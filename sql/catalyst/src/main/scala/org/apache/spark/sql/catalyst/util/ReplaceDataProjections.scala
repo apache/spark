@@ -21,5 +21,13 @@ import org.apache.spark.sql.catalyst.ProjectingInternalRow
 
 case class ReplaceDataProjections(
     rowProjection: ProjectingInternalRow,
-    updateRowProjection: Option[ProjectingInternalRow],
-    metadataProjection: Option[ProjectingInternalRow])
+    metadataProjection: Option[ProjectingInternalRow]) {
+
+  def all: Seq[ProjectingInternalRow] = rowProjection +: metadataProjection.toSeq
+
+  def remapOrdinals(ordinalMap: Int => Int): ReplaceDataProjections = {
+    ReplaceDataProjections(
+      rowProjection.remapOrdinals(ordinalMap),
+      metadataProjection.map(_.remapOrdinals(ordinalMap)))
+  }
+}

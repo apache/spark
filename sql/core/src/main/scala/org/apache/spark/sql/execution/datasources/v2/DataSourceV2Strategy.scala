@@ -625,7 +625,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         projections,
         write,
         rd.operation.command,
-        r.name) :: Nil
+        r.name,
+        useWriteColumnUpdate = V2Writes.hasNarrowRows(rd)) :: Nil
 
     case wd @ WriteDelta(_: DataSourceV2Relation, _, query, r: DataSourceV2Relation, projections,
         _, Some(write)) =>

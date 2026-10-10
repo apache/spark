@@ -18,11 +18,12 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.{SparkRuntimeException, SparkUnsupportedOperationException}
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableInfo, WriteUpdate}
-import org.apache.spark.sql.connector.expressions.LogicalExpressions.{identity, reference}
-import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.catalyst.optimizer.ColumnPruning
+import org.apache.spark.sql.catalyst.plans.logical.Union
+import org.apache.spark.sql.connector.catalog.{InMemoryBaseTable, InMemoryRowLevelOperationTable}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 class GroupBasedColumnUpdateTableSuite extends UpdateTableSuiteBase {
 
@@ -32,39 +33,20 @@ class GroupBasedColumnUpdateTableSuite extends UpdateTableSuiteBase {
     props
   }
 
-  private def createAndInitTableReplaceData(schemaString: String, jsonData: String): Unit = {
-    val props = new java.util.HashMap[String, String]()
-    props.put("column-update-cow", "true")
-    val columns = CatalogV2Util.structTypeToV2Columns(StructType.fromDDL(schemaString))
-    val transforms = Array[Transform](identity(reference(Seq("dep"))))
-    val tableInfo = new TableInfo.Builder()
-      .withColumns(columns)
-      .withPartitions(transforms)
-      .withProperties(props)
-      .build()
-    catalog.createTable(ident, tableInfo)
-    append(schemaString, jsonData)
-  }
-
-  test("column-update ReplaceData: write schema contains only declared + assigned columns") {
-    createAndInitTableReplaceData("pk INT NOT NULL, salary INT, bonus INT, dep STRING",
+  test("column-update ReplaceData: column update schema has only the declared columns") {
+    createAndInitTable("pk INT NOT NULL, salary INT, bonus INT, dep STRING",
       """{ "pk": 1, "salary": 100, "bonus": 10, "dep": "hr" }
         |{ "pk": 2, "salary": 200, "bonus": 20, "dep": "software" }
         |""".stripMargin)
 
     sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE dep = 'hr'")
 
-    val updateSchema = table.lastWriteInfo.updateSchema().get()
-    assert(updateSchema.fieldNames.contains("pk"), s"pk must be in update schema: $updateSchema")
-    assert(updateSchema.fieldNames.contains("dep"), s"dep must be in update schema: $updateSchema")
-    assert(updateSchema.fieldNames.contains("salary"),
-      s"salary must be in update schema: $updateSchema")
-    assert(!updateSchema.fieldNames.contains("bonus"),
-      s"bonus must not be in update schema: $updateSchema")
+    assert(table.lastWriteInfo.columnUpdateSchema.get.fieldNames.toSeq ==
+      Seq("pk", "dep", "salary"))
   }
 
   test("column-update ReplaceData: data correctness -- bonus preserved, salary updated") {
-    createAndInitTableReplaceData("pk INT NOT NULL, salary INT, bonus INT, dep STRING",
+    createAndInitTable("pk INT NOT NULL, salary INT, bonus INT, dep STRING",
       """{ "pk": 1, "salary": 100, "bonus": 10, "dep": "hr" }
         |{ "pk": 2, "salary": 200, "bonus": 20, "dep": "software" }
         |{ "pk": 3, "salary": 300, "bonus": 30, "dep": "hr" }
@@ -82,7 +64,7 @@ class GroupBasedColumnUpdateTableSuite extends UpdateTableSuiteBase {
   }
 
   test("column-update ReplaceData: subquery WHERE condition data correctness") {
-    createAndInitTableReplaceData("pk INT NOT NULL, salary INT, bonus INT, dep STRING",
+    createAndInitTable("pk INT NOT NULL, salary INT, bonus INT, dep STRING",
       """{ "pk": 1, "salary": 100, "bonus": 10, "dep": "hr" }
         |{ "pk": 2, "salary": 200, "bonus": 20, "dep": "software" }
         |{ "pk": 3, "salary": 300, "bonus": 30, "dep": "hr" }
@@ -110,13 +92,11 @@ class GroupBasedColumnUpdateTableSuite extends UpdateTableSuiteBase {
     Seq(true, false).foreach { dppEnabled =>
       Seq(true, false).foreach { aqeEnabled =>
         withSQLConf(
-            org.apache.spark.sql.internal.SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key ->
-              dppEnabled.toString,
-            org.apache.spark.sql.internal.SQLConf.ADAPTIVE_EXECUTION_ENABLED.key ->
-              aqeEnabled.toString) {
+            SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> dppEnabled.toString,
+            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled.toString) {
           withTable(tableNameAsString) {
             withTempView("matched_pk") {
-              createAndInitTableReplaceData("pk INT, salary INT, bonus INT, dep STRING",
+              createAndInitTable("pk INT, salary INT, bonus INT, dep STRING",
                 """{ "pk": 1, "salary": 100, "bonus": 10, "dep": "hr" }
                   |{ "pk": 2, "salary": 200, "bonus": 20, "dep": "software" }
                   |{ "pk": 3, "salary": 300, "bonus": 30, "dep": "hr" }
@@ -126,14 +106,20 @@ class GroupBasedColumnUpdateTableSuite extends UpdateTableSuiteBase {
               val matchedPkDF = Seq(Some(1), None).toDF()
               matchedPkDF.createOrReplaceTempView("matched_pk")
 
-              sql(s"UPDATE $tableNameAsString SET salary = -1 " +
-                s"WHERE pk IN (SELECT * FROM matched_pk)")
+              executeAndCheckScans(
+                s"UPDATE $tableNameAsString SET salary = -1 " +
+                  s"WHERE pk IN (SELECT * FROM matched_pk)",
+                primaryScanSchema =
+                  "pk INT, salary INT, dep STRING, _partition STRING, index INT",
+                groupFilterScanSchema = Some("pk INT, dep STRING"))
 
               checkAnswer(
                 sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
                 Row(1, -1, 10, "hr") ::
                 Row(2, 200, 20, "software") ::
                 Row(3, 300, 30, "hr") :: Nil)
+
+              checkReplacedPartitions(Seq("hr"))
             }
           }
         }
@@ -141,10 +127,9 @@ class GroupBasedColumnUpdateTableSuite extends UpdateTableSuiteBase {
     }
   }
 
-  test("column-update ReplaceData: dispatch verification -- UPDATE/COPY rows use writeUpdate") {
-    // The test connector tags log entries by which writer method was called, so we can assert
-    // every row in the write log went through the narrow path.
-    createAndInitTableReplaceData("pk INT NOT NULL, salary INT, bonus INT, dep STRING",
+  test("column-update ReplaceData: updated and copied rows reach writeColumnUpdate with " +
+    "metadata") {
+    createAndInitTable("pk INT NOT NULL, salary INT, bonus INT, dep STRING",
       """{ "pk": 1, "salary": 100, "bonus": 10, "dep": "hr" }
         |{ "pk": 2, "salary": 200, "bonus": 20, "dep": "hr" }
         |{ "pk": 3, "salary": 300, "bonus": 30, "dep": "software" }
@@ -152,102 +137,451 @@ class GroupBasedColumnUpdateTableSuite extends UpdateTableSuiteBase {
 
     sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE pk = 1")
 
-    // The matched 'hr' partition rewrites two rows: pk=1 (UPDATE) and pk=2 (COPY). Both
-    // must be tagged as writeUpdate; no plain write entries.
-    val ops = table.lastWriteLog.map(_.getUTF8String(0).toString).toSet
-    assert(ops == Set(WriteUpdate.toString),
-      s"all CoW column-update log entries must use writeUpdate, got: $ops")
+    checkLastColumnUpdateWriteLog(
+      writeColumnUpdateWithMetadataLogEntry(metadata = Row("hr", null), data = Row(1, "hr", -1)),
+      writeColumnUpdateWithMetadataLogEntry(metadata = Row("hr", 1), data = Row(2, "hr", 200)))
   }
 
-  test("column-update ReplaceData: connector missing writeUpdate override is rejected") {
-    createAndInitTableReplaceDataNoWriteUpdate("pk INT NOT NULL, salary INT, dep STRING",
+  test("column-update ReplaceData: without metadata, rows reach writeColumnUpdate(record)") {
+    createAndInitTable("pk INT NOT NULL, salary INT, bonus INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "bonus": 10, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "bonus": 20, "dep": "hr" }
+        |{ "pk": 3, "salary": 300, "bonus": 30, "dep": "software" }
+        |""".stripMargin,
+      java.util.Map.of("column-update-cow", "true", "no-metadata", "true"))
+
+    sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE pk = 1")
+
+    checkLastColumnUpdateWriteLog(
+      writeColumnUpdateLogEntry(data = Row(1, "hr", -1)),
+      writeColumnUpdateLogEntry(data = Row(2, "hr", 200)))
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+      Row(1, -1, 10, "hr") :: Row(2, 200, 20, "hr") :: Row(3, 300, 30, "software") :: Nil)
+  }
+
+  test("column-update ReplaceData: a writer overriding only writeColumnUpdate(record) " +
+    "receives rows with metadata") {
+    createAndInitTable("pk INT NOT NULL, salary INT, bonus INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "bonus": 10, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "bonus": 20, "dep": "hr" }
+        |""".stripMargin,
+      java.util.Map.of("column-update-cow", "true", "column-update-cow-record-only-writer", "true"))
+
+    sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE pk = 1")
+
+    checkLastColumnUpdateWriteLog(
+      writeColumnUpdateLogEntry(data = Row(1, "hr", -1)),
+      writeColumnUpdateLogEntry(data = Row(2, "hr", 200)))
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+      Row(1, -1, 10, "hr") :: Row(2, 200, 20, "hr") :: Nil)
+  }
+
+  test("column-update ReplaceData: without metadata, column update schema is the declared " +
+    "layout") {
+    createAndInitTable("pk INT NOT NULL, salary INT, bonus INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "bonus": 10, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "bonus": 20, "dep": "hr" }
+        |""".stripMargin,
+      java.util.Map.of("column-update-cow", "true", "no-metadata", "true"))
+
+    sql(s"UPDATE $tableNameAsString SET salary = salary + bonus WHERE pk = 1")
+
+    checkLastWriteInfo(
+      expectedColumnUpdateSchema = Some(StructType(Seq(PK_FIELD, DEP_FIELD,
+        StructField("salary", IntegerType, nullable = true)))))
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+      Row(1, 110, 10, "hr") :: Row(2, 200, 20, "hr") :: Nil)
+  }
+
+  test("column-update ReplaceData: connector missing writeColumnUpdate override is rejected") {
+    createAndInitTableReplaceDataNoWriteColumnUpdate("pk INT NOT NULL, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": "hr" }
         |{ "pk": 2, "salary": 200, "dep": "software" }
         |""".stripMargin)
 
-    val ex = intercept[SparkUnsupportedOperationException] {
-      sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE pk = 1")
-    }
-    assert(ex.getCondition == "DATA_SOURCE_WRITE_UPDATE_NOT_IMPLEMENTED",
-      s"expected DATA_SOURCE_WRITE_UPDATE_NOT_IMPLEMENTED but got: ${ex.getCondition}")
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE pk = 1")
+      },
+      condition = "DATA_SOURCE_WRITE_COLUMN_UPDATE_NOT_IMPLEMENTED",
+      parameters = Map(
+        "class" -> "org.apache.spark.sql.connector.catalog.NoWriteColumnUpdateOverrideWriter"))
   }
 
-  private def createAndInitTableReplaceDataNoWriteUpdate(
+  private def createAndInitTableReplaceDataNoWriteColumnUpdate(
       schemaString: String, jsonData: String): Unit = {
-    val props = new java.util.HashMap[String, String]()
-    props.put("column-update-cow-no-write-update", "true")
-    val columns = CatalogV2Util.structTypeToV2Columns(StructType.fromDDL(schemaString))
-    val transforms = Array[Transform](identity(reference(Seq("dep"))))
-    val tableInfo = new TableInfo.Builder()
-      .withColumns(columns)
-      .withPartitions(transforms)
-      .withProperties(props)
-      .build()
-    catalog.createTable(ident, tableInfo)
-    append(schemaString, jsonData)
+    createAndInitTable(schemaString, jsonData,
+      java.util.Map.of("column-update-cow-no-write-column-update", "true"))
   }
 
   // ---------------------------------------------------------------------------
-  // Scan-narrowing tests: verify that the physical scan reads only the columns
-  // required by the connector, the assignment RHS, and the operation condition.
+  // Write relation tests: verify that only the write relation is narrowed to the
+  // declared columns, on both copy-on-write plan shapes.
   // ---------------------------------------------------------------------------
 
-  test("column-update ReplaceData: scan excludes columns outside required + cond") {
-    createAndInitTableReplaceData("pk INT NOT NULL, salary INT, bonus INT, dep STRING",
+  private val reqAttrsOperationClass =
+    classOf[InMemoryRowLevelOperationTable#PartitionBasedColumnUpdateOperationWithReqAttrs].getName
+
+  // t(pk, id, dep, salary, bonus, extra) with CHECK (extra > 0), partitioned by dep
+  private def createAndInitTableWithReqAttrs(reqAttrs: String): Unit = {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING, salary INT, bonus INT, extra INT",
+      """{ "pk": 1, "id": 1, "dep": "hr", "salary": 100, "bonus": 10, "extra": 1 }
+        |{ "pk": 2, "id": 2, "dep": "hr", "salary": 200, "bonus": 20, "extra": 1 }
+        |{ "pk": 3, "id": 3, "dep": "software", "salary": 300, "bonus": 30, "extra": 1 }
+        |""".stripMargin,
+      java.util.Map.of("column-update-cow-req-attrs", reqAttrs))
+    sql(s"ALTER TABLE $tableNameAsString ADD CONSTRAINT positive_extra CHECK (extra > 0)")
+  }
+
+  test("column-update ReplaceData: write relation has the declared columns in declared order") {
+    createAndInitTableWithReqAttrs("salary,pk")
+
+    val write = executeAndKeepAnalyzedWrite {
+      sql(s"UPDATE $tableNameAsString SET salary = salary + bonus WHERE dep = 'hr'")
+    }
+
+    assert(!write.query.exists(_.isInstanceOf[Union]))
+    checkColumnUpdateWrite(write, "salary", "pk")
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+      Row(1, 1, "hr", 110, 10, 1) ::
+      Row(2, 2, "hr", 220, 20, 1) ::
+      Row(3, 3, "software", 300, 30, 1) :: Nil)
+  }
+
+  test("column-update ReplaceData: subquery write relation has the declared columns") {
+    withTempView("deps") {
+      createAndInitTableWithReqAttrs("pk,salary")
+      import testImplicits._
+      Seq("hr").toDF("dep").createOrReplaceTempView("deps")
+
+      val write = executeAndKeepAnalyzedWrite {
+        sql(s"UPDATE $tableNameAsString SET salary = salary + bonus " +
+          s"WHERE dep IN (SELECT dep FROM deps)")
+      }
+
+      assert(write.query.exists(_.isInstanceOf[Union]))
+      checkColumnUpdateWrite(write, "pk", "salary")
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+        Row(1, 1, "hr", 110, 10, 1) ::
+        Row(2, 2, "hr", 220, 20, 1) ::
+        Row(3, 3, "software", 300, 30, 1) :: Nil)
+    }
+  }
+
+  test("column-update ReplaceData: runtime group filtering on an undeclared condition column") {
+    withTempView("matched_ids") {
+      // `dep` is declared because the scan filters groups at runtime by the partition column
+      createAndInitTableWithReqAttrs("pk,dep,salary")
+      import testImplicits._
+      Seq(1, 100).toDF().createOrReplaceTempView("matched_ids")
+
+      // `id` is neither declared nor in the write relation; the group filter must still map it
+      // onto the second read of the table that the subquery rewrite adds
+      executeAndCheckScans(
+        s"UPDATE $tableNameAsString SET salary = salary + bonus " +
+          s"WHERE id IN (SELECT * FROM matched_ids)",
+        primaryScanSchema = "pk INT, id INT, dep STRING, salary INT, bonus INT, extra INT, " +
+          "_partition STRING, index INT",
+        groupFilterScanSchema = Some("id INT, dep STRING"))
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+        Row(1, 1, "hr", 110, 10, 1) ::
+        Row(2, 2, "hr", 200, 20, 1) ::
+        Row(3, 3, "software", 300, 30, 1) :: Nil)
+      checkReplacedPartitions(Seq("hr"))
+    }
+  }
+
+  test("column-update ReplaceData: scan reads only the referenced columns") {
+    createAndInitTableWithReqAttrs("pk,salary")
+
+    sql(s"UPDATE $tableNameAsString SET salary = salary + bonus WHERE dep = 'hr'")
+
+    // `id` is neither declared nor referenced; `dep`, `bonus` and `extra` are read for the
+    // condition, the assignment and the CHECK constraint
+    checkLastScanSchema(
+      "pk INT, dep STRING, salary INT, bonus INT, extra INT, _partition STRING, index INT")
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+      Row(1, 1, "hr", 110, 10, 1) ::
+      Row(2, 2, "hr", 220, 20, 1) ::
+      Row(3, 3, "software", 300, 30, 1) :: Nil)
+  }
+
+  test("column-update ReplaceData: subquery scan reads only the referenced columns") {
+    withTempView("deps") {
+      createAndInitTableWithReqAttrs("pk,salary")
+      import testImplicits._
+      Seq("hr").toDF("dep").createOrReplaceTempView("deps")
+
+      sql(s"UPDATE $tableNameAsString SET salary = salary + bonus " +
+        s"WHERE dep IN (SELECT dep FROM deps)")
+
+      checkLastScanSchema(
+        "pk INT, dep STRING, salary INT, bonus INT, extra INT, _partition STRING, index INT")
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+        Row(1, 1, "hr", 110, 10, 1) ::
+        Row(2, 2, "hr", 220, 20, 1) ::
+        Row(3, 3, "software", 300, 30, 1) :: Nil)
+    }
+  }
+
+  test("column-update ReplaceData: unread partition column skips runtime group filtering") {
+    withTempView("matched_ids") {
+      createAndInitTableWithReqAttrs("pk,salary")
+      import testImplicits._
+      Seq(1, 100).toDF().createOrReplaceTempView("matched_ids")
+
+      // `dep` is neither declared nor referenced, so the scan doesn't read it and doesn't
+      // report it from filterAttributes(); every group is read and replaced
+      executeAndCheckScans(
+        s"UPDATE $tableNameAsString SET salary = salary + bonus " +
+          s"WHERE id IN (SELECT * FROM matched_ids)",
+        primaryScanSchema = "pk INT, id INT, salary INT, bonus INT, extra INT, " +
+          "_partition STRING, index INT",
+        groupFilterScanSchema = None)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+        Row(1, 1, "hr", 110, 10, 1) ::
+        Row(2, 2, "hr", 200, 20, 1) ::
+        Row(3, 3, "software", 300, 30, 1) :: Nil)
+      checkReplacedPartitions(Seq("hr", "software"))
+    }
+  }
+
+  test("column-update ReplaceData: runtime filter attribute the scan doesn't read is rejected") {
+    withTempView("matched_ids") {
+      createAndInitTable("pk INT NOT NULL, id INT, dep STRING, salary INT",
+        """{ "pk": 1, "id": 1, "dep": "hr", "salary": 100 }
+          |""".stripMargin,
+        java.util.Map.of(
+          "column-update-cow-req-attrs", "pk,salary",
+          "column-update-cow-unread-filter-attrs", "true"))
+      import testImplicits._
+      Seq(1).toDF().createOrReplaceTempView("matched_ids")
+
+      val ex = intercept[AnalysisException] {
+        sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE id IN (SELECT * FROM matched_ids)")
+      }
+      assert(ex.getCondition == "DATA_SOURCE_INVALID_RUNTIME_FILTER_ATTRIBUTE.CANNOT_RESOLVE")
+      assert(ex.getMessageParameters.get("attribute") == "`dep`")
+      assert(ex.getMessageParameters.get("method") == "filterAttributes()")
+    }
+  }
+
+  test("column-update ReplaceData: a connector without column updates reads every column") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |""".stripMargin,
+      java.util.Map.of[String, String]())
+
+    sql(s"UPDATE $tableNameAsString SET salary = 0")
+
+    checkLastScanSchema("pk INT, salary INT, dep STRING, _partition STRING, index INT")
+    checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(1, 0, "hr") :: Nil)
+  }
+
+  test("column-update ReplaceData: undeclared distribution column is rejected") {
+    // without metadata, the write clusters by `dep`
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |""".stripMargin,
+      java.util.Map.of("column-update-cow-req-attrs", "pk,salary", "no-metadata", "true"))
+
+    val excludeColumnPruning = SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ColumnPruning.ruleName
+    for {
+      cond <- Seq("pk = 1", "dep = 'hr'")
+      confs <- Seq(Nil, Seq(excludeColumnPruning))
+    } withSQLConf(confs: _*) {
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE $cond")
+        },
+        condition = "COLUMN_UPDATE_UNDECLARED_WRITE_REQUIREMENT_COLUMNS",
+        parameters = Map("connector" -> reqAttrsOperationClass, "columns" -> "[dep]"))
+    }
+  }
+
+  test("column-update ReplaceData: excluding ColumnPruning keeps the write narrow") {
+    createAndInitTableWithReqAttrs("pk,salary")
+
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ColumnPruning.ruleName) {
+      sql(s"UPDATE $tableNameAsString SET salary = salary + bonus WHERE dep = 'hr'")
+    }
+
+    assert(table.lastWriteInfo.columnUpdateSchema.get.fieldNames.toSeq == Seq("pk", "salary"))
+    checkLastScanSchema("pk INT, id INT, dep STRING, salary INT, bonus INT, extra INT, " +
+      "_partition STRING, index INT")
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+      Row(1, 1, "hr", 110, 10, 1) ::
+      Row(2, 2, "hr", 220, 20, 1) ::
+      Row(3, 3, "software", 300, 30, 1) :: Nil)
+  }
+
+  test("column-update ReplaceData: other operations read every column") {
+    createAndInitTable("pk INT NOT NULL, salary INT, bonus INT, dep STRING",
       """{ "pk": 1, "salary": 100, "bonus": 10, "dep": "hr" }
-        |{ "pk": 2, "salary": 200, "bonus": 20, "dep": "software" }
-        |""".stripMargin)
+        |{ "pk": 2, "salary": 200, "bonus": 20, "dep": "hr" }
+        |""".stripMargin,
+      java.util.Map.of())
+    val fullScanSchema = "pk INT, salary INT, bonus INT, dep STRING, _partition STRING, index INT"
 
-    // Connector-declared requiredDataAttributes = [pk, dep, salary]; cond refs `dep` (already
-    // declared). `bonus` is neither declared nor referenced -- it must not appear in the scan.
-    sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE dep = 'hr'")
+    sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE pk = 1")
+    checkLastScanSchema(fullScanSchema)
 
-    checkLastScanExcludes("bonus")
+    sql(s"DELETE FROM $tableNameAsString WHERE pk > 1")
+    checkLastScanSchema(fullScanSchema)
+
+    withTempView("source") {
+      import testImplicits._
+      Seq((1, 150)).toDF("pk", "salary").createOrReplaceTempView("source")
+      sql(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk
+           |WHEN MATCHED THEN UPDATE SET salary = s.salary
+           |""".stripMargin)
+      checkLastScanSchema(fullScanSchema)
+    }
+
+    checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(1, 150, 10, "hr") :: Nil)
   }
 
-  test("column-update ReplaceData: scan transparently widens for RHS references") {
-    createAndInitTableReplaceData("pk INT NOT NULL, salary INT, bonus INT, dep STRING",
+  test("column-update ReplaceData: DELETE and MERGE on a column-update table read every column") {
+    createAndInitTable("pk INT NOT NULL, salary INT, bonus INT, dep STRING",
       """{ "pk": 1, "salary": 100, "bonus": 10, "dep": "hr" }
         |{ "pk": 2, "salary": 200, "bonus": 20, "dep": "hr" }
         |""".stripMargin)
+    val fullScanSchema = "pk INT, salary INT, bonus INT, dep STRING, _partition STRING, index INT"
 
-    // Connector-declared = [pk, dep, salary]; RHS `salary + bonus` references `bonus`.
-    // Narrow scan must include `bonus` even though it's not declared as required.
-    sql(s"UPDATE $tableNameAsString SET salary = salary + bonus WHERE dep = 'hr'")
+    sql(s"DELETE FROM $tableNameAsString WHERE pk > 1")
+    checkLastScanSchema(fullScanSchema)
 
-    checkLastScanIncludes("bonus", "salary")
+    withTempView("source") {
+      import testImplicits._
+      Seq((1, 150)).toDF("pk", "salary").createOrReplaceTempView("source")
+      sql(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk
+           |WHEN MATCHED THEN UPDATE SET salary = s.salary
+           |""".stripMargin)
+      checkLastScanSchema(fullScanSchema)
+    }
 
-    checkAnswer(
-      sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
-      Row(1, 110, 10, "hr") :: Row(2, 220, 20, "hr") :: Nil)
+    checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(1, 150, 10, "hr") :: Nil)
   }
 
+  test("column-update ReplaceData: assigned column outside requiredDataAttributes is rejected") {
+    createAndInitTableWithReqAttrs("pk,salary")
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(s"UPDATE $tableNameAsString SET bonus = 0 WHERE dep = 'hr'")
+      },
+      condition = "COLUMN_UPDATE_REQUIRED_DATA_ATTRIBUTES_MISSING_UPDATED_COLUMNS",
+      parameters = Map(
+        "connector" -> reqAttrsOperationClass,
+        "missingColumns" -> "[bonus]"))
+  }
+
+  test("column-update ReplaceData: assigned column outside requiredDataAttributes is rejected " +
+    "on the subquery path") {
+    withTempView("deps") {
+      createAndInitTableWithReqAttrs("pk,salary")
+      import testImplicits._
+      Seq("hr").toDF("dep").createOrReplaceTempView("deps")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"UPDATE $tableNameAsString SET bonus = 0 WHERE dep IN (SELECT dep FROM deps)")
+        },
+        condition = "COLUMN_UPDATE_REQUIRED_DATA_ATTRIBUTES_MISSING_UPDATED_COLUMNS",
+        parameters = Map(
+          "connector" -> reqAttrsOperationClass,
+          "missingColumns" -> "[bonus]"))
+    }
+  }
+
+  test("column-update ReplaceData: analyzed plan shows the declared columns as the write target") {
+    createAndInitTableWithReqAttrs("pk,salary")
+
+    val write = executeAndKeepAnalyzedWrite {
+      sql(s"UPDATE $tableNameAsString SET salary = salary + bonus WHERE dep = 'hr'")
+    }
+
+    val header = write.simpleString(Int.MaxValue)
+    assert(header.matches("""ReplaceData RelationV2\[pk#\d+, salary#\d+\] .*"""), header)
+  }
+
+  test("column-update ReplaceData: column update schema nullability covers UPDATE and COPY " +
+    "rows") {
+    createAndInitTable("pk INT NOT NULL, salary INT NOT NULL, bonus INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "bonus": 10, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "bonus": null, "dep": "hr" }
+        |""".stripMargin,
+      java.util.Map.of("column-update-cow-req-attrs", "pk,salary,bonus"))
+
+    sql(s"UPDATE $tableNameAsString SET salary = -1, bonus = 5 WHERE pk = 1")
+
+    // UPDATE rows assign non-null literals, but the COPY row for pk = 2 carries a null bonus.
+    checkLastWriteInfo(
+      expectedMetadataSchema = Some(StructType(Array(PARTITION_FIELD, INDEX_FIELD_NULLABLE))),
+      expectedColumnUpdateSchema = Some(StructType(Seq(
+        StructField("pk", IntegerType, nullable = false),
+        StructField("salary", IntegerType, nullable = false),
+        StructField("bonus", IntegerType, nullable = true)))))
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+      Row(1, -1, 5, "hr") :: Row(2, 200, null, "hr") :: Nil)
+  }
+
+  test("column-update ReplaceData: other operations keep a full-width write relation") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |""".stripMargin,
+      java.util.Map.of())
+
+    val write = executeAndKeepAnalyzedWrite {
+      sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE pk = 1")
+    }
+
+    assert(write.table.output == write.originalTable.output)
+  }
+
+
   test("column-update ReplaceData: nested struct field update narrows to root struct column") {
-    createAndInitTableReplaceData("pk INT NOT NULL, s STRUCT<c1: INT, c2: INT>, dep STRING",
+    createAndInitTable("pk INT NOT NULL, s STRUCT<c1: INT, c2: INT>, dep STRING",
       """{ "pk": 1, "s": { "c1": 1, "c2": 2 }, "dep": "hr" }
         |{ "pk": 2, "s": { "c1": 3, "c2": 4 }, "dep": "hr" }
         |""".stripMargin)
 
     // `SET s.c1 = -1` is aligned into a whole-struct assignment, so updatedColumns is [s]
-    // at root granularity. The narrow write / scan schema covers the root struct column.
+    // at root granularity.
     sql(s"UPDATE $tableNameAsString SET s.c1 = -1 WHERE pk = 1")
 
-    val updatedNames = table.lastUpdatedColumns.map(_.describe()).toSet
-    assert(updatedNames == Set("s"),
-      s"expected [s] in updatedColumns (root struct) but got: $updatedNames")
+    checkLastUpdatedColumns("s")
 
-    val updateSchema = table.lastWriteInfo.updateSchema().get()
-    assert(updateSchema.fieldNames.contains("s"),
-      s"s must be in update schema: $updateSchema")
+    val columnUpdateSchema = table.lastWriteInfo.columnUpdateSchema().get()
+    assert(columnUpdateSchema.fieldNames.contains("s"),
+      s"s must be in column update schema: $columnUpdateSchema")
 
-    // Data correctness: matched row's c1 updated, c2 preserved; unmatched row untouched.
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
       Row(1, Row(-1, 2), "hr") :: Row(2, Row(3, 4), "hr") :: Nil)
   }
 
   test("column-update ReplaceData: nested field identity update reports root struct as updated") {
-    createAndInitTableReplaceData("pk INT NOT NULL, s STRUCT<c1: INT, c2: INT>, dep STRING",
+    createAndInitTable("pk INT NOT NULL, s STRUCT<c1: INT, c2: INT>, dep STRING",
       """{ "pk": 1, "s": { "c1": 1, "c2": 2 }, "dep": "hr" }
         |""".stripMargin)
 
@@ -261,9 +595,7 @@ class GroupBasedColumnUpdateTableSuite extends UpdateTableSuiteBase {
     // CoW path.
     sql(s"UPDATE $tableNameAsString SET s.c1 = s.c1 WHERE pk = 1")
 
-    val updatedNames = table.lastUpdatedColumns.map(_.describe()).toSet
-    assert(updatedNames == Set("s"),
-      s"nested identity is reported as an update at root-column granularity: $updatedNames")
+    checkLastUpdatedColumns("s")
 
     // Data correctness: the struct is rewritten but with equal values, so rows are unchanged.
     checkAnswer(
@@ -271,9 +603,8 @@ class GroupBasedColumnUpdateTableSuite extends UpdateTableSuiteBase {
       Row(1, Row(1, 2), "hr") :: Nil)
   }
 
-  test("column-update ReplaceData: narrow scan widens for an unreferenced CHECK constraint" +
-    " column") {
-    createAndInitTableReplaceData("pk INT NOT NULL, id INT, dep STRING, extra INT",
+  test("column-update ReplaceData: scan reads an unreferenced CHECK constraint column") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING, extra INT",
       """{ "pk": 1, "id": 1, "dep": "hr", "extra": 5 }
         |{ "pk": 2, "id": 2, "dep": "software", "extra": 5 }
         |""".stripMargin)
@@ -283,9 +614,9 @@ class GroupBasedColumnUpdateTableSuite extends UpdateTableSuiteBase {
 
     checkLastScanIncludes("extra")
 
-    val updateSchema = table.lastWriteInfo.updateSchema().get()
-    assert(!updateSchema.fieldNames.contains("extra"),
-      s"extra must not leak into the narrow update schema: $updateSchema")
+    val columnUpdateSchema = table.lastWriteInfo.columnUpdateSchema().get()
+    assert(!columnUpdateSchema.fieldNames.contains("extra"),
+      s"extra must not be in column update schema: $columnUpdateSchema")
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
@@ -293,7 +624,7 @@ class GroupBasedColumnUpdateTableSuite extends UpdateTableSuiteBase {
   }
 
   test("column-update ReplaceData: CHECK constraint is still enforced on a narrow write") {
-    createAndInitTableReplaceData("pk INT NOT NULL, id INT, dep STRING, extra INT",
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING, extra INT",
       """{ "pk": 1, "id": 1, "dep": "hr", "extra": 5 }
         |""".stripMargin)
     sql(s"ALTER TABLE $tableNameAsString ADD CONSTRAINT positive_id CHECK (id > 0)")
@@ -305,8 +636,111 @@ class GroupBasedColumnUpdateTableSuite extends UpdateTableSuiteBase {
       s"expected CHECK_CONSTRAINT_VIOLATION but got: ${ex.getCondition}")
   }
 
+  test("column-update ReplaceData: CHECK constraint on a nested field narrows correctly") {
+    createAndInitTable("pk INT NOT NULL, id INT, s STRUCT<c1: INT, c2: INT>, dep STRING",
+      """{ "pk": 1, "id": 1, "s": { "c1": 1, "c2": 2 }, "dep": "hr" }
+        |""".stripMargin)
+    sql(s"ALTER TABLE $tableNameAsString ADD CONSTRAINT positive_c1 CHECK (s.c1 > 0)")
+
+    sql(s"UPDATE $tableNameAsString SET id = -1 WHERE pk = 1")
+    checkLastScanIncludes("s")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, Row(1, 2), "hr") :: Nil)
+
+    val ex = intercept[SparkRuntimeException] {
+      sql(s"UPDATE $tableNameAsString SET s.c1 = -1 WHERE pk = 1")
+    }
+    assert(ex.getCondition == "CHECK_CONSTRAINT_VIOLATION",
+      s"expected CHECK_CONSTRAINT_VIOLATION but got: ${ex.getCondition}")
+  }
+
+
+  test("column-update ReplaceData: undeclared, differently-cased columns in the RHS and WHERE " +
+    "clause are read with the table's own spelling") {
+    createAndInitTable(
+      "pk INT NOT NULL, salary INT, bonus INT, extra INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "bonus": 10, "extra": 5, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "bonus": 20, "extra": 5, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"UPDATE $tableNameAsString SET salary = salary + BONUS WHERE pk = 1 AND EXTRA > 3")
+
+    checkLastScanSchema(
+      "pk INT, salary INT, bonus INT, extra INT, dep STRING, _partition STRING, index INT")
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+      Row(1, 110, 10, 5, "hr") :: Row(2, 200, 20, 5, "hr") :: Nil)
+  }
+
+  test("column-update ReplaceData: scan that returns unrequested columns still writes narrow " +
+    "rows") {
+    createAndInitTable("pk INT NOT NULL, salary INT, bonus INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "bonus": 10, "dep": "hr" }
+        |""".stripMargin,
+      java.util.Map.of(
+        "column-update-cow", "true",
+        InMemoryBaseTable.SIMULATE_PARTIAL_COLUMN_PRUNING, "true"))
+
+    sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE pk = 1")
+
+    checkLastScanIncludes("bonus")
+    val columnUpdateSchema = table.lastWriteInfo.columnUpdateSchema().get()
+    assert(!columnUpdateSchema.fieldNames.contains("bonus"),
+      s"bonus must not be in column update schema: $columnUpdateSchema")
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, 10, "hr") :: Nil)
+  }
+
+  test("column-update ReplaceData: row-level DELETE falls back to full-width rows") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"DELETE FROM $tableNameAsString WHERE pk < 2")
+
+    assert(!table.lastWriteInfo.columnUpdateSchema().isPresent,
+      s"DELETE must not report a column update schema: " +
+        s"${table.lastWriteInfo.columnUpdateSchema()}")
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(2, 200, "hr") :: Nil)
+  }
+
+  test("column-update ReplaceData: MERGE falls back to full-width rows") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |""".stripMargin)
+
+    withTempView("source") {
+      import testImplicits._
+      Seq((1, 150, "hr"), (3, 300, "software")).toDF("pk", "salary", "dep")
+        .createOrReplaceTempView("source")
+
+      sql(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk
+           |WHEN MATCHED THEN UPDATE SET salary = s.salary
+           |WHEN NOT MATCHED THEN INSERT *
+           |""".stripMargin)
+
+      assert(!table.lastWriteInfo.columnUpdateSchema().isPresent,
+        s"MERGE must not report a column update schema: " +
+          s"${table.lastWriteInfo.columnUpdateSchema()}")
+      checkLastUpdatedColumns()
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+        Row(1, 150, "hr") :: Row(2, 200, "software") :: Row(3, 300, "software") :: Nil)
+    }
+  }
+
   test("column-update ReplaceData: dynamic options reach the connector") {
-    createAndInitTableReplaceData("pk INT NOT NULL, id INT, dep STRING",
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }
         |""".stripMargin)
 

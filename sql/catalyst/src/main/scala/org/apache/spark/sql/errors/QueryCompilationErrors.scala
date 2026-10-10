@@ -4654,6 +4654,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "duplicateAttributes" -> duplicateAttributes.mkString("[", ", ", "]")))
   }
 
+  def metadataRequiredDataAttributeError(
+      connectorClass: String,
+      metadataAttributes: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "COLUMN_UPDATE_METADATA_REQUIRED_DATA_ATTRIBUTE",
+      messageParameters = Map(
+        "connector" -> connectorClass,
+        "metadataAttributes" -> metadataAttributes.mkString("[", ", ", "]")))
+  }
+
   def nestedRequiredDataAttributeError(
       connectorClass: String,
       nestedAttributes: Seq[String]): Throwable = {
@@ -4692,6 +4702,26 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "connector" -> connectorClass,
         "rowIds" -> rowIds.mkString("[", ", ", "]")))
+  }
+
+  def unknownRequiredDataAttributeError(
+      connectorClass: String,
+      unknownAttributes: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "COLUMN_UPDATE_UNKNOWN_REQUIRED_DATA_ATTRIBUTE",
+      messageParameters = Map(
+        "connector" -> connectorClass,
+        "unknownAttributes" -> unknownAttributes.mkString("[", ", ", "]")))
+  }
+
+  def undeclaredWriteRequirementColumnsError(
+      connectorClass: String,
+      columns: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "COLUMN_UPDATE_UNDECLARED_WRITE_REQUIREMENT_COLUMNS",
+      messageParameters = Map(
+        "connector" -> connectorClass,
+        "columns" -> columns.mkString("[", ", ", "]")))
   }
 
   def cannotRenameTableAcrossSchemaError(): Throwable = {

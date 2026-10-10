@@ -21,6 +21,16 @@ import org.apache.spark.sql.catalyst.ProjectingInternalRow
 
 case class WriteDeltaProjections(
     rowProjection: Option[ProjectingInternalRow],
-    updateRowProjection: Option[ProjectingInternalRow],
     rowIdProjection: ProjectingInternalRow,
-    metadataProjection: Option[ProjectingInternalRow])
+    metadataProjection: Option[ProjectingInternalRow]) {
+
+  def all: Seq[ProjectingInternalRow] =
+    rowProjection.toSeq ++ (rowIdProjection +: metadataProjection.toSeq)
+
+  def remapOrdinals(ordinalMap: Int => Int): WriteDeltaProjections = {
+    WriteDeltaProjections(
+      rowProjection.map(_.remapOrdinals(ordinalMap)),
+      rowIdProjection.remapOrdinals(ordinalMap),
+      metadataProjection.map(_.remapOrdinals(ordinalMap)))
+  }
+}

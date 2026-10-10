@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.dynamicpruning
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, AttributeSet, DynamicPruningExpression, Expression, InSubquery, ListQuery, NamedExpression, PredicateHelper, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, DynamicPruningExpression, Expression, InSubquery, ListQuery, NamedExpression, PredicateHelper, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.optimizer.RewritePredicateSubquery
 import org.apache.spark.sql.catalyst.planning.{DeltaBasedRowLevelOperation, GroupBasedRowLevelOperation}
@@ -28,7 +28,6 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{REPLACE_DATA, WRITE_DELT
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.read.Scan
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, MERGE, UPDATE}
-import org.apache.spark.sql.connector.write.SupportsColumnUpdates
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Implicits, DataSourceV2Relation, DataSourceV2ScanRelation}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -44,8 +43,9 @@ import org.apache.spark.util.ArrayImplicits._
  * Note that this rule is also beneficial for operations that deal with deltas of rows. Even if
  * the data source is capable of handling specific changes, it is useful to first discard entire
  * groups that are not modified. The cost of the runtime query is small as it only projects columns
- * required to evaluate the row level operation condition. The main scan, on the other hand, must
- * project all columns, meaning the cost of reading unaffected groups can dominate the runtime.
+ * required to evaluate the row level operation condition. The main scan, on the other hand, also
+ * projects the columns the write needs, meaning the cost of reading unaffected groups can dominate
+ * the runtime.
  */
 class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPlan])
   extends Rule[LogicalPlan] with PredicateHelper {
@@ -111,12 +111,10 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
         // this rule assigns runtime filters to both scan relations (will be shared at runtime)
         // and must transform the runtime filter condition to use correct expr IDs for each relation
         // note this only applies to group-based row-level operations (i.e. ReplaceData)
+        // the map is built from the original table as the write table may be narrower than the
+        // columns the condition references
         // see RewriteUpdateTable for more details
-        val attrMap = if (write.operation.isInstanceOf[SupportsColumnUpdates]) {
-          buildNarrowTableToScanAttrMap(write.table.output, relation.output, cond.references)
-        } else {
-          buildTableToScanAttrMap(write.table.output, relation.output)
-        }
+        val attrMap = buildTableToScanAttrMap(write.originalTable.output, relation.output)
         val transformedCond = cond transform {
           case attr: AttributeReference if attrMap.contains(attr) => attrMap(attr)
         }
@@ -168,30 +166,6 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
               "tableAttr" -> tableAttr.toString,
               "scanAttrs" -> scanAttrs.mkString(",")))
         }
-    }
-    AttributeMap(attrMapping)
-  }
-
-  /**
-   * Variant of `buildTableToScanAttrMap` for the `SupportsColumnUpdates` narrow-scan path.
-   * Table columns dropped from the narrow scan are legitimately absent and silently skipped.
-   * Only attributes referenced by the group-filter condition are required to resolve.
-   */
-  private def buildNarrowTableToScanAttrMap(
-      tableAttrs: Seq[Attribute],
-      scanAttrs: Seq[Attribute],
-      condRefs: AttributeSet): AttributeMap[Attribute] = {
-
-    val attrMapping = tableAttrs.flatMap { tableAttr =>
-      val matched = scanAttrs.find(scanAttr => conf.resolver(scanAttr.name, tableAttr.name))
-      if (matched.isEmpty && condRefs.contains(tableAttr)) {
-        throw new AnalysisException(
-          errorClass = "_LEGACY_ERROR_TEMP_3075",
-          messageParameters = Map(
-            "tableAttr" -> tableAttr.toString,
-            "scanAttrs" -> scanAttrs.mkString(",")))
-      }
-      matched.map(scanAttr => tableAttr -> scanAttr)
     }
     AttributeMap(attrMapping)
   }

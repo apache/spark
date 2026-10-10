@@ -213,7 +213,7 @@ abstract class FileTable(
       mergedOptions(writeInfo.options()),
       writeInfo.rowIdSchema(),
       writeInfo.metadataSchema(),
-      writeInfo.updateSchema())
+      writeInfo.columnUpdateSchema())
   }
 }
 

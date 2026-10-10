@@ -25,39 +25,70 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  * receive a narrow row containing only the columns declared via {@link #requiredDataAttributes()}
  * for updated, copied, and reinserted records, instead of the full table row.
  * <p>
- * Currently honored only for UPDATE. DELETE and MERGE ignore this interface: those operations
- * receive full-width rows and {@link LogicalWriteInfo#updateSchema()} is absent for them.
+ * When {@link LogicalWriteInfo#columnUpdateSchema()} is present, updated, copied, and reinserted
+ * rows follow it: group-based operations receive them through
+ * {@link DataWriter#writeColumnUpdate(Object, Object)} or
+ * {@link DataWriter#writeColumnUpdate(Object)}, and operations that mix in {@link SupportsDelta}
+ * through {@link DeltaWriter#update} and {@link DeltaWriter#reinsert}. Inserted rows always follow
+ * {@link LogicalWriteInfo#schema()} and arrive through {@link DataWriter#write(Object)} and
+ * {@link DeltaWriter#insert}. When {@link LogicalWriteInfo#columnUpdateSchema()} is absent, every
+ * row follows {@link LogicalWriteInfo#schema()}, as for any other operation. Connectors must
+ * decide which layout to expect by whether {@link LogicalWriteInfo#columnUpdateSchema()} is
+ * present, not by the command. A builder that wants full-width rows for some command can check
+ * {@link RowLevelOperationInfo#command()} and build an operation without this mix-in. Currently
+ * Spark narrows only UPDATE.
+ * <p>
+ * The scan builder returned by {@link #newScanBuilder} should implement
+ * {@link org.apache.spark.sql.connector.read.SupportsPushDownRequiredColumns}, so that the scan
+ * does not read columns the command neither references nor declares. Otherwise the scan reads
+ * every column.
  *
- * @since 4.3.0
+ * @since 4.4.0
  */
 @Experimental
 public interface SupportsColumnUpdates extends RowLevelOperation {
   /**
    * Returns the data column references required to perform this row-level operation.
    * <p>
-   * The returned columns become the schema of updated, copied, and reinserted rows, in declared
-   * order. Implementations must include every column they want to receive (typically the columns
-   * reported by {@link RowLevelOperationInfo#updatedColumns()} plus any columns needed for row
-   * lookup or routing, e.g. a primary key). The array must not be empty; an empty array is
-   * rejected with an analysis exception.
+   * When Spark narrows the write, the returned columns become
+   * {@link LogicalWriteInfo#columnUpdateSchema()}, in declared order. Implementations must include
+   * every column they want to receive: every column reported by
+   * {@link RowLevelOperationInfo#updatedColumns()}, plus any columns needed for row lookup or
+   * routing, e.g. a primary key. Columns that are not declared are absent from the rows the
+   * connector receives, so the connector must preserve their values itself.
    * <p>
-   * If any of the columns from {@link RowLevelOperationInfo#updatedColumns()} are
-   * missing, an analysis exception is thrown.
+   * Each entry must name a top-level data column of the table. For updates on nested fields such
+   * as {@code SET s.c1 = -1}, the connector must declare the root struct column {@code s}. Spark
+   * rejects with an analysis exception an empty array, a column that does not exist, a column
+   * declared more than once, a nested field, a metadata column (declare those through
+   * {@link #requiredMetadataAttributes()} instead), and an array that misses a column reported by
+   * {@link RowLevelOperationInfo#updatedColumns()}.
    * <p>
    * If this operation also mixes in {@link SupportsDelta} and represents updates as deletes and
    * inserts ({@link SupportsDelta#representUpdateAsDeleteAndInsert()} returns {@code true}),
-   * every row-ID column ({@link SupportsDelta#rowId()}) must also be included here, unless it is
-   * itself a metadata column; otherwise an analysis exception is thrown, since the reinserted row
-   * would have no identity left for the connector to place it by.
+   * every row-ID column ({@link SupportsDelta#rowId()}) must reach the reinserted row: a data
+   * row-ID column must be declared here, and a metadata row-ID column must be returned by
+   * {@link #requiredMetadataAttributes()} with
+   * {@link org.apache.spark.sql.connector.catalog.MetadataColumn#PRESERVE_ON_REINSERT} set. In
+   * this mode, an UPDATE that assigns a new value to a row-ID column is also rejected, unless
+   * every table column is declared here. Both cases are rejected with an analysis exception.
    * <p>
-   * For updates on nested fields such as {@code SET t.s.c1 = -1} the connector should declare the
-   * root struct column {@code s} rather than any nested field.
+   * Data columns the write needs must be declared here too, even if the command does not
+   * reference them, such as the source columns of partition transforms and any columns used by
+   * {@link RequiresDistributionAndOrdering#requiredDistribution()} or
+   * {@link RequiresDistributionAndOrdering#requiredOrdering()}. Such columns appear in the rows
+   * the connector receives; a connector that does not want to persist them should project them
+   * away inside the connector before writing. A write whose distribution or ordering references
+   * any other column is rejected with an analysis exception, except for metadata columns returned
+   * by {@link #requiredMetadataAttributes()} and, for operations that mix in
+   * {@link SupportsDelta}, row-ID columns.
    * <p>
-   * Partition columns and any clustering keys returned from
-   * {@link RequiresDistributionAndOrdering#requiredDistribution()}, must be declared here too.
-   * Such columns will appear in the row passed to {@link DataWriter#writeUpdate(Object, Object)}
-   * / {@link DeltaWriter#update} / {@link DeltaWriter#reinsert}; a connector that does not want
-   * to persist them should project them away inside the connector before writing.
+   * Spark does not read an undeclared column that neither the command nor a table constraint
+   * references, so such a column is not available for runtime filtering. A scan that reports
+   * runtime filter attributes based on the columns it reads loses runtime group filtering on it,
+   * and a scan that still reports it as a runtime filter attribute fails with
+   * {@code DATA_SOURCE_INVALID_RUNTIME_FILTER_ATTRIBUTE}. Declare partition source columns used
+   * for runtime filtering to keep it.
    */
   NamedReference[] requiredDataAttributes();
 }

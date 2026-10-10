@@ -144,7 +144,6 @@ class TxnTable(
   override def newRowLevelOperationBuilder(
       info: RowLevelOperationInfo): RowLevelOperationBuilder = {
     catalog.writeTarget = this
-    delegate.lastUpdatedColumns = info.updatedColumns()
     super.newRowLevelOperationBuilder(info)
   }
 
