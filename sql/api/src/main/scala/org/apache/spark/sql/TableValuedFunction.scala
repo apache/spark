@@ -170,6 +170,22 @@ abstract class TableValuedFunction {
   def variant_explode(input: Column): Dataset[Row]
 
   /**
+   * Separates a variant object/array into multiple rows, including nested fields/elements when
+   * `recursive` is true. When false, the result schema is
+   * `struct&lt;pos int, key string, value variant&gt;`; when true, the result schema is
+   * `struct&lt;path string, pos int, key string, value variant&gt;`.
+   *
+   * `pos` is the position within the parent, `key` is the object field name or NULL for arrays,
+   * and `value` is the field/element value. In recursive mode, `path` is its JSONPath. It ignores
+   * any input that is not a variant array/object, including SQL NULL, variant null, and any other
+   * variant values.
+   *
+   * @group variant_funcs
+   * @since 4.4.0
+   */
+  def variant_explode(input: Column, recursive: Boolean): Dataset[Row]
+
+  /**
    * Separates a variant object/array into multiple rows containing its fields/elements. Its
    * result schema is `struct&lt;pos int, key string, value variant&gt;`. `pos` is the position of
    * the field/element in its parent object/array, and `value` is the field/element value. `key`
@@ -181,6 +197,22 @@ abstract class TableValuedFunction {
    * @since 4.0.0
    */
   def variant_explode_outer(input: Column): Dataset[Row]
+
+  /**
+   * Separates a variant object/array into multiple rows, including nested fields/elements when
+   * `recursive` is true. When false, the result schema is
+   * `struct&lt;pos int, key string, value variant&gt;`; when true, the result schema is
+   * `struct&lt;path string, pos int, key string, value variant&gt;`.
+   *
+   * `pos` is the position within the parent, `key` is the object field name or NULL for arrays,
+   * and `value` is the field/element value. In recursive mode, `path` is its JSONPath. Unlike
+   * variant_explode, if the given variant is not a variant array/object, including SQL NULL,
+   * variant null, and any other variant values, then NULL is produced.
+   *
+   * @group variant_funcs
+   * @since 4.4.0
+   */
+  def variant_explode_outer(input: Column, recursive: Boolean): Dataset[Row]
 
   /**
    * Returns a `DataFrame` of logs collected from Python workers.

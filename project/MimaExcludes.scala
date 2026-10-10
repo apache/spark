@@ -46,7 +46,12 @@ object MimaExcludes {
       "org.apache.spark.ml.regression.DecisionTreeRegressionModel.numLeave"),
     // [SPARK-59154] Remove unused prediction variance helper after inlining its implementation.
     ProblemFilters.exclude[DirectMissingMethodProblem](
-      "org.apache.spark.ml.regression.DecisionTreeRegressionModel.predictVariance")
+      "org.apache.spark.ml.regression.DecisionTreeRegressionModel.predictVariance"),
+    // [SPARK-58645][SQL] Add recursive mode to variant explode table-valued functions
+    ProblemFilters.exclude[ReversedMissingMethodProblem](
+      "org.apache.spark.sql.TableValuedFunction.variant_explode"),
+    ProblemFilters.exclude[ReversedMissingMethodProblem](
+      "org.apache.spark.sql.TableValuedFunction.variant_explode_outer")
   )
 
   // Exclude rules for 4.3.x from 4.2.0 (add 4.3-specific filters below as needed).
