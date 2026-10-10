@@ -53,11 +53,13 @@ private case class TeradataDialect() extends JdbcDialect with NoLegacyJDBCError 
   // Teradata does not support cascading a truncation
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
 
-  // scalastyle:off line.size.limit
-  // See https://docs.teradata.com/r/Enterprise_IntelliFlex_VMware/SQL-Stored-Procedures-and-Embedded-SQL/SQLSTATE-Mappings/SQLSTATE-Codes
-  // scalastyle:on line.size.limit
+  // See https://docs.teradata.com/r/VMware/Analytics-Database-Messages
+  // The Teradata JDBC driver reports syntax errors with SQLSTATE 42000, but it uses the same
+  // state for access errors such as 3523 and 3524, and other class 42 states for missing objects
+  // (3807, 42S02) and columns (3810, 42S22). So only the error codes whose message starts with
+  // "Syntax error" are classified as syntax errors.
   override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
-    Option(exception.getSQLState).exists(_.startsWith("42"))
+    Set(3706, 3707, 3708, 3709).contains(exception.getErrorCode)
   }
 
   /**
