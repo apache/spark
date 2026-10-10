@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, UnresolvedSeed}
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -37,6 +39,10 @@ import org.apache.spark.unsafe.types.UTF8String
 case class PrintToStderr(child: Expression) extends UnaryExpression {
 
   override def dataType: DataType = child.dataType
+
+  override lazy val deterministic: Boolean = false
+
+  override def foldable: Boolean = false
 
   protected override def nullSafeEval(input: Any): Any = {
     // scalastyle:off println
@@ -412,6 +418,38 @@ case class CurrentUser()
   final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }
 
+private object AesEncryptDeterminism {
+  def apply(arguments: Seq[Expression]): Boolean = {
+    arguments.forall(_.deterministic) &&
+      (hasNonEmptyFixedValue(arguments(4)) || isEcbFixedValue(arguments(2)))
+  }
+
+  private def fixedValue(expression: Expression): Option[Any] = {
+    if (expression.resolved && expression.foldable && expression.deterministic &&
+        expression.contextIndependentFoldable) {
+      try {
+        Option(expression.eval(EmptyRow))
+      } catch {
+        case NonFatal(_) => None
+      }
+    } else {
+      None
+    }
+  }
+
+  private def hasNonEmptyFixedValue(expression: Expression): Boolean =
+    fixedValue(expression) match {
+      case Some(value: Array[Byte]) => value.nonEmpty
+      case Some(value: UTF8String) => value.numBytes() > 0
+      case _ => false
+    }
+
+  private def isEcbFixedValue(expression: Expression): Boolean = fixedValue(expression) match {
+    case Some(value: UTF8String) => value.toString.equalsIgnoreCase("ECB")
+    case _ => false
+  }
+}
+
 /**
  * A function that encrypts input using AES. Key lengths of 128, 192 or 256 bits can be used.
  * If either argument is NULL or the key length is not one of the permitted values,
@@ -471,12 +509,15 @@ case class AesEncrypt(
     aad: Expression)
   extends RuntimeReplaceable with ImplicitCastInputTypes {
 
+  override lazy val deterministic: Boolean = AesEncryptDeterminism(children)
+
   override lazy val replacement: Expression = StaticInvoke(
     classOf[ExpressionImplUtils],
     BinaryType,
     "aesEncrypt",
     Seq(input, key, mode, padding, iv, aad),
-    inputTypes)
+    inputTypes,
+    isDeterministic = deterministic)
 
   def this(input: Expression, key: Expression, mode: Expression, padding: Expression, iv: Expression) =
     this(input, key, mode, padding, iv, Literal(""))
