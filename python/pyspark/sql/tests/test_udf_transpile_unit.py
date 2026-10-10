@@ -148,8 +148,9 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             transformed_df = input_df.select(pudf("a").alias("result"))
             [row] = transformed_df.collect()
             self.assertEqual(row[0], 5)
-            physical_plan = transformed_df._jdf.queryExecution().executedPlan().toString()
-            self.assertNotIn("UDF", physical_plan)
+            # Count EvalPython nodes rather than matching "UDF" as a substring:
+            # the NULL guard's raise_error renders as USER_RAISED_EXCEPTION.
+            self.assertEqual(0, self._eval_python_count(transformed_df))
 
         with self.sql_conf({"spark.sql.experimental.optimizer.transpilePyUDFs": False}):
             call = PlusFour()
@@ -160,8 +161,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             transformed_df = input_df.select(pudf("a").alias("result"))
             [row] = transformed_df.collect()
             self.assertEqual(row[0], 5)
-            physical_plan = transformed_df._jdf.queryExecution().executedPlan().toString()
-            self.assertIn("UDF", physical_plan)
+            self.assertGreater(self._eval_python_count(transformed_df), 0)
 
     def test_udf_not_transpilable(self):
         class UnsupportedEx:
@@ -630,8 +630,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             expected = [None if v is None else v + 4 for v in [-3, -1, 0, 1, 7, None, 100]]
             self.assertEqual(actual, expected)
             # Plan should also have the UDF stripped under the rewrite.
-            physical_plan = transformed_df._jdf.queryExecution().executedPlan().toString()
-            self.assertNotIn("UDF", physical_plan)
+            self.assertEqual(0, self._eval_python_count(transformed_df))
 
     def test_udf_transpile_falls_back_for_non_boolean_short_circuit(self):
         # Python's `x or 0` returns x if truthy else 0; Spark's `|` is
@@ -1693,9 +1692,9 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 self.assertEqual(0, self._eval_python_count(projected), str(func))
             return [r[0] for r in projected.collect()]
 
-    def _raises(self, func, schema, rows, needle="numeric"):
+    def _raises(self, func, schema, rows, needle="numeric", return_type=LongType()):
         with self.sql_conf(_TRANSPILE_ON):
-            u = self._transpiled_udf(func, LongType())
+            u = self._transpiled_udf(func, return_type)
             df = self.spark.createDataFrame(rows, schema)
             with self.assertRaises(Exception) as ctx:
                 df.select(u(*df.columns)).collect()
@@ -2586,15 +2585,16 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             "both parameters come from the call site",
         )
 
-    def test_udf_transpile_known_value_divergences(self):
-        # Transpile but DIVERGE from Python (documented in transpile.py; pinned so
-        # a future fix is noticed): unguarded arithmetic on NULL yields NULL where
-        # Python raises TypeError. Mixed str/numeric arithmetic is handled or falls
-        # back -- see test_udf_transpile_string_operands{,_fall_back}.
-        unguarded = lambda x: x + 1  # noqa: E731
+    def test_udf_transpile_closed_value_divergences(self):
+        # Divergences that used to be pinned here and are now closed, kept as
+        # regression guards so a flip-back is loud. Arithmetic on a NULL operand
+        # was one (`x + 1` on NULL yielded NULL where Python raises TypeError);
+        # the NULL guards closed it, and the raise is pinned in
+        # test_udf_transpile_numeric_null_and_error_paths. Mixed str/numeric
+        # arithmetic is handled or falls back -- see
+        # test_udf_transpile_string_operands{,_fall_back}.
         nan_gt = lambda x: (x > 0) if x is not None else None  # noqa: E731
         eq_strlit = lambda x: (x == "5") if x is not None else None  # noqa: E731
-        self.assertEqual(self._vals(unguarded, LongType(), "a long", [(None,), (5,)]), [None, 6])
         # `nan > 0` used to be pinned here as a divergence: Spark orders NaN above
         # every value, so it returned True where Python returns False. `_nan_guard`
         # closed that, and the case stays as a regression guard -- if the guard
@@ -2794,8 +2794,9 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
     def test_udf_transpile_numeric_null_and_error_paths(self):
         # Runtime behavior of the new lowerings. `//` and `%` by zero raise in
         # Spark and Python alike; the shift guards turn Python's ValueError and
-        # its promote-on-overflow into ANSI-style raises; and min/max guard NULL
-        # because least/greatest would skip it where Python raises TypeError.
+        # its promote-on-overflow into ANSI-style raises; and every numeric
+        # lowering guards NULL, because Spark propagates it where Python raises
+        # TypeError.
         floordiv_zero = lambda x: x // 0  # noqa: E731
         negative_shift = lambda a, b: a << b  # noqa: E731
         overflow_shift = lambda a, b: a << b  # noqa: E731
@@ -2804,13 +2805,48 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         self._raises(negative_shift, "a long, b long", [(1, -1)], "negative shift")
         self._raises(overflow_shift, "a long, b long", [(1, 63)], "overflow")
         self._raises(min_null, "a long, b long", [(None, 3)], "null")
-        # Unguarded arithmetic still yields NULL for a NULL input rather than
-        # raising, matching the documented caveat for `+`/`-`/`*`.
+        # Every numeric lowering raises on a NULL operand now, matching the
+        # TypeError Python raises instead of propagating NULL the way Spark's
+        # arithmetic does. The guard is the shared `_raise_on_null_operand`,
+        # so one row per lowering pins the contract; floordiv gets both
+        # operand positions as the representative case.
+        add = lambda a, b: a + b  # noqa: E731
+        sub = lambda a, b: a - b  # noqa: E731
+        mul = lambda a, b: a * b  # noqa: E731
         floordiv = lambda a, b: a // b  # noqa: E731
-        self.assertEqual(
-            self._vals(floordiv, LongType(), "a long, b long", [(None, 2), (7, None)]),
-            [None, None],
-        )
+        mod = lambda a, b: a % b  # noqa: E731
+        bit_and = lambda a, b: a & b  # noqa: E731
+        power = lambda x: x**2  # noqa: E731
+        negate = lambda x: -x  # noqa: E731
+        unary_plus = lambda x: +x  # noqa: E731
+        invert = lambda x: ~x  # noqa: E731
+        absolute = lambda x: abs(x)  # noqa: E731
+        rounded = lambda x: round(x)  # noqa: E731
+        div = lambda a, b: a / b  # noqa: E731
+        repeat = lambda a, b: a * b  # noqa: E731
+        self._raises(add, "a long, b long", [(None, 2)], "null")
+        self._raises(sub, "a long, b long", [(None, 2)], "null")
+        self._raises(mul, "a long, b long", [(7, None)], "null")
+        self._raises(floordiv, "a long, b long", [(None, 2)], "null")
+        self._raises(floordiv, "a long, b long", [(7, None)], "null")
+        self._raises(mod, "a long, b long", [(None, 2)], "null")
+        self._raises(bit_and, "a long, b long", [(None, 2)], "null")
+        self._raises(power, "a long", [(None,)], "null")
+        self._raises(negate, "a long", [(None,)], "null")
+        self._raises(unary_plus, "a long", [(None,)], "null")
+        self._raises(invert, "a long", [(None,)], "null")
+        self._raises(absolute, "a long", [(None,)], "null")
+        self._raises(rounded, "a long", [(None,)], "null")
+        # `/` and `*` on a string declare non-long return types, so they pass
+        # one to `_raises`. `/` gets a row per lowering arm (int32 and
+        # fractional); repeat gets both arms (str*int and int*str lower
+        # separately) and both operand positions of the str*int arm -- one
+        # collect aborts on the first raising row, so each pin is its own call.
+        self._raises(div, "a int, b int", [(None, 2)], "null", DoubleType())
+        self._raises(div, "a double, b double", [(7.0, None)], "null", DoubleType())
+        self._raises(repeat, "a string, b long", [(None, 2)], "null", StringType())
+        self._raises(repeat, "a string, b long", [("ab", None)], "null", StringType())
+        self._raises(repeat, "a long, b string", [(None, "ab")], "null", StringType())
 
     def test_udf_transpile_shift_counts_at_and_past_the_width(self):
         # Java (and so Spark) masks a shift distance to the operand's width where
@@ -2900,14 +2936,13 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
     def test_udf_transpile_pow_zero_keeps_the_base(self):
         # `x ** 0` is 1 for every x in Python -- but `None ** 0` raises TypeError,
         # so folding to a bare literal 1 would both invent a value for NULL and
-        # discard any error raised while computing the base. NULL must stay NULL
-        # (the documented unguarded-NULL behavior) and `(x // 0) ** 0` must raise.
+        # discard any error raised while computing the base. The base stays in
+        # the condition: NULL raises like everywhere else, and `(x // 0) ** 0`
+        # raises the division's error.
         power_zero = lambda x: x**0  # noqa: E731
         zero_div_pow = lambda x: (x // 0) ** 0  # noqa: E731
-        self.assertEqual(
-            self._native_vals(power_zero, LongType(), "a long", [(5,), (None,), (0,)]),
-            [1, None, 1],
-        )
+        self.assertEqual(self._native_vals(power_zero, LongType(), "a long", [(5,), (0,)]), [1, 1])
+        self._raises(power_zero, "a long", [(None,)], "null")
         self._raises(zero_div_pow, "a long", [(5,)], "zero")
 
     def test_udf_transpile_narrowing_keeps_the_narrowest_requirement(self):
@@ -2927,17 +2962,19 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         )
         self._assert_runs_as_python(mixed, S, "a string, b bigint")
 
-    def test_udf_transpile_right_shift_null_stays_null(self):
-        # `>>` past the width branches on `base < 0`, which is NULL for a NULL
-        # operand -- without an explicit check the zero branch fires and invents a
-        # value. NULL has to behave the same at any count.
+    def test_udf_transpile_shift_null_raises(self):
+        # A NULL shift operand raises the way Python's TypeError does, in either
+        # position and either direction. `>>` past the width branches on
+        # `base < 0`, which is NULL for a NULL operand -- without the guard the
+        # zero branch would fire and invent a value.
         rshift = lambda a, b: a >> b  # noqa: E731
-        self.assertEqual(
-            self._native_vals(
-                rshift, LongType(), "a bigint, b bigint", [(None, 70), (None, 5), (None, None)]
-            ),
-            [None, None, None],
-        )
+        lshift = lambda a, b: a << b  # noqa: E731
+        self._raises(rshift, "a bigint, b bigint", [(None, 70)], "null")
+        self._raises(rshift, "a bigint, b bigint", [(None, 5)], "null")
+        self._raises(rshift, "a bigint, b bigint", [(5, None)], "null")
+        self._raises(rshift, "a bigint, b bigint", [(None, None)], "null")
+        self._raises(lshift, "a bigint, b bigint", [(None, 5)], "null")
+        self._raises(lshift, "a bigint, b bigint", [(5, None)], "null")
 
     def test_udf_transpile_pow_widens_narrow_columns(self):
         # `Multiply` keeps its operands' type, so expanding `x ** 2` in place would
