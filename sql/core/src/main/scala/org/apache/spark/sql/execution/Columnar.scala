@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
+import org.apache.spark.sql.execution.convention.{BatchType, RowType, TransitionGraph}
 import org.apache.spark.sql.execution.datasources.V1WriteCommand
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector
@@ -551,25 +552,37 @@ case class RowToColumnarExec(child: SparkPlan) extends RowToColumnarTransition {
  *
  * @param columnarRules custom columnar rules
  * @param outputsColumnar whether or not the produced plan should output columnar format.
+ * @param transitionGraph graph containing the types and transitions available for planning.
  */
 case class ApplyColumnarRulesAndInsertTransitions(
     columnarRules: Seq[ColumnarRule],
-    outputsColumnar: Boolean)
+    outputsColumnar: Boolean,
+    transitionGraph: TransitionGraph = TransitionGraph())
   extends Rule[SparkPlan] {
 
   /**
    * Ensures columnar output on the input query plan. Transitions will be inserted
    * on demand.
    */
-  private def ensureOutputsColumnar(plan: SparkPlan): SparkPlan = {
+  private def ensureOutputsColumnar(plan: SparkPlan, batchType: BatchType): SparkPlan = {
     if (!plan.supportsColumnar) {
-      // The tree feels kind of backwards
-      // Columnar Processing will start here, so transition from row to columnar
-      RowToColumnarExec(ensureOutputsRowBased(plan))
-    } else if (!plan.isInstanceOf[RowToColumnarTransition]) {
-      plan.withNewChildren(plan.children.map(ensureOutputsColumnar))
+      // A mixed union becomes row-capable after its children are converted to rows.
+      val rowType = if (plan.supportsRowBased) {
+        plan.convention.rowType
+      } else {
+        RowType.SparkRowType
+      }
+      val rowPlan = ensureOutputsRowBased(plan, rowType)
+      transitionGraph.insertTransitions(
+        rowPlan, rowPlan.convention.rowType, batchType)
     } else {
-      plan
+      val columnarPlan = if (!plan.isInstanceOf[RowToColumnarTransition]) {
+        plan.withNewChildren(plan.children.map(ensureOutputsColumnar(_, plan.convention.batchType)))
+      } else {
+        plan
+      }
+      transitionGraph.insertTransitions(
+        columnarPlan, columnarPlan.convention.batchType, batchType)
     }
   }
 
@@ -577,46 +590,52 @@ case class ApplyColumnarRulesAndInsertTransitions(
    * Ensures row-based output on the input query plan. Transitions will be inserted
    * on demand.
    */
-  private def ensureOutputsRowBased(plan: SparkPlan): SparkPlan = {
+  private def ensureOutputsRowBased(plan: SparkPlan, rowType: RowType): SparkPlan = {
     if (plan.supportsColumnar && !plan.supportsRowBased) {
-      // `outputsColumnar` is false but the plan only outputs columnar format, so add a
-      // to-row transition here.
-      ColumnarToRowExec(ensureOutputsColumnar(plan))
-    } else if (!plan.isInstanceOf[ColumnarToRowTransition]) {
-      val outputsColumnar = plan match {
-        // With planned write, the write command invokes child plan's `executeWrite` which is
-        // neither columnar nor row-based.
-        case write: DataWritingCommandExec
-            if write.cmd.isInstanceOf[V1WriteCommand] && conf.plannedWriteEnabled =>
-          write.child.supportsColumnar
-        // If it is not required to output columnar (`outputsColumnar` is false), and the plan
-        // supports row-based and columnar, we don't need to output row-based data on its children
-        // nodes. So we set `outputsColumnar` to true.
-        case _ if plan.supportsColumnar && plan.supportsRowBased => true
-        case _ =>
-          false
+      val columnarPlan = ensureOutputsColumnar(plan, plan.convention.batchType)
+      transitionGraph.insertTransitions(
+        columnarPlan, columnarPlan.convention.batchType, rowType)
+    } else {
+      val rowPlan = if (!plan.isInstanceOf[ColumnarToRowTransition]) {
+        val makeChild: SparkPlan => SparkPlan = plan match {
+          // With planned write, the write command invokes child plan's executeWrite which is
+          // neither columnar nor row-based.
+          case write: DataWritingCommandExec
+              if write.cmd.isInstanceOf[V1WriteCommand] && conf.plannedWriteEnabled =>
+            if (write.child.supportsColumnar) {
+              ensureOutputsColumnar(_, write.child.convention.batchType)
+            } else {
+              ensureOutputsRowBased(_, write.child.convention.rowType)
+            }
+          // Dual-mode plans retain columnar children even when their output is row-based.
+          case _ if plan.supportsColumnar && plan.supportsRowBased =>
+            ensureOutputsRowBased(_, plan.convention.rowType)
+          case _ =>
+            // A mixed union has no row convention until its children are aligned.
+            val childRowType = if (plan.supportsRowBased) {
+              plan.convention.rowType
+            } else {
+              rowType
+            }
+            ensureOutputsRowBased(_, childRowType)
+        }
+        plan.withNewChildren(plan.children.map(makeChild(_)))
+      } else {
+        plan
       }
-      plan.withNewChildren(plan.children.map(insertTransitions(_, outputsColumnar)))
-    } else {
-      plan
-    }
-  }
-
-  /**
-   * Inserts RowToColumnarExecs and ColumnarToRowExecs where needed.
-   */
-  private def insertTransitions(plan: SparkPlan, outputsColumnar: Boolean): SparkPlan = {
-    if (outputsColumnar) {
-      ensureOutputsColumnar(plan)
-    } else {
-      ensureOutputsRowBased(plan)
+      transitionGraph.insertTransitions(
+        rowPlan, rowPlan.convention.rowType, rowType)
     }
   }
 
   def apply(plan: SparkPlan): SparkPlan = {
     var preInsertPlan: SparkPlan = plan
     columnarRules.foreach(r => preInsertPlan = r.preColumnarTransitions(preInsertPlan))
-    var postInsertPlan = insertTransitions(preInsertPlan, outputsColumnar)
+    var postInsertPlan = if (outputsColumnar) {
+      ensureOutputsColumnar(preInsertPlan, BatchType.SparkBatchType)
+    } else {
+      ensureOutputsRowBased(preInsertPlan, RowType.SparkRowType)
+    }
     columnarRules.reverse.foreach(r => postInsertPlan = r.postColumnarTransitions(postInsertPlan))
     postInsertPlan
   }
