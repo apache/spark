@@ -3899,6 +3899,7 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
             (double(1.5e-5), "1.5E-5"),
             (double(-1e20), "-1.0E20"),
             (double(5e-324), "4.9E-324"),
+            (double(0.1 + 0.2), "0.30000000000000004"),
             # Powers of two whose shortest decimal is not the closest one of that length.
             (double(2.0**-24), "5.960464477539063E-8"),
             (double(-(2.0**-24)), "-5.960464477539063E-8"),
@@ -3930,6 +3931,11 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
 
         self.assertEqual(
             timestamp(0, ntz=False).toJson("Asia/Kolkata"), '"1970-01-01 05:30:00+05:30"'
+        )
+        # 1800-01-01T00:00Z, where the local mean time offset of -07:52:58 is truncated.
+        self.assertEqual(
+            timestamp(-5364662400000000, ntz=False).toJson("America/Los_Angeles"),
+            '"1799-12-31 16:07:02-07:52"',
         )
 
     def test_invalid_create_row(self):
