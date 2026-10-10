@@ -19,9 +19,9 @@ package org.apache.spark.api.python
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream, EOFException}
 import java.nio.charset.StandardCharsets
-import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.{CountDownLatch, FutureTask, TimeUnit}
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.{SparkException, SparkFunSuite, TaskContext}
 
 class BasePythonRunnerSuite extends SparkFunSuite {
 
@@ -48,6 +48,105 @@ class BasePythonRunnerSuite extends SparkFunSuite {
       release.countDown()
       futures.foreach(_.get(1, TimeUnit.MINUTES))
     }
+  }
+
+  /**
+   * A writer that, once started, keeps running until `release` is counted down, ignoring
+   * interrupts the way a writer in the middle of copying a row into a HybridRowQueue page does.
+   */
+  private class UninterruptibleWriter extends Runnable {
+    val started = new CountDownLatch(1)
+    val release = new CountDownLatch(1)
+    @volatile var exited = false
+
+    override def run(): Unit = {
+      started.countDown()
+      try {
+        var done = false
+        while (!done) {
+          try {
+            done = release.await(1, TimeUnit.MINUTES)
+          } catch {
+            case _: InterruptedException => // keep going, like a row copy in progress
+          }
+        }
+      } finally {
+        exited = true
+      }
+    }
+  }
+
+  test("SPARK-60113: task completion waits for the pipelined writer to exit") {
+    val context = TaskContext.empty()
+    val writer = new UninterruptibleWriter
+    // Registered before the writer, so it runs after the writer's listener (LIFO), like the
+    // listener that closes the HybridRowQueue and frees its pages.
+    @volatile var exitedBeforeCleanup: Option[Boolean] = None
+    context.addTaskCompletionListener[Unit] { _ => exitedBeforeCleanup = Some(writer.exited) }
+    BasePythonRunner.startPipelinedWriter(writer, context)
+    assert(writer.started.await(1, TimeUnit.MINUTES))
+
+    val completion = new Thread(() => context.markTaskCompleted(None))
+    completion.setDaemon(true)
+    completion.start()
+    try {
+      // Task completion must stay blocked while the writer is still running.
+      completion.join(500)
+      assert(completion.isAlive)
+      assert(exitedBeforeCleanup.isEmpty)
+    } finally {
+      writer.release.countDown()
+    }
+    completion.join(TimeUnit.MINUTES.toMillis(1))
+    assert(!completion.isAlive)
+    assert(exitedBeforeCleanup === Some(true))
+  }
+
+  test("SPARK-60113: task completion waits for the pipelined writer even if interrupted") {
+    val context = TaskContext.empty()
+    val writer = new UninterruptibleWriter
+    @volatile var exitedBeforeCleanup: Option[Boolean] = None
+    context.addTaskCompletionListener[Unit] { _ => exitedBeforeCleanup = Some(writer.exited) }
+    BasePythonRunner.startPipelinedWriter(writer, context)
+    assert(writer.started.await(1, TimeUnit.MINUTES))
+
+    @volatile var interruptedAfterCompletion = false
+    val completion = new Thread(() => {
+      context.markTaskCompleted(None)
+      interruptedAfterCompletion = Thread.currentThread().isInterrupted
+    })
+    completion.setDaemon(true)
+    completion.start()
+    try {
+      completion.join(200)
+      // E.g. a task kill interrupting the task thread while it runs the listeners.
+      completion.interrupt()
+      completion.join(500)
+      assert(completion.isAlive)
+      assert(exitedBeforeCleanup.isEmpty)
+    } finally {
+      writer.release.countDown()
+    }
+    completion.join(TimeUnit.MINUTES.toMillis(1))
+    assert(!completion.isAlive)
+    assert(exitedBeforeCleanup === Some(true))
+    // The interrupt is preserved for the code that runs after the listeners.
+    assert(interruptedAfterCompletion)
+  }
+
+  test("SPARK-60113: a pipelined writer stopped before it starts never runs") {
+    val writer = new UninterruptibleWriter
+    val writerTask = new BasePythonRunner.PipelinedWriterTask(writer)
+    // A future the pool has not started yet: stopping must not wait for it.
+    val future = new FutureTask[Unit](writerTask, ())
+    writerTask.stopAndAwaitExit(future, "test task")
+    assert(future.isCancelled)
+    // Even if the pool thread reaches the task afterwards, the writer must not run. Release it
+    // up front so that a writer that wrongly runs fails the test instead of hanging it.
+    writer.release.countDown()
+    writerTask.run()
+    assert(writer.started.getCount === 1)
+    assert(!writer.exited)
   }
 
   test("SPARK-58192: pyspark memory is split across the executor's concurrent task slots") {
