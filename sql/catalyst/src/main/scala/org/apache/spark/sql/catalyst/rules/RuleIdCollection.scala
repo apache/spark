@@ -119,6 +119,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.UpdateAttributeNullability" ::
       "org.apache.spark.sql.catalyst.analysis.UpdateOuterReferences" ::
       "org.apache.spark.sql.catalyst.expressions.EliminatePipeOperators" ::
+      "org.apache.spark.sql.catalyst.expressions.EliminateResolvedPipeSetInputs" ::
       "org.apache.spark.sql.catalyst.expressions.ExtractSemiStructuredFields" ::
       "org.apache.spark.sql.catalyst.expressions.ValidateAndStripPipeExpressions" ::
       // Catalyst Optimizer rules

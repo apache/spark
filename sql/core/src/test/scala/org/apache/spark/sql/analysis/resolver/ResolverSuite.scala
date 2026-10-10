@@ -24,9 +24,11 @@ import org.apache.spark.sql.catalyst.analysis.resolver.{
   Resolver,
   ResolverExtension
 }
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, PipeSetInput}
 import org.apache.spark.sql.catalyst.plans.NormalizePlan
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.IntegerType
 
@@ -105,6 +107,40 @@ class ResolverSuite extends SharedSparkSession {
         "extensions" -> "TestRelationResolver, TestRelationOtherResolver"
       )
     )
+  }
+
+  test("SPARK-59146: pipe SET cleanup follows extended rewrite rules") {
+    var extendedRuleSawPipeSetInput = false
+    val extendedRewriteRule = new Rule[LogicalPlan] {
+      override def apply(plan: LogicalPlan): LogicalPlan = {
+        if (plan.exists(_.isInstanceOf[PipeSetInput])) {
+          extendedRuleSawPipeSetInput = true
+        }
+        plan.transformUp {
+          case pipeSetInput: PipeSetInput => pipeSetInput.child
+        }
+      }
+    }
+    val resolver = new Resolver(
+      catalogManager = spark.sessionState.catalogManager,
+      sharedRelationCache = spark.sharedState.relationCache,
+      extendedRewriteRules = Seq(extendedRewriteRule))
+
+    val result = resolver.lookupMetadataAndResolve(spark.sessionState.sqlParser.parsePlan(
+      "VALUES (1, 10) AS t(a, b) |> SET a = a + 1 " +
+        "|> INNER JOIN VALUES (2, 20) AS u(a, c) USING (a) " +
+        "|> SELECT a"))
+    val hiddenOutput = result.collect {
+      case project: Project =>
+        project.getTagValue(Project.hiddenOutputTag).toSeq.flatten
+    }.flatten
+
+    assert(extendedRuleSawPipeSetInput)
+    assert(!result.exists(_.isInstanceOf[PipeSetInput]))
+    assert(!hiddenOutput.exists(_.pipeSetRetained))
+    assert(hiddenOutput.exists { attribute =>
+      attribute.name == "a" && attribute.qualifier == Seq("u")
+    })
   }
 
   private def createResolver(extensions: Seq[ResolverExtension] = Seq.empty): Resolver = {

@@ -332,6 +332,12 @@ class ExpressionResolver(
             resolveLiteral(unresolvedLiteral)
           case unresolvedOrdinal: UnresolvedOrdinal =>
             ordinalResolver.resolve(unresolvedOrdinal)
+          case pipeExpression: PipeExpression
+              if pipeExpression.clause == PipeOperators.setClause =>
+            val resolvedChild = resolve(pipeExpression.child)
+            ValidateAndStripPipeExpressions.validateAndStripPipeExpression(
+              pipeExpression,
+              resolvedChild)
           case unresolvedPredicate: Predicate =>
             resolvePredicate(unresolvedPredicate)
           case unresolvedScalarSubquery: ScalarSubquery =>

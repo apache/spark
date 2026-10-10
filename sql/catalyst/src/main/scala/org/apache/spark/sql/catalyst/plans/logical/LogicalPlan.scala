@@ -157,13 +157,30 @@ abstract class LogicalPlan
     }
   }
 
-  private[this] lazy val childAttributes = AttributeSeq.fromNormalOutput(children.flatMap(_.output))
+  private def attributesForResolution(
+      output: Seq[Attribute],
+      metadataOutput: Seq[Attribute]): AttributeSeq = {
+    lazy val outputSet = AttributeSet(output)
+    new AttributeSeq(
+      output.map(_.markAsAllowAnyAccess()) ++
+        metadataOutput.filter(attribute =>
+          attribute.qualifiedAccessOnly && !outputSet.contains(attribute)))
+  }
 
-  private[this] lazy val childMetadataAttributes = AttributeSeq(children.flatMap(_.metadataOutput))
+  private[this] lazy val childOutput = children.flatMap(_.output)
 
-  private[this] lazy val outputAttributes = AttributeSeq.fromNormalOutput(output)
+  private[this] lazy val childMetadataOutput = children.flatMap(_.metadataOutput)
 
-  private[this] lazy val outputMetadataAttributes = AttributeSeq(metadataOutput)
+  private[this] lazy val childAttributes =
+    attributesForResolution(childOutput, childMetadataOutput)
+
+  private[this] lazy val childMetadataAttributes =
+    new AttributeSeq(childMetadataOutput.filterNot(_.qualifiedAccessOnly))
+
+  private[this] lazy val outputAttributes = attributesForResolution(output, metadataOutput)
+
+  private[this] lazy val outputMetadataAttributes =
+    new AttributeSeq(metadataOutput.filterNot(_.qualifiedAccessOnly))
 
   /**
    * Optionally resolves the given strings to a [[NamedExpression]] using the input from all child
