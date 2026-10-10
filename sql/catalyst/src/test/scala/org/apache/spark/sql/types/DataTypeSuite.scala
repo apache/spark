@@ -1708,6 +1708,27 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("FileType: name, JSON and DDL round trip") {
+    assert(FileType.typeName === "file")
+    assert(FileType.simpleString === "file")
+    assert(FileType.sql === "FILE EXTERNAL")
+    assert(FileType.json === "\"file\"")
+    assert(DataType.fromJson("\"file\"") === FileType)
+    assert(DataType.fromDDL(FileType.sql) === FileType)
+    assert(!(FileType: DataType).isInstanceOf[StructType])
+
+    val schema = new StructType()
+      .add("id", IntegerType)
+      .add("f", FileType, nullable = false)
+      .add("fs", ArrayType(FileType))
+      .add("m", MapType(StringType, FileType))
+    assert(DataType.fromJson(schema.json) === schema)
+    assert(DataType.fromDDL(schema.toDDL) === schema)
+    assert(schema("f").dataType.sameType(FileType))
+    assert(schema.asNullable("f").nullable)
+    assert(FileType.defaultSize > 0)
+  }
+
   test("singleton DataType equality after deserialization") {
     // Singleton DataTypes that use `case object` pattern matching (e.g., `case BinaryType =>`).
     // If a non-singleton instance is created (e.g., via Kryo deserialization which doesn't call
