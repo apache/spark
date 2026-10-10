@@ -43,7 +43,7 @@ import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.{GeneralParameterizedQuery, NameParameterizedQuery, ParameterizedQueryArgumentsValidator, PosParameterizedQuery, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.encoders._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Expression, Literal}
 import org.apache.spark.sql.catalyst.parser.{HybridParameterContext, NamedParameterContext, ParserInterface, PositionalParameterContext}
 import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LocalRelation, LogicalPlan, OneRowRelation, Project, Range}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
@@ -353,8 +353,9 @@ class SparkSession private(
 
   /** @inheritdoc */
   def createDataFrame(rdd: RDD[_], beanClass: Class[_]): DataFrame = withActive {
-    implicit val encoder: Encoder[Any] = beanEncoderFor(beanClass)
-    createDataset(rdd.asInstanceOf[RDD[Any]]).toDF()
+    val (attributes, toRow) = beanRowSerializer(beanClass)
+    val rowRdd = rdd.asInstanceOf[RDD[Any]].map(toRow)
+    Dataset.ofRows(self, LogicalRDD(attributes, rowRdd.setName(rdd.name))(self))
   }
 
   /** @inheritdoc */
@@ -364,8 +365,9 @@ class SparkSession private(
 
   /** @inheritdoc */
   def createDataFrame(data: java.util.List[_], beanClass: Class[_]): DataFrame = withActive {
-    implicit val encoder: Encoder[Any] = beanEncoderFor(beanClass)
-    createDataset(data.asInstanceOf[java.util.List[Any]]).toDF()
+    val (attributes, toRow) = beanRowSerializer(beanClass)
+    val rows = data.asScala.map(d => toRow(d).copy()).toSeq
+    Dataset.ofRows(self, LocalRelation(attributes, rows))
   }
 
   /** @inheritdoc */
@@ -895,11 +897,15 @@ class SparkSession private(
   }
 
   /**
-   * Encoder for the `createDataFrame(..., beanClass)` overloads. Same as `Encoders.bean`, so Java
-   * records are supported too.
+   * Output attributes and row serializer for the `createDataFrame(..., beanClass)` overloads. They
+   * use the same encoder as `Encoders.bean`, so Java records are supported too. The attributes
+   * come from the encoder's schema rather than its serializer's, which keeps `@Nonnull` boxed
+   * fields non-nullable.
    */
-  private def beanEncoderFor(beanClass: Class[_]): Encoder[Any] = {
-    JavaTypeInference.encoderFor(beanClass.asInstanceOf[Class[Any]])
+  private def beanRowSerializer(
+      beanClass: Class[_]): (Seq[AttributeReference], ExpressionEncoder.Serializer[Any]) = {
+    val encoder = JavaTypeInference.encoderFor(beanClass.asInstanceOf[Class[Any]])
+    (toAttributes(encoder.schema), ExpressionEncoder(encoder).createSerializer())
   }
 
   private[sql] def leafNodeDefaultParallelism: Int = {
