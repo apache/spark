@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.math.{BigDecimal => JBigDecimal}
+import java.nio.file.Files
 import java.time.{LocalDateTime, LocalTime}
 import java.util.Locale
 
@@ -27,16 +28,21 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
 import com.google.common.primitives.UnsignedLong
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
+import org.apache.parquet.bytes.BytesUtils
 import org.apache.parquet.column.{Encoding, ParquetProperties}
 import org.apache.parquet.column.ParquetProperties.WriterVersion.PARQUET_1_0
 import org.apache.parquet.example.data.Group
 import org.apache.parquet.example.data.simple.{SimpleGroup, SimpleGroupFactory}
 import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.example.ExampleParquetWriter
+import org.apache.parquet.io.ParquetDecodingException
 import org.apache.parquet.io.api.Binary
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
+import org.scalatest.concurrent.{Signaler, ThreadSignaler}
+import org.scalatest.time.{Seconds, Span}
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkException, TestUtils}
 import org.apache.spark.rdd.RDD
@@ -2479,6 +2485,89 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
         }
       }
     }
+  }
+
+  /**
+   * Writes 100 rows of `column` to a single uncompressed data page, lets `corrupt` modify the
+   * RLE section that starts with `03 00 00 00 C8 01 01` (the 4-byte length 3, then one RLE run
+   * with header 100 << 1 and value 1), and returns the error of reading the file with the
+   * vectorized reader. For a nullable INT32 column that is the definition levels; for a
+   * BOOLEAN column written as a V2 page it is the RLE-encoded values.
+   */
+  private def readCorruptedRleSection(
+      column: String,
+      writerVersion: String = "PARQUET_1_0")(
+      corrupt: (Array[Byte], Int) => Unit): Throwable = {
+    var error: Throwable = null
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(100).selectExpr(column).coalesce(1)
+        .write
+        .option(ParquetOutputFormat.ENABLE_DICTIONARY, "false")
+        .option(ParquetOutputFormat.WRITER_VERSION, writerVersion)
+        .option("compression", "uncompressed")
+        .parquet(path)
+      val file = dir.listFiles().filter(_.getName.endsWith(".parquet")).head
+      val bytes = Files.readAllBytes(file.toPath)
+      val section = Array[Byte](3, 0, 0, 0, 0xC8.toByte, 0x01, 1)
+      val offset = bytes.indexOfSlice(section)
+      assert(offset >= 0 && bytes.indexOfSlice(section, offset + 1) < 0)
+      corrupt(bytes, offset)
+      Files.write(file.toPath, bytes)
+      dir.listFiles().filter(_.getName.endsWith(".crc")).foreach(_.delete())
+
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+        // Before SPARK-59832 a truncated read never returned, so run it with a timeout. The test
+        // thread waits interruptibly for the job, so it can be signaled directly.
+        implicit val signaler: Signaler = ThreadSignaler
+        error = intercept[SparkException] {
+          failAfter(Span(60, Seconds))(spark.read.parquet(path).collect())
+        }
+      }
+    }
+    error
+  }
+
+  private def causes(e: Throwable): Seq[Throwable] =
+    ExceptionUtils.getThrowableList(e).asScala.toSeq
+
+  /** Sets the 4-byte length at `offset` to Int.MaxValue, far more than the rest of the page. */
+  private def setMaxLength(bytes: Array[Byte], offset: Int): Unit =
+    BytesUtils.intToBytes(Int.MaxValue).copyToArray(bytes, offset)
+
+  /**
+   * Checks that the page error is reported once with the column, directly on top of the
+   * `ParquetDecodingException` about the invalid length.
+   */
+  private def assertInvalidLengthReportsColumn(e: Throwable, column: String): Unit = {
+    val pageErrors =
+      causes(e).filter(c => Option(c.getMessage).exists(_.startsWith("could not read page")))
+    assert(pageErrors.size == 1, e)
+    assert(pageErrors.head.getMessage.contains(s"in col [$column]"), e)
+    assert(pageErrors.head.getCause.isInstanceOf[ParquetDecodingException], e)
+    assert(pageErrors.head.getCause.getMessage.contains(
+      s"Corrupted RLE data: invalid length ${Int.MaxValue}"), e)
+  }
+
+  test("SPARK-59832: vectorized reader fails on truncated definition levels") {
+    // Shorten the run to 64 values (header 64 << 1 = varint 0x80 0x01).
+    val e = readCorruptedRleSection("if(id < 0, null, cast(id as int)) as a") {
+      (bytes, offset) => bytes(offset + 4) = 0x80.toByte
+    }
+    assert(causes(e).exists {
+      case c: ParquetDecodingException => c.getMessage.contains("Corrupted RLE data")
+      case _ => false
+    }, e)
+  }
+
+  test("SPARK-59832: invalid definition level length reports the column") {
+    val e = readCorruptedRleSection("if(id < 0, null, cast(id as int)) as a")(setMaxLength)
+    assertInvalidLengthReportsColumn(e, "a")
+  }
+
+  test("SPARK-59832: invalid length of RLE booleans in a V2 page reports the column") {
+    val e = readCorruptedRleSection("id >= 0 as b", writerVersion = "PARQUET_2_0")(setMaxLength)
+    assertInvalidLengthReportsColumn(e, "b")
   }
 }
 

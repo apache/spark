@@ -41,6 +41,7 @@ import org.apache.spark.util.SparkClassUtils
  * Currently bridges:
  *   - `ParquetReadState` (its factory + `resetForNewBatch` + `resetForNewPage`)
  *   - `VectorizedRleValuesReader.readBatch` (5-arg overload not exposed publicly)
+ *   - `VectorizedRleValuesReader.readBatchRepeated` (takes the package-private state)
  *   - `ParquetVectorUpdaterFactory` (constructor)
  *   - `VectorizedDeltaByteArrayReader` (no-arg constructor)
  *   - `VectorizedDeltaLengthByteArrayReader` (no-arg constructor)
@@ -88,6 +89,15 @@ object ParquetTestAccess {
       .getOrElse(throw new NoSuchMethodException(
         "VectorizedRleValuesReader.readBatch/5"))
 
+  private val readBatchRepeatedMethod: Method =
+    classOf[VectorizedRleValuesReader].getMethods
+      .find(m =>
+        m.getName == "readBatchRepeated"
+          && m.getParameterCount == 7
+          && m.getParameterTypes()(0) == stateCls)
+      .getOrElse(throw new NoSuchMethodException(
+        "VectorizedRleValuesReader.readBatchRepeated/7"))
+
   /**
    * A read state over `descriptor`, told which rows to include the same way production tells it, as
    * ranges when the caller holds them, else as the row indexes a page store handed out, else not at
@@ -130,6 +140,20 @@ object ParquetTestAccess {
     try {
       readBatchMethod.invoke(
         reader, state, values, defLevels, valueReader, updater)
+    } catch { case e: ReflectiveOperationException => throw rethrow(e) }
+
+  def readBatchRepeated(
+      reader: VectorizedRleValuesReader,
+      state: AnyRef,
+      repLevels: WritableColumnVector,
+      defLevelsReader: VectorizedRleValuesReader,
+      defLevels: WritableColumnVector,
+      values: WritableColumnVector,
+      valueReader: VectorizedValuesReader,
+      updater: ParquetVectorUpdater): Unit =
+    try {
+      readBatchRepeatedMethod.invoke(
+        reader, state, repLevels, defLevelsReader, defLevels, values, valueReader, updater)
     } catch { case e: ReflectiveOperationException => throw rethrow(e) }
 
   // -------- ParquetVectorUpdaterFactory --------
