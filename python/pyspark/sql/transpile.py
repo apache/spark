@@ -233,6 +233,46 @@ def _truthiness_col(cat: Optional[str], c: Column) -> Optional[Column]:
     return None
 
 
+def _null_narrowed(params: List[str], test_node: ast.AST) -> Tuple[frozenset, frozenset]:
+    """Return ``(body_nonnull, else_nonnull)`` — frozensets of parameter names
+    that are proven non-null in the true branch and the false branch
+    respectively of an ``if``/ternary with this test.
+
+    Recognised patterns (``p`` must be in ``params``):
+      ``p is not None``          → body: {p}
+      ``p is None``              → else: {p}
+      ``None is not p``          → body: {p}
+      ``None is p``              → else: {p}
+      ``A and B and …``          → body: union of each clause's body set
+    All other nodes yield empty sets (conservative; no narrowing assumed).
+    """
+    match test_node:
+        case (
+            ast.Compare(
+                left=ast.Name(id=name),
+                ops=[op],
+                comparators=[ast.Constant(value=None)],
+            )
+            | ast.Compare(
+                left=ast.Constant(value=None),
+                ops=[op],
+                comparators=[ast.Name(id=name)],
+            )
+        ) if name in params:
+            if isinstance(op, ast.IsNot):
+                return frozenset({name}), frozenset()
+            if isinstance(op, ast.Is):
+                return frozenset(), frozenset({name})
+        case ast.BoolOp(op=ast.And(), values=values):
+            # x is not None and y is not None and … → body: union, else: {}
+            body_nonnull: frozenset = frozenset()
+            for v in values:
+                bn, _ = _null_narrowed(params, v)
+                body_nonnull |= bn
+            return body_nonnull, frozenset()
+    return frozenset(), frozenset()
+
+
 class CatalystTranspiler(AbstractTranspiler):
     """Transpiler that attempts to convert a Python UDF into native Spark SQL expressions."""
 
@@ -241,6 +281,8 @@ class CatalystTranspiler(AbstractTranspiler):
     def __init__(self) -> None:
         self._param_categories: dict[int, str] = {}
         self._category_cache: dict[int, str] = {}
+        self._nonnull_params: frozenset = frozenset()
+        self._null_guard_emitted: bool = False
 
     # TODO (SPARK-55218): handle implicit-None return bodies like
     # ``def f(x): x + x`` -- no return statement means return None;
@@ -260,6 +302,21 @@ class CatalystTranspiler(AbstractTranspiler):
         if len(statements) == 0:
             return lit(None)
         return self._convert_chunk(params, statements[0])
+
+    def _is_nonnull_node(self, params: List[str], node: ast.AST) -> bool:
+        """Return True when ``node`` is statically known to produce a non-null value.
+
+        A non-None literal constant is always non-null. A parameter name is
+        non-null when proven so by an enclosing ``is not None`` guard recorded
+        in ``self._nonnull_params``.
+        """
+        match node:
+            case ast.Constant(value=v):
+                return v is not None
+            case ast.Name(id=name) if name in params:
+                return name in self._nonnull_params
+            case _:
+                return False
 
     def _safe_category(self, params: List[str], node: Optional[ast.AST]) -> Optional[str]:
         """Best-effort input-type category for an if/else branch, or ``None`` when
@@ -443,12 +500,15 @@ class CatalystTranspiler(AbstractTranspiler):
             )
         left_col = self._convert_chunk(params, left_node)
         right_col = self._convert_chunk(params, right_node)
+        if self._is_nonnull_node(params, left_node) and self._is_nonnull_node(params, right_node):
+            return op(left_col, right_col)
         null_guard = left_col.isNull() | right_col.isNull()
         err = lit(
             "Python UDF transpiler: cannot compare NULL with operator "
             f"`{op_repr}`; Python would raise TypeError here. Add an "
             "`is not None` guard or filter NULLs upstream."
         )
+        self._null_guard_emitted = True
         return when(null_guard, raise_error(err)).otherwise(op(left_col, right_col))
 
     def _category(self, params: List[str], node: ast.AST) -> str:
@@ -653,21 +713,31 @@ class CatalystTranspiler(AbstractTranspiler):
             case ast.IfExp(test=test, body=body_expr, orelse=orelse_expr):
                 # Ternary `body if test else orelse` -- shares the
                 # NULL-as-falsy lowering with the if-statement case.
+                test_col = self._convert_chunk(params, test)
+                body_nonnull, else_nonnull = _null_narrowed(params, test)
+                saved = self._nonnull_params
+                self._nonnull_params = saved | body_nonnull
+                body_col = self._convert_chunk(params, body_expr)
+                self._nonnull_params = saved | else_nonnull
+                else_col = self._convert_chunk(params, orelse_expr)
+                self._nonnull_params = saved
                 return self._convert_if_like(
-                    params,
-                    self._convert_chunk(params, test),
-                    self._convert_chunk(params, body_expr),
-                    self._convert_chunk(params, orelse_expr),
-                    test,
-                    body_expr,
-                    orelse_expr,
+                    params, test_col, body_col, else_col, test, body_expr, orelse_expr
                 )
             case ast.If(test, success, orelse):
+                test_col = self._convert_chunk(params, test)
+                body_nonnull, else_nonnull = _null_narrowed(params, test)
+                saved = self._nonnull_params
+                self._nonnull_params = saved | body_nonnull
+                body_col = self._convert_branch(params, success, "body")
+                self._nonnull_params = saved | else_nonnull
+                else_col = self._convert_branch(params, orelse, "else body")
+                self._nonnull_params = saved
                 return self._convert_if_like(
                     params,
-                    self._convert_chunk(params, test),
-                    self._convert_branch(params, success, "body"),
-                    self._convert_branch(params, orelse, "else body"),
+                    test_col,
+                    body_col,
+                    else_col,
                     test,
                     success[0] if success else None,
                     orelse[0] if orelse else None,
@@ -829,11 +899,14 @@ class CatalystTranspiler(AbstractTranspiler):
                         "types fall back to interpreted Python"
                     )
                 arg_col = self._convert_chunk(params, arg)
+                if self._is_nonnull_node(params, arg):
+                    return length(arg_col)
                 err = lit(
                     "Python UDF transpiler: cannot call len() on NULL; "
                     "Python would raise TypeError here. Add an "
                     "`is not None` guard or filter NULLs upstream."
                 )
+                self._null_guard_emitted = True
                 return when(arg_col.isNull(), raise_error(err)).otherwise(length(arg_col))
             case _:
                 raise UnsupportedOperationException(
@@ -859,7 +932,20 @@ class CatalystTranspiler(AbstractTranspiler):
         # Category inference depends on the per-variant assumptions above. Cache
         # each AST node only for this lowering so recursive conversion stays linear.
         self._category_cache = {}
+        # Reset per-transpilation null-narrowing state.
+        self._nonnull_params = frozenset()
+        self._null_guard_emitted = False
         function_body = function_ast.body
+        # Normalize `if <test>: return y\nreturn body` (2-stmt early-return)
+        # into a single if/else so null narrowing can apply to the main body.
+        match function_body:
+            case [
+                ast.If(test=test, body=[ast.Return() as early_ret], orelse=[]) as if_node,
+                ast.Return() as main_ret,
+            ]:
+                synthesized = ast.If(test=test, body=[early_ret], orelse=[main_ret])
+                ast.fix_missing_locations(ast.copy_location(synthesized, if_node))
+                function_body = [synthesized]
         if len(function_body) != 1:
             raise UnsupportedOperationException(
                 "functions with more than one top-level statement are not "
@@ -912,6 +998,15 @@ class CatalystTranspiler(AbstractTranspiler):
                     "interpreted Python"
                 )
         converted = self._convert_chunk(params, function_body[0])
+        if self._null_guard_emitted:
+            warnings.warn(
+                "Python UDF transpiler: the transpiled UDF includes a NULL guard "
+                "that raises at runtime when a NULL input is encountered. Add an "
+                "`if x is not None` guard around comparisons, or filter NULLs "
+                "upstream, to avoid this.",
+                UserWarning,
+                stacklevel=2,
+            )
         # Cast to the declared return type so the rewritten plan reports a
         # known data type to the optimizer's plan validator (otherwise it
         # sees an UnresolvedFunction tree and reports VOID, which fails
