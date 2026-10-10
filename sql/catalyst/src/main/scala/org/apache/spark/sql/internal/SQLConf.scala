@@ -7989,7 +7989,10 @@ object SQLConf {
       "FILTER (WHERE ...) clauses on each aggregate expression. " +
       "Merging two filtered scans broadens the combined filter to OR(f1, f2), which may " +
       "reduce IO pruning (e.g. partition or file skipping) compared to the individual " +
-      "filters. Disabled by default; enable once the behaviour has been validated in your " +
+      "filters. When both subplans filter both join children, the merged join can also " +
+      "produce pairs that neither subplan needs, increasing join work or making a formerly " +
+      "broadcastable input too large to broadcast. Disabled by default; enable once the " +
+      "behaviour has been validated in your " +
       "workload, particularly on heavily partitioned or file-pruned tables. " +
       s"Has no effect when ${MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key} is false.")
     .version("4.2.0")
