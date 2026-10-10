@@ -793,6 +793,22 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SHOW CREATE TABLE resolves a missing provider as CREATE TABLE does") {
+    val catalogClass = classOf[NoProviderSessionCatalog].getName
+    Seq(false -> Seq("ORDERED BY (id ASC NULLS FIRST)"), true -> Seq.empty).foreach {
+      case (hiveByDefault, clauses) =>
+        withSQLConf(
+            SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key -> catalogClass,
+            SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> classOf[FakeV2Provider].getName,
+            SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT.key -> hiveByDefault.toString) {
+          spark.sessionState.catalogManager.reset()
+          val ddl = sql("SHOW CREATE TABLE spark_catalog.default.t").head().getString(0)
+          assert(!ddl.contains("USING"), ddl)
+          assert(writeClauseLines(ddl) === clauses, s"hiveByDefault=$hiveByDefault: $ddl")
+        }
+    }
+  }
+
   test("SHOW CREATE TABLE omits the clauses for a catalog that does not accept them") {
     withSQLConf(
         "spark.sql.catalog.reportcat" -> classOf[ReportingInMemoryTableCatalog].getName,
@@ -1251,19 +1267,27 @@ class GenericClusterByTableCatalog extends ReportingInMemoryTableCatalog {
  */
 class V1ProviderSessionCatalog extends DelegatingCatalogExtension {
 
+  protected def provider: Option[String] = Some("parquet")
+
   override def capabilities: util.Set[TableCatalogCapability] =
     WriteSpecCapability.add(super.capabilities)
 
   override def loadTable(ident: Identifier): Table = {
-    val info = new TableInfo.Builder()
+    val builder = new TableInfo.Builder()
+    provider.foreach(builder.withProvider)
+    val info = builder
       .withColumns(Array(Column.create("id", IntegerType)))
-      .withProvider("parquet")
       .withWriteDistributionMode(RANGE)
       .withWriteOrdering(Array(LogicalExpressions.sort(
         FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)))
       .build()
     new DelegatingTable(info, ident.name)
   }
+}
+
+/** The same, for tables that report no provider. */
+class NoProviderSessionCatalog extends V1ProviderSessionCatalog {
+  override protected def provider: Option[String] = None
 }
 
 /** A staging catalog that supports the clauses but rejects `CLUSTER BY` with `UNORDERED`. */
