@@ -572,6 +572,34 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(summarizer3.min ~== Vectors.dense(0.0, -10.0) absTol 1e-14)
   }
 
+  test("summarizer min/max with NaN samples (SPARK-20711)") {
+    val input = Seq(
+      Vectors.dense(1.0, Double.NaN, -1.0),
+      Vectors.sparse(3, Seq((0, Double.NaN), (2, 2.0))),
+      Vectors.dense(0.0, 3.0, 0.0))
+    val summarizer = input.foldLeft(new SummarizerBuffer) { (summary, vector) =>
+      summary.add(vector)
+    }
+
+    def checkResult(min: Vector, max: Vector): Unit = {
+      assert(max(0).isNaN)
+      assert(max(1).isNaN)
+      assert(max(2) === 2.0)
+      assert(min(0).isNaN)
+      assert(min(1).isNaN)
+      assert(min(2) === -1.0)
+    }
+
+    checkResult(summarizer.min, summarizer.max)
+
+    val df = input.map(Tuple1.apply).toDF("features")
+    val Row(Row(summaryMin: Vector, summaryMax: Vector), singleMin: Vector, singleMax: Vector) =
+      df.select(metrics("min", "max").summary($"features"), min($"features"), max($"features"))
+        .first()
+    checkResult(summaryMin, summaryMax)
+    checkResult(singleMin, singleMax)
+  }
+
   test("support new metrics: sum, std, numFeatures, sumL2, weightSum") {
     val summarizer1 = new SummarizerBuffer()
       .add(Vectors.dense(10.0, -10.0), 1e10)
