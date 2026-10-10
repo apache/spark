@@ -1479,6 +1479,31 @@ abstract class JsonSuite
     }
   }
 
+  gridTest("multiline top level JSON array ends the document at a syntax error in a nested object")(
+      Seq("PERMISSIVE", "DROPMALFORMED")) { mode =>
+    withSQLConf(
+        SQLConf.JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY.key -> "true",
+        SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
+      withTempPath { file =>
+        // Resuming inside the second element would return `t`'s object as a row.
+        val document = """[{"a":1},{"s":{"x":1 2},"t":{"a":9}},{"a":2}]"""
+        Files.write(file.toPath, document.getBytes(StandardCharsets.UTF_8))
+        val df = spark.read
+          .schema("a INT, s STRUCT<x: INT>, _corrupt_record STRING")
+          .option("multiLine", true)
+          .option("mode", mode)
+          .json(file.getCanonicalPath)
+
+        val expected = if (mode == "PERMISSIVE") {
+          Seq(Row(1, null, null), Row(null, null, document))
+        } else {
+          Seq(Row(1, null, null))
+        }
+        checkAnswer(df, expected)
+      }
+    }
+  }
+
   gridTest("multiline top level JSON array streaming option overrides the session config")(
       Seq(false, true)) { streaming =>
     withSQLConf(SQLConf.JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY.key -> (!streaming).toString) {

@@ -798,16 +798,18 @@ class JacksonParser(
       }
       throw badRecord(error, () => recordLiteral(record))
     }
-    // Resuming is only safe where the parser cannot have moved past the element that failed. A
-    // scalar element leaves it on that scalar's own token, and `convertObject` consumes through
-    // END_OBJECT before raising `PartialResultException`; any other container failure can have
-    // stopped anywhere inside the element.
-    def resumableAfter(error: Throwable, elementStart: Option[JsonToken]): Boolean =
-      options.parseMode != FailFastMode && (elementStart match {
-        case Some(START_OBJECT) | Some(START_ARRAY) => error.isInstanceOf[PartialResultException]
-        case Some(_) => error.isInstanceOf[RuntimeException]
-        case None => false
-      })
+    // Resuming is only safe where the failed element left the parser back in the top-level array.
+    // A syntax error inside a nested object ends `convertObject` at that object's END_OBJECT, not
+    // the element's, so a `PartialResultException` alone does not prove the element was consumed.
+    def resumableAfter(error: Throwable, elementStart: Option[JsonToken]): Boolean = {
+      val context = jsonParser.getParsingContext
+      options.parseMode != FailFastMode && context.inArray && context.getParent.inRoot &&
+        (elementStart match {
+          case Some(START_OBJECT) | Some(START_ARRAY) => error.isInstanceOf[PartialResultException]
+          case Some(_) => error.isInstanceOf[RuntimeException]
+          case None => false
+        })
+    }
     def handleFailure[R](elementStart: Option[JsonToken])(operation: => R): R = {
       try operation catch {
         case e: SparkUpgradeException => fail(e)
