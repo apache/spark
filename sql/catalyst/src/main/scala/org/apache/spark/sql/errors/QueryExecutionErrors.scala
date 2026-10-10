@@ -3613,4 +3613,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("rangeStart" -> rangeStart, "rangeEnd" -> rangeEnd)
     )
   }
+
+  def binByOverflowError(): SparkArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map("operation" -> "compute BIN BY bucket boundaries"),
+      context = Array.empty,
+      summary = "")
+  }
 }
