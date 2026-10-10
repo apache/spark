@@ -1,0 +1,2 @@
+Project [inet_ntoa(id#0L, false) AS inet_ntoa(id)#0]
++- LocalRelation <empty>, [id#0L, a#0, b#0]
