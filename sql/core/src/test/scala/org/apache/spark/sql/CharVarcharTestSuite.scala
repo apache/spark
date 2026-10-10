@@ -1044,6 +1044,28 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       parameters = Map("limit" -> expectedLimit))
   }
 
+  private def assertUnsupportedXmlMapKey(
+      query: String, key: String, dataTypeSql: String): Unit = {
+    assertUnsupportedXmlMapKeyError(sql(query).collect(), key, dataTypeSql)
+  }
+
+  private def assertUnsupportedXmlMapKeyError(
+      body: => Any, key: String, dataTypeSql: String): Unit = {
+    val error = intercept[Exception] { body }
+    val cause = Iterator.iterate[Throwable](error)(_.getCause)
+      .takeWhile(_ != null)
+      .collectFirst {
+        case e: SparkRuntimeException
+          if e.getCondition == "UNSUPPORTED_XML_CHAR_VARCHAR_MAP_KEY" => e
+      }
+      .getOrElse(fail("expected UNSUPPORTED_XML_CHAR_VARCHAR_MAP_KEY cause", error))
+    checkError(
+      exception = cause,
+      condition = "UNSUPPORTED_XML_CHAR_VARCHAR_MAP_KEY",
+      sqlState = "0A000",
+      parameters = Map("key" -> s"'$key'", "dataType" -> s""""$dataTypeSql""""))
+  }
+
   private def assertDuplicateMapKey(query: String, expectedKey: String = "a "): Unit = {
     assertDuplicateMapKeyError(sql(query).collect(), expectedKey)
   }
@@ -2796,8 +2818,11 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
             "map('mode', 'FAILFAST'))")
       }
       checkAnswer(
+        sql("SELECT from_xml('<ROW><m><ab>1</ab></m></ROW>', 'm MAP<CHAR(2), INT>')"),
+        Row(Row(Map("ab" -> 1))))
+      checkAnswer(
         sql("SELECT from_xml('<ROW><m><ab>1</ab></m></ROW>', 'm MAP<CHAR(4), INT>')"),
-        Row(Row(Map("ab  " -> 1))))
+        Row(Row(null)))
       checkAnswer(
         sql(
           """SELECT from_xml(
@@ -2837,7 +2862,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           |  'xs_any ARRAY<CHAR(5)>',
           |  map('wildcardColName', 'xs_any', 'mode', 'FAILFAST'))""".stripMargin)
       withTempPath { path =>
-        Seq("<ROW><m><a>1</a></m></ROW>").toDS().write.text(path.getCanonicalPath)
+        Seq("<ROW><m><ab>1</ab></m></ROW>").toDS().write.text(path.getCanonicalPath)
         val xmlDataFrame = spark.read
           .option("rowTag", "ROW")
           .schema("m MAP<CHAR(2), INT>")
@@ -2845,7 +2870,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         assert(
           xmlDataFrame.schema("m").dataType ===
             MapType(CharType(2), IntegerType, valueContainsNull = true))
-        checkAnswer(xmlDataFrame, Row(Map("a " -> 1)))
+        checkAnswer(xmlDataFrame, Row(Map("ab" -> 1)))
       }
       withTempPath { path =>
         Seq("""{"c":"ab"}""").toDS().write.text(path.getCanonicalPath)
@@ -2896,155 +2921,241 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-59274: normalized XML CHAR map keys honor the dedup policy") {
+  test("SPARK-60103: XML CHAR/VARCHAR map keys are not padded or trimmed") {
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
-      val xmlQuery =
-        """SELECT from_xml(
-          |  '<ROW><m><a>1</a>9</m></ROW>',
-          |  'm MAP<CHAR(2), INT>',
-          |  map('valueTag', 'a ')).m""".stripMargin
-      val varcharXmlQuery =
-        """SELECT from_xml(
-          |  '<ROW><m><ab>1</ab>2</m></ROW>',
-          |  'm MAP<VARCHAR(2), INT>',
-          |  map('valueTag', 'ab ')).m""".stripMargin
-      val exactCharXmlQuery =
-        """SELECT from_xml(
-          |  '<ROW><m><a>1</a><a>2</a></m></ROW>',
-          |  'm MAP<CHAR(2), INT>').m""".stripMargin
-      val exactVarcharXmlQuery =
-        """SELECT from_xml(
+      checkAnswer(
+        sql("SELECT from_xml('<ROW><m><ab>1</ab></m></ROW>', 'm MAP<CHAR(2), INT>').m"),
+        Row(Map("ab" -> 1)))
+      checkAnswer(
+        sql("SELECT from_xml('<ROW><m><ab>1</ab></m></ROW>', 'm MAP<VARCHAR(3), INT>').m"),
+        Row(Map("ab" -> 1)))
+      checkAnswer(
+        sql("""SELECT from_xml(
+          |  '<ROW><m><ab>1</ab><AB>2</AB></m></ROW>',
+          |  'm MAP<VARCHAR(2), INT>').m""".stripMargin),
+        Row(Map("ab" -> 1, "AB" -> 2)))
+      checkAnswer(
+        sql("""SELECT from_xml(
           |  '<ROW><m><ab>1</ab><ab>2</ab></m></ROW>',
-          |  'm MAP<VARCHAR(2), INT>').m""".stripMargin
-      val interleavedCharXmlQuery =
-        """SELECT map_entries(from_xml(
-          |  '<ROW><m><a>1</a>2<a>3</a></m></ROW>',
-          |  'm MAP<CHAR(2), INT>',
-          |  map('valueTag', 'a ')).m)""".stripMargin
-      val badXmlKeyThenSiblingQuery =
-        """SELECT from_xml(
-          |  '<ROW><m><abc>1</abc></m><tail>2</tail></ROW>',
-          |  'm MAP<CHAR(2), INT>, tail INT').tail""".stripMargin
-      val badXmlKeyBeforeDuplicateQuery =
-        """SELECT from_xml(
-          |  '<ROW><m><abc>0</abc><a>1</a>2</m></ROW>',
-          |  'm MAP<CHAR(2), INT>',
-          |  map('valueTag', 'a ')).m""".stripMargin
-      val malformedXmlValueBeforeDuplicateQuery =
-        """SELECT from_xml(
-          |  '<ROW><m><a>bad</a>2</m></ROW>',
-          |  'm MAP<CHAR(2), INT>',
-          |  map('valueTag', 'a ')).m""".stripMargin
-      val ignoreCorruptXmlQuery =
-        """SELECT from_xml(
-          |  '<ROW><m><a>1</a>2</m></ROW>',
-          |  'm MAP<CHAR(2), INT>',
-          |  map('valueTag', 'a ', 'ignoreCorruptFiles', 'true')).m""".stripMargin
-      val attributePaddingQuery =
-        """SELECT from_xml(
-          |  '<ROW><m a="1"><b>2</b></m></ROW>',
-          |  'm MAP<CHAR(2), INT>',
-          |  map('attributePrefix', '')).m""".stripMargin
-      val attributeOverflowQuery =
-        """SELECT from_xml(
-          |  '<ROW><m abc="1"><b>2</b></m></ROW>',
-          |  'm MAP<VARCHAR(2), INT>',
-          |  map('attributePrefix', '')).m""".stripMargin
-      val attributeOverflowFailfastQuery =
-        """SELECT from_xml(
-          |  '<ROW><m abc="1"><b>2</b></m></ROW>',
-          |  'm MAP<VARCHAR(2), INT>',
-          |  map('attributePrefix', '', 'mode', 'FAILFAST')).m""".stripMargin
-      val attributeCollisionQuery =
-        """SELECT from_xml(
-          |  '<ROW><m a="1"><b>0</b>2</m></ROW>',
-          |  'm MAP<CHAR(2), INT>',
-          |  map('attributePrefix', '', 'valueTag', 'a ')).m""".stripMargin
+          |  'm MAP<CHAR(2), INT>').m""".stripMargin),
+        Row(Map("ab" -> 2)))
+      checkAnswer(
+        sql("""SELECT from_xml(
+          |  '<ROW><m><outer><xy>1</xy></outer></m></ROW>',
+          |  'm MAP<STRING, MAP<CHAR(2), INT>>').m""".stripMargin),
+        Row(Map("outer" -> Map("xy" -> 1))))
 
-      assertDuplicateMapKey(xmlQuery)
-      assertDuplicateMapKey(varcharXmlQuery, expectedKey = "ab")
-      checkAnswer(sql(exactCharXmlQuery), Row(Map("a " -> 2)))
-      checkAnswer(sql(exactVarcharXmlQuery), Row(Map("ab" -> 2)))
-      assertDuplicateMapKey(interleavedCharXmlQuery)
-      assertDuplicateMapKey(badXmlKeyBeforeDuplicateQuery)
-      assertDuplicateMapKey(malformedXmlValueBeforeDuplicateQuery)
-      assertDuplicateMapKey(ignoreCorruptXmlQuery)
-      checkAnswer(sql(badXmlKeyThenSiblingQuery), Row(2))
-      checkAnswer(sql(attributePaddingQuery), Row(Map("a " -> 1, "b " -> 2)))
-      checkAnswer(sql(attributeOverflowQuery), Row(null))
-      assertParseExceedLimit(attributeOverflowFailfastQuery, expectedLimit = "2")
-      assertDuplicateMapKey(attributeCollisionQuery)
+      // A key that fails length-check still lets later struct fields parse.
+      checkAnswer(
+        sql("""SELECT from_xml(
+          |  '<ROW><m><a>1</a></m><tail>2</tail></ROW>',
+          |  'm MAP<CHAR(2), INT>, tail INT')""".stripMargin),
+        Row(Row(null, 2)))
+      checkAnswer(
+        sql("""SELECT from_xml(
+          |  '<ROW><m><outer><z>1</z></outer></m><tail>2</tail></ROW>',
+          |  'm MAP<STRING, MAP<CHAR(2), INT>>, tail INT')""".stripMargin),
+        Row(Row(null, 2)))
+      assertUnsupportedXmlMapKey(
+        """SELECT from_xml(
+          |  '<ROW><m><outer><z>1</z></outer></m></ROW>',
+          |  'm MAP<STRING, MAP<CHAR(2), INT>>',
+          |  map('mode', 'FAILFAST'))""".stripMargin,
+        key = "z",
+        dataTypeSql = "CHAR(2)")
+
+      // ARRAY<MAP<...>> uses convertField's MapType arm; a short key must still keep tail.
+      checkAnswer(
+        sql("""SELECT from_xml(
+          |  '<ROW><m><a>1</a></m><m><ab>2</ab></m><tail>9</tail></ROW>',
+          |  'm ARRAY<MAP<CHAR(2), INT>>, tail INT')""".stripMargin),
+        Row(Row(Seq(Map("ab" -> 2)), 9)))
+      assertUnsupportedXmlMapKey(
+        """SELECT from_xml(
+          |  '<ROW><m><a>1</a></m><m><ab>2</ab></m></ROW>',
+          |  'm ARRAY<MAP<CHAR(2), INT>>',
+          |  map('mode', 'FAILFAST'))""".stripMargin,
+        key = "a",
+        dataTypeSql = "CHAR(2)")
+
+      // Default valueTag is "_VALUE" (6 characters), so CHAR(2) rejects it.
+      checkAnswer(
+        sql("SELECT from_xml('<ROW><m>xy</m></ROW>', 'm MAP<CHAR(2), STRING>')"),
+        Row(Row(null)))
+      assertUnsupportedXmlMapKey(
+        """SELECT from_xml(
+          |  '<ROW><m>xy</m></ROW>',
+          |  'm MAP<CHAR(2), STRING>',
+          |  map('mode', 'FAILFAST'))""".stripMargin,
+        key = "_VALUE",
+        dataTypeSql = "CHAR(2)")
+
+      // Too-short CHAR, CHAR overflow, and VARCHAR overflow are not EXCEED_LIMIT_LENGTH.
+      checkAnswer(
+        sql("SELECT from_xml('<ROW><m><a>1</a></m></ROW>', 'm MAP<CHAR(2), INT>')"),
+        Row(Row(null)))
+      checkAnswer(
+        sql("SELECT from_xml('<ROW><m><abc>1</abc></m></ROW>', 'm MAP<CHAR(2), INT>')"),
+        Row(Row(null)))
+      checkAnswer(
+        sql("SELECT from_xml('<ROW><m><abcd>1</abcd></m></ROW>', 'm MAP<VARCHAR(3), INT>')"),
+        Row(Row(null)))
+      assertUnsupportedXmlMapKey(
+        """SELECT from_xml(
+          |  '<ROW><m><a>1</a></m></ROW>',
+          |  'm MAP<CHAR(2), INT>',
+          |  map('mode', 'FAILFAST'))""".stripMargin,
+        key = "a",
+        dataTypeSql = "CHAR(2)")
+      assertUnsupportedXmlMapKey(
+        """SELECT from_xml(
+          |  '<ROW><m><abc>1</abc></m></ROW>',
+          |  'm MAP<CHAR(2), INT>',
+          |  map('mode', 'FAILFAST'))""".stripMargin,
+        key = "abc",
+        dataTypeSql = "CHAR(2)")
+      assertUnsupportedXmlMapKey(
+        """SELECT from_xml(
+          |  '<ROW><m><abcd>1</abcd></m></ROW>',
+          |  'm MAP<VARCHAR(3), INT>',
+          |  map('mode', 'FAILFAST'))""".stripMargin,
+        key = "abcd",
+        dataTypeSql = "VARCHAR(3)")
+
+      checkAnswer(
+        sql("""SELECT from_xml(
+          |  '<ROW><m a="1"><bc>2</bc></m></ROW>',
+          |  'm MAP<CHAR(2), INT>',
+          |  map('attributePrefix', ''))""".stripMargin),
+        Row(Row(null)))
+      checkAnswer(
+        sql("""SELECT from_xml(
+          |  '<ROW><m ab="1"><cd>2</cd></m></ROW>',
+          |  'm MAP<CHAR(2), INT>',
+          |  map('attributePrefix', ''))""".stripMargin),
+        Row(Row(Map("ab" -> 1, "cd" -> 2))))
+      checkAnswer(
+        sql("""SELECT from_xml(
+          |  '<ROW><m abc="1"><cd>2</cd></m></ROW>',
+          |  'm MAP<VARCHAR(2), INT>',
+          |  map('attributePrefix', ''))""".stripMargin),
+        Row(Row(null)))
+      assertUnsupportedXmlMapKey(
+        """SELECT from_xml(
+          |  '<ROW><m abc="1"><cd>2</cd></m></ROW>',
+          |  'm MAP<VARCHAR(2), INT>',
+          |  map('attributePrefix', '', 'mode', 'FAILFAST'))""".stripMargin,
+        key = "abc",
+        dataTypeSql = "VARCHAR(2)")
+
+      // Default attributePrefix "_" is part of the key: local name ab is key _ab.
+      checkAnswer(
+        sql("SELECT from_xml('<ROW><m ab=\"1\"></m></ROW>', 'm MAP<CHAR(2), INT>')"),
+        Row(Row(null)))
+      checkAnswer(
+        sql("SELECT from_xml('<ROW><m ab=\"1\"></m></ROW>', 'm MAP<CHAR(3), INT>')"),
+        Row(Row(Map("_ab" -> 1))))
+      assertUnsupportedXmlMapKey(
+        """SELECT from_xml(
+          |  '<ROW><m ab="1"></m></ROW>',
+          |  'm MAP<CHAR(2), INT>',
+          |  map('mode', 'FAILFAST'))""".stripMargin,
+        key = "_ab",
+        dataTypeSql = "CHAR(2)")
 
       withTempPath { path =>
-        Seq("<ROW><m><a>1</a>2</m></ROW>").toDS().write.text(path.getCanonicalPath)
-        def readXmlMap(): DataFrame = spark.read
+        Seq(
+          """<ROWS><ROW><m><ab>1</ab></m></ROW><ROW><m><a>1</a></m></ROW></ROWS>"""
+        ).toDS().write.text(path.getCanonicalPath)
+        val schema = "m MAP<CHAR(2), INT>"
+        val permissive = spark.read
           .option("rowTag", "ROW")
-          .option("valueTag", "a ")
-          .schema("m MAP<CHAR(2), INT>")
+          .schema(schema)
           .xml(path.getCanonicalPath)
+        checkAnswer(permissive, Seq(Row(Map("ab" -> 1)), Row(null)))
+        val failFast = spark.read
+          .option("rowTag", "ROW")
+          .option("mode", "FAILFAST")
+          .schema(schema)
+          .xml(path.getCanonicalPath)
+        assertUnsupportedXmlMapKeyError(failFast.collect(), key = "a", dataTypeSql = "CHAR(2)")
+        val ignoreCorrupt = spark.read
+          .option("rowTag", "ROW")
+          .option("ignoreCorruptFiles", "true")
+          .schema(schema)
+          .xml(path.getCanonicalPath)
+        checkAnswer(ignoreCorrupt, Seq(Row(Map("ab" -> 1)), Row(null)))
+      }
 
-        assertDuplicateMapKeyError(readXmlMap().collect())
-
-        withSQLConf(
-            SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
-          checkAnswer(readXmlMap(), Row(Map("a " -> 2)))
-        }
+      withTempPath { path =>
+        Seq(
+          """<ROWS><ROW><m><a>1</a></m></ROW><ROW><m><ab>2</ab></m></ROW></ROWS>"""
+        ).toDS().write.text(path.getCanonicalPath)
+        val arraySchema = "m ARRAY<MAP<CHAR(2), INT>>"
+        val arrayPermissive = spark.read
+          .option("rowTag", "ROW")
+          .schema(arraySchema)
+          .xml(path.getCanonicalPath)
+        checkAnswer(arrayPermissive, Seq(Row(null), Row(Seq(Map("ab" -> 2)))))
       }
 
       withSQLConf(
-          SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
-        checkAnswer(sql(xmlQuery), Row(Map("a " -> 9)))
-        checkAnswer(sql(varcharXmlQuery), Row(Map("ab" -> 2)))
-        checkAnswer(sql(exactCharXmlQuery), Row(Map("a " -> 2)))
-        checkAnswer(sql(exactVarcharXmlQuery), Row(Map("ab" -> 2)))
-        checkAnswer(sql(interleavedCharXmlQuery), Row(Seq(Row("a ", 3))))
-        checkAnswer(sql(badXmlKeyBeforeDuplicateQuery), Row(null))
-        checkAnswer(sql(malformedXmlValueBeforeDuplicateQuery), Row(null))
-        checkAnswer(sql(ignoreCorruptXmlQuery), Row(Map("a " -> 2)))
-        checkAnswer(sql(attributeCollisionQuery), Row(Map("a " -> 2, "b " -> 0)))
+          SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.EXCEPTION.toString) {
+        checkAnswer(
+          sql("""SELECT from_xml(
+            |  '<ROW><m><ab>1</ab><ab>2</ab></m></ROW>',
+            |  'm MAP<VARCHAR(2), INT>').m""".stripMargin),
+          Row(Map("ab" -> 2)))
       }
+
+      // Value overflow still uses EXCEED_LIMIT_LENGTH. A last-win duplicate whose winning
+      // value overflows nulls the map, matching the non-duplicate case.
+      checkAnswer(
+        sql("""SELECT from_xml(
+          |  '<ROW><m><ab>x</ab><ab>abcdef</ab></m></ROW>',
+          |  'm MAP<CHAR(2), CHAR(2)>')""".stripMargin),
+        Row(Row(null)))
+      assertParseExceedLimit(
+        """SELECT from_xml(
+          |  '<ROW><m><ab>x</ab><ab>abcdef</ab></m></ROW>',
+          |  'm MAP<CHAR(2), CHAR(2)>',
+          |  map('mode', 'FAILFAST'))""".stripMargin,
+        expectedLimit = "2")
+
+      withSQLConf(SQLConf.ALLOW_COLLATIONS_IN_MAP_KEYS.key -> "true") {
+        checkAnswer(
+          sql("""SELECT from_xml(
+            |  '<ROW><m><ab>1</ab><AB>2</AB></m></ROW>',
+            |  'm MAP<VARCHAR(2) COLLATE UTF8_LCASE, INT>').m""".stripMargin),
+          Row(Map("ab" -> 1, "AB" -> 2)))
+      }
+    }
+
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      checkAnswer(
+        sql("SELECT from_xml('<ROW><m><a>1</a></m></ROW>', 'm MAP<CHAR(3), INT>')"),
+        Row(Row(Map("a  " -> 1))))
+      assertParseExceedLimit(
+        """SELECT from_xml(
+          |  '<ROW><m><abcd>1</abcd></m></ROW>',
+          |  'm MAP<VARCHAR(3), INT>',
+          |  map('mode', 'FAILFAST'))""".stripMargin,
+        expectedLimit = "3")
     }
   }
 
-  test("SPARK-59274: pretty-printed XML map failures preserve parser position") {
+  test("SPARK-60103: XML map value overflow keeps siblings") {
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
-      val overflowQueries = Seq("CHAR(5)", "VARCHAR(5)").map { valueType =>
-        s"""SELECT from_xml(
-           |  '<ROW>
-           |    <m>
-           |      <b>abcdef</b>
-           |      <a>x</a>y
-           |    </m>
-           |    <tail>9</tail>
-           |  </ROW>',
-           |  'm MAP<CHAR(2), $valueType>, tail INT',
-           |  map('valueTag', 'a '))""".stripMargin
-      }
-      val nestedFailureQuery =
-        """SELECT from_xml(
-          |  '<ROW>
-          |    <m>
-          |      <b><x>bad</x></b>
-          |      <a><x>1</x></a>ignored
-          |    </m>
-          |    <tail>9</tail>
-          |  </ROW>',
-          |  'm MAP<CHAR(2), MAP<CHAR(2), INT>>, tail INT',
-          |  map('valueTag', 'a '))""".stripMargin
-
-      (overflowQueries :+ nestedFailureQuery).foreach { query =>
-        // A duplicate, rather than an AssertionError from XML recovery, wins under EXCEPTION.
-        withClue(s"$query: ") {
-          assertDuplicateMapKey(query)
-        }
-      }
-
-      withSQLConf(
-          SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
-        // The failed map remains null, but its complete element is consumed and the `tail` field
-        // is parsed.
-        (overflowQueries :+ nestedFailureQuery).foreach { query =>
-          checkAnswer(sql(query), Row(Row(null, 9)))
+      Seq("CHAR(5)", "VARCHAR(5)").foreach { valueType =>
+        val xml = "<ROW><m><xy>abcdef</xy></m><tail>9</tail></ROW>"
+        val schema = s"m MAP<CHAR(2), $valueType>, tail INT"
+        withClue(valueType) {
+          checkAnswer(sql(s"SELECT from_xml('$xml', '$schema')"), Row(Row(null, 9)))
+          assertParseExceedLimit(
+            s"SELECT from_xml('$xml', '$schema', map('mode', 'FAILFAST'))",
+            expectedLimit = "5")
         }
       }
     }
@@ -3194,27 +3305,15 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-59274: collated CHAR/VARCHAR map keys honor the dedup policy") {
+  test("SPARK-59274: collated XML CHAR/VARCHAR map keys last-win on exact names") {
     withSQLConf(
         SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
         SQLConf.ALLOW_COLLATIONS_IN_MAP_KEYS.key -> "true") {
-      val xmlQuery =
-        """SELECT from_xml(
-          |  '<ROW><m><a>1</a><A>2</A></m></ROW>',
-          |  'm MAP<CHAR(2) COLLATE UTF8_LCASE, INT>').m""".stripMargin
-      val varcharXmlQuery =
-        """SELECT from_xml(
+      checkAnswer(
+        sql("""SELECT from_xml(
           |  '<ROW><m><ab>1</ab><AB>2</AB></m></ROW>',
-          |  'm MAP<VARCHAR(2) COLLATE UTF8_LCASE, INT>').m""".stripMargin
-
-      assertDuplicateMapKey(xmlQuery, expectedKey = "A ")
-      assertDuplicateMapKey(varcharXmlQuery, expectedKey = "AB")
-
-      withSQLConf(
-          SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
-        checkAnswer(sql(xmlQuery), Row(Map("a " -> 2)))
-        checkAnswer(sql(varcharXmlQuery), Row(Map("ab" -> 2)))
-      }
+          |  'm MAP<CHAR(2) COLLATE UTF8_LCASE, INT>').m""".stripMargin),
+        Row(Map("ab" -> 1, "AB" -> 2)))
     }
   }
 }

@@ -26,7 +26,6 @@ import javax.xml.stream.events._
 import javax.xml.transform.stream.StreamSource
 import javax.xml.validation.Schema
 
-import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.Try
@@ -85,6 +84,9 @@ class StaxXmlParser(
   private val decimalParser = ExprUtils.getDecimalParser(options.locale)
 
   private val caseSensitive = SQLConf.get.caseSensitiveAnalysis
+
+  // CHAR/VARCHAR XML map keys are length-checked without pad or trim under this flag.
+  private val charVarcharStandardSemantics = SQLConf.get.charVarcharStandardSemantics
 
   /**
    * Limits a view of an event stream to one element whose start event has already been consumed.
@@ -383,9 +385,7 @@ class StaxXmlParser(
         startElementName: String,
         attributes: Array[Attribute]): Any = dt match {
       case st: StructType => convertObject(parser, st)
-      case MapType(StringType, vt, _) => convertMap(parser, vt, attributes)
-      case MapType(kt @ (_: CharType | _: VarcharType), vt, _) =>
-        convertConstrainedMap(parser, kt, vt, attributes)
+      case MapType(kt, vt, _) => convertMap(parser, vt, attributes, kt)
       case ArrayType(st, _) => convertField(parser, st, startElementName)
       case VariantType =>
         StaxXmlParser.convertVariant(parser, attributes, options)
@@ -445,109 +445,76 @@ class StaxXmlParser(
   }
 
   /**
-   * Parse an object as map.
+   * Parse an object as a Map.
+   *
+   * XML names used as CHAR/VARCHAR keys are length-checked without rewriting:
+   * CHAR keys must already be exactly n characters, and VARCHAR keys must already be
+   * at most n characters. Padding, trimming, and mapKeyDedupPolicy are not applied.
+   * Repeated names last-win on binary equality (collation is not consulted), matching
+   * ordinary MAP<STRING, ...> XML maps.
+   *
+   * Example: `from_xml('<ROW><m><ab>1</ab></m></ROW>', 'm MAP<CHAR(2), INT>')`
+   * keeps key `ab`; `MAP<CHAR(4), INT>` raises `UNSUPPORTED_XML_CHAR_VARCHAR_MAP_KEY`.
+   *
+   * This method owns element bounding so a key-check failure still consumes the current
+   * map element (ARRAY<MAP<...>> and nested maps included).
    */
   private def convertMap(
       parser: XMLEventReader,
       valueType: DataType,
-      attributes: Array[Attribute]): MapData = {
-    val kvPairs = ArrayBuffer.empty[(UTF8String, Any)]
-    attributes.foreach { attr =>
-      kvPairs += (UTF8String.fromString(options.attributePrefix + attr.getName.getLocalPart)
-        -> convertTo(attr.getValue, valueType))
-    }
-    var shouldStop = false
-    while (!shouldStop) {
-      parser.nextEvent match {
-        case e: StartElement =>
-          val key = StaxXmlParserUtils.getName(e.asStartElement.getName, options)
-          kvPairs +=
-            (UTF8String.fromString(key) -> convertField(parser, valueType, key))
-        case c: Characters if !c.isWhiteSpace =>
-          // Create a value tag field for it
-          kvPairs +=
-            // TODO: We don't support array value tags in maps yet.
-            (UTF8String.fromString(options.valueTag) -> convertTo(c.getData, valueType))
-        case _: EndElement | _: EndDocument =>
-          shouldStop = true
-        case _ => // do nothing
+      attributes: Array[Attribute],
+      keyType: DataType): MapData = {
+    val bounded = new ElementBoundedEventReader(parser)
+    try {
+      val kvPairs = ArrayBuffer.empty[(UTF8String, Any)]
+      attributes.foreach { attr =>
+        val key = convertXmlMapKey(
+          options.attributePrefix + attr.getName.getLocalPart, keyType)
+        kvPairs += (key -> convertTo(attr.getValue, valueType))
       }
+      var shouldStop = false
+      while (!shouldStop) {
+        bounded.nextEvent match {
+          case e: StartElement =>
+            val rawName = StaxXmlParserUtils.getName(e.asStartElement.getName, options)
+            val key = convertXmlMapKey(rawName, keyType)
+            kvPairs += (key -> convertField(bounded, valueType, rawName))
+          case c: Characters if !c.isWhiteSpace =>
+            // Create a value tag field for it
+            kvPairs +=
+              // TODO: We don't support array value tags in maps yet.
+              (convertXmlMapKey(options.valueTag, keyType) -> convertTo(c.getData, valueType))
+          case _: EndElement | _: EndDocument =>
+            shouldStop = true
+          case _ => // do nothing
+        }
+      }
+      ArrayBasedMapData(kvPairs.toMap)
+    } finally {
+      bounded.drain()
     }
-    ArrayBasedMapData(kvPairs.toMap)
   }
 
-  private def convertConstrainedMap(
-      parser: XMLEventReader,
-      keyType: DataType,
-      valueType: DataType,
-      attributes: Array[Attribute]): MapData = {
-    val lastEntries =
-      mutable.LinkedHashMap.empty[UTF8String, (UTF8String, Option[Any])]
-    var badMapException: Option[Throwable] = None
-    def mapKey(raw: UTF8String): UTF8String = {
-      CharVarcharUtils.applyTextParseSemantics(raw, keyType)
-    }
-    def appendPair(rawKey: String, value: Option[Any]): Unit = {
-      try {
-        val rawKeyUtf8 = UTF8String.fromString(rawKey)
-        lastEntries.remove(rawKeyUtf8)
-        lastEntries.update(rawKeyUtf8, (mapKey(rawKeyUtf8), value))
-      } catch {
-        case NonFatal(e) => badMapException = badMapException.orElse(Some(e))
+  /**
+   * Length-check a CHAR/VARCHAR XML name used as a map key. Unlike value assignment,
+   * this does not pad or trim. STRING keys and the flag-off path still use
+   * [[CharVarcharUtils.applyTextParseSemantics]].
+   */
+  private def convertXmlMapKey(rawName: String, keyType: DataType): UTF8String = {
+    val key = UTF8String.fromString(rawName)
+    if (charVarcharStandardSemantics) {
+      keyType match {
+        case c: CharType if key.numChars() != c.length =>
+          throw QueryExecutionErrors.unsupportedXmlCharVarcharMapKey(key, c)
+        case _: CharType => key
+        case v: VarcharType if key.numChars() > v.length =>
+          throw QueryExecutionErrors.unsupportedXmlCharVarcharMapKey(key, v)
+        case _: VarcharType => key
+        case _ => CharVarcharUtils.applyTextParseSemantics(key, keyType)
       }
+    } else {
+      CharVarcharUtils.applyTextParseSemantics(key, keyType)
     }
-    attributes.foreach { attr =>
-      val value = try {
-        Some(convertTo(attr.getValue, valueType))
-      } catch {
-        case e: SparkUpgradeException => throw e
-        case NonFatal(e) =>
-          badMapException = badMapException.orElse(Some(e))
-          None
-      }
-      appendPair(options.attributePrefix + attr.getName.getLocalPart, value)
-    }
-    var shouldStop = false
-    while (!shouldStop) {
-      parser.nextEvent match {
-        case e: StartElement =>
-          val rawKey = StaxXmlParserUtils.getName(e.asStartElement.getName, options)
-          val entryParser = new ElementBoundedEventReader(parser)
-          val value = {
-            try {
-              Some(convertField(entryParser, valueType, rawKey))
-            } catch {
-              case e: SparkUpgradeException => throw e
-              case DuplicateMapKeyUtils(e) => throw e
-              case NonFatal(e) =>
-                badMapException = badMapException.orElse(Some(e))
-                None
-            } finally {
-              entryParser.drain()
-            }
-          }
-          appendPair(rawKey, value)
-        case c: Characters if !c.isWhiteSpace =>
-          // Create a value tag field for it
-          // TODO: We don't support array value tags in maps yet.
-          val value = try {
-            Some(convertTo(c.getData, valueType))
-          } catch {
-            case e: SparkUpgradeException => throw e
-            case NonFatal(e) =>
-              badMapException = badMapException.orElse(Some(e))
-              None
-          }
-          appendPair(options.valueTag, value)
-        case _: EndElement | _: EndDocument =>
-          shouldStop = true
-        case _ => // do nothing
-      }
-    }
-    val mapData = DuplicateMapKeyUtils.buildConstrainedMap(
-      lastEntries, keyType, valueType)
-    badMapException.foreach(throw _)
-    mapData
   }
 
   /**
@@ -679,6 +646,9 @@ class StaxXmlParser(
             case Some(index) => schema(index).dataType match {
               case st: StructType =>
                 row(index) = convertNestedStruct(parser, st, field, attributes)
+
+              case mt: MapType =>
+                row(index) = convertMap(parser, mt.valueType, attributes, mt.keyType)
 
               case ArrayType(dt: DataType, _) =>
                 val values = Option(row(index))

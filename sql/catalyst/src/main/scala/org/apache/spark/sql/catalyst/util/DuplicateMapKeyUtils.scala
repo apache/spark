@@ -17,13 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import scala.collection.mutable
-
 import org.apache.spark.SparkRuntimeException
-import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, StringType}
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.SparkErrorUtils
 
 private[sql] object DuplicateMapKeyUtils {
@@ -36,47 +30,4 @@ private[sql] object DuplicateMapKeyUtils {
   }
 
   def unapply(exception: Throwable): Option[SparkRuntimeException] = cause(exception)
-
-  /**
-   * Builds an XML map with a constrained CHAR/VARCHAR key type from a raw-key last-wins
-   * accumulator. Failed values still occupy a slot so normalized collisions are visible.
-   *
-   * CHAR/VARCHAR keys: repeated raw XML keys keep the last value, then
-   * `spark.sql.mapKeyDedupPolicy` applies to normalized keys.
-   *
-   * Example: parsing `a` and `a ` as CHAR(2) keys raises
-   * DUPLICATED_MAP_KEY under EXCEPTION and keeps `a ` -> 2 under LAST_WIN.
-   */
-  def buildConstrainedMap(
-      lastEntries: mutable.LinkedHashMap[UTF8String, (UTF8String, Option[Any])],
-      keyType: DataType,
-      valueType: DataType): MapData = {
-    if (SQLConf.get.getConf(SQLConf.MAP_KEY_DEDUP_POLICY) ==
-        SQLConf.MapKeyDedupPolicy.EXCEPTION) {
-      val distinctKeys = keyType match {
-        case stringType: StringType if stringType.supportsBinaryEquality =>
-          new java.util.HashSet[Any]()
-        case _ =>
-          new java.util.TreeSet[Any](TypeUtils.getInterpretedOrdering(keyType))
-      }
-      val keys = mutable.ArrayBuffer.empty[Any]
-      val values = mutable.ArrayBuffer.empty[Any]
-      lastEntries.valuesIterator.foreach { case (key, value) =>
-        if (!distinctKeys.add(key)) {
-          throw QueryExecutionErrors.duplicateMapKeyFoundError(key)
-        }
-        value.foreach { v =>
-          keys += key
-          values += v
-        }
-      }
-      ArrayBasedMapData(keys.toArray, values.toArray)
-    } else {
-      val builder = new ArrayBasedMapBuilder(keyType, valueType)
-      lastEntries.valuesIterator.foreach { case (normalizedKey, value) =>
-        value.foreach(builder.put(normalizedKey, _))
-      }
-      builder.build()
-    }
-  }
 }
