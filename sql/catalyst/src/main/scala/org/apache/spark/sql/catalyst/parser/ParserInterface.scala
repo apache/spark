@@ -19,8 +19,10 @@ package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{GeneralParameterizedQuery, NameParameterizedQuery, PosParameterizedQuery}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -37,12 +39,33 @@ trait ParserInterface extends DataTypeParserInterface {
   /**
    * Parse a string to a [[LogicalPlan]] with explicit parameter context.
    * This method avoids thread-local usage for better API design.
+   *
+   * The default implementation parses `sqlText` with [[parsePlan]] and marks the result for
+   * parameter binding during analysis, so that implementations which only override
+   * [[parsePlan]] - such as the parsers injected by `SparkSessionExtensions.injectParser` -
+   * still honour parameterized SQL. This binds markers wherever the parser produces a
+   * parameter expression; implementations that want markers supported in every position a
+   * literal is allowed, and error positions reported against the substituted text, should
+   * override this method and substitute the parameters as part of their own parse, as
+   * `SparkSqlParser` does.
    */
   @throws[ParseException]("Text cannot be parsed to a LogicalPlan")
   def parsePlanWithParameters(sqlText: String, parameterContext: ParameterContext): LogicalPlan = {
-    // Default implementation falls back to regular parsePlan
-    // Concrete implementations can override this for parameter support
-    parsePlan(sqlText)
+    val plan = parsePlan(sqlText)
+    // In legacy mode the callers of this method wrap the plan themselves.
+    if (SQLConf.get.legacyParameterSubstitutionConstantsOnly) {
+      plan
+    } else {
+      parameterContext match {
+        case NamedParameterContext(params) if params.nonEmpty =>
+          NameParameterizedQuery(plan, params)
+        case PositionalParameterContext(params) if params.nonEmpty =>
+          PosParameterizedQuery(plan, params)
+        case HybridParameterContext(args, paramNames) if args.nonEmpty =>
+          GeneralParameterizedQuery(plan, args, paramNames)
+        case _ => plan
+      }
+    }
   }
 
   /**
