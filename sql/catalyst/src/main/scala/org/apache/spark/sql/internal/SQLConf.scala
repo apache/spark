@@ -3148,14 +3148,9 @@ object SQLConf {
         "supports it, such as a CASE WHEN with many branches, into methods that take the input " +
         "variables they read as parameters, the way code generation outside whole stage codegen " +
         "splits it. In a stage whose expressions are split, the methods that subexpression " +
-        "elimination's discarded first pass added are removed; and in every stage, a slot of " +
-        "a compacted mutable state array counts as the field it is when code moves into a " +
-        "method: an operator's method that took it as a parameter, and failed to compile, now " +
-        "compiles, and a common expression's definition reading one, which stayed inline, " +
-        "gets its method. When false, " +
-        "the code stays in the method of its operator, where a large enough expression goes " +
-        "past the JVM's 64KB method limit and fails to compile, and the generated code is what " +
-        "it was before this conf existed.")
+        "elimination's discarded first pass added are removed. When false, the code stays in " +
+        "the method of its operator, where a large enough expression goes past the JVM's 64KB " +
+        "method limit and fails to compile.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

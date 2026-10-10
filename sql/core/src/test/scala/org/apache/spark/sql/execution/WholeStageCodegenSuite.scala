@@ -1741,37 +1741,32 @@ class WholeStageCodegenSuite extends SharedSparkSession
       "sinh(v) should be evaluated only once per input row without function splitting")
   }
 
-  test("SPARK-59589: Expand hands a compacted mutable state slot to the consumer as a global") {
-    // A varying output column of an Expand lives in a mutable state, and for a type
-    // `addMutableState` cannot inline it is a slot in a compacted array (`mutableStateArray_0[3]`)
-    // rather than a field name. A consumer that collects the local variables of its input to pass
-    // them into a split function -- `CodeGenerator.getLocalInputVariableValues` -- must not take
-    // that slot for a local variable, since a slot expression cannot be a parameter name.
-    // This asserts the invariant on the shape that comes closest to reaching it: the child of a
-    // regular aggregate under a distinct rewrite is a varying `string` column, the buffers stay
-    // fixed width so the plan is a `HashAggregateExec`, aggregate function splitting is forced, and
-    // the consume function per operator is turned off so that the aggregate sees the Expand's own
-    // expressions rather than fresh parameters of a `doConsume` function.
-    withSQLConf(
-      SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> "false",
-      SQLConf.CODEGEN_SPLIT_AGGREGATE_FUNC.key -> "true",
-      SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1") {
-      val df = spark.range(0, 4, 1, 1).selectExpr(
-        "cast(id as string) as a", "cast(id % 2 as string) as b", "cast(id as string) as c")
-      // `RewriteDistinctAggregates` puts each distinct group in its own Expand branch and nulls the
-      // other groups' columns, so the child of the regular `count` varies across branches.
-      val query = df.agg(countDistinct("a"), countDistinct("b"), count("c"))
-      val plan = query.queryExecution.executedPlan
-      assert(plan.exists(_.isInstanceOf[ExpandExec]), "Expand is expected")
-      assert(plan.exists(_.isInstanceOf[HashAggregateExec]), "HashAggregate is expected")
-      val code = codegenStringSeq(plan).map(_._2).mkString("\n")
-      // The slot is read inside generated methods and passed as an argument, which is legal; being
-      // a parameter name is not.
-      assert(code.contains("mutableStateArray"), "the varying column should be a compacted slot")
-      val slotParams = """private void [a-zA-Z0-9_]+\([^)]*mutableStateArray""".r
-        .findAllIn(code).toList
-      assert(slotParams.isEmpty, s"a compacted slot was used as a parameter name: $slotParams")
-      checkAnswer(query, Row(4L, 2L, 4L))
+  test("SPARK-59589: a subexpression method reads an Expand's varying output as a field") {
+    // `ExpandExec` holds an UNPIVOT's string output in a slot of a compacted mutable state array,
+    // such as `expand_mutableStateArray_0[1]`. A large common subexpression reading it is computed
+    // in a method of its own, which takes the local variables it reads as parameters. Taken for a
+    // local variable, the slot became a parameter `UTF8String expand_mutableStateArray_0[1]` and
+    // the stage did not compile. Handed out as a field, it is read as one, split on or off.
+    withTempView("t") {
+      spark.range(10).selectExpr("concat('a', CAST(id AS STRING)) AS a",
+        "concat('b', CAST(id AS STRING)) AS b").createOrReplaceTempView("t")
+      val f = "concat(upper(v), lower(v), reverse(v), trim(v), ltrim(v), rtrim(v), initcap(v), " +
+        "repeat(v, 2), lpad(v, 10, 'x'), rpad(v, 10, 'y'))"
+      def df: DataFrame =
+        sql(s"SELECT c, $f AS x, concat($f, 'z') AS y FROM t UNPIVOT (v FOR c IN (a, b))")
+      val expected = withoutWholeStage(df)
+      val stringParameter = "private void \\w*subExpr_\\d+\\([^)]*UTF8String ".r
+      Seq("true", "false").foreach { split =>
+        withSQLConf(SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS.key -> split) {
+          val code = genCode(df)
+          assert(code.exists { c =>
+            methodsHolding(c, "expand_mutableStateArray").exists(_.contains("subExpr"))
+          }, split)
+          assert(code.forall(c => stringParameter.findFirstIn(c.body).isEmpty), split)
+          code.foreach(CodeGenerator.compile)
+          checkAnswer(df, expected)
+        }
+      }
     }
   }
 
@@ -2801,7 +2796,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
   test("SPARK-33301: a split method reads a slot of a compacted mutable state array as a field") {
     withSplitAlways {
       // `ExpandExec` holds an output of a type that is not primitive in a slot of a compacted
-      // mutable state array, such as `expand_mutableStateArray_0[0]`: a field, though not a name.
+      // mutable state array, such as `expand_mutableStateArray_0[0]`, and hands it out as a field.
       // An UNPIVOT of string columns gives such an output, which the projection above reads
       // directly when the operators' consume functions are not split into methods of their own.
       // Every block reads it, the ELSE too, and each reads it as the field it is, taking no
@@ -2820,31 +2815,6 @@ class WholeStageCodegenSuite extends SharedSparkSession
           assert(splitCaseWhenParameters(df).flatten.forall(!_.contains("mutableStateArray")))
           checkAnswer(df, withoutWholeStage(df))
         }
-      }
-    }
-  }
-
-  test("SPARK-33301: with the split on, a subexpression method reads a compacted slot as a field") {
-    // `ExpandExec` holds an UNPIVOT's string output in a slot of a compacted mutable state array.
-    // A large common subexpression reading it is computed in a method of its own, which takes its
-    // inputs as parameters. No parameter can be named `array[i]`, so with the split off, as before
-    // it, that method takes the slot as one and does not compile; with it on, in every stage,
-    // CASE WHEN or not, the method reads the slot as the field it is.
-    withTempView("t") {
-      spark.range(10).selectExpr("concat('a', CAST(id AS STRING)) AS a",
-        "concat('b', CAST(id AS STRING)) AS b").createOrReplaceTempView("t")
-      val f = "concat(upper(v), lower(v), reverse(v), trim(v), ltrim(v), rtrim(v), initcap(v), " +
-        "repeat(v, 2), lpad(v, 10, 'x'), rpad(v, 10, 'y'))"
-      def df: DataFrame =
-        sql(s"SELECT c, $f AS x, concat($f, 'z') AS y FROM t UNPIVOT (v FOR c IN (a, b))")
-      // A parameter named for the slot's string, whatever its name: the slot is read as a field.
-      val stringParameter = "private void \\w*subExpr_\\d+\\([^)]*UTF8String ".r
-      val code = genCode(df)
-      assert(code.forall(c => stringParameter.findFirstIn(c.body).isEmpty))
-      code.foreach(CodeGenerator.compile)
-      checkAnswer(df, withoutWholeStage(df))
-      withSQLConf(SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS.key -> "false") {
-        assert(genCode(df).exists(c => stringParameter.findFirstIn(c.body).nonEmpty))
       }
     }
   }
