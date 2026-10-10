@@ -1262,17 +1262,14 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     }
   }
 
-  test("end event reparse applies the line length limit and reports relative line numbers") {
-    val log = newLogFile("end-event-limit", None, inProgress = false)
-    val tail = Seq(jobStartLine(2, "x" * 2048), jobStartLine(3, "y"))
-    val lines = endEventTestLines("end-event-limit", tail: _*)
+  test("end event reparse keeps a line that starts exactly at the skip offset") {
+    val log = newLogFile("end-event-boundary", None, inProgress = false)
+    val lines = endEventTestLines("end-event-boundary")
     val bytes = writeRawLog(log, lines)
-    // Skip into the middle of the line before the tail. The next line starts at `offset` and
-    // the over-long line is the first line after it.
-    val offset = lines.takeWhile(_ != tail.head).map(_.length + 1).sum
+    // The application end event is the last line: skip exactly to its first byte.
+    assert(bytes.length > lineBytes(lines.last))
     val conf = createTestConf()
-      .set(END_EVENT_REPARSE_CHUNK_SIZE, bytes.length - offset + 10L)
-      .set(EVENT_LOG_MAX_LINE_LENGTH.key, "1k")
+      .set(END_EVENT_REPARSE_CHUNK_SIZE, lineBytes(lines.last).toLong)
     val appender = new LogAppender("end event reparse")
     withLogAppender(appender) {
       updateAndCheck(new FsHistoryProvider(conf)) { list =>
@@ -1280,27 +1277,93 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
         assert(list(0).attempts.head.completed)
       }
     }
-    val sourceName = s"${log.getName} (lines counted from uncompressed byte offset $offset)"
+    // The end event is found by the reparse, not by the fallback that parses the whole log.
     val messages = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
-    assert(messages.exists(m => m.contains("Skipped event log lines longer than 1024 bytes") &&
-      m.contains(s"$sourceName; first skipped line: 1")), messages)
+    assert(!messages.exists(_.contains("since end event was not found")), messages)
   }
 
-  test("end event reparse labels JSON errors with the skip offset") {
+  Seq(None, Some(CompressionCodec.LZ4)).foreach { codecName =>
+    test("end event reparse applies the line length limit and reports relative line numbers " +
+        s"(codec = ${codecName.getOrElse("none")})") {
+      val log = newLogFile("end-event-limit", None, inProgress = false, codecName)
+      val tail = Seq(jobStartLine(2, "x" * 2048), jobStartLine(3, "y"))
+      val lines = endEventTestLines("end-event-limit", tail: _*)
+      val codec = codecName.map(CompressionCodec.createCodec(new SparkConf(), _))
+      writeRawLog(log, lines, codec)
+      // The skip runs on the uncompressed stream while the chunk size is subtracted from the
+      // file length. Skip into the middle of the first line: replay then starts at the second
+      // line, and the over-long line is at relative line `lines.indexOf(tail.head)`.
+      val target = 5L
+      val conf = createTestConf()
+        .set(END_EVENT_REPARSE_CHUNK_SIZE, log.length() - target)
+        .set(EVENT_LOG_MAX_LINE_LENGTH.key, "1k")
+      val appender = new LogAppender("end event reparse")
+      withLogAppender(appender) {
+        updateAndCheck(new FsHistoryProvider(conf)) { list =>
+          assert(list.size === 1)
+          assert(list(0).attempts.head.completed)
+        }
+      }
+      val offset = lineBytes(lines.head)
+      val messages = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+      assert(messages.exists(m => m.contains("Skipped event log lines longer than 1024 bytes") &&
+        m.contains(s"${log.getName}; first skipped line: ${lines.indexOf(tail.head)} " +
+          s"(lines counted from uncompressed byte offset $offset)")), messages)
+    }
+  }
+
+  test("end event reparse reports JSON errors with the skip offset") {
     val log = newLogFile("end-event-malformed", None, inProgress = false)
     val malformed = "{\"Event\":\"SparkListenerApplicationEnd\",\"Timestamp\":"
     val tail = Seq(jobStartLine(2, "x"), malformed, jobStartLine(3, "y"))
     val lines = endEventTestLines("end-event-malformed", tail: _*)
     val bytes = writeRawLog(log, lines)
-    val offset = lines.takeWhile(_ != tail.head).map(_.length + 1).sum
+    val offset = lines.takeWhile(_ != tail.head).map(lineBytes).sum
     val conf = createTestConf().set(END_EVENT_REPARSE_CHUNK_SIZE, bytes.length - offset + 10L)
     val appender = new LogAppender("end event reparse")
     withLogAppender(appender) {
-      new FsHistoryProvider(conf).checkForLogs()
+      // A completed log fails on a malformed line that is not the last one, so the application
+      // is not listed.
+      updateAndCheck(new FsHistoryProvider(conf)) { list =>
+        assert(list.isEmpty)
+      }
     }
-    val sourceName = s"${log.getName} (lines counted from uncompressed byte offset $offset)"
     val messages = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
-    assert(messages.exists(_.contains(s"$sourceName at line 2")), messages)
+    assert(messages.exists(_.contains(s"${log.getName} at line 2 " +
+      s"(lines counted from uncompressed byte offset $offset)")), messages)
+    assert(!messages.exists(_.contains(s"${log.getName} (lines")), messages)
+  }
+
+  test("skipToLineStart aligns to the first line starting at or after the target") {
+    def alignStream(in: InputStream, target: Long): (String, Long) = {
+      val (rest, offset) = FsHistoryProvider.skipToLineStart(in, target)
+      (new String(rest.readAllBytes(), StandardCharsets.UTF_8), offset)
+    }
+    def align(data: String, target: Long): (String, Long) = {
+      alignStream(new ByteArrayInputStream(data.getBytes(StandardCharsets.UTF_8)), target)
+    }
+    // Inside a line, at its '\n', and exactly at the start of the next line.
+    assert(align("abc\ndef\n", 1) === (("def\n", 4L)))
+    assert(align("abc\ndef\n", 3) === (("def\n", 4L)))
+    assert(align("abc\ndef\n", 4) === (("def\n", 4L)))
+    assert(align("abc\ndef\n", 5) === (("", 8L)))
+    // CRLF line endings, and a target at the '\r'.
+    assert(align("ab\r\ncd", 2) === (("cd", 4L)))
+    assert(align("ab\r\ncd", 4) === (("cd", 4L)))
+    // No line starts at or after the target, or the target is beyond the end of the stream.
+    assert(align("abc", 1) === (("", 3L)))
+    assert(align("abc\n", 10) === (("", 4L)))
+    // A partial line longer than the read buffer.
+    val long = "x" * 20000 + "\nnext"
+    assert(align(long, 1) === (("next", 20001L)))
+    // A stream whose skip() never advances, e.g. at the end of a decompressed stream.
+    def noSkip(data: String): InputStream = {
+      new FilterInputStream(new ByteArrayInputStream(data.getBytes(StandardCharsets.UTF_8))) {
+        override def skip(n: Long): Long = 0L
+      }
+    }
+    assert(alignStream(noSkip("abc\ndef"), 2) === (("def", 4L)))
+    assert(alignStream(noSkip("abc\n"), 100) === (("", 4L)))
   }
 
   test("parse event logs with optimizations off") {
@@ -2211,12 +2274,22 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     }
   }
 
-  /** Writes the given lines as an uncompressed event log and returns the written bytes. */
-  private def writeRawLog(file: File, lines: Seq[String]): Array[Byte] = {
+  /** Writes the given lines as an event log and returns the uncompressed bytes. */
+  private def writeRawLog(
+      file: File,
+      lines: Seq[String],
+      codec: Option[CompressionCodec] = None): Array[Byte] = {
     val bytes = lines.map(_ + "\n").mkString.getBytes(StandardCharsets.UTF_8)
-    Utils.tryWithResource(new FileOutputStream(file))(_.write(bytes))
+    Utils.tryWithResource(new FileOutputStream(file)) { out =>
+      Utils.tryWithResource(codec.map(_.compressedContinuousOutputStream(out)).getOrElse(out)) {
+        _.write(bytes)
+      }
+    }
     bytes
   }
+
+  /** UTF-8 length of a line including its '\n'. */
+  private def lineBytes(line: String): Int = line.getBytes(StandardCharsets.UTF_8).length + 1
 
   private def jobStartLine(jobId: Int, description: String): String = {
     val properties = new java.util.Properties()

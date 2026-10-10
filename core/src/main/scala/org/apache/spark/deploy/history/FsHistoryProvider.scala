@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.history
 
-import java.io.{File, FileNotFoundException, InputStream, IOException}
+import java.io.{ByteArrayInputStream, File, FileNotFoundException, InputStream, IOException, SequenceInputStream}
 import java.lang.{Long => JLong}
 import java.util.{Date, NoSuchElementException, ServiceLoader}
 import java.util.concurrent.{ConcurrentHashMap, ExecutorService, TimeUnit}
@@ -1106,23 +1106,16 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       Utils.tryWithResource(EventLogFileReader.openEventLog(lastFile.getPath,
           fsForPath(lastFile.getPath))) { in =>
         val target = lastFile.getLen - reparseChunkSize
-        val sourceName = if (target > 0) {
+        val (tail, startOffset) = if (target > 0) {
           logInfo(log"Looking for end event; skipping ${MDC(NUM_BYTES, target)} bytes" +
             log" from ${MDC(PATH, logPath)}...")
-          var skipped = 0L
-          while (skipped < target) {
-            skipped += in.skip(target - skipped)
-          }
-          // Because skipping may leave the stream in the middle of a line, or even in the
-          // middle of a multi-byte UTF-8 character, discard the rest of that line before any
-          // decoding. Line numbers reported by the replay are then relative to this offset.
-          val offset = target + skipPartialLine(in)
-          s"${lastFile.getPath} (lines counted from uncompressed byte offset $offset)"
+          skipToLineStart(in, target)
         } else {
-          lastFile.getPath.toString
+          (in, 0L)
         }
 
-        bus.replay(in, sourceName, !appCompleted, eventsFilter)
+        bus.replayFromOffset(tail, lastFile.getPath.toString, startOffset, !appCompleted,
+          eventsFilter)
       }
     }
 
@@ -1771,19 +1764,52 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 private[spark] object FsHistoryProvider {
 
   /**
-   * Discards bytes up to and including the next '\n', returning the number of bytes discarded.
-   * This works on raw bytes so that it is safe to call at an arbitrary byte offset: '\n' never
-   * occurs inside a multi-byte UTF-8 sequence. The bytes are read one at a time so that the
-   * stream is left exactly at the start of the next line.
+   * Positions `in` at the start of the first line that begins at or after byte `target`
+   * (`target` > 0), returning a stream that starts there and the byte offset of that line.
+   * If the stream ends first, the returned stream is at EOF and the offset is the stream length.
+   *
+   * Since the skip may land anywhere, including inside a multi-byte UTF-8 character, the line
+   * boundary is found on raw bytes before any decoding: '\n' never occurs inside a multi-byte
+   * UTF-8 sequence. Bytes read past the boundary are put back in front of the stream.
    */
-  private[history] def skipPartialLine(in: InputStream): Long = {
-    var discarded = 0L
-    var b = in.read()
-    while (b != -1 && b != '\n') {
-      discarded += 1
-      b = in.read()
+  private[history] def skipToLineStart(in: InputStream, target: Long): (InputStream, Long) = {
+    // Stop one byte early, so that a line starting exactly at `target` is kept.
+    var position = 0L
+    var eof = false
+    while (!eof && position < target - 1) {
+      val skipped = in.skip(target - 1 - position)
+      if (skipped > 0) {
+        position += skipped
+      } else if (in.read() == -1) {
+        // skip() may return 0 at EOF, e.g. when `target` comes from a compressed length that
+        // exceeds the decompressed one.
+        eof = true
+      } else {
+        position += 1
+      }
     }
-    if (b == '\n') discarded + 1 else discarded
+
+    var result: InputStream = in
+    val buffer = new Array[Byte](8192)
+    var found = false
+    while (!eof && !found) {
+      val n = in.read(buffer)
+      if (n == -1) {
+        eof = true
+      } else {
+        var i = 0
+        while (i < n && buffer(i) != '\n') {
+          i += 1
+        }
+        position += math.min(i + 1, n)
+        if (i < n) {
+          found = true
+          val rest = new ByteArrayInputStream(buffer, i + 1, n - i - 1)
+          result = new SequenceInputStream(rest, in)
+        }
+      }
+    }
+    (result, position)
   }
 
   private val APPL_START_EVENT_PREFIX = "{\"Event\":\"SparkListenerApplicationStart\""
