@@ -643,8 +643,17 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
    * @since 3.5.0
    */
   override def clearCache(): Unit = {
+    clearCache(allSessions = true)
+  }
+
+  /**
+   * Removes cached tables from the in-memory cache.
+   *
+   * @since 4.4.0
+   */
+  override def clearCache(allSessions: Boolean): Unit = {
     sparkSession.execute { builder =>
-      builder.getCatalogBuilder.getClearCacheBuilder
+      builder.getCatalogBuilder.getClearCacheBuilder.setAllSessions(allSessions)
     }
   }
 

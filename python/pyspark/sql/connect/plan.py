@@ -2622,12 +2622,13 @@ class UncacheTable(LogicalPlan):
 
 
 class ClearCache(LogicalPlan):
-    def __init__(self) -> None:
+    def __init__(self, all_sessions: bool = True) -> None:
         super().__init__(None)
+        self._all_sessions = all_sessions
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         plan = self._create_proto_relation()
-        plan.catalog.clear_cache.SetInParent()
+        plan.catalog.clear_cache.all_sessions = self._all_sessions
         return plan
 
 
