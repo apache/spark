@@ -218,19 +218,21 @@ trait SQLLastAttemptAccumulator[IN, OUT, PARTIAL, DRIVER_ACC]
         exception = Some(e))
   }
 
-  override def logAccumulatorState: LogEntry = try {
-    val driverQEVals = Option(lastAttemptDirectDriverQueryExecutionValues)
-      .map(_.map { case (key, acc) => s"$key -> ${driverAccValue(acc)}" }.mkString("\n"))
-      .getOrElse("<not initialized>")
-    super.logAccumulatorState +
+  override def logAccumulatorState: LogEntry = super.logAccumulatorState + LogEntry.from {
+    // The formatting runs when the entry is read, so the try goes inside the by-name argument.
+    try {
+      val driverQEVals = Option(lastAttemptDirectDriverQueryExecutionValues)
+        .map(_.map { case (key, acc) => s"$key -> ${driverAccValue(acc)}" }.mkString("\n"))
+        .getOrElse("<not initialized>")
       log"""
          |Direct driver QE values:
          |${MDC(logKeyAccumulatorState, driverQEVals)}
          """.stripMargin
-  } catch {
-    case NonFatal(e) =>
-      logWarning(log"Unexpected exception in logAccumulatorState", e)
-      log"<Unexpected exception in logAccumulatorState>"
+    } catch {
+      case NonFatal(e) =>
+        logWarning(log"Unexpected exception in logAccumulatorState", e)
+        log"<Unexpected exception in logAccumulatorState>"
+    }
   }
 
   /**
