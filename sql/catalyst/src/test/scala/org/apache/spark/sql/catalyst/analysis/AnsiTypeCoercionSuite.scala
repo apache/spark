@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.sql.Timestamp
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.catalyst.analysis.AnsiTypeCoercion._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -30,6 +32,24 @@ import org.apache.spark.sql.types._
 
 class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
   import TypeCoercionSuite._
+
+  test("combined type coercion invokes every rule in order") {
+    val invocations = ArrayBuffer.empty[Int]
+    val rules = (1 to 3).map { index =>
+      new TypeCoercionRule {
+        override val transform: PartialFunction[Expression, Expression] = {
+          case expression =>
+            invocations += index
+            expression
+        }
+      }
+    }
+    val input = Literal(1)
+
+    new AnsiCombinedTypeCoercionRule(rules).transform.applyOrElse(input, identity[Expression])
+
+    assert(invocations.toSeq == rules.indices.map(_ + 1))
+  }
 
   // scalastyle:off line.size.limit
   // The following table shows all implicit data type conversions that are not visible to the user.

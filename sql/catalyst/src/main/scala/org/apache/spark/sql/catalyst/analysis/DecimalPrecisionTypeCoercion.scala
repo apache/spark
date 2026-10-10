@@ -31,6 +31,8 @@ import org.apache.spark.sql.types.{DataType, DecimalExpression, DecimalType, Dou
 object DecimalPrecisionTypeCoercion extends SQLConfHelper {
   import scala.math.max
 
+  private val identity: Expression => Expression = expression => expression
+
   /**
    * Strength reduction for comparing integral expressions with decimal literals.
    * 1. int_col > decimal_literal => int_col > floor(decimal_literal)
@@ -125,16 +127,18 @@ object DecimalPrecisionTypeCoercion extends SQLConfHelper {
   }
 
   def apply(expression: Expression): Expression = {
-    decimalAndDecimal()
-      .orElse(integralAndDecimalLiteral)
-      .orElse(nondecimalAndDecimal(conf.literalPickMinimumPrecision))
-      .lift(expression).getOrElse(expression)
+    val transform = if (conf.literalPickMinimumPrecision) {
+      withLiteralMinimumPrecision
+    } else {
+      withoutLiteralMinimumPrecision
+    }
+    transform.applyOrElse(expression, identity)
   }
 
   private def isFloat(t: DataType): Boolean = t == FloatType || t == DoubleType
 
   /** Decimal precision promotion for  binary comparison. */
-  private def decimalAndDecimal(): PartialFunction[Expression, Expression] = {
+  private val decimalAndDecimal: PartialFunction[Expression, Expression] = {
     case b @ BinaryComparison(e1 @ DecimalExpression(p1, s1), e2 @ DecimalExpression(p2, s2))
         if p1 != p2 || s1 != s2 =>
       val resultType = widerDecimalType(p1, s1, p2, s2)
@@ -186,6 +190,14 @@ object DecimalPrecisionTypeCoercion extends SQLConfHelper {
         case _ => b
       }
   }
+
+  private val withLiteralMinimumPrecision = decimalAndDecimal
+    .orElse(integralAndDecimalLiteral)
+    .orElse(nondecimalAndDecimal(literalPickMinimumPrecision = true))
+
+  private val withoutLiteralMinimumPrecision = decimalAndDecimal
+    .orElse(integralAndDecimalLiteral)
+    .orElse(nondecimalAndDecimal(literalPickMinimumPrecision = false))
 
   // Returns the wider decimal type that's wider than both of them
   def widerDecimalType(d1: DecimalType, d2: DecimalType): DecimalType = {
