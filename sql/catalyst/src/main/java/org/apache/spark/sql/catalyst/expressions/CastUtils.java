@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions;
 
 import org.apache.spark.QueryContext;
+import org.apache.spark.sql.errors.DataTypeErrors;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DataTypes;
@@ -107,7 +108,7 @@ public final class CastUtils {
   public static Decimal changePrecisionExact(
       Decimal d, int precision, int scale, QueryContext context) {
     if (d.changePrecision(precision, scale)) return d;
-    throw QueryExecutionErrors.cannotChangeDecimalPrecisionError(d, precision, scale, context);
+    throw DataTypeErrors.cannotChangeDecimalPrecisionError(d, precision, scale, context);
   }
 
   public static Decimal changePrecisionOrNull(Decimal d, int precision, int scale) {

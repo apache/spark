@@ -489,6 +489,25 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
           "cannot be represented as Decimal(10, 2)")
       }
       checkEvaluation(cast("0e2147483647", DecimalType(10, 2)), Decimal("0.00"))
+
+      // The value is shown in plain notation unless its scale is hugely negative.
+      Seq("1e2147483647" -> "1E+2147483647", "1e40" -> ("1" + "0" * 40)).foreach {
+        case (str, value) =>
+          if (!isTryCast) {
+            checkError(
+              exception = intercept[SparkArithmeticException](
+                cast(str, DecimalType(10, 2)).eval()),
+              condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+              parameters = Map(
+                "value" -> value,
+                "precision" -> "10",
+                "scale" -> "2",
+                "config" -> """"spark.sql.ansi.enabled""""),
+              queryContext = Array(ExpectedContext(fragment = "", start = -1, stop = -1)))
+          } else {
+            checkEvaluation(cast(str, DecimalType(10, 2)), null)
+          }
+      }
     }
   }
 

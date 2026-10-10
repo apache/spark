@@ -494,7 +494,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
   }
 
   test("SPARK-60119: changePrecision with a source scale far from the target scale") {
-    // A value below 0.1 ulp of the target scale rounds to 0 or +/-1 ulp depending only on its
+    // A value below 0.01 ulp of the target scale rounds to 0 or +/-1 ulp depending only on its
     // sign and the rounding mode, so it must round like a small value of the same sign.
     Seq("1e-2147483647", "-1e-2147483647", "9.99e-100000000", "-1e-100000000",
       "0e-2147483647").foreach { str =>

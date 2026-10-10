@@ -103,15 +103,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     )
   }
 
-  def cannotChangeDecimalPrecisionError(
-      value: Decimal,
-      decimalPrecision: Int,
-      decimalScale: Int,
-      context: QueryContext = null): ArithmeticException = {
-    DataTypeErrors.cannotChangeDecimalPrecisionError(
-      value, decimalPrecision, decimalScale, context)
-  }
-
   def invalidInputSyntaxForBooleanError(
       s: UTF8String,
       context: QueryContext): SparkRuntimeException = {
