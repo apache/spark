@@ -474,15 +474,23 @@ class VariantUtils:
 
         # Like Java, pick the shortest decimal that round-trips, using at least 2 significant
         # digits (e.g. Double.MIN_VALUE is "4.9E-324", not "5.0E-324"), and the one closest to
-        # `f` among those of that length.
-        for precision in range(2, 18):
+        # `f` among those of that length. For a double, repr() already has the shortest length,
+        # so start there instead of trying every shorter one.
+        start = 2
+        if not is_float32:
+            shortest = decimal.Decimal(repr(f)).normalize(context)
+            start = max(start, len(shortest.as_tuple().digits))
+        for precision in range(start, 18):
             s = "%.*e" % (precision - 1, f)
             if round_trips(s):
                 break
             # When `f` is a power of two, the values that round to it extend only half as far
             # toward zero as away from it. So the closest decimal of this length can fail to
             # round-trip while the next one away from zero still does (e.g. 2^-24 is
-            # "5.960464477539063E-8", not "5.9604644775390625E-8").
+            # "5.960464477539063E-8", not "5.9604644775390625E-8"). Elsewhere the interval is
+            # symmetric and the next one cannot round-trip either.
+            if abs(math.frexp(f)[0]) != 0.5:
+                continue
             closest = decimal.Decimal(s)
             exponent = closest.as_tuple().exponent
             assert isinstance(exponent, int)
