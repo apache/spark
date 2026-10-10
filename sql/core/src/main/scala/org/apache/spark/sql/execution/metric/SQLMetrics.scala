@@ -24,8 +24,9 @@ import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates
-import org.apache.spark.util.{AccumulatorContext, AccumulatorV2}
+import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, MetricUtils}
 import org.apache.spark.util.AccumulatorContext.internOption
+import org.apache.spark.util.MetricUtils.{AVERAGE_METRIC, NS_TIMING_METRIC, SIZE_METRIC, TIMING_METRIC}
 
 /**
  * A metric used in a SQL query plan. This is implemented as an [[AccumulatorV2]]. Updates on
@@ -110,13 +111,7 @@ class SQLMetric(
 }
 
 object SQLMetrics {
-  private[metric] val SUM_METRIC = "sum"
-  private val SIZE_METRIC = "size"
-  private val TIMING_METRIC = "timing"
-  private val NS_TIMING_METRIC = "nsTiming"
-  private val AVERAGE_METRIC = "average"
-
-  private val baseForAvgMetric: Int = 10
+  private[metric] val SUM_METRIC: String = MetricUtils.SUM_METRIC
 
   val cachedSQLAccumIdentifier = Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER)
 
@@ -136,7 +131,7 @@ object SQLMetrics {
   private[sql] def setDoubleForAverageMetrics(metric: SQLMetric, v: Double): Unit = {
     assert(metric.metricType == AVERAGE_METRIC,
       s"Can't set a double to a metric of metrics type: ${metric.metricType}")
-    metric.set((v * baseForAvgMetric).toLong)
+    metric.set((v * MetricUtils.baseForAvgMetric).toLong)
   }
 
   def createMetric(sc: SparkContext, name: String): SQLMetric = {
