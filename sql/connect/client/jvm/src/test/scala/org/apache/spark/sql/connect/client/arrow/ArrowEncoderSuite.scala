@@ -650,6 +650,19 @@ class ArrowEncoderSuite extends ConnectFunSuite {
     }
   }
 
+  test("SPARK-55396: java records and beans nested in each other") {
+    import ArrowEncoderRecordTestData.{Address, BeanWithRecord, RecordWithBean}
+    val encoder = JavaTypeInference.encoderFor[RecordWithBean](classOf[RecordWithBean])
+    roundTripAndCheckIdentical(encoder) { () =>
+      val maybeNull = MaybeNull(5)
+      Iterator.tabulate(100) { i =>
+        val bean = new BeanWithRecord
+        bean.setAddress(maybeNull(new Address("c" + i, "z" + i)))
+        new RecordWithBean("r" + i, maybeNull(bean))
+      }
+    }
+  }
+
   test("SPARK-55396: java record with array components") {
     import ArrowEncoderRecordTestData.{Address, ArrayRecord}
     val encoder = JavaTypeInference.encoderFor[ArrayRecord](classOf[ArrayRecord])
