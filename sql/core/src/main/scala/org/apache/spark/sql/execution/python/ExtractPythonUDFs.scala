@@ -198,7 +198,10 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
       pythonUDFArrowFallbackOnUDT: Boolean): Boolean = {
     e.children match {
       case Seq(child: PythonUDF) =>
-        correctEvalType(e, pythonUDFArrowFallbackOnUDT) ==
+        // The in-process evaluator accepts JVM expressions as inputs. Extract nested calls
+        // into separate operators instead of serializing a chain for a Python worker.
+        e.evalType != PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF &&
+          correctEvalType(e, pythonUDFArrowFallbackOnUDT) ==
           correctEvalType(child, pythonUDFArrowFallbackOnUDT) &&
           shouldExtractUDFExpressionTree(child, pythonUDFArrowFallbackOnUDT)
       // Python UDF can't be evaluated directly in JVM
@@ -360,6 +363,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
                  | PythonEvalType.SQL_SCALAR_ARROW_ELEMENTWISE_UDF
                  | PythonEvalType.SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF
                  | PythonEvalType.SQL_SCALAR_ARROW_UDF
+                 | PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF
                  | PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF =>
               ArrowEvalPython(validUdfs, resultAttrs, child, evalType)
             case _ =>

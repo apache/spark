@@ -21,6 +21,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
@@ -45,6 +46,7 @@ import org.apache.spark.sql.execution.datasources.{
   LogicalRelation,
   LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, ChangelogTable, DataSourceV2Relation, ExtractV2CatalogAndIdentifier, ExtractV2Table, FileTable, V2TableRefreshUtil}
+import org.apache.spark.sql.execution.python.InProcessPythonUDFBuilder
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -402,14 +404,26 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   private def tryRebuildCacheEntry(spark: SparkSession, cd: CachedData): Option[CachedData] = {
     val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)
     sessionWithConfigsOff.withActive {
-      tryRefreshPlan(sessionWithConfigsOff, cd.plan).map { refreshedPlan =>
-        val qe = QueryExecution.create(
-          sessionWithConfigsOff,
-          refreshedPlan,
-          refreshPhaseEnabled = false)
-        val newKey = qe.normalized
-        val newCache = InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
-        cd.copy(plan = newKey, cachedRepresentation = newCache)
+      tryRefreshPlan(sessionWithConfigsOff, cd.plan).flatMap { refreshedPlan =>
+        try {
+          val qe = QueryExecution.create(
+            sessionWithConfigsOff,
+            refreshedPlan,
+            refreshPhaseEnabled = false)
+          val newKey = qe.normalized
+          val newCache = InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
+          Some(cd.copy(plan = newKey, cachedRepresentation = newCache))
+        } catch {
+          // Re-caching follows the command that invalidated the entry, e.g. a committed write,
+          // and plans the entry in that command's session. In-process Python UDFs check that
+          // session's configuration while planning; if it rejects them, drop the entry rather
+          // than fail a command whose work is done. Other failures still propagate.
+          case e: SparkException
+              if InProcessPythonUDFBuilder.isUnsupportedSessionConfiguration(e) =>
+            logWarning(log"Removed cache entry ${MDC(DATAFRAME_CACHE_ENTRY, cd)} because it " +
+              log"cannot be re-planned in the session that invalidated it", e)
+            None
+        }
       }
     }
   }
