@@ -464,8 +464,9 @@ public class CLIService extends CompositeService implements ICLIService {
         LOG.warn("{}: The background operation was aborted", e,
           MDC.of(LogKeys.OPERATION_HANDLE, opHandle));
       } catch (InterruptedException e) {
-        // No op, this thread was interrupted
+        // This thread was interrupted
         // In this case, the call might return sooner than long polling timeout
+        Thread.currentThread().interrupt();
       }
     }
     OperationStatus opStatus = operation.getStatus();

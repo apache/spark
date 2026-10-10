@@ -180,7 +180,7 @@ class LauncherServer implements Closeable {
       try {
         serverThread.join();
       } catch (InterruptedException ie) {
-        // no-op
+        Thread.currentThread().interrupt();
       }
     }
   }
@@ -386,7 +386,7 @@ class LauncherServer implements Closeable {
         try {
           connThread.join(getConnectionTimeout());
         } catch (InterruptedException ie) {
-          // Ignore.
+          Thread.currentThread().interrupt();
         }
 
         if (connThread.isAlive()) {

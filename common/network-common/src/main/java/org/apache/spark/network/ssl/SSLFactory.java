@@ -135,6 +135,7 @@ public class SSLFactory {
             manager.destroy();
           } catch (InterruptedException ex) {
             logger.info("Interrupted while destroying trust manager: ", ex);
+            Thread.currentThread().interrupt();
           }
         }
       }
