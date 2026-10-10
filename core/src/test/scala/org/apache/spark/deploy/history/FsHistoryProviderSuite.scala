@@ -1264,22 +1264,37 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
 
   test("end event reparse keeps a line that starts exactly at the skip offset") {
     val log = newLogFile("end-event-boundary", None, inProgress = false)
-    val lines = endEventTestLines("end-event-boundary")
-    val bytes = writeRawLog(log, lines)
+    // The whole-log fallback reparse fails on this malformed line, so the application can only
+    // be listed as completed if the tail reparse finds the end event.
+    val malformed = "{\"Event\":\"SparkListenerApplicationEnd\",\"Timestamp\":"
+    val lines = endEventTestLines("end-event-boundary", malformed)
+    writeRawLog(log, lines)
     // The application end event is the last line: skip exactly to its first byte.
-    assert(bytes.length > lineBytes(lines.last))
     val conf = createTestConf()
       .set(END_EVENT_REPARSE_CHUNK_SIZE, lineBytes(lines.last).toLong)
-    val appender = new LogAppender("end event reparse")
-    withLogAppender(appender) {
-      updateAndCheck(new FsHistoryProvider(conf)) { list =>
-        assert(list.size === 1)
-        assert(list(0).attempts.head.completed)
-      }
+    updateAndCheck(new FsHistoryProvider(conf)) { list =>
+      assert(list.size === 1)
+      assert(list(0).attempts.head.completed)
     }
-    // The end event is found by the reparse, not by the fallback that parses the whole log.
-    val messages = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
-    assert(!messages.exists(_.contains("since end event was not found")), messages)
+  }
+
+  test("end event reparse stops at the end of a stream shorter than the skip target") {
+    val log = newLogFile("end-event-short", None, inProgress = false, Some(CompressionCodec.LZ4))
+    val codec = CompressionCodec.createCodec(new SparkConf(), CompressionCodec.LZ4)
+    val bytes = writeRawLog(log, Seq(JsonProtocol.sparkEventToJsonString(
+      SparkListenerApplicationStart("a", Some("b"), 1L, "c", None))), Some(codec))
+    // The lz4 framing makes this tiny log larger than its content, so with a 1-byte chunk the
+    // skip target is past the end of the decompressed stream: skip() returns 0 there.
+    assert(log.length() - 2 > bytes.length)
+    val provider = new FsHistoryProvider(
+      createTestConf().set(END_EVENT_REPARSE_CHUNK_SIZE, 1L))
+    // Run the scan in a separate thread so that a skip loop that never ends fails the test.
+    val scan = new Thread(() => provider.checkForLogs())
+    scan.setDaemon(true)
+    scan.start()
+    scan.join(TimeUnit.MINUTES.toMillis(1))
+    assert(!scan.isAlive, "the scan did not finish")
+    assert(provider.getListing().toSeq.map(_.id) === Seq("b"))
   }
 
   Seq(None, Some(CompressionCodec.LZ4)).foreach { codecName =>
@@ -1353,6 +1368,9 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     // No line starts at or after the target, or the target is beyond the end of the stream.
     assert(align("abc", 1) === (("", 3L)))
     assert(align("abc\n", 10) === (("", 4L)))
+    // A non-positive target leaves the stream unchanged.
+    assert(align("abc\ndef", 0) === (("abc\ndef", 0L)))
+    assert(align("abc\ndef", -1) === (("abc\ndef", 0L)))
     // A partial line longer than the read buffer.
     val long = "x" * 20000 + "\nnext"
     assert(align(long, 1) === (("next", 20001L)))

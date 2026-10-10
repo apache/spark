@@ -320,6 +320,30 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
     assert(warnings.forall(_.contains("at line 3,")))
   }
 
+  test("Replay from an offset reports where line numbers start") {
+    val end = JsonProtocol.sparkEventToJsonString(SparkListenerApplicationEnd(1000L))
+    def replay(data: String, startOffset: Long, maybeTruncated: Boolean): Seq[String] = {
+      val appender = new LogAppender
+      withLogAppender(appender) {
+        new ReplayListenerBus(1024).replayFromOffset(
+          new ByteArrayInputStream(data.getBytes(StandardCharsets.UTF_8)), "offset",
+          startOffset, maybeTruncated, ReplayListenerBus.SELECT_ALL_FILTER)
+      }
+      appender.loggingEvents.map(_.getMessage.getFormattedMessage).toSeq
+    }
+    val origin = " (lines counted from uncompressed byte offset 42)"
+    val malformed = replay(end + "\n" + "x" * 2048 + "\n{}\n", 42L, maybeTruncated = false)
+    assert(malformed.exists(_.contains("first skipped line: 2" + origin)), malformed)
+    assert(malformed.exists(_.startsWith("Malformed line #3" + origin + ": {}")), malformed)
+    val truncated = replay(end + "\n{\"Event\":", 42L, maybeTruncated = true)
+    assert(truncated.exists(_.contains("offset at line 2" + origin + ", the file might not")),
+      truncated)
+    // Without an offset, the diagnostics are unchanged.
+    val unlabeled = replay(end + "\n{}\n", 0L, maybeTruncated = false)
+    assert(unlabeled.exists(_.startsWith("Malformed line #2: {}")), unlabeled)
+    assert(!unlabeled.exists(_.contains("lines counted from")), unlabeled)
+  }
+
   test("SPARK-59804: Replay still rejects malformed UTF-8 in skipped lines") {
     val bytes = Array.fill[Byte](20 * 1024)('x'.toByte) ++ Array(0xff.toByte, '\n'.toByte)
     val bus = new ReplayListenerBus(1024)
