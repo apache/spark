@@ -9605,6 +9605,13 @@
     ],
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_JSON_CHAR_VARCHAR_MAP_KEY" : {
+    "message" : [
+      "The JSON object name <key> is not a valid key for the map key type <dataType>.",
+      "A CHAR key must match the declared length exactly and a VARCHAR key must not exceed it; keys are never padded or trimmed. Use a STRING map key to accept any name."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_MERGE_CONDITION" : {
     "message" : [
       "MERGE operation contains unsupported <condName> condition."

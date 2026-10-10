@@ -51,7 +51,13 @@ class JacksonParser(
     schema: DataType,
     val options: JSONOptions,
     allowArrayAsStructs: Boolean,
-    filters: Seq[Filter] = Seq.empty) extends Logging {
+    filters: Seq[Filter] = Seq.empty,
+    // `spark.sql.charVarchar.standardSemantics.enabled` has PERSISTED binding, so for `from_json`
+    // it must be captured when the expression is analyzed (see `JsonToStructs`) rather than read
+    // live here, otherwise a view created under the flag would skip the CHAR/VARCHAR map-key check
+    // when queried from a session with the flag off. `None` falls back to the live conf, which is
+    // correct for the file-based JSON data source where there is no view to capture.
+    charVarcharStandardSemanticsOverride: Option[Boolean] = None) extends Logging {
 
   import JacksonUtils._
   import com.fasterxml.jackson.core.JsonToken._
@@ -59,6 +65,13 @@ class JacksonParser(
   // A `ValueConverter` is responsible for converting a value from `JsonParser`
   // to a value in a field for `InternalRow`.
   private type ValueConverter = JsonParser => AnyRef
+
+  // CHAR/VARCHAR JSON map keys are length-checked without pad or trim under this flag. Lazy so
+  // its value is independent of field declaration order: `makeMapKeyChecker` reads it while the
+  // converters below are built, and an eager val read before its own initializer would silently
+  // see `false` and disable the check.
+  private lazy val charVarcharStandardSemantics =
+    charVarcharStandardSemanticsOverride.getOrElse(SQLConf.get.charVarcharStandardSemantics)
 
   // `ValueConverter`s for the root schema for all fields in the schema
   private val rootConverter = makeRootConverter(schema)
@@ -191,8 +204,9 @@ class JacksonParser(
 
   private def makeMapRootConverter(mt: MapType): JsonParser => Iterable[InternalRow] = {
     val fieldConverter = makeConverter(mt.valueType)
+    val keyChecker = makeMapKeyChecker(mt.keyType)
     (parser: JsonParser) => parseJsonToken[Iterable[InternalRow]](parser, mt) {
-      case START_OBJECT => Some(InternalRow(convertMap(parser, fieldConverter)))
+      case START_OBJECT => Some(InternalRow(convertMap(parser, fieldConverter, keyChecker)))
     }
   }
 
@@ -484,8 +498,9 @@ class JacksonParser(
 
     case mt: MapType =>
       val valueConverter = makeConverter(mt.valueType)
+      val keyChecker = makeMapKeyChecker(mt.keyType)
       (parser: JsonParser) => parseJsonToken[MapData](parser, dataType) {
-        case START_OBJECT => convertMap(parser, valueConverter)
+        case START_OBJECT => convertMap(parser, valueConverter, keyChecker)
       }
 
     case udt: UserDefinedType[_] =>
@@ -618,44 +633,109 @@ class JacksonParser(
   }
 
   /**
-   * Parse an object as a Map, preserving all fields.
+   * Parse an object as a Map.
+   *
+   * JSON object names used as CHAR/VARCHAR keys are length-checked without rewriting (see
+   * `makeMapKeyChecker`): CHAR keys must already be exactly n characters, and VARCHAR keys
+   * must already be at most n characters. Padding, trimming, and `mapKeyDedupPolicy` are not
+   * applied, and duplicate names are kept, exactly as for STRING keys. This differs from XML,
+   * which pads keys and then applies `mapKeyDedupPolicy`.
+   *
+   * A rejected key is treated like a failed value, regardless of `enablePartialResults`: the
+   * cause is recorded and the parser steps past the value so the loop still consumes the map's
+   * END_OBJECT, leaving the key unpaired. The check must not surface its result while the parser
+   * is still on the FIELD_NAME, or an enclosing struct would misread the map's remaining entries
+   * as its own sibling fields (SPARK-60108). STRING keys have no checker and take the fast path.
    */
   private def convertMap(
       parser: JsonParser,
-      fieldConverter: ValueConverter): MapData = {
+      fieldConverter: ValueConverter,
+      keyChecker: Option[UTF8String => Option[Throwable]]): MapData = {
     val keys = ArrayBuffer.empty[UTF8String]
     val values = ArrayBuffer.empty[Any]
     var badRecordException: Option[Throwable] = None
 
     while (nextUntil(parser, JsonToken.END_OBJECT)) {
-      keys += UTF8String.fromString(parser.currentName)
-      try {
-        values += fieldConverter.apply(parser)
-      } catch {
-        case err: PartialValueException if enablePartialResults =>
-          badRecordException = badRecordException.orElse(Some(err.cause))
-          values += err.partialResult
-        case NonFatal(e) if enablePartialResults =>
+      val key = UTF8String.fromString(parser.currentName)
+      keys += key
+      // Avoid allocating a closure per entry on the common no-checker path.
+      val keyRejection = keyChecker match {
+        case Some(check) => check(key)
+        case None => None
+      }
+      keyRejection match {
+        case Some(e) =>
           badRecordException = badRecordException.orElse(Some(e))
+          parser.nextToken() // step from FIELD_NAME onto the value
           parser.skipChildren()
+        case None =>
+          try {
+            values += fieldConverter.apply(parser)
+          } catch {
+            case err: PartialValueException if enablePartialResults =>
+              badRecordException = badRecordException.orElse(Some(err.cause))
+              values += err.partialResult
+            case NonFatal(e) if enablePartialResults =>
+              badRecordException = badRecordException.orElse(Some(e))
+              parser.skipChildren()
+          }
       }
     }
 
-    // Value conversion can fail after the key is recorded. Do not build MapData from
-    // unpaired buffers: ArrayBasedMapData would throw a cardinality error and hide
-    // the original conversion failure (for example EXCEED_LIMIT_LENGTH).
+    // A rejected key or a failed value leaves the key recorded without a value. Rethrow the
+    // real cause instead of building an unbalanced ArrayBasedMapData, whose cardinality
+    // `require` would otherwise mask it. The row then becomes a bad record (null in PERMISSIVE,
+    // surfaced in FAILFAST). Balanced partial results (a trimmed value) still flow through
+    // PartialMapDataResultException below.
     if (keys.length != values.length) {
       throw badRecordException.get
     }
 
-    // Preserve every parsed JSON key/value pair, including exact duplicate names.
-    // ArrayBasedMapData is used directly to retain this historical behavior.
+    // The JSON map keeps every parsed pair, including exact duplicate names.
     val mapData = ArrayBasedMapData(keys.toArray, values.toArray)
 
     if (badRecordException.isEmpty) {
       mapData
     } else {
       throw PartialMapDataResultException(mapData, badRecordException.get)
+    }
+  }
+
+  /**
+   * Builds the length check applied to this map's CHAR/VARCHAR keys, or `None` when the keys
+   * need no check (STRING keys, or standard semantics are off). Built once per map converter so
+   * the per-entry loop in `convertMap` does not re-inspect the key type. The check never pads or
+   * trims; it returns the rejection cause (with the actual key type, collation included, so the
+   * message is accurate) rather than throwing, so `convertMap` keeps full control of the parser
+   * position when a key is rejected.
+   */
+  private def makeMapKeyChecker(keyType: DataType): Option[UTF8String => Option[Throwable]] = {
+    if (!charVarcharStandardSemantics) {
+      None
+    } else {
+      keyType match {
+        case c: CharType => Some(checkCharJsonMapKey(_, c))
+        case v: VarcharType => Some(checkVarcharJsonMapKey(_, v))
+        case _ => None
+      }
+    }
+  }
+
+  // A CHAR(n) JSON object name is never padded: it must already be exactly n characters.
+  private def checkCharJsonMapKey(key: UTF8String, keyType: CharType): Option[Throwable] = {
+    if (key.numChars() != keyType.length) {
+      Some(QueryExecutionErrors.unsupportedJsonCharVarcharMapKey(key, keyType))
+    } else {
+      None
+    }
+  }
+
+  // A VARCHAR(n) JSON object name is never trimmed: it must already be at most n characters.
+  private def checkVarcharJsonMapKey(key: UTF8String, keyType: VarcharType): Option[Throwable] = {
+    if (key.numChars() > keyType.length) {
+      Some(QueryExecutionErrors.unsupportedJsonCharVarcharMapKey(key, keyType))
+    } else {
+      None
     }
   }
 
