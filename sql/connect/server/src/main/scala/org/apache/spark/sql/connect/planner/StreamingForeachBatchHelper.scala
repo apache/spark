@@ -261,7 +261,10 @@ object StreamingForeachBatchHelper extends Logging {
    * setting the query id. The caller must ensure it is closed so that worker process and related
    * resources are released.
    */
-  def pythonForeachBatchWrapper(pythonFn: SimplePythonFunction, sessionHolder: SessionHolder)
+  def pythonForeachBatchWrapper(
+      pythonFn: SimplePythonFunction,
+      sessionHolder: SessionHolder,
+      sessionTags: Set[String] = Set.empty)
       : (ForeachBatchFnType, AutoCloseable, AtomicReference[String]) = {
 
     val port = SparkConnectService.localPort
@@ -283,6 +286,9 @@ object StreamingForeachBatchHelper extends Logging {
         log"pythonExec: ${MDC(PYTHON_EXEC, pythonFn.pythonExec)})")
 
     val (dataOut, dataIn) = runner.init()
+    dataOut.writeInt(sessionTags.size)
+    sessionTags.toSeq.sorted.foreach(tag => PythonWorkerUtils.writeUTF(tag, dataOut))
+    dataOut.flush()
 
     val useClonedSession = sessionHolder.session.sessionState.conf
       .getConf(SQLConf.CONNECT_STREAMING_FOREACH_BATCH_USE_CLONED_SESSION)
