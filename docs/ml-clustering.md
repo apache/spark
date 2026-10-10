@@ -30,10 +30,10 @@ about these algorithms.
 
 ## K-means
 
-[k-means](http://en.wikipedia.org/wiki/K-means_clustering) is one of the
+[k-means](https://en.wikipedia.org/wiki/K-means_clustering) is one of the
 most commonly used clustering algorithms that clusters the data points into a
 predefined number of clusters. The MLlib implementation includes a parallelized
-variant of the [k-means++](http://en.wikipedia.org/wiki/K-means%2B%2B) method
+variant of the [k-means++](https://en.wikipedia.org/wiki/K-means%2B%2B) method
 called [kmeans||](http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf).
 
 `KMeans` is implemented as an `Estimator` and generates a `KMeansModel` as the base model.
@@ -193,10 +193,10 @@ Refer to the [R API docs](api/R/reference/spark.bisectingKmeans.html) for more d
 
 ## Gaussian Mixture Model (GMM)
 
-A [Gaussian Mixture Model](http://en.wikipedia.org/wiki/Mixture_model#Multivariate_Gaussian_mixture_model)
+A [Gaussian Mixture Model](https://en.wikipedia.org/wiki/Mixture_model#Multivariate_Gaussian_mixture_model)
 represents a composite distribution whereby points are drawn from one of *k* Gaussian sub-distributions,
 each with its own probability. The `spark.ml` implementation uses the
-[expectation-maximization](http://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm)
+[expectation-maximization](https://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm)
 algorithm to induce the maximum-likelihood model given a set of samples.
 
 `GaussianMixture` is implemented as an `Estimator` and generates a `GaussianMixtureModel` as the base

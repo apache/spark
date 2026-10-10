@@ -436,7 +436,7 @@ Refer to the [R API docs](api/R/reference/spark.svmLinear.html) for more details
 
 ## One-vs-Rest classifier (a.k.a. One-vs-All)
 
-[OneVsRest](http://en.wikipedia.org/wiki/Multiclass_classification#One-vs.-rest) is an example of a machine learning reduction for performing multiclass classification given a base classifier that can perform binary classification efficiently.  It is also known as "One-vs-All."
+[OneVsRest](https://en.wikipedia.org/wiki/Multiclass_classification#One-vs.-rest) is an example of a machine learning reduction for performing multiclass classification given a base classifier that can perform binary classification efficiently.  It is also known as "One-vs-All."
 
 `OneVsRest` is implemented as an `Estimator`. For the base classifier, it takes instances of `Classifier` and creates a binary classification problem for each of the k classes. The classifier for class i is trained to predict whether the label is i or not, distinguishing class i from all other classes.
 
@@ -474,7 +474,7 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/OneVsRe
 
 ## Naive Bayes
 
-[Naive Bayes classifiers](http://en.wikipedia.org/wiki/Naive_Bayes_classifier) are a family of simple
+[Naive Bayes classifiers](https://en.wikipedia.org/wiki/Naive_Bayes_classifier) are a family of simple
 probabilistic, multiclass classifiers based on applying Bayes' theorem with strong (naive) independence
 assumptions between every pair of features.
 
@@ -483,7 +483,7 @@ it computes the conditional probability distribution of each feature given each 
 For prediction, it applies Bayes' theorem to compute the conditional probability distribution
 of each label given an observation.
 
-MLlib supports [Multinomial naive Bayes](http://en.wikipedia.org/wiki/Naive_Bayes_classifier#Multinomial_naive_Bayes),
+MLlib supports [Multinomial naive Bayes](https://en.wikipedia.org/wiki/Naive_Bayes_classifier#Multinomial_naive_Bayes),
 [Complement naive Bayes](https://people.csail.mit.edu/jrennie/papers/icml03-nb.pdf),
 [Bernoulli naive Bayes](http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html)
 and [Gaussian naive Bayes](https://en.wikipedia.org/wiki/Naive_Bayes_classifier#Gaussian_naive_Bayes).
@@ -498,7 +498,7 @@ Feature values for Multinomial and Bernoulli models must be *non-negative*. The 
 For document classification, the input feature vectors should usually be sparse vectors.
 Since the training data is only used once, it is not necessary to cache it.
 
-[Additive smoothing](http://en.wikipedia.org/wiki/Lidstone_smoothing) can be used by
+[Additive smoothing](https://en.wikipedia.org/wiki/Lidstone_smoothing) can be used by
 setting the parameter $\lambda$ (default to $1.0$).
 
 **Examples**
@@ -1003,7 +1003,7 @@ Refer to the [R API docs](api/R/reference/spark.survreg.html) for more details.
 
 
 ## Isotonic regression
-[Isotonic regression](http://en.wikipedia.org/wiki/Isotonic_regression)
+[Isotonic regression](https://en.wikipedia.org/wiki/Isotonic_regression)
 belongs to the family of regression algorithms. Formally isotonic regression is a problem where
 given a finite set of real numbers `$Y = {y_1, y_2, ..., y_n}$` representing observed responses
 and `$X = {x_1, x_2, ..., x_n}$` the unknown response values to be fitted
@@ -1018,7 +1018,7 @@ with respect to complete order subject to
 The resulting function is called isotonic regression and it is unique.
 It can be viewed as least squares problem under order restriction.
 Essentially isotonic regression is a
-[monotonic function](http://en.wikipedia.org/wiki/Monotonic_function)
+[monotonic function](https://en.wikipedia.org/wiki/Monotonic_function)
 best fitting the original data points.
 
 We implement a
@@ -1136,7 +1136,7 @@ Refer to [the linear methods guide for the RDD-based API](mllib-linear-methods.h
 details about implementation and tuning; this information is still relevant.
 
 We also include a DataFrame API for [Elastic
-net](http://en.wikipedia.org/wiki/Elastic_net_regularization), a hybrid
+net](https://en.wikipedia.org/wiki/Elastic_net_regularization), a hybrid
 of $L_1$ and $L_2$ regularization proposed in [Zou et al, Regularization
 and variable selection via the elastic
 net](http://users.stat.umn.edu/~zouxx019/Papers/elasticnet.pdf).
@@ -1150,10 +1150,10 @@ regularization as special cases. For example, if a [linear
 regression](https://en.wikipedia.org/wiki/Linear_regression) model is
 trained with the elastic net parameter $\alpha$ set to $1$, it is
 equivalent to a
-[Lasso](http://en.wikipedia.org/wiki/Least_squares#Lasso_method) model.
+[Lasso](https://en.wikipedia.org/wiki/Least_squares#Lasso_method) model.
 On the other hand, if $\alpha$ is set to $0$, the trained model reduces
 to a [ridge
-regression](http://en.wikipedia.org/wiki/Tikhonov_regularization) model.
+regression](https://en.wikipedia.org/wiki/Tikhonov_regularization) model.
 We implement Pipelines API for both linear regression and logistic
 regression with elastic net regularization.
 
@@ -1195,7 +1195,7 @@ or bin the continuous features and one-hot encode them.
 
 # Decision trees
 
-[Decision trees](http://en.wikipedia.org/wiki/Decision_tree_learning)
+[Decision trees](https://en.wikipedia.org/wiki/Decision_tree_learning)
 and their ensembles are popular methods for the machine learning tasks of
 classification and regression. Decision trees are widely used since they are easy to interpret,
 handle categorical features, extend to the multiclass classification setting, do not require
@@ -1300,7 +1300,7 @@ All output columns are optional; to exclude an output column, set its correspond
 
 # Tree Ensembles
 
-The DataFrame API supports two major tree ensemble algorithms: [Random Forests](http://en.wikipedia.org/wiki/Random_forest) and [Gradient-Boosted Trees (GBTs)](http://en.wikipedia.org/wiki/Gradient_boosting).
+The DataFrame API supports two major tree ensemble algorithms: [Random Forests](https://en.wikipedia.org/wiki/Random_forest) and [Gradient-Boosted Trees (GBTs)](https://en.wikipedia.org/wiki/Gradient_boosting).
 Both use [`spark.ml` decision trees](ml-classification-regression.html#decision-trees) as their base models.
 
 Users can find more information about ensemble algorithms in the [MLlib Ensemble guide](mllib-ensembles.html).
@@ -1315,7 +1315,7 @@ The main differences between this API and the [original MLlib ensembles API](mll
 
 ## Random Forests
 
-[Random forests](http://en.wikipedia.org/wiki/Random_forest)
+[Random forests](https://en.wikipedia.org/wiki/Random_forest)
 are ensembles of [decision trees](ml-classification-regression.html#decision-trees).
 Random forests combine many decision trees in order to reduce the risk of overfitting.
 The `spark.ml` implementation supports random forests for binary and multiclass classification and for regression,
@@ -1396,7 +1396,7 @@ All output columns are optional; to exclude an output column, set its correspond
 
 ## Gradient-Boosted Trees (GBTs)
 
-[Gradient-Boosted Trees (GBTs)](http://en.wikipedia.org/wiki/Gradient_boosting)
+[Gradient-Boosted Trees (GBTs)](https://en.wikipedia.org/wiki/Gradient_boosting)
 are ensembles of [decision trees](ml-classification-regression.html#decision-trees).
 GBTs iteratively train decision trees in order to minimize a loss function.
 The `spark.ml` implementation supports GBTs for binary classification and for regression,
