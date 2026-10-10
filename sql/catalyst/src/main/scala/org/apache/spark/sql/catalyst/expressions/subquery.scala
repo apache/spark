@@ -96,6 +96,8 @@ abstract class SubqueryExpression(
 
   def getOuterAttrs: Seq[Expression] = outerAttrs
 
+  def getJoinCond: Seq[Expression] = joinCond
+
   def getOuterScopeAttrs: Seq[Expression] = outerScopeAttrs
 
   def isCorrelated: Boolean = outerAttrs.nonEmpty
