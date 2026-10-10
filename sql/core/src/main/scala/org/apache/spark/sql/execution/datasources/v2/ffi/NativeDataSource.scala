@@ -290,6 +290,7 @@ class NativeDataSourceWriter(
     call(name, "commit a write to") {
       library.commit(handle.get, -1L, NativeWriterCommitMessage.toBytes(messages))
     }
+    // Not closed if the commit fails: Spark then aborts the write, which closes it.
     handle.close()
   }
 
@@ -418,14 +419,19 @@ class NativePartitionReader(
         "is not supported.")
     }
     val actual = ArrowUtils.fromArrowSchema(root.getSchema)
-    val matches = actual.length == schema.length && actual.zip(schema).forall {
+    // The schema to read as the library got it: Arrow does not carry everything, such as the
+    // collations of strings, the fields of intervals and user-defined types, which still apply to
+    // the data that Spark reads.
+    val expected = ArrowUtils.fromArrowSchema(ArrowUtils.toArrowSchema(
+      schema, "UTC", errorOnDuplicatedFieldNames = true, largeVarTypes = false))
+    val matches = actual.length == expected.length && actual.zip(expected).forall {
       case (actualField, field) =>
         actualField.name == field.name &&
           DataType.equalsIgnoreNullability(actualField.dataType, field.dataType)
     }
     if (!matches) {
       throw error(name, "read", s"The data has the schema ${actual.toDDL}, but the expected " +
-        s"schema is ${schema.toDDL}.")
+        s"schema is ${expected.toDDL}.")
     }
   }
 

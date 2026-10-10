@@ -177,32 +177,40 @@ object NativeDataSourceRegistry extends Logging {
     case pkg: NativeDataSourcePackage =>
       SparkSession.getActiveSession match {
         // In local mode, the executors run in the driver and read the package where it is.
-        case Some(session) if !session.sparkContext.isLocal => addToArtifacts(session, pkg)
-        case _ => pkg
+        case Some(session) if session.sparkContext.isLocal => pkg
+        case Some(session) => addToArtifacts(session, pkg)
+        case None =>
+          logWarning(log"Cannot distribute the native data source package " +
+            log"${MDC(PATH, pkg.path)} to the executors: there is no active session. The " +
+            log"executors only find it if it is at the same path on every node.")
+          pkg
       }
     case installed: InstalledNativeLibrary => installed
   }
 
-  /** Adds the package as an artifact of the session, unless it already is one. */
+  /**
+   * Makes the package available to the executors of the session, as one of its artifacts. A
+   * package that the session added with `spark.addArtifact` already is one. Any other package,
+   * such as a package under `spark.sql.dataSource.native.paths`, is copied to the artifacts under
+   * a name made of its file name and its checksum: the copy does not have the extension of a
+   * package, so it is not a package of the session that the lookups find, and two different
+   * packages with the same file name do not collide.
+   */
   private[ffi] def addToArtifacts(
       session: SparkSession,
       pkg: NativeDataSourcePackage): NativeDataSourcePackage = {
     val artifactManager = session.artifactManager
     val (added, artifactUUID) = artifactManager.getNativeDataSourcePackages
-    // The executors find the package by its file name, so the session cannot have another
-    // package with the same file name.
-    added.find(_.getName == pkg.fileName) match {
-      case Some(file) =>
-        val sha256 = NativeDataSourcePackage.tryRead(file).map(_.sha256).getOrElse("")
-        if (sha256 != pkg.sha256) {
-          throw QueryExecutionErrors.nativeDataSourcePackageFileNameConflictError(
-            pkg.path, pkg.fileName)
-        }
-      case None =>
+    if (added.exists(_.getCanonicalPath == pkg.path)) {
+      pkg.copy(artifactUUID = artifactUUID)
+    } else {
+      val copyName = s"${pkg.fileName}.${pkg.sha256}"
+      if (!artifactManager.hasFileArtifact(copyName)) {
         artifactManager.addLocalArtifacts(Artifact.newFileArtifact(
-          Paths.get(pkg.fileName), new Artifact.LocalFile(Paths.get(pkg.path))) :: Nil)
+          Paths.get(copyName), new Artifact.LocalFile(Paths.get(pkg.path))) :: Nil)
+      }
+      pkg.copy(artifactUUID = artifactUUID, distributedFileName = Some(copyName))
     }
-    pkg.copy(artifactUUID = artifactUUID)
   }
 
   /**
@@ -215,13 +223,14 @@ object NativeDataSourceRegistry extends Logging {
     if (SparkEnv.get == null) {
       Nil
     } else {
+      val fileName = pkg.distributedFileName.getOrElse(pkg.fileName)
       val root = new File(SparkFiles.getRootDirectory())
       val sessionCopies = Option(root.listFiles()).toSeq.flatten
         .filter(_.isDirectory)
         .sortBy(_.getName)
-        .map(new File(_, pkg.fileName))
-      (pkg.artifactUUID.map(uuid => new File(new File(root, uuid), pkg.fileName)).toSeq ++
-        Seq(new File(root, pkg.fileName)) ++ sessionCopies).distinct
+        .map(new File(_, fileName))
+      (pkg.artifactUUID.map(uuid => new File(new File(root, uuid), fileName)).toSeq ++
+        Seq(new File(root, fileName)) ++ sessionCopies).distinct
     }
   }
 
@@ -245,10 +254,17 @@ object NativeDataSourceRegistry extends Logging {
   }
 
   private def packageFilesIn(dir: File): Seq[File] = {
-    dir.listFiles()
-      .filter(f => f.isFile && f.getName.endsWith(NativeDataSourcePackage.FILE_EXTENSION))
-      .sortBy(_.getName)
-      .toSeq
+    Option(dir.listFiles()) match {
+      case Some(files) =>
+        files
+          .filter(f => f.isFile && f.getName.endsWith(NativeDataSourcePackage.FILE_EXTENSION))
+          .sortBy(_.getName)
+          .toSeq
+      case None =>
+        logWarning(log"Ignoring the native data source path ${MDC(PATH, dir)}: the directory " +
+          log"cannot be read.")
+        Nil
+    }
   }
 
   private def artifactPackageFiles(): Seq[File] = {

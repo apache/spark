@@ -75,12 +75,15 @@ sealed trait NativeLibraryLocation extends Serializable
  * @param path the path of the package file on the driver
  * @param artifactUUID the UUID of the session whose artifacts contain the package, if the session
  *                     is isolated. Executors store the artifacts of such a session separately.
+ * @param distributedFileName the name of the copy of the package in the artifacts of the session,
+ *                            if the package is not itself an artifact of the session
  */
 case class NativeDataSourcePackage(
     path: String,
     sha256: String,
     manifest: NativeDataSourceManifest,
-    artifactUUID: Option[String] = None) extends NativeLibraryLocation {
+    artifactUUID: Option[String] = None,
+    distributedFileName: Option[String] = None) extends NativeLibraryLocation {
   def fileName: String = new File(path).getName
 }
 

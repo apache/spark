@@ -167,6 +167,15 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
     (packages, Option(state).map(_.uuid))
   }
 
+  /** Returns whether a file with the given name was added to this session as a file artifact. */
+  private[sql] def hasFileArtifact(fileName: String): Boolean = {
+    val path = Paths.get("files", fileName)
+    sparkContextRelativePaths.asScala.exists {
+      case (SparkContextResourceType.FILE, relativePath, _) => relativePath == path
+      case _ => false
+    }
+  }
+
   protected[sql] def getCachedBlockId(hash: String): Option[CacheId] = {
     Option(hashToCachedIdMap.get(hash)).map(_.id)
   }

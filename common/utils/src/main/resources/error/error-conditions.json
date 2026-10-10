@@ -6326,12 +6326,6 @@
     ],
     "sqlState" : "42710"
   },
-  "NATIVE_DATA_SOURCE_PACKAGE_FILE_NAME_CONFLICT" : {
-    "message" : [
-      "Cannot add the native data source package <path> to the session, because the session already has a different file named <fileName>. Rename one of the packages."
-    ],
-    "sqlState" : "42710"
-  },
   "NATIVE_DATA_SOURCE_PACKAGE_NOT_FOUND" : {
     "message" : [
       "Cannot find the native data source package <fileName> with the SHA-256 checksum <checksum>. Add the package with `spark.addArtifact`, or install the same package under `spark.sql.dataSource.native.paths` on every node."

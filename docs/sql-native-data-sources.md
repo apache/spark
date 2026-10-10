@@ -168,13 +168,14 @@ A session finds the packages in two places, and the executors get them automatic
   ```
 
 - **Configured paths**: the packages listed in `spark.sql.dataSource.native.paths`, or in the
-  directories it lists, on the driver.
+  directories it lists, on the driver. A package can be replaced in place: the next queries use
+  the new version.
 
 The packages of a session take precedence over the installed libraries. Give packages distinct
 file names, for example with their version: sessions that are not isolated share the files they
-add, and a session cannot use two different packages with the same file name. Spark ignores, and
-logs, a package that it cannot read or whose version it does not support, unless its manifest
-lists the data source that a query uses and no other package or installed library provides it.
+add. Spark ignores, and logs, a package that it cannot read or whose version it does not
+support, unless its manifest lists the data source that a query uses and no other package or
+installed library provides it.
 
 ## Example in Rust
 
@@ -551,7 +552,12 @@ statically, or install them on the nodes.
 ## Security
 
 A native data source runs native code in the driver and executor processes, with their
-privileges, and is not sandboxed. Only install libraries and add packages that you trust, and do
-not let untrusted users write to the directories of the native library path. Set
+privileges, and is not sandboxed. Spark finds installed libraries by their file name, in the
+directories of the native library path, and loads one when a query uses its name and no Java or
+Python data source has that name, much like it imports the Python data sources installed as
+`pyspark_*` packages. So only install libraries and add packages that you trust, and do not let
+untrusted users write to the directories of the native library path, or to the directories in
+`spark.sql.dataSource.native.paths`. A user who can add artifacts to a session, for example a Spark
+Connect client, can also add a package, as they can add JAR files. Set
 `spark.sql.dataSource.native.enabled` to false to prevent loading native data sources, for example
 on a server shared by several users.

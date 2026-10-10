@@ -121,6 +121,10 @@ final class NativeLibrary {
   static NativeLibrary load(String path) throws Throwable {
     Class<?> bridge = new BridgeClassLoader(NativeBridge.class.getClassLoader())
       .loadClass(BRIDGE_CLASS);
+    // The copy itself has to call System.load, because a library belongs to the class loader of
+    // the class that loads it. NativeBridge.load is package-private, so that it is not part of
+    // the public interface, so it is called reflectively. Java always allows this for the classes
+    // on the class path: they are in unnamed modules, whose packages are all open.
     Method load = bridge.getDeclaredMethod("load", String.class);
     load.setAccessible(true);
     try {

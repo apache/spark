@@ -114,6 +114,19 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("batch write in batches of a limited size") {
+    withSQLConf(SQLConf.ARROW_EXECUTION_MAX_BYTES_PER_BATCH.key -> "4096") {
+      val table = "batch_write_bytes"
+      val rows = (0L until 10L).map(id => (id, "x" * 1000 + id))
+      rows.toDF("id", "name").coalesce(1)
+        .write.format(format).option("table", table).mode("append").save()
+      assert(TestColumnarSink.rows(table) == rows)
+      // A batch ends once it holds at least 4096 bytes, long before it has 10,000 rows: each row
+      // takes about 1 KB, so a batch has 5 rows.
+      assert(TestColumnarSink.batchSizes(table) == Seq(5, 5))
+    }
+  }
+
   test("abort a failed write") {
     val table = "failed_write"
     val e = intercept[SparkException] {

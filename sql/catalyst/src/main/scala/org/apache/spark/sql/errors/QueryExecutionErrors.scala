@@ -828,13 +828,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("fileName" -> fileName, "checksum" -> checksum))
   }
 
-  def nativeDataSourcePackageFileNameConflictError(
-      path: String, fileName: String): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "NATIVE_DATA_SOURCE_PACKAGE_FILE_NAME_CONFLICT",
-      messageParameters = Map("path" -> path, "fileName" -> fileName))
-  }
-
   def invalidNativeDataSourceLibraryError(
       path: String,
       subClass: String,
