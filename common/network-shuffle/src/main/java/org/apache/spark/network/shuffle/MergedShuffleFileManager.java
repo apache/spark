@@ -25,6 +25,7 @@ import com.codahale.metrics.MetricSet;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.StreamCallbackWithID;
+import org.apache.spark.network.shuffle.checksum.Cause;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.shuffle.protocol.FinalizeShuffleMerge;
 import org.apache.spark.network.shuffle.protocol.MergeStatuses;
@@ -132,6 +133,34 @@ public interface MergedShuffleFileManager {
    * identify a shuffle to be removed
    */
   void removeShuffleMerge(RemoveShuffleMerge removeShuffleMerge);
+
+  /**
+   * Diagnose the cause of the corruption of a merged shuffle chunk by comparing the checksum
+   * calculated by the reducer against the one calculated while the chunk was merged. This is
+   * best effort, so it returns {@link Cause#UNKNOWN_ISSUE} rather than failing when the
+   * checksum of the chunk is unavailable.
+   *
+   * @param appId application ID
+   * @param shuffleId shuffle ID
+   * @param shuffleMergeId shuffleMergeId is used to uniquely identify merging process
+   *                       of shuffle by an indeterminate stage attempt.
+   * @param reduceId reducer ID
+   * @param chunkId the ID of the corrupted chunk of the merged shuffle partition
+   * @param checksumByReader the checksum of the chunk calculated by the reducer
+   * @param algorithm the checksum algorithm the reducer used
+   * @return the cause of the corruption
+   * @since 4.4.0
+   */
+  default Cause diagnoseShuffleChunkCorruption(
+      String appId,
+      int shuffleId,
+      int shuffleMergeId,
+      int reduceId,
+      int chunkId,
+      long checksumByReader,
+      String algorithm) {
+    return Cause.UNKNOWN_ISSUE;
+  }
 
   /**
    * Optionally close any resources associated the MergedShuffleFileManager, such as the

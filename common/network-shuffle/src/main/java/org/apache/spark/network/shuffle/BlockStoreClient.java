@@ -91,6 +91,48 @@ public abstract class BlockStoreClient implements Closeable {
   }
 
   /**
+   * Send the diagnosis request for the corrupted chunk of a merged shuffle partition to the
+   * shuffle server which merged it.
+   *
+   * @param host the host of the shuffle server which merged the chunk.
+   * @param port the port of the shuffle server which merged the chunk.
+   * @param shuffleId the shuffleId of the corrupted shuffle chunk
+   * @param shuffleMergeId the shuffleMergeId of the corrupted shuffle chunk
+   * @param reduceId the reduceId of the corrupted shuffle chunk
+   * @param chunkId the chunkId of the corrupted shuffle chunk
+   * @param checksum the shuffle checksum which calculated at client side for the corrupted
+   *                 shuffle chunk
+   * @param algorithm the checksum algorithm which is used for calculating checksum
+   * @return The cause of the shuffle chunk corruption
+   */
+  public Cause diagnoseShuffleChunkCorruption(
+      String host,
+      int port,
+      int shuffleId,
+      int shuffleMergeId,
+      int reduceId,
+      int chunkId,
+      long checksum,
+      String algorithm) {
+    try {
+      TransportClient client = clientFactory.createClient(host, port);
+      ByteBuffer response = client.sendRpcSync(
+        new DiagnoseShuffleChunkCorruption(
+          appId, shuffleId, shuffleMergeId, reduceId, chunkId, checksum, algorithm).toByteBuffer(),
+        transportConf.connectionTimeoutMs()
+      );
+      CorruptionCause cause =
+        (CorruptionCause) BlockTransferMessage.Decoder.fromByteBuffer(response);
+      return cause.cause;
+    } catch (Exception e) {
+      // A shuffle service that does not support this request yet answers it with an error, so
+      // the exception is logged to tell that case apart from a genuinely unknown cause.
+      logger.warn("Failed to get the corruption cause of the shuffle chunk.", e);
+      return Cause.UNKNOWN_ISSUE;
+    }
+  }
+
+  /**
    * Fetch a sequence of blocks from a remote node asynchronously,
    *
    * Note that this API takes a sequence so the implementation can batch requests, and does not
