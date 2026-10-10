@@ -80,6 +80,8 @@ public class JavaRecordEncoderTestData {
 
   public record SelfReferencingRecord(String value, SelfReferencingRecord next) {}
 
+  public record InterfaceComponentRecord(CharSequence value) {}
+
   public record ValidatedRecord(String name, int age) {
     public ValidatedRecord {
       if (age < 0) {
