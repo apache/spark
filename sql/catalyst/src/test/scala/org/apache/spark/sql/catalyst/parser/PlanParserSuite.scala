@@ -944,6 +944,21 @@ class PlanParserSuite extends AnalysisTest {
     )
   }
 
+  test("joins - missing JOIN after a join type gets a hint") {
+    // The ASOF grammar shares its prefix with ordinary joins. Fails if that makes the parser give
+    // up before it can suggest the missing JOIN.
+    Seq(
+      "right", "right outer", "full", "full outer", "cross", "left", "left outer",
+      "left semi", "semi", "left anti", "anti", "inner",
+      "natural", "natural left", "natural right", "natural inner"
+    ).foreach { joinType =>
+      checkError(
+        exception = parseException(s"select * from a $joinType b"),
+        condition = "PARSE_SYNTAX_ERROR",
+        parameters = Map("error" -> "'b'", "hint" -> ": missing 'JOIN'"))
+    }
+  }
+
   test("nearest-by join") {
     assertEqual(
       "select * from t join u approx nearest 5 by similarity t.a + u.a",
@@ -1207,6 +1222,113 @@ class PlanParserSuite extends AnalysisTest {
     }
   }
 
+  test("asof join - unsupported join types rejected") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      // Only INNER and LEFT OUTER are valid before ASOF, and NATURAL and LATERAL never are (even
+      // with LEFT). Each other form must fail with INCOMPATIBLE_JOIN_TYPES naming the pair, not a
+      // generic syntax error. The context is the whole join clause, so its position comes from
+      // the SQL.
+      def checkUnsupported(
+          joinClause: String,
+          joinType2: String,
+          prefix: String = "select * from t "): Unit = {
+        val sql = prefix + joinClause
+        checkError(
+          exception = parseException(sql),
+          condition = "INCOMPATIBLE_JOIN_TYPES",
+          sqlState = "42613",
+          parameters = Map("joinType1" -> "ASOF", "joinType2" -> joinType2),
+          context = ExpectedContext(
+            fragment = joinClause, start = prefix.length, stop = sql.length - 1))
+      }
+      val asof = "asof join u match_condition (t.a >= u.a)"
+      Seq(
+        "right" -> "RIGHT OUTER", "right outer" -> "RIGHT OUTER",
+        "full" -> "FULL OUTER", "full outer" -> "FULL OUTER",
+        "cross" -> "CROSS",
+        "semi" -> "LEFT SEMI", "left semi" -> "LEFT SEMI",
+        "anti" -> "LEFT ANTI", "left anti" -> "LEFT ANTI",
+        "natural" -> "NATURAL", "natural left" -> "NATURAL"
+      ).foreach { case (written, reported) => checkUnsupported(s"$written $asof", reported) }
+      checkUnsupported(s"right $asof", "RIGHT OUTER", prefix = "from t |> ")
+      val lateral = "join lateral (select * from u) match_condition (t.a >= u.a)"
+      checkUnsupported(s"asof $lateral", "LATERAL")
+      checkUnsupported(s"left asof $lateral", "LATERAL")
+      // The join type check runs before the MATCH_CONDITION check.
+      checkUnsupported("natural asof join u", "NATURAL")
+      checkUnsupported("right asof join u", "RIGHT OUTER")
+    }
+  }
+
+  test("asof join - missing MATCH_CONDITION is a syntax error") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      // The grammar accepts ASOF after a join type without MATCH_CONDITION, so AstBuilder must
+      // reject it. Fails if such a query runs as a plain or NEAREST BY join and drops the ASOF.
+      val prefix = "select * from t "
+      Seq(
+        "left asof join u",
+        "left asof join u on t.b = u.b",
+        "inner asof join u using (b)",
+        "left asof join u approx nearest 1 by distance abs(t.a - u.a)"
+      ).foreach { joinClause =>
+        val sql = prefix + joinClause
+        checkError(
+          exception = parseException(sql),
+          condition = "PARSE_SYNTAX_ERROR",
+          parameters = Map("error" -> "'asof'", "hint" -> ": missing 'MATCH_CONDITION'"),
+          context = ExpectedContext(
+            fragment = joinClause, start = prefix.length, stop = sql.length - 1))
+      }
+    }
+  }
+
+  test("asof join - MATCH_CONDITION without ASOF is a syntax error") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      // The grammar accepts MATCH_CONDITION after any join type, so AstBuilder must reject it
+      // when ASOF is missing. Fails if such a query runs as an ASOF join or drops the condition.
+      val prefix = "select * from t "
+      val matchCondition = "match_condition (t.a >= u.a)"
+      Seq("left join u ", "inner join u ", "natural join u ").foreach { join =>
+        val joinClause = join + matchCondition
+        val sql = prefix + joinClause
+        checkError(
+          exception = parseException(sql),
+          condition = "PARSE_SYNTAX_ERROR",
+          parameters = Map("error" -> "'match_condition'", "hint" -> ""),
+          context = ExpectedContext(
+            fragment = joinClause, start = prefix.length, stop = sql.length - 1))
+      }
+      // Without a join type the grammar still rejects it, with the same error.
+      checkError(
+        exception = parseException(s"select * from t join u $matchCondition"),
+        condition = "PARSE_SYNTAX_ERROR",
+        parameters = Map("error" -> "'match_condition'", "hint" -> ""))
+    }
+  }
+
+  test("asof join - asof is still a table alias without MATCH_CONDITION") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      // Fails if the grammar reads `asof` as the ASOF keyword here, which changes a valid join.
+      assertEqual(
+        "select * from t asof join u on t.a = u.a",
+        table("t").as("asof").join(table("u"), Inner, Some($"t.a" === $"u.a")).select(star()))
+    }
+  }
+
+  test("asof join - lateral after ASOF JOIN is the LATERAL keyword") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      // As in ordinary joins (`JOIN LATERAL t2`), `lateral l` reads as LATERAL plus table `l`, not
+      // as a table named `lateral`. Fails if ASOF and ordinary joins read it differently.
+      val joinClause = "asof join lateral l match_condition (t.a >= l.a)"
+      val sql = s"select * from t $joinClause"
+      checkError(
+        exception = parseException(sql),
+        condition = "INVALID_SQL_SYNTAX.LATERAL_WITHOUT_SUBQUERY_OR_TABLE_VALUED_FUNC",
+        sqlState = "42000",
+        context = ExpectedContext(fragment = joinClause, start = 16, stop = sql.length - 1))
+    }
+  }
+
   test("asof join - struct match condition") {
     withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
       // A multi-column MATCH_CONDITION: `(a, b)` parses to a row constructor (CreateStruct),
@@ -1373,6 +1495,25 @@ class PlanParserSuite extends AnalysisTest {
           fragment = "asof join u match_condition (t.a >= u.a)",
           start = 16,
           stop = 55))
+      // The disabled check runs before the join type check, so an unsupported type also reports
+      // the disabled feature.
+      checkError(
+        exception = parseException(
+          "select * from t right asof join u match_condition (t.a >= u.a)"),
+        condition = "UNSUPPORTED_FEATURE.ASOF_JOIN",
+        sqlState = "0A000",
+        parameters = Map("config" -> "\"spark.sql.join.asofJoin.enabled\""),
+        context = ExpectedContext(
+          fragment = "right asof join u match_condition (t.a >= u.a)",
+          start = 16,
+          stop = 61))
+      // The same holds when MATCH_CONDITION is missing.
+      checkError(
+        exception = parseException("select * from t left asof join u"),
+        condition = "UNSUPPORTED_FEATURE.ASOF_JOIN",
+        sqlState = "0A000",
+        parameters = Map("config" -> "\"spark.sql.join.asofJoin.enabled\""),
+        context = ExpectedContext(fragment = "left asof join u", start = 16, stop = 31))
     }
   }
 

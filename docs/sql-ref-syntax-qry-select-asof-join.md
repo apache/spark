@@ -32,7 +32,8 @@ and reversing the operands changes the result.
 to enable the syntax. When disabled, `ASOF JOIN` fails at parse time with
 `UNSUPPORTED_FEATURE.ASOF_JOIN`.
 
-Only `INNER` (the default) and `LEFT OUTER` join types are supported.
+Only `INNER` (the default) and `LEFT OUTER` join types are supported. Any other join
+type, `NATURAL`, or `LATERAL` fails at parse time with `INCOMPATIBLE_JOIN_TYPES`.
 
 ### Syntax
 
