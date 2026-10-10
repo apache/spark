@@ -90,9 +90,13 @@ public class V2ExpressionSQLBuilder {
    * The default returns the input unchanged: a standard SQL string literal is taken verbatim (the
    * single-quote doubling is already applied when the literal is rendered), so the {@code \} that
    * {@link #escapeSpecialCharsForLikePattern} uses as the LIKE escape character reaches the LIKE
-   * engine intact. A dialect whose string-literal syntax gives {@code \} a special meaning (e.g.
-   * MySQL, which treats {@code \} as an escape character inside string literals) must override this
-   * to double the backslash, so the LIKE pattern survives string-literal parsing unchanged.
+   * engine intact. A subclass whose string-literal syntax gives {@code \} a special meaning should
+   * override this to double the backslash, so the LIKE pattern survives string-literal parsing
+   * unchanged.
+   *
+   * JDBC dialects do not reach this method: they render LIKE patterns in
+   * {@code JdbcDialect.JDBCSQLBuilder} and escape string literals through
+   * {@code JdbcDialect.escapeSql}.
    */
   protected String escapeStringLiteralForLikePattern(String str) {
     return str;
