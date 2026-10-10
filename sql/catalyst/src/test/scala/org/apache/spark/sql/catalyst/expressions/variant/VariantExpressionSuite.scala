@@ -264,6 +264,37 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   private def tryVariantGet(input: String, path: String, dataType: DataType): VariantGet =
     VariantGet(Literal(parseJson(input)), Literal(path), dataType, failOnError = false)
 
+  test("variant_array_length") {
+    def length(input: String, path: Expression = Literal("$")): VariantArrayLength =
+      VariantArrayLength(Literal(parseJson(input)), path)
+
+    checkEvaluation(length("[1, 2, 3]"), 3)
+    checkEvaluation(length("[]"), 0)
+    checkEvaluation(length("""{"a": [1, 2]}""", Literal("$.a")), 2)
+    checkEvaluation(length("""{"a": 1}""", Literal("$.a")), null)
+    checkEvaluation(length("{}", Literal("$.missing")), null)
+    checkEvaluation(length("null"), null)
+    checkEvaluation(
+      VariantArrayLength(Literal.create(null, VariantType), Literal("$")),
+      null)
+
+    val dynamicPath = length(
+      """{"a": [1, 2]}""",
+      BoundReference(0, StringType, nullable = true))
+    checkEvaluation(dynamicPath, 2, InternalRow(UTF8String.fromString("$.a")))
+    checkEvaluation(dynamicPath, null, InternalRow(null))
+
+    checkErrorInExpression[SparkRuntimeException](
+      length("[1, 2]", Literal("abc")),
+      "INVALID_VARIANT_PATH",
+      Map("path" -> "abc", "functionName" -> "`variant_array_length`"))
+    checkErrorInExpression[SparkRuntimeException](
+      dynamicPath,
+      InternalRow(UTF8String.fromString("abc")),
+      "INVALID_VARIANT_PATH",
+      Map("path" -> "abc", "functionName" -> "`variant_array_length`"))
+  }
+
   private def testVariantGet(input: String, path: String, dataType: DataType, output: Any): Unit = {
     checkEvaluation(variantGet(input, path, dataType), output)
     checkEvaluation(

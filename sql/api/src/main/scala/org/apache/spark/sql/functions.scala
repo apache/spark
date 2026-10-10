@@ -14875,6 +14875,51 @@ object functions {
   def is_variant_null(v: Column): Column = Column.fn("is_variant_null", v)
 
   /**
+   * Returns the number of elements in a variant array. Returns NULL if the input is SQL NULL or
+   * the input is not an array.
+   *
+   * @param v
+   *   a variant column.
+   * @group variant_funcs
+   * @since 4.4.0
+   * @return
+   *   an integer column, or NULL for non-array variant values.
+   */
+  def variant_array_length(v: Column): Column = Column.fn("variant_array_length", v)
+
+  /**
+   * Returns the number of elements in the variant array at `path`. Returns NULL if the input is
+   * SQL NULL, the path does not exist, or the target is not an array.
+   *
+   * @param v
+   *   a variant column.
+   * @param path
+   *   a column containing a JSONPath string that identifies the array to inspect.
+   * @group variant_funcs
+   * @since 4.4.0
+   * @return
+   *   an integer column, or NULL if the path is absent or the target is not an array.
+   */
+  def variant_array_length(v: Column, path: Column): Column =
+    Column.fn("variant_array_length", v, path)
+
+  /**
+   * Returns the number of elements in the variant array at `path`. Returns NULL if the input is
+   * SQL NULL, the path does not exist, or the target is not an array.
+   *
+   * @param v
+   *   a variant column.
+   * @param path
+   *   a JSONPath string that identifies the array to inspect.
+   * @group variant_funcs
+   * @since 4.4.0
+   * @return
+   *   an integer column, or NULL if the path is absent or the target is not an array.
+   */
+  def variant_array_length(v: Column, path: String): Column =
+    variant_array_length(v, lit(path))
+
+  /**
    * Check if a variant value is valid. Returns true if the variant is valid, false if it is
    * malformed, and NULL if the input is NULL.
    *

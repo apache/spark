@@ -3643,6 +3643,9 @@ class FunctionsTestsMixin:
             ['{"a":1,"z":9}', '{"b":2,"z":9}'],
         )
         arr = F.parse_json(df.arr)
+        check(df.select(F.variant_array_length(arr)), [2, 2])
+        check(df.select(F.variant_array_length(arr, "$[0]")), [None, 1])
+        check(df.select(F.variant_array_length(arr, df.arrpath)), [2, 1])
         check(
             df.select(F.to_json(F.variant_array_append(arr, "$", F.lit(9)))),
             ["[1,2,9]", "[[3],4,9]"],
