@@ -46,8 +46,9 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, LongType, StructField, StructType}
 import org.apache.spark.sql.util.ArrowUtils
-import org.apache.spark.udf.worker.{Cancel, DataRequest, DataResponse, Finish, FinishResponse, Init,
-  InitResponse, UDFWorkerDataFormat, UDFWorkerSpecification}
+import org.apache.spark.udf.worker.{Cancel, CancelResponse, DataRequest, DataResponse,
+  ExecutionMetrics, Finish, FinishResponse, Init, InitResponse, UDFWorkerDataFormat,
+  UDFWorkerSpecification}
 import org.apache.spark.udf.worker.core.{Termination, WorkerHandle, WorkerLogger,
   WorkerSecurityScope, WorkerSession}
 import org.apache.spark.util.{LongAccumulator, Utils}
@@ -86,7 +87,9 @@ object ExecuteExternalUDFExecSuite {
       expectedTimeZone: String,
       expectedLargeVarTypes: Boolean,
       requestCount: LongAccumulator,
-      closeCount: LongAccumulator)
+      closeCount: LongAccumulator,
+      terminalMetrics: Option[ExecutionMetrics],
+      cancelOnClose: Boolean)
     extends WorkerSession(new TestWorkerHandle, WorkerLogger.NoOp) {
 
     override protected def doInit(message: Init): InitResponse = {
@@ -144,7 +147,18 @@ object ExecuteExternalUDFExecSuite {
 
     override protected def doClose(cancel: () => Cancel): Termination = {
       closeCount.add(1L)
-      completeTerminal(Termination.Finished(FinishResponse.getDefaultInstance))
+      val termination = if (cancelOnClose) {
+        val response = terminalMetrics.fold(CancelResponse.getDefaultInstance) { metrics =>
+          CancelResponse.newBuilder().setExecutionMetrics(metrics).build()
+        }
+        Termination.Cancelled(response)
+      } else {
+        val response = terminalMetrics.fold(FinishResponse.getDefaultInstance) { metrics =>
+          FinishResponse.newBuilder().setExecutionMetrics(metrics).build()
+        }
+        Termination.Finished(response)
+      }
+      completeTerminal(termination)
       settledTermination
     }
 
@@ -262,24 +276,24 @@ object ExecuteExternalUDFExecSuite {
       expectedTimeZone: String,
       expectedLargeVarTypes: Boolean,
       requestCount: LongAccumulator,
-      closeCount: LongAccumulator)
+      closeCount: LongAccumulator,
+      terminalMetrics: Option[ExecutionMetrics],
+      cancelOnClose: Boolean)
     extends ExecuteExternalUDFExec(udf, resultAttr, child) {
 
-    override protected def withUDFWorkerSession(
-        taskContext: TaskContext,
-        securityScope: Option[WorkerSecurityScope])(
-        f: WorkerSession => Iterator[InternalRow]): Iterator[InternalRow] = {
+    override protected def createUDFWorkerSession(
+        securityScope: Option[WorkerSecurityScope]): WorkerSession = {
       require(securityScope.isEmpty, "scalar external UDF execution must not request a sandbox")
-      val session = new TestWorkerSession(
+      new TestWorkerSession(
         behavior,
         expectedInputSchema,
         expectedOutputSchema,
         expectedTimeZone,
         expectedLargeVarTypes,
         requestCount,
-        closeCount)
-      taskContext.addTaskCompletionListener[Unit](_ => session.close())
-      f(session)
+        closeCount,
+        terminalMetrics,
+        cancelOnClose)
     }
   }
 }
@@ -289,14 +303,18 @@ class ExecuteExternalUDFExecSuite extends QueryTest with SharedSparkSession {
 
   private def testExecution(
       behavior: ResponseBehavior,
-      rowCount: Long): TestExecution = {
+      rowCount: Long,
+      terminalMetrics: Option[ExecutionMetrics] = None,
+      cancelOnClose: Boolean = false): TestExecution = {
     val child = spark.range(0L, rowCount, 1L, 1).queryExecution.executedPlan
     testExecution(
       behavior,
       child,
       Seq(child.output.head),
       LongType,
-      udfNullable = false)
+      udfNullable = false,
+      terminalMetrics = terminalMetrics,
+      cancelOnClose = cancelOnClose)
   }
 
   private def testExecution(
@@ -305,6 +323,24 @@ class ExecuteExternalUDFExecSuite extends QueryTest with SharedSparkSession {
       udfChildren: Seq[Expression],
       udfDataType: DataType,
       udfNullable: Boolean): TestExecution = {
+    testExecution(
+      behavior,
+      child,
+      udfChildren,
+      udfDataType,
+      udfNullable,
+      terminalMetrics = None,
+      cancelOnClose = false)
+  }
+
+  private def testExecution(
+      behavior: ResponseBehavior,
+      child: SparkPlan,
+      udfChildren: Seq[Expression],
+      udfDataType: DataType,
+      udfNullable: Boolean,
+      terminalMetrics: Option[ExecutionMetrics],
+      cancelOnClose: Boolean): TestExecution = {
     val udf = ExternalUserDefinedFunction(
       name = Some("identity"),
       workerSpec = UDFWorkerSpecification.getDefaultInstance,
@@ -337,7 +373,9 @@ class ExecuteExternalUDFExecSuite extends QueryTest with SharedSparkSession {
         conf.sessionLocalTimeZone,
         conf.arrowUseLargeVarTypes,
         requestCount,
-        closeCount),
+        closeCount,
+        terminalMetrics,
+        cancelOnClose),
       requestCount,
       closeCount)
   }
@@ -394,6 +432,97 @@ class ExecuteExternalUDFExecSuite extends QueryTest with SharedSparkSession {
       exception = error,
       condition = "UNSUPPORTED_FEATURE.EXTERNAL_UDF_IN_BARRIER_TASK",
       parameters = Map.empty)
+  }
+
+  gridTest("external UDF records typed terminal metrics from")(
+      Seq("finish", "cancel")) { terminal =>
+    val reported = ExecutionMetrics.newBuilder()
+      .setBytesIn(1)
+      .setBytesOut(2)
+      .setRowsIn(3)
+      .setRowsOut(4)
+      .setBatchesIn(5)
+      .setBatchesOut(6)
+      .setInitWallNanos(7)
+      .setProcessingWallNanos(8)
+      .setReceiveWallNanos(9)
+      .setSendWallNanos(10)
+      .setWorkWallNanos(11)
+      .setWorkCpuNanos(12)
+      .setFinishWallNanos(13)
+      .setMaxWorkWallNanos(14)
+      .setMaxWorkCpuNanos(15)
+      .build()
+    val execution = testExecution(
+      EchoResponses,
+      rowCount = 5L,
+      terminalMetrics = Some(reported),
+      cancelOnClose = terminal == "cancel")
+    val plan = execution.plan.asInstanceOf[TestExecuteExternalUDFExec]
+
+    terminal match {
+      case "finish" => plan.executeCollect()
+      case "cancel" => plan.executeTake(1)
+      case other => fail(s"unexpected terminal: $other")
+    }
+
+    Seq(
+      "bytesIn", "bytesOut", "rowsIn", "rowsOut", "batchesIn", "batchesOut",
+      "initWallNanos", "processingWallNanos", "receiveWallNanos", "sendWallNanos",
+      "workWallNanos", "workCpuNanos", "finishWallNanos", "maxWorkWallNanos",
+      "maxWorkCpuNanos"
+    ).zipWithIndex.foreach { case (name, index) =>
+      assert(plan.metrics(name).value === index + 1L)
+    }
+  }
+
+  test("external UDF keeps the max, not the sum, of peak metrics across sessions in a task") {
+    val metrics = ExternalUDFMetrics.create(spark.sparkContext)
+    def snapshot(workWallNanos: Long, maxWall: Long, maxCpu: Long): ExecutionMetrics =
+      ExecutionMetrics.newBuilder()
+        .setWorkWallNanos(workWallNanos)
+        .setMaxWorkWallNanos(maxWall)
+        .setMaxWorkCpuNanos(maxCpu)
+        .build()
+
+    ExternalUDFMetrics.update(metrics, snapshot(workWallNanos = 10, maxWall = 10, maxCpu = 4))
+    ExternalUDFMetrics.update(metrics, snapshot(workWallNanos = 20, maxWall = 5, maxCpu = 8))
+
+    assert(metrics("workWallNanos").value === 30L)
+    assert(metrics("maxWorkWallNanos").value === 10L)
+    assert(metrics("maxWorkCpuNanos").value === 8L)
+  }
+
+  test("external UDF preserves missing and measured zero terminal metrics") {
+    // bytesIn exercises a measured zero on the additive path; maxWorkCpuNanos exercises one on the
+    // keep-max path, where only the metric.isZero branch records it (0 never exceeds the unset
+    // value, which reads 0). maxWorkWallNanos stays unset to cover keep-max absence.
+    val reported = ExecutionMetrics.newBuilder()
+      .setBytesIn(0)
+      .setMaxWorkCpuNanos(0)
+      .build()
+    val execution = testExecution(
+      EchoResponses,
+      rowCount = 1L,
+      terminalMetrics = Some(reported))
+    val plan = execution.plan.asInstanceOf[TestExecuteExternalUDFExec]
+
+    plan.executeCollect()
+
+    Seq("bytesIn", "maxWorkCpuNanos").foreach { name =>
+      assert(plan.metrics(name).value === 0L)
+      assert(!plan.metrics(name).isZero, s"$name should report measured zero")
+    }
+    Seq(
+      "bytesOut", "initWallNanos", "processingWallNanos", "receiveWallNanos", "sendWallNanos",
+      "workWallNanos", "workCpuNanos", "finishWallNanos", "maxWorkWallNanos"
+    ).foreach { name =>
+      assert(plan.metrics(name).isZero, s"$name should be unreported")
+    }
+    // toInfoUpdate is the raw value the live SQL UI sums; value hides a negative initial value.
+    Seq("rowsIn", "rowsOut", "batchesIn", "batchesOut").foreach { name =>
+      assert(plan.metrics(name).toInfoUpdate.update === Some(0L))
+    }
   }
 
   test("scalar external UDF exchanges multiple Arrow batches through a worker session") {

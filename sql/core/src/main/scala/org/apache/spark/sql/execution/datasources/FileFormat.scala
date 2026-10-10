@@ -177,6 +177,20 @@ trait FileFormat {
    * leaves every one of them in the post-scan `Filter` as well, so ignoring one is a missed
    * optimization rather than a wrong answer.
    *
+   * The `Filter` can skip them on the rows the reader says it has checked. The planner asks for
+   * that only where the scan returns columnar batches. `requiredSchema` then ends with a nullable
+   * boolean column named [[FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME]], which is not a column
+   * of the relation, and the `Filter` evaluates each storage filter as `IF(checked, true, filter)`.
+   *  - True says every storage filter was evaluated on the row and kept it.
+   *  - False or null says the row was not checked, and the `Filter` decides it as if the column
+   *    were not there. So a reader that does not know the column, and reads it as missing from
+   *    the file, is still right.
+   * A reader that marks rows writes the column itself rather than decoding it from the file. A file
+   * holding a column of that name is not supported, see
+   * [[FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME]]. The column is in the `requiredSchema` of the
+   * ordinary reader too, the one the caller builds when this returns `None`, so that reader has to
+   * read it as missing or mark it as well.
+   *
    * Being optional is also an obligation. A storage filter is evaluated out of the plan's order,
    * without the conjuncts that precede it, so it can raise an error on a row those conjuncts would
    * have rejected, which is an error a plain scan never raises. A reader must not fail the query
@@ -343,6 +357,14 @@ object FileFormat {
    * by calling supportBatch.
    */
   val OPTION_RETURNING_BATCH = "returning_batch"
+
+  /**
+   * The column a reader that applies storage filters marks the rows it has checked in. See
+   * [[FileFormat.buildReaderWithStorageFilters]]. The name is reserved, as the row-index metadata
+   * column's is. A relation with a column of that name is offered no storage filters, and a file
+   * holding one outside the relation's schema is not supported.
+   */
+  val STORAGE_FILTER_CHECKED_COLUMN_NAME = "_tmp_storage_filter_checked"
 
   /**
    * Schema of metadata struct that can be produced by every file format,

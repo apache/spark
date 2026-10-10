@@ -1982,16 +1982,22 @@ object SQLConf {
         "only for the rows that survived. This is a planning-time decision. " +
         "A filter that is attached also stays in the post-scan filter, the way a pushed data " +
         "filter does, so the reader is free to stop applying it wherever doing so would cost " +
-        "more than it saves, and the answer does not change. A row group where it stops reads " +
+        "more than it saves, and the answer does not change. In a scan that returns columnar " +
+        "batches, the post-scan filter skips it on the rows the reader applied it to, which the " +
+        "reader marks in a column named _tmp_storage_filter_checked. A table with a column of " +
+        "that name is not offered storage filters, and a file holding one outside the table's " +
+        "schema is not supported. A row group where the reader stops applying the filter reads " +
         "its key columns twice, which is slower than not pushing the filter. " +
         "Under spark.sql.files.ignoreCorruptFiles the answer can change, because this reader " +
         "reads different pages in a different order than a plain read. Which rows survive a " +
         "corrupt page can then differ from a plain read, in either direction. " +
         "Returning only the surviving rows of a row group relies on the Parquet page index, so a " +
-        "file whose page index is wrong can pair a row's key with another row's values. Setting " +
+        "file whose page index is wrong can pair a row's key with another row's values, or " +
+        "return rows the filter rejects. Setting " +
         "parquet.filter.columnindex.enabled to false makes the reader fall back to skipping " +
         "whole row groups in which the filter rejects every row. A row group with a surviving " +
-        "row then reads its key columns twice. A file without a page index falls back the same " +
+        "row then reads its key columns twice, and the post-scan filter evaluates the filter " +
+        "on each of its rows. A file without a page index falls back the same " +
         "way. It gains only where a whole row group has no surviving row, a bloom's false " +
         "positives included, and every other row group reads its key columns twice. A read " +
         "with pushed data filters already relies on the page index, and that conf turns it off " +
@@ -5541,6 +5547,33 @@ object SQLConf {
         "The value of spark.sql.execution.python.udf.maxBytesPerBatch should " +
           "be -1 (no limit) or greater than zero and less than or equal to INT_MAX.")
       .createWithDefault(-1)
+
+  val PYTHON_UDF_ROW_SIZE_GUARD_ENABLED =
+    buildConf("spark.sql.execution.python.udf.rowSizeGuard.enabled")
+      .internal()
+      .doc("When true, guard pickle-serialized (non-Arrow) Python UDF evaluation against " +
+        "top-level string and binary argument payloads whose combined size exceeds " +
+        "rowSizeGuard.maxRowHeapFraction of executor heap. The guard checks the projected " +
+        "arguments before conversion and pickling. Nested inputs are not estimated.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  val PYTHON_UDF_ROW_SIZE_GUARD_MAX_ROW_HEAP_FRACTION =
+    buildConf("spark.sql.execution.python.udf.rowSizeGuard.maxRowHeapFraction")
+      .internal()
+      .doc("Maximum combined byte size of one projected input row's top-level string and " +
+        "binary Python UDF arguments, as a fraction of executor max heap. The default 0.083 " +
+        "is approximately 1/12 of the executor heap; conversion and pickling can require " +
+        "multiple copies of the argument bytes.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .doubleConf
+      .checkValue(v => v > 0.0 && v <= 1.0,
+        "The value of spark.sql.execution.python.udf.rowSizeGuard.maxRowHeapFraction " +
+          "must be in (0.0, 1.0].")
+      .createWithDefault(0.083)
 
   val PYTHON_UDF_BUFFER_SIZE =
     buildConf("spark.sql.execution.python.udf.buffer.size")
