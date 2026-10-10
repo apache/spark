@@ -18,13 +18,14 @@
 package org.apache.spark.sql.execution.datasources.parquet.types.ops
 
 import java.lang.{Long => JLong}
-import java.util.HashSet
 
 import org.apache.parquet.filter2.predicate.{FilterApi, FilterPredicate}
 import org.apache.parquet.filter2.predicate.Operators.{Column, SupportsLtGt}
 import org.apache.parquet.filter2.predicate.SparkFilterApi.longColumn
 import org.apache.parquet.schema.LogicalTypeAnnotation
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
+
+import org.apache.spark.util.SparkCollectionUtils
 
 /**
  * Optional Parquet filter-pushdown support for a Types Framework type.
@@ -110,7 +111,7 @@ private[parquet] abstract class TypedParquetFilterOps[T <: Comparable[T]] extend
   override def makeGtEq(columnPath: Array[String], value: Any): FilterPredicate =
     FilterApi.gtEq(column(columnPath), toPhysical(value))
   override def makeIn(columnPath: Array[String], values: Array[Any]): FilterPredicate = {
-    val set = new HashSet[T]()
+    val set = SparkCollectionUtils.newHashSetWithExpectedSize[T](values.length)
     values.foreach(v => set.add(toPhysicalOrNull(v)))
     FilterApi.in(column(columnPath), set)
   }
