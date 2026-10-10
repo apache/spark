@@ -17,13 +17,14 @@
 
 package org.apache.spark.scheduler.cluster
 
+import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.nio.ByteBuffer
 
 import org.apache.spark.TaskState.TaskState
-import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
+import org.apache.spark.resource.{CpuAmount, ResourceInformation, ResourceProfile}
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.{ExecutorLossReason, MiscellaneousProcessDetails}
-import org.apache.spark.util.SerializableBuffer
+import org.apache.spark.util.{SerializableBuffer, Utils}
 
 private[spark] sealed trait CoarseGrainedClusterMessage extends Serializable
 
@@ -78,14 +79,54 @@ private[spark] object CoarseGrainedClusterMessages {
 
   case class LaunchedExecutor(executorId: String) extends CoarseGrainedClusterMessage
 
+  // Serialized manually (Externalizable): default Java serialization of `state` (a Scala
+  // Enumeration value) and `taskCpus` (a BigDecimal) each drag in a large class-descriptor graph
+  // -- together ~1.3KB per message on this hot, per-task-state-change path.
   case class StatusUpdate(
-      executorId: String,
-      taskId: Long,
-      state: TaskState,
-      data: SerializableBuffer,
-      taskCpus: BigDecimal,
-      resources: Map[String, Map[String, Long]] = Map.empty)
-    extends CoarseGrainedClusterMessage
+      var executorId: String,
+      var taskId: Long,
+      var state: TaskState,
+      var data: SerializableBuffer,
+      var taskCpus: BigDecimal,
+      var resources: Map[String, Map[String, Long]] = Map.empty)
+    extends CoarseGrainedClusterMessage with Externalizable {
+
+    def this() = this(null, 0L, null, null, null, Map.empty)  // For deserialization only
+
+    override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
+      out.writeUTF(executorId)
+      out.writeLong(taskId)
+      out.writeByte(state.id)
+      // taskCpus as a normalized decimal string (like TaskDescription); round-trips exactly.
+      out.writeUTF(CpuAmount.toDisplayString(taskCpus))
+      // Reuse SerializableBuffer's channel-based write (no extra copy for large results).
+      out.writeObject(data)
+      out.writeInt(resources.size)
+      resources.foreach { case (rName, addressAmounts) =>
+        out.writeUTF(rName)
+        out.writeInt(addressAmounts.size)
+        addressAmounts.foreach { case (address, amount) =>
+          out.writeUTF(address)
+          out.writeLong(amount)
+        }
+      }
+    }
+
+    override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
+      executorId = in.readUTF()
+      taskId = in.readLong()
+      state = org.apache.spark.TaskState(in.readByte().toInt)
+      taskCpus = CpuAmount.normalize(BigDecimal(in.readUTF()))
+      data = in.readObject().asInstanceOf[SerializableBuffer]
+      val numResources = in.readInt()
+      resources = Iterator.fill(numResources) {
+        val rName = in.readUTF()
+        val numAddresses = in.readInt()
+        val addressAmounts = Iterator.fill(numAddresses)(in.readUTF() -> in.readLong()).toMap
+        rName -> addressAmounts
+      }.toMap
+    }
+  }
 
   object StatusUpdate {
     /** Alternate factory method that takes a ByteBuffer directly for the data field */
