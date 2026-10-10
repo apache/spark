@@ -96,6 +96,13 @@ object SQLConf {
     Option(sqlConfEntries.get(key)).getOrElse(ConfigEntry.findProtoDefinedEntry(key))
   }
 
+  private[sql] def isSessionBindingPolicy(key: String): Boolean = {
+    Option(getConfigEntry(key)).exists { entry =>
+      entry.bindingPolicy.contains(ConfigBindingPolicy.SESSION) ||
+        entry.bindingPolicy.contains(ConfigBindingPolicy.NOT_APPLICABLE)
+    }
+  }
+
   // TODO: once all configs are migrated to textproto, this can be replaced by
   //  ConfigEntry.listAllEntries() and callers can filter by config properties.
   private[sql] def getConfigEntries(): util.Collection[ConfigEntry[_]] = {
@@ -1943,6 +1950,68 @@ object SQLConf {
       .checkValue(threshold => threshold >= 0, "The threshold must not be negative.")
       .createWithDefault(10)
 
+  val PARQUET_STORAGE_FILTER_PUSHDOWN_MAX_SPLICED_ROW_GROUP_BYTES =
+    buildConf("spark.sql.parquet.storageFilterPushdown.maxSplicedRowGroupBytes")
+      .internal()
+      .doc("The limit, in bytes, on what the vectorized Parquet reader buffers for one row group " +
+        "while it applies a storage filter. What is counted is an estimate of what the buffer " +
+        "holds, not a bound on what the column vectors behind it allocate. " +
+        "Two things count against it, and both grow with the number of surviving rows. The " +
+        "first is the row ranges those rows fall into, which the second phase needs to select " +
+        "its pages. They are always on heap. The second is the surviving key values, buffered " +
+        "to splice into the output batches. They follow the reader's memory mode. Off heap they " +
+        s"are native memory outside ${MEMORY_OFFHEAP_SIZE.key}, so they come out of " +
+        s"${EXECUTOR_MEMORY_OVERHEAD.key}. " +
+        "The count is examined after every surviving row. Past the limit the reader first " +
+        "releases the buffered key values, and reads every projected column of the surviving " +
+        "rows instead, which costs one extra read of the key columns. If the row ranges alone " +
+        "still pass the limit, it reads the row group with no filter applied at all. That is " +
+        "correct and pays the same extra read, so it is slower than not pushing the filter.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ > 0, "must be positive")
+      .createWithDefaultString("64MB")
+
+  val PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED =
+    buildConf("spark.sql.parquet.storageFilterPushdown.enabled")
+      .doc("If true, the vectorized reader of the V1 Parquet file source may apply a runtime " +
+        "storage filter, such as a bloom filter from join runtime filtering, while it reads. " +
+        "It reads the columns the " +
+        "filter needs first, evaluates the filter per row, and then reads the remaining columns " +
+        "only for the rows that survived. This is a planning-time decision. " +
+        "A filter that is attached also stays in the post-scan filter, the way a pushed data " +
+        "filter does, so the reader is free to stop applying it wherever doing so would cost " +
+        "more than it saves, and the answer does not change. In a scan that returns columnar " +
+        "batches, the post-scan filter skips it on the rows the reader applied it to, which the " +
+        "reader marks in a column named _tmp_storage_filter_checked. A table with a column of " +
+        "that name is not offered storage filters, and a file holding one outside the table's " +
+        "schema is not supported. A row group where the reader stops applying the filter reads " +
+        "its key columns twice, which is slower than not pushing the filter. " +
+        "Under spark.sql.files.ignoreCorruptFiles the answer can change, because this reader " +
+        "reads different pages in a different order than a plain read. Which rows survive a " +
+        "corrupt page can then differ from a plain read, in either direction. " +
+        "Returning only the surviving rows of a row group relies on the Parquet page index, so a " +
+        "file whose page index is wrong can pair a row's key with another row's values, or " +
+        "return rows the filter rejects. Setting " +
+        "parquet.filter.columnindex.enabled to false makes the reader fall back to skipping " +
+        "whole row groups in which the filter rejects every row. A row group with a surviving " +
+        "row then reads its key columns twice, and the post-scan filter evaluates the filter " +
+        "on each of its rows. A file without a page index falls back the same " +
+        "way. It gains only where a whole row group has no surviving row, a bloom's false " +
+        "positives included, and every other row group reads its key columns twice. A read " +
+        "with pushed data filters already relies on the page index, and that conf turns it off " +
+        "there too. A read with no pushed data filter relies on it only with this feature. " +
+        "Note that the surviving key values of a whole row group are buffered before that row " +
+        "group's first batch is produced. Each reader holds them and their row ranges for one " +
+        "row group at a time, up to " +
+        s"${PARQUET_STORAGE_FILTER_PUSHDOWN_MAX_SPLICED_ROW_GROUP_BYTES.key}. Like the reader's " +
+        "own column vectors, they are not tracked by Spark's memory manager.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val PARQUET_AGGREGATE_PUSHDOWN_ENABLED = buildConf("spark.sql.parquet.aggregatePushdown")
     .doc("If true, aggregates will be pushed down to Parquet for optimization. Support MIN, MAX " +
       "and COUNT as aggregate expression. For MIN/MAX, support boolean, integer, float and date " +
@@ -2592,7 +2661,8 @@ object SQLConf {
         "a V2 data source that reports a KeyedPartitioning but does not report explicit ordering " +
         "via SupportsReportOrdering, or reports one that Spark ignores because it references a " +
         "column that cannot be resolved. Within a single partition all rows share the same key " +
-        s"value, so the data is trivially sorted by those expressions. Requires " +
+        "value, so the data is trivially sorted by those expressions. Partition transforms such " +
+        "as `days(ts)` or `bucket(8, id)` are left out of the ordering. Requires " +
         s"${V2_BUCKETING_ENABLED.key} to be enabled.")
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
@@ -2604,9 +2674,10 @@ object SQLConf {
       .doc("When enabled, Spark preserves sort orders over partition key expressions when " +
         "GroupPartitionsExec coalesces multiple input partitions into one output partition. " +
         "Because all merged partitions share the same partition key value, sort orders over " +
-        "those key expressions remain valid after the merge. This applies to both key-derived " +
-        "ordering (from SupportsReportOrdering) and ordering derived from " +
-        s"${V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key}. Requires " +
+        "those key expressions remain valid after the merge. This applies to both the ordering " +
+        "reported via SupportsReportOrdering and the ordering derived from " +
+        s"${V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key}. Sort orders over partition " +
+        "transforms such as `days(ts)` or `bucket(8, id)` are left out. Requires " +
         s"${V2_BUCKETING_ENABLED.key} to be enabled.")
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
@@ -3069,6 +3140,43 @@ object SQLConf {
       .version("2.3.1")
       .booleanConf
       .createWithDefault(true)
+
+  val WHOLESTAGE_SPLIT_EXPRESSIONS =
+    buildConf("spark.sql.codegen.wholeStage.splitExpressions")
+      .internal()
+      .doc("When true, whole stage codegen splits the generated code of an expression that " +
+        "supports it, such as a CASE WHEN with many branches, into methods that take the input " +
+        "variables they read as parameters, the way code generation outside whole stage codegen " +
+        "splits it. In a stage whose expressions are split, the methods that subexpression " +
+        "elimination's discarded first pass added are removed; and in every stage, a slot of " +
+        "a compacted mutable state array counts as the field it is when code moves into a " +
+        "method: an operator's method that took it as a parameter, and failed to compile, now " +
+        "compiles, and a common expression's definition reading one, which stayed inline, " +
+        "gets its method. When false, " +
+        "the code stays in the method of its operator, where a large enough expression goes " +
+        "past the JVM's 64KB method limit and fails to compile, and the generated code is what " +
+        "it was before this conf existed.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
+  val WHOLESTAGE_SPLIT_EXPRESSIONS_METHOD_LIMIT =
+    buildConf("spark.sql.codegen.wholeStage.splitExpressions.methodLimit")
+      .internal()
+      .doc("The largest method, in bytes of bytecode, a whole stage keeps unsplit when " +
+        "spark.sql.codegen.wholeStage.splitExpressions is true. The stage's code is first " +
+        "generated with no expression split and compiled; only when that fails or a method " +
+        "is past this size is it generated again with the expressions split, and the split " +
+        "code is kept when it compiles and lowers the total bytecode of the methods past this " +
+        "size. The default is " +
+        "HotSpot's limit for JIT-compiling a method, so a stage the JIT compiles whole keeps " +
+        "its code in one piece; 0 always splits.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .checkValue(_ >= 0, "The method limit must not be negative")
+      .createWithDefault(8000)
 
   val WHOLESTAGE_BROADCAST_CLEANED_SOURCE_THRESHOLD =
     buildConf("spark.sql.codegen.broadcastCleanedSourceThreshold")
@@ -5440,6 +5548,33 @@ object SQLConf {
           "be -1 (no limit) or greater than zero and less than or equal to INT_MAX.")
       .createWithDefault(-1)
 
+  val PYTHON_UDF_ROW_SIZE_GUARD_ENABLED =
+    buildConf("spark.sql.execution.python.udf.rowSizeGuard.enabled")
+      .internal()
+      .doc("When true, guard pickle-serialized (non-Arrow) Python UDF evaluation against " +
+        "top-level string and binary argument payloads whose combined size exceeds " +
+        "rowSizeGuard.maxRowHeapFraction of executor heap. The guard checks the projected " +
+        "arguments before conversion and pickling. Nested inputs are not estimated.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  val PYTHON_UDF_ROW_SIZE_GUARD_MAX_ROW_HEAP_FRACTION =
+    buildConf("spark.sql.execution.python.udf.rowSizeGuard.maxRowHeapFraction")
+      .internal()
+      .doc("Maximum combined byte size of one projected input row's top-level string and " +
+        "binary Python UDF arguments, as a fraction of executor max heap. The default 0.083 " +
+        "is approximately 1/12 of the executor heap; conversion and pickling can require " +
+        "multiple copies of the argument bytes.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .doubleConf
+      .checkValue(v => v > 0.0 && v <= 1.0,
+        "The value of spark.sql.execution.python.udf.rowSizeGuard.maxRowHeapFraction " +
+          "must be in (0.0, 1.0].")
+      .createWithDefault(0.083)
+
   val PYTHON_UDF_BUFFER_SIZE =
     buildConf("spark.sql.execution.python.udf.buffer.size")
       .doc(
@@ -6914,7 +7049,8 @@ object SQLConf {
     buildConf("spark.sql.maven.additionalRemoteRepositories")
       .doc("A comma-delimited string config of the optional additional remote Maven mirror " +
         "repositories. This is only used for downloading Hive jars in IsolatedClientLoader " +
-        "if the default Maven Central repo is unreachable.")
+        "if the default Maven Central repo is unreachable. When spark.jars.ivySettings is " +
+        "set, the repositories are added only if this configuration is explicitly set.")
       .version("3.0.0")
       .stringConf
       .createWithDefault(
@@ -7610,7 +7746,10 @@ object SQLConf {
     .doc("When true, Spark does not replace CHAR/VARCHAR with STRING in schemas and plans. " +
       "This is the Spark 4.0 experimental path: types can leak through transforming string " +
       "functions via child.dataType. Prefer spark.sql.charVarchar.standardSemantics.enabled " +
-      "for SQL standard CHAR/VARCHAR behavior (CAST/LCT/STRING-returning transforms).")
+      "for SQL standard CHAR/VARCHAR behavior (CAST/LCT/STRING-returning transforms). " +
+      "ORC reads with a CHAR/VARCHAR schema over STRING storage return the stored values " +
+      "without ORC truncation, matching Parquet. Read-side length checks apply only when " +
+      "spark.sql.charVarchar.standardSemantics.enabled is true.")
     .version("4.0.0")
     .booleanConf
     .createWithDefault(false)
@@ -7621,7 +7760,9 @@ object SQLConf {
         "schemas and CAST targets; least-common-type for COALESCE/CASE/UNION may return " +
         "CHAR/VARCHAR; transforming string functions and operators return plain STRING. " +
         "This is a breaking change from the annotated-STRING default and from " +
-        "preserveCharVarcharTypeInfo (which keeps Char/Varchar through transforms).")
+        "preserveCharVarcharTypeInfo (which keeps Char/Varchar through transforms). " +
+        "Storage types stay with the data source: native ORC CHAR/VARCHAR keep ORC " +
+        "enforcement; STRING columns with a Spark CHAR/VARCHAR schema are checked by Spark.")
       .version("4.4.0")
       // PERSISTED, like ANSI mode: the flag decides the types a view body resolves to, so a view
       // created under standard semantics must keep computing CHAR/VARCHAR regardless of the
@@ -9178,6 +9319,12 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def parquetFilterPushDownInFilterThreshold: Int =
     getConf(PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD)
 
+  def parquetStorageFilterPushdownEnabled: Boolean =
+    getConf(PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED)
+
+  def parquetStorageFilterPushdownMaxSplicedRowGroupBytes: Long =
+    getConf(PARQUET_STORAGE_FILTER_PUSHDOWN_MAX_SPLICED_ROW_GROUP_BYTES)
+
   def parquetAggregatePushDown: Boolean = getConf(PARQUET_AGGREGATE_PUSHDOWN_ENABLED)
 
   def orcFilterPushDown: Boolean = getConf(ORC_FILTER_PUSHDOWN_ENABLED)
@@ -9234,6 +9381,11 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def hugeMethodLimit: Int = getConf(WHOLESTAGE_HUGE_METHOD_LIMIT)
 
   def methodSplitThreshold: Int = getConf(CODEGEN_METHOD_SPLIT_THRESHOLD)
+
+  def wholeStageSplitExpressions: Boolean = getConf(WHOLESTAGE_SPLIT_EXPRESSIONS)
+
+  def wholeStageSplitExpressionsMethodLimit: Int =
+    getConf(WHOLESTAGE_SPLIT_EXPRESSIONS_METHOD_LIMIT)
 
   def wholeStageSplitConsumeFuncByOperator: Boolean =
     getConf(WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR)

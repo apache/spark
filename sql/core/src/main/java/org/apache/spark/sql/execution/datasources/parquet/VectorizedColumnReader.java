@@ -32,6 +32,7 @@ import org.apache.parquet.column.Encoding;
 import org.apache.parquet.column.page.*;
 import org.apache.parquet.column.values.RequiresPreviousReader;
 import org.apache.parquet.column.values.ValuesReader;
+import org.apache.parquet.filter2.columnindex.RowRanges;
 import org.apache.parquet.schema.LogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.DateLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.DecimalLogicalTypeAnnotation;
@@ -102,6 +103,11 @@ public class VectorizedColumnReader {
   private final String datetimeRebaseMode;
   private final ParsedVersion writerVersion;
 
+  /**
+   * A reader of the rows the store names, as {@code rowRanges = null} below. Nothing in Spark
+   * calls it. It is kept for code outside Spark that builds a column reader with the constructor
+   * that predates the ranges.
+   */
   public VectorizedColumnReader(
       ColumnDescriptor descriptor,
       boolean isRequired,
@@ -112,10 +118,25 @@ public class VectorizedColumnReader {
       String int96RebaseMode,
       String int96RebaseTz,
       ParsedVersion writerVersion) throws IOException {
+    this(descriptor, isRequired, pageReadStore, null, convertTz, datetimeRebaseMode,
+        datetimeRebaseTz, int96RebaseMode, int96RebaseTz, writerVersion);
+  }
+
+  public VectorizedColumnReader(
+      ColumnDescriptor descriptor,
+      boolean isRequired,
+      PageReadStore pageReadStore,
+      RowRanges rowRanges,
+      ZoneId convertTz,
+      String datetimeRebaseMode,
+      String datetimeRebaseTz,
+      String int96RebaseMode,
+      String int96RebaseTz,
+      ParsedVersion writerVersion) throws IOException {
     this.descriptor = descriptor;
     this.pageReader = pageReadStore.getPageReader(descriptor);
-    this.readState = new ParquetReadState(descriptor, isRequired,
-      pageReadStore.getRowIndexes().orElse(null));
+    this.readState = ParquetReadState.forRead(
+      descriptor, isRequired, rowRanges, pageReadStore.getRowIndexes().orElse(null));
     this.logicalTypeAnnotation = descriptor.getPrimitiveType().getLogicalTypeAnnotation();
     this.updaterFactory = new ParquetVectorUpdaterFactory(
       logicalTypeAnnotation,

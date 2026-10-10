@@ -17,17 +17,19 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, SortOrder, TransformExpression}
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, KeyedPartitioning, KeyReducer, Partitioning, PartitioningCollection, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, CodegenObjectFactoryMode, SortOrder, TransformExpression}
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, KeyedPartitioning, KeyReducer, OrderedDistribution, Partitioning, PartitioningCollection, REPLICATED_FOR_JOIN, SPLIT_FOR_JOIN, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.date
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
-import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, BucketReducer, DaysFunctionWithToYearsReducerWithLongResult, DaysToYearsReducerWithLongResult, Reducer, YearsFunctionWithToYearsReducerWithLongResult}
+import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, BucketReducer, DaysFunctionWithToYearsReducerWithLongResult, DaysToYearsReducerWithLongResult, Reducer, YearsFunction, YearsFunctionWithToYearsReducerWithLongResult}
 import org.apache.spark.sql.execution.{DummySparkPlan, LeafExecNode, SafeForKWayMerge}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DataType, IntegerType, LongType}
+import org.apache.spark.sql.types.{DataType, IntegerType, LongType, TimestampType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 class GroupPartitionsExecSuite extends SharedSparkSession {
@@ -50,7 +52,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
       val childKp = KeyedPartitioning(Seq(exprA, exprB), keys)
         .withLayout(_.copy(isCollapsed = childCollapsed))
       GroupPartitionsExec(DummySparkPlan(outputPartitioning = childKp), joinKeyPositions,
-        expected, distributePartitions = distribute)
+        expected, ungroupingOrigin = Option.when(distribute)(SPLIT_FOR_JOIN))
         .outputPartitioning.asInstanceOf[KeyedPartitioning]
     }
     def keyOf(a: Int): InternalRowComparableWrapper =
@@ -144,7 +146,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
   test("SPARK-58324: k-way merge ordering drops sameOrderExpressions") {
     // The child ordering carries sameOrderExpressions (planner metadata). The k-way merge
     // comparator only needs the sort key, so kWayMergeOrdering keeps child/direction/nullOrdering
-    // but drops sameOrderExpressions, so LazyCodeGenOrdering does not serialize them with the RDD.
+    // but drops sameOrderExpressions, so LazyRowOrdering does not serialize them with the RDD.
     val childOrdering = Seq(SortOrder(exprA, Ascending, Seq(exprB, exprC)))
     val child = DummySparkPlan(
       outputPartitioning = KeyedPartitioning(Seq(exprA), Seq(row(1), row(2), row(1))),
@@ -155,6 +157,34 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     val merged = gpe.kWayMergeOrdering
     assert(merged.map(so => (so.child, so.direction)) === Seq((exprA, Ascending)))
     assert(merged.forall(_.sameOrderExpressions.isEmpty))
+  }
+
+  test("SPARK-59995: the k-way merge ordering falls back to interpreted evaluation") {
+    // The scan drops every sort order over a transform, so none reaches the merge. Here a transform
+    // only stands in for a sort key without generated code. `TransformExpression` generates none,
+    // while `eval` calls its function. The ordering is serialized before any comparison, as the
+    // RDD ships it.
+    val ts = AttributeReference("ts", TimestampType)()
+    val ordering = new LazyRowOrdering(
+      Seq(SortOrder(TransformExpression(YearsFunction, Seq(ts)), Ascending)), Seq(ts))
+    val serializer = new JavaSerializer(new SparkConf()).newInstance()
+    def ship(): LazyRowOrdering =
+      serializer.deserialize[LazyRowOrdering](serializer.serialize(ordering))
+    // Under `CODEGEN_ONLY` the comparator cannot be built, which is the premise of this test.
+    val error = withSQLConf(
+        SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.CODEGEN_ONLY.toString) {
+      intercept[SparkException] {
+        ship().compare(InternalRow(date(2022)), InternalRow(date(2021)))
+      }
+    }
+    assert(error.getMessage.contains("Cannot generate code for expression"))
+    // `FALLBACK` is the production default.
+    val shipped = ship()
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.FALLBACK.toString) {
+      assert(shipped.compare(InternalRow(date(2022)), InternalRow(date(2021, 6))) > 0)
+      // Two timestamps in the same year compare equal, so the year is what is compared.
+      assert(shipped.compare(InternalRow(date(2021)), InternalRow(date(2021, 6))) === 0)
+    }
   }
 
   test("SPARK-56241: coalescing without reducers keeps key-expression orders from child") {
@@ -590,7 +620,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     val child = ExecutableKeyedLeaf(KeyedPartitioning(Seq(exprA), Seq(row(1), row(2), row(2))))
     val gpe = GroupPartitionsExec(child,
       expectedPartitionKeys = Some(Seq(keyOf(1) -> 1, keyOf(2) -> 3, keyOf(3) -> 1)),
-      distributePartitions = true)
+      ungroupingOrigin = Some(SPLIT_FOR_JOIN))
     gpe.execute()
 
     assert(gpe.metrics("numInputPartitions").value === 3)
@@ -599,6 +629,52 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     assert(gpe.metrics("numPrunedPartitions").value === 0)
     assert(gpe.metrics("numCoalescedPartitions").value === 0, "distribute never coalesces")
     assert(!gpe.metrics.contains("numReplicatedPartitionReads"), "distribute never replicates")
+  }
+
+  test("SPARK-59671: the output claim is the node's own, never inherited") {
+    // The child's origin describes the shape its producer built. A node that groups those
+    // partitions settles them: its output carries only the claim its own producer stamped it
+    // with, none here, so no stale stamp above turns away a sound pair of grouped sides.
+    def keyOf(a: Int): InternalRowComparableWrapper =
+      InternalRowComparableWrapper(row(a), Seq(exprA))
+    val child = ExecutableKeyedLeaf(
+      KeyedPartitioning(Seq(exprA), Seq(row(1), row(1), row(2)))
+        .withLayout(_.copy(ungroupingOrigin = Some(SPLIT_FOR_JOIN))))
+
+    val grouped = GroupPartitionsExec(child)
+    val groupedOut = grouped.outputPartitioning.asInstanceOf[KeyedPartitioning]
+    assert(groupedOut.isGrouped && groupedOut.ungroupingOrigin.isEmpty)
+    assert(groupedOut.partitionKeys.map(_.row) == Seq(row(1), row(2)))
+
+    // A stamped node stamps its own output whatever the child claimed, and its routing follows
+    // the stamp: a repeating side groups first.
+    val restamped = GroupPartitionsExec(child,
+      expectedPartitionKeys = Some(Seq(keyOf(1) -> 2, keyOf(2) -> 1)),
+      ungroupingOrigin = Some(REPLICATED_FOR_JOIN))
+    assert(!restamped.distributePartitions, "a repeating side groups first")
+    val restampedOut = restamped.outputPartitioning.asInstanceOf[KeyedPartitioning]
+    assert(!restampedOut.isGrouped)
+    assert(restampedOut.ungroupingOrigin.contains(REPLICATED_FOR_JOIN))
+  }
+
+  test("SPARK-59671: an alignment that settles every key spends its stamp") {
+    // A stamp says why the keys repeat on purpose; a grouping where every key got one slot
+    // leaves nothing repeating, so the layout reports no claim even though the node was stamped
+    // for one -- and it keeps the ordering claim a grouped layout has always had.
+    def keyOf(a: Int): InternalRowComparableWrapper =
+      InternalRowComparableWrapper(row(a), Seq(exprA))
+    val child = ExecutableKeyedLeaf(KeyedPartitioning(Seq(exprA), Seq(row(1), row(2))))
+    val gpe = GroupPartitionsExec(child,
+      expectedPartitionKeys = Some(Seq(keyOf(1) -> 1, keyOf(2) -> 1)),
+      ungroupingOrigin = Some(SPLIT_FOR_JOIN))
+    assert(gpe.ungroupingOrigin.contains(SPLIT_FOR_JOIN),
+      "the node keeps the stamp it was handed, and the routing it derives")
+    val out = gpe.outputPartitioning.asInstanceOf[KeyedPartitioning]
+    assert(out.isGrouped && out.ungroupingOrigin.isEmpty)
+    withSQLConf(SQLConf.V2_BUCKETING_SORTING_ENABLED.key -> "true") {
+      assert(out.satisfies(OrderedDistribution(Seq(SortOrder(exprA, Ascending)))),
+        "a grouped layout keeps its ordering claim")
+    }
   }
 
   test("SPARK-59310: alignment prunes unmatched keys, pads missing ones") {

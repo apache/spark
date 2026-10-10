@@ -53,6 +53,15 @@ private[spark] object MavenUtils extends Logging {
   private val ivyLock = new ReentrantLock()
   private val ivyLockPollIntervalMs = 100L
 
+  private def withIvyContext[T](ivy: Ivy)(f: => T): T = {
+    ivy.pushContext()
+    try {
+      f
+    } finally {
+      ivy.popContext()
+    }
+  }
+
   private def acquireIvyLock(isCancelled: () => Boolean): Unit = {
     def checkCancelled(): Unit = {
       if (isCancelled() || Thread.currentThread().isInterrupted) {
@@ -559,71 +568,65 @@ private[spark] object MavenUtils extends Logging {
         // scalastyle:on println
 
         val ivy = Ivy.newInstance(ivySettings)
-        ivy.pushContext()
-
-        // Set resolve options to download transitive dependencies as well
-        val resolveOptions = new ResolveOptions
-        resolveOptions.setTransitive(transitive)
-        val retrieveOptions = new RetrieveOptions
-        // Turn downloading and logging off for testing
-        if (isTest) {
-          resolveOptions.setDownload(false)
-          resolveOptions.setLog(LogOptions.LOG_QUIET)
-          retrieveOptions.setLog(LogOptions.LOG_QUIET)
-        } else {
-          resolveOptions.setDownload(true)
-        }
-        // retrieve all resolved dependencies
-        retrieveOptions.setDestArtifactPattern(
-          packagesDirectory.getAbsolutePath + File.separator +
-            "[organization]_[artifact]-[revision](-[classifier]).[ext]")
-        retrieveOptions.setConfs(Array(ivyConfName))
-
-        // Add exclusion rules for Spark and Scala Library
-        addExclusionRules(ivySettings, ivyConfName, md)
-        // add all supplied maven artifacts as dependencies
-        addDependenciesToIvy(md, artifacts, ivyConfName)
-        exclusions.foreach { e =>
-          md.addExcludeRule(createExclusion(e + ":*", ivySettings, ivyConfName))
-        }
-        // resolve dependencies
-        val rr: ResolveReport = ivy.resolve(md, resolveOptions)
-        if (rr.hasError) {
-          // SPARK-46302: When there are some corrupted jars in the local maven repo,
-          // we try to continue without the cache
-          val failedReports = rr.getArtifactsReports(DownloadStatus.FAILED, true)
-          if (failedReports.nonEmpty && noCacheIvySettings.isDefined) {
-            val failedArtifacts = failedReports.map(r => r.getArtifact)
-            logInfo(log"Download failed: " +
-              log"${MDC(LogKeys.ARTIFACTS, failedArtifacts.mkString("[", ", ", "]"))}, " +
-              log"attempt to retry while skipping local-m2-cache.")
-            failedArtifacts.foreach(artifact => {
-              clearInvalidIvyCacheFiles(artifact.getModuleRevisionId, ivySettings.getDefaultCache)
-            })
-            ivy.popContext()
-
-            val noCacheIvy = Ivy.newInstance(noCacheIvySettings.get)
-            noCacheIvy.pushContext()
-
-            val noCacheRr = noCacheIvy.resolve(md, resolveOptions)
-            if (noCacheRr.hasError) {
-              throw new RuntimeException(noCacheRr.getAllProblemMessages.toString)
-            }
-            noCacheIvy.retrieve(noCacheRr.getModuleDescriptor.getModuleRevisionId, retrieveOptions)
-            val dependencyPaths = resolveDependencyPaths(
-              noCacheRr.getArtifacts.toArray, packagesDirectory)
-            noCacheIvy.popContext()
-
-            dependencyPaths
+        withIvyContext(ivy) {
+          // Set resolve options to download transitive dependencies as well
+          val resolveOptions = new ResolveOptions
+          resolveOptions.setTransitive(transitive)
+          val retrieveOptions = new RetrieveOptions
+          // Turn downloading and logging off for testing
+          if (isTest) {
+            resolveOptions.setDownload(false)
+            resolveOptions.setLog(LogOptions.LOG_QUIET)
+            retrieveOptions.setLog(LogOptions.LOG_QUIET)
           } else {
-            throw new RuntimeException(rr.getAllProblemMessages.toString)
+            resolveOptions.setDownload(true)
           }
-        } else {
-          ivy.retrieve(rr.getModuleDescriptor.getModuleRevisionId, retrieveOptions)
-          val dependencyPaths = resolveDependencyPaths(rr.getArtifacts.toArray, packagesDirectory)
-          ivy.popContext()
+          // retrieve all resolved dependencies
+          retrieveOptions.setDestArtifactPattern(
+            packagesDirectory.getAbsolutePath + File.separator +
+              "[organization]_[artifact]-[revision](-[classifier]).[ext]")
+          retrieveOptions.setConfs(Array(ivyConfName))
 
-          dependencyPaths
+          // Add exclusion rules for Spark and Scala Library
+          addExclusionRules(ivySettings, ivyConfName, md)
+          // add all supplied maven artifacts as dependencies
+          addDependenciesToIvy(md, artifacts, ivyConfName)
+          exclusions.foreach { e =>
+            md.addExcludeRule(createExclusion(e + ":*", ivySettings, ivyConfName))
+          }
+          // resolve dependencies
+          val rr: ResolveReport = ivy.resolve(md, resolveOptions)
+          if (rr.hasError) {
+            // SPARK-46302: When there are some corrupted jars in the local maven repo,
+            // we try to continue without the cache
+            val failedReports = rr.getArtifactsReports(DownloadStatus.FAILED, true)
+            if (failedReports.nonEmpty && noCacheIvySettings.isDefined) {
+              val failedArtifacts = failedReports.map(r => r.getArtifact)
+              logInfo(log"Download failed: " +
+                log"${MDC(LogKeys.ARTIFACTS, failedArtifacts.mkString("[", ", ", "]"))}, " +
+                log"attempt to retry while skipping local-m2-cache.")
+              failedArtifacts.foreach(artifact => {
+                clearInvalidIvyCacheFiles(
+                  artifact.getModuleRevisionId, ivySettings.getDefaultCache)
+              })
+
+              val noCacheIvy = Ivy.newInstance(noCacheIvySettings.get)
+              withIvyContext(noCacheIvy) {
+                val noCacheRr = noCacheIvy.resolve(md, resolveOptions)
+                if (noCacheRr.hasError) {
+                  throw new RuntimeException(noCacheRr.getAllProblemMessages.toString)
+                }
+                noCacheIvy.retrieve(
+                  noCacheRr.getModuleDescriptor.getModuleRevisionId, retrieveOptions)
+                resolveDependencyPaths(noCacheRr.getArtifacts.toArray, packagesDirectory)
+              }
+            } else {
+              throw new RuntimeException(rr.getAllProblemMessages.toString)
+            }
+          } else {
+            ivy.retrieve(rr.getModuleDescriptor.getModuleRevisionId, retrieveOptions)
+            resolveDependencyPaths(rr.getArtifacts.toArray, packagesDirectory)
+          }
         }
       } finally {
         System.setOut(sysOut)
