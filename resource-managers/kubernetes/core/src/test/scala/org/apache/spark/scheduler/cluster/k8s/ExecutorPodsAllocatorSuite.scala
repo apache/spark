@@ -26,7 +26,7 @@ import scala.jdk.CollectionConverters._
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.{KubernetesClient, KubernetesClientException}
 import io.fabric8.kubernetes.client.dsl.PodResource
-import org.mockito.{Mock, MockitoAnnotations}
+import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
 import org.mockito.ArgumentMatchers.{any, anyString, eq => meq}
 import org.mockito.Mockito.{clearInvocations, never, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
@@ -181,6 +181,27 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     }
     assert(!logAppender2.loggingEvents.exists(
       _.getMessage.getFormattedMessage.contains("instead of only one")))
+  }
+
+  test("SPARK-58322: driver instance ID reaches allocated executor pod") {
+    val driverConf = conf.clone()
+      .set(CONTAINER_IMAGE, "executor-image")
+      .set("spark.driver.instanceId", "58322000-0000-4000-8000-000000000001")
+    val podsAllocator = new ExecutorPodsAllocator(
+      driverConf, secMgr, new KubernetesExecutorBuilder(), kubernetesClient,
+      snapshotsStore, waitForExecutorPodsClock)
+    podsAllocator.setExecutorPodsLifecycleManager(lifecycleManager)
+    podsAllocator.start(TEST_SPARK_APP_ID, schedulerBackend)
+    podsAllocator.setTotalExpectedExecutors(Map(defaultProfile -> 1))
+
+    val captor = ArgumentCaptor.forClass(classOf[Pod])
+    verify(podsWithNamespace).resource(captor.capture())
+    val javaOpts = captor.getValue.getSpec.getContainers.asScala
+      .flatMap(_.getEnv.asScala)
+      .filter(_.getName.startsWith("SPARK_JAVA_OPT_"))
+      .map(_.getValue)
+    assert(javaOpts.contains(
+      "-Dspark.driver.instanceId=58322000-0000-4000-8000-000000000001"))
   }
 
   test("SPARK-49447: Prevent small values less than 100 for batch delay") {

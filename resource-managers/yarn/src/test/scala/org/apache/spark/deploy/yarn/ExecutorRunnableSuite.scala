@@ -33,6 +33,7 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.yarn.config.YARN_EXECUTOR_OOM_KILL_ENABLED
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.JavaUtils
+import org.apache.spark.util.Utils
 
 class ExecutorRunnableSuite extends SparkFunSuite with PrivateMethodTester {
 
@@ -109,6 +110,20 @@ class ExecutorRunnableSuite extends SparkFunSuite with PrivateMethodTester {
     assert(!metaInfo.containsKey(ExecutorRunnable.SECRET_KEY))
     val metadataStorageVal: Any = metaInfo.get(SHUFFLE_SERVER_RECOVERY_DISABLED.key)
     assert(metadataStorageVal != null && metadataStorageVal.asInstanceOf[Boolean])
+  }
+
+  test("SPARK-58322: driver instance ID reaches executor JVM command") {
+    val sparkConf = new SparkConf(false)
+      .set("spark.driver.instanceId", "58322000-0000-4000-8000-000000000001")
+    val execRunnable = createExecutorRunnable(sparkConf)
+
+    val commands = execRunnable invokePrivate _prepareCommand()
+    val expected = if (Utils.isWindows) {
+      "\"-Dspark.driver.instanceId=58322000-0000-4000-8000-000000000001\""
+    } else {
+      "'-Dspark.driver.instanceId=58322000-0000-4000-8000-000000000001'"
+    }
+    commands should contain (expected)
   }
 
   test("SPARK-53209: ActiveProcessorCount not set by default") {

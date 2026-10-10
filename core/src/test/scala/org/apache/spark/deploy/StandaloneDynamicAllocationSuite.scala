@@ -549,8 +549,6 @@ class StandaloneDynamicAllocationSuite
     val endpointRef = mock(classOf[RpcEndpointRef])
     val mockAddress = mock(classOf[RpcAddress])
     when(endpointRef.address).thenReturn(mockAddress)
-    val message = RegisterExecutor("one", endpointRef, "excluded-host", 10, Map.empty,
-      Map.empty, Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
 
     val taskScheduler = mock(classOf[TaskSchedulerImpl])
     when(taskScheduler.excludedNodes()).thenReturn(Set("excluded-host"))
@@ -562,6 +560,9 @@ class StandaloneDynamicAllocationSuite
       val scheduler = new CoarseGrainedSchedulerBackend(taskScheduler, rpcEnv)
       try {
         scheduler.start()
+        val message = RegisterExecutor("one", endpointRef, "excluded-host", 10, Map.empty,
+          Map(config.DRIVER_INSTANCE_ID.key -> scheduler.driverInstanceId),
+          Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
         val e = intercept[SparkException] {
           scheduler.driverEndpoint.askSync[Boolean](message)
         }
@@ -672,7 +673,8 @@ class StandaloneDynamicAllocationSuite
       val endpointRef = mock(classOf[RpcEndpointRef])
       val mockAddress = mock(classOf[RpcAddress])
       when(endpointRef.address).thenReturn(mockAddress)
-      val message = RegisterExecutor(id, endpointRef, "localhost", 10, Map.empty, Map.empty,
+      val message = RegisterExecutor(id, endpointRef, "localhost", 10, Map.empty,
+        Map(config.DRIVER_INSTANCE_ID.key -> backend.driverInstanceId),
         Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
       backend.driverEndpoint.askSync[Boolean](message)
       backend.driverEndpoint.send(LaunchedExecutor(id))

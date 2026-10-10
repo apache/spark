@@ -29,7 +29,7 @@ import org.scalatest.PrivateMethodTester
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
-import org.apache.spark.internal.config.{DYN_ALLOCATION_TESTING, STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT}
+import org.apache.spark.internal.config.{DRIVER_INSTANCE_ID, DYN_ALLOCATION_TESTING, STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT}
 import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
 import org.apache.spark.resource.{ResourceProfile, ResourceProfileManager}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
@@ -178,10 +178,12 @@ class HeartbeatReceiverSuite
     val dummyExecutorEndpointRef1 = rpcEnv.setupEndpoint("fake-executor-1", dummyExecutorEndpoint1)
     val dummyExecutorEndpointRef2 = rpcEnv.setupEndpoint("fake-executor-2", dummyExecutorEndpoint2)
     fakeSchedulerBackend.driverEndpoint.askSync[Boolean](
-      RegisterExecutor(executorId1, dummyExecutorEndpointRef1, "1.2.3.4", 0, Map.empty, Map.empty,
+      RegisterExecutor(executorId1, dummyExecutorEndpointRef1, "1.2.3.4", 0, Map.empty,
+        Map(DRIVER_INSTANCE_ID.key -> fakeSchedulerBackend.driverInstanceId),
         Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
     fakeSchedulerBackend.driverEndpoint.askSync[Boolean](
-      RegisterExecutor(executorId2, dummyExecutorEndpointRef2, "1.2.3.5", 0, Map.empty, Map.empty,
+      RegisterExecutor(executorId2, dummyExecutorEndpointRef2, "1.2.3.5", 0, Map.empty,
+        Map(DRIVER_INSTANCE_ID.key -> fakeSchedulerBackend.driverInstanceId),
         Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
     heartbeatReceiverRef.askSync[Boolean](TaskSchedulerIsSet)
     addExecutorAndVerify(executorId1)
