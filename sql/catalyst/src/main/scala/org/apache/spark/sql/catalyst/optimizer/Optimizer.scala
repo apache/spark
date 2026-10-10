@@ -1537,6 +1537,10 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case e @ MergeRows(_, _, _, _, _, _, _, child) if !child.outputSet.subsetOf(e.references) =>
       e.copy(child = prunedChild(child, e.references))
 
+    // prune unused columns from the query of ReplaceData/WriteDelta for row-level operations
+    case w: RowLevelWrite if !w.query.outputSet.subsetOf(w.references) =>
+      w.withNewQuery(prunedChild(w.query, w.references))
+
     // prune unrequired references
     case p @ Project(_, g: Generate) if p.references != g.outputSet =>
       val requiredAttrs = p.references -- g.producedAttributes ++ g.generator.references

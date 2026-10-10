@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.ProjectingInternalRow
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, ResolvedProcedure, ResolveSchemaEvolution, TypeCheckResult, UnresolvedAttribute, UnresolvedException, UnresolvedProcedure, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.catalog.{FunctionResource, RoutineLanguage}
@@ -36,7 +37,7 @@ import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.procedures.BoundProcedure
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.write.{DeltaWrite, RowLevelOperation, RowLevelOperationTable, SupportsColumnUpdates, SupportsDelta, Write}
+import org.apache.spark.sql.connector.write.{DeltaWrite, RowLevelOperation, RowLevelOperationTable, SupportsDelta, Write}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, MERGE, UPDATE}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -356,6 +357,18 @@ trait RowLevelWrite extends V2WriteCommand with SupportsSubquery {
   def condition: Expression
   def originalTable: NamedRelation
 
+  /** The projections that read query columns by ordinal. */
+  protected def queryProjections: Seq[ProjectingInternalRow]
+
+  /**
+   * The write reads the operation column at ordinal 0 and other columns only through projections.
+   * The query columns after the last one it reads can be pruned without changing its ordinals.
+   */
+  override lazy val references: AttributeSet = {
+    val lastReadOrdinal = queryProjections.flatMap(_.colOrdinals).foldLeft(0)(math.max)
+    AttributeSet(query.output.take(lastReadOrdinal + 1))
+  }
+
   protected def operationResolved: Boolean = {
     val attr = query.output.head
     attr.name == RowDeltaUtils.OPERATION_COLUMN && attr.dataType == IntegerType && !attr.nullable
@@ -365,26 +378,6 @@ trait RowLevelWrite extends V2WriteCommand with SupportsSubquery {
     V2ExpressionUtils.resolveRefs[AttributeReference](
       operation.requiredMetadataAttributes.toImmutableArraySeq,
       originalTable)
-  }
-
-  /**
-   * Resolves the connector-declared data attributes against the original table.
-   * Symmetric with projectedMetadataAttrs; used to validate the narrow updateRowProjection
-   * when the connector mixes in SupportsColumnUpdates. The write relation stays wide, so
-   * the narrow projection cannot be validated against `table.output` directly.
-   */
-  protected def projectedDataAttrs: Seq[Attribute] = operation match {
-    case scu: SupportsColumnUpdates =>
-      val resolved = V2ExpressionUtils.resolveRefs[AttributeReference](
-        scu.requiredDataAttributes.toImmutableArraySeq,
-        originalTable)
-      // Map back to the table's own attribute (by exprId): `resolveRefs` matches
-      // case-insensitively but keeps the declared spelling, and `areCompatible` (used to
-      // validate this against the write-side projection) compares names, so a mismatched
-      // spelling here would make the two sides disagree.
-      val byExprId = originalTable.output.map(a => a.exprId -> a).toMap
-      resolved.map(a => byExprId.getOrElse(a.exprId, a))
-    case _ => Nil
   }
 }
 
@@ -417,8 +410,6 @@ case class ReplaceData(
 
   override def stringArgs: Iterator[Any] = Iterator(table, query, write)
 
-  override lazy val references: AttributeSet = query.outputSet
-
   lazy val operation: RowLevelOperation = {
     EliminateSubqueryAliases(table) match {
       case ExtractV2Table(RowLevelOperationTable(_, operation)) =>
@@ -439,31 +430,7 @@ case class ReplaceData(
   // validates row projection output is compatible with table attributes
   private def rowAttrsResolved: Boolean = {
     val inRowAttrs = DataTypeUtils.toAttributes(projections.rowProjection.schema)
-    val inUpdateAttrs = projections.updateRowProjection match {
-      case Some(projection) => DataTypeUtils.toAttributes(projection.schema)
-      case None => Nil
-    }
-    // `rowProjection` (INSERT-tagged rows) validates against full table column set.
-    // `updateRowProjection` (UPDATE/COPY-tagged rows) is narrow for column-update
-    // connectors, so it validates against the connector-declared narrow
-    // set instead. When the connector does not mix in `SupportsColumnUpdates`,
-    // `updateRowProjection` is absent and `updateResolved` is trivially true.
-    val insertResolved = table.skipSchemaResolution ||
-      (inUpdateAttrs.nonEmpty && inRowAttrs.isEmpty) ||
-      areCompatible(inRowAttrs, table.output)
-    val updateResolved = table.skipSchemaResolution ||
-      inUpdateAttrs.isEmpty || dataAttrsResolved(inUpdateAttrs)
-    insertResolved && updateResolved
-  }
-
-  /**
-   * Validates the narrow-write-schema row projection output for a column-update connector.
-   * The write schema must exactly match the columns declared via
-   * `SupportsColumnUpdates.requiredDataAttributes()` (same columns, same order).
-   */
-  private def dataAttrsResolved(inRowAttrs: Seq[Attribute]): Boolean = {
-    operation.isInstanceOf[SupportsColumnUpdates] &&
-      areCompatible(inRowAttrs, projectedDataAttrs)
+    table.skipSchemaResolution || areCompatible(inRowAttrs, table.output)
   }
 
   // validates metadata projection output is compatible with metadata attributes
@@ -482,6 +449,8 @@ case class ReplaceData(
   private def isMetadataNullabilityPreserved(attr: Attribute): Boolean = {
     operation.command == DELETE || MetadataAttribute.isPreservedOnUpdate(attr)
   }
+
+  override protected def queryProjections: Seq[ProjectingInternalRow] = projections.all
 
   override def withNewQuery(newQuery: LogicalPlan): ReplaceData = copy(query = newQuery)
 
@@ -531,8 +500,6 @@ case class WriteDelta(
 
   override def stringArgs: Iterator[Any] = Iterator(table, query, write)
 
-  override lazy val references: AttributeSet = query.outputSet
-
   lazy val operation: SupportsDelta = {
     EliminateSubqueryAliases(table) match {
       case ExtractV2Table(RowLevelOperationTable(_, operation)) =>
@@ -557,31 +524,7 @@ case class WriteDelta(
       case Some(projection) => DataTypeUtils.toAttributes(projection.schema)
       case None => Nil
     }
-    val inUpdateAttrs = projections.updateRowProjection match {
-      case Some(projection) => DataTypeUtils.toAttributes(projection.schema)
-      case None => Nil
-    }
-    // `rowProjection` (INSERT-tagged rows) validates against `outRowAttrs`. For column-update
-    // connectors, `updateRowProjection` is narrow and validates against `projectedDataAttrs`
-    // (the connector-declared narrow set) instead. When the connector does not mix in
-    // `SupportsColumnUpdates`, `updateRowProjection` is absent and `updateResolved` is trivially
-    // true.
-    val insertResolved = table.skipSchemaResolution ||
-      (inUpdateAttrs.nonEmpty && inRowAttrs.isEmpty) ||
-      areCompatible(inRowAttrs, outRowAttrs)
-    val updateResolved = table.skipSchemaResolution ||
-      inUpdateAttrs.isEmpty || dataAttrsResolved(inUpdateAttrs)
-    insertResolved && updateResolved
-  }
-
-  /**
-   * Validates the narrow-write-schema row projection output for a column-update connector.
-   * The write schema must exactly match the columns declared via
-   * `SupportsColumnUpdates.requiredDataAttributes()` (same columns, same order).
-   */
-  private def dataAttrsResolved(inRowAttrs: Seq[Attribute]): Boolean = {
-    operation.isInstanceOf[SupportsColumnUpdates] &&
-      areCompatible(inRowAttrs, projectedDataAttrs)
+    table.skipSchemaResolution || areCompatible(inRowAttrs, outRowAttrs)
   }
 
   // validates row ID projection output is compatible with row ID attributes
@@ -618,6 +561,8 @@ case class WriteDelta(
         MetadataAttribute.isPreservedOnDelete(attr) && MetadataAttribute.isPreservedOnUpdate(attr)
     }
   }
+
+  override protected def queryProjections: Seq[ProjectingInternalRow] = projections.all
 
   override def withNewQuery(newQuery: LogicalPlan): V2WriteCommand = copy(query = newQuery)
 

@@ -380,20 +380,17 @@ case class ReplaceDataExec(
     write: Write,
     rowLevelCommand: RowLevelOperation.Command,
     tableName: String,
+    useWriteColumnUpdate: Boolean,
     transaction: Option[Transaction] = None) extends RowLevelWriteExec {
 
   override def writingTask: WritingSparkTask[_] = {
     projections.metadataProjection match {
       case Some(metadataProj) =>
         DataAndMetadataWritingSparkTask(
-          projections.rowProjection,
-          projections.updateRowProjection.orNull,
-          metadataProj, sparkMetrics)
+          projections.rowProjection, metadataProj, useWriteColumnUpdate, sparkMetrics)
       case None =>
         DataWithProjectionWritingSparkTask(
-          projections.rowProjection,
-          projections.updateRowProjection.orNull,
-          sparkMetrics)
+          projections.rowProjection, useWriteColumnUpdate, sparkMetrics)
     }
   }
 
@@ -777,8 +774,8 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
 
 case class DataAndMetadataWritingSparkTask(
     dataProj: ProjectingInternalRow,
-    updateDataProj: ProjectingInternalRow,
     metadataProj: ProjectingInternalRow,
+    useWriteColumnUpdate: Boolean,
     sparkMetrics: Map[String, SQLMetric])
   extends WritingSparkTask[DataWriter[InternalRow]] {
 
@@ -786,8 +783,8 @@ case class DataAndMetadataWritingSparkTask(
       writer: DataWriter[InternalRow], iter: java.util.Iterator[InternalRow]): Unit = {
     var numUpdatedRows = 0L
     var numCopiedRows = 0L
-    val proj = if (updateDataProj != null) updateDataProj else dataProj
-    val useWriteUpdate = updateDataProj != null
+    val writeCopiedOrUpdatedRow: (InternalRow, InternalRow) => Unit =
+      if (useWriteColumnUpdate) writer.writeColumnUpdate(_, _) else writer.write(_, _)
 
     while (iter.hasNext) {
       val row = iter.next()
@@ -796,17 +793,15 @@ case class DataAndMetadataWritingSparkTask(
       operation match {
         case UPDATE_OPERATION =>
           numUpdatedRows += 1L
-          proj.project(row)
+          dataProj.project(row)
           metadataProj.project(row)
-          if (useWriteUpdate) writer.writeUpdate(metadataProj, proj)
-          else writer.write(metadataProj, proj)
+          writeCopiedOrUpdatedRow(metadataProj, dataProj)
 
         case COPY_OPERATION =>
           numCopiedRows += 1L
-          proj.project(row)
+          dataProj.project(row)
           metadataProj.project(row)
-          if (useWriteUpdate) writer.writeUpdate(metadataProj, proj)
-          else writer.write(metadataProj, proj)
+          writeCopiedOrUpdatedRow(metadataProj, dataProj)
 
         case INSERT_OPERATION =>
           dataProj.project(row)
@@ -824,7 +819,7 @@ case class DataAndMetadataWritingSparkTask(
 
 case class DataWithProjectionWritingSparkTask(
     dataProj: ProjectingInternalRow,
-    updateDataProj: ProjectingInternalRow,
+    useWriteColumnUpdate: Boolean,
     sparkMetrics: Map[String, SQLMetric])
   extends WritingSparkTask[DataWriter[InternalRow]] {
 
@@ -832,8 +827,8 @@ case class DataWithProjectionWritingSparkTask(
       writer: DataWriter[InternalRow], iter: java.util.Iterator[InternalRow]): Unit = {
     var numUpdatedRows = 0L
     var numCopiedRows = 0L
-    val proj = if (updateDataProj != null) updateDataProj else dataProj
-    val useWriteUpdate = updateDataProj != null
+    val writeCopiedOrUpdatedRow: InternalRow => Unit =
+      if (useWriteColumnUpdate) writer.writeColumnUpdate(_) else writer.write(_)
 
     while (iter.hasNext) {
       val row = iter.next()
@@ -842,15 +837,13 @@ case class DataWithProjectionWritingSparkTask(
       operation match {
         case UPDATE_OPERATION =>
           numUpdatedRows += 1L
-          proj.project(row)
-          if (useWriteUpdate) writer.writeUpdate(proj)
-          else writer.write(proj)
+          dataProj.project(row)
+          writeCopiedOrUpdatedRow(dataProj)
 
         case COPY_OPERATION =>
           numCopiedRows += 1L
-          proj.project(row)
-          if (useWriteUpdate) writer.writeUpdate(proj)
-          else writer.write(proj)
+          dataProj.project(row)
+          writeCopiedOrUpdatedRow(dataProj)
 
         case INSERT_OPERATION =>
           dataProj.project(row)
@@ -879,16 +872,12 @@ case class DeltaWritingSparkTask(
   extends WritingSparkTask[DeltaWriter[InternalRow]] {
 
   private lazy val rowProjection = projections.rowProjection.orNull
-  private lazy val updateRowProjection = projections.updateRowProjection.orNull
   private lazy val rowIdProjection = projections.rowIdProjection
 
   override protected def write(
       writer: DeltaWriter[InternalRow], iter: java.util.Iterator[InternalRow]): Unit = {
     var numUpdatedRows = 0L
     var numDeletedRows = 0L
-    // UPDATE/COPY/REINSERT rows use the narrow update projection when the connector implements
-    // SupportsColumnUpdates; otherwise fall back to the full row projection.
-    val updateProj = if (updateRowProjection != null) updateRowProjection else rowProjection
 
     while (iter.hasNext) {
       val row = iter.next()
@@ -902,16 +891,16 @@ case class DeltaWritingSparkTask(
 
         case UPDATE_OPERATION =>
           numUpdatedRows += 1L
-          updateProj.project(row)
+          rowProjection.project(row)
           rowIdProjection.project(row)
-          writer.update(null, rowIdProjection, updateProj)
+          writer.update(null, rowIdProjection, rowProjection)
 
         case REINSERT_OPERATION =>
           // When representUpdateAsDeleteAndInsert is true, each logical update is split
           // into a DELETE and a REINSERT. Count the REINSERT as one updated row.
           numUpdatedRows += 1L
-          updateProj.project(row)
-          writer.reinsert(null, updateProj)
+          rowProjection.project(row)
+          writer.reinsert(null, rowProjection)
 
         case INSERT_OPERATION =>
           rowProjection.project(row)
@@ -933,7 +922,6 @@ case class DeltaWithMetadataWritingSparkTask(
   extends WritingSparkTask[DeltaWriter[InternalRow]] {
 
   private lazy val rowProjection = projections.rowProjection.orNull
-  private lazy val updateRowProjection = projections.updateRowProjection.orNull
   private lazy val rowIdProjection = projections.rowIdProjection
   private lazy val metadataProjection = projections.metadataProjection.orNull
 
@@ -941,9 +929,6 @@ case class DeltaWithMetadataWritingSparkTask(
       writer: DeltaWriter[InternalRow], iter: java.util.Iterator[InternalRow]): Unit = {
     var numUpdatedRows = 0L
     var numDeletedRows = 0L
-    // UPDATE/COPY/REINSERT rows use the narrow update projection when the connector implements
-    // SupportsColumnUpdates; otherwise fall back to the full row projection.
-    val updateProj = if (updateRowProjection != null) updateRowProjection else rowProjection
 
     while (iter.hasNext) {
       val row = iter.next()
@@ -958,18 +943,18 @@ case class DeltaWithMetadataWritingSparkTask(
 
         case UPDATE_OPERATION =>
           numUpdatedRows += 1L
-          updateProj.project(row)
+          rowProjection.project(row)
           rowIdProjection.project(row)
           metadataProjection.project(row)
-          writer.update(metadataProjection, rowIdProjection, updateProj)
+          writer.update(metadataProjection, rowIdProjection, rowProjection)
 
         case REINSERT_OPERATION =>
           // When representUpdateAsDeleteAndInsert is true, each logical update is split
           // into a DELETE and a REINSERT. Count the REINSERT as one updated row.
           numUpdatedRows += 1L
-          updateProj.project(row)
+          rowProjection.project(row)
           metadataProjection.project(row)
-          writer.reinsert(metadataProjection, updateProj)
+          writer.reinsert(metadataProjection, rowProjection)
 
         case INSERT_OPERATION =>
           rowProjection.project(row)

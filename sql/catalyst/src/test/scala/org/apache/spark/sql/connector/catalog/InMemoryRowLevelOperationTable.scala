@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector.catalog
 
 import java.util
+import java.util.concurrent.atomic.AtomicReference
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
@@ -91,12 +92,19 @@ class InMemoryRowLevelOperationTable private (
   private final val COLUMN_UPDATE = "column-update"
   private final val COLUMN_UPDATE_REQ_ATTRS = "column-update-req-attrs"
   private final val COLUMN_UPDATE_COW = "column-update-cow"
-  private final val COLUMN_UPDATE_COW_NO_WRITE_UPDATE = "column-update-cow-no-write-update"
-  private final val COLUMN_UPDATE_FROM_INFO = "column-update-from-info"
+  private final val COLUMN_UPDATE_COW_REQ_ATTRS = "column-update-cow-req-attrs"
+  private final val COLUMN_UPDATE_COW_NO_WRITE_COLUMN_UPDATE =
+    "column-update-cow-no-write-column-update"
+  // makes the copy-on-write column-update writer override only writeColumnUpdate(record)
+  private final val COLUMN_UPDATE_COW_RECORD_ONLY_WRITER = "column-update-cow-record-only-writer"
+  // makes the copy-on-write column-update scan report every identity partition column from
+  // filterAttributes(), even one it doesn't read
+  private final val COLUMN_UPDATE_COW_UNREAD_FILTER_ATTRS = "column-update-cow-unread-filter-attrs"
   private final val COLUMN_UPDATE_SPLIT = "column-update-split"
   private final val COLUMN_UPDATE_SPLIT_REQ_ATTRS = "column-update-split-req-attrs"
   private final val COLUMN_UPDATE_EMPTY_REQ_ATTRS = "column-update-empty-req-attrs"
-  private final val COLUMN_UPDATE_SPLIT_MISSING_ROW_ID = "column-update-split-missing-row-id"
+  private final val COLUMN_UPDATE_SPLIT_ROW_ID = "column-update-split-row-id"
+  private final val COLUMN_UPDATE_CLUSTER_BY = "column-update-cluster-by"
 
   // used in row-level operation tests to verify replaced partitions
   var replacedPartitions: Seq[Seq[Any]] = Seq.empty
@@ -105,7 +113,7 @@ class InMemoryRowLevelOperationTable private (
   // used in column-update tests to verify that Spark passed the correct updated column list
   // to the connector via RowLevelOperationInfo.updatedColumns()
   var lastUpdatedColumns: Array[NamedReference] = Array.empty
-  // used in scan-narrowing tests to verify the schema Spark asked the connector to read.
+  // used in scan pruning tests to verify the schema Spark asked the connector to read.
   // Routed through the companion object (see InMemoryRowLevelOperationTable.lastScanSchema)
   // because Spark's planner and the test harness can hold references to different table
   // instances for the same identifier -- a per-instance field would only be visible to one.
@@ -147,6 +155,7 @@ class InMemoryRowLevelOperationTable private (
     copied.replacedPartitions = replacedPartitions
     copied.lastWriteInfo = lastWriteInfo
     copied.lastWriteLog = lastWriteLog
+    copied.lastUpdatedColumns = lastUpdatedColumns
     copied
   }
 
@@ -163,14 +172,16 @@ class InMemoryRowLevelOperationTable private (
       // Test-only: returns an empty requiredDataAttributes() so we can verify Spark rejects it.
       () => new DeltaBasedColumnUpdateOperationWithReqAttrs(
         info.command, Array.empty, info.options)
-    } else if (properties.getOrDefault(COLUMN_UPDATE_FROM_INFO, "false") == "true") {
-      () => new DeltaBasedColumnUpdateOperationFromInfo(
-        info.command, info.updatedColumns().toSeq, info.options)
     } else if (properties.getOrDefault(COLUMN_UPDATE_COW, "false") == "true") {
       () => new PartitionBasedColumnUpdateOperation(
         info.command, info.updatedColumns().toSeq, info.options)
-    } else if (properties.getOrDefault(COLUMN_UPDATE_COW_NO_WRITE_UPDATE, "false") == "true") {
-      () => new PartitionBasedColumnUpdateOperationNoWriteUpdate(
+    } else if (properties.containsKey(COLUMN_UPDATE_COW_REQ_ATTRS)) {
+      val reqCols = properties.get(COLUMN_UPDATE_COW_REQ_ATTRS).split(",").map(_.trim)
+      () => new PartitionBasedColumnUpdateOperationWithReqAttrs(
+        info.command, reqCols, info.options)
+    } else if (
+        properties.getOrDefault(COLUMN_UPDATE_COW_NO_WRITE_COLUMN_UPDATE, "false") == "true") {
+      () => new PartitionBasedColumnUpdateOperationNoWriteColumnUpdate(
         info.command, info.updatedColumns().toSeq, info.options)
     } else if (properties.getOrDefault(COLUMN_UPDATE_SPLIT, "false") == "true") {
       () => new DeltaBasedColumnUpdateSplitOperation(
@@ -179,14 +190,47 @@ class InMemoryRowLevelOperationTable private (
       val reqCols = properties.get(COLUMN_UPDATE_SPLIT_REQ_ATTRS).split(",").map(_.trim)
       () => new DeltaBasedColumnUpdateSplitOperationWithReqAttrs(
         info.command, reqCols, info.options)
-    } else if (properties.getOrDefault(COLUMN_UPDATE_SPLIT_MISSING_ROW_ID, "false") == "true") {
-      () => new DeltaBasedColumnUpdateSplitMissingRowIdOperation(
-        info.command, info.updatedColumns().toSeq, info.options)
+    } else if (properties.containsKey(COLUMN_UPDATE_SPLIT_ROW_ID)) {
+      val rowIdCol = properties.get(COLUMN_UPDATE_SPLIT_ROW_ID)
+      () => new DeltaBasedColumnUpdateSplitOperationWithRowId(
+        info.command, rowIdCol, info.updatedColumns().toSeq, info.options)
     } else if (properties.getOrDefault(SUPPORTS_DELTAS, "false") == "true") {
       () => DeltaBasedOperation(info.command, info.options)
     } else {
       () => PartitionBasedOperation(info.command, info.options)
     }
+  }
+
+  private def currentRowByPk(pk: Int): Option[InternalRow] = {
+    dataMap.values.iterator.flatten.flatMap(_.rows)
+      .find(r => r.getInt(schema.fieldIndex("pk")) == pk)
+  }
+
+  // Rebuilds a full table row for a narrow column-update row: the base row's values (or the
+  // existence default for a column added after the base row was written), overlaid with the
+  // narrow row's columns.
+  private def overlayNarrowRow(
+      baseRow: Option[InternalRow],
+      narrowRow: InternalRow,
+      narrowFieldIdx: Map[String, Int]): InternalRow = {
+    val fullRow = new GenericInternalRow(schema.length)
+    baseRow.foreach { base =>
+      for (i <- schema.fields.indices) {
+        val field = schema.fields(i)
+        val value = if (i < base.numFields) {
+          base.get(i, field.dataType)
+        } else {
+          ResolveDefaultColumns.getExistenceDefaultValue(field)
+        }
+        fullRow.update(i, value)
+      }
+    }
+    schema.fields.zipWithIndex.foreach { case (field, i) =>
+      narrowFieldIdx.get(field.name).foreach { j =>
+        fullRow.update(i, narrowRow.get(j, field.dataType))
+      }
+    }
+    fullRow
   }
 
   case class PartitionBasedOperation(command: Command, options: CaseInsensitiveStringMap)
@@ -310,11 +354,10 @@ class InMemoryRowLevelOperationTable private (
     }
   }
 
-  // A delta-based operation that supports column-level updates: Spark sends only the
-  // declared + assigned columns in the row projection instead of the full row schema. The base
-  // class composes its required-attrs set as `pk` (the row-lookup key) and `dep` (an
-  // unconditionally declared base column) plus whatever columns Spark reports as being
-  // assigned via `RowLevelOperationInfo#updatedColumns()`.
+  // A delta-based operation that supports column-level updates: Spark sends only the declared
+  // columns in the row projection instead of the full row schema. It declares `pk` (the
+  // row-lookup key) and `dep` (an unconditionally declared base column) plus whatever columns
+  // Spark reports as being assigned via `RowLevelOperationInfo#updatedColumns()`.
   class DeltaBasedColumnUpdateOperation(
       command: Command,
       updatedCols: Seq[NamedReference] = Nil,
@@ -328,15 +371,17 @@ class InMemoryRowLevelOperationTable private (
       (base ++ updatedCols.filterNot(r => baseNames.contains(r.describe()))).toArray
     }
 
-    protected def clusterColumnRef: NamedReference = PARTITION_COLUMN_REF
+    private val clusterRef: NamedReference = Option(properties.get(COLUMN_UPDATE_CLUSTER_BY))
+      .map(FieldReference(_))
+      .getOrElse(PARTITION_COLUMN_REF)
 
     override def newWriteBuilder(info: LogicalWriteInfo): DeltaWriteBuilder = {
       lastWriteInfo = info
       // Capture info into a local val so nested writer/commit closures see a stable schema
       // even if a subsequent newWriteBuilder call mutates lastWriteInfo.
       val capturedInfo = info
-      val capturedWriteSchema = if (capturedInfo.updateSchema().isPresent) {
-        capturedInfo.updateSchema().get()
+      val capturedWriteSchema = if (capturedInfo.columnUpdateSchema().isPresent) {
+        capturedInfo.columnUpdateSchema().get()
       } else {
         capturedInfo.schema()
       }
@@ -345,13 +390,13 @@ class InMemoryRowLevelOperationTable private (
           new DeltaWrite with RequiresDistributionAndOrdering {
 
             override def requiredDistribution(): Distribution = {
-              Distributions.clustered(Array(clusterColumnRef))
+              Distributions.clustered(Array(clusterRef))
             }
 
             override def requiredOrdering(): Array[SortOrder] = {
               Array[SortOrder](
                 LogicalExpressions.sort(
-                  clusterColumnRef,
+                  clusterRef,
                   SortDirection.ASCENDING,
                   SortDirection.ASCENDING.defaultNullOrdering())
               )
@@ -361,13 +406,12 @@ class InMemoryRowLevelOperationTable private (
               new TestBatchWrite with DeltaBatchWrite {
                 override def createBatchWriterFactory(
                     info: PhysicalWriteInfo): DeltaWriterFactory = {
-                  // Use the narrow update schema for UPDATE/COPY/REINSERT rows when present.
                   new DeltaBufferedRowsWriterFactory(capturedWriteSchema)
                 }
 
-                // For column-update writes, rows contain only the assigned columns
-                // (narrow schema from LogicalWriteInfo). We expand each row to the full table
-                // schema by overlaying write-schema columns on the base row found by pk.
+                // For column-update writes, updated rows contain only the declared columns
+                // (columnUpdateSchema from LogicalWriteInfo). We expand each row to the full
+                // table schema by overlaying them on the base row found by pk.
                 override protected def doCommit(messages: Array[WriterCommitMessage]): Unit =
                   dataMap.synchronized {
                     val newData = messages.map(_.asInstanceOf[BufferedRows])
@@ -383,26 +427,8 @@ class InMemoryRowLevelOperationTable private (
                         if (opName == updateOpName) {
                           val pk = logRow.getInt(1)
                           val narrowRow = logRow.get(3, writeSchema).asInstanceOf[InternalRow]
-                          val baseRow = dataMap.values.iterator.flatten
-                            .flatMap(_.rows)
-                            .find(r => r.getInt(schema.fieldIndex("pk")) == pk)
-                          val fullRow = new GenericInternalRow(schema.length)
-                          baseRow.foreach { base =>
-                            for (i <- schema.fields.indices) {
-                              val field = schema.fields(i)
-                              val value = if (i < base.numFields) {
-                                base.get(i, field.dataType)
-                              } else {
-                                ResolveDefaultColumns.getExistenceDefaultValue(field)
-                              }
-                              fullRow.update(i, value)
-                            }
-                          }
-                          schema.fields.zipWithIndex.foreach { case (field, i) =>
-                            writeFieldIdx.get(field.name).foreach { j =>
-                              fullRow.update(i, narrowRow.get(j, field.dataType))
-                            }
-                          }
+                          val baseRow = currentRowByPk(pk)
+                          val fullRow = overlayNarrowRow(baseRow, narrowRow, writeFieldIdx)
                           merged.rows.append(fullRow)
                         } else if (opName == insertOpName) {
                           // INSERT rows arrive with the full table schema via writer.insert()
@@ -433,13 +459,6 @@ class InMemoryRowLevelOperationTable private (
     override def requiredDataAttributes(): Array[NamedReference] = reqCols.map(FieldReference(_))
   }
 
-  class DeltaBasedColumnUpdateOperationFromInfo(
-      command: Command,
-      updatedCols: Seq[NamedReference],
-      options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty())
-      extends DeltaBasedColumnUpdateOperation(command, updatedCols, options) {
-  }
-
   class DeltaBasedColumnUpdateSplitOperation(
       command: Command,
       updatedCols: Seq[NamedReference] = Nil,
@@ -452,8 +471,8 @@ class InMemoryRowLevelOperationTable private (
       // Capture info into a local val so nested writer/commit closures see a stable schema
       // even if a subsequent newWriteBuilder call mutates lastWriteInfo.
       val capturedInfo = info
-      val capturedWriteSchema = if (capturedInfo.updateSchema().isPresent) {
-        capturedInfo.updateSchema().get()
+      val capturedWriteSchema = if (capturedInfo.columnUpdateSchema().isPresent) {
+        capturedInfo.columnUpdateSchema().get()
       } else {
         capturedInfo.schema()
       }
@@ -475,8 +494,8 @@ class InMemoryRowLevelOperationTable private (
                 }
 
                 // For delete+reinsert with narrow writes, the REINSERT row has only the
-                // connector-declared columns (requiredDataAttributes order).
-                // pk is the first field in the write schema (declared before updatedCols).
+                // connector-declared columns (requiredDataAttributes order). The base row is
+                // looked up by `pk`, so `pk` must be declared for the write to commit.
                 // Reconstruct the full row by overlaying the narrow row onto the original.
                 override protected def doCommit(messages: Array[WriterCommitMessage]): Unit =
                   dataMap.synchronized {
@@ -484,6 +503,7 @@ class InMemoryRowLevelOperationTable private (
                     val writeSchema = capturedWriteSchema
                     val writeFieldIdx = writeSchema.fieldNames.zipWithIndex.toMap
                     val reinsertOpName = UTF8String.fromString(Reinsert.toString)
+                    val insertOpName = UTF8String.fromString(Insert.toString)
                     val pkIdx = writeFieldIdx("pk")
 
                     val expandedData = newData.map { buf =>
@@ -493,27 +513,13 @@ class InMemoryRowLevelOperationTable private (
                         if (opName == reinsertOpName) {
                           val narrowRow = logRow.get(3, writeSchema).asInstanceOf[InternalRow]
                           val pk = narrowRow.getInt(pkIdx)
-                          val baseRow = dataMap.values.iterator.flatten
-                            .flatMap(_.rows)
-                            .find(r => r.getInt(schema.fieldIndex("pk")) == pk)
-                          val fullRow = new GenericInternalRow(schema.length)
-                          baseRow.foreach { base =>
-                            for (i <- schema.fields.indices) {
-                              val field = schema.fields(i)
-                              val value = if (i < base.numFields) {
-                                base.get(i, field.dataType)
-                              } else {
-                                ResolveDefaultColumns.getExistenceDefaultValue(field)
-                              }
-                              fullRow.update(i, value)
-                            }
-                          }
-                          schema.fields.zipWithIndex.foreach { case (field, i) =>
-                            writeFieldIdx.get(field.name).foreach { j =>
-                              fullRow.update(i, narrowRow.get(j, field.dataType))
-                            }
-                          }
+                          val baseRow = currentRowByPk(pk)
+                          val fullRow = overlayNarrowRow(baseRow, narrowRow, writeFieldIdx)
                           expanded.rows.append(fullRow)
+                        } else if (opName == insertOpName) {
+                          // INSERT rows arrive with the full table schema via writer.insert()
+                          val insertRow = logRow.get(3, schema).asInstanceOf[InternalRow]
+                          expanded.rows.append(insertRow.copy())
                         }
                       }
                       expanded
@@ -541,13 +547,17 @@ class InMemoryRowLevelOperationTable private (
     override def requiredDataAttributes(): Array[NamedReference] = reqCols.map(FieldReference(_))
   }
 
-  // Test-only: a split-update fixture whose requiredDataAttributes() excludes the row-ID
-  // column, to exercise the guard that rejects an undeclared row ID for the REINSERT path.
-  class DeltaBasedColumnUpdateSplitMissingRowIdOperation(
+
+  // Test-only: a split-update fixture whose row ID is the given column and whose
+  // requiredDataAttributes() lists only the updated columns, to exercise which undeclared
+  // row-ID columns still reach the REINSERT row.
+  class DeltaBasedColumnUpdateSplitOperationWithRowId(
       command: Command,
+      rowIdCol: String,
       updatedCols: Seq[NamedReference] = Nil,
       options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty())
       extends DeltaBasedColumnUpdateSplitOperation(command, updatedCols, options) {
+    override def rowId(): Array[NamedReference] = Array(FieldReference(rowIdCol))
     override def requiredDataAttributes(): Array[NamedReference] = updatedCols.toArray
   }
 
@@ -556,7 +566,7 @@ class InMemoryRowLevelOperationTable private (
       updatedCols: Seq[NamedReference] = Nil,
       override val options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty())
       extends RowLevelOperation with SupportsColumnUpdates with RowLevelOperationWithOptions {
-    var configuredScan: InMemoryBatchScan = _
+    var configuredScan: BatchScanBaseClass = _
 
     override def command(): Command = command
 
@@ -566,17 +576,42 @@ class InMemoryRowLevelOperationTable private (
       (base ++ updatedCols.filterNot(r => baseNames.contains(r.describe()))).toArray
     }
 
-    override def requiredMetadataAttributes(): Array[NamedReference] =
-      Array(PARTITION_COLUMN_REF, INDEX_COLUMN_REF)
+    override def requiredMetadataAttributes(): Array[NamedReference] = {
+      if (noMetadata) {
+        Array.empty
+      } else {
+        Array(PARTITION_COLUMN_REF, INDEX_COLUMN_REF)
+      }
+    }
+
+    private def clusterColumnRef: NamedReference =
+      if (noMetadata) FieldReference("dep") else PARTITION_COLUMN_REF
 
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-      new InMemoryScanBuilder(schema, options) {
-        override def build(): Scan = {
-          val scan = super.build()
-          InMemoryRowLevelOperationTable.recordLastScanSchema(scan.readSchema())
-          configuredScan = scan.asInstanceOf[InMemoryBatchScan]
-          scan
+      val onBuild: BatchScanBaseClass => Unit = { scan =>
+        InMemoryRowLevelOperationTable.recordLastScanSchema(scan.readSchema())
+        configuredScan = scan
+      }
+      if (properties.getOrDefault(COLUMN_UPDATE_COW_UNREAD_FILTER_ATTRS, "false") == "true") {
+        new InMemoryScanBuilder(schema, options) {
+          override protected def createScan(
+              partitions: Seq[InputPartition],
+              readSchema: StructType,
+              tableSchema: StructType,
+              options: CaseInsensitiveStringMap): BatchScanBaseClass = {
+            new InMemoryBatchScan(partitions, readSchema, tableSchema, options) {
+              override def filterAttributes(): Array[NamedReference] = identityPartitionReferences
+            }
+          }
+
+          override def build(): Scan = {
+            val scan = super.build().asInstanceOf[BatchScanBaseClass]
+            onBuild(scan)
+            scan
+          }
         }
+      } else {
+        newRowLevelScanBuilder(options)(onBuild)
       }
     }
 
@@ -585,17 +620,17 @@ class InMemoryRowLevelOperationTable private (
       new WriteBuilder {
         override def build(): Write = new Write with RequiresDistributionAndOrdering {
           override def requiredDistribution: Distribution =
-            Distributions.clustered(Array(PARTITION_COLUMN_REF))
+            Distributions.clustered(Array(clusterColumnRef))
 
           override def requiredOrdering: Array[SortOrder] = Array[SortOrder](
             LogicalExpressions.sort(
-              PARTITION_COLUMN_REF,
+              clusterColumnRef,
               SortDirection.ASCENDING,
               SortDirection.ASCENDING.defaultNullOrdering()))
 
           override def toBatch: BatchWrite = {
-            val narrowSchema = if (info.updateSchema().isPresent) {
-              info.updateSchema().get()
+            val narrowSchema = if (info.columnUpdateSchema().isPresent) {
+              info.columnUpdateSchema().get()
             } else {
               info.schema()
             }
@@ -612,10 +647,21 @@ class InMemoryRowLevelOperationTable private (
     override def description(): String = "InMemoryPartitionColumnUpdateOperation"
   }
 
+  // Test-only: a copy-on-write column-update fixture with a fixed requiredDataAttributes(), so
+  // tests can declare columns independently of the UPDATE. The commit path looks rows up by `pk`,
+  // so `pk` must be declared.
+  class PartitionBasedColumnUpdateOperationWithReqAttrs(
+      command: Command,
+      reqCols: Array[String],
+      options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty())
+      extends PartitionBasedColumnUpdateOperation(command, options = options) {
+    override def requiredDataAttributes(): Array[NamedReference] = reqCols.map(FieldReference(_))
+  }
+
   // Test-only: mixes in SupportsColumnUpdates like PartitionBasedColumnUpdateOperation, but its
-  // DataWriter never overrides writeUpdate(), to exercise the DataWriter#writeUpdate default
-  // that throws DATA_SOURCE_WRITE_UPDATE_NOT_IMPLEMENTED.
-  class PartitionBasedColumnUpdateOperationNoWriteUpdate(
+  // DataWriter never overrides writeColumnUpdate(), to exercise the DataWriter#writeColumnUpdate
+  // default that throws DATA_SOURCE_WRITE_COLUMN_UPDATE_NOT_IMPLEMENTED.
+  class PartitionBasedColumnUpdateOperationNoWriteColumnUpdate(
       command: Command,
       updatedCols: Seq[NamedReference] = Nil,
       options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty())
@@ -637,26 +683,34 @@ class InMemoryRowLevelOperationTable private (
           override def toBatch: BatchWrite = new TestBatchWrite {
             override def createBatchWriterFactory(
                 info: PhysicalWriteInfo): DataWriterFactory = {
-              new NoWriteUpdateOverrideWriterFactory
+              new NoWriteColumnUpdateOverrideWriterFactory
             }
 
             override protected def doCommit(messages: Array[WriterCommitMessage]): Unit = {}
           }
 
-          override def description: String = "InMemoryColumnUpdateNoWriteUpdateOverride"
+          override def description: String = "InMemoryColumnUpdateNoWriteColumnUpdateOverride"
         }
       }
     }
   }
 
   // CoW write handler for narrow column-update writes.
-  // Narrow rows (UPDATE/COPY) are sent via writeUpdate, wide rows (INSERT) via write.
+  // Narrow rows (UPDATE/COPY) are sent via writeColumnUpdate, wide rows (INSERT) via write.
   // Both arrive in the same buffer; rows are routed by the operation tag in the log entry,
   // which lets tests assert that Spark dispatched through the correct writer method.
   private case class PartitionBasedNarrowReplaceData(
-      scan: InMemoryBatchScan,
+      scan: BatchScanBaseClass,
       writeSchema: StructType,
       fullSchema: StructType) extends TestBatchWrite {
+
+    override def createBatchWriterFactory(info: PhysicalWriteInfo): DataWriterFactory = {
+      if (properties.getOrDefault(COLUMN_UPDATE_COW_RECORD_ONLY_WRITER, "false") == "true") {
+        new RecordOnlyColumnUpdateWriterFactory(CatalogV2Util.v2ColumnsToStructType(columns()))
+      } else {
+        super.createBatchWriterFactory(info)
+      }
+    }
 
     override protected def doCommit(
         messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
@@ -669,35 +723,19 @@ class InMemoryRowLevelOperationTable private (
       val writeFieldIdx = writeSchema.fieldNames.zipWithIndex.toMap
       val pkIdxInWrite = writeFieldIdx("pk")
       val pkIdxInFull = schema.fieldIndex("pk")
-      val writeUpdateOpName = UTF8String.fromString(WriteUpdate.toString)
+      val writeColumnUpdateOpName = UTF8String.fromString(WriteColumnUpdate.toString)
 
       val expandedData = newData.map { buf =>
         val expanded = new BufferedRows(buf.key, schema)
-        // Walk the log so we can route on the operation tag (Write vs WriteUpdate).
+        // Walk the log so we can route on the operation tag (Write vs WriteColumnUpdate).
         // buf.rows contains rows in the same order as the log; iterate together.
         buf.log.zip(buf.rows).foreach { case (logEntry, row) =>
           val opName = logEntry.getUTF8String(0)
-          if (opName == writeUpdateOpName) {
+          if (opName == writeColumnUpdateOpName) {
             // UPDATE/COPY narrow row: look up base row by pk, overlay narrow values
             val pk = row.getInt(pkIdxInWrite)
             val origRow = readRows.find(r => r.getInt(pkIdxInFull) == pk)
-            val fullRow = new GenericInternalRow(schema.length)
-            origRow.foreach { base =>
-              for (i <- schema.fields.indices) {
-                val field = schema.fields(i)
-                val value = if (i < base.numFields) {
-                  base.get(i, field.dataType)
-                } else {
-                  ResolveDefaultColumns.getExistenceDefaultValue(field)
-                }
-                fullRow.update(i, value)
-              }
-            }
-            schema.fields.zipWithIndex.foreach { case (field, i) =>
-              writeFieldIdx.get(field.name).foreach { j =>
-                fullRow.update(i, row.get(j, field.dataType))
-              }
-            }
+            val fullRow = overlayNarrowRow(origRow, row, writeFieldIdx)
             expanded.rows.append(fullRow)
           } else {
             // INSERT row: full schema, append directly aligned to table schema
@@ -786,20 +824,38 @@ private class DeltaBufferedRowsWriterFactory(schema: StructType) extends DeltaWr
   }
 }
 
-// Test-only: a writer factory for a connector that never overrides writeUpdate(), to exercise
-// the DataWriter#writeUpdate default that throws DATA_SOURCE_WRITE_UPDATE_NOT_IMPLEMENTED.
+// Test-only: a writer factory for a connector that never overrides writeColumnUpdate(), to
+// exercise the DataWriter#writeColumnUpdate default that throws
+// DATA_SOURCE_WRITE_COLUMN_UPDATE_NOT_IMPLEMENTED.
 // Declared top-level (no reference to the enclosing table) so it stays task-serializable.
-private class NoWriteUpdateOverrideWriterFactory extends DataWriterFactory {
+private class NoWriteColumnUpdateOverrideWriterFactory extends DataWriterFactory {
   override def createWriter(partitionId: Int, taskId: Long): DataWriter[InternalRow] = {
-    new NoWriteUpdateOverrideWriter
+    new NoWriteColumnUpdateOverrideWriter
   }
 }
 
-private class NoWriteUpdateOverrideWriter extends DataWriter[InternalRow] {
+private class NoWriteColumnUpdateOverrideWriter extends DataWriter[InternalRow] {
   override def write(record: InternalRow): Unit = {}
   override def commit(): WriterCommitMessage = new BufferedRows(Seq.empty, StructType(Nil))
   override def abort(): Unit = {}
   override def close(): Unit = {}
+}
+
+// Test-only: a writer that overrides writeColumnUpdate(record) but not
+// writeColumnUpdate(metadata, record), so rows with metadata reach it through the default.
+private class RecordOnlyColumnUpdateWriterFactory(schema: StructType) extends DataWriterFactory {
+  override def createWriter(partitionId: Int, taskId: Long): DataWriter[InternalRow] = {
+    new RecordOnlyColumnUpdateWriter(schema)
+  }
+}
+
+private class RecordOnlyColumnUpdateWriter(schema: StructType) extends DataWriter[InternalRow] {
+  private val delegate = new BufferWriter(schema)
+  override def write(record: InternalRow): Unit = delegate.write(record)
+  override def writeColumnUpdate(record: InternalRow): Unit = delegate.writeColumnUpdate(record)
+  override def commit(): WriterCommitMessage = delegate.commit()
+  override def abort(): Unit = delegate.abort()
+  override def close(): Unit = delegate.close()
 }
 
 private class DeltaBufferWriter(schema: StructType) extends BufferWriter(schema)
@@ -850,10 +906,9 @@ private class DeltaBufferWriter(schema: StructType) extends BufferWriter(schema)
 object InMemoryRowLevelOperationTable {
   // Global holder for the scan schema of the last row-level operation. See the class-level
   // `lastScanSchema` def for why this is a companion-object field rather than a per-instance one.
-  // Tests that assert on scan narrowing should reset this before running the operation under test
+  // Tests that assert on scan pruning should reset this before running the operation under test
   // (see `RowLevelOperationSuiteBase.beforeEach`).
-  private[catalog] val lastScanSchemaRef: java.util.concurrent.atomic.AtomicReference[StructType] =
-    new java.util.concurrent.atomic.AtomicReference[StructType]()
+  private[catalog] val lastScanSchemaRef = new AtomicReference[StructType]()
 
   /** Called by test-only scan builders on every scan build. Overwrites; tests reset between
    * cases. */

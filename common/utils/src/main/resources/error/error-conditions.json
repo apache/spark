@@ -1265,6 +1265,12 @@
     ],
     "sqlState" : "42000"
   },
+  "COLUMN_UPDATE_METADATA_REQUIRED_DATA_ATTRIBUTE" : {
+    "message" : [
+      "Connector <connector> mixes in `SupportsColumnUpdates` but declared metadata column(s) <metadataAttributes> in `requiredDataAttributes()`. Declare metadata columns in `requiredMetadataAttributes()` instead."
+    ],
+    "sqlState" : "42000"
+  },
   "COLUMN_UPDATE_NESTED_REQUIRED_DATA_ATTRIBUTE" : {
     "message" : [
       "Connector <connector> mixes in `SupportsColumnUpdates` but declared nested field(s) <nestedAttributes> in `requiredDataAttributes()`. Declare the root struct column instead of a nested field."
@@ -1279,15 +1285,27 @@
   },
   "COLUMN_UPDATE_SPLIT_ROW_ID_NOT_DECLARED" : {
     "message" : [
-      "Data source <connector> represents UPDATE as delete + insert but its `requiredDataAttributes()` does not include row ID column(s) <rowIds>. The REINSERT payload is projected down to `requiredDataAttributes()`, so an undeclared row ID column leaves the reinserted row with no identity for the connector to place it by. Include the row ID column(s) in `requiredDataAttributes()`."
+      "Connector <connector> mixes in `SupportsColumnUpdates` and represents UPDATE as delete and insert, but row ID column(s) <rowIds> do not reach the reinserted row, which then has no identity for the connector to place it by. Declare each data row ID column in `requiredDataAttributes()`, and return each metadata row ID column from `requiredMetadataAttributes()` with `MetadataColumn.PRESERVE_ON_REINSERT` set."
     ],
     "sqlState" : "42000"
   },
   "COLUMN_UPDATE_SPLIT_ROW_ID_REASSIGNMENT" : {
     "message" : [
-      "Cannot reassign row ID column(s) <rowIds> in a column-level UPDATE when data source <connector> represents UPDATE as delete + insert. The REINSERT path has no row-ID channel to reconstruct columns outside `requiredDataAttributes()`, so undeclared columns would become NULL. Either avoid reassigning row ID columns, or include every table column in `requiredDataAttributes()`."
+      "Connector <connector> mixes in `SupportsColumnUpdates` and represents UPDATE as delete and insert, so UPDATE cannot assign row ID column(s) <rowIds>. The reinserted row carries only the columns in `requiredDataAttributes()`, and with a new row ID it cannot be matched to the row whose other columns the connector must preserve. Do not assign row ID columns, or include every table column in `requiredDataAttributes()`."
     ],
     "sqlState" : "42000"
+  },
+  "COLUMN_UPDATE_UNDECLARED_WRITE_REQUIREMENT_COLUMNS" : {
+    "message" : [
+      "Connector <connector> mixes in `SupportsColumnUpdates`, but its write requires a distribution or ordering by column(s) <columns> that the column-level UPDATE does not read. Declare each data column in `requiredDataAttributes()` and each metadata column in `requiredMetadataAttributes()`."
+    ],
+    "sqlState" : "42000"
+  },
+  "COLUMN_UPDATE_UNKNOWN_REQUIRED_DATA_ATTRIBUTE" : {
+    "message" : [
+      "Connector <connector> mixes in `SupportsColumnUpdates` but declared column(s) <unknownAttributes> in `requiredDataAttributes()` that do not exist in the table."
+    ],
+    "sqlState" : "42703"
   },
   "COMPARATOR_RETURNS_NULL" : {
     "message" : [
@@ -2443,9 +2461,9 @@
     ],
     "sqlState" : "42K03"
   },
-  "DATA_SOURCE_WRITE_UPDATE_NOT_IMPLEMENTED" : {
+  "DATA_SOURCE_WRITE_COLUMN_UPDATE_NOT_IMPLEMENTED" : {
     "message" : [
-      "<class> mixes in `SupportsColumnUpdates` but does not implement `writeUpdate`. Connectors that opt into narrow column-level updates must override `writeUpdate` to handle rows in the `LogicalWriteInfo.updateSchema()` layout; the default implementation would forward narrow rows to `write`, which expects the full `LogicalWriteInfo.schema()` layout."
+      "<class> does not override `writeColumnUpdate(record)`. A data writer that receives rows in the `LogicalWriteInfo.columnUpdateSchema()` layout must override `writeColumnUpdate(record)`, or `writeColumnUpdate(metadata, record)` if the operation returns metadata columns from `requiredMetadataAttributes()`."
     ],
     "sqlState" : "0A000"
   },
