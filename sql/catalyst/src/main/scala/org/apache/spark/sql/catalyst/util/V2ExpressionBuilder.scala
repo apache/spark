@@ -85,7 +85,11 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
     case _ => false
   }
 
-  private def translateLiteral(l: Literal): V2Expression = l match {
+  private def translateLiteral(l: Literal, isPredicate: Boolean): V2Expression = l match {
+    case _ if SQLConf.get.getConf(
+        SQLConf.V2_EXPRESSION_BUILDER_PRESERVE_BOOLEAN_LITERALS_ENABLED) &&
+        !isPredicate =>
+      LiteralValue(l.value, l.dataType)
     case Literal(true, BooleanType) => new AlwaysTrue()
     case Literal(false, BooleanType) => new AlwaysFalse()
     case other => LiteralValue(other.value, other.dataType)
@@ -93,7 +97,7 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
 
   private def generateExpression(
       expr: Expression, isPredicate: Boolean = false): Option[V2Expression] = expr match {
-    case literal: Literal => Some(translateLiteral(literal))
+    case literal: Literal => Some(translateLiteral(literal, isPredicate))
     case _ if expr.contextIndependentFoldable
         && SQLConf.get.getConfByKeyStrict[Boolean]("spark.sql.optimizer.datasourceV2ExprFolding") =>
       // If the expression is context independent foldable, we can convert it to a literal.
