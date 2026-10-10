@@ -106,7 +106,7 @@ private[spark] class ExecutorPodsLifecycleManager(
       snapshots: Seq[ExecutorPodsSnapshot]): Unit = {
     val execIdsRemovedInThisRound = mutable.HashSet.empty[Long]
     snapshots.foreach { snapshot =>
-      val currentFailedExecutorIds = snapshot.executorPods.filter {
+      val currentFailedExecutorIds = snapshot.lifecyclePods.filter {
         case (_, PodFailed(_)) => true
         case _ => false
       }.keySet
@@ -117,10 +117,13 @@ private[spark] class ExecutorPodsLifecycleManager(
         newFailedExecutorIds.foreach { _ => failureTracker.registerExecutorFailure() }
       }
       failedExecutorIds = failedExecutorIds ++ currentFailedExecutorIds
-      snapshot.executorPods.foreach { case (execId, state) =>
+      snapshot.lifecyclePods.foreach { case (execId, state) =>
         state match {
           case _state if isPodInactive(_state.pod) =>
-            inactivatedPods -= execId
+            // Avoid boxing executor IDs when no inactive-label acknowledgements are pending.
+            if (inactivatedPods.nonEmpty) {
+              inactivatedPods -= execId
+            }
 
           case deleted@PodDeleted(_) =>
             execIdsRemovedInThisRound += execId

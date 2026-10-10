@@ -32,19 +32,33 @@ import org.apache.spark.internal.LogKeys.{POD_NAME, POD_NAMESPACE, POD_PHASE}
  */
 private[spark] case class ExecutorPodsSnapshot(
     executorPods: Map[Long, ExecutorPodState],
-    fullSnapshotTs: Long) {
+    fullSnapshotTs: Long,
+    lifecyclePods: Map[Long, ExecutorPodState]) {
 
   import ExecutorPodsSnapshot._
 
   def withUpdate(updatedPod: Pod): ExecutorPodsSnapshot = {
-    val newExecutorPods = executorPods ++ toStatesByExecutorId(Seq(updatedPod))
-    new ExecutorPodsSnapshot(newExecutorPods, fullSnapshotTs)
+    val updates = toStatesByExecutorId(Seq(updatedPod))
+    val newExecutorPods = executorPods ++ updates
+    val newLifecyclePods = (lifecyclePods -- updates.keys) ++ updates.filter {
+      case (_, state) => needsLifecycleHandling(state)
+    }
+    new ExecutorPodsSnapshot(newExecutorPods, fullSnapshotTs, newLifecyclePods)
   }
 }
 
 object ExecutorPodsSnapshot extends Logging {
   private var shouldCheckAllContainers: Boolean = _
   private var sparkContainerName: String = DEFAULT_EXECUTOR_CONTAINER_NAME
+
+  // Keep terminal and inactive pods indexed so lifecycle processing need not scan healthy pods
+  // after every watch event. Retain them across updates to preserve cleanup retries.
+  def apply(
+      executorPods: Map[Long, ExecutorPodState],
+      fullSnapshotTs: Long): ExecutorPodsSnapshot = {
+    val lifecyclePods = executorPods.filter { case (_, state) => needsLifecycleHandling(state) }
+    new ExecutorPodsSnapshot(executorPods, fullSnapshotTs, lifecyclePods)
+  }
 
   def apply(executorPods: Seq[Pod], fullSnapshotTs: Long): ExecutorPodsSnapshot = {
     ExecutorPodsSnapshot(toStatesByExecutorId(executorPods), fullSnapshotTs)
@@ -58,6 +72,11 @@ object ExecutorPodsSnapshot extends Logging {
 
   def setSparkContainerName(containerName: String): Unit = {
     sparkContainerName = containerName
+  }
+
+  private def needsLifecycleHandling(state: ExecutorPodState): Boolean = {
+    state.isInstanceOf[FinalPodState] ||
+      state.pod.getMetadata.getLabels.get(SPARK_EXECUTOR_INACTIVE_LABEL) == "true"
   }
 
   private def toStatesByExecutorId(executorPods: Seq[Pod]): Map[Long, ExecutorPodState] = {

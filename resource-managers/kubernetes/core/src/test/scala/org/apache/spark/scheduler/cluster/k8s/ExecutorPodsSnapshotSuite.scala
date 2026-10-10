@@ -16,9 +16,10 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
-import io.fabric8.kubernetes.api.model.Pod
+import io.fabric8.kubernetes.api.model.{Pod, PodBuilder}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.deploy.k8s.Constants.SPARK_EXECUTOR_INACTIVE_LABEL
 import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils._
 
 class ExecutorPodsSnapshotSuite extends SparkFunSuite {
@@ -83,5 +84,28 @@ class ExecutorPodsSnapshotSuite extends SparkFunSuite {
         0L -> PodPending(originalPods(0)),
         1L -> PodSucceeded(succeededExecutor(1)),
         2L -> PodPending(pendingExec)))
+  }
+
+  test("Lifecycle index retains terminal pods and follows inactive label changes") {
+    ExecutorPodsSnapshot.setShouldCheckAllContainers(false)
+    val inactive = new PodBuilder(runningExecutor(2)).editMetadata()
+      .addToLabels(SPARK_EXECUTOR_INACTIVE_LABEL, "true").endMetadata().build()
+    val original = ExecutorPodsSnapshot(Seq(
+      runningExecutor(1), inactive, failedExecutorWithoutDeletion(3), succeededExecutor(4)), 123)
+    assert(original.lifecyclePods.keySet == Set(2L, 3L, 4L))
+
+    val changed = original.withUpdate(runningExecutor(2)).withUpdate(succeededExecutor(1))
+    assert(changed.lifecyclePods.keySet == Set(1L, 3L, 4L))
+    assert(changed.lifecyclePods(1).isInstanceOf[PodSucceeded])
+    assert(changed.fullSnapshotTs == 123)
+    assert(original.lifecyclePods.keySet == Set(2L, 3L, 4L))
+
+    val inactiveAgain = changed.withUpdate(inactive)
+    assert(inactiveAgain.lifecyclePods.keySet == Set(1L, 2L, 3L, 4L))
+    val recovered = inactiveAgain.withUpdate(runningExecutor(3))
+    assert(!recovered.lifecyclePods.contains(3L))
+
+    val replaced = ExecutorPodsSnapshot(Seq(runningExecutor(1)), 456)
+    assert(replaced.lifecyclePods.isEmpty)
   }
 }
