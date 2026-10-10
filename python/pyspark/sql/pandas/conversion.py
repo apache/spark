@@ -65,11 +65,12 @@ def _create_array_from_pandas(
     mask: Optional["pd.Series"],
     safecheck: bool,
 ) -> Union["pa.Array", "pa.ChunkedArray"]:
+    import pandas as pd
     import pyarrow as pa
 
-    if mask is None:
-        # The Arrow-array protocol can ignore type or force safe casts. Extract its
-        # result first, then cast explicitly to honor both the type and safecheck.
+    if isinstance(series.array, pd.arrays.ArrowExtensionArray):
+        # pyarrow-backed arrays can ignore the requested type or force a safe cast.
+        # Extract first, then cast explicitly. Other dtypes already honor the type.
         result = pa.Array.from_pandas(series, safe=safecheck)
         if arrow_type is not None and result.type != arrow_type:
             result = result.cast(arrow_type, safe=safecheck)

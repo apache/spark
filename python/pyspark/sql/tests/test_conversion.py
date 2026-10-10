@@ -507,6 +507,43 @@ class PandasToArrowConversionTests(unittest.TestCase):
                 self.assertEqual(result.type, target_type)
                 self.assertEqual(result.to_pylist(), values)
 
+    def test_nullable_dtype_requested_type(self):
+        # SPARK-60009: NumPy-backed nullable dtypes keep honoring the requested type.
+        import pandas as pd
+        import pyarrow as pa
+
+        from pyspark.sql.pandas.conversion import create_arrow_array_from_pandas
+
+        schema = StructType([StructField("value", LongType())])
+        for dtype in ["Int32", "Int64"]:
+            with self.subTest(dtype=dtype):
+                series = pd.Series([1, None], dtype=dtype)
+                result = PandasToArrowConversion.from_pandas([series], schema)
+                self.assertEqual(result.column(0).type, pa.int64())
+                self.assertEqual(result.column(0).to_pylist(), [1, None])
+                result = create_arrow_array_from_pandas(series, LongType())
+                self.assertEqual(result.type, pa.int64())
+                self.assertEqual(result.to_pylist(), [1, None])
+
+    def test_nullable_dtype_type_mismatch(self):
+        # SPARK-60009: Nullable dtypes must still reject mismatched types.
+        import pandas as pd
+
+        from pyspark.sql.pandas.conversion import create_arrow_array_from_pandas
+
+        for series, spark_type, error in [
+            (pd.Series([1, None], dtype="Int64"), StringType(), PySparkTypeError),
+            (pd.Series([1.5, None], dtype="Float64"), StringType(), PySparkTypeError),
+            (pd.Series([True, None], dtype="boolean"), StringType(), PySparkTypeError),
+            (pd.Series(["1", None], dtype="string[python]"), LongType(), PySparkValueError),
+        ]:
+            with self.subTest(dtype=str(series.dtype), spark_type=spark_type):
+                schema = StructType([StructField("value", spark_type)])
+                with self.assertRaises(error):
+                    PandasToArrowConversion.from_pandas([series], schema)
+                with self.assertRaises(error):
+                    create_arrow_array_from_pandas(series, spark_type)
+
     def test_from_pandas_decimal(self):
         """Test int to decimal coercion."""
         from decimal import Decimal
