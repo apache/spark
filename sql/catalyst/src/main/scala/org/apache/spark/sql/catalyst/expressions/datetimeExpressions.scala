@@ -2350,14 +2350,15 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
 
   override def nullSafeEval(seconds: Any, format: Any): Any = {
     val fmt = formatterOption.getOrElse(getFormatter(format.toString))
-    UTF8String.fromString(fmt.format(seconds.asInstanceOf[Long] * MICROS_PER_SECOND))
+    UTF8String.fromString(fmt.format(DateTimeUtils.secondsToMicros(seconds.asInstanceOf[Long])))
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     formatterOption.map { f =>
       val formatterName = ctx.addReferenceObj("formatter", f)
       defineCodeGen(ctx, ev, (seconds, _) =>
-        s"UTF8String.fromString($formatterName.format($seconds * 1000000L))")
+        s"UTF8String.fromString($formatterName.format($dtu.secondsToMicros($seconds)))")
     }.getOrElse {
       val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
       val ldf = LegacyDateFormats.getClass.getName.stripSuffix("$")
@@ -2368,7 +2369,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
            |  $tf$$.MODULE$$.apply($format.toString(),
            |  $zid,
            |  $ldf$$.MODULE$$.SIMPLE_DATE_FORMAT(),
-           |  false).format($seconds * 1000000L))
+           |  false).format($dtu.secondsToMicros($seconds)))
            |""".stripMargin)
     }
   }

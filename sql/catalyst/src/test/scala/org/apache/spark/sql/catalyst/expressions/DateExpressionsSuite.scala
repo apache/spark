@@ -1096,6 +1096,31 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     GenerateUnsafeProjection.generate(FromUnixTime(Literal(0L), Literal("\""), UTC_OPT) :: Nil)
   }
 
+  test("SPARK-59860: from_unixtime fails on overflow instead of wrapping around") {
+    val fmt = "yyyy-MM-dd HH:mm:ss"
+    // The largest number of seconds whose microseconds still fit in a Long.
+    val maxSeconds = Long.MaxValue / MICROS_PER_SECOND
+    checkEvaluation(
+      FromUnixTime(Literal(maxSeconds), Literal(fmt), UTC_OPT), "+294247-01-10 04:00:54")
+    Seq(maxSeconds + 1, Long.MaxValue, Long.MinValue).foreach { seconds =>
+      val parameters =
+        Map("operation" -> s"create a TIMESTAMP from ${seconds}L seconds since the epoch")
+      checkErrorInExpression[SparkArithmeticException](
+        FromUnixTime(Literal(seconds), Literal(fmt), UTC_OPT),
+        condition = "DATETIME_OVERFLOW",
+        parameters = parameters)
+      // A non-literal format goes through the other code path.
+      checkErrorInExpression[SparkArithmeticException](
+        FromUnixTime(
+          BoundReference(ordinal = 0, dataType = LongType, nullable = true),
+          BoundReference(ordinal = 1, dataType = StringType, nullable = true),
+          UTC_OPT),
+        InternalRow(seconds, UTF8String.fromString(fmt)),
+        condition = "DATETIME_OVERFLOW",
+        parameters = parameters)
+    }
+  }
+
   test("unix_timestamp") {
     Seq("legacy", "corrected").foreach { legacyParserPolicy =>
       withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {
