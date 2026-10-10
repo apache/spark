@@ -287,11 +287,18 @@ def _extract_jvm_stacktrace(
                 f"({elem.file_name}:{elem.line_number})"
             )
 
-        # If this error has a cause, format that recursively
-        if error.HasField("cause_idx"):
-            format_stacktrace(errors[error.cause_idx])
-
-    format_stacktrace(errors[root_error_idx])
+    # Follow the cause chain iteratively and stop on an out-of-range or already
+    # visited index, so that malformed error details (e.g. a cyclic cause_idx)
+    # cannot crash the client.
+    visited = set()
+    error_idx = root_error_idx
+    while 0 <= error_idx < len(errors) and error_idx not in visited:
+        visited.add(error_idx)
+        error = errors[error_idx]
+        format_stacktrace(error)
+        if not error.HasField("cause_idx"):
+            break
+        error_idx = error.cause_idx
 
     return "\n".join(lines)
 
