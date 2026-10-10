@@ -481,6 +481,17 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
       castErrMsg("abcd", DecimalType(38, 1)))
   }
 
+  test("SPARK-60119: cast string with a huge exponent to decimal with negative scale allowed") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      Seq("1e2147483647", "-1e2147483646", "12e2147483647", "1e100000000").foreach { str =>
+        checkExceptionInExpression[ArithmeticException](
+          cast(str, DecimalType(10, 2)),
+          "cannot be represented as Decimal(10, 2)")
+      }
+      checkEvaluation(cast("0e2147483647", DecimalType(10, 2)), Decimal("0.00"))
+    }
+  }
+
   protected def checkCastToBooleanError(l: Literal, to: DataType, tryCastResult: Any): Unit = {
     checkExceptionInExpression[SparkRuntimeException](
       cast(l, to), """cannot be cast to "BOOLEAN"""")

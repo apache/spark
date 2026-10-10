@@ -2144,6 +2144,12 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       }
   }
 
+  test("SPARK-60119: cast string with a huge negative exponent to decimal") {
+    Seq("1e-2147483647", "-1e-2147483647", "1e-100000000", "0e-2147483647").foreach { str =>
+      checkEvaluation(cast(str, DecimalType(10, 2)), Decimal("0.00"))
+    }
+  }
+
   test("cast ANSI intervals to/from decimals") {
     Seq(
       (Duration.ZERO, DayTimeIntervalType(DAY), DecimalType(10, 3)) -> Decimal(0, 10, 3),

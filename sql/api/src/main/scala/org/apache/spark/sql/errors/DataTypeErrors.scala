@@ -210,7 +210,9 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
     new SparkArithmeticException(
       errorClass = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
       messageParameters = Map(
-        "value" -> value.toPlainString,
+        // A negative scale (legacy mode only) can make the plain string arbitrarily long,
+        // e.g. 1E+2147483647.
+        "value" -> (if (value.scale < 0) value.toString else value.toPlainString),
         "precision" -> decimalPrecision.toString,
         "scale" -> decimalScale.toString,
         "config" -> toSQLConf("spark.sql.ansi.enabled")),
