@@ -44,7 +44,7 @@ class LikeSimplificationSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
-      .where(StartsWith($"a", "abc") || ($"a" like "abc\\%"))
+      .where(StartsWith($"a", "abc") || ($"a" === "abc%"))
       .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -70,7 +70,7 @@ class LikeSimplificationSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
-      .where(($"a" like "abc\\%def") ||
+      .where(($"a" === "abc%def") ||
         (OctetLength($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def"))))
       .analyze
 
@@ -84,7 +84,7 @@ class LikeSimplificationSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
-      .where(Contains($"a", "mn") || ($"a" like "%mn\\%"))
+      .where(Contains($"a", "mn") || EndsWith($"a", "mn%"))
       .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -110,16 +110,63 @@ class LikeSimplificationSuite extends PlanTest {
   }
 
   test("test like escape syntax") {
+    // '#%' with escape '#' is a literal '%', so these decode to exact-match EqualTo.
     val originalQuery1 = testRelation.where($"a".like("abc#%", '#'))
     val optimized1 = Optimize.execute(originalQuery1.analyze)
-    comparePlans(optimized1, originalQuery1.analyze)
+    comparePlans(optimized1, testRelation.where($"a" === "abc%").analyze)
 
     val originalQuery2 = testRelation.where($"a".like("abc#%abc", '#'))
     val optimized2 = Optimize.execute(originalQuery2.analyze)
-    comparePlans(optimized2, originalQuery2.analyze)
+    comparePlans(optimized2, testRelation.where($"a" === "abc%abc").analyze)
   }
 
-  test("SPARK-33677: LikeSimplification should be skipped if pattern contains any escapeChar") {
+  test("simplify LIKE patterns with escaped wildcards") {
+    // Escaped wildcard/escape characters decode to literals, so escaped patterns simplify too.
+    // EqualTo (no unescaped wildcard):
+    comparePlans(
+      Optimize.execute(testRelation.where($"a" like "ma\\%ca").analyze),
+      testRelation.where($"a" === "ma%ca").analyze)
+    comparePlans(
+      Optimize.execute(testRelation.where($"a" like "ma\\\\ca").analyze),
+      testRelation.where($"a" === "ma\\ca").analyze)
+    comparePlans(
+      Optimize.execute(testRelation.where($"a" like "a\\_b").analyze),
+      testRelation.where($"a" === "a_b").analyze)
+    // StartsWith / EndsWith / Contains with an escaped literal in the fixed part:
+    comparePlans(
+      Optimize.execute(testRelation.where($"a" like "abc\\%def%").analyze),
+      testRelation.where(StartsWith($"a", "abc%def")).analyze)
+    comparePlans(
+      Optimize.execute(testRelation.where($"a" like "%xyz\\%").analyze),
+      testRelation.where(EndsWith($"a", "xyz%")).analyze)
+    comparePlans(
+      Optimize.execute(testRelation.where($"a" like "%a\\%b%").analyze),
+      testRelation.where(Contains($"a", "a%b")).analyze)
+    // startsAndEndsWith with escaped literals on both sides ("a%b" and "c_d", 3 bytes each):
+    comparePlans(
+      Optimize.execute(testRelation.where($"a" like "a\\%b%c\\_d").analyze),
+      testRelation.where(OctetLength($"a") >= 6 &&
+        (StartsWith($"a", "a%b") && EndsWith($"a", "c_d"))).analyze)
+  }
+
+  test("do not simplify LIKE with invalid or pathological escapes") {
+    // Invalid escape (escape char not followed by %, _, or itself) -> kept (LIKE errors at eval).
+    val invalid = testRelation.where($"a" like "m\\aca").analyze
+    comparePlans(Optimize.execute(invalid), invalid)
+    // Trailing escape -> kept.
+    val trailing = testRelation.where($"a" like "abc\\").analyze
+    comparePlans(Optimize.execute(trailing), trailing)
+    // Escape char is itself a wildcard character -> kept.
+    val escPercent = testRelation.where($"a".like("a%%b", '%')).analyze
+    comparePlans(Optimize.execute(escPercent), escPercent)
+    val escUnderscore = testRelation.where($"a".like("a__b", '_')).analyze
+    comparePlans(Optimize.execute(escUnderscore), escUnderscore)
+    // Unescaped '_' single-char wildcard -> not handled by this rule.
+    val underscore = testRelation.where($"a" like "a_b").analyze
+    comparePlans(Optimize.execute(underscore), underscore)
+  }
+
+  test("SPARK-33677: LikeSimplification skips invalid/pathological escapes, simplifies valid") {
     val originalQuery1 =
       testRelation
         .where(($"a" like "abc%") || ($"a" like "\\abc%"))
@@ -157,12 +204,14 @@ class LikeSimplificationSuite extends PlanTest {
       .analyze
     comparePlans(optimized4, correctAnswer4)
 
+    // 'abbc' with escape 'b': the 'b' escapes the next 'b' (a valid escaped-escape), so this is
+    // the exact literal "abc" and is now simplified rather than skipped.
     val originalQuery5 =
       testRelation
         .where(($"a" like "abc") || ($"a" like ("abbc", 'b')))
     val optimized5 = Optimize.execute(originalQuery5.analyze)
     val correctAnswer5 = testRelation
-      .where(($"a" === "abc") || ($"a" like ("abbc", 'b')))
+      .where(($"a" === "abc") || ($"a" === "abc"))
       .analyze
     comparePlans(optimized5, correctAnswer5)
   }
@@ -223,10 +272,10 @@ class LikeSimplificationSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
-      .where((((((StartsWith($"a", "abc") && EndsWith($"a", "xyz")) &&
-        (OctetLength($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def")))) &&
-        Contains($"a", "mn")) && ($"a" === "")) && ($"a" === "abc")) &&
-        ($"a" likeAll("abc\\%", "abc\\%def", "%mn\\%")))
+      .where(StartsWith($"a", "abc") && ($"a" === "abc%") && EndsWith($"a", "xyz") &&
+        ($"a" === "abc%def") &&
+        (OctetLength($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def"))) &&
+        Contains($"a", "mn") && EndsWith($"a", "mn%") && ($"a" === "") && ($"a" === "abc"))
       .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -240,10 +289,11 @@ class LikeSimplificationSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
-      .where((((((Not(StartsWith($"a", "abc")) && Not(EndsWith($"a", "xyz"))) &&
-        Not(OctetLength($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def")))) &&
-        Not(Contains($"a", "mn"))) && Not($"a" === "")) && Not($"a" === "abc")) &&
-        ($"a" notLikeAll("abc\\%", "abc\\%def", "%mn\\%")))
+      .where(Not(StartsWith($"a", "abc")) && Not($"a" === "abc%") && Not(EndsWith($"a", "xyz")) &&
+        Not($"a" === "abc%def") &&
+        Not(OctetLength($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def"))) &&
+        Not(Contains($"a", "mn")) && Not(EndsWith($"a", "mn%")) && Not($"a" === "") &&
+        Not($"a" === "abc"))
       .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -257,10 +307,12 @@ class LikeSimplificationSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
-      .where(((StartsWith($"a", "abc") || EndsWith($"a", "xyz")) ||
-        (OctetLength($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def")) ||
-          Contains($"a", "mn")) || (($"a" === "") || ($"a" === "abc")) ||
-        ($"a" likeAny("abc\\%", "abc\\%def", "%mn\\%"))))
+      .where(
+        (((StartsWith($"a", "abc") || ($"a" === "abc%")) ||
+          (EndsWith($"a", "xyz") || ($"a" === "abc%def"))) ||
+          (((OctetLength($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def"))) ||
+            Contains($"a", "mn")) || (EndsWith($"a", "mn%") || ($"a" === "")))) ||
+          ($"a" === "abc"))
       .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -274,10 +326,12 @@ class LikeSimplificationSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
-      .where((((Not(StartsWith($"a", "abc")) || Not(EndsWith($"a", "xyz"))) ||
-        (Not(OctetLength($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def"))) ||
-          Not(Contains($"a", "mn")))) || (Not($"a" === "") || Not($"a" === "abc"))) ||
-        ($"a" notLikeAny("abc\\%", "abc\\%def", "%mn\\%")))
+      .where(
+        (((Not(StartsWith($"a", "abc")) || Not($"a" === "abc%")) ||
+          (Not(EndsWith($"a", "xyz")) || Not($"a" === "abc%def"))) ||
+          ((Not(OctetLength($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def"))) ||
+            Not(Contains($"a", "mn"))) || (Not(EndsWith($"a", "mn%")) || Not($"a" === "")))) ||
+          Not($"a" === "abc"))
       .analyze
 
     comparePlans(optimized, correctAnswer)
