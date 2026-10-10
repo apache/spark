@@ -825,8 +825,8 @@ public class CollationAwareUTF8String {
   public static int lowercaseIndexOf(final UTF8String target, final UTF8String pattern,
       final int start, final int occurrence) {
     assert occurrence > 0;
-    if (pattern.numBytes() == 0) return target.indexOfEmpty(start);
     if (start == 0) return MATCH_NOT_FOUND;
+    if (pattern.numBytes() == 0) return target.indexOfEmpty(start);
     if (target.isFullAscii() && pattern.isFullAscii()) {
       return target.toLowerCase().indexOf(pattern.toLowerCase(), start, occurrence);
     }
@@ -928,8 +928,9 @@ public class CollationAwareUTF8String {
   public static int indexOf(final UTF8String target, final UTF8String pattern,
       final int start, final int occurrence, final int collationId) {
     assert occurrence > 0;
+    if (start == 0) return MATCH_NOT_FOUND;
     if (pattern.numBytes() == 0) return target.indexOfEmpty(start);
-    if (target.numBytes() == 0 || start == 0) return MATCH_NOT_FOUND;
+    if (target.numBytes() == 0) return MATCH_NOT_FOUND;
 
     String targetStr = target.toValidString();
     String patternStr = pattern.toValidString();

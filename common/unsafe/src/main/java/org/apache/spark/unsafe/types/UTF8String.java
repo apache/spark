@@ -1319,11 +1319,11 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   public int indexOf(UTF8String pattern, int start, int occurrence) {
     assert occurrence > 0;
-    if (pattern.numBytes() == 0) {
-      return indexOfEmpty(start);
-    }
     if (start == 0) {
       return -1;
+    }
+    if (pattern.numBytes() == 0) {
+      return indexOfEmpty(start);
     }
 
     int charCount = 0;
