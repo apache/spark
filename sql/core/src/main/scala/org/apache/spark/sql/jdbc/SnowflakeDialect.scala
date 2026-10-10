@@ -45,4 +45,11 @@ private case class SnowflakeDialect() extends JdbcDialect with NoLegacyJDBCError
     // Manual tests also show that this is the error state for syntax error
     "42000".equals(exception.getSQLState)
   }
+
+  // scalastyle:off line.size.limit
+  // See https://docs.snowflake.com/en/sql-reference/sql/execute-immediate-from#access-control-errors
+  // scalastyle:on line.size.limit
+  // 2003 ("does not exist or not authorized") is kept as object-not-found.
+  override def isInsufficientPrivilegeException(e: SQLException): Boolean =
+    e.getErrorCode == 3001
 }

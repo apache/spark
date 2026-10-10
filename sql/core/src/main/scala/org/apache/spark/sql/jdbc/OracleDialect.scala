@@ -251,6 +251,12 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
     "42000".equals(exception.getSQLState)
   }
 
+  // See https://docs.oracle.com/en/error-help/db/ora-01031/
+  // ORA-00942 also means "no privilege" but is kept as object-not-found, see
+  // https://docs.oracle.com/en/error-help/db/ora-00942/
+  override def isInsufficientPrivilegeException(e: SQLException): Boolean =
+    Option(e.getMessage).exists(_.contains("ORA-01031"))
+
   /**
    * The SQL query used to truncate a table.
    * @param table The table to truncate

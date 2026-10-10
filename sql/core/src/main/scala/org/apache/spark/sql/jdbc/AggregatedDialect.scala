@@ -66,6 +66,12 @@ private class AggregatedDialect(dialects: List[JdbcDialect])
     dialects.head.isSyntaxErrorBestEffort(exception)
   }
 
+  // Ask every dialect, so that a registered dialect that doesn't override this method can't hide
+  // detection by a built-in one.
+  override def isInsufficientPrivilegeException(e: SQLException): Boolean = {
+    dialects.exists(_.isInsufficientPrivilegeException(e))
+  }
+
   override def isCascadingTruncateTable(): Option[Boolean] = {
     // If any dialect claims cascading truncate, this dialect is also cascading truncate.
     // Otherwise, if any dialect has unknown cascading truncate, this dialect is also unknown.

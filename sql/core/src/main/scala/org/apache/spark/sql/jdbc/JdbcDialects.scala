@@ -820,6 +820,13 @@ abstract class JdbcDialect extends Serializable with Logging {
   def isNotSelectableObjectException(e: SQLException): Boolean = false
 
   /**
+   * Returns true if the given exception indicates that the remote user lacks a privilege needed to
+   * run the query. Dialects override this to recognize their own error codes; the default is false.
+   */
+  @Since("4.4.0")
+  def isInsufficientPrivilegeException(e: SQLException): Boolean = false
+
+  /**
    * Gets a dialect exception, classifies it and wraps it by `AnalysisException`.
    * @param e The dialect specific exception.
    * @param condition The error condition assigned in the case of an unclassified `e`

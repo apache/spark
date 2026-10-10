@@ -63,6 +63,13 @@ private case class DatabricksDialect() extends JdbcDialect with NoLegacyJDBCErro
         .exists(_.toUpperCase(Locale.ROOT).contains("SYNTAX_ERROR"))
   }
 
+  // See https://docs.databricks.com/aws/en/error-messages/error-classes#insufficient_permissions
+  // Like isSyntaxErrorBestEffort, also check the message, because the driver doesn't always set
+  // the SQLSTATE.
+  override def isInsufficientPrivilegeException(e: SQLException): Boolean =
+    e.getSQLState == "42501" ||
+      Option(e.getMessage).exists(_.toUpperCase(Locale.ROOT).contains("INSUFFICIENT_PERMISSIONS"))
+
   override def quoteIdentifier(colName: String): String = {
     // Per Databricks documentation:
     // https://docs.databricks.com/aws/en/sql/language-manual/sql-ref-identifiers
