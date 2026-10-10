@@ -317,12 +317,16 @@ private[python] object InProcessPythonRuntime extends Logging {
       // which finishes the shutdown, so that the interpreter is gone in the common case.
       try {
         if (!executor.awaitTermination(waitMillis, TimeUnit.MILLISECONDS)) {
+          // Without registrations, the final cleanup has shut the executor down.
           if (pendingCalls.get > 0) {
             logWarning("In-process Python is still stopping; native work and its buffers " +
               "remain alive until the invocation finishes or the process exits.")
-          } else {
+          } else if (!executor.isShutdown) {
             logWarning("In-process Python is still stopping; tasks still hold UDF " +
               "registrations, and the last release stops the interpreter.")
+          } else {
+            logWarning("In-process Python is still stopping; its final cleanup is still " +
+              "running, e.g. releasing results or closing the interpreter.")
           }
         }
       } catch {

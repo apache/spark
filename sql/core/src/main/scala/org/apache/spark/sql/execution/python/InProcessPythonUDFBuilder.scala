@@ -29,7 +29,9 @@ import org.apache.spark.internal.config.Python.PYSPARK_EXECUTOR_MEMORY
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.expressions.PythonUDF
 import org.apache.spark.sql.catalyst.plans.logical.NamedParametersSupport
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.{ColumnNodeExpression, ExpressionUtils}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.Utils
@@ -63,6 +65,11 @@ object InProcessPythonUDFBuilder {
       deterministic: Boolean,
       pythonVersion: String): Column = {
     val returnType = DataType.fromJson(returnTypeJson)
+    // As in `UserDefinedPythonFunction.builder`, so that no client can skip its own check.
+    if (CharVarcharUtils.hasCharVarcharIncludingUDT(returnType)) {
+      throw QueryCompilationErrors.charVarcharNotSupportedInPython(
+        "Python UDF return types", returnType.catalogString)
+    }
     val inputExprs = jColumns.asScala.map(col => ColumnNodeExpression(col.node)).toSeq
     NamedParametersSupport.splitAndCheckNamedArguments(inputExprs, name, SQLConf.get.resolver)
     val function = new SimplePythonFunction(

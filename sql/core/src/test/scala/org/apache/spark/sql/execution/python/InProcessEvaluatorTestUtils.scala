@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, UnsafeProjection}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.{DataType, LongType, StructField, StructType}
 
@@ -43,7 +43,9 @@ private[python] object InProcessEvaluatorTestUtils {
   /**
    * An evaluator without UDFs over `rowCount` rows of one long column, so that its iterator
    * runs without Python. The input blocks on `gate` before it reads row `blockAt`: in
-   * `hasNext`, or in `next` if `blockInNext`.
+   * `hasNext`, or in `next` if `blockInNext`. If `blockInCopy`, it returns that row instead,
+   * which blocks when its value is read, i.e. when the evaluator copies it into a batch. For
+   * `ReadBack`, which takes any row, `copied` counts the copies of input rows.
    */
   class BlockingInput(
       joinInput: InProcessArrowEvalPythonEvaluatorFactory.JoinInput,
@@ -52,25 +54,41 @@ private[python] object InProcessEvaluatorTestUtils {
       rowCount: Int = Int.MaxValue,
       blockAt: Int = -1,
       blockInNext: Boolean = false,
+      blockInCopy: Boolean = false,
       batchSize: Int = 10) {
     val reached = new CountDownLatch(1)
     val gate = new CountDownLatch(1)
     val pulled = new AtomicInteger()
+    val copied = new AtomicInteger()
     private val column = AttributeReference("x", LongType)()
     private val toUnsafe = UnsafeProjection.create(Array[DataType](LongType))
 
+    private def await(): Unit = {
+      reached.countDown()
+      gate.await(10, TimeUnit.SECONDS)
+    }
+
     private def block(inNext: Boolean): Unit = {
-      if (inNext == blockInNext && pulled.get == blockAt) {
-        reached.countDown()
-        gate.await(10, TimeUnit.SECONDS)
-      }
+      if (!blockInCopy && inNext == blockInNext && pulled.get == blockAt) await()
     }
 
     private val rows: Iterator[InternalRow] = new Iterator[InternalRow] {
       override def hasNext: Boolean = { block(inNext = false); pulled.get < rowCount }
       override def next(): InternalRow = {
         block(inNext = true)
-        toUnsafe(InternalRow(pulled.incrementAndGet().toLong)).copy()
+        val blocks = blockInCopy && pulled.get == blockAt
+        val value = pulled.incrementAndGet().toLong
+        if (blocks || joinInput == InProcessArrowEvalPythonEvaluatorFactory.ReadBack) {
+          new GenericInternalRow(Array[Any](value)) {
+            override def getLong(ordinal: Int): Long = {
+              if (blocks) await()
+              copied.incrementAndGet()
+              value
+            }
+          }
+        } else {
+          toUnsafe(InternalRow(value)).copy()
+        }
       }
     }
 

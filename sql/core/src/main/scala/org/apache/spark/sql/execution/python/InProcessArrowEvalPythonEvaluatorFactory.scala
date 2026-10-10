@@ -195,7 +195,6 @@ class InProcessArrowEvalPythonEvaluatorFactory(
     }
 
     val resources = new InProcessArrowEvalPythonEvaluatorFactory.IteratorResources(
-      hasTaskMemory = queue != null,
       // Closing the queue deletes the spill files it tracks; deleteQuietly also removes any
       // other, without starting a process or throwing, also on an interrupted thread.
       releaseTaskMemory = () => if (queue != null) {
@@ -235,8 +234,13 @@ class InProcessArrowEvalPythonEvaluatorFactory(
         if (startedAt == 0L) startedAt = System.nanoTime()
         checkCancellation()
         val available = batchIter.hasNext || {
-          resources.startReadingInput()
-          try !resources.isClosed && rows.hasNext finally resources.endReadingInput()
+          var open = false
+          val more = try {
+            resources.startReadingInput() && rows.hasNext
+          } finally {
+            open = resources.endReadingInput()
+          }
+          more && open
         }
         if (!available) resources.close()
         available
@@ -286,16 +290,19 @@ class InProcessArrowEvalPythonEvaluatorFactory(
        * task completion happened. If it happens while the row is read, the row is dropped.
        */
       private def pullRow(): Boolean = {
-        resources.startReadingInput()
+        var open = false
         val row = try {
-          // Checked after marking, and again after `hasNext`, which may wait for input.
-          if (!resources.isClosed && rows.hasNext && !resources.isClosed) rows.next() else null
+          // Checked again after `hasNext`, which may wait for input, not to read another row.
+          if (resources.startReadingInput() && rows.hasNext && !resources.isClosed) {
+            rows.next()
+          } else {
+            null
+          }
         } finally {
-          resources.endReadingInput()
+          open = resources.endReadingInput()
         }
+        if (!open) endOfInput
         if (row == null) return false
-        // Checked after reading ends, so that task memory is not left to the executor now.
-        if (resources.isClosed) endOfInput
         if (queue != null) queue.add(row.asInstanceOf[UnsafeRow])
         writer.write(if (projection != null) projection(row) else row)
         true
@@ -312,7 +319,7 @@ class InProcessArrowEvalPythonEvaluatorFactory(
         }
         // Task completion stops the fill within a row, and Python never sees a partial batch.
         var count = 0
-        while (!resources.isClosed && (batchSize <= 0 || count < batchSize) &&
+        while ((batchSize <= 0 || count < batchSize) &&
             (count == 0 || writer.sizeInBytes() < maxBytes) && {
               checkCancellation()
               pullRow()
@@ -427,11 +434,11 @@ private[python] object InProcessArrowEvalPythonEvaluatorFactory {
    * briefly. Then it leaves the task memory to the executor, deleting what lives outside it,
    * and the consumer releases the other resources once its row returns, without touching the
    * task memory again. Otherwise the consumer may use the task memory, e.g. the queue, and
-   * the listener waits for the lock until it is done. Without task memory, i.e. when the
-   * input is read back from Arrow, the listener always waits only briefly.
+   * the listener waits for the lock until it is done. This holds also when the input is read
+   * back from Arrow, without a queue: the consumer then copies a row that may point into the
+   * task memory of an upstream operator, e.g. a page of a sorter, which the executor frees.
    */
   class IteratorResources(
-      hasTaskMemory: Boolean,
       releaseTaskMemory: () => Unit,
       abandonTaskMemory: () => Unit,
       releaseOthers: () => Unit,
@@ -452,23 +459,29 @@ private[python] object InProcessArrowEvalPythonEvaluatorFactory {
 
     /**
      * Marks that the consumer reads input, which may wait for a later listener, so that the
-     * listener may leave the task memory to the executor meanwhile. Otherwise the consumer may
+     * listener may leave the task memory to the executor meanwhile, and returns whether the
+     * consumer may read, i.e. whether closing was not requested. Otherwise the consumer may
      * use the task memory whenever it holds the lock, e.g. to add a row to the queue, read
-     * one, or copy it, so the listener waits for the lock however long that takes. Without
-     * task memory, there is nothing to mark, and the listener always waits only briefly.
+     * one, or copy an input row, so the listener waits for the lock however long that takes.
      *
-     * The consumer must check `isClosed` after marking and before it reads: `close` sets its
-     * flag before it reads this one, so either the consumer sees the close and does not read,
-     * or the listener sees the read and does not wait for it.
+     * The consumer must call `endReadingInput` afterwards, also when it does not read. Both
+     * check for closing after they set the mark, while `close` requests closing before it
+     * reads the mark, so either the consumer sees the close or the listener sees the mark: a
+     * read cannot start, nor task memory be used after one, once the listener gave up.
      */
-    def startReadingInput(): Unit = if (hasTaskMemory) readingInput = true
+    def startReadingInput(): Boolean = {
+      readingInput = true
+      !closeRequested
+    }
 
     /**
-     * Ends reading input. The consumer must check `isClosed` afterwards, before it uses the
-     * task memory: the flag is cleared before that check, so either the consumer sees the
-     * close or the listener waits for it.
+     * Ends reading input, returning whether the consumer may use what it read and the task
+     * memory, i.e. whether closing was not requested. If not, it must not touch either.
      */
-    def endReadingInput(): Unit = if (hasTaskMemory) readingInput = false
+    def endReadingInput(): Boolean = {
+      readingInput = false
+      !closeRequested
+    }
 
     /** Locks for a consumer call; returns false, without the lock, once closed. */
     def enter(): Boolean = {
@@ -509,7 +522,7 @@ private[python] object InProcessArrowEvalPythonEvaluatorFactory {
       } else if (Uninterruptibles.tryLockUninterruptibly(
           lock, lockWaitMillis, TimeUnit.MILLISECONDS)) {
         try releaseAll() finally lock.unlock()
-      } else if ((!hasTaskMemory || readingInput) &&
+      } else if (readingInput &&
           taskMemory.compareAndSet(TaskMemoryHeld, TaskMemoryAbandoned)) {
         // The executor frees the task memory, but not what lives outside it, e.g. spill files.
         abandonTaskMemory()

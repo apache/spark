@@ -66,6 +66,14 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
       }
   }
 
+  /** Shuts the runtime down, returning the warnings about what it still waits for. */
+  private def shutdownWarnings(waitMillis: Long): Seq[String] = {
+    val appender = new LogAppender("in-process Python shutdown")
+    withLogAppender(appender) { runtime.shutdown(waitMillis) }
+    appender.loggingEvents.map(_.getMessage.getFormattedMessage).toSeq
+      .filter(_.contains("still stopping"))
+  }
+
   test("shutdown waits for tasks to release their registrations") {
     val field = ArrowUtils.toArrowField("result", LongType, true, "UTC")
     intercept[NullPointerException] {
@@ -91,7 +99,7 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
         "failed", new Array[Byte](1024 * 1024), field, "3.12", false, false, false, true)
     }
     assert(ArrowUtils.rootAllocator.getAllocatedMemory == before)
-    runtime.shutdown(waitMillis = 20)
+    assert(shutdownWarnings(waitMillis = 20).exists(_.contains("tasks still hold")))
     assert(!runtime.isTerminated)
     runtime.release(Seq("failed"))
     runtime.shutdown()
@@ -200,10 +208,9 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
     val abandoned = new AtomicInteger()
     val others = new AtomicInteger()
 
-    def resources(lockWaitMillis: Long = 10000L, hasTaskMemory: Boolean = true)
+    def resources(lockWaitMillis: Long = 10000L)
       : InProcessArrowEvalPythonEvaluatorFactory.IteratorResources =
       new InProcessArrowEvalPythonEvaluatorFactory.IteratorResources(
-        hasTaskMemory,
         () => taskMemory.incrementAndGet(),
         () => abandoned.incrementAndGet(),
         () => others.incrementAndGet(),
@@ -227,7 +234,7 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
         if (inPython) {
           resources.withoutLock { entered.countDown(); finish.await(10, TimeUnit.SECONDS) }
         } else if (readingInput) {
-          resources.startReadingInput()
+          assert(resources.startReadingInput())
           try {
             entered.countDown()
             finish.await(10, TimeUnit.SECONDS)
@@ -339,17 +346,6 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
     assert(releases.taskMemory.get == 1 && releases.others.get == 1)
   }
 
-  test("without task memory, task completion waits only briefly for any consumer") {
-    val releases = new Releases
-    val resources = releases.resources(lockWaitMillis = 50L, hasTaskMemory = false)
-    withConsumer(resources) {
-      // There is nothing for the consumer to use after the executor frees task memory.
-      resources.close()
-      assert(releases.taskMemory.get == 0 && releases.others.get == 0)
-    }
-    assert(releases.taskMemory.get == 0 && releases.others.get == 1)
-  }
-
   test("only some types read back from the exported input vectors") {
     import InProcessArrowEvalPythonEvaluatorFactory.readsBack
     val struct = (t: DataType) => new StructType().add("f", t)
@@ -401,12 +397,38 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
         try iterator.next() catch { case t: Throwable => error.set(t) }
       }
       completeWhileBlocked(input, consumer)
-      // A row read while completing is dropped, and no later row is read.
+      // A row read while completing is dropped without copying it, and no later row is read.
       assert(error.get.isInstanceOf[NoSuchElementException])
       assert(error.get.getMessage == "End of in-process UDF input")
-      assert(input.pulled.get == (if (blockInNext) 4 else 3))
+      assert(input.pulled.get == (if (blockInNext) 4 else 3) && input.copied.get == 3)
       assert(!iterator.hasNext)
     }
+  }
+
+  test("task completion waits for a consumer copying an input row read back from Arrow") {
+    // The row may point into the task memory of an upstream operator, e.g. a sorter page.
+    val input = new BlockingInput(InProcessArrowEvalPythonEvaluatorFactory.ReadBack,
+      TaskContext.empty(), runtime, blockAt = 3, blockInCopy = true)
+    val iterator = input.iterator()
+    val error = new AtomicReference[Throwable]()
+    val consumer = thread {
+      try iterator.next() catch { case t: Throwable => error.set(t) }
+    }
+    try {
+      assert(input.reached.await(10, TimeUnit.SECONDS))
+      val closing = thread(input.context.markTaskCompleted(None))
+      // Past the one second that the listener waits for a consumer reading its input.
+      closing.join(1500)
+      assert(closing.isAlive)
+      input.gate.countDown()
+      closing.join(10000)
+      assert(!closing.isAlive)
+    } finally {
+      input.gate.countDown()
+      consumer.join(10000)
+    }
+    assert(error.get.getMessage == "End of in-process UDF input")
+    assert(input.pulled.get == 4)
   }
 
   test("hasNext returns false when task completion happens while it reads input") {
@@ -593,7 +615,7 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
       val start = System.nanoTime()
       runtime.release(Seq.empty)
       runtime.release(Seq("partially-registered"))
-      runtime.shutdown(waitMillis = 20)
+      assert(shutdownWarnings(waitMillis = 20).exists(_.contains("native work")))
       assert(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start) < 2000)
       assert(!runtime.isTerminated)
       intercept[IllegalStateException] {

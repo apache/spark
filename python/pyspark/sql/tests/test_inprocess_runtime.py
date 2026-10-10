@@ -705,19 +705,21 @@ class InProcessRuntimeTests(unittest.TestCase):
             YearMonthIntervalType,
         )
 
-        for declared in (
-            CalendarIntervalType(),
-            CharType(5),
-            VarcharType(5),
-            YearMonthIntervalType(),
-            ArrayType(YearMonthIntervalType()),
-            StructType([StructField("x", CalendarIntervalType())]),
+        for declared, condition in (
+            (CalendarIntervalType(), "NOT_IMPLEMENTED"),
+            (YearMonthIntervalType(), "NOT_IMPLEMENTED"),
+            (ArrayType(YearMonthIntervalType()), "NOT_IMPLEMENTED"),
+            (StructType([StructField("x", CalendarIntervalType())]), "NOT_IMPLEMENTED"),
+            # Python UDFs reject CHAR/VARCHAR return types before their Arrow types.
+            (CharType(5), "CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON"),
+            (VarcharType(5), "CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON"),
+            (StructType([StructField("x", CharType(5))]), "CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON"),
         ):
             with self.subTest(declared=declared):
                 wrapper = inprocess_udf(declared)(lambda x: x)
                 with self.assertRaises(PySparkNotImplementedError) as error:
                     wrapper._serialize()
-                self.assertEqual(error.exception.getCondition(), "NOT_IMPLEMENTED")
+                self.assertEqual(error.exception.getCondition(), condition)
                 self.assertIsNone(wrapper._serialized)
 
     def test_registration_consumes_declared_cdi_schema(self):

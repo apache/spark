@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.{GlobalLimitExec, ProjectExec, SortExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.LongType
+import org.apache.spark.sql.types.{CharType, LongType, StructType, VarcharType}
 import org.apache.spark.util.Utils
 
 /**
@@ -194,6 +194,18 @@ class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
     assert(error.getCondition == "UNEXPECTED_POSITIONAL_ARGUMENT")
   }
 
+  test("CHAR/VARCHAR return types are rejected by the builder") {
+    Seq(CharType(5), VarcharType(5), new StructType().add("x", CharType(5))).foreach { dt =>
+      checkError(
+        intercept[AnalysisException] {
+          InProcessPythonUDFBuilder.build(
+            "f", Array[Byte](1), dt.json, Seq(col("id")).asJava, true, "3.11")
+        },
+        condition = "CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON",
+        parameters = Map("feature" -> "Python UDF return types", "data_type" -> dt.catalogString))
+    }
+  }
+
   test("parallel calls fuse and deterministic duplicate calls are shared") {
     val df = spark.range(10)
     val plan = df.select(
@@ -326,7 +338,7 @@ class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
         blockInNext: Boolean = false,
         batchSize: Int = 10): BlockingInput =
       new BlockingInput(InProcessArrowEvalPythonEvaluatorFactory.Buffered(None), context,
-        session, rowCount, blockAt, blockInNext, batchSize)
+        session, rowCount, blockAt, blockInNext, batchSize = batchSize)
 
     def close(): Unit = {
       try context.markTaskCompleted(None) finally session.shutdown()
@@ -447,12 +459,17 @@ class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
 
   // The 11th row is the first one read after the first batch, which ends with the 10th: in
   // `hasNext`, before filling the next batch, and the 12th in filling it.
-  Seq(10 -> "hasNext", 11 -> "a batch fill").foreach { case (blockAt, where) =>
+  for {
+    (blockAt, where) <- Seq(10 -> "hasNext", 11 -> "a batch fill")
+    joinInput <- Seq(
+      InProcessArrowEvalPythonEvaluatorFactory.ReadBack,
+      InProcessArrowEvalPythonEvaluatorFactory.Buffered(None))
+  } {
     test(s"a consumer that pauses before reading input does not read after task completion " +
-        s"(in $where)") {
+        s"(in $where, $joinInput)") {
       val task = new StallingTask
-      val input = new BlockingInput(InProcessArrowEvalPythonEvaluatorFactory.Buffered(None),
-        task.context, task.session, rowCount = 25, blockAt = blockAt)
+      val input = new BlockingInput(joinInput, task.context, task.session, rowCount = 25,
+        blockAt = blockAt)
       try {
         val iterator = input.iterator()
         assert(iterator.take(10).map(_.getLong(0)).toSeq == (1L to 10L))
