@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2.json
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.json.{JacksonParser, JSONOptionsInRead}
+import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.connector.read.PartitionReader
 import org.apache.spark.sql.execution.datasources.PartitionedFile
 import org.apache.spark.sql.execution.datasources.json.JsonDataSource
@@ -50,7 +51,8 @@ case class JsonPartitionReaderFactory(
 
   override def buildReader(partitionedFile: PartitionedFile): PartitionReader[InternalRow] = {
     val actualSchema =
-      StructType(readDataSchema.filterNot(_.name == options.columnNameOfCorruptRecord))
+      ExprUtils.schemaWithoutCorruptRecordColumn(
+        readDataSchema, options.columnNameOfCorruptRecord)
     val parser = new JacksonParser(
       actualSchema,
       options,

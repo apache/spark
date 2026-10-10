@@ -70,7 +70,8 @@ case class JsonScan(
     ExprUtils.verifyColumnNameOfCorruptRecord(dataSchema, parsedOptions.columnNameOfCorruptRecord)
 
     if (readDataSchema.length == 1 &&
-      readDataSchema.head.name == parsedOptions.columnNameOfCorruptRecord) {
+      ExprUtils.isCorruptRecordColumn(
+        readDataSchema.head.name, parsedOptions.columnNameOfCorruptRecord)) {
       throw QueryCompilationErrors.queryFromRawFilesIncludeCorruptRecordColumnError()
     }
     val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap

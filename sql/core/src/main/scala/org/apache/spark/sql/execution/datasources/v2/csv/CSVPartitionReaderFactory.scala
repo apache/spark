@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2.csv
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVOptions, UnivocityParser}
+import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.connector.read.PartitionReader
 import org.apache.spark.sql.execution.datasources.PartitionedFile
 import org.apache.spark.sql.execution.datasources.csv.CSVDataSource
@@ -49,10 +50,10 @@ case class CSVPartitionReaderFactory(
 
   override def buildReader(file: PartitionedFile): PartitionReader[InternalRow] = {
     val conf = broadcastedConf.value.value
-    val actualDataSchema = StructType(
-      dataSchema.filterNot(_.name == options.columnNameOfCorruptRecord))
-    val actualReadDataSchema = StructType(
-      readDataSchema.filterNot(_.name == options.columnNameOfCorruptRecord))
+    val actualDataSchema = ExprUtils.schemaWithoutCorruptRecordColumn(
+      dataSchema, options.columnNameOfCorruptRecord)
+    val actualReadDataSchema = ExprUtils.schemaWithoutCorruptRecordColumn(
+      readDataSchema, options.columnNameOfCorruptRecord)
     val parser = new UnivocityParser(
       actualDataSchema,
       actualReadDataSchema,

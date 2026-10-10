@@ -144,7 +144,8 @@ case class JsonToStructsEvaluator(
     val (parserSchema, actualSchema) = nullableSchema match {
       case s: StructType =>
         ExprUtils.verifyColumnNameOfCorruptRecord(s, parsedOptions.columnNameOfCorruptRecord)
-        (s, StructType(s.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)))
+        (s, ExprUtils.schemaWithoutCorruptRecordColumn(
+          s, parsedOptions.columnNameOfCorruptRecord))
       case other =>
         (StructType(Array(StructField("value", other))), other)
     }
