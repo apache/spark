@@ -275,6 +275,12 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         .load(),
       (0L until 6L).map(id => Row(id, if (id % 5 == 0) null else s"n$id")))
 
+    // The Arrow schema does not have the collation, which applies to the data that Spark reads.
+    val collated = session.read.schema("id BIGINT, name STRING COLLATE UTF8_LCASE")
+      .format("native_range").option("end", "6").load()
+    checkRows(collated.filter("name = 'N1'"), Seq(Row(1L, "n1")))
+    assert(scan(collated.filter("name = 'N1'")).getMetaData()("PushedPredicates") == "[]")
+
     val e = intercept[Exception] {
       session.read.schema("id INT").format("native_range").load().collect()
     }
@@ -387,6 +393,26 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(new File(dir, "_ABORTED").isFile)
     assert(new File(dir, "_CLOSED").isFile)
     assert(!dir.listFiles().exists(_.getName.startsWith("part-")))
+  }
+
+  nativeTest("abort a write whose commit failed") {
+    val session = newSession(defaultPackage)
+    val dir = Utils.createTempDir()
+    val e = intercept[Exception] {
+      session.range(10).write.format("native_sink").option("path", dir.getPath)
+        .option("fail", "commit").mode("append").save()
+    }
+    checkError(
+      exception = findError(e, "NATIVE_DATA_SOURCE_ERROR"),
+      condition = "NATIVE_DATA_SOURCE_ERROR",
+      parameters = Map(
+        "action" -> "commit a write to",
+        "name" -> "native_sink",
+        "msg" -> "injected failure in commit"))
+    assert(e.getSuppressed.isEmpty)
+    // Spark aborted the write with the writer, which it closed afterwards.
+    assert(new File(dir, "_ABORTED").isFile)
+    assert(new File(dir, "_CLOSED").isFile)
   }
 
   nativeTest("abort a data writer whose commit failed") {
@@ -531,31 +557,37 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     val pkg = NativeDataSourcePackage.read(added.head).copy(artifactUUID = artifactUUID)
     assert(NativeDataSourceRegistry.distributedCopies(pkg).exists(_.isFile))
 
-    // A package under spark.sql.dataSource.native.paths is added as an artifact when it is used,
-    // except in local mode, where the executors run in the driver.
-    val other = newSession(defaultPackage)
-    range(other, "end" -> "1").collect()
-    assert(other.artifactManager.getNativeDataSourcePackages._1.isEmpty)
-    val distributed =
-      NativeDataSourceRegistry.addToArtifacts(other, NativeDataSourcePackage.read(defaultPackage))
-    val (otherPackages, otherArtifactUUID) = other.artifactManager.getNativeDataSourcePackages
-    assert(otherPackages.map(_.getName) == Seq(defaultPackage.getName))
-    assert(distributed.artifactUUID == otherArtifactUUID)
-    // Adding the same package again does nothing.
-    NativeDataSourceRegistry.addToArtifacts(other, NativeDataSourcePackage.read(defaultPackage))
-    assert(other.artifactManager.getNativeDataSourcePackages._1.size == 1)
+    // A package that the session added is distributed as it is.
+    assert(NativeDataSourceRegistry.addToArtifacts(session, pkg) == pkg)
 
-    // A different package with the same file name cannot be added: the executors would not find
-    // the package by its file name.
+    // A package under spark.sql.dataSource.native.paths is copied to the artifacts of the session
+    // when it is used, except in local mode, where the executors run in the driver. The copy is
+    // named after the checksum of the package, and it is not a package of the session.
+    val configuredDir = Utils.createTempDir()
+    val configured = createPackage(library, dataSources(""), dir = configuredDir,
+      fileName = defaultPackage.getName)
+    val other = newSession(configured)
+    range(other, "end" -> "1").collect()
+    assert(!other.artifactManager.hasFileArtifact(defaultPackage.getName))
+    val configuredPackage = NativeDataSourcePackage.read(configured)
+    val distributed = NativeDataSourceRegistry.addToArtifacts(other, configuredPackage)
+    val copyName = s"${defaultPackage.getName}.${configuredPackage.sha256}"
+    assert(distributed == configuredPackage.copy(
+      artifactUUID = other.artifactManager.getNativeDataSourcePackages._2,
+      distributedFileName = Some(copyName)))
+    assert(other.artifactManager.hasFileArtifact(copyName))
+    assert(other.artifactManager.getNativeDataSourcePackages._1.isEmpty)
+    assert(NativeDataSourceRegistry.distributedCopies(distributed).exists(_.isFile))
+    // Adding the same package again does nothing.
+    assert(NativeDataSourceRegistry.addToArtifacts(other, configuredPackage) == distributed)
+
+    // A package with the same file name as a package of the session does not collide with it.
+    other.addArtifact(defaultPackage.getPath)
     val sameFileName = createPackage(negatingLibrary, dataSources("b_"),
       dir = Utils.createTempDir(), fileName = defaultPackage.getName)
-    checkError(
-      exception = intercept[SparkRuntimeException] {
-        NativeDataSourceRegistry.addToArtifacts(other, NativeDataSourcePackage.read(sameFileName))
-      },
-      condition = "NATIVE_DATA_SOURCE_PACKAGE_FILE_NAME_CONFLICT",
-      parameters = Map(
-        "path" -> sameFileName.getCanonicalPath, "fileName" -> defaultPackage.getName))
+    val sameFileNameCopy =
+      NativeDataSourceRegistry.addToArtifacts(other, NativeDataSourcePackage.read(sameFileName))
+    assert(sameFileNameCopy.distributedFileName.exists(_.startsWith(defaultPackage.getName + ".")))
 
     // The executors also check the copies in the files of the other sessions, such as the session
     // of a streaming query, which is a clone of the session that started it.
@@ -572,6 +604,95 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     } finally {
       Utils.deleteRecursively(sessionDir)
     }
+  }
+
+  test("distribute a package without an active session") {
+    val pkg = NativeDataSourcePackage(
+      "/path/to/x.sparkpkg", "checksum", NativeDataSourceManifest(1, Seq("x"), Map.empty))
+    val logAppender = new LogAppender("distribute without an active session")
+    SparkSession.clearActiveSession()
+    try {
+      withLogAppender(logAppender, level = Some(org.apache.logging.log4j.Level.WARN)) {
+        assert(NativeDataSourceRegistry.distribute(pkg) == pkg)
+      }
+    } finally {
+      SparkSession.setActiveSession(spark)
+    }
+    assert(logAppender.loggingEvents.exists(
+      _.getMessage.getFormattedMessage.contains("there is no active session")))
+  }
+
+  nativeTest("write with a session that is not the active one") {
+    val session = newSession()
+    session.addArtifact(defaultPackage.getPath)
+    SparkSession.setActiveSession(spark)
+    val dir = Utils.createTempDir()
+    session.range(3).selectExpr("id", "concat('v', id) AS name")
+      .write.format("native_sink").option("path", dir.getPath).mode("append").save()
+    val written = dir.listFiles().filter(_.getName.startsWith("part-"))
+      .flatMap(file => Files.readAllLines(file.toPath).asScala)
+    assert(written.toSet == Set("0,v0", "1,v1", "2,v2"))
+
+    val streamDir = Utils.createTempDir()
+    val query = session.readStream.format("native_counter").option("max_offset", "3").load()
+      .writeStream
+      .format("native_sink")
+      .option("path", streamDir.getPath)
+      .option("checkpointLocation", Utils.createTempDir().getPath)
+      .start()
+    try {
+      query.processAllAvailable()
+    } finally {
+      query.stop()
+    }
+    assert(streamDir.listFiles().filter(_.getName.startsWith("part-"))
+      .flatMap(file => Files.readAllLines(file.toPath).asScala).sorted.toSeq == Seq("0", "1", "2"))
+  }
+
+  nativeTest("ignore configured directories that cannot be read") {
+    val dir = Utils.createTempDir()
+    createPackage(library, dataSources(""), dir = dir, fileName = "a.sparkpkg")
+    assert(dir.setReadable(false))
+    try {
+      assume(dir.listFiles() == null, "The directory can still be read, for example by root.")
+      val session = newSession(dir)
+      checkError(
+        exception = intercept[SparkClassNotFoundException] {
+          session.read.format("no_such_source").load()
+        },
+        condition = "DATA_SOURCE_NOT_FOUND",
+        parameters = Map("provider" -> "no_such_source"))
+      val e = intercept[AnalysisException](session.sql("SELECT * FROM missing_db.missing_table"))
+      assert(e.getCondition == "TABLE_OR_VIEW_NOT_FOUND")
+    } finally {
+      dir.setReadable(true)
+    }
+  }
+
+  nativeTest("replace a configured package in place") {
+    val dir = Utils.createTempDir()
+    val configured = createPackage(library, dataSources(""), dir = dir, fileName = "x.sparkpkg")
+    val session = newSession(configured)
+    checkRows(range(session, "end" -> "2"), (0L until 2L).map(expectedRow))
+    // On a cluster, the package is copied to the artifacts of the session when it is used.
+    val first =
+      NativeDataSourceRegistry.addToArtifacts(session, NativeDataSourcePackage.read(configured))
+
+    // An operator replaces the package with a new version: here, with one more file.
+    val path = s"${NativePlatform.current}/${library.getName}"
+    createZip(dir, "x.sparkpkg",
+      NativeDataSourcePackage.MANIFEST_NAME -> manifestJson(
+        dataSources(""), Map(NativePlatform.current -> path)).getBytes(UTF_8),
+      path -> Files.readAllBytes(library.toPath),
+      "README" -> "version 2".getBytes(UTF_8))
+    // The copy of the previous version is not a package of the session, so the session uses the
+    // new version, which is copied under another name.
+    checkRows(range(session, "end" -> "3"), (0L until 3L).map(expectedRow))
+    val second =
+      NativeDataSourceRegistry.addToArtifacts(session, NativeDataSourcePackage.read(configured))
+    assert(second.sha256 != first.sha256)
+    assert(second.distributedFileName != first.distributedFileName)
+    assert(session.artifactManager.getNativeDataSourcePackages._1.isEmpty)
   }
 
   nativeTest("look up a native data source once") {

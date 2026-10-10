@@ -115,16 +115,25 @@ class ColumnarStreamingDataWriterFactory(
 
 /**
  * How [[ArrowBatchingDataWriter]] converts rows to Arrow, captured on the driver from the
- * session configuration.
+ * session configuration. Like the other Arrow batches of Spark, a batch ends when it reaches
+ * `spark.sql.execution.arrow.maxRecordsPerBatch` rows or, after a row, holds at least
+ * `spark.sql.execution.arrow.maxBytesPerBatch` bytes.
  */
-case class ArrowBatchingOptions(schema: StructType, timeZoneId: String, maxRecordsPerBatch: Int)
+case class ArrowBatchingOptions(
+    schema: StructType,
+    timeZoneId: String,
+    maxRecordsPerBatch: Int,
+    maxBytesPerBatch: Long)
 
 object ArrowBatchingOptions {
   def apply(schema: StructType): ArrowBatchingOptions = {
     val conf = SQLConf.get
     val maxRecords = conf.arrowMaxRecordsPerBatch
     ArrowBatchingOptions(
-      schema, conf.sessionLocalTimeZone, if (maxRecords > 0) maxRecords else Int.MaxValue)
+      schema,
+      conf.sessionLocalTimeZone,
+      if (maxRecords > 0) maxRecords else Int.MaxValue,
+      conf.arrowMaxBytesPerBatch)
   }
 }
 
@@ -151,7 +160,9 @@ class ArrowBatchingDataWriter(delegate: DataWriter[ColumnarBatch], options: Arro
     }
     arrowWriter.write(record)
     numRows += 1
-    if (numRows >= options.maxRecordsPerBatch) {
+    // The size is not computed when the limit is the largest possible one, as in Python UDFs.
+    if (numRows >= options.maxRecordsPerBatch || (options.maxBytesPerBatch < Int.MaxValue &&
+        arrowWriter.sizeInBytes() >= options.maxBytesPerBatch)) {
       flush()
     }
   }

@@ -62,9 +62,11 @@ import org.apache.spark.annotation.Evolving;
  *   {@link #createStreamWriter}, and serializes its state with {@link #serializeWriter}. On the
  *   executors, each task creates a data writer with {@link #createDataWriter}, calls
  *   {@link #write} for each batch of at most {@code spark.sql.execution.arrow.maxRecordsPerBatch}
- *   rows, and calls {@link #commitDataWriter}, or {@link #abortDataWriter} if the task or the
+ *   rows, which also ends once it holds {@code spark.sql.execution.arrow.maxBytesPerBatch} bytes,
+ *   and calls {@link #commitDataWriter}, or {@link #abortDataWriter} if the task or the
  *   commit fails. Then the driver calls {@link #commit} with the messages of the tasks if they
- *   all succeeded, or {@link #abort} otherwise, and closes the writer. A streaming write commits
+ *   all succeeded, or {@link #abort} otherwise, including when {@link #commit} fails, and closes
+ *   the writer. A streaming write commits
  *   or aborts each micro-batch (epoch). A micro-batch streaming query creates a new stream writer
  *   for each micro-batch, and Spark closes the previous stream writer of the query when the query
  *   creates a new one. Spark is not told when a streaming query stops, so it closes the last
