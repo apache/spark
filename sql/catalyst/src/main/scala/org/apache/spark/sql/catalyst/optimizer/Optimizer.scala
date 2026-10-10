@@ -339,7 +339,12 @@ abstract class Optimizer(catalogManager: CatalogManager)
       NormalizeFloatingNumbers.ruleName,
       ReplaceUpdateFieldsExpression.ruleName,
       RewriteLateralSubquery.ruleName,
-      OptimizeSubqueries.ruleName)
+      OptimizeSubqueries.ruleName,
+      // EliminateSerialization inserts an exprId-preserving Alias around an ObjectType
+      // attribute when it collapses a DeserializeToObject/SerializeFromObject pair; excluding
+      // RemoveRedundantAliases leaves that Alias in place and leaks an ObjectType projection
+      // into execution, which codegen and the interpreted projection cannot handle.
+      RemoveRedundantAliases.ruleName)
 
   /**
    * Apply finish-analysis rules for the entire plan including all subqueries.
