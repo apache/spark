@@ -113,10 +113,12 @@ public class TaskMemoryManager {
   final MemoryMode tungstenMemoryMode;
 
   /**
-   * Tracks spillable memory consumers.
+   * Tracks spillable memory consumers. Consumers are tracked by identity rather than by
+   * {@code equals}, so that distinct consumers which happen to be equal (for example, Scala case
+   * classes) are all offered for spilling and reported in the memory usage breakdown.
    */
   @GuardedBy("this")
-  private final HashSet<MemoryConsumer> consumers;
+  private final Set<MemoryConsumer> consumers;
 
   /**
    * The amount of memory that is acquired but not used.
@@ -181,7 +183,9 @@ public class TaskMemoryManager {
     this.memoryManager = memoryManager;
     this.tungstenMemoryAllocator = tungstenMemoryAllocator;
     this.taskAttemptId = taskAttemptId;
-    this.consumers = new HashSet<>();
+    // A task rarely has more than a few consumers; the default expected size of IdentityHashMap
+    // would eagerly allocate a much larger table for every task.
+    this.consumers = Collections.newSetFromMap(new IdentityHashMap<>(4));
   }
 
   /**
