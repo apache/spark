@@ -249,32 +249,56 @@ abstract class InMemoryBaseTable(
   }
 
   protected def getKey(row: InternalRow, rowSchema: StructType): Seq[Any] = {
+    getKey(row, rowSchema, rowSchema)
+  }
+
+  /**
+   * Extracts partition key values from `row`. `positionSchema` is the schema the row is
+   * stored under and determines where each partition field's value sits in the row;
+   * `valueSchema` is the schema the keys must be typed for, i.e. the table's current
+   * schema, so that stored values are read back as the evolved field type.
+   */
+  protected def getKey(
+      row: InternalRow,
+      positionSchema: StructType,
+      valueSchema: StructType): Seq[Any] = {
     @scala.annotation.tailrec
     def extractor(
         fieldNames: Array[String],
-        schema: StructType,
+        positionSchema: StructType,
+        valueSchema: StructType,
         row: InternalRow): (Any, DataType) = {
-      val index = schema.fieldIndex(fieldNames(0))
-      val field = schema(index)
-      val value = row.get(index, field.dataType)
+      val index = positionSchema.fieldIndex(fieldNames(0))
+      val valueIndex = valueSchema.fieldIndex(fieldNames(0))
+      val value = row.get(index, valueSchema(valueIndex).dataType)
       if (fieldNames.length > 1) {
-        (value, schema(index).dataType) match {
-          case (row: InternalRow, nestedSchema: StructType) =>
-            extractor(fieldNames.drop(1), nestedSchema, row)
+        (value, valueSchema(valueIndex).dataType) match {
+          case (row: InternalRow, nestedValueSchema: StructType) =>
+            positionSchema(index).dataType match {
+              case nestedPositionSchema: StructType =>
+                extractor(
+                  fieldNames.drop(1), nestedPositionSchema, nestedValueSchema, row)
+              case dataType =>
+                throw new IllegalArgumentException(
+                  s"Unsupported type, ${dataType.simpleString}")
+            }
           case (_, dataType) =>
             throw new IllegalArgumentException(s"Unsupported type, ${dataType.simpleString}")
         }
       } else {
-        (value, schema(index).dataType)
+        (value, valueSchema(valueIndex).dataType)
       }
     }
 
-    val cleanedSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(rowSchema)
+    val cleanedPositionSchema =
+      CharVarcharUtils.replaceCharVarcharWithStringInSchema(positionSchema)
+    val cleanedValueSchema =
+      CharVarcharUtils.replaceCharVarcharWithStringInSchema(valueSchema)
     partitioning.map {
       case IdentityTransform(ref) =>
-        extractor(ref.fieldNames, cleanedSchema, row)._1
+        extractor(ref.fieldNames, cleanedPositionSchema, cleanedValueSchema, row)._1
       case YearsTransform(ref) =>
-        extractor(ref.fieldNames, cleanedSchema, row) match {
+        extractor(ref.fieldNames, cleanedPositionSchema, cleanedValueSchema, row) match {
           case (days: Int, DateType) =>
             ChronoUnit.YEARS.between(EPOCH_LOCAL_DATE, DateTimeUtils.daysToLocalDate(days)).toInt
           case (micros: Long, TimestampType) =>
@@ -284,7 +308,7 @@ abstract class InMemoryBaseTable(
             throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
         }
       case MonthsTransform(ref) =>
-        extractor(ref.fieldNames, cleanedSchema, row) match {
+        extractor(ref.fieldNames, cleanedPositionSchema, cleanedValueSchema, row) match {
           case (days: Int, DateType) =>
             ChronoUnit.MONTHS.between(EPOCH_LOCAL_DATE, DateTimeUtils.daysToLocalDate(days))
           case (micros: Long, TimestampType) =>
@@ -294,7 +318,7 @@ abstract class InMemoryBaseTable(
             throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
         }
       case DaysTransform(ref) =>
-        extractor(ref.fieldNames, cleanedSchema, row) match {
+        extractor(ref.fieldNames, cleanedPositionSchema, cleanedValueSchema, row) match {
           case (days, DateType) =>
             days
           case (micros: Long, TimestampType) =>
@@ -303,7 +327,7 @@ abstract class InMemoryBaseTable(
             throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
         }
       case HoursTransform(ref) =>
-        extractor(ref.fieldNames, cleanedSchema, row) match {
+        extractor(ref.fieldNames, cleanedPositionSchema, cleanedValueSchema, row) match {
           case (micros: Long, TimestampType) =>
             ChronoUnit.HOURS.between(Instant.EPOCH, DateTimeUtils.microsToInstant(micros))
           case (v, t) =>
@@ -312,7 +336,8 @@ abstract class InMemoryBaseTable(
       // the result should be consistent with BucketFunctions defined at transformFunctions.scala
       case BucketTransform(numBuckets, cols, _) =>
         val hash: Long = cols.foldLeft(0L) { (acc, col) =>
-          val valueHash = extractor(col.fieldNames, cleanedSchema, row) match {
+          val valueHash = extractor(
+            col.fieldNames, cleanedPositionSchema, cleanedValueSchema, row) match {
             case (value: Byte, _: ByteType) => value.toLong
             case (value: Short, _: ShortType) => value.toLong
             case (value: Int, _: IntegerType) => value.toLong
@@ -330,7 +355,7 @@ abstract class InMemoryBaseTable(
         }
         Math.floorMod(hash, numBuckets)
       case NamedTransform("truncate", Seq(ref: NamedReference, length: V2Literal[_])) =>
-        extractor(ref.fieldNames, cleanedSchema, row) match {
+        extractor(ref.fieldNames, cleanedPositionSchema, cleanedValueSchema, row) match {
           case (str: UTF8String, StringType) =>
             str.substring(0, length.value.asInstanceOf[Int])
           case (v, t) =>
@@ -339,7 +364,7 @@ abstract class InMemoryBaseTable(
       // the result should be consistent with SignedZerosFunction defined at
       // transformFunctions.scala
       case NamedTransform("signed_zeros", Seq(ref: NamedReference)) =>
-        extractor(ref.fieldNames, cleanedSchema, row) match {
+        extractor(ref.fieldNames, cleanedPositionSchema, cleanedValueSchema, row) match {
           case (value: Long, LongType) =>
             if (value == 1L) -0.0d else if (value == 2L) 0.0d else value.toDouble
           case (v, t) =>
@@ -348,14 +373,14 @@ abstract class InMemoryBaseTable(
       // The key is whatever the function itself computes, so the two cannot drift. The other
       // transforms above repeat their function's arithmetic and keep it in step by comment only.
       case NamedTransform("flip_low_bit", Seq(ref: NamedReference)) =>
-        extractor(ref.fieldNames, cleanedSchema, row) match {
+        extractor(ref.fieldNames, cleanedPositionSchema, cleanedValueSchema, row) match {
           case (value: Long, LongType) => FlipLowBitFunction.produceResult(InternalRow(value))
           case (v, t) =>
             throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
         }
       case ClusterByTransform(columnNames) =>
         columnNames.map { colName =>
-          extractor(colName.fieldNames, cleanedSchema, row)._1
+          extractor(colName.fieldNames, cleanedPositionSchema, cleanedValueSchema, row)._1
         }
     }.toImmutableArraySeq
   }
@@ -486,8 +511,11 @@ abstract class InMemoryBaseTable(
           row
         }
 
-        // handle partition evolution by re-keying all data
-        val key = getKey(retainedRowAfterDroppedColumns, newSchema)
+        // handle partition evolution by re-keying all data: positions come from the
+        // schema the row is stored under, while key values must be read back as the
+        // evolved field types so that they match the reported partition ordering.
+        val key = getKey(
+          retainedRowAfterDroppedColumns, retainedSchemaAfterDroppedColumns, newSchema)
         dataMap += dataMap.get(key)
           .map { splits =>
             val newSplits = if ((splits.last.rows.size >= numRowsPerSplit) ||
@@ -692,10 +720,13 @@ abstract class InMemoryBaseTable(
         inputPartition.rows.foreach(row =>
           for (i <- 0 until numOfCols) {
             val field = tableSchema(i)
-            val colValue = if (i < row.numFields) {
-              row.get(i, field.dataType)
-            } else {
-              ResolveDefaultColumns.getExistenceDefaultValue(field)
+            // Look up the field in the split's schema by name: schema evolution may
+            // have added columns at positions before it, shifting stored indexes.
+            val colValue = inputPartition.schema.getFieldIndex(field.name) match {
+              case Some(storedIndex) if storedIndex < row.numFields =>
+                row.get(storedIndex, field.dataType)
+              case _ =>
+                ResolveDefaultColumns.getExistenceDefaultValue(field)
             }
             colValueSets(i).add(colValue)
             if (colValue == null) {
@@ -1324,7 +1355,7 @@ private class BufferedRowsReader(
             }
             val childRow = row.toSeq(writeSchema)(writeIndex).asInstanceOf[InternalRow]
             val childWriteSchema = writeSchema.fields(writeIndex).dataType.asInstanceOf[StructType]
-            val childReadSchema = readSchema.fields(writeIndex).dataType.asInstanceOf[StructType]
+            val childReadSchema = field.dataType.asInstanceOf[StructType]
             val resultValue = new Array[Any](fields.length)
             fields.zipWithIndex.foreach { case (childField, idx) =>
               val childValue = extractFieldValue(childField, childReadSchema,

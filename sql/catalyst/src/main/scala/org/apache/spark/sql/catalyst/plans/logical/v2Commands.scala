@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import scala.collection.mutable
+
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, ResolvedProcedure, ResolveSchemaEvolution, TypeCheckResult, UnresolvedAttribute, UnresolvedException, UnresolvedProcedure, ViewSchemaMode}
@@ -42,7 +44,7 @@ import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructType}
+import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
@@ -1279,25 +1281,100 @@ object MergeIntoTable {
   }
 
   private def computePendingSchemaChanges(merge: MergeIntoTable): Seq[TableChange] = {
+    val preserveColumnOrder = SQLConf.get.schemaEvolutionPreserveColumnOrder
+    val resolver = SQLConf.get.resolver
+
+    // Field paths already scheduled for addition: they anchor positioned adds that
+    // follow a source sibling which is itself being added, and are skipped as repeats.
+    val addedFieldPaths = mutable.ArrayBuffer.empty[Seq[String]]
+
+    def isAlreadyAdded(fieldPath: Seq[String]): Boolean = {
+      addedFieldPaths.exists { added =>
+        added.length == fieldPath.length &&
+          added.lazyZip(fieldPath).forall((a, b) => resolver(a, b))
+      }
+    }
+
+    // Positions the new field as in the source: after the nearest preceding source
+    // sibling that exists in the target or is itself added earlier, or first when
+    // none exists. Returns null when the source position cannot be determined.
+    def addedColumnPosition(fieldPath: Seq[String]): TableChange.ColumnPosition = {
+      val parentPath = fieldPath.init
+
+      def siblingFields(schema: StructType): Seq[StructField] = {
+        if (parentPath.isEmpty) {
+          schema.fields.toImmutableArraySeq
+        } else {
+          schema
+            .findNestedField(parentPath, includeCollections = true, resolver = resolver)
+            .map(_._2.dataType)
+            .collect { case struct: StructType => struct.fields.toImmutableArraySeq }
+            .getOrElse(Seq.empty)
+        }
+      }
+
+      val sourceSiblings = siblingFields(merge.sourceTable.schema)
+      val targetSiblings = siblingFields(merge.targetTable.schema)
+      val index = sourceSiblings.indexWhere(f => resolver(f.name, fieldPath.last))
+      if (index < 0) {
+        null
+      } else {
+        sourceSiblings.take(index).reverseIterator
+          .map { sibling =>
+            targetSiblings.find(f => resolver(f.name, sibling.name))
+              .map(f => TableChange.ColumnPosition.after(f.name))
+              .orElse(Option.when(isAlreadyAdded(parentPath :+ sibling.name)) {
+                TableChange.ColumnPosition.after(sibling.name)
+              })
+              .orNull
+          }
+          .find(_ != null)
+          .getOrElse(TableChange.ColumnPosition.first())
+      }
+    }
+
     schemaEvolutionTriggeringAssignments(merge).flatMap {
       // New column: the key didn't resolve against the target, so the column is missing.
       // Applies to top-level fields (e.g. SET new_col = source.new_col) and nested fields
       // where the leaf is missing (e.g. SET addr.zip = source.addr.zip).
       case a @ Assignment(UnresolvedAttribute(fieldPath), _)
           if !containsColumn(merge.targetTable, fieldPath) =>
-        Seq(TableChange.addColumn(fieldPath.toArray, a.value.dataType.asNullable))
+        if (isAlreadyAdded(fieldPath)) {
+          Seq.empty
+        } else {
+          val position = if (preserveColumnOrder) addedColumnPosition(fieldPath) else null
+          addedFieldPaths += fieldPath
+          Seq(TableChange.addColumn(
+            fieldPath.toArray,
+            a.value.dataType.asNullable,
+            /* isNullable */ true,
+            /* comment */ null,
+            position,
+            /* defaultValue */ null))
+        }
 
       // Type mismatch on an existing column: the key is resolved but the source type differs.
       // For atomic types this produces an updateColumnType; for structs this recurses to
       // find nested additions or type changes (e.g. SET addr = source.addr where source.addr
       // has an extra field or a widened child type).
       case a if a.key.resolved && a.key.dataType != a.value.dataType =>
-        ResolveSchemaEvolution.computeSchemaChanges(
+        val changes = ResolveSchemaEvolution.computeSchemaChanges(
           a.key.dataType,
           a.value.dataType,
           fieldPath = extractFieldPath(a.key, allowUnresolved = false),
           isByName = true,
-          throwError = throwIncompatibleSchemasError(merge))
+          throwError = throwIncompatibleSchemasError(merge),
+          preserveColumnOrder)
+        changes.filter {
+          case add: TableChange.AddColumn =>
+            val newFieldPath = add.fieldNames.toSeq
+            val emit = !isAlreadyAdded(newFieldPath)
+            if (emit) {
+              addedFieldPaths += newFieldPath
+            }
+            emit
+          case _ => true
+        }
 
       // Types already match - no schema change needed.
       case _ => Seq.empty

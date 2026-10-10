@@ -95,7 +95,12 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
       plan: T,
       oldOutput: Seq[Attribute],
       newOutput: Seq[Attribute]): T = {
-    val attrMap = AttributeMap(oldOutput.zip(newOutput))
+    // Match attributes by name rather than position: schema changes may add fields at
+    // any position, shifting the ordinal of following columns.
+    val resolver = conf.resolver
+    val attrMap = AttributeMap(oldOutput.flatMap { oldAttr =>
+      newOutput.find(newAttr => resolver(newAttr.name, oldAttr.name)).map(oldAttr -> _)
+    })
     plan.rewriteAttrs(attrMap).asInstanceOf[T]
   }
 
@@ -112,7 +117,8 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
     val candidateChanges = computeSchemaChanges(
       targetTable.schema,
       sourceSchema,
-      isByName)
+      isByName,
+      preserveColumnOrder = conf.schemaEvolutionPreserveColumnOrder)
     filterSupportedChanges(targetTable, candidateChanges)
   }
 
@@ -123,14 +129,16 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
   private[catalyst] def computeSchemaChanges(
       targetType: StructType,
       sourceType: StructType,
-      isByName: Boolean): Seq[TableChange] = {
+      isByName: Boolean,
+      preserveColumnOrder: Boolean = false): Seq[TableChange] = {
     computeSchemaChanges(
       targetType,
       sourceType,
       fieldPath = Nil,
       isByName,
       throwError =
-        throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(targetType, sourceType))
+        throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(targetType, sourceType),
+      preserveColumnOrder)
   }
 
   def filterSupportedChanges(
@@ -157,7 +165,8 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
       newType: DataType,
       fieldPath: Seq[String],
       isByName: Boolean,
-      throwError: => Nothing): Seq[TableChange] = {
+      throwError: => Nothing,
+      preserveColumnOrder: Boolean): Seq[TableChange] = {
     (currentType, newType) match {
       case (StructType(currentFields), StructType(newFields)) =>
         if (isByName) {
@@ -165,7 +174,8 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
             currentFields.toImmutableArraySeq,
             newFields.toImmutableArraySeq,
             fieldPath,
-            throwError)
+            throwError,
+            preserveColumnOrder)
         } else {
           computeSchemaChangesByPosition(
             currentFields.toImmutableArraySeq,
@@ -180,7 +190,8 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
           newElementType,
           fieldPath :+ "element",
           isByName,
-          throwError)
+          throwError,
+          preserveColumnOrder)
 
       case (MapType(currentKeyType, currentValueType, _),
             MapType(newKeyType, newValueType, _)) =>
@@ -189,13 +200,15 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
           newKeyType,
           fieldPath :+ "key",
           isByName,
-          throwError)
+          throwError,
+          preserveColumnOrder)
         val valueChanges = computeSchemaChanges(
           currentValueType,
           newValueType,
           fieldPath :+ "value",
           isByName,
-          throwError)
+          throwError,
+          preserveColumnOrder)
         keyChanges ++ valueChanges
 
       case (currentType: AtomicType, newType: AtomicType) if currentType != newType =>
@@ -226,7 +239,8 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
       currentFields: Seq[StructField],
       newFields: Seq[StructField],
       fieldPath: Seq[String],
-      throwError: => Nothing): Seq[TableChange] = {
+      throwError: => Nothing,
+      preserveColumnOrder: Boolean): Seq[TableChange] = {
     val currentFieldMap = toFieldMap(currentFields)
     val newFieldMap = toFieldMap(newFields)
 
@@ -239,18 +253,51 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
           newFieldMap(f.name).dataType,
           fieldPath :+ f.name,
           isByName = true,
-          throwError)
+          throwError,
+          preserveColumnOrder)
       }
 
     // Collect newly added fields
-    val adds = newFields
-      .filterNot(f => currentFieldMap.contains(f.name))
-      .map { f =>
-        // Make the type nullable, since existing rows in the table will have NULLs for this column.
-        TableChange.addColumn((fieldPath :+ f.name).toArray, f.dataType.asNullable)
+    val adds = newFields.zipWithIndex
+      .collect {
+        case (f, index) if !currentFieldMap.contains(f.name) =>
+          // Make the type nullable, since existing rows in the table will have NULLs
+          // for this column.
+          TableChange.addColumn(
+            (fieldPath :+ f.name).toArray,
+            f.dataType.asNullable,
+            /* isNullable */ true,
+            /* comment */ null,
+            if (preserveColumnOrder) {
+              addedFieldPosition(currentFieldMap, newFields, index)
+            } else {
+              null
+            },
+            /* defaultValue */ null)
       }
 
     updates ++ adds
+  }
+
+  /**
+   * Returns the position of a field added at the given index among the source schema's
+   * fields: [[ColumnPosition.first]] when the field is the first of its siblings, or
+   * [[ColumnPosition.after]] the preceding source sibling. A preceding sibling that
+   * already exists in the target schema is anchored by its target field name, while a
+   * preceding sibling that is itself a new field is anchored by its source name, since
+   * additions are emitted in source order.
+   */
+  private def addedFieldPosition(
+      currentFieldMap: Map[String, StructField],
+      newFields: Seq[StructField],
+      index: Int): TableChange.ColumnPosition = {
+    if (index == 0) {
+      TableChange.ColumnPosition.first()
+    } else {
+      val previous = newFields(index - 1).name
+      TableChange.ColumnPosition.after(
+        currentFieldMap.get(previous).map(_.name).getOrElse(previous))
+    }
   }
 
   /**
@@ -269,7 +316,8 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
         newField.dataType,
         fieldPath :+ currentField.name,
         isByName = false,
-        throwError)
+        throwError,
+        preserveColumnOrder = false)
     }
 
     // Extra source fields beyond the target's field count are new additions.

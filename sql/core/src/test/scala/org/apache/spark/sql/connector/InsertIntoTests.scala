@@ -820,6 +820,108 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
     }
   }
 
+  test("Insert schema evolution: preserve order - extra column by name first") {
+    withSQLConf(SQLConf.SCHEMA_EVOLUTION_PRESERVE_COLUMN_ORDER.key -> "true") {
+      val t1 = s"${catalogAndNamespace}tbl"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+        doInsert(t1, Seq((1L, "a")).toDF("id", "data"))
+        checkInsertMetrics(t1, numInsertedRows = 1)
+        doInsertWithSchemaEvolution(t1,
+          Seq((true, 2L, "b")).toDF("active", "id", "data"), byName = true)
+        checkInsertMetrics(t1, numInsertedRows = 1)
+        assert(spark.table(t1).schema.fieldNames.toSeq === Seq("active", "id", "data"))
+        verifyTable(t1, Seq[(java.lang.Boolean, java.lang.Long, String)](
+          (null, 1L, "a"),
+          (true, 2L, "b")
+        ).toDF("active", "id", "data"))
+      }
+    }
+  }
+
+  test("Insert schema evolution: preserve order - extra column by name in the middle") {
+    withSQLConf(SQLConf.SCHEMA_EVOLUTION_PRESERVE_COLUMN_ORDER.key -> "true") {
+      val t1 = s"${catalogAndNamespace}tbl"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+        doInsert(t1, Seq((1L, "a")).toDF("id", "data"))
+        checkInsertMetrics(t1, numInsertedRows = 1)
+        doInsertWithSchemaEvolution(t1,
+          Seq((2L, true, "b")).toDF("id", "active", "data"), byName = true)
+        checkInsertMetrics(t1, numInsertedRows = 1)
+        assert(spark.table(t1).schema.fieldNames.toSeq === Seq("id", "active", "data"))
+        verifyTable(t1, Seq[(java.lang.Long, java.lang.Boolean, String)](
+          (1L, null, "a"),
+          (2L, true, "b")
+        ).toDF("id", "active", "data"))
+      }
+    }
+  }
+
+  test("Insert schema evolution: preserve order off - extra column by name appends") {
+    val t1 = s"${catalogAndNamespace}tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+      doInsert(t1, Seq((1L, "a")).toDF("id", "data"))
+      checkInsertMetrics(t1, numInsertedRows = 1)
+      doInsertWithSchemaEvolution(t1,
+        Seq((2L, true, "b")).toDF("id", "active", "data"), byName = true)
+      checkInsertMetrics(t1, numInsertedRows = 1)
+      assert(spark.table(t1).schema.fieldNames.toSeq === Seq("id", "data", "active"))
+      verifyTable(t1, Seq[(java.lang.Long, String, java.lang.Boolean)](
+        (1L, "a", null),
+        (2L, "b", true)
+      ).toDF("id", "data", "active"))
+    }
+  }
+
+  test("Insert schema evolution: preserve order - consecutive extra columns by name") {
+    withSQLConf(SQLConf.SCHEMA_EVOLUTION_PRESERVE_COLUMN_ORDER.key -> "true") {
+      val t1 = s"${catalogAndNamespace}tbl"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+        doInsert(t1, Seq((1L, "a")).toDF("id", "data"))
+        checkInsertMetrics(t1, numInsertedRows = 1)
+        doInsertWithSchemaEvolution(t1,
+          Seq((2L, 100, true, "b")).toDF("id", "bonus", "active", "data"), byName = true)
+        checkInsertMetrics(t1, numInsertedRows = 1)
+        assert(spark.table(t1).schema.fieldNames.toSeq ===
+          Seq("id", "bonus", "active", "data"))
+        verifyTable(t1,
+          Seq[(java.lang.Long, java.lang.Integer, java.lang.Boolean, String)](
+            (1L, null, null, "a"),
+            (2L, 100, true, "b")
+          ).toDF("id", "bonus", "active", "data"))
+      }
+    }
+  }
+
+  test("Insert schema evolution: preserve order - extra nested field by name") {
+    withSQLConf(SQLConf.SCHEMA_EVOLUTION_PRESERVE_COLUMN_ORDER.key -> "true") {
+      val t1 = s"${catalogAndNamespace}tbl"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (id int, info struct<name:string, city:string>) " +
+          s"USING $v2Format")
+        doInsert(t1,
+          Seq((1, "Alice", "NYC")).toDF("id", "name", "city")
+            .select($"id", struct($"name", $"city").as("info")))
+        checkInsertMetrics(t1, numInsertedRows = 1)
+        doInsertWithSchemaEvolution(t1,
+          Seq((2, "Bob", 30, "SF")).toDF("id", "name", "age", "city")
+            .select($"id", struct($"name", $"age", $"city").as("info")),
+          byName = true)
+        checkInsertMetrics(t1, numInsertedRows = 1)
+        assert(
+          spark.table(t1).schema.fields(1).dataType
+            .asInstanceOf[StructType].fieldNames.toSeq ===
+          Seq("name", "age", "city"))
+        checkAnswer(
+          sql(s"SELECT * FROM $t1"),
+          Seq(Row(1, Row("Alice", null, "NYC")), Row(2, Row("Bob", 30, "SF"))))
+      }
+    }
+  }
+
   test("Insert schema evolution: extra nested field by name in overwrite") {
     val t1 = s"${catalogAndNamespace}tbl"
     withTable(t1) {
