@@ -260,6 +260,7 @@ class AsOfJoinResolver(
     partiallyResolved.copy(
       asOfCondition = asOfCondition,
       orderExpression = orderExpression,
+      direction = materialized.direction,
       matchLeftOperand = None,
       matchOperator = None,
       matchRightOperand = None,

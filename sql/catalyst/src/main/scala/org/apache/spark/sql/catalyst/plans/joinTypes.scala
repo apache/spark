@@ -163,26 +163,32 @@ case object Nearest extends AsOfJoinDirection
 sealed abstract class MatchComparisonOperator {
   def sql: String
   def flip: MatchComparisonOperator
+  /** The direction when the left table's operand is first, e.g. `l.ts >= r.ts` is [[Backward]]. */
+  def direction: AsOfJoinDirection
 }
 
 case object GreaterThanOrEqualOp extends MatchComparisonOperator {
   override def sql: String = ">="
   override def flip: MatchComparisonOperator = LessThanOrEqualOp
+  override def direction: AsOfJoinDirection = Backward
 }
 
 case object GreaterThanOp extends MatchComparisonOperator {
   override def sql: String = ">"
   override def flip: MatchComparisonOperator = LessThanOp
+  override def direction: AsOfJoinDirection = Backward
 }
 
 case object LessThanOrEqualOp extends MatchComparisonOperator {
   override def sql: String = "<="
   override def flip: MatchComparisonOperator = GreaterThanOrEqualOp
+  override def direction: AsOfJoinDirection = Forward
 }
 
 case object LessThanOp extends MatchComparisonOperator {
   override def sql: String = "<"
   override def flip: MatchComparisonOperator = GreaterThanOp
+  override def direction: AsOfJoinDirection = Forward
 }
 
 object LateralJoinType {

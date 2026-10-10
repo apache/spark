@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
 
+import org.apache.spark.sql.catalyst.plans.{Backward, Forward}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.joins.SortMergeAsOfJoinExec
 import org.apache.spark.sql.internal.SQLConf
@@ -210,6 +211,39 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
           |  ON t.symbol = q.symbol
           |""".stripMargin),
       Row(180.15) :: Nil)
+  }
+
+  test("MATCH_CONDITION with the right operand written first plans the flipped direction") {
+    setupTradeQuoteViews()
+    // Writing the right operand first flips the operator: q <= t is backward, q >= t is forward.
+    val cases = Seq(
+      ("<=", Backward, Seq(
+        Row(Timestamp.valueOf("2026-06-29 10:00:05"), "AAPL", 180.10),
+        Row(Timestamp.valueOf("2026-06-29 10:00:11"), "AAPL", 180.20),
+        Row(Timestamp.valueOf("2026-06-29 10:00:12"), "MSFT", 420.50))),
+      (">=", Forward, Seq(
+        Row(Timestamp.valueOf("2026-06-29 10:00:05"), "AAPL", 180.15))))
+    for {
+      singlePass <- Seq(false, true)
+      (operator, direction, expected) <- cases
+    } {
+      withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString) {
+        val df = sql(
+          s"""
+             |SELECT t.trade_time, t.symbol, q.bid_price
+             |FROM trades t ASOF JOIN quotes q
+             |  MATCH_CONDITION (q.quote_time $operator t.trade_time)
+             |  ON t.symbol = q.symbol
+             |""".stripMargin)
+        // The single-pass analyzer cannot resolve the plan that `df.rdd` builds.
+        QueryTest.checkAnswer(df, expected, checkToRDD = false)
+        val asOfJoin = collectFirst(df.queryExecution.executedPlan) {
+          case j: SortMergeAsOfJoinExec => j
+        }
+        assert(asOfJoin.map(_.direction) === Some(direction),
+          s"single-pass analyzer: $singlePass, operator: $operator")
+      }
+    }
   }
 
   test("TIMESTAMP MATCH_CONDITION with legacy intervals") {
@@ -927,6 +961,7 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
   }
 
   test("strict > MATCH_CONDITION excludes equal right rows") {
+    // Two rows are strictly earlier, so a forward scan would pick 08:00 instead.
     checkSortMergeAsOf(
       sql(
         """
@@ -934,7 +969,8 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
           |FROM VALUES (TIMESTAMP '2026-06-29 10:00:00', 'X') AS t(trade_time, symbol)
           |ASOF JOIN VALUES
           |  (TIMESTAMP '2026-06-29 10:00:00', 'X'),
-          |  (TIMESTAMP '2026-06-29 09:00:00', 'X') AS q(quote_time, symbol)
+          |  (TIMESTAMP '2026-06-29 09:00:00', 'X'),
+          |  (TIMESTAMP '2026-06-29 08:00:00', 'X') AS q(quote_time, symbol)
           |  MATCH_CONDITION (t.trade_time > q.quote_time)
           |  ON t.symbol = q.symbol
           |""".stripMargin),
@@ -942,6 +978,7 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
   }
 
   test("strict < forward MATCH_CONDITION") {
+    // Two rows are strictly later, so a backward scan would pick 12:00 instead.
     checkSortMergeAsOf(
       sql(
         """
@@ -949,7 +986,8 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
           |FROM VALUES (TIMESTAMP '2026-06-29 10:00:00') AS t(ts)
           |ASOF JOIN VALUES
           |  (TIMESTAMP '2026-06-29 10:00:00'),
-          |  (TIMESTAMP '2026-06-29 11:00:00') AS r(ts)
+          |  (TIMESTAMP '2026-06-29 11:00:00'),
+          |  (TIMESTAMP '2026-06-29 12:00:00') AS r(ts)
           |  MATCH_CONDITION (t.ts < r.ts)
           |""".stripMargin),
       Row(Timestamp.valueOf("2026-06-29 11:00:00")) :: Nil)

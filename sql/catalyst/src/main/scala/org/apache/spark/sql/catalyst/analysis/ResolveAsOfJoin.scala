@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.{
 }
 import org.apache.spark.sql.catalyst.expressions.AttributeSet
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.MatchComparisonOperator
+import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, MatchComparisonOperator}
 import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.plans.logical.AsOfJoin.MatchConditionTypes
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -46,6 +46,7 @@ object ResolveAsOfJoin extends Rule[LogicalPlan] with SQLConfHelper {
         right,
         _,
         condition,
+        _,
         _,
         _,
         _,
@@ -85,6 +86,7 @@ object ResolveAsOfJoin extends Rule[LogicalPlan] with SQLConfHelper {
               joinBase.copy(
                 asOfCondition = materialized.asOfCondition,
                 orderExpression = materialized.orderExpression,
+                direction = materialized.direction,
                 leftSortExprs = materialized.leftSortExpressions,
                 rightSortExprs = materialized.rightSortExpressions,
                 matchLeftOperand = None,
@@ -113,6 +115,7 @@ object ResolveAsOfJoin extends Rule[LogicalPlan] with SQLConfHelper {
 private[analysis] case class MaterializedMatchCondition(
     asOfCondition: Expression,
     orderExpression: Expression,
+    direction: AsOfJoinDirection,
     leftSortExpressions: Seq[Expression],
     rightSortExpressions: Seq[Expression])
 
@@ -160,6 +163,7 @@ private[analysis] object AsOfJoinMatchConditionResolution {
       Some(MaterializedMatchCondition(
         asOfCondition = asOfCondition,
         orderExpression = orderExpression,
+        direction = normalizedOperator.direction,
         leftSortExpressions = leftSortExpressions,
         rightSortExpressions = rightSortExpressions))
     } else {
