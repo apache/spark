@@ -29,10 +29,9 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.CreateTable
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, CharVarcharUtils, WriteDistributionAndOrdering}
-import org.apache.spark.sql.connector.catalog.{CatalogExtension, CatalogV2Util, Table, TableCatalog, TableCatalogCapability, V1Table, WriteDistributionMode}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Table, TableCatalog, TableCatalogCapability, V1Table, WriteDistributionMode}
 import org.apache.spark.sql.connector.expressions.{BucketTransform, SortOrder}
 import org.apache.spark.sql.execution.LeafExecNode
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
@@ -156,17 +155,17 @@ case class ShowCreateTableExec(
     }
   }
 
-  // In the session catalog, a CREATE TABLE whose provider is not a v2 source creates a v1 table,
-  // which cannot record the clauses, so the replay would be rejected.
+  // Whether the printed CREATE TABLE, which has the table's provider as USING and no STORED AS
+  // or ROW FORMAT, would create a v1 table, which cannot record the clauses, so the replay would
+  // be rejected. A provider that cannot be looked up fails the replay too.
   private def createsV1Table(resolvedTable: ResolvedTable): Boolean = {
-    val catalog = resolvedTable.catalog
-    val v1Capable = CatalogV2Util.isSessionCatalog(catalog) && (
-      conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION) == "builtin" ||
-        catalog.isInstanceOf[CatalogExtension])
-    v1Capable && {
-      val provider = Option(resolvedTable.table.properties.get(TableCatalog.PROP_PROVIDER))
-        .getOrElse(conf.defaultDataSourceName)
-      !Try(DataSourceV2Utils.getTableProvider(provider, conf)).toOption.flatten.isDefined
+    DataSourceV2Utils.supportsV1Command(resolvedTable.catalog, conf) && {
+      val provider = DataSourceV2Utils.createTableProvider(
+        Option(resolvedTable.table.properties.get(TableCatalog.PROP_PROVIDER)),
+        hasSerde = false,
+        ctas = false,
+        conf)
+      !Try(DataSourceV2Utils.isV2Provider(provider, conf)).getOrElse(false)
     }
   }
 

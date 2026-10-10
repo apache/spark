@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, CharVarcharUtils, ResolveDefaultColumns => DefaultCols, WriteDistributionAndOrdering}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.connector.catalog.{CatalogExtension, CatalogManager, CatalogPlugin, CatalogV2Util, LookupCatalog, SupportsNamespaces, V1Table, ViewCatalog, WriteDistributionMode}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, LookupCatalog, SupportsNamespaces, V1Table, ViewCatalog, WriteDistributionMode}
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.command._
@@ -815,8 +815,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       // tables if:
       //   1. `LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT` is false, or
       //   2. It's a CTAS and `conf.convertCTAS` is true.
-      val createHiveTableByDefault = conf.getConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT)
-      if (!createHiveTableByDefault || (ctas && conf.convertCTAS)) {
+      if (!DataSourceV2Utils.createsHiveTableByDefault(ctas, conf)) {
         (nonHiveStorageFormat, conf.defaultDataSourceName)
       } else {
         logWarning(log"A Hive serde table will be created as there is no table provider " +
@@ -950,7 +949,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   }
 
   private def isV2Provider(provider: String): Boolean = {
-    DataSourceV2Utils.getTableProvider(provider, conf).isDefined
+    DataSourceV2Utils.isV2Provider(provider, conf)
   }
 
   /**
@@ -1030,9 +1029,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   }
 
   private def supportsV1Command(catalog: CatalogPlugin): Boolean = {
-    isSessionCatalog(catalog) && (
-      SQLConf.get.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION) == "builtin" ||
-        catalog.isInstanceOf[CatalogExtension])
+    DataSourceV2Utils.supportsV1Command(catalog, SQLConf.get)
   }
 
   // True when the ALTER COLUMN specs only change comments (set or drop, no type / nullability /

@@ -232,17 +232,18 @@ case class DescribeTableExec(
    * can reproduce them.
    */
   private def addTableWriteDistributionAndOrdering(rows: ArrayBuffer[InternalRow]): Unit = {
-    if (WriteDistributionAndOrdering.isRequested(
-        table.writeDistributionMode(), table.writeOrdering().toImmutableArraySeq)) {
+    val writeDistributionMode = table.writeDistributionMode()
+    val writeOrdering = table.writeOrdering().toImmutableArraySeq
+    if (WriteDistributionAndOrdering.isRequested(writeDistributionMode, writeOrdering)) {
       rows += emptyRow()
       rows += toCatalystRow("# Write Distribution and Ordering", "", "")
-      if (table.writeDistributionMode() != null) {
-        rows += toCatalystRow("Distribution", table.writeDistributionMode().toString, "")
+      if (writeDistributionMode != null) {
+        rows += toCatalystRow("Distribution", writeDistributionMode.toString, "")
       }
-      if (table.writeOrdering().nonEmpty) {
+      if (writeOrdering.nonEmpty) {
         rows += toCatalystRow(
           "Ordering",
-          table.writeOrdering().map(WriteDistributionAndOrdering.describeSortOrder).mkString(", "),
+          writeOrdering.map(WriteDistributionAndOrdering.describeSortOrder).mkString(", "),
           "")
       }
     }
