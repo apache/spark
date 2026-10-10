@@ -634,6 +634,39 @@ class DDLParserSuite extends AnalysisTest {
         stop = 128))
   }
 
+  test("SPARK-60002: create/replace table - row format delimited with null defined as") {
+    Seq(
+      "NULL DEFINED AS 'fooNull'" -> Map("serialization.null.format" -> "fooNull"),
+      "FIELDS TERMINATED BY '|' NULL DEFINED AS 'NA'" -> Map(
+        "field.delim" -> "|", "serialization.format" -> "|", "serialization.null.format" -> "NA"),
+      // An empty string is a valid null format.
+      "NULL DEFINED AS ''" -> Map("serialization.null.format" -> ""),
+      // The value is unescaped like the other delimiters (as in Hive): '\N' becomes N, and
+      // '\\N' is needed for a literal \N.
+      "NULL DEFINED AS '\\N'" -> Map("serialization.null.format" -> "N"),
+      "NULL DEFINED AS '\\\\N'" -> Map("serialization.null.format" -> "\\N")
+    ).foreach { case (delimitedClauses, serdeProperties) =>
+      val createSql =
+        s"""CREATE TABLE my_tab (id bigint, name string)
+           |ROW FORMAT DELIMITED $delimitedClauses
+           |STORED AS textfile""".stripMargin
+      val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
+      val expectedTableSpec = TableSpec(
+        Seq("my_tab"),
+        Some(Seq(ColumnDefinition("id", LongType), ColumnDefinition("name", StringType))),
+        Seq.empty[Transform],
+        Map.empty[String, String],
+        None,
+        OptionList(Seq.empty),
+        None,
+        None,
+        Some(SerdeInfo(storedAs = Some("textfile"), serdeProperties = serdeProperties)))
+      Seq(createSql, replaceSql).foreach { sql =>
+        testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
+      }
+    }
+  }
+
   test("create/replace table - stored as inputformat/outputformat") {
     val createSql =
       """CREATE TABLE my_tab (id bigint)
