@@ -635,8 +635,9 @@ object Decimal {
     }
   }
 
-  private def numDigitsInIntegralPart(bigDecimal: JavaBigDecimal): Int =
-    bigDecimal.precision - bigDecimal.scale
+  // Computed in Long since `precision - scale` can overflow Int, e.g. for "1e2147483647".
+  private def numDigitsInIntegralPart(bigDecimal: JavaBigDecimal): Long =
+    bigDecimal.precision.toLong - bigDecimal.scale
 
   private def stringToJavaBigDecimal(str: UTF8String): JavaBigDecimal = {
     // According the benchmark test,  `s.toString.trim` is much faster than `s.trim.toString`.

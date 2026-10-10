@@ -446,6 +446,19 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     }
   }
 
+  test("UTF8String to Decimal with exponent near Int.MaxValue") {
+    // The number of integral digits (precision - scale) of these values overflows Int.
+    Seq("1e2147483647", "-1E+2147483647", "0e2147483647", "12e2147483647",
+      "1.5e2147483647", "1e2147483648").foreach { string =>
+      assert(Decimal.fromString(UTF8String.fromString(string)) === null)
+      checkError(
+        exception = intercept[SparkArithmeticException](
+          Decimal.fromStringANSI(UTF8String.fromString(string))),
+        condition = "NUMERIC_OUT_OF_SUPPORTED_RANGE",
+        parameters = Map("value" -> string))
+    }
+  }
+
   // 18 is a max number of digits in Decimal's compact long
   test("SPARK-41554: decrease/increase scale by 18 and more on compact decimal") {
     val unscaledNums = Seq(
