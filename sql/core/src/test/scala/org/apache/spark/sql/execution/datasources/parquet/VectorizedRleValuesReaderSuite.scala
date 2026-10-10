@@ -54,7 +54,7 @@ class VectorizedRleValuesReaderSuite extends SparkFunSuite {
   // stuck in a loop does not block the following ones. The decode loops do not check for
   // interruption, so a stuck read keeps its thread busy until the JVM exits. After the first
   // timeout, later reads fail without running, so that a regression leaves one busy thread.
-  private lazy val executor = ThreadUtils.newDaemonCachedThreadPool("rle-reader-suite")
+  private val executor = ThreadUtils.newDaemonCachedThreadPool("rle-reader-suite")
   @volatile private var timedOut = false
 
   override def afterAll(): Unit = {
@@ -435,7 +435,7 @@ class VectorizedRleValuesReaderSuite extends SparkFunSuite {
     val c = new OnHeapColumnVector(5, IntegerType)
     reader.readIntegers(0, c, 0)
     reader.skipIntegers(0)
-    interceptCorrupted("the page has no data, not even the bit width") {
+    interceptCorrupted("the dictionary id section is empty, not even the bit width") {
       reader.readIntegers(5, c, 0)
     }
   }

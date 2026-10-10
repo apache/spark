@@ -385,11 +385,8 @@ public class VectorizedColumnReader {
       this.isCurrentPageDictionaryEncoded = false;
     }
 
-    try {
-      dataColumn.initFromPage(pageValueCount, in);
-    } catch (IOException e) {
-      throw new IOException("could not read page in col " + descriptor, e);
-    }
+    // readPageV1 and readPageV2 add the page and the column to any error thrown here.
+    dataColumn.initFromPage(pageValueCount, in);
     // for PARQUET-246 (See VectorizedDeltaByteArrayReader.setPreviousValues)
     if (CorruptDeltaByteArrays.requiresSequentialReads(writerVersion, dataEncoding) &&
         previousReader instanceof RequiresPreviousReader) {

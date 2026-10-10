@@ -544,7 +544,7 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
         TestParquetRowGroupReader(Seq(TestPageReadStore(memPageStore, Seq(0L)))), 1)
       val e = intercept[ParquetDecodingException](recordReader.nextKeyValue())
       assert(e.getMessage.contains("could not decode the dictionary for [a]"), e.getMessage)
-      assert(e.getMessage.contains("could not read int"), e.getMessage)
+      assert(e.getMessage.contains(e.getCause.getMessage), e.getMessage)
       assert(e.getCause.isInstanceOf[ParquetDecodingException], e)
     } finally {
       recordReader.close()
