@@ -58,8 +58,10 @@ import org.apache.spark.annotation.Evolving;
  *   micro-batch, it asks for the {@link #latestOffset}, plans the partitions with
  *   {@link #streamPartitions} and serializes the state with {@link #serializeStreamReader}, then
  *   calls {@link #read} on the executors. Offsets are JSON strings defined by the library.</li>
- *   <li><b>Writes.</b> On the driver, Spark creates a writer with {@link #createWriter} or
- *   {@link #createStreamWriter}, and serializes its state with {@link #serializeWriter}. On the
+ *   <li><b>Writes.</b> On the driver, once it computed the data to write, right before it starts
+ *   the tasks of the write (or of a micro-batch), Spark creates a writer with
+ *   {@link #createWriter} or {@link #createStreamWriter}, and serializes its state with
+ *   {@link #serializeWriter}. If computing the data fails, Spark creates no writer. On the
  *   executors, each task creates a data writer with {@link #createDataWriter}, calls
  *   {@link #write} for each batch of at most {@code spark.sql.execution.arrow.maxRecordsPerBatch}
  *   rows, which also ends once it holds {@code spark.sql.execution.arrow.maxBytesPerBatch} bytes,
@@ -92,13 +94,17 @@ import org.apache.spark.annotation.Evolving;
  *   interface</a>. A {@code long} argument named {@code ...Address} is the address of a C struct
  *   allocated by Spark. For an output struct, the library initializes it and Spark takes
  *   ownership. For an input struct, the library may move it to take ownership; otherwise, Spark
- *   releases it after the call returns, so the library must not use it afterwards.</li>
+ *   releases it after the call returns, so the library must not use it afterwards. The arrays
+ *   that the library exports must have an offset of 0, at every level: Arrow Java ignores the
+ *   offsets of the arrays it imports, so Spark rejects an array with another offset, such as a
+ *   zero-copy slice. Copy a sliced array before exporting it.</li>
  *   <li><b>Schemas.</b> Spark types map to Arrow types as in {@code spark.sql.execution.arrow}:
  *   for example, {@code bigint} is {@code int64}, {@code string} is {@code utf8},
  *   {@code timestamp} is {@code timestamp[us]} with a time zone and {@code timestamp_ntz} is
  *   {@code timestamp[us]} without one. Data read from a library may also use
- *   {@code large_utf8}, {@code utf8_view} and the other variants of the same type, but not
- *   unsigned integers or dictionary encoding.</li>
+ *   {@code large_utf8}, {@code utf8_view} and the other variants of the same type, and any names
+ *   for the fields of the entries of a map, but not unsigned integers, {@code decimal256} or
+ *   dictionary encoding.</li>
  *   <li><b>Options.</b> Option keys are passed in lower case, because Spark matches them
  *   case-insensitively.</li>
  *   <li><b>Optional methods.</b> A library only needs to export the functions for the operations

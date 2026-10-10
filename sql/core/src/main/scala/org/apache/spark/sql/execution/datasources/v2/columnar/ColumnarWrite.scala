@@ -57,31 +57,56 @@ class ColumnarWrite(
   override def description(): String = shortName
 
   override def toBatch: BatchWrite = {
-    new ColumnarBatchWrite(createDataSource().writer(info.schema(), overwrite), info.schema())
+    new ColumnarBatchWrite(
+      () => createDataSource().writer(info.schema(), overwrite), info.schema())
   }
 
   override def toStreaming: StreamingWrite = {
     new ColumnarStreamingWrite(
-      createDataSource().streamWriter(info.schema(), overwrite, info.queryId()), info.schema())
+      () => createDataSource().streamWriter(info.schema(), overwrite, info.queryId()),
+      info.schema())
   }
 }
 
-class ColumnarBatchWrite(writer: ColumnarWriter, schema: StructType) extends BatchWrite {
+/**
+ * A batch write. The writer of the data source is created with the writer factory, once Spark
+ * computed the stages that the write depends on: Spark only aborts the write if it fails later.
+ */
+class ColumnarBatchWrite(createWriter: () => ColumnarWriter, schema: StructType)
+  extends BatchWrite {
+
+  private var writer: ColumnarWriter = _
 
   override def createBatchWriterFactory(info: PhysicalWriteInfo): DataWriterFactory = {
+    if (writer == null) {
+      writer = createWriter()
+    }
     new ColumnarDataWriterFactory(writer, ArrowBatchingOptions(schema))
   }
 
   override def commit(messages: Array[WriterCommitMessage]): Unit = writer.commit(messages)
 
-  override def abort(messages: Array[WriterCommitMessage]): Unit = writer.abort(messages)
+  override def abort(messages: Array[WriterCommitMessage]): Unit = {
+    if (writer != null) {
+      writer.abort(messages)
+    }
+  }
 }
 
-class ColumnarStreamingWrite(writer: ColumnarStreamWriter, schema: StructType)
+/**
+ * A streaming write. As for a [[ColumnarBatchWrite]], the writer of the data source is created
+ * with the writer factory, once Spark computed the stages of the micro-batch.
+ */
+class ColumnarStreamingWrite(createWriter: () => ColumnarStreamWriter, schema: StructType)
   extends StreamingWrite {
+
+  private var writer: ColumnarStreamWriter = _
 
   override def createStreamingWriterFactory(
       info: PhysicalWriteInfo): StreamingDataWriterFactory = {
+    if (writer == null) {
+      writer = createWriter()
+    }
     new ColumnarStreamingDataWriterFactory(writer, ArrowBatchingOptions(schema))
   }
 
@@ -90,7 +115,9 @@ class ColumnarStreamingWrite(writer: ColumnarStreamWriter, schema: StructType)
   }
 
   override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
-    writer.abort(epochId, messages)
+    if (writer != null) {
+      writer.abort(epochId, messages)
+    }
   }
 }
 

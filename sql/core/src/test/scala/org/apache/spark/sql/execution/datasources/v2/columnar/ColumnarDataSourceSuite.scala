@@ -127,6 +127,20 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("create the writer once the data to write is computed") {
+    val table = "failed_upstream"
+    // The error happens in a shuffle stage, which adaptive query execution runs before the write,
+    // so no writer is created. Spark would not abort it.
+    val e = intercept[Exception] {
+      spark.range(10).selectExpr("id", "if(id >= 0, raise_error('boom'), 'x') AS name")
+        .repartition(2)
+        .write.format(format).option("table", table).mode("append").save()
+    }
+    assert(e.getMessage.contains("boom"))
+    assert(!TestColumnarSink.writers.contains(table))
+    assert(!TestColumnarSink.aborted.contains(table))
+  }
+
   test("abort a failed write") {
     val table = "failed_write"
     val e = intercept[SparkException] {
@@ -211,6 +225,7 @@ class TestRangeDataSource(options: CaseInsensitiveStringMap) extends ColumnarDat
   }
 
   override def writer(schema: StructType, overwrite: Boolean): ColumnarWriter = {
+    TestColumnarSink.writers.add(table)
     new TestSinkWriter(table, overwrite, options.getBoolean("fail", false))
   }
 
@@ -314,6 +329,8 @@ class TestBatchReader(lo: Long, hi: Long, schema: StructType)
 object TestColumnarSink {
   val committed = new ConcurrentHashMap[String, Seq[TestCommitMessage]]()
   val aborted = ConcurrentHashMap.newKeySet[String]()
+  // The tables for which a writer was created.
+  val writers = ConcurrentHashMap.newKeySet[String]()
   val epochs = new ConcurrentHashMap[String, Seq[Long]]()
   val streamWriterQueryIds = new ConcurrentHashMap[String, Seq[String]]()
 
