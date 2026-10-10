@@ -510,6 +510,29 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     }
   }
 
+  test("Explain formatted output shows the runtime filters of a datasource V2 scan") {
+    // A scalar subquery filter over a partition column is fully pushed into a V2 file scan, so
+    // no FilterExec above the scan prints it and the scan's own details have to.
+    withTempDir { dir =>
+      val factPath = dir.getCanonicalPath + "/fact"
+      val dimPath = dir.getCanonicalPath + "/dim"
+      spark.range(100).selectExpr("id", "CAST(id % 10 AS INT) AS part")
+        .write.partitionBy("part").parquet(factPath)
+      spark.range(10).selectExpr("CAST(id AS INT) AS dim_id").write.parquet(dimPath)
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+        withTempView("fact", "dim") {
+          spark.read.parquet(factPath).createOrReplaceTempView("fact")
+          spark.read.parquet(dimPath).createOrReplaceTempView("dim")
+          val q = sql("SELECT id FROM fact WHERE part = (SELECT max(dim_id) FROM dim)")
+          val output = getNormalizedExplain(q, FormattedMode)
+          assert("""(?m)^RuntimeFilters: \[\(part#x = Subquery scalar-subquery#x, \[id=#x\]\)\]$"""
+            .r.findFirstIn(output).isDefined, output)
+          assert(!output.contains("Filter ("), output)
+        }
+      }
+    }
+  }
+
   test("Explain UnresolvedRelation with CaseInsensitiveStringMap options") {
     val tableName = "test"
     withTable(tableName) {
