@@ -16,6 +16,7 @@
 #
 
 import array
+import calendar
 import datetime
 import decimal
 import functools
@@ -1429,7 +1430,20 @@ class ArrowTableToRowsConversion:
                     # lossless path), so drop any sub-microsecond digits to match classic collect().
                     if hasattr(value, "to_pydatetime"):
                         value = value.to_pydatetime(warn=False)
-                    return value.astimezone().replace(tzinfo=None)
+                    # SPARK-60081: integer POSIX seconds so fromtimestamp sets fold on the
+                    # local wall time, then re-attach microseconds. A float timestamp would
+                    # drop microseconds past ~2255 and can overflow at 9999-12-31 under UTC.
+                    # fromtimestamp probes the offset one day earlier and raises ValueError
+                    # ("year 0 is out of range") for instants in roughly the first day of
+                    # year 1 (longer in zones west of UTC). Fall back to the previous
+                    # astimezone() conversion there. That path does not set fold; the
+                    # fromtimestamp path still does for every later instant.
+                    try:
+                        return datetime.datetime.fromtimestamp(
+                            calendar.timegm(value.utctimetuple())
+                        ).replace(microsecond=value.microsecond)
+                    except (OverflowError, ValueError):
+                        return value.astimezone().replace(tzinfo=None)
 
             return convert_timestamp
 

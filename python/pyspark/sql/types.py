@@ -484,6 +484,32 @@ class TimeType(AnyTimeType):
         return "TimeType(%d)" % (self.precision)
 
 
+def _naive_dt_to_epoch_seconds(dt: datetime.datetime) -> int:
+    """Convert a naive local datetime to whole POSIX seconds, honoring ``fold``.
+
+    Shared by :meth:`TimestampType.toInternal` and :meth:`TimestampLTZNanosType.toInternal`
+    so both local-time types agree on the repeated DST hour (SPARK-60081).
+
+    ``datetime.datetime.timestamp(dt.replace(microsecond=0))`` is used instead of
+    ``time.mktime(dt.timetuple())`` so the result honors ``datetime.fold``. The unbound
+    call is required: ``pandas.Timestamp.timestamp`` treats a naive value as UTC, and
+    ``replace`` keeps that subclass. Dropping the microseconds first keeps the float
+    integer-valued (and the ``int()`` conversion exact) across the full 0001..9999 range,
+    so the caller can add ``dt.microsecond`` back without the double-counting that plain
+    ``int(dt.timestamp())`` produces for pre-1970 and far-future values.
+
+    Naive ``datetime.min.timestamp()`` raises ``ValueError`` ("year 0 is out of range");
+    fall back to ``time.mktime`` so ``toInternal`` keeps the previous value for these
+    range-edge inputs. ``datetime.min`` does not round-trip through ``fromInternal``.
+    """
+    try:
+        # Unbound stdlib method: a bound call would dispatch to pandas.Timestamp.timestamp.
+        seconds = datetime.datetime.timestamp(dt.replace(microsecond=0))
+    except (OverflowError, ValueError):
+        seconds = time.mktime(dt.timetuple())
+    return int(seconds)
+
+
 class TimestampType(DatetimeType, metaclass=DataTypeSingleton):
     """Timestamp (datetime.datetime) data type."""
 
@@ -492,10 +518,11 @@ class TimestampType(DatetimeType, metaclass=DataTypeSingleton):
 
     def toInternal(self, dt: datetime.datetime) -> int:
         if dt is not None:
-            seconds = (
-                calendar.timegm(dt.utctimetuple()) if dt.tzinfo else time.mktime(dt.timetuple())
-            )
-            return int(seconds) * 1000000 + dt.microsecond
+            if dt.tzinfo:
+                seconds = calendar.timegm(dt.utctimetuple())
+            else:
+                seconds = _naive_dt_to_epoch_seconds(dt)
+            return seconds * 1000000 + dt.microsecond
 
     def fromInternal(self, ts: int) -> datetime.datetime:
         if ts is not None:
@@ -662,12 +689,13 @@ class TimestampLTZNanosType(AnyTimestampNanoType):
 
     def toInternal(self, dt: datetime.datetime) -> int:
         # Mirrors TimestampType.toInternal: an aware value is converted through UTC, a naive one
-        # is interpreted in the local time zone.
+        # is interpreted in the local time zone (via the shared fold-aware helper).
         if dt is not None:
-            seconds = (
-                calendar.timegm(dt.utctimetuple()) if dt.tzinfo else time.mktime(dt.timetuple())
-            )
-            return int(seconds) * 1000000 + dt.microsecond
+            if dt.tzinfo:
+                seconds = calendar.timegm(dt.utctimetuple())
+            else:
+                seconds = _naive_dt_to_epoch_seconds(dt)
+            return seconds * 1000000 + dt.microsecond
 
     def fromInternal(self, ts: int) -> datetime.datetime:
         if ts is not None:
