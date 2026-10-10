@@ -447,12 +447,26 @@ class VariantUtils:
             return '"Infinity"' if f > 0 else '"-Infinity"'
 
         def round_trips(s: str) -> bool:
+            x = float(s)
             if not is_float32:
-                return float(s) == f
+                return x == f
             try:
-                return struct.pack("<f", float(s)) == struct.pack("<f", f)
+                rounded = struct.unpack("<f", struct.pack("<f", x))[0]
             except OverflowError:
                 return False
+            if rounded != x:
+                # Rounding the decimal to a double first can change which float32 it rounds to
+                # only when the double is exactly the midpoint between two float32 values. Every
+                # such midpoint is an exact double, so resolve that tie with the exact decimal.
+                bits = struct.unpack("<I", struct.pack("<f", abs(rounded)))[0]
+                bits = bits + 1 if abs(x) > abs(rounded) else bits - 1
+                other = math.copysign(struct.unpack("<f", struct.pack("<I", bits))[0], rounded)
+                midpoint = (rounded + other) / 2
+                if x == midpoint:
+                    exact, exact_midpoint = decimal.Decimal(s), decimal.Decimal(midpoint)
+                    if exact != exact_midpoint and (exact < exact_midpoint) != (rounded < midpoint):
+                        rounded = other
+            return rounded == f
 
         # Use an explicit context so that the result does not depend on the caller's decimal
         # context, e.g. a lowered `decimal.getcontext().prec`.

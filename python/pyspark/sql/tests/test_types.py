@@ -3905,6 +3905,10 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
             (double(2.0**-44), "5.684341886080802E-14"),
             (float32(2.0**-96), "1.2621775E-29"),
             (float32(-(2.0**-96)), "-1.2621775E-29"),
+            # Neighboring floats whose shortest decimals, read as doubles, are exactly the
+            # midpoint between them.
+            (variant(14, struct.pack("<I", 0x15AE43FE)), "7.0385313E-26"),
+            (variant(14, struct.pack("<I", 0x15AE43FD)), "7.038531E-26"),
             (float32(float("nan")), '"NaN"'),
             (float32(1.1), "1.1"),
             (float32(1e10), "1.0E10"),
