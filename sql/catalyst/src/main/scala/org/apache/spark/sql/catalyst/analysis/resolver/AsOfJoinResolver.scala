@@ -216,8 +216,8 @@ class AsOfJoinResolver(
         val rightOperand = resolveExpressionInJoin(unresolvedAsOfJoin, unresolvedRightOperand)
         AsOfJoinMatchConditionResolution.materialize(
           join = partiallyResolved,
-          leftSet = AttributeSet(leftNameScope.output),
-          rightSet = AttributeSet(rightNameScope.output),
+          leftSet = AttributeSet(leftNameScope.output ++ leftNameScope.hiddenOutput),
+          rightSet = AttributeSet(rightNameScope.output ++ rightNameScope.hiddenOutput),
           leftOperand = leftOperand,
           operator = operator,
           rightOperand = rightOperand

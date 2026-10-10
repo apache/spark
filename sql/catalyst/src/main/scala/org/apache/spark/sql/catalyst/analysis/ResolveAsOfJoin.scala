@@ -76,8 +76,8 @@ object ResolveAsOfJoin extends Rule[LogicalPlan] with SQLConfHelper {
         case (Some(leftExpr), Some(operator), Some(rightExpr)) =>
           AsOfJoinMatchConditionResolution.materialize(
             join = joinBase,
-            leftSet = left.outputSet,
-            rightSet = right.outputSet,
+            leftSet = AttributeSet(left.output ++ left.metadataOutput),
+            rightSet = AttributeSet(right.output ++ right.metadataOutput),
             leftOperand = leftExpr,
             operator = operator,
             rightOperand = rightExpr) match {

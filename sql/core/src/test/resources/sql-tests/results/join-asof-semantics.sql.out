@@ -426,3 +426,40 @@ FROM VALUES (TIMESTAMP '2026-06-29 10:00:05', 'AAPL', 100) AS t(trade_time, symb
 struct<trade_time:timestamp,quote_time:timestamp>
 -- !query output
 2026-06-29 10:00:05	2026-06-29 10:00:00
+
+
+-- !query
+SELECT l.lts, r.rts
+FROM (VALUES (1, 10), (2, 20)) AS l(k, lts) ASOF JOIN
+     ((VALUES (1, 5), (8, 15)) AS r(k, rts) LEFT JOIN (VALUES (1)) AS d(k) USING (k))
+  MATCH_CONDITION (l.lts >= d.k)
+-- !query schema
+struct<lts:int,rts:int>
+-- !query output
+10	5
+20	5
+
+
+-- !query
+SELECT l.lts, r.rts
+FROM ((VALUES (1, 10), (2, 20), (8, 30)) AS l(k, lts)
+       LEFT JOIN (VALUES (1), (2)) AS d(k) USING (k))
+     ASOF JOIN (VALUES (5), (15)) AS r(rts)
+  MATCH_CONDITION (d.k <= r.rts)
+-- !query schema
+struct<lts:int,rts:int>
+-- !query output
+10	5
+20	5
+
+
+-- !query
+SELECT l.lts, r.rts
+FROM (VALUES (1, 10), (2, 20)) AS l(k, lts) ASOF JOIN
+     ((VALUES (1, 5), (2, 15)) AS r(k, rts) JOIN (VALUES (1), (2)) AS d(k) USING (k))
+  MATCH_CONDITION (l.lts >= d.k)
+-- !query schema
+struct<lts:int,rts:int>
+-- !query output
+10	15
+20	15

@@ -228,3 +228,22 @@ FROM VALUES (TIMESTAMP '2026-06-29 10:00:05', 'AAPL', 100) AS t(trade_time, symb
      VALUES (TIMESTAMP '2026-06-29 10:00:00', 'AAPL', 100) AS q(quote_time, symbol, quantity)
   MATCH_CONDITION (t.trade_time >= q.quote_time)
   USING (symbol, quantity);
+
+-- FVT-ASOF-2-027: a hidden USING column of the right input is a MATCH_CONDITION operand
+SELECT l.lts, r.rts
+FROM (VALUES (1, 10), (2, 20)) AS l(k, lts) ASOF JOIN
+     ((VALUES (1, 5), (8, 15)) AS r(k, rts) LEFT JOIN (VALUES (1)) AS d(k) USING (k))
+  MATCH_CONDITION (l.lts >= d.k);
+
+-- FVT-ASOF-2-028: a hidden USING column of the left input is a MATCH_CONDITION operand
+SELECT l.lts, r.rts
+FROM ((VALUES (1, 10), (2, 20), (8, 30)) AS l(k, lts)
+       LEFT JOIN (VALUES (1), (2)) AS d(k) USING (k))
+     ASOF JOIN (VALUES (5), (15)) AS r(rts)
+  MATCH_CONDITION (d.k <= r.rts);
+
+-- FVT-ASOF-2-029: same as FVT-ASOF-2-027, with an inner USING join
+SELECT l.lts, r.rts
+FROM (VALUES (1, 10), (2, 20)) AS l(k, lts) ASOF JOIN
+     ((VALUES (1, 5), (2, 15)) AS r(k, rts) JOIN (VALUES (1), (2)) AS d(k) USING (k))
+  MATCH_CONDITION (l.lts >= d.k);

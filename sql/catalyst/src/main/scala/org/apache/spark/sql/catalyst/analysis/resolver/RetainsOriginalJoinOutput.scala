@@ -22,7 +22,7 @@ import java.util.{HashMap, HashSet}
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, ExprId, NamedExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, Join, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.util._
 
 trait RetainsOriginalJoinOutput {
@@ -112,7 +112,7 @@ trait RetainsOriginalJoinOutput {
    * [[Project]] on top of the outer [[Join]] even though its output has changed.
    *
    * The above example also holds true for cases when there is a [[Project]], [[Aggregate]] or
-   * [[Filter]] node on top of a [[Join]].
+   * [[Filter]] node on top of a [[Join]] or an [[AsOfJoin]].
    */
   def retainOriginalJoinOutput(
       plan: LogicalPlan,
@@ -127,8 +127,28 @@ trait RetainsOriginalJoinOutput {
             referencedAttributes = childReferencedAttributes
           ) =>
         Project(scopes.current.output, join)
+      case asOfJoin: AsOfJoin
+          if childHasMissingAttributesNotInOutput(
+            scopes = scopes,
+            outputExpressions = outputExpressions,
+            referencedAttributes = referencedAttributesOf(asOfJoin)
+          ) =>
+        Project(scopes.current.output, asOfJoin)
       case other => other
     }
+  }
+
+  /**
+   * [[AsOfJoinResolver]] resolves the ON condition and each MATCH_CONDITION operand separately, so
+   * the last resolved expression does not hold all references of the [[AsOfJoin]]. Collect them
+   * from the resolved [[AsOfJoin]] instead.
+   */
+  private def referencedAttributesOf(asOfJoin: AsOfJoin): HashMap[ExprId, Attribute] = {
+    val referencedAttributes = new HashMap[ExprId, Attribute]
+    asOfJoin.references.foreach { attribute =>
+      referencedAttributes.put(attribute.exprId, attribute)
+    }
+    referencedAttributes
   }
 
   /**
