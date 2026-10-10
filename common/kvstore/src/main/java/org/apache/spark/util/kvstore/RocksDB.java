@@ -189,7 +189,8 @@ public class RocksDB implements KVStore {
     byte[] data = serializer.serialize(value);
     synchronized (ti) {
       try (WriteBatch writeBatch = new WriteBatch()) {
-        updateBatch(writeBatch, value, data, value.getClass(), ti.naturalIndex(), ti.indices());
+        updateBatch(writeBatch, value, data, value.getClass(), ti.naturalIndex(), ti.indices(),
+          null);
         db().write(writeOptions, writeBatch);
       }
     }
@@ -223,10 +224,11 @@ public class RocksDB implements KVStore {
         final Collection<RocksDBTypeInfo.Index> indices = ti.indices();
 
         try (WriteBatch writeBatch = new WriteBatch()) {
+          KVStoreBatch pending = new KVStoreBatch();
           while (valueIter.hasNext()) {
             assert serializedValueIter.hasNext();
             updateBatch(writeBatch, valueIter.next(), serializedValueIter.next(), klass,
-                naturalIndex, indices);
+                naturalIndex, indices, pending);
           }
           db().write(writeOptions, writeBatch);
         }
@@ -240,14 +242,19 @@ public class RocksDB implements KVStore {
       byte[] data,
       Class<?> klass,
       RocksDBTypeInfo.Index naturalIndex,
-      Collection<RocksDBTypeInfo.Index> indices) throws Exception {
-    Object existing = getOrNull(naturalIndex.entityKey(null, value), klass);
+      Collection<RocksDBTypeInfo.Index> indices,
+      KVStoreBatch pending) throws Exception {
+    byte[] entityKey = naturalIndex.entityKey(null, value);
+    Object existing = pending == null ? null : pending.put(entityKey, value);
+    if (existing == null) {
+      existing = getOrNull(entityKey, klass);
+    }
 
     PrefixCache cache = new PrefixCache(value);
     byte[] naturalKey = naturalIndex.toKey(naturalIndex.getValue(value));
     for (RocksDBTypeInfo.Index idx : indices) {
       byte[] prefix = cache.getPrefix(idx);
-      idx.add(batch, value, existing, data, naturalKey, prefix);
+      idx.add(batch, value, existing, data, naturalKey, prefix, pending);
     }
   }
 
