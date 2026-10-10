@@ -102,7 +102,8 @@ public final class UnsafeKVExternalSorter {
         numElementsForSpillThreshold,
         sizeInBytesForSpillThreshold,
         (int) SparkEnv.get().conf().get(package$.MODULE$.UNSAFE_SORTER_SPILL_MERGE_FACTOR()),
-        canUseRadixSort);
+        canUseRadixSort,
+        keySchema.length() > 0 && keySchema.apply(0).nullable());
     } else {
       // During spilling, the pointer array in `BytesToBytesMap` will not be used, so we can borrow
       // that and use it as the pointer array for `UnsafeInMemorySorter`.
