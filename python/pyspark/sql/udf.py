@@ -271,6 +271,9 @@ class UserDefinedFunction:
                 value = session.conf.get(key, default)
             return value is not None and value.lower() == "true"
 
+        # Collected inside the try but warned after it, so warnings-as-errors cannot
+        # cost us a lowering; see the deferral below.
+        pending_guard_warning: list[str] = []
         try:
             transpile_enabled = (
                 deterministic
@@ -308,11 +311,17 @@ class UserDefinedFunction:
                     self._transpiled_param_names,
                     self._transpiled_input_categories,
                     positional_only,
+                    null_guards,
                 ) = _transpile_func(session, func, self.returnType)
                 self._positional_only_param_names = frozenset(positional_only)
                 if not self.transpiled:
                     detail = f": {errors}" if errors else ""
                     warnings.warn(f"Unable to transpile UDF {func}{detail}")
+                elif null_guards:
+                    # Deferred past the handler below, which clears ``transpiled``:
+                    # under warnings-as-errors, warning here would be caught there and
+                    # cost us a lowering that is perfectly good.
+                    pending_guard_warning = null_guards
         except PySparkNotImplementedError:
             # ``self.returnType`` parses DDL and rejects CHAR/VARCHAR. That is
             # not a transpilation failure; do not swallow it as a warning.
@@ -329,6 +338,24 @@ class UserDefinedFunction:
             self._transpiled_param_names = []
             self._transpiled_input_categories = []
             self._positional_only_param_names = frozenset()
+        if pending_guard_warning and self.transpiled:
+            # Advice, not an error: the lowering is fine, so warn in its own handler --
+            # under warnings-as-errors the handler above would have thrown the
+            # lowering away, which is the wrong fix. "may not" because a non-nullable
+            # bound column (NullPropagation) or ``asNondeterministic()`` can still drop
+            # the check after this point.
+            try:
+                warnings.warn(
+                    f"Transpiled UDF {func} still checks for NULL in "
+                    f"{', '.join(pending_guard_warning)} and raises if it finds one, so "
+                    "Spark may not be able to push a filter on this UDF through a join "
+                    "or combine it with an adjacent filter. Guard the parameter "
+                    "(`if x is not None:`) or bind a non-nullable column to drop the "
+                    "check; binding one already drops it.",
+                    UserWarning,
+                )
+            except Exception:
+                pass
 
     @staticmethod
     def _check_return_type(returnType: DataType, evalType: int) -> None:

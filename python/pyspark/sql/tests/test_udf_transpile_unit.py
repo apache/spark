@@ -359,7 +359,9 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # transpiler handles ast.Lt, `x < 0` should lower to a Catalyst
         # expression and match interpreted Python. The ``is not None``
         # guard short-circuits None inputs through the else branch, so
-        # the comparison itself never sees a NULL in this UDF.
+        # the comparison itself never sees a NULL in this UDF -- and since
+        # SPARK-58628 that also means no NULL check is emitted for it (see
+        # test_udf_transpile_drops_null_checks_a_guard_already_made).
         from pyspark.sql.types import StructField, StructType
 
         def less_than_zero(x):
@@ -386,7 +388,9 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # raised TypeError ('>' not supported between NoneType and int).
         # The transpiler wraps Compare ops with a raise_error guard so
         # the rewritten plan fails loudly instead of silently producing
-        # NULL three-valued-logic results.
+        # NULL three-valued-logic results. Nothing here proves ``x``
+        # non-NULL, so the guard is emitted -- contrast the guarded shapes in
+        # test_udf_transpile_drops_null_checks_a_guard_already_made.
         from pyspark.sql.types import StructField, StructType
 
         def gt_zero(x):
@@ -492,7 +496,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # ``<=`` and ``>=`` go through the same ``_lower_value_compare`` path
         # as ``<`` / ``>`` (and so share the NULL-raises-TypeError guard), but
         # the entry points are not exercised elsewhere. Cover both with a None
-        # guard so the comparison only sees non-NULL operands here.
+        # guard, which since SPARK-58628 also means the guard proves the operands
+        # non-NULL and no check is emitted at all.
         from pyspark.sql.types import StructField, StructType
 
         def lte_zero(x):
@@ -1594,9 +1599,11 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 self.assertEqual(0, self._eval_python_count(projected), str(func))
             return [r[0] for r in projected.collect()]
 
-    def _raises(self, func, schema, rows, needle="numeric"):
+    def _raises(self, func, schema, rows, needle="numeric", return_type=None):
+        # `is None`, not `or`: a DataType can be falsy (an empty StructType defines
+        # __len__), so `return_type or LongType()` would silently swap it out.
         with self.sql_conf(_TRANSPILE_ON):
-            u = self._transpiled_udf(func, LongType())
+            u = self._transpiled_udf(func, LongType() if return_type is None else return_type)
             df = self.spark.createDataFrame(rows, schema)
             with self.assertRaises(Exception) as ctx:
                 df.select(u(*df.columns)).collect()
@@ -2526,6 +2533,28 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self._vals(strlen_guarded, L, "a string", [("ab",), (None,)]),
             [2, None],
         )
+        # The guard has to actually leave the plan. A dead ``raise_error`` still
+        # blocks predicate movement. ``len(x) > 0`` is not a "definitely boolean"
+        # compare (``len`` is a call), so it only transpiles under a numeric return
+        # type, where the transpiled cast makes the bool 0/1 (the interpreted path
+        # nulls it -- a pre-existing hole in the return-type gate) -- and it must
+        # not grow a second check on the ``length`` result, which is an int or a
+        # raise, never NULL.
+        self.assertNotIn("raise_error", self._transpiled_plan(strlen_guarded, L, "a string"))
+        self.assertIn("raise_error", self._transpiled_plan(strlen, L, "a string"))
+        guarded_cmp = lambda x: (len(x) > 0) if x is not None else None  # noqa: E731
+        self.assertEqual(
+            self._vals(guarded_cmp, L, "a string", [("ab",), ("",), (None,)]),
+            [1, 0, None],
+        )
+        self.assertNotIn("raise_error", self._transpiled_plan(guarded_cmp, L, "a string"))
+        len_cmp = lambda x: len(x) > 0  # noqa: E731
+        cmp_plan = self._transpiled_plan(len_cmp, L, "a string")
+        self.assertIn("cannot call len()", cmp_plan)
+        self.assertNotIn("cannot compare", cmp_plan)
+        self.assertEqual(self._vals(len_cmp, L, "a string", [("ab",), ("",)]), [1, 0])
+        # Dropping the compare's check must not drop the one ``len`` still needs.
+        self._raises(len_cmp, "a string", [(None,)], needle="len()")
         self._raises(strlen, "a string", [(None,)], needle="len()")
         self._raises(strlen, "a long", [(5,)], needle="")
 
@@ -2633,6 +2662,440 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         with self.sql_conf(_TRANSPILE_ON):
             self.assertFalse(UserDefinedFunction(bool_add, LongType()).transpiled)
             self.assertTrue(UserDefinedFunction(bytes_ident, BinaryType()).transpiled)
+
+    def _transpiled_plan(self, func, return_type, schema):
+        """The optimized plan of ``func`` applied to every column of ``schema``.
+
+        The lowered NULL checks are what these tests are about, so they have to be
+        read off the plan: the values a guarded UDF returns are the same whether or
+        not the plan carries a check that can never fire.
+
+        Asserting the option was actually APPLIED is what keeps every
+        ``assertNotIn(..., plan)`` built on this from passing for the wrong reason
+        -- an interpreted plan contains none of the strings we look for, so a UDF
+        that quietly fell back would satisfy them all (see ``_vals``, which guards
+        the same way for the same reason).
+        """
+        with self.sql_conf(_TRANSPILE_ON):
+            u = self._transpiled_udf(func, return_type)
+            df = self.spark.createDataFrame([], schema)
+            projected = df.select(u(*df.columns))
+            self.assertEqual(0, self._eval_python_count(projected), str(func))
+            return projected._jdf.queryExecution().optimizedPlan().toString()
+
+    def test_udf_transpile_drops_null_checks_a_guard_already_made(self):
+        # SPARK-58628. Python raises TypeError on `None > 0` where Spark returns
+        # NULL, so an ordering comparison carries a check that raises. When the UDF
+        # has already tested the parameter the check can never fire, and leaving it
+        # in is not free: RaiseError is throwable (SPARK-58627), which stops the
+        # optimizer from moving a predicate containing it. Every shape below proves
+        # non-NULL-ness, so none of them should lower to a raise -- and all of them
+        # must still agree with Python, including on the None row.
+        def if_guard(x):
+            if x is not None:
+                return x > 0
+            else:
+                return None
+
+        def else_of_is_none(x):
+            if x is None:
+                return None
+            else:
+                return x > 0
+
+        def not_is_none(x):
+            if not (x is None):  # noqa: E714  the `not` form is the point
+                return x > 0
+            else:
+                return None
+
+        def reversed_test(x):
+            if None is not x:
+                return x > 0
+            else:
+                return None
+
+        def ne_none_test(x):
+            # The `!= None` spelling of the same guard. PEP 8 prefers `is not None`,
+            # but both are common and both must narrow, or the equality form keeps a
+            # raising check and gets told to add the guard it already has.
+            if x != None:  # noqa: E711
+                return x > 0
+            else:
+                return None
+
+        def eq_none_test(x):
+            if x == None:  # noqa: E711
+                return None
+            else:
+                return x > 0
+
+        ternary = lambda x: (x > 0) if x is not None else None  # noqa: E731
+        short_circuit_and = lambda x: x is not None and x > 0  # noqa: E731
+        short_circuit_or = lambda x: x is None or x > 0  # noqa: E731
+        # `<=` / `>=` share `_lower_value_compare` but are otherwise only exercised
+        # where a guard IS emitted, so cover the narrowed side for them too.
+        lte_guarded = lambda x: (x <= 0) if x is not None else None  # noqa: E731
+        gte_guarded = lambda x: (x >= 0) if x is not None else None  # noqa: E731
+        lt_guarded = lambda x: (x < 0) if x is not None else None  # noqa: E731
+
+        rows = [(-1,), (0,), (5,), (None,)]
+        cases = [
+            (if_guard, [False, False, True, None]),
+            (else_of_is_none, [False, False, True, None]),
+            (not_is_none, [False, False, True, None]),
+            (reversed_test, [False, False, True, None]),
+            (ne_none_test, [False, False, True, None]),
+            (eq_none_test, [False, False, True, None]),
+            (ternary, [False, False, True, None]),
+            (lte_guarded, [True, True, False, None]),
+            (gte_guarded, [False, True, True, None]),
+            (lt_guarded, [True, False, False, None]),
+            # `and` / `or` return the guard's own result for None, as Python does.
+            (short_circuit_and, [False, False, True, False]),
+            (short_circuit_or, [False, False, True, True]),
+        ]
+        for func, expected in cases:
+            with self.subTest(func=getattr(func, "__name__", "lambda")):
+                self.assertEqual(
+                    expected,
+                    [func(v) for (v,) in rows],
+                    "the expectation should be what Python actually does",
+                )
+                self.assertEqual(expected, self._vals(func, BooleanType(), "a long", rows))
+                plan = self._transpiled_plan(func, BooleanType(), "a long")
+                self.assertNotIn("raise_error", plan)
+
+    def test_udf_transpile_keeps_the_null_check_it_needs(self):
+        # The other side of the previous test: nothing here proves the parameter
+        # non-NULL, so the check has to stay and the UDF has to raise like Python.
+        # `x is None and ...` is the interesting one -- an `and` being false says
+        # only that SOME operand was false, so it narrows nothing.
+        unguarded = lambda x: x > 0  # noqa: E731
+        wrong_way_and = lambda x: x is None and x > 0  # noqa: E731
+        two_columns = lambda a, b: a > b  # noqa: E731
+
+        for func, schema in ((unguarded, "a long"), (two_columns, "a long, b long")):
+            with self.subTest(func="lambda", schema=schema):
+                plan = self._transpiled_plan(func, BooleanType(), schema)
+                self.assertIn("raise_error", plan)
+        boolean = BooleanType()
+        self._raises(unguarded, "a long", [(None,)], "cannot compare null", boolean)
+        self._raises(two_columns, "a long, b long", [(1, None)], "cannot compare null", boolean)
+        # Each ordering operator names itself in the guard's message and in the
+        # warning's label; only `>` was covered before.
+        lt_zero = lambda x: x < 0  # noqa: E731
+        lte_zero = lambda x: x <= 0  # noqa: E731
+        gte_zero = lambda x: x >= 0  # noqa: E731
+        for func, op_text in ((lt_zero, "`<`"), (lte_zero, "`<=`"), (gte_zero, "`>=`")):
+            with self.subTest(op=op_text):
+                with self.sql_conf(_TRANSPILE_ON):
+                    _, warned = self._udf_and_warnings(func, boolean)
+                self.assertIn(f"comparison {op_text} on x", warned)
+                self._raises(func, "a long", [(None,)], f"operator {op_text}", boolean)
+        # `x is None and x > 0` is False for every non-None x without evaluating the
+        # comparison, and raises for None -- exactly like Python.
+        with self.sql_conf(_TRANSPILE_ON):
+            u = self._transpiled_udf(wrong_way_and, BooleanType())
+            self.assertIn("raise_error", str(u.transpiled[0]))
+            df = self.spark.createDataFrame([(1,)], "a long")
+            self.assertEqual([False], [r[0] for r in df.select(u("a")).collect()])
+        self._raises(wrong_way_and, "a long", [(None,)], "cannot compare null", boolean)
+
+    def test_udf_transpile_narrows_only_the_proven_parameter(self):
+        # With two parameters the narrowing has to be per-name: guarding `a` must
+        # not license dropping the check on `b`. Both guarded, no check at all.
+        one_guarded = lambda a, b: a is not None and a > b  # noqa: E731
+        both_guarded = lambda a, b: a is not None and b is not None and a > b  # noqa: E731
+
+        # The same two-parameter guards written as an `if` TEST rather than as the
+        # expression itself. This is the only shape that asks `_null_facts` about a
+        # composite `and` / `or` node instead of about a single comparison, and it
+        # is the idiomatic way to guard two columns.
+        def composite_and(a, b):
+            if a is not None and b is not None:
+                return a > b
+            else:
+                return None
+
+        def composite_or(a, b):
+            if a is None or b is None:
+                return None
+            else:
+                return a > b
+
+        def composite_not_or(a, b):
+            if not (a is None or b is None):
+                return a > b
+            else:
+                return None
+
+        schema = "a long, b long"
+        partial = self._transpiled_plan(one_guarded, BooleanType(), schema)
+        self.assertIn("raise_error", partial)
+        # Only `b` is still checked. Note `isnull(a` does not match the guard's own
+        # `isnotnull(a...)`, which is the test rather than a check on the operand.
+        self.assertIn("isnull(b", partial)
+        self.assertNotIn("isnull(a", partial)
+        rows = [(5, 1), (1, 5), (1, None), (None, 1)]
+        for func in (both_guarded, composite_and, composite_or, composite_not_or):
+            with self.subTest(func=getattr(func, "__name__", "lambda")):
+                self.assertNotIn("raise_error", self._transpiled_plan(func, BooleanType(), schema))
+                self.assertEqual(
+                    [func(a, b) for a, b in rows],
+                    self._vals(func, BooleanType(), schema, rows),
+                )
+        # Partial narrowing was only plan-asserted, but it creates two runtime
+        # invariants: the surviving check must still fire for a NULL `b`, and the
+        # guard on `a` must still short-circuit a NULL `a` to False without reaching
+        # the comparison. This is the one live consumer of the claim that Catalyst's
+        # `And` short-circuits on false the way Python does.
+        self._raises(one_guarded, schema, [(1, None)], "cannot compare null", BooleanType())
+        self.assertEqual([False], self._vals(one_guarded, BooleanType(), schema, [(None, None)]))
+        self.assertEqual([False], self._vals(one_guarded, BooleanType(), schema, [(None, 1)]))
+
+        # The UNSOUND direction, end to end: a true `or` says only that ONE operand
+        # held, so it narrows nothing and the check must stay. Covered here as well as
+        # in `test_null_facts_narrow_by_outcome`, because a plausible "symmetry" edit
+        # to `_null_facts` would delete a needed raise, and the fact-table unit test
+        # sits one remove from the plan that would go wrong.
+        def or_test(a, b):
+            if a is not None or b is not None:
+                return a > 0
+            else:
+                return None
+
+        def not_and_test(a, b):
+            if not (a is None and b is None):
+                return a > 0
+            else:
+                return None
+
+        for func in (or_test, not_and_test):
+            with self.subTest(func=func.__name__):
+                self.assertIn("raise_error", self._transpiled_plan(func, BooleanType(), schema))
+                with self.assertRaises(Exception):
+                    func(None, 1)
+                self._raises(func, schema, [(None, 1)], "cannot compare null", BooleanType())
+
+    def test_udf_transpile_drops_the_coalesce_when_nothing_can_be_null(self):
+        # The `if` test and the `not` operand each get coalesced against a literal
+        # so that a NULL follows Python's "None is falsy" rule. Neither coalesce
+        # does anything once the operand provably cannot be NULL, and dropping it
+        # leaves a plainer expression for the optimizer.
+        def non_null_test(x):
+            # `x is not None` lowers to isNotNull, which is never NULL itself.
+            if x is not None:
+                return 1
+            else:
+                return 2
+
+        def nullable_test(x):
+            # A ternary arm of literal None can be NULL, so the coalesce stays.
+            if (x > 0) if x is not None else None:
+                return 1
+            else:
+                return 2
+
+        # `not (x is None)` on purpose, rather than `x is not None`: it is the `not`
+        # arm of _convert_chunk that this case is about.
+        negate_compare = lambda x: not (x is None)  # noqa: E714,E731
+        # The `not` arm's negative case, and unlike the `if` test above this
+        # coalesce is load-bearing: Python's `not None` is True while Catalyst's
+        # `~NULL` is NULL, so dropping it here would return NULL for a None row.
+        negate_nullable = lambda x: not ((x > 0) if x is not None else None)  # noqa: E731
+
+        with self.sql_conf(_TRANSPILE_ON):
+            proven = str(self._transpiled_udf(non_null_test, LongType()).transpiled[0])
+            self.assertNotIn("coalesce", proven)
+            self.assertIn("isNotNull", proven)
+            unproven = str(self._transpiled_udf(nullable_test, LongType()).transpiled[0])
+            self.assertIn("coalesce", unproven)
+            negated = str(self._transpiled_udf(negate_compare, BooleanType()).transpiled[0])
+            self.assertNotIn("coalesce", negated)
+            # Positive companion, so this cannot pass on a plan that no longer
+            # resembles the `not` lowering at all.
+            self.assertIn("!(isNull", negated)
+            still = str(self._transpiled_udf(negate_nullable, BooleanType()).transpiled[0])
+            self.assertIn("coalesce", still)
+        # Values still follow Python, coalesce or not.
+        rows = [(5,), (-5,), (None,)]
+        for func, return_type in (
+            (non_null_test, LongType()),
+            (nullable_test, LongType()),
+            (negate_compare, BooleanType()),
+            (negate_nullable, BooleanType()),
+        ):
+            with self.subTest(func=getattr(func, "__name__", "lambda")):
+                self.assertEqual(
+                    [func(v) for (v,) in rows],
+                    self._vals(func, return_type, "a long", rows),
+                )
+
+    def test_udf_transpile_does_not_null_check_a_literal(self):
+        # A literal operand is never NULL, so only the column is checked. This used
+        # to emit `isNull(0)` alongside it -- constant-folded later, but it meant a
+        # comparison of two literals still produced a guard.
+        unguarded = lambda x: x > 0  # noqa: E731
+        with self.sql_conf(_TRANSPILE_ON):
+            lowered = str(self._transpiled_udf(unguarded, BooleanType()).transpiled[0])
+        self.assertIn("isNull(_udf_param_0)", lowered)
+        self.assertNotIn("isNull(0)", lowered)
+
+    def test_udf_transpile_warns_only_when_a_null_check_survives(self):
+        # The (gentle) warning SPARK-58628 asks for: the UDF transpiled fine, but
+        # the check it kept will stop filters moving, so say so once. A guarded UDF
+        # must not warn -- the warning is a nudge toward guarding, and firing it on
+        # already-guarded code would train people to ignore it.
+        def guarded(x):
+            if x is not None:
+                return x > 0
+            else:
+                return None
+
+        unguarded = lambda x: x > 0  # noqa: E731
+        half_guarded = lambda a, b: a is not None and a > b  # noqa: E731
+        needle = "still checks for NULL"
+        with self.sql_conf(_TRANSPILE_ON):
+            _, warned = self._udf_and_warnings(unguarded, BooleanType())
+            self.assertIn(needle, warned)
+            # Actionable: it should name what is checked, and the guard to add.
+            self.assertIn("comparison `>` on x", warned)
+            self.assertIn("is not None", warned)
+            # It must name the parameter still checked, not both -- `a` is guarded
+            # here, so advising the reader to guard "the parameter" is only useful
+            # if they can tell which one is left.
+            _, partial = self._udf_and_warnings(half_guarded, BooleanType())
+            self.assertIn("comparison `>` on b", partial)
+            # The full label, not " on a": that would match any prose word starting
+            # with "a" elsewhere in the message.
+            self.assertNotIn("comparison `>` on a", partial)
+            # `_transpiled_udf`, not `_udf_and_warnings`: udf.py reports the fallback
+            # and this warning through mutually exclusive branches, so a `guarded`
+            # that stopped transpiling would satisfy assertNotIn for the wrong
+            # reason. Assert it transpiled, then that it stayed quiet.
+            quiet_udf, quiet = self._udf_and_warnings(guarded, BooleanType())
+            self.assertTrue(quiet_udf.transpiled, f"guarded must transpile: {quiet}")
+            self.assertNotIn(needle, quiet)
+            # ``len`` raises on NULL the same way ``>`` does, so it warns the same
+            # way -- and only for the check it actually kept. ``len(x) > 0`` must
+            # not also warn about the comparison: the ``length`` result is not NULL.
+            unguarded_len = lambda x: len(x)  # noqa: E731
+            len_cmp = lambda x: len(x) > 0  # noqa: E731
+            _, len_warned = self._udf_and_warnings(unguarded_len, LongType())
+            self.assertIn("`len` on x", len_warned)
+            # LongType, not BooleanType: this compare is not classified as boolean
+            # (``len`` is a call), so a boolean return type refuses the lowering.
+            cmp_udf, cmp_warned = self._udf_and_warnings(len_cmp, LongType())
+            self.assertTrue(cmp_udf.transpiled, f"len compare must transpile: {cmp_warned}")
+            self.assertIn("`len` on x", cmp_warned)
+            self.assertNotIn("comparison `>`", cmp_warned)
+            self.assertFalse(UserDefinedFunction(len_cmp, BooleanType()).transpiled)
+
+            def guarded_len(x):
+                if x is not None:
+                    return len(x)
+                else:
+                    return None
+
+            quiet_len, quiet_len_w = self._udf_and_warnings(guarded_len, LongType())
+            self.assertTrue(quiet_len.transpiled, f"guarded len must transpile: {quiet_len_w}")
+            self.assertNotIn(needle, quiet_len_w)
+
+    def test_udf_transpile_null_check_blocks_predicate_pushdown(self):
+        # Why the checks are worth dropping. RaiseError is throwable, and
+        # PushPredicateThroughJoin refuses to push a throwable condition to either
+        # side (Optimizer.scala). So an unguarded UDF pins its filter above the
+        # join while a guarded one pushes below it -- the "filter cannot bubble up"
+        # in SPARK-58628.
+        def guarded(x):
+            if x is not None:
+                return x > 0
+            else:
+                return None
+
+        unguarded = lambda x: x > 0  # noqa: E731
+
+        conf = dict(_TRANSPILE_ON)
+        # Broadcast would reshape the plan and hide where the Filter landed.
+        conf["spark.sql.autoBroadcastJoinThreshold"] = -1
+        with self.sql_conf(conf):
+            left = self.spark.createDataFrame([(1,), (2,), (None,)], "a long")
+            right = self.spark.createDataFrame([(1,), (2,)], "k long")
+            for func, pushed in ((guarded, True), (unguarded, False)):
+                with self.subTest(pushed=pushed):
+                    u = self._transpiled_udf(func, BooleanType())
+                    joined = left.join(right, left["a"] == right["k"]).filter(u("a"))
+                    # This method builds its own plan rather than going through
+                    # `_optimized_plan`, so it needs the same applied-or-not guard:
+                    # a filter on an interpreted UDF would satisfy the pushed case
+                    # for the wrong reason.
+                    self.assertEqual(0, self._eval_python_count(joined))
+                    plan = joined._jdf.queryExecution().optimizedPlan().toString()
+                    # Whether the raise is there is what DRIVES the pushdown, so
+                    # assert it too: if this half fails the position check below
+                    # becomes noise, and the failure says which one broke.
+                    self.assertEqual(pushed, "raise_error" not in plan, plan)
+                    # The remaining Filters are the join keys' inferred isnotnull,
+                    # which sit below the Join either way, so comparing the first
+                    # of each reads the UDF's own filter. Assert both nodes are
+                    # present first, or `index` raises ValueError and the plan text
+                    # this failure needs never gets printed.
+                    self.assertIn("Filter", plan, plan)
+                    self.assertIn("Join", plan, plan)
+                    self.assertEqual(pushed, plan.index("Filter") > plan.index("Join"), plan)
+
+    def test_udf_transpile_non_nullable_column_drops_the_null_check(self):
+        # The half Catalyst already does for us: on a non-nullable column the check
+        # folds away entirely (NullPropagation turns isnull over a non-nullable child
+        # into false, SimplifyConditionals drops the branch). Pinned because it needs
+        # ConvertToCatalyst to run before the operator-optimization batches, so a
+        # reordering of Optimizer.defaultBatches would quietly regress it.
+        unguarded = lambda x: x > 0  # noqa: E731
+        with self.sql_conf(_TRANSPILE_ON):
+            u = self._transpiled_udf(unguarded, BooleanType())
+            self.assertIn("raise_error", str(u.transpiled[0]))
+            source = self.spark.range(0, 4)
+            self.assertFalse(source.schema["id"].nullable, "range(id) should be non-nullable")
+            projected = source.select(u("id"))
+            # Without this the test is vacuous under the very regression it pins: an
+            # interpreted plan has no `raise_error` and no `CASE WHEN` either, and
+            # returns the same values, so all three assertions below would pass
+            # while nothing had been lowered at all.
+            self.assertEqual(0, self._eval_python_count(projected))
+            plan = projected._jdf.queryExecution().optimizedPlan().toString()
+            self.assertNotIn("raise_error", plan)
+            self.assertNotIn("CASE WHEN", plan)
+            self.assertEqual([False, True, True, True], [r[0] for r in projected.collect()])
+
+    def test_null_facts_narrow_by_outcome(self):
+        # The fact extractor on its own, so a regression in the table shows up as a
+        # unit failure rather than as a plan-shape surprise several layers up.
+        import ast as _ast
+
+        from pyspark.sql.transpile import _null_facts
+
+        def facts(source):
+            true_facts, false_facts = _null_facts(_ast.parse(source, mode="eval").body)
+            return sorted(true_facts), sorted(false_facts)
+
+        self.assertEqual((["x"], []), facts("x is not None"))
+        self.assertEqual(([], ["x"]), facts("x is None"))
+        # Operand order does not matter -- `None is x` is the same test.
+        self.assertEqual((["x"], []), facts("None is not x"))
+        self.assertEqual(([], ["x"]), facts("None is x"))
+        # `not` swaps the two outcomes.
+        self.assertEqual(([], ["x"]), facts("not (x is not None)"))
+        # An `and` that held means every operand held; false says only that one of
+        # them did not, so it narrows nothing. `or` is the mirror image.
+        self.assertEqual((["x", "y"], []), facts("x is not None and y is not None"))
+        self.assertEqual(([], ["x", "y"]), facts("x is None or y is None"))
+        self.assertEqual(([], []), facts("x is not None or y is not None"))
+        self.assertEqual(([], []), facts("x is None and y is None"))
+        # Identity checks that are not against None, and anything else, say nothing.
+        self.assertEqual(([], []), facts("x is y"))
+        self.assertEqual(([], []), facts("x > 0"))
+        self.assertEqual(([], []), facts("f(x)"))
 
     def test_param_category_combos_caps_preserve_typed_pins(self):
         # With more than three untyped params the cap collapses the untyped ones
