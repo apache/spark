@@ -795,8 +795,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       // tables if:
       //   1. `LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT` is false, or
       //   2. It's a CTAS and `conf.convertCTAS` is true.
-      val createHiveTableByDefault = conf.getConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT)
-      if (!createHiveTableByDefault || (ctas && conf.convertCTAS)) {
+      if (!DataSourceV2Utils.createsHiveTableByDefault(ctas, conf)) {
         (nonHiveStorageFormat, conf.defaultDataSourceName)
       } else {
         logWarning(log"A Hive serde table will be created as there is no table provider " +
@@ -848,7 +847,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     extends ResolvedIdentifierInSessionCatalog("CREATE", "FUNCTION")
 
   private def isV2Provider(provider: String): Boolean = {
-    DataSourceV2Utils.getTableProvider(provider, conf).isDefined
+    DataSourceV2Utils.isV2Provider(provider, conf)
   }
 
   /**

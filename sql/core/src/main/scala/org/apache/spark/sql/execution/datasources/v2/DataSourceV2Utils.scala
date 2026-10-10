@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.TimeTravelSpec
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SessionConfigSupport, StagedTable, StagingTableCatalog, SupportsCatalogOptions, SupportsRead, Table, TableProvider}
+import org.apache.spark.sql.connector.catalog.{CatalogExtension, CatalogPlugin, CatalogV2Util, SessionConfigSupport, StagedTable, StagingTableCatalog, SupportsCatalogOptions, SupportsRead, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability.BATCH_READ
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SQLExecution
@@ -167,6 +167,48 @@ private[sql] object DataSourceV2Utils extends Logging {
       // TODO(SPARK-28396): Currently file source v2 can't work with tables.
       case Some(p) if !p.isInstanceOf[FileDataSourceV2] => Some(p)
       case _ => None
+    }
+  }
+
+  /** True when `provider` names a v2 source that a session catalog table can be created with. */
+  def isV2Provider(provider: String, conf: SQLConf): Boolean = {
+    getTableProvider(provider, conf).isDefined
+  }
+
+  /**
+   * True when a command on `catalog` runs as a v1 command: the catalog is the session catalog,
+   * either the built-in one or a [[CatalogExtension]].
+   */
+  def supportsV1Command(catalog: CatalogPlugin, conf: SQLConf): Boolean = {
+    CatalogV2Util.isSessionCatalog(catalog) && (
+      conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION) == "builtin" ||
+        catalog.isInstanceOf[CatalogExtension])
+  }
+
+  /**
+   * True when a CREATE TABLE in the session catalog with neither USING nor STORED AS/ROW FORMAT
+   * creates a Hive serde table: `spark.sql.legacy.createHiveTableByDefault` is set, unless the
+   * statement is a CTAS that `spark.sql.hive.convertCTAS` converts.
+   */
+  def createsHiveTableByDefault(ctas: Boolean, conf: SQLConf): Boolean = {
+    conf.getConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT) && !(ctas && conf.convertCTAS)
+  }
+
+  /**
+   * The provider a CREATE TABLE in the session catalog creates the table with: the one in
+   * USING, Hive for STORED AS or ROW FORMAT, and otherwise as [[createsHiveTableByDefault]] says.
+   */
+  def createTableProvider(
+      provider: Option[String],
+      hasSerde: Boolean,
+      ctas: Boolean,
+      conf: SQLConf): String = {
+    provider.getOrElse {
+      if (hasSerde || createsHiveTableByDefault(ctas, conf)) {
+        DDLUtils.HIVE_PROVIDER
+      } else {
+        conf.defaultDataSourceName
+      }
     }
   }
 

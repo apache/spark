@@ -191,10 +191,11 @@ object WriteDistributionAndOrdering {
     e.children().map(toSQL(_, quote)).mkString(s"$name(", ", ", ")")
   }
 
-  // `ToStringSQLBuilder` renders a few expressions through their children's `describe`, and for an
-  // expression it does not know builds an error message with `describe`, which recurses without
-  // end for a `GeneralScalarExpression` name it does not know. This builder renders every child
-  // itself, and an expression it does not know from its children.
+  // Renders literals and references with `toSQL`, so that they keep their type and quoting, and
+  // renders the children of `GetArrayItem` and `VariantGet` itself rather than through their
+  // `toString`. An expression `ToStringSQLBuilder` does not know is rendered from its children, and
+  // so is a `PartitionPredicate`, whose `describe` defaults to a `toString` that renders through
+  // this builder again.
   private class DescribingSQLBuilder(quote: String => String) extends ToStringSQLBuilder {
     override protected def visitLiteral(literal: Literal[_]): String = toSQL(literal, quote)
 
