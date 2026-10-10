@@ -119,7 +119,8 @@ case class JsonToStructsEvaluator(
     nullableSchema: DataType,
     nameOfCorruptRecord: String,
     timeZoneId: Option[String],
-    variantAllowDuplicateKeys: Boolean) {
+    variantAllowDuplicateKeys: Boolean,
+    charVarcharStandardSemantics: Boolean) {
 
   // This converts parsed rows to the desired output by the given schema.
   @transient
@@ -149,7 +150,8 @@ case class JsonToStructsEvaluator(
         (StructType(Array(StructField("value", other))), other)
     }
 
-    val rawParser = new JacksonParser(actualSchema, parsedOptions, allowArrayAsStructs = false)
+    val rawParser = new JacksonParser(actualSchema, parsedOptions, allowArrayAsStructs = false,
+      charVarcharStandardSemanticsOverride = Some(charVarcharStandardSemantics))
     val createParser = CreateJacksonParser.utf8String _
 
     new FailureSafeParser[UTF8String](

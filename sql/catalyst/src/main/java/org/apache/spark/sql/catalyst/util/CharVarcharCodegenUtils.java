@@ -18,8 +18,6 @@
 package org.apache.spark.sql.catalyst.util;
 
 import org.apache.spark.sql.errors.QueryExecutionErrors;
-import org.apache.spark.sql.types.CharType;
-import org.apache.spark.sql.types.VarcharType;
 import org.apache.spark.unsafe.types.UTF8String;
 
 public class CharVarcharCodegenUtils {
@@ -112,29 +110,5 @@ public class CharVarcharCodegenUtils {
    */
   public static UTF8String varcharTypeReadSideCheck(UTF8String inputStr, int limit) {
     return varcharTypeWriteSideCheck(inputStr, limit);
-  }
-
-  /**
-   * JSON object names used as MAP&lt;CHAR(n), _&gt; keys cannot be padded or trimmed.
-   * The name must already be exactly n characters.
-   */
-  public static UTF8String charTypeJsonMapKeyCheck(UTF8String inputStr, int limit) {
-    if (inputStr.numChars() != limit) {
-      throw QueryExecutionErrors.unsupportedJsonCharVarcharMapKey(
-          inputStr, CharType.apply(limit));
-    }
-    return inputStr;
-  }
-
-  /**
-   * JSON object names used as MAP&lt;VARCHAR(n), _&gt; keys cannot be trimmed.
-   * The name must already be at most n characters.
-   */
-  public static UTF8String varcharTypeJsonMapKeyCheck(UTF8String inputStr, int limit) {
-    if (inputStr.numChars() > limit) {
-      throw QueryExecutionErrors.unsupportedJsonCharVarcharMapKey(
-          inputStr, VarcharType.apply(limit));
-    }
-    return inputStr;
   }
 }

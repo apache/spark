@@ -3096,27 +3096,46 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
 
   test("SPARK-60108: JSON CHAR/VARCHAR map keys are not padded or trimmed") {
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      // Exact CHAR and within-limit VARCHAR names are accepted as-is: the trailing space in
+      // "ab " is preserved for CHAR(3) and not trimmed for VARCHAR(3).
       checkAnswer(
         sql("""SELECT from_json('{"ab ": 1}', 'MAP<CHAR(3), INT>')"""),
         Row(Map("ab " -> 1)))
       checkAnswer(
         sql("""SELECT from_json('{"ab": 1}', 'MAP<VARCHAR(3), INT>')"""),
         Row(Map("ab" -> 1)))
+      // Binary-distinct names ("ab" vs "ab ") are both kept.
       checkAnswer(
         sql("""SELECT map_entries(from_json('{"ab": 1, "ab ": 2}', 'MAP<VARCHAR(3), INT>'))"""),
         Row(Seq(Row("ab", 1), Row("ab ", 2))))
+      // Duplicate names are kept, exactly as for STRING keys; mapKeyDedupPolicy is not applied.
+      // checkAnswer alone would collapse the duplicates when it builds a Scala Map, so pin the
+      // behavior with size and map_entries.
       checkAnswer(
         sql("""SELECT size(from_json('{"abc": 1, "abc": 2}', 'MAP<CHAR(3), INT>'))"""),
-        Row(1))
+        Row(2))
       checkAnswer(
-        sql("""SELECT from_json('{"abc": 1, "abc": 2}', 'MAP<CHAR(3), INT>')"""),
-        Row(Map("abc" -> 2)))
+        sql("""SELECT map_entries(from_json('{"abc": 1, "abc": 2}', 'MAP<CHAR(3), INT>'))"""),
+        Row(Seq(Row("abc", 1), Row("abc", 2))))
+      // Length counts characters (code points), not UTF-16 units or bytes: one non-BMP code
+      // point is exactly CHAR(1) and is kept verbatim, and the same name is rejected by CHAR(2).
+      val nonBmp = "\uD83D\uDE00" // U+1F600, one code point stored as a UTF-16 surrogate pair
+      checkAnswer(
+        sql(s"""SELECT map_keys(from_json('{"$nonBmp": 1}', 'MAP<CHAR(1), INT>'))[0]"""),
+        Row(nonBmp))
+      checkAnswer(sql(s"""SELECT from_json('{"$nonBmp": 1}', 'MAP<CHAR(2), INT>')"""), Row(null))
+
+      // Valid keys inside nested containers.
       checkAnswer(
         sql("""SELECT from_json('{"outer": {"xy ": 1}}',
           |  'MAP<STRING, MAP<CHAR(3), INT>>')""".stripMargin),
         Row(Map("outer" -> Map("xy " -> 1))))
+      checkAnswer(
+        sql("""SELECT from_json('[{"ab ": 1}]', 'ARRAY<MAP<CHAR(3), INT>>')"""),
+        Row(Seq(Map("ab " -> 1))))
 
-      // Too-short CHAR, CHAR overflow, and VARCHAR overflow are not EXCEED_LIMIT_LENGTH.
+      // A rejected key makes the row a bad record: null in PERMISSIVE (not EXCEED_LIMIT_LENGTH),
+      // and in FAILFAST the UNSUPPORTED_JSON_CHAR_VARCHAR_MAP_KEY cause is surfaced.
       checkAnswer(sql("""SELECT from_json('{"a": 1}', 'MAP<CHAR(3), INT>')"""), Row(null))
       checkAnswer(sql("""SELECT from_json('{"abcd": 1}', 'MAP<CHAR(3), INT>')"""), Row(null))
       checkAnswer(sql("""SELECT from_json('{"abcd": 1}', 'MAP<VARCHAR(3), INT>')"""), Row(null))
@@ -3133,6 +3152,51 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         """SELECT from_json('{"abcd": 1}', 'MAP<VARCHAR(3), INT>', map('mode', 'FAILFAST'))""",
         key = "abcd",
         dataTypeSql = "VARCHAR(3)")
+      // A rejected key inside a nested container is surfaced too (not swallowed).
+      assertUnsupportedJsonMapKey(
+        """SELECT from_json('{"outer": {"a": 1}}',
+          |  'MAP<STRING, MAP<CHAR(3), INT>>', map('mode', 'FAILFAST'))""".stripMargin,
+        key = "a",
+        dataTypeSql = "CHAR(3)")
+      assertUnsupportedJsonMapKey(
+        """SELECT from_json('[{"a": 1}]',
+          |  'ARRAY<MAP<CHAR(3), INT>>', map('mode', 'FAILFAST'))""".stripMargin,
+        key = "a",
+        dataTypeSql = "CHAR(3)")
+
+      // SPARK-60108: a rejected key must not corrupt a sibling field of an enclosing struct.
+      // The map becomes null but the following `tail` field is still parsed, and an inner name
+      // ("tail") is not mistaken for the outer field. This holds in both partial-results modes.
+      Seq(true, false).foreach { partial =>
+        withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> partial.toString) {
+          val schema = "m MAP<CHAR(3), INT>, tail INT"
+          checkAnswer(
+            sql(s"""SELECT from_json('{"m":{"a":1},"tail":1}', '$schema')"""),
+            Row(Row(null, 1)))
+          checkAnswer(
+            sql(s"""SELECT from_json('{"m":{"a":1,"tail":5},"tail":1}', '$schema')"""),
+            Row(Row(null, 1)))
+          assertUnsupportedJsonMapKey(
+            s"""SELECT from_json('{"m":{"a":1},"tail":1}', '$schema',
+               |  map('mode', 'FAILFAST'))""".stripMargin,
+            key = "a",
+            dataTypeSql = "CHAR(3)")
+        }
+      }
+
+      // multiLine + streaming top-level array: a bad key in one element must not add spurious
+      // rows. Two elements in, two rows out, with the bad element reported in _corrupt_record.
+      withTempPath { file =>
+        val document = """[{"m":{"a":1}},{"m":{"abc":2}}]"""
+        java.nio.file.Files.write(file.toPath,
+          document.getBytes(java.nio.charset.StandardCharsets.UTF_8))
+        val df = spark.read
+          .schema("m MAP<CHAR(3), INT>, _corrupt_record STRING")
+          .option("multiLine", true)
+          .option("enableStreamingTopLevelArray", true)
+          .json(file.getCanonicalPath)
+        checkAnswer(df, Seq(Row(null, document), Row(Map("abc" -> 2), null)))
+      }
 
       withTempPath { path =>
         Seq("""{"m":{"ab ":1}}""", """{"m":{"a":1}}""").toDS()
@@ -3146,58 +3210,59 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         assertUnsupportedJsonMapKeyError(failFast.collect(), key = "a", dataTypeSql = "CHAR(3)")
       }
 
+      // mapKeyDedupPolicy is not applied: EXCEPTION does not raise DUPLICATED_MAP_KEY, the
+      // duplicate names are simply kept (contrast XML, which pads keys and applies the policy).
       withSQLConf(
           SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.EXCEPTION.toString) {
         checkAnswer(
-          sql("""SELECT from_json('{"abc": 1, "abc": 2}', 'MAP<VARCHAR(3), INT>')"""),
-          Row(Map("abc" -> 2)))
+          sql("""SELECT map_entries(from_json('{"abc": 1, "abc": 2}', 'MAP<VARCHAR(3), INT>'))"""),
+          Row(Seq(Row("abc", 1), Row("abc", 2))))
       }
 
-      // A last-win duplicate whose winning (second) value overflows nulls the whole
-      // record and keeps EXCEED_LIMIT_LENGTH, matching the non-duplicate case, instead
-      // of silently keeping the superseded first value. Holds for both partial modes.
-      Seq(true, false).foreach { partial =>
-        withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> partial.toString) {
-          checkAnswer(
-            sql("""SELECT from_json('{"abc": "x", "abc": "abcdef"}',
-              |  'MAP<CHAR(3), CHAR(2)>')""".stripMargin),
-            Row(null))
-          assertParseExceedLimit(
-            """SELECT from_json('{"abc": "x", "abc": "abcdef"}',
-              |  'MAP<CHAR(3), CHAR(2)>',
-              |  map('mode', 'FAILFAST'))""".stripMargin,
-            expectedLimit = "2")
-        }
-      }
-
-      // Collation is not consulted for last-win: binary-distinct names are both kept,
-      // unlike XML which pads keys and then applies the dedup policy.
+      // Collation is not consulted: binary-distinct names are both kept, and the collation is
+      // reported in the error message rather than dropped.
       withSQLConf(SQLConf.ALLOW_COLLATIONS_IN_MAP_KEYS.key -> "true") {
         checkAnswer(
           sql("""SELECT map_entries(from_json('{"ab": 1, "AB": 2}',
             |  'MAP<VARCHAR(2) COLLATE UTF8_LCASE, INT>'))""".stripMargin),
           Row(Seq(Row("ab", 1), Row("AB", 2))))
+        assertUnsupportedJsonMapKey(
+          """SELECT from_json('{"abc": 1}',
+            |  'MAP<VARCHAR(2) COLLATE UTF8_LCASE, INT>', map('mode', 'FAILFAST'))""".stripMargin,
+          key = "abc",
+          dataTypeSql = "VARCHAR(2) COLLATE UTF8_LCASE")
       }
     }
 
-    // Flag off is unchanged: write-side pad/trim still apply to keys, and the new
-    // UNSUPPORTED_JSON_CHAR_VARCHAR_MAP_KEY check is not used.
+    // The flag has PERSISTED binding, so a view created under standard semantics keeps the
+    // key check when queried from a session with the flag off (SPARK-60108, review follow-up).
+    withView("v_spark_60108") {
+      withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+        sql("""CREATE VIEW v_spark_60108 AS
+          |SELECT from_json('{"a": 1}', 'MAP<CHAR(3), INT>', map('mode', 'FAILFAST')) AS m"""
+          .stripMargin)
+      }
+      withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+        assertUnsupportedJsonMapKeyError(
+          sql("SELECT * FROM v_spark_60108").collect(), key = "a", dataTypeSql = "CHAR(3)")
+      }
+    }
+
+    // With the flag off the new key check is not applied: a name that FAILFAST rejects under
+    // standard semantics is accepted, and from_json leaves the raw object name in place. (Any
+    // CHAR padding seen when the result is collected comes from the CHAR encoder, not from_json,
+    // so to_json is used here to observe exactly what from_json produced.)
     withSQLConf(
         SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
         SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
       checkAnswer(
-        sql("""SELECT from_json('{"a": 1}', 'MAP<CHAR(3), INT>')"""),
-        Row(Map("a  " -> 1)))
-      checkError(
-        exception = intercept[SparkRuntimeException] {
-          sql(
-            """SELECT from_json(
-              |  '{"abcd": 1}',
-              |  'MAP<VARCHAR(3), INT>',
-              |  map('mode', 'FAILFAST'))""".stripMargin).collect()
-        },
-        condition = "EXCEED_LIMIT_LENGTH",
-        parameters = Map("limit" -> "3"))
+        sql("""SELECT to_json(from_json('{"a": 1}',
+          |  'MAP<CHAR(3), INT>', map('mode', 'FAILFAST')))""".stripMargin),
+        Row("""{"a":1}"""))
+      checkAnswer(
+        sql("""SELECT to_json(from_json('{"abcd": 1}',
+          |  'MAP<VARCHAR(3), INT>', map('mode', 'FAILFAST')))""".stripMargin),
+        Row("""{"abcd":1}"""))
     }
   }
 
