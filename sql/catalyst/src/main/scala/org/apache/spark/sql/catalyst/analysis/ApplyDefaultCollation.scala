@@ -21,7 +21,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, DefaultStringProducingExpression, Expression, Literal, SubqueryExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterViewAs, ColumnDefinition, CreateTable, CreateTableAsSelect, CreateTempView, CreateUserDefinedFunction, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, ReplaceTable, ReplaceTableAsSelect, TableSpec, V2CreateTablePlan}
+import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterViewAs, ColumnDefinition, CreateTable, CreateTableAsSelect, CreateTempView, CreateUserDefinedFunctionLike, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, ReplaceTable, ReplaceTableAsSelect, TableSpec, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.{areSameBaseType, isDefaultStringCharOrVarcharType, replaceDefaultStringCharAndVarcharTypes}
@@ -206,16 +206,16 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
           newCreateView.copyTagsFrom(createView)
           newCreateView
 
-        case createUserDefinedFunction@CreateUserDefinedFunction(
-        ResolvedIdentifier(catalog: SupportsNamespaces, identifier),
-        _, _, _, _, _, collation, _, _, _, _, _, _) if collation.isEmpty =>
-          val newCreateUserDefinedFunction =
-            CurrentOrigin.withOrigin(createUserDefinedFunction.origin) {
-              createUserDefinedFunction.copy(
-                collation = getCollationFromSchemaMetadata(catalog, identifier.namespace()))
-            }
-          newCreateUserDefinedFunction.copyTagsFrom(createUserDefinedFunction)
-          newCreateUserDefinedFunction
+        case f: CreateUserDefinedFunctionLike if f.collation.isEmpty =>
+          f.children.headOption match {
+            case Some(ResolvedIdentifier(catalog: SupportsNamespaces, identifier)) =>
+              val newPlan = CurrentOrigin.withOrigin(f.origin) {
+                f.withCollation(getCollationFromSchemaMetadata(catalog, identifier.namespace()))
+              }
+              newPlan.copyTagsFrom(f)
+              newPlan
+            case _ => f
+          }
 
         case other =>
           other
