@@ -1867,9 +1867,12 @@ class AstBuilder extends DataTypeAstBuilder
       Project(
         attributes.zip(schema).map { case (a, field) =>
           if (CharVarcharUtils.hasCharVarchar(field.dataType)) {
+            // Keep the raw CHAR/VARCHAR metadata, matching scan-side
+            // readSidePadding. First-class CHAR vs STRING still promotes to
+            // STRING equality, so this metadata does not pad the literal.
             Alias(
               CharVarcharUtils.stringLengthCheck(a, field.dataType),
-              a.name)(explicitMetadata = Some(CharVarcharUtils.cleanMetadata(a.metadata)))
+              a.name)(explicitMetadata = Some(a.metadata))
           } else {
             a
           }
