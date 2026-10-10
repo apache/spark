@@ -19,7 +19,7 @@ package org.apache.spark.deploy.history
 
 import java.io.{File, FileNotFoundException, IOException}
 import java.lang.{Long => JLong}
-import java.util.{Date, NoSuchElementException, ServiceLoader}
+import java.util.{Date, NoSuchElementException}
 import java.util.concurrent.{ConcurrentHashMap, ExecutorService, TimeUnit}
 import java.util.zip.ZipOutputStream
 
@@ -1713,9 +1713,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     store
   }
 
-  private def loadPlugins(): Iterable[AppHistoryServerPlugin] = {
-    ServiceLoader.load(classOf[AppHistoryServerPlugin], Utils.getContextOrSparkClassLoader).asScala
-  }
+  private def loadPlugins(): Iterable[AppHistoryServerPlugin] = AppHistoryServerPlugin.loadPlugins()
 
   /** For testing. Returns internal data about a single attempt. */
   private[history] def getAttempt(appId: String, attemptId: Option[String]): AttemptInfoWrapper = {
