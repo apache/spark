@@ -1216,16 +1216,11 @@ def _get_function_from_ast(body: ast.AST, held_code: Any) -> Tuple[Optional[ast.
     )
 
 
-def _variety_option(
-    result: Union[Column, Tuple[Column, List[str]]], combo: dict, num_params: int
-) -> Tuple[Column, List[str]]:
-    """Normalize one ``_transpile_from_ast`` return to a ``(Column, categories)`` option.
+def _variety_option(result: Any, combo: dict, num_params: int) -> Tuple[Column, List[str]]:
+    """Return the ``(column, categories)`` option for one ``_transpile_from_ast`` result.
 
-    A plain :class:`Column` is labeled with the combo the caller asked about; a
-    ``(Column, list[str])`` tuple keeps the categories the variety reported for
-    the option it built. Anything malformed raises, so the caller records the
-    reason and the UDF falls back to interpreted Python rather than surfacing a
-    JVM error at call time.
+    A plain :class:`Column` is labeled with ``combo``; a ``(Column, list[str])``
+    tuple keeps the variety's own categories. Malformed returns raise.
     """
     if isinstance(result, Column):
         return result, [combo.get(i, "numeric") for i in range(num_params)]

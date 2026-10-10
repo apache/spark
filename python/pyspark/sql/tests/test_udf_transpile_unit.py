@@ -1551,8 +1551,6 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             def _transpile_from_ast(
                 self, src, ast_info, function_ast, params, returnType, param_categories=None
             ):
-                # This variety only ever builds a boolean option, regardless of
-                # the numeric/string combo the caller asked about.
                 return (
                     col("_udf_param_0").cast(returnType),
                     ["bool"] * len(params),
@@ -1592,9 +1590,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertEqual([["numeric", "numeric"]], u._transpiled_input_categories)
 
     def test_udf_transpile_variety_tuple_with_none_column_falls_back(self):
-        # Declining is plain ``None``; a ``(None, categories)`` tuple is
-        # malformed -- its Column would NPE the JVM at UDF-call time. Refused
-        # with a reason rather than silently declined.
+        # Declining is plain ``None``; a ``(None, categories)`` tuple is refused.
         from pyspark.sql.transpile import AbstractTranspiler
 
         class DeclineInTupleTranspiler(AbstractTranspiler):
@@ -1614,8 +1610,6 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertIn("not a Column", reasons)
 
     def test_udf_transpile_variety_malformed_return_falls_back(self):
-        # A return that is neither a Column nor a (Column, categories) tuple
-        # would surface a JVM error at call time; refuse it instead.
         from pyspark.sql.functions import col
         from pyspark.sql.transpile import AbstractTranspiler
 
@@ -1638,8 +1632,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertIn("unsupported result", reasons)
 
     def test_udf_transpile_variety_wrong_length_categories_falls_back(self):
-        # The JVM matches options by index and drops the WHOLE option set on a
-        # length mismatch, so a wrong-length categories list must be refused.
+        # A wrong-length categories list is refused.
         from pyspark.sql.functions import col
         from pyspark.sql.transpile import AbstractTranspiler
 
