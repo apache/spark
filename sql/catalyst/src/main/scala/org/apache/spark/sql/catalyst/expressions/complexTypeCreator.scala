@@ -21,14 +21,14 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{Resolver, TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedExtractValue}
+import org.apache.spark.sql.catalyst.analysis.{Resolver, TypeCheckResult, TypeCoercion, TypeCoercionValidation, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.{FUNC_ALIAS, FunctionBuilder}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.trees.{LeafLike, TreeNodeTag, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, LeafLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -715,12 +715,6 @@ trait StructFieldsOperation extends Expression with Unevaluable {
   override def nullable: Boolean = throw SparkException.internalError(
     "StructFieldsOperation.nullable should not be called.")
 
-  /**
-   * Returns an updated list of StructFields and Expressions that will ultimately be used
-   * as the fields argument for [[StructType]] and as the children argument for
-   * [[CreateNamedStruct]] respectively inside of [[UpdateFields]].
-   */
-  def apply(values: Seq[(StructField, Expression)]): Seq[(StructField, Expression)]
 }
 
 /**
@@ -731,22 +725,6 @@ trait StructFieldsOperation extends Expression with Unevaluable {
  */
 case class WithField(name: String, valExpr: Expression)
   extends StructFieldsOperation with UnaryLike[Expression] {
-
-  override def apply(values: Seq[(StructField, Expression)]): Seq[(StructField, Expression)] = {
-    val newFieldExpr = (StructField(name, valExpr.dataType, valExpr.nullable), valExpr)
-    val result = ArrayBuffer.empty[(StructField, Expression)]
-    var hasMatch = false
-    for (existingFieldExpr @ (existingField, _) <- values) {
-      if (resolver(existingField.name, name)) {
-        hasMatch = true
-        result += newFieldExpr
-      } else {
-        result += existingFieldExpr
-      }
-    }
-    if (!hasMatch) result += newFieldExpr
-    result.toSeq
-  }
 
   override def child: Expression = valExpr
 
@@ -759,9 +737,19 @@ case class WithField(name: String, valExpr: Expression)
 /**
  * Drop a field by name.
  */
-case class DropField(name: String) extends StructFieldsOperation with LeafLike[Expression] {
-  override def apply(values: Seq[(StructField, Expression)]): Seq[(StructField, Expression)] =
-    values.filterNot { case (field, _) => resolver(field.name, name) }
+case class DropField(name: String) extends StructFieldsOperation with LeafLike[Expression]
+
+/**
+ * Updates the current value of a field without duplicating the parent struct expression.
+ */
+case class UpdateNestedField(name: String, fieldOps: Seq[StructFieldsOperation])
+  extends StructFieldsOperation {
+
+  override def children: Seq[Expression] = fieldOps
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression =
+    copy(fieldOps = newChildren.map(_.asInstanceOf[StructFieldsOperation]))
 }
 
 /**
@@ -789,6 +777,10 @@ private case class UpdateFieldsExpression(
 
   override def nullable: Boolean = structExpr.nullable
 
+  private lazy val indexedOrdinals = outputOrdinals.toArray
+  private lazy val indexedUpdatedValues = updatedValues.toArray
+  private lazy val needsSource = nullable || indexedOrdinals.exists(_ >= 0)
+
   override lazy val dataType: StructType = {
     val sourceFields = structExpr.dataType.asInstanceOf[StructType]
     var updatedIndex = 0
@@ -806,7 +798,6 @@ private case class UpdateFieldsExpression(
   }
 
   override def eval(input: InternalRow): Any = {
-    val needsSource = nullable || outputOrdinals.exists(_ >= 0)
     val sourceRow = if (needsSource) {
       structExpr.eval(input).asInstanceOf[InternalRow]
     } else {
@@ -815,11 +806,11 @@ private case class UpdateFieldsExpression(
     if (sourceRow == null && nullable) {
       null
     } else {
-      val values = new Array[Any](outputOrdinals.length)
+      val values = new Array[Any](indexedOrdinals.length)
       var updatedIndex = 0
       var i = 0
-      while (i < outputOrdinals.length) {
-        val sourceOrdinal = outputOrdinals(i)
+      while (i < indexedOrdinals.length) {
+        val sourceOrdinal = indexedOrdinals(i)
         if (sourceOrdinal >= 0) {
           values(i) = if (sourceRow == null) {
             null
@@ -827,7 +818,7 @@ private case class UpdateFieldsExpression(
             sourceRow.get(sourceOrdinal, dataType(i).dataType)
           }
         } else {
-          values(i) = updatedValues(updatedIndex).eval(input)
+          values(i) = indexedUpdatedValues(updatedIndex).eval(input)
           updatedIndex += 1
         }
         i += 1
@@ -843,27 +834,30 @@ private case class UpdateFieldsExpression(
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rowClass = classOf[GenericInternalRow].getName
     val values = ctx.freshName("values")
-    val needsSource = nullable || outputOrdinals.exists(_ >= 0)
     val sourceCode = if (needsSource) Some(structExpr.genCode(ctx)) else None
     val sourceRow = ctx.freshName("sourceRow")
 
     val copyValuesCode = if (outputOrdinals.exists(_ >= 0)) {
-      val index = ctx.freshName("i")
-      val sourceOrdinal = ctx.freshName("sourceOrdinal")
-      val sourceOrdinals = ctx.addReferenceObj("sourceOrdinals", outputOrdinals.toArray, "int[]")
-      val fieldTypes = ctx.addReferenceObj(
-        "fieldTypes",
-        dataType.fields.map(_.dataType).toArray,
-        s"${classOf[DataType].getName}[]")
-      s"""
-         |for (int $index = 0; $index < ${outputOrdinals.length}; $index++) {
-         |  int $sourceOrdinal = $sourceOrdinals[$index];
-         |  if ($sourceOrdinal >= 0) {
-         |    $values[$index] = $sourceRow == null ? null :
-         |      $sourceRow.get($sourceOrdinal, $fieldTypes[$index]);
-         |  }
-         |}
-       """.stripMargin
+      val copiedFields = outputOrdinals.zipWithIndex.filter(_._1 >= 0)
+        .groupBy { case (_, ordinal) => dataType(ordinal).dataType }
+      val copyCodes = copiedFields.toSeq.map { case (fieldType, fields) =>
+        val index = ctx.freshName("i")
+        val sourceOrdinal = ctx.freshName("sourceOrdinal")
+        val ordinals = ctx.addReferenceObj("copyOrdinals",
+          fields.flatMap { case (source, output) => Seq(output, source) }.toArray, "int[]")
+        val value = CodeGenerator.getValue(sourceRow, fieldType, sourceOrdinal)
+        s"""
+           |for (int $index = 0; $index < ${fields.length * 2}; $index += 2) {
+           |  int $sourceOrdinal = $ordinals[$index + 1];
+           |  $values[$ordinals[$index]] =
+           |    $sourceRow == null || $sourceRow.isNullAt($sourceOrdinal) ? null : $value;
+           |}
+         """.stripMargin
+      }
+      ctx.splitExpressionsWithCurrentInputs(
+        expressions = copyCodes,
+        funcName = "copyFields",
+        extraArguments = Seq("InternalRow" -> sourceRow, "Object[]" -> values))
     } else {
       ""
     }
@@ -931,8 +925,6 @@ private case class UpdateFieldsExpression(
 case class UpdateFields(structExpr: Expression, fieldOps: Seq[StructFieldsOperation])
   extends Unevaluable {
 
-  private lazy val generatedStructReadOwner = UpdateFields.generatedStructReadOwner(this)
-
   final override val nodePatterns: Seq[TreePattern] = Seq(UPDATE_FIELDS)
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -970,7 +962,7 @@ case class UpdateFields(structExpr: Expression, fieldOps: Seq[StructFieldsOperat
   override def prettyName: String = "update_fields"
 
   private lazy val newFieldSources: Seq[(StructField, UpdateFields.FieldSource)] =
-    UpdateFields.fieldSources(structExpr.dataType.asInstanceOf[StructType], fieldOps)
+    UpdateFields.fieldSources(structExpr, fieldOps)
 
   private lazy val newFields: Seq[StructField] = newFieldSources.map(_._1)
 
@@ -980,28 +972,19 @@ case class UpdateFields(structExpr: Expression, fieldOps: Seq[StructFieldsOperat
     case UpdateFields.Updated(expr) => expr
   }
 
-  /**
-   * Returns an input field expression and marks generated reads so they can share `structExpr`
-   * without changing equivalent expressions supplied to `withField`.
-   */
   private def getFieldExpr(ordinal: Int): Expression = structExpr match {
     case c: CreateNamedStruct => c.valExprs(ordinal)
-    case _ => UpdateFields.markGeneratedStructRead(
-      GetStructField(structExpr, ordinal), generatedStructReadOwner)
+    case _ => GetStructField(structExpr, ordinal)
   }
 
   lazy val evalExpr: Expression = With(structExpr) { case Seq(structRef) =>
-    // Read fields used to rebuild the input struct from structRef so structExpr is evaluated once.
-    // Do not rewrite expressions passed to withField; they must be evaluated independently.
-    def replaceStruct(expr: Expression): Expression = expr.transformDown {
-      case field @ GetStructField(child, _, _)
-          if UpdateFields.isGeneratedStructRead(field, generatedStructReadOwner) &&
-            child.eq(structExpr) =>
-        field.copy(child = structRef)
+    val source = structExpr match {
+      case namedStruct: CreateNamedStruct => namedStruct
+      case _ => structRef
     }
-
+    val fieldSources = UpdateFields.fieldSources(source, fieldOps)
     val updatedValues = ArrayBuffer.empty[Expression]
-    val outputOrdinals = newFieldSources.map { case (_, source) =>
+    val outputOrdinals = fieldSources.map { case (_, source) =>
       source match {
         case UpdateFields.Original(ordinal) => structExpr match {
           case namedStruct: CreateNamedStruct =>
@@ -1010,7 +993,7 @@ case class UpdateFields(structExpr: Expression, fieldOps: Seq[StructFieldsOperat
           case _ => ordinal
         }
         case UpdateFields.Updated(expr) =>
-          updatedValues += replaceStruct(expr)
+          updatedValues += expr
           -1
       }
     }
@@ -1034,14 +1017,24 @@ object UpdateFields {
    * return one field without constructing the complete struct.
    */
   private def fieldSources(
-      structType: StructType,
+      structExpr: Expression,
       fieldOps: Seq[StructFieldsOperation]): Seq[(StructField, FieldSource)] = {
+    val structType = structExpr.dataType.asInstanceOf[StructType]
+    def expression(source: FieldSource): Expression = source match {
+      case Original(ordinal) => structExpr match {
+        case namedStruct: CreateNamedStruct => namedStruct.valExprs(ordinal)
+        case _ => GetStructField(structExpr, ordinal)
+      }
+      case Updated(expr) => expr
+    }
     val fields: Seq[(StructField, FieldSource)] = structType.fields.zipWithIndex.map {
       case (field, ordinal) =>
       field -> Original(ordinal)
     }.toImmutableArraySeq
-    fieldOps.foldLeft(fields) {
-      case (current, op: WithField) =>
+    def applyOperation(
+        current: Seq[(StructField, FieldSource)],
+        operation: StructFieldsOperation): Seq[(StructField, FieldSource)] = operation match {
+      case op: WithField =>
         val updated = StructField(op.name, op.valExpr.dataType, op.valExpr.nullable) ->
           Updated(op.valExpr)
         val result = ArrayBuffer.empty[(StructField, FieldSource)]
@@ -1056,41 +1049,35 @@ object UpdateFields {
         }
         if (!hasMatch) result += updated
         result.toSeq
-      case (current, op: DropField) =>
+      case op: DropField =>
         current.filterNot { case (field, _) => op.resolver(field.name, op.name) }
-      case (_, op) =>
+      case op =>
         throw SparkException.internalError(
           s"Unsupported StructFieldsOperation: ${op.getClass.getName}")
     }
-  }
-
-  // Generated reads identify field accesses introduced while expanding nested paths. The owner
-  // prevents one UpdateFields from rewriting reads that belong to another UpdateFields.
-  private val GENERATED_STRUCT_READ = TreeNodeTag[ExprId]("generatedStructRead")
-  private val GENERATED_STRUCT_READ_OWNER = TreeNodeTag[ExprId]("generatedStructReadOwner")
-
-  /** Returns the stable identity used to associate generated reads with `expr`. */
-  private def generatedStructReadOwner(expr: Expression): ExprId = {
-    expr.getTagValue(GENERATED_STRUCT_READ_OWNER).getOrElse {
-      val owner = NamedExpression.newExprId
-      expr.setTagValue(GENERATED_STRUCT_READ_OWNER, owner)
-      owner
+    fieldOps.foldLeft(fields) { (current, operation) =>
+      val expanded = operation match {
+        case nested: UpdateNestedField =>
+          val currentType = StructType(current.map(_._1))
+          val field = ExtractValue(
+            Literal.create(null, currentType), Literal(nested.name), nested.resolver)
+            .asInstanceOf[GetStructField]
+          val updated = CurrentOrigin.withOrigin(nested.origin) {
+            expression(current(field.ordinal)._2) match {
+              case UpdateFields(input, previousOps) =>
+                UpdateFields(input, previousOps ++ nested.fieldOps)
+              case input => UpdateFields(input, nested.fieldOps)
+            }
+          }
+          if (updated.checkInputDataTypes().isFailure) {
+            TypeCoercionValidation.failOnTypeCheckResult(updated)
+          }
+          WithField(nested.name, updated)
+        case other => other
+      }
+      applyOperation(current, expanded)
     }
   }
-
-  /** Marks a field read as generated by the UpdateFields identified by `owner`. */
-  private def markGeneratedStructRead[T <: Expression](expr: T, owner: ExprId): T = {
-    expr.setTagValue(GENERATED_STRUCT_READ, owner)
-    expr
-  }
-
-  /** Tests whether a field read was generated by the UpdateFields identified by `owner`. */
-  private def isGeneratedStructRead(expr: Expression, owner: ExprId): Boolean =
-    expr.getTagValue(GENERATED_STRUCT_READ).contains(owner)
-
-  /** Tests whether a field read was generated while expanding any nested update path. */
-  private[catalyst] def isGeneratedStructRead(expr: Expression): Boolean =
-    expr.containsTag(GENERATED_STRUCT_READ)
 
   private def nameParts(fieldName: String): Seq[String] = {
     require(fieldName != null, "fieldName cannot be null")
@@ -1124,20 +1111,12 @@ object UpdateFields {
     if (namePartsRemaining.length == 1) {
       UpdateFields(structExpr, valueFunc(fieldName) :: Nil)
     } else {
-      val newStruct = if (structExpr.resolved) {
-        val resolver = SQLConf.get.resolver
-        ExtractValue(structExpr, Literal(fieldName), resolver)
-      } else {
-        UnresolvedExtractValue(structExpr, Literal(fieldName))
+      def nestedOperation(parts: Seq[String]): StructFieldsOperation = {
+        if (parts.length == 1) valueFunc(parts.head)
+        else UpdateNestedField(parts.head, Seq(nestedOperation(parts.tail)))
       }
-
-      val newValue = updateFieldsHelper(
-        structExpr = newStruct,
-        namePartsRemaining = namePartsRemaining.tail,
-        valueFunc = valueFunc)
-      val updated = UpdateFields(structExpr, WithField(fieldName, newValue) :: Nil)
-      markGeneratedStructRead(newStruct, generatedStructReadOwner(updated))
-      updated
+      UpdateFields(structExpr,
+        Seq(UpdateNestedField(fieldName, Seq(nestedOperation(namePartsRemaining.tail)))))
     }
   }
 }

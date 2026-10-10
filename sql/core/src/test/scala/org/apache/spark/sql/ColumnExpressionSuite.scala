@@ -504,6 +504,103 @@ class ColumnExpressionSuite extends SharedSparkSession {
     }
   }
 
+  test("nested field updates on unresolved columns should remain linear") {
+    val df = Seq((((1, 2), 3), 0)).toDF("s", "z")
+    Seq(4, 8, 12).foreach { count =>
+      val updated = (0 until count).foldLeft(col("s")) { (column, index) =>
+        column.withField(s"_1.x$index", lit(index))
+      }
+      val query = df.select(updated).queryExecution
+      Seq(query.analyzed, query.optimizedPlan).foreach { plan =>
+        val nodes = plan.flatMap(_.expressions).map(_.collect { case _ => 1 }.size).sum
+        assert(nodes < 30 * count, s"$count updates produced $nodes expression nodes")
+      }
+      checkAnswer(df.select(updated.dropFields((0 until count).map(i => s"_1.x$i"): _*)),
+        Row(Row(Row(1, 2), 3)))
+    }
+  }
+
+  test("nested field updates should prune dropped and overwritten values") {
+    onEachEvalPath {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        val df = Seq((((1, 2), 3), 0)).toDF("s", "z")
+        val updated = col("s").withField("_1.d", lit(1) / col("z"))
+        checkAnswer(df.select(updated.dropFields("_1")), Row(Row(3)))
+        checkAnswer(df.select(updated.withField("_1.d", lit(4))),
+          Row(Row(Row(1, 2, 4), 3)))
+        checkAnswer(df.select(updated.getField("_2")), Row(3))
+        val projected = df.select(
+          col("s").withField("x", lit(1) / col("z")).as("t"))
+        checkAnswer(projected.select(col("t").withField("y", lit(2)).getField("_2")), Row(3))
+      }
+    }
+  }
+
+  test("nested field updates should share an unresolved nondeterministic input") {
+    onEachEvalPath {
+      val counter = new java.util.concurrent.atomic.AtomicLong()
+      val nextStruct = udf((id: Long) => {
+        val value = counter.getAndIncrement() + id
+        ((value, value), value)
+      }).asNondeterministic()
+      val updated = nextStruct(col("id")).withField("_1.copy", lit(1))
+        .withField("_1.extra", lit(2)).withField("extra", lit(3))
+      spark.range(10).select(updated).collect().foreach { row =>
+        val result = row.getStruct(0)
+        val nested = result.getStruct(0)
+        assert(nested.getLong(0) == nested.getLong(1))
+        assert(nested.getLong(0) == result.getLong(1))
+      }
+    }
+  }
+
+  test("nested field updates should discard paths overwritten before resolution") {
+    val df = Seq((1, 2)).toDF("a", "b").select(struct(col("a"), col("b")).as("s"))
+    checkAnswer(df.select(col("s").withField("a.x", lit(3)).withField("a", lit(4))),
+      Row(Row(4, 2)))
+    checkAnswer(df.select(col("s").withField("missing.x", lit(3))
+      .withField("missing", lit(4))), Row(Row(1, 2, 4)))
+  }
+
+  test("withField should copy TIME fields from vectorized Parquet structs") {
+    withSQLConf(
+      SQLConf.TIME_TYPE_ENABLED.key -> "true",
+      SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
+      SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+      withTempPath { path =>
+        spark.sql("SELECT named_struct('t', TIME '12:34:56', 'a', 1) AS s")
+          .write.parquet(path.getCanonicalPath)
+        val df = spark.read.parquet(path.getCanonicalPath)
+        checkAnswer(df.select(col("s").withField("b", lit(2))),
+          spark.sql("SELECT named_struct('t', TIME '12:34:56', 'a', 1, 'b', 2)"))
+      }
+    }
+  }
+
+  test("withField should copy geospatial fields from vectorized Parquet structs") {
+    val point = "010100000000000000000031400000000000001C40"
+      .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
+    Seq(
+      GeometryType(4326) -> Geometry.fromWKB(point, 4326),
+      GeographyType(4326) -> Geography.fromWKB(point, 4326)).foreach { case (dataType, value) =>
+      withSQLConf(
+        SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
+        SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+        withTempPath { path =>
+          val schema = StructType(Seq(StructField("s", StructType(Seq(
+            StructField("g", dataType), StructField("a", IntegerType))))))
+          spark.createDataFrame(
+            sparkContext.parallelize(Seq(Row(Row(value, 1)))), schema)
+            .write.parquet(path.getCanonicalPath)
+          val df = spark.read.parquet(path.getCanonicalPath)
+          checkAnswer(df.select(col("s").withField("b", lit(2))), Row(Row(value, 1, 2)))
+        }
+      }
+    }
+  }
+
   test("withField should reuse an updated struct for a nested path") {
     onEachEvalPath {
       val counter = new java.util.concurrent.atomic.AtomicLong()
