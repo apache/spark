@@ -24,7 +24,10 @@ from pandas.api.types import CategoricalDtype
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
-from pyspark.pandas.typedef.typehints import extension_object_dtypes_available
+from pyspark.pandas.typedef.typehints import (
+    extension_arrow_dtypes_available,
+    extension_object_dtypes_available,
+)
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 if extension_object_dtypes_available:
@@ -236,6 +239,19 @@ class StringOpsTestsMixin:
         other_pser, other_psser = pdf["that"], psdf["that"]
         self.assert_eq(pser >= other_pser, psser >= other_psser)
         self.assert_eq(pser >= pser, psser >= psser)
+
+    @unittest.skipIf(
+        not extension_arrow_dtypes_available, "PyArrow-backed dtypes are not available"
+    )
+    def test_pyarrow_backed_string_ops(self):
+        import pyarrow as pa
+        from pandas import ArrowDtype
+
+        s1 = ps.Series(["a", "b", "c"], dtype=ArrowDtype(pa.string()))
+        s2 = ps.Series(["a", "x", "c"], dtype=ArrowDtype(pa.string()))
+        res = s1 == s2
+        self.assertEqual(res.dtype, ArrowDtype(pa.bool_()))
+        self.assertEqual(res.tolist(), [True, False, True])
 
 
 class StringOpsTests(
