@@ -162,23 +162,16 @@ class AbstractTranspiler(object):
         name bound to placeholder ``_udf_param_i`` with no offsetting needed. It is
         also the list ``param_categories`` is keyed by.
 
-        The return value describes the option the variety actually produced, not
-        the one the caller asked about. A plain :class:`Column` is the existing
-        contract: the caller labels the option with the ``param_categories`` combo
-        it passed in, so a variety that just consumes that assumption needs no
-        change. A variety that works out its own input types -- e.g. one that reads
-        the function's annotations and supports types the combo enum does not
-        cover -- returns a ``(Column, list[str])`` tuple instead, where the list is
-        one category per public param (``"numeric"`` / ``"string"`` / ``"bool"`` /
-        ``"binary"``) describing the option the variety built. The caller uses those
-        when present and falls back to the combo otherwise, so existing varieties
-        do not move. Without this, every new type a variety supports is another
-        entry in a fixed category enum matched against the caller's guess.
+        A plain :class:`Column` return is labeled with the ``param_categories``
+        combo the caller passed in. A variety that works out its own input types
+        returns ``(Column, list[str])`` instead -- one category per public param
+        (``"numeric"`` / ``"string"`` / ``"bool"`` / ``"binary"``) describing the
+        option it built, which the caller uses in place of the combo.
 
-        To decline, return ``None`` (plain, not inside a tuple). Any malformed
-        return -- a non-Column, a wrong-length categories list, a tuple whose
-        Column is ``None`` -- is refused so the UDF falls back to interpreted
-        Python rather than breaking at call time.
+        Decline with plain ``None``, not a tuple. A malformed return -- a
+        non-Column, a wrong-length categories list, a tuple whose Column is
+        ``None`` -- is refused so the UDF falls back to interpreted Python
+        rather than breaking at call time.
         """
         pass
 
@@ -1223,6 +1216,41 @@ def _get_function_from_ast(body: ast.AST, held_code: Any) -> Tuple[Optional[ast.
     )
 
 
+def _variety_option(
+    result: Union[Column, Tuple[Column, List[str]]], combo: dict, num_params: int
+) -> Tuple[Column, List[str]]:
+    """Normalize one ``_transpile_from_ast`` return to a ``(Column, categories)`` option.
+
+    A plain :class:`Column` is labeled with the combo the caller asked about; a
+    ``(Column, list[str])`` tuple keeps the categories the variety reported for
+    the option it built. Anything malformed raises, so the caller records the
+    reason and the UDF falls back to interpreted Python rather than surfacing a
+    JVM error at call time.
+    """
+    if isinstance(result, Column):
+        return result, [combo.get(i, "numeric") for i in range(num_params)]
+    if isinstance(result, tuple):
+        column, categories = result
+        # Declining is plain None; a None Column would surface a raw JVM NPE.
+        if not isinstance(column, Column):
+            raise UnsupportedOperationException(
+                "transpiler returned a (Column, list[str]) tuple whose first "
+                "element is not a Column; return None to decline"
+            )
+        # The JVM drops the WHOLE option set on a length mismatch, so a
+        # wrong-length list would silently neuter every variety.
+        if len(categories) != num_params:
+            raise UnsupportedOperationException(
+                f"transpiler returned {len(categories)} input categories for "
+                f"{num_params} parameters"
+            )
+        return column, list(categories)
+    raise UnsupportedOperationException(
+        f"transpiler returned an unsupported result of type {type(result).__name__}; "
+        "expected a Column, a (Column, list[str]) tuple, or None"
+    )
+
+
 def _transpile_func(
     session: "SparkSession",
     func: Callable[..., Any],
@@ -1401,41 +1429,9 @@ def _transpile_func(
                         src, ast_info, function_ast, public_params, returnType, combo
                     )
                     if result is not None:
-                        # A variety may report the input categories the option it
-                        # actually needs via a (Column, list[str]) tuple, falling back
-                        # to the combo we asked about otherwise.
-                        if isinstance(result, tuple):
-                            transpiled_column, categories = result
-                            # A None Column would surface a raw JVM NPE at call time;
-                            # to decline, return plain None.
-                            if not isinstance(transpiled_column, Column):
-                                raise UnsupportedOperationException(
-                                    "transpiler returned a (Column, list[str]) tuple "
-                                    "whose first element is not a Column; return None to "
-                                    "decline"
-                                )
-                            # The JVM drops the WHOLE option set on a length mismatch,
-                            # so a wrong-length list would silently neuter every variety.
-                            if len(categories) != len(public_params):
-                                raise UnsupportedOperationException(
-                                    f"transpiler returned {len(categories)} input "
-                                    f"categories for {len(public_params)} parameters"
-                                )
-                            input_categories.append(list(categories))
-                        elif isinstance(result, Column):
-                            transpiled_column = result
-                            input_categories.append(
-                                [combo.get(i, "numeric") for i in range(len(public_params))]
-                            )
-                        else:
-                            # Anything else (e.g. a bare list by typo) would surface a
-                            # raw JVM error at call time; refuse so the UDF falls back.
-                            raise UnsupportedOperationException(
-                                f"transpiler returned an unsupported result of type "
-                                f"{type(result).__name__}; expected a Column, a "
-                                "(Column, list[str]) tuple, or None"
-                            )
-                        transpiled.append(transpiled_column)
+                        column, categories = _variety_option(result, combo, len(public_params))
+                        transpiled.append(column)
+                        input_categories.append(categories)
                 except Exception as e:
                     errors.append(str(e))
         return (
