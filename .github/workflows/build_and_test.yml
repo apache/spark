@@ -75,6 +75,10 @@ on:
 concurrency:
   group: build-test-${{ github.workflow }}-${{ github.repository == 'apache/spark' && github.run_id || github.ref }}
   cancel-in-progress: true
+
+env:
+  SPARK_SCALA_CHECKINIT: "true"
+
 jobs:
   precondition:
     name: Check changes
