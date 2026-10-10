@@ -21,6 +21,7 @@ import java.util.Locale
 import _root_.test.org.apache.spark.sql.JavaRecordEncoderTestData._
 
 import org.apache.spark.SparkRuntimeException
+import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.test.SharedSparkSession
 
 class JavaRecordDatasetSuite extends QueryTest with SharedSparkSession {
@@ -91,8 +92,22 @@ class JavaRecordDatasetSuite extends QueryTest with SharedSparkSession {
       spark.createDataFrame(java.util.Arrays.asList(records: _*), classOf[SimpleRecord])
     assert(fromList.columns.toSeq === Seq("id", "name", "value"))
     checkAnswer(fromList, expected)
-    checkAnswer(
-      spark.createDataFrame(spark.sparkContext.parallelize(records), classOf[SimpleRecord]),
-      expected)
+    val rdd = spark.sparkContext.parallelize(records).setName("records")
+    val fromRdd = spark.createDataFrame(rdd, classOf[SimpleRecord])
+    checkAnswer(fromRdd, expected)
+    // The source RDD's name is kept, as it is for JavaBeans.
+    assert(fromRdd.queryExecution.analyzed.collectFirst { case r: LogicalRDD => r.rdd.name } ===
+      Some("records"))
+  }
+
+  test("createDataFrame keeps @Nonnull components non-nullable") {
+    val records = Seq(new NonnullRecord("a", 1, null))
+    Seq(
+      spark.createDataFrame(java.util.Arrays.asList(records: _*), classOf[NonnullRecord]),
+      spark.createDataFrame(spark.sparkContext.parallelize(records), classOf[NonnullRecord])
+    ).foreach { df =>
+      assert(df.schema === Encoders.record(classOf[NonnullRecord]).schema)
+      checkAnswer(df, Row("a", 1, null))
+    }
   }
 }

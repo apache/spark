@@ -51,7 +51,8 @@ public class JavaRecordEncoderTestData {
 
   public record EmptyRecord() {}
 
-  public record NonnullRecord(@Nonnull String name, @Nonnull Integer count, String note) {}
+  public record NonnullRecord(@Nonnull String name, @Nonnull Integer count, String note)
+      implements Serializable {}
 
   // Only components become fields; getB() and CONSTANT are ignored.
   public record WithExtraMethods(int a) {
