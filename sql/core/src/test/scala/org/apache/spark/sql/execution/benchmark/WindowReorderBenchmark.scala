@@ -32,7 +32,7 @@ import org.apache.spark.sql.internal.SQLConf
  * groups (user id plus a core flag and plus a service-tier flag, and user id
  * plus a model and a priority flag), so the analyzer stacks them into a single
  * chain of adjacent Window operators. Reordering the stack groups windows by
- * their partition spec, collapsing the number of inserted shuffles and sorts.
+ * their partition spec and can reduce the number of inserted shuffles and sorts.
  *
  * This benchmark compares the baseline (default, reordering off) against the
  * optimized behavior (reordering on), and measures the wall-clock runtime only:
