@@ -162,9 +162,8 @@ if [[ "$1" == "finalize" ]]; then
   cd spark-website
   git add site/docs/$RELEASE_VERSION
   git commit -m "Add docs for Apache Spark $RELEASE_VERSION"
-  git push origin HEAD:asf-site
   cd ..
-  echo "docs uploaded"
+  echo "docs committed for later upload"
 
   echo "Uploading release docs to spark-website"
   cd spark-website
@@ -541,6 +540,9 @@ EOF
 
   git add .
   git commit -m "Add release docs for Apache Spark $RELEASE_VERSION"
+  # We want to `git push` the website only once to eliminate the chance that
+  # multiple pushes will race with spark-website CI pushing HTML commits,
+  # creating annoying fast-forward failures.
   git push origin HEAD:asf-site
   cd ..
   echo "release docs uploaded"
