@@ -26,7 +26,7 @@ import com.fasterxml.jackson.core.{JsonParseException, JsonProcessingException}
 import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.History
 import org.apache.spark.scheduler.ReplayListenerBus._
@@ -72,8 +72,23 @@ private[spark] class ReplayListenerBus(
       sourceName: String,
       maybeTruncated: Boolean = false,
       eventsFilter: ReplayEventsFilter = SELECT_ALL_FILTER): Boolean = {
-    val lines = boundedLines(logData, sourceName)
-    replayEntries(lines, sourceName, maybeTruncated, eventsFilter)
+    replayFromOffset(logData, sourceName, 0L, maybeTruncated, eventsFilter)
+  }
+
+  /**
+   * Variant of [[replay()]] for a stream positioned at the start of a line that begins at
+   * `startOffset` bytes into the (uncompressed) source. A positive `startOffset` is added to
+   * the diagnostics so that the reported line numbers, which count from the start of the
+   * stream, can be located in the source.
+   */
+  private[spark] def replayFromOffset(
+      logData: InputStream,
+      sourceName: String,
+      startOffset: Long,
+      maybeTruncated: Boolean,
+      eventsFilter: ReplayEventsFilter): Boolean = {
+    val lines = boundedLines(logData, sourceName, startOffset)
+    replayEntries(lines, sourceName, startOffset, maybeTruncated, eventsFilter)
   }
 
   /**
@@ -84,7 +99,8 @@ private[spark] class ReplayListenerBus(
    */
   private def boundedLines(
       logData: InputStream,
-      sourceName: String): Iterator[(String, Int)] = {
+      sourceName: String,
+      startOffset: Long): Iterator[(String, Int)] = {
     // Fail on malformed input like Source.getLines() does instead of replacing it.
     val decoder = StandardCharsets.UTF_8.newDecoder()
       .onMalformedInput(CodingErrorAction.REPORT)
@@ -131,10 +147,12 @@ private[spark] class ReplayListenerBus(
             if (!warned) {
               logWarning(log"Skipped event log lines longer than " +
                 log"${MDC(MAX_SIZE, effectiveMaxLineLength)} bytes in " +
-                log"${MDC(FILE_NAME, sourceName)}; first skipped line: ${MDC(LINE_NUM, index + 1)}")
+                log"${MDC(FILE_NAME, sourceName)}; first skipped line: " +
+                log"${MDC(LINE_NUM, index + 1)}" + lineOrigin(startOffset))
               warned = true
             }
-            logDebug(s"Skipped event log line ${index + 1} in $sourceName")
+            logDebug(s"Skipped event log line ${index + 1} in $sourceName" +
+              lineOrigin(startOffset).message)
             fetchLine()
           } else {
             (maybeLine.get, index)
@@ -153,12 +171,13 @@ private[spark] class ReplayListenerBus(
       sourceName: String,
       maybeTruncated: Boolean,
       eventsFilter: ReplayEventsFilter): Boolean = {
-    replayEntries(lines.zipWithIndex, sourceName, maybeTruncated, eventsFilter)
+    replayEntries(lines.zipWithIndex, sourceName, 0L, maybeTruncated, eventsFilter)
   }
 
   private def replayEntries(
       lines: Iterator[(String, Int)],
       sourceName: String,
+      startOffset: Long,
       maybeTruncated: Boolean,
       eventsFilter: ReplayEventsFilter): Boolean = {
     var currentLine: String = null
@@ -202,8 +221,8 @@ private[spark] class ReplayListenerBus(
               throw jpe
             } else {
               logWarning(log"Got JsonParseException from log file ${MDC(FILE_NAME, sourceName)}" +
-                log" at line ${MDC(LINE_NUM, lineNumber)}, " +
-                log"the file might not have finished writing cleanly.")
+                log" at line ${MDC(LINE_NUM, lineNumber)}" + lineOrigin(startOffset) +
+                log", the file might not have finished writing cleanly.")
             }
         }
       }
@@ -215,7 +234,7 @@ private[spark] class ReplayListenerBus(
       case _: EOFException if maybeTruncated => false
       case jpe: JsonProcessingException =>
         logError(log"Exception parsing Spark event log: ${MDC(PATH, sourceName)} " +
-          log"at line ${MDC(LINE_NUM, lineNumber)}")
+          log"at line ${MDC(LINE_NUM, lineNumber)}" + lineOrigin(startOffset))
         throw jpe
       case ioe: IOException =>
         throw ioe
@@ -223,9 +242,19 @@ private[spark] class ReplayListenerBus(
         logError(log"Exception parsing Spark event log: ${MDC(PATH, sourceName)}", e)
         val prefix = Option(currentLine).map(_.take(1024)).orNull
         val length = Option(currentLine).fold(0)(_.length)
-        logError(log"Malformed line #${MDC(LINE_NUM, lineNumber)}: ${MDC(LINE, prefix)} " +
+        logError(log"Malformed line #${MDC(LINE_NUM, lineNumber)}" + lineOrigin(startOffset) +
+          log": ${MDC(LINE, prefix)} " +
           log"(line length: ${MDC(SIZE, length)} characters; showing at most 1024)\n")
         false
+    }
+  }
+
+  /** Describes where line numbers start when the replay does not start at the source start. */
+  private def lineOrigin(startOffset: Long): MessageWithContext = {
+    if (startOffset > 0) {
+      log" (lines counted from uncompressed byte offset ${MDC(OFFSET, startOffset)})"
+    } else {
+      log""
     }
   }
 
