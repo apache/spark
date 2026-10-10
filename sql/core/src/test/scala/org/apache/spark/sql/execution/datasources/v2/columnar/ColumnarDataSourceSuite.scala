@@ -176,7 +176,10 @@ class TestRangeDataSource(options: CaseInsensitiveStringMap) extends ColumnarDat
     new TestSinkWriter(table, overwrite, options.getBoolean("fail", false))
   }
 
-  override def streamWriter(schema: StructType, overwrite: Boolean): ColumnarStreamWriter = {
+  override def streamWriter(
+      schema: StructType,
+      overwrite: Boolean,
+      queryId: String): ColumnarStreamWriter = {
     new TestSinkStreamWriter(table)
   }
 }

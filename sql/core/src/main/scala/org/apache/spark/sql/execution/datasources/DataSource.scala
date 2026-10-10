@@ -667,6 +667,19 @@ object DataSource extends Logging {
 
   /** Given a provider name, look up the data source class definition. */
   def lookupDataSource(provider: String, conf: SQLConf): Class[_] = {
+    lookupDataSource(provider, conf, includeNativeDataSources = true)
+  }
+
+  /**
+   * Given a provider name, look up the data source class definition.
+   *
+   * @param includeNativeDataSources whether to look the name up among the native data sources,
+   *                                 which come after the Java and Python data sources
+   */
+  private[sql] def lookupDataSource(
+      provider: String,
+      conf: SQLConf,
+      includeNativeDataSources: Boolean): Class[_] = {
     val provider1 = backwardCompatibilityMap.getOrElse(provider, provider) match {
       case name if name.equalsIgnoreCase("orc") &&
           conf.getConf(SQLConf.ORC_IMPLEMENTATION) == "native" =>
@@ -683,7 +696,9 @@ object DataSource extends Logging {
     val serviceLoader = ServiceLoader.load(classOf[DataSourceRegister], loader)
     lazy val isUserDefinedDataSource = SparkSession.getActiveSession.exists(
       _.sessionState.dataSourceManager.dataSourceExists(provider))
-    lazy val isNativeDataSource = NativeDataSourceRegistry.exists(provider, conf)
+    // The provider created for the native data source takes the result of this lookup.
+    lazy val isNativeDataSource = includeNativeDataSources &&
+      NativeDataSourceRegistry.lookupForProvider(provider, conf).isDefined
 
     try {
       serviceLoader.asScala.filter(_.shortName().equalsIgnoreCase(provider1)).toList match {

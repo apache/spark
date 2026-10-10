@@ -62,7 +62,7 @@ class ColumnarWrite(
 
   override def toStreaming: StreamingWrite = {
     new ColumnarStreamingWrite(
-      createDataSource().streamWriter(info.schema(), overwrite), info.schema())
+      createDataSource().streamWriter(info.schema(), overwrite, info.queryId()), info.schema())
   }
 }
 

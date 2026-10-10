@@ -21,21 +21,27 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.Files
 import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDate}
+import java.util.UUID
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.{SparkClassNotFoundException, SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkClassNotFoundException, SparkFiles, SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.api.python.{PythonBroadcast, SimplePythonFunction}
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{And, Predicate}
+import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.datasources.v2.columnar.ColumnarScan
+import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, UserDefinedPythonDataSource}
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -163,10 +169,13 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       new Predicate(name, children.toArray)
     }
     val id = FieldReference(Seq("id"))
-    assert(NativePredicates.toJson(predicate(">", id, LiteralValue(5L, LongType))).contains(
+    val schema = StructType.fromDDL("id BIGINT, a STRUCT<b: INT>, s STRING, " +
+      "c STRING COLLATE UTF8_LCASE, d STRUCT<e: ARRAY<STRING COLLATE UTF8_LCASE>>")
+    def toJson(predicate: Predicate): Option[String] = NativePredicates.toJson(predicate, schema)
+    assert(toJson(predicate(">", id, LiteralValue(5L, LongType))).contains(
       """{"type":"function","name":">","children":[{"type":"column","name":["id"]},""" +
         """{"type":"literal","dataType":"bigint","value":5}]}"""))
-    assert(NativePredicates.toJson(new And(
+    assert(toJson(new And(
       predicate("IS_NULL", FieldReference(Seq("a", "b"))),
       predicate("=", id, new GeneralScalarExpression("+", Array(id, LiteralValue(1, IntegerType))))
     )).contains(
@@ -177,7 +186,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         """{"type":"literal","dataType":"int","value":1}]}]}]}"""))
 
     def literal(value: Any, dataType: DataType): Option[String] = {
-      NativePredicates.toJson(predicate("=", id, LiteralValue(value, dataType)))
+      toJson(predicate("=", id, LiteralValue(value, dataType)))
         .map(json => json.substring(json.indexOf("\"dataType\""), json.length - 3))
     }
     assert(literal(null, LongType).contains(""""dataType":"bigint","value":null"""))
@@ -201,6 +210,36 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(literal(UTF8String.fromString("a"), StringType("UTF8_LCASE")).isEmpty)
     assert(literal(null, ArrayType(IntegerType)).nonEmpty)
     assert(literal(Array(1), ArrayType(IntegerType)).isEmpty)
+
+    // A source compares strings by their bytes, so the columns with strings of a non-binary
+    // collation are not pushed down, and neither are the columns that are not in the schema.
+    def compare(left: String, right: String): Option[String] = {
+      toJson(predicate("=", FieldReference(left.split('.').toSeq),
+        FieldReference(right.split('.').toSeq)))
+    }
+    assert(compare("s", "s").nonEmpty)
+    assert(compare("a.b", "id").nonEmpty)
+    assert(compare("c", "c").isEmpty)
+    assert(compare("s", "c").isEmpty)
+    assert(compare("d", "d").isEmpty)
+    assert(compare("d.e", "d.e").isEmpty)
+    assert(compare("missing", "id").isEmpty)
+    assert(compare("a.missing", "id").isEmpty)
+    assert(compare("id.b", "id").isEmpty)
+  }
+
+  test("close the previous stream writer of a streaming query") {
+    val released = ArrayBuffer.empty[Long]
+    def handle(value: Long): NativeHandle = new NativeHandle(value, released += _)
+    val (first, other, second) = (handle(1), handle(2), handle(3))
+    NativeStreamWriters.register("query", first)
+    NativeStreamWriters.register("other query", other)
+    assert(released.isEmpty)
+    NativeStreamWriters.register("query", second)
+    assert(released == Seq(1L))
+    second.close()
+    other.close()
+    assert(released == Seq(1L, 3L, 2L))
   }
 
   nativeTest("disable native data sources") {
@@ -253,6 +292,9 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     checkRows(df, (6L to 12L).map(expectedRow))
     val pushed = scan(df).getMetaData()("PushedPredicates")
     assert(pushed.contains("id > 5") && pushed.contains("id <= 12"), pushed)
+    // The scan is described by the name of the data source.
+    assert(scan(df).description() == "native_range")
+    assert(!df.queryExecution.executedPlan.toString.contains("NativeDataSource"))
 
     // A predicate that the library does not accept is evaluated by Spark.
     val partly = range(newSession(defaultPackage), "end" -> "20")
@@ -341,6 +383,26 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         "name" -> "native_sink",
         "msg" -> "injected failure in write"))
     assert(new File(dir, "_ABORTED").isFile)
+    assert(!dir.listFiles().exists(_.getName.startsWith("part-")))
+  }
+
+  nativeTest("abort a data writer whose commit failed") {
+    val session = newSession(defaultPackage)
+    val dir = Utils.createTempDir()
+    val e = intercept[Exception] {
+      session.range(10).repartition(2).write.format("native_sink").option("path", dir.getPath)
+        .option("fail", "commitDataWriter").mode("append").save()
+    }
+    checkError(
+      exception = findError(e, "NATIVE_DATA_SOURCE_ERROR"),
+      condition = "NATIVE_DATA_SOURCE_ERROR",
+      parameters = Map(
+        "action" -> "write to",
+        "name" -> "native_sink",
+        "msg" -> "injected failure in commitDataWriter"))
+    // abortDataWriter removed the temporary files of the tasks.
+    assert(new File(dir, "_ABORTED").isFile)
+    assert(new File(dir, "_temporary").listFiles().isEmpty)
     assert(!dir.listFiles().exists(_.getName.startsWith("part-")))
   }
 
@@ -473,6 +535,72 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     val (otherPackages, otherArtifactUUID) = other.artifactManager.getNativeDataSourcePackages
     assert(otherPackages.map(_.getName) == Seq(defaultPackage.getName))
     assert(distributed.artifactUUID == otherArtifactUUID)
+    // Adding the same package again does nothing.
+    NativeDataSourceRegistry.addToArtifacts(other, NativeDataSourcePackage.read(defaultPackage))
+    assert(other.artifactManager.getNativeDataSourcePackages._1.size == 1)
+
+    // A different package with the same file name cannot be added: the executors would not find
+    // the package by its file name.
+    val sameFileName = createPackage(negatingLibrary, dataSources("b_"),
+      dir = Utils.createTempDir(), fileName = defaultPackage.getName)
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        NativeDataSourceRegistry.addToArtifacts(other, NativeDataSourcePackage.read(sameFileName))
+      },
+      condition = "NATIVE_DATA_SOURCE_PACKAGE_FILE_NAME_CONFLICT",
+      parameters = Map(
+        "path" -> sameFileName.getCanonicalPath, "fileName" -> defaultPackage.getName))
+
+    // The executors also check the copies in the files of the other sessions, such as the session
+    // of a streaming query, which is a clone of the session that started it.
+    val sessionDir = new File(SparkFiles.getRootDirectory(), s"test-${UUID.randomUUID()}")
+    try {
+      val copy = new File(sessionDir, defaultPackage.getName)
+      sessionDir.mkdirs()
+      Files.copy(defaultPackage.toPath, copy.toPath)
+      val copies = NativeDataSourceRegistry.distributedCopies(pkg.copy(artifactUUID = Some("x")))
+      assert(copies.take(2) == Seq(
+        new File(new File(SparkFiles.getRootDirectory(), "x"), defaultPackage.getName),
+        new File(SparkFiles.getRootDirectory(), defaultPackage.getName)))
+      assert(copies.contains(copy))
+    } finally {
+      Utils.deleteRecursively(sessionDir)
+    }
+  }
+
+  nativeTest("look up a native data source once") {
+    val session = newSession(defaultPackage)
+    val provider = DataSource.lookupDataSourceV2("native_range", session.sessionState.conf).get
+    assert(provider.isInstanceOf[NativeDataSourceV2])
+    assert(NativeDataSourceRegistry.takeLookup("native_range").isEmpty)
+    // The provider uses the result of the lookup that found its class, even if the package is
+    // no longer configured.
+    session.conf.unset(SQLConf.NATIVE_DATA_SOURCE_PATHS.key)
+    assert(provider.inferSchema(CaseInsensitiveStringMap.empty()).fieldNames.head == "id")
+  }
+
+  nativeTest("Python data sources take precedence") {
+    val dir = Utils.createTempDir()
+    installLibrary(installedLibrary, "installed_native_range", dir)
+    withLibraryPath(dir) {
+      val session = newSession()
+      val conf = session.sessionState.conf
+      assert(DataSource.lookupDataSource("installed_native_range", conf) ==
+        classOf[NativeDataSourceV2])
+      // A Python data source can be registered with the name of an installed native data
+      // source, and takes precedence over it.
+      val pythonDataSource = UserDefinedPythonDataSource(SimplePythonFunction(
+        command = Seq.empty,
+        envVars = new java.util.HashMap[String, String](),
+        pythonIncludes = java.util.Collections.emptyList[String](),
+        pythonExec = "python3",
+        pythonVer = "3",
+        broadcastVars = java.util.Collections.emptyList[Broadcast[PythonBroadcast]](),
+        accumulator = null))
+      session.dataSource.registerPython("installed_native_range", pythonDataSource)
+      assert(DataSource.lookupDataSource("installed_native_range", conf) ==
+        classOf[PythonDataSourceV2])
+    }
   }
 
   nativeTest("find installed libraries automatically") {
@@ -563,11 +691,6 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         parameters = params)
     }
 
-    val noManifest = createZip(dir, "no_manifest.sparkpkg", "x" -> Array.emptyByteArray)
-    check(noManifest, "INVALID_MANIFEST", Map(
-      "path" -> noManifest.getCanonicalPath,
-      "reason" -> "The package does not contain the manifest spark-native-datasource.json."))
-
     val missingLibrary = createZip(dir, "missing_library.sparkpkg",
       NativeDataSourcePackage.MANIFEST_NAME -> manifestJson(
         Seq("native_range"), Map(NativePlatform.current -> "lib.so")).getBytes(UTF_8))
@@ -607,6 +730,35 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       condition = "INVALID_NATIVE_DATA_SOURCE_PACKAGE.UNSUPPORTED_ABI_VERSION",
       parameters = Map(
         "path" -> mismatchedAbi.getCanonicalPath, "version" -> "2", "supported" -> "1"))
+  }
+
+  nativeTest("ignore invalid packages that do not provide the data source") {
+    val dir = Utils.createTempDir()
+    createPackage(library, dataSources(""), dir = dir, fileName = "a.sparkpkg")
+    createZip(dir, "no_manifest.sparkpkg", "x" -> Array.emptyByteArray)
+    Files.writeString(new File(dir, "not_a_zip.sparkpkg").toPath, "not a zip")
+    val otherSource = createZip(dir, "other_source.sparkpkg",
+      NativeDataSourcePackage.MANIFEST_NAME -> manifestJson(
+        Seq("other_source"), Map(NativePlatform.current -> "lib.so")).getBytes(UTF_8))
+    val session = newSession(dir)
+    checkRows(range(session, "end" -> "2"), (0L until 2L).map(expectedRow))
+    checkError(
+      exception = intercept[SparkClassNotFoundException] {
+        session.read.format("com.typo.Missing").load()
+      },
+      condition = "DATA_SOURCE_NOT_FOUND",
+      parameters = Map("provider" -> "com.typo.Missing"))
+    val e = intercept[AnalysisException](session.sql("SELECT * FROM missing_db.missing_table"))
+    assert(e.getCondition == "TABLE_OR_VIEW_NOT_FOUND")
+    // The invalid package whose manifest lists the data source reports why it is invalid.
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        session.read.format("other_source").load()
+      },
+      condition = "INVALID_NATIVE_DATA_SOURCE_PACKAGE.INVALID_MANIFEST",
+      parameters = Map(
+        "path" -> otherSource.getCanonicalPath,
+        "reason" -> "The package does not contain the library lib.so."))
   }
 
   nativeTest("invalid installed libraries") {

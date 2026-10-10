@@ -106,16 +106,26 @@ class ArtifactTests(ArtifactTestsMixin, ReusedSQLTestCase):
             )
 
     def test_add_native_data_source_package(self):
-        # A new session, so that the package does not affect the other tests.
+        # A new session, so that the packages do not affect the other tests.
         spark = self.spark.newSession()
         with tempfile.TemporaryDirectory(prefix="test_add_native_data_source_package") as d:
-            package_path = os.path.join(d, "my_source.sparkpkg")
-            with open(package_path, "wb") as f:
-                f.write(b"package")
-            spark.addArtifact(package_path)
+
+            def new_file(name):
+                file_path = os.path.join(d, name)
+                with open(file_path, "wb") as f:
+                    f.write(name.encode("utf-8"))
+                return file_path
+
+            spark.addArtifact(new_file("my_source.sparkpkg"))
+            # Packages are added to the session whatever the flags, as with Spark Connect, also
+            # together with other files.
+            spark.addArtifact(new_file("my_file_source.sparkpkg"), file=True)
+            spark.addArtifacts(new_file("my_other_source.sparkpkg"), new_file("other.txt"))
             packages = spark._jsparkSession.artifactManager().getNativeDataSourcePackages()._1()
-            self.assertEqual(packages.size(), 1)
-            self.assertEqual(packages.head().getName(), "my_source.sparkpkg")
+            self.assertEqual(
+                sorted(packages.apply(i).getName() for i in range(packages.size())),
+                ["my_file_source.sparkpkg", "my_other_source.sparkpkg", "my_source.sparkpkg"],
+            )
 
     def test_add_zipped_package(self):
         self.check_add_zipped_package(self.spark)

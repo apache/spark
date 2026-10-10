@@ -60,8 +60,12 @@ Spark calls the functions of the library as follows:
   and calls `read` on the executors. Offsets are JSON strings defined by the library.
 - **Writes**: on the driver, Spark creates a writer with `createWriter` or `createStreamWriter`. On
   the executors, each task creates a data writer with `createDataWriter`, writes the batches of its
-  data with `write`, and calls `commitDataWriter`. Then the driver calls `commit` with the messages
-  of the tasks, or `abort` if the write failed.
+  data with `write`, and calls `commitDataWriter`, or `abortDataWriter` if the task or the commit
+  fails. Then the driver calls `commit` with the messages of the tasks, or `abort` if the write
+  failed. A micro-batch streaming query creates a new stream writer for each micro-batch, and Spark
+  closes the previous one when it creates the next one. Because Spark is not told when a streaming
+  query stops, the last stream writer of a query is closed once it is no longer referenced, or
+  when the query is restarted.
 
 The library defines the format of the partitions, of the state of its readers and writers, and of
 the commit messages, which Spark sends to the executors and back as byte arrays. A library reports
@@ -82,7 +86,9 @@ are optional:
 
 The [Javadoc of `NativeBridge`](api/java/org/apache/spark/sql/datasource/NativeBridge.html)
 specifies each function, including the ownership of the Arrow structs and the JSON format of the
-pushed predicates.
+pushed predicates. A predicate that a library reports as evaluated completely must follow the
+semantics of Spark SQL, for example for NaN values, which are equal to each other and greater
+than any other value.
 
 ## Finding Native Data Sources
 
@@ -166,7 +172,8 @@ A session finds the packages in two places, and the executors get them automatic
 
 The packages of a session take precedence over the installed libraries. Give packages distinct
 file names, for example with their version: sessions that are not isolated share the files they
-add.
+add, and a session cannot use two different packages with the same file name. Spark ignores, and
+logs, a package that it cannot read, unless its manifest lists the data source that a query uses.
 
 ## Example in Rust
 
