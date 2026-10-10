@@ -26,7 +26,7 @@ import scala.util.Try
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkFiles, TestUtils}
+import org.apache.spark.{SparkArithmeticException, SparkFiles, TestUtils}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -182,8 +182,23 @@ class HiveQuerySuite extends HiveComparisonTest with QueryTest with BeforeAndAft
       printf("bb%d", 12), "13",
       repeat(printf("s%d", 14), 2), "14") FROM src LIMIT 1""")
 
-  createQueryTest("NaN to Decimal",
-    "SELECT CAST(CAST('NaN' AS DOUBLE) AS DECIMAL(1,1)) FROM src LIMIT 1")
+  test("NaN to Decimal") {
+    TestHive.loadTestTable("src")
+    val query = "SELECT CAST(CAST('NaN' AS DOUBLE) AS DECIMAL(1,1)) FROM src LIMIT 1"
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkAnswer(sql(query), Row(null))
+    }
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkError(
+        exception = intercept[SparkArithmeticException](sql(query).collect()),
+        condition = "CAST_OVERFLOW",
+        parameters = Map(
+          "value" -> "NaN",
+          "sourceType" -> "\"DOUBLE\"",
+          "targetType" -> "\"DECIMAL(1,1)\"",
+          "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
+    }
+  }
 
   createQueryTest("constant null testing",
     """SELECT

@@ -104,7 +104,7 @@ struct<>
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (0,0,double('NaN'))
+INSERT INTO num_exp_div VALUES (0,0,try_cast(double('NaN') AS decimal(38,10)))
 -- !query schema
 struct<>
 -- !query output
@@ -136,7 +136,7 @@ struct<>
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (0,1,double('NaN'))
+INSERT INTO num_exp_div VALUES (0,1,try_cast(double('NaN') AS decimal(38,10)))
 -- !query schema
 struct<>
 -- !query output
@@ -424,7 +424,7 @@ struct<>
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (1,0,double('NaN'))
+INSERT INTO num_exp_div VALUES (1,0,try_cast(double('NaN') AS decimal(38,10)))
 -- !query schema
 struct<>
 -- !query output
@@ -456,7 +456,7 @@ struct<>
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (1,1,double('NaN'))
+INSERT INTO num_exp_div VALUES (1,1,try_cast(double('NaN') AS decimal(38,10)))
 -- !query schema
 struct<>
 -- !query output
@@ -744,7 +744,7 @@ struct<>
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (2,0,double('NaN'))
+INSERT INTO num_exp_div VALUES (2,0,try_cast(double('NaN') AS decimal(38,10)))
 -- !query schema
 struct<>
 -- !query output
@@ -776,7 +776,7 @@ struct<>
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (2,1,double('NaN'))
+INSERT INTO num_exp_div VALUES (2,1,try_cast(double('NaN') AS decimal(38,10)))
 -- !query schema
 struct<>
 -- !query output
@@ -1064,7 +1064,7 @@ struct<>
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (3,0,double('NaN'))
+INSERT INTO num_exp_div VALUES (3,0,try_cast(double('NaN') AS decimal(38,10)))
 -- !query schema
 struct<>
 -- !query output
@@ -1096,7 +1096,7 @@ struct<>
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (3,1,double('NaN'))
+INSERT INTO num_exp_div VALUES (3,1,try_cast(double('NaN') AS decimal(38,10)))
 -- !query schema
 struct<>
 -- !query output
@@ -1384,7 +1384,7 @@ struct<>
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (4,0,double('NaN'))
+INSERT INTO num_exp_div VALUES (4,0,try_cast(double('NaN') AS decimal(38,10)))
 -- !query schema
 struct<>
 -- !query output
@@ -1416,7 +1416,7 @@ struct<>
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (4,1,double('NaN'))
+INSERT INTO num_exp_div VALUES (4,1,try_cast(double('NaN') AS decimal(38,10)))
 -- !query schema
 struct<>
 -- !query output
@@ -1704,7 +1704,7 @@ struct<>
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (5,0,double('NaN'))
+INSERT INTO num_exp_div VALUES (5,0,try_cast(double('NaN') AS decimal(38,10)))
 -- !query schema
 struct<>
 -- !query output
@@ -1736,7 +1736,7 @@ struct<>
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (5,1,double('NaN'))
+INSERT INTO num_exp_div VALUES (5,1,try_cast(double('NaN') AS decimal(38,10)))
 -- !query schema
 struct<>
 -- !query output
@@ -2024,7 +2024,7 @@ struct<>
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (6,0,double('NaN'))
+INSERT INTO num_exp_div VALUES (6,0,try_cast(double('NaN') AS decimal(38,10)))
 -- !query schema
 struct<>
 -- !query output
@@ -2056,7 +2056,7 @@ struct<>
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (6,1,double('NaN'))
+INSERT INTO num_exp_div VALUES (6,1,try_cast(double('NaN') AS decimal(38,10)))
 -- !query schema
 struct<>
 -- !query output
@@ -2344,7 +2344,7 @@ struct<>
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (7,0,double('NaN'))
+INSERT INTO num_exp_div VALUES (7,0,try_cast(double('NaN') AS decimal(38,10)))
 -- !query schema
 struct<>
 -- !query output
@@ -2376,7 +2376,7 @@ struct<>
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (7,1,double('NaN'))
+INSERT INTO num_exp_div VALUES (7,1,try_cast(double('NaN') AS decimal(38,10)))
 -- !query schema
 struct<>
 -- !query output
@@ -2664,7 +2664,7 @@ struct<>
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (8,0,double('NaN'))
+INSERT INTO num_exp_div VALUES (8,0,try_cast(double('NaN') AS decimal(38,10)))
 -- !query schema
 struct<>
 -- !query output
@@ -2696,7 +2696,7 @@ struct<>
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (8,1,double('NaN'))
+INSERT INTO num_exp_div VALUES (8,1,try_cast(double('NaN') AS decimal(38,10)))
 -- !query schema
 struct<>
 -- !query output
@@ -2984,7 +2984,7 @@ struct<>
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (9,0,double('NaN'))
+INSERT INTO num_exp_div VALUES (9,0,try_cast(double('NaN') AS decimal(38,10)))
 -- !query schema
 struct<>
 -- !query output
@@ -3016,7 +3016,7 @@ struct<>
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (9,1,double('NaN'))
+INSERT INTO num_exp_div VALUES (9,1,try_cast(double('NaN') AS decimal(38,10)))
 -- !query schema
 struct<>
 -- !query output
@@ -3360,7 +3360,7 @@ struct<>
 
 
 -- !query
-INSERT INTO num_exp_ln VALUES (0,double('NaN'))
+INSERT INTO num_exp_ln VALUES (0,try_cast(double('NaN') AS decimal(38,10)))
 -- !query schema
 struct<>
 -- !query output
@@ -3368,7 +3368,7 @@ struct<>
 
 
 -- !query
-INSERT INTO num_exp_ln VALUES (1,double('NaN'))
+INSERT INTO num_exp_ln VALUES (1,try_cast(double('NaN') AS decimal(38,10)))
 -- !query schema
 struct<>
 -- !query output
@@ -3440,7 +3440,7 @@ struct<>
 
 
 -- !query
-INSERT INTO num_exp_log10 VALUES (0,double('NaN'))
+INSERT INTO num_exp_log10 VALUES (0,try_cast(double('NaN') AS decimal(38,10)))
 -- !query schema
 struct<>
 -- !query output
@@ -3448,7 +3448,7 @@ struct<>
 
 
 -- !query
-INSERT INTO num_exp_log10 VALUES (1,double('NaN'))
+INSERT INTO num_exp_log10 VALUES (1,try_cast(double('NaN') AS decimal(38,10)))
 -- !query schema
 struct<>
 -- !query output
@@ -3520,7 +3520,7 @@ struct<>
 
 
 -- !query
-INSERT INTO num_exp_power_10_ln VALUES (0,double('NaN'))
+INSERT INTO num_exp_power_10_ln VALUES (0,try_cast(double('NaN') AS decimal(38,10)))
 -- !query schema
 struct<>
 -- !query output
@@ -3528,7 +3528,7 @@ struct<>
 
 
 -- !query
-INSERT INTO num_exp_power_10_ln VALUES (1,double('NaN'))
+INSERT INTO num_exp_power_10_ln VALUES (1,try_cast(double('NaN') AS decimal(38,10)))
 -- !query schema
 struct<>
 -- !query output
@@ -4301,49 +4301,109 @@ struct<>
 -- !query
 SELECT decimal(double('NaN'))
 -- !query schema
-struct<NaN:decimal(10,0)>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "CAST_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "sourceType" : "\"DOUBLE\"",
+    "targetType" : "\"DECIMAL(10,0)\"",
+    "value" : "NaN"
+  }
+}
 
 
 -- !query
 SELECT decimal(double('Infinity'))
 -- !query schema
-struct<Infinity:decimal(10,0)>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "CAST_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "sourceType" : "\"DOUBLE\"",
+    "targetType" : "\"DECIMAL(10,0)\"",
+    "value" : "Infinity"
+  }
+}
 
 
 -- !query
 SELECT decimal(double('-Infinity'))
 -- !query schema
-struct<-Infinity:decimal(10,0)>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "CAST_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "sourceType" : "\"DOUBLE\"",
+    "targetType" : "\"DECIMAL(10,0)\"",
+    "value" : "-Infinity"
+  }
+}
 
 
 -- !query
 SELECT decimal(float('NaN'))
 -- !query schema
-struct<NaN:decimal(10,0)>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "CAST_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "sourceType" : "\"FLOAT\"",
+    "targetType" : "\"DECIMAL(10,0)\"",
+    "value" : "NaN"
+  }
+}
 
 
 -- !query
 SELECT decimal(float('Infinity'))
 -- !query schema
-struct<Infinity:decimal(10,0)>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "CAST_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "sourceType" : "\"FLOAT\"",
+    "targetType" : "\"DECIMAL(10,0)\"",
+    "value" : "Infinity"
+  }
+}
 
 
 -- !query
 SELECT decimal(float('-Infinity'))
 -- !query schema
-struct<-Infinity:decimal(10,0)>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "CAST_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "sourceType" : "\"FLOAT\"",
+    "targetType" : "\"DECIMAL(10,0)\"",
+    "value" : "-Infinity"
+  }
+}
 
 
 -- !query
