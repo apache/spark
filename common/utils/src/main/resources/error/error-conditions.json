@@ -7344,9 +7344,23 @@
     ],
     "sqlState" : "42908"
   },
+  "SPECIFY_CLUSTER_BY_WITH_DISTRIBUTED_BY_PARTITION_IS_NOT_ALLOWED" : {
+    "message" : [
+      "Cannot specify both CLUSTER BY and DISTRIBUTED BY PARTITION.",
+      "Please replace CLUSTER BY with PARTITIONED BY or CLUSTERED BY ... INTO ... BUCKETS, or drop DISTRIBUTED BY PARTITION."
+    ],
+    "sqlState" : "42908"
+  },
   "SPECIFY_CLUSTER_BY_WITH_PARTITIONED_BY_IS_NOT_ALLOWED" : {
     "message" : [
       "Cannot specify both CLUSTER BY and PARTITIONED BY."
+    ],
+    "sqlState" : "42908"
+  },
+  "SPECIFY_DISTRIBUTED_BY_PARTITION_WITHOUT_PARTITIONING_IS_NOT_ALLOWED" : {
+    "message" : [
+      "Cannot specify DISTRIBUTED BY PARTITION for a table that has no partitioning.",
+      "Please add PARTITIONED BY or CLUSTERED BY ... INTO ... BUCKETS, or drop the clause. A cluster_by(...) transform in PARTITIONED BY is clustering, not partitioning. A statement that defines no schema (no column list, no typed partition columns, and no AS SELECT) cannot declare partitioning, so it cannot use DISTRIBUTED BY PARTITION."
     ],
     "sqlState" : "42908"
   },
@@ -7355,6 +7369,13 @@
       "A CREATE TABLE without explicit column list cannot specify PARTITIONED BY.",
       "Please use the form with explicit column list and specify PARTITIONED BY.",
       "Alternatively, allow partitioning to be inferred by omitting the PARTITION BY clause."
+    ],
+    "sqlState" : "42601"
+  },
+  "SPECIFY_WRITE_ORDERING_IS_NOT_ALLOWED" : {
+    "message" : [
+      "A CREATE or REPLACE TABLE that defines no schema (no column list, no typed partition columns, and no AS SELECT) cannot specify ORDERED BY, because there is no schema to resolve the ordering against.",
+      "Please add a column list, or use the AS SELECT form."
     ],
     "sqlState" : "42601"
   },
@@ -10122,6 +10143,12 @@
       "Error parsing WKB: <parseError> at position <pos>"
     ],
     "sqlState" : "22023"
+  },
+  "WRITE_ORDERING_WITH_UNKNOWN_COLUMN" : {
+    "message" : [
+      "Invalid write ordering: cannot resolve <cols> against the columns of the table."
+    ],
+    "sqlState" : "42703"
   },
   "WRITE_STREAM_NOT_ALLOWED" : {
     "message" : [

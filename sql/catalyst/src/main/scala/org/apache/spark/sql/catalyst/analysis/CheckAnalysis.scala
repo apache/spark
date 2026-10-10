@@ -17,6 +17,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
+import scala.util.Try
 
 import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.api.python.PythonEvalType
@@ -989,6 +990,21 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 errorClass = "UNSUPPORTED_FEATURE.PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED",
                 messageParameters = Map(
                   "cols" -> badReferences.map(r => toSQLId(r)).mkString(", ")))
+            }
+
+            // PreprocessTableCreation keeps a reference to a missing column as is, so this is the
+            // only check that rejects it, also for analyzers that do not run that rule. A path
+            // through a non-struct field is missing too, although findNestedField throws for it.
+            val badOrderingReferences = create.writeOrdering
+              .flatMap(_.expression().references().map(_.fieldNames().toImmutableArraySeq))
+              .distinct
+              .filter(c => Try(create.tableSchema.findNestedField(c)).toOption.flatten.isEmpty)
+
+            if (badOrderingReferences.nonEmpty) {
+              create.failAnalysis(
+                errorClass = "WRITE_ORDERING_WITH_UNKNOWN_COLUMN",
+                messageParameters = Map(
+                  "cols" -> badOrderingReferences.map(parts => toSQLId(parts)).mkString(", ")))
             }
 
             create.tableSchema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))

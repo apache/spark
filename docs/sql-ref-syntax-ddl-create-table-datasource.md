@@ -37,7 +37,16 @@ CREATE [ EXTERNAL ] TABLE [ IF NOT EXISTS ] table_identifier
     [ LOCATION path ]
     [ COMMENT table_comment ]
     [ TBLPROPERTIES ( key1=val1, key2=val2, ... ) ]
+    [ DISTRIBUTED BY PARTITION ]
+    [ [ LOCALLY ] ORDERED BY { ( write_order_field [ , ... ] ) | write_order_field [ , ... ] }
+        | UNORDERED ]
     [ AS select_statement ]
+```
+
+```sql
+write_order_field
+    { col_name | transform ( { col_name | constant } [ , ... ] ) }
+        [ ASC | DESC ] [ NULLS { FIRST | LAST } ]
 ```
 
 Note that, the clauses between the USING clause and the AS SELECT clause can come in
@@ -97,6 +106,75 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
 * **TBLPROPERTIES**
 
     A list of key-value pairs that is used to tag the table definition.
+
+* **DISTRIBUTED BY PARTITION**
+
+    Requests that every write to the table be clustered by the table's partitioning, so the rows
+    of each partition are written by as few tasks as possible rather than by every task that holds
+    rows for it.
+
+    Requires the table to actually be partitioned, with `PARTITIONED BY` or with
+    `CLUSTERED BY ... INTO ... BUCKETS`. Note that `CLUSTER BY` -- a different clause from
+    `CLUSTERED BY ... INTO ... BUCKETS` -- does **not** qualify: it lists clustering columns for the
+    data source to interpret rather than defining a partitioning, and it cannot be combined with
+    `PARTITIONED BY` or `CLUSTERED BY ... INTO ... BUCKETS`, so a table using it has no partitioning
+    to distribute by. To distribute such a table by partition, replace `CLUSTER BY` with one of
+    those clauses. A `cluster_by(...)` transform in `PARTITIONED BY` is clustering too, so it does
+    not qualify either.
+
+    A statement that defines no schema (no column list, no typed partition columns, and no
+    `AS SELECT`) cannot declare partitioning, so it cannot use this clause either.
+
+* **ORDERED BY**
+
+    Requests a sort order for every write to the table, recorded on the table so that later writes
+    honor it too. `UNORDERED` asks for no ordering at all, which is different from omitting the
+    clause -- omitting it leaves the choice to the catalog. The parentheses are optional:
+    `ORDERED BY (a, b)` and `ORDERED BY a, b` are the same. The sort keys must resolve against the
+    table's columns, so a statement that defines no schema (no column list, no typed partition
+    columns, and no `AS SELECT`) cannot use `ORDERED BY` or `LOCALLY ORDERED BY`. `UNORDERED` needs
+    no schema.
+
+    The distribution decides how far the order reaches, and this clause picks one when
+    `DISTRIBUTED BY PARTITION` is absent: a bare `ORDERED BY` asks for each write to be
+    range-partitioned, so that the order holds across the tasks of a write, not only within one,
+    while `LOCALLY ORDERED BY` asks for it to hold within each write task only, without a shuffle.
+    `UNORDERED` on its own asks for no distribution either.
+
+    When `DISTRIBUTED BY PARTITION` is given it decides the distribution instead, and the order then
+    holds within each write task. `LOCALLY` therefore adds nothing beside it, and `UNORDERED` beside
+    it contributes only "no sort keys":
+
+    ```sql
+    -- range-partition each write by id, so the order holds across that write's tasks
+    CREATE TABLE t (id INT, c STRING) USING iceberg PARTITIONED BY (c) ORDERED BY (id);
+
+    -- cluster each write by partition instead, and sort by id within each task
+    CREATE TABLE t (id INT, c STRING) USING iceberg PARTITIONED BY (c)
+        DISTRIBUTED BY PARTITION ORDERED BY (id);
+
+    -- cluster each write by partition, with no sort order; UNORDERED here is the same as
+    -- omitting it, since DISTRIBUTED BY PARTITION already fixed the distribution
+    CREATE TABLE t (id INT, c STRING) USING iceberg PARTITIONED BY (c)
+        DISTRIBUTED BY PARTITION UNORDERED;
+    ```
+
+    Both clauses are passed to the catalog, which has to support them. If the catalog does not
+    advertise support for a write distribution and ordering, Spark rejects the statement rather
+    than creating a table that silently lacks the requested layout. The built-in catalogs do not
+    support them. `ORDERED BY`, `LOCALLY ORDERED BY`, and `UNORDERED` may also be combined with
+    `CLUSTER BY`, subject to the catalog accepting the combination: Spark passes the clustering
+    columns and the requested distribution and ordering to the catalog without reconciling them,
+    so the catalog decides how they interact and may reject a combination it does not support.
+    `DISTRIBUTED BY PARTITION` cannot be combined with `CLUSTER BY`, as described above.
+
+    What the catalog records is a *default* for later writes, not a statement about the data
+    already in the table: an individual write may override it, and rewriting existing data to match
+    a newly requested layout is a separate operation. `SHOW CREATE TABLE` reproduces the clauses
+    only when the catalog accepts them, every column they reference exists, and parsing them in
+    the current session gives back the same pair. A sort key with a `TRUE`, `FALSE` or `NULL`
+    argument, for example, is read back as a column reference when that keyword is not reserved,
+    so it is not reproduced. `DESCRIBE TABLE EXTENDED` reports both values in every case.
 
 * **AS select_statement**
 

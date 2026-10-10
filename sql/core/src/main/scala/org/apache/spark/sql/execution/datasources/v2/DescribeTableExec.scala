@@ -23,7 +23,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, ClusterBySpec}
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, ResolveDefaultColumns}
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, ResolveDefaultColumns, WriteDistributionAndOrdering}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, SupportsMetadataColumns, SupportsRead, Table, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, IdentityTransform}
@@ -180,6 +180,7 @@ case class DescribeTableExec(
       addTableDetails(rows)
       addTableStats(rows)
       addTableConstraints(rows)
+      addTableWriteDistributionAndOrdering(rows)
     }
     rows.toSeq
   }
@@ -222,6 +223,28 @@ case class DescribeTableExec(
       rows += toCatalystRow("# Constraints", "", "")
       rows ++= table.constraints().map{ constraint =>
         toCatalystRow(constraint.name(), constraint.toDescription, "")
+      }
+    }
+  }
+
+  /**
+   * Reports the table's declared write distribution and ordering, whether or not SHOW CREATE TABLE
+   * can reproduce them.
+   */
+  private def addTableWriteDistributionAndOrdering(rows: ArrayBuffer[InternalRow]): Unit = {
+    val writeDistributionMode = table.writeDistributionMode()
+    val writeOrdering = table.writeOrdering().toImmutableArraySeq
+    if (WriteDistributionAndOrdering.isRequested(writeDistributionMode, writeOrdering)) {
+      rows += emptyRow()
+      rows += toCatalystRow("# Write Distribution and Ordering", "", "")
+      if (writeDistributionMode != null) {
+        rows += toCatalystRow("Distribution", writeDistributionMode.toString, "")
+      }
+      if (writeOrdering.nonEmpty) {
+        rows += toCatalystRow(
+          "Ordering",
+          writeOrdering.map(WriteDistributionAndOrdering.describeSortOrder).mkString(", "),
+          "")
       }
     }
   }
