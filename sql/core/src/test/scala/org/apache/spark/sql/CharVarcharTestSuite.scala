@@ -2978,13 +2978,14 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         key = "a",
         dataTypeSql = "CHAR(2)")
 
-      // Default valueTag is "_VALUE" (6 characters), so CHAR(2) rejects it.
+      // Default valueTag is "_VALUE" (6 characters). Text-only elements are malformed
+      // records (convertField), so use mixed content to reach convertMap.
       checkAnswer(
-        sql("SELECT from_xml('<ROW><m>xy</m></ROW>', 'm MAP<CHAR(2), STRING>')"),
+        sql("SELECT from_xml('<ROW><m><ab>1</ab>xy</m></ROW>', 'm MAP<CHAR(2), STRING>')"),
         Row(Row(null)))
       assertUnsupportedXmlMapKey(
         """SELECT from_xml(
-          |  '<ROW><m>xy</m></ROW>',
+          |  '<ROW><m><ab>1</ab>xy</m></ROW>',
           |  'm MAP<CHAR(2), STRING>',
           |  map('mode', 'FAILFAST'))""".stripMargin,
         key = "_VALUE",
@@ -3049,19 +3050,37 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         dataTypeSql = "VARCHAR(2)")
 
       // Default attributePrefix "_" is part of the key: local name ab is key _ab.
+      // Attribute-only elements are SQL NULL (convertField EndElement), so include a child.
       checkAnswer(
-        sql("SELECT from_xml('<ROW><m ab=\"1\"></m></ROW>', 'm MAP<CHAR(2), INT>')"),
+        sql("SELECT from_xml('<ROW><m ab=\"1\"><xy>2</xy></m></ROW>', 'm MAP<CHAR(2), INT>')"),
         Row(Row(null)))
       checkAnswer(
-        sql("SELECT from_xml('<ROW><m ab=\"1\"></m></ROW>', 'm MAP<CHAR(3), INT>')"),
-        Row(Row(Map("_ab" -> 1))))
+        sql("SELECT from_xml('<ROW><m ab=\"1\"><xyz>2</xyz></m></ROW>', 'm MAP<CHAR(3), INT>')"),
+        Row(Row(Map("_ab" -> 1, "xyz" -> 2))))
       assertUnsupportedXmlMapKey(
         """SELECT from_xml(
-          |  '<ROW><m ab="1"></m></ROW>',
+          |  '<ROW><m ab="1"><xy>2</xy></m></ROW>',
           |  'm MAP<CHAR(2), INT>',
           |  map('mode', 'FAILFAST'))""".stripMargin,
         key = "_ab",
         dataTypeSql = "CHAR(2)")
+
+      // MAP<STRING> empty, attribute-only, and text-only elements stay SQL NULL, matching
+      // convertField on master. ARRAY<MAP> empty elements are null entries, not {}.
+      checkAnswer(
+        sql("SELECT from_xml('<ROW><m></m></ROW>', 'm MAP<STRING, INT>')"),
+        Row(Row(null)))
+      checkAnswer(
+        sql("SELECT from_xml('<ROW><m a=\"1\"></m></ROW>', 'm MAP<STRING, INT>')"),
+        Row(Row(null)))
+      checkAnswer(
+        sql("SELECT from_xml('<ROW><m>xy</m></ROW>', 'm MAP<STRING, STRING>')"),
+        Row(Row(null)))
+      checkAnswer(
+        sql("""SELECT from_xml(
+          |  '<ROW><m></m><tail>9</tail></ROW>',
+          |  'm ARRAY<MAP<STRING, INT>>, tail INT')""".stripMargin),
+        Row(Row(Seq(null), 9)))
 
       withTempPath { path =>
         Seq(
@@ -3097,6 +3116,31 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           .schema(arraySchema)
           .xml(path.getCanonicalPath)
         checkAnswer(arrayPermissive, Seq(Row(null), Row(Seq(Map("ab" -> 2)))))
+      }
+
+      // format("xml").load() skips INVALID_XML_MAP_KEY_TYPE. Non-string keys must stay a
+      // malformed record (MatchError), not a mistyped map that fails with ClassCastException.
+      withTempPath { path =>
+        Seq("""<ROWS><ROW><m><a>x</a></m></ROW></ROWS>""")
+          .toDS().write.text(path.getCanonicalPath)
+        val intKeySchema = "m MAP<INT, STRING>"
+        val permissiveInt = spark.read
+          .format("xml")
+          .option("rowTag", "ROW")
+          .schema(intKeySchema)
+          .load(path.getCanonicalPath)
+        checkAnswer(permissiveInt, Seq(Row(null)))
+        val failFastInt = spark.read
+          .format("xml")
+          .option("rowTag", "ROW")
+          .option("mode", "FAILFAST")
+          .schema(intKeySchema)
+          .load(path.getCanonicalPath)
+        val error = intercept[Exception] { failFastInt.collect() }
+        val causes = Iterator.iterate[Throwable](error)(_.getCause).takeWhile(_ != null)
+        assert(
+          !causes.exists(_.isInstanceOf[ClassCastException]),
+          s"MAP<INT, STRING> XML read must not ClassCastException: $error")
       }
 
       withSQLConf(

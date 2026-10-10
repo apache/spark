@@ -385,7 +385,10 @@ class StaxXmlParser(
         startElementName: String,
         attributes: Array[Attribute]): Any = dt match {
       case st: StructType => convertObject(parser, st)
-      case MapType(kt, vt, _) => convertMap(parser, vt, attributes, kt)
+      // CHAR/VARCHAR extend StringType. Non-string keys (for example MAP<INT, _> through
+      // format("xml").load()) must not reach convertMap: applyTextParseSemantics would keep
+      // UTF8String keys and fail later with ClassCastException.
+      case MapType(kt: StringType, vt, _) => convertMap(parser, vt, attributes, kt)
       case ArrayType(st, _) => convertField(parser, st, startElementName)
       case VariantType =>
         StaxXmlParser.convertVariant(parser, attributes, options)
@@ -447,14 +450,18 @@ class StaxXmlParser(
   /**
    * Parse an object as a Map.
    *
-   * XML names used as CHAR/VARCHAR keys are length-checked without rewriting:
-   * CHAR keys must already be exactly n characters, and VARCHAR keys must already be
-   * at most n characters. Padding, trimming, and mapKeyDedupPolicy are not applied.
+   * When `spark.sql.charVarchar.standardSemantics.enabled` is true, XML names used as
+   * CHAR/VARCHAR keys are length-checked without rewriting: CHAR keys must already be
+   * exactly n characters, and VARCHAR keys must already be at most n characters.
+   * Padding, trimming, and mapKeyDedupPolicy are not applied. With the flag off,
+   * CHAR keys are padded and VARCHAR overflow uses EXCEED_LIMIT_LENGTH when
+   * first-class CHAR/VARCHAR types reach the parser.
    * Repeated names last-win on binary equality (collation is not consulted), matching
    * ordinary MAP<STRING, ...> XML maps.
    *
-   * Example: `from_xml('<ROW><m><ab>1</ab></m></ROW>', 'm MAP<CHAR(2), INT>')`
-   * keeps key `ab`; `MAP<CHAR(4), INT>` raises `UNSUPPORTED_XML_CHAR_VARCHAR_MAP_KEY`.
+   * Example (flag on): `from_xml('<ROW><m><ab>1</ab></m></ROW>',
+   * 'm MAP<CHAR(2), INT>')` keeps key `ab`; `MAP<CHAR(4), INT>` raises
+   * `UNSUPPORTED_XML_CHAR_VARCHAR_MAP_KEY`.
    *
    * This method owns element bounding so a key-check failure still consumes the current
    * map element (ARRAY<MAP<...>> and nested maps included).
@@ -646,9 +653,6 @@ class StaxXmlParser(
             case Some(index) => schema(index).dataType match {
               case st: StructType =>
                 row(index) = convertNestedStruct(parser, st, field, attributes)
-
-              case mt: MapType =>
-                row(index) = convertMap(parser, mt.valueType, attributes, mt.keyType)
 
               case ArrayType(dt: DataType, _) =>
                 val values = Option(row(index))
