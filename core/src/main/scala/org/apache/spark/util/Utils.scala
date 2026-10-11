@@ -29,7 +29,7 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.attribute.PosixFilePermissions
 import java.security.SecureRandom
-import java.util.{HexFormat, Locale, Properties, Random, UUID}
+import java.util.{Collections, HexFormat, Locale, Properties, Random, UUID}
 import java.util.concurrent._
 import java.util.concurrent.TimeUnit.NANOSECONDS
 import java.util.zip.{GZIPInputStream, ZipInputStream}
@@ -224,7 +224,9 @@ private[spark] object Utils
     writeByteBufferImpl(bb, out.write)
   }
 
-  private val chmod700Perms = PosixFilePermissions.fromString("rwx------")
+  // fromString returns a mutable HashSet; wrap it so no future caller can mutate the shared set.
+  private val chmod700Perms =
+    Collections.unmodifiableSet(PosixFilePermissions.fromString("rwx------"))
 
   /**
    * JDK equivalent of `chmod 700 file`.
@@ -251,13 +253,22 @@ private[spark] object Utils
         // Non-POSIX filesystem (e.g. Windows): best-effort, non-atomic fallback. Remove all
         // permissions first so the file is locked down as early as possible, then grant the
         // owner permissions; no intermediate state grants group/other access.
-        file.setReadable(false, false) &&
-        file.setWritable(false, false) &&
-        file.setExecutable(false, false) &&
-        file.setReadable(true, true) &&
-        file.setWritable(true, true) &&
-        file.setExecutable(true, true)
-      case NonFatal(_) => false
+        val succeeded =
+          file.setReadable(false, false) &&
+          file.setWritable(false, false) &&
+          file.setExecutable(false, false) &&
+          file.setReadable(true, true) &&
+          file.setWritable(true, true) &&
+          file.setExecutable(true, true)
+        if (!succeeded) {
+          // Structural on Windows: File.setReadable(false, false) always fails there (the
+          // filesystem has no read permission to revoke), so this fires on every call.
+          logWarning(log"Failed to set permissions to 700 on ${MDC(PATH, file.getAbsolutePath)}")
+        }
+        succeeded
+      case NonFatal(e) =>
+        logWarning(log"Failed to set permissions to 700 on ${MDC(PATH, file.getAbsolutePath)}", e)
+        false
     }
   }
 
