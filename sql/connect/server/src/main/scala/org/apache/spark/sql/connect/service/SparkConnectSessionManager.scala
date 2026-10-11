@@ -19,7 +19,7 @@ package org.apache.spark.sql.connect.service
 
 import java.util.UUID
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, Executors, ScheduledExecutorService, TimeUnit}
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 import scala.concurrent.duration.FiniteDuration
 import scala.jdk.CollectionConverters._
@@ -224,31 +224,36 @@ class SparkConnectSessionManager extends Logging {
     session
   }
 
-  // Removes session from sessionStore and returns it. If `expected` is given, the session is
-  // removed only if it is still that exact holder. Returns the holder only to the caller that
-  // actually removed it; that caller owns its close() and must call shutdownSessionHolder.
-  private[service] def removeSessionHolder(
-      key: SessionKey,
-      expected: Option[SessionHolder] = None): Option[SessionHolder] = {
-    // The session is always tombstoned before it is removed from the session store, and the
-    // tombstone is kept until shutdownSessionHolder has finished closing it. Otherwise a session
-    // with the same key could be created right after removal, or while the old session is still
-    // closing, and the key-based cleanup in SessionHolder.close() would tear it down.
-    // Tombstoning and removal happen atomically for the key, so concurrent callers cannot both
-    // win the removal, and a losing caller cannot re-put a tombstone that the owner has dropped.
-    var removed: Option[SessionHolder] = None
+  // Removes the session with the given key from sessionStore, if any, and returns it.
+  private[service] def removeSessionHolder(key: SessionKey): Option[SessionHolder] = {
+    Option(sessionStore.get(key)).filter(tryRemoveSessionHolder)
+  }
+
+  // Removes the given session from sessionStore if it is still stored there. Returns true only
+  // for the one caller that removed it; that caller must then call shutdownSessionHolder.
+  //
+  // The session is tombstoned before it is removed, and the tombstone is kept until
+  // shutdownSessionHolder has finished closing it. Otherwise a session with the same key could be
+  // created while the old session is still closing, and the key-based cleanup in
+  // SessionHolder.close() would tear it down.
+  private[service] def tryRemoveSessionHolder(sessionHolder: SessionHolder): Boolean = {
+    // Tombstone and remove the session in one atomic step for the key, matched by identity, so
+    // that two callers cannot both remove the same session, a caller that loses cannot re-put a
+    // tombstone that the owner already dropped, and a later session with the same key is never
+    // removed.
+    val removed = new AtomicBoolean(false)
     sessionStore.computeIfPresent(
-      key,
-      (_, s) => {
-        if (expected.forall(_ eq s)) {
-          closedSessionsCache.put(s.key, s.getSessionHolderInfo)
-          removed = Some(s)
+      sessionHolder.key,
+      (_, current) => {
+        if (current eq sessionHolder) {
+          closedSessionsCache.put(current.key, current.getSessionHolderInfo)
+          removed.set(true)
           null
         } else {
-          s
+          current
         }
       })
-    removed
+    removed.get()
   }
 
   // Shuts down the session after removing.
@@ -363,11 +368,11 @@ class SparkConnectSessionManager extends Logging {
         logInfo(
           log"Found session ${MDC(SESSION_HOLD_INFO, info)} that expired " +
             log"and will be closed.")
-        // Only shut down the holder if this call removed it. If another caller, for example a
-        // concurrent ReleaseSession, already removed it, that caller owns its close().
-        removeSessionHolder(info.key, Some(sessionHolder)).foreach { removed =>
+        // If another caller, for example a concurrent ReleaseSession, already removed this
+        // session, that caller owns its close().
+        if (tryRemoveSessionHolder(sessionHolder)) {
           try {
-            shutdownSessionHolder(removed)
+            shutdownSessionHolder(sessionHolder)
           } catch {
             case NonFatal(ex) => logWarning("Unexpected exception closing session", ex)
           }
@@ -460,8 +465,10 @@ class SparkConnectSessionManager extends Logging {
    * Used for testing
    */
   private[connect] def invalidateAllSessions(): Unit = {
-    sessionStore.forEach((key, sessionHolder) => {
-      removeSessionHolder(key, Some(sessionHolder)).foreach(shutdownSessionHolder(_))
+    sessionStore.forEach((_, sessionHolder) => {
+      if (tryRemoveSessionHolder(sessionHolder)) {
+        shutdownSessionHolder(sessionHolder)
+      }
     })
     closedSessionsCache.invalidateAll()
   }

@@ -250,7 +250,7 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession {
       // Callers that lose the removal, such as a concurrent ReleaseSession or a maintenance run
       // that observed the holder before it was removed, must not close it again or touch its
       // tombstone.
-      assert(sessionManager.removeSessionHolder(key, Some(holder)).isEmpty)
+      assert(!sessionManager.tryRemoveSessionHolder(holder))
       sessionManager.closeSession(key)
       sessionManager.periodicMaintenance(defaultInactiveTimeoutMs = 0L)
       assertSessionClosed(key)
@@ -272,12 +272,12 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession {
     releaseSession(key, allowReconnect = true)
 
     // For example, a maintenance run that observed the old holder before the release removed it.
-    assert(sessionManager.removeSessionHolder(key, Some(oldHolder)).isEmpty)
+    assert(!sessionManager.tryRemoveSessionHolder(oldHolder))
     val newHolder = sessionManager.getOrCreateIsolatedSession(key, None)
     assert(newHolder ne oldHolder)
 
     // Removal keyed on the old holder must not remove the new session with the same key.
-    assert(sessionManager.removeSessionHolder(key, Some(oldHolder)).isEmpty)
+    assert(!sessionManager.tryRemoveSessionHolder(oldHolder))
     assert(sessionManager.getIsolatedSessionIfPresent(key).exists(_ eq newHolder))
   }
 
