@@ -3,14 +3,16 @@
 # File originates from the cpython source
 # https://github.com/python/cpython/blob/3.11/Lib/distutils/version.py
 
+from __future__ import annotations
+
 import re
-from typing import Optional
+from types import NotImplementedType
 
 
 class LooseVersion:
     component_re = re.compile(r"(\d+ | [a-z]+ | \.)", re.VERBOSE)
 
-    def __init__(self, vstring: Optional[str]) -> None:
+    def __init__(self, vstring: str | None) -> None:
         if vstring:
             self.parse(vstring)
 
@@ -31,37 +33,37 @@ class LooseVersion:
     def __repr__(self) -> str:
         return "LooseVersion ('%s')" % str(self)
 
-    def __eq__(self, other):  # type: ignore[no-untyped-def]
+    def __eq__(self, other: object) -> bool:
         c = self._cmp(other)
         if c is NotImplemented:
-            return c
+            return NotImplemented
         return c == 0
 
-    def __lt__(self, other):  # type: ignore[no-untyped-def]
+    def __lt__(self, other: LooseVersion | str) -> bool:
         c = self._cmp(other)
         if c is NotImplemented:
-            return c
+            return NotImplemented
         return c < 0
 
-    def __le__(self, other):  # type: ignore[no-untyped-def]
+    def __le__(self, other: LooseVersion | str) -> bool:
         c = self._cmp(other)
         if c is NotImplemented:
-            return c
+            return NotImplemented
         return c <= 0
 
-    def __gt__(self, other):  # type: ignore[no-untyped-def]
+    def __gt__(self, other: LooseVersion | str) -> bool:
         c = self._cmp(other)
         if c is NotImplemented:
-            return c
+            return NotImplemented
         return c > 0
 
-    def __ge__(self, other):  # type: ignore[no-untyped-def]
+    def __ge__(self, other: LooseVersion | str) -> bool:
         c = self._cmp(other)
         if c is NotImplemented:
-            return c
+            return NotImplemented
         return c >= 0
 
-    def _cmp(self, other):  # type: ignore[no-untyped-def]
+    def _cmp(self, other: object) -> int | NotImplementedType:
         if isinstance(other, str):
             other = LooseVersion(other)
         elif not isinstance(other, LooseVersion):
@@ -71,5 +73,4 @@ class LooseVersion:
             return 0
         if self.version < other.version:
             return -1
-        if self.version > other.version:
-            return 1
+        return 1

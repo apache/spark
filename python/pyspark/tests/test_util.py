@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import gc
+import operator
 import os
 import time
 import unittest
@@ -132,18 +133,6 @@ class UtilTests(PySparkTestCase):
             lambda: self.assertTrue(random.random() < 0.1)
         )()
 
-    def test_loose_version(self):
-        v1 = LooseVersion("1.2.3")
-        self.assertEqual(str(v1), "1.2.3")
-        self.assertEqual(repr(v1), "LooseVersion ('1.2.3')")
-        v2 = "1.2.3"
-        self.assertEqual(v1, v2)
-        v3 = 1.1
-        with self.assertRaises(TypeError):
-            v1 > v3
-        v4 = LooseVersion("1.2.4")
-        self.assertTrue(v1 <= v4)
-
     def test_parse_memory(self):
         self.assertEqual(_parse_memory("1g"), 1024)
         with self.assertRaisesRegex(ValueError, "invalid format"):
@@ -165,6 +154,50 @@ class UtilTests(PySparkTestCase):
             time.sleep(3600)  # Simulate a long-running operation
         else:
             print("succeeding immediately")
+
+
+class LooseVersionTests(unittest.TestCase):
+    def test_string_representation(self):
+        version = LooseVersion("1.2.3")
+        self.assertEqual(str(version), "1.2.3")
+        self.assertEqual(repr(version), "LooseVersion ('1.2.3')")
+
+    def test_comparisons(self):
+        for left, right, expected in [
+            ("1.2.3", "1.2.3", 0),
+            ("1.2.3", "1.2.4", -1),
+            ("1.3", "1.2", 1),
+            ("1.2", "1.2.0", -1),
+            ("1.2a", "1.2b", -1),
+        ]:
+            version = LooseVersion(left)
+            for other in (right, LooseVersion(right)):
+                with self.subTest(left=left, other=other):
+                    for compare in (
+                        operator.eq,
+                        operator.lt,
+                        operator.le,
+                        operator.gt,
+                        operator.ge,
+                    ):
+                        self.assertEqual(compare(version, other), compare(expected, 0))
+                        self.assertEqual(compare(other, version), compare(0, expected))
+
+    def test_unsupported_operands(self):
+        version = LooseVersion("1.2.3")
+        for other in (object(), 1.1, None):
+            with self.subTest(other=other):
+                self.assertFalse(version == other)
+                self.assertFalse(other == version)
+                for compare in (operator.lt, operator.le, operator.gt, operator.ge):
+                    with self.assertRaises(TypeError):
+                        compare(version, other)
+                    with self.assertRaises(TypeError):
+                        compare(other, version)
+
+    def test_incomparable_components(self):
+        with self.assertRaises(TypeError):
+            LooseVersion("1.a") < LooseVersion("1.2")
 
 
 class HandleWorkerExceptionTests(unittest.TestCase):
