@@ -550,6 +550,64 @@ class JDBCSuite extends SharedSparkSession {
         "dataType" -> "\"TIMESTAMP_NTZ\""))
   }
 
+  test("SPARK-59051: compile temporal partition bounds with the JDBC dialect") {
+    val testUrl = "jdbc:spark-test:"
+    val quotedColumn = "\"PartitionColumn\""
+    val cases = Seq(
+      (DateType, "2018-07-06", "2018-07-08", "{d '2018-07-07'}"),
+      (TimestampType, "2018-07-06 10:00:00", "2018-07-06 14:00:00",
+        "{ts '2018-07-06 12:00:00'}"),
+      (TimestampNTZType, "2018-07-06 10:00:00", "2018-07-06 14:00:00",
+        "{ts '2018-07-06 12:00:00'}"),
+      // These midpoints must not be shifted across the Julian/Gregorian calendar cutover.
+      (DateType, "1582-10-04", "1582-10-16", "{d '1582-10-10'}"),
+      (TimestampType, "1582-10-10 10:00:00", "1582-10-10 14:00:00",
+        "{ts '1582-10-10 12:00:00'}"),
+      (TimestampNTZType, "1582-10-10 10:00:00", "1582-10-10 14:00:00",
+        "{ts '1582-10-10 12:00:00'}"),
+      // A zoneless timestamp can fall inside the JVM default time zone's DST gap.
+      (TimestampNTZType, "2018-03-11 02:10:00", "2018-03-11 02:50:00",
+        "{ts '2018-03-11 02:30:00'}"),
+      (TimestampType, "2018-07-06 10:00:00.100", "2018-07-06 10:00:00.300",
+        "{ts '2018-07-06 10:00:00.2'}"))
+
+    JdbcDialects.registerDialectForUrlPrefix(testUrl, OracleDialect())
+    try {
+      for {
+        java8Api <- Seq("true", "false")
+        jvmTimeZone <- Seq("UTC", "America/Los_Angeles")
+        boundTimeZone <- Seq("UTC", "America/Los_Angeles")
+      } {
+        DateTimeTestUtils.withDefaultTimeZone(DateTimeUtils.getZoneId(jvmTimeZone)) {
+          withSQLConf(
+            SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api,
+            SQLConf.SESSION_LOCAL_TIMEZONE.key -> "Asia/Kolkata") {
+            cases.foreach { case (dataType, lowerBound, upperBound, compiledMidpoint) =>
+              val schema = StructType(Seq(StructField("PartitionColumn", dataType)))
+              val partitions = JDBCRelation.columnPartition(
+                schema,
+                analysis.caseInsensitiveResolution,
+                boundTimeZone,
+                new JDBCOptions(testUrl, "table", Map(
+                  "driver" -> "org.h2.Driver",
+                  "lowerBound" -> lowerBound,
+                  "upperBound" -> upperBound,
+                  "numPartitions" -> "2",
+                  "partitionColumn" -> "PartitionColumn")))
+
+              val clauses = partitions.map(_.asInstanceOf[JDBCPartition].whereClause)
+              assert(clauses === Array(
+                s"$quotedColumn < $compiledMidpoint or $quotedColumn is null",
+                s"$quotedColumn >= $compiledMidpoint"))
+            }
+          }
+        }
+      }
+    } finally {
+      JdbcDialects.unregisterDialectForUrlPrefix(testUrl)
+    }
+  }
+
   test("overflow of partition bound difference does not give negative stride") {
     val df = sql("SELECT * FROM partsoverflow")
     checkNumPartitions(df, expectedNumPartitions = 3)
@@ -1954,7 +2012,7 @@ class JDBCSuite extends SharedSparkSession {
     // Oracle literal rather than LocalDateTime.toString.
     val oracleDialect = JdbcDialects.get("jdbc:oracle")
     assert(oracleDialect.compileValue(LocalDateTime.of(2018, 7, 6, 6, 0, 0)) ===
-      "{ts '2018-07-06 06:00:00.0'}")
+      "{ts '2018-07-06 06:00:00'}")
   }
 
   test("SPARK-58876: Oracle TIMESTAMP(7-9) resolves to nanosecond NTZ under the nanos preview") {

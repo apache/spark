@@ -18,7 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{Date, SQLException, Timestamp, Types}
-import java.time.LocalDateTime
+import java.time.{LocalDate, LocalDateTime}
 import java.util.Locale
 
 import scala.util.control.NonFatal
@@ -236,8 +236,9 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
     // Appendix A Reference Information.
     case stringValue: String => s"'${escapeSql(stringValue)}'"
     case timestampValue: Timestamp => "{ts '" + timestampValue + "'}"
-    case localDateTimeValue: LocalDateTime => "{ts '" + Timestamp.valueOf(localDateTimeValue) + "'}"
+    case localDateTimeValue: LocalDateTime => s"{ts ${super.compileValue(localDateTimeValue)}}"
     case dateValue: Date => "{d '" + dateValue + "'}"
+    case localDateValue: LocalDate => s"{d ${super.compileValue(localDateValue)}}"
     case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")
     case binaryValue: Array[Byte] =>
       binaryValue.map("%02X".format(_)).mkString("HEXTORAW('", "", "')")
