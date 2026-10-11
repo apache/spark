@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Expression, Literal,
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, DropField, Expression, Literal,
   UpdateFields, With, WithField}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
@@ -65,6 +65,24 @@ class ReplaceUpdateFieldsExpressionSuite extends PlanTest {
       val depthSix = expressionNodeCount(nullable, 6)
       assert(depthSix < depthThree * 3,
         s"nullable=$nullable: depth 3 has $depthThree nodes, depth 6 has $depthSix")
+    }
+  }
+
+  test("UpdateFields replacement does not introduce scopes for non-nested operations") {
+    val structType = StructType(Seq(
+      StructField("a", IntegerType), StructField("b", IntegerType)))
+    Seq(true, false).foreach { nullable =>
+      val struct = AttributeReference("struct", structType, nullable)()
+      Seq(
+        Seq(WithField("a", Literal(1))),
+        Seq(DropField("b")),
+        Seq(WithField("a", Literal(1)), DropField("b"))).foreach { operations =>
+        val optimized = Optimize.execute(LocalRelation(struct).select(
+          Alias(UpdateFields(struct, operations), "result")()))
+        assert(!optimized.exists(_.expressions.exists(_.exists(_.isInstanceOf[With]))))
+        assert(!optimized.exists(_.expressions.exists(_.exists(_.isInstanceOf[UpdateFields]))))
+        assert(optimized.output.head.nullable == nullable)
+      }
     }
   }
 

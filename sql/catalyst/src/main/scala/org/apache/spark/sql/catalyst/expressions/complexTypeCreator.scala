@@ -988,27 +988,34 @@ case class UpdateFields(structExpr: Expression, fieldOps: Seq[StructFieldsOperat
     case _ => GetStructField(structExpr, ordinal)
   }
 
-  lazy val evalExpr: Expression = With(structExpr) { case Seq(structRef) =>
-    val source = structExpr match {
-      case namedStruct: CreateNamedStruct => namedStruct
-      case _ => structRef
-    }
-    val fieldSources = UpdateFields.fieldSources(source, fieldOps)
-    val updatedValues = ArrayBuffer.empty[Expression]
-    val outputOrdinals = fieldSources.map { case (_, source) =>
-      source match {
-        case UpdateFields.Original(ordinal) => structExpr match {
-          case namedStruct: CreateNamedStruct =>
-            updatedValues += namedStruct.valExprs(ordinal)
-            -1
-          case _ => ordinal
-        }
-        case UpdateFields.Updated(expr) =>
-          updatedValues += expr
-          -1
+  lazy val evalExpr: Expression = {
+    def buildExpression(structRef: Expression): Expression = {
+      val source = structExpr match {
+        case namedStruct: CreateNamedStruct => namedStruct
+        case _ => structRef
       }
+      val fieldSources = UpdateFields.fieldSources(source, fieldOps)
+      val updatedValues = ArrayBuffer.empty[Expression]
+      val outputOrdinals = fieldSources.map { case (_, source) =>
+        source match {
+          case UpdateFields.Original(ordinal) => structExpr match {
+            case namedStruct: CreateNamedStruct =>
+              updatedValues += namedStruct.valExprs(ordinal)
+              -1
+            case _ => ordinal
+          }
+          case UpdateFields.Updated(expr) =>
+            updatedValues += expr
+            -1
+        }
+      }
+      UpdateFieldsExpression(structRef, updatedValues.toSeq, outputOrdinals, newFields)
     }
-    UpdateFieldsExpression(structRef, updatedValues.toSeq, outputOrdinals, newFields)
+    if (fieldOps.exists(_.isInstanceOf[UpdateNestedField])) {
+      With(structExpr) { case Seq(structRef) => buildExpression(structRef) }
+    } else {
+      buildExpression(structExpr)
+    }
   }
 }
 
