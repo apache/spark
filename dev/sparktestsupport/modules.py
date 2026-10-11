@@ -1869,7 +1869,7 @@ def transitive_dependencies(module: Module) -> set[Module]:
     """
     Return all modules that `module` depends on, directly or transitively.
     The module itself is not included.
-    
+
     `utils-java` is an indirect dependency of `unsafe`:
 
     >>> sorted(dependency.name for dependency in transitive_dependencies(unsafe))
