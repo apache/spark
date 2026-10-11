@@ -376,8 +376,8 @@ def infer_eval_type(
 
 
 # infer the eval type for @udf
-def infer_eval_type_for_udf(  # type: ignore[no-untyped-def]
-    f,
+def infer_eval_type_for_udf(
+    f: Callable[..., Any],
 ) -> Optional[
     Union[
         "PandasScalarUDFType",
