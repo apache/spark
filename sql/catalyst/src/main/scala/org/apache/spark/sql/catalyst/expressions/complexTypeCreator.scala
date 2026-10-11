@@ -850,18 +850,33 @@ private case class UpdateFieldsExpression(
 
     val copyValuesCode = if (outputOrdinals.exists(_ >= 0)) {
       val copiedFields = outputOrdinals.zipWithIndex.filter(_._1 >= 0)
-        .groupBy { case (_, ordinal) => dataType(ordinal).dataType }
-      val copyCodes = copiedFields.toSeq.map { case (fieldType, fields) =>
+        .groupBy { case (_, ordinal) =>
+          (dataType(ordinal).dataType, dataType(ordinal).nullable)
+        }
+      val copyCodes = copiedFields.toSeq.map { case ((fieldType, fieldNullable), fields) =>
         val index = ctx.freshName("i")
         val sourceOrdinal = ctx.freshName("sourceOrdinal")
-        val ordinals = ctx.addReferenceObj("copyOrdinals",
-          fields.flatMap { case (source, output) => Seq(output, source) }.toArray, "int[]")
+        val (firstSource, firstOutput) = fields.head
+        val contiguous = fields.zipWithIndex.forall { case ((source, output), offset) =>
+          source == firstSource + offset && output == firstOutput + offset
+        }
+        val (loopEnd, loopStep, sourceIndex, outputIndex) = if (contiguous) {
+          (fields.length, 1, s"$index + $firstSource", s"$index + $firstOutput")
+        } else {
+          val ordinals = ctx.addReferenceObj("copyOrdinals",
+            fields.flatMap { case (source, output) => Seq(output, source) }.toArray, "int[]")
+          (fields.length * 2, 2, s"$ordinals[$index + 1]", s"$ordinals[$index]")
+        }
         val value = CodeGenerator.getValue(sourceRow, fieldType, sourceOrdinal)
+        val copiedValue = if (fieldNullable) {
+          s"$sourceRow.isNullAt($sourceOrdinal) ? null : $value"
+        } else {
+          value
+        }
         s"""
-           |for (int $index = 0; $index < ${fields.length * 2}; $index += 2) {
-           |  int $sourceOrdinal = $ordinals[$index + 1];
-           |  $values[$ordinals[$index]] =
-           |    $sourceRow == null || $sourceRow.isNullAt($sourceOrdinal) ? null : $value;
+           |for (int $index = 0; $index < $loopEnd; $index += $loopStep) {
+           |  int $sourceOrdinal = $sourceIndex;
+           |  $values[$outputIndex] = $copiedValue;
            |}
          """.stripMargin
       }

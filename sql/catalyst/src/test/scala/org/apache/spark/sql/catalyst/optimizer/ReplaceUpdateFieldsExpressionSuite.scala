@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, DropField, Expression, Literal,
-  UpdateFields, With, WithField}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, BoundReference,
+  DropField, Expression, Literal, UnsafeProjection, UpdateFields, With, WithField}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -82,6 +84,57 @@ class ReplaceUpdateFieldsExpressionSuite extends PlanTest {
         assert(!optimized.exists(_.expressions.exists(_.exists(_.isInstanceOf[With]))))
         assert(!optimized.exists(_.expressions.exists(_.exists(_.isInstanceOf[UpdateFields]))))
         assert(optimized.output.head.nullable == nullable)
+      }
+    }
+  }
+
+  test("UpdateFields codegen checks only nullable copied fields") {
+    Seq(true, false).foreach { structNullable =>
+      Seq(true, false).foreach { fieldNullable =>
+        val structType = StructType(Seq(
+          StructField("a", IntegerType, nullable = false),
+          StructField("b", IntegerType, nullable = fieldNullable)))
+        val struct = BoundReference(0, structType, structNullable)
+        val expression = UpdateFields(struct, Seq(WithField("a", Literal(7)))).evalExpr
+        val code = expression.genCode(new CodegenContext).code.toString
+        val checksCopiedField = code.linesIterator.exists { line =>
+          line.contains("sourceRow") && line.contains(".isNullAt(")
+        }
+        assert(checksCopiedField == fieldNullable)
+        val projection = UnsafeProjection.create(Seq(expression))
+        val result = projection(InternalRow(InternalRow(1, 2))).getStruct(0, 2)
+        assert(result.getInt(0) == 7)
+        assert(result.getInt(1) == 2)
+        if (fieldNullable) {
+          assert(projection(InternalRow(InternalRow(1, null))).getStruct(0, 2).isNullAt(1))
+        }
+        if (structNullable) {
+          assert(projection(InternalRow(null)).isNullAt(0))
+        }
+      }
+    }
+  }
+
+  test("UpdateFields codegen does not load ordinal arrays for contiguous copies") {
+    Seq(5, 100, 500).foreach { width =>
+      val structType = StructType((0 until width).map { index =>
+        StructField(s"field$index", IntegerType, nullable = false)
+      })
+      val struct = BoundReference(0, structType, nullable = false)
+      Seq(false, true).foreach { dropField =>
+        val operations = Seq(WithField("field0", Literal(7))) ++
+          (if (dropField) Seq(DropField("field1")) else Nil)
+        val expression = UpdateFields(struct, operations).evalExpr
+        val context = new CodegenContext
+        expression.genCode(context)
+        assert(!context.references.exists(_.isInstanceOf[Array[Int]]))
+        val outputWidth = if (dropField) width - 1 else width
+        val result = UnsafeProjection.create(Seq(expression))(
+          InternalRow(InternalRow.fromSeq(0 until width))).getStruct(0, outputWidth)
+        assert(result.getInt(0) == 7)
+        (1 until outputWidth).foreach { index =>
+          assert(result.getInt(index) == index + (if (dropField) 1 else 0))
+        }
       }
     }
   }
