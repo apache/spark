@@ -259,7 +259,7 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
 
   test("partial range left outer broadcasts the right side") {
     setupIntervalViews()
-    // (1, 5) is below every b.lo, so the left row is kept with nulls.
+    // No b.lo is strictly greater than a.hi (5), so the left row (1, 5) is kept with nulls.
     val query =
       "SELECT a.lo, a.hi, b.lo, b.hi FROM intervals_a a LEFT JOIN intervals_b b " +
         "ON a.hi < b.lo"
@@ -445,8 +445,8 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
         "(20, 0, 5), (21, 3, 9), (22, 100, 110)")
     // b10 and b11 each overlap two rows of c, so semi and anti stop before that
     // probe is drained. b12 is still waiting on the outer probe.
-    // a.lo < c.hi references both legs of (a join b), so the semi/anti stays
-    // above that join and both probes share one stage.
+    // The complete semi condition references both a and b on the left side of the semi/anti join,
+    // so the semi/anti stays above that join and both probes share one stage.
     val overlap = "b.lo < c.hi AND c.lo < b.hi AND a.lo < c.hi"
     val semi =
       s"""
