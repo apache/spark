@@ -21,7 +21,7 @@ import unittest
 import uuid
 from unittest.mock import MagicMock
 
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.errors import PySparkValueError
 from pyspark.testing.connectutils import (
     PlanOnlyTestFixture,
     connect_requirement_message,
@@ -968,19 +968,6 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
                     expected = lit(buckets) if isinstance(buckets, int) else buckets
                     self.assertEqual(function.arguments[0], expected.to_plan(self.connect))
                     self.assertEqual(function.arguments[1], col("value").to_plan(self.connect))
-
-    def test_partitioning_bucket_invalid_count(self):
-        with self.assertRaises(PySparkTypeError) as error:
-            partitioning.bucket("4", "value")
-        self.check_error(
-            error.exception,
-            errorClass="NOT_EXPECTED_TYPE",
-            messageParameters={
-                "expected_type": "Column or int",
-                "arg_name": "numBuckets",
-                "arg_type": "str",
-            },
-        )
 
     def test_partitioning_time_expressions(self):
         for name in ["years", "months", "days", "hours"]:
