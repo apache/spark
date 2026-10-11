@@ -35,6 +35,41 @@ class SQLFunctionSuite extends SharedSparkSession {
     Seq((0, 1), (1, 2)).toDF("a", "b").createOrReplaceTempView("t")
   }
 
+  test("SPARK-59970: a SQL function does not inherit the IDENTIFIER-clause variables of the " +
+    "functions it calls") {
+    withUserDefinedFunction("ident_callee" -> false, "ident_caller" -> false) {
+      sql("DECLARE OR REPLACE VARIABLE ident_col STRING DEFAULT 'a'")
+      try {
+        // The callee may only be created with the legacy flag; its dependency on `ident_col` is
+        // its own and is not persisted.
+        withSQLConf(SQLConf.VARIABLES_UNDER_IDENTIFIER_IN_VIEW.key -> "true") {
+          sql("CREATE FUNCTION ident_callee(x INT) RETURNS INT " +
+            "RETURN (SELECT IDENTIFIER(ident_col) FROM VALUES (1) AS T(a))")
+        }
+        checkAnswer(sql("SELECT ident_callee(0)"), Row(1))
+        // Expanding the callee must not attribute `ident_col` to the caller: creating the caller
+        // succeeds without the flag. (The variable must still exist, since the callee's body is
+        // inlined and its IDENTIFIER clause is evaluated during this analysis.)
+        sql("CREATE FUNCTION ident_caller(x INT) RETURNS INT RETURN ident_callee(x) + 1")
+        // A direct IDENTIFIER read in the caller's own body is still rejected.
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("CREATE FUNCTION ident_caller2(x INT) RETURNS INT " +
+              "RETURN ident_callee(x) + (SELECT IDENTIFIER(ident_col) FROM VALUES (1) AS T(a))")
+          },
+          condition = "INVALID_TEMP_OBJ_REFERENCE",
+          parameters = Map(
+            "obj" -> "FUNCTION",
+            "objName" -> "`default`.`ident_caller2`",
+            "tempObj" -> "VARIABLE",
+            "tempObjName" -> "`ident_col`"))
+        checkAnswer(sql("SELECT ident_caller(0)"), Row(2))
+      } finally {
+        sql("DROP TEMPORARY VARIABLE IF EXISTS ident_col")
+      }
+    }
+  }
+
   test("SQL scalar function") {
     withUserDefinedFunction("area" -> false) {
       sql(

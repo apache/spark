@@ -4041,6 +4041,131 @@ DropFunctionCommand foo3_5e, false, true
 
 
 -- !query
+DECLARE OR REPLACE VARIABLE foo3_5_tbl STRING DEFAULT 't1'
+-- !query analysis
+CreateVariable default(cast(t1 as string), sql=''t1''), true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.foo3_5_tbl
+
+
+-- !query
+CREATE FUNCTION foo3_5d(x INT) RETURNS TABLE (c1 INT)
+RETURN SELECT c1 FROM IDENTIFIER(foo3_5_tbl)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "FUNCTION",
+    "objName" : "`default`.`foo3_5d`",
+    "tempObj" : "VARIABLE",
+    "tempObjName" : "`foo3_5_tbl`"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo3_5d(x INT) RETURNS INT
+RETURN (SELECT IDENTIFIER(session.foo3_5_col) FROM VALUES (1) AS T(a))
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "FUNCTION",
+    "objName" : "`default`.`foo3_5d`",
+    "tempObj" : "VARIABLE",
+    "tempObjName" : "`session`.`foo3_5_col`"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo3_5d(x INT) RETURNS TABLE (c INT)
+RETURN SELECT IDENTIFIER(foo3_5_col) AS c FROM IDENTIFIER(foo3_5_tbl) AS T(a, b)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "FUNCTION",
+    "objName" : "`default`.`foo3_5d`",
+    "tempObj" : "VARIABLE",
+    "tempObjName" : "`foo3_5_tbl`"
+  }
+}
+
+
+-- !query
+SET spark.sql.legacy.allowSessionVariableInPersistedView=true
+-- !query analysis
+SetCommand (spark.sql.legacy.allowSessionVariableInPersistedView,Some(true))
+
+
+-- !query
+CREATE FUNCTION foo3_5f(x INT) RETURNS INT
+RETURN (SELECT IDENTIFIER(foo3_5_col) FROM VALUES (1) AS T(a))
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo3_5f, x INT, INT, (SELECT IDENTIFIER(foo3_5_col) FROM VALUES (1) AS T(a)), false, false, false, false
+
+
+-- !query
+SELECT foo3_5f(0)
+-- !query analysis
+Project [spark_catalog.default.foo3_5f(x#x) AS spark_catalog.default.foo3_5f(0)#x]
+:  +- Project [a#x]
+:     +- SubqueryAlias T
+:        +- LocalRelation [a#x]
++- Project [cast(0 as int) AS x#x]
+   +- OneRowRelation
+
+
+-- !query
+SET spark.sql.legacy.allowSessionVariableInPersistedView=false
+-- !query analysis
+SetCommand (spark.sql.legacy.allowSessionVariableInPersistedView,Some(false))
+
+
+-- !query
+CREATE FUNCTION foo3_5g(x INT) RETURNS INT RETURN foo3_5f(x) + 1
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo3_5g, x INT, INT, foo3_5f(x) + 1, false, false, false, false
+
+
+-- !query
+SELECT foo3_5g(0)
+-- !query analysis
+Project [spark_catalog.default.foo3_5g(x#x) AS spark_catalog.default.foo3_5g(0)#x]
+:  +- Project [a#x]
+:     +- SubqueryAlias T
+:        +- LocalRelation [a#x]
++- Project [x#x, cast(x#x as int) AS x#x]
+   +- Project [cast(0 as int) AS x#x]
+      +- OneRowRelation
+
+
+-- !query
+DROP FUNCTION foo3_5g
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_5g, false, false
+
+
+-- !query
+DROP FUNCTION foo3_5f
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_5f, false, false
+
+
+-- !query
+DROP TEMPORARY VARIABLE foo3_5_tbl
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.foo3_5_tbl
+
+
+-- !query
 DROP TEMPORARY VARIABLE foo3_5_col
 -- !query analysis
 DropVariable false

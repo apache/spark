@@ -183,6 +183,13 @@ case class AnalysisContext(
     // than one variable is read via an IDENTIFIER clause.
     referredTempVariableNamesUnderIdentifier: mutable.Set[Seq[String]] =
       mutable.LinkedHashSet.empty,
+    // Whether a SQL function expanded during this analysis shares the accumulator above with the
+    // enclosing object. A view or CACHE TABLE AS SELECT body owns the dependencies of every
+    // function it expands (functions persist no IDENTIFIER-variable metadata of their own that is
+    // consulted on resolution), so they share. A SQL function body being created does not: a
+    // variable that an already existing function reads is that function's dependency, and
+    // attributing it to the new function would reject or record it there. See SPARK-59970.
+    shareIdentifierVariablesWithNestedSQLFunctions: Boolean = true,
     outerPlan: Option[LogicalPlan] = None,
     collation: Option[String] = None,
 
@@ -292,13 +299,20 @@ object AnalysisContext {
       resolutionPathEntries = function.functionStoredResolutionPath
         .map(CatalogManager.deserializePathEntriesOrFail(
           _, "SQL function", function.name.unquotedString)),
-      // Unlike `withAnalysisContext(viewDesc)`, do NOT reset this accumulator. A SQL function has
-      // no IDENTIFIER-variable metadata of its own, so a variable its body reads through IDENTIFIER
-      // clause is part of the enclosing object's definition (e.g. the temporary view or CACHE TABLE
-      // AS SELECT that selects the function), and must be recorded there. Sharing the caller's set
-      // records it; a nested view, by contrast, stores its own and so is reset.
+      // Unlike `withAnalysisContext(viewDesc)`, do NOT reset this accumulator by default. A SQL
+      // function has no IDENTIFIER-variable metadata of its own that is consulted on resolution, so
+      // a variable its body reads through an IDENTIFIER clause is part of the enclosing object's
+      // definition (e.g. the temporary view or CACHE TABLE AS SELECT that selects the function),
+      // and must be recorded there. Sharing the caller's set records it; a nested view, by
+      // contrast, stores its own and so is reset. The exception is a SQL function body under
+      // creation, which must not inherit the dependencies of the functions it calls; see
+      // `shareIdentifierVariablesWithNestedSQLFunctions`.
       referredTempVariableNamesUnderIdentifier =
-        originContext.referredTempVariableNamesUnderIdentifier,
+        if (originContext.shareIdentifierVariablesWithNestedSQLFunctions) {
+          originContext.referredTempVariableNamesUnderIdentifier
+        } else {
+          mutable.LinkedHashSet.empty
+        },
       collation = function.collation)
     set(context)
     try f finally { set(originContext) }
@@ -314,6 +328,17 @@ object AnalysisContext {
   def withOuterPlan[A](outerPlan: LogicalPlan)(f: => A): A = {
     val originContext = value.get()
     val context = originContext.copy(isDefault = false, outerPlan = Some(outerPlan))
+    set(context)
+    try f finally { set(originContext) }
+  }
+
+  /**
+   * Runs `f` with `shareIdentifierVariablesWithNestedSQLFunctions` set to `share`; see that field.
+   */
+  def withSharingIdentifierVariablesWithNestedSQLFunctions[A](share: Boolean)(f: => A): A = {
+    val originContext = value.get()
+    val context = originContext.copy(shareIdentifierVariablesWithNestedSQLFunctions = share)
+    context.setSinglePassResolverBridgeState(originContext.getSinglePassResolverBridgeState)
     set(context)
     try f finally { set(originContext) }
   }
@@ -583,13 +608,19 @@ class Analyzer(
    * it cannot go through [[executeAndCheckReferredTempVariablesUnderIdentifier]]. It still needs
    * the recorded variables, which [[execute]] discards with its analysis context: a persistent
    * function must reject them and a temporary one stores them in its metadata.
+   *
+   * Only the variables read by the body itself are returned. A SQL function that the body calls
+   * is expanded in a context of its own, so a variable it reads through an IDENTIFIER clause stays
+   * that function's dependency rather than becoming one of the function under creation.
    */
   def executeWithReferredTempVariablesUnderIdentifier(
       plan: LogicalPlan): (LogicalPlan, Seq[Seq[String]]) = {
     AnalysisContext.withNewAnalysisContext {
-      val analyzed = executeSameContext(plan)
-      // Read the accumulator before the context is restored on exit.
-      (analyzed, AnalysisContext.get.referredTempVariableNamesUnderIdentifier.toSeq)
+      AnalysisContext.withSharingIdentifierVariablesWithNestedSQLFunctions(share = false) {
+        val analyzed = executeSameContext(plan)
+        // Read the accumulator before the context is restored on exit.
+        (analyzed, AnalysisContext.get.referredTempVariableNamesUnderIdentifier.toSeq)
+      }
     }
   }
 

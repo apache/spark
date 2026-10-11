@@ -32,6 +32,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.CreateUserDefinedFunctionCommand._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, MetadataBuilder, StructField, StructType}
 
 /**
@@ -258,9 +259,14 @@ case class CreateSQLFunctionCommand(
       }
 
       // A permanent function is not allowed to reference temporary objects.
-      // This should be called after `qe.assertAnalyzed()` (i.e., `plan` can be resolved)
+      // This should be called after `qe.assertAnalyzed()` (i.e., `plan` can be resolved).
+      // Like persisted views, honor `spark.sql.legacy.allowSessionVariableInPersistedView` for the
+      // variables read only through IDENTIFIER clauses: with it set they are not rejected (and,
+      // as for views, not persisted either).
+      val identifierVarsToReject =
+        if (conf.getConf(SQLConf.VARIABLES_UNDER_IDENTIFIER_IN_VIEW)) Nil else identifierVars
       verifyTemporaryObjectsNotExists(
-        catalog, isTemp, name, unresolvedPlan, analyzedPlan, identifierVars)
+        catalog, isTemp, name, unresolvedPlan, analyzedPlan, identifierVarsToReject)
 
       // Generate function properties.
       val properties =

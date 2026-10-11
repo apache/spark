@@ -8417,8 +8417,8 @@ object SQLConf {
     buildConf("spark.sql.legacy.allowSessionVariableInPersistedView")
       .internal()
       .doc(
-        "When set to true, variables can be found under identifiers in a view query. Throw " +
-        "otherwise."
+        "When set to true, a persisted view or SQL function may read session variables " +
+        "through IDENTIFIER clauses in its body. Throw otherwise."
       )
       .version("4.1.0")
       .booleanConf
