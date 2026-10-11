@@ -347,14 +347,14 @@ class VectorUDTTests(MLlibTestCase):
     def test_deserialization_invalid_length(self):
         two_fields = (1, [1.0, 2.0])
         three_fields = (1, None, [1.0, 2.0])
-        five_long = (1, None, None, None, [1.0, 2.0])
+        five_fields = (1, None, None, None, [1.0, 2.0])
 
         with self.assertRaises(AssertionError):
             self.udt.deserialize(two_fields)
         with self.assertRaises(AssertionError):
             self.udt.deserialize(three_fields)
         with self.assertRaises(AssertionError):
-            self.udt.deserialize(five_long)
+            self.udt.deserialize(five_fields)
 
     def test_deserialization_invalid_type(self):
         invalid_type = 2
