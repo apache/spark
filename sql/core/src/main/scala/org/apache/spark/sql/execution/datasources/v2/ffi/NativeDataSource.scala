@@ -489,7 +489,7 @@ class NativePartitionReader(
         false
       } else {
         try {
-          checkOffsets(snapshot)
+          checkArrays(snapshot)
         } catch {
           case e: Throwable =>
             array.release()
@@ -505,29 +505,65 @@ class NativePartitionReader(
   }
 
   /**
-   * Checks that the array of a batch, and the arrays of its columns at every level, have an
-   * offset of 0: Arrow Java ignores the offsets of the arrays it imports, so it would read a
-   * sliced array from the start of its buffers.
+   * Checks the array of a batch, and the arrays of its columns at every level, before importing
+   * them. Arrow Java trusts the arrays, and would read them wrongly otherwise:
+   *  - An array must have an offset of 0. Arrow Java ignores the offsets of the arrays it imports,
+   *    so it would read a sliced array from the start of its buffers.
+   *  - An array must have at least as many values as its parent refers to: a column as many as
+   *    the batch has rows, a field as many as its struct has values, and the elements of a list or
+   *    a map as many as its last offset says. Arrow Java would extend a shorter array with nulls.
+   *    Only the lengths that the library exported show this: the import sets the length of each
+   *    array to what its parent refers to.
+   * The buffers are not checked, since the C data interface does not carry their sizes: Arrow
+   * Java takes them from the lengths, so the library must export buffers that hold every value.
    */
-  private def checkOffsets(array: ArrowArray.Snapshot): Unit = {
+  private def checkArrays(batch: ArrowArray.Snapshot): Unit = {
     def children(array: ArrowArray.Snapshot): Seq[ArrowArray.Snapshot] = {
       (0 until array.n_children.toInt).map { i =>
         ArrowArray.wrap(Platform.getLong(null, array.children + 8L * i)).snapshot()
       }
     }
-    def checkColumn(array: ArrowArray.Snapshot, column: String): Unit = {
+    // The last offset of a list or a map, in its second buffer. Arrow Java rejects the array if
+    // the buffer is missing.
+    def lastOffset(array: ArrowArray.Snapshot): Long = {
+      val offsets = if (array.length > 0 && array.n_buffers >= 2) {
+        Platform.getLong(null, array.buffers + 8L)
+      } else {
+        0L
+      }
+      if (offsets == 0) 0 else Platform.getInt(null, offsets + 4L * array.length)
+    }
+    // The number of values that an array refers to in each of its children.
+    def referenced(array: ArrowArray.Snapshot, arrowType: ArrowType): Long = arrowType match {
+      case _: ArrowType.Struct => array.length
+      case _: ArrowType.List | _: ArrowType.Map => lastOffset(array)
+      // A list view has no last offset: its lists refer to ranges of its elements in any order.
+      case _ => 0
+    }
+    def checkColumn(array: ArrowArray.Snapshot, field: Field, column: String): Unit = {
       if (array.offset != 0) {
         throw error(name, "read", s"The column $column has an offset of ${array.offset}, but " +
           "Spark only reads arrays with an offset of 0. Copy sliced arrays before exporting them.")
       }
-      children(array).foreach(checkColumn(_, column))
+      val length = referenced(array, field.getType)
+      children(array).zip(field.getChildren.asScala).foreach { case (child, childField) =>
+        if (child.length < length) {
+          throw error(name, "read", s"The column $column contains an array with a length of " +
+            s"${child.length}, but its parent refers to $length values.")
+        }
+        checkColumn(child, childField, column)
+      }
     }
-    if (array.offset != 0) {
-      throw error(name, "read", s"The batch has an offset of ${array.offset}, but Spark only " +
+    if (batch.offset != 0) {
+      throw error(name, "read", s"The batch has an offset of ${batch.offset}, but Spark only " +
         "reads arrays with an offset of 0. Copy sliced arrays before exporting them.")
     }
-    children(array).zip(root.getSchema.getFields.asScala).foreach { case (column, field) =>
-      checkColumn(column, field.getName)
+    children(batch).zip(root.getSchema.getFields.asScala).foreach { case (column, field) =>
+      if (column.length < batch.length) {
+        throw error(name, "read", s"The column ${field.getName} has a length of " +
+          s"${column.length}, but the batch has a length of ${batch.length}.")
+      }
+      checkColumn(column, field, field.getName)
     }
   }
 

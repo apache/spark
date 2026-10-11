@@ -351,6 +351,13 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     // Arrow Java would read a slice from the start of its buffers.
     check("The column id has an offset of 1, but Spark only reads arrays with an offset of 0. " +
       "Copy sliced arrays before exporting them.", "slice" -> "true")
+    // Arrow Java would extend an array with fewer values than its parent refers to with nulls.
+    // Each batch has 2 rows.
+    check("The column id has a length of 1, but the batch has a length of 2.", "short" -> "id")
+    Seq("entries", "values").foreach { array =>
+      check("The column m contains an array with a length of 1, but its parent refers to 2 " +
+        "values.", "extra" -> "map", "short" -> array)
+    }
     check("The column dec contains the Arrow type Decimal(10, 2, 256), which is not supported.",
       "extra" -> "decimal256")
   }
