@@ -47,7 +47,7 @@ import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ENSURE_REQUIREMENTS, EnsureRequirements, Exchange, REPARTITION_BY_COL, REPARTITION_BY_NUM, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
-import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, BroadcastRangeJoinExec, HashedRelationBroadcastMode, PointIndexKind, RangeBroadcastMode, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, BroadcastRangeJoinExec, HashedRelationBroadcastMode, IntervalIndexKind, PointIndexKind, RangeBroadcastMode, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLShuffleReadMetricsReporter
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
@@ -2899,6 +2899,11 @@ class AdaptiveQueryExecSuite
 
     val mismatched = join.copy(right = stage(modeFor(hi)))
     assert(LogicalQueryStageStrategy(mismatched).isEmpty)
+
+    val boundLo: Expression = BindReferences.bindReference(lo, right.output)
+    val wrongKindMode = RangeBroadcastMode(Seq(boundLo), IntervalIndexKind)
+    val mismatchedKind = join.copy(right = stage(wrongKindMode))
+    assert(LogicalQueryStageStrategy(mismatchedKind).isEmpty)
   }
 
   test("range broadcast satisfies its distribution after AQE changes nullability") {

@@ -21,7 +21,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.{IntervalOverlapJoin, PartialRangeJoin, PointInRangeJoin, RangeJoin}
 import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
-import org.apache.spark.sql.catalyst.types.PhysicalDataType
 
 /**
  * Which [[RangeRelation]] a broadcast materializes.
@@ -79,7 +78,6 @@ private[execution] case class RangeBroadcastMode private(
         require(buildKeys.length == 1, "A point index expects one build key.")
     }
 
-    val ordering = PhysicalDataType.ordering(buildKeys.head.dataType)
     val projection = new InterpretedProjection(buildKeys)
     val lowOf = RangeIndex.getValue(buildKeys.head.dataType, 0)
 
@@ -91,11 +89,11 @@ private[execution] case class RangeBroadcastMode private(
           val p = projection(r)
           (lowOf(p), highOf(p), r)
         }.toArray
-        IntervalIndex.build(ordering, intervals)
+        IntervalIndex.build(buildKeys.head.dataType, intervals)
 
       case PointIndexKind =>
         val points = rows.map(r => (lowOf(projection(r)), r)).toArray
-        PointIndex.build(ordering, points)
+        PointIndex.build(buildKeys.head.dataType, points)
     }
   }
 

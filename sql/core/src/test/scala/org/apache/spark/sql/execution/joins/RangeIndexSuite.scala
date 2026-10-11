@@ -41,7 +41,7 @@ class RangeIndexSuite extends SparkFunSuite {
   private def span(lo: Any, hi: Any, id: Int): (Any, Any, InternalRow) = (lo, hi, row(id))
 
   private def buildIntervals(spans: Seq[(Any, Any, InternalRow)]): IntervalIndex =
-    IntervalIndex.build(intOrdering, spans.toArray)
+    IntervalIndex.build(IntegerType, spans.toArray)
 
   private def ids(rows: Iterator[InternalRow]): List[Int] = rows.map(_.getInt(0)).toList
 
@@ -63,7 +63,7 @@ class RangeIndexSuite extends SparkFunSuite {
   }
 
   test("build keeps a point, orders an inverted interval, and drops a null bound") {
-    val index = IntervalIndex.build(intOrdering, Array(
+    val index = IntervalIndex.build(IntegerType, Array(
       (5, 5, InternalRow(5, 5)),
       (1, 3, InternalRow(1, 3)),
       (3, 1, InternalRow(3, 1)),
@@ -185,17 +185,17 @@ class RangeIndexSuite extends SparkFunSuite {
     val ints = buildIntervals(Seq(span(0, 1, 0)))
     val wide = UTF8String.fromString("x" * 64)
     val strings = IntervalIndex.build(
-      PhysicalDataType.ordering(StringType),
+      StringType,
       Array((wide, wide, row(0))))
     assert(strings.estimatedSize() > ints.estimatedSize())
   }
 
-  test("interval tree treats NaN as its own point and Infinity as an open bound") {
+  test("interval tree treats NaN as its own point and Infinity as a bound") {
     // PhysicalDoubleType's ordering (SQLOrderingUtil.compareDoubles) totally orders
-    // -Inf < ... < +Inf < NaN, with NaN comparing equal only to itself. So [1.0, +Inf)
-    // behaves like "at or above 1.0" with no finite ceiling, and a NaN key overlaps
-    // only a probe that also lands exactly on NaN.
-    val index = IntervalIndex.build(doubleOrdering, Array(
+    // -Inf < ... < +Inf < NaN, with NaN comparing equal only to itself. So [1.0, +Inf]
+    // includes +Inf under inclusive probe, and a NaN key overlaps only a probe that
+    // also lands exactly on NaN.
+    val index = IntervalIndex.build(DoubleType, Array(
       (1.0, Double.PositiveInfinity, row(1)),
       (Double.NegativeInfinity, -1.0, row(2)),
       (Double.NaN, Double.NaN, row(3))))
@@ -214,18 +214,19 @@ class RangeIndexSuite extends SparkFunSuite {
     // orders them with that comparator, so a probe on either key returns both.
     // Signed zero is already one key: Scala equality treats -0.0 and 0.0 as equal.
     def assertMerged(
-        ordering: Ordering[Any],
+        dataType: DataType,
         low: Any,
         leftKey: Any,
         rightKey: Any,
         high: Any,
         earlier: Seq[Any]): Unit = {
+      val ordering = PhysicalDataType.ordering(dataType)
       assert(leftKey != rightKey)
       assert(ordering.compare(leftKey, rightKey) == 0)
       val points = Array(
         (leftKey, leftKey, row(0)),
         (rightKey, rightKey, row(1)))
-      val pointIdx = IntervalIndex.build(ordering, points)
+      val pointIdx = IntervalIndex.build(dataType, points)
       assert(ids(pointIdx.overlapping(leftKey, leftKey)).toSet == Set(0, 1))
       assert(ids(pointIdx.overlapping(rightKey, rightKey)).toSet == Set(0, 1))
 
@@ -234,7 +235,7 @@ class RangeIndexSuite extends SparkFunSuite {
       }.toArray ++ Array(
         (low, leftKey, row(0)),
         (rightKey, high, row(1)))
-      val index = IntervalIndex.build(ordering, intervals)
+      val index = IntervalIndex.build(dataType, intervals)
       assert(ids(index.overlapping(leftKey, leftKey)).sorted == List(0, 1))
       assert(ids(index.overlapping(rightKey, rightKey)).sorted == List(0, 1))
     }
@@ -242,7 +243,7 @@ class RangeIndexSuite extends SparkFunSuite {
     val bytes = Array[Byte](1, 2)
     val sameBytes = Array[Byte](1, 2)
     assertMerged(
-      PhysicalDataType.ordering(BinaryType),
+      BinaryType,
       Array[Byte](1, 0),
       bytes,
       sameBytes,
@@ -252,7 +253,7 @@ class RangeIndexSuite extends SparkFunSuite {
     val upper = UTF8String.fromString("M")
     val lower = UTF8String.fromString("m")
     assertMerged(
-      PhysicalDataType.ordering(StringType("UNICODE_CI")),
+      StringType("UNICODE_CI"),
       UTF8String.fromString("c"),
       upper,
       lower,
@@ -292,7 +293,7 @@ class RangeIndexSuite extends SparkFunSuite {
       (5, row(50)),
       (3, row(3)),
       (null, row(-1)))
-    val index = PointIndex.build(intOrdering, keyed)
+    val index = PointIndex.build(IntegerType, keyed)
     assert(ids(index.upTo(5)) == List(1, 3, 5, 50))
     assert(ids(index.upTo(4)) == List(1, 3))
     assert(ids(index.upTo(0)).isEmpty)
@@ -304,7 +305,7 @@ class RangeIndexSuite extends SparkFunSuite {
     assert(index.upTo(null).isEmpty)
     assert(index.from(null).isEmpty)
 
-    val empty = PointIndex.build(intOrdering, Array.empty)
+    val empty = PointIndex.build(IntegerType, Array.empty)
     assert(empty.upTo(1).isEmpty)
     assert(empty.from(1).isEmpty)
     // SizeEstimator charges the empty array shell, and the five kept points on top of it.
@@ -321,7 +322,7 @@ class RangeIndexSuite extends SparkFunSuite {
       (Double.NegativeInfinity, row(-80)),
       (-1.0, row(-1)),
       (0.0, row(0)))
-    val index = PointIndex.build(doubleOrdering, keyed)
+    val index = PointIndex.build(DoubleType, keyed)
     assert(ids(index.upTo(0.0)) == List(-80, -1, 0))
     assert(ids(index.from(1.0)) == List(1, 80, 90))
     // NaN is the unique maximum: only a NaN key is at or above it.
@@ -330,5 +331,30 @@ class RangeIndexSuite extends SparkFunSuite {
     // +Infinity is below NaN but above every finite value.
     assert(ids(index.upTo(Double.PositiveInfinity)) == List(-80, -1, 0, 1, 80))
     assert(ids(index.from(Double.NegativeInfinity)) == List(-80, -1, 0, 1, 80, 90))
+  }
+
+  test("Java serialization round-trips collated string range relations") {
+    val serializer =
+      new org.apache.spark.serializer.JavaSerializer(new org.apache.spark.SparkConf()).newInstance()
+    val collationType = StringType("UTF8_LCASE")
+    val wide = UTF8String.fromString("abc")
+    val intervalIndex = IntervalIndex.build(collationType, Array((wide, wide, row(0))))
+    val pointIndex = PointIndex.build(collationType, Array((wide, row(0))))
+
+    val intervalRestored =
+      serializer.deserialize[IntervalIndex](serializer.serialize(intervalIndex))
+    val pointRestored = serializer.deserialize[PointIndex](serializer.serialize(pointIndex))
+
+    assert(intervalRestored.overlapping(
+      UTF8String.fromString("ABC"), UTF8String.fromString("ABC")).nonEmpty)
+    assert(pointRestored.upTo(UTF8String.fromString("ABC")).nonEmpty)
+  }
+
+  test("overlapping traversal is lazy and supports early exit under high overlap") {
+    val n = 10000
+    val overlappingSpans = (0 until n).map(i => span(0, 100, i))
+    val index = buildIntervals(overlappingSpans)
+    val iter = index.overlapping(50, 50)
+    assert(iter.take(3).size == 3)
   }
 }

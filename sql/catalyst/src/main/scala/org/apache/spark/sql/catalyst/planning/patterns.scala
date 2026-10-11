@@ -497,10 +497,10 @@ object ExtractRangeJoinKeys extends PredicateHelper {
       case Seq((d1, l1, h1), (d2, l2, h2)) if d1 == d2 =>
         val pointCandidate =
           if (h1.semanticEquals(l2) && !l1.semanticEquals(h2) && l1.dataType == h2.dataType) {
-            assignPoint(l2, l1, h2, left, right)
+            place(Seq(l2), Seq(l1, h2), left, right)
           } else if (l1.semanticEquals(h2) && !h1.semanticEquals(l2) &&
               l2.dataType == h1.dataType) {
-            assignPoint(l1, l2, h1, left, right)
+            place(Seq(l1), Seq(l2, h1), left, right)
           } else {
             None
           }
@@ -512,16 +512,22 @@ object ExtractRangeJoinKeys extends PredicateHelper {
     }.nextOption()
   }
 
-  private def assignPoint(
-      point: Expression,
-      low: Expression,
-      high: Expression,
+  /**
+   * Puts `leftExprs` on the left child when that child can evaluate all of them
+   * and the right child can evaluate `rightExprs`. Otherwise swaps, when the
+   * opposite assignment fits. A key is a column of one input, so at most one
+   * assignment succeeds.
+   */
+  private def place(
+      leftExprs: Seq[Expression],
+      rightExprs: Seq[Expression],
       left: LogicalPlan,
       right: LogicalPlan): Option[(Seq[Expression], Seq[Expression])] = {
-    if (canEvaluate(point, left) && canEvaluate(low, right) && canEvaluate(high, right)) {
-      Some((Seq(point), Seq(low, high)))
-    } else if (canEvaluate(point, right) && canEvaluate(low, left) && canEvaluate(high, left)) {
-      Some((Seq(low, high), Seq(point)))
+    if (leftExprs.forall(canEvaluate(_, left)) && rightExprs.forall(canEvaluate(_, right))) {
+      Some((leftExprs, rightExprs))
+    } else if (leftExprs.forall(canEvaluate(_, right)) &&
+        rightExprs.forall(canEvaluate(_, left))) {
+      Some((rightExprs, leftExprs))
     } else {
       None
     }
@@ -534,16 +540,8 @@ object ExtractRangeJoinKeys extends PredicateHelper {
       joinType: JoinType): Option[ReturnType] = {
     rangePreds.combinations(2).flatMap {
       case Seq((d1, l1, h1), (d2, l2, h2)) if d1 == d2 =>
-        val overlapCandidate =
-          if (canEvaluate(l1, left) && canEvaluate(h2, left) &&
-              canEvaluate(l2, right) && canEvaluate(h1, right)) {
-            Some((Seq(l1, h2), Seq(l2, h1)))
-          } else if (canEvaluate(l2, left) && canEvaluate(h1, left) &&
-              canEvaluate(l1, right) && canEvaluate(h2, right)) {
-            Some((Seq(l2, h1), Seq(l1, h2)))
-          } else {
-            None
-          }
+        // `(l1, h2)` is one interval and `(l2, h1)` is the other.
+        val overlapCandidate = place(Seq(l1, h2), Seq(l2, h1), left, right)
         overlapCandidate.collect {
           case (leftKeys, rightKeys)
               if !leftKeys.head.semanticEquals(leftKeys(1)) &&
@@ -569,17 +567,19 @@ object ExtractRangeJoinKeys extends PredicateHelper {
       right: LogicalPlan,
       joinType: JoinType): Option[ReturnType] = {
     rangePreds.iterator.flatMap { case (_, low, high) =>
-      if (!low.semanticEquals(high) && low.dataType == high.dataType &&
-          supportedKeys(Seq(low, high))) {
-        if (canEvaluate(low, left) && canEvaluate(high, right)) {
-          Some((left, right, Seq(low), Seq(high), joinType, LessPartialRangeJoin))
-        } else if (canEvaluate(low, right) && canEvaluate(high, left)) {
-          Some((left, right, Seq(high), Seq(low), joinType, GreaterPartialRangeJoin))
-        } else {
-          None
-        }
-      } else {
+      if (low.semanticEquals(high) || low.dataType != high.dataType ||
+          !supportedKeys(Seq(low, high))) {
         None
+      } else {
+        // Unswapped, the left child holds `low`. Swapped, it holds `high`.
+        place(Seq(low), Seq(high), left, right).map { case (leftKeys, rightKeys) =>
+          val rangeJoin = if (canEvaluate(low, left)) {
+            LessPartialRangeJoin
+          } else {
+            GreaterPartialRangeJoin
+          }
+          (left, right, leftKeys, rightKeys, joinType, rangeJoin)
+        }
       }
     }.nextOption()
   }
