@@ -1252,10 +1252,12 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     val log = newLogFile("end-event-utf8", None, inProgress = false)
     val bytes = writeRawLog(log, endEventTestLines("end-event-utf8",
       jobStartLine(1, 0x4e2d.toChar.toString * 200)))
-    // The job description is written as raw UTF-8: skip to the second byte of a character.
+    // The job description is written as raw UTF-8. Target the third byte of a 3-byte character,
+    // so that the line boundary scan, which starts one byte before the target, starts on a
+    // continuation byte.
     val leadByte = bytes.indexWhere(b => (b & 0xF0) == 0xE0)
     assert(leadByte > 0)
-    val conf = createTestConf().set(END_EVENT_REPARSE_CHUNK_SIZE, (bytes.length - leadByte - 1L))
+    val conf = createTestConf().set(END_EVENT_REPARSE_CHUNK_SIZE, (bytes.length - leadByte - 2L))
     updateAndCheck(new FsHistoryProvider(conf)) { list =>
       assert(list.size === 1)
       assert(list(0).attempts.head.completed)
@@ -1368,6 +1370,11 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     // No line starts at or after the target, or the target is beyond the end of the stream.
     assert(align("abc", 1) === (("", 3L)))
     assert(align("abc\n", 10) === (("", 4L)))
+    // Targets on each byte of a 3-byte character, and on the '\n' after it.
+    val cjk = "a" + 0x4e2d.toChar + "\nb"
+    (1 to 5).foreach { target =>
+      assert(align(cjk, target) === (("b", 5L)), s"target = $target")
+    }
     // A non-positive target leaves the stream unchanged.
     assert(align("abc\ndef", 0) === (("abc\ndef", 0L)))
     assert(align("abc\ndef", -1) === (("abc\ndef", 0L)))

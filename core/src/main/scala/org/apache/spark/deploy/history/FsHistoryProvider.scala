@@ -1762,14 +1762,15 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 private[spark] object FsHistoryProvider {
 
   /**
-   * Positions `in` at the start of the first line that begins at or after byte `target`,
-   * returning a stream that starts there and the byte offset of that line. If the stream ends
-   * first, the returned stream is at EOF and the offset is the stream length. A non-positive
-   * `target` returns `in` unchanged with offset 0.
+   * Returns a stream that starts at the first line beginning at or after byte `target` of
+   * `in`, together with that line's byte offset. If `in` ends first, the returned stream is at
+   * EOF and the offset is the length of `in`. A non-positive `target` returns `in` unchanged
+   * with offset 0. Otherwise `in` is consumed and must not be read afterwards: bytes read past
+   * the line boundary are prepended to the returned stream, not pushed back into `in`.
    *
    * Since the skip may land anywhere, including inside a multi-byte UTF-8 character, the line
    * boundary is found on raw bytes before any decoding: '\n' never occurs inside a multi-byte
-   * UTF-8 sequence. Bytes read past the boundary are put back in front of the stream.
+   * UTF-8 sequence.
    */
   private[history] def skipToLineStart(in: InputStream, target: Long): (InputStream, Long) = {
     if (target <= 0) {
