@@ -89,7 +89,10 @@ specifies each function, including the ownership of the Arrow structs and the JS
 pushed predicates. A predicate that a library reports as evaluated completely must follow the
 semantics of Spark SQL, for example for NaN values, which are equal to each other and greater
 than any other value. The arrays that a library exports must have an offset of 0: copy a sliced
-array, such as the result of `RecordBatch::slice` in arrow-rs, before exporting it.
+array, such as the result of `RecordBatch::slice` in arrow-rs, before exporting it. Spark also
+checks that each array has at least as many values as its parent refers to, but it cannot check
+that the buffers of the arrays hold those values, because the C data interface does not carry the
+sizes of buffers: a library that exports a buffer that is too short makes Spark read past its end.
 
 ## Finding Native Data Sources
 

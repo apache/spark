@@ -97,7 +97,11 @@ import org.apache.spark.annotation.Evolving;
  *   releases it after the call returns, so the library must not use it afterwards. The arrays
  *   that the library exports must have an offset of 0, at every level: Arrow Java ignores the
  *   offsets of the arrays it imports, so Spark rejects an array with another offset, such as a
- *   zero-copy slice. Copy a sliced array before exporting it.</li>
+ *   zero-copy slice. Copy a sliced array before exporting it. Spark also rejects an array with
+ *   fewer values than its parent refers to, such as a column shorter than its batch. The buffers
+ *   of an array must hold all of its values, as the C data interface requires: it does not carry
+ *   the sizes of the buffers, so Spark cannot check them, and reads past the end of a buffer that
+ *   is too short.</li>
  *   <li><b>Schemas.</b> Spark types map to Arrow types as in {@code spark.sql.execution.arrow}:
  *   for example, {@code bigint} is {@code int64}, {@code string} is {@code utf8},
  *   {@code timestamp} is {@code timestamp[us]} with a time zone and {@code timestamp_ntz} is

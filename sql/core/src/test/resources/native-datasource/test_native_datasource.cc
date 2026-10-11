@@ -23,7 +23,11 @@
 //                   column and limit pushdown. With the option "extra", the schema has one more
 //                   column: "map" adds a map whose entry fields are named "keys" and "values",
 //                   as arrow-rs names them, and "decimal256" adds a decimal256. With the option
-//                   "slice", the columns of the batches have an offset of 1.
+//                   "slice", the columns of the batches have an offset of 1. With the option
+//                   "short", an array of the batches has one value fewer than its parent refers
+//                   to, although its buffers hold them all: "id" shortens the column id,
+//                   "entries" the entries of the map and their fields, and "values" the values
+//                   of the entries.
 //   native_sink     Writes the rows as CSV files under the directory in the option "path".
 //   native_counter  Streams the rows [0, max_offset) with a single column "id", making "step"
 //                   more rows available each time Spark asks for the latest offset.
@@ -377,9 +381,10 @@ void exportColumn(const std::string& name, int64_t lo, int64_t hi, ArrowArray* o
 }
 
 // Exports a struct array with the given columns for the ids [lo, hi). A sliced batch exports
-// the columns for [lo - 1, hi), with an offset of 1, like a zero-copy slice.
+// the columns for [lo - 1, hi), with an offset of 1, like a zero-copy slice. `short_array` names
+// the array to export with one value fewer than its parent refers to, as the option "short".
 void exportBatch(const std::vector<std::string>& columns, int64_t lo, int64_t hi, bool slice,
-                 ArrowArray* out) {
+                 const std::string& short_array, ArrowArray* out) {
   initArray(out, hi - lo, 0, {std::vector<uint8_t>()});
   for (const auto& name : columns) {
     ArrowArray* column = addChild(out);
@@ -388,6 +393,16 @@ void exportBatch(const std::vector<std::string>& columns, int64_t lo, int64_t hi
       column->offset = 1;
       column->length = hi - lo;
       column->null_count = -1;  // Unknown.
+    }
+    if (short_array == "id" && name == "id") {
+      column->length--;
+    } else if (short_array == "entries" && name == "m") {
+      // The last offset of the map refers to one entry more than there are.
+      ArrowArray* entries = column->children[0];
+      entries->length--;
+      for (int64_t i = 0; i < entries->n_children; i++) entries->children[i]->length--;
+    } else if (short_array == "values" && name == "m") {
+      column->children[0]->children[1]->length--;
     }
   }
 }
@@ -698,6 +713,7 @@ struct Stream {
   int64_t batch_size;
   bool fail;
   bool slice;
+  std::string short_array;
   std::string last_error;
 };
 
@@ -718,7 +734,7 @@ int streamGetNext(ArrowArrayStream* stream, ArrowArray* out) {
     return 0;
   }
   int64_t hi = std::min(state->end, state->next + state->batch_size);
-  exportBatch(state->columns, state->next, hi, state->slice, out);
+  exportBatch(state->columns, state->next, hi, state->slice, state->short_array, out);
   state->next = hi;
   return 0;
 }
@@ -866,6 +882,7 @@ SPARK_JNI(jlong, createReader)(JNIEnv* env, jclass, jlong handle, jlong schema_a
     reader->state["batch_size"] = get(source->options, "batch_size", "1000");
     reader->state["fail"] = get(source->options, "fail", "");
     reader->state["slice"] = get(source->options, "slice", "");
+    reader->state["short"] = get(source->options, "short", "");
     return toHandle(reader);
   });
 }
@@ -1052,7 +1069,8 @@ SPARK_JNI(void, read)(JNIEnv* env, jclass, jbyteArray reader_state, jbyteArray p
     stream->private_data = new Stream{split(get(state, "columns", "")), std::stoll(bounds[0]),
                                       std::stoll(bounds[1]), getLong(state, "batch_size", 1000),
                                       get(state, "fail", "") == "read",
-                                      get(state, "slice", "") == "true", ""};
+                                      get(state, "slice", "") == "true", get(state, "short", ""),
+                                      ""};
   });
 }
 
