@@ -21,12 +21,9 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.planning.{IntervalOverlapJoin, LessPartialRangeJoin}
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti, LeftOuter, LeftSemi}
-import org.apache.spark.sql.execution.{
-  InputAdapter, ReusedSubqueryExec, ScalarSubquery, SparkPlan, SubqueryExec,
-  WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{InputAdapter, ReusedSubqueryExec, ScalarSubquery, SparkPlan, SubqueryExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.joins.{
-  BroadcastNestedLoopJoinExec, BroadcastRangeJoinExec, CartesianProductExec}
+import org.apache.spark.sql.execution.joins.{BroadcastNestedLoopJoinExec, BroadcastRangeJoinExec, CartesianProductExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -168,6 +165,33 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
         |CREATE OR REPLACE TEMP VIEW str_points(s) AS VALUES
         |  (CAST('M' AS STRING COLLATE UNICODE_CI)),
         |  (CAST('m' AS STRING COLLATE UNICODE_CI))
+        |""".stripMargin)
+  }
+
+  private def setupDateAndTimestampViews(): Unit = {
+    sql(
+      """
+        |CREATE OR REPLACE TEMP VIEW dt_ranges(lo, hi) AS VALUES
+        |  (DATE'2024-01-01', DATE'2024-01-31'),
+        |  (DATE'2024-06-01', DATE'2024-06-30')
+        |""".stripMargin)
+    sql(
+      """
+        |CREATE OR REPLACE TEMP VIEW dt_points(d) AS VALUES
+        |  (DATE'2024-01-15'),
+        |  (DATE'2024-05-01'),
+        |  (DATE'2024-06-15')
+        |""".stripMargin)
+    sql(
+      """
+        |CREATE OR REPLACE TEMP VIEW ts_ranges(lo, hi) AS VALUES
+        |  (TIMESTAMP'2024-01-01 00:00:00', TIMESTAMP'2024-01-01 12:00:00')
+        |""".stripMargin)
+    sql(
+      """
+        |CREATE OR REPLACE TEMP VIEW ts_points(t) AS VALUES
+        |  (TIMESTAMP'2024-01-01 06:00:00'),
+        |  (TIMESTAMP'2024-01-01 18:00:00')
         |""".stripMargin)
   }
 
@@ -368,6 +392,22 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
         val df = sql(query)
         val joins = findRangeJoin(df.queryExecution.executedPlan)
         assert(joins.size == 1 && joins.head.buildSide == buildSide, query)
+        checkAnswer(df, expected)
+      }
+    }
+  }
+
+  test("date and timestamp range joins match the nested loop result") {
+    setupDateAndTimestampViews()
+    val dateQuery =
+      "SELECT p.d, r.lo, r.hi FROM dt_points p JOIN dt_ranges r ON p.d BETWEEN r.lo AND r.hi"
+    val tsQuery =
+      "SELECT p.t, r.lo, r.hi FROM ts_points p JOIN ts_ranges r ON p.t BETWEEN r.lo AND r.hi"
+    Seq(dateQuery, tsQuery).foreach { query =>
+      val expected = sql(query).collect()
+      withRangeJoin() {
+        val df = sql(query)
+        assert(findRangeJoin(df.queryExecution.executedPlan).size == 1, query)
         checkAnswer(df, expected)
       }
     }
