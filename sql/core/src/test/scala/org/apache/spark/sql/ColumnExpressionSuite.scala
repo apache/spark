@@ -504,6 +504,70 @@ class ColumnExpressionSuite extends SharedSparkSession {
     }
   }
 
+  test("field updates should preserve shared value subexpression elimination") {
+    withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+      for {
+        nested <- Seq(false, true)
+        external <- Seq(false, true)
+        opaque <- Seq(false, true)
+      } {
+        val calls = spark.sparkContext.longAccumulator
+        val sourceCalls = spark.sparkContext.longAccumulator
+        val value = udf((id: Long) => {
+          calls.add(1)
+          id + 1
+        }).apply($"id")
+        val source = if (opaque) {
+          udf((id: Long) => {
+            sourceCalls.add(1)
+            ((id, id), id)
+          }).asNonNullable().asNondeterministic()($"id")
+        } else {
+          struct(struct($"id", $"id").as("_1"), $"id".as("_2"))
+        }
+        val prefix = if (nested) "_1." else ""
+        val updated = source.withField(s"${prefix}first", value)
+          .withField(s"${prefix}second", value)
+        val columns = if (external) Seq(updated, value) else Seq(updated)
+        val rows = spark.range(0, 10, 1, 1).select(columns: _*).collect()
+        rows.zipWithIndex.foreach { case (row, index) =>
+          val result = if (nested) row.getStruct(0).getStruct(0) else row.getStruct(0)
+          assert(result.getLong(2) == index + 1L)
+          assert(result.getLong(3) == index + 1L)
+          if (external) assert(row.getLong(1) == index + 1L)
+        }
+        val expectedCalls = if (nested && opaque) 10 * (if (external) 3 else 2) else 10
+        assert(calls.value == expectedCalls,
+          s"nested=$nested external=$external opaque=$opaque calls=${calls.value}")
+        if (opaque) assert(sourceCalls.value == 10)
+      }
+    }
+  }
+
+  test("field updates should not hoist guarded shared values") {
+    onEachEvalPath {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
+        SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true") {
+        val schema = StructType(Seq(StructField("a", IntegerType, nullable = false)))
+        val source = when($"id" === 0, lit(null).cast(schema))
+          .otherwise(struct(lit(1).as("a")))
+        val shared = lit(1L) / $"id"
+        checkAnswer(
+          spark.range(0, 2, 1, 1).select(
+            source.withField("b", shared).withField("c", shared)),
+          Seq(Row(null), Row(Row(1, 1.0, 1.0))))
+        val throwingSource = udf((id: Long) => {
+          if (id >= 0) throw new IllegalStateException(s"evaluated for $id") else (id, id)
+        }).asNonNullable()
+        checkAnswer(
+          spark.range(1).select(
+            throwingSource($"id").withField("_1", lit(1L)).withField("_2", lit(2L))),
+          Row(Row(1L, 2L)))
+      }
+    }
+  }
+
   test("nested field updates on unresolved columns should remain linear") {
     val df = Seq((((1, 2), 3), 0)).toDF("s", "z")
     Seq(4, 8, 12).foreach { count =>

@@ -23,7 +23,7 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.trees.TreePattern.{LAMBDA_VARIABLE, PLAN_EXPRESSION}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMON_EXPR_REF, LAMBDA_VARIABLE, PLAN_EXPRESSION}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
@@ -62,7 +62,7 @@ class EquivalentExpressions(
       expr: Expression,
       map: mutable.HashMap[ExpressionEquals, ExpressionStats],
       useCount: Int = 1): Boolean = {
-    if (expr.deterministic) {
+    if (expr.deterministic && supportedExpression(expr)) {
       val wrapper = ExpressionEquals(expr)
       map.get(wrapper) match {
         case Some(stats) =>
@@ -159,12 +159,10 @@ class EquivalentExpressions(
   // that the peel lands on rather than about the `And`/`Or` chain above it.
   private def childrenToRecurse(expr: Expression): Seq[Expression] = expr match {
     case _: CodegenFallback => Nil
-    // A `CommonExpressionRef` cannot be evaluated ahead of the `With` that binds it, for the same
-    // reason a `LambdaVariable` cannot be evaluated ahead of its loop. Do not descend, so that no
-    // subtree holding a reference -- nor a `CommonExpressionDef`, which is unevaluable -- becomes
-    // a candidate. The `With` itself may still be deduplicated as a whole, which is safe: it
-    // carries its own definitions and brings their slots into scope wherever it is generated.
-    case _: With => Nil
+    // Definitions are lazy. Only the generated body exposes always-evaluated subexpressions;
+    // supportedExpression excludes candidates whose references would escape their binding scope.
+    case withExpr: With =>
+      if (withExpr.refUnderCodegenFallback) Nil else Seq(withExpr.child)
     // Peeling here is redundant for safety: `updateExprTree` peels before it descends, so this
     // method sees the peeled node either way. It stays because dropping it would pass
     // `updateExprTree` the input itself rather than the operand its peel lands on.
@@ -186,9 +184,27 @@ class EquivalentExpressions(
     // `LambdaVariable` is usually used as a loop variable, which can't be evaluated ahead of the
     // loop. So we can't evaluate sub-expressions containing `LambdaVariable` at the beginning.
     !(e.containsPattern(LAMBDA_VARIABLE) ||
+      e.isInstanceOf[CommonExpressionDef] ||
+      hasUnboundCommonExpressionRef(e) ||
       // `PlanExpression` wraps query plan. To compare query plans of `PlanExpression` on executor,
       // can cause error like NPE.
       (e.containsPattern(PLAN_EXPRESSION) && Utils.isInRunningSparkTask))
+  }
+
+  private def hasUnboundCommonExpressionRef(
+      expression: Expression,
+      boundIds: Set[CommonExpressionId] = Set.empty): Boolean = {
+    if (!expression.containsPattern(COMMON_EXPR_REF)) {
+      false
+    } else {
+      expression match {
+        case ref: CommonExpressionRef => !boundIds.contains(ref.id)
+        case withExpr: With =>
+          val innerIds = boundIds ++ withExpr.defs.map(_.id)
+          withExpr.children.exists(hasUnboundCommonExpressionRef(_, innerIds))
+        case other => other.children.exists(hasUnboundCommonExpressionRef(_, boundIds))
+      }
+    }
   }
 
   /**

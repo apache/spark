@@ -546,12 +546,65 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     assert(equivalence1.getCommonSubexpressions.size == 1)
   }
 
-  test("SPARK-58902: no candidate below a With, with or without the short-circuit peel") {
+  test("With exposes independent subexpressions but not unbound references") {
+    val input = AttributeReference("input", IntegerType)()
+    val shared = Add(input, Literal(1))
+    val expression = With(input) { case Seq(ref) =>
+      Add(ref, Multiply(shared, shared))
+    }
+    val equivalence = new EquivalentExpressions
+    equivalence.addExprTree(expression)
+    assert(equivalence.getCommonSubexpressions == Seq(shared))
+    assert(equivalence.getAllExprStates().forall { state =>
+      state.expr == expression || !state.expr.exists(_.isInstanceOf[CommonExpressionRef])
+    })
+  }
+
+  test("With candidates must bind references in their lexical scope") {
+    val input = AttributeReference("input", IntegerType)()
+    val shared = Add(input, Literal(1))
+    var inner: Expression = null
+    val outer = With(input) { case Seq(outerRef) =>
+      inner = With(input) { case Seq(innerRef) =>
+        Add(Add(outerRef, innerRef), shared)
+      }
+      Add(inner, shared)
+    }
+    val equivalence = new EquivalentExpressions
+    equivalence.addExprTree(outer)
+    assert(equivalence.getExprState(outer).nonEmpty)
+    assert(equivalence.getExprState(inner).isEmpty)
+    assert(equivalence.getCommonSubexpressions == Seq(shared))
+    assert(!equivalence.addExpr(inner))
+    val closed = With(input) { case Seq(ref) => Add(ref, Literal(1)) }
+    val sibling = new CommonExpressionRef(closed.defs.head)
+    assert(!equivalence.addExpr(Add(closed, sibling)))
+  }
+
+  test("With does not expose lazy definitions or interpreted children") {
+    val input = AttributeReference("input", IntegerType)()
+    val shared = Add(input, Literal(1))
+    val lazyDefinition = With(Multiply(shared, shared)) { case Seq(ref) =>
+      If(Literal(false), ref, input)
+    }
+    val fallback = With(input) { case Seq(ref) =>
+      Add(CodegenFallbackExpression(ref), Multiply(shared, shared))
+    }
+    val guarded = With(input) { case Seq(ref) =>
+      If(GreaterThan(ref, Literal(0)), Multiply(shared, shared), Literal(0))
+    }
+    Seq(lazyDefinition, fallback, guarded).foreach { expression =>
+      val equivalence = new EquivalentExpressions
+      equivalence.addExprTree(expression)
+      assert(equivalence.getCommonSubexpressions.isEmpty)
+    }
+  }
+
+  test("SPARK-58902: candidates below a With cannot hold unbound references") {
     // A `CommonExpressionRef` can only be evaluated inside the `With` that binds it: the codegen
     // slots exist only while that `With` is being generated, and `getCommonExpr` throws otherwise.
     // Subexpression elimination generates its candidates outside every `With` scope, so a candidate
-    // holding a reference would fail the query. `childrenToRecurse` therefore stops at a `With`,
-    // including after `skipForShortcut` has peeled an `And`/`Or` down to one.
+    // holding an unbound reference would fail the query.
     val a = AttributeReference("a", IntegerType)()
     val memoized = With(Add(a, a)) { case Seq(ref) =>
       And(GreaterThan(ref, Literal(0)), LessThan(ref, Literal(10)))

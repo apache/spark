@@ -771,7 +771,7 @@ private case class UpdateFieldsExpression(
     structExpr: Expression,
     updatedValues: Seq[Expression],
     outputOrdinals: Seq[Int],
-    outputFields: Seq[StructField]) extends Expression {
+    outputFields: Seq[StructField]) extends ConditionalExpression {
 
   override def children: Seq[Expression] = structExpr +: updatedValues
 
@@ -780,6 +780,17 @@ private case class UpdateFieldsExpression(
   private lazy val indexedOrdinals = outputOrdinals.toArray
   private lazy val indexedUpdatedValues = updatedValues.toArray
   private lazy val needsSource = nullable || indexedOrdinals.exists(_ >= 0)
+
+  override def alwaysEvaluatedInputs: Seq[Expression] =
+    (if (needsSource) Seq(structExpr) else Nil) ++ (if (nullable) Nil else updatedValues)
+
+  override def branchGroups: Seq[Seq[Expression]] = Nil
+
+  override def withNewAlwaysEvaluatedInputs(
+      inputs: Seq[Expression]): ConditionalExpression =
+    copy(
+      structExpr = if (needsSource) inputs.head else structExpr,
+      updatedValues = if (nullable) updatedValues else if (needsSource) inputs.tail else inputs)
 
   override lazy val dataType: StructType = {
     val sourceFields = structExpr.dataType.asInstanceOf[StructType]
