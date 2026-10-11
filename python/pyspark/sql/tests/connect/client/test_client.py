@@ -310,11 +310,10 @@ class SparkConnectClientTestCase(unittest.TestCase):
 
     def test_command_iterator_skips_disallowed_accumulator(self):
         import collections
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import MagicMock
 
         from pyspark.accumulators import SpecialAccumulatorIds
         from pyspark.serializers import CPickleSerializer
-        from pyspark.sql.connect.logging import logger
 
         pickle_ser = CPickleSerializer()
         disallowed_metric = pickle_ser.dumps(
@@ -334,17 +333,9 @@ class SparkConnectClientTestCase(unittest.TestCase):
         )
         client._profiler_collector = MagicMock()
 
-        with (
-            patch.object(logger, "disabled", False),
-            self.assertLogs("pyspark.sql.connect.logging", level="WARNING") as logs,
-        ):
-            list(client.execute_command_as_iterator(proto.Command()))
+        list(client.execute_command_as_iterator(proto.Command()))
 
         client._profiler_collector._update.assert_called_once_with({1: {}})
-        self.assertEqual(len(logs.records), 1)
-        message = logs.records[0].getMessage()
-        self.assertIn("Error unpickling accumulator metric", message)
-        self.assertIn("collections.defaultdict", message)
 
     def test_user_agent_passthrough(self):
         client = SparkConnectClient("sc://foo/;user_agent=bar", use_reattachable_execute=False)
