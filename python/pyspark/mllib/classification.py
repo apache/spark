@@ -202,7 +202,7 @@ class LogisticRegressionModel(LinearClassificationModel):
             self._dataWithBiasSize = None
             self._weightsMatrix = None
         else:
-            self._dataWithBiasSize = self._coeff.size // (self._numClasses - 1)
+            self._dataWithBiasSize = len(self._coeff) // (self._numClasses - 1)
             self._weightsMatrix = self._coeff.toArray().reshape(
                 self._numClasses - 1, self._dataWithBiasSize
             )
@@ -259,11 +259,11 @@ class LogisticRegressionModel(LinearClassificationModel):
 
             best_class = 0
             max_margin = 0.0
-            if x.size + 1 == self._dataWithBiasSize:
+            if len(x) + 1 == self._dataWithBiasSize:
                 for i in range(0, self._numClasses - 1):
                     margin = (
-                        x.dot(self._weightsMatrix[i][0 : x.size])  # type: ignore[attr-defined]
-                        + self._weightsMatrix[i][x.size]
+                        x.dot(self._weightsMatrix[i][0 : len(x)])  # type: ignore[attr-defined]
+                        + self._weightsMatrix[i][len(x)]
                     )
                     if margin > max_margin:
                         max_margin = margin
@@ -934,7 +934,7 @@ class StreamingLogisticRegressionWithSGD(StreamingLinearAlgorithm):
         self._model = LogisticRegressionModel(
             initialWeights,
             0,
-            initialWeights.size,
+            len(initialWeights),
             2,
         )
         return self
