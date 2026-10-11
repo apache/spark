@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, ExpressionSet, SortOrder, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, ExpressionSet, ProjectionOverSchema, SortOrder, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -155,20 +156,38 @@ trait DataSourceV2ScanExecBase
    */
   override def outputOrdering: Seq[SortOrder] = {
     def holdsTransform(e: Expression): Boolean = e.exists(_.isInstanceOf[TransformExpression])
-    (ordering, outputPartitioning) match {
+    (outputBoundOrdering, outputPartitioning) match {
       case (Some(o), p) =>
-        val (prefix, rest) =
-          o.span(order => order.references.subsetOf(outputSet) && !holdsTransform(order.child))
+        val (prefix, rest) = o.span(_.exists(order => !holdsTransform(order.child)))
         p match {
           case k: KeyedPartitioning if rest.nonEmpty =>
             val keyExprs = ExpressionSet(k.expressions.filterNot(holdsTransform))
-            prefix ++ rest.filter(order => keyExprs.contains(order.child))
-          case _ => prefix
+            prefix.flatten ++ rest.flatten.filter(order => keyExprs.contains(order.child))
+          case _ => prefix.flatten
         }
       case (_, k: KeyedPartitioning) if conf.v2BucketingPartitionKeyOrderingEnabled =>
         k.expressions.filterNot(holdsTransform).map(SortOrder(_, Ascending))
       case _ => Seq.empty
     }
+  }
+
+  /**
+   * The reported ordering bound to this scan's output, or None for a sort order that reads a column
+   * or nested field the scan does not output. Nested schema pruning keeps an attribute's exprId but
+   * narrows its type, so field ordinals are recomputed. Mirrors
+   * `DataSourceV2ScanRelation.outputBoundPushedFilters`. A `lazy val` because the planner asks a
+   * node for its ordering many times.
+   */
+  @transient private lazy val outputBoundOrdering: Option[Seq[Option[SortOrder]]] = {
+    val projection = ProjectionOverSchema(schema, outputSet)
+    ordering.map(_.map { order =>
+      try {
+        val bound = order.child.transformDown { case projection(e) => e }
+        Option.when(bound.references.subsetOf(outputSet))(order.copy(child = bound))
+      } catch {
+        case e: SparkIllegalArgumentException if e.getCondition == "FIELD_NOT_FOUND" => None
+      }
+    })
   }
 
   override def supportsColumnar: Boolean = {
