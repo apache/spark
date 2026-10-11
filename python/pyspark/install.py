@@ -35,7 +35,6 @@ DEFAULT_HADOOP = "hadoop3"
 DEFAULT_HIVE = "hive2.3"
 SUPPORTED_HADOOP_VERSIONS = ["hadoop3", "without-hadoop"]
 SUPPORTED_HIVE_VERSIONS = ["hive2.3"]
-UNSUPPORTED_COMBINATIONS: list[tuple[str, str]] = []
 
 # Official ASF-controlled hosts serving release checksums. Integrity metadata
 # must come from these origins, never from a (community) mirror, so that a
