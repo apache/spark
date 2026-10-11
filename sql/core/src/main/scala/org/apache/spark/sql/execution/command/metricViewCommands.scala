@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, SchemaUnsuppo
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, HiveTableRelation, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, View}
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.CatalogV2Util
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -78,6 +79,18 @@ case class CreateMetricViewCommand(
     // `where`) into the user-supplied properties so v1 DESCRIBE TABLE EXTENDED surfaces the
     // same descriptor rows as the v2 path in `DataSourceV2Strategy`.
     val mergedProps = properties ++ metricView.getProperties
+    if (replace && catalog.tableExists(name)) {
+      // Handles `CREATE OR REPLACE VIEW ... WITH METRICS` on an existing view, the same way
+      // `CreateViewCommand` does: nothing is retained from the old view, so drop and recreate.
+      val existing = catalog.getTableMetadata(name)
+      if (!existing.isViewLike) {
+        throw QueryCompilationErrors.unsupportedCreateOrReplaceViewOnTableError(
+          name.nameParts, replace)
+      }
+      ViewHelper.checkCyclicViewReference(analyzed, Seq(existing.fullIdent), existing.fullIdent)
+      CommandUtils.uncacheTableOrView(sparkSession, existing.identifier)
+      catalog.dropTable(existing.identifier, ignoreIfNotExists = false, purge = false)
+    }
     catalog.createTable(
       ViewHelper.prepareTable(
         sparkSession, name, Some(originalText), analyzed, userSpecifiedColumns,

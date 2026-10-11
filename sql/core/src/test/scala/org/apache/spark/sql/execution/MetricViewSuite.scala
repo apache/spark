@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.metricview.serde.{AssetSource, Column, DimensionExpression, MeasureExpression, MetricView, MetricViewFactory, SQLSource}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -149,6 +149,48 @@ abstract class MetricViewSuite extends QueryTest {
         )
       }
     }
+  }
+
+  test("CREATE OR REPLACE VIEW ... WITH METRICS replaces an existing metric view") {
+    val original = MetricView("0.1", AssetSource(testTableName), None, testMetricViewColumns)
+    withMetricView(testMetricViewName, original) {
+      val replacement = MetricView(
+        "0.1", AssetSource(testTableName),
+        Some("product = 'product_1'"), testMetricViewColumns)
+      sql(s"""
+          |CREATE OR REPLACE VIEW $testMetricViewName
+          |WITH METRICS
+          |LANGUAGE YAML
+          |AS
+          |$$$$
+          |${MetricViewFactory.toYAML(replacement)}
+          |$$$$
+          |""".stripMargin)
+      checkAnswer(
+        sql(s"SELECT measure(count_sum) FROM $testMetricViewName"),
+        sql(s"SELECT sum(count) FROM $testTableName WHERE product = 'product_1'"))
+    }
+  }
+
+  test("CREATE OR REPLACE VIEW ... WITH METRICS does not replace a table") {
+    val metricView = MetricView("0.1", AssetSource(testTableName), None, testMetricViewColumns)
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(s"""
+            |CREATE OR REPLACE VIEW $testTableName
+            |WITH METRICS
+            |LANGUAGE YAML
+            |AS
+            |$$$$
+            |${MetricViewFactory.toYAML(metricView)}
+            |$$$$
+            |""".stripMargin)
+      },
+      condition = "EXPECT_VIEW_NOT_TABLE.NO_ALTERNATIVE",
+      parameters = Map(
+        "tableName" -> s"`default`.`$testTableName`",
+        "operation" -> "CREATE OR REPLACE VIEW"))
+    checkAnswer(sql(s"SELECT count(*) FROM $testTableName"), Row(testTableData.length))
   }
 
   test("test where clause") {
