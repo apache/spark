@@ -55,9 +55,10 @@ case class SortMergeAsOfJoinExec(
     right: SparkPlan,
     isSkewJoin: Boolean = false) extends ShuffledJoin with PredicateHelper {
 
-  require(leftSortExprs.nonEmpty && rightSortExprs.nonEmpty &&
-    leftSortExprs.length == rightSortExprs.length,
-    s"$nodeName requires matching non-empty sort expressions on both sides")
+  // The sides may have different key counts: each side is sorted on its own, and only the
+  // equi-keys are compared across sides.
+  require(leftSortExprs.nonEmpty && rightSortExprs.nonEmpty,
+    s"$nodeName requires non-empty sort expressions on both sides")
 
   require(Seq(Inner, LeftOuter).exists(joinType == _),
     s"$nodeName does not support join type: $joinType")

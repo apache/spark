@@ -198,6 +198,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = e)
   }
 
+  def pythonUDFRowSizeExceededError(
+      maxRowSize: Long, actualRowSize: Long): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "UDF_LIMITS.ROW_SIZE",
+      messageParameters = Map(
+        "maxRowSize" -> maxRowSize.toString,
+        "actualRowSize" -> actualRowSize.toString))
+  }
+
   def divideByZeroError(context: QueryContext): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DIVIDE_BY_ZERO",
@@ -2450,14 +2459,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = cause)
   }
 
-  def outputDataTypeUnsupportedByNodeWithoutSerdeError(
-      nodeName: String, dt: DataType): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2265",
-      messageParameters = Map(
-        "nodeName" -> nodeName,
-        "dt" -> dt.getClass.getSimpleName),
-      cause = null)
+  def scriptTransformWithoutSerdeUnsupportedTypeError(
+      dt: DataType): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE.TRANSFORM_WITHOUT_SERDE_TYPE",
+      messageParameters = Map("dataType" -> toSQLType(dt)))
   }
 
   def invalidStartIndexError(
@@ -2731,6 +2737,20 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       errorClass = "EXCEED_LIMIT_LENGTH",
       messageParameters = Map("limit" -> limit.toString)
     )
+  }
+
+  /**
+   * Restricting CHAR/VARCHAR XML map keys is a parser limitation (SQLSTATE 0A000),
+   * but this is a SparkRuntimeException so XML parse modes can handle it: PERMISSIVE
+   * wraps a bad record and FAILFAST surfaces the failure.
+   */
+  def unsupportedXmlCharVarcharMapKey(
+      key: UTF8String, dataType: DataType): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "UNSUPPORTED_XML_CHAR_VARCHAR_MAP_KEY",
+      messageParameters = Map(
+        "key" -> toSQLValue(key, StringType),
+        "dataType" -> toSQLType(dataType)))
   }
 
   def timestampAddOverflowError(micros: Long, amount: Long, unit: String): ArithmeticException = {

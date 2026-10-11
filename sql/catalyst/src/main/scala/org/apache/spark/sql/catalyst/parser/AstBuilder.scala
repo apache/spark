@@ -2050,7 +2050,8 @@ class AstBuilder extends DataTypeAstBuilder
       inSerdeClass, outSerdeClass,
       inSerdeProps, outSerdeProps,
       reader, writer,
-      schemaLess)
+      schemaLess,
+      conf.charVarcharStandardSemantics)
   }
 
   /**

@@ -154,6 +154,11 @@
       "Cannot <condition1> without <condition2>."
     ]
   },
+  "CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON": {
+    "message": [
+      "CHAR/VARCHAR is not supported in <feature>. Use STRING in the declaration. Data type: <data_type>."
+    ]
+  },
   "CLASSIC_OPERATION_NOT_SUPPORTED_ON_DF": {
     "message": [
       "Calling property or member '<member>' is not supported in PySpark Classic, please use Spark Connect instead."
