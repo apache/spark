@@ -338,6 +338,30 @@ class VectorUDTTests(MLlibTestCase):
         for v in [self.dv0, self.dv1, self.sv0, self.sv1]:
             self.assertEqual(v, self.udt.deserialize(self.udt.serialize(v)))
 
+    def test_serialization_invalid_object(self):
+        invalid_object = [1.0, 2.0]
+
+        with self.assertRaises(TypeError):
+            self.udt.serialize(invalid_object)
+
+    def test_deserialization_invalid_length(self):
+        two_fields = (1, [1.0, 2.0])
+        three_fields = (1, None, [1.0, 2.0])
+        five_long = (1, None, None, None, [1.0, 2.0])
+
+        with self.assertRaises(AssertionError):
+            self.udt.deserialize(two_fields)
+        with self.assertRaises(AssertionError):
+            self.udt.deserialize(three_fields)
+        with self.assertRaises(AssertionError):
+            self.udt.deserialize(five_long)
+
+    def test_deserialization_invalid_type(self):
+        invalid_type = 2
+
+        with self.assertRaises(ValueError):
+            self.udt.deserialize((invalid_type, None, None, [1.0, 2.0]))
+
     def test_infer_schema(self):
         rdd = self.sc.parallelize(
             [Row(label=1.0, features=self.dv1), Row(label=0.0, features=self.sv1)]
@@ -414,6 +438,10 @@ class VectorUDTTests(MLlibTestCase):
 
     def test_hashable(self):
         _ = hash(VectorUDT())
+
+    def test_simple_string(self):
+        result = self.udt.simpleString()
+        self.assertEqual(result, "vector")
 
 
 class MatrixUDTTests(MLlibTestCase):
