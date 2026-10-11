@@ -1066,26 +1066,6 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       parameters = Map("key" -> s"'$key'", "dataType" -> s""""$dataTypeSql""""))
   }
 
-  private def assertDuplicateMapKey(query: String, expectedKey: String = "a "): Unit = {
-    assertDuplicateMapKeyError(sql(query).collect(), expectedKey)
-  }
-
-  private def assertDuplicateMapKeyError(body: => Any, expectedKey: String = "a "): Unit = {
-    val error = intercept[Exception] { body }
-    val duplicateError = Iterator.iterate[Throwable](error)(_.getCause)
-      .takeWhile(_ != null)
-      .collectFirst {
-        case e: SparkRuntimeException if e.getCondition == "DUPLICATED_MAP_KEY" => e
-      }
-      .getOrElse(fail("expected DUPLICATED_MAP_KEY cause", error))
-    checkError(
-      exception = duplicateError,
-      condition = "DUPLICATED_MAP_KEY",
-      parameters = Map(
-        "key" -> expectedKey,
-        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\""))
-  }
-
   test("user-specified schema in cast") {
     def assertNoCharType(df: DataFrame): Unit = {
       checkAnswer(df, Row("0"))
@@ -3181,6 +3161,12 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       checkAnswer(
         sql("SELECT from_xml('<ROW><m><a>1</a></m></ROW>', 'm MAP<CHAR(3), INT>')"),
         Row(Row(Map("a  " -> 1))))
+      assertParseExceedLimit(
+        """SELECT from_xml(
+          |  '<ROW><m><abcd>1</abcd></m></ROW>',
+          |  'm MAP<CHAR(3), INT>',
+          |  map('mode', 'FAILFAST'))""".stripMargin,
+        expectedLimit = "3")
       assertParseExceedLimit(
         """SELECT from_xml(
           |  '<ROW><m><abcd>1</abcd></m></ROW>',

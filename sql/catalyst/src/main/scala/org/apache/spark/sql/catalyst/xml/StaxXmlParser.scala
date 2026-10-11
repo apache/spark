@@ -41,7 +41,7 @@ import org.apache.spark.{SparkIllegalArgumentException, SparkUpgradeException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow, ToStringBase}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, BadRecordException, CharVarcharUtils, DateFormatter, DropMalformedMode, DuplicateMapKeyUtils, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, PermissiveMode, TimeFormatter, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, BadRecordException, CharVarcharUtils, DateFormatter, DropMalformedMode, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, PermissiveMode, TimeFormatter, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.xml.StaxXmlParser.convertStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -235,7 +235,6 @@ class StaxXmlParser(
       // ValidatorUtil.newValidator throws this when the JAXP implementation cannot
       // disable external access; that is an environment error, not a bad record.
       case e: UnsupportedOperationException => throw e
-      case DuplicateMapKeyUtils(e) => throw e
       case e@(_: RuntimeException | _: XMLStreamException | _: MalformedInputException
               | _: SAXException) =>
         // XML parser currently doesn't support partial results for corrupted records.
@@ -332,16 +331,11 @@ class StaxXmlParser(
         throw BadRecordException(xmlLiteral, () => Array.empty,
           wrappedCharException)
       case PartialResultException(row, cause) =>
-        DuplicateMapKeyUtils.cause(cause) match {
-          case Some(e) => throw e
-          case None =>
-            throw BadRecordException(record = xmlLiteral, partialResults = () => Array(row), cause)
-        }
+        throw BadRecordException(record = xmlLiteral, partialResults = () => Array(row), cause)
       case PartialResultArrayException(rows, cause) =>
         throw BadRecordException(record = xmlLiteral, partialResults = () => rows, cause)
       case e: Throwable =>
         SparkErrorUtils.getRootCause(e) match {
-          case DuplicateMapKeyUtils(duplicate) => throw duplicate
           case _: FileNotFoundException if options.ignoreMissingFiles =>
             logWarning("Skipped missing file", e)
             parser.close()
@@ -454,8 +448,8 @@ class StaxXmlParser(
    * CHAR/VARCHAR keys are length-checked without rewriting: CHAR keys must already be
    * exactly n characters, and VARCHAR keys must already be at most n characters.
    * Padding, trimming, and mapKeyDedupPolicy are not applied. With the flag off,
-   * CHAR keys are padded and VARCHAR overflow uses EXCEED_LIMIT_LENGTH when
-   * first-class CHAR/VARCHAR types reach the parser.
+   * short CHAR keys are padded and over-length CHAR or VARCHAR keys raise
+   * EXCEED_LIMIT_LENGTH when first-class CHAR/VARCHAR types reach the parser.
    * Repeated names last-win on binary equality (collation is not consulted), matching
    * ordinary MAP<STRING, ...> XML maps.
    *
@@ -557,7 +551,6 @@ class StaxXmlParser(
           row(i) = convertTo(v, schema(i).dataType)
         } catch {
           case e: SparkUpgradeException => throw e
-          case DuplicateMapKeyUtils(e) => throw e
           case NonFatal(e) => firstError = firstError.orElse(Some(e))
         }
       }
@@ -696,7 +689,6 @@ class StaxXmlParser(
           }
         } catch {
           case e: SparkUpgradeException => throw e
-          case DuplicateMapKeyUtils(e) => throw e
           case NonFatal(e) =>
             // TODO: we don't support partial results now
             badRecordException = badRecordException.orElse(Some(e))
