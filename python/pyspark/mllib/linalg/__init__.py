@@ -306,6 +306,8 @@ class Vector:
     Abstract class for DenseVector and SparseVector
     """
 
+    size: int
+
     def toArray(self) -> np.ndarray:
         """
         Convert the vector into an numpy.ndarray
