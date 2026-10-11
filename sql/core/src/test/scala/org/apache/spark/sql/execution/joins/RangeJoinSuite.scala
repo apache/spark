@@ -89,6 +89,20 @@ class RangeJoinSuite extends QueryTest with SharedSparkSession {
     if (highFirst) And(highPred, lowPred) else And(lowPred, highPred)
   }
 
+  private def checkAnswerBothModes(
+      left: DataFrame,
+      right: DataFrame,
+      plan: (SparkPlan, SparkPlan) => SparkPlan,
+      expected: Seq[Row]): Unit = {
+    Seq(true, false).foreach { codegen =>
+      withSQLConf(
+        org.apache.spark.sql.internal.SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString,
+        org.apache.spark.sql.internal.SQLConf.CODEGEN_FALLBACK.key -> "false") {
+        checkAnswer2(left, right, plan, expected)
+      }
+    }
+  }
+
   private def checkPointJoin(
       left: DataFrame,
       right: DataFrame,
@@ -99,7 +113,7 @@ class RangeJoinSuite extends QueryTest with SharedSparkSession {
       highInclusive: Boolean,
       expected: Seq[Row],
       highFirst: Boolean = false): Unit = {
-    checkAnswer2(left, right, (leftPlan: SparkPlan, rightPlan: SparkPlan) => {
+    checkAnswerBothModes(left, right, (leftPlan: SparkPlan, rightPlan: SparkPlan) => {
       val pointPlan = if (pointOnLeft) leftPlan else rightPlan
       val boundPlan = if (pointOnLeft) rightPlan else leftPlan
       val point = pointPlan.output.head
@@ -181,7 +195,7 @@ class RangeJoinSuite extends QueryTest with SharedSparkSession {
     // a.lo > b.hi builds the low side and scans up to the stream key.
     def check(rangeJoin: RangeJoin, condition: (SparkPlan, SparkPlan) => Expression,
         expected: Seq[Row]): Unit = {
-      checkAnswer2(intervals1, intervals2, (left: SparkPlan, right: SparkPlan) => {
+      checkAnswerBothModes(intervals1, intervals2, (left: SparkPlan, right: SparkPlan) => {
         rangeJoinExec(
           left, right, BuildRight, Inner,
           buildKeys = right.output(1) :: Nil,
@@ -208,7 +222,7 @@ class RangeJoinSuite extends QueryTest with SharedSparkSession {
     val condition = (left: SparkPlan, right: SparkPlan) => And(
       LessThan(left.output(0), right.output(1)),
       LessThan(right.output(0), left.output(1)))
-    checkAnswer2(intervals1, intervals2, (left: SparkPlan, right: SparkPlan) => {
+    checkAnswerBothModes(intervals1, intervals2, (left: SparkPlan, right: SparkPlan) => {
       rangeJoinExec(
         left, right, BuildRight, Inner,
         buildKeys = right.output,

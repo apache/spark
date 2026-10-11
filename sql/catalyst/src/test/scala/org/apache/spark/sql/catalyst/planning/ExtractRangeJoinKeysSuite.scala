@@ -66,9 +66,9 @@ class ExtractRangeJoinKeysSuite extends PlanTest {
   }
 
   test("point-in-range keys are the point and the two bounds") {
-    // Inclusivity and conjunct order stay on the condition. BETWEEN is a With
-    // of the point when common expressions are not inlined; the ref has no
-    // attributes, so the keys are still the point and the bounds.
+    // Inclusivity and conjunct order stay on the condition. BETWEEN lowers to a With
+    // whose deterministic common expression is inlined before range matching, substituting
+    // the reference back to the original point expression so keys are the point and bounds.
     val inclusive = And(GreaterThanOrEqual(p, rLo), LessThanOrEqual(p, rHi))
     val exclusive = And(GreaterThan(p, rLo), LessThan(p, rHi))
     val highFirst = And(LessThanOrEqual(p, rHi), GreaterThan(p, rLo))

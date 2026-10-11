@@ -389,48 +389,48 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         checkHintNonEquiJoin(hint)
 
         def createRangeJoin(hintOnly: Boolean) = {
-          def createBroadcastRangeJoinExec(
-              leftRangeKeys: Seq[Expression],
-              rightRangeKeys: Seq[Expression],
-              buildSide: BuildSide,
-              rangeJoin: RangeJoin): BroadcastRangeJoinExec = {
-            BroadcastRangeJoinExec(
-              planLater(left), planLater(right), buildSide, joinType,
-              leftRangeKeys, rightRangeKeys, condition, rangeJoin)
+          /**
+           * Which side to broadcast for the range join. A hint-only pass honors a
+           * BROADCAST hint. Otherwise a side qualifies when it is small enough and
+           * is not marked NO_BROADCAST_AND_REPLICATION. `allowed` drops a side
+           * BroadcastRangeJoinExec cannot build. Both sides qualify: the smaller one.
+           */
+          def broadcastSide(allowed: BuildSide => Boolean): Option[BuildSide] = {
+            def qualifies(
+                plan: LogicalPlan,
+                broadcastHint: Boolean,
+                blocked: Boolean): Boolean = {
+              if (hintOnly) {
+                broadcastHint
+              } else {
+                canBroadcastBySize(plan, conf) && !blocked
+              }
+            }
+            val leftOk = qualifies(left, hintToBroadcastLeft(hint),
+              hintToNotBroadcastAndReplicateLeft(hint)) && allowed(BuildLeft)
+            val rightOk = qualifies(right, hintToBroadcastRight(hint),
+              hintToNotBroadcastAndReplicateRight(hint)) && allowed(BuildRight)
+            if (leftOk && rightOk) {
+              Some(getSmallerSide(left, right))
+            } else if (leftOk) {
+              Some(BuildLeft)
+            } else if (rightOk) {
+              Some(BuildRight)
+            } else {
+              None
+            }
           }
 
           if (!conf.broadcastRangeJoinEnabled) {
             None
           } else {
-            val buildLeft = if (hintOnly) {
-              hintToBroadcastLeft(hint)
-            } else {
-              canBroadcastBySize(left, conf) && !hintToNotBroadcastAndReplicateLeft(hint)
-            }
-
-            val buildRight = if (hintOnly) {
-              hintToBroadcastRight(hint)
-            } else {
-              canBroadcastBySize(right, conf) && !hintToNotBroadcastAndReplicateRight(hint)
-            }
-
             plan match {
               case ExtractRangeJoinKeys(_, _, leftKeys, rightKeys, _, rangeJoin) =>
-                val canBuildLeft =
-                  buildLeft && BroadcastRangeJoinExec.supports(joinType, BuildLeft)
-                val canBuildRight =
-                  buildRight && BroadcastRangeJoinExec.supports(joinType, BuildRight)
-                val maybeBuildSide = if (canBuildLeft && canBuildRight) {
-                  Some(getSmallerSide(left, right))
-                } else if (canBuildLeft) {
-                  Some(BuildLeft)
-                } else if (canBuildRight) {
-                  Some(BuildRight)
-                } else {
-                  None
-                }
-                maybeBuildSide.map { buildSide =>
-                  Seq(createBroadcastRangeJoinExec(leftKeys, rightKeys, buildSide, rangeJoin))
+                val allowed = BroadcastRangeJoinExec.supports(joinType, _: BuildSide)
+                broadcastSide(allowed).map { buildSide =>
+                  Seq(BroadcastRangeJoinExec(
+                    planLater(left), planLater(right), buildSide, joinType,
+                    leftKeys, rightKeys, condition, rangeJoin))
                 }
               case _ => None
             }
