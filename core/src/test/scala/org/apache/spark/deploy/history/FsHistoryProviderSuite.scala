@@ -1381,6 +1381,11 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     // A partial line longer than the read buffer.
     val long = "x" * 20000 + "\nnext"
     assert(align(long, 1) === (("next", 20001L)))
+    // More than a read buffer of varied content after the boundary, so the rest of the
+    // stream must follow the put-back bytes in order.
+    val longTail = (1 to 3000).mkString(",")
+    assert(longTail.length > 8192)
+    assert(align("abc\n" + longTail, 1) === ((longTail, 4L)))
     // A stream whose skip() never advances, e.g. at the end of a decompressed stream.
     def noSkip(data: String): InputStream = {
       new FilterInputStream(new ByteArrayInputStream(data.getBytes(StandardCharsets.UTF_8))) {
