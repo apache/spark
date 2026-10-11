@@ -1884,7 +1884,7 @@ def transitive_dependencies(module: Module) -> set[Module]:
     `utils-java` is an indirect dependency of `unsafe`:
 
     >>> sorted(dependency.name for dependency in transitive_dependencies(unsafe))
-    ['tags', 'utils', 'utils-java']
+    ['config', 'tags', 'utils', 'utils-java']
 
     Every `pyspark-*` module must depend on `pyspark-base`:
 
