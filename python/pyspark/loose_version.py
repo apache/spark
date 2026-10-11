@@ -3,16 +3,15 @@
 # File originates from the cpython source
 # https://github.com/python/cpython/blob/3.11/Lib/distutils/version.py
 
-from __future__ import annotations
-
 import re
 from types import NotImplementedType
+from typing import Optional, Union
 
 
 class LooseVersion:
     component_re = re.compile(r"(\d+ | [a-z]+ | \.)", re.VERBOSE)
 
-    def __init__(self, vstring: str | None) -> None:
+    def __init__(self, vstring: Optional[str]) -> None:
         if vstring:
             self.parse(vstring)
 
@@ -39,31 +38,31 @@ class LooseVersion:
             return NotImplemented
         return c == 0
 
-    def __lt__(self, other: LooseVersion | str) -> bool:
+    def __lt__(self, other: Union["LooseVersion", str]) -> bool:
         c = self._cmp(other)
         if c is NotImplemented:
             return NotImplemented
         return c < 0
 
-    def __le__(self, other: LooseVersion | str) -> bool:
+    def __le__(self, other: Union["LooseVersion", str]) -> bool:
         c = self._cmp(other)
         if c is NotImplemented:
             return NotImplemented
         return c <= 0
 
-    def __gt__(self, other: LooseVersion | str) -> bool:
+    def __gt__(self, other: Union["LooseVersion", str]) -> bool:
         c = self._cmp(other)
         if c is NotImplemented:
             return NotImplemented
         return c > 0
 
-    def __ge__(self, other: LooseVersion | str) -> bool:
+    def __ge__(self, other: Union["LooseVersion", str]) -> bool:
         c = self._cmp(other)
         if c is NotImplemented:
             return NotImplemented
         return c >= 0
 
-    def _cmp(self, other: object) -> int | NotImplementedType:
+    def _cmp(self, other: object) -> Union[int, NotImplementedType]:
         if isinstance(other, str):
             other = LooseVersion(other)
         elif not isinstance(other, LooseVersion):
