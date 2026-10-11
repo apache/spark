@@ -2739,6 +2739,20 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     )
   }
 
+  /**
+   * Restricting CHAR/VARCHAR XML map keys is a parser limitation (SQLSTATE 0A000),
+   * but this is a SparkRuntimeException so XML parse modes can handle it: PERMISSIVE
+   * wraps a bad record and FAILFAST surfaces the failure.
+   */
+  def unsupportedXmlCharVarcharMapKey(
+      key: UTF8String, dataType: DataType): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "UNSUPPORTED_XML_CHAR_VARCHAR_MAP_KEY",
+      messageParameters = Map(
+        "key" -> toSQLValue(key, StringType),
+        "dataType" -> toSQLType(dataType)))
+  }
+
   def timestampAddOverflowError(micros: Long, amount: Long, unit: String): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DATETIME_OVERFLOW",
