@@ -18,10 +18,13 @@
 import datetime
 import decimal
 
+import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
+from pyspark.pandas.data_type_ops.base import DataTypeOps
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
+from pyspark.sql.types import IntegerType, MapType, StringType, StructType
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
@@ -100,7 +103,7 @@ class ComplexOpsTestsMixin:
             "this_struct": ps.Index([("x", 1)]).to_series().reset_index(drop=True),
             "that_struct": ps.Index([("a", 2)]).to_series().reset_index(drop=True),
         }
-        return ps.concat(pssers, axis=1)
+        return ps.concat([psser.rename(name) for name, psser in pssers.items()], axis=1)
 
     def test_add(self):
         pdf, psdf = self.array_pdf, self.array_psdf
@@ -140,6 +143,11 @@ class ComplexOpsTestsMixin:
         for numeric_col in self.numeric_array_df_cols:
             for non_numeric_col in self.non_numeric_array_df_cols:
                 self.assertRaises(TypeError, lambda: psdf[numeric_col] + psdf[non_numeric_col])
+
+        # Array + non-array
+        self.assertRaises(TypeError, lambda: self.psser + 1)
+        psdf = ps.DataFrame({"array": [[1, 2]], "int": [1]})
+        self.assertRaises(TypeError, lambda: psdf["array"] + psdf["int"])
 
     def test_sub(self):
         self.assertRaises(TypeError, lambda: self.psser - "x")
@@ -266,7 +274,7 @@ class ComplexOpsTestsMixin:
         self.assertRaises(TypeError, lambda: ~self.psser)
 
     def test_eq(self):
-        pdf, psdf = self.complex_pdf, self.complex_pdf
+        pdf, psdf = self.complex_pdf, self.complex_psdf
         self.assert_eq(
             pdf["this_array"] == pdf["that_array"], psdf["this_array"] == psdf["that_array"]
         )
@@ -281,7 +289,7 @@ class ComplexOpsTestsMixin:
         )
 
     def test_ne(self):
-        pdf, psdf = self.complex_pdf, self.complex_pdf
+        pdf, psdf = self.complex_pdf, self.complex_psdf
         self.assert_eq(
             pdf["this_array"] != pdf["that_array"], psdf["this_array"] != psdf["that_array"]
         )
@@ -296,7 +304,7 @@ class ComplexOpsTestsMixin:
         )
 
     def test_lt(self):
-        pdf, psdf = self.complex_pdf, self.complex_pdf
+        pdf, psdf = self.complex_pdf, self.complex_psdf
         self.assert_eq(
             pdf["this_array"] < pdf["that_array"], psdf["this_array"] < psdf["that_array"]
         )
@@ -311,7 +319,7 @@ class ComplexOpsTestsMixin:
         )
 
     def test_le(self):
-        pdf, psdf = self.complex_pdf, self.complex_pdf
+        pdf, psdf = self.complex_pdf, self.complex_psdf
         self.assert_eq(
             pdf["this_array"] <= pdf["that_array"], psdf["this_array"] <= psdf["that_array"]
         )
@@ -326,7 +334,7 @@ class ComplexOpsTestsMixin:
         )
 
     def test_gt(self):
-        pdf, psdf = self.complex_pdf, self.complex_pdf
+        pdf, psdf = self.complex_pdf, self.complex_psdf
         self.assert_eq(
             pdf["this_array"] > pdf["that_array"], psdf["this_array"] > psdf["that_array"]
         )
@@ -341,7 +349,7 @@ class ComplexOpsTestsMixin:
         )
 
     def test_ge(self):
-        pdf, psdf = self.complex_pdf, self.complex_pdf
+        pdf, psdf = self.complex_pdf, self.complex_psdf
         self.assert_eq(
             pdf["this_array"] >= pdf["that_array"], psdf["this_array"] >= psdf["that_array"]
         )
@@ -354,6 +362,12 @@ class ComplexOpsTestsMixin:
         self.assert_eq(
             pdf["this_struct"] >= pdf["this_struct"], psdf["this_struct"] >= psdf["this_struct"]
         )
+
+    def test_pretty_name(self):
+        dtype = np.dtype("object")
+        map_type = MapType(StringType(), IntegerType())
+        self.assertEqual(DataTypeOps(dtype, map_type).pretty_name, "maps")
+        self.assertEqual(DataTypeOps(dtype, StructType()).pretty_name, "structs")
 
 
 class ComplexOpsTests(
