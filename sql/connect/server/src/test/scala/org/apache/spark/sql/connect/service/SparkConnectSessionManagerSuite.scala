@@ -84,6 +84,51 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession {
     assert(exGet.getSqlState == "08003")
   }
 
+  private def assertSessionChangedAndNotCreated(key: SessionKey, observedId: String): Unit = {
+    val ex = intercept[SparkSQLException] {
+      SparkConnectService.sessionManager.getOrCreateIsolatedSession(key, Some(observedId))
+    }
+    assert(ex.getCondition == "INVALID_HANDLE.SESSION_CHANGED")
+    assert(SparkConnectService.sessionManager.getIsolatedSessionIfPresent(key).isEmpty)
+    assert(!SparkConnectService.sessionManager.listActiveSessions.exists(_.key == key))
+  }
+
+  test("a client that observed a previous session does not create a new session") {
+    val key = SessionKey("user", UUID.randomUUID().toString)
+    assertSessionChangedAndNotCreated(key, UUID.randomUUID().toString)
+    // Without an observed session id, the session is created as usual.
+    SparkConnectService.sessionManager.getOrCreateIsolatedSession(key, None)
+    assert(SparkConnectService.sessionManager.getIsolatedSessionIfPresent(key).isDefined)
+  }
+
+  test("a stale client of an expired reconnect-allowed session does not create a session") {
+    val key = SessionKey("user", UUID.randomUUID().toString)
+    val oldHolder = SparkConnectService.sessionManager.getOrCreateIsolatedSession(key, None)
+    oldHolder.session.conf.set(Connect.CONNECT_SESSION_ALLOW_RECONNECT_AFTER_CLOSE.key, "true")
+    oldHolder.session.conf.set("spark.sql.shuffle.partitions", "7")
+    SparkConnectService.sessionManager.periodicMaintenance(defaultInactiveTimeoutMs = 0L)
+
+    assertSessionChangedAndNotCreated(key, oldHolder.session.sessionUUID)
+
+    // A new SparkSession with the same session id gets a new, empty session.
+    val newHolder = SparkConnectService.sessionManager.getOrCreateIsolatedSession(key, None)
+    assert(newHolder ne oldHolder)
+    assert(newHolder.session.sessionUUID != oldHolder.session.sessionUUID)
+    assert(newHolder.session.conf.get("spark.sql.shuffle.partitions") != "7")
+  }
+
+  test("a closed session id with an observed session id still gets SESSION_CLOSED") {
+    val key = SessionKey("user", UUID.randomUUID().toString)
+    val holder = SparkConnectService.sessionManager.getOrCreateIsolatedSession(key, None)
+    SparkConnectService.sessionManager.closeSession(key)
+    val ex = intercept[SparkSQLException] {
+      SparkConnectService.sessionManager.getOrCreateIsolatedSession(
+        key,
+        Some(holder.session.sessionUUID))
+    }
+    assert(ex.getCondition == "INVALID_HANDLE.SESSION_CLOSED")
+  }
+
   test(
     "getOrCreateIsolatedSession/getIsolatedSession/getIsolatedSessionIfPresent " +
       "doesn't recreate closed session") {

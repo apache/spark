@@ -155,13 +155,14 @@ object Connect {
       .doc(
         "When true, the session id can be reused after this session is closed, for example " +
           "on inactivity expiry. The id stays reserved, and requests fail with " +
-          "INVALID_HANDLE.SESSION_CLOSED, until the close finishes; then a new, empty session " +
-          "can be created with the same session id. A client that used the closed session gets " +
-          "INVALID_HANDLE.SESSION_CHANGED and must create a new SparkSession with the same " +
-          "session id, which starts with default configurations and must set this again to " +
-          "keep the behavior. Only set this when the client does not depend on server-side " +
-          "session state, such as temporary views, temporary functions, cached data or the " +
-          "current catalog, surviving a close.")
+          "INVALID_HANDLE.SESSION_CLOSED, until the close finishes. After that, a client that " +
+          "used the closed session gets INVALID_HANDLE.SESSION_CHANGED and must create a new " +
+          "SparkSession with the same session id. The new session is empty: server-side state " +
+          "such as registered UDFs, temporary views, temporary functions, cached data and the " +
+          "current catalog is gone and must be rebuilt, for example by rerunning notebook " +
+          "paragraphs. The new session starts with default configurations, so it must set " +
+          "this configuration again to keep this behavior. Only set this when the client can " +
+          "rebuild its session state.")
       .version("4.4.0")
       .booleanConf
       .createWithDefault(false)

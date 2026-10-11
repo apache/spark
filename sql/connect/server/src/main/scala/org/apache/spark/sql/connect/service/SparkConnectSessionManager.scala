@@ -90,11 +90,14 @@ class SparkConnectSessionManager extends Logging {
       sessionUUID: String,
       previouslyObservedSessionId: String) = {
     if (sessionUUID != previouslyObservedSessionId) {
-      throw new SparkSQLException(
-        errorClass = "INVALID_HANDLE.SESSION_CHANGED",
-        messageParameters = Map("handle" -> key.sessionId))
+      throw sessionChangedError(key)
     }
   }
+
+  private def sessionChangedError(key: SessionKey): SparkSQLException =
+    new SparkSQLException(
+      errorClass = "INVALID_HANDLE.SESSION_CHANGED",
+      messageParameters = Map("handle" -> key.sessionId))
 
   /**
    * Based on the userId and sessionId, find or create a new SparkSession.
@@ -106,6 +109,11 @@ class SparkConnectSessionManager extends Logging {
       key,
       Some(() => {
         validateSessionCreate(key)
+        // A client that observed a previous session expects that session, so do not create a
+        // new one that it cannot use. Throwing here leaves sessionStore unchanged.
+        if (previouslyObservedSesssionId.isDefined) {
+          throw sessionChangedError(key)
+        }
         val holder = SessionHolder(key.userId, key.sessionId, newIsolatedSession())
         holder.initializeSession()
         holder
