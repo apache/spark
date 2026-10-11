@@ -1171,14 +1171,15 @@ object SQLConf {
 
   val BROADCAST_RANGE_JOIN_ENABLED = buildConf("spark.sql.join.broadcastRangeJoin.enabled")
     .doc("When true, a join whose condition is a range predicate is planned as a " +
-      "broadcast range join instead of a broadcast nested loop join. Supported join " +
-      "types are inner, left outer, right outer, left semi, and left anti. The " +
-      "preserved side is streamed. Full outer stays a broadcast nested loop join. " +
+      "broadcast range join instead of a broadcast nested loop join, provided that a " +
+      "supported build side qualifies for broadcast by size or by a BROADCAST hint. " +
+      "Supported join types are inner, left outer, right outer, left semi, and left anti. " +
+      "The preserved side is streamed. Full outer stays a broadcast nested loop join. " +
       "Point-in-range and interval overlap (a.lo < b.hi AND b.lo < a.hi) broadcast " +
       "an interval index. A single inequality broadcasts a sorted point index. " +
       "Only types the index compares with the join predicate are recognized. " +
       "A non-deterministic key stays a nested loop join. " +
-      "Overlapping intervals make the interval index larger than the build table. " +
+      "Deeply overlapping intervals can increase candidate evaluation cost during probing. " +
       "Off by default.")
     .version("4.4.0")
     .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)

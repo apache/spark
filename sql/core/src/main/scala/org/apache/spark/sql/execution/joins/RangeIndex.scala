@@ -17,9 +17,8 @@
 
 package org.apache.spark.sql.execution.joins
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.SizeEstimator
 
@@ -32,6 +31,7 @@ import org.apache.spark.util.SizeEstimator
  */
 private[execution] sealed trait RangeRelation extends Serializable {
   def estimatedSize(): Long
+  def keyType: DataType
 }
 
 private[execution] object RangeIndex {
@@ -54,13 +54,15 @@ private[execution] object RangeIndex {
 private[execution] object IntervalIndex {
 
   def build(
-      ordering: Ordering[Any],
+      keyType: DataType,
       intervals: Array[(Any, Any, InternalRow)]): IntervalIndex = {
-    val valid = intervals
-      .filter(t => t._1 != null && t._2 != null)
-      .map { case (lo, hi, r) =>
-        if (ordering.lteq(lo, hi)) (lo, hi, r) else (hi, lo, r)
+    val ordering = PhysicalDataType.ordering(keyType)
+    val valid = intervals.iterator
+      .collect {
+        case (lo, hi, r) if lo != null && hi != null =>
+          if (ordering.lteq(lo, hi)) (lo, hi, r) else (hi, lo, r)
       }
+      .toArray
     java.util.Arrays.sort(valid, Ordering.by[(Any, Any, InternalRow), Any](_._1)(ordering))
 
     val length = valid.length
@@ -79,15 +81,18 @@ private[execution] object IntervalIndex {
     }
 
     fillMaxHigh(0, length)
-    new IntervalIndex(ordering, valid, maxHighs)
+    new IntervalIndex(keyType, valid, maxHighs)
   }
 }
 
 private[execution] class IntervalIndex private[joins] (
-    private[this] val ordering: Ordering[Any],
+    val keyType: DataType,
     private[this] val intervals: Array[(Any, Any, InternalRow)],
     private[this] val maxHighs: Array[Any])
   extends RangeRelation {
+
+  @transient
+  private[this] lazy val ordering: Ordering[Any] = PhysicalDataType.ordering(keyType)
 
   override def estimatedSize(): Long =
     SizeEstimator.estimate(intervals) + SizeEstimator.estimate(maxHighs)
@@ -96,24 +101,63 @@ private[execution] class IntervalIndex private[joins] (
     if (intervals.isEmpty || low == null || high == null) return Iterator.empty
     val (probeLow, probeHigh) = if (ordering.lteq(low, high)) (low, high) else (high, low)
 
-    val buffer = ArrayBuffer.empty[InternalRow]
-    def search(start: Int, end: Int): Unit = {
-      if (start >= end) return
-      val mid = (start + end) >>> 1
-      if (ordering.gteq(maxHighs(mid), probeLow)) {
-        search(start, mid)
-        val (lo, hi, row) = intervals(mid)
-        if (ordering.gteq(hi, probeLow) && ordering.lteq(lo, probeHigh)) {
-          buffer += row
+    new Iterator[InternalRow] {
+      private[this] var stackStart = new Array[Int](128)
+      private[this] var stackEnd = new Array[Int](128)
+      private[this] var stackTop = 0
+      private[this] var nextRow: InternalRow = null
+
+      push(0, intervals.length)
+
+      private def push(s: Int, e: Int): Unit = {
+        if (stackTop >= stackStart.length) {
+          stackStart = java.util.Arrays.copyOf(stackStart, stackStart.length * 2)
+          stackEnd = java.util.Arrays.copyOf(stackEnd, stackEnd.length * 2)
         }
-        if (ordering.lteq(lo, probeHigh)) {
-          search(mid + 1, end)
+        stackStart(stackTop) = s
+        stackEnd(stackTop) = e
+        stackTop += 1
+      }
+
+      private def advance(): InternalRow = {
+        while (stackTop > 0) {
+          stackTop -= 1
+          val start = stackStart(stackTop)
+          val end = stackEnd(stackTop)
+          if (start < end) {
+            val mid = (start + end) >>> 1
+            if (ordering.gteq(maxHighs(mid), probeLow)) {
+              if (ordering.lteq(intervals(mid)._1, probeHigh)) {
+                push(mid + 1, end)
+              }
+              push(mid, -1)
+              push(start, mid)
+            }
+          } else if (end == -1) {
+            val (lo, hi, row) = intervals(start)
+            if (ordering.gteq(hi, probeLow) && ordering.lteq(lo, probeHigh)) {
+              return row
+            }
+          }
+        }
+        null
+      }
+
+      override def hasNext: Boolean = {
+        if (nextRow != null) true
+        else {
+          nextRow = advance()
+          nextRow != null
         }
       }
-    }
 
-    search(0, intervals.length)
-    buffer.iterator
+      override def next(): InternalRow = {
+        if (!hasNext) throw new NoSuchElementException("empty iterator")
+        val r = nextRow
+        nextRow = null
+        r
+      }
+    }
   }
 }
 
@@ -122,17 +166,21 @@ private[execution] class IntervalIndex private[joins] (
  */
 private[execution] object PointIndex {
 
-  def build(ordering: Ordering[Any], keyedRows: Array[(Any, InternalRow)]): PointIndex = {
-    val present = keyedRows.filter(_._1 != null)
+  def build(keyType: DataType, keyedRows: Array[(Any, InternalRow)]): PointIndex = {
+    val ordering = PhysicalDataType.ordering(keyType)
+    val present = keyedRows.iterator.filter(_._1 != null).toArray
     java.util.Arrays.sort(present, Ordering.by[(Any, InternalRow), Any](_._1)(ordering))
-    new PointIndex(ordering, present)
+    new PointIndex(keyType, present)
   }
 }
 
 private[execution] class PointIndex private[joins] (
-    private[this] val ordering: Ordering[Any],
+    val keyType: DataType,
     private[this] val points: Array[(Any, InternalRow)])
   extends RangeRelation {
+
+  @transient
+  private[this] lazy val ordering: Ordering[Any] = PhysicalDataType.ordering(keyType)
 
   private[this] val length = points.length
 

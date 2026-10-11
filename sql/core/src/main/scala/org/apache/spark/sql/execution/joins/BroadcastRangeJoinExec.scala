@@ -111,16 +111,20 @@ case class BroadcastRangeJoinExec(
   private def buildHoldsLowerBound(partial: PartialRangeJoin): Boolean =
     partial.leftIsLower == (buildSide == BuildLeft)
 
+  /**
+   * Candidates for one streamed row. A null bound is unknown: the index
+   * returns an empty iterator, and the original condition is not evaluated.
+   * A point probe has one key. Pass it as both ends so it is evaluated once.
+   */
   private def candidates(
       relation: RangeRelation,
       boundStreamKeys: Seq[Expression],
       streamRow: InternalRow): Iterator[InternalRow] = {
     val low = boundStreamKeys.head.eval(streamRow)
-    if (low == null) return Iterator.empty
     relation match {
       case intervals: IntervalIndex =>
         val high = if (boundStreamKeys.length == 1) low else boundStreamKeys(1).eval(streamRow)
-        if (high == null) Iterator.empty else intervals.overlapping(low, high)
+        intervals.overlapping(low, high)
       case points: PointIndex =>
         rangeJoin match {
           case partial: PartialRangeJoin if buildHoldsLowerBound(partial) =>
@@ -138,86 +142,109 @@ case class BroadcastRangeJoinExec(
     require(BroadcastRangeJoinExec.supports(joinType, buildSide),
       s"BroadcastRangeJoin does not support $joinType with $buildSide")
     val relation = buildPlan.executeBroadcast[RangeRelation]()
-    streamPreservingJoin(relation)
+    val joined = joinType match {
+      case _: InnerLike => innerJoin(relation)
+      case LeftOuter | RightOuter => outerJoin(relation)
+      case LeftSemi => existenceJoin(relation, exists = true)
+      case LeftAnti => existenceJoin(relation, exists = false)
+      case t =>
+        throw new IllegalArgumentException(
+          s"BroadcastRangeJoin should not take $t as the JoinType")
+    }
+    val numOutputRows = longMetric("numOutputRows")
+    joined.mapPartitionsWithIndexInternal { (index, iter) =>
+      val resultProj = genResultProjection
+      resultProj.initialize(index)
+      iter.map { r =>
+        numOutputRows += 1
+        resultProj(r)
+      }
+    }
   }
 
-  private def streamPreservingJoin(relation: Broadcast[RangeRelation]): RDD[InternalRow] = {
+  /**
+   * Broadcast index, bound probe keys, and the original condition for one
+   * streamed partition. The joined row is reused; the caller copies it.
+   */
+  private class Partition(
+      val stream: Iterator[InternalRow],
+      index: RangeRelation,
+      keys: Seq[Expression],
+      val condition: InternalRow => Boolean,
+      joinedRow: JoinedRow,
+      val nullBuild: InternalRow) {
+
+    def candidates(row: InternalRow): Iterator[InternalRow] =
+      BroadcastRangeJoinExec.this.candidates(index, keys, row)
+
+    def join(streamRow: InternalRow, buildRow: InternalRow): InternalRow = buildSide match {
+      case BuildRight => joinedRow(streamRow, buildRow)
+      case BuildLeft => joinedRow(buildRow, streamRow)
+    }
+  }
+
+  private def perPartition(
+      relation: Broadcast[RangeRelation])(
+      f: Partition => Iterator[InternalRow]): RDD[InternalRow] = {
     val boundStreamKeys = BindReferences.bindReferences(streamedKeys, streamedOutput)
+    val cond = condition.get
+    val schema = left.output ++ right.output
     val numBuildFields = buildPlan.output.length
+    streamedPlan.execute().mapPartitionsInternal { stream =>
+      f(new Partition(
+        stream,
+        relation.value,
+        boundStreamKeys,
+        Predicate.create(cond, schema).eval _,
+        new JoinedRow,
+        new GenericInternalRow(numBuildFields)))
+    }
+  }
 
-    val resultRdd = streamedPlan.execute().mapPartitions { stream =>
-      val boundCondition = Predicate.create(condition.get, left.output ++ right.output).eval _
+  private def innerJoin(relation: Broadcast[RangeRelation]): RDD[InternalRow] = {
+    perPartition(relation) { p =>
+      p.stream.flatMap { row =>
+        p.candidates(row).flatMap { buildRow =>
+          val joined = p.join(row, buildRow)
+          if (p.condition(joined)) Iterator.single(joined) else Iterator.empty
+        }
+      }
+    }
+  }
+
+  /**
+   * Emit each candidate the condition accepts. When none were, emit the stream
+   * row once with the build side padded by nulls.
+   *
+   * The loop test checks `streamRow` before `stream.hasNext`. A whole-stage
+   * stream reuses one `UnsafeRow`, and `hasNext` fills that buffer. It must
+   * not run while the current row is still being joined.
+   */
+  private def outerJoin(relation: Broadcast[RangeRelation]): RDD[InternalRow] = {
+    perPartition(relation) { p =>
       new Iterator[InternalRow] {
-        private[this] val index = relation.value
-        private[this] val joinedRow = new JoinedRow
-        private[this] val buildNulls = new GenericInternalRow(numBuildFields)
-        private[this] var matchIterator: Iterator[InternalRow] = Iterator.empty
-
-        // current row from stream side
         private var streamRow: InternalRow = null
-        // the next row to emit, or null if not yet found
-        private var resultRow: InternalRow = null
+        private var matches: Iterator[InternalRow] = Iterator.empty
         private var foundMatch: Boolean = false
+        private var resultRow: InternalRow = null
 
-        /**
-         * Advance until the next output row, or the stream is exhausted.
-         *
-         * The loop test is ordered on purpose. A codegen stream reuses one
-         * `UnsafeRow`, and `hasNext` fills that buffer with the next row. It must
-         * not run while `streamRow` is still being joined, so `streamRow != null`
-         * is checked first and short-circuits the call.
-         *
-         * Inner emits each candidate the condition accepts. Outer does too, then one
-         * null-padded stream row when none were. Semi emits the stream row once.
-         * Anti emits it only when nothing was accepted. A null bound is unknown,
-         * so it is not a match.
-         */
-        private def findNextMatch(): Boolean = {
-          while (streamRow != null || stream.hasNext) {
+        private def findNext(): Boolean = {
+          while (streamRow != null || p.stream.hasNext) {
             if (streamRow == null) {
-              streamRow = stream.next()
+              streamRow = p.stream.next()
               foundMatch = false
-              matchIterator = candidates(index, boundStreamKeys, streamRow)
+              matches = p.candidates(streamRow)
             }
-
-            var matched = false
-            while (matchIterator.hasNext && !matched) {
-              val buildRow = matchIterator.next()
-              val joined = buildSide match {
-                case BuildRight => joinedRow(streamRow, buildRow)
-                case BuildLeft => joinedRow(buildRow, streamRow)
-              }
-              if (boundCondition(joined)) {
+            while (matches.hasNext) {
+              val joined = p.join(streamRow, matches.next())
+              if (p.condition(joined)) {
                 foundMatch = true
-                joinType match {
-                  case LeftSemi =>
-                    resultRow = streamRow
-                    streamRow = null
-                    return true
-                  case LeftAnti =>
-                    matchIterator = Iterator.empty
-                  case _ =>
-                    resultRow = joined
-                    matched = true
-                }
+                resultRow = joined
+                return true
               }
             }
-            if (matched) {
-              return true
-            }
-            val emitUnmatched = joinType match {
-              case LeftAnti | LeftOuter | RightOuter => !foundMatch
-              case _ => false
-            }
-            if (emitUnmatched) {
-              resultRow = joinType match {
-                case LeftAnti => streamRow
-                case _ =>
-                  buildSide match {
-                    case BuildRight => joinedRow(streamRow, buildNulls)
-                    case BuildLeft => joinedRow(buildNulls, streamRow)
-                  }
-              }
+            if (!foundMatch) {
+              resultRow = p.join(streamRow, p.nullBuild)
               streamRow = null
               return true
             }
@@ -226,9 +253,7 @@ case class BroadcastRangeJoinExec(
           false
         }
 
-        override def hasNext: Boolean = {
-          resultRow != null || findNextMatch()
-        }
+        override def hasNext: Boolean = resultRow != null || findNext()
 
         override def next(): InternalRow = {
           val r = resultRow
@@ -237,14 +262,18 @@ case class BroadcastRangeJoinExec(
         }
       }
     }
+  }
 
-    val numOutputRows = longMetric("numOutputRows")
-    resultRdd.mapPartitionsWithIndexInternal { (index, iter) =>
-      val resultProj = genResultProjection
-      resultProj.initialize(index)
-      iter.map { r =>
-        numOutputRows += 1
-        resultProj(r)
+  /** Semi keeps a stream row that matches. Anti keeps one that does not. */
+  private def existenceJoin(
+      relation: Broadcast[RangeRelation],
+      exists: Boolean): RDD[InternalRow] = {
+    perPartition(relation) { p =>
+      p.stream.filter { row =>
+        val matched = p.candidates(row).exists { buildRow =>
+          p.condition(p.join(row, buildRow))
+        }
+        matched == exists
       }
     }
   }
@@ -366,14 +395,18 @@ case class BroadcastRangeJoinExec(
     (keyCode, iteratorCode, matches)
   }
 
+  private def joinedVars(input: Seq[ExprCode], buildVars: Seq[ExprCode]): Seq[ExprCode] = {
+    buildSide match {
+      case BuildLeft => buildVars ++ input
+      case BuildRight => input ++ buildVars
+    }
+  }
+
   private def codegenInner(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     val (keyCode, iteratorCode, matches) = prepareProbe(ctx, input)
     val (buildRow, checkCondition, buildVars) =
       getJoinCondition(ctx, input, streamedPlan, buildPlan)
-    val resultVars = buildSide match {
-      case BuildLeft => buildVars ++ input
-      case BuildRight => input ++ buildVars
-    }
+    val resultVars = joinedVars(input, buildVars)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
     s"""
@@ -395,10 +428,7 @@ case class BroadcastRangeJoinExec(
     val (_, checkCondition, _) = getJoinCondition(
       ctx, input, streamedPlan, buildPlan, Some(buildRow))
     val buildVars = genOneSideJoinVars(ctx, buildRow, buildPlan, setDefaultValue = true)
-    val resultVars = buildSide match {
-      case BuildLeft => buildVars ++ input
-      case BuildRight => input ++ buildVars
-    }
+    val resultVars = joinedVars(input, buildVars)
     val found = ctx.freshName("foundMatch")
     val shouldOutput = ctx.freshName("shouldOutput")
     val numOutput = metricTerm(ctx, "numOutputRows")
