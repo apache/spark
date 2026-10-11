@@ -33,9 +33,6 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 class RangeIndexSuite extends SparkFunSuite {
 
-  private val intOrdering: Ordering[Any] = PhysicalDataType.ordering(IntegerType)
-  private val doubleOrdering: Ordering[Any] = PhysicalDataType.ordering(DoubleType)
-
   private def row(id: Int): InternalRow = InternalRow(id)
 
   private def span(lo: Any, hi: Any, id: Int): (Any, Any, InternalRow) = (lo, hi, row(id))
