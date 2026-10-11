@@ -732,11 +732,11 @@ class SparseVector(Vector):
             raise ValueError("Tuple should end with ')'")
         s = s[start + 1 : end].strip()
 
-        size = s[: s.find(",")]
+        size_str = s[: s.find(",")]
         try:
-            size = int(size)  # type: ignore[assignment]
+            size = int(size_str)
         except ValueError:
-            raise ValueError("Cannot parse size %s." % size)
+            raise ValueError("Cannot parse size %s." % size_str)
 
         ind_start = s.find("[")
         if ind_start == -1:
@@ -763,7 +763,7 @@ class SparseVector(Vector):
             values = [float(val) for val in val_list if val]
         except ValueError:
             raise ValueError("Unable to parse values from %s." % s)
-        return SparseVector(cast(int, size), indices, values)
+        return SparseVector(size, indices, values)
 
     def dot(self, other: "VectorLike") -> np.float64:
         """
