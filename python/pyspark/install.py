@@ -22,7 +22,7 @@ import time
 import traceback
 import urllib.request
 from shutil import rmtree
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Tuple
 
 if TYPE_CHECKING:
     from http.client import HTTPResponse
@@ -35,7 +35,8 @@ DEFAULT_HADOOP = "hadoop3"
 DEFAULT_HIVE = "hive2.3"
 SUPPORTED_HADOOP_VERSIONS = ["hadoop3", "without-hadoop"]
 SUPPORTED_HIVE_VERSIONS = ["hive2.3"]
-UNSUPPORTED_COMBINATIONS = []  # type: ignore
+# Unsupported (hadoop_version, hive_version) combinations.
+UNSUPPORTED_COMBINATIONS: List[Tuple[str, str]] = []
 
 # Official ASF-controlled hosts serving release checksums. Integrity metadata
 # must come from these origins, never from a (community) mirror, so that a
