@@ -18,10 +18,11 @@
 package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.{DataFrame, QueryTest}
-import org.apache.spark.sql.catalyst.expressions.{Add, And, LessThan, Literal, Rand}
+import org.apache.spark.sql.catalyst.expressions.{Add, And, Cast, LessThan, Literal, Rand}
 import org.apache.spark.sql.catalyst.plans.LeftOuter
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.LongType
 
 /**
  * Tests for streamed-side join condition hoisting in whole-stage codegen. The
@@ -130,6 +131,17 @@ class SplitStreamedSideJoinConditionSuite extends QueryTest with SharedSparkSess
     assert(rest.contains(nonDeterministic))
   }
 
+  test("split hoists lossless widening cast") {
+    val streamed = spark.range(8).selectExpr("id", "CAST(id AS int) AS a")
+      .queryExecution.executedPlan
+    val a = streamed.output.find(_.name == "a").get
+    val hoistable = LessThan(Cast(a, LongType), Literal(5L))
+    val (streamedOnly, rest) = StreamedSideJoinCondition.split(
+      Some(hoistable), LeftOuter, streamed, splitEnabled = true)
+    assert(streamedOnly.contains(hoistable))
+    assert(rest.isEmpty)
+  }
+
   // The streamed-only condition a < 5 is false for ids 5..7, so the hoisted guard fires on
   // those rows. pad is selected but not referenced by the join.
 
@@ -149,6 +161,15 @@ class SplitStreamedSideJoinConditionSuite extends QueryTest with SharedSparkSess
       |FROM (SELECT * FROM streamed_t WHERE pad % 2 = 0) s
       |LEFT OUTER JOIN (SELECT bid, b FROM build_t UNION ALL SELECT bid, b FROM build_t) b
       |ON s.id = b.bid AND s.a < 5
+    """.stripMargin))
+
+  testWithCodegenOnAndOff(
+    "left outer join with lossless widening cast in streamed-only condition")(
+    spark.sql("""
+      |SELECT /*+ BROADCAST(b) */ s.id, s.a, s.pad, b.bid
+      |FROM (SELECT id, CAST(id AS int) AS a, pad FROM streamed_t WHERE pad % 2 = 0) s
+      |LEFT OUTER JOIN (SELECT DISTINCT bid FROM build_t) b
+      |ON s.id = b.bid AND CAST(s.a AS bigint) < 5L
     """.stripMargin))
 
   // The "compiles without pre-materialized column" variants drop the residual filter, so pad
