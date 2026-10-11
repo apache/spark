@@ -207,6 +207,56 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
     assert(diagnostic.length < 1200)
   }
 
+  test("SPARK-60158: Line buffer range appends match single-character appends") {
+    val alphabet = Array('x', '\r', 0x00e9.toChar, 0x4e2d.toChar, 0xd83d.toChar, 0xde00.toChar)
+    val random = new scala.util.Random(60158)
+    for (_ <- 0 until 2000) {
+      val chars = Array.fill(random.nextInt(64))(alphabet(random.nextInt(alphabet.length)))
+      val limit = random.nextInt(80)
+      val single = new ReplayListenerBus.BoundedLineBuffer(limit)
+      chars.foreach(single.append)
+      val ranged = new ReplayListenerBus.BoundedLineBuffer(limit)
+      var start = 0
+      while (start < chars.length) {
+        val end = math.min(chars.length, start + random.nextInt(8))
+        ranged.append(chars, start, end)
+        start = end
+      }
+      withClue(s"chars=${chars.map(_.toInt).mkString(",")} limit=$limit: ") {
+        assert(ranged.result() == single.result())
+        assert(ranged.length == single.length)
+        assert((ranged.capacity == 0) == (single.capacity == 0))
+      }
+    }
+  }
+
+  test("SPARK-60158: Replay splits lines across read buffers like a reference splitter") {
+    val alphabet = Seq("x", "\r", 0x00e9.toChar.toString, 0x4e2d.toChar.toString,
+      new String(Character.toChars(0x1f600)))
+    val random = new scala.util.Random(60158)
+    for (_ <- 0 until 50) {
+      val lines = Seq.fill(random.nextInt(20)) {
+        val length = if (random.nextInt(4) == 0) random.nextInt(20000) else random.nextInt(100)
+        Seq.fill(length)(alphabet(random.nextInt(alphabet.length))).mkString
+      }
+      val data = lines.mkString("\n") + (if (random.nextBoolean()) "\n" else "")
+      val limit = 1 + random.nextInt(30000)
+      // Reference: split on '\n', drop one trailing CR, keep lines within the byte limit.
+      val expected = (if (data.isEmpty) Seq.empty else data.split("\n", -1).toSeq)
+        .dropRight(if (data.endsWith("\n")) 1 else 0)
+        .map(line => if (line.endsWith("\r")) line.dropRight(1) else line)
+        .filter(_.getBytes(StandardCharsets.UTF_8).length <= limit)
+      val seen = new ArrayBuffer[String]
+      assert(new ReplayListenerBus(limit).replay(
+        new ByteArrayInputStream(data.getBytes(StandardCharsets.UTF_8)), "reference",
+        eventsFilter = line => {
+          seen += line
+          false
+        }))
+      assert(seen.toSeq == expected, s"limit=$limit")
+    }
+  }
+
   test("SPARK-59804: Replay line limit defaults and maximum supported configuration") {
     val conf = new SparkConf(false)
     assert(conf.get(History.EVENT_LOG_MAX_LINE_LENGTH) == 256L * 1024 * 1024)

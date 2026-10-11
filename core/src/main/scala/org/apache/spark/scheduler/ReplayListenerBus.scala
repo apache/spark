@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{BufferedReader, EOFException, InputStream, InputStreamReader, IOException}
+import java.io.{EOFException, InputStream, InputStreamReader, IOException}
 import java.nio.charset.{CodingErrorAction, StandardCharsets}
 
 import scala.annotation.tailrec
@@ -89,12 +89,26 @@ private[spark] class ReplayListenerBus(
     val decoder = StandardCharsets.UTF_8.newDecoder()
       .onMalformedInput(CodingErrorAction.REPORT)
       .onUnmappableCharacter(CodingErrorAction.REPORT)
-    val reader = new BufferedReader(new InputStreamReader(logData, decoder))
+    // Read decoded characters in bulk and scan them for '\n', instead of calling read() per
+    // character on a BufferedReader, which takes a lock on every call.
+    val reader = new InputStreamReader(logData, decoder)
     new Iterator[(String, Int)] {
+      private val chars = new Array[Char](8192)
+      private var pos = 0
+      private var len = 0
       private var nextLine: (String, Int) = _
       private var lineIndex = 0
       private var lineFetched = false
       private var warned = false
+
+      /** Makes at least one unread character available; returns false at EOF. */
+      private def fill(): Boolean = {
+        while (pos == len && len != -1) {
+          len = reader.read(chars)
+          pos = 0
+        }
+        len != -1
+      }
 
       override def hasNext: Boolean = {
         if (!lineFetched) {
@@ -116,15 +130,20 @@ private[spark] class ReplayListenerBus(
 
       @tailrec private def fetchLine(): (String, Int) = {
         val buffer = new BoundedLineBuffer(effectiveMaxLineLength)
-        var c = reader.read()
-        if (c == -1) {
+        if (!fill()) {
           null
         } else {
           val index = lineIndex
           lineIndex += 1
-          while (c != -1 && c != '\n') {
-            buffer.append(c.toChar)
-            c = reader.read()
+          var endOfLine = false
+          while (!endOfLine && fill()) {
+            var i = pos
+            while (i < len && chars(i) != '\n') {
+              i += 1
+            }
+            buffer.append(chars, pos, i)
+            endOfLine = i < len
+            pos = if (endOfLine) i + 1 else i
           }
           val maybeLine = buffer.result()
           if (maybeLine.isEmpty) {
@@ -275,17 +294,42 @@ private[spark] object ReplayListenerBus {
 
     def append(c: Char): Unit = {
       if (byteLength <= bufferLimit) {
-        // The strict decoder emits valid surrogate pairs: count two bytes per half.
-        byteLength += (if (c < 0x80) 1 else if (c < 0x800 || Character.isSurrogate(c)) 2 else 3)
+        byteLength += utf8Width(c)
         // Reserve one extra byte for a possible CR in the line ending.
         if (byteLength <= bufferLimit) {
           buffer.append(c)
         } else {
-          // The line will be skipped; release the retained prefix while draining.
-          buffer.setLength(0)
-          buffer.trimToSize()
+          release()
         }
       }
+    }
+
+    /** Appends `chars(start until end)`, with the same result as appending them one by one. */
+    def append(chars: Array[Char], start: Int, end: Int): Unit = {
+      if (byteLength <= bufferLimit) {
+        var i = start
+        // Stop counting at the first character that exceeds the allowance, like append(c).
+        while (i < end && byteLength <= bufferLimit) {
+          byteLength += utf8Width(chars(i))
+          i += 1
+        }
+        if (byteLength <= bufferLimit) {
+          buffer.append(chars, start, end - start)
+        } else {
+          release()
+        }
+      }
+    }
+
+    // The strict decoder emits valid surrogate pairs: count two bytes per half.
+    private def utf8Width(c: Char): Int = {
+      if (c < 0x80) 1 else if (c < 0x800 || Character.isSurrogate(c)) 2 else 3
+    }
+
+    // The line will be skipped; release the retained prefix while draining.
+    private def release(): Unit = {
+      buffer.setLength(0)
+      buffer.trimToSize()
     }
 
     def result(): Option[String] = {
