@@ -212,12 +212,20 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession {
     assertSessionClosed(key)
   }
 
-  /** A session holder whose close() blocks until `release` is counted down. */
+  /**
+   * A session holder whose close() blocks until `release` is counted down. If `blockInfoOn` is
+   * set, the first getSessionHolderInfo call on that thread blocks until `releaseInfo` is counted
+   * down.
+   */
   private class BlockingCloseSessionHolder(key: SessionKey)
       extends SessionHolder(key.userId, key.sessionId, spark.newSession()) {
     val closeStarted = new CountDownLatch(1)
     val release = new CountDownLatch(1)
     val closeCalls = new AtomicInteger(0)
+
+    @volatile var blockInfoOn: Thread = null
+    val infoBlocked = new CountDownLatch(1)
+    val releaseInfo = new CountDownLatch(1)
 
     override private[connect] def close(): Unit = {
       closeCalls.incrementAndGet()
@@ -225,13 +233,26 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession {
       assert(release.await(1, TimeUnit.MINUTES))
       super.close()
     }
+
+    override def getSessionHolderInfo: SessionHolderInfo = {
+      if (blockInfoOn eq Thread.currentThread()) {
+        blockInfoOn = null
+        infoBlocked.countDown()
+        assert(releaseInfo.await(1, TimeUnit.MINUTES))
+      }
+      super.getSessionHolderInfo
+    }
   }
 
-  private def startBlockingCloseSession(key: SessionKey): BlockingCloseSessionHolder = {
+  private def startBlockingCloseSession(
+      key: SessionKey,
+      allowReconnectAfterClose: Boolean = true): BlockingCloseSessionHolder = {
     val holder = new BlockingCloseSessionHolder(key)
     holder.initializeSession()
-    holder.session.conf.set(Connect.CONNECT_SESSION_ALLOW_RECONNECT_AFTER_CLOSE.key, "true")
-    SparkConnectService.sessionManager.putSessionHolderForTesting(holder)
+    holder.session.conf.set(
+      Connect.CONNECT_SESSION_ALLOW_RECONNECT_AFTER_CLOSE.key,
+      allowReconnectAfterClose.toString)
+    SparkConnectService.sessionManager.putSessionForTesting(holder)
     holder
   }
 
@@ -247,10 +268,9 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession {
       // The old session is removed but still closing: it must not be recreated in this window.
       assertSessionClosed(key)
 
-      // Callers that lose the removal, such as a concurrent ReleaseSession or a maintenance run
-      // that observed the holder before it was removed, must not close it again or touch its
-      // tombstone.
-      assert(!sessionManager.tryRemoveSessionHolder(holder))
+      // Callers that lose the removal, such as a concurrent ReleaseSession or a later
+      // maintenance run, must not close it again or touch its fence.
+      assert(sessionManager.tryRemoveSessionHolder(holder).isEmpty)
       sessionManager.closeSession(key)
       sessionManager.periodicMaintenance(defaultInactiveTimeoutMs = 0L)
       assertSessionClosed(key)
@@ -265,6 +285,77 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession {
     sessionManager.getOrCreateIsolatedSession(key, None)
   }
 
+  test("maintenance that observed a session but lost its removal does not close it") {
+    val sessionManager = SparkConnectService.sessionManager
+    val key = SessionKey("user", UUID.randomUUID().toString)
+    val holder = startBlockingCloseSession(key)
+
+    val maintenance =
+      new Thread(() => sessionManager.periodicMaintenance(defaultInactiveTimeoutMs = 0L))
+    val owner = new Thread(() => sessionManager.closeSession(key))
+    holder.blockInfoOn = maintenance
+    maintenance.start()
+    try {
+      // Maintenance has observed the expired holder in sessionStore but not yet removed it.
+      assert(holder.infoBlocked.await(1, TimeUnit.MINUTES))
+      // A concurrent close wins the removal and blocks in close().
+      owner.start()
+      assert(holder.closeStarted.await(1, TimeUnit.MINUTES))
+      holder.releaseInfo.countDown()
+      maintenance.join(TimeUnit.MINUTES.toMillis(1))
+      assert(!maintenance.isAlive)
+      assert(holder.closeCalls.get == 1)
+      // The owner's close() is still running, so the id stays reserved.
+      assertSessionClosed(key)
+    } finally {
+      holder.releaseInfo.countDown()
+      holder.release.countDown()
+      maintenance.join(TimeUnit.MINUTES.toMillis(1))
+      if (owner.getState != Thread.State.NEW) {
+        owner.join(TimeUnit.MINUTES.toMillis(1))
+      }
+    }
+    assert(!owner.isAlive)
+    assert(holder.closeCalls.get == 1)
+
+    sessionManager.getOrCreateIsolatedSession(key, None)
+  }
+
+  test("a reconnect-allowed close fences its id without taking a tombstone slot") {
+    val sessionManager = SparkConnectService.sessionManager
+    // Opted in through the session conf, or through ReleaseSession(allow_reconnect = true).
+    Seq(true, false).foreach { optedIn =>
+      val key = SessionKey("user", UUID.randomUUID().toString)
+      val holder = startBlockingCloseSession(key, allowReconnectAfterClose = optedIn)
+
+      val owner = new Thread(() => sessionManager.closeSession(key, allowReconnect = !optedIn))
+      owner.start()
+      try {
+        assert(holder.closeStarted.await(1, TimeUnit.MINUTES))
+        assert(!sessionManager.listClosedSessions.exists(_.key == key))
+        assertSessionClosed(key)
+        val exGet = intercept[SparkSQLException] {
+          sessionManager.getIsolatedSession(key, None)
+        }
+        assert(exGet.getCondition == "INVALID_HANDLE.SESSION_CLOSED")
+      } finally {
+        holder.release.countDown()
+        owner.join(TimeUnit.MINUTES.toMillis(1))
+      }
+      assert(!owner.isAlive)
+      assert(!sessionManager.listClosedSessions.exists(_.key == key))
+
+      // The id is reusable for a new, empty session.
+      val newHolder = sessionManager.getOrCreateIsolatedSession(key, None)
+      assert(newHolder ne holder)
+
+      // A default close of the new session is tombstoned and listed as closed.
+      sessionManager.closeSession(key)
+      assert(sessionManager.listClosedSessions.exists(_.key == key))
+      assertSessionClosed(key)
+    }
+  }
+
   test("a late duplicate shutdown does not re-tombstone or remove a recreated session") {
     val sessionManager = SparkConnectService.sessionManager
     val key = SessionKey("user", UUID.randomUUID().toString)
@@ -272,12 +363,12 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession {
     releaseSession(key, allowReconnect = true)
 
     // For example, a maintenance run that observed the old holder before the release removed it.
-    assert(!sessionManager.tryRemoveSessionHolder(oldHolder))
+    assert(sessionManager.tryRemoveSessionHolder(oldHolder).isEmpty)
     val newHolder = sessionManager.getOrCreateIsolatedSession(key, None)
     assert(newHolder ne oldHolder)
 
     // Removal keyed on the old holder must not remove the new session with the same key.
-    assert(!sessionManager.tryRemoveSessionHolder(oldHolder))
+    assert(sessionManager.tryRemoveSessionHolder(oldHolder).isEmpty)
     assert(sessionManager.getIsolatedSessionIfPresent(key).exists(_ eq newHolder))
   }
 

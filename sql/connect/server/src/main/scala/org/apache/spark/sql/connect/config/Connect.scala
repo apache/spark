@@ -153,9 +153,13 @@ object Connect {
   val CONNECT_SESSION_ALLOW_RECONNECT_AFTER_CLOSE =
     buildConf("spark.connect.session.allowReconnectAfterClose")
       .doc(
-        "When true, the session id is not tombstoned when this session is closed, for example " +
-          "on inactivity expiry, so a client can create a new, empty session with the same " +
-          "session id afterwards. Only set this when the client does not depend on server-side " +
+        "When true, the session id can be reused after this session is closed, for example " +
+          "on inactivity expiry. The id stays reserved, and requests fail with " +
+          "INVALID_HANDLE.SESSION_CLOSED, until the close finishes; then a new, empty session " +
+          "can be created with the same session id. A client that used the closed session gets " +
+          "INVALID_HANDLE.SESSION_CHANGED and must create a new SparkSession with the same " +
+          "session id, which starts with default configurations and must set this again to " +
+          "keep the behavior. Only set this when the client does not depend on server-side " +
           "session state, such as temporary views, temporary functions, cached data or the " +
           "current catalog, surviving a close.")
       .version("4.4.0")
