@@ -183,7 +183,9 @@ class RowQueueSuite extends SparkFunSuite with EncryptionFunSuite {
       taskM: TaskMemoryManager): (HybridRowQueue, HybridRowQueue) = {
     val serManager = createSerializerManager(smallPageConf)
     val tempDir = Utils.createTempDir().getCanonicalFile
-    (HybridRowQueue(taskM, tempDir, 1, serManager), HybridRowQueue(taskM, tempDir, 1, serManager))
+    // The second queue uses named arguments to check that they match the former case class.
+    (HybridRowQueue(taskM, tempDir, 1, serManager),
+      HybridRowQueue(memManager = taskM, tempDir = tempDir, numFields = 1, serMgr = serManager))
   }
 
   private def addRows(queue: HybridRowQueue, n: Int): Unit = {

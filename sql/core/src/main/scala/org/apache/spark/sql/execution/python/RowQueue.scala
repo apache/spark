@@ -221,13 +221,15 @@ class HybridRowQueue(
 }
 
 object HybridRowQueue {
+  // Same parameter names as the constructor, like the apply of the former case class, so that
+  // calls with named arguments keep compiling.
   def apply(
-      taskMemoryMgr: TaskMemoryManager,
-      file: File,
-      fields: Int,
+      memManager: TaskMemoryManager,
+      tempDir: File,
+      numFields: Int,
       serMgr: SerializerManager,
       lockFree: Boolean = false): HybridRowQueue = {
-    new HybridRowQueue(taskMemoryMgr, file, fields, serMgr, lockFree)
+    new HybridRowQueue(memManager, tempDir, numFields, serMgr, lockFree)
   }
 
   def apply(taskMemoryMgr: TaskMemoryManager, file: File, fields: Int): HybridRowQueue = {
