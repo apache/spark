@@ -22,10 +22,13 @@ import java.util.concurrent.{CountDownLatch, Semaphore, TimeUnit}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 
 import org.mockito.ArgumentMatchers.{any, eq => mockitoEq}
 import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfter
+import org.scalatest.concurrent.Eventually.{eventually, timeout}
 
 import org.apache.spark._
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, SparkPlugin}
@@ -769,8 +772,8 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     context.addTaskCompletionListener(makeLoggingListener("A"))
     context.addTaskPreCompletionListener(makeLoggingListener("P1"))
     context.addTaskPreCompletionListener(makeLoggingListener("P2"))
-    // Added after the pre-completion listeners, e.g. lazily by the thread they stop. An ordinary
-    // completion listener added here would run before them.
+    // Added after the pre-completion listeners, e.g. lazily by the thread they stop. Had P1 and
+    // P2 been added with addTaskCompletionListener, B would run before them.
     context.addTaskCompletionListener(makeLoggingListener("B"))
 
     context.markTaskCompleted(None)
@@ -862,6 +865,93 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
       adder.join(TimeUnit.MINUTES.toMillis(1))
       assert(pendingListenerThread.get eq Thread.currentThread())
     }
+  }
+
+  test("SPARK-60113: a failing listener does not let another thread take over the listeners") {
+    // While a failing listener's failure listeners run, the thread invoking the listeners must
+    // stay registered, so that another thread adding listeners at that moment does not start
+    // running the pending ones, possibly concurrently with this thread.
+    (1 to 200).foreach { _ =>
+      val context = TaskContext.empty()
+      val pendingListenerThread = new AtomicReference[Thread]()
+      context.addTaskCompletionListener[Unit] { _ =>
+        pendingListenerThread.set(Thread.currentThread())
+      }
+      // Two failing listeners: the second failure finds the task already failed.
+      (1 to 2).foreach { i =>
+        context.addTaskPreCompletionListener(new TaskCompletionListener {
+          override def onTaskCompletion(context: TaskContext): Unit = throw new Exception(s"$i")
+        })
+      }
+      context.addTaskFailureListener(new TaskFailureListener {
+        override def onTaskFailure(context: TaskContext, error: Throwable): Unit = {}
+      })
+      val ready = new CountDownLatch(1)
+      val adder = new Thread(() => {
+        ready.countDown()
+        while (!context.isCompleted()) {}
+        (1 to 200).foreach { _ => context.addTaskCompletionListener[Unit] { _ => } }
+      })
+      adder.setDaemon(true)
+      adder.start()
+      ready.await()
+      intercept[TaskCompletionListenerException] {
+        context.markTaskCompleted(None)
+      }
+      adder.join(TimeUnit.MINUTES.toMillis(1))
+      assert(pendingListenerThread.get eq Thread.currentThread())
+    }
+  }
+
+  test("SPARK-60113: completion waits for another thread invoking listeners and runs them") {
+    val context = TaskContext.empty()
+    val holding = new CountDownLatch(1)
+    val release = new CountDownLatch(1)
+    val listenerThreads = new java.util.concurrent.ConcurrentLinkedQueue[(String, Thread)]()
+    context.addTaskCompletionListener[Unit] { _ =>
+      listenerThreads.add(("pending", Thread.currentThread()))
+    }
+    context.addTaskInterruptListener(new TaskInterruptListener {
+      override def onTaskInterrupted(context: TaskContext, reason: String): Unit =
+        throw new Exception("interrupt listener")
+    })
+    context.addTaskFailureListener(new TaskFailureListener {
+      override def onTaskFailure(context: TaskContext, error: Throwable): Unit = {
+        holding.countDown()
+        release.await(1, TimeUnit.MINUTES)
+      }
+    })
+    // Like a kill: an interrupt listener fails, so the kill thread runs the failure listeners.
+    val killer = new Thread(() => context.markInterrupted("killed"))
+    killer.setDaemon(true)
+    killer.start()
+    assert(holding.await(1, TimeUnit.MINUTES))
+
+    val completion = new Thread(() => context.markTaskCompleted(None))
+    completion.setDaemon(true)
+    completion.start()
+    try {
+      eventually(timeout(1.minute)) {
+        assert(completion.getState == Thread.State.WAITING)
+      }
+      // Neither returns early nor runs the completion listeners while the kill thread holds the
+      // listener invocation, and a third thread adding a listener does not take them over.
+      val adder = new Thread(() => {
+        context.addTaskCompletionListener[Unit] { _ =>
+          listenerThreads.add(("added", Thread.currentThread()))
+        }
+      })
+      adder.start()
+      adder.join()
+      assert(completion.isAlive)
+      assert(listenerThreads.isEmpty)
+    } finally {
+      release.countDown()
+    }
+    completion.join(TimeUnit.MINUTES.toMillis(1))
+    killer.join(TimeUnit.MINUTES.toMillis(1))
+    assert(!completion.isAlive)
+    assert(listenerThreads.asScala.toSeq === Seq(("added", completion), ("pending", completion)))
   }
 
   test("SPARK-46480: Add isFailed in TaskContext") {

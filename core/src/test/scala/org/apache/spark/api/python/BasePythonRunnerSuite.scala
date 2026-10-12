@@ -18,13 +18,21 @@
 package org.apache.spark.api.python
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream, EOFException}
+import java.net.{InetAddress, InetSocketAddress}
+import java.nio.ByteBuffer
+import java.nio.channels.{ServerSocketChannel, SocketChannel}
 import java.nio.charset.StandardCharsets
+import java.util.{ArrayList => JArrayList, HashMap => JHashMap}
 import java.util.concurrent.{CountDownLatch, FutureTask, TimeUnit}
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
+
+import scala.concurrent.duration._
 
 import org.apache.logging.log4j.Level
+import org.scalatest.concurrent.Eventually.{eventually, timeout}
 
-import org.apache.spark.{SparkException, SparkFunSuite, TaskContext}
+import org.apache.spark.{LocalSparkContext, SparkContext, SparkEnv, SparkException, SparkFunSuite, TaskContext}
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.util.TaskCompletionListener
 
 class BasePythonRunnerSuite extends SparkFunSuite {
@@ -283,6 +291,124 @@ class BasePythonRunnerSuite extends SparkFunSuite {
     })
     // The writer has exited, so stopping does not wait.
     writerTask.stopAndAwaitExit(new FutureTask[Unit](() => (), ()))
+  }
+
+  test("SPARK-60113: stopping on the writer thread itself does not wait for the writer") {
+    val taskRef = new AtomicReference[BasePythonRunner.PipelinedWriterTask]()
+    val stopReturned = new CountDownLatch(1)
+    val writerTask = new BasePythonRunner.PipelinedWriterTask(() => {
+      // Like task completion listeners handed to the writer thread while it pulls its input.
+      taskRef.get.stopAndAwaitExit(new FutureTask[Unit](() => (), ()))
+      stopReturned.countDown()
+    }, "test task")
+    taskRef.set(writerTask)
+    val writerThread = startThread(writerTask.run())
+    assert(stopReturned.await(1, TimeUnit.MINUTES))
+    writerThread.join(TimeUnit.MINUTES.toMillis(1))
+    assert(!writerThread.isAlive)
+    // The writer has exited, so stopping from another thread does not wait either.
+    writerTask.stopAndAwaitExit(new FutureTask[Unit](() => (), ()))
+  }
+
+  test("SPARK-60113: the writer is interrupted again if it consumed the interrupt") {
+    val interrupts = new AtomicInteger(0)
+    val writerTask = new BasePythonRunner.PipelinedWriterTask(() => {
+      // Like upstream code that catches the first InterruptedException and carries on, and then
+      // blocks again (e.g. in channel.write), where the next interrupt stops it.
+      val blocker = new CountDownLatch(1)
+      var stopped = false
+      while (!stopped) {
+        try {
+          blocker.await()
+        } catch {
+          case _: InterruptedException =>
+            stopped = interrupts.incrementAndGet() >= 2
+        }
+      }
+    }, "test task", warnIntervalMs = 100)
+    val future = new FutureTask[Unit](writerTask, ())
+    val writerThread = startThread(future.run())
+    eventually(timeout(1.minute)) {
+      assert(writerThread.getState == Thread.State.WAITING)
+    }
+
+    val stopper = startThread(writerTask.stopAndAwaitExit(future))
+    stopper.join(TimeUnit.MINUTES.toMillis(1))
+    assert(!stopper.isAlive)
+    assert(interrupts.get >= 2)
+    writerThread.join(TimeUnit.MINUTES.toMillis(1))
+  }
+
+  test("SPARK-60113: an interrupt pending before stopping the writer is kept") {
+    // The writer never started.
+    val notStarted = new BasePythonRunner.PipelinedWriterTask(() => (), "test task")
+    // The writer runs and exits once interrupted.
+    val running = new BasePythonRunner.PipelinedWriterTask(() => {
+      try {
+        new CountDownLatch(1).await()
+      } catch {
+        case _: InterruptedException =>
+      }
+    }, "test task")
+    val runningFuture = new FutureTask[Unit](running, ())
+    val writerThread = startThread(runningFuture.run())
+    eventually(timeout(1.minute)) {
+      assert(writerThread.getState == Thread.State.WAITING)
+    }
+
+    Seq(
+      (notStarted, new FutureTask[Unit](notStarted, ())),
+      (running, runningFuture)).foreach { case (writerTask, future) =>
+      val interruptedAfterStop = new AtomicReference[Option[Boolean]](None)
+      val stopper = startThread {
+        Thread.currentThread().interrupt()
+        writerTask.stopAndAwaitExit(future)
+        interruptedAfterStop.set(Some(Thread.currentThread().isInterrupted))
+      }
+      stopper.join(TimeUnit.MINUTES.toMillis(1))
+      assert(interruptedAfterStop.get === Some(true))
+    }
+    writerThread.join(TimeUnit.MINUTES.toMillis(1))
+  }
+
+  test("SPARK-60113: a fatal error of the pipelined writer is passed to the reader") {
+    LocalSparkContext.withSpark(new SparkContext("local", "test")) { _ =>
+      val func = SimplePythonFunction(
+        Seq.empty, new JHashMap[String, String](), new JArrayList[String](), "python3", "3",
+        new JArrayList[Broadcast[PythonBroadcast]](), null)
+      val runner = new PythonRunner(Seq(ChainedPythonFunctions(Seq(func))), None)
+      val server = ServerSocketChannel.open()
+      try {
+        server.bind(new InetSocketAddress(InetAddress.getLoopbackAddress, 0))
+        val channel = SocketChannel.open(server.getLocalAddress)
+        val pythonSide = server.accept()
+        try {
+          val context = TaskContext.empty()
+          val worker = PythonWorker(channel)
+          val writer = new runner.Writer(SparkEnv.get, worker, Iterator.empty, 0, context) {
+            override def open(dataOut: DataOutputStream): Unit = {}
+            override protected def writeCommand(dataOut: DataOutputStream): Unit = {}
+            override def writeNextInputToStream(dataOut: DataOutputStream): Boolean = {
+              // scalastyle:off throwerror
+              throw new LinkageError("fatal writer error")
+              // scalastyle:on throwerror
+            }
+          }
+          intercept[LinkageError] {
+            new runner.PipelinedWriterRunnable(worker, writer, 1024, context).run()
+          }
+          // The reader rethrows the error instead of waiting for the Python worker, which sees
+          // the end of its input.
+          assert(writer.exception.map(_.getMessage) === Some("fatal writer error"))
+          assert(pythonSide.read(ByteBuffer.allocate(1)) === -1)
+        } finally {
+          pythonSide.close()
+          channel.close()
+        }
+      } finally {
+        server.close()
+      }
+    }
   }
 
   test("SPARK-58192: pyspark memory is split across the executor's concurrent task slots") {

@@ -148,10 +148,12 @@ abstract class TaskContext extends Serializable {
   }
 
   /**
-   * Adds a listener to be executed on task completion before every listener added with
-   * `addTaskCompletionListener`, regardless of when or from which thread that listener was
-   * added. Listeners added with this method run in reverse order of registration, and a
-   * listener added after the task completes is called immediately.
+   * Adds a listener to be executed on task completion before every pending listener added with
+   * `addTaskCompletionListener`, from any thread and even if that listener was added later.
+   * Completion listeners that have already run are not affected, so to run before all of them,
+   * the listener must be added before the task completes. Listeners added with this method run
+   * in reverse order of registration, and a listener added after the task completes is called
+   * immediately.
    *
    * This is for stopping helper threads that read task resources owned by completion
    * listeners: the helper thread itself can add such listeners lazily (e.g. when it first
