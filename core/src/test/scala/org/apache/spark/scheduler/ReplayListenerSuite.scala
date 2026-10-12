@@ -158,8 +158,9 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
   test("SPARK-59804: Replay line buffer stops retaining oversized content") {
     for (limit <- Seq(0, 1, 8, 1024)) {
       val buffer = new ReplayListenerBus.BoundedLineBuffer(limit)
+      val x = Array('x')
       for (_ <- 0 until 10000) {
-        buffer.append('x')
+        assert(buffer.appendUntilNewline(x, 0, 1) == 1)
         assert(buffer.length <= limit + 1)
       }
       assert(buffer.length == 0)
@@ -205,6 +206,90 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
     assert(diagnostic.contains(s"line length: ${line.length} characters"))
     assert(!diagnostic.contains("tail-marker"))
     assert(diagnostic.length < 1200)
+  }
+
+  test("SPARK-60158: Line buffer gives the same result for any split of a line") {
+    val alphabet = Seq("x", "\r", 0x00e9.toChar.toString, 0x4e2d.toChar.toString,
+      new String(Character.toChars(0x1f600)))
+    val random = new scala.util.Random(60158)
+    for (_ <- 0 until 2000) {
+      val line = Seq.fill(random.nextInt(40))(alphabet(random.nextInt(alphabet.length))).mkString
+      val limit = random.nextInt(80)
+      // Reference: drop one trailing CR and keep the line if its UTF-8 length fits the limit.
+      val content = if (line.endsWith("\r")) line.dropRight(1) else line
+      val expected =
+        if (content.getBytes(StandardCharsets.UTF_8).length <= limit) Some(content) else None
+      // A '\n' and a following line after the end must not be consumed.
+      val chars = (line + "\nnext").toCharArray
+      val buffer = new ReplayListenerBus.BoundedLineBuffer(limit)
+      var start = 0
+      var newline = -1
+      while (newline < 0) {
+        val end = math.min(chars.length, start + random.nextInt(8))
+        val i = buffer.appendUntilNewline(chars, start, end)
+        assert(i >= start && i <= end)
+        if (i < end) newline = i else start = end
+      }
+      withClue(s"line=${line.map(_.toInt).mkString(",")} limit=$limit: ") {
+        assert(newline == line.length)
+        assert(buffer.result() == expected)
+        // The buffer is released once the line exceeds the limit plus the CR allowance.
+        if (line.getBytes(StandardCharsets.UTF_8).length > limit + 1) {
+          assert(buffer.capacity == 0)
+        }
+      }
+    }
+  }
+
+  test("SPARK-60158: Replay splits lines across read buffers like a reference splitter") {
+    val alphabet = Seq("x", "\r", 0x00e9.toChar.toString, 0x4e2d.toChar.toString,
+      new String(Character.toChars(0x1f600)))
+    val random = new scala.util.Random(60158)
+    for (_ <- 0 until 50) {
+      val lines = Seq.fill(random.nextInt(20)) {
+        val length = if (random.nextInt(4) == 0) random.nextInt(20000) else random.nextInt(100)
+        Seq.fill(length)(alphabet(random.nextInt(alphabet.length))).mkString
+      }
+      val data = lines.mkString("\n") + (if (random.nextBoolean()) "\n" else "")
+      val bytes = data.getBytes(StandardCharsets.UTF_8)
+      val limit = 1 + random.nextInt(30000)
+      // Reference: split on '\n', drop one trailing CR, keep lines within the byte limit.
+      val expected = (if (data.isEmpty) Seq.empty else data.split("\n", -1).toSeq)
+        .dropRight(if (data.endsWith("\n")) 1 else 0)
+        .map(line => if (line.endsWith("\r")) line.dropRight(1) else line)
+        .filter(_.getBytes(StandardCharsets.UTF_8).length <= limit)
+      // Full reads, and the short, uneven reads of codec streams.
+      val maxRead = Seq(1, 3, 64, 8192)(random.nextInt(4))
+      for (input <- Seq(new ByteArrayInputStream(bytes),
+          new ShortReadInputStream(bytes, random, maxRead))) {
+        val seen = new ArrayBuffer[String]
+        assert(new ReplayListenerBus(limit).replay(input, "reference", eventsFilter = line => {
+          seen += line
+          false
+        }))
+        assert(seen.toSeq == expected, s"limit=$limit input=${input.getClass.getSimpleName}")
+      }
+    }
+  }
+
+  test("SPARK-60158: Replay reports physical line numbers for lines spanning read buffers") {
+    val end = JsonProtocol.sparkEventToJsonString(SparkListenerApplicationEnd(1000L))
+    // Line 2 is skipped and spans several read buffers; line 4 is malformed.
+    val bytes = (end + "\n" + "x" * 20000 + "\n" + end + "\n{}\n")
+      .getBytes(StandardCharsets.UTF_8)
+    val random = new scala.util.Random(60158)
+    for (input <- Seq(new ByteArrayInputStream(bytes), new ShortReadInputStream(bytes, random, 1),
+        new ShortReadInputStream(bytes, random, 100))) {
+      val appender = new LogAppender
+      withLogAppender(appender) {
+        assert(!new ReplayListenerBus(1024).replay(input, "spanning"))
+      }
+      val messages = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+      withClue(s"input=${input.getClass.getSimpleName}: ") {
+        assert(messages.exists(_.contains("in spanning; first skipped line: 2")), messages)
+        assert(messages.exists(_.startsWith("Malformed line #4: {}")), messages)
+      }
+    }
   }
 
   test("SPARK-59804: Replay line limit defaults and maximum supported configuration") {
@@ -505,6 +590,36 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
    * This is a dummy input stream that wraps another input stream but ends prematurely when
    * reading at the specified position, throwing an EOFException.
    */
+  /** Returns 1 to `maxRead` bytes per read and reports nothing available, like codec streams. */
+  private class ShortReadInputStream(data: Array[Byte], random: scala.util.Random, maxRead: Int)
+    extends InputStream {
+    private var pos = 0
+
+    override def read(): Int = {
+      if (pos < data.length) {
+        pos += 1
+        data(pos - 1) & 0xFF
+      } else {
+        -1
+      }
+    }
+
+    override def read(b: Array[Byte], off: Int, len: Int): Int = {
+      if (len == 0) {
+        0
+      } else if (pos >= data.length) {
+        -1
+      } else {
+        val n = math.min(math.min(len, 1 + random.nextInt(maxRead)), data.length - pos)
+        System.arraycopy(data, pos, b, off, n)
+        pos += n
+        n
+      }
+    }
+
+    override def available(): Int = 0
+  }
+
   private class EarlyEOFInputStream(in: InputStream, failAtPos: Int) extends InputStream {
     private val countDown = new AtomicInteger(failAtPos)
 
