@@ -455,16 +455,15 @@ class CategoricalAccessor:
         dtype: category
         Categories (3, object): ['a', 'b', 'c']
         """
-        used_categories = set(self._data.drop_duplicates()._to_pandas())
-        removals = [cat for cat in self.categories if cat not in used_categories]
-        categories = [cat for cat in removals if cat is not None]
-        if len(categories) == 0:
+        observed_values = set(self._data.drop_duplicates()._to_pandas())
+        retained_categories = [
+            category for category in self.categories if category in observed_values
+        ]
+        if len(retained_categories) == len(self.categories):
             return self._data.copy()
-        else:
-            dtype = CategoricalDtype(
-                [cat for cat in self.categories if cat not in categories], ordered=self.ordered
-            )
-            return self._data.astype(dtype)
+
+        dtype = CategoricalDtype(retained_categories, ordered=self.ordered)
+        return self._data.astype(dtype)
 
     def rename_categories(
         self, new_categories: Union[list, dict, Callable]
