@@ -67,10 +67,13 @@ function expandAllThreadStackTrace(toggleButton) {
 // URI, which browsers truncate at the first '#'.
 function downloadThreadDump(fileName) {
   const text = document.getElementById("thread-dump-text").textContent;
+  const url = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
   const link = document.createElement("a");
-  link.href = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
+  link.href = url;
   link.download = fileName;
   link.click();
+  // Release the Blob once the browser has started the download, as exportSparkProperties does.
+  setTimeout(function () { URL.revokeObjectURL(url); }, 100);
 }
 
 function collapseAllThreadStackTrace(toggleButton) {

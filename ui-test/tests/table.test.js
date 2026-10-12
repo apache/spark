@@ -58,28 +58,36 @@ function readBlob(blob) {
 }
 
 // jsdom implements neither URL.createObjectURL nor downloads, so record the Blob and the link
-// the helper clicks to start the download.
+// the helper clicks to start the download, and the Blob URLs it revokes.
 let downloads;
+let revokedUrls;
 let originalAnchorClick;
 
 beforeAll(() => new Promise(resolve => $(resolve)));
 
 beforeEach(() => {
   downloads = [];
+  revokedUrls = [];
   let lastBlob;
   URL.createObjectURL = blob => {
     lastBlob = blob;
     return 'blob:thread-dump';
   };
+  URL.revokeObjectURL = url => revokedUrls.push(url);
   originalAnchorClick = HTMLAnchorElement.prototype.click;
   HTMLAnchorElement.prototype.click = function () {
-    downloads.push({ blob: lastBlob, href: this.href, fileName: this.download });
+    downloads.push({
+      blob: lastBlob, href: this.href, fileName: this.download, revokedAtClick: revokedUrls.length
+    });
   };
 });
 
-afterEach(() => {
+afterEach(async () => {
+  // Let a pending Blob URL revoke run before the stubs are restored.
+  await new Promise(resolve => setTimeout(resolve, 200));
   HTMLAnchorElement.prototype.click = originalAnchorClick;
   delete URL.createObjectURL;
+  delete URL.revokeObjectURL;
 });
 
 test('Download saves the complete thread dump, including threads after a "#"', async function () {
@@ -98,6 +106,22 @@ test('Download saves the complete thread dump, including threads after a "#"', a
   expect(href).toBe('blob:thread-dump');
   expect(blob.type).toBe('text/plain;charset=utf-8');
   expect(await readBlob(blob)).toBe(THREAD_DUMP);
+});
+
+test('Download releases the Blob URL after starting the download', async function () {
+  document.body.innerHTML =
+    '<a class="downloadbutton" data-action="downloadThreadDump" ' +
+    'data-filename="threaddump_1.txt">Download</a>' +
+    `<pre id="thread-dump-text" class="d-none">${escapeHtml(THREAD_DUMP)}</pre>`;
+
+  document.querySelector('a.downloadbutton')
+    .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+  await new Promise(resolve => setTimeout(resolve, 200));
+
+  expect(downloads.length).toBe(1);
+  // Revoking before the click would cancel the download.
+  expect(downloads[0].revokedAtClick).toBe(0);
+  expect(revokedUrls).toEqual(['blob:thread-dump']);
 });
 
 test('the legacy data: URI link is left to the browser', function () {
