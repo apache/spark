@@ -24,7 +24,12 @@ import org.apache.spark.annotation.Unstable
  * (size, content type and checksum); the bytes of the file are never stored in the value.
  *
  * In SQL the type is named `FILE`, and the `EXTERNAL` keyword is required when declaring a
- * column, as in `CREATE TABLE t (f FILE EXTERNAL)`. Its JSON representation is `"file"`.
+ * column, as in `CREATE TABLE t (f FILE EXTERNAL)`. Its JSON representation is `"file"` inside
+ * a struct field and `"file external"` for a standalone type.
+ *
+ * The mode is part of the type's identity: `FILE EXTERNAL` is a reference whose lifecycle is
+ * independent of the table, and a bare `FILE` is a file whose mode is not determined yet, such as
+ * the result of a cast or of a UDF. Table column definitions are to require `EXTERNAL`.
  *
  * The type is planned to be physically represented as a struct (see [[FileType.FIELDS]]) but
  * deliberately does not extend [[StructType]]. It is planned to have no ordering, so it is not
@@ -41,7 +46,10 @@ case class FileType(mode: FileTypeMode = FileTypeMode.UNKNOWN) extends DataType 
 
   override def defaultSize: Int = FileType.asStruct.defaultSize
 
-  override def typeName: String = "file"
+  override def typeName: String = mode match {
+    case FileTypeMode.EXTERNAL => "file external"
+    case _ => "file"
+  }
 
   /**
    * `acceptsType` ignores mode so that an expression expecting `FileType()` accepts a

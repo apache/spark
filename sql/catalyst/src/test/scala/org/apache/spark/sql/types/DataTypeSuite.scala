@@ -1709,39 +1709,98 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("FileType: name, JSON and DDL round trip") {
-    assert(FileType.external.typeName === "file")
-    assert(FileType.external.simpleString === "file")
-    // The SQL name of the type is FILE; EXTERNAL belongs to the column declaration.
-    assert(FileType.external.sql === "FILE")
+    // The mode is part of the type's identity.
+    assert(FileType.external != FileType())
+    assert(FileType() === FileType(FileTypeMode.UNKNOWN))
+    assert(DataTypes.FileType === FileType())
+    assert(FileType.external.typeName === "file external")
+    assert(FileType().typeName === "file")
+    // The SQL name is FILE; EXTERNAL is part of the SQL form of an external file.
+    assert(FileType.external.sql === "FILE EXTERNAL")
     assert(FileType().sql === "FILE")
-    assert(FileType.external.json === "\"file\"")
-    assert(DataType.fromJson("\"file\"") === FileType.external)
+    assert(FileType.external.json === "\"file external\"")
+    assert(FileType().json === "\"file\"")
     assert(DataType.fromJson("\"file external\"") === FileType.external)
+    // A bare "file" has no mode on its own, and is an external file inside a struct field.
+    assert(DataType.fromJson("\"file\"") === FileType())
     assert(DataType.fromDDL("FILE EXTERNAL") === FileType.external)
     assert(DataType.fromDDL("FILE") === FileType())
-    assert(FileType.external != FileType())
     assert(!(FileType.external: DataType).isInstanceOf[StructType])
+    assert(FileType.external.acceptsType(FileType()))
+    assert(FileType().acceptsType(FileType.external))
 
     val schema = new StructType()
       .add("id", IntegerType)
       .add("f", FileType.external, nullable = false)
       .add("fs", ArrayType(FileType.external))
       .add("m", MapType(StringType, FileType.external))
-    assert(DataType.fromJson(schema.json) === schema)
     assert(schema.toDDL ===
       "id INT,f FILE EXTERNAL NOT NULL,fs ARRAY<FILE EXTERNAL>,m MAP<STRING, FILE EXTERNAL>")
     assert(DataType.fromDDL(schema.toDDL) === schema)
     val nested = new StructType().add("s", new StructType().add("f", FileType.external))
     assert(nested.toDDL === "s STRUCT<f: FILE EXTERNAL>")
     assert(DataType.fromDDL(nested.toDDL) === nested)
-    // The JSON of a field is the plain "file" with empty metadata, as in the SPIP.
+
+    // Inside a field the type is the plain "file", with empty metadata, and reads back as an
+    // external file, which is also what a schema written without any mode metadata means.
+    assert(DataType.fromJson(schema.json) === schema)
     assert(JsonMethods.compact(JsonMethods.render(schema("f").jsonValue)) ===
       """{"name":"f","type":"file","nullable":false,"metadata":{}}""")
+    assert(JsonMethods.compact(JsonMethods.render(schema("fs").jsonValue)) ===
+      """{"name":"fs","type":{"type":"array","elementType":"file","containsNull":true},""" +
+        """"nullable":true,"metadata":{}}""")
+    val unknownField = new StructType().add("u", FileType())
+    assert(DataType.fromJson(unknownField.json) === new StructType().add("u", FileType.external))
+
     assert(schema("f").dataType.sameType(FileType.external))
+    assert(!FileType().sameType(FileType.external))
     assert(schema.asNullable("f").nullable)
     assert(FileType.external.defaultSize > 0)
     assert(FileType.PUBLIC_FIELDS.map(_.name).toSeq ===
       Seq("uri", "offset", "size", "content_type", "checksum"))
+  }
+
+  test("FileType: the mode of a field is read from the __FILE_TYPE_MODE metadata") {
+    def fieldJson(tpe: String, modes: String, other: String = ""): String =
+      s"""{"type":"struct","fields":[{"name":"f","type":$tpe,"nullable":true,""" +
+        s""""metadata":{$other"__FILE_TYPE_MODE":{$modes}}}]}"""
+
+    // The key is consumed, so it does not show up in the metadata of the field.
+    val external = DataType.fromJson(fieldJson("\"file\"", "\"f\":\"EXTERNAL\""))
+      .asInstanceOf[StructType]
+    assert(external("f").dataType === FileType.external)
+    assert(external("f").metadata === Metadata.empty)
+    val unknown = DataType.fromJson(fieldJson("\"file\"", "\"f\":\"unknown\""))
+    assert(unknown === new StructType().add("f", FileType()))
+    val nested = DataType.fromJson(fieldJson(
+      """{"type":"array","elementType":"file","containsNull":true}""",
+      "\"f.element\":\"EXTERNAL\""))
+    assert(nested === new StructType().add("f", ArrayType(FileType.external)))
+
+    // A mode that OSS does not support is rejected, not read as an external file.
+    Seq("MANAGED", "OTHER").foreach { mode =>
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          DataType.fromJson(fieldJson("\"file\"", s"\"f\":\"$mode\""))
+        },
+        condition = "INVALID_JSON_DATA_TYPE_FOR_FILE",
+        parameters = Map("fieldPath" -> "f", "jsonType" -> s"file (mode=$mode)"))
+    }
+    // The mode of a path that does not hold a file is rejected.
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        DataType.fromJson(fieldJson("\"string\"", "\"f\":\"EXTERNAL\""))
+      },
+      condition = "INVALID_JSON_DATA_TYPE_FOR_FILE",
+      parameters = Map("fieldPath" -> "f", "jsonType" -> "string"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        DataType.fromJson(fieldJson(
+          """{"type":"array","elementType":"file","containsNull":true}""",
+          "\"f\":\"EXTERNAL\""))
+      },
+      condition = "INVALID_JSON_DATA_TYPE_FOR_FILE",
+      parameters = Map("fieldPath" -> "f", "jsonType" -> "array"))
   }
 
   test("singleton DataType equality after deserialization") {
