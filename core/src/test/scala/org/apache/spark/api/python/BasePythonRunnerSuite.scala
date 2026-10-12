@@ -216,9 +216,11 @@ class BasePythonRunnerSuite extends SparkFunSuite {
     val completion = startThread(context.markTaskCompleted(None))
     try {
       assert(reached.await(1, TimeUnit.MINUTES))
-      // Give the completion thread time to block in the wait, then interrupt it, e.g. a task
-      // kill that lands while the listeners run.
-      completion.join(200)
+      // Interrupt the completion thread once it blocks in the wait, e.g. a task kill that lands
+      // while the listeners run.
+      eventually(timeout(1.minute)) {
+        assert(completion.getState == Thread.State.TIMED_WAITING)
+      }
       completion.interrupt()
       completion.join(500)
       assert(completion.isAlive)
@@ -239,6 +241,8 @@ class BasePythonRunnerSuite extends SparkFunSuite {
     val future = new FutureTask[Unit](writerTask, ())
     writerTask.stopAndAwaitExit(future)
     assert(future.isCancelled)
+    // Stopping again does not wait either.
+    writerTask.stopAndAwaitExit(future)
     // Even if the pool thread reaches the task afterwards, the writer must not run. Release it
     // up front so that a writer that wrongly runs fails the test instead of hanging it.
     writer.release.countDown()
@@ -294,16 +298,24 @@ class BasePythonRunnerSuite extends SparkFunSuite {
   }
 
   test("SPARK-60113: stopping on the writer thread itself does not wait for the writer") {
+    val futureRef = new AtomicReference[FutureTask[Unit]]()
     val taskRef = new AtomicReference[BasePythonRunner.PipelinedWriterTask]()
     val stopReturned = new CountDownLatch(1)
+    val interruptedAfterStop = new AtomicReference[Option[Boolean]](None)
     val writerTask = new BasePythonRunner.PipelinedWriterTask(() => {
       // Like task completion listeners handed to the writer thread while it pulls its input.
-      taskRef.get.stopAndAwaitExit(new FutureTask[Unit](() => (), ()))
+      // cancel(true) interrupts this thread, as it runs the future.
+      taskRef.get.stopAndAwaitExit(futureRef.get)
+      interruptedAfterStop.set(Some(Thread.currentThread().isInterrupted))
       stopReturned.countDown()
     }, "test task")
     taskRef.set(writerTask)
-    val writerThread = startThread(writerTask.run())
+    futureRef.set(new FutureTask[Unit](writerTask, ()))
+    val writerThread = startThread(futureRef.get.run())
     assert(stopReturned.await(1, TimeUnit.MINUTES))
+    // The interrupt that stopping set on this thread is cleared, so that the listeners that run
+    // next on it can clean up.
+    assert(interruptedAfterStop.get === Some(false))
     writerThread.join(TimeUnit.MINUTES.toMillis(1))
     assert(!writerThread.isAlive)
     // The writer has exited, so stopping from another thread does not wait either.

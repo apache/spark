@@ -19,6 +19,7 @@ package org.apache.spark
 
 import java.io.Closeable
 import java.util.{Properties, Stack}
+import java.util.concurrent.TimeUnit
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.ArrayBuffer
@@ -26,7 +27,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.{config, Logging}
-import org.apache.spark.internal.LogKeys.LISTENER
+import org.apache.spark.internal.LogKeys.{LISTENER, TASK_ATTEMPT_ID, THREAD_NAME, TOTAL_TIME}
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.metrics.source.Source
@@ -61,6 +62,8 @@ private[spark] class TaskContextImpl(
     override val resources: Map[String, ResourceInformation] = Map.empty)
   extends TaskContext
   with Logging {
+
+  import TaskContextImpl._
 
   /**
    * List of callback functions to execute when the task completes.
@@ -156,7 +159,7 @@ private[spark] class TaskContextImpl(
     synchronized {
       onFailureCallbacks.push(listener)
       failureCauseOpt
-    }.foreach(invokeTaskFailureListeners(_, nested = false))
+    }.foreach(invokeTaskFailureListeners(_, Claim))
     this
   }
 
@@ -193,19 +196,19 @@ private[spark] class TaskContextImpl(
   }
 
   private[spark] override def markTaskFailed(error: Throwable): Unit = {
-    markTaskFailed(error, nested = false)
+    markTaskFailed(error, Claim)
   }
 
   /**
-   * @param nested whether this thread is already invoking listeners, i.e. a listener failed. The
-   *               failure listeners then run as part of that invocation, which this thread keeps.
+   * @param mode `Nested` if this thread is already invoking listeners, i.e. a listener failed. The
+   *             failure listeners then run as part of that invocation, which this thread keeps.
    */
-  private def markTaskFailed(error: Throwable, nested: Boolean): Unit = {
+  private def markTaskFailed(error: Throwable, mode: InvocationMode): Unit = {
     synchronized {
       if (failureCauseOpt.isDefined) return
       failureCauseOpt = Some(error)
     }
-    invokeTaskFailureListeners(error, nested)
+    invokeTaskFailureListeners(error, mode)
   }
 
   private[spark] override def markTaskCompleted(error: Option[Throwable]): Unit = {
@@ -216,34 +219,61 @@ private[spark] class TaskContextImpl(
     // ran, the task could release its memory while that writer still uses it. So the listener
     // invocation is claimed together with setting `completed`; if another thread holds it (e.g. a
     // kill thread running failure listeners), that thread hands it over to this one when done.
-    val nested = synchronized {
+    //
+    // That wait has no time bound: if the other thread's listeners block, so does this task. It
+    // logs a warning with that thread's stack trace periodically. If such a task is killed,
+    // `spark.task.reaper.enabled` with a positive `spark.task.reaper.killTimeout` bounds how long
+    // it may stay in this state, by killing the executor JVM.
+    val mode = synchronized {
       if (completed) return
       completed = true
       val currentThread = Thread.currentThread()
       if (listenerInvocationThread.isEmpty) {
         listenerInvocationThread = Some(currentThread)
-        false
+        Claimed
       } else if (listenerInvocationThread.contains(currentThread)) {
         // Called from a listener on this thread: run the completion listeners as part of that
         // invocation.
-        true
+        Nested
       } else {
         nextListenerInvocationThread = Some(currentThread)
-        var interrupted = false
-        while (!listenerInvocationThread.contains(currentThread)) {
-          try {
-            wait()
-          } catch {
-            case _: InterruptedException => interrupted = true
-          }
-        }
-        if (interrupted) {
-          currentThread.interrupt()
-        }
-        false
+        awaitListenerInvocationHandover(currentThread)
+        Claimed
       }
     }
-    invokeTaskCompletionListeners(error, claimed = true, nested = nested)
+    invokeTaskCompletionListeners(error, mode)
+  }
+
+  /**
+   * Waits until another thread invoking listeners hands the invocation over to `currentThread`.
+   * Interrupts do not stop the wait and are restored afterwards. Must hold the TaskContext lock.
+   */
+  private def awaitListenerInvocationHandover(currentThread: Thread): Unit = {
+    val startNs = System.nanoTime()
+    var nextWarningNs = startNs + TimeUnit.MILLISECONDS.toNanos(listenerHandoverWarnIntervalMs)
+    var interrupted = false
+    while (!listenerInvocationThread.contains(currentThread)) {
+      try {
+        wait(math.max(1L, TimeUnit.NANOSECONDS.toMillis(nextWarningNs - System.nanoTime())))
+      } catch {
+        case _: InterruptedException => interrupted = true
+      }
+      val nowNs = System.nanoTime()
+      if (nowNs >= nextWarningNs && !listenerInvocationThread.contains(currentThread)) {
+        listenerInvocationThread.foreach { holder =>
+          val holderStack = new Exception(s"Stack trace of thread ${holder.getName}")
+          holderStack.setStackTrace(holder.getStackTrace)
+          logWarning(log"Task ${MDC(TASK_ATTEMPT_ID, taskAttemptId)} has been waiting for " +
+            log"${MDC(TOTAL_TIME, TimeUnit.NANOSECONDS.toMillis(nowNs - startNs))} ms to run " +
+            log"its completion listeners until thread ${MDC(THREAD_NAME, holder.getName)} " +
+            log"finishes running its task listeners.", holderStack)
+        }
+        nextWarningNs = nowNs + TimeUnit.MILLISECONDS.toNanos(listenerHandoverWarnIntervalMs)
+      }
+    }
+    if (interrupted) {
+      currentThread.interrupt()
+    }
   }
 
   private[spark] override def getTaskFailure: Option[Throwable] = {
@@ -252,8 +282,7 @@ private[spark] class TaskContextImpl(
 
   private def invokeTaskCompletionListeners(
       error: Option[Throwable],
-      claimed: Boolean = false,
-      nested: Boolean = false): Unit = {
+      mode: InvocationMode = Claim): Unit = {
     // It is safe to access the references to `onPreCompleteCallbacks` and `onCompleteCallbacks`
     // without holding the TaskContext lock. `invokeListeners()` acquires the lock before accessing
     // the contents. Pre-completion listeners are taken first, including those added while
@@ -262,17 +291,15 @@ private[spark] class TaskContextImpl(
         Seq(onPreCompleteCallbacks, onCompleteCallbacks),
         "TaskCompletionListener",
         error,
-        claimed,
-        nested) {
+        mode) {
       _.onTaskCompletion(this)
     }
   }
 
-  private def invokeTaskFailureListeners(error: Throwable, nested: Boolean): Unit = {
+  private def invokeTaskFailureListeners(error: Throwable, mode: InvocationMode): Unit = {
     // It is safe to access the reference to `onFailureCallbacks` without holding the TaskContext
     // lock. `invokeListeners()` acquires the lock before accessing the contents.
-    invokeListeners(
-        Seq(onFailureCallbacks), "TaskFailureListener", Option(error), nested, nested) {
+    invokeListeners(Seq(onFailureCallbacks), "TaskFailureListener", Option(error), mode) {
       _.onTaskFailure(this, error)
     }
   }
@@ -317,17 +344,17 @@ private[spark] class TaskContextImpl(
    * A listener is always taken from the first non-empty stack, so all listeners of a stack run
    * before those of the stacks after it that are still pending.
    *
-   * @param claimed whether the caller has already registered this thread as
-   *                `listenerInvocationThread`.
-   * @param nested whether that registration belongs to an outer invocation on this thread, which
-   *               keeps it when this one is done. Implies `claimed`.
+   * Unless `mode` is `Nested`, this thread releases the invocation when it is done, but first runs
+   * the listeners that other threads queued meanwhile and left to it because it held the
+   * invocation: the failure listeners if the task has failed, and the completion listeners if it
+   * has completed. A thread waiting in `markTaskCompleted()` instead takes the invocation over
+   * directly and runs them itself.
    */
   private def invokeListeners[T](
       listenerStacks: Seq[Stack[T]],
       name: String,
       error: Option[Throwable],
-      claimed: Boolean = false,
-      nested: Boolean = false)(
+      mode: InvocationMode = Claim)(
       callback: T => Unit): Unit = {
     // This method is subject to two constraints:
     //
@@ -339,7 +366,7 @@ private[spark] class TaskContextImpl(
     //
     // We meet these constraints by ensuring there is at most one thread invoking listeners at any
     // point in time.
-    if (!claimed) synchronized {
+    if (mode == Claim) synchronized {
       if (listenerInvocationThread.nonEmpty) {
         // If another thread is already invoking listeners, do nothing.
         return
@@ -351,26 +378,13 @@ private[spark] class TaskContextImpl(
       }
     }
 
-    def getNextListenerOrDeregisterThread(): Option[T] = synchronized {
-      listenerStacks.find(!_.empty()) match {
-        case Some(listeners) =>
-          Some(listeners.pop())
-        case None =>
-          // We have executed all listeners that have been added so far. Deregister this thread as
-          // the callback invocation thread, unless an outer invocation on this thread continues. A
-          // thread waiting in `markTaskCompleted()` takes over directly.
-          if (!nested) {
-            listenerInvocationThread = nextListenerInvocationThread
-            nextListenerInvocationThread = None
-            notifyAll()
-          }
-          None
-      }
+    def getNextListener(): Option[T] = synchronized {
+      listenerStacks.find(!_.empty()).map(_.pop())
     }
 
     val listenerExceptions = new ArrayBuffer[Throwable](2)
     var listenerOption: Option[T] = None
-    while ({listenerOption = getNextListenerOrDeregisterThread(); listenerOption.nonEmpty}) {
+    while ({listenerOption = getNextListener(); listenerOption.nonEmpty}) {
       val listener = listenerOption.get
       try {
         callback(listener)
@@ -413,12 +427,42 @@ private[spark] class TaskContextImpl(
           //    [[markTaskFailed]] here will have no effect and we simply resume running the
           //    remaining completion handlers.
           try {
-            markTaskFailed(e, nested = true)
+            markTaskFailed(e, Nested)
           } catch {
             case t: Throwable => e.addSuppressed(t)
           }
           listenerExceptions += e
           logError(log"Error in ${MDC(LISTENER, name)}", e)
+      }
+    }
+    if (mode != Nested) {
+      // We have executed all listeners of `listenerStacks` that have been added so far. Run the
+      // listeners left to this thread (see above), then deregister this thread as the callback
+      // invocation thread, or hand the invocation over to a thread waiting for it.
+      var released = false
+      while (!released) {
+        val pendingListeners: Option[() => Unit] = synchronized {
+          val pendingFailure = failureCauseOpt.filter(_ => !onFailureCallbacks.empty())
+          if (nextListenerInvocationThread.isEmpty && pendingFailure.isDefined) {
+            Some(() => invokeTaskFailureListeners(pendingFailure.get, Nested))
+          } else if (nextListenerInvocationThread.isEmpty && completed &&
+              (!onPreCompleteCallbacks.empty() || !onCompleteCallbacks.empty())) {
+            Some(() => invokeTaskCompletionListeners(None, Nested))
+          } else {
+            listenerInvocationThread = nextListenerInvocationThread
+            nextListenerInvocationThread = None
+            notifyAll()
+            released = true
+            None
+          }
+        }
+        pendingListeners.foreach { invoke =>
+          try {
+            invoke()
+          } catch {
+            case e: Throwable => listenerExceptions += e
+          }
+        }
       }
     }
     if (listenerExceptions.nonEmpty) {
@@ -511,4 +555,22 @@ private[spark] class TaskContextImpl(
       }
     }
   }
+}
+
+private object TaskContextImpl {
+
+  /** How an `invokeListeners()` call takes part in the listener invocation. */
+  sealed trait InvocationMode
+
+  /** Registers this thread as `listenerInvocationThread` unless another thread is registered. */
+  case object Claim extends InvocationMode
+
+  /** The caller has already registered this thread as `listenerInvocationThread`. */
+  case object Claimed extends InvocationMode
+
+  /** An outer invocation on this thread has registered it, and keeps it when this one is done. */
+  case object Nested extends InvocationMode
+
+  /** How often to log while `markTaskCompleted()` waits for another thread invoking listeners. */
+  val listenerHandoverWarnIntervalMs = 10000L
 }
