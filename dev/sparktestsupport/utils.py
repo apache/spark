@@ -22,7 +22,6 @@ import os
 import subprocess
 import sys
 from collections.abc import Iterable
-from typing import NamedTuple
 
 from sparktestsupport import modules
 from sparktestsupport.shellutils import run_cmd
@@ -31,12 +30,6 @@ from sparktestsupport.toposort import toposort_flatten
 # -------------------------------------------------------------------------------------------------
 # Functions for traversing module dependency graph
 # -------------------------------------------------------------------------------------------------
-
-
-class TestGoals(NamedTuple):
-    sbt: tuple[str, ...]
-    python: tuple[str, ...]
-    shell_script: tuple[modules.ShellScriptTestGoal, ...]
 
 
 def determine_modules_for_files(filenames):
@@ -163,65 +156,6 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
     )
 
 
-def determine_test_goals_for_files(filenames: Iterable[str]) -> TestGoals:
-    """
-    Return the module-declared test goals selected for a set of changed files.
-
-    A Spark Connect server change also selects the PySpark Connect tests that depend on it:
-
-    >>> goals = determine_test_goals_for_files(["sql/connect/server/src/main/scala/Service.scala"])
-    >>> goals.sbt
-    ('connect/test', 'connect-client-jvm/test', 'connect-client-jdbc/test')
-    >>> "pyspark.sql.tests.connect.test_connect_basic" in goals.python
-    True
-    >>> goals.shell_script
-    ()
-
-    A PySpark error change includes its error-specific Python tests:
-
-    >>> goals = determine_test_goals_for_files(["python/pyspark/errors/error.py"])
-    >>> goals.sbt
-    ()
-    >>> {
-    ...     "pyspark.errors.tests.test_connect_errors_conversion",
-    ...     "pyspark.errors.tests.test_errors",
-    ...     "pyspark.errors.tests.test_traceback",
-    ...     "pyspark.errors.tests.connect.test_parity_traceback",
-    ... } <= set(goals.python)
-    True
-
-    A POM change selects the dependency check:
-
-    >>> goals = determine_test_goals_for_files(["pom.xml"])
-    >>> "dev/test-dependencies.sh" in [g.path for g in goals.shell_script]
-    True
-
-    Ignored files select no module goals:
-
-    >>> goals = determine_test_goals_for_files(["python/README.md"])
-    >>> (goals.sbt, goals.python, goals.shell_script)
-    ((), (), ())
-
-    An otherwise unmatched path selects the root module:
-
-    >>> goals = determine_test_goals_for_files(["new-file.txt"])
-    >>> goals == TestGoals(
-    ...     sbt=tuple(modules.root.sbt_test_goals),
-    ...     python=tuple(modules.root.python_test_goals),
-    ...     shell_script=tuple(modules.root.shell_script_test_goals),
-    ... )
-    True
-    """
-    test_modules = determine_modules_to_test(determine_modules_for_files(filenames))
-    return TestGoals(
-        sbt=tuple(itertools.chain.from_iterable(m.sbt_test_goals for m in test_modules)),
-        python=tuple(itertools.chain.from_iterable(m.python_test_goals for m in test_modules)),
-        shell_script=tuple(
-            itertools.chain.from_iterable(m.shell_script_test_goals for m in test_modules)
-        ),
-    )
-
-
 def determine_shell_script_test_goals(
     test_modules: Iterable[modules.Module], stage: modules.TestStage
 ) -> tuple[modules.ShellScriptTestGoal, ...]:
@@ -238,9 +172,11 @@ def determine_shell_script_test_goals(
     >>> [g.path for g in determine_shell_script_test_goals([first, second], Stage.PRE_BUILD)]
     ['dev/shared', 'dev/first', 'dev/second']
 
-    Goals for other stages are left out:
+    Goals for another stage are left out. The stand-in is not a ShellScriptTestGoal
+    because that type only accepts a stage defined on the enum:
 
-    >>> later = SimpleNamespace(shell_script_test_goals=[Goal("dev/later", Stage.POST_BUILD)])
+    >>> other = SimpleNamespace(path="dev/later", stage="other")
+    >>> later = SimpleNamespace(shell_script_test_goals=[other])
     >>> [g.path for g in determine_shell_script_test_goals([first, later], Stage.PRE_BUILD)]
     ['dev/shared', 'dev/first']
     """
