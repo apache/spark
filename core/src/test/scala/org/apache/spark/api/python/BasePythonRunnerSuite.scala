@@ -69,16 +69,21 @@ class BasePythonRunnerSuite extends SparkFunSuite {
       try {
         onStart(this)
         started.countDown()
-        var done = false
-        while (!done) {
-          try {
-            done = release.await(1, TimeUnit.MINUTES)
-          } catch {
-            case _: InterruptedException => // keep going, like a row copy in progress
-          }
-        }
+        awaitIgnoringInterrupts(release)
       } finally {
         exited = true
+      }
+    }
+  }
+
+  /** Waits for `latch`, ignoring interrupts like a writer in the middle of a row copy. */
+  private def awaitIgnoringInterrupts(latch: CountDownLatch): Unit = {
+    var done = false
+    while (!done) {
+      try {
+        done = latch.await(1, TimeUnit.MINUTES)
+      } catch {
+        case _: InterruptedException => // keep going
       }
     }
   }
@@ -140,6 +145,52 @@ class BasePythonRunnerSuite extends SparkFunSuite {
     assert(!completion.isAlive)
     assert(cleanupAddedBefore.get === Some(true))
     assert(cleanupAddedByWriter.get === Some(true))
+  }
+
+  test("SPARK-60113: a listener the writer adds once completion has started waits for it") {
+    val context = TaskContext.empty()
+    val addNow = new CountDownLatch(1)
+    val added = new CountDownLatch(1)
+    // Whether the writer had exited, and the thread, when the listener added by the writer ran.
+    val lateCleanup = new AtomicReference[Option[(Boolean, Thread)]](None)
+    val writerStarted = new CountDownLatch(1)
+    val release = new CountDownLatch(1)
+    // Like a writer that adds a listener when it pulls more input after completion has started.
+    val lateWriter: Runnable = new Runnable {
+      @volatile var exited = false
+      override def run(): Unit = {
+        try {
+          writerStarted.countDown()
+          awaitIgnoringInterrupts(addNow)
+          context.addTaskCompletionListener[Unit] { _ =>
+            lateCleanup.set(Some((exited, Thread.currentThread())))
+          }
+          added.countDown()
+          awaitIgnoringInterrupts(release)
+        } finally {
+          exited = true
+        }
+      }
+    }
+    BasePythonRunner.startPipelinedWriter(lateWriter, context)
+    assert(writerStarted.await(1, TimeUnit.MINUTES))
+    val reached = addReachedListener(context)
+
+    val completion = startThread(context.markTaskCompleted(None))
+    try {
+      assert(reached.await(1, TimeUnit.MINUTES))
+      addNow.countDown()
+      assert(added.await(1, TimeUnit.MINUTES))
+      // The writer thread only queued the listener: task completion still waits for the writer.
+      completion.join(500)
+      assert(completion.isAlive)
+      assert(lateCleanup.get.isEmpty)
+    } finally {
+      release.countDown()
+    }
+    completion.join(TimeUnit.MINUTES.toMillis(1))
+    assert(!completion.isAlive)
+    assert(lateCleanup.get === Some((true, completion)))
   }
 
   test("SPARK-60113: an interrupt does not stop the wait and is not passed to later listeners") {

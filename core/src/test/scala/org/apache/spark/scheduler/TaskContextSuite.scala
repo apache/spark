@@ -18,8 +18,8 @@
 package org.apache.spark.scheduler
 
 import java.util.Properties
-import java.util.concurrent.Semaphore
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.{CountDownLatch, Semaphore, TimeUnit}
+import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -838,6 +838,30 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
 
     context.markTaskCompleted(None)
     assert(invocationOrder === Seq("B", "P", "A"))
+  }
+
+  test("SPARK-60113: a listener added as completion starts does not take over the listeners") {
+    // Another thread that sees the task completed and adds a listener at that moment must not
+    // become the thread that runs the pending listeners: it may be one they stop and wait for.
+    (1 to 500).foreach { _ =>
+      val context = TaskContext.empty()
+      val pendingListenerThread = new AtomicReference[Thread]()
+      context.addTaskCompletionListener[Unit] { _ =>
+        pendingListenerThread.set(Thread.currentThread())
+      }
+      val ready = new CountDownLatch(1)
+      val adder = new Thread(() => {
+        ready.countDown()
+        while (!context.isCompleted()) {}
+        context.addTaskCompletionListener[Unit] { _ => }
+      })
+      adder.setDaemon(true)
+      adder.start()
+      ready.await()
+      context.markTaskCompleted(None)
+      adder.join(TimeUnit.MINUTES.toMillis(1))
+      assert(pendingListenerThread.get eq Thread.currentThread())
+    }
   }
 
   test("SPARK-46480: Add isFailed in TaskContext") {
