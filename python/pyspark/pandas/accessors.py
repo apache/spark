@@ -52,7 +52,6 @@ if TYPE_CHECKING:
     from pyspark.sql._typing import UserDefinedFunctionLike
 
 
-# Include pandas-on-Spark types for callbacks whose return annotations declare Spark schemas.
 _DataFrameLike = Union[pd.DataFrame, "DataFrame"]
 _SeriesLike = Union[pd.Series, "Series"]
 
@@ -352,7 +351,6 @@ class PandasOnSparkFrameMethods:
         return_sig = spec.annotations.get("return", None)
         should_infer_schema = return_sig is None
 
-        # pandas-on-Spark return annotations declare schemas; callbacks return pandas objects.
         original_func = cast(Callable[..., pd.DataFrame], func)
 
         def new_func(o: Any) -> pd.DataFrame:
@@ -586,7 +584,6 @@ class PandasOnSparkFrameMethods:
         return_sig = spec.annotations.get("return", None)
         should_infer_schema = return_sig is None
         should_retain_index = should_infer_schema
-        # pandas-on-Spark return annotations declare schemas; callbacks return pandas objects.
         original_func = cast(Callable[..., Union[pd.DataFrame, pd.Series]], func)
 
         def new_func(o: Any) -> Union[pd.DataFrame, pd.Series]:
@@ -918,7 +915,6 @@ class PandasOnSparkSeriesMethods:
         from pyspark.pandas.groupby import GroupBy
         from pyspark.pandas.series import Series, first_series
 
-        # pandas-on-Spark return annotations declare schemas; callbacks return pandas objects.
         func = cast(Callable[..., pd.Series], func)
 
         if not isinstance(func, FunctionType):
