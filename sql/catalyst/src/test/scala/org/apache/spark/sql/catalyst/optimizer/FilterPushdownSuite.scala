@@ -31,7 +31,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
-class FilterPushdownSuite extends PlanTest {
+class FilterPushdownSuite extends PlanTest with ExpressionEvalHelper {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
 
@@ -2246,5 +2246,37 @@ class FilterPushdownSuite extends PlanTest {
     // Only the given keys count.
     assert(!PushPredicateThroughNonJoin.sensitiveToFloatNormalization(
       x.cast(StringType) === "-0.0", AttributeSet.empty))
+  }
+
+  test("SPARK-60150: comparisons exempt from normalization agree with normalized values") {
+    // sensitiveToFloatNormalization does not normalize a float/double key that is a direct
+    // operand of these comparisons, so each must give the same result for a value and for its
+    // normalized form: -0.0 and 0.0, and NaNs with different bit patterns.
+    val binary: Seq[(Expression, Expression) => Expression] = Seq(
+      EqualTo, EqualNullSafe, LessThan, LessThanOrEqual, GreaterThan, GreaterThanOrEqual,
+      (l, r) => In(l, Seq(r)))
+    val unary: Seq[Expression => Expression] = Seq(IsNull, IsNotNull, IsNaN)
+
+    def check(dataType: DataType, values: Seq[Any]): Unit = {
+      def lit(v: Any): Expression = Literal.create(v, dataType)
+      def norm(v: Any): Expression = lit(NormalizeNaNAndZero(lit(v)).eval())
+      for (v <- values; w <- values; op <- binary) {
+        checkEvaluation(op(lit(v), lit(w)), op(norm(v), lit(w)).eval())
+        checkEvaluation(op(lit(v), lit(w)), op(lit(v), norm(w)).eval())
+      }
+      for (v <- values; op <- unary) {
+        checkEvaluation(op(lit(v)), op(norm(v)).eval())
+      }
+    }
+
+    val otherDoubleNaN = java.lang.Double.longBitsToDouble(0x7ff8000000000001L)
+    assert(java.lang.Double.doubleToRawLongBits(otherDoubleNaN) !=
+      java.lang.Double.doubleToRawLongBits(Double.NaN))
+    check(DoubleType, Seq(-0.0d, 0.0d, Double.NaN, otherDoubleNaN, 1.0d, null))
+
+    val otherFloatNaN = java.lang.Float.intBitsToFloat(0x7fc00001)
+    assert(java.lang.Float.floatToRawIntBits(otherFloatNaN) !=
+      java.lang.Float.floatToRawIntBits(Float.NaN))
+    check(FloatType, Seq(-0.0f, 0.0f, Float.NaN, otherFloatNaN, 1.0f, null))
   }
 }
