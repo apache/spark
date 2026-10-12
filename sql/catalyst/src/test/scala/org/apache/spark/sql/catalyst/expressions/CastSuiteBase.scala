@@ -2660,6 +2660,54 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     assert(!Cast.isTimeToTimestampLTZ(TimestampType, TimestampType))
   }
 
+  test("SPARK-60179: needsTimeZone covers complex types collapsing to a string") {
+    // An LTZ leaf is rendered in the session time zone at any nesting depth.
+    Seq(
+      ArrayType(TimestampType),
+      MapType(IntegerType, TimestampType),
+      MapType(TimestampType, IntegerType),
+      new StructType().add("t", TimestampType),
+      new StructType().add("i", IntegerType).add("t", TimestampLTZNanosType(9)),
+      ArrayType(ArrayType(TimestampType)),
+      ArrayType(new StructType().add("t", TimestampType)),
+      ArrayType(VariantType),
+      new PythonUserDefinedType(ArrayType(TimestampType), "pyClass", "serializedClass"))
+      .foreach { from =>
+      assert(Cast.needsTimeZone(from, StringType), s"$from -> STRING")
+      // One level further out, the ARRAY/ARRAY case recurses into the pair above.
+      assert(Cast.needsTimeZone(ArrayType(from), ArrayType(StringType)),
+        s"ARRAY<$from> -> ARRAY<STRING>")
+    }
+    // TIMESTAMP_NTZ, DATE and TIME render on a fixed grid, so they stay zone-independent.
+    Seq(
+      ArrayType(TimestampNTZType),
+      MapType(IntegerType, DateType),
+      new StructType().add("t", TimestampNTZNanosType(9)).add("d", DateType),
+      ArrayType(ArrayType(TimeType(TimeType.MAX_PRECISION))),
+      new PythonUserDefinedType(ArrayType(TimestampNTZType), "pyClass", "serializedClass"))
+      .foreach { from =>
+      assert(!Cast.needsTimeZone(from, StringType), s"$from -> STRING")
+      assert(!Cast.needsTimeZone(ArrayType(from), ArrayType(StringType)),
+        s"ARRAY<$from> -> ARRAY<STRING>")
+    }
+  }
+
+  test("SPARK-60179: a complex-to-string cast needs a time zone to be resolved") {
+    val arrayOfTimestamp = Literal.create(Seq(0L), ArrayType(TimestampType))
+    // Without a time zone the cast cannot be evaluated: the leaf formatter reads `zoneId`.
+    assert(!Cast(arrayOfTimestamp, StringType).resolved)
+    assert(Cast(arrayOfTimestamp, StringType, UTC_OPT).resolved)
+    // `canonicalized` may no longer drop the zone, so two zones are not semantically equal.
+    assert(!Cast(arrayOfTimestamp, StringType, UTC_OPT)
+      .semanticEquals(Cast(arrayOfTimestamp, StringType, Option(LA.getId))))
+    checkEvaluation(Cast(arrayOfTimestamp, StringType, UTC_OPT), "[1970-01-01 00:00:00]")
+    checkEvaluation(
+      Cast(arrayOfTimestamp, StringType, Option(LA.getId)), "[1969-12-31 16:00:00]")
+    // The NTZ control renders on a fixed grid and stays resolvable without a zone.
+    val arrayOfTimestampNTZ = Literal.create(Seq(0L), ArrayType(TimestampNTZType))
+    assert(Cast(arrayOfTimestampNTZ, StringType).resolved)
+  }
+
   test("cast timestamp_ntz to time") {
     // Per ANSI rule 15.d the time-of-day fields are extracted and truncated to the target
     // precision; the operation is deterministic and time-zone independent.
