@@ -1271,6 +1271,39 @@ class DataFrameAggregateSuite extends SharedSparkSession
     )
   }
 
+  test("SPARK-60150: filter above an aggregate sees normalized float/double grouping keys") {
+    // Two rows, so that OptimizeOneRowPlan does not remove the aggregate.
+    val df = Seq(-0.0d, -0.0d).toDF("x")
+    val isNegZero = col("x").cast("string") === "-0.0"
+
+    // The aggregate outputs -0.0 as 0.0, for which the predicate is false.
+    checkAnswer(df.distinct().where(isNegZero), Nil)
+    checkAnswer(df.groupBy("x").count().where(isNegZero), Nil)
+    checkAnswer(df.dropDuplicates().where(isNegZero), Nil)
+    checkAnswer(df.intersectAll(df).where(isNegZero), Nil)
+    checkAnswer(df.except(Seq(1.0d).toDF("x")).where(isNegZero), Nil)
+    checkAnswer(Seq(-0.0f, -0.0f).toDF("x").distinct().where(isNegZero), Nil)
+
+    withTempView("t") {
+      df.createOrReplaceTempView("t")
+      checkAnswer(
+        sql("SELECT * FROM (SELECT DISTINCT x FROM t) WHERE cast(x AS STRING) = '-0.0'"),
+        Nil)
+      // An alias computed from the key is also evaluated on the normalized value.
+      checkAnswer(
+        sql("SELECT * FROM (SELECT cast(x AS STRING) AS s FROM t GROUP BY x) WHERE s = '-0.0'"),
+        Nil)
+    }
+
+    // Evaluating the predicate below the aggregate would split the group and change the count.
+    val zeros = Seq(-0.0d, 0.0d).toDF("x")
+    checkAnswer(
+      zeros.groupBy("x").count().where(col("x").cast("string") === "0.0"),
+      Row(0.0d, 2))
+    // Comparisons treat -0.0 and 0.0 as equal, so they can still be pushed down.
+    checkAnswer(zeros.groupBy("x").count().where(col("x") === 0.0d), Row(0.0d, 2))
+  }
+
   test("SPARK-57329: mode normalizes -0.0/0.0 in the frequency buffer") {
     checkAnswer(
       Seq(0.0d, 0.0d, -0.0d, -0.0d, 9.0d, 9.0d, 9.0d).toDF("d").select(expr("mode(d)")),

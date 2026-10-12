@@ -2677,18 +2677,24 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // We can push down deterministic predicate through Aggregate, including throwable predicate.
     // If we can push down a filter through Aggregate, it means the filter only references the
     // grouping keys or constants. The Aggregate operator can't reduce distinct values of grouping
-    // keys so the filter won't see any new data after push down.
+    // keys so the filter won't see any new data after push down. The exception is float/double
+    // grouping keys, which the Aggregate normalizes (-0.0 to 0.0, NaN canonicalized), so a filter
+    // that can tell those values apart must stay above it.
     case filter @ Filter(condition, aggregate: Aggregate)
       if aggregate.aggregateExpressions.forall(_.deterministic)
         && aggregate.groupingExpressions.nonEmpty =>
       val aliasMap = getAliasMap(aggregate)
+      val normalizedKeys = AttributeSet(aggregate.groupingExpressions
+        .filter(e => NormalizeFloatingNumbers.needNormalize(e.dataType))
+        .flatMap(_.references))
 
       // For each filter, expand the alias and check if the filter can be evaluated using
       // attributes produced by the aggregate operator's child operator.
       val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
         val replaced = replaceAlias(cond, aliasMap)
         cond.deterministic && cond.references.nonEmpty &&
-          replaced.references.subsetOf(aggregate.child.outputSet)
+          replaced.references.subsetOf(aggregate.child.outputSet) &&
+          !sensitiveToFloatNormalization(replaced, normalizedKeys)
       }
 
       if (pushDown.nonEmpty) {
@@ -2799,6 +2805,19 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case _: Expand => true
     case _: BinBy => true
     case _ => false
+  }
+
+  // Whether `e` may evaluate differently before and after `keys` are normalized. Comparisons
+  // treat -0.0/0.0 and all NaNs as equal, so a float/double key that is a direct operand of one
+  // is safe. Any other use of a key is treated as sensitive.
+  private def sensitiveToFloatNormalization(e: Expression, keys: AttributeSet): Boolean = e match {
+    case a: Attribute => keys.contains(a)
+    case _: BinaryComparison | _: In | _: IsNull | _: IsNotNull | _: IsNaN =>
+      e.children.exists {
+        case a: Attribute if a.dataType == FloatType || a.dataType == DoubleType => false
+        case c => sensitiveToFloatNormalization(c, keys)
+      }
+    case _ => e.children.exists(sensitiveToFloatNormalization(_, keys))
   }
 
   private def pushDownPredicate(
