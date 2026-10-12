@@ -1,0 +1,17 @@
+core/src/test/resources/TestHelloV2_2.13.jar
+core/src/test/resources/TestHelloV3_2.13.jar
+core/src/test/resources/TestUDTF.jar
+data/artifact-tests/junitLargeJar.jar
+data/artifact-tests/smallJar.jar
+sql/connect/client/jvm/src/test/resources/TestHelloV2_2.13.jar
+sql/connect/client/jvm/src/test/resources/udf2.13.jar
+sql/connect/common/src/test/resources/artifact-tests/junitLargeJar.jar
+sql/connect/common/src/test/resources/artifact-tests/smallJar.jar
+sql/core/src/test/resources/SPARK-33084.jar
+sql/core/src/test/resources/artifact-tests/udf_noA.jar
+sql/hive-thriftserver/src/test/resources/TestUDTF.jar
+sql/hive/src/test/noclasspath/hive-test-udfs.jar
+sql/hive/src/test/resources/SPARK-21101-1.0.jar
+sql/hive/src/test/resources/TestUDTF.jar
+sql/hive/src/test/resources/data/files/TestSerDe.jar
+sql/hive/src/test/resources/regression-test-SPARK-8489/test-2.13.jar
