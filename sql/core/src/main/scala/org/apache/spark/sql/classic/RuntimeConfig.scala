@@ -46,8 +46,8 @@ class RuntimeConfig private[sql](val sqlConf: SQLConf = new SQLConf) extends sql
       // Connect config RPC writes through this method too, so both front ends behave the same way.
       //
       // Scoped to the prefix so an ordinary configuration write does not take the monitor. Check
-      // and write under the monitor that guards the session configurations -- `settings` is a
-      // `ModificationCountingMap`, so every `put` locks the map this block locks -- because
+      // and write under the monitor that guards the session configurations -- every method of
+      // `settings` locks the map itself, so every `put` locks the map this block locks -- because
       // the count and total-size limits are properties of the whole environment: without it two
       // concurrent writers could each validate against the pre-write environment and jointly exceed
       // a limit that neither write appeared to break. `Option` rather than `Some`, so a null value
