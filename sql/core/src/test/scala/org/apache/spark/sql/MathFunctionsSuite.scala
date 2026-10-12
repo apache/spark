@@ -364,6 +364,36 @@ class MathFunctionsSuite extends SharedSparkSession {
     )
   }
 
+  test("scaled floor/ceil preserves floating-point boundaries in SQL and DataFrames") {
+    for (ansi <- Seq(false, true); codegen <- Seq("CODEGEN_ONLY", "NO_CODEGEN")) {
+      withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> ansi.toString,
+          SQLConf.CODEGEN_FACTORY_MODE.key -> codegen,
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> (codegen == "CODEGEN_ONLY").toString) {
+        checkAnswer(sql(
+          "SELECT floor(CAST('0.9999999999999999' AS DOUBLE)), " +
+            "floor(CAST('0.9999999999999999' AS DOUBLE), 0), " +
+            "ceil(CAST('0.9000000000000001' AS DOUBLE), 1)"),
+          Row(0L, BigDecimal(0), BigDecimal("1.0")))
+
+        val doubleValues = Seq(0.8999999999999999, 0.9000000000000001,
+          -0.8999999999999999, -0.9000000000000001)
+        val floatValues = Seq(java.lang.Math.nextDown(0.9f), java.lang.Math.nextUp(0.9f),
+          -java.lang.Math.nextDown(0.9f), -java.lang.Math.nextUp(0.9f))
+        Seq(doubleValues.map(lit), floatValues.map(lit)).foreach { values =>
+          val input = spark.range(values.size).select(
+            element_at(array(values: _*), ($"id" + 1).cast("int")).as("value"))
+          val result = input.select(floor($"value", lit(1)), ceil($"value", lit(1)))
+          checkAnswer(result, Seq(
+            Row(BigDecimal("0.8"), BigDecimal("0.9")),
+            Row(BigDecimal("0.9"), BigDecimal("1.0")),
+            Row(BigDecimal("-0.9"), BigDecimal("-0.8")),
+            Row(BigDecimal("-1.0"), BigDecimal("-0.9"))))
+        }
+      }
+    }
+  }
+
   test("round/bround/ceil/floor") {
     val df = Seq(5, 55, 555).map(Tuple1(_)).toDF("a")
     checkAnswer(

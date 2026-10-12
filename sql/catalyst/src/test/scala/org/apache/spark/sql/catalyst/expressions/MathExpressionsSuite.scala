@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -748,6 +749,114 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Truncate(Literal(1.23), Literal.create(null, IntegerType)), null)
   }
 
+  Seq("floor", "ceil").foreach { name =>
+    test(s"scaled $name preserves Double rounding boundaries") {
+      val cases = if (name == "floor") {
+        Seq(
+          (0.8999999999999999, 1, "0.8"),
+          (1.7999999999999998, 1, "1.7"),
+          (0.9999999999999999, 0, "0"),
+          (-0.9000000000000001, 1, "-1.0"))
+      } else {
+        Seq(
+          (0.9000000000000001, 1, "1.0"),
+          (-0.8999999999999999, 1, "-0.8"),
+          (-1.7999999999999998, 1, "-1.7"),
+          (-0.9999999999999999, 0, "0"))
+      }
+      cases.foreach { case (value, scale, expected) =>
+        val input = BoundReference(0, DoubleType, nullable = true)
+        val rounding = if (name == "floor") {
+          RoundFloor(input, Literal(scale))
+        } else {
+          RoundCeil(input, Literal(scale))
+        }
+        val expression = checkDataTypeAndCast(rounding)
+        assert(expression.dataType == DecimalType(16 + scale, scale))
+        checkEvaluation(expression, Decimal(BigDecimal(expected)), InternalRow(value))
+      }
+    }
+  }
+
+  test("scaled floor/ceil preserves Float rounding boundaries") {
+    val cases = Seq(
+      (java.lang.Math.nextDown(0.1f), "0.0", "0.1"),
+      (java.lang.Math.nextUp(0.9f), "0.9", "1.0"),
+      (-java.lang.Math.nextDown(0.1f), "-0.1", "0.0"),
+      (-java.lang.Math.nextUp(0.9f), "-1.0", "-0.9"))
+    cases.foreach { case (value, down, up) =>
+      val input = BoundReference(0, FloatType, nullable = true)
+      checkEvaluation(checkDataTypeAndCast(RoundFloor(input, Literal(1))),
+        Decimal(BigDecimal(down)), InternalRow(value))
+      checkEvaluation(checkDataTypeAndCast(RoundCeil(input, Literal(1))),
+        Decimal(BigDecimal(up)), InternalRow(value))
+    }
+  }
+
+  test("scaled floor/ceil preserves result types and explicit decimal casts") {
+    Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType).foreach { dt =>
+      Seq(-3, 0, 1, 15, 20).foreach { scale =>
+        val input = BoundReference(0, dt, nullable = true)
+        val decimal = Cast(input, DecimalType.forType(dt))
+        val actual = Seq(RoundFloor(input, Literal(scale)), RoundCeil(input, Literal(scale)))
+        val previous = Seq(RoundFloor(decimal, Literal(scale)), RoundCeil(decimal, Literal(scale)))
+        actual.zip(previous).foreach { case (rounding, control) =>
+          assert(checkDataTypeAndCast(rounding).dataType == control.dataType)
+        }
+      }
+    }
+    val input = BoundReference(0, DoubleType, nullable = true)
+    val explicitCast = Cast(input, DecimalType(30, 15))
+    checkEvaluation(RoundFloor(explicitCast, Literal(1)), Decimal(BigDecimal("0.9")),
+      InternalRow(0.8999999999999999))
+    checkEvaluation(RoundCeil(explicitCast, Literal(1)), Decimal(BigDecimal("0.9")),
+      InternalRow(0.9000000000000001))
+  }
+
+  test("scaled floor/ceil preserves null, non-finite and overflow behavior") {
+    for (ansi <- Seq(false, true); dt <- Seq(FloatType, DoubleType)) {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+        def toInput(value: Double): Any = if (dt == FloatType) value.toFloat else value
+        val input = BoundReference(0, dt, nullable = true)
+        val expressions = Seq(RoundFloor(input, Literal(1)), RoundCeil(input, Literal(1)))
+          .map(checkDataTypeAndCast)
+        expressions.foreach { expression =>
+          checkEvaluation(expression, null, InternalRow(null))
+          Seq(Double.NaN, Double.PositiveInfinity, Double.NegativeInfinity).foreach { value =>
+            checkEvaluation(expression, null, InternalRow(toInput(value)))
+          }
+          Seq(0.0, -0.0).foreach { value =>
+            checkEvaluation(expression, Decimal(0), InternalRow(toInput(value)))
+          }
+          val limit = if (dt == FloatType) 1e7 else 1e15
+          Seq(limit, -limit).foreach { value =>
+            val row = InternalRow(toInput(value))
+            if (ansi) {
+              checkExceptionInExpression[SparkArithmeticException](
+                expression, row, "NUMERIC_VALUE_OUT_OF_RANGE")
+            } else {
+              checkEvaluation(expression, null, row)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("scaled floor/ceil handles small values and negative scales") {
+    Seq(-1, 0, 1).foreach { scale =>
+      val input = BoundReference(0, DoubleType, nullable = true)
+      val down = checkDataTypeAndCast(RoundFloor(input, Literal(scale)))
+      val up = checkDataTypeAndCast(RoundCeil(input, Literal(scale)))
+      val unit = Decimal(BigDecimal(java.math.BigDecimal.ONE.scaleByPowerOfTen(-scale)))
+      val negativeUnit = Decimal(-BigDecimal(java.math.BigDecimal.ONE.scaleByPowerOfTen(-scale)))
+      checkEvaluation(down, Decimal(0), InternalRow(java.lang.Double.MIN_VALUE))
+      checkEvaluation(up, unit, InternalRow(java.lang.Double.MIN_VALUE))
+      checkEvaluation(down, negativeUnit, InternalRow(-java.lang.Double.MIN_VALUE))
+      checkEvaluation(up, Decimal(0), InternalRow(-java.lang.Double.MIN_VALUE))
+    }
+  }
+
   test("round/bround/floor/ceil") {
     val scales = -6 to 6
     val doublePi: Double = math.Pi
@@ -789,8 +898,9 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     def floatResultsFloor(i: Int): Any = {
+      // 3.1415f is represented as 3.141499996185302734375.
       val results = Seq(0, 0, 0, 0, 0, 0, 3,
-        3.1, 3.14, 3.141, 3.1415, 3.1415, 3.1415)
+        3.1, 3.14, 3.141, 3.1414, 3.14149, 3.141499)
       Decimal(results(i))
     }
 

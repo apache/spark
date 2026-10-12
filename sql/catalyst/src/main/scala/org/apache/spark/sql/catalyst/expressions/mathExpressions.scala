@@ -369,10 +369,13 @@ object CeilExpressionBuilder extends CeilFloorExpressionBuilderBase {
     RoundCeil(param1, param2)
 }
 
-case class RoundCeil(child: Expression, scale: Expression)
-  extends RoundBase(child, scale, BigDecimal.RoundingMode.CEILING, "ROUND_CEILING") {
+case class RoundCeil(
+    child: Expression,
+    scale: Expression,
+    override val ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
+  extends RoundToDecimal(child, scale, BigDecimal.RoundingMode.CEILING, "ROUND_CEILING") {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType, IntegerType)
+  override def flatArguments: Iterator[Any] = Iterator(child, scale)
 
   override def nodeName: String = "ceil"
 
@@ -672,10 +675,13 @@ object FloorExpressionBuilder extends CeilFloorExpressionBuilderBase {
     RoundFloor(param1, param2)
 }
 
-case class RoundFloor(child: Expression, scale: Expression)
-  extends RoundBase(child, scale, BigDecimal.RoundingMode.FLOOR, "ROUND_FLOOR") {
+case class RoundFloor(
+    child: Expression,
+    scale: Expression,
+    override val ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
+  extends RoundToDecimal(child, scale, BigDecimal.RoundingMode.FLOOR, "ROUND_FLOOR") {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType, IntegerType)
+  override def flatArguments: Iterator[Any] = Iterator(child, scale)
 
   override def nodeName: String = "floor"
 
@@ -1706,22 +1712,23 @@ abstract class RoundBase(child: Expression, scale: Expression,
   override def foldable: Boolean = child.foldable
 
   override lazy val dataType: DataType = child.dataType match {
-    case DecimalType.Fixed(p, s) =>
-      // After rounding we may need one more digit in the integral part,
-      // e.g. `ceil(9.9, 0)` -> `10`, `ceil(99, -1)` -> `100`.
-      val integralLeastNumDigits = p - s + 1
-      if (_scale < 0) {
-        // negative scale means we need to adjust `-scale` number of digits before the decimal
-        // point, which means we need at lease `-scale + 1` digits (after rounding).
-        val newPrecision = math.max(integralLeastNumDigits, -_scale + 1)
-        // We have to accept the risk of overflow as we can't exceed the max precision.
-        DecimalType(math.min(newPrecision, DecimalType.MAX_PRECISION), 0)
-      } else {
-        val newScale = math.min(s, _scale)
-        // We have to accept the risk of overflow as we can't exceed the max precision.
-        DecimalType(math.min(integralLeastNumDigits + newScale, 38), newScale)
-      }
+    case dt: DecimalType => decimalResultType(dt)
     case t => t
+  }
+
+  protected def decimalResultType(inputType: DecimalType): DecimalType = {
+    val DecimalType.Fixed(p, s) = inputType
+    // After rounding we may need one more digit in the integral part,
+    // e.g. `ceil(9.9, 0)` -> `10`, `ceil(99, -1)` -> `100`.
+    val integralLeastNumDigits = p - s + 1
+    if (_scale < 0) {
+      // A negative scale rounds digits before the decimal point.
+      val newPrecision = math.max(integralLeastNumDigits, -_scale + 1)
+      DecimalType(math.min(newPrecision, DecimalType.MAX_PRECISION), 0)
+    } else {
+      val newScale = math.min(s, _scale)
+      DecimalType(math.min(integralLeastNumDigits + newScale, 38), newScale)
+    }
   }
 
   override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, IntegerType)
@@ -1897,6 +1904,75 @@ abstract class RoundBase(child: Expression, scale: Expression,
           $evaluationCode
         }""")
     }
+  }
+}
+
+/**
+ * Scaled floor/ceil return decimals, including for floating-point inputs. Keep the original
+ * floating-point value until rounding: an implicit decimal cast can round across a boundary.
+ */
+abstract class RoundToDecimal(
+    child: Expression,
+    scale: Expression,
+    mode: BigDecimal.RoundingMode.Value,
+    modeStr: String)
+  extends RoundBase(child, scale, mode, modeStr) {
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(DecimalType, FloatType, DoubleType), IntegerType)
+
+  private lazy val decimalInputType: DecimalType = child.dataType match {
+    case dt: DecimalType => dt
+    case dt => DecimalType.forType(dt)
+  }
+
+  override lazy val dataType: DataType = decimalResultType(decimalInputType)
+
+  private lazy val inputLimit: Double =
+    math.pow(10, decimalInputType.precision - decimalInputType.scale)
+
+  // Called by generated code as well as interpreted evaluation.
+  def roundFloatingPoint(value: Double): Decimal = {
+    if (value.isNaN || value.isInfinite) {
+      null
+    } else {
+      val decimal = Decimal(value)
+      if (math.abs(value) >= inputLimit) {
+        // Preserve the overflow behavior of the previous implicit cast. Values inside its
+        // range must not be rounded to the cast's scale before applying floor/ceil.
+        if (ansiEnabled) {
+          CastUtils.changePrecisionExact(decimal, decimalInputType.precision,
+            decimalInputType.scale, getContextOrNull())
+        } else {
+          CastUtils.changePrecisionOrNull(
+            decimal, decimalInputType.precision, decimalInputType.scale)
+        }
+      } else {
+        super.nullSafeEval(decimal).asInstanceOf[Decimal]
+      }
+    }
+  }
+
+  override def nullSafeEval(input: Any): Any = child.dataType match {
+    case FloatType => roundFloatingPoint(input.asInstanceOf[Float].toDouble)
+    case DoubleType => roundFloatingPoint(input.asInstanceOf[Double])
+    case _ => super.nullSafeEval(input)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = child.dataType match {
+    case FloatType | DoubleType if scale.eval(EmptyRow) != null =>
+      val input = child.genCode(ctx)
+      val rounding = ctx.addReferenceObj("rounding", this, classOf[RoundToDecimal].getName)
+      ev.copy(code = code"""
+        ${input.code}
+        boolean ${ev.isNull} = ${input.isNull};
+        Decimal ${ev.value} = null;
+        if (!${ev.isNull}) {
+          ${ev.value} = $rounding.roundFloatingPoint(${input.value});
+          ${ev.isNull} = ${ev.value} == null;
+        }
+      """)
+    case _ => super.doGenCode(ctx, ev)
   }
 }
 
