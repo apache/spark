@@ -84,6 +84,12 @@ options { tokenVocab = SqlBaseLexer; }
   /**
    * Checks if the next token is a top-level COLON inside a `jsonObjectColonKey`, i.e. the
    * JSON_OBJECT member separator, so the key does not absorb it as `k:v` or `'k' :v`.
+   *
+   * Scans the token stream, not the parse tree, because it runs during ANTLR prediction before the
+   * rule-context stack above `_ctx` is materialized. The COLON separates only at the key's top
+   * level: not inside parens/brackets and not inside a CASE branch. CASE and END are non-reserved,
+   * so each is counted as CASE nesting only when a neighbouring token shows it is the keyword, not
+   * a column (see the helpers below).
    */
   public boolean isJsonObjectColonSeparator() {
     Token next = _input.LT(1);
@@ -92,23 +98,89 @@ options { tokenVocab = SqlBaseLexer; }
     }
     for (ParserRuleContext ctx = _ctx; ctx != null; ctx = ctx.getParent()) {
       if (ctx instanceof JsonObjectColonKeyContext) {
+        int stop = next.getTokenIndex();
         int start = ctx.getStart().getTokenIndex();
         int depth = 0;
-        // END is non-reserved, so it only closes an open CASE (a column named `end` does not).
         int caseDepth = 0;
-        for (int i = start; i < next.getTokenIndex(); i++) {
-          switch (_input.get(i).getType()) {
+        int prevType = -1;
+        for (int i = start; i < stop; i++) {
+          Token tok = _input.get(i);
+          // Skip hidden-channel whitespace/comments so neighbour-token checks see real tokens.
+          if (tok.getChannel() != Token.DEFAULT_CHANNEL) {
+            continue;
+          }
+          int type = tok.getType();
+          switch (type) {
             case LEFT_PAREN: case LEFT_BRACKET: depth++; break;
             case RIGHT_PAREN: case RIGHT_BRACKET: depth--; break;
-            case CASE: caseDepth++; break;
-            case END: if (caseDepth > 0) caseDepth--; break;
+            case CASE:
+              // A `case` column, not the keyword, when an operator/terminator follows.
+              if (!jsonKeyTokenFollowsOperand(nextDefaultChannelType(i, stop))) caseDepth++;
+              break;
+            case END:
+              // An `end` column, not the keyword, when it sits in an operand position.
+              if (caseDepth > 0 && !jsonKeyOperandExpectedAfter(prevType)) caseDepth--;
+              break;
             default: break;
           }
+          prevType = type;
         }
-        return depth == 0 && caseDepth == 0 && next.getTokenIndex() > start;
+        return depth == 0 && caseDepth == 0 && stop > start;
       }
     }
     return false;
+  }
+
+  /**
+   * Type of the first default-channel token after index {@code i}, up to and including
+   * {@code stop}, or -1 if there is none.
+   */
+  private int nextDefaultChannelType(int i, int stop) {
+    for (int j = i + 1; j <= stop; j++) {
+      Token tok = _input.get(j);
+      if (tok.getChannel() == Token.DEFAULT_CHANNEL) {
+        return tok.getType();
+      }
+    }
+    return -1;
+  }
+
+  /**
+   * True when an operand is expected after this token type, so a following `CASE`/`END` is a column
+   * rather than the keyword. Lists only tokens that never complete an expression; any other
+   * predecessor falls back to treating `CASE`/`END` as the keyword.
+   */
+  private boolean jsonKeyOperandExpectedAfter(int type) {
+    switch (type) {
+      case LEFT_PAREN: case LEFT_BRACKET: case COMMA:
+      case EQ: case NEQ: case NEQJ: case LT: case LTE: case GT: case GTE:
+      case PLUS: case MINUS: case ASTERISK: case SLASH: case PERCENT: case DIV:
+      case TILDE: case AMPERSAND: case PIPE: case CONCAT_PIPE: case HAT:
+      case AND: case OR: case NOT:
+      case WHEN: case THEN: case ELSE: case CASE:
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * True when this token type can only follow a completed operand, so a preceding `CASE` is a
+   * column rather than the keyword. Any other follower falls back to treating `CASE` as the
+   * keyword -- including `+`/`-`/`~`/`*`, which can also start a CASE value and so do not prove
+   * `CASE` is a column.
+   */
+  private boolean jsonKeyTokenFollowsOperand(int type) {
+    switch (type) {
+      case COLON: case COMMA: case RIGHT_PAREN: case RIGHT_BRACKET:
+      case DOUBLE_COLON: case DOT: case SEMICOLON:
+      case EQ: case NEQ: case NEQJ: case LT: case LTE: case GT: case GTE:
+      case SLASH: case PERCENT: case AMPERSAND: case PIPE: case CONCAT_PIPE: case HAT:
+      case AND: case OR:
+        return true;
+      default:
+        return false;
+    }
   }
 }
 

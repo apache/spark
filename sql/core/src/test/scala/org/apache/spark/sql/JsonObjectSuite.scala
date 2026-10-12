@@ -82,7 +82,8 @@ class JsonObjectSuite extends QueryTest with SharedSparkSession {
   }
 
   test("a colon member splits at the first top-level colon after the key") {
-    val from = """FROM (SELECT parse_json('{"x":1,"y":"s"}') AS v, 'kk' AS k, 'e' AS `end`)"""
+    val from =
+      """FROM (SELECT parse_json('{"x":1,"y":"s"}') AS v, 'kk' AS k, 'e' AS `end`, 'c' AS `case`)"""
     Seq(
       "json_object('k': v:x)" -> """{"k":1}""",
       "json_object(k: v:x)" -> """{"kk":1}""",
@@ -92,6 +93,10 @@ class JsonObjectSuite extends QueryTest with SharedSparkSession {
       "json_object((v:y::string) : 1)" -> """{"s":1}""",
       "json_object(v:y::string VALUE v:x)" -> """{"s":1}""",
       "json_object(CASE WHEN v:x::int = 1 THEN 'a' END : v:y)" -> """{"a":"s"}""",
+      // `end` and `case` are non-reserved and usable as column names: the separator check must read
+      // each CASE/END token as keyword or column by its neighbour, not count it blindly.
+      "json_object(CASE WHEN end = 'e' AND v:x::int = 1 THEN 'a' END : v:y)" -> """{"a":"s"}""",
+      "json_object(case : v:x)" -> """{"c":1}""",
       "json_object(array('a')[0] : v:x)" -> """{"a":1}""",
       "json_object(end : v:x)" -> """{"e":1}"""
     ).foreach { case (call, expected) =>
@@ -1014,6 +1019,14 @@ world'))"""))
     checkAnswer(
       sql("SELECT json_object('a', CAST(json_object('b', 1) AS STRING))"),
       Row("""{"a":"{\"b\":1}"}"""))
+    // JSON_QUERY is mode-sensitive: KEEP QUOTES splices raw JSON text, OMIT QUOTES returns a
+    // decoded (quoted) string. Verify the comma form preserves the distinction, as the VALUE form.
+    checkAnswer(
+      sql("""SELECT json_object('a', json_query('{"o":{"x":1}}', '$.o'))"""),
+      Row("""{"a":{"x":1}}"""))
+    checkAnswer(
+      sql("""SELECT json_object('a', json_query('{"n":"Ada"}', '$.n' OMIT QUOTES))"""),
+      Row("""{"a":"Ada"}"""))
   }
 
   test("routed comma-form builder ties each member's raw flag to its own position") {
