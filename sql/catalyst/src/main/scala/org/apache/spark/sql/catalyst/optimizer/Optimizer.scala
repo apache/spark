@@ -2672,29 +2672,25 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // We can push down deterministic predicate through Aggregate, including throwable predicate.
     // If we can push down a filter through Aggregate, it means the filter only references the
     // grouping keys or constants. The Aggregate operator can't reduce distinct values of grouping
-    // keys so the filter won't see any new data after push down. The exception is float/double
-    // grouping keys, which the Aggregate normalizes (-0.0 to 0.0, NaN canonicalized), so a filter
-    // that can tell those values apart must stay above it.
+    // keys so the filter won't see any new data after push down. Float/double grouping keys are
+    // normalized by the Aggregate (-0.0 to 0.0, NaN canonicalized), so a filter that can tell
+    // those values apart reads the normalized grouping keys after push down (see
+    // `pushBelowAggregate`).
     case filter @ Filter(condition, aggregate: Aggregate)
       if aggregate.aggregateExpressions.forall(_.deterministic)
         && aggregate.groupingExpressions.nonEmpty =>
       val aliasMap = getAliasMap(aggregate)
-      val normalizedKeys = AttributeSet(aggregate.groupingExpressions
-        .filter(e => NormalizeFloatingNumbers.needNormalize(e.dataType))
-        .flatMap(_.references))
 
       // For each filter, expand the alias and check if the filter can be evaluated using
       // attributes produced by the aggregate operator's child operator.
       val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
         val replaced = replaceAlias(cond, aliasMap)
         cond.deterministic && cond.references.nonEmpty &&
-          replaced.references.subsetOf(aggregate.child.outputSet) &&
-          !sensitiveToFloatNormalization(replaced, normalizedKeys)
+          replaced.references.subsetOf(aggregate.child.outputSet)
       }
 
       if (pushDown.nonEmpty) {
-        val pushDownPredicate = pushDown.reduce(And)
-        val replaced = replaceAlias(pushDownPredicate, aliasMap)
+        val replaced = pushDown.map(pushBelowAggregate(_, aggregate)).reduce(And)
         val newAggregate = aggregate.copy(child = Filter(replaced, aggregate.child))
         // If there is no more filter to stay up, just eliminate the filter.
         // Otherwise, create "Filter(stayUp) <- Aggregate <- Filter(pushDownPredicate)".
@@ -2800,6 +2796,30 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case _: Expand => true
     case _: BinBy => true
     case _ => false
+  }
+
+  // Rewrites a conjunct pushed below `aggregate` in terms of the aggregate's child. Expressions
+  // above the aggregate see its float/double grouping keys normalized, so a conjunct that can
+  // tell normalized values apart reads the normalized grouping expressions instead.
+  private[optimizer] def pushBelowAggregate(cond: Expression, aggregate: Aggregate): Expression = {
+    val replaced = replaceAlias(cond, getAliasMap(aggregate))
+    val normalizedGrouping = aggregate.groupingExpressions
+      .filter(e => NormalizeFloatingNumbers.needNormalize(e.dataType))
+      .map(trimAliases)
+    val keys = AttributeSet(normalizedGrouping.flatMap(_.references))
+    if (sensitiveToFloatNormalization(replaced, keys)) {
+      normalizeGroupingExpressions(replaced, normalizedGrouping)
+    } else {
+      replaced
+    }
+  }
+
+  private def normalizeGroupingExpressions(
+      e: Expression,
+      grouping: Seq[Expression]): Expression = e match {
+    case _: KnownFloatingPointNormalized => e
+    case _ if grouping.exists(_.semanticEquals(e)) => NormalizeFloatingNumbers.normalize(e)
+    case _ => e.mapChildren(normalizeGroupingExpressions(_, grouping))
   }
 
   // Whether `e` may evaluate differently before and after `keys` are normalized. Comparisons
