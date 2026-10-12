@@ -1699,7 +1699,7 @@ nonTrivialPrimitiveType
     | TIME (LEFT_PAREN precision=integerValue RIGHT_PAREN)? (withoutTimeZone)?
     | GEOGRAPHY LEFT_PAREN (srid=integerValue | any=ANY) RIGHT_PAREN
     | GEOMETRY LEFT_PAREN (srid=integerValue | any=ANY) RIGHT_PAREN
-    | {file_type_enabled}? FILE (fileTypeMode=EXTERNAL)?
+    | {file_type_enabled}? FILE EXTERNAL?
     ;
 
 trivialPrimitiveType

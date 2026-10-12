@@ -133,7 +133,7 @@ object DataType {
   private val STRING_WITH_COLLATION = """string\s+collate\s+(\w+)""".r
   private val TIMESTAMP_LTZ_NANOS_TYPE = """timestamp_ltz\(\s*(\d+)\s*\)""".r
   private val TIMESTAMP_NTZ_NANOS_TYPE = """timestamp_ntz\(\s*(\d+)\s*\)""".r
-  private val FILE_TYPE = """file(?:\s+(external))?""".r
+  private val FILE_TYPE = """file(?:\s+external)?""".r
   private val GEOMETRY_TYPE = """geometry\(\s*([\w]+:-?[\w]+)\s*\)""".r
   private val GEOGRAPHY_TYPE_CRS = """geography\(\s*(\w+:-?\w+)\s*\)""".r
   private val GEOGRAPHY_TYPE_ALG = """geography\(\s*(\w+)\s*\)""".r
@@ -143,9 +143,8 @@ object DataType {
   // CHAR/VARCHAR collations are stored separately so older readers that only understand
   // __COLLATIONS (and reject it on non-STRING types) still see uncollated char(n)/varchar(n).
   val CHAR_VARCHAR_COLLATIONS_METADATA_KEY = "__CHAR_VARCHAR_COLLATIONS"
-  // The mode of the FILE types of a field, as a map of field path to mode. It is written by
-  // engines that support more modes than OSS, which writes none: a FILE without an entry is an
-  // external file.
+  // The paths of the FILE types of a field, with their mode. It is written by engines that
+  // support more modes than OSS, which writes none: OSS has a single kind of file.
   val FILE_TYPE_MODE_METADATA_KEY = "__FILE_TYPE_MODE"
 
   /**
@@ -272,7 +271,7 @@ object DataType {
   }
 
   /** Given the string representation of a type, return its DataType */
-  private def nameToType(name: String, inStructField: Boolean = false): DataType = {
+  private def nameToType(name: String): DataType = {
     name match {
       case "decimal" => DecimalType.USER_DEFAULT
       case FIXED_DECIMAL(precision, scale) =>
@@ -349,17 +348,7 @@ object DataType {
           TimestampNTZNanosType(p)
         }
       case "timestamp_ltz" => TimestampType
-      case FILE_TYPE(mode) =>
-        // Bare `"file"` resolves differently depending on context: inside a StructField with
-        // no `__FILE_TYPE_MODE` entry it is the OSS-source EXTERNAL implicit default; in a
-        // standalone parse (top-level `fromJson` or recursion outside any StructField) it is
-        // UNKNOWN -- required for cross-language UDF round-trips where Python serializes a
-        // top-level `FileType()` to bare `"file"` and the JVM must read it back as UNKNOWN.
-        mode match {
-          case "external" => FileType.external
-          case _ if inStructField => FileType.external
-          case _ => FileType()
-        }
+      case FILE_TYPE() => FileType
       case other =>
         otherTypes.getOrElse(
           other,
@@ -386,8 +375,7 @@ object DataType {
       fieldPath: String,
       collationsMap: Map[String, String],
       charVarcharCollationsMap: Map[String, String] = Map.empty,
-      inStructField: Boolean = false,
-      fileTypeModes: Map[String, FileTypeMode] = Map.empty): DataType = {
+      fileTypePaths: Set[String] = Set.empty): DataType = {
     val remainingCharVarcharPaths = mutable.Set.from(charVarcharCollationsMap.keySet)
     val parsedType = parseDataType(
       json,
@@ -395,8 +383,7 @@ object DataType {
       collationsMap,
       charVarcharCollationsMap,
       remainingCharVarcharPaths,
-      inStructField,
-      fileTypeModes)
+      fileTypePaths)
     if (remainingCharVarcharPaths.nonEmpty) {
       throw new SparkIllegalArgumentException(
         errorClass = "INVALID_CHAR_VARCHAR_COLLATION_METADATA.UNRECOGNIZED_PATH",
@@ -411,11 +398,10 @@ object DataType {
       collationsMap: Map[String, String],
       charVarcharCollationsMap: Map[String, String],
       remainingCharVarcharPaths: mutable.Set[String],
-      inStructField: Boolean,
-      fileTypeModes: Map[String, FileTypeMode]): DataType = json match {
-    case JString(name) if fileTypeModes.contains(fieldPath) =>
+      fileTypePaths: Set[String]): DataType = json match {
+    case JString(name) if fileTypePaths.contains(fieldPath) =>
       name match {
-        case FILE_TYPE(_) => FileType(fileTypeModes(fieldPath))
+        case FILE_TYPE() => FileType
         case _ => throw invalidJsonDataTypeForFile(fieldPath, name)
       }
 
@@ -435,7 +421,7 @@ object DataType {
           assertValidTypeForCollations(fieldPath, name, collationsMap)
           StringType(CollationFactory.collationNameToId(collation))
         case (None, None) =>
-          nameToType(name, inStructField)
+          nameToType(name)
       }
 
     case JSortedObject(
@@ -443,7 +429,7 @@ object DataType {
           ("elementType", t: JValue),
           ("type", JString("array"))) =>
       assertValidTypeForCollations(fieldPath, "array", collationsMap)
-      assertNotFileTypePath(fieldPath, "array", fileTypeModes)
+      assertNotFileTypePath(fieldPath, "array", fileTypePaths)
       assertValidTypeForCharVarcharCollations(fieldPath, "array", charVarcharCollationsMap)
       val elementType = parseDataType(
         t,
@@ -451,8 +437,7 @@ object DataType {
         collationsMap,
         charVarcharCollationsMap,
         remainingCharVarcharPaths,
-        inStructField,
-        fileTypeModes)
+        fileTypePaths)
       ArrayType(elementType, n)
 
     case JSortedObject(
@@ -461,7 +446,7 @@ object DataType {
           ("valueContainsNull", JBool(n)),
           ("valueType", v: JValue)) =>
       assertValidTypeForCollations(fieldPath, "map", collationsMap)
-      assertNotFileTypePath(fieldPath, "map", fileTypeModes)
+      assertNotFileTypePath(fieldPath, "map", fileTypePaths)
       assertValidTypeForCharVarcharCollations(fieldPath, "map", charVarcharCollationsMap)
       val keyType = parseDataType(
         k,
@@ -469,21 +454,19 @@ object DataType {
         collationsMap,
         charVarcharCollationsMap,
         remainingCharVarcharPaths,
-        inStructField,
-        fileTypeModes)
+        fileTypePaths)
       val valueType = parseDataType(
         v,
         appendFieldToPath(fieldPath, "value"),
         collationsMap,
         charVarcharCollationsMap,
         remainingCharVarcharPaths,
-        inStructField,
-        fileTypeModes)
+        fileTypePaths)
       MapType(keyType, valueType, n)
 
     case JSortedObject(("fields", JArray(fields)), ("type", JString("struct"))) =>
       assertValidTypeForCollations(fieldPath, "struct", collationsMap)
-      assertNotFileTypePath(fieldPath, "struct", fileTypeModes)
+      assertNotFileTypePath(fieldPath, "struct", fileTypePaths)
       assertValidTypeForCharVarcharCollations(fieldPath, "struct", charVarcharCollationsMap)
       StructType(fields.map(parseStructField))
 
@@ -541,7 +524,7 @@ object DataType {
       val collationsMap = getCollationsMap(metadataFields, COLLATIONS_METADATA_KEY)
       val charVarcharCollationsMap =
         getCollationsMap(metadataFields, CHAR_VARCHAR_COLLATIONS_METADATA_KEY)
-      val fileTypeModes = getFileTypeModes(metadataFields)
+      val fileTypePaths = getFileTypePaths(metadataFields)
       val metadataWithoutCollations = JObject(metadataFields.filterNot { field =>
         field._1 == COLLATIONS_METADATA_KEY ||
         field._1 == CHAR_VARCHAR_COLLATIONS_METADATA_KEY ||
@@ -554,8 +537,7 @@ object DataType {
           name,
           collationsMap,
           charVarcharCollationsMap,
-          inStructField = true,
-          fileTypeModes),
+          fileTypePaths),
         nullable,
         Metadata.fromJObject(metadataWithoutCollations))
     // Support reading schema when 'metadata' is missing.
@@ -563,13 +545,10 @@ object DataType {
           ("name", JString(name)),
           ("nullable", JBool(nullable)),
           ("type", dataType: JValue)) =>
-      StructField(
-        name,
-        parseDataType(dataType, name, Map.empty, inStructField = true),
-        nullable)
+      StructField(name, parseDataType(dataType), nullable)
     // Support reading schema when 'nullable' is missing.
     case JSortedObject(("name", JString(name)), ("type", dataType: JValue)) =>
-      StructField(name, parseDataType(dataType, name, Map.empty, inStructField = true))
+      StructField(name, parseDataType(dataType))
     case other =>
       throw new SparkIllegalArgumentException(
         errorClass = "INVALID_JSON_DATA_TYPE",
@@ -624,28 +603,27 @@ object DataType {
   private def assertNotFileTypePath(
       fieldPath: String,
       jsonType: String,
-      fileTypeModes: Map[String, FileTypeMode]): Unit = {
-    if (fileTypeModes.contains(fieldPath)) {
+      fileTypePaths: Set[String]): Unit = {
+    if (fileTypePaths.contains(fieldPath)) {
       throw invalidJsonDataTypeForFile(fieldPath, jsonType)
     }
   }
 
   /**
-   * Returns a map of field path to the mode of the FILE type at that path. A mode that OSS does
-   * not support, such as MANAGED, is rejected rather than read as an external file.
+   * Returns the paths of the FILE types of a field, as recorded by engines with more modes than
+   * OSS. OSS has a single kind of file, which behaves like an external file, so any other mode,
+   * such as MANAGED, is rejected rather than read as an external file.
    */
-  private def getFileTypeModes(metadataFields: List[JField]): Map[String, FileTypeMode] = {
+  private def getFileTypePaths(metadataFields: List[JField]): Set[String] = {
     metadataFields.find(_._1 == FILE_TYPE_MODE_METADATA_KEY).map(_._2) match {
       case Some(JObject(fields)) =>
         fields.collect { case (path, JString(modeStr)) =>
-          val mode = modeStr.toUpperCase(Locale.ROOT) match {
-            case "EXTERNAL" => FileTypeMode.EXTERNAL
-            case "UNKNOWN" => FileTypeMode.UNKNOWN
-            case _ => throw invalidJsonDataTypeForFile(path, s"file (mode=$modeStr)")
+          if (modeStr.toUpperCase(Locale.ROOT) != "EXTERNAL") {
+            throw invalidJsonDataTypeForFile(path, s"file (mode=$modeStr)")
           }
-          path -> mode
-        }.toMap
-      case _ => Map.empty
+          path
+        }.toSet
+      case _ => Set.empty
     }
   }
 

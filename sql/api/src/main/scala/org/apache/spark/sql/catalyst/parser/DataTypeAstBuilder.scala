@@ -420,11 +420,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeE
             // This implies a fixed GEOMETRY type, with a single fixed SRID value across all rows.
             GeometryType(parseSrid(currentCtx.srid.getText))
           }
-        case FILE =>
-          Option(currentCtx.fileTypeMode).map(_.getType) match {
-            case Some(EXTERNAL) => FileType.external
-            case _ => FileType()
-          }
+        case FILE => FileType
       }
     } else if (typeCtx.trivialPrimitiveType != null) {
       // This is a primitive type without parameters, e.g. BOOLEAN, TINYINT, etc.

@@ -24,12 +24,9 @@ import org.apache.spark.annotation.Unstable
  * (size, content type and checksum); the bytes of the file are never stored in the value.
  *
  * In SQL the type is named `FILE`, and the `EXTERNAL` keyword is required when declaring a
- * column, as in `CREATE TABLE t (f FILE EXTERNAL)`. Its JSON representation is `"file"` inside
- * a struct field and `"file external"` for a standalone type.
- *
- * The mode is part of the type's identity: `FILE EXTERNAL` is a reference whose lifecycle is
- * independent of the table, and a bare `FILE` is a file whose mode is not determined yet, such as
- * the result of a cast or of a UDF. Table column definitions are to require `EXTERNAL`.
+ * column, as in `CREATE TABLE t (f FILE EXTERNAL)`. Its JSON representation is `"file"`. OSS has
+ * a single kind of file, which behaves like an external file: the lifecycle of the referenced
+ * file is independent of the table.
  *
  * The type is planned to be physically represented as a struct (see [[FileType.FIELDS]]) but
  * deliberately does not extend [[StructType]]. It is planned to have no ordering, so it is not
@@ -37,25 +34,18 @@ import org.apache.spark.annotation.Unstable
  * clustering column. Of these, this type currently only guarantees the schema-level pieces (DDL
  * and JSON); the physical representation and most of the restrictions are added by later parts.
  *
- * @param mode
- *   the mode of this FileType column. Mode is part of type identity.
  * @since 4.4.0
  */
 @Unstable
-case class FileType(mode: FileTypeMode = FileTypeMode.UNKNOWN) extends DataType {
+class FileType private () extends DataType {
 
   override def defaultSize: Int = FileType.asStruct.defaultSize
 
-  override def typeName: String = mode match {
-    case FileTypeMode.EXTERNAL => "file external"
-    case _ => "file"
-  }
+  override def typeName: String = "file"
 
-  /**
-   * `acceptsType` ignores mode so that an expression expecting `FileType()` accepts a
-   * `FileType.external`. `sameType` and `equals` still distinguish modes.
-   */
-  override private[sql] def acceptsType(other: DataType): Boolean = other.isInstanceOf[FileType]
+  override def equals(obj: Any): Boolean = obj.isInstanceOf[FileType]
+
+  override def hashCode(): Int = classOf[FileType].getSimpleName.hashCode
 
   private[spark] override def asNullable: FileType = this
 }
@@ -64,10 +54,7 @@ case class FileType(mode: FileTypeMode = FileTypeMode.UNKNOWN) extends DataType 
  * @since 4.4.0
  */
 @Unstable
-object FileType {
-
-  /** Creates an external FileType. */
-  def external: FileType = FileType(FileTypeMode.EXTERNAL)
+case object FileType extends FileType {
 
   /** Field index for the uri field. */
   val URI_INDEX = 0
