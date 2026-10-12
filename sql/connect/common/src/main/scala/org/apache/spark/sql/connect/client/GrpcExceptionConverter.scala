@@ -406,7 +406,170 @@ private[client] object GrpcExceptionConverter {
         errorClass = Option(getErrorClassOrFallback(params)),
         messageParameters = errorParamsToMessageParameters(params),
         context = params.queryContext,
-        sqlState = getSqlStateOrFallback(params))))
+        sqlState = getSqlStateOrFallback(params)))).map { case (name, constructor) =>
+    name -> { (params: ErrorParams) =>
+      if (params.errorClass.exists(ec => !SparkThrowableHelper.isValidErrorClass(ec))) {
+        // Connector conditions and conditions from newer servers may not be defined locally.
+        // Use the server message verbatim: parameters in ErrorInfo may have been truncated.
+        val exception = serverErrorFactory(name)(resolveParams(params))
+        if (params.cause.isDefined && exception.getCause == null) {
+          exception.initCause(params.cause.get)
+        }
+        exception
+      } else {
+        constructor(params)
+      }
+    }
+  }
+
+  // Constructors that accept an already rendered message without consulting the local registry.
+  private lazy val serverErrorFactory: Map[String, ErrorParams => Throwable] = Map(
+    errorConstructor(params =>
+      new StreamingQueryException(
+        queryDebugString = "", // Already included in the server message.
+        message = params.message,
+        cause = params.cause.orNull,
+        startOffset = params.messageParameters.getOrElse("startOffset", ""),
+        endOffset = params.messageParameters.getOrElse("endOffset", ""),
+        errorClass = params.errorClass.orNull,
+        messageParameters = params.messageParameters,
+        sqlState = params.sqlState,
+        context = params.queryContext)),
+    errorConstructor(params =>
+      new ParseException(
+        command = None,
+        message = params.message,
+        start = Origin(),
+        errorClass = params.errorClass,
+        messageParameters = params.messageParameters,
+        queryContext = params.queryContext,
+        sqlState = params.sqlState,
+        cause = params.cause,
+        messagePreformatted = true)),
+    errorConstructor(params =>
+      AnalysisException.fromServerError(
+        message = params.message,
+        cause = params.cause,
+        errorClass = params.errorClass,
+        messageParameters = params.messageParameters,
+        context = params.queryContext,
+        sqlState = params.sqlState)),
+    errorConstructor(params =>
+      new NamespaceAlreadyExistsException(
+        params.message,
+        params.errorClass,
+        params.messageParameters,
+        params.cause,
+        params.queryContext,
+        params.sqlState)),
+    errorConstructor(params =>
+      new TableAlreadyExistsException(
+        params.message,
+        params.cause,
+        params.errorClass,
+        params.messageParameters,
+        params.queryContext,
+        params.sqlState)),
+    errorConstructor(params =>
+      new TempTableAlreadyExistsException(
+        params.message,
+        params.cause,
+        params.errorClass,
+        params.messageParameters,
+        params.queryContext,
+        params.sqlState)),
+    errorConstructor(params =>
+      new NoSuchDatabaseException(
+        params.message,
+        params.cause,
+        params.errorClass,
+        params.messageParameters,
+        params.queryContext,
+        params.sqlState)),
+    errorConstructor(params =>
+      new NoSuchNamespaceException(
+        params.message,
+        params.cause,
+        params.errorClass,
+        params.messageParameters,
+        params.queryContext,
+        params.sqlState)),
+    errorConstructor(params =>
+      new NoSuchTableException(
+        params.message,
+        params.cause,
+        params.errorClass,
+        params.messageParameters,
+        params.queryContext,
+        params.sqlState)),
+    errorConstructor[NumberFormatException](params =>
+      new SparkNumberFormatException(
+        params.message,
+        params.errorClass,
+        params.messageParameters,
+        params.queryContext,
+        params.sqlState)),
+    errorConstructor[IllegalArgumentException](params =>
+      new SparkIllegalArgumentException(
+        params.message,
+        params.cause,
+        params.errorClass,
+        params.messageParameters,
+        params.queryContext,
+        params.sqlState)),
+    errorConstructor[ArithmeticException](params =>
+      new SparkArithmeticException(
+        params.message,
+        params.errorClass,
+        params.messageParameters,
+        params.queryContext,
+        params.sqlState)),
+    errorConstructor[UnsupportedOperationException](params =>
+      new SparkUnsupportedOperationException(
+        params.message,
+        params.errorClass,
+        params.messageParameters,
+        params.sqlState,
+        params.queryContext)),
+    errorConstructor[ArrayIndexOutOfBoundsException](params =>
+      new SparkArrayIndexOutOfBoundsException(
+        params.message,
+        params.errorClass,
+        params.messageParameters,
+        params.queryContext,
+        params.sqlState)),
+    errorConstructor[DateTimeException](params =>
+      new SparkDateTimeException(
+        params.message,
+        params.errorClass,
+        params.messageParameters,
+        params.queryContext,
+        params.cause,
+        params.sqlState)),
+    errorConstructor(params =>
+      new SparkRuntimeException(
+        params.message,
+        params.cause,
+        params.errorClass,
+        params.messageParameters,
+        params.queryContext,
+        params.sqlState)),
+    errorConstructor(params =>
+      new SparkUpgradeException(
+        params.message,
+        params.cause,
+        params.errorClass,
+        params.messageParameters,
+        params.sqlState,
+        params.queryContext)),
+    errorConstructor(params =>
+      new SparkException(
+        params.message,
+        params.cause.orNull,
+        params.errorClass,
+        params.messageParameters,
+        params.queryContext,
+        params.sqlState)))
 
   // Explicitly deal with cases where there are fallback legacy error classes
   private def getParamsWithLegacyErrorClass(

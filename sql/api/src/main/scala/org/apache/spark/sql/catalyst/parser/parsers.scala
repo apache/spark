@@ -173,21 +173,34 @@ case object ParseErrorListener extends BaseErrorListener {
  * A [[ParseException]] is an [[SparkException]] that is thrown during the parse process. It
  * contains fields and an extended error message that make reporting and diagnosing errors easier.
  */
-class ParseException private (
+class ParseException private[sql] (
     val command: Option[String],
     message: String,
     val start: Origin,
-    errorClass: Option[String] = None,
-    messageParameters: Map[String, String] = Map.empty,
-    queryContext: Array[QueryContext] = ParseException.getQueryContext())
+    errorClass: Option[String],
+    messageParameters: Map[String, String],
+    queryContext: Array[QueryContext],
+    override val sqlState: Option[String],
+    cause: Option[Throwable],
+    private val messagePreformatted: Boolean)
     extends AnalysisException(
       message,
       start.line,
       start.startPosition,
-      None,
+      cause,
       errorClass,
       messageParameters,
-      queryContext) {
+      queryContext,
+      sqlState) {
+
+  private def this(
+      command: Option[String],
+      message: String,
+      start: Origin,
+      errorClass: Option[String] = None,
+      messageParameters: Map[String, String] = Map.empty,
+      queryContext: Array[QueryContext] = ParseException.getQueryContext()) =
+    this(command, message, start, errorClass, messageParameters, queryContext, None, None, false)
 
   def this(errorClass: String, messageParameters: Map[String, String], ctx: ParserRuleContext) =
     this(
@@ -229,6 +242,10 @@ class ParseException private (
       queryContext)
 
   override def getMessage: String = {
+    // A remote message already includes the query context and position information.
+    if (messagePreformatted) {
+      return message
+    }
     val builder = new StringBuilder
     builder ++= "\n" ++= message
     if (queryContext.nonEmpty) {

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.SparkThrowableHelper
+import org.apache.spark.{QueryContext, SparkThrowableHelper}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.QuotingUtils.{quoted, quoteIdentifier, quoteNameParts}
 import org.apache.spark.sql.connector.catalog.Identifier
@@ -35,16 +35,27 @@ private[sql] object NoSuchItemExceptionHelper {
  * Thrown by a catalog when an item cannot be found. The analyzer will rethrow the exception as an
  * [[org.apache.spark.sql.AnalysisException]] with the correct position information.
  */
-class NoSuchDatabaseException private[analysis] (
+class NoSuchDatabaseException private[sql] (
     message: String,
     cause: Option[Throwable],
     errorClass: Option[String],
-    messageParameters: Map[String, String])
+    messageParameters: Map[String, String],
+    context: Array[QueryContext],
+    sqlState: Option[String])
     extends AnalysisException(
       message,
       cause = cause,
       errorClass = errorClass,
-      messageParameters = messageParameters) {
+      messageParameters = messageParameters,
+      context = context,
+      sqlState = sqlState) {
+
+  private[analysis] def this(
+      message: String,
+      cause: Option[Throwable],
+      errorClass: Option[String],
+      messageParameters: Map[String, String]) =
+    this(message, cause, errorClass, messageParameters, Array.empty, None)
 
   def this(
       errorClass: String,
@@ -66,16 +77,27 @@ class NoSuchDatabaseException private[analysis] (
 }
 
 // any changes to this class should be backward compatible as it may be used by external connectors
-class NoSuchNamespaceException private (
+class NoSuchNamespaceException private[sql] (
     message: String,
     cause: Option[Throwable],
     errorClass: Option[String],
-    messageParameters: Map[String, String])
+    messageParameters: Map[String, String],
+    context: Array[QueryContext],
+    sqlState: Option[String])
     extends NoSuchDatabaseException(
       message,
       cause = cause,
       errorClass = errorClass,
-      messageParameters = messageParameters) {
+      messageParameters = messageParameters,
+      context = context,
+      sqlState = sqlState) {
+
+  private def this(
+      message: String,
+      cause: Option[Throwable],
+      errorClass: Option[String],
+      messageParameters: Map[String, String]) =
+    this(message, cause, errorClass, messageParameters, Array.empty, None)
 
   def this(errorClass: String, messageParameters: Map[String, String]) = {
     this(
@@ -97,16 +119,27 @@ class NoSuchNamespaceException private (
 }
 
 // any changes to this class should be backward compatible as it may be used by external connectors
-class NoSuchTableException private (
+class NoSuchTableException private[sql] (
     message: String,
     cause: Option[Throwable],
     errorClass: Option[String],
-    messageParameters: Map[String, String])
+    messageParameters: Map[String, String],
+    context: Array[QueryContext],
+    sqlState: Option[String])
     extends AnalysisException(
       message,
       cause = cause,
       errorClass = errorClass,
-      messageParameters = messageParameters) {
+      messageParameters = messageParameters,
+      context = context,
+      sqlState = sqlState) {
+
+  private def this(
+      message: String,
+      cause: Option[Throwable],
+      errorClass: Option[String],
+      messageParameters: Map[String, String]) =
+    this(message, cause, errorClass, messageParameters, Array.empty, None)
 
   def this(
       errorClass: String,

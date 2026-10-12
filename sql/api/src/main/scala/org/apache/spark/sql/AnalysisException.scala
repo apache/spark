@@ -226,3 +226,21 @@ class AnalysisException protected (
 
   override lazy val origin: Origin = Origin(line, startPosition)
 }
+
+object AnalysisException {
+  private[sql] def fromServerError(
+      message: String,
+      cause: Option[Throwable],
+      errorClass: Option[String],
+      messageParameters: Map[String, String],
+      context: Array[QueryContext],
+      sqlState: Option[String]): AnalysisException = {
+    new AnalysisException(
+      message = message,
+      cause = cause,
+      errorClass = errorClass,
+      messageParameters = messageParameters,
+      context = context,
+      sqlState = sqlState)
+  }
+}

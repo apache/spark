@@ -178,13 +178,22 @@ private[spark] case class ExecutorDeadException(message: String)
 /**
  * Exception thrown when Spark returns different result after upgrading to a new version.
  */
-private[spark] class SparkUpgradeException private(
+private[spark] class SparkUpgradeException private[spark](
     message: String,
     cause: Option[Throwable],
     errorClass: Option[String],
     messageParameters: Map[String, String],
-    sqlState: Option[String] = None)
+    sqlState: Option[String],
+    context: Array[QueryContext])
   extends RuntimeException(message, cause.orNull) with SparkThrowable {
+
+  private def this(
+      message: String,
+      cause: Option[Throwable],
+      errorClass: Option[String],
+      messageParameters: Map[String, String],
+      sqlState: Option[String] = None) =
+    this(message, cause, errorClass, messageParameters, sqlState, Array.empty)
 
   def this(
     errorClass: String,
@@ -217,17 +226,19 @@ private[spark] class SparkUpgradeException private(
   override def getCondition: String = errorClass.orNull
 
   override def getSqlState: String = sqlState.getOrElse(super.getSqlState)
+
+  override def getQueryContext: Array[QueryContext] = context
 }
 
 /**
  * Arithmetic exception thrown from Spark with an error class.
  */
-private[spark] class SparkArithmeticException private(
+private[spark] class SparkArithmeticException private[spark](
     message: String,
     errorClass: Option[String],
     messageParameters: Map[String, String],
     context: Array[QueryContext],
-    sqlState: Option[String] = None)
+    sqlState: Option[String])
   extends ArithmeticException(message) with SparkThrowable {
 
   def this(
@@ -239,7 +250,8 @@ private[spark] class SparkArithmeticException private(
       SparkThrowableHelper.getMessage(errorClass, messageParameters, summary),
       Option(errorClass),
       messageParameters,
-      context
+      context,
+      sqlState = None
     )
   }
 
@@ -274,12 +286,20 @@ private[spark] class SparkArithmeticException private(
 /**
  * Unsupported operation exception thrown from Spark with an error class.
  */
-private[spark] class SparkUnsupportedOperationException private(
+private[spark] class SparkUnsupportedOperationException private[spark](
   message: String,
   errorClass: Option[String],
   messageParameters: Map[String, String],
-  sqlState: Option[String] = None)
+  sqlState: Option[String],
+  context: Array[QueryContext])
   extends UnsupportedOperationException(message) with SparkThrowable {
+
+  private def this(
+      message: String,
+      errorClass: Option[String],
+      messageParameters: Map[String, String],
+      sqlState: Option[String] = None) =
+    this(message, errorClass, messageParameters, sqlState, Array.empty)
 
   def this(
     errorClass: String,
@@ -322,6 +342,8 @@ private[spark] class SparkUnsupportedOperationException private(
   override def getCondition: String = errorClass.orNull
 
   override def getSqlState: String = sqlState.getOrElse(super.getSqlState)
+
+  override def getQueryContext: Array[QueryContext] = context
 }
 
 private[spark] object SparkUnsupportedOperationException {
@@ -379,13 +401,13 @@ private[spark] class SparkConcurrentModificationException(
 /**
  * Datetime exception thrown from Spark with an error class.
  */
-private[spark] class SparkDateTimeException private(
+private[spark] class SparkDateTimeException private[spark](
     message: String,
     errorClass: Option[String],
     messageParameters: Map[String, String],
     context: Array[QueryContext],
     cause: Option[Throwable],
-    sqlState: Option[String] = None)
+    sqlState: Option[String])
   extends DateTimeException(message, cause.orNull) with SparkThrowable {
 
   def this(
@@ -398,7 +420,8 @@ private[spark] class SparkDateTimeException private(
       Option(errorClass),
       messageParameters,
       context,
-      cause = None
+      cause = None,
+      sqlState = None
     )
   }
 
@@ -413,7 +436,8 @@ private[spark] class SparkDateTimeException private(
       Option(errorClass),
       messageParameters,
       context,
-      cause.orElse(None)
+      cause.orElse(None),
+      sqlState = None
     )
   }
 
@@ -469,12 +493,12 @@ private[spark] class SparkFileNotFoundException(
 /**
  * Number format exception thrown from Spark with an error class.
  */
-private[spark] class SparkNumberFormatException private(
+private[spark] class SparkNumberFormatException private[spark](
     message: String,
     errorClass: Option[String],
     messageParameters: Map[String, String],
     context: Array[QueryContext],
-    sqlState: Option[String] = None)
+    sqlState: Option[String])
   extends NumberFormatException(message)
   with SparkThrowable {
 
@@ -487,7 +511,8 @@ private[spark] class SparkNumberFormatException private(
       SparkThrowableHelper.getMessage(errorClass, messageParameters, summary),
       Option(errorClass),
       messageParameters,
-      context
+      context,
+      sqlState = None
     )
   }
 
@@ -522,13 +547,13 @@ private[spark] class SparkNumberFormatException private(
 /**
  * Illegal argument exception thrown from Spark with an error class.
  */
-private[spark] class SparkIllegalArgumentException private(
+private[spark] class SparkIllegalArgumentException private[spark](
     message: String,
     cause: Option[Throwable],
     errorClass: Option[String],
     messageParameters: Map[String, String],
     context: Array[QueryContext],
-    sqlState: Option[String] = None)
+    sqlState: Option[String])
   extends IllegalArgumentException(message, cause.orNull)
   with SparkThrowable {
 
@@ -543,7 +568,8 @@ private[spark] class SparkIllegalArgumentException private(
       Option(cause),
       Option(errorClass),
       messageParameters,
-      context
+      context,
+      sqlState = None
     )
   }
 
@@ -614,7 +640,7 @@ private[spark] class SparkIllegalStateException(
   override def getQueryContext: Array[QueryContext] = context
 }
 
-private[spark] class SparkRuntimeException private(
+private[spark] class SparkRuntimeException private[spark](
     message: String,
     cause: Option[Throwable],
     errorClass: Option[String],
@@ -741,12 +767,12 @@ private[spark] class SparkSecurityException(
 /**
  * Array index out of bounds exception thrown from Spark with an error class.
  */
-private[spark] class SparkArrayIndexOutOfBoundsException private(
+private[spark] class SparkArrayIndexOutOfBoundsException private[spark](
   message: String,
   errorClass: Option[String],
   messageParameters: Map[String, String],
   context: Array[QueryContext],
-  sqlState: Option[String] = None)
+  sqlState: Option[String])
   extends ArrayIndexOutOfBoundsException(message)
     with SparkThrowable {
 
@@ -759,7 +785,8 @@ private[spark] class SparkArrayIndexOutOfBoundsException private(
       SparkThrowableHelper.getMessage(errorClass, messageParameters, summary),
       Option(errorClass),
       messageParameters,
-      context
+      context,
+      sqlState = None
     )
   }
 

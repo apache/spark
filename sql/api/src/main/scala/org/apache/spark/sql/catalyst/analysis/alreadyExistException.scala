@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.SparkThrowableHelper
+import org.apache.spark.{QueryContext, SparkThrowableHelper}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.AttributeNameParser
 import org.apache.spark.sql.catalyst.util.QuotingUtils.{quoted, quoteIdentifier, quoteNameParts}
@@ -32,14 +32,26 @@ class DatabaseAlreadyExistsException(db: String)
     extends NamespaceAlreadyExistsException(Array(db))
 
 // any changes to this class should be backward compatible as it may be used by external connectors
-class NamespaceAlreadyExistsException private (
+class NamespaceAlreadyExistsException private[sql] (
     message: String,
     errorClass: Option[String],
-    messageParameters: Map[String, String])
+    messageParameters: Map[String, String],
+    cause: Option[Throwable],
+    context: Array[QueryContext],
+    sqlState: Option[String])
     extends AnalysisException(
       message,
       errorClass = errorClass,
-      messageParameters = messageParameters) {
+      messageParameters = messageParameters,
+      cause = cause,
+      context = context,
+      sqlState = sqlState) {
+
+  private def this(
+      message: String,
+      errorClass: Option[String],
+      messageParameters: Map[String, String]) =
+    this(message, errorClass, messageParameters, None, Array.empty, None)
 
   def this(errorClass: String, messageParameters: Map[String, String]) = {
     this(
@@ -56,16 +68,27 @@ class NamespaceAlreadyExistsException private (
 }
 
 // any changes to this class should be backward compatible as it may be used by external connectors
-class TableAlreadyExistsException private (
+class TableAlreadyExistsException private[sql] (
     message: String,
     cause: Option[Throwable],
     errorClass: Option[String],
-    messageParameters: Map[String, String])
+    messageParameters: Map[String, String],
+    context: Array[QueryContext],
+    sqlState: Option[String])
     extends AnalysisException(
       message,
       cause = cause,
       errorClass = errorClass,
-      messageParameters = messageParameters) {
+      messageParameters = messageParameters,
+      context = context,
+      sqlState = sqlState) {
+
+  private def this(
+      message: String,
+      cause: Option[Throwable],
+      errorClass: Option[String],
+      messageParameters: Map[String, String]) =
+    this(message, cause, errorClass, messageParameters, Array.empty, None)
 
   def this(
       errorClass: String,
@@ -111,16 +134,27 @@ class TableAlreadyExistsException private (
   }
 }
 
-class TempTableAlreadyExistsException private (
+class TempTableAlreadyExistsException private[sql] (
     message: String,
     cause: Option[Throwable],
     errorClass: Option[String],
-    messageParameters: Map[String, String])
+    messageParameters: Map[String, String],
+    context: Array[QueryContext],
+    sqlState: Option[String])
     extends AnalysisException(
       message,
       cause = cause,
       errorClass = errorClass,
-      messageParameters = messageParameters) {
+      messageParameters = messageParameters,
+      context = context,
+      sqlState = sqlState) {
+
+  private def this(
+      message: String,
+      cause: Option[Throwable],
+      errorClass: Option[String],
+      messageParameters: Map[String, String]) =
+    this(message, cause, errorClass, messageParameters, Array.empty, None)
 
   def this(
       errorClass: String,
