@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LOCAL_RELATION, REPARTITION_OPERATION, TRUE_OR_FALSE_LITERAL}
+import org.apache.spark.sql.types.Metadata
 
 /**
  * The base class of two rules in the normal and AQE Optimizer. It simplifies query plans with
@@ -63,9 +64,13 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
   protected def empty(plan: LogicalPlan): LogicalPlan =
     LocalRelation(plan.output, data = Seq.empty, isStreaming = plan.isStreaming)
 
-  // Construct a project list from plan's output, while the value is always NULL.
-  private def nullValueProjectList(plan: LogicalPlan): Seq[NamedExpression] =
-    plan.output.map{ a => Alias(cast(Literal(null), a.dataType), a.name)(a.exprId) }
+  // Construct a project list from plan's output, while the value is always NULL. The aliases keep
+  // the qualifier and metadata of the attributes they replace, so that the output of the rewritten
+  // plan only differs from the original one in nullability.
+  private def nullValueProjectList(plan: LogicalPlan): Seq[NamedExpression] = plan.output.map { a =>
+    val explicitMetadata = if (a.metadata != Metadata.empty) Some(a.metadata) else None
+    Alias(cast(Literal(null), a.dataType), a.name)(a.exprId, a.qualifier, explicitMetadata)
+  }
 
   protected def canExecuteWithoutJoin(plan: LogicalPlan): Boolean = true
 
