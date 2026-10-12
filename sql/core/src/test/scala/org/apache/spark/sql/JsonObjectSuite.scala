@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.parser.{ParseException, SparkParserBailErro
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{CharType, GeometryType, IntegerType, MapType, StringType, VarcharType}
+import org.apache.spark.sql.types.{ArrayType, CharType, GeographyType, GeometryType, IntegerType, MapType, StringType, StructType, VarcharType}
 
 /**
  * End-to-end tests for the SQL:2016 `JSON_OBJECT` constructor function.
@@ -108,6 +108,15 @@ class JsonObjectSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       spark.sql("SELECT json_object('k' :p VALUE 1), 'a' :p", Map("p" -> "x")),
       Row("""{"kx":1}""", "ax"))
+  }
+
+  test("a case-named column subscript is a column, not a CASE keyword") {
+    // `case` is non-reserved, so `case[0]` subscripts a column named `case`; `CASE [` never begins
+    // a real CASE expression (Spark has no `[...]` array literal). The separator check must read
+    // the `[` as a postfix on an operand -- like the already-handled `.` -- so the top-level colon
+    // is still found as the member separator rather than being swallowed as a CASE branch.
+    val from = """FROM (SELECT array('c') AS `case`, parse_json('{"x":1}') AS v)"""
+    checkAnswer(sql(s"SELECT json_object(case[0] : v:x) $from"), Row("""{"c":1}"""))
   }
 
   test("a member whose key and value are named key and value splits at VALUE") {
@@ -507,6 +516,20 @@ world'))"""))
     badNested.checkInputDataTypes() match {
       case DataTypeMismatch(sub, _) => assert(sub == "CANNOT_CONVERT_TO_JSON")
       case other => fail(s"expected DataTypeMismatch for a nested spatial value, got $other")
+    }
+    // The guard also descends into STRUCT fields and ARRAY elements, so a spatial type buried in
+    // either -- the other two recursive branches -- must be rejected just like the map-value case.
+    val nestedBadTypes = Seq(
+      new StructType().add("g", GeometryType(4326)),
+      ArrayType(GeographyType(4326)))
+    nestedBadTypes.foreach { dt =>
+      val expr = JsonObjectExpr(
+        Seq((Literal("k"), Literal.create(null, dt))),
+        Seq(false), Seq(false), JsonConstructorNullBehavior.Null, StringType)
+      expr.checkInputDataTypes() match {
+        case DataTypeMismatch(sub, _) => assert(sub == "CANNOT_CONVERT_TO_JSON", s"for $dt")
+        case other => fail(s"expected DataTypeMismatch for a spatial type in $dt, got $other")
+      }
     }
     // A spatial type appearing only as a MAP KEY is fine: JacksonGenerator writes map keys via
     // toString, so the value-type guard must not over-reject it.
