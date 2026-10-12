@@ -162,8 +162,10 @@ trait PushVariantIntoScanSuiteBase extends SharedSparkSession {
         "v variant",
         """(parse_json(r'{"a\nb":1,"a\\nb":2}'))""") {
         val pushed = sql("""select variant_get(v, r'$["a\nb"]', 'int') from T""")
-        assertShreddedStruct(scanColumnType(pushed.queryExecution.optimizedPlan, "v"))
-        checkAnswer(pushed, Row(if (legacy) 2 else 1))
+        withSQLConf(SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL.key -> (!legacy).toString) {
+          assertShreddedStruct(scanColumnType(pushed.queryExecution.optimizedPlan, "v"))
+          checkAnswer(pushed, Row(if (legacy) 2 else 1))
+        }
       }
     }
   }

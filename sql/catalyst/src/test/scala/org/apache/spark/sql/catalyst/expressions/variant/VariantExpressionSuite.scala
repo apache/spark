@@ -737,10 +737,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on nonascii
     testVariantGet("[1, 2, 3]", "$[2147483647]", IntegerType, null)
 
-    // Single-quoted keys decode escapes and allow unescaped double quotes.
     testVariantGet("""{"a'b": 1}""", """$['a\'b']""", IntegerType, 1)
     testVariantGet("""{"a\"b": 2}""", """$['a"b']""", IntegerType, 2)
-    // Backslash, short control, and slash escapes.
     testVariantGet("""{"a\\b": 4}""", """$['a\\b']""", IntegerType, 4)
     testVariantGet("""{"a\tb": 5}""", """$['a\tb']""", IntegerType, 5)
     testVariantGet("""{"a\nb": 6}""", """$['a\nb']""", IntegerType, 6)
@@ -748,12 +746,10 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     testVariantGet("""{"a\fb": 12}""", """$['a\fb']""", IntegerType, 12)
     testVariantGet("""{"a\rb": 13}""", """$['a\rb']""", IntegerType, 13)
     testVariantGet("""{"a/b": 14}""", """$['a\/b']""", IntegerType, 14)
-    // Unicode escape for vertical tab. Split `\u` so Scala leaves it literal.
+    // Split the Unicode escape so Scala does not decode it.
     testVariantGet("{\"a\\" + "u000bb\": 7}", "$['a\\" + "u000bb']", IntegerType, 7)
-    // Double-quoted keys decode escapes and allow unescaped single quotes.
     testVariantGet("""{"a\"b": 8}""", """$["a\"b"]""", IntegerType, 8)
     testVariantGet("""{"a'b": 9}""", """$["a'b"]""", IntegerType, 9)
-    // Unknown, malformed Unicode, and cross-delimiter escapes remain literal.
     testVariantGet("""{"a\\xb": 15}""", """$['a\xb']""", IntegerType, 15)
     testVariantGet("""{"a\\u12G4b": 17}""", "$['a\\" + "u12G4b']", IntegerType, 17)
     testVariantGet("""{"a\\\"b": 18}""", """$['a\"b']""", IntegerType, 18)
@@ -801,6 +797,50 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         variantGet("""{"a'b":1}""", escapedQuote, IntegerType),
         "INVALID_VARIANT_GET_PATH",
         Map("path" -> escapedQuote, "functionName" -> "`variant_get`"))
+    }
+  }
+
+  gridTest("Variant path functions use the captured parser mode")(Seq(false, true)) { legacy =>
+    val conf = SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL.key
+    val input = Literal(parseJson("""{"a\nb":[1],"a\\nb":[2]}"""))
+    val path = "$['a\\nb']"
+    val dynamicPath = BoundReference(0, StringType, nullable = false)
+    withSQLConf(conf -> legacy.toString) {
+      val dynamicGet = VariantGet(input, dynamicPath, ArrayType(IntegerType), failOnError = true)
+      val cases = Seq(
+        VariantDelete(Seq(input, Literal(path))) ->
+          (if (legacy) """{"a\nb":[1]}""" else """{"a\\nb":[2]}"""),
+        VariantPick(Seq(input, Literal(path))) ->
+          (if (legacy) """{"a\\nb":[2]}""" else """{"a\nb":[1]}"""),
+        VariantInsert(input, Literal(path + "[0]"), Literal(3)) ->
+          (if (legacy) """{"a\nb":[1],"a\\nb":[3,2]}""" else """{"a\nb":[3,1],"a\\nb":[2]}"""),
+        VariantSet(input, dynamicPath, Literal(3), Literal(true)) ->
+          (if (legacy) """{"a\nb":[1],"a\\nb":3}""" else """{"a\nb":3,"a\\nb":[2]}"""),
+        VariantArrayAppend(input, Literal(path), Literal(3)) ->
+          (if (legacy) """{"a\nb":[1],"a\\nb":[2,3]}""" else """{"a\nb":[1,3],"a\\nb":[2]}"""))
+      withSQLConf(conf -> (!legacy).toString) {
+        val row = InternalRow(UTF8String.fromString(path))
+        checkEvaluation(dynamicGet, Array(if (legacy) 2 else 1), row)
+        cases.foreach { case (expr, expected) =>
+          checkEvaluation(
+            ResolveTimeZone.resolveTimeZones(Cast(expr, StringType)), expected, row)
+        }
+      }
+    }
+  }
+
+  test("legacy Variant diagnostics preserve literal backslashes") {
+    val conf = SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL.key
+    val path = """$['a.\nb'].c"""
+    val insert = withSQLConf(conf -> "true") {
+      VariantInsert(Literal(parseJson("""{"a.\\nb":5}""")), Literal(path), Literal(2))
+    }
+    withSQLConf(conf -> "false") {
+      checkErrorInExpression[SparkRuntimeException](
+        insert,
+        "VARIANT_PATH_TYPE_MISMATCH",
+        Map("path" -> path, "failedAt" -> """$['a.\nb']""",
+          "functionName" -> "`variant_insert`"))
     }
   }
 
