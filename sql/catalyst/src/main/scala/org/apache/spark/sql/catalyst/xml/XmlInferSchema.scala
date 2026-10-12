@@ -53,12 +53,7 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
 
   private val decimalParser = ExprUtils.getDecimalParser(options.locale)
 
-  private val timestampFormatter = TimestampFormatter(
-    options.timestampFormatInRead,
-    options.zoneId,
-    options.locale,
-    legacyFormat = FAST_DATE_FORMAT,
-    isParsing = true)
+  private val timestampFormatter = new XmlTimestampParser(options)
 
   private lazy val timestampNTZFormatter = TimestampFormatter(
     options.timestampNTZFormatInRead,

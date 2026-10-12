@@ -57,12 +57,7 @@ class StaxXmlParser(
     schema: StructType,
     val options: XmlOptions) extends Logging {
 
-  private lazy val timestampFormatter = TimestampFormatter(
-    options.timestampFormatInRead,
-    options.zoneId,
-    options.locale,
-    legacyFormat = FAST_DATE_FORMAT,
-    isParsing = true)
+  private lazy val timestampFormatter = new XmlTimestampParser(options)
 
   private lazy val timestampNTZFormatter = TimestampFormatter(
     options.timestampNTZFormatInRead,
