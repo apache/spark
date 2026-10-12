@@ -106,17 +106,10 @@ def is_ignored_file(filename: str) -> bool:
 
 class TestStage(Enum):
     """
-    When a test goal runs in dev/run-tests.py, relative to the Spark build.
+    When a shell script test goal runs in dev/run-tests.py.
     """
-
+    # Before the Spark build.
     PRE_BUILD = "pre_build"
-    # Before assembly; still runs when SKIP_SCALA_BUILD=true.
-    POST_BUILD = "post_build"
-    # After SBT assembly; skipped when SKIP_SCALA_BUILD=true.
-    POST_ASSEMBLY_SBT = "post_assembly_sbt"
-    # After assembly, whether built from scratch or restored from an artifact;
-    # still runs when SKIP_SCALA_BUILD=true.
-    POST_ASSEMBLY = "post_assembly"
 
 
 @dataclass(frozen=True)

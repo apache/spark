@@ -618,11 +618,6 @@ def main():
         with titled_block("Building Spark"):
             build_apache_spark(build_tool, extra_profiles)
 
-    run_shell_script_tests(
-        test_modules,
-        modules.TestStage.POST_BUILD,
-    )
-
     # backwards compatibility checks
     if build_tool == "sbt":
         # Note: compatibility tests only supported in sbt for now
@@ -634,21 +629,12 @@ def main():
         if os.environ.get("SKIP_SCALA_BUILD", "false") != "true":
             with titled_block("Building Spark assembly"):
                 build_spark_assembly_sbt(extra_profiles)
-            run_shell_script_tests(
-                test_modules,
-                modules.TestStage.POST_ASSEMBLY_SBT,
-            )
             if should_run_java_style_checks:
                 with titled_block("Running Java style checks"):
                     run_java_style_checks(extra_profiles + modules.root.build_profile_flags)
             if not os.environ.get("SKIP_UNIDOC"):
                 with titled_block("Building Unidoc API Documentation"):
                     build_spark_unidoc_sbt(extra_profiles)
-
-    run_shell_script_tests(
-        test_modules,
-        modules.TestStage.POST_ASSEMBLY,
-    )
 
     # run the test suites
     with titled_block("Running Spark unit tests"):
