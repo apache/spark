@@ -4377,7 +4377,7 @@
       },
       "SESSION_CHANGED" : {
         "message" : [
-          "The existing Spark server driver instance has restarted. Please reconnect."
+          "The server-side session has changed, for example because the server restarted or the session was closed. Please create a new session."
         ],
         "sqlState" : "08003"
       },

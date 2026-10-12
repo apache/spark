@@ -117,6 +117,32 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession {
     assert(newHolder.session.conf.get("spark.sql.shuffle.partitions") != "7")
   }
 
+  test("lookups by a stale client of an expired reconnect-allowed session get SESSION_CHANGED") {
+    val sessionManager = SparkConnectService.sessionManager
+    val key = SessionKey("user", UUID.randomUUID().toString)
+    val oldHolder = sessionManager.getOrCreateIsolatedSession(key, None)
+    val oldSessionId = oldHolder.session.sessionUUID
+    // A live session with a matching observed session id is returned as usual.
+    assert(sessionManager.getIsolatedSession(key, Some(oldSessionId)) eq oldHolder)
+    oldHolder.session.conf.set(Connect.CONNECT_SESSION_ALLOW_RECONNECT_AFTER_CLOSE.key, "true")
+    sessionManager.periodicMaintenance(defaultInactiveTimeoutMs = 0L)
+
+    val exGet = intercept[SparkSQLException] {
+      sessionManager.getIsolatedSession(key, Some(oldSessionId))
+    }
+    assert(exGet.getCondition == "INVALID_HANDLE.SESSION_CHANGED")
+    val exClone = intercept[SparkSQLException] {
+      sessionManager.cloneSession(key, UUID.randomUUID().toString, Some(oldSessionId))
+    }
+    assert(exClone.getCondition == "INVALID_HANDLE.SESSION_CHANGED")
+    // Without an observed session id, the session is simply not found.
+    val exNotFound = intercept[SparkSQLException] {
+      sessionManager.getIsolatedSession(key, None)
+    }
+    assert(exNotFound.getCondition == "INVALID_HANDLE.SESSION_NOT_FOUND")
+    assert(sessionManager.getIsolatedSessionIfPresent(key).isEmpty)
+  }
+
   test("a closed session id with an observed session id still gets SESSION_CLOSED") {
     val key = SessionKey("user", UUID.randomUUID().toString)
     val holder = SparkConnectService.sessionManager.getOrCreateIsolatedSession(key, None)
@@ -379,10 +405,12 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession {
         assert(holder.closeStarted.await(1, TimeUnit.MINUTES))
         assert(!sessionManager.listClosedSessions.exists(_.key == key))
         assertSessionClosed(key)
-        val exGet = intercept[SparkSQLException] {
-          sessionManager.getIsolatedSession(key, None)
+        Seq(None, Some(holder.session.sessionUUID)).foreach { observedSessionId =>
+          val exGet = intercept[SparkSQLException] {
+            sessionManager.getIsolatedSession(key, observedSessionId)
+          }
+          assert(exGet.getCondition == "INVALID_HANDLE.SESSION_CLOSED")
         }
-        assert(exGet.getCondition == "INVALID_HANDLE.SESSION_CLOSED")
       } finally {
         holder.release.countDown()
         owner.join(TimeUnit.MINUTES.toMillis(1))
@@ -399,6 +427,65 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession {
       assert(sessionManager.listClosedSessions.exists(_.key == key))
       assertSessionClosed(key)
     }
+  }
+
+  private class FailingCloseSessionHolder(key: SessionKey)
+      extends SessionHolder(key.userId, key.sessionId, spark.newSession()) {
+    override private[connect] def close(): Unit = {
+      super.close()
+      throw new IllegalStateException("close failed")
+    }
+  }
+
+  test("a close that throws still releases or tombstones the session id") {
+    val sessionManager = SparkConnectService.sessionManager
+    Seq(true, false).foreach { allowReconnectAfterClose =>
+      val key = SessionKey("user", UUID.randomUUID().toString)
+      val holder = new FailingCloseSessionHolder(key)
+      holder.initializeSession()
+      holder.session.conf.set(
+        Connect.CONNECT_SESSION_ALLOW_RECONNECT_AFTER_CLOSE.key,
+        allowReconnectAfterClose.toString)
+      sessionManager.putSessionForTesting(holder)
+
+      intercept[IllegalStateException] {
+        sessionManager.closeSession(key)
+      }
+      if (allowReconnectAfterClose) {
+        // The id is released for a new session.
+        assert(sessionManager.getOrCreateIsolatedSession(key, None) ne holder)
+      } else {
+        assertSessionClosed(key)
+        val closed = sessionManager.listClosedSessions.find(_.key == key)
+        assert(closed.exists(_.closedTimeMs.isDefined))
+      }
+    }
+  }
+
+  test("cloning into a session id that is still closing fails until the close completes") {
+    val sessionManager = SparkConnectService.sessionManager
+    val sourceKey = SessionKey("user", UUID.randomUUID().toString)
+    sessionManager.getOrCreateIsolatedSession(sourceKey, None)
+    val targetKey = SessionKey("user", UUID.randomUUID().toString)
+    val holder = startBlockingCloseSession(targetKey)
+
+    val owner = new Thread(() => sessionManager.closeSession(targetKey))
+    owner.start()
+    try {
+      assert(holder.closeStarted.await(1, TimeUnit.MINUTES))
+      val ex = intercept[SparkSQLException] {
+        sessionManager.cloneSession(sourceKey, targetKey.sessionId, None)
+      }
+      assert(ex.getCondition == "INVALID_CLONE_SESSION_REQUEST.TARGET_SESSION_ID_ALREADY_CLOSED")
+    } finally {
+      holder.release.countDown()
+      owner.join(TimeUnit.MINUTES.toMillis(1))
+    }
+    assert(!owner.isAlive)
+
+    // The reconnect-allowed close has finished, so the id can be cloned into.
+    val cloned = sessionManager.cloneSession(sourceKey, targetKey.sessionId, None)
+    assert(cloned.key == targetKey)
   }
 
   test("a late duplicate shutdown does not re-tombstone or remove a recreated session") {

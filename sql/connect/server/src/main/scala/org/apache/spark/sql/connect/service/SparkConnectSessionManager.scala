@@ -137,6 +137,10 @@ class SparkConnectSessionManager extends Logging {
           throw new SparkSQLException(
             errorClass = "INVALID_HANDLE.SESSION_CLOSED",
             messageParameters = Map("handle" -> key.sessionId))
+        } else if (previouslyObservedSesssionId.isDefined) {
+          // The client observed a session that no longer exists, e.g. one that was closed
+          // and allowed its id to be reused.
+          throw sessionChangedError(key)
         } else {
           throw new SparkSQLException(
             errorClass = "INVALID_HANDLE.SESSION_NOT_FOUND",
@@ -166,10 +170,7 @@ class SparkConnectSessionManager extends Logging {
       previouslyObservedSessionId: Option[String]): SessionHolder = {
 
     // Get source session (must exist)
-    val sourceSessionHolder = getIsolatedSession(sourceKey, None)
-
-    previouslyObservedSessionId.foreach(sessionId =>
-      validateSessionId(sourceKey, sourceSessionHolder.session.sessionUUID, sessionId))
+    val sourceSessionHolder = getIsolatedSession(sourceKey, previouslyObservedSessionId)
 
     val newKey = SessionKey(sourceKey.userId, newSessionId)
 
