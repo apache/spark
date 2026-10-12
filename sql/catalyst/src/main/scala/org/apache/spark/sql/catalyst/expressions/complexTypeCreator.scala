@@ -1030,13 +1030,11 @@ case class UpdateFields(structExpr: Expression, fieldOps: Seq[StructFieldsOperat
     def buildExpression(structRef: Expression): Expression = {
       val fieldSources = UpdateFields.fieldSources(structRef, fieldOps)
       val updatedValues = ArrayBuffer.empty[Expression]
-      val outputOrdinals = fieldSources.map { case (_, source) =>
-        source match {
-          case UpdateFields.Original(ordinal) => ordinal
-          case UpdateFields.Updated(expr) =>
-            updatedValues += expr
-            -1
-        }
+      val outputOrdinals = fieldSources.map {
+        case (_, UpdateFields.Original(ordinal)) => ordinal
+        case (_, UpdateFields.Updated(expr)) =>
+          updatedValues += expr
+          -1
       }
       UpdateFieldsExpression(structRef, updatedValues.toSeq, outputOrdinals, newFields)
     }
