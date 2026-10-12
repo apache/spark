@@ -267,8 +267,9 @@ class ExpressionIdAssigner {
    *   upwards using [[createMappingFromChildMappings]].
    * @param oldOutputSet a special parameter used when [[popMapping]] is called while reassigning
    *   expression IDs in optimized plans. oldOutputSet contains the original output `ExprId`s for
-   *   the current child plan. If it is not empty, [[popMapping]] filters out Ids not related to the original
-   *   outputSet and only maintains the mapping from original oldId to new Id and new Id to itself.
+   *   the current child plan. If it is not empty, [[popMapping]] filters out Ids not related to the
+   *   original outputSet and only maintains the mapping from original oldId to new Id and new Id to
+   *   itself.
    *   This is useful because certain optimization plans may contain duplicated `ExprId`s covered
    *   with aliases from different branches. E.g:
    *   {{{
