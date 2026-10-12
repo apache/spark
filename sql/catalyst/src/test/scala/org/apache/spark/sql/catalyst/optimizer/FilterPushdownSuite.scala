@@ -2102,20 +2102,20 @@ class FilterPushdownSuite extends PlanTest with ExpressionEvalHelper {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("SPARK-60150: normalize only the sensitive conjuncts of a pushed filter") {
+  test("SPARK-60150: normalize only the keys that can change a pushed filter's result") {
     val x = $"x".double
     val y = $"y".float
     val relation = LocalRelation(x, y)
     val normX = NormalizeFloatingNumbers.normalize(x)
 
-    // An OR containing a sensitive branch is normalized as a whole.
+    // Within an OR, the key is normalized under the Cast but not as a direct comparison operand.
     comparePlans(
       Optimize.execute(
         relation.groupBy(x, y)(x, y).where(x > 5.0 || x.cast(StringType) === "-0.0").analyze),
-      relation.where(normX > 5.0 || normX.cast(StringType) === "-0.0")
+      relation.where(x > 5.0 || normX.cast(StringType) === "-0.0")
         .groupBy(x, y)(x, y).analyze)
 
-    // Only the sensitive conjunct is normalized.
+    // Across conjuncts, only the one that reads the key through a Cast changes.
     comparePlans(
       Optimize.execute(
         relation.groupBy(x, y)(x, y).where(y > 1.0f && x.cast(StringType) === "-0.0").analyze),
@@ -2200,56 +2200,63 @@ class FilterPushdownSuite extends PlanTest with ExpressionEvalHelper {
       relation.where(normX.cast(StringType) === "-0.0").groupBy(x)(x).groupBy(x)(x).analyze)
   }
 
-  test("SPARK-60150: sensitiveToFloatNormalization") {
+  test("SPARK-60150: normalizeGroupingExpressions") {
     val x = $"x".double
     val f = $"f".float
     val y = $"y".int
     val s = $"s".struct(StructType(Seq(StructField("d", DoubleType))))
-    val keys = AttributeSet(Seq(x, f, s))
-    def sensitive(e: Expression): Boolean =
-      PushPredicateThroughNonJoin.sensitiveToFloatNormalization(e, keys)
+    val normX = NormalizeFloatingNumbers.normalize(x)
+    val normS = NormalizeFloatingNumbers.normalize(s)
+    def normalize(e: Expression): Expression =
+      PushPredicateThroughNonJoin.normalizeGroupingExpressions(e, Seq(x, f, s))
+    def unchanged(e: Expression): Unit = assert(normalize(e) == e)
 
-    // A key on its own is sensitive; other columns and literals are not.
-    assert(sensitive(x))
-    assert(!sensitive(y))
-    assert(!sensitive(Literal(0.0)))
+    // A grouping key on its own is normalized; other columns and literals are not.
+    assert(normalize(x) == normX)
+    unchanged(y)
+    unchanged(Literal(0.0))
 
-    // A float/double key that is a direct operand of a comparison is safe.
-    assert(!sensitive(x === 0.0))
-    assert(!sensitive(EqualNullSafe(x, Literal(0.0))))
-    assert(!sensitive(x < 1.0))
-    assert(!sensitive(f >= 1.0f))
-    assert(!sensitive(x === x))
-    assert(!sensitive(x.in(1.0, 2.0)))
-    assert(!sensitive(x.isNull))
-    assert(!sensitive(x.isNotNull))
-    assert(!sensitive(IsNaN(x)))
+    // A float/double key that is a direct operand of these comparisons is left as is.
+    unchanged(x === 0.0)
+    unchanged(EqualNullSafe(x, Literal(0.0)))
+    unchanged(x < 1.0)
+    unchanged(f >= 1.0f)
+    unchanged(x === x)
+    unchanged(x.in(1.0, 2.0))
+    unchanged(x.isNull)
+    unchanged(x.isNotNull)
+    unchanged(IsNaN(x))
 
-    // A key under any other expression is sensitive, even inside a comparison.
-    assert(sensitive(x.cast(StringType)))
-    assert(sensitive(x.cast(StringType) === "-0.0"))
-    assert(sensitive(Length(x.cast(StringType)) === 4))
-    assert(sensitive((x + 0.0) > 5.0))
+    // A key under any other expression is normalized, even inside a comparison.
+    assert(normalize(x.cast(StringType) === "-0.0") == (normX.cast(StringType) === "-0.0"))
+    assert(normalize(Length(x.cast(StringType)) === 4) == (Length(normX.cast(StringType)) === 4))
+    assert(normalize((x + 0.0) > 5.0) == ((normX + 0.0) > 5.0))
 
-    // Only float/double attributes are exempt, so struct keys are sensitive.
-    assert(sensitive(s.isNull))
-    assert(sensitive(GetStructField(s, 0) === 0.0))
+    // Only float/double attributes are left as is, so a struct key is normalized.
+    assert(normalize(s.isNull) == normS.isNull)
+    assert(normalize(GetStructField(s, 0) === 0.0) == (GetStructField(normS, 0) === 0.0))
 
-    // Boolean connectives are sensitive if any child is.
-    assert(!sensitive(x === 0.0 || x > 5.0))
-    assert(!sensitive(x === 0.0 && y === 1))
-    assert(!sensitive(!(x === 0.0)))
-    assert(sensitive(x > 5.0 || x.cast(StringType) === "-0.0"))
-    assert(sensitive(y === 1 && x.cast(StringType) === "-0.0"))
-    assert(sensitive(!(x.cast(StringType) === "-0.0")))
+    // Boolean connectives are rewritten child by child.
+    unchanged(x === 0.0 || x > 5.0)
+    unchanged(!(x === 0.0))
+    assert(normalize(x > 5.0 || x.cast(StringType) === "-0.0") ==
+      (x > 5.0 || normX.cast(StringType) === "-0.0"))
+    assert(normalize(y === 1 && !(x.cast(StringType) === "-0.0")) ==
+      (y === 1 && !(normX.cast(StringType) === "-0.0")))
 
-    // Only the given keys count.
-    assert(!PushPredicateThroughNonJoin.sensitiveToFloatNormalization(
-      x.cast(StringType) === "-0.0", AttributeSet.empty))
+    // An already normalized key is not normalized again.
+    unchanged(normX.cast(StringType) === "-0.0")
+
+    // Only the given grouping expressions count, matched semantically rather than by name.
+    assert(PushPredicateThroughNonJoin.normalizeGroupingExpressions(
+      x.cast(StringType), Seq.empty) == x.cast(StringType))
+    val renamed = x.withName("X").withQualifier(Seq("t")).withNullability(false)
+    assert(normalize(renamed) == NormalizeFloatingNumbers.normalize(renamed))
+    unchanged($"x".double)
   }
 
   test("SPARK-60150: comparisons exempt from normalization agree with normalized values") {
-    // sensitiveToFloatNormalization does not normalize a float/double key that is a direct
+    // normalizeGroupingExpressions does not normalize a float/double key that is a direct
     // operand of these comparisons, so each must give the same result for a value and for its
     // normalized form: -0.0 and 0.0, and NaNs with different bit patterns.
     val binary: Seq[(Expression, Expression) => Expression] = Seq(

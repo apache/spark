@@ -239,12 +239,11 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] with
         }
         if (removedAny) (u.withNewChildren(newChildren), true) else (u, false)
       case agg: Aggregate =>
-        // Mirror PushPredicateThroughNonJoin: translate each conjunct of the target with the
-        // same helper it uses to move grouping-key filters below the aggregate (filters
-        // referencing aggregate expressions stay up, so they are always found above this node).
-        val translated = splitConjunctivePredicates(target)
-          .map(PushPredicateThroughNonJoin.pushBelowAggregate(_, agg))
-          .reduce(And)
+        // Mirror PushPredicateThroughNonJoin: translate the target with the same helper it uses
+        // to move grouping-key filters below the aggregate (filters referencing aggregate
+        // expressions stay up, so they are always found above this node).
+        val translated =
+          PushPredicateThroughNonJoin.pushBelowAggregate(splitConjunctivePredicates(target), agg)
         val (newChild, removed) = remove(agg.child, translated)
         if (removed) (agg.withNewChildren(Seq(newChild)), true) else (agg, false)
       case w: Window =>
