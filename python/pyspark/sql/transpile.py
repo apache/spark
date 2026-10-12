@@ -140,7 +140,7 @@ class AbstractTranspiler(object):
     # to enable this transpiler.
     variety: str = ""
 
-    def __init__(self, null_strict: bool = True) -> None:
+    def __init__(self, null_strictness: str = "strict") -> None:
         pass
 
     @classmethod
@@ -241,8 +241,8 @@ class CatalystTranspiler(AbstractTranspiler):
 
     variety = "catalyst"
 
-    def __init__(self, null_strict: bool = True) -> None:
-        self._null_strict = null_strict
+    def __init__(self, null_strictness: str = "strict") -> None:
+        self._null_strictness = null_strictness
         self._param_categories: dict[int, str] = {}
         self._category_cache: dict[int, str] = {}
 
@@ -453,7 +453,7 @@ class CatalystTranspiler(AbstractTranspiler):
             )
         left_col = self._convert_chunk(params, left_node)
         right_col = self._convert_chunk(params, right_node)
-        if not self._null_strict:
+        if self._null_strictness == "loose":
             return op(left_col, right_col)
         null_guard = left_col.isNull() | right_col.isNull()
         err = lit(
@@ -939,13 +939,12 @@ def _get_transpilers(session: "SparkSession") -> List[AbstractTranspiler]:
     configured_transpilers = session.conf.get("spark.sql.experimental.optimizer.pyTranspilers")
     if not configured_transpilers:
         return []
-    null_strict = (
-        session.conf.get("spark.sql.experimental.optimizer.transpileNullStrictness", "strict")
-        != "loose"
+    null_strictness = session.conf.get(
+        "spark.sql.experimental.optimizer.transpileNullStrictness", "strict"
     )
     transpiler_names = configured_transpilers.split(",")
     return [
-        AbstractTranspiler.varieties[name](null_strict=null_strict)
+        AbstractTranspiler.varieties[name](null_strictness=null_strictness)
         for name in transpiler_names
         if name in AbstractTranspiler.varieties
     ]

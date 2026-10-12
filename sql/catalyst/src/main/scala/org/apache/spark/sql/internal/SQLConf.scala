@@ -664,7 +664,7 @@ object SQLConf {
       "operand causes the expression to raise an error, matching Python's TypeError. Under " +
       "``loose`` a NULL operand silently propagates as NULL instead of raising, which allows " +
       "more UDFs to be transpiled at the cost of minor semantic divergence on NULL inputs.")
-    .version("4.3.0")
+    .version("4.4.0")
     .stringConf
     .checkValue(
       v => v == "strict" || v == "loose",
