@@ -2142,4 +2142,69 @@ class FilterPushdownSuite extends PlanTest {
       Optimize.execute(relation.groupBy(x)(x.as("k")).where($"k" === 0.0).analyze),
       relation.where(x === 0.0).groupBy(x)(x.as("k")).analyze)
   }
+
+  test("SPARK-60150: push down a comparison on a float/double grouping key below Aggregate") {
+    val x = $"x".double
+    val relation = LocalRelation(x, $"b".int)
+
+    val originalQuery = relation
+      .groupBy(x)(x, count($"b").as("c"))
+      .where(x > 1.0)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer = relation
+      .where(x > 1.0)
+      .groupBy(x)(x, count($"b").as("c"))
+      .analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-60150: sensitiveToFloatNormalization") {
+    val x = $"x".double
+    val f = $"f".float
+    val y = $"y".int
+    val s = $"s".struct(StructType(Seq(StructField("d", DoubleType))))
+    val keys = AttributeSet(Seq(x, f, s))
+    def sensitive(e: Expression): Boolean =
+      PushPredicateThroughNonJoin.sensitiveToFloatNormalization(e, keys)
+
+    // A key on its own is sensitive; other columns and literals are not.
+    assert(sensitive(x))
+    assert(!sensitive(y))
+    assert(!sensitive(Literal(0.0)))
+
+    // A float/double key that is a direct operand of a comparison is safe.
+    assert(!sensitive(x === 0.0))
+    assert(!sensitive(EqualNullSafe(x, Literal(0.0))))
+    assert(!sensitive(x < 1.0))
+    assert(!sensitive(f >= 1.0f))
+    assert(!sensitive(x === x))
+    assert(!sensitive(x.in(1.0, 2.0)))
+    assert(!sensitive(x.isNull))
+    assert(!sensitive(x.isNotNull))
+    assert(!sensitive(IsNaN(x)))
+
+    // A key under any other expression is sensitive, even inside a comparison.
+    assert(sensitive(x.cast(StringType)))
+    assert(sensitive(x.cast(StringType) === "-0.0"))
+    assert(sensitive(Length(x.cast(StringType)) === 4))
+    assert(sensitive((x + 0.0) > 5.0))
+
+    // Struct keys are only exempt for float/double attributes, so they stay sensitive.
+    assert(sensitive(s.isNull))
+    assert(sensitive(GetStructField(s, 0) === 0.0))
+
+    // Boolean connectives are sensitive if any child is.
+    assert(!sensitive(x === 0.0 || x > 5.0))
+    assert(!sensitive(x === 0.0 && y === 1))
+    assert(!sensitive(!(x === 0.0)))
+    assert(sensitive(x > 5.0 || x.cast(StringType) === "-0.0"))
+    assert(sensitive(y === 1 && x.cast(StringType) === "-0.0"))
+    assert(sensitive(!(x.cast(StringType) === "-0.0")))
+
+    // Only the given keys count.
+    assert(!PushPredicateThroughNonJoin.sensitiveToFloatNormalization(
+      x.cast(StringType) === "-0.0", AttributeSet.empty))
+  }
 }

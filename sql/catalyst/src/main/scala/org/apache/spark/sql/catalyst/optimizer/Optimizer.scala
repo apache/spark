@@ -2805,7 +2805,9 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
   // Whether `e` may evaluate differently before and after `keys` are normalized. Comparisons
   // treat -0.0/0.0 and all NaNs as equal, so a float/double key that is a direct operand of one
   // is safe. Any other use of a key is treated as sensitive.
-  private def sensitiveToFloatNormalization(e: Expression, keys: AttributeSet): Boolean = e match {
+  private[optimizer] def sensitiveToFloatNormalization(
+      e: Expression,
+      keys: AttributeSet): Boolean = e match {
     case a: Attribute => keys.contains(a)
     case _: BinaryComparison | _: In | _: IsNull | _: IsNotNull | _: IsNaN =>
       e.children.exists {
