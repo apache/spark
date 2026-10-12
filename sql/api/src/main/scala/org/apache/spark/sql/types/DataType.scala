@@ -133,9 +133,6 @@ object DataType {
   private val STRING_WITH_COLLATION = """string\s+collate\s+(\w+)""".r
   private val TIMESTAMP_LTZ_NANOS_TYPE = """timestamp_ltz\(\s*(\d+)\s*\)""".r
   private val TIMESTAMP_NTZ_NANOS_TYPE = """timestamp_ntz\(\s*(\d+)\s*\)""".r
-  // `"file external"` is the standalone form of an external file. Inside a struct field the mode
-  // is omitted and a bare `"file"` is an external file, which is also what a schema written
-  // without any mode metadata means. On its own a bare `"file"` has no mode yet.
   private val FILE_TYPE = """file(?:\s+(external))?""".r
   private val GEOMETRY_TYPE = """geometry\(\s*([\w]+:-?[\w]+)\s*\)""".r
   private val GEOGRAPHY_TYPE_CRS = """geography\(\s*(\w+:-?\w+)\s*\)""".r
@@ -353,7 +350,16 @@ object DataType {
         }
       case "timestamp_ltz" => TimestampType
       case FILE_TYPE(mode) =>
-        if (mode == "external" || inStructField) FileType.external else FileType()
+        // Bare `"file"` resolves differently depending on context: inside a StructField with
+        // no `__FILE_TYPE_MODE` entry it is the OSS-source EXTERNAL implicit default; in a
+        // standalone parse (top-level `fromJson` or recursion outside any StructField) it is
+        // UNKNOWN -- required for cross-language UDF round-trips where Python serializes a
+        // top-level `FileType()` to bare `"file"` and the JVM must read it back as UNKNOWN.
+        mode match {
+          case "external" => FileType.external
+          case _ if inStructField => FileType.external
+          case _ => FileType()
+        }
       case other =>
         otherTypes.getOrElse(
           other,

@@ -423,7 +423,6 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeE
         case FILE =>
           Option(currentCtx.fileTypeMode).map(_.getType) match {
             case Some(EXTERNAL) => FileType.external
-            // A bare FILE has no mode yet, and is the type of a cast target or of a UDF result.
             case _ => FileType()
           }
       }

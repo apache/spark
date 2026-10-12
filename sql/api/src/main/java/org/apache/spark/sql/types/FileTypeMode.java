@@ -33,6 +33,6 @@ import org.apache.spark.annotation.Unstable;
  */
 @Unstable
 public enum FileTypeMode {
-  EXTERNAL,
-  UNKNOWN,
+    EXTERNAL,
+    UNKNOWN,
 }
