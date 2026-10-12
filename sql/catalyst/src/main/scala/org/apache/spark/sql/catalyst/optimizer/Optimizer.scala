@@ -2827,18 +2827,29 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case _ => e.mapChildren(normalizeGroupingExpressions(_, grouping))
   }
 
-  // Whether `e` may evaluate differently before and after `keys` are normalized. Comparisons
-  // treat -0.0/0.0 and all NaNs as equal, so a float/double key that is a direct operand of one
-  // is safe. Any other use of a key is treated as sensitive.
+  // Whether `e` may evaluate differently on the raw values of `keys` than on their normalized
+  // values. Normalization (see NormalizeFloatingNumbers) turns -0.0 into 0.0 and every NaN into
+  // one canonical NaN. `keys` are the child attributes behind the float/double grouping
+  // expressions of an Aggregate. The check is conservative: anything not known to be safe is
+  // reported as sensitive.
   private[optimizer] def sensitiveToFloatNormalization(
       e: Expression,
       keys: AttributeSet): Boolean = e match {
+    // The raw value of a key differs from its normalized value for -0.0 and for NaNs.
     case a: Attribute => keys.contains(a)
-    case _: BinaryComparison | _: In | _: IsNull | _: IsNotNull | _: IsNaN =>
+    // These treat -0.0 and 0.0 as equal and all NaNs as equal (see
+    // SQLOrderingUtil.compareDoubles and CodegenContext.genEqual), and normalization never
+    // changes whether a value is null or NaN. So a float/double attribute used directly as an
+    // operand gives the same result raw or normalized. Any other operand, such as
+    // cast(x AS STRING), may expose the difference and is checked recursively.
+    case _: EqualTo | _: EqualNullSafe | _: LessThan | _: LessThanOrEqual | _: GreaterThan |
+         _: GreaterThanOrEqual | _: In | _: IsNull | _: IsNotNull | _: IsNaN =>
       e.children.exists {
         case a: Attribute if a.dataType == FloatType || a.dataType == DoubleType => false
         case c => sensitiveToFloatNormalization(c, keys)
       }
+    // Any other expression, including AND, OR and NOT, gives the same result when all of its
+    // children do, so it is sensitive if any child is.
     case _ => e.children.exists(sensitiveToFloatNormalization(_, keys))
   }
 
