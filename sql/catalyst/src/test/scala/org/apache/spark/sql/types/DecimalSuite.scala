@@ -517,6 +517,26 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
       val zero = Decimal(new java.math.BigDecimal("0e2147483647"))
       assert(zero.changePrecision(10, 2))
       assert(zero.toString === "0.00")
+
+      // A compact (long) input takes the Long branch first, where the scale change can exceed
+      // the Int range, and may switch to the BigDecimal branch. It must round like the same
+      // value in BigDecimal form.
+      Seq(
+        (1L, 1, -40, 10, 2),
+        (0L, 1, -2147483647, 10, 2),
+        (100L, 3, 2, 1, -2147483647),
+        (-100L, 3, 2, 1, -2147483647)).foreach { case (unscaled, p, s, toP, toS) =>
+        allSupportedRoundModes.foreach { mode =>
+          val compact = Decimal.createUnsafe(unscaled, p, s)
+          checkCompact(compact, true)
+          val expanded = Decimal(java.math.BigDecimal.valueOf(unscaled, s))
+          checkCompact(expanded, false)
+          assert(
+            Option(compact.toPrecision(toP, toS, mode)).map(_.toString) ===
+              Option(expanded.toPrecision(toP, toS, mode)).map(_.toString),
+            s"$unscaled, ($p, $s) -> ($toP, $toS), $mode")
+        }
+      }
     }
 
     // Values around the bounds of the shortcuts must round as BigDecimal.setScale does.

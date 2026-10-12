@@ -495,13 +495,9 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
         case (str, value) =>
           def expr: Expression = cast(str, DecimalType(10, 2))
           if (!isTryCast) {
-            // Interpreted, and both codegen paths, which report the error from `CastUtils`.
-            Seq[Expression => Any](
-              evaluateWithoutCodegen(_),
-              evaluateWithMutableProjection(_),
-              evaluateWithUnsafeProjection(_)).foreach { eval =>
+            def checkOutOfRange(eval: => Any): Unit = {
               checkError(
-                exception = intercept[SparkArithmeticException](eval(expr)),
+                exception = intercept[SparkArithmeticException](eval),
                 condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
                 parameters = Map(
                   "value" -> value,
@@ -509,6 +505,13 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
                   "scale" -> "2",
                   "config" -> """"spark.sql.ansi.enabled""""),
                 queryContext = Array(ExpectedContext(fragment = "", start = -1, stop = -1)))
+            }
+            // Interpreted, and both codegen paths without falling back to interpreted.
+            checkOutOfRange(evaluateWithoutCodegen(expr))
+            withSQLConf(
+              SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.CODEGEN_ONLY.toString) {
+              checkOutOfRange(evaluateWithMutableProjection(expr))
+              checkOutOfRange(evaluateWithUnsafeProjection(expr))
             }
           } else {
             checkEvaluation(expr, null)
