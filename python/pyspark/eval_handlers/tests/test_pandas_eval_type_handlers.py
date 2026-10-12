@@ -100,7 +100,7 @@ def _map_handler(udf, return_type, runner_conf=None):
 
 def _grouped_arg_offsets(*dataframes):
     """Encode ``arg_offsets`` from ``(key_cols, value_cols)`` per DataFrame, laid out
-    as ``[length, num_keys, *key_cols, *value_cols]`` (BasePandasGroupExec.resolveArgOffsets).
+    as ``[length, num_keys, *key_cols, *value_cols]`` (PandasGroupUtils.resolveArgOffsets).
     """
     offsets: list = []
     for key_cols, value_cols in dataframes:
