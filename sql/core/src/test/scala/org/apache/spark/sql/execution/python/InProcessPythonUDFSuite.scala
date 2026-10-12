@@ -89,6 +89,11 @@ class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
     assert(physical.head.producedAttributes ==
       (physical.head.outputSet -- physical.head.child.outputSet))
     assert(physical.head.missingInput.isEmpty)
+    // There are no Python workers, so no boot time and descriptions of in-process execution.
+    val metrics = physical.head.metrics
+    assert(metrics.keySet == Set("pythonDataSent", "pythonDataReceived", "pythonInitTime",
+      "pythonTotalTime", "pythonProcessingTime", "pythonNumRowsReceived"))
+    assert(!metrics.values.exists(_.name.exists(_.contains("worker"))))
   }
 
   test("a committed write that invalidates a cached in-process plan does not fail") {
@@ -203,6 +208,16 @@ class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
         condition = "CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON",
         parameters = Map("feature" -> "Python UDF return types", "data_type" -> dt.catalogString))
     }
+  }
+
+  test("in-process UDFs inside higher-order function lambdas are rejected") {
+    // Unlike worker UDFs, they cannot be lifted out of the lambda with an element-wise type.
+    val arrays = spark.range(1).select(array(col("id")).as("a"))
+    val error = intercept[AnalysisException] {
+      arrays.select(transform(col("a"), x => makeUDF("f", x)))
+    }
+    assert(error.getCondition == "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF")
+    assert(error.getMessageParameters.get("funcName").startsWith("\"f(lambda"))
   }
 
   test("parallel calls fuse and deterministic duplicate calls are shared") {

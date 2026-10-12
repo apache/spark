@@ -1403,9 +1403,13 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
         // preserve the UDF batch pipeline (e.g. an outer UDF that could not be
         // transpiled wrapping one that could).
         //
+        // An in-process UDF never chains with worker UDFs, so it has no pipeline to preserve.
+        //
         // A conditional branch is not treated like a lambda, on purpose: the column stands, which
         // makes the argument eager, and the interpreted UDF is eager there too. See `transpile.py`.
-        expression.mapChildren(applyExpr(_, parentIsUdf = isScalarPythonUDF(expression),
+        val chains = isScalarPythonUDF(expression) && expression.asInstanceOf[PythonUDF].evalType !=
+          PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF
+        expression.mapChildren(applyExpr(_, parentIsUdf = chains,
           preEvaluate, inLambda || expression.isInstanceOf[LambdaFunction]))
     }
   }

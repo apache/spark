@@ -21,13 +21,27 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, PythonUDF}
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
 
 /** Row-based CDI execution, sharing the standard Python UDF evaluator contracts. */
 case class InProcessArrowEvalPythonExec(
     udfs: Seq[PythonUDF],
     resultAttrs: Seq[Attribute],
-    child: SparkPlan) extends EvalPythonExec with PythonSQLMetrics {
+    child: SparkPlan) extends EvalPythonExec {
+
+  // The keys of `PythonSQLMetrics`, which the evaluator updates, without `pythonBootTime`:
+  // there are no workers to start.
+  private val pythonMetrics: Map[String, SQLMetric] =
+    InProcessArrowEvalPythonExec.sizeMetricsDesc.map { case (k, v) =>
+      k -> SQLMetrics.createSizeMetric(sparkContext, v)
+    } ++ InProcessArrowEvalPythonExec.timingMetricsDesc.map { case (k, v) =>
+      k -> SQLMetrics.createTimingMetric(sparkContext, v)
+    } ++ InProcessArrowEvalPythonExec.otherMetricsDesc.map { case (k, v) =>
+      k -> SQLMetrics.createMetric(sparkContext, v)
+    }
+
+  override lazy val metrics: Map[String, SQLMetric] = pythonMetrics
 
   override protected def doExecute(): RDD[InternalRow] = {
     InProcessPythonUDFBuilder.checkConfiguration(conf)
@@ -48,4 +62,18 @@ case class InProcessArrowEvalPythonExec(
 
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     copy(child = newChild)
+}
+
+object InProcessArrowEvalPythonExec {
+  private[python] val sizeMetricsDesc: Map[String, String] = Map(
+    "pythonDataSent" -> "data exported to in-process Python",
+    "pythonDataReceived" -> "data returned from in-process Python")
+
+  private[python] val timingMetricsDesc: Map[String, String] = Map(
+    "pythonInitTime" -> "time to register UDFs in in-process Python",
+    "pythonTotalTime" -> "time to run in-process Python UDFs",
+    "pythonProcessingTime" -> "time to execute Python code")
+
+  private[python] val otherMetricsDesc: Map[String, String] = Map(
+    "pythonNumRowsReceived" -> "number of output rows")
 }

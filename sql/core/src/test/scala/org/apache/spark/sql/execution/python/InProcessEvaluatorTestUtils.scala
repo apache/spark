@@ -29,10 +29,11 @@ import org.apache.spark.sql.types.{DataType, LongType, StructField, StructType}
 /** Fixtures for in-process evaluator tests that need no Python. */
 private[python] object InProcessEvaluatorTestUtils {
 
-  /** Every metric that an evaluator may update, as `PythonSQLMetrics` defines them. */
+  /** Every metric that an evaluator may update, as `InProcessArrowEvalPythonExec` creates. */
   def allMetrics(): Map[String, SQLMetric] =
-    (PythonSQLMetrics.pythonSizeMetricsDesc ++ PythonSQLMetrics.pythonTimingMetricsDesc ++
-      PythonSQLMetrics.pythonOtherMetricsDesc).keys.map(_ -> new SQLMetric("sum", 0L)).toMap
+    (InProcessArrowEvalPythonExec.sizeMetricsDesc ++
+      InProcessArrowEvalPythonExec.timingMetricsDesc ++
+      InProcessArrowEvalPythonExec.otherMetricsDesc).keys.map(_ -> new SQLMetric("sum", 0L)).toMap
 
   def thread(body: => Unit): Thread = {
     val t = new Thread(() => body)

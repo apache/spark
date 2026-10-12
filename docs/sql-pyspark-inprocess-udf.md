@@ -77,7 +77,9 @@ type. Spark's existing `ArrowEvalPython` planning rules handle aggregation,
 nested calls, nondeterminism, and filter/limit pushdown. A dedicated
 `InProcessArrowEvalPythonExec` extends `EvalPythonExec`, reusing its argument extraction
 and partition-evaluator path, while its evaluator buffers and joins input rows itself.
-Ordinary Python UDFs continue to use Python workers.
+Ordinary Python UDFs continue to use Python workers. Unlike them, in-process UDFs cannot be
+called inside the lambda of a higher-order function such as `transform` or `filter`; such a
+call fails analysis with `UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF`.
 
 `maxRecordsPerBatch <= 0` means no row-count limit. The independent
 `spark.sql.execution.arrow.maxBytesPerBatch` limit always applies.
@@ -565,8 +567,8 @@ Unlike Python workers, the embedded interpreter does not search the user site-pa
 directory, e.g. packages installed with `pip install --user`, since it runs in Python's
 isolated mode. If packages such as PyArrow are installed there, prefer a virtual environment
 shipped with `--archives`, as above. Otherwise, list that directory here: it depends on the
-user that runs the executor, so run `python -m site --user-site` as that user on an
-executor host to find it.
+user that runs the executor and on the Python version that JEP embeds, so run that version,
+e.g. `python3.11 -m site --user-site`, as that user on an executor host to find it.
 
 ---
 
@@ -726,7 +728,7 @@ JVM memory in comparisons (see [Requirements](#requirements)).
 |---|---|---|---|
 | Input type | Python scalar | `pandas.Series` | `pa.Array` |
 | Output type | Python scalar | `pandas.Series` | `pa.Array` |
-| Data transfer | Pickle, row-by-row | Arrow IPC (process boundary) | Arrow CDI (zero-copy, in-process) |
+| Data transfer | Arrow IPC by default (pickle when Arrow optimization is disabled); row-by-row calls | Arrow IPC (process boundary) | Arrow CDI (zero-copy, in-process) |
 | Requires jep | No | No | Yes |
 | Python concurrency per executor | Multiple workers | Multiple workers | One invocation |
 | Best for | Simple row transforms | pandas-heavy logic | High-throughput Arrow transforms |

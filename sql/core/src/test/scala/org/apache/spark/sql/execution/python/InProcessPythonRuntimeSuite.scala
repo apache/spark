@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.python
 
 import java.util.Collections
 import java.util.concurrent.{CountDownLatch, TimeUnit}
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong, AtomicReference}
 
 import org.mockito.Mockito.{mock, when}
 
@@ -204,15 +204,22 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
     val taskMemory = new AtomicInteger()
     val abandoned = new AtomicInteger()
     val recorded = new AtomicInteger()
+    val recordedNanos = new AtomicLong()
     val others = new AtomicInteger()
 
     /** Resources whose consumer has started, so that closing records the time once. */
-    def resources(lockWaitMillis: Long = 10000L)
+    def resources(
+        lockWaitMillis: Long = 10000L,
+        recordTime: Long => Unit = _ => ())
       : InProcessArrowEvalPythonEvaluatorFactory.IteratorResources = {
       val resources = new InProcessArrowEvalPythonEvaluatorFactory.IteratorResources(
         () => taskMemory.incrementAndGet(),
         () => abandoned.incrementAndGet(),
-        _ => recorded.incrementAndGet(),
+        nanos => {
+          recorded.incrementAndGet()
+          recordedNanos.set(nanos)
+          recordTime(nanos)
+        },
         () => others.incrementAndGet(),
         lockWaitMillis)
       resources.start()
@@ -324,6 +331,26 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
     }
     closing.join(10000)
     assert(!closing.isAlive && interrupted.get)
+    assert(releases.taskMemory.get == 1 && releases.others.get == 1)
+  }
+
+  test("task completion records the time since the consumer started, once") {
+    val releases = new Releases
+    val resources = releases.resources()
+    Thread.sleep(50)
+    // Later starts do not move the start time.
+    resources.start()
+    resources.close()
+    resources.close()
+    assert(releases.recorded.get == 1)
+    assert(releases.recordedNanos.get >= TimeUnit.MILLISECONDS.toNanos(50))
+    assert(releases.recordedNanos.get < TimeUnit.SECONDS.toNanos(30))
+  }
+
+  test("task completion releases resources even if recording the time fails") {
+    val releases = new Releases
+    val resources = releases.resources(recordTime = _ => throw new IllegalStateException("x"))
+    intercept[IllegalStateException](resources.close())
     assert(releases.taskMemory.get == 1 && releases.others.get == 1)
   }
 

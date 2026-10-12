@@ -137,10 +137,12 @@ class InProcessUDFWrapper:
         return self
 
     def __getstate__(self) -> Dict[str, Any]:
-        # The JVM-side function holds the py4j gateway, which cannot be pickled or copied;
-        # a copy creates its own on its first call.
+        # The JVM-side function holds the py4j gateway, which cannot be pickled or copied, and
+        # the serialized command is labeled with the version of the process that sends it, so
+        # a copy, possibly in another Python, serializes the function and creates its own.
         state = self.__dict__.copy()
         state["_jfunc"] = None
+        state["_serialized"] = None
         return state
 
     def _serialize(self) -> bytes:

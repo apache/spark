@@ -715,6 +715,7 @@ class BootstrapFailureProbe {
         # A called wrapper can still be copied; the copy creates its own function.
         copied = copy.deepcopy(double)
         self.assertIsNone(copied._jfunc)
+        self.assertIsNone(copied._serialized)
         self.assertEqual(self.spark.range(2).select(copied("id")).collect()[1][0], 2)
 
     def test_traceback_settings_are_per_registration(self):

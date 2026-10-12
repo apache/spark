@@ -181,8 +181,6 @@ class InProcessArrowEvalPythonEvaluatorFactory(
     var registered = false
     var writer: ArrowWriter = null
     val results = ArrayBuffer.empty[ArrowColumnVector]
-    // Whether the consumer has started, which `resources` records for the total time.
-    var started = false
 
     def closeBatch(): Unit = {
       val resources = ArrayBuffer.empty[AutoCloseable]
@@ -230,10 +228,7 @@ class InProcessArrowEvalPythonEvaluatorFactory(
 
       // Called with the lock held.
       private def hasNextLocked: Boolean = {
-        if (!started) {
-          started = true
-          resources.start()
-        }
+        resources.start()
         checkCancellation()
         val available = batchIter.hasNext || {
           var open = false
@@ -455,7 +450,9 @@ private[python] object InProcessArrowEvalPythonEvaluatorFactory {
     // Guarded by the lock.
     private var inPython = false
     private var othersReleased = false
-    // Set once by the consumer, and read by `close` without the lock.
+    // Set once by the consumer, and read by `close` without the lock. The consumer checks
+    // `started` instead, so that its calls do not read the volatile field.
+    private var started = false
     @volatile private var startedAt = 0L
     private val timeRecorded = new AtomicBoolean()
 
@@ -464,8 +461,14 @@ private[python] object InProcessArrowEvalPythonEvaluatorFactory {
 
     def isClosed: Boolean = closeRequested
 
-    /** Marks that the consumer started, from when `close` records the total time. */
-    def start(): Unit = startedAt = System.nanoTime()
+    /**
+     * Marks that the consumer started, from when `close` records the total time. Called by the
+     * consumer with the lock held, on each call; only the first one counts.
+     */
+    def start(): Unit = if (!started) {
+      started = true
+      startedAt = System.nanoTime()
+    }
 
     /**
      * Marks that the consumer reads input, which may wait for a later listener, so that the
@@ -527,25 +530,29 @@ private[python] object InProcessArrowEvalPythonEvaluatorFactory {
 
     def close(): Unit = {
       closeRequested = true
-      // Recorded before taking the lock, which the listener may give up on.
-      val started = startedAt
-      if (started != 0L && timeRecorded.compareAndSet(false, true)) {
-        recordTime(System.nanoTime() - started)
-      }
-      if (lock.isHeldByCurrentThread) {
-        releaseAll()
-      } else if (Uninterruptibles.tryLockUninterruptibly(
-          lock, lockWaitMillis, TimeUnit.MILLISECONDS)) {
-        try releaseAll() finally lock.unlock()
-      } else if (readingInput &&
-          taskMemory.compareAndSet(TaskMemoryHeld, TaskMemoryAbandoned)) {
-        // The executor frees the task memory, but not what lives outside it, e.g. spill files.
-        abandonTaskMemory()
-      } else {
-        // The consumer may use the task memory, or is releasing it. Either way, it releases
-        // everything before it unlocks, ahead of the executor.
-        lock.lock()
-        lock.unlock()
+      Utils.tryWithSafeFinally {
+        // Recorded before taking the lock, which the listener may give up on.
+        val since = startedAt
+        if (since != 0L && timeRecorded.compareAndSet(false, true)) {
+          recordTime(System.nanoTime() - since)
+        }
+      } {
+        if (lock.isHeldByCurrentThread) {
+          releaseAll()
+        } else if (Uninterruptibles.tryLockUninterruptibly(
+            lock, lockWaitMillis, TimeUnit.MILLISECONDS)) {
+          try releaseAll() finally lock.unlock()
+        } else if (readingInput &&
+            taskMemory.compareAndSet(TaskMemoryHeld, TaskMemoryAbandoned)) {
+          // The executor frees the task memory, but not what lives outside it, e.g. spill
+          // files.
+          abandonTaskMemory()
+        } else {
+          // The consumer may use the task memory, or is releasing it. Either way, it releases
+          // everything before it unlocks, ahead of the executor.
+          lock.lock()
+          lock.unlock()
+        }
       }
     }
 
