@@ -18,7 +18,10 @@ package org.apache.spark.sql.catalyst.xml
 
 import java.io.{BufferedReader, CharConversionException, FileNotFoundException, InputStream, InputStreamReader, IOException, StringReader}
 import java.nio.charset.{Charset, MalformedInputException}
+import java.sql.Date
 import java.text.NumberFormat
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import java.util
 import java.util.Locale
 import javax.xml.stream.{XMLEventReader, XMLStreamException}
@@ -41,11 +44,11 @@ import org.apache.spark.{SparkIllegalArgumentException, SparkUpgradeException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow, ToStringBase}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, BadRecordException, CharVarcharUtils, DropMalformedMode, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, PermissiveMode, TimeFormatter, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, BadRecordException, CharVarcharUtils, DateFormatter, DateTimeUtils, DropMalformedMode, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, PermissiveMode, TimeFormatter, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.xml.StaxXmlParser.convertStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
 import org.apache.spark.types.variant.{Variant, VariantBuilder}
 import org.apache.spark.types.variant.VariantBuilder.FieldEntry
@@ -71,7 +74,14 @@ class StaxXmlParser(
     isParsing = true,
     forTimestampNTZ = true)
 
-  private lazy val dateParser = new XmlDateParser(options)
+  private lazy val dateFormatter = DateFormatter(
+    options.dateFormatInRead,
+    options.locale,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true)
+
+  private lazy val legacyIsoDateFirst = options.dateFormatOption.isDefined &&
+    SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY
 
   private lazy val timeFormatter = TimeFormatter(options.timeFormatInRead, isParsing = true)
 
@@ -776,7 +786,8 @@ class StaxXmlParser(
   }
 
   private def parseXmlDate(value: String, options: XmlOptions): Int = {
-    dateParser.parse(value)
+    val isoDate = if (legacyIsoDateFirst) StaxXmlParser.parseIsoDate(value) else None
+    isoDate.getOrElse(dateFormatter.parse(value))
   }
 
   private def parseXmlTimestamp(value: String, options: XmlOptions): Long = {
@@ -1168,6 +1179,17 @@ class XmlTokenizer(
 }
 
 object StaxXmlParser {
+  private[xml] def parseIsoDate(value: String): Option[Int] = {
+    if (value.nonEmpty && Character.isDigit(value.head)) {
+      Try(LocalDate.parse(value, DateTimeFormatter.ISO_DATE)).toOption.map { date =>
+        // Match spark-xml's java.sql.Date conversion for historical dates.
+        DateTimeUtils.fromJavaDate(Date.valueOf(date))
+      }
+    } else {
+      None
+    }
+  }
+
   /**
    * Parses a stream that contains CSV strings and turns it into an iterator of tokens.
    */
