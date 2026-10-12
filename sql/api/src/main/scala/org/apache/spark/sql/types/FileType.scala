@@ -28,7 +28,7 @@ import org.apache.spark.annotation.Unstable
  * a single kind of file, which behaves like an external file: the lifecycle of the referenced
  * file is independent of the table.
  *
- * The type is planned to be physically represented as a struct (see [[FileType.FIELDS]]) but
+ * The type is planned to be physically represented as a struct (see `FileType.FIELDS`) but
  * deliberately does not extend [[StructType]]. It is planned to have no ordering, so it is not
  * to be usable in the key of a map, a join, a grouping expression, or as a partition or
  * clustering column. Of these, this type currently only guarantees the schema-level pieces (DDL

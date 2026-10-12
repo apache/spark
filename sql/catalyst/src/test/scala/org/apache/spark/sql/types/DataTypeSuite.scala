@@ -1750,15 +1750,15 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
     assert(JsonMethods.compact(JsonMethods.render(schema("f").jsonValue)) ===
       """{"name":"f","type":"file","nullable":false,"metadata":{}}""")
     assert(JsonMethods.compact(JsonMethods.render(schema("fs").jsonValue)) ===
-      """{"name":"fs","type":{"type":"array","elementType":"file","containsNull":true},""" +
-        """"nullable":true,"metadata":{}}""")
+      "{\"name\":\"fs\",\"type\":{\"type\":\"array\",\"elementType\":\"file\"," +
+        "\"containsNull\":true},\"nullable\":true,\"metadata\":{}}")
     assert(schema.asNullable("f").nullable)
   }
 
   test("FileType: the mode of a field is read from the __FILE_TYPE_MODE metadata") {
     def fieldJson(tpe: String, modes: String): String =
-      s"""{"type":"struct","fields":[{"name":"f","type":$tpe,"nullable":true,""" +
-        s""""metadata":{"__FILE_TYPE_MODE":{$modes}}}]}"""
+      """{"type":"struct","fields":[{"name":"f","type":""" + tpe + ""","nullable":true,""" +
+        """"metadata":{"__FILE_TYPE_MODE":{""" + modes + """}}}]}"""
 
     // The key is consumed, so it does not show up in the metadata of the field.
     val external = DataType.fromJson(fieldJson("\"file\"", "\"f\":\"EXTERNAL\""))
@@ -1774,10 +1774,10 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
     Seq("OTHER", "NONE").foreach { mode =>
       checkError(
         exception = intercept[SparkIllegalArgumentException] {
-          DataType.fromJson(fieldJson("\"file\"", s"\"f\":\"$mode\""))
+          DataType.fromJson(fieldJson("\"file\"", "\"f\":\"" + mode + "\""))
         },
         condition = "INVALID_JSON_DATA_TYPE_FOR_FILE",
-        parameters = Map("fieldPath" -> "f", "jsonType" -> s"file (mode=$mode)"))
+        parameters = Map("fieldPath" -> "f", "jsonType" -> ("file (mode=" + mode + ")")))
     }
     // The mode of a path that does not hold a file is rejected.
     checkError(
