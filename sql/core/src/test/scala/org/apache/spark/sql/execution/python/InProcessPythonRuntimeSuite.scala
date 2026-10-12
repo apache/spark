@@ -206,14 +206,18 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
     val recorded = new AtomicInteger()
     val others = new AtomicInteger()
 
+    /** Resources whose consumer has started, so that closing records the time once. */
     def resources(lockWaitMillis: Long = 10000L)
-      : InProcessArrowEvalPythonEvaluatorFactory.IteratorResources =
-      new InProcessArrowEvalPythonEvaluatorFactory.IteratorResources(
+      : InProcessArrowEvalPythonEvaluatorFactory.IteratorResources = {
+      val resources = new InProcessArrowEvalPythonEvaluatorFactory.IteratorResources(
         () => taskMemory.incrementAndGet(),
         () => abandoned.incrementAndGet(),
-        () => recorded.incrementAndGet(),
+        _ => recorded.incrementAndGet(),
         () => others.incrementAndGet(),
         lockWaitMillis)
+      resources.start()
+      resources
+    }
   }
 
   /**
@@ -296,10 +300,12 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
     withConsumer(resources, readingInput = true) {
       resources.close()
       // The executor frees the task memory, after the listener deletes what lives outside it.
+      // The listener records the time too, without the lock.
       assert(releases.taskMemory.get == 0 && releases.abandoned.get == 1)
-      assert(releases.others.get == 0)
+      assert(releases.others.get == 0 && releases.recorded.get == 1)
     }
     assert(releases.taskMemory.get == 0 && releases.others.get == 1)
+    assert(releases.recorded.get == 1)
   }
 
   test("an interrupted completion listener still waits for the consumer's lock") {

@@ -563,8 +563,10 @@ spark.python.inProcess.sitePackages = ./venv/lib/python3.11/site-packages,/opt/c
 
 Unlike Python workers, the embedded interpreter does not search the user site-packages
 directory, e.g. packages installed with `pip install --user`, since it runs in Python's
-isolated mode. List that directory here (`python -m site --user-site` prints it) if
-packages such as PyArrow are installed there.
+isolated mode. If packages such as PyArrow are installed there, prefer a virtual environment
+shipped with `--archives`, as above. Otherwise, list that directory here: it depends on the
+user that runs the executor, so run `python -m site --user-site` as that user on an
+executor host to find it.
 
 ---
 

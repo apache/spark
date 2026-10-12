@@ -36,7 +36,7 @@ import io
 import sys
 from functools import update_wrapper
 from inspect import signature
-from typing import TYPE_CHECKING, Any, Callable, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Union
 
 from pyspark import Accumulator, Broadcast, cloudpickle
 from pyspark.errors import PySparkNotImplementedError, PySparkTypeError, PySparkValueError
@@ -134,8 +134,14 @@ class InProcessUDFWrapper:
 
     def asNondeterministic(self) -> "InProcessUDFWrapper":
         self._deterministic = False
-        self._jfunc = None
         return self
+
+    def __getstate__(self) -> Dict[str, Any]:
+        # The JVM-side function holds the py4j gateway, which cannot be pickled or copied;
+        # a copy creates its own on its first call.
+        state = self.__dict__.copy()
+        state["_jfunc"] = None
+        return state
 
     def _serialize(self) -> bytes:
         if self._serialized is None:
@@ -191,10 +197,9 @@ class InProcessUDFWrapper:
                 self._name,
                 self._serialize(),
                 self.returnType.json(),
-                self._deterministic,
                 "%d.%d" % sys.version_info[:2],
             )
-        return Column(self._jfunc.apply(jlist))
+        return Column(self._jfunc.apply(jlist, self._deterministic))
 
 
 def inprocess_udf(returnType: Union[DataType, str], deterministic: bool = True) -> Callable:

@@ -690,10 +690,14 @@ class BootstrapFailureProbe {
         self.assertFalse(plan.expressions().apply(0).deterministic())
 
     def test_calls_share_one_jvm_function(self):
+        import copy
+
+        import pyarrow.compute as pc
+
         from pyspark.inprocess import inprocess_udf
 
         jvm = self.spark._jvm
-        double = inprocess_udf("long")(lambda x: x * 2)
+        double = inprocess_udf("long")(lambda x: pc.multiply(x, 2))
 
         def functions(*cols):
             plan = self.spark.range(1).select(*cols)._jdf.queryExecution().analyzed()
@@ -703,11 +707,15 @@ class BootstrapFailureProbe {
         # The command crosses py4j once, however many expressions call the UDF.
         ids, _ = functions(double("id"), double("id"))
         self.assertEqual(ids[0], ids[1])
-        # Nondeterminism is part of the JVM function, which is then created again.
+        # Nondeterminism belongs to each call, so it keeps the function.
         double.asNondeterministic()
         later, udfs = functions(double("id"))
-        self.assertNotEqual(later[0], ids[0])
+        self.assertEqual(later[0], ids[0])
         self.assertFalse(udfs[0].udfDeterministic())
+        # A called wrapper can still be copied; the copy creates its own function.
+        copied = copy.deepcopy(double)
+        self.assertIsNone(copied._jfunc)
+        self.assertEqual(self.spark.range(2).select(copied("id")).collect()[1][0], 2)
 
     def test_traceback_settings_are_per_registration(self):
         from pyspark.inprocess import inprocess_udf

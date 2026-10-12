@@ -21,7 +21,7 @@ import java.io.File
 import java.nio.file.Files
 import java.util.UUID
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 import java.util.concurrent.locks.ReentrantLock
 
 import scala.collection.mutable.ArrayBuffer
@@ -181,7 +181,8 @@ class InProcessArrowEvalPythonEvaluatorFactory(
     var registered = false
     var writer: ArrowWriter = null
     val results = ArrayBuffer.empty[ArrowColumnVector]
-    var startedAt = 0L
+    // Whether the consumer has started, which `resources` records for the total time.
+    var started = false
 
     def closeBatch(): Unit = {
       val resources = ArrayBuffer.empty[AutoCloseable]
@@ -206,9 +207,7 @@ class InProcessArrowEvalPythonEvaluatorFactory(
           Utils.deleteQuietly(spillDir)
         }
       },
-      recordTime = () => if (startedAt != 0L) {
-        metrics("pythonTotalTime") += (System.nanoTime() - startedAt) / 1000000
-      },
+      recordTime = nanos => metrics("pythonTotalTime") += nanos / 1000000,
       releaseOthers = () => {
         Utils.tryWithSafeFinally {
           closeBatch()
@@ -231,7 +230,10 @@ class InProcessArrowEvalPythonEvaluatorFactory(
 
       // Called with the lock held.
       private def hasNextLocked: Boolean = {
-        if (startedAt == 0L) startedAt = System.nanoTime()
+        if (!started) {
+          started = true
+          resources.start()
+        }
         checkCancellation()
         val available = batchIter.hasNext || {
           var open = false
@@ -426,7 +428,8 @@ private[python] object InProcessArrowEvalPythonEvaluatorFactory {
    * closing, which the consumer checks after each input row, so the listener waits for at most
    * one row before it releases task memory (the row queue), ahead of the executor. It releases
    * the other resources (Arrow vectors and Python handles) too, unless Python is running; then
-   * the consumer releases them when Python returns.
+   * the consumer releases them when Python returns. Before any of that, it records the time
+   * since the consumer started, so that the task reports it whatever the consumer is doing.
    *
    * Reading one row can take long: the input can be another in-process evaluator, whose next
    * row may need a batch of Python, or an upstream operator that only a later listener
@@ -441,7 +444,7 @@ private[python] object InProcessArrowEvalPythonEvaluatorFactory {
   class IteratorResources(
       releaseTaskMemory: () => Unit,
       abandonTaskMemory: () => Unit,
-      recordTime: () => Unit,
+      recordTime: Long => Unit,
       releaseOthers: () => Unit,
       lockWaitMillis: Long = 1000L) {
     private val lock = new ReentrantLock()
@@ -451,13 +454,18 @@ private[python] object InProcessArrowEvalPythonEvaluatorFactory {
     private val taskMemory = new AtomicInteger(TaskMemoryHeld)
     // Guarded by the lock.
     private var inPython = false
-    private var timeRecorded = false
     private var othersReleased = false
+    // Set once by the consumer, and read by `close` without the lock.
+    @volatile private var startedAt = 0L
+    private val timeRecorded = new AtomicBoolean()
 
     // Set while the consumer reads input; see `startReadingInput`.
     @volatile private var readingInput = false
 
     def isClosed: Boolean = closeRequested
+
+    /** Marks that the consumer started, from when `close` records the total time. */
+    def start(): Unit = startedAt = System.nanoTime()
 
     /**
      * Marks that the consumer reads input, which may wait for a later listener, so that the
@@ -519,6 +527,11 @@ private[python] object InProcessArrowEvalPythonEvaluatorFactory {
 
     def close(): Unit = {
       closeRequested = true
+      // Recorded before taking the lock, which the listener may give up on.
+      val started = startedAt
+      if (started != 0L && timeRecorded.compareAndSet(false, true)) {
+        recordTime(System.nanoTime() - started)
+      }
       if (lock.isHeldByCurrentThread) {
         releaseAll()
       } else if (Uninterruptibles.tryLockUninterruptibly(
@@ -541,17 +554,9 @@ private[python] object InProcessArrowEvalPythonEvaluatorFactory {
       Utils.tryWithSafeFinally {
         if (taskMemory.compareAndSet(TaskMemoryHeld, TaskMemoryReleased)) releaseTaskMemory()
       } {
-        // Recorded with the lock, but also while Python runs, so that the task reports it.
-        Utils.tryWithSafeFinally {
-          if (!timeRecorded) {
-            timeRecorded = true
-            recordTime()
-          }
-        } {
-          if (!othersReleased && !inPython) {
-            othersReleased = true
-            releaseOthers()
-          }
+        if (!othersReleased && !inPython) {
+          othersReleased = true
+          releaseOthers()
         }
       }
     }

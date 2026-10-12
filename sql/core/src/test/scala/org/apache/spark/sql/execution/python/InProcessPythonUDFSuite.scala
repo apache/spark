@@ -66,8 +66,8 @@ class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
       input: Column,
       deterministic: Boolean = true): Column = {
     // Each call creates fresh bytes, as Py4J does. Semantic equality must compare their contents.
-    InProcessPythonUDFBuilder.build(
-      name, Array[Byte](1, 2), LongType.json, Seq(input).asJava, deterministic, "3.11")
+    InProcessPythonUDFBuilder.create(name, Array[Byte](1, 2), LongType.json, "3.11")
+      .apply(Seq(input).asJava, deterministic)
   }
 
   test("in-process UDFs use PythonUDF and ArrowEvalPython planning contracts") {
@@ -188,8 +188,8 @@ class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
   test("positional arguments after named arguments are rejected by the builder") {
     val named = PythonSQLUtils.namedArgumentExpression("x", col("id"))
     val error = intercept[AnalysisException] {
-      InProcessPythonUDFBuilder.build(
-        "f", Array[Byte](1), LongType.json, Seq(named, col("id")).asJava, true, "3.11")
+      InProcessPythonUDFBuilder.create("f", Array[Byte](1), LongType.json, "3.11")
+        .apply(Seq(named, col("id")).asJava, true)
     }
     assert(error.getCondition == "UNEXPECTED_POSITIONAL_ARGUMENT")
   }
@@ -198,8 +198,7 @@ class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
     Seq(CharType(5), VarcharType(5), new StructType().add("x", CharType(5))).foreach { dt =>
       checkError(
         intercept[AnalysisException] {
-          InProcessPythonUDFBuilder.build(
-            "f", Array[Byte](1), dt.json, Seq(col("id")).asJava, true, "3.11")
+          InProcessPythonUDFBuilder.create("f", Array[Byte](1), dt.json, "3.11")
         },
         condition = "CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON",
         parameters = Map("feature" -> "Python UDF return types", "data_type" -> dt.catalogString))
