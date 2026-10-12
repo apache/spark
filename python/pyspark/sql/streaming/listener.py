@@ -66,6 +66,8 @@ class StreamingQueryListener(ABC):
     >>> spark.streams.addListener(MyListener())
     """
 
+    _sparkSession: Optional[Union["SparkSession", "ConnectSparkSession"]] = None
+
     def _set_spark_session(
         self,
         session: Union["SparkSession", "ConnectSparkSession"],
@@ -75,7 +77,7 @@ class StreamingQueryListener(ABC):
 
     @property
     def spark(self) -> Optional[Union["SparkSession", "ConnectSparkSession"]]:
-        return getattr(self, "_sparkSession", None)
+        return self._sparkSession
 
     @spark.setter
     def spark(self, session: Union["SparkSession", "ConnectSparkSession"]) -> None:
