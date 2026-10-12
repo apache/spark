@@ -96,8 +96,6 @@ class ResolverGuard(
    * their children. For unimplemented ones, return Some("reason").
    */
   private def checkOperator(operator: LogicalPlan): Option[String] = {
-    checkOperatorSecondPassAnalysis(operator)
-
     operator match {
       case unresolvedWith: UnresolvedWith =>
         checkUnresolvedWith(unresolvedWith)
@@ -169,9 +167,6 @@ class ResolverGuard(
 
   private object CheckOperator {
     def unapply(operator: LogicalPlan): Option[String] = checkOperator(operator)
-  }
-
-  private def checkOperatorSecondPassAnalysis(operator: LogicalPlan): Unit = {
   }
 
   /**
@@ -666,8 +661,6 @@ class ResolverGuard(
     } else if (conf.getConf(SQLConf.LEGACY_CTE_PRECEDENCE_POLICY) !=
       LegacyBehaviorPolicy.CORRECTED) {
       Some("legacyCTEPrecedencePolicy")
-    } else if (conf.getConfString("pipelines.id", null) != null) {
-      Some("dlt")
     } else if (!conf.getConf(SQLConf.PRIORITIZE_ORDINAL_RESOLUTION_IN_SORT)) {
       Some("prioritizeOrdinalResolutionInSortDisabled")
     } else if (conf.getConf(SQLConf.PERSISTENT_CATALOG_FIRST)) {
@@ -762,8 +755,6 @@ object ResolverGuard {
   private val UNSUPPORTED_FUNCTION_NAMES = {
     val map = new IdentifierMap[Unit]()
     // User info functions are not supported.
-    // [[InlineUserInfoExpressions]] cannot be invoked as a post-hoc rule as it produces
-    // inconsistent aliases based on the table type (because of the rule ordering in fixed-point).
     map += ("current_user", ())
     map += ("session_user", ())
     map += ("user", ())

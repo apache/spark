@@ -74,8 +74,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPl
  *   which indicates how many subquery levels we need to go up to find the attribute reference.
  *   We need the outerScopeLevel map when resolving the subquery expressions, where we collect
  *   the outer references and wrap the ones cannot be resolved in the current subquery scope or
- *   its parent scopes with [[OuterScopeReference]]. More details can be found in
- *   `SubqueryExpressionResolver.processOuterReferences`.
+ *   its parent scopes with [[OuterScopeReference]].
  *
  * Notes:
  *  - Spark only supports outer aggregates in the subqueries inside `HAVING`;
