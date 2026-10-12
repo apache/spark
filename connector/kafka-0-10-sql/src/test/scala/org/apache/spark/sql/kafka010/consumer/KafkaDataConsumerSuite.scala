@@ -25,6 +25,7 @@ import scala.collection.immutable
 import scala.jdk.CollectionConverters._
 import scala.util.Random
 
+import org.apache.kafka.clients.admin.{Admin, AdminClientConfig, RecordsToDelete}
 import org.apache.kafka.clients.consumer.ConsumerConfig._
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
@@ -105,7 +106,22 @@ class KafkaDataConsumerSuite
     val testTopic = "out-of-range-recovery-topic-" + Random.nextInt()
     val testTopicPartition = new TopicPartition(testTopic, 0)
     testUtils.createTopic(testTopic, 1)
-    testUtils.sendMessages(Seq(new RecordBuilder(testTopic, "value").build()))
+    testUtils.sendMessages((0 until 3).map { offset =>
+      new RecordBuilder(testTopic, s"value-$offset").build()
+    })
+
+    val admin = Admin.create(Map[String, Object](
+      AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG -> testUtils.brokerAddress).asJava)
+    try {
+      admin.deleteRecords(Map(
+        testTopicPartition -> RecordsToDelete.beforeOffset(2L)).asJava).all().get()
+    } finally {
+      admin.close()
+    }
+    assert(testUtils.getEarliestOffsets(Set(testTopic))(testTopicPartition) === 2L)
+
+    val kafkaParams = new ju.HashMap[String, Object](getKafkaParams())
+    kafkaParams.put(AUTO_OFFSET_RESET_CONFIG, "none")
 
     // Closing a consumer as soon as it is returned deterministically reproduces an eviction
     // racing with the out-of-range recovery path.
@@ -117,16 +133,17 @@ class KafkaDataConsumerSuite
     }
     val consumer = new KafkaDataConsumer(
       testTopicPartition,
-      getKafkaParams(),
+      kafkaParams,
       closingConsumerPool,
       fetchedDataPool)
 
     try {
       val originalConsumer = consumer.getOrRetrieveConsumer()
-      // The only record is at offset 0, so requesting offset 1 triggers out-of-range recovery.
-      val record = consumer.get(1, 2, 1000, failOnDataLoss = false)
+      val record = consumer.get(0, 3, 1000, failOnDataLoss = false)
 
-      assert(record === null)
+      assert(record !== null)
+      assert(record.offset() === 2L)
+      assert(new String(record.value(), StandardCharsets.UTF_8) === "value-2")
       assert(consumer._consumer.exists(_.ne(originalConsumer)))
     } finally {
       consumer.release()
