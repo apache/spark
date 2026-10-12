@@ -557,11 +557,13 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
 
         constant = udf(lambda: 7, "long", useArrow=True)
         phase_names = (
-            "pythonDataReadTime",
+            "pythonDataReceiveTime",
+            "pythonArrowDeserializationTime",
             "pythonInputPreparationTime",
             "pythonUDFExecutionTime",
             "pythonOutputPreparationTime",
-            "pythonDataWriteTime",
+            "pythonArrowSerializationTime",
+            "pythonDataSendTime",
         )
         with self.sql_conf(
             {
@@ -602,11 +604,11 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
                     phases = [metrics.apply(name).value() for name in phase_names]
                     self.assertTrue(all(value >= 0 for value in phases))
                     if num_rows and concurrency == 0:
-                        self.assertGreaterEqual(phases[2], 2 * num_rows)
+                        self.assertGreaterEqual(phases[3], 2 * num_rows)
                     elif num_rows:
-                        self.assertGreater(phases[2], 0)
+                        self.assertGreater(phases[3], 0)
                     else:
-                        self.assertEqual(phases[1:4], [0, 0, 0])
+                        self.assertEqual(phases[2:5], [0, 0, 0])
                     self.assertLessEqual(sum(phases), metrics.apply("pythonProcessingTime").value())
 
 
@@ -616,16 +618,34 @@ class ArrowStreamTimingTests(unittest.TestCase):
         import pyarrow as pa
 
         metrics = WorkerMetrics()
-        metrics.reset()
         self.addCleanup(metrics.reset)
-        serializer = ArrowStreamSerializer(write_start_stream=True, collect_timing=True)
         batch = pa.record_batch([[1, 2]], names=["value"])
         clock_ns = 0
 
         def clock():
-            nonlocal clock_ns
-            clock_ns += 1_000_000
             return clock_ns
+
+        class DelayedStream(BytesIO):
+            receive_ns = 0
+            send_ns = 0
+
+            def read(self, size=-1):
+                nonlocal clock_ns
+                clock_ns += 3_000_000
+                self.receive_ns += 3_000_000
+                return super().read(size)
+
+            def write(self, data):
+                nonlocal clock_ns
+                clock_ns += 5_000_000
+                self.send_ns += 5_000_000
+                return super().write(data)
+
+            def flush(self):
+                nonlocal clock_ns
+                clock_ns += 7_000_000
+                self.send_ns += 7_000_000
+                return super().flush()
 
         def produce():
             nonlocal clock_ns
@@ -633,18 +653,90 @@ class ArrowStreamTimingTests(unittest.TestCase):
                 clock_ns += 100_000_000
                 yield batch
 
-        stream = BytesIO()
-        with patch("pyspark.worker_metrics.time.perf_counter_ns", side_effect=clock):
-            serializer.dump_stream(produce(), stream)
-            stream.seek(0)
-            self.assertEqual(read_int(stream), SpecialLengths.START_ARROW_STREAM)
-            for actual in serializer.load_stream(stream):
-                clock_ns += 100_000_000
-                self.assertTrue(actual.equals(batch))
+        for flush_per_batch in (False, True):
+            with self.subTest(flush_per_batch=flush_per_batch):
+                metrics.reset()
+                serializer = ArrowStreamSerializer(
+                    write_start_stream=True,
+                    flush_per_batch=flush_per_batch,
+                    collect_timing=True,
+                )
+                stream = DelayedStream()
+                with patch("pyspark.worker_metrics.time.perf_counter_ns", side_effect=clock):
+                    serializer.dump_stream(produce(), stream)
+                    stream.seek(0)
+                    self.assertEqual(read_int(stream), SpecialLengths.START_ARROW_STREAM)
+                    stream.receive_ns = 0
+                    for actual in serializer.load_stream(stream):
+                        clock_ns += 100_000_000
+                        self.assertTrue(actual.equals(batch))
 
-        # Open, two batches, and close/EOF each add 1 ms; producer/consumer time is excluded.
-        for name in ("pythonDataReadTime", "pythonDataWriteTime"):
-            self.assertEqual(metrics.to_dict()[name], 4)
+                # All simulated time inside IPC is stream I/O; producer/consumer time is excluded.
+                report = metrics.to_dict()
+                self.assertEqual(report["pythonDataReceiveTime"], stream.receive_ns // 1_000_000)
+                self.assertEqual(report["pythonDataSendTime"], stream.send_ns // 1_000_000)
+                self.assertEqual(report["pythonArrowDeserializationTime"], 0)
+                self.assertEqual(report["pythonArrowSerializationTime"], 0)
+
+    def test_timing_preserves_stream_operations(self):
+        import pyarrow as pa
+
+        metrics = WorkerMetrics()
+        self.addCleanup(metrics.reset)
+        batch = pa.record_batch([[1, 2]], names=["value"])
+
+        def run(timed, write_start_stream, flush_per_batch, num_batches, fail):
+            metrics.reset()
+            events = []
+
+            class RecordedStream(BytesIO):
+                def read(self, size=-1):
+                    events.append(("read", size))
+                    return super().read(size)
+
+                def write(self, data):
+                    events.append(("write", bytes(data)))
+                    return super().write(data)
+
+                def flush(self):
+                    events.append(("flush",))
+                    return super().flush()
+
+            def produce():
+                for _ in range(num_batches):
+                    events.append(("produce",))
+                    yield batch
+                if fail:
+                    raise RuntimeError("batch producer failed")
+
+            stream = RecordedStream()
+            serializer = ArrowStreamSerializer(
+                write_start_stream=write_start_stream,
+                flush_per_batch=flush_per_batch,
+                collect_timing=timed,
+            )
+            if fail:
+                with self.assertRaisesRegex(RuntimeError, "batch producer failed"):
+                    serializer.dump_stream(produce(), stream)
+            else:
+                serializer.dump_stream(produce(), stream)
+            data = stream.getvalue()
+            if num_batches:
+                stream.seek(0)
+                if write_start_stream:
+                    self.assertEqual(read_int(stream), SpecialLengths.START_ARROW_STREAM)
+                for actual in serializer.load_stream(stream):
+                    events.append(("consume",))
+                    self.assertTrue(actual.equals(batch))
+            self.assertFalse(stream.closed)
+            return data, events
+
+        for write_start_stream in (False, True):
+            for flush_per_batch in (False, True):
+                for num_batches, fail in ((0, False), (0, True), (2, False), (2, True)):
+                    case = (write_start_stream, flush_per_batch, num_batches, fail)
+                    with self.subTest(case=case):
+                        self.assertEqual(run(False, *case), run(True, *case))
 
 
 if __name__ == "__main__":
