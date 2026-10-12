@@ -1711,13 +1711,14 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
   test("FileType: name, JSON and DDL round trip") {
     assert(FileType.external.typeName === "file")
     assert(FileType.external.simpleString === "file")
-    // EXTERNAL is part of the SQL form, so that toDDL can declare the column.
-    assert(FileType.external.sql === "FILE EXTERNAL")
+    // The SQL name of the type is FILE; EXTERNAL belongs to the column declaration.
+    assert(FileType.external.sql === "FILE")
     assert(FileType().sql === "FILE")
     assert(FileType.external.json === "\"file\"")
     assert(DataType.fromJson("\"file\"") === FileType.external)
     assert(DataType.fromJson("\"file external\"") === FileType.external)
-    assert(DataType.fromDDL(FileType.external.sql) === FileType.external)
+    assert(DataType.fromDDL("FILE EXTERNAL") === FileType.external)
+    assert(DataType.fromDDL("FILE") === FileType())
     assert(FileType.external != FileType())
     assert(!(FileType.external: DataType).isInstanceOf[StructType])
 
@@ -1727,7 +1728,12 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
       .add("fs", ArrayType(FileType.external))
       .add("m", MapType(StringType, FileType.external))
     assert(DataType.fromJson(schema.json) === schema)
+    assert(schema.toDDL ===
+      "id INT,f FILE EXTERNAL NOT NULL,fs ARRAY<FILE EXTERNAL>,m MAP<STRING, FILE EXTERNAL>")
     assert(DataType.fromDDL(schema.toDDL) === schema)
+    val nested = new StructType().add("s", new StructType().add("f", FileType.external))
+    assert(nested.toDDL === "s STRUCT<f: FILE EXTERNAL>")
+    assert(DataType.fromDDL(nested.toDDL) === nested)
     // The JSON of a field is the plain "file" with empty metadata, as in the SPIP.
     assert(JsonMethods.compact(JsonMethods.render(schema("f").jsonValue)) ===
       """{"name":"f","type":"file","nullable":false,"metadata":{}}""")

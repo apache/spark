@@ -23,8 +23,8 @@ import org.apache.spark.annotation.Unstable
  * video. A value holds the location of the file and a small amount of metadata describing it
  * (size, content type and checksum); the bytes of the file are never stored in the value.
  *
- * In SQL the type is named `FILE`, and `EXTERNAL` is required when declaring a column, as in
- * `FILE EXTERNAL`. Its JSON representation is `"file"`.
+ * In SQL the type is named `FILE`, and the `EXTERNAL` keyword is required when declaring a
+ * column, as in `CREATE TABLE t (f FILE EXTERNAL)`. Its JSON representation is `"file"`.
  *
  * The type is planned to be physically represented as a struct (see [[FileType.FIELDS]]) but
  * deliberately does not extend [[StructType]]. It is planned to have no ordering, so it is not
@@ -42,12 +42,6 @@ case class FileType(mode: FileTypeMode = FileTypeMode.UNKNOWN) extends DataType 
   override def defaultSize: Int = FileType.asStruct.defaultSize
 
   override def typeName: String = "file"
-
-  /** The mode is part of the SQL form, because EXTERNAL is required when declaring a column. */
-  override def sql: String = mode match {
-    case FileTypeMode.EXTERNAL => "FILE EXTERNAL"
-    case _ => "FILE"
-  }
 
   /**
    * `acceptsType` ignores mode so that an expression expecting `FileType()` accepts a

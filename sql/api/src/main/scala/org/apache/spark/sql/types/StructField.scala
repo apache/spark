@@ -343,8 +343,25 @@ case class StructField(
    * Returns a string containing a schema in SQL format. For example the following value:
    * `StructField("eventId", IntegerType)` will be converted to `eventId`: INT.
    */
-  private[sql] def sql =
-    s"${QuotingUtils.quoteIfNeeded(name)}: ${dataType.sql}$nullDDL$getDDLComment"
+  private[sql] def sql = sqlWithType(dataType.sql)
+
+  private def sqlWithType(typeSql: String): String =
+    s"${QuotingUtils.quoteIfNeeded(name)}: $typeSql$nullDDL$getDDLComment"
+
+  /**
+   * The SQL form of a type in a column declaration. It differs from `DataType.sql` only for
+   * FILE, which must be declared as `FILE EXTERNAL`, also when nested in another type.
+   */
+  private def declarationSql(dt: DataType): String = dt match {
+    case _ if !dt.existsRecursively(_.isInstanceOf[FileType]) => dt.sql
+    case _: FileType => "FILE EXTERNAL"
+    case ArrayType(elementType, _) => s"ARRAY<${declarationSql(elementType)}>"
+    case MapType(keyType, valueType, _) =>
+      s"MAP<${declarationSql(keyType)}, ${declarationSql(valueType)}>"
+    case st: StructType =>
+      s"STRUCT<${st.fields.map(f => f.sqlWithType(f.declarationSql(f.dataType))).mkString(", ")}>"
+    case other => other.sql
+  }
 
   /**
    * Returns a string containing a schema in DDL format. For example, the following value:
@@ -353,7 +370,7 @@ case class StructField(
    * @since 2.4.0
    */
   def toDDL: String = {
-    s"${QuotingUtils.quoteIfNeeded(name)} ${dataType.sql}$nullDDL" +
+    s"${QuotingUtils.quoteIfNeeded(name)} ${declarationSql(dataType)}$nullDDL" +
       s"$getDDLDefault$getDDLComment"
   }
 }
