@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{DefaultSqlApiConf, SQLConf}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -68,6 +68,12 @@ class TypeUtilsSuite extends SparkFunSuite with SQLHelper {
 
   test("TIMESTAMP_NANOS_TYPES_ENABLED defaults to Utils.isTesting") {
     assert(SQLConf.get.timestampNanosTypesEnabled === Utils.isTesting)
+  }
+
+  test("FILE_TYPE_ENABLED defaults to Utils.isTesting, and is off without a SQLConf") {
+    assert(SQLConf.get.isFileTypeEnabled === Utils.isTesting)
+    assert(SQLConf.FILE_TYPE_ENABLED.defaultValue === Some(Utils.isTesting))
+    assert(!DefaultSqlApiConf.isFileTypeEnabled)
   }
 
   test("failUnsupportedDataType rejects timestamp nanos types when preview is disabled") {
