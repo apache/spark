@@ -200,9 +200,19 @@ class Module(object):
         Traceback (most recent call last):
             ...
         ValueError: module name 'core' is already in use
+
+        A plain-string goal fails here, not later as an AttributeError:
+
+        >>> Module("bad-goal", [], [], shell_script_test_goals=["dev/lint-java"])
+        Traceback (most recent call last):
+            ...
+        TypeError: bad-goal: expected ShellScriptTestGoal, got 'dev/lint-java'
         """
         if any(module.name == name for module in all_modules):
             raise ValueError(f"module name {name!r} is already in use")
+        for goal in shell_script_test_goals:
+            if not isinstance(goal, ShellScriptTestGoal):
+                raise TypeError(f"{name}: expected ShellScriptTestGoal, got {goal!r}")
 
         self.name = name
         self.dependencies = dependencies
