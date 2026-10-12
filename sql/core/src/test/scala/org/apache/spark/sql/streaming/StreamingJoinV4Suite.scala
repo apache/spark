@@ -98,35 +98,32 @@ class StreamingInnerJoinV4Suite
         val df2 = input2.toDF().select($"value" as "key", ($"value" * 3) as "rightValue")
         val joined = df1.join(df2, "key")
 
+        def checkMergeOperatorVersion(query: StreamExecution): Unit = {
+          val join = query.lastExecution.executedPlan.collectFirst {
+            case join: StreamingSymmetricHashJoinExec => join
+          }.getOrElse(fail("StreamingSymmetricHashJoinExec not found"))
+          assert(join.stateFormatVersion == 4)
+          assert(SQLConf.get.getConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION) == 1,
+            "the guardrail must not mutate the caller's session")
+        }
+
         testStream(joined)(
           StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
           AddData(input1, 1),
           AddData(input2, 1),
           CheckAnswer((1, 2, 3)),
           Execute { query =>
-            val join = query.lastExecution.executedPlan.collectFirst {
-              case join: StreamingSymmetricHashJoinExec => join
-            }.getOrElse(fail("StreamingSymmetricHashJoinExec not found"))
-            assert(join.stateFormatVersion == 4)
+            checkMergeOperatorVersion(query)
             assert(query.offsetLog.getLatest().flatMap(_._2.metadataOpt)
               .flatMap(_.conf.get(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key))
               .contains("2"))
-            assert(SQLConf.get.getConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION) == 1,
-              "the guardrail must not mutate the caller's session")
           },
           StopStream,
           StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
           AddData(input1, 2),
           AddData(input2, 2),
           CheckNewAnswer((2, 4, 6)),
-          Execute { query =>
-            val join = query.lastExecution.executedPlan.collectFirst {
-              case join: StreamingSymmetricHashJoinExec => join
-            }.getOrElse(fail("StreamingSymmetricHashJoinExec not found after restart"))
-            assert(join.stateFormatVersion == 4)
-            assert(SQLConf.get.getConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION) == 1,
-              "restoring the pinned config must not mutate the caller's session")
-          },
+          Execute(checkMergeOperatorVersion),
           StopStream
         )
       }

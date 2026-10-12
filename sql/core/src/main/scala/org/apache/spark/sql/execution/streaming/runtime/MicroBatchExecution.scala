@@ -472,22 +472,25 @@ class MicroBatchExecution(
    * is pinned. On restart the checkpoint's configuration must take precedence.
    */
   private def applyJoinStateConfigGuardrails(streamConf: SQLConf): Unit = {
+    def hasStreamStreamJoin: Boolean = analyzedPlan.exists {
+      case join: Join => join.left.isStreaming && join.right.isStreaming
+      case _ => false
+    }
+
+    def isRocksDBProvider(providerClassName: String): Boolean =
+      classOf[RocksDBStateStoreProvider].isAssignableFrom(Utils.classForName(providerClassName))
+
     val configuredVersion = streamConf.getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION)
-    if (initialLatestOffsetSeq.isEmpty && configuredVersion >= 3 &&
-        analyzedPlan.exists {
-          case join: Join => join.left.isStreaming && join.right.isStreaming
-          case _ => false
-        }) {
+    if (initialLatestOffsetSeq.isEmpty && configuredVersion >= 3 && hasStreamStreamJoin) {
       val stateStoreProvider = streamConf.getConf(SQLConf.STATE_STORE_PROVIDER_CLASS)
-      if (!classOf[RocksDBStateStoreProvider].isAssignableFrom(
-          Utils.classForName(stateStoreProvider))) {
+      if (!isRocksDBProvider(stateStoreProvider)) {
         val fallbackVersion = 2
         logInfo(log"Overriding " +
           log"${MDC(CONFIG, SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key)} from " +
           log"${MDC(OLD_VALUE, configuredVersion)} to ${MDC(NEW_VALUE, fallbackVersion)} " +
           log"because ${MDC(CONFIG, SQLConf.STATE_STORE_PROVIDER_CLASS.key)} is set to " +
           log"${MDC(CLASS_NAME, stateStoreProvider)}, which does not support the virtual column " +
-        log"families required by this join state format.")
+          log"families required by this join state format.")
         streamConf.setConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION, fallbackVersion)
       } else if (configuredVersion == 4) {
         val mergeOperatorVersion =

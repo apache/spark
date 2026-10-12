@@ -38,7 +38,7 @@ import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.{StreamingSymmetricHashJoinExec, StreamingSymmetricHashJoinHelper}
-import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExecution}
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -991,6 +991,15 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
         val configuredVersion =
           SQLConf.get.getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION)
 
+        def checkJoinStateFormat(query: StreamExecution): Unit = {
+          val join = query.lastExecution.executedPlan.collectFirst {
+            case join: StreamingSymmetricHashJoinExec => join
+          }.getOrElse(fail("StreamingSymmetricHashJoinExec not found"))
+          assert(join.stateFormatVersion == 2)
+          assert(SQLConf.get.getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION) ==
+            configuredVersion, "the guardrail must not mutate the caller's session")
+        }
+
         assert(Set(3, 4).contains(configuredVersion))
         testStream(joined)(
           StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
@@ -998,29 +1007,17 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
           AddData(input2, 1),
           CheckAnswer((1, 2, 3)),
           Execute { query =>
-            val join = query.lastExecution.executedPlan.collectFirst {
-              case join: StreamingSymmetricHashJoinExec => join
-            }.getOrElse(fail("StreamingSymmetricHashJoinExec not found"))
-            assert(join.stateFormatVersion == 2)
+            checkJoinStateFormat(query)
             assert(query.offsetLog.getLatest().flatMap(_._2.metadataOpt)
               .flatMap(_.conf.get(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key))
               .contains("2"))
-            assert(SQLConf.get.getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION) ==
-              configuredVersion, "the guardrail must not mutate the caller's session")
           },
           StopStream,
           StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
           AddData(input1, 2),
           AddData(input2, 2),
           CheckNewAnswer((2, 4, 6)),
-          Execute { query =>
-            val join = query.lastExecution.executedPlan.collectFirst {
-              case join: StreamingSymmetricHashJoinExec => join
-            }.getOrElse(fail("StreamingSymmetricHashJoinExec not found after restart"))
-            assert(join.stateFormatVersion == 2)
-            assert(SQLConf.get.getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION) ==
-              configuredVersion, "restoring the pinned config must not mutate the caller's session")
-          },
+          Execute(checkJoinStateFormat),
           StopStream
         )
       }
