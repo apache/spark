@@ -280,6 +280,111 @@ class RewriteDistinctAggregatesConditionalQuerySuite extends QueryTest with Shar
     }
   }
 
+  test("guard: high-cardinality base with low-selectivity disjoint predicates") {
+    withTempView("t") {
+      // ord is unique (high-cardinality base); each predicate matches ~1% of rows and
+      // they are disjoint. This is the workload shape that regressed before the
+      // union-of-filters guard: the guarded key must stay bounded by the pre-rewrite
+      // plan's cardinality while the Expand stays collapsed.
+      spark.range(1000)
+        .selectExpr(
+          "cast(id % 7 as int) as key",
+          "cast(id as bigint) as ord",
+          "cast(id % 100 as int) as bucket")
+        .createOrReplaceTempView("t")
+
+      checkRewriteAndResult(
+        """SELECT key,
+          |  COUNT(DISTINCT IF(bucket = 0, ord, NULL)),
+          |  COUNT(DISTINCT IF(bucket = 3, ord, NULL))
+          |FROM t GROUP BY key""".stripMargin,
+        """SELECT key,
+          |  COUNT(DISTINCT ord) FILTER (WHERE bucket = 0),
+          |  COUNT(DISTINCT ord) FILTER (WHERE bucket = 3)
+          |FROM t GROUP BY key""".stripMargin)
+    }
+  }
+
+  test("guard: mixed overlapping windows and disjoint flags") {
+    withTempView("t") {
+      spark.range(1000)
+        .selectExpr(
+          "cast(id % 7 as int) as key",
+          "cast(id as bigint) as ord",
+          "cast(id % 30 as int) as day",
+          "cast(id % 100 as int) as bucket")
+        .createOrReplaceTempView("t")
+
+      // Overlapping windows (day < 10 is a subset of day < 30) plus disjoint selective flags in
+      // the same query: the union guard must keep every count correct.
+      checkRewriteAndResult(
+        """SELECT key,
+          |  COUNT(DISTINCT IF(day < 10, ord, NULL)),
+          |  COUNT(DISTINCT IF(day < 30, ord, NULL)),
+          |  COUNT(DISTINCT IF(bucket = 0, ord, NULL)),
+          |  COUNT(DISTINCT IF(bucket = 7, ord, NULL))
+          |FROM t GROUP BY key""".stripMargin,
+        """SELECT key,
+          |  COUNT(DISTINCT ord) FILTER (WHERE day < 10),
+          |  COUNT(DISTINCT ord) FILTER (WHERE day < 30),
+          |  COUNT(DISTINCT ord) FILTER (WHERE bucket = 0),
+          |  COUNT(DISTINCT ord) FILTER (WHERE bucket = 7)
+          |FROM t GROUP BY key""".stripMargin)
+    }
+  }
+
+  test("guard: NULL condition keeps the count empty") {
+    withTempView("t") {
+      spark.range(50)
+        .selectExpr(
+          "cast(id % 7 as int) as key",
+          "cast(id as bigint) as ord",
+          "cast(id % 100 as int) as bucket")
+        .createOrReplaceTempView("t")
+
+      // A NULL condition is never true; with the union guard its rows may share the
+      // Expand key of the other count, but must never be counted. The FILTER syntax
+      // cannot express a NULL condition (non-boolean type is rejected), so compare
+      // the rewritten plan against the conf-off result as the semantic baseline.
+      val sqlText =
+        """SELECT key,
+          |  COUNT(DISTINCT IF(NULL, ord, NULL)),
+          |  COUNT(DISTINCT IF(bucket = 0, ord, NULL))
+          |FROM t GROUP BY key""".stripMargin
+      val withoutRewriteRows = withSQLConf(
+        SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "false") {
+        spark.sql(sqlText).collect()
+      }
+      withSQLConf(
+        SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "true") {
+        checkAnswer(spark.sql(sqlText), withoutRewriteRows)
+      }
+    }
+  }
+
+  test("guard: mixed filtered and unfiltered counts on the same base") {
+    withTempView("t") {
+      spark.range(1000)
+        .selectExpr(
+          "cast(id % 7 as int) as key",
+          "cast(id as bigint) as ord",
+          "cast(id % 100 as int) as bucket")
+        .createOrReplaceTempView("t")
+
+      // The unfiltered count needs ord over ALL rows, so the shared Expand key must
+      // stay unguarded; the filtered counts ride along via their flag columns.
+      checkRewriteAndResult(
+        """SELECT key,
+          |  COUNT(DISTINCT ord),
+          |  COUNT(DISTINCT IF(bucket = 0, ord, NULL))
+          |FROM t GROUP BY key""".stripMargin,
+        """SELECT key,
+          |  COUNT(DISTINCT ord),
+          |  COUNT(DISTINCT ord) FILTER (WHERE bucket = 0)
+          |FROM t GROUP BY key""".stripMargin)
+    }
+  }
+
   test("rewrite is present in optimized plan") {
     withTempView("t") {
       spark.range(2)

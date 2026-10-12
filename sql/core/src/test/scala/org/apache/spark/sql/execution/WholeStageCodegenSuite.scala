@@ -1682,10 +1682,13 @@ class WholeStageCodegenSuite extends SharedSparkSession
 
   test("Expand should eliminate common subexpressions across branches") {
     // The conditions of the two conditional COUNT DISTINCT aggregates share `sinh(v)`, which
-    // `RewriteDistinctAggregates` places in different branches of the Expand. Since all the
+    // `RewriteDistinctAggregates` places in different branches of the Expand. Each branch
+    // evaluates its condition twice: once as the filter flag column and once in the
+    // union-of-filters guard of the distinct key (`If(cond, base, NULL)`), so without
+    // subexpression elimination `sinh(v)` is evaluated twice per branch. Since all the
     // branches of an Expand consume the same input row, with subexpression elimination
     // `sinh(v)` should be evaluated once per input row (before the branch loop) instead of
-    // once per branch.
+    // once per use.
     def runQuery(): String = {
       val df = spark.range(10)
         .selectExpr("id as k", "cast(id as double) as v")
@@ -1707,8 +1710,9 @@ class WholeStageCodegenSuite extends SharedSparkSession
     }
     assert(sinhPattern.findAllIn(enabledCode).length == 1,
       "sinh(v) should be evaluated only once per input row with subexpression elimination")
-    assert(sinhPattern.findAllIn(disabledCode).length == 2,
-      "sinh(v) should be evaluated once per branch without subexpression elimination")
+    assert(sinhPattern.findAllIn(disabledCode).length == 4,
+      "sinh(v) should be evaluated twice per branch (flag column and key guard) " +
+        "without subexpression elimination")
 
     // Whether the switch/case bodies are split into separate functions (SPARK-35329)
     // depends on the amount of code generated for the branches, so force both code paths

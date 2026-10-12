@@ -50,6 +50,8 @@ object ExpandBenchmark extends SqlBasedBenchmark {
 
   private val OPTIMIZE_EXPAND_RATIO =
     SQLConf.OPTIMIZE_EXPAND_RATIO.key
+  private val REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED =
+    SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key
 
   private def prepareTable(name: String, N: Long,
       keyMod: Int, colMods: Seq[Int]): Unit = {
@@ -161,6 +163,32 @@ object ExpandBenchmark extends SqlBasedBenchmark {
        |GROUP BY user_id""".stripMargin
   }
 
+  /**
+   * The traffic query's day windows are nested (day <= 1 is a subset of day <= 7, ... of
+   * day <= 730) and together cover every row, so every row matches some predicate and the
+   * union-of-filters guard degenerates to the raw base. This is the best case for the
+   * conditional-count collapse itself: conf on collapses the 9 conditional counts into one
+   * distinct group, removing most of the Expand fan-out.
+   */
+  private def overlappingWorkloadBenchmark(
+      title: String, N: Long, table: String): Unit = {
+    val benchmark = new Benchmark(title, N, output = output)
+    val sql = conditionalAggsQuery(table, Seq(1, 7, 14, 30, 60, 90, 180, 365, 730))
+
+    benchmark.addCase("conf off (9 distinct groups)", numIters = 3) { _ =>
+      withSQLConf(REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED -> "false") {
+        spark.sql(sql).noop()
+      }
+    }
+    benchmark.addCase("conf on (1 collapsed group)", numIters = 3) { _ =>
+      withSQLConf(REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED -> "true") {
+        spark.sql(sql).noop()
+      }
+    }
+
+    benchmark.run()
+  }
+
   private def subExprEliminationBenchmark(
       title: String, N: Long, table: String): Unit = {
     val benchmark = new Benchmark(title, N, output = output)
@@ -173,6 +201,53 @@ object ExpandBenchmark extends SqlBasedBenchmark {
     }
     benchmark.addCase("CSE enabled (evaluate once per row)", numIters = 3) { _ =>
       withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true") {
+        spark.sql(sql).noop()
+      }
+    }
+
+    benchmark.run()
+  }
+
+  /**
+   * Prepares a table with a unique base column `ord`, a grouping key `user_id`, and
+   * a 100-value flag column `bucket`. This is the workload shape that regressed in
+   * SPARK-56898 before the union-of-filters guard: high-cardinality base with
+   * low-selectivity disjoint predicates. Unguarded, collapsing the conditional counts
+   * keys the first aggregate by every distinct base value (unbounded by how few rows
+   * the predicates select); guarded, rows matching no predicate collapse into a NULL
+   * key, matching the pre-rewrite plan's cardinality while keeping the collapsed
+   * Expand.
+   */
+  private def prepareHostileTable(name: String, N: Long, userMod: Int): Unit = {
+    spark.range(N)
+      .selectExpr(
+        s"cast(id % $userMod as bigint) as user_id",
+        "cast(id as bigint) as ord",
+        "cast(id % 100 as int) as bucket")
+      .createOrReplaceTempView(name)
+  }
+
+  private def conditionalCountsQuery(table: String, numFlags: Int): String = {
+    val counts = (0 until numFlags).map(i =>
+      s"count(distinct if(bucket = $i, ord, null)) as flag_cnt_$i").mkString(",\n  ")
+    s"""SELECT user_id,
+       |  $counts
+       |FROM $table
+       |GROUP BY user_id""".stripMargin
+  }
+
+  private def hostileWorkloadBenchmark(
+      title: String, N: Long, table: String): Unit = {
+    val benchmark = new Benchmark(title, N, output = output)
+    val sql = conditionalCountsQuery(table, numFlags = 10)
+
+    benchmark.addCase("conf off (10 distinct groups)", numIters = 3) { _ =>
+      withSQLConf(REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED -> "false") {
+        spark.sql(sql).noop()
+      }
+    }
+    benchmark.addCase("conf on (1 guarded group)", numIters = 3) { _ =>
+      withSQLConf(REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED -> "true") {
         spark.sql(sql).noop()
       }
     }
@@ -280,6 +355,27 @@ object ExpandBenchmark extends SqlBasedBenchmark {
       subExprEliminationBenchmark(
         "9 conditional COUNT(DISTINCT) + 9 conditional SUM sharing one subexpression",
         numRows, "expand_traffic")
+    }
+
+    runBenchmark("Expand: conditional COUNT(DISTINCT), overlapping predicates") {
+      val numRows = 5L << 20 // ~5M rows
+      prepareTrafficTable("expand_traffic_windows", numRows, userMod = 1000000)
+      overlappingWorkloadBenchmark(
+        "9 conditional COUNT(DISTINCT) + 9 conditional SUM, overlapping day windows",
+        numRows, "expand_traffic_windows")
+    }
+
+    runBenchmark("Expand: conditional COUNT(DISTINCT), high-cardinality base") {
+      // ~10M rows, 100K groups (~100 rows each), unique base column. Each of the 10
+      // disjoint predicates matches ~1% of rows. Conf-off keeps 10 distinct groups
+      // with NULL-collapsed keys; conf-on collapses to 1 guarded group, whose key
+      // cardinality must not regress against the conf-off plan.
+      val hostileRows = 10L << 20
+      prepareHostileTable("expand_hostile", hostileRows, userMod = 100000)
+      hostileWorkloadBenchmark(
+        "10 conditional COUNT(DISTINCT), unique base, " +
+          "1%-selective disjoint predicates",
+        hostileRows, "expand_hostile")
     }
   }
 }

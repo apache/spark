@@ -158,8 +158,8 @@ import org.apache.spark.util.collection.Utils
  *      output = ['key, 'cat1, 'cat2, 'gid, 'max_cond1, 'max_cond2, 'total])
  *     Expand(
  *        projections = [('key, null, null, 0, null, null, cast('value as bigint), 'id),
- *                       ('key, 'cat1, null, 1, 'id > 1, null, null, null),
- *                       ('key, null, 'cat2, 2, null, 'id > 2, null, null)]
+ *                       ('key, if('id > 1, 'cat1, null), null, 1, 'id > 1, null, null, null),
+ *                       ('key, null, if('id > 2, 'cat2, null), 2, null, 'id > 2, null, null)]
  *        output = ['key, 'cat1, 'cat2, 'gid, 'cond1, 'cond2, 'value, 'id])
  *       LocalTableScan [...]
  * }}}
@@ -174,7 +174,10 @@ import org.apache.spark.util.collection.Utils
  *    later on. Groups can by identified by a group id (gid) column added by the expand operator.
  *    If distinct group exists filter clause, the expand will calculate the filter and output it's
  *    result (e.g. cond1) which will be used to calculate the global conditions (e.g. max_cond1)
- *    equivalent to filter clauses.
+ *    equivalent to filter clauses. Additionally, the distinct key of a group whose aggregates
+ *    are all filtered is guarded by the union of their filters (e.g. if('id > 1, 'cat1, null)):
+ *    rows matching no predicate project NULL as the key and collapse into a single key of the
+ *    first aggregate, keeping its output cardinality bounded by the un-rewritten plan.
  * 2. De-duplicate the distinct paths and aggregate the non-aggregate path. The group by clause of
  *    this aggregate consists of the original group by clause, all the requested distinct columns
  *    and the group id. Both de-duplication of distinct column and the aggregation of the
@@ -292,9 +295,31 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
             case e => nullify(e)
           }
 
+          // Union-of-filters guard for the shared distinct key. Without the guard, the
+          // Expand projects the raw child for every row, so every distinct child value
+          // becomes a key of the first aggregate, no matter how few rows the filters
+          // select. Guarding the key with the union of the filters restores the
+          // NULL-collapse: rows matching no predicate project NULL as the key and merge
+          // into one key, keeping the first aggregate's output bounded by the
+          // pre-rewrite plan:
+          //   distinct(child | Or(filters)) + 1 <= sum_i distinct(child | filter_i) + n
+          // The guard must not apply when the group contains an unfiltered aggregate
+          // (it needs the raw child over all rows), and the guard re-evaluates the
+          // filters, so they must be deterministic.
+          val canGuard = expressions.forall(_.filter.isDefined) &&
+            filters.forall(_.deterministic)
+          val guardCondOpt = if (canGuard) {
+            Some(filters.distinctBy(_.canonicalized).reduce(Or))
+          } else {
+            None
+          }
+
           // Expand projection
           val projection = distinctAggChildren.map {
-            case e if group.contains(e) => e
+            case e if group.contains(e) =>
+              guardCondOpt.fold(e) { cond =>
+                If(cond, e, Literal.create(null, e.dataType))
+              }
             case e => nullify(e)
           } :+ id
 
