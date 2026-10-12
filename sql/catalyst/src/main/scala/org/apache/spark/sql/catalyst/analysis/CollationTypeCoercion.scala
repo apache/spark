@@ -113,8 +113,10 @@ object CollationTypeCoercion extends SQLConfHelper {
    *
    * Literal and Cast: wrap in a new Cast when the CHAR/VARCHAR constraint
    * changes so truncation, overflow, and padding stay on the original node.
-   * Collation-only changes retarget with `copy(dataType)`, which keeps a
-   * non-string Cast child non-string and therefore Default strength.
+   * Collation-only changes retarget with `copy(dataType)` and copy
+   * `USER_SPECIFIED_CAST` (truncation). Do not copy all tags: a stale
+   * `COLLATION_CONTEXT_TAG` would reuse the pre-LCT collation. That keeps
+   * a non-string Cast child non-string and therefore Default strength.
    */
   private def changeType(expr: Expression, newType: DataType): Expression = {
     mergeTypes(expr.dataType, newType) match {
@@ -128,7 +130,11 @@ object CollationTypeCoercion extends SQLConfHelper {
           case cast: Cast if stringConstraintChanged(cast.dataType, newDataType) =>
             Cast(cast, newDataType, timeZoneId = Some(conf.sessionLocalTimeZone))
           case cast: Cast =>
-            cast.copy(dataType = newDataType)
+            val retargeted = cast.copy(dataType = newDataType)
+            if (cast.containsTag(Cast.USER_SPECIFIED_CAST)) {
+              retargeted.setTagValue(Cast.USER_SPECIFIED_CAST, ())
+            }
+            retargeted
           case subquery: SubqueryExpression =>
             changeTypeInSubquery(subquery, newType)
 
