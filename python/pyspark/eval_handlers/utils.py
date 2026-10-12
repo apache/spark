@@ -27,7 +27,7 @@ from typing import Any
 def extract_key_value_indexes(grouped_arg_offsets: list) -> list:
     """
     Extract the key and value indexes from arg_offsets for the grouped and cogrouped grouped-map
-    udfs. See BasePandasGroupExec.resolveArgOffsets for equivalent scala code.
+    udfs. See PandasGroupUtils.resolveArgOffsets for equivalent scala code.
 
     Parameters
     ----------
