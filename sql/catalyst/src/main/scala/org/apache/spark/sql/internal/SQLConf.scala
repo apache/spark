@@ -43,7 +43,7 @@ import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.analysis.{HintErrorLogger, Resolver}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, HintErrorLogger, Resolver}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -114,22 +114,21 @@ object SQLConf {
 
   /**
    * The subset of `allConfs` that follows the active session into view and SQL function body
-   * confs: SQL configs bound SESSION or NOT_APPLICABLE (`isSessionBindingPolicy`) and catalog
-   * configs (`spark.sql.catalog.*`).
+   * confs, as decided by `Analyzer.bodyFollowsCaller`.
    *
    * Depends on the registered SQL config entries, so a config from a lazily-loaded module (e.g.
    * sql/hive) is retained only after its holding object is initialized. Proto-defined entries are
    * all registered when `ConfigEntry` loads, and a replacement entry (e.g. from `checkValue`)
    * takes its binding policy from the same proto.
    *
-   * `Analyzer.retainResolutionConfigsForAnalysis` applies the same rule directly while
+   * `Analyzer.retainResolutionConfigsForAnalysis` applies the same predicate directly while
    * `ANALYZER_MEMOIZE_RETAINED_RESOLUTION_CONFIGS` is off.
    */
   private def filterRetainedResolutionConfigs(
       allConfs: scala.collection.Map[String, String]): util.Map[String, String] = {
     val retained = new util.HashMap[String, String]()
     allConfs.foreach { case (key, value) =>
-      if (key.startsWith("spark.sql.catalog.") || isSessionBindingPolicy(key)) {
+      if (Analyzer.bodyFollowsCaller(key)) {
         retained.put(key, value)
       }
     }

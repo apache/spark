@@ -333,13 +333,22 @@ object Analyzer {
       newConf.settings.putAll(existingConf.retainedResolutionConfigs)
     } else {
       existingConf.getAllConfs.foreach { case (key, value) =>
-        if (key.startsWith("spark.sql.catalog.") || SQLConf.isSessionBindingPolicy(key)) {
+        if (bodyFollowsCaller(key)) {
           newConf.settings.put(key, value)
         }
       }
     }
 
     trySetAnsiValue(newConf, createSparkVersion)
+  }
+
+  /**
+   * True if a view or SQL function body takes the caller's value for `key` rather than the
+   * value saved when the body was created: catalog configs and SQL configs bound SESSION or
+   * NOT_APPLICABLE.
+   */
+  def bodyFollowsCaller(key: String): Boolean = {
+    key.startsWith("spark.sql.catalog.") || SQLConf.isSessionBindingPolicy(key)
   }
 
   /**
