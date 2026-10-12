@@ -384,12 +384,8 @@ def run_python_packaging_tests():
 def run_shell_script_tests(test_modules, stage):
     shell_script_test_goals = determine_shell_script_test_goals(test_modules, stage)
 
-    if not shell_script_test_goals:
-        return
-
-    title = f"Running {stage.value} shell script tests"
-    with titled_block(title):
-        for test_goal in shell_script_test_goals:
+    for test_goal in shell_script_test_goals:
+        with titled_block(f"Running {test_goal.path}"):
             command = [os.path.join(SPARK_HOME, test_goal.path)]
             run_cmd(command)
 
