@@ -493,19 +493,25 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
       // The value is shown in plain notation unless its scale is hugely negative.
       Seq("1e2147483647" -> "1E+2147483647", "1e40" -> ("1" + "0" * 40)).foreach {
         case (str, value) =>
+          def expr: Expression = cast(str, DecimalType(10, 2))
           if (!isTryCast) {
-            checkError(
-              exception = intercept[SparkArithmeticException](
-                cast(str, DecimalType(10, 2)).eval()),
-              condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
-              parameters = Map(
-                "value" -> value,
-                "precision" -> "10",
-                "scale" -> "2",
-                "config" -> """"spark.sql.ansi.enabled""""),
-              queryContext = Array(ExpectedContext(fragment = "", start = -1, stop = -1)))
+            // Interpreted, and both codegen paths, which report the error from `CastUtils`.
+            Seq[Expression => Any](
+              evaluateWithoutCodegen(_),
+              evaluateWithMutableProjection(_),
+              evaluateWithUnsafeProjection(_)).foreach { eval =>
+              checkError(
+                exception = intercept[SparkArithmeticException](eval(expr)),
+                condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+                parameters = Map(
+                  "value" -> value,
+                  "precision" -> "10",
+                  "scale" -> "2",
+                  "config" -> """"spark.sql.ansi.enabled""""),
+                queryContext = Array(ExpectedContext(fragment = "", start = -1, stop = -1)))
+            }
           } else {
-            checkEvaluation(cast(str, DecimalType(10, 2)), null)
+            checkEvaluation(expr, null)
           }
       }
     }
