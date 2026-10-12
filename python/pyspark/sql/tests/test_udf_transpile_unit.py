@@ -2754,18 +2754,27 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # When a parameter is guarded by `x is not None` in an
         # if/ternary test, the transpiler should skip the raise_error null guard
         # for ordering comparisons on that parameter within the guarded branch.
+        def if_guard_gt(x):
+            return (x > 0) if x is not None else None
+
+        def if_guard_and_lt(a, b):
+            return (a < b) if a is not None and b is not None else None
+
+        def ternary_guard_ge(x):
+            return (x >= 0) if x is not None else None
+
+        def is_none_ternary(x):
+            return None if x is None else x > 0
+
         cases_if = [
             # if/else with `is not None` guard
-            ("if_guard_gt", lambda x: (x > 0) if x is not None else None),
+            ("if_guard_gt", if_guard_gt),
             # if/else with `is not None` and-chain (two params)
-            (
-                "if_guard_and_lt",
-                lambda a, b: (a < b) if a is not None and b is not None else None,
-            ),
+            ("if_guard_and_lt", if_guard_and_lt),
             # ternary with `is not None` guard
-            ("ternary_guard_ge", lambda x: (x >= 0) if x is not None else None),
+            ("ternary_guard_ge", ternary_guard_ge),
             # `is None` guard: non-null in the else branch
-            ("is_none_ternary", lambda x: None if x is None else x > 0),
+            ("is_none_ternary", is_none_ternary),
         ]
         with self.sql_conf(_TRANSPILE_ON):
             for name, func in cases_if:
