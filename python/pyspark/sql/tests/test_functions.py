@@ -700,9 +700,12 @@ class FunctionsTestsMixin:
             F.try_make_timestamp(timezone=df_dt.timezone)
 
     def test_try_make_timestamp_ltz(self):
-        # Use an unambiguous zone ID: tz abbreviations such as CST or PDT are misread or
-        # rejected by Spark.
-        data = [(2024, 5, 22, 10, 30, 0, "UTC")]
+        # Use the local UTC offset on the test date rather than the local tz abbreviation
+        # (e.g. CST, PDT), which Spark may misread or reject.
+        offset = datetime.datetime(2024, 5, 22, 10, 30).astimezone().strftime("%z")
+        local_tz = f"{offset[:3]}:{offset[3:]}"  # e.g. +0800 -> +08:00
+
+        data = [(2024, 5, 22, 10, 30, 0, local_tz)]
         df = self.spark.createDataFrame(
             data, ["year", "month", "day", "hour", "minute", "second", "timezone"]
         )
@@ -711,9 +714,9 @@ class FunctionsTestsMixin:
                 df.year, df.month, df.day, df.hour, df.minute, df.second, df.timezone
             )
         )
-        assertDataFrameEqual(actual, [Row(_utc_to_local(2024, 5, 22, 10, 30, 0))])
+        assertDataFrameEqual(actual, [Row(datetime.datetime(2024, 5, 22, 10, 30, 0))])
 
-        data = [(2024, 13, 22, 10, 30, 0, "UTC")]
+        data = [(2024, 13, 22, 10, 30, 0, local_tz)]
         df = self.spark.createDataFrame(
             data, ["year", "month", "day", "hour", "minute", "second", "timezone"]
         )
