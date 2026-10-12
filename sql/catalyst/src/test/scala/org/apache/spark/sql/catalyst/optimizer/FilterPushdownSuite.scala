@@ -2082,4 +2082,64 @@ class FilterPushdownSuite extends PlanTest {
     val optimizedC = Optimize.execute(queryC)
     comparePlans(optimizedC, queryC, checkAnalysis = false)
   }
+
+  test("SPARK-60150: don't push a filter on a float/double grouping key below Aggregate") {
+    val x = $"x".double
+    val relation = LocalRelation(x)
+
+    // SELECT * FROM (SELECT DISTINCT x FROM t) WHERE cast(x AS STRING) = '-0.0'
+    // DISTINCT becomes Aggregate(x, x) in the optimizer, so build that shape directly.
+    val originalQuery = relation.groupBy(x)(x).where(x.cast(StringType) === "-0.0")
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    // The Aggregate normalizes -0.0 to 0.0 (NormalizeFloatingNumbers), so the predicate must
+    // still be evaluated above it.
+    comparePlans(optimized, originalQuery.analyze)
+  }
+
+  test("SPARK-60150: push down normalization-insensitive filters on a float/double key") {
+    val x = $"x".double
+    val y = $"y".float
+    val relation = LocalRelation(x, y)
+    val sensitive = x.cast(StringType) === "-0.0"
+
+    // Comparisons treat -0.0/0.0 and all NaNs as equal, so they are still pushed down.
+    val safe = x === 0.0 || (y > 1.0f && !IsNaN(x)) || x.in(1.0, 2.0) || x.isNull
+    comparePlans(
+      Optimize.execute(relation.groupBy(x, y)(x, y).where(safe).analyze),
+      relation.where(safe).groupBy(x, y)(x, y).analyze)
+
+    // An OR containing a sensitive branch stays above the Aggregate as a whole.
+    val withOr = relation.groupBy(x, y)(x, y).where(x > 5.0 || sensitive).analyze
+    comparePlans(Optimize.execute(withOr), withOr)
+
+    // Only the sensitive conjunct stays above the Aggregate.
+    comparePlans(
+      Optimize.execute(relation.groupBy(x, y)(x, y).where(y > 1.0f && sensitive).analyze),
+      relation.where(y > 1.0f).groupBy(x, y)(x, y).where(sensitive).analyze)
+
+    // An aliased key is checked the same way.
+    val aliased = relation.groupBy(x)(x.as("k")).where($"k".cast(StringType) === "-0.0").analyze
+    comparePlans(Optimize.execute(aliased), aliased)
+  }
+
+  test("SPARK-60150: check aliases computed from a float/double key after alias expansion") {
+    val x = $"x".double
+    val relation = LocalRelation(x)
+
+    // The alias is computed from the normalized key above the Aggregate but from the raw key
+    // below it, even when the alias itself is not float/double or is compared directly.
+    val castAlias = relation.groupBy(x)(x.cast(StringType).as("s"))
+      .where($"s" === "-0.0").analyze
+    comparePlans(Optimize.execute(castAlias), castAlias)
+
+    val lengthAlias = relation.groupBy(x)(Length(x.cast(StringType)).as("k"))
+      .where($"k" === 4).analyze
+    comparePlans(Optimize.execute(lengthAlias), lengthAlias)
+
+    // A plain rename of the key compared directly is still pushed down.
+    comparePlans(
+      Optimize.execute(relation.groupBy(x)(x.as("k")).where($"k" === 0.0).analyze),
+      relation.where(x === 0.0).groupBy(x)(x.as("k")).analyze)
+  }
 }
