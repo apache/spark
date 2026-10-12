@@ -52,8 +52,17 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
   import org.apache.spark.sql.catalyst.xml.XmlInferSchema._
 
   private val decimalParser = ExprUtils.getDecimalParser(options.locale)
+  private val legacyTimeParser = SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY
 
-  private val timestampFormatter = new XmlTimestampParser(options)
+  @transient private lazy val timestampFormatter = TimestampFormatter(
+    options.timestampFormatInRead,
+    options.zoneId,
+    options.locale,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true)
+
+  @transient private lazy val customLegacyTimestampFormatter =
+    StaxXmlParser.customLegacyTimestampFormatter(options)
 
   private lazy val timestampNTZFormatter = TimestampFormatter(
     options.timestampNTZFormatInRead,
@@ -749,7 +758,11 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
   private def tryParseTimestamp(field: String): DataType = {
     val isTimestamp =
       try {
-        timestampFormatter.parseOptional(field).isDefined
+        if (legacyTimeParser) {
+          StaxXmlParser.parseLegacyTimestamp(field, customLegacyTimestampFormatter).isDefined
+        } else {
+          timestampFormatter.parseOptional(field).isDefined
+        }
       } catch {
         case _: IllegalArgumentException => false
       }
