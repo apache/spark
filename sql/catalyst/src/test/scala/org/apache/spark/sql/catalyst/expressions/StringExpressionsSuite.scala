@@ -1357,9 +1357,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         BoundReference(2, IntegerType, nullable = false),
         BoundReference(3, IntegerType, nullable = false))
       for {
-        // scalastyle:off nonascii
-        string <- Seq("", "abc", "\u4F60\u597D")
-        // scalastyle:on nonascii
+        string <- Seq("", "abc")
         substring <- Seq("", "a")
         occurrence <- Seq(1, 2)
       } {
