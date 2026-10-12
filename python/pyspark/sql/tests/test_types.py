@@ -3896,8 +3896,8 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
 
             self.check_error(
                 exception=pe.exception,
-                errorClass="VARIANT_SIZE_LIMIT_EXCEEDED",
-                messageParameters={"size_limit": "64"},
+                errorClass="VARIANT_SIZE_LIMIT",
+                messageParameters={"sizeLimit": "64"},
             )
 
 

@@ -1267,9 +1267,9 @@
       "Value for `<arg_name>` must be between <lower_bound> and <upper_bound> (inclusive), got <actual>"
     ]
   },
-  "VARIANT_SIZE_LIMIT_EXCEEDED": {
+  "VARIANT_SIZE_LIMIT": {
     "message": [
-      "Cannot build variant bigger than <size_limit> bytes."
+      "Cannot build variant bigger than <sizeLimit> bytes."
     ],
     "sqlState": "22023"
   },

@@ -565,8 +565,8 @@ class VariantBuilder:
         max_size = max(dictionary_string_size, num_keys)
         if max_size > self.size_limit:
             raise PySparkValueError(
-                errorClass="VARIANT_SIZE_LIMIT_EXCEEDED",
-                messageParameters={"size_limit": str(self.size_limit)},
+                errorClass="VARIANT_SIZE_LIMIT",
+                messageParameters={"sizeLimit": str(self.size_limit)},
             )
         offset_size = self._get_integer_size(max_size)
 
@@ -575,8 +575,8 @@ class VariantBuilder:
         metadata_size = string_start + dictionary_string_size
         if metadata_size > self.size_limit:
             raise PySparkValueError(
-                errorClass="VARIANT_SIZE_LIMIT_EXCEEDED",
-                messageParameters={"size_limit": str(self.size_limit)},
+                errorClass="VARIANT_SIZE_LIMIT",
+                messageParameters={"sizeLimit": str(self.size_limit)},
             )
 
         metadata = bytearray()
@@ -639,8 +639,8 @@ class VariantBuilder:
         required = len(self.value) + additional
         if required > self.size_limit:
             raise PySparkValueError(
-                errorClass="VARIANT_SIZE_LIMIT_EXCEEDED",
-                messageParameters={"size_limit": str(self.size_limit)},
+                errorClass="VARIANT_SIZE_LIMIT",
+                messageParameters={"sizeLimit": str(self.size_limit)},
             )
 
     def _primitive_header(self, type: int) -> bytes:
