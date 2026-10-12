@@ -1009,17 +1009,15 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     }
   }
 
-  test("VariantGet boolean targetType does not crash under Or (isPredicate path)") {
+  test("VariantGet boolean targetType translates under Or (isPredicate path)") {
     val ref = AttributeReference("v", VariantType)()
     val path = Literal.create("$.flag", StringType)
     val boolExpr = VariantGet(ref, path, BooleanType, failOnError = true)
     val x = AttributeReference("x", IntegerType)()
     val orExpr = Or(boolExpr, GreaterThan(x, Literal(0)))
-    // A boolean-typed VariantGet in predicate position must translate to a V2Predicate, or the
-    // enclosing And/Or's `isInstanceOf[V2Predicate]` assert crashes planning;
-    // the BOOLEAN_EXPRESSION predicate provides that.
+    // BOOLEAN_EXPRESSION wraps the boolean VariantGet so Or receives a V2Predicate operand.
     val result = new V2ExpressionBuilder(orExpr, isPredicate = true).build()
-    assert(result.isDefined, "Or with boolean VariantGet should translate without AssertionError")
+    assert(result.isDefined, "Or with boolean VariantGet should translate to a V2 predicate")
     result.get match {
       case p: Predicate => // expected
       case other => fail(s"expected a Predicate, got ${other.getClass.getName}")
