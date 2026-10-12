@@ -153,6 +153,7 @@ class PythonDataSourceWorkerUtilsTests(unittest.TestCase):
             (1, {1}, (0, 0), 1),
         )
 
+    @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
     def test_deserialize_unsupported_filter(self):
         with mock.patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
             from pyspark.sql.worker.data_source_pushdown_filters import deserializeFilter
