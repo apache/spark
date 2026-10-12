@@ -197,7 +197,10 @@ class PandasOnSparkFrameMethods:
         )
 
     def apply_batch(
-        self, func: Callable[..., pd.DataFrame], args: Tuple = (), **kwds: Any
+        self,
+        func: Callable[..., Union[pd.DataFrame, "DataFrame"]],
+        args: Tuple = (),
+        **kwds: Any,
     ) -> "DataFrame":
         """
         Apply a function that takes pandas DataFrame and outputs pandas DataFrame. The pandas
@@ -344,7 +347,8 @@ class PandasOnSparkFrameMethods:
         return_sig = spec.annotations.get("return", None)
         should_infer_schema = return_sig is None
 
-        original_func = func
+        # pandas-on-Spark return annotations declare schemas; callbacks return pandas objects.
+        original_func = cast(Callable[..., pd.DataFrame], func)
 
         def new_func(o: Any) -> pd.DataFrame:
             return original_func(o, *args, **kwds)
@@ -430,7 +434,10 @@ class PandasOnSparkFrameMethods:
         return DataFrame(internal)
 
     def transform_batch(
-        self, func: Callable[..., Union[pd.DataFrame, pd.Series]], *args: Any, **kwargs: Any
+        self,
+        func: Callable[..., Union[pd.DataFrame, pd.Series, "DataFrame", "Series"]],
+        *args: Any,
+        **kwargs: Any,
     ) -> DataFrameOrSeries:
         """
         Transform chunks with a function that takes pandas DataFrame and outputs pandas DataFrame.
@@ -574,7 +581,8 @@ class PandasOnSparkFrameMethods:
         return_sig = spec.annotations.get("return", None)
         should_infer_schema = return_sig is None
         should_retain_index = should_infer_schema
-        original_func = func
+        # pandas-on-Spark return annotations declare schemas; callbacks return pandas objects.
+        original_func = cast(Callable[..., Union[pd.DataFrame, pd.Series]], func)
 
         def new_func(o: Any) -> Union[pd.DataFrame, pd.Series]:
             return original_func(o, *args, **kwargs)
@@ -770,7 +778,7 @@ class PandasOnSparkSeriesMethods:
         self._psser = series
 
     def transform_batch(
-        self, func: Callable[..., pd.Series], *args: Any, **kwargs: Any
+        self, func: Callable[..., Union[pd.Series, "Series"]], *args: Any, **kwargs: Any
     ) -> "Series":
         """
         Transform the data with the function that takes pandas Series and outputs pandas Series.
@@ -897,11 +905,16 @@ class PandasOnSparkSeriesMethods:
         return self._transform_batch(lambda c: func(c, *args, **kwargs), return_type)
 
     def _transform_batch(
-        self, func: Callable[..., pd.Series], return_type: Optional[Union[SeriesType, ScalarType]]
+        self,
+        func: Callable[..., Union[pd.Series, "Series"]],
+        return_type: Optional[Union[SeriesType, ScalarType]],
     ) -> "Series":
         from pyspark import pandas as ps
         from pyspark.pandas.groupby import GroupBy
         from pyspark.pandas.series import Series, first_series
+
+        # pandas-on-Spark return annotations declare schemas; callbacks return pandas objects.
+        func = cast(Callable[..., pd.Series], func)
 
         if not isinstance(func, FunctionType):
             f = func
