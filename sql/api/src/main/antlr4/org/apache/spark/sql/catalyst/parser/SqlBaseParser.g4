@@ -166,16 +166,16 @@ options { tokenVocab = SqlBaseLexer; }
 
   /**
    * True when this token type can only follow a completed operand, so a preceding `CASE` is a
-   * column rather than the keyword. Covers the postfix operators (`.`, `::`, `[`/`]` subscript --
-   * Spark has no `[...]` array literal, so `[` only ever subscripts an operand) alongside the
-   * closers and binary/comparison operators. Any other follower falls back to treating `CASE` as
-   * the keyword -- including `+`/`-`/`~`/`*`, which can also start a CASE value and so do not prove
-   * `CASE` is a column.
+   * column rather than the keyword. Covers the postfix operators (`.`, `::`, `COLLATE`, `[`/`]`
+   * subscript -- Spark has no `[...]` array literal, so `[` only ever subscripts an operand)
+   * alongside the closers and binary/comparison operators. Any other follower falls back to
+   * treating `CASE` as the keyword -- including `+`/`-`/`~`/`*`, which can also start a CASE value
+   * and so do not prove `CASE` is a column.
    */
   private boolean jsonKeyTokenFollowsOperand(int type) {
     switch (type) {
       case COLON: case COMMA: case RIGHT_PAREN: case LEFT_BRACKET: case RIGHT_BRACKET:
-      case DOUBLE_COLON: case DOT: case SEMICOLON:
+      case DOUBLE_COLON: case DOT: case COLLATE: case SEMICOLON:
       case EQ: case NEQ: case NEQJ: case LT: case LTE: case GT: case GTE:
       case SLASH: case PERCENT: case AMPERSAND: case PIPE: case CONCAT_PIPE: case HAT:
       case AND: case OR:

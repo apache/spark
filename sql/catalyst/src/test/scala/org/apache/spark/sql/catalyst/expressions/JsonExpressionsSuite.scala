@@ -1068,8 +1068,8 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       input)
   }
 
-  test("JsonToStructs, GetJsonObject, JsonTuple, MultiGetJsonObject, JsonValue are stateful " +
-      "and produce fresh copies") {
+  test("JsonToStructs, GetJsonObject, JsonTuple, MultiGetJsonObject, JsonValue, JsonObjectExpr " +
+      "are stateful and produce fresh copies") {
     val schema = StructType(StructField("a", IntegerType) :: Nil)
     val jsonToStructs = JsonToStructs(schema, Map.empty, Literal("{}"), UTC_OPT)
     assert(jsonToStructs.stateful)
@@ -1093,6 +1093,13 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       JsonValueBehavior.Null, JsonValueBehavior.Null, None, None)
     assert(jsonValue.stateful)
     assert(jsonValue.freshCopyIfContainsStatefulExpression() ne jsonValue)
+
+    // JsonObjectExpr owns mutable scratch (reused rows, cached evaluators/validated texts), so it
+    // must be stateful and hand out a fresh copy.
+    val jsonObject = JsonObjectExpr(
+      Seq((Literal("a"), Literal(1))), Seq(false), Seq(false))
+    assert(jsonObject.stateful)
+    assert(jsonObject.freshCopyIfContainsStatefulExpression() ne jsonObject)
   }
 
 }

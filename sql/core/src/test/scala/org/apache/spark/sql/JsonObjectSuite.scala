@@ -110,13 +110,20 @@ class JsonObjectSuite extends QueryTest with SharedSparkSession {
       Row("""{"kx":1}""", "ax"))
   }
 
-  test("a case-named column subscript is a column, not a CASE keyword") {
-    // `case` is non-reserved, so `case[0]` subscripts a column named `case`; `CASE [` never begins
-    // a real CASE expression (Spark has no `[...]` array literal). The separator check must read
-    // the `[` as a postfix on an operand -- like the already-handled `.` -- so the top-level colon
-    // is still found as the member separator rather than being swallowed as a CASE branch.
-    val from = """FROM (SELECT array('c') AS `case`, parse_json('{"x":1}') AS v)"""
-    checkAnswer(sql(s"SELECT json_object(case[0] : v:x) $from"), Row("""{"c":1}"""))
+  test("a case-named column with a postfix operator is a column, not a CASE keyword") {
+    // `case` is non-reserved, so `case[0]` (subscript) and `case COLLATE ...` apply a postfix
+    // operator to a column named `case`; neither `CASE [` nor `CASE COLLATE` begins a real CASE
+    // expression (`[` has no array-literal form, COLLATE needs a left operand). The separator check
+    // must read the token right after `case` as a postfix on an operand -- like the already-handled
+    // `.` -- so the top-level colon is still the member separator, not swallowed as a CASE branch.
+    checkAnswer(
+      sql("""SELECT json_object(case[0] : v:x)
+            |FROM (SELECT array('c') AS `case`, parse_json('{"x":1}') AS v)""".stripMargin),
+      Row("""{"c":1}"""))
+    checkAnswer(
+      sql("""SELECT json_object(case COLLATE UTF8_LCASE : v:x)
+            |FROM (SELECT 'c' AS `case`, parse_json('{"x":1}') AS v)""".stripMargin),
+      Row("""{"c":1}"""))
   }
 
   test("a member whose key and value are named key and value splits at VALUE") {
