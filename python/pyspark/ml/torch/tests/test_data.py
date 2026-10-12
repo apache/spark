@@ -24,6 +24,7 @@ from pyspark.testing.utils import have_torch, torch_requirement_message
 if have_torch:
     from pyspark.ml.torch.data import _SparkPartitionTorchDataset
 
+
 @unittest.skipIf(not have_torch, torch_requirement_message)
 class TestGetFieldConverterVectorType(unittest.TestCase):
     def setUp(self):
@@ -48,6 +49,7 @@ class TestGetFieldConverterVectorType(unittest.TestCase):
         value = {"type": 99, "values": [1.0, 2.0]}
         result = self.converter(value)
         self.assertIsNone(result)
+
 
 @unittest.skipIf(not have_torch, torch_requirement_message)
 class TestGetFieldConverterNumericTypes(unittest.TestCase):
@@ -74,6 +76,7 @@ class TestGetFieldConverterNumericTypes(unittest.TestCase):
             with self.subTest(field_type=field_type):
                 converter = _SparkPartitionTorchDataset._get_field_converter(field_type)
                 self.assertEqual(converter(value), value)
+
 
 @unittest.skipIf(not have_torch, torch_requirement_message)
 class TestGetFieldConverterUnsupportedType(unittest.TestCase):
