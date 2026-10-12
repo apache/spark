@@ -977,7 +977,7 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
   }
 
   testWithVirtualColumnFamilyJoins(
-    "SPARK-51779 Join query using virtual column families with HDFS should fail") {
+    "Join query with a non-RocksDB provider uses compatible format") {
     withTempDir { checkpointDir =>
       withSQLConf(
         SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[HDFSBackedStateStoreProvider].getName
@@ -988,20 +988,40 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
         val df1 = input1.toDF().select($"value" as "key", ($"value" * 2) as "leftValue")
         val df2 = input2.toDF().select($"value" as "key", ($"value" * 3) as "rightValue")
         val joined = df1.join(df2, "key")
+        val configuredVersion =
+          SQLConf.get.getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION)
 
+        assert(Set(3, 4).contains(configuredVersion))
         testStream(joined)(
           StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
-          AddData(input1, 1, 2),
-          ExpectFailure[StateStoreMultipleColumnFamiliesNotSupportedException] {
-            (t: Throwable) => {
-              checkError(
-                exception = t.asInstanceOf[StateStoreMultipleColumnFamiliesNotSupportedException],
-                condition = "UNSUPPORTED_FEATURE.STATE_STORE_MULTIPLE_COLUMN_FAMILIES",
-                sqlState = Some("0A000"),
-                parameters = Map("stateStoreProvider" -> "HDFSBackedStateStoreProvider")
-              )
-            }
-          }
+          AddData(input1, 1),
+          AddData(input2, 1),
+          CheckAnswer((1, 2, 3)),
+          Execute { query =>
+            val join = query.lastExecution.executedPlan.collectFirst {
+              case join: StreamingSymmetricHashJoinExec => join
+            }.getOrElse(fail("StreamingSymmetricHashJoinExec not found"))
+            assert(join.stateFormatVersion == 2)
+            assert(query.offsetLog.getLatest().flatMap(_._2.metadataOpt)
+              .flatMap(_.conf.get(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key))
+              .contains("2"))
+            assert(SQLConf.get.getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION) ==
+              configuredVersion, "the guardrail must not mutate the caller's session")
+          },
+          StopStream,
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(input1, 2),
+          AddData(input2, 2),
+          CheckNewAnswer((2, 4, 6)),
+          Execute { query =>
+            val join = query.lastExecution.executedPlan.collectFirst {
+              case join: StreamingSymmetricHashJoinExec => join
+            }.getOrElse(fail("StreamingSymmetricHashJoinExec not found after restart"))
+            assert(join.stateFormatVersion == 2)
+            assert(SQLConf.get.getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION) ==
+              configuredVersion, "restoring the pinned config must not mutate the caller's session")
+          },
+          StopStream
         )
       }
     }
