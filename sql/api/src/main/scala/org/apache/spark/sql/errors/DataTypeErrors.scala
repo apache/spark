@@ -211,13 +211,14 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
       decimalPrecision: Int,
       decimalScale: Int,
       context: QueryContext): ArithmeticException = {
+    // A huge negative scale (legacy mode only) makes the plain string too long to build,
+    // e.g. for 1E+2147483647.
+    val valueString =
+      if (value.scale < -MAX_PLAIN_STRING_TRAILING_ZEROS) value.toString else value.toPlainString
     new SparkArithmeticException(
       errorClass = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
       messageParameters = Map(
-        // A huge negative scale (legacy mode only) makes the plain string too long to build,
-        // e.g. for 1E+2147483647.
-        "value" -> (if (value.scale < -MAX_PLAIN_STRING_TRAILING_ZEROS) value.toString
-          else value.toPlainString),
+        "value" -> valueString,
         "precision" -> decimalPrecision.toString,
         "scale" -> decimalScale.toString,
         "config" -> toSQLConf("spark.sql.ansi.enabled")),
