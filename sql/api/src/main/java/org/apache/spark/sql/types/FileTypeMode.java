@@ -19,7 +19,7 @@ package org.apache.spark.sql.types;
 import org.apache.spark.annotation.Unstable;
 
 /**
- * The mode of a FileType column.
+ * The mode for a FileType column.
  *
  * <ul>
  *   <li>{@code EXTERNAL} - simple references, lifecycle independent of the table</li>

@@ -19,26 +19,32 @@ package org.apache.spark.sql.types
 import org.apache.spark.annotation.Unstable
 
 /**
- * The data type representing a reference to an external file, such as a PDF, image, audio or
- * video. A value holds the location of the file and a small amount of metadata describing it
- * (size, content type and checksum); the bytes of the file are never stored in the value.
+ * The data type representing a reference to a file, with metadata describing the file.
  *
  * In SQL the type is named `FILE`, and the `EXTERNAL` keyword is required when declaring a
  * column, as in `CREATE TABLE t (f FILE EXTERNAL)`. Its JSON representation is `"file"` inside
  * a struct field and `"file external"` for a standalone type.
  *
- * The mode is part of the type's identity: `FILE EXTERNAL` is a reference whose lifecycle is
- * independent of the table, and a bare `FILE` is a file whose mode is not determined yet, such as
- * the result of a cast or of a UDF. Table column definitions are to require `EXTERNAL`.
+ * FileType is planned to be physically stored as a struct with the following fields (see
+ * `FileType.FIELDS`), but it deliberately does not extend [[StructType]]:
+ *   - uri (STRING): the opaque URI to the file
+ *   - offset (BIGINT): the start of the referenced byte range
+ *   - size (BIGINT): the size of the file in bytes
+ *   - content_type (STRING): the MIME/content type of the file
+ *   - checksum (STRING): an algorithm-tagged integrity token for the file, e.g. "ETAG:<etag>"
+ *   - inline (BINARY): the referenced bytes stored inline in the value
  *
- * The type is planned to be physically represented as a struct (see `FileType.FIELDS`) but
- * deliberately does not extend [[StructType]]. It is planned to have no ordering, so it is not
- * to be usable in the key of a map, a join, a grouping expression, or as a partition or
- * clustering column. Of these, this type currently only guarantees the schema-level pieces (DDL
- * and JSON); the physical representation and most of the restrictions are added by later parts.
+ * FileType may be EXTERNAL (simple references, lifecycle independent of the table) or UNKNOWN
+ * (mode not yet determined, such as the result of a cast or of a UDF). Mode is part of type
+ * identity - files with different modes are distinct under `equals`. Table column definitions
+ * are to require `EXTERNAL`.
  *
- * @param mode
- *   the mode of this FileType column. Mode is part of type identity.
+ * FileType is planned to be not comparable -- it cannot be used in join expressions, grouping
+ * expressions, or as a partition/clustering column. Users can extract the uri field for such
+ * operations. This type currently only guarantees the schema-level pieces (DDL and JSON); the
+ * physical representation and most of the restrictions are added by later parts.
+ *
+ * @param mode the mode for this FileType column
  * @since 4.4.0
  */
 @Unstable
@@ -52,8 +58,8 @@ case class FileType(mode: FileTypeMode = FileTypeMode.UNKNOWN) extends DataType 
   }
 
   /**
-   * `acceptsType` ignores mode so that an expression expecting `FileType()` accepts a
-   * `FileType.external`. `sameType` and `equals` still distinguish modes.
+   * `acceptsType` ignores mode so `ExpectsInputTypes.inputTypes = Seq(FileType())` (e.g.
+   * `GetStructField`) accepts FileType(EXTERNAL). `sameType` / `equals` still distinguish modes.
    */
   override private[sql] def acceptsType(other: DataType): Boolean = other.isInstanceOf[FileType]
 
