@@ -99,17 +99,6 @@ object SQLConf {
     sqlConfEntriesVersion += 1
   }
 
-  private[internal] def getConfigEntry(key: String): ConfigEntry[_] = {
-    Option(sqlConfEntries.get(key)).getOrElse(ConfigEntry.findProtoDefinedEntry(key))
-  }
-
-  private[sql] def isSessionBindingPolicy(key: String): Boolean = {
-    Option(getConfigEntry(key)).exists { entry =>
-      entry.bindingPolicy.contains(ConfigBindingPolicy.SESSION) ||
-        entry.bindingPolicy.contains(ConfigBindingPolicy.NOT_APPLICABLE)
-    }
-  }
-
   private def configEntriesVersion: Long = sqlConfEntriesVersion
 
   /**
@@ -143,6 +132,17 @@ object SQLConf {
     // Retained values can include catalog credentials (`spark.sql.catalog.*`).
     override def toString: String = s"RetainedResolutionConfigsMemo(settingsVersion=" +
       s"$settingsVersion, entriesVersion=$entriesVersion, keys=${retained.size})"
+  }
+
+  private[internal] def getConfigEntry(key: String): ConfigEntry[_] = {
+    Option(sqlConfEntries.get(key)).getOrElse(ConfigEntry.findProtoDefinedEntry(key))
+  }
+
+  private[sql] def isSessionBindingPolicy(key: String): Boolean = {
+    Option(getConfigEntry(key)).exists { entry =>
+      entry.bindingPolicy.contains(ConfigBindingPolicy.SESSION) ||
+        entry.bindingPolicy.contains(ConfigBindingPolicy.NOT_APPLICABLE)
+    }
   }
 
   // TODO: once all configs are migrated to textproto, this can be replaced by
