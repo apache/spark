@@ -2544,6 +2544,11 @@ case class JsonObjectExpr(
   @transient private lazy val cachedValidatedTexts: Array[String] =
     new Array[String](memberArray.length)
 
+  // Cache each value's foldability so the per-row FORMAT JSON path below never re-walks a composite
+  // child's expression tree.
+  @transient private lazy val valueFoldable: Array[Boolean] =
+    memberArray.map(_._2.foldable)
+
   // A `FORMAT JSON` value is spliced verbatim, so it must be exactly one well-formed JSON value
   // (a string like `1,2` or `{bad` would corrupt the object). Parse one value; reject anything
   // trailing. Mirrors `JsonArray.validateJsonText`.
@@ -2573,7 +2578,7 @@ case class JsonObjectExpr(
   private def rawJsonText(idx: Int, value: Any): String = {
     if (!needsValidationArray(idx)) {
       value.asInstanceOf[UTF8String].toString
-    } else if (memberArray(idx)._2.foldable) {
+    } else if (valueFoldable(idx)) {
       val cached = cachedValidatedTexts(idx)
       if (cached != null) {
         cached

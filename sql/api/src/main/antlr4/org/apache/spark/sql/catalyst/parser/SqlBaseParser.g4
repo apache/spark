@@ -114,12 +114,17 @@ options { tokenVocab = SqlBaseLexer; }
             case LEFT_PAREN: case LEFT_BRACKET: depth++; break;
             case RIGHT_PAREN: case RIGHT_BRACKET: depth--; break;
             case CASE:
-              // A `case` column, not the keyword, when an operator/terminator follows.
-              if (!jsonKeyTokenFollowsOperand(nextDefaultChannelType(i, stop))) caseDepth++;
+              // Only count a top-level CASE: one inside parens/brackets has its colons balanced by
+              // `depth` already, so counting it would misread a parenthesized `case` column (e.g.
+              // `CAST(case AS ...)`) as keyword nesting no `END` clears. A `case` column, not the
+              // keyword, when an operator/terminator follows.
+              if (depth == 0 &&
+                  !jsonKeyTokenFollowsOperand(nextDefaultChannelType(i, stop))) caseDepth++;
               break;
             case END:
-              // An `end` column, not the keyword, when it sits in an operand position.
-              if (caseDepth > 0 && !jsonKeyOperandExpectedAfter(prevType)) caseDepth--;
+              // Matched to the top-level CASE above; an `end` column in an operand position.
+              if (depth == 0 && caseDepth > 0 &&
+                  !jsonKeyOperandExpectedAfter(prevType)) caseDepth--;
               break;
             default: break;
           }
@@ -1720,8 +1725,9 @@ jsonObjectMember
     ;
 
 // The key of a `key : value` member. A top-level `:` after the key's first token ends the key, so
-// `JSON_OBJECT(k: v:x)` is key `k` with value `v:x`; a key that is itself an extraction needs
-// parentheses, e.g. `(v:x) : 1`.
+// `JSON_OBJECT(k: v:x)` is key `k` with value `v:x`. A key that is itself an extraction, or that
+// coalesces a trailing named parameter marker (`'k' :p`), needs parentheses -- `(v:x) : 1`,
+// `('k' :p) : 1` -- or the VALUE form, else the key's own `:` reads as the member separator.
 jsonObjectColonKey
     : keyExpr=expression
     ;

@@ -126,6 +126,34 @@ class JsonObjectSuite extends QueryTest with SharedSparkSession {
       Row("""{"c":1}"""))
   }
 
+  test("a colon key cannot coalesce a trailing named parameter marker") {
+    // `'k' :p` coalesces the marker into the key under the VALUE form, but in the colon form the
+    // first top-level `:` is the member separator, so a bare marker-coalesced key is a clean parse
+    // error (never a silent mis-split). Parenthesize the key or use the VALUE form.
+    val e = intercept[ParseException] {
+      spark.sql("SELECT json_object('k' :p : 1)", Map("p" -> "x"))
+    }
+    assert(e.getCondition == "PARSE_SYNTAX_ERROR")
+    checkAnswer(
+      spark.sql("SELECT json_object(('k' :p) : 1)", Map("p" -> "x")), Row("""{"kx":1}"""))
+    checkAnswer(
+      spark.sql("SELECT json_object('k' :p VALUE 1)", Map("p" -> "x")), Row("""{"kx":1}"""))
+  }
+
+  test("a case column nested in a colon key is a column, not a CASE keyword") {
+    // A `case` column in a CAST or parens is below the key's top level, where the token after it
+    // (`AS`, `+`) does not prove it is a column; without the depth guard the spurious CASE count
+    // hid the real separator colon (the parens already balance any colon inside).
+    checkAnswer(
+      sql("""SELECT json_object(CAST(case AS STRING) : v:x)
+            |FROM (SELECT 'c' AS `case`, parse_json('{"x":1}') AS v)""".stripMargin),
+      Row("""{"c":1}"""))
+    checkAnswer(
+      sql("""SELECT json_object((case + 1)::string : v:x)
+            |FROM (SELECT 1 AS `case`, parse_json('{"x":1}') AS v)""".stripMargin),
+      Row("""{"2":1}"""))
+  }
+
   test("a member whose key and value are named key and value splits at VALUE") {
     checkAnswer(
       sql("SELECT json_object(key VALUE value + 1) FROM VALUES ('a', 1) t(key, value)"),
@@ -1034,9 +1062,13 @@ world'))"""))
         // system.builtin on the path) shadows the built-in constructor.
         checkAnswer(sql("SELECT json_object('id', 7)"), Row("shadowed"))
         checkAnswer(sql("SELECT json_object('id' VALUE 7)"), Row("shadowed"))
+        // The clause-free colon spelling routes through resolution too, so it is shadowable.
+        checkAnswer(sql("SELECT json_object('id' : 7)"), Row("shadowed"))
         checkAnswer(sql("SELECT json_object(*) FROM VALUES ('id', 7) AS t(a, b)"), Row("shadowed"))
         // A clause-bearing form is not a function call, so it stays the built-in constructor.
         checkAnswer(sql("SELECT json_object('id' VALUE 7 RETURNING STRING)"), Row("""{"id":7}"""))
+        // A clause-bearing colon form likewise stays the built-in constructor.
+        checkAnswer(sql("SELECT json_object('id' : 7 RETURNING STRING)"), Row("""{"id":7}"""))
         checkAnswer(sql("SELECT json_object('id' VALUE NULL ABSENT ON NULL)"), Row("{}"))
         // A nested JSON constructor stays on the direct-construction path, so it is not shadowed
         // and its parse-time raw splice is preserved.
