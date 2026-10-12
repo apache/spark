@@ -31,17 +31,34 @@ class MemoryConsumerSuite extends SparkFunSuite {
     assert(consumer != other)
     assert(consumer == consumer)
     assert(consumer.hashCode === System.identityHashCode(consumer))
-    // A spill triggered by an equal-looking consumer is not mistaken for a self-triggered one.
-    assert(consumer.spill(Long.MaxValue, other) === 1)
-    assert(consumer.spill(Long.MaxValue, consumer) === 0)
+  }
+
+  test("case class consumers with equal arguments spill for each other") {
+    val memoryManager = new TestMemoryManager(new SparkConf())
+    memoryManager.limit(100)
+    val taskMemoryManager = new TaskMemoryManager(memoryManager, 0)
+    val consumer = CaseClassConsumer(taskMemoryManager, 1)
+    val other = CaseClassConsumer(taskMemoryManager, 1)
+
+    consumer.use(60)
+    // Only 40 bytes are free, so TaskMemoryManager asks `consumer` to spill on behalf of `other`,
+    // which must not be mistaken for a self-triggered spill.
+    other.use(60)
+    assert(consumer.getUsed === 0)
+    assert(other.getUsed === 60)
+
+    other.free(60)
+    assert(taskMemoryManager.cleanUpAllAllocatedMemory() === 0)
   }
 }
 
 private case class CaseClassConsumer(tmm: TaskMemoryManager, id: Int)
-  extends MemoryConsumer(tmm, MemoryMode.ON_HEAP) {
+  extends TestMemoryConsumer(tmm) {
 
   override def spill(size: Long, trigger: MemoryConsumer): Long = {
-    // Written with `==` on purpose: it calls equals, which is identity for memory consumers.
-    if (trigger == this) 0L else 1L
+    // Written with `==` on purpose, to check that it calls the identity equals of
+    // MemoryConsumer. Real consumers should still compare `trigger` with `eq`, as the
+    // MemoryConsumer#spill Javadoc says.
+    if (trigger == this) 0L else super.spill(size, trigger)
   }
 }

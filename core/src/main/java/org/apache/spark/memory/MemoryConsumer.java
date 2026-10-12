@@ -30,11 +30,12 @@ import org.apache.spark.unsafe.memory.MemoryBlock;
  * Note: this only supports allocation / spilling of Tungsten memory.
  *
  * Memory consumers have identity equality: {@link #equals} and {@link #hashCode} are defined here
- * by reference, so a subclass, including a Scala case class, does not get value equality unless it
- * explicitly overrides them. {@link TaskMemoryManager} also tracks consumers by identity, so every
- * distinct instance is tracked, offered for spilling and reported in the memory usage breakdown,
- * even if a subclass overrides {@code equals}. How much memory a spill actually releases is decided
- * by each consumer's {@link #spill(long, MemoryConsumer)}.
+ * by reference, so a subclass, including a Scala case class when compiled against this version,
+ * does not get value equality unless it explicitly overrides them. {@link TaskMemoryManager} also
+ * tracks consumers by identity, even if a subclass overrides {@code equals}: distinct instances are
+ * never merged into one entry, so each of them can be offered for spilling and reported in the
+ * memory usage breakdown. How much memory a spill actually releases is decided by each consumer's
+ * {@link #spill(long, MemoryConsumer)}.
  */
 public abstract class MemoryConsumer {
 
@@ -168,8 +169,9 @@ public abstract class MemoryConsumer {
 
   /**
    * Memory consumers are compared by identity. This is not final so that existing subclasses which
-   * override it keep compiling, but its presence stops Scala case classes from generating value
-   * equality.
+   * override it keep compiling, but its presence stops Scala case classes compiled against this
+   * version from generating value equality. A case class compiled against an earlier version keeps
+   * its generated equality until it is rebuilt.
    */
   @Override
   public boolean equals(Object other) {

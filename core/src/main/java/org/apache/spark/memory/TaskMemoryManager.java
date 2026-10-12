@@ -114,8 +114,8 @@ public class TaskMemoryManager {
 
   /**
    * Tracks spillable memory consumers. Consumers are tracked by identity rather than by
-   * {@code equals}, so that distinct consumers which happen to be equal (for example, Scala case
-   * classes) are all offered for spilling and reported in the memory usage breakdown.
+   * {@code equals}, so that distinct consumers are all offered for spilling and reported in the
+   * memory usage breakdown even if a subclass overrides {@code equals}.
    */
   @GuardedBy("this")
   private final Set<MemoryConsumer> consumers;
