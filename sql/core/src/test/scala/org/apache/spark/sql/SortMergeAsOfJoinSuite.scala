@@ -192,8 +192,9 @@ class SortMergeAsOfJoinSuite extends QueryTest
       StructField("ts", IntegerType) ::
         StructField("val", StringType) :: Nil)
     val left = spark.createDataFrame(List(Row(10, "a")).asJava, schema)
-    // Pairs of right rows tie on ts. Backward keeps the last row of a tie, Nearest the first.
-    // One partition keeps the input order, so the order within a tie is fixed.
+    // The tie at ts=5 catches a backward join run as nearest: backward keeps the last row (r2),
+    // nearest the first (r1). Forward and nearest both return r3, so only the `op.direction`
+    // check catches a forward join run as nearest. One partition fixes the order within a tie.
     val right = spark.createDataFrame(
       List(Row(5, "r1"), Row(5, "r2"), Row(15, "r3"), Row(15, "r4")).asJava, schema)
       .coalesce(1)

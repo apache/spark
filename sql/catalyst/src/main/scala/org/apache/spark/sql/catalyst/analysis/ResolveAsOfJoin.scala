@@ -34,8 +34,8 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryErrorsBase
 
 /**
- * Resolves SQL [[AsOfJoin]] operators: materializes `MATCH_CONDITION` into `asOfCondition` and
- * `orderExpression`, and expands `USING` column lists into equi-join predicates.
+ * Resolves SQL [[AsOfJoin]] operators: materializes `MATCH_CONDITION` into the fields of
+ * [[MaterializedMatchCondition]], and expands `USING` column lists into equi-join predicates.
  */
 object ResolveAsOfJoin extends Rule[LogicalPlan] with SQLConfHelper {
 

@@ -2628,7 +2628,9 @@ object LateralJoin {
 
 /**
  * A logical plan for as-of join.
- * @param direction Which matching right row to keep. 
+ * @param direction Which matching right row to keep: the last for [[Backward]], the first for
+ *                  [[Forward]], the closest by `orderExpression` for [[Nearest]].
+ *                  `asOfCondition` and `orderExpression` must be built for the same direction.
  */
 case class AsOfJoin(
     left: LogicalPlan,

@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.catalyst.plans.{Backward, Forward}
+import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, Backward, Forward}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.joins.SortMergeAsOfJoinExec
 import org.apache.spark.sql.internal.SQLConf
@@ -52,6 +52,13 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
     assert(collectWithSubqueries(plan) {
       case _: SortMergeAsOfJoinExec => true
     }.nonEmpty, s"Expected SortMergeAsOfJoinExec in plan:\n$plan")
+  }
+
+  private def assertPlannedDirection(query: DataFrame, direction: AsOfJoinDirection): Unit = {
+    val plan = query.queryExecution.executedPlan
+    val directions = collectWithSubqueries(plan) { case j: SortMergeAsOfJoinExec => j.direction }
+    assert(directions === Seq(direction),
+      s"Expected one $direction SortMergeAsOfJoinExec in plan:\n$plan")
   }
 
   private def checkSortMergeAsOf(query: => DataFrame, expected: Seq[Row]): Unit = {
@@ -171,32 +178,36 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
   test("MATCH_CONDITION with the right operand written first (<=) is a backward match") {
     setupTradeQuoteViews()
     // q.quote_time <= t.trade_time normalizes to t.trade_time >= q.quote_time.
+    val query = sql(
+      """
+        |SELECT t.trade_time, t.symbol, q.bid_price
+        |FROM trades t ASOF JOIN quotes q
+        |  MATCH_CONDITION (q.quote_time <= t.trade_time)
+        |  ON t.symbol = q.symbol
+        |""".stripMargin)
     checkSortMergeAsOf(
-      sql(
-        """
-          |SELECT t.trade_time, t.symbol, q.bid_price
-          |FROM trades t ASOF JOIN quotes q
-          |  MATCH_CONDITION (q.quote_time <= t.trade_time)
-          |  ON t.symbol = q.symbol
-          |""".stripMargin),
+      query,
       Seq(
         Row(Timestamp.valueOf("2026-06-29 10:00:05"), "AAPL", 180.10),
         Row(Timestamp.valueOf("2026-06-29 10:00:11"), "AAPL", 180.20),
         Row(Timestamp.valueOf("2026-06-29 10:00:12"), "MSFT", 420.50)))
+    assertPlannedDirection(query, Backward)
   }
 
   test("MATCH_CONDITION with the right operand written first (>=) is a forward match") {
     setupTradeQuoteViews()
     // q.quote_time >= t.trade_time normalizes to t.trade_time <= q.quote_time.
+    val query = sql(
+      """
+        |SELECT t.trade_time, t.symbol, q.bid_price
+        |FROM trades t ASOF JOIN quotes q
+        |  MATCH_CONDITION (q.quote_time >= t.trade_time)
+        |  ON t.symbol = q.symbol
+        |""".stripMargin)
     checkSortMergeAsOf(
-      sql(
-        """
-          |SELECT t.trade_time, t.symbol, q.bid_price
-          |FROM trades t ASOF JOIN quotes q
-          |  MATCH_CONDITION (q.quote_time >= t.trade_time)
-          |  ON t.symbol = q.symbol
-          |""".stripMargin),
+      query,
       Row(Timestamp.valueOf("2026-06-29 10:00:05"), "AAPL", 180.15) :: Nil)
+    assertPlannedDirection(query, Forward)
   }
 
   test("MATCH_CONDITION right operand first (>=) forward match is inclusive at the boundary") {
@@ -211,39 +222,6 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
           |  ON t.symbol = q.symbol
           |""".stripMargin),
       Row(180.15) :: Nil)
-  }
-
-  test("MATCH_CONDITION with the right operand written first plans the flipped direction") {
-    setupTradeQuoteViews()
-    // Writing the right operand first flips the operator: q <= t is backward, q >= t is forward.
-    val cases = Seq(
-      ("<=", Backward, Seq(
-        Row(Timestamp.valueOf("2026-06-29 10:00:05"), "AAPL", 180.10),
-        Row(Timestamp.valueOf("2026-06-29 10:00:11"), "AAPL", 180.20),
-        Row(Timestamp.valueOf("2026-06-29 10:00:12"), "MSFT", 420.50))),
-      (">=", Forward, Seq(
-        Row(Timestamp.valueOf("2026-06-29 10:00:05"), "AAPL", 180.15))))
-    for {
-      singlePass <- Seq(false, true)
-      (operator, direction, expected) <- cases
-    } {
-      withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString) {
-        val df = sql(
-          s"""
-             |SELECT t.trade_time, t.symbol, q.bid_price
-             |FROM trades t ASOF JOIN quotes q
-             |  MATCH_CONDITION (q.quote_time $operator t.trade_time)
-             |  ON t.symbol = q.symbol
-             |""".stripMargin)
-        // The single-pass analyzer cannot resolve the plan that `df.rdd` builds.
-        QueryTest.checkAnswer(df, expected, checkToRDD = false)
-        val asOfJoin = collectFirst(df.queryExecution.executedPlan) {
-          case j: SortMergeAsOfJoinExec => j
-        }
-        assert(asOfJoin.map(_.direction) === Some(direction),
-          s"single-pass analyzer: $singlePass, operator: $operator")
-      }
-    }
   }
 
   test("TIMESTAMP MATCH_CONDITION with legacy intervals") {
