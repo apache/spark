@@ -796,6 +796,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     ),
                 )
             )
+        assert udf_infos, "At least one Arrow UDF expected here."
         col_names = [f"_{i}" for i in range(len(udfs))]
 
         # --- Input preparation ---
@@ -831,8 +832,8 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             clock = time.perf_counter_ns
             try:
                 for input_batch in data:
-                    input_start_ns = clock()
                     # --- Input: Arrow -> Python columns ---
+                    input_start_ns = clock()
                     metrics.increment("pythonNumTimedBatches")
                     num_rows = input_batch.num_rows
                     columns = [
@@ -846,15 +847,13 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     if not columns:
                         columns = [[_NoValue] * num_rows]
                     output_arrays: list[pa.Array] = []
-                    # The UDF loop replaces this when output preparation begins.
-                    output_start_ns = input_start_ns
 
                     # --- Process: evaluate each UDF row-by-row ---
                     for udf_func, offsets, zero_arg, arrow_return_type, result_conv in udf_infos:
                         if output_arrays:
-                            # One boundary ends the previous output and starts the next input.
+                            # Reuse the batch start for the first UDF, avoiding another clock read.
+                            # Later UDFs start input after the loop transition.
                             input_start_ns = clock()
-                            output_duration_ns += input_start_ns - output_start_ns
                         rows = (
                             [() for _ in range(num_rows)]
                             if zero_arg
@@ -880,9 +879,11 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                                 target_type=arrow_return_type, safe=runner_conf.safecheck
                             )
                         output_arrays.append(arr)
+                        # All UDF results for this batch are ready; time its assembly as output.
+                        if len(output_arrays) == num_udfs:
+                            output_batch = pa.RecordBatch.from_arrays(output_arrays, col_names)
+                        output_duration_ns += clock() - output_start_ns
 
-                    output_batch = pa.RecordBatch.from_arrays(output_arrays, col_names)
-                    output_duration_ns += clock() - output_start_ns
                     yield output_batch
                     del output_batch
             finally:
