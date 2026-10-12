@@ -814,6 +814,7 @@ public class CollationAwareUTF8String {
    * target string, starting from the specified position (1-based index referring to character
    * position in UTF8String), with respect to the UTF8_LCASE collation. If the pattern is not
    * found, {@code MATCH_NOT_FOUND} is returned.
+   * If {@code start} is zero, returns {@code MATCH_NOT_FOUND} even when {@code pattern} is empty.
    *
    * @param target the string to be searched in
    * @param pattern the string to be searched for
@@ -916,6 +917,7 @@ public class CollationAwareUTF8String {
    * target string, starting from the specified position (1-based index referring to character
    * position in UTF8String), with respect to the ICU collation identified by {@code collationId}.
    * If the pattern is not found, {@code MATCH_NOT_FOUND} is returned.
+   * If {@code start} is zero, returns {@code MATCH_NOT_FOUND} even when {@code pattern} is empty.
    *
    * @param target the string to be searched in
    * @param pattern the string to be searched for
@@ -928,6 +930,7 @@ public class CollationAwareUTF8String {
   public static int indexOf(final UTF8String target, final UTF8String pattern,
       final int start, final int occurrence, final int collationId) {
     assert occurrence > 0;
+    // Reject zero start before the empty-pattern shortcut to preserve SQL instr semantics.
     if (start == 0) return MATCH_NOT_FOUND;
     if (pattern.numBytes() == 0) return target.indexOfEmpty(start);
     if (target.numBytes() == 0) return MATCH_NOT_FOUND;

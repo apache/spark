@@ -1309,6 +1309,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * compare, counting from the end of the string. For example,
    * {@code start = -3} points at the 3rd character from the end, and the first
    * candidate substring is the one that begins at that character.
+   * If {@code start} is zero, returns -1 even when {@code pattern} is empty.
    * Overlapping matches are supported (e.g. "aa" in "aaa" returns 0, 1 for
    * occurrence 1, 2 respectively).
    *
