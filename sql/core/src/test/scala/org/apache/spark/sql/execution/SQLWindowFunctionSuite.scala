@@ -107,6 +107,57 @@ class SQLWindowFunctionSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-59175: window expression with GROUP BY expression") {
+    withTempView("events") {
+      sql("SELECT * FROM VALUES ('us'), ('US'), ('us'), ('ca'), ('CA'), ('mx'), ('br') " +
+        "AS t(country)").createOrReplaceTempView("events")
+
+      val groupByExpr = sql(
+        """
+          |WITH ranked AS (
+          |  SELECT
+          |    CASE
+          |      WHEN ROW_NUMBER() OVER (ORDER BY COUNT(1) DESC) <= 2 THEN UPPER(country)
+          |      ELSE 'Other'
+          |    END AS bucket,
+          |    COUNT(1) AS events
+          |  FROM events
+          |  GROUP BY UPPER(country)
+          |)
+          |SELECT bucket, SUM(events) AS events
+          |FROM ranked
+          |GROUP BY bucket
+          |""".stripMargin)
+      checkAnswer(groupByExpr, Seq(Row("US", 3), Row("CA", 2), Row("Other", 2)))
+
+      val groupByColumn = sql(
+        """
+          |SELECT
+          |  CASE
+          |    WHEN ROW_NUMBER() OVER (ORDER BY COUNT(1) DESC, country) <= 2 THEN UPPER(country)
+          |    ELSE 'Other'
+          |  END AS bucket,
+          |  COUNT(1) AS events
+          |FROM events
+          |GROUP BY country
+          |""".stripMargin)
+      checkAnswer(groupByColumn,
+        Seq(Row("US", 2), Row("CA", 1), Row("Other", 1), Row("Other", 1),
+          Row("Other", 1), Row("Other", 1)))
+
+      val separateItems = sql(
+        """
+          |SELECT
+          |  UPPER(country) AS bucket,
+          |  ROW_NUMBER() OVER (ORDER BY COUNT(1) DESC, UPPER(country)) AS rn
+          |FROM events
+          |GROUP BY UPPER(country)
+          |""".stripMargin)
+      checkAnswer(separateItems,
+        Seq(Row("US", 1), Row("CA", 2), Row("BR", 3), Row("MX", 4)))
+    }
+  }
+
   test("window function: refer column in inner select block") {
     val data = Seq(
       WindowData(1, "a", 5),
