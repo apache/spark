@@ -29,10 +29,12 @@ import org.apache.spark.unsafe.memory.MemoryBlock;
  *
  * Note: this only supports allocation / spilling of Tungsten memory.
  *
- * {@link TaskMemoryManager} tracks consumers by identity, so distinct consumer instances are
- * always tracked, spilled and reported separately, regardless of how they implement
- * {@code equals} and {@code hashCode}. Code that keeps consumers in a collection should likewise
- * key them by identity rather than relying on {@code equals}/{@code hashCode}.
+ * Memory consumers have identity equality: {@link #equals} and {@link #hashCode} are defined here
+ * by reference, so a subclass, including a Scala case class, does not get value equality unless it
+ * explicitly overrides them. {@link TaskMemoryManager} also tracks consumers by identity, so every
+ * distinct instance is tracked, offered for spilling and reported in the memory usage breakdown,
+ * even if a subclass overrides {@code equals}. How much memory a spill actually releases is decided
+ * by each consumer's {@link #spill(long, MemoryConsumer)}.
  */
 public abstract class MemoryConsumer {
 
@@ -85,7 +87,10 @@ public abstract class MemoryConsumer {
    * Note: today, this only frees Tungsten-managed pages.
    *
    * @param size the amount of memory should be released
-   * @param trigger the MemoryConsumer that trigger this spilling
+   * @param trigger the MemoryConsumer that trigger this spilling. Compare it with this consumer
+   *                by reference ({@code eq}/{@code ne} in Scala), not by {@code equals}: a
+   *                distinct consumer that is equal to this one does not make this a
+   *                self-triggered spill.
    * @return the amount of released memory in bytes
    */
   public abstract long spill(long size, MemoryConsumer trigger) throws IOException;
@@ -159,6 +164,21 @@ public abstract class MemoryConsumer {
   public void freeMemory(long size) {
     taskMemoryManager.releaseExecutionMemory(size, this);
     used.getAndAdd(-size);
+  }
+
+  /**
+   * Memory consumers are compared by identity. This is not final so that existing subclasses which
+   * override it keep compiling, but its presence stops Scala case classes from generating value
+   * equality.
+   */
+  @Override
+  public boolean equals(Object other) {
+    return this == other;
+  }
+
+  @Override
+  public int hashCode() {
+    return System.identityHashCode(this);
   }
 
   private void throwOom(final MemoryBlock page, final long required) {
