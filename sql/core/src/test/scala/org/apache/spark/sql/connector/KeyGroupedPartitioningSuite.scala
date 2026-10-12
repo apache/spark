@@ -2908,6 +2908,60 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     }
   }
 
+  test("SPARK-60203: SPJ with join-key subset projects originalPartitionValues when AQE " +
+      "is enabled") {
+    val table1 = "table1"
+    val table2 = "table2"
+    val cols = Array(
+      Column.create("id", StringType),
+      Column.create("date", StringType),
+      Column.create("data", StringType))
+    // The join key is the second partition key of `table1` (`bucket(32, id)`), after the
+    // leading identity key `date`. With AQE enabled, `createShuffleSpec` projects
+    // `originalPartitionValues` using the already-trimmed partition expressions.
+    createTable(table1, cols,
+      Array(identity("date"), bucket(32, "id"), bucket(32, "data")))
+    sql(s"INSERT INTO testcat.ns.$table1 VALUES " +
+        "('a', '2026-05-01', 'aa'), " +
+        "('b', '2026-05-01', 'bb'), " +
+        "('c', '2026-05-02', 'aa')")
+
+    createTable(table2, cols, Array(bucket(32, "id")))
+    sql(s"INSERT INTO testcat.ns.$table2 VALUES " +
+        "('a', '2026-05-01', 'xx'), " +
+        "('b', '2026-05-01', 'yy'), " +
+        "('d', '2026-05-01', 'zz')")
+
+    Seq(true, false).foreach { partiallyClustered =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.SKEW_JOIN_ENABLED.key -> "true",
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+        SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key ->
+            partiallyClustered.toString) {
+        val df = sql(
+          s"""
+             |${selectWithMergeJoinHint("t1", "t2")}
+             |t1.id, t1.date, t1.data AS t1data, t2.data AS t2data
+             |FROM testcat.ns.$table1 t1 JOIN testcat.ns.$table2 t2
+             |ON t1.id = t2.id
+             |ORDER BY t1.id, t1.date, t1data
+             |""".stripMargin)
+        val scans = collectScans(df.queryExecution.executedPlan)
+        assert(
+          scans.exists(_.spjParams.joinKeyPositions.contains(Seq(1))),
+          "SPJ should project the scan partitioning down to the bucket join key")
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        assert(shuffles.isEmpty, "SPJ should be triggered")
+        checkAnswer(df, Seq(
+          Row("a", "2026-05-01", "aa", "xx"),
+          Row("b", "2026-05-01", "bb", "yy")))
+      }
+    }
+  }
+
   test("SPARK-48012: one-side shuffle with partition transforms") {
     val items_partitions = Array(bucket(2, "id"), identity("arrive_time"))
     val items_partitions2 = Array(identity("arrive_time"), bucket(2, "id"))
