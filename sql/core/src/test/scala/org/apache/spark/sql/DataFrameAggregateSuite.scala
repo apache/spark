@@ -1283,6 +1283,9 @@ class DataFrameAggregateSuite extends SharedSparkSession
     checkAnswer(df.intersectAll(df).where(isNegZero), Nil)
     checkAnswer(df.except(Seq(1.0d).toDF("x")).where(isNegZero), Nil)
     checkAnswer(Seq(-0.0f, -0.0f).toDF("x").distinct().where(isNegZero), Nil)
+    checkAnswer(
+      df.select(struct(col("x")).as("s")).distinct().where(col("s.x").cast("string") === "-0.0"),
+      Nil)
 
     withTempView("t") {
       df.createOrReplaceTempView("t")
@@ -1295,12 +1298,12 @@ class DataFrameAggregateSuite extends SharedSparkSession
         Nil)
     }
 
-    // Evaluating the predicate below the aggregate would split the group and change the count.
+    // Reading the raw key below the aggregate would split the group and change the count.
     val zeros = Seq(-0.0d, 0.0d).toDF("x")
     checkAnswer(
       zeros.groupBy("x").count().where(col("x").cast("string") === "0.0"),
       Row(0.0d, 2))
-    // Comparisons treat -0.0 and 0.0 as equal, so they can still be pushed down.
+    // Comparisons treat -0.0 and 0.0 as equal, so they are pushed down without normalization.
     checkAnswer(zeros.groupBy("x").count().where(col("x") === 0.0d), Row(0.0d, 2))
   }
 
