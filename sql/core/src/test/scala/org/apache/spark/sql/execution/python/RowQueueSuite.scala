@@ -241,8 +241,10 @@ class RowQueueSuite extends SparkFunSuite with EncryptionFunSuite {
     addRows(queue1, n)
     assert(queue1.numQueues() > 2)
     val used = queue1.getUsed
-    assert(queue1.spill(Long.MaxValue, queue2) === used - smallPageSize)
+    // Check the self-triggered spill while queue1 still has spillable in-memory pages.
     assert(queue1.spill(Long.MaxValue, queue1) === 0)
+    assert(queue1.getUsed === used)
+    assert(queue1.spill(Long.MaxValue, queue2) === used - smallPageSize)
     drainAndClose(queue1, n)
     queue2.close()
   }
