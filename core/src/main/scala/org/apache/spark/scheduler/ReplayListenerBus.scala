@@ -137,11 +137,7 @@ private[spark] class ReplayListenerBus(
           lineIndex += 1
           var endOfLine = false
           while (!endOfLine && fill()) {
-            var i = pos
-            while (i < len && chars(i) != '\n') {
-              i += 1
-            }
-            buffer.append(chars, pos, i)
+            val i = buffer.appendUntilNewline(chars, pos, len)
             endOfLine = i < len
             pos = if (endOfLine) i + 1 else i
           }
@@ -292,33 +288,28 @@ private[spark] object ReplayListenerBus {
 
     def capacity: Int = buffer.capacity()
 
-    def append(c: Char): Unit = {
-      if (byteLength <= bufferLimit) {
-        byteLength += utf8Width(c)
-        // Reserve one extra byte for a possible CR in the line ending.
-        if (byteLength <= bufferLimit) {
-          buffer.append(c)
-        } else {
-          release()
-        }
+    /**
+     * Appends `chars` from `start` up to the first '\n' before `end`, and returns the index of
+     * that '\n', or `end` if there is none. The line ending is found and the UTF-8 length is
+     * counted in a single pass. Once the line exceeds the allowance, its retained prefix is
+     * released and the rest of the line is only scanned for '\n'.
+     */
+    def appendUntilNewline(chars: Array[Char], start: Int, end: Int): Int = {
+      var i = start
+      // Reserve one extra byte for a possible CR in the line ending.
+      while (i < end && chars(i) != '\n' && byteLength <= bufferLimit) {
+        byteLength += utf8Width(chars(i))
+        i += 1
       }
-    }
-
-    /** Appends `chars(start until end)`, with the same result as appending them one by one. */
-    def append(chars: Array[Char], start: Int, end: Int): Unit = {
       if (byteLength <= bufferLimit) {
-        var i = start
-        // Stop counting at the first character that exceeds the allowance, like append(c).
-        while (i < end && byteLength <= bufferLimit) {
-          byteLength += utf8Width(chars(i))
+        buffer.append(chars, start, i - start)
+      } else {
+        release()
+        while (i < end && chars(i) != '\n') {
           i += 1
         }
-        if (byteLength <= bufferLimit) {
-          buffer.append(chars, start, end - start)
-        } else {
-          release()
-        }
       }
+      i
     }
 
     // The strict decoder emits valid surrogate pairs: count two bytes per half.
@@ -328,8 +319,10 @@ private[spark] object ReplayListenerBus {
 
     // The line will be skipped; release the retained prefix while draining.
     private def release(): Unit = {
-      buffer.setLength(0)
-      buffer.trimToSize()
+      if (buffer.capacity() > 0) {
+        buffer.setLength(0)
+        buffer.trimToSize()
+      }
     }
 
     def result(): Option[String] = {
