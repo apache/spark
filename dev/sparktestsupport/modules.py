@@ -108,6 +108,7 @@ class TestStage(Enum):
     """
     When a shell script test goal runs in dev/run-tests.py.
     """
+
     # Before the Spark build.
     PRE_BUILD = "pre_build"
 
