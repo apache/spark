@@ -127,6 +127,13 @@ class ShellScriptTestGoal:
     Traceback (most recent call last):
         ...
     TypeError: Unsupported test stage: 'post_build'
+
+    The path is a repository-relative script:
+
+    >>> ShellScriptTestGoal("/tmp/example")
+    Traceback (most recent call last):
+        ...
+    ValueError: Shell script path must be relative to repo root: '/tmp/example'
     """
 
     path: str
@@ -135,6 +142,9 @@ class ShellScriptTestGoal:
     def __post_init__(self) -> None:
         if not isinstance(self.stage, TestStage):
             raise TypeError(f"Unsupported test stage: {self.stage!r}")
+        parts = PurePath(self.path).parts
+        if not self.path or not self.path.strip() or os.path.isabs(self.path) or ".." in parts:
+            raise ValueError(f"Shell script path must be relative to repo root: {self.path!r}")
 
 
 @total_ordering
