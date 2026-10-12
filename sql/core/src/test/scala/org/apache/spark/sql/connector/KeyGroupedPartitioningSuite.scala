@@ -2917,8 +2917,9 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       Column.create("date", StringType),
       Column.create("data", StringType))
     // The join key is the second partition key of `table1` (`bucket(32, id)`), after the
-    // leading identity key `date`. With AQE enabled, `createShuffleSpec` projects
-    // `originalPartitionValues` using the already-trimmed partition expressions.
+    // leading identity key `date`. After SPJ pushdown, callers such as ValidateRequirements
+    // invoke `createShuffleSpec` on the scan's projected `outputPartitioning`, which
+    // re-projects `originalPartitionValues` using the already-trimmed expressions.
     createTable(table1, cols,
       Array(identity("date"), bucket(32, "id"), bucket(32, "data")))
     sql(s"INSERT INTO testcat.ns.$table1 VALUES " +
@@ -2949,12 +2950,23 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
              |ON t1.id = t2.id
              |ORDER BY t1.id, t1.date, t1data
              |""".stripMargin)
-        val scans = collectScans(df.queryExecution.executedPlan)
+        val executedPlan = df.queryExecution.executedPlan
+        val scans = collectScans(executedPlan)
         assert(
           scans.exists(_.spjParams.joinKeyPositions.contains(Seq(1))),
           "SPJ should project the scan partitioning down to the bucket join key")
-        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        val shuffles = collectShuffles(executedPlan)
         assert(shuffles.isEmpty, "SPJ should be triggered")
+        val smjs = collect(executedPlan) { case j: SortMergeJoinExec => j }
+        assert(smjs.size == 1, "expected a sort-merge join")
+        val smj = smjs.head
+        val projectedScan = scans.find(_.spjParams.joinKeyPositions.contains(Seq(1))).get
+        val kgp = projectedScan.outputPartitioning.asInstanceOf[KeyGroupedPartitioning]
+        assert(kgp.originalPartitionValues.nonEmpty)
+        assert(kgp.originalPartitionValues.forall(_.numFields == kgp.expressions.length),
+          "originalPartitionValues should be projected to the join keys")
+        // Without the fix, this throws when a string leading partition value is read as int.
+        kgp.createShuffleSpec(physical.ClusteredDistribution(smj.leftKeys))
         checkAnswer(df, Seq(
           Row("a", "2026-05-01", "aa", "xx"),
           Row("b", "2026-05-01", "bb", "yy")))
