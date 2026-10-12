@@ -59,3 +59,5 @@ jobs:
           "ui": "true",
           "transpile": "true"
         }' || '' }}
+    secrets:
+      DEVELOCITY_ACCESS_KEY: ${{ secrets.DEVELOCITY_ACCESS_KEY }}

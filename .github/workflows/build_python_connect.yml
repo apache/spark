@@ -44,6 +44,8 @@ jobs:
           python-version: '3.11'
           architecture: x64
       - name: Build Spark
+        env:
+          DEVELOCITY_ACCESS_KEY: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
         run: |
           ./build/sbt -Phive Test/package
       - name: Install pure Python package (pyspark-client)
