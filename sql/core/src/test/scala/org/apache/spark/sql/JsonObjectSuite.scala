@@ -142,13 +142,27 @@ class JsonObjectSuite extends QueryTest with SharedSparkSession {
       Row("""{"x":0,"a":2}"""))
   }
 
+  test("a key column continued by an operator is the key, not the optional KEY keyword") {
+    // `key` is non-reserved; `key + 1` continues the `key` column into the key expression rather
+    // than reading `key` as the optional KEY keyword with key `+ 1`. The arithmetic key is itself a
+    // type error (JSON object keys must be STRING), but the report names `(key + 1)` -- proof the
+    // `key` column is bound into the key, not dropped. Were it read as KEY, the key would be `+ 1`.
+    val ex = intercept[AnalysisException] {
+      sql("SELECT json_object(key + 1 VALUE value) FROM VALUES (10, 'x') t(key, value)")
+    }
+    assert(ex.getCondition == "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
+    assert(ex.getMessage.contains("(key + 1)"))
+  }
+
   test("JSON_OBJECT members parse in SLL mode without the LL fallback") {
     Seq(
       "SELECT JSON_OBJECT('k': V)",
       "SELECT JSON_OBJECT(K: V)",
       "SELECT JSON_OBJECT('k': V:X, K: V:Y)",
       "SELECT JSON_OBJECT(KEY 'id' VALUE 7)",
-      "SELECT JSON_OBJECT(KEY VALUE VALUE 1)").foreach { query =>
+      "SELECT JSON_OBJECT(KEY VALUE VALUE 1)",
+      // Exercises the optional-KEY `jsonOptionalKeyFollowsOperand` guard (`key + 1` as the key).
+      "SELECT JSON_OBJECT(key + 1 VALUE value)").foreach { query =>
       val parser = new SqlBaseParser(
         new CommonTokenStream(new SqlBaseLexer(CharStreams.fromString(query))))
       parser.setErrorHandler(new SparkParserBailErrorStrategy())
@@ -875,6 +889,9 @@ world'))"""))
       sql("""SELECT json_object('a' VALUE '{"b":1}' FORMAT JSON)"""), Row("""{"a":{"b":1}}"""))
     checkAnswer(
       sql("SELECT json_object('a' VALUE '[1,2]' FORMAT JSON)"), Row("""{"a":[1,2]}"""))
+    // FORMAT JSON applies to the colon form too, not just VALUE.
+    checkAnswer(
+      sql("""SELECT json_object('a' : '{"b":1}' FORMAT JSON)"""), Row("""{"a":{"b":1}}"""))
     // Without FORMAT JSON the same string is quoted, even though its contents are valid JSON.
     checkAnswer(
       sql("""SELECT json_object('a' VALUE '{"b":1}')"""), Row("""{"a":"{\"b\":1}"}"""))

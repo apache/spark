@@ -184,6 +184,26 @@ options { tokenVocab = SqlBaseLexer; }
         return false;
     }
   }
+
+  /**
+   * True when the token after a leading `KEY` continues it as an operand, so the `KEY` is a column
+   * (`JSON_OBJECT(key + 1 VALUE v)` is key expression `key + 1`, not the `KEY` keyword with key
+   * `+ 1`). Delegates to the shared operand-follower set and adds `+`/`-` -- the only operators
+   * that both continue `key` as an operand and open a key expression as a unary prefix. Without
+   * this, `KEY +1 VALUE ...` also matches the optional-`KEY` alternative and swallows the `key`
+   * column.
+   * The shared set holds the purely infix/postfix operators, which cannot open a key expression and
+   * so already fail that alternative. Used only to disable the optional-`KEY` alternative, never to
+   * enable it.
+   */
+  private boolean jsonOptionalKeyFollowsOperand(int type) {
+    switch (type) {
+      case PLUS: case MINUS:
+        return true;
+      default:
+        return jsonKeyTokenFollowsOperand(type);
+    }
+  }
 }
 
 compoundOrSingleStatement
@@ -1689,9 +1709,11 @@ jsonObjectConstructor
 // implicitly (see `jsonArrayValue`). The KEY form precedes the plain VALUE form (which would read
 // `KEY 'k'` as a typed literal), except before a `value` identifier, so that
 // `JSON_OBJECT(key VALUE value + 1)` reads `key` as the member name; the last alternative still
-// accepts `KEY value VALUE ...`.
+// accepts `KEY value VALUE ...`. The leading `KEY` is also skipped when the next token continues it
+// as an operand (e.g. `key + 1 VALUE v`), so a `key` column is read as the key, not the keyword.
 jsonObjectMember
-    : {_input.LA(2) != VALUE}? KEY keyExpr=expression VALUE valueExpr=expression (FORMAT JSON)?
+    : {_input.LA(2) != VALUE && !jsonOptionalKeyFollowsOperand(_input.LA(2))}?
+      KEY keyExpr=expression VALUE valueExpr=expression (FORMAT JSON)?
     | keyExpr=expression VALUE valueExpr=expression (FORMAT JSON)?
     | colonKey=jsonObjectColonKey COLON valueExpr=expression (FORMAT JSON)?
     | KEY keyExpr=expression VALUE valueExpr=expression (FORMAT JSON)?
