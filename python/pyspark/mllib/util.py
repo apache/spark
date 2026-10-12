@@ -76,7 +76,7 @@ class MLUtils:
                 items.append(str(v.indices[i] + 1) + ":" + str(v.values[i]))
         else:
             for i in range(len(v)):
-                items.append(str(i + 1) + ":" + str(v[i]))  # type: ignore[index]
+                items.append(str(i + 1) + ":" + str(v[i]))
         return " ".join(items)
 
     @staticmethod

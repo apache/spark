@@ -1,0 +1,36 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+- case: mllibVectorIndexing
+  main: |
+    from typing import assert_type
+
+    import numpy as np
+
+    from pyspark.mllib.linalg import DenseVector, SparseVector, Vector
+
+    def check_vector(vector: Vector) -> None:
+        assert_type(vector[0], np.float64)
+        assert_type(vector[-1], np.float64)
+
+    dense = DenseVector([1.0, 2.0])
+    sparse = SparseVector(2, {1: 2.0})
+    check_vector(dense)
+    check_vector(sparse)
+    assert_type(dense[0], np.float64)
+    assert_type(sparse[0], np.float64)
+    assert_type(dense[:], np.ndarray)
