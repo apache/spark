@@ -130,9 +130,9 @@ class TypeUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("failUnsupportedDataType rejects the FILE type when it is disabled") {
-    val nested = StructType(StructField("f", ArrayType(FileType)) :: Nil)
+    val nested = StructType(StructField("f", ArrayType(FileType.external)) :: Nil)
     withSQLConf(SQLConf.FILE_TYPE_ENABLED.key -> "false") {
-      Seq(FileType, nested).foreach { dt =>
+      Seq(FileType.external, FileType(), nested).foreach { dt =>
         checkError(
           exception = intercept[org.apache.spark.sql.AnalysisException] {
             TypeUtils.failUnsupportedDataType(dt, SQLConf.get)

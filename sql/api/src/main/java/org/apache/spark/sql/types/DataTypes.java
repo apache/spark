@@ -141,9 +141,9 @@ public class DataTypes {
   public static final DataType VariantType = VariantType$.MODULE$;
 
   /**
-   * Gets the FileType object.
+   * Gets a default FileType instance.
    */
-  public static final DataType FileType = FileType$.MODULE$;
+  public static final DataType FileType = FileType$.MODULE$.apply(FileTypeMode.UNKNOWN);
 
   /**
    * Creates an ArrayType by specifying the data type of elements ({@code elementType}).

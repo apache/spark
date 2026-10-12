@@ -77,7 +77,8 @@ case class StructField(
   }
 
   private[sql] def dataTypeJsonValue: JValue = {
-    if (stringCollationMetadata.isEmpty && charVarcharCollationMetadata.isEmpty) {
+    if (stringCollationMetadata.isEmpty && charVarcharCollationMetadata.isEmpty &&
+      !dataType.existsRecursively(_.isInstanceOf[FileType])) {
       return dataType.jsonValue
     }
 
@@ -89,6 +90,9 @@ case class StructField(
       case MapType(kt, vt, nullable) =>
         MapType(removeCollations(kt), removeCollations(vt), nullable)
       case st: StringType => StringHelper.removeCollation(st)
+      // The mode of a file is not part of its JSON form inside a field, where a bare "file"
+      // reads back as an external file.
+      case _: FileType => FileType()
       case _ => dt
     }
 
@@ -343,25 +347,8 @@ case class StructField(
    * Returns a string containing a schema in SQL format. For example the following value:
    * `StructField("eventId", IntegerType)` will be converted to `eventId`: INT.
    */
-  private[sql] def sql = sqlWithType(dataType.sql)
-
-  private def sqlWithType(typeSql: String): String =
-    s"${QuotingUtils.quoteIfNeeded(name)}: $typeSql$nullDDL$getDDLComment"
-
-  /**
-   * The SQL form of a type in a column declaration. It differs from `DataType.sql` only for
-   * FILE, which must be declared as `FILE EXTERNAL`, also when nested in another type.
-   */
-  private def declarationSql(dt: DataType): String = dt match {
-    case _ if !dt.existsRecursively(_.isInstanceOf[FileType]) => dt.sql
-    case _: FileType => "FILE EXTERNAL"
-    case ArrayType(elementType, _) => s"ARRAY<${declarationSql(elementType)}>"
-    case MapType(keyType, valueType, _) =>
-      s"MAP<${declarationSql(keyType)}, ${declarationSql(valueType)}>"
-    case st: StructType =>
-      s"STRUCT<${st.fields.map(f => f.sqlWithType(f.declarationSql(f.dataType))).mkString(", ")}>"
-    case other => other.sql
-  }
+  private[sql] def sql =
+    s"${QuotingUtils.quoteIfNeeded(name)}: ${dataType.sql}$nullDDL$getDDLComment"
 
   /**
    * Returns a string containing a schema in DDL format. For example, the following value:
@@ -370,7 +357,7 @@ case class StructField(
    * @since 2.4.0
    */
   def toDDL: String = {
-    s"${QuotingUtils.quoteIfNeeded(name)} ${declarationSql(dataType)}$nullDDL" +
+    s"${QuotingUtils.quoteIfNeeded(name)} ${dataType.sql}$nullDDL" +
       s"$getDDLDefault$getDDLComment"
   }
 }
