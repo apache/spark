@@ -241,7 +241,7 @@ class MicroBatchExecution(
     // the order pinned in the offset log (mirroring how `enforceNamed` is read above). For a new
     // query the offset log has no entry yet, so the session value is used and pinned at batch 0.
     val streamConf = sparkSessionForStream.sessionState.conf
-    applyJoinStateFormatVersionGuardrail(streamConf)
+    applyJoinStateConfigGuardrails(streamConf)
     val orderDeterministically = initialLatestOffsetSeq.flatMap { case (_, offsetSeq) =>
       offsetSeq.metadataOpt.flatMap { metadata =>
         OffsetSeqMetadata.readValueOpt(metadata, SQLConf.DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER)
@@ -468,10 +468,10 @@ class MicroBatchExecution(
   }
 
   /**
-   * Fall back to the join format supported by non-RocksDB providers before checkpoint
-   * configuration is pinned. On restart the checkpoint's format must take precedence.
+   * Align new stream-stream joins with the selected state store before checkpoint configuration
+   * is pinned. On restart the checkpoint's configuration must take precedence.
    */
-  private def applyJoinStateFormatVersionGuardrail(streamConf: SQLConf): Unit = {
+  private def applyJoinStateConfigGuardrails(streamConf: SQLConf): Unit = {
     val configuredVersion = streamConf.getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION)
     if (initialLatestOffsetSeq.isEmpty && configuredVersion >= 3 &&
         analyzedPlan.exists {
@@ -487,8 +487,18 @@ class MicroBatchExecution(
           log"${MDC(OLD_VALUE, configuredVersion)} to ${MDC(NEW_VALUE, fallbackVersion)} " +
           log"because ${MDC(CONFIG, SQLConf.STATE_STORE_PROVIDER_CLASS.key)} is set to " +
           log"${MDC(CLASS_NAME, stateStoreProvider)}, which does not support the virtual column " +
-          log"families required by this join state format.")
+        log"families required by this join state format.")
         streamConf.setConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION, fallbackVersion)
+      } else if (configuredVersion == 4) {
+        val mergeOperatorVersion =
+          streamConf.getConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION)
+        if (mergeOperatorVersion != 2) {
+          logInfo(log"Overriding " +
+            log"${MDC(CONFIG, SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key)} from " +
+            log"${MDC(OLD_VALUE, mergeOperatorVersion)} to ${MDC(NEW_VALUE, 2)} " +
+            log"because join state format version 4 requires RocksDB merge operator version 2.")
+          streamConf.setConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION, 2)
+        }
       }
     }
   }
