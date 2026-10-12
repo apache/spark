@@ -645,19 +645,28 @@ object Decimal {
     new JavaBigDecimal(str.toString.trim)
   }
 
+  /**
+   * Converts a `JavaBigDecimal` parsed from a string to `Decimal`, or returns null if no decimal
+   * type can hold it. We fast fail because constructing a very large JavaBigDecimal to Decimal is
+   * very slow. For example: Decimal("6.0790316E+25569151")
+   */
+  private def stringBigDecimalToDecimal(bigDecimal: JavaBigDecimal): Decimal = {
+    if (SqlApiConf.get.allowNegativeScaleOfDecimalEnabled) {
+      Decimal(bigDecimal)
+    } else if (bigDecimal.signum == 0) {
+      // Zero fits any decimal type whatever its exponent, e.g. "0e39". Drop a negative scale so
+      // that the precision does not grow with the exponent.
+      Decimal(bigDecimal.setScale(math.max(bigDecimal.scale, 0)))
+    } else if (numDigitsInIntegralPart(bigDecimal) > DecimalType.MAX_PRECISION) {
+      null
+    } else {
+      Decimal(bigDecimal)
+    }
+  }
+
   def fromString(str: UTF8String): Decimal = {
     try {
-      val bigDecimal = stringToJavaBigDecimal(str)
-      // We fast fail because constructing a very large JavaBigDecimal to Decimal is very slow.
-      // For example: Decimal("6.0790316E+25569151"). Zero fits any decimal type whatever its
-      // exponent, e.g. "0e39", so it is not checked.
-      if (bigDecimal.signum != 0 &&
-        numDigitsInIntegralPart(bigDecimal) > DecimalType.MAX_PRECISION &&
-        !SqlApiConf.get.allowNegativeScaleOfDecimalEnabled) {
-        null
-      } else {
-        Decimal(bigDecimal)
-      }
+      stringBigDecimalToDecimal(stringToJavaBigDecimal(str))
     } catch {
       case _: NumberFormatException =>
         null
@@ -669,17 +678,11 @@ object Decimal {
       to: DecimalType = DecimalType.USER_DEFAULT,
       context: QueryContext = null): Decimal = {
     try {
-      val bigDecimal = stringToJavaBigDecimal(str)
-      // We fast fail because constructing a very large JavaBigDecimal to Decimal is very slow.
-      // For example: Decimal("6.0790316E+25569151"). Zero fits any decimal type whatever its
-      // exponent, e.g. "0e39", so it is not checked.
-      if (bigDecimal.signum != 0 &&
-        numDigitsInIntegralPart(bigDecimal) > DecimalType.MAX_PRECISION &&
-        !SqlApiConf.get.allowNegativeScaleOfDecimalEnabled) {
+      val decimal = stringBigDecimalToDecimal(stringToJavaBigDecimal(str))
+      if (decimal == null) {
         throw DataTypeErrors.outOfDecimalTypeRangeError(str)
-      } else {
-        Decimal(bigDecimal)
       }
+      decimal
     } catch {
       case _: NumberFormatException =>
         throw DataTypeErrors.invalidInputInCastToNumberError(to, str, context)

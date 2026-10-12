@@ -446,7 +446,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     }
   }
 
-  test("UTF8String to Decimal with exponent near Int.MaxValue") {
+  test("SPARK-60118: UTF8String to Decimal with exponent near Int.MaxValue") {
     // The number of integral digits (precision - scale) of these values overflows Int.
     Seq("1e2147483647", "-1E+2147483647", "12e2147483647",
       "1.5e2147483647").foreach { string =>
@@ -459,9 +459,14 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     }
     // Zero fits any decimal type whatever its exponent.
     Seq("0e39", "-0E+100", "0e2147483647").foreach { string =>
-      assert(Decimal.fromString(UTF8String.fromString(string)) === Decimal(0))
-      assert(Decimal.fromStringANSI(UTF8String.fromString(string)) === Decimal(0))
+      Seq(Decimal.fromString(UTF8String.fromString(string)),
+        Decimal.fromStringANSI(UTF8String.fromString(string))).foreach { d =>
+        assert(d === Decimal(0))
+        assert(d.precision === 1)
+        assert(d.scale === 0)
+      }
     }
+    assert(Decimal.fromString(UTF8String.fromString("0.00")).scale === 2)
   }
 
   // 18 is a max number of digits in Decimal's compact long

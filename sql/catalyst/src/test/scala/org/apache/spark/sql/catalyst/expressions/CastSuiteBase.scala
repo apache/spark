@@ -330,6 +330,12 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     assert(cast("abcdef", FloatType).nullable)
   }
 
+  test("SPARK-60118: cast string of zero with a large exponent to decimal") {
+    Seq("0e39", "-0E+100", "0e2147483647").foreach { s =>
+      checkEvaluation(cast(s, DecimalType(10, 2)), Decimal("0.00"))
+    }
+  }
+
   test("cast from timestamp") {
     val millis = 15 * 1000 + 3
     val seconds = millis * 1000 + 3

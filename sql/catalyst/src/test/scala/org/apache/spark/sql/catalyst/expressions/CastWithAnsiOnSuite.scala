@@ -480,9 +480,6 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
         cast(s, DecimalType(10, 2)),
         "NUMERIC_OUT_OF_SUPPORTED_RANGE")
     }
-    Seq("0e39", "0e2147483647").foreach { s =>
-      checkEvaluation(cast(s, DecimalType(10, 2)), Decimal("0.00"))
-    }
 
     checkExceptionInExpression[NumberFormatException](
       cast("abcd", DecimalType(38, 1)),
