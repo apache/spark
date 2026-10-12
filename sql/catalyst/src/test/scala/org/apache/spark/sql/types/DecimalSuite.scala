@@ -466,7 +466,20 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
         assert(d.scale === 0)
       }
     }
-    assert(Decimal.fromString(UTF8String.fromString("0.00")).scale === 2)
+    Seq(Decimal.fromString(UTF8String.fromString("0.00")),
+      Decimal.fromStringANSI(UTF8String.fromString("0.00"))).foreach { d =>
+      assert(d.precision === 2)
+      assert(d.scale === 2)
+    }
+    // With negative scales allowed, zero keeps its negative scale.
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      Seq(Decimal.fromString(UTF8String.fromString("0e39")),
+        Decimal.fromStringANSI(UTF8String.fromString("0e39"))).foreach { d =>
+        assert(d === Decimal(0))
+        assert(d.precision === 1)
+        assert(d.scale === -39)
+      }
+    }
   }
 
   // 18 is a max number of digits in Decimal's compact long

@@ -646,18 +646,25 @@ object Decimal {
   }
 
   /**
-   * Converts a `JavaBigDecimal` parsed from a string to `Decimal`, or returns null if no decimal
-   * type can hold it. We fast fail because constructing a very large JavaBigDecimal to Decimal is
-   * very slow. For example: Decimal("6.0790316E+25569151")
+   * Converts a `JavaBigDecimal` parsed from a string to `Decimal`, or returns null if its integral
+   * part has more than `DecimalType.MAX_PRECISION` digits and negative scales are not allowed. We
+   * fast fail because constructing a very large JavaBigDecimal to Decimal is very slow. For
+   * example: Decimal("6.0790316E+25569151")
+   *
+   * This runs for every row of a cast, so the conf is read only for a zero with a negative scale
+   * and for a value with too many integral digits.
    */
   private def stringBigDecimalToDecimal(bigDecimal: JavaBigDecimal): Decimal = {
-    if (SqlApiConf.get.allowNegativeScaleOfDecimalEnabled) {
-      Decimal(bigDecimal)
-    } else if (bigDecimal.signum == 0) {
+    if (bigDecimal.signum == 0) {
       // Zero fits any decimal type whatever its exponent, e.g. "0e39". Drop a negative scale so
-      // that the precision does not grow with the exponent.
-      Decimal(bigDecimal.setScale(math.max(bigDecimal.scale, 0)))
-    } else if (numDigitsInIntegralPart(bigDecimal) > DecimalType.MAX_PRECISION) {
+      // that the precision does not grow with a positive exponent.
+      if (bigDecimal.scale < 0 && !SqlApiConf.get.allowNegativeScaleOfDecimalEnabled) {
+        Decimal(bigDecimal.setScale(0))
+      } else {
+        Decimal(bigDecimal)
+      }
+    } else if (numDigitsInIntegralPart(bigDecimal) > DecimalType.MAX_PRECISION &&
+        !SqlApiConf.get.allowNegativeScaleOfDecimalEnabled) {
       null
     } else {
       Decimal(bigDecimal)
