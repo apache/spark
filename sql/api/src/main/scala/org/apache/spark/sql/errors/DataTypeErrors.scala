@@ -31,8 +31,9 @@ import org.apache.spark.unsafe.types.UTF8String
  * into [[CompilationErrors]].
  */
 private[sql] object DataTypeErrors extends DataTypeErrorsBase {
-  // Above this many trailing zeros, a decimal value in an error message is rendered in
-  // scientific notation instead of plain notation.
+  // A decimal whose scale is below -MAX_PLAIN_STRING_TRAILING_ZEROS (that is, with more than
+  // this many zeros implied by a negative scale) is rendered in scientific notation in error
+  // messages instead of plain notation.
   private val MAX_PLAIN_STRING_TRAILING_ZEROS = 1000
 
   def unsupportedOperationExceptionError(): SparkUnsupportedOperationException = {

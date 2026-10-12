@@ -459,8 +459,9 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       // We get here if either we started with a BigDecimal, or we switched to one because we would
       // have overflowed our Long; in either case we must rescale dv to the new scale.
       if (math.abs(dv.scale.toLong - scale) > DecimalType.MAX_PRECISION) {
-        // setScale takes time proportional to the scale change and fails once the change
-        // exceeds the Int range, e.g. for 1e-2147483647. Skip it when the result is known.
+        // setScale's cost grows with the scale change, and it throws once 10^change exceeds
+        // BigInteger's range (e.g. for 1e-2147483647) or the change exceeds the Int range.
+        // Skip it when the result is known.
         val numIntegralDigits = dv.precision.toLong - dv.scale
         if (dv.signum != 0 && numIntegralDigits > precision.toLong - scale) {
           return false
