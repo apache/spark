@@ -41,7 +41,7 @@ import org.apache.spark.{SparkIllegalArgumentException, SparkUpgradeException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow, ToStringBase}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, BadRecordException, CharVarcharUtils, DateFormatter, DropMalformedMode, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, PermissiveMode, TimeFormatter, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, BadRecordException, CharVarcharUtils, DropMalformedMode, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, PermissiveMode, TimeFormatter, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.xml.StaxXmlParser.convertStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -71,11 +71,7 @@ class StaxXmlParser(
     isParsing = true,
     forTimestampNTZ = true)
 
-  private lazy val dateFormatter = DateFormatter(
-    options.dateFormatInRead,
-    options.locale,
-    legacyFormat = FAST_DATE_FORMAT,
-    isParsing = true)
+  private lazy val dateParser = new XmlDateParser(options)
 
   private lazy val timeFormatter = TimeFormatter(options.timeFormatInRead, isParsing = true)
 
@@ -780,7 +776,7 @@ class StaxXmlParser(
   }
 
   private def parseXmlDate(value: String, options: XmlOptions): Int = {
-    dateFormatter.parse(value)
+    dateParser.parse(value)
   }
 
   private def parseXmlTimestamp(value: String, options: XmlOptions): Long = {

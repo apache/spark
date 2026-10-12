@@ -1724,6 +1724,29 @@ class XmlSuite
     assert(df.collect().head.getAs[Date](2).toString === "2021-02-01")
   }
 
+  test("SPARK-60201: LEGACY XML files prefer ISO dates to a custom dateFormat") {
+    val xml = Seq("2024-03-04", "2024-31-01")
+      .map(value => s"<ROW><d>$value</d></ROW>").toDS()
+    withTempPath { path =>
+      xml.write.text(path.getCanonicalPath)
+      for {
+        policy <- Seq("LEGACY", "CORRECTED", "EXCEPTION")
+        mode <- Seq("PERMISSIVE", "FAILFAST")
+      } {
+        withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> policy) {
+          val result = spark.read
+            .option("rowTag", "ROW")
+            .option("dateFormat", "yyyy-dd-MM")
+            .option("mode", mode)
+            .schema("d DATE")
+            .xml(path.getCanonicalPath)
+          val expected = if (policy == "LEGACY") "2024-03-04" else "2024-04-03"
+          checkAnswer(result, Seq(Row(Date.valueOf(expected)), Row(Date.valueOf("2024-01-31"))))
+        }
+      }
+    }
+  }
+
   test("Test timestampFormat") {
     val df = spark.read
       .option("rowTag", "book")

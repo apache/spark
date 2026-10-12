@@ -38,7 +38,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
-import org.apache.spark.sql.catalyst.util.{DateFormatter, DropMalformedMode, FailFastMode, ParseMode, PermissiveMode, TimeFormatter, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{DropMalformedMode, FailFastMode, ParseMode, PermissiveMode, TimeFormatter, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
@@ -67,11 +67,7 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
     isParsing = true,
     forTimestampNTZ = true)
 
-  private lazy val dateFormatter = DateFormatter(
-    options.dateFormatInRead,
-    options.locale,
-    legacyFormat = FAST_DATE_FORMAT,
-    isParsing = true)
+  private lazy val dateParser = new XmlDateParser(options)
 
   private lazy val timeFormatter = TimeFormatter(options.timeFormatInRead, isParsing = true)
 
@@ -719,7 +715,7 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
   }
 
   private def tryParseDate(field: String): DataType = {
-    if ((allCatch opt dateFormatter.parse(field)).isDefined) {
+    if ((allCatch opt dateParser.parse(field)).isDefined) {
       DateType
     } else {
       tryParseTimestampNTZ(field)
