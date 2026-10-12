@@ -52,6 +52,11 @@ if TYPE_CHECKING:
     from pyspark.sql._typing import UserDefinedFunctionLike
 
 
+# Include pandas-on-Spark types for callbacks whose return annotations declare Spark schemas.
+_DataFrameLike = Union[pd.DataFrame, "DataFrame"]
+_SeriesLike = Union[pd.Series, "Series"]
+
+
 class PandasOnSparkFrameMethods:
     """pandas-on-Spark specific features for DataFrame."""
 
@@ -198,7 +203,7 @@ class PandasOnSparkFrameMethods:
 
     def apply_batch(
         self,
-        func: Callable[..., Union[pd.DataFrame, "DataFrame"]],
+        func: Callable[..., _DataFrameLike],
         args: Tuple = (),
         **kwds: Any,
     ) -> "DataFrame":
@@ -435,7 +440,7 @@ class PandasOnSparkFrameMethods:
 
     def transform_batch(
         self,
-        func: Callable[..., Union[pd.DataFrame, pd.Series, "DataFrame", "Series"]],
+        func: Callable[..., Union[_DataFrameLike, _SeriesLike]],
         *args: Any,
         **kwargs: Any,
     ) -> DataFrameOrSeries:
@@ -778,7 +783,7 @@ class PandasOnSparkSeriesMethods:
         self._psser = series
 
     def transform_batch(
-        self, func: Callable[..., Union[pd.Series, "Series"]], *args: Any, **kwargs: Any
+        self, func: Callable[..., _SeriesLike], *args: Any, **kwargs: Any
     ) -> "Series":
         """
         Transform the data with the function that takes pandas Series and outputs pandas Series.
@@ -906,7 +911,7 @@ class PandasOnSparkSeriesMethods:
 
     def _transform_batch(
         self,
-        func: Callable[..., Union[pd.Series, "Series"]],
+        func: Callable[..., _SeriesLike],
         return_type: Optional[Union[SeriesType, ScalarType]],
     ) -> "Series":
         from pyspark import pandas as ps
