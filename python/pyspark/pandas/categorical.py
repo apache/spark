@@ -455,9 +455,9 @@ class CategoricalAccessor:
         dtype: category
         Categories (3, object): ['a', 'b', 'c']
         """
-        categories = set(self._data.drop_duplicates()._to_pandas())
-        removals = [cat for cat in self.categories if cat not in categories]
-        categories = [cat for cat in removals if cat is not None]  # type: ignore[assignment]
+        used_categories = set(self._data.drop_duplicates()._to_pandas())
+        removals = [cat for cat in self.categories if cat not in used_categories]
+        categories = [cat for cat in removals if cat is not None]
         if len(categories) == 0:
             return self._data.copy()
         else:
