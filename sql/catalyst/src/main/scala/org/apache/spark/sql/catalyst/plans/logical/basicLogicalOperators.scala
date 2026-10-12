@@ -1767,8 +1767,10 @@ case class Unpivot(
     ids.exists(_.forall(_.resolved))
 
   def valuesTypeCoercioned: Boolean = canBeCoercioned && {
-    // all inner values at position idx must have exactly the same data type, including nested
-    // nullability, because the value column takes the data type of the first value
+    // all inner values at position idx must have the same data type; the value column takes the
+    // data type of the first value, so by default the types must be exactly equal, including
+    // nested nullability; the legacy mode ignores nested nullability, so the value column then
+    // takes the nested nullability of the first value
     val sameType: (DataType, DataType) => Boolean =
       if (conf.getConf(SQLConf.LEGACY_UNPIVOT_USE_FIRST_VALUE_NESTED_NULLABILITY)) {
         DataTypeUtils.sameType
