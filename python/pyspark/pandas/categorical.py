@@ -456,9 +456,7 @@ class CategoricalAccessor:
         Categories (3, object): ['a', 'b', 'c']
         """
         observed_values = set(self._data.drop_duplicates()._to_pandas())
-        retained_categories = [
-            category for category in self.categories if category in observed_values
-        ]
+        retained_categories = [cat for cat in self.categories if cat in observed_values]
         if len(retained_categories) == len(self.categories):
             return self._data.copy()
 
