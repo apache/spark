@@ -322,13 +322,12 @@ object Analyzer {
   // Configs with bindingPolicy SESSION or NOT_APPLICABLE are retained when resolving views and
   // SQL UDFs, so that their values propagate from the active session rather than falling back to
   // Spark defaults. Entries from lazily-loaded modules are recognized once registered.
-  // The retained configs are memoized on `existingConf` (see `SQLConf.retainedResolutionConfigs`)
-  // unless `SQLConf.ANALYZER_MEMOIZE_RETAINED_RESOLUTION_CONFIGS` is off, which recomputes them on
-  // every build as before the memo existed.
   def retainResolutionConfigsForAnalysis(
       newConf: SQLConf,
       existingConf: SQLConf,
       createSparkVersion: String = ""): Unit = {
+    // The retained configs are memoized on `existingConf` unless
+    // `ANALYZER_MEMOIZE_RETAINED_RESOLUTION_CONFIGS` is off, which recomputes them on every build.
     if (existingConf.getConf(SQLConf.ANALYZER_MEMOIZE_RETAINED_RESOLUTION_CONFIGS)) {
       newConf.settings.putAll(existingConf.retainedResolutionConfigs)
     } else {
