@@ -807,9 +807,11 @@ case class FileSourceScanExec(
     readRDD
   }
 
-  // The storage filters with their scalar subqueries materialized, bound to `requiredSchema`,
-  // whose fields are the first `requiredSchema.length` attributes of `output`. Subqueries must be
-  // prepared before this is forced, as for `pushedDownFilters`.
+  // The storage filters with their scalar subqueries materialized, bound to `requiredSchema`.
+  // `output` is `readDataColumns ++ generatedMetadataColumns ++ storageFilterCheckedColumn ++
+  // partitionColumns ++ constantMetadataColumns`, and `requiredSchema` is the first three groups,
+  // so its fields are the first `requiredSchema.length` attributes of `output`. Subqueries must
+  // be prepared before this is forced, as for `pushedDownFilters`.
   @transient
   protected lazy val preparedStorageFilters: Seq[Expression] = {
     val requestedDataAttrs = output.take(requiredSchema.length)

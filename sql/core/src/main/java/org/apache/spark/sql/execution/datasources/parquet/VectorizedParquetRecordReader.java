@@ -183,8 +183,9 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   }
 
   /**
-   * Implementation of RecordReader API. Super's runs {@link #initializeInternal()}. Kept although
-   * it only calls super, since removing it fails MiMa.
+   * Implementation of RecordReader API. Super's delegates to the overload below, which runs
+   * {@link #initializeInternal()}. Kept although it only calls super, since removing it fails
+   * MiMa.
    */
   @Override
   public void initialize(InputSplit inputSplit, TaskAttemptContext taskAttemptContext)
@@ -541,7 +542,8 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
 
   /**
    * A column reader for one leaf column over one row group's pages, reading the rows as for
-   * {@link #installRowGroup}, with the file's rebase and timezone settings.
+   * {@link #installRowGroup}, with the file's rebase and timezone settings. A subclass reading
+   * columns of its own goes through here, so its values decode as the batch's do.
    */
   protected VectorizedColumnReader newColumnReader(
       ColumnDescriptor descriptor,

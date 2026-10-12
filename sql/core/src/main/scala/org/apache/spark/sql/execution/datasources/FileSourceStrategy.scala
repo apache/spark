@@ -167,8 +167,8 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
    *    built-in batch read takes a boolean.
    *
    * Per conjunct:
-   *  - it is deterministic, which every one of `normalizedFilters` is, since the `Filter` takes the
-   *    reader's word on the rows it checked;
+   *  - it is deterministic, since the `Filter` takes the reader's word on the rows it checked
+   *    (every one of `normalizedFilters` is);
    *  - it references at least one column, and only projected data columns;
    *  - [[FileFormat.supportsStorageFilter]] accepts it.
    *

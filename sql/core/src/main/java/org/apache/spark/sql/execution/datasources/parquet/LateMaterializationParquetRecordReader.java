@@ -100,7 +100,9 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
   /**
    * What one buffered variable-length value costs, as a multiple of its own bytes. The byte child
    * holds a null byte per byte, and {@link WritableColumnVector#reserve} doubles it when it grows.
-   * It over-counts on purpose, since nothing can spill this buffer.
+   * It over-counts on purpose, since nothing can spill this buffer. That holds at the default
+   * growth. A {@code hugeVectorReserveRatio} above 2 makes it under-count past
+   * {@code hugeVectorThreshold}, which is off by default.
    */
   private static final long VARIABLE_LENGTH_BYTES_FACTOR = 4L;
 
@@ -150,6 +152,8 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
   /**
    * Whether {@code parquet.filter.columnindex.enabled} is false, so this file's page index must not
    * be used. That turns off phase 0 and every partial read, which parquet does not check itself.
+   * It is the way out of a wrong page index, which would pair a row's key with another row's
+   * values, and which the post-scan Filter cannot catch on the rows this reader marks checked.
    * Read off {@link #readOptions}, so it agrees with {@link #fileReader}.
    */
   private boolean pageIndexDisabled;
@@ -477,8 +481,8 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
 
       // Phase 2 can read part of the row group only with an offset index for every column of the
       // block's store, since parquet empties the store when one column lacks it. Files written by
-      // parquet-mr before 1.11, or by pyarrow's `write_table` by default, have none. Otherwise the
-      // filter can only skip the row group whole.
+      // parquet-mr before 1.11, or by pyarrow's `write_table` by default, have none. Without one,
+      // the filter can only skip the row group whole.
       boolean canNarrowRowGroup =
           !pageIndexDisabled && blockAccounting.hasOffsetIndexes(blockIdx, requestedPaths);
       spliceCurrentRowGroup = canNarrowRowGroup;
@@ -715,7 +719,8 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
           } catch (RuntimeException e) {
             // The buffer is optional, so failing to fill it gives splicing up, not the filter. That
             // covers a vector that cannot grow, and a key value the predicate did not read on this
-            // row, such as `b` in `coalesce(a, b)`, since the copy decodes every key.
+            // row, such as `b` in `coalesce(a, b)`, since the copy decodes every key. It also
+            // absorbs a bug of ours, which only the WARN then shows.
             reportOnce(e, SPLICING_GIVEN_UP_ON_ERROR);
             abandonSplicing();
             splicedBytes = 0L;

@@ -191,10 +191,11 @@ trait FileFormat {
    * read it as missing or mark it as well.
    *
    * A format that does not apply storage filters returns `None`, the default, and the caller then
-   * builds an ordinary reader. `storageFilters` arrive with their scalar subqueries materialized,
-   * bound to `requiredSchema`, while [[supportsStorageFilter]] is asked about the unbound
-   * expression. `storageFilterMetrics` are the ones this format's [[storageFilterMetrics]] created,
-   * which the scan shows in the SQL UI.
+   * builds an ordinary reader. It is an `Option` rather than a call to that builder, so the two
+   * builders cannot call each other. `storageFilters` arrive with their scalar subqueries
+   * materialized, bound to `requiredSchema`, while [[supportsStorageFilter]] is asked about the
+   * unbound expression. `storageFilterMetrics` are the ones this format's [[storageFilterMetrics]]
+   * created, which the scan shows in the SQL UI.
    */
   def buildReaderWithStorageFilters(
       sparkSession: SparkSession,

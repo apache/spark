@@ -118,8 +118,9 @@ class ParquetStorageFilter private (
     }
     val created = Predicate.create(boundExpression)
     // A bloom's bytes sit in the expression as a binary literal, while a generated predicate holds
-    // the deserialized filter instead, so dropping the expression lets the task reclaim them. Safe
-    // because every task attempt deserializes its own copy, and this is the field's only reader.
+    // the deserialized filter instead, so dropping the expression lets the task reclaim them. An
+    // interpreted predicate, the fallback, keeps the expression, so its bytes stay. Safe because
+    // every task attempt deserializes its own copy, and this is the field's only reader.
     boundExpression = null
     created
   }
