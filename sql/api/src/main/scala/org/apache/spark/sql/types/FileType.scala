@@ -23,27 +23,37 @@ import org.apache.spark.annotation.Unstable
  * video. A value holds the location of the file and a small amount of metadata describing it
  * (size, content type and checksum); the bytes of the file are never stored in the value.
  *
- * In SQL the type is written `FILE EXTERNAL`, and its JSON representation is `"file"`.
+ * In SQL the type is named `FILE`, and `EXTERNAL` is required when declaring a column, as in
+ * `FILE EXTERNAL`. Its JSON representation is `"file"`.
  *
- * The type is physically represented as a struct but deliberately does not extend [[StructType]].
- * It has no ordering, so it cannot be used in the key of a map, a join, a grouping expression, or
- * as a partition or clustering column.
+ * The type is planned to be physically represented as a struct (see [[FileType.FIELDS]]) but
+ * deliberately does not extend [[StructType]]. It is planned to have no ordering, so it is not
+ * to be usable in the key of a map, a join, a grouping expression, or as a partition or
+ * clustering column. Of these, this type currently only guarantees the schema-level pieces (DDL
+ * and JSON); the physical representation and most of the restrictions are added by later parts.
  *
+ * @param mode
+ *   the mode of this FileType column. Mode is part of type identity.
  * @since 4.4.0
  */
 @Unstable
-class FileType private () extends DataType {
-  // The default size is used in query planning to drive optimization decisions. It accounts for
-  // the uri, content type and checksum strings plus the offset and size longs.
-  override def defaultSize: Int = 3 * StringType.defaultSize + 2 * LongType.defaultSize
+case class FileType(mode: FileTypeMode = FileTypeMode.UNKNOWN) extends DataType {
+
+  override def defaultSize: Int = FileType.asStruct.defaultSize
 
   override def typeName: String = "file"
 
-  override def sql: String = "FILE EXTERNAL"
+  /** The mode is part of the SQL form, because EXTERNAL is required when declaring a column. */
+  override def sql: String = mode match {
+    case FileTypeMode.EXTERNAL => "FILE EXTERNAL"
+    case _ => "FILE"
+  }
 
-  override def equals(obj: Any): Boolean = obj.isInstanceOf[FileType]
-
-  override def hashCode(): Int = classOf[FileType].getSimpleName.hashCode
+  /**
+   * `acceptsType` ignores mode so that an expression expecting `FileType()` accepts a
+   * `FileType.external`. `sameType` and `equals` still distinguish modes.
+   */
+  override private[sql] def acceptsType(other: DataType): Boolean = other.isInstanceOf[FileType]
 
   private[spark] override def asNullable: FileType = this
 }
@@ -52,4 +62,45 @@ class FileType private () extends DataType {
  * @since 4.4.0
  */
 @Unstable
-case object FileType extends FileType
+object FileType {
+
+  /** Creates an external FileType. */
+  def external: FileType = FileType(FileTypeMode.EXTERNAL)
+
+  /** Field index for the uri field. */
+  val URI_INDEX = 0
+
+  /** Field index for the offset field. */
+  val OFFSET_INDEX = 1
+
+  /** Field index for the size field. */
+  val SIZE_INDEX = 2
+
+  /** Field index for the content_type field. */
+  val CONTENT_TYPE_INDEX = 3
+
+  /** Field index for the checksum field. */
+  val CHECKSUM_INDEX = 4
+
+  /** Field index for the inline field. */
+  val INLINE_INDEX = 5
+
+  /**
+   * The struct fields that define the physical layout of FileType. Positional consumers (the
+   * `*_INDEX` constants) depend on this order; do not reorder without updating every layer.
+   * `inline` is internal: it is not exposed as a user-facing field.
+   */
+  val FIELDS: Array[StructField] = Array(
+    StructField("uri", StringType, nullable = true),
+    StructField("offset", LongType, nullable = true),
+    StructField("size", LongType, nullable = true),
+    StructField("content_type", StringType, nullable = true),
+    StructField("checksum", StringType, nullable = true),
+    StructField("inline", BinaryType, nullable = true))
+
+  /** The user-facing subset of `FIELDS`: everything except `inline`. */
+  val PUBLIC_FIELDS: Array[StructField] = FIELDS.take(INLINE_INDEX)
+
+  /** Returns the FileType fields as a StructType, for use in expressions. */
+  val asStruct: StructType = StructType(FIELDS)
+}

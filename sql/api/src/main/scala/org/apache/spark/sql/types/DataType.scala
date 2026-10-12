@@ -133,6 +133,8 @@ object DataType {
   private val STRING_WITH_COLLATION = """string\s+collate\s+(\w+)""".r
   private val TIMESTAMP_LTZ_NANOS_TYPE = """timestamp_ltz\(\s*(\d+)\s*\)""".r
   private val TIMESTAMP_NTZ_NANOS_TYPE = """timestamp_ntz\(\s*(\d+)\s*\)""".r
+  // Bare `"file"` is an external file; `"file external"` is tolerated for DBR-written schemas.
+  private val FILE_TYPE = """file(?:\s+external)?""".r
   private val GEOMETRY_TYPE = """geometry\(\s*([\w]+:-?[\w]+)\s*\)""".r
   private val GEOGRAPHY_TYPE_CRS = """geography\(\s*(\w+:-?\w+)\s*\)""".r
   private val GEOGRAPHY_TYPE_ALG = """geography\(\s*(\w+)\s*\)""".r
@@ -228,8 +230,7 @@ object DataType {
       YearMonthIntervalType(MONTH),
       YearMonthIntervalType(YEAR, MONTH),
       TimestampNTZType,
-      VariantType,
-      FileType) ++
+      VariantType) ++
       (TimeType.MIN_PRECISION to TimeType.MAX_PRECISION).map(TimeType(_)))
       .map(t => t.typeName -> t)
       .toMap
@@ -345,6 +346,7 @@ object DataType {
           TimestampNTZNanosType(p)
         }
       case "timestamp_ltz" => TimestampType
+      case FILE_TYPE() => FileType.external
       case other =>
         otherTypes.getOrElse(
           other,

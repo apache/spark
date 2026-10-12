@@ -1709,24 +1709,33 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("FileType: name, JSON and DDL round trip") {
-    assert(FileType.typeName === "file")
-    assert(FileType.simpleString === "file")
-    assert(FileType.sql === "FILE EXTERNAL")
-    assert(FileType.json === "\"file\"")
-    assert(DataType.fromJson("\"file\"") === FileType)
-    assert(DataType.fromDDL(FileType.sql) === FileType)
-    assert(!(FileType: DataType).isInstanceOf[StructType])
+    assert(FileType.external.typeName === "file")
+    assert(FileType.external.simpleString === "file")
+    // EXTERNAL is part of the SQL form, so that toDDL can declare the column.
+    assert(FileType.external.sql === "FILE EXTERNAL")
+    assert(FileType().sql === "FILE")
+    assert(FileType.external.json === "\"file\"")
+    assert(DataType.fromJson("\"file\"") === FileType.external)
+    assert(DataType.fromJson("\"file external\"") === FileType.external)
+    assert(DataType.fromDDL(FileType.external.sql) === FileType.external)
+    assert(FileType.external != FileType())
+    assert(!(FileType.external: DataType).isInstanceOf[StructType])
 
     val schema = new StructType()
       .add("id", IntegerType)
-      .add("f", FileType, nullable = false)
-      .add("fs", ArrayType(FileType))
-      .add("m", MapType(StringType, FileType))
+      .add("f", FileType.external, nullable = false)
+      .add("fs", ArrayType(FileType.external))
+      .add("m", MapType(StringType, FileType.external))
     assert(DataType.fromJson(schema.json) === schema)
     assert(DataType.fromDDL(schema.toDDL) === schema)
-    assert(schema("f").dataType.sameType(FileType))
+    // The JSON of a field is the plain "file" with empty metadata, as in the SPIP.
+    assert(JsonMethods.compact(JsonMethods.render(schema("f").jsonValue)) ===
+      """{"name":"f","type":"file","nullable":false,"metadata":{}}""")
+    assert(schema("f").dataType.sameType(FileType.external))
     assert(schema.asNullable("f").nullable)
-    assert(FileType.defaultSize > 0)
+    assert(FileType.external.defaultSize > 0)
+    assert(FileType.PUBLIC_FIELDS.map(_.name).toSeq ===
+      Seq("uri", "offset", "size", "content_type", "checksum"))
   }
 
   test("singleton DataType equality after deserialization") {

@@ -9467,6 +9467,12 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_FILE_TYPE" : {
+    "message" : [
+      "The data type FILE is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_GENERATOR" : {
     "message" : [
       "The generator is not supported:"

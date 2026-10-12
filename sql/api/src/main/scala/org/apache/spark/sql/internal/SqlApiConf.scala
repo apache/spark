@@ -62,6 +62,7 @@ private[sql] trait SqlApiConf {
   def legacyParameterSubstitutionConstantsOnly: Boolean
   def legacyIdentifierClauseOnly: Boolean
   def timestampNanosTypesEnabled: Boolean
+  def isFileTypeEnabled: Boolean
   def allowCreatingUDTFromString: Boolean
   def allowedDynamicUDTClasses: Seq[String]
 }
@@ -125,6 +126,7 @@ private[sql] object DefaultSqlApiConf extends SqlApiConf {
   override def legacyParameterSubstitutionConstantsOnly: Boolean = false
   override def legacyIdentifierClauseOnly: Boolean = false
   override def timestampNanosTypesEnabled: Boolean = SparkEnvUtils.isTesting
+  override def isFileTypeEnabled: Boolean = SparkEnvUtils.isTesting
   override def allowCreatingUDTFromString: Boolean = true
   override def allowedDynamicUDTClasses: Seq[String] = Nil
 }
