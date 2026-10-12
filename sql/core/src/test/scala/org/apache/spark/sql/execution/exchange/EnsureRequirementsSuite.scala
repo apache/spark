@@ -2675,11 +2675,19 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     withSQLConf(
         SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true") {
-      val asOf = SortMergeAsOfJoinExec(Seq(exprA), Seq(exprB), Seq(exprA), Seq(exprB),
-        GreaterThan(exprA, exprB), exprA, Backward, Inner, None,
-        DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprA),
+      val asOf = SortMergeAsOfJoinExec(
+        leftKeys = Seq(exprA),
+        rightKeys = Seq(exprB),
+        leftSortExprs = Seq(exprA),
+        rightSortExprs = Seq(exprB),
+        asOfCondition = GreaterThan(exprA, exprB),
+        orderExpression = exprA,
+        direction = Backward,
+        joinType = Inner,
+        condition = None,
+        left = DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprA),
           Seq(InternalRow(1), InternalRow(1), InternalRow(1)))),
-        DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprB),
+        right = DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprB),
           Seq(InternalRow(1), InternalRow(2)))))
       EnsureRequirements.apply(asOf).children.foreach { child =>
         assert(groupPartitionsNodes(child).isEmpty,
