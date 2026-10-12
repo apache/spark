@@ -27,7 +27,7 @@ def first_spark_call():
     Return a CallSite representing the first Spark call in the current call stack.
     """
     tb = traceback.extract_stack()
-    if len(tb) == 0:
+    if len(tb) == 0:  # pragma: no cover
         return None
     file, line, module, what = tb[len(tb) - 1]
     sparkpath = os.path.dirname(file)
@@ -65,7 +65,7 @@ class SCCallSiteSync:
                 call_site.file,
                 call_site.linenum,
             )
-        else:
+        else:  # pragma: no cover
             self._call_site = "Error! Could not extract traceback info"
         self._context = sc
 
