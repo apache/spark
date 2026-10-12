@@ -640,6 +640,27 @@ class MetricViewV2CatalogSuite extends SharedSparkSession {
   // ============================================================
 
 
+  test("v2 metric view resolves its source in the namespace it was created in") {
+    withTestCatalogTables {
+      try {
+        sql(s"USE $testCatalogName.$testNamespace")
+        createMetricView(fullMetricViewName,
+          MetricView("0.1", AssetSource(sourceTableName), where = None, select = metricViewColumns))
+        sql(s"CREATE TABLE $testCatalogName.other.$sourceTableName USING foo AS " +
+          "SELECT 'region_9' AS region, 1000 AS count, 1.0 AS price")
+        val expected = sql(s"SELECT sum(count) FROM $fullSourceTableName")
+        // Another namespace with the same table name, and another catalog.
+        Seq(s"$testCatalogName.other", "spark_catalog.default").foreach { namespace =>
+          sql(s"USE $namespace")
+          checkAnswer(sql(s"SELECT measure(count_sum) FROM $fullMetricViewName"), expected)
+        }
+      } finally {
+        sql("USE spark_catalog.default")
+        scala.util.Try(sql(s"DROP TABLE IF EXISTS $testCatalogName.other.$sourceTableName"))
+      }
+    }
+  }
+
   test("SELECT measure(...) from a v2 metric view returns aggregated rows") {
     withTestCatalogTables {
       val mv = MetricView(

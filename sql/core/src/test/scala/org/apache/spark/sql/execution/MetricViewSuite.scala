@@ -151,6 +151,44 @@ abstract class MetricViewSuite extends QueryTest {
     }
   }
 
+  test("metric view resolves its source in the namespace it was created in") {
+    val assetSource = MetricView(
+      "0.1", AssetSource(testTableName), None, testMetricViewColumns)
+    val sqlSource = MetricView(
+      "0.1", SQLSource(s"SELECT * FROM $testTableName"), None, testMetricViewColumns)
+    withMetricView("mv_asset_source", assetSource) {
+      withMetricView("mv_sql_source", sqlSource) {
+        withDatabase("other_db", "empty_db") {
+          sql("CREATE DATABASE other_db")
+          sql("CREATE DATABASE empty_db")
+          sql(s"CREATE TABLE other_db.$testTableName USING parquet AS " +
+            "SELECT 'region_9' AS region, 'product_9' AS product, 1000 AS count, 1.0 AS price")
+          val expected = sql(s"SELECT sum(count) FROM default.$testTableName")
+          // A table with the same name in the current namespace, and no such table at all.
+          Seq("other_db", "empty_db").foreach { db =>
+            activateDatabase(db) {
+              checkAnswer(sql("SELECT measure(count_sum) FROM default.mv_asset_source"), expected)
+              checkAnswer(sql("SELECT measure(count_sum) FROM default.mv_sql_source"), expected)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("metric view source does not resolve to a temporary view") {
+    val metricView = MetricView("0.1", AssetSource(testTableName), None, testMetricViewColumns)
+    withMetricView(testMetricViewName, metricView) {
+      withTempView(testTableName) {
+        sql(s"CREATE TEMPORARY VIEW $testTableName AS " +
+          "SELECT 'region_9' AS region, 'product_9' AS product, 1000 AS count, 1.0 AS price")
+        checkAnswer(
+          sql(s"SELECT measure(count_sum) FROM $testMetricViewName"),
+          sql(s"SELECT sum(count) FROM default.$testTableName"))
+      }
+    }
+  }
+
   test("test where clause") {
     val metricView = MetricView(
       "0.1", AssetSource(testTableName),
