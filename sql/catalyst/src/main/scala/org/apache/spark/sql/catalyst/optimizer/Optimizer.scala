@@ -2673,9 +2673,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // If we can push down a filter through Aggregate, it means the filter only references the
     // grouping keys or constants. The Aggregate operator can't reduce distinct values of grouping
     // keys so the filter won't see any new data after push down. Float/double grouping keys are
-    // normalized by the Aggregate (-0.0 to 0.0, NaN canonicalized), so a filter that can tell
-    // those values apart reads the normalized grouping keys after push down (see
-    // `pushBelowAggregate`).
+    // normalized by the Aggregate, so the pushed filter reads them normalized wherever that could
+    // change its result (see `pushBelowAggregate`).
     case filter @ Filter(condition, aggregate: Aggregate)
       if aggregate.aggregateExpressions.forall(_.deterministic)
         && aggregate.groupingExpressions.nonEmpty =>
@@ -2690,7 +2689,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       }
 
       if (pushDown.nonEmpty) {
-        val replaced = pushDown.map(pushBelowAggregate(_, aggregate)).reduce(And)
+        val replaced = pushBelowAggregate(pushDown, aggregate)
         val newAggregate = aggregate.copy(child = Filter(replaced, aggregate.child))
         // If there is no more filter to stay up, just eliminate the filter.
         // Otherwise, create "Filter(stayUp) <- Aggregate <- Filter(pushDownPredicate)".
@@ -2798,54 +2797,45 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case _ => false
   }
 
-  // Rewrites a conjunct pushed below `aggregate` in terms of the aggregate's child. Expressions
-  // above the aggregate see its float/double grouping keys normalized, so a conjunct that can
-  // tell normalized values apart reads the normalized grouping expressions instead.
-  private[optimizer] def pushBelowAggregate(cond: Expression, aggregate: Aggregate): Expression = {
-    val replaced = replaceAlias(cond, getAliasMap(aggregate))
+  // Rewrites conjuncts pushed below `aggregate` in terms of the aggregate's child and ANDs them.
+  // Expressions above the aggregate see its float/double grouping keys normalized (see
+  // NormalizeFloatingNumbers: -0.0 becomes 0.0 and every NaN becomes one canonical NaN), so the
+  // pushed conjuncts read them normalized too, wherever the raw value could change the result.
+  private[optimizer] def pushBelowAggregate(
+      conds: Seq[Expression],
+      aggregate: Aggregate): Expression = {
+    val aliasMap = getAliasMap(aggregate)
     val normalizedGrouping = aggregate.groupingExpressions
       .filter(e => NormalizeFloatingNumbers.needNormalize(e.dataType))
       .map(trimAliases)
-    val keys = AttributeSet(normalizedGrouping.flatMap(_.references))
-    if (sensitiveToFloatNormalization(replaced, keys)) {
-      normalizeGroupingExpressions(replaced, normalizedGrouping)
-    } else {
-      replaced
-    }
+    conds.map { cond =>
+      val replaced = replaceAlias(cond, aliasMap)
+      if (normalizedGrouping.isEmpty) {
+        replaced
+      } else {
+        normalizeGroupingExpressions(replaced, normalizedGrouping)
+      }
+    }.reduce(And)
   }
 
-  private def normalizeGroupingExpressions(
+  // Replaces each occurrence of `grouping` in `e` with its normalized form, except a float/double
+  // attribute that is a direct operand of one of the comparisons below. Those treat -0.0 and 0.0
+  // as equal and all NaNs as equal (see SQLOrderingUtil.compareDoubles and
+  // CodegenContext.genEqual), and normalization never changes whether a value is null or NaN, so
+  // they give the same result on the raw value. Leaving them unwrapped keeps them usable by data
+  // sources and partition pruning.
+  private[optimizer] def normalizeGroupingExpressions(
       e: Expression,
       grouping: Seq[Expression]): Expression = e match {
     case _: KnownFloatingPointNormalized => e
-    case _ if grouping.exists(_.semanticEquals(e)) => NormalizeFloatingNumbers.normalize(e)
-    case _ => e.mapChildren(normalizeGroupingExpressions(_, grouping))
-  }
-
-  // Whether `e` may evaluate differently on the raw values of `keys` than on their normalized
-  // values. Normalization (see NormalizeFloatingNumbers) turns -0.0 into 0.0 and every NaN into
-  // one canonical NaN. `keys` are the child attributes behind the float/double grouping
-  // expressions of an Aggregate. The check is conservative: anything not known to be safe is
-  // reported as sensitive.
-  private[optimizer] def sensitiveToFloatNormalization(
-      e: Expression,
-      keys: AttributeSet): Boolean = e match {
-    // The raw value of a key differs from its normalized value for -0.0 and for NaNs.
-    case a: Attribute => keys.contains(a)
-    // These treat -0.0 and 0.0 as equal and all NaNs as equal (see
-    // SQLOrderingUtil.compareDoubles and CodegenContext.genEqual), and normalization never
-    // changes whether a value is null or NaN. So a float/double attribute used directly as an
-    // operand gives the same result raw or normalized. Any other operand, such as
-    // cast(x AS STRING), may expose the difference and is checked recursively.
     case _: EqualTo | _: EqualNullSafe | _: LessThan | _: LessThanOrEqual | _: GreaterThan |
          _: GreaterThanOrEqual | _: In | _: IsNull | _: IsNotNull | _: IsNaN =>
-      e.children.exists {
-        case a: Attribute if a.dataType == FloatType || a.dataType == DoubleType => false
-        case c => sensitiveToFloatNormalization(c, keys)
+      e.mapChildren {
+        case a: Attribute if a.dataType == FloatType || a.dataType == DoubleType => a
+        case c => normalizeGroupingExpressions(c, grouping)
       }
-    // Any other expression, including AND, OR and NOT, gives the same result when all of its
-    // children do, so it is sensitive if any child is.
-    case _ => e.children.exists(sensitiveToFloatNormalization(_, keys))
+    case _ if grouping.exists(_.semanticEquals(e)) => NormalizeFloatingNumbers.normalize(e)
+    case _ => e.mapChildren(normalizeGroupingExpressions(_, grouping))
   }
 
   private def pushDownPredicate(
