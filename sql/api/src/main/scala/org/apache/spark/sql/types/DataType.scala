@@ -143,8 +143,8 @@ object DataType {
   // CHAR/VARCHAR collations are stored separately so older readers that only understand
   // __COLLATIONS (and reject it on non-STRING types) still see uncollated char(n)/varchar(n).
   val CHAR_VARCHAR_COLLATIONS_METADATA_KEY = "__CHAR_VARCHAR_COLLATIONS"
-  // The paths of the FILE types of a field, with their mode. It is written by engines that
-  // support more modes than OSS, which writes none: OSS has a single kind of file.
+  // The FILE types of a field. OSS does not write it, but reads it so that a schema written
+  // by another engine is not misread.
   val FILE_TYPE_MODE_METADATA_KEY = "__FILE_TYPE_MODE"
 
   /**
@@ -610,9 +610,9 @@ object DataType {
   }
 
   /**
-   * Returns the paths of the FILE types of a field, as recorded by engines with more modes than
-   * OSS. OSS has a single kind of file, which behaves like an external file, so any other mode,
-   * such as MANAGED, is rejected rather than read as an external file.
+   * Returns the paths of the FILE types of a field, as recorded by another engine. OSS has a
+   * single kind of file, which behaves like an external file, so a path that is recorded with
+   * any other mode is rejected rather than read as an external file.
    */
   private def getFileTypePaths(metadataFields: List[JField]): Set[String] = {
     metadataFields.find(_._1 == FILE_TYPE_MODE_METADATA_KEY).map(_._2) match {

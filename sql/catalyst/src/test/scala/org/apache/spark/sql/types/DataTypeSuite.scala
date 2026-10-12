@@ -1714,7 +1714,7 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
     assert(FileType.sql === "FILE")
     assert(FileType.json === "\"file\"")
     assert(DataType.fromJson("\"file\"") === FileType)
-    // The form written by engines that have more than one kind of file is tolerated.
+    // The form with the EXTERNAL keyword is tolerated when reading.
     assert(DataType.fromJson("\"file external\"") === FileType)
     assert(DataType.fromDDL("FILE") === FileType)
     assert(DataType.fromDDL("FILE EXTERNAL") === FileType)
@@ -1770,8 +1770,8 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
       "\"f.element\":\"external\""))
     assert(nested === new StructType().add("f", ArrayType(FileType)))
 
-    // OSS has a single kind of file, so any other mode is rejected, not read as an external file.
-    Seq("MANAGED", "UNKNOWN", "OTHER").foreach { mode =>
+    // Any other mode is rejected, not read as an external file.
+    Seq("OTHER", "NONE").foreach { mode =>
       checkError(
         exception = intercept[SparkIllegalArgumentException] {
           DataType.fromJson(fieldJson("\"file\"", s"\"f\":\"$mode\""))
