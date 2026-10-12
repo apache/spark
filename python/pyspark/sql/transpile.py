@@ -181,6 +181,8 @@ def _is_definitely_basic_type(node: ast.AST) -> bool:
             return _is_definitely_basic_type(operand)
         case ast.Name():
             return True
+        case ast.Call(func=ast.Name(id="len"), args=[arg], keywords=[]):
+            return _is_definitely_basic_type(arg)
         case _:
             return False
 
@@ -308,13 +310,16 @@ class CatalystTranspiler(AbstractTranspiler):
 
         A non-None literal constant is always non-null. A parameter name is
         non-null when proven so by an enclosing ``is not None`` guard recorded
-        in ``self._nonnull_params``.
+        in ``self._nonnull_params``. ``len(x)`` is non-null when ``x`` is non-null
+        because ``length`` of a non-null string always returns a non-null integer.
         """
         match node:
             case ast.Constant(value=v):
                 return v is not None
             case ast.Name(id=name) if name in params:
                 return name in self._nonnull_params
+            case ast.Call(func=ast.Name(id="len"), args=[arg], keywords=[]):
+                return self._is_nonnull_node(params, arg)
             case _:
                 return False
 
