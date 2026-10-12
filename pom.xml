@@ -222,7 +222,7 @@
             SPARK-53327 workaround should be reverted.
      -->
     <datasketches.version>6.2.0</datasketches.version>
-    <netty.version>4.2.18.Final</netty.version>
+    <netty.version>4.2.19.Final</netty.version>
     <netty-tcnative.version>2.0.84.Final</netty-tcnative.version>
     <icu4j.version>78.3</icu4j.version>
     <junit.version>6.0.3</junit.version>
@@ -1422,9 +1422,15 @@
       </dependency>
       <dependency>
         <groupId>net.snowflake</groupId>
-        <artifactId>snowflake-jdbc</artifactId>
+        <artifactId>snowflake-jdbc-thin</artifactId>
         <version>${snowflake.jdbc.version}</version>
         <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>*</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>com.teradata.jdbc</groupId>
