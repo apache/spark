@@ -1755,45 +1755,17 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
     assert(schema.asNullable("f").nullable)
   }
 
-  test("FileType: the mode of a field is read from the __FILE_TYPE_MODE metadata") {
-    def fieldJson(tpe: String, modes: String): String =
-      """{"type":"struct","fields":[{"name":"f","type":""" + tpe + ""","nullable":true,""" +
-        """"metadata":{"__FILE_TYPE_MODE":{""" + modes + """}}}]}"""
-
-    // The key is consumed, so it does not show up in the metadata of the field.
-    val external = DataType.fromJson(fieldJson("\"file\"", "\"f\":\"EXTERNAL\""))
-      .asInstanceOf[StructType]
-    assert(external("f").dataType === FileType)
-    assert(external("f").metadata === Metadata.empty)
-    val nested = DataType.fromJson(fieldJson(
-      """{"type":"array","elementType":"file","containsNull":true}""",
-      "\"f.element\":\"external\""))
-    assert(nested === new StructType().add("f", ArrayType(FileType)))
-
-    // Any other mode is rejected, not read as an external file.
-    Seq("OTHER", "NONE").foreach { mode =>
-      checkError(
-        exception = intercept[SparkIllegalArgumentException] {
-          DataType.fromJson(fieldJson("\"file\"", "\"f\":\"" + mode + "\""))
-        },
-        condition = "INVALID_JSON_DATA_TYPE_FOR_FILE",
-        parameters = Map("fieldPath" -> "f", "jsonType" -> ("file (mode=" + mode + ")")))
-    }
-    // The mode of a path that does not hold a file is rejected.
-    checkError(
-      exception = intercept[SparkIllegalArgumentException] {
-        DataType.fromJson(fieldJson("\"string\"", "\"f\":\"EXTERNAL\""))
-      },
-      condition = "INVALID_JSON_DATA_TYPE_FOR_FILE",
-      parameters = Map("fieldPath" -> "f", "jsonType" -> "string"))
-    checkError(
-      exception = intercept[SparkIllegalArgumentException] {
-        DataType.fromJson(fieldJson(
-          """{"type":"array","elementType":"file","containsNull":true}""",
-          "\"f\":\"EXTERNAL\""))
-      },
-      condition = "INVALID_JSON_DATA_TYPE_FOR_FILE",
-      parameters = Map("fieldPath" -> "f", "jsonType" -> "array"))
+  test("FileType: metadata that describes the file in a field is kept as it is") {
+    // The metadata of a field is opaque to OSS, so it is neither interpreted nor dropped.
+    val json = "{\"type\":\"struct\",\"fields\":[{\"name\":\"f\",\"type\":\"file\"," +
+      "\"nullable\":true,\"metadata\":{\"k\":{\"f\":\"v\"}}}]}"
+    val schema = DataType.fromJson(json).asInstanceOf[StructType]
+    assert(schema("f").dataType === FileType)
+    assert(schema("f").metadata.contains("k"))
+    assert(DataType.fromJson(schema.json) === schema)
+    assert(JsonMethods.compact(JsonMethods.render(schema("f").jsonValue)) ===
+      "{\"name\":\"f\",\"type\":\"file\",\"nullable\":true," +
+        "\"metadata\":{\"k\":{\"f\":\"v\"}}}")
   }
 
   test("singleton DataType equality after deserialization") {

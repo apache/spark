@@ -4612,12 +4612,6 @@
     ],
     "sqlState" : "2203G"
   },
-  "INVALID_JSON_DATA_TYPE_FOR_FILE" : {
-    "message" : [
-      "Expected 'file' type at file path '<fieldPath>', but the JSON data type is <jsonType>."
-    ],
-    "sqlState" : "2203G"
-  },
   "INVALID_JSON_FORMAT_JSON_VALUE" : {
     "message" : [
       "<functionName> FORMAT JSON argument at position <position> must contain exactly one well-formed JSON value, but got <value>."
