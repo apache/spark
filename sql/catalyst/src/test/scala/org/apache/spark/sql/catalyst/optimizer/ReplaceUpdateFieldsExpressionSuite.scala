@@ -18,20 +18,23 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, BoundReference,
-  DropField, Expression, Literal, UnsafeProjection, UpdateFields, With, WithField}
+  CreateNamedStruct, DropField, Expression, GetStructField, Literal, UnsafeProjection, UpdateFields,
+  With, WithField}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.catalyst.util.{quoteIdentifier, toPrettySQL}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 class ReplaceUpdateFieldsExpressionSuite extends PlanTest {
   private object Optimize extends RuleExecutor[LogicalPlan] {
     override protected def batches: Seq[Batch] =
-      Batch("ReplaceUpdateFieldsExpression", FixedPoint(10),
+      Batch("ReplaceUpdateFieldsExpression", Once,
         ReplaceUpdateFieldsExpression) :: Nil
   }
 
@@ -56,6 +59,7 @@ class ReplaceUpdateFieldsExpressionSuite extends PlanTest {
       .select(Alias(nestedUpdates(struct, depth), "result")())
     val optimized = Optimize.execute(plan)
     assert(optimized.exists(_.expressions.exists(_.exists(_.isInstanceOf[With]))))
+    assert(!optimized.exists(_.expressions.exists(_.exists(_.isInstanceOf[UpdateFields]))))
     optimized.collect {
       case node => node.expressions.map(_.collect { case expression => expression }.size).sum
     }.sum
@@ -67,6 +71,42 @@ class ReplaceUpdateFieldsExpressionSuite extends PlanTest {
       val depthSix = expressionNodeCount(nullable, 6)
       assert(depthSix < depthThree * 3,
         s"nullable=$nullable: depth 3 has $depthThree nodes, depth 6 has $depthSix")
+    }
+  }
+
+  test("UpdateFields replacement prunes named struct inputs in one pass") {
+    val source = CreateNamedStruct(Seq(
+      Literal("nested"), CreateNamedStruct(Seq(Literal("a"), Literal(1))),
+      Literal("discarded"), Literal(100)))
+    val updated = UpdateFields(UpdateFields(source, "nested.b", Literal(2)), "discarded")
+    val plan = LocalRelation().select(Alias(updated, "result")())
+    val replaced = ReplaceUpdateFieldsExpression(OptimizeUpdateFields(plan))
+    val expressions = replaced.flatMap(_.expressions)
+    assert(!expressions.exists(_.exists(_.isInstanceOf[UpdateFields])))
+    assert(!expressions.exists(_.exists(_.isInstanceOf[With])))
+    assert(!expressions.exists(_.exists(_ == Literal(100))))
+    comparePlans(ReplaceUpdateFieldsExpression(replaced), replaced)
+  }
+
+  test("nested UpdateFields SQL matches expanded operations") {
+    Seq("nested", "a.b", "a`b").foreach { name =>
+      val nestedType = StructType(Seq(StructField("a", IntegerType)))
+      val structType = StructType(Seq(StructField(name, nestedType)))
+      val resolved = AttributeReference("s", structType)()
+      Seq(resolved, UnresolvedAttribute("s")).foreach { struct =>
+        val nested = if (struct.resolved) {
+          GetStructField(struct, 0, Some(name))
+        } else {
+          UnresolvedExtractValue(struct, Literal(name))
+        }
+        val expanded = UpdateFields(struct, Seq(WithField(name,
+          UpdateFields(nested, Seq(WithField("a", Literal(2)))))))
+        val compact = UpdateFields(struct, s"${quoteIdentifier(name)}.a", Literal(2))
+        assert(compact.sql == expanded.sql)
+        if (struct.resolved) {
+          assert(toPrettySQL(compact) == toPrettySQL(expanded))
+        }
+      }
     }
   }
 
@@ -158,6 +198,47 @@ class ReplaceUpdateFieldsExpressionSuite extends PlanTest {
       val widthHundred = nodeCount(100, updateCount)
       assert(widthHundred < widthTen * 2,
         s"$updateCount updates: width 10 has $widthTen nodes, width 100 has $widthHundred")
+    }
+  }
+
+  test("wide UpdateFields replacements preserve rewritten field types and values") {
+    for {
+      width <- Seq(100, 500)
+      nullable <- Seq(false, true)
+    } {
+      val structType = StructType((0 until width).map { index =>
+        StructField(s"field$index", IntegerType, nullable = false)
+      })
+      val struct = BoundReference(0, structType, nullable)
+      val operations = (0 until width by 3).map { index =>
+        WithField(s"field$index", Literal(index))
+      }.toList
+      val expression = UpdateFields(struct, operations).evalExpr
+      val rewritten = expression.withNewChildren(
+        expression.children.head +: expression.children.tail.map(_ => Literal("updated")))
+      val expectedType = StructType((0 until width).map { index =>
+        StructField(s"field$index",
+          if (index % 3 == 0) StringType else IntegerType, nullable = false)
+      })
+      assert(rewritten.dataType == expectedType)
+      assert(rewritten.nullable == nullable)
+      val input = InternalRow(InternalRow.fromSeq(0 until width))
+      val interpreted = rewritten.eval(input).asInstanceOf[InternalRow]
+      val projection = UnsafeProjection.create(Seq(rewritten))
+      val generated = projection(input).getStruct(0, width)
+      Seq(interpreted, generated).foreach { result =>
+        (0 until width).foreach { index =>
+          if (index % 3 == 0) {
+            assert(result.getUTF8String(index).toString == "updated")
+          } else {
+            assert(result.getInt(index) == index)
+          }
+        }
+      }
+      if (nullable) {
+        assert(rewritten.eval(InternalRow(null)) == null)
+        assert(projection(InternalRow(null)).isNullAt(0))
+      }
     }
   }
 }

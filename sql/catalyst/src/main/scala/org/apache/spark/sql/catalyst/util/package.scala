@@ -90,6 +90,9 @@ package object util extends Logging {
   private def usePrettyExpression(
       e: Expression,
       shouldTrimTempResolvedColumn: Boolean = false): Expression = e transform {
+    case u: UpdateFields if u.fieldOps.exists(_.isInstanceOf[UpdateNestedField]) =>
+      PrettyAttribute(
+        u.sqlString(toPrettySQL(_, shouldTrimTempResolvedColumn), identity), u.dataType)
     case a: Attribute => new PrettyAttribute(a)
     case Literal(s: UTF8String, StringType) => PrettyAttribute(s.toString, StringType)
     case Literal(v, t: NumericType) if v != null => PrettyAttribute(v.toString, t)

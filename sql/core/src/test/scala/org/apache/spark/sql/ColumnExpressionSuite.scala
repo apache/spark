@@ -600,6 +600,64 @@ class ColumnExpressionSuite extends SharedSparkSession {
     }
   }
 
+  test("struct field updates should prune discarded aggregate expressions") {
+    onEachEvalPath {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        val df = Seq((1L, 0L)).toDF("x", "z")
+        val source = struct(sum($"x").as("a"), sum($"x" / $"z").as("b"))
+        checkAnswer(df.agg(source.dropFields("b")), Row(Row(1L)))
+        checkAnswer(df.agg(source.withField("b", lit(2))), Row(Row(1L, 2)))
+        checkAnswer(df.agg(source.as("s")).select(col("s").dropFields("b")),
+          Row(Row(1L)))
+        val nested = struct(source.as("inner"), sum($"x").as("c"))
+        checkAnswer(df.agg(nested.withField("inner.d", lit(2)).dropFields("inner.b")),
+          Row(Row(Row(1L, 2), 1L)))
+      }
+    }
+  }
+
+  test("extracting a re-updated nested struct should prune unrelated updates") {
+    onEachEvalPath {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        val nestedType = StructType(Seq(StructField("x", IntegerType)))
+        val structType = StructType(Seq(StructField("a", nestedType)))
+        Seq(false, true).foreach { nullable =>
+          val schema = StructType(Seq(
+            StructField("s", structType, nullable),
+            StructField("z", IntegerType, nullable = false)))
+          val rows = Seq(Row(Row(Row(1)), 0), Row(Row(null), 0)) ++
+            (if (nullable) Seq(Row(null, 0)) else Nil)
+          val df = spark.createDataFrame(sparkContext.parallelize(rows), schema)
+          val input = if (nullable) {
+            col("s").getField("a").withField("x", lit(1) / col("z"))
+          } else {
+            col("s").withField("a.x", lit(1) / col("z")).getField("a")
+          }
+          val updated = input.withField("y", lit(2)).getField("y")
+          checkAnswer(df.select(updated), Seq(Row(2), Row(null)) ++
+            (if (nullable) Seq(Row(null)) else Nil))
+          val projected = df.select(input.as("t"))
+          checkAnswer(projected.select(col("t").withField("y", lit(2)).getField("y")),
+            Seq(Row(2), Row(null)) ++ (if (nullable) Seq(Row(null)) else Nil))
+        }
+      }
+    }
+  }
+
+  test("nested field updates should preserve generated column names") {
+    val df = Seq((((1, 2), (3, 4)), 0)).toDF("s", "z")
+    val added = df.select(
+      col("s").withField("_1.x", lit(1)),
+      col("s").withField("_2.x", lit(1)))
+    assert(added.columns.toSeq == Seq(
+      "update_fields(s, WithField(update_fields(s._1, WithField(1))))",
+      "update_fields(s, WithField(update_fields(s._2, WithField(1))))"))
+    val dropped = df.select(col("s").dropFields("_1._2"), col("s").dropFields("_2._2"))
+    assert(dropped.columns.toSeq == Seq(
+      "update_fields(s, WithField(update_fields(s._1, dropfield())))",
+      "update_fields(s, WithField(update_fields(s._2, dropfield())))"))
+  }
+
   test("nested field updates should share an unresolved nondeterministic input") {
     onEachEvalPath {
       val counter = new java.util.concurrent.atomic.AtomicLong()

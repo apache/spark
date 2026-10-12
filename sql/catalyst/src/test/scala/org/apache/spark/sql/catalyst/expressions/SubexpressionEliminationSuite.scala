@@ -625,16 +625,15 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
         assert(states.nonEmpty, s"nothing was recorded for $expr (peel = $peel)")
         // The `With` itself stays a candidate wherever it is reached: deduplicating it as a whole
         // is safe, since it carries its own definitions and brings their slots into scope wherever
-        // it is generated. The exception is an `And` root with the peel on, where the peel lands on
-        // the `With` and the guard drops it along with its subtree -- no opportunity is lost there,
-        // because the peel never hands back the node it lands on, only that node's children.
+        // it is generated. With an `And` root and the peel on, the `With` itself is skipped; its
+        // child is still traversed, but candidates with unbound references are rejected.
         if (!(peel && expr.isInstanceOf[And])) {
           assert(states.exists(_.expr.isInstanceOf[With]),
             s"the With itself stopped being a candidate for $expr (peel = $peel)")
         }
         states.foreach { state =>
-          // A candidate may hold a reference only if it also holds the `With` that binds it -- the
-          // whole `With`, or something above it, is a legal candidate; anything below it is not.
+          // A candidate may hold a reference only if it also holds the `With` that binds it.
+          // Reference-free candidates below a `With` are legal too.
           // The ids are collected over the whole candidate rather than per reference, so a
           // reference sitting beside its binder rather than under it would pass; `With.apply`
           // cannot build that shape.
@@ -642,7 +641,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
           val boundIds =
             state.expr.collect { case inScope: With => inScope.defs.map(_.id) }.flatten.toSet
           assert(refIds.subsetOf(boundIds),
-            s"a candidate below the With was added for $expr (peel = $peel): ${state.expr}")
+            s"an unbound reference was added for $expr (peel = $peel): ${state.expr}")
           assert(!state.expr.isInstanceOf[CommonExpressionDef],
             s"an unevaluable definition was added for $expr (peel = $peel): ${state.expr}")
         }

@@ -301,9 +301,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RemoveNoopOperators),
     // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
     Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers),
-    // Repeat because an update can contain another update. Keep the resulting With expressions so
-    // their definitions remain inside conditional branches until evaluation.
-    Batch("ReplaceUpdateFieldsExpression", fixedPoint, ReplaceUpdateFieldsExpression)))
+    Batch("ReplaceUpdateFieldsExpression", Once, ReplaceUpdateFieldsExpression)))
 
     // remove any batches with no rules. this may happen when subclasses do not add optional rules.
     batches.filter(_.rules.nonEmpty)

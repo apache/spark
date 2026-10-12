@@ -32,7 +32,8 @@ object SimplifyExtractValueOps extends Rule[LogicalPlan] {
       // Remove redundant field extraction.
       case GetStructField(createNamedStruct: CreateNamedStruct, ordinal, _) =>
         createNamedStruct.valExprs(ordinal)
-      case GetStructField(u: UpdateFields, ordinal, _) =>
+      case GetStructField(u: UpdateFields, ordinal, _)
+          if !u.structExpr.isInstanceOf[UpdateFields] =>
         val structExpr = u.structExpr
         u.newExpr(ordinal) match {
           // if the struct itself is null, then any value extracted from it (expr) will be null

@@ -747,6 +747,8 @@ case class UpdateNestedField(name: String, fieldOps: Seq[StructFieldsOperation])
 
   override def children: Seq[Expression] = fieldOps
 
+  override def prettyName: String = "WithField"
+
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): Expression =
     copy(fieldOps = newChildren.map(_.asInstanceOf[StructFieldsOperation]))
@@ -794,18 +796,18 @@ private case class UpdateFieldsExpression(
 
   override lazy val dataType: StructType = {
     val sourceFields = structExpr.dataType.asInstanceOf[StructType]
-    var updatedIndex = 0
-    StructType(outputOrdinals.zipWithIndex.map { case (sourceOrdinal, index) =>
+    val updated = indexedUpdatedValues.iterator
+    StructType(indexedOrdinals.iterator.zip(outputFields.iterator).map {
+      case (sourceOrdinal, field) =>
       if (sourceOrdinal >= 0) {
         sourceFields(sourceOrdinal)
       } else {
-        val updatedValue = updatedValues(updatedIndex)
-        updatedIndex += 1
-        outputFields(index).copy(
+        val updatedValue = updated.next()
+        field.copy(
           dataType = updatedValue.dataType,
           nullable = updatedValue.nullable)
       }
-    })
+    }.toArray)
   }
 
   override def eval(input: InternalRow): Any = {
@@ -888,7 +890,7 @@ private case class UpdateFieldsExpression(
       ""
     }
 
-    val updatedOutputOrdinals = outputOrdinals.indices.filter(outputOrdinals(_) < 0)
+    val updatedOutputOrdinals = indexedOrdinals.indices.filter(indexedOrdinals(_) < 0)
     assert(updatedOutputOrdinals.length == updatedValues.length)
     val updatedCodes = updatedValues.zip(updatedOutputOrdinals).map { case (expr, ordinal) =>
       val eval = expr.genCode(ctx)
@@ -987,6 +989,27 @@ case class UpdateFields(structExpr: Expression, fieldOps: Seq[StructFieldsOperat
 
   override def prettyName: String = "update_fields"
 
+  private[sql] def sqlString(
+      render: Expression => String,
+      quoteField: String => String): String = {
+    def updateSql(inputSql: String, operations: Seq[StructFieldsOperation]): String = {
+      val operationsSql = operations.map {
+        case nested: UpdateNestedField =>
+          val fieldSql = if (structExpr.resolved) {
+            s"$inputSql.${quoteField(nested.name)}"
+          } else {
+            s"$inputSql[${render(Literal(nested.name))}]"
+          }
+          s"WithField(${updateSql(fieldSql, nested.fieldOps)})"
+        case operation => render(operation)
+      }
+      s"$prettyName(${(inputSql +: operationsSql).mkString(", ")})"
+    }
+    updateSql(render(structExpr), fieldOps)
+  }
+
+  override def sql: String = sqlString(_.sql, quoteIdentifier)
+
   private lazy val newFieldSources: Seq[(StructField, UpdateFields.FieldSource)] =
     UpdateFields.fieldSources(structExpr, fieldOps)
 
@@ -1005,20 +1028,11 @@ case class UpdateFields(structExpr: Expression, fieldOps: Seq[StructFieldsOperat
 
   lazy val evalExpr: Expression = {
     def buildExpression(structRef: Expression): Expression = {
-      val source = structExpr match {
-        case namedStruct: CreateNamedStruct => namedStruct
-        case _ => structRef
-      }
-      val fieldSources = UpdateFields.fieldSources(source, fieldOps)
+      val fieldSources = UpdateFields.fieldSources(structRef, fieldOps)
       val updatedValues = ArrayBuffer.empty[Expression]
       val outputOrdinals = fieldSources.map { case (_, source) =>
         source match {
-          case UpdateFields.Original(ordinal) => structExpr match {
-            case namedStruct: CreateNamedStruct =>
-              updatedValues += namedStruct.valExprs(ordinal)
-              -1
-            case _ => ordinal
-          }
+          case UpdateFields.Original(ordinal) => ordinal
           case UpdateFields.Updated(expr) =>
             updatedValues += expr
             -1
@@ -1026,10 +1040,20 @@ case class UpdateFields(structExpr: Expression, fieldOps: Seq[StructFieldsOperat
       }
       UpdateFieldsExpression(structRef, updatedValues.toSeq, outputOrdinals, newFields)
     }
-    if (fieldOps.exists(_.isInstanceOf[UpdateNestedField])) {
-      With(structExpr) { case Seq(structRef) => buildExpression(structRef) }
-    } else {
-      buildExpression(structExpr)
+    structExpr match {
+      case namedStruct: CreateNamedStruct =>
+        val values = namedStruct.valExprs.toArray
+        CreateNamedStruct(newFieldSources.flatMap { case (field, source) =>
+          val value = source match {
+            case UpdateFields.Original(ordinal) => values(ordinal)
+            case UpdateFields.Updated(expr) => expr
+          }
+          Seq(Literal(field.name), value)
+        })
+      case _ if fieldOps.exists(_.isInstanceOf[UpdateNestedField]) =>
+        With(structExpr) { case Seq(structRef) => buildExpression(structRef) }
+      case _ =>
+        buildExpression(structExpr)
     }
   }
 }
