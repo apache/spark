@@ -324,12 +324,12 @@ class SparkContext:
         start_update_server = accumulators._start_update_server
         self._accumulatorServer = start_update_server(auth_token, is_unix_domain_sock, socket_path)
         assert self._jvm is not None
-        if is_unix_domain_sock:
+        if isinstance(self._accumulatorServer, accumulators.AccumulatorUnixServer):
             self._javaAccumulator = self._jvm.PythonAccumulatorV2(
                 self._accumulatorServer.server_address
             )
         else:
-            host, port = self._accumulatorServer.server_address  # type: ignore[misc]
+            host, port = self._accumulatorServer.server_address
             self._javaAccumulator = self._jvm.PythonAccumulatorV2(host, port, auth_token)
         self._jsc.sc().register(self._javaAccumulator)
 
