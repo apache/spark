@@ -62,6 +62,16 @@ abstract class HybridQueue[T, Q <: Queue[T]](
   // exposed for testing
   private[python] def numQueues(): Int = queues.size()
 
+  // A memory consumer must use identity equality. TaskMemoryManager tracks consumers in a
+  // HashSet, so two queues that compare equal would be tracked (and offered for spilling) as one.
+  // These are final so that no subclass, including a case class, can switch to value equality.
+  final override def equals(other: Any): Boolean = other match {
+    case ref: AnyRef => this eq ref
+    case _ => false
+  }
+
+  final override def hashCode(): Int = System.identityHashCode(this)
+
   protected def createDiskQueue(): Q
   protected def createInMemoryQueue(page: MemoryBlock): Q
   protected def getRequiredSize(item: T): Long
@@ -70,7 +80,7 @@ abstract class HybridQueue[T, Q <: Queue[T]](
   protected def isReadingFromDiskQueue: Boolean = !isInMemoryQueue(reading)
 
   def spill(size: Long, trigger: MemoryConsumer): Long = {
-    if (trigger == this) {
+    if (trigger eq this) {
       // When it's triggered by itself, it should write upcoming elements into disk instead of
       // copying the elements already in the queue.
       return 0L
@@ -171,10 +181,17 @@ abstract class HybridQueue[T, Q <: Queue[T]](
       reading.close()
       reading = null.asInstanceOf[Q]
     }
-    synchronized {
-      while (!queues.isEmpty) {
-        queues.remove().close()
-      }
+    // Detach the queues under the lock but close them (which frees their pages through the
+    // TaskMemoryManager) after releasing it. `spill` is called with the TaskMemoryManager's
+    // monitor held and then takes this queue's lock, so freeing pages while holding this lock
+    // could deadlock with a concurrent spill of this queue triggered from another thread.
+    val detached = synchronized {
+      val current = queues
+      queues = new java.util.LinkedList[Q]()
+      current
+    }
+    while (!detached.isEmpty) {
+      detached.remove().close()
     }
   }
 
