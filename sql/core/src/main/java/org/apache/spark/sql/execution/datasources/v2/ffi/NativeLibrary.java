@@ -36,11 +36,33 @@ import org.apache.spark.sql.datasource.NativeBridge;
  * libraries export the same JNI functions. Spark calls the methods of a copy through method
  * handles, because the copy is a different class than the {@link NativeBridge} it is compiled
  * against. Calling a method that the library does not export throws
- * {@link UnsatisfiedLinkError}.
+ * {@link MissingFunctionException}.
  */
 final class NativeLibrary {
 
   private static final String BRIDGE_CLASS = NativeBridge.class.getName();
+
+  private static final MethodHandle MISSING_FUNCTION;
+
+  static {
+    try {
+      MISSING_FUNCTION = MethodHandles.lookup().findStatic(NativeLibrary.class, "missingFunction",
+        MethodType.methodType(Object.class, UnsatisfiedLinkError.class));
+    } catch (ReflectiveOperationException e) {
+      throw new IllegalStateException(e);
+    }
+  }
+
+  /** Thrown when Spark calls a function that the library does not export. */
+  static final class MissingFunctionException extends RuntimeException {
+    MissingFunctionException(UnsatisfiedLinkError cause) {
+      super(cause.getMessage(), cause);
+    }
+  }
+
+  private static Object missingFunction(UnsatisfiedLinkError e) {
+    throw new MissingFunctionException(e);
+  }
 
   private final MethodHandle abiVersion;
   private final MethodHandle createDataSource;
@@ -82,7 +104,8 @@ final class NativeLibrary {
     createReader = find(bridge, "createReader", jlong, jlong, jlong);
     createStreamReader = find(bridge, "createStreamReader", jlong, jlong, jlong);
     createWriter = find(bridge, "createWriter", jlong, jlong, jlong, boolean.class);
-    createStreamWriter = find(bridge, "createStreamWriter", jlong, jlong, jlong, boolean.class);
+    createStreamWriter =
+      find(bridge, "createStreamWriter", jlong, jlong, jlong, boolean.class, String.class);
     closeDataSource = find(bridge, "closeDataSource", void.class, jlong);
     pushPredicates = find(bridge, "pushPredicates", boolean[].class, jlong, strings);
     pushLimit = find(bridge, "pushLimit", boolean.class, jlong, int.class);
@@ -111,8 +134,13 @@ final class NativeLibrary {
   private static MethodHandle find(
       Class<?> bridge, String name, Class<?> returnType, Class<?>... parameterTypes)
       throws ReflectiveOperationException {
-    return MethodHandles.publicLookup()
+    MethodHandle method = MethodHandles.publicLookup()
       .findStatic(bridge, name, MethodType.methodType(returnType, parameterTypes));
+    // The JVM throws UnsatisfiedLinkError when it cannot link the native method, because the
+    // library does not export it. Other code also throws it, such as Arrow when it cannot load its
+    // own JNI library, so only the error of the method itself means that the function is missing.
+    return MethodHandles.catchException(method, UnsatisfiedLinkError.class,
+      MISSING_FUNCTION.asType(MethodType.methodType(returnType, UnsatisfiedLinkError.class)));
   }
 
   /**
@@ -200,9 +228,9 @@ final class NativeLibrary {
     return (long) createWriter.invokeExact(dataSource, schemaAddress, overwrite);
   }
 
-  long createStreamWriter(long dataSource, long schemaAddress, boolean overwrite)
+  long createStreamWriter(long dataSource, long schemaAddress, boolean overwrite, String queryId)
       throws Throwable {
-    return (long) createStreamWriter.invokeExact(dataSource, schemaAddress, overwrite);
+    return (long) createStreamWriter.invokeExact(dataSource, schemaAddress, overwrite, queryId);
   }
 
   void closeDataSource(long dataSource) throws Throwable {

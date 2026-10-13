@@ -133,10 +133,11 @@ class NativeDataSourceClusterSuite extends QueryTest {
     assert(distributed.artifactUUID.contains(session.sessionUUID))
     assert(distributed.distributedFileName.contains(s"${pkg.getName}.${found.sha256}"))
 
-    // Then the package at the path of the driver becomes unusable for the executors, while the
-    // driver keeps the package it read, since the file keeps its length and modification time.
-    // So the query only succeeds if the executors find the distributed copy, and check that it
-    // is the same package by its checksum.
+    // Then the file at the path of the driver is no longer a valid package, so the executors
+    // cannot use it, while the driver keeps the package it read, since the file is written in
+    // place and keeps its length and modification time. So the query only succeeds if the
+    // executors find the distributed copy. NativeDataSourceSuite checks that the executors only
+    // load a valid package with the checksum of the driver.
     val lastModified = pkg.lastModified()
     Files.write(pkg.toPath, new Array[Byte](pkg.length().toInt))
     assert(pkg.setLastModified(lastModified))

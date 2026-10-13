@@ -51,21 +51,28 @@ import org.apache.spark.annotation.Evolving;
  *   pushes operations down by calling, each at most once and in this order,
  *   {@link #pushPredicates}, {@link #pushLimit} and {@link #pruneColumns}, plans the partitions
  *   with {@link #partitions}, serializes the state of the reader with {@link #serializeReader},
- *   and closes it. Then it calls {@link #read} on the executors, in one task for each
- *   partition.</li>
+ *   and closes it. Then it calls {@link #read} on the executors, in one task for each partition.
+ *   If Spark never plans the partitions, for example to only explain the plan of the query, it
+ *   closes the reader once the reader is no longer referenced.</li>
  *   <li><b>Streaming reads.</b> On the driver, Spark creates a stream reader with
  *   {@link #createStreamReader} and keeps it until the streaming query stops. For each
  *   micro-batch, it asks for the {@link #latestOffset}, plans the partitions with
  *   {@link #streamPartitions} and serializes the state with {@link #serializeStreamReader}, then
- *   calls {@link #read} on the executors. Offsets are JSON strings defined by the library. When
- *   a streaming query restarts, from its checkpoint, Spark creates a new stream reader and may
- *   call {@link #streamPartitions} again for the last range that it planned before, so the
- *   partitions of a range must read the same data each time.</li>
- *   <li><b>Writes.</b> On the driver, once it computed the data to write, right before it starts
- *   the tasks of the write (or of a micro-batch), Spark creates a writer with {@link #createWriter}
- *   or {@link #createStreamWriter}, and serializes its state with {@link #serializeWriter}. If
- *   computing the data fails, Spark creates no writer. On the executors, each task creates a data
- *   writer with {@link #createDataWriter}, calls {@link #write} for each batch of at most
+ *   calls {@link #read} on the executors. Offsets are defined by the library, as compact JSON on
+ *   a single line: Spark stores each offset as a line of the offset log of the checkpoint, so it
+ *   rejects an offset that is null, is not valid JSON or contains a line break. When a streaming
+ *   query restarts, from its checkpoint, Spark creates a new stream reader and may call
+ *   {@link #streamPartitions} again for the last range that it planned before, so the partitions
+ *   of a range must read the same data each time.</li>
+ *   <li><b>Writes.</b> On the driver, right before it starts the tasks of the write (or of a
+ *   micro-batch), Spark creates a writer with {@link #createWriter} or {@link #createStreamWriter},
+ *   and serializes its state with {@link #serializeWriter}. With adaptive query execution, Spark
+ *   first runs the stages of the data to write that end with a shuffle, and creates no writer if
+ *   they fail. The rest of the data, such as its last stage, is computed in the tasks of the
+ *   write, so a writer may still be aborted because computing the data failed: do irreversible
+ *   work, such as removing the existing data for an overwrite, in {@link #commit}. On the
+ *   executors, each task creates a data writer with {@link #createDataWriter}, calls
+ *   {@link #write} for each batch of at most
  *   {@code spark.sql.execution.arrow.maxRecordsPerBatch} rows, which also ends once it holds
  *   {@code spark.sql.execution.arrow.maxBytesPerBatch} bytes, and calls {@link #commitDataWriter},
  *   or {@link #abortDataWriter} if the task or the commit fails. Then the driver calls
@@ -79,7 +86,10 @@ import org.apache.spark.annotation.Evolving;
  *   may even have committed before its message reached the driver. A streaming write commits or
  *   aborts each micro-batch (epoch). Spark may commit the same epoch more than once, for example
  *   when a streaming query restarts after a failure, so committing an epoch that is already
- *   committed must have no effect, for exactly-once output. A micro-batch streaming query creates a
+ *   committed must have no effect, for exactly-once output. The ID of the query, which
+ *   {@link #createStreamWriter} gets, stays the same when the query restarts from its checkpoint,
+ *   so the ID of the query and the epoch ID identify the output of a micro-batch, also when other
+ *   queries write to the same destination. A micro-batch streaming query creates a
  *   new stream writer for each micro-batch, and Spark closes the previous stream writer of the
  *   query when the query creates a new one. Spark is not told when a streaming query stops, so it
  *   closes the last stream writer of the query once the writer is no longer referenced, or when the
@@ -89,16 +99,30 @@ import org.apache.spark.annotation.Evolving;
  * <h2>Conventions</h2>
  * <ul>
  *   <li><b>Handles.</b> The {@code create} methods return an opaque, non-zero handle, typically a
- *   pointer. Spark releases each handle exactly once with the matching {@code close} method, or
- *   with {@link #commitDataWriter} or {@link #abortDataWriter} for data writers, though not
- *   always right after the last use of a stream writer (see Writes above). A reader or
- *   writer handle must not depend on the data source handle it was created from, because Spark
- *   closes the data source handle right after creating it.</li>
+ *   pointer: Spark reports a handle of 0 as an error. Spark releases each handle exactly once
+ *   with the matching {@code close} method, or with {@link #commitDataWriter} or
+ *   {@link #abortDataWriter} for data writers, though not always right after its last use: a batch
+ *   reader whose partitions are never planned and the last stream writer of a query are released
+ *   once they are no longer referenced (see Lifecycle above). A reader or writer handle must not
+ *   depend on the data source handle it was created from, because Spark closes the data source
+ *   handle right after creating it.</li>
  *   <li><b>State.</b> Partitions, the state of readers and writers, and commit messages are byte
  *   arrays in a format defined by the library. Spark sends them to the executors and back.</li>
  *   <li><b>Errors.</b> To report an error, throw a Java exception, for example with the JNI
  *   function {@code ThrowNew} on {@code java.lang.RuntimeException}, and return any value. Spark
- *   rethrows it as a {@code NATIVE_DATA_SOURCE_ERROR}.</li>
+ *   rethrows it as a {@code NATIVE_DATA_SOURCE_ERROR}, except for the errors of
+ *   {@link #closeReader}, {@link #closeStreamReader} and {@link #closeWriter}, which Spark only
+ *   logs: they may run after the query, from another thread. So do the work that can fail a
+ *   query, such as flushing data, in {@link #commit} rather than when closing.</li>
+ *   <li><b>Strings.</b> The strings of this interface, such as the name and the options of
+ *   {@link #createDataSource}, the predicates, the column names of {@link #pruneColumns} and the
+ *   offsets, are Java strings. The JNI functions {@code GetStringUTFChars} and
+ *   {@code NewStringUTF} convert them from and to modified UTF-8, which is UTF-8 except for the
+ *   character U+0000 and the characters outside the Basic Multilingual Plane, such as emoji, which
+ *   modified UTF-8 encodes in 6 bytes rather than 4. Convert the strings where it matters, for
+ *   example with the Java method {@code String.getBytes} and the charset UTF-8. The {@code jni}
+ *   crate of Rust converts them to and from UTF-8. The JSON of the predicates is ASCII: it escapes
+ *   the other characters, which any JSON parser decodes.</li>
  *   <li><b>Arrow data.</b> Schemas and data are exchanged with the
  *   <a href="https://arrow.apache.org/docs/format/CDataInterface.html">Arrow C data
  *   interface</a>. A {@code long} argument named {@code ...Address} is the address of a C struct
@@ -115,16 +139,18 @@ import org.apache.spark.annotation.Evolving;
  *   <li><b>Schemas.</b> Spark types map to Arrow types as in {@code spark.sql.execution.arrow}:
  *   for example, {@code bigint} is {@code int64}, {@code string} is {@code utf8},
  *   {@code timestamp} is {@code timestamp[us]} with a time zone and {@code timestamp_ntz} is
- *   {@code timestamp[us]} without one. Data read from a library may also use
- *   {@code large_utf8}, {@code utf8_view} and the other variants of the same type, and any names
- *   for the fields of the entries of a map, but not unsigned integers, {@code decimal256}, list
- *   views or dictionary encoding.</li>
+ *   {@code timestamp[us]} without one. Data read from a library may also use {@code large_utf8}
+ *   and {@code utf8_view} for strings, {@code large_binary} and {@code binary_view} for binary
+ *   data, and any names for the fields of the entries of a map. Spark rejects the other Arrow
+ *   types, such as unsigned integers, {@code decimal256}, large lists, fixed-size lists and list
+ *   views, and dictionary encoding.</li>
  *   <li><b>Options.</b> Option keys are passed in lower case, because Spark matches them
  *   case-insensitively.</li>
  *   <li><b>Optional methods.</b> A library only needs to export the functions for the operations
  *   it supports. If a function is missing, Spark treats the operation as unsupported, except for
- *   the pushdown methods and the {@code serialize} methods, which then push nothing down and
- *   return no state.</li>
+ *   the pushdown methods, the {@code serialize} methods and {@link #commitOffset}: then Spark
+ *   pushes nothing down, sends no state and does not tell the library which offsets it
+ *   processed.</li>
  *   <li><b>Threads.</b> Spark calls the library from multiple threads, and calls on different
  *   handles may run concurrently. Calls on the same handle never run concurrently. A handle may
  *   be released from a thread other than the threads that used it, such as a JVM
@@ -179,8 +205,8 @@ public final class NativeBridge {
    * Creates a data source with the options given by the user, such as
    * {@code spark.read.option("key", "value")}.
    *
-   * @param name the name of the data source, as listed in the package manifest. A library can
-   *             implement several data sources.
+   * @param name the name of the data source, as listed in the package manifest, or in lower case
+   *             for an installed library. A library can implement several data sources.
    * @param optionKeys the option keys, in lower case
    * @param optionValues the option values, in the same order as the keys
    * @return the data source handle
@@ -230,10 +256,13 @@ public final class NativeBridge {
    * @param schemaAddress the address of the {@code ArrowSchema} of the data to write
    * @param overwrite whether to replace the existing data in each micro-batch (output mode
    *                  "complete") instead of appending to it
+   * @param queryId the ID of the streaming query. It stays the same when the query restarts from
+   *                its checkpoint, so with the epoch IDs, it identifies the commits of the query:
+   *                see Writes above.
    * @return the writer handle
    */
   public static native long createStreamWriter(
-      long dataSource, long schemaAddress, boolean overwrite);
+      long dataSource, long schemaAddress, boolean overwrite, String queryId);
 
   /** Releases a data source handle. */
   public static native void closeDataSource(long dataSource);
@@ -268,23 +297,41 @@ public final class NativeBridge {
    * arithmetic or other functions, nor predicates on columns that contain strings with a
    * non-binary collation, such as {@code UTF8_LCASE}: strings are compared by their UTF-8 bytes.
    * A later version of Spark may pass predicates with other names without changing
-   * {@link #ABI_VERSION}, so a reader must not report a predicate as evaluated completely if it
-   * contains a name that the reader does not know, or a data type that it does not support.
+   * {@link #ABI_VERSION}, so a reader must ignore a predicate that contains a name that it does
+   * not know, or a data type that it does not support.
    * <p>
-   * A predicate that the reader evaluates completely must follow the semantics of Spark SQL. In
-   * particular, for floating-point columns, NaN is equal to NaN and greater than any other value,
-   * including positive infinity, and {@code -0.0} is equal to {@code 0.0}, unlike IEEE 754
-   * comparisons. For example, {@code d > 1.0} is true for a NaN value of {@code d}. Comparisons
-   * with null are null, so a row only matches if the predicate is true.
+   * Spark evaluates all the predicates again after reading, so a reader may use them only to skip
+   * data, for example the files whose statistics show that no row matches. But it must never drop
+   * or skip a row for which the predicates are true under the semantics of Spark SQL, which Spark
+   * cannot detect. In particular:
+   * <ul>
+   *   <li>For floating-point columns, NaN is equal to NaN and greater than any other value,
+   *   including positive infinity, and {@code -0.0} is equal to {@code 0.0}. IEEE 754 comparisons
+   *   treat NaN differently, and total orders, such as {@code f64::total_cmp} in Rust or the
+   *   comparison kernels of arrow-rs, also order {@code -0.0} before {@code 0.0}. For example,
+   *   {@code d > 1.0} is true for a NaN value of {@code d}, and {@code d = 0.0} for
+   *   {@code -0.0}.</li>
+   *   <li>Comparisons with null are null, and a row only matches if the predicates are true. For
+   *   example, {@code NOT (i IN (1, NULL))} matches no row.</li>
+   *   <li>Strings are compared by their UTF-8 bytes, which order the characters outside the Basic
+   *   Multilingual Plane after all the others, unlike comparisons of UTF-16 strings, such as
+   *   {@code String.compareTo} in Java.</li>
+   *   <li>To use only a part of a predicate, a reader may take the parts that it does not support
+   *   as true, but not under a {@code NOT}, where that would drop rows.</li>
+   * </ul>
+   * The file {@code org/apache/spark/sql/datasource/predicate-cases.json} in the jar of Spark SQL
+   * lists predicates as Spark passes them to this method, with the rows of a table for which they
+   * are true, to test a reader with.
    *
-   * @return for each predicate, whether the reader evaluates it completely, so that Spark does
-   *         not have to evaluate it again. The reader can still use the other predicates to skip
-   *         data.
+   * @return for each predicate, whether the reader evaluates it completely. Spark shows these
+   *         predicates as pushed in the plan of the query, and evaluates all the predicates again
+   *         after reading anyway.
    */
   public static native boolean[] pushPredicates(long reader, String[] predicates);
 
   /**
-   * Pushes a LIMIT down to the reader.
+   * Pushes a LIMIT down to the reader. Spark only pushes a limit when the query does not filter
+   * the rows, since it evaluates the predicates after reading.
    *
    * @return whether the reader returns at most {@code limit} rows in total. Spark applies the
    *         limit again after reading either way.
@@ -294,7 +341,9 @@ public final class NativeBridge {
   /**
    * Prunes the columns to read.
    *
-   * @param columnNames the names of the top-level columns that the query needs
+   * @param columnNames the names of the top-level columns that the query needs, which include
+   *                    the columns of the pushed predicates. There may be none, for example for
+   *                    {@code SELECT count(*)}: then the batches only have a number of rows.
    * @return whether {@link #read} returns exactly these columns, in this order. If not, it
    *         returns all the columns of the schema to read.
    */
@@ -320,10 +369,13 @@ public final class NativeBridge {
   // Stream reader (driver)
   // ---------------------------------------------------------------------------------------------
 
-  /** Returns the offset to start from when the streaming query has no checkpoint, as JSON. */
+  /**
+   * Returns the offset to start from when the streaming query has no checkpoint, as compact JSON
+   * on a single line.
+   */
   public static native String initialOffset(long streamReader);
 
-  /** Returns the most recent offset available, as JSON. */
+  /** Returns the most recent offset available, as compact JSON on a single line. */
   public static native String latestOffset(long streamReader);
 
   /**

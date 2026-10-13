@@ -18,7 +18,8 @@ package org.apache.spark.sql.execution.datasources.v2.ffi
 
 import java.util.Base64
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.core.json.JsonWriteFeature
+import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.databind.node.ObjectNode
 
 import org.apache.spark.sql.connector.expressions.{Expression, GeneralScalarExpression, Literal, NamedReference}
@@ -30,7 +31,10 @@ import org.apache.spark.sql.types._
  * `NativeBridge.pushPredicates`.
  */
 object NativePredicates {
-  private val mapper = new ObjectMapper()
+  // Writes ASCII only, escaping the other characters. The libraries often get the JSON with
+  // the JNI function GetStringUTFChars, which returns modified UTF-8: it differs from UTF-8 for
+  // the characters outside the Basic Multilingual Plane, but any JSON parser decodes the escapes.
+  private val mapper = JsonMapper.builder().enable(JsonWriteFeature.ESCAPE_NON_ASCII).build()
 
   /**
    * The names of the predicates that are passed to the libraries, as listed in

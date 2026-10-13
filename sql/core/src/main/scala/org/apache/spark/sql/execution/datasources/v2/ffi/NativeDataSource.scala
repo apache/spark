@@ -23,8 +23,11 @@ import java.util.concurrent.atomic.AtomicLong
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
+import com.fasterxml.jackson.core.JsonProcessingException
+import com.fasterxml.jackson.databind.DeserializationFeature
+import com.fasterxml.jackson.databind.json.JsonMapper
 import org.apache.arrow.c.{ArrowArray, ArrowArrayStream, ArrowSchema, CDataDictionaryProvider, Data}
-import org.apache.arrow.vector.{FieldVector, VectorSchemaRoot}
+import org.apache.arrow.vector.{FieldVector, ValueVector, VectorSchemaRoot}
 import org.apache.arrow.vector.complex.MapVector
 import org.apache.arrow.vector.types.pojo.{ArrowType, Field, Schema}
 
@@ -36,7 +39,7 @@ import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarDataSource, ColumnarReader, ColumnarStreamReader, ColumnarStreamWriter, ColumnarWriter}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.sql.util.{ArrowUtils, CaseInsensitiveStringMap}
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.unsafe.Platform
@@ -70,9 +73,9 @@ class NativeDataSource(
   override def reader(schema: StructType): ColumnarReader = {
     val executorLocation = NativeDataSourceRegistry.distribute(location)
     val library = NativeLibraries.get(location)
-    val handle = create(library, "plan a scan of", "DATA_SOURCE_BATCH_SCAN_NOT_SUPPORTED") {
-      dataSource =>
-        NativeArrow.exportSchema(schema)(address => library.createReader(dataSource, address))
+    val handle = create(library, "plan a scan of", "createReader",
+        "DATA_SOURCE_BATCH_SCAN_NOT_SUPPORTED") { dataSource =>
+      NativeArrow.exportSchema(schema)(address => library.createReader(dataSource, address))
     }
     new NativeDataSourceReader(
       executorLocation, name, schema, new NativeHandle(handle, library.closeReader))
@@ -81,9 +84,9 @@ class NativeDataSource(
   override def streamReader(schema: StructType): ColumnarStreamReader = {
     val executorLocation = NativeDataSourceRegistry.distribute(location)
     val library = NativeLibraries.get(location)
-    val handle = create(library, "plan a scan of", "DATA_SOURCE_MICRO_BATCH_SCAN_NOT_SUPPORTED") {
-      dataSource =>
-        NativeArrow.exportSchema(schema)(address => library.createStreamReader(dataSource, address))
+    val handle = create(library, "plan a scan of", "createStreamReader",
+        "DATA_SOURCE_MICRO_BATCH_SCAN_NOT_SUPPORTED") { dataSource =>
+      NativeArrow.exportSchema(schema)(address => library.createStreamReader(dataSource, address))
     }
     new NativeDataSourceStreamReader(
       executorLocation, name, schema, new NativeHandle(handle, library.closeStreamReader))
@@ -93,7 +96,8 @@ class NativeDataSource(
     val executorLocation = NativeDataSourceRegistry.distribute(location)
     val library = NativeLibraries.get(location)
     val handle = new NativeHandle(
-      create(library, "plan a write to", "DATA_SOURCE_BATCH_WRITE_NOT_SUPPORTED") { dataSource =>
+      create(library, "plan a write to", "createWriter",
+          "DATA_SOURCE_BATCH_WRITE_NOT_SUPPORTED") { dataSource =>
         NativeArrow.exportSchema(schema) { address =>
           library.createWriter(dataSource, address, overwrite)
         }
@@ -109,11 +113,11 @@ class NativeDataSource(
     val executorLocation = NativeDataSourceRegistry.distribute(location)
     val library = NativeLibraries.get(location)
     val handle = new NativeHandle(
-      create(library, "plan a write to", "DATA_SOURCE_STREAMING_WRITE_NOT_SUPPORTED") {
-        dataSource =>
-          NativeArrow.exportSchema(schema) { address =>
-            library.createStreamWriter(dataSource, address, overwrite)
-          }
+      create(library, "plan a write to", "createStreamWriter",
+          "DATA_SOURCE_STREAMING_WRITE_NOT_SUPPORTED") { dataSource =>
+        NativeArrow.exportSchema(schema) { address =>
+          library.createStreamWriter(dataSource, address, overwrite, queryId)
+        }
       },
       library.closeWriter)
     val writer = new NativeDataSourceStreamWriter(
@@ -126,21 +130,30 @@ class NativeDataSource(
   private def withDataSource[T](library: NativeLibrary, action: String)(f: Long => T): T = {
     // The keys of a case-insensitive map are in lower case.
     val entries = options.entrySet().asScala.toArray
-    val dataSource = call(name, "create") {
-      library.createDataSource(name, entries.map(_.getKey), entries.map(_.getValue))
+    val dataSource = checkHandle(name, "create", "createDataSource") {
+      call(name, "create") {
+        library.createDataSource(name, entries.map(_.getKey), entries.map(_.getValue))
+      }
     }
     Utils.tryWithSafeFinally(f(dataSource)) {
       call(name, action)(library.closeDataSource(dataSource))
     }
   }
 
-  /** Creates a reader or a writer with `f`, which fails if the library does not implement it. */
-  private def create(library: NativeLibrary, action: String, unsupportedError: String)(
-      f: Long => Long): Long = {
+  /**
+   * Creates a reader or a writer with `f`, which calls the given function of the library, and
+   * fails if the library does not implement it.
+   */
+  private def create(
+      library: NativeLibrary,
+      action: String,
+      function: String,
+      unsupportedError: String)(f: Long => Long): Long = {
     withDataSource(library, action) { dataSource =>
-      call(name, action)(optional(f(dataSource))).getOrElse {
+      val handle = call(name, action)(optional(f(dataSource))).getOrElse {
         throw new SparkUnsupportedOperationException(unsupportedError, Map("description" -> name))
       }
+      checkHandle(name, action, function)(handle)
     }
   }
 
@@ -168,6 +181,9 @@ class NativeDataSourceReader(
   private var readerState: Array[Byte] = Array.emptyByteArray
   private var readSchema: StructType = schema
   @transient private var plannedPartitions: Array[InputPartition] = _
+  // Why planning the partitions failed. The handle is released after the first try, but the
+  // scan can be planned again, for example by the lazy values of the physical plan that call it.
+  @transient private var planningError: Throwable = _
 
   @transient private lazy val library = NativeLibraries.get(location)
 
@@ -209,11 +225,18 @@ class NativeDataSourceReader(
 
   override def partitions(): Array[InputPartition] = synchronized {
     if (plannedPartitions == null) {
+      if (planningError != null) {
+        throw planningError
+      }
       try {
         val partitions = call(name, "plan a scan of")(library.partitions(handle.get))
         readerState = bytesOrEmpty(
           call(name, "plan a scan of")(optional(library.serializeReader(handle.get))))
         plannedPartitions = NativeInputPartition.from(partitions)
+      } catch {
+        case e: Throwable =>
+          planningError = e
+          throw e
       } finally {
         // The executors only need the serialized state.
         handle.close()
@@ -244,11 +267,36 @@ class NativeDataSourceStreamReader(
   @transient private lazy val library = NativeLibraries.get(location)
 
   override def initialOffset(): String = {
-    call(name, "plan a scan of")(library.initialOffset(handle.get))
+    checkOffset("initialOffset", call(name, "plan a scan of")(library.initialOffset(handle.get)))
   }
 
   override def latestOffset(): String = {
-    call(name, "plan a scan of")(library.latestOffset(handle.get))
+    checkOffset("latestOffset", call(name, "plan a scan of")(library.latestOffset(handle.get)))
+  }
+
+  /**
+   * Checks an offset returned by the given function of the library: it must be JSON on a single
+   * line, because the offset log of the checkpoint stores each offset as a line.
+   */
+  private def checkOffset(function: String, offset: String): String = {
+    if (offset == null) {
+      throw error(name, "plan a scan of", s"$function returned null instead of an offset.")
+    }
+    if (offset.exists(c => c == '\n' || c == '\r')) {
+      throw error(name, "plan a scan of", s"$function returned an offset with a line break, " +
+        "but an offset must be JSON on a single line.")
+    }
+    val valid = try {
+      val json = NativeDataSourceStreamReader.mapper.readTree(offset)
+      json != null && !json.isMissingNode
+    } catch {
+      case _: JsonProcessingException => false
+    }
+    if (!valid) {
+      throw error(name, "plan a scan of", s"$function returned an offset that is not valid " +
+        s"JSON: $offset")
+    }
+    offset
   }
 
   override def partitions(start: String, end: String): Array[InputPartition] = {
@@ -270,6 +318,12 @@ class NativeDataSourceStreamReader(
   }
 
   override def stop(): Unit = handle.close()
+}
+
+object NativeDataSourceStreamReader {
+  // Parses the offsets of the libraries to check them, and rejects anything after the JSON value.
+  private val mapper =
+    JsonMapper.builder().enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS).build()
 }
 
 /** Writes to a native data source for a batch write. */
@@ -454,7 +508,16 @@ class NativePartitionReader(
           s"$arrowType, which is not supported.")
       }
     }
-    val actual = ArrowUtils.fromArrowSchema(root.getSchema)
+    val actual = StructType(root.getSchema.getFields.asScala.map { field =>
+      val dataType = try {
+        ArrowUtils.fromArrowField(field)
+      } catch {
+        case e: SparkUnsupportedOperationException if e.getCondition == "UNSUPPORTED_ARROWTYPE" =>
+          throw error(name, "read", s"The column ${field.getName} contains the Arrow type " +
+            s"${e.getMessageParameters.get("typeName")}, which is not supported.")
+      }
+      StructField(field.getName, dataType, field.isNullable)
+    }.toSeq)
     // The schema to read as the library got it: Arrow does not carry everything, such as the
     // collations of strings, the fields of intervals and user-defined types, which still apply to
     // the data that Spark reads.
@@ -473,7 +536,7 @@ class NativePartitionReader(
 
   private def columnVector(vector: FieldVector): ColumnVector = {
     try {
-      new ArrowColumnVector(vector)
+      new ReusedArrowColumnVector(vector)
     } catch {
       case NonFatal(e) =>
         throw QueryExecutionErrors.nativeDataSourceError("read", name,
@@ -585,6 +648,17 @@ class NativePartitionReader(
   }
 }
 
+/**
+ * The Arrow column vector of a column of a [[NativePartitionReader]], which imports all its batches
+ * into the same Arrow vectors. It is not freeable between batches: Spark must not close it when it
+ * moves to the next batch, as `ColumnarToRowExec` does with the column vectors that are freeable,
+ * because closing a struct column also drops its child column vectors. The reader closes the
+ * Arrow vectors at the end.
+ */
+private class ReusedArrowColumnVector(vector: ValueVector) extends ArrowColumnVector(vector) {
+  override def closeIfFreeable(): Unit = {}
+}
+
 /** Writes the batches of a task to the data writer of a native library. */
 class NativeDataWriter(
     location: NativeLibraryLocation,
@@ -599,8 +673,10 @@ class NativeDataWriter(
   private val library = NativeLibraries.get(location)
   // Zero once the data writer was committed or aborted, which releases it. It stays set if the
   // commit fails, so that Spark aborts the data writer.
-  private var handle: Long = call(name, "write to") {
-    library.createDataWriter(writerState, partitionId, taskId, epochId)
+  private var handle: Long = checkHandle(name, "write to", "createDataWriter") {
+    call(name, "write to") {
+      library.createDataWriter(writerState, partitionId, taskId, epochId)
+    }
   }
 
   override def write(batch: ColumnarBatch): Unit = {
@@ -714,18 +790,29 @@ object NativeStreamWriters {
 
 /** Helpers to call native data source libraries. */
 object NativeCalls {
-  /** Calls a native library, and rethrows the errors it reports as NATIVE_DATA_SOURCE_ERROR. */
+  /**
+   * Calls a native library, and rethrows the errors it reports as NATIVE_DATA_SOURCE_ERROR, as
+   * well as the link errors, such as when Arrow cannot load its own JNI library.
+   */
   def call[T](name: String, action: String)(f: => T): T = {
     try {
       f
     } catch {
       case e: Throwable with SparkThrowable => throw e
-      case e: UnsatisfiedLinkError =>
+      case e: NativeLibrary.MissingFunctionException =>
         throw QueryExecutionErrors.nativeDataSourceError(
           action, name, s"The library does not implement ${e.getMessage}.", e)
-      case NonFatal(e) =>
+      case e @ (NonFatal(_) | _: LinkageError) =>
         throw QueryExecutionErrors.nativeDataSourceError(action, name, message(e), e)
     }
+  }
+
+  /** Checks that the handle returned by the given function of the library is not 0. */
+  def checkHandle(name: String, action: String, function: String)(handle: Long): Long = {
+    if (handle == 0) {
+      throw error(name, action, s"$function returned 0, which is not a valid handle.")
+    }
+    handle
   }
 
   // How Arrow reports the error message of an Arrow C stream.
@@ -743,7 +830,7 @@ object NativeCalls {
     try {
       Some(f)
     } catch {
-      case _: UnsatisfiedLinkError => None
+      case _: NativeLibrary.MissingFunctionException => None
     }
   }
 

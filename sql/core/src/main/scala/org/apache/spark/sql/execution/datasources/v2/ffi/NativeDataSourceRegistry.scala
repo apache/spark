@@ -208,9 +208,13 @@ object NativeDataSourceRegistry extends Logging {
       pkg.copy(artifactUUID = artifactUUID)
     } else {
       val copyName = s"${pkg.fileName}.${pkg.sha256}"
-      if (!artifactManager.hasFileArtifact(copyName)) {
-        artifactManager.addLocalArtifacts(Artifact.newFileArtifact(
-          Paths.get(copyName), new Artifact.LocalFile(Paths.get(pkg.path))) :: Nil)
+      // Queries of the session can use the package at the same time, and the artifact manager
+      // fails to add a file that another thread is adding.
+      artifactManager.synchronized {
+        if (!artifactManager.hasFileArtifact(copyName)) {
+          artifactManager.addLocalArtifacts(Artifact.newFileArtifact(
+            Paths.get(copyName), new Artifact.LocalFile(Paths.get(pkg.path))) :: Nil)
+        }
       }
       pkg.copy(artifactUUID = artifactUUID, distributedFileName = Some(copyName))
     }

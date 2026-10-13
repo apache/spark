@@ -69,8 +69,11 @@ class ColumnarWrite(
 }
 
 /**
- * A batch write. The writer of the data source is created with the writer factory, once Spark
- * computed the stages that the write depends on: Spark only aborts the write if it fails later.
+ * A batch write. The writer of the data source is created with the writer factory, right before
+ * the tasks of the write start: after the shuffle stages that adaptive query execution runs
+ * before the write, so no writer is created if they fail. The rest of the data, such as its last
+ * stage, is computed in the tasks of the write, and a failure there, as any later failure, aborts
+ * the write. So irreversible work belongs in the commit of the writer.
  */
 class ColumnarBatchWrite(createWriter: () => ColumnarWriter, schema: StructType)
   extends BatchWrite {
@@ -95,7 +98,9 @@ class ColumnarBatchWrite(createWriter: () => ColumnarWriter, schema: StructType)
 
 /**
  * A streaming write. As for a [[ColumnarBatchWrite]], the writer of the data source is created
- * with the writer factory, once Spark computed the stages of the micro-batch.
+ * with the writer factory, right before the tasks of the micro-batch start. A stateful
+ * micro-batch runs without adaptive query execution, so all its stages, as those of any write
+ * without it, run after the writer is created.
  */
 class ColumnarStreamingWrite(createWriter: () => ColumnarStreamWriter, schema: StructType)
   extends StreamingWrite {

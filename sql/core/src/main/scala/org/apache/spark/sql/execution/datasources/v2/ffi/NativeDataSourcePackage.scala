@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2.ffi
 import java.io.{File, FileInputStream, IOException}
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, StandardCopyOption}
+import java.nio.file.attribute.BasicFileAttributes
 import java.security.MessageDigest
 import java.util.{HexFormat, Locale}
 import java.util.concurrent.ConcurrentHashMap
@@ -31,7 +32,7 @@ import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import com.google.common.cache.{Cache, CacheBuilder}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.PATH
+import org.apache.spark.internal.LogKeys.{PATH, VERSION_NUM}
 import org.apache.spark.sql.Artifact
 import org.apache.spark.sql.datasource.NativeBridge
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -95,11 +96,24 @@ case class NativeDataSourcePackage(
  */
 case class InvalidNativeDataSourcePackage(error: Throwable, dataSources: Seq[String])
 
+/**
+ * A version of a file, to cache what is read from it until it changes: the file is identified by
+ * its canonical path, and its version by its length, its modification time and its file key, such
+ * as the inode on Linux, which changes when another file replaces it, as `make install` does.
+ */
+private[ffi] case class FileVersion(path: String, length: Long, lastModified: Long, key: AnyRef)
+
+private[ffi] object FileVersion {
+  def apply(canonical: File): FileVersion = {
+    val attributes = Files.readAttributes(canonical.toPath, classOf[BasicFileAttributes])
+    FileVersion(canonical.getPath, attributes.size(), attributes.lastModifiedTime().toMillis,
+      attributes.fileKey())
+  }
+}
+
 object NativeDataSourcePackage extends Logging {
   val FILE_EXTENSION: String = Artifact.NATIVE_DATA_SOURCE_PACKAGE_EXTENSION
   val MANIFEST_NAME = "spark-native-datasource.json"
-
-  private case class CacheKey(path: String, length: Long, lastModified: Long)
 
   private[ffi] type ReadResult = Either[InvalidNativeDataSourcePackage, NativeDataSourcePackage]
 
@@ -107,8 +121,8 @@ object NativeDataSourcePackage extends Logging {
   // long-running server where many sessions add packages reads many different files.
   private val MAX_CACHED_PACKAGES = 1000
 
-  private val packages: Cache[CacheKey, ReadResult] =
-    CacheBuilder.newBuilder().maximumSize(MAX_CACHED_PACKAGES).build[CacheKey, ReadResult]()
+  private val packages: Cache[FileVersion, ReadResult] =
+    CacheBuilder.newBuilder().maximumSize(MAX_CACHED_PACKAGES).build[FileVersion, ReadResult]()
   private val mapper = new ObjectMapper()
 
   /** Reads the package in the given file. The result is cached until the file changes. */
@@ -116,24 +130,31 @@ object NativeDataSourcePackage extends Logging {
 
   /**
    * Reads the package in the given file, or returns why it is invalid. The result is cached until
-   * the file changes, and an invalid package is logged when it is read.
+   * the file changes, and an invalid package, or a package of a version of the interface that
+   * Spark does not support, is logged when it is read.
    */
   private[ffi] def tryRead(file: File): ReadResult = {
-    val canonical = try {
-      file.getCanonicalFile
+    val version = try {
+      FileVersion(file.getCanonicalFile)
     } catch {
       case e: IOException =>
         return Left(InvalidNativeDataSourcePackage(
           invalidManifestError(file, s"The package cannot be read: $e", e), Nil))
     }
-    val key = CacheKey(canonical.getPath, canonical.length(), canonical.lastModified())
-    Option(packages.getIfPresent(key)).getOrElse {
+    Option(packages.getIfPresent(version)).getOrElse {
+      val canonical = new File(version.path)
       val result = parse(canonical)
-      result.swap.foreach { invalid =>
-        logWarning(log"Invalid native data source package ${MDC(PATH, canonical)}.",
-          invalid.error)
+      result match {
+        case Left(invalid) =>
+          logWarning(log"Invalid native data source package ${MDC(PATH, canonical)}.",
+            invalid.error)
+        case Right(pkg) if pkg.manifest.abiVersion != NativeBridge.ABI_VERSION =>
+          logWarning(log"The native data source package ${MDC(PATH, canonical)} implements " +
+            log"version ${MDC(VERSION_NUM, pkg.manifest.abiVersion)} of the native data source " +
+            log"interface, which this version of Spark does not support, so it is not used.")
+        case _ =>
       }
-      packages.put(key, result)
+      packages.put(version, result)
       result
     }
   }
@@ -244,22 +265,19 @@ object NativeDataSourcePackage extends Logging {
 case class InstalledNativeLibrary(path: String, sha256: String) extends NativeLibraryLocation
 
 object InstalledNativeLibrary {
-  private case class CacheKey(path: String, length: Long, lastModified: Long)
-
   // Bounded, like the cache of the packages, although few libraries are installed.
-  private val checksums: Cache[CacheKey, String] =
-    CacheBuilder.newBuilder().maximumSize(1000).build[CacheKey, String]()
+  private val checksums: Cache[FileVersion, String] =
+    CacheBuilder.newBuilder().maximumSize(1000).build[FileVersion, String]()
 
   /** The installed library in the given file. */
   def apply(file: File): InstalledNativeLibrary = InstalledNativeLibrary(file.getPath, sha256(file))
 
   /** The SHA-256 checksum of the given file. The result is cached until the file changes. */
   private[ffi] def sha256(file: File): String = {
-    val canonical = file.getCanonicalFile
-    val key = CacheKey(canonical.getPath, canonical.length(), canonical.lastModified())
-    Option(checksums.getIfPresent(key)).getOrElse {
-      val checksum = NativeDataSourcePackage.sha256(canonical)
-      checksums.put(key, checksum)
+    val version = FileVersion(file.getCanonicalFile)
+    Option(checksums.getIfPresent(version)).getOrElse {
+      val checksum = NativeDataSourcePackage.sha256(new File(version.path))
+      checksums.put(version, checksum)
       checksum
     }
   }
@@ -292,26 +310,37 @@ object NativePlatform {
  */
 object NativeLibraries extends Logging {
   // The libraries of the packages, by the checksum of the package, and the installed libraries,
-  // by their canonical path: the JVM loads a library file in a single class loader. A library
-  // that is loaded but rejected stays loaded, so its error is kept: it cannot be loaded again.
+  // by their canonical path, with the checksum of the build that was loaded: the JVM loads a
+  // library file in a single class loader. A library that is loaded but rejected stays loaded,
+  // so its error is kept: it cannot be loaded again.
   private val packagedLibraries = new ConcurrentHashMap[String, Try[NativeLibrary]]()
-  private val installedLibraries = new ConcurrentHashMap[String, Try[NativeLibrary]]()
+  private val installedLibraries = new ConcurrentHashMap[String, (String, Try[NativeLibrary])]()
 
   private lazy val extractionDir: File = Utils.createTempDir(namePrefix = "native-datasources")
 
   /** Returns the library at the given location, and loads it if needed. */
   private[ffi] def get(location: NativeLibraryLocation): NativeLibrary = location match {
     case pkg: NativeDataSourcePackage =>
-      getOrLoad(packagedLibraries, pkg.sha256)(loadPackaged(pkg))
+      getOrLoad(packagedLibraries, pkg.sha256)(loadPackaged(pkg)).get
     case installed: InstalledNativeLibrary =>
+      // The file has the checksum of the build of the driver.
       val file = locate(installed).getCanonicalFile
-      getOrLoad(installedLibraries, file.getPath)(loadInstalled(file))
+      val (loadedChecksum, library) =
+        getOrLoad(installedLibraries, file.getPath)(installed.sha256 -> loadInstalled(file))
+      // The JVM cannot load another build from the same path: the library was replaced since.
+      if (loadedChecksum != installed.sha256) {
+        throw QueryExecutionErrors.invalidNativeDataSourceLibraryError(
+          file.getPath,
+          "REPLACED",
+          Map("loadedChecksum" -> loadedChecksum, "checksum" -> installed.sha256))
+      }
+      library.get
   }
 
-  private def getOrLoad(libraries: ConcurrentHashMap[String, Try[NativeLibrary]], key: String)(
-      load: => Try[NativeLibrary]): NativeLibrary = {
+  private def getOrLoad[T](libraries: ConcurrentHashMap[String, T], key: String)(
+      load: => T): T = {
     val library = libraries.get(key)
-    (if (library != null) library else libraries.computeIfAbsent(key, _ => load)).get
+    if (library != null) library else libraries.computeIfAbsent(key, _ => load)
   }
 
   private def loadPackaged(pkg: NativeDataSourcePackage): Try[NativeLibrary] = {
@@ -368,7 +397,7 @@ object NativeLibraries extends Logging {
       val abiVersion = try {
         library.abiVersion()
       } catch {
-        case e: UnsatisfiedLinkError =>
+        case e: NativeLibrary.MissingFunctionException =>
           throw invalidLibrary("It does not implement NativeBridge.abiVersion.", e)
       }
       if (abiVersion != NativeBridge.ABI_VERSION) {

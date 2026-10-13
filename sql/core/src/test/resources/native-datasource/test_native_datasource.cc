@@ -20,17 +20,28 @@
 // interface structs by hand. It provides three data sources:
 //
 //   native_range    Reads rows [0, end) with columns of several types. Supports predicate,
-//                   column and limit pushdown. With the option "extra", the schema has one more
-//                   column: "map" adds a map whose entry fields are named "keys" and "values",
-//                   as arrow-rs names them, "decimal256" adds a decimal256, and "listview" adds
-//                   a list view. With the option "slice", the columns of the batches have an
-//                   offset of 1. With the option "short", an array of the batches has one value
-//                   fewer than its parent refers to, although its buffers hold them all: "id"
-//                   shortens the column id, "entries" the entries of the map and their fields,
-//                   and "values" the values of the entries.
+//                   column and limit pushdown. With the option "claim_predicates", it reports
+//                   all the predicates as evaluated completely, but ignores them. With the
+//                   option "extra", the schema has one more column: "map" adds a map whose
+//                   entry fields are named "keys" and "values", as arrow-rs names them, "struct"
+//                   adds a struct, "decimal256" adds a decimal256, "listview" adds a list view,
+//                   "largelist" adds a large list, and "dictionary" adds a dictionary-encoded
+//                   string column, whose data Spark rejects before reading it. With the option
+//                   "slice", the columns of the batches have an offset of 1. With the option
+//                   "short", an array of the batches has one value fewer than its parent refers
+//                   to, although its buffers hold them all: "id" shortens the column id,
+//                   "entries" the entries of the map and their fields, and "values" the values
+//                   of the entries.
 //   native_sink     Writes the rows as CSV files under the directory in the option "path".
 //   native_counter  Streams the rows [0, max_offset) with a single column "id", making "step"
-//                   more rows available each time Spark asks for the latest offset.
+//                   more rows available each time Spark asks for the latest offset. With the
+//                   option "bad_offset", the latest offset is "null", "multiline" JSON or
+//                   "invalid" JSON. With the option "closed_path", closing the stream reader
+//                   creates that file.
+//
+// With the option "fail", a step fails with an error. With the option "zero", a function that
+// creates a handle returns 0 without an error: "createDataSource", "createReader",
+// "createStreamReader", "createWriter", "createStreamWriter" or "createDataWriter".
 //
 // The suite compiles it with these macros to get several distinct libraries:
 //
@@ -146,9 +157,12 @@ const ColumnType kColumns[] = {
 
 // The columns that native_range adds with the option "extra", by its value.
 const std::map<std::string, ColumnType> kExtraColumns = {
-    {"map", {"m", "+m"}},               // map<string, bigint>: {"k<id>": id}
+    {"map", {"m", "+m"}},                   // map<string, bigint>: {"k<id>": id}
+    {"struct", {"st", "+s"}},               // struct<a: bigint, b: string>: {id, "s<id>"}
     {"decimal256", {"dec", "d:10,2,256"}},  // decimal256(10, 2): id
-    {"listview", {"lv", "+vl"}}              // list_view<bigint>: [id]
+    {"listview", {"lv", "+vl"}},            // list_view<bigint>: [id]
+    {"largelist", {"ll", "+L"}},            // large_list<bigint>, without data
+    {"dictionary", {"dict", "i"}}           // dictionary<int32, string>, without data
 };
 
 const ColumnType* findColumn(const std::string& name) {
@@ -182,6 +196,7 @@ struct SchemaData {
   std::string name;
   std::vector<std::unique_ptr<ArrowSchema>> children;
   std::vector<ArrowSchema*> child_pointers;
+  std::unique_ptr<ArrowSchema> dictionary;
 };
 
 void releaseSchema(ArrowSchema* schema) {
@@ -189,13 +204,16 @@ void releaseSchema(ArrowSchema* schema) {
   for (auto& child : data->children) {
     if (child->release != nullptr) child->release(child.get());
   }
+  if (data->dictionary != nullptr && data->dictionary->release != nullptr) {
+    data->dictionary->release(data->dictionary.get());
+  }
   delete data;
   schema->release = nullptr;
 }
 
 void initSchema(ArrowSchema* out, const std::string& format, const std::string& name,
                 int64_t flags) {
-  auto* data = new SchemaData{format, name, {}, {}};
+  auto* data = new SchemaData{format, name, {}, {}, nullptr};
   out->format = data->format.c_str();
   out->name = data->name.c_str();
   out->metadata = nullptr;
@@ -229,8 +247,16 @@ void exportSchema(const std::vector<std::string>& columns, ArrowSchema* out) {
       ArrowSchema* entries = addChild(column, "+s", "entries", 0);
       addChild(entries, "u", "keys", 0);
       addChild(entries, "l", "values", ARROW_FLAG_NULLABLE);
-    } else if (name == "lv") {
+    } else if (name == "st") {
+      addChild(column, "l", "a", ARROW_FLAG_NULLABLE);
+      addChild(column, "u", "b", ARROW_FLAG_NULLABLE);
+    } else if (name == "lv" || name == "ll") {
       addChild(column, "l", "item", ARROW_FLAG_NULLABLE);
+    } else if (name == "dict") {
+      auto* data = static_cast<SchemaData*>(column->private_data);
+      data->dictionary = std::make_unique<ArrowSchema>();
+      initSchema(data->dictionary.get(), "u", "", ARROW_FLAG_NULLABLE);
+      column->dictionary = data->dictionary.get();
     }
   }
 }
@@ -369,6 +395,19 @@ void exportColumn(const std::string& name, int64_t lo, int64_t hi, ArrowArray* o
     initArray(addChild(entries), n, 0,
               {no_validity, toBytes(key_offsets), std::vector<uint8_t>(keys.begin(), keys.end())});
     initArray(addChild(entries), n, 0, {no_validity, toBytes(values)});
+  } else if (name == "st") {
+    initArray(out, n, 0, {no_validity});
+    std::vector<int64_t> ids;
+    std::vector<int32_t> offsets{0};
+    std::string chars;
+    for (int64_t id = lo; id < hi; id++) {
+      ids.push_back(id);
+      chars += "s" + std::to_string(id);
+      offsets.push_back(static_cast<int32_t>(chars.size()));
+    }
+    initArray(addChild(out), n, 0, {no_validity, toBytes(ids)});
+    initArray(addChild(out), n, 0,
+              {no_validity, toBytes(offsets), std::vector<uint8_t>(chars.begin(), chars.end())});
   } else if (name == "dec") {
     // 256-bit little-endian unscaled values of the scale 2.
     std::vector<int64_t> words;
@@ -391,7 +430,8 @@ void exportColumn(const std::string& name, int64_t lo, int64_t hi, ArrowArray* o
     initArray(out, n, 0, {no_validity, toBytes(offsets), toBytes(sizes)});
     initArray(addChild(out), n, 0, {no_validity, toBytes(values)});
   } else {
-    throw std::runtime_error("unknown column " + name);
+    // Including "ll" and "dict", which Spark rejects from the schema, before reading data.
+    throw std::runtime_error("no data for the column " + name);
   }
 }
 
@@ -715,6 +755,11 @@ void maybeFail(const Options& options, const std::string& step) {
   if (get(options, "fail", "") == step) throw std::runtime_error("injected failure in " + step);
 }
 
+// Whether the given function returns 0 instead of a handle, with the option "zero".
+bool returnsZero(const Options& options, const std::string& function) {
+  return get(options, "zero", "") == function;
+}
+
 // The driver-side reader of native_range and native_counter.
 struct Reader {
   Options state;  // Serialized to the executors.
@@ -864,6 +909,7 @@ SPARK_JNI(jlong, createDataSource)(JNIEnv* env, jclass, jstring name_value, jobj
         source->name != name("native_counter")) {
       throw std::runtime_error("unknown data source " + source->name);
     }
+    if (returnsZero(source->options, "createDataSource")) return jlong{0};
     return toHandle(owner.release());
   });
 }
@@ -889,6 +935,7 @@ SPARK_JNI(jlong, createReader)(JNIEnv* env, jclass, jlong handle, jlong schema_a
     }
     auto columns = importColumns(reinterpret_cast<ArrowSchema*>(schema_address));
     for (const auto& column : columns) findColumn(column);
+    if (returnsZero(source->options, "createReader")) return jlong{0};
     auto* reader = new Reader();
     reader->state["columns"] = join(columns);
     reader->state["lo"] = "0";
@@ -898,6 +945,7 @@ SPARK_JNI(jlong, createReader)(JNIEnv* env, jclass, jlong handle, jlong schema_a
     reader->state["fail"] = get(source->options, "fail", "");
     reader->state["slice"] = get(source->options, "slice", "");
     reader->state["short"] = get(source->options, "short", "");
+    reader->state["claim_predicates"] = get(source->options, "claim_predicates", "");
     return toHandle(reader);
   });
 }
@@ -910,13 +958,17 @@ SPARK_JNI(jlong, createStreamReader)(JNIEnv* env, jclass, jlong handle, jlong sc
     if (source->name != name("native_counter")) {
       throw std::runtime_error(source->name + " does not support streaming reads");
     }
+    auto columns = join(importColumns(reinterpret_cast<ArrowSchema*>(schema_address)));
+    if (returnsZero(source->options, "createStreamReader")) return jlong{0};
     auto* reader = new Reader();
-    reader->state["columns"] = join(importColumns(reinterpret_cast<ArrowSchema*>(schema_address)));
+    reader->state["columns"] = columns;
     reader->state["max_offset"] = get(source->options, "max_offset", "10");
     reader->state["step"] = get(source->options, "step", reader->state["max_offset"]);
     reader->state["current"] = "0";
     reader->state["batch_size"] = get(source->options, "batch_size", "1000");
     reader->state["commit_path"] = get(source->options, "commit_path", "");
+    reader->state["bad_offset"] = get(source->options, "bad_offset", "");
+    reader->state["closed_path"] = get(source->options, "closed_path", "");
     return toHandle(reader);
   });
 }
@@ -937,6 +989,14 @@ SPARK_JNI(jbooleanArray, pushPredicates)(JNIEnv* env, jclass, jlong handle,
     std::vector<jboolean> accepted;
     int64_t lo = getLong(reader->state, "lo", 0);
     int64_t hi = getLong(reader->state, "hi", 0);
+    // With the option "claim_predicates", reports every predicate as evaluated completely, but
+    // evaluates none of them.
+    if (reader->state["claim_predicates"] == "true") {
+      std::vector<jboolean> claimed(json.size(), JNI_TRUE);
+      jbooleanArray result = env->NewBooleanArray(static_cast<jsize>(claimed.size()));
+      env->SetBooleanArrayRegion(result, 0, static_cast<jsize>(claimed.size()), claimed.data());
+      return result;
+    }
     for (const auto& text : json) {
       // Accepts "id <op> <integer literal>" for the comparison operators.
       Json predicate = JsonParser(text).parse();
@@ -1035,6 +1095,15 @@ SPARK_JNI(jstring, latestOffset)(JNIEnv* env, jclass, jlong handle) {
     int64_t latest = std::min(getLong(state, "max_offset", 10),
                               getLong(state, "current", 0) + getLong(state, "step", 10));
     state["current"] = std::to_string(latest);
+    std::string bad_offset = get(state, "bad_offset", "");
+    if (bad_offset == "null") return static_cast<jstring>(nullptr);
+    // Pretty-printed JSON, as serde_json::to_string_pretty writes it.
+    if (bad_offset == "multiline") {
+      return env->NewStringUTF(("{\n  \"offset\": " + std::to_string(latest) + "\n}").c_str());
+    }
+    if (bad_offset == "invalid") {
+      return env->NewStringUTF(("offset " + std::to_string(latest)).c_str());
+    }
     return env->NewStringUTF(("{\"offset\":" + std::to_string(latest) + "}").c_str());
   });
 }
@@ -1063,8 +1132,12 @@ SPARK_JNI(void, commitOffset)(JNIEnv* env, jclass, jlong handle, jstring end) {
   });
 }
 
-SPARK_JNI(void, closeStreamReader)(JNIEnv*, jclass, jlong handle) {
-  delete fromHandle<Reader>(handle);
+SPARK_JNI(void, closeStreamReader)(JNIEnv* env, jclass, jlong handle) {
+  std::unique_ptr<Reader> reader(fromHandle<Reader>(handle));
+  guardedVoid(env, [&] {
+    std::string path = get(reader->state, "closed_path", "");
+    if (!path.empty()) writeFile(path, "");
+  });
 }
 
 #endif  // READ_ONLY
@@ -1093,7 +1166,9 @@ SPARK_JNI(void, read)(JNIEnv* env, jclass, jbyteArray reader_state, jbyteArray p
 
 namespace {
 
-jlong createAnyWriter(JNIEnv* env, jlong handle, jlong schema_address, jboolean overwrite) {
+// Creates the writer of a batch write, or of a streaming write with the ID of its query.
+jlong createAnyWriter(JNIEnv* env, const char* function, jlong handle, jlong schema_address,
+                      jboolean overwrite, jstring query_id) {
   return guarded<jlong>(env, 0, [&] {
     auto* source = fromHandle<DataSource>(handle);
     if (source->name != name("native_sink")) {
@@ -1102,6 +1177,7 @@ jlong createAnyWriter(JNIEnv* env, jlong handle, jlong schema_address, jboolean 
     // Spark releases the schema after the call, since it is not moved here.
     auto* schema = reinterpret_cast<ArrowSchema*>(schema_address);
     if (schema->n_children == 0) throw std::runtime_error("no columns to write");
+    if (returnsZero(source->options, function)) return jlong{0};
     auto* writer = new Writer();
     // The location of a table in a catalog is passed as a URI.
     std::string path = get(source->options, "path", "");
@@ -1113,13 +1189,16 @@ jlong createAnyWriter(JNIEnv* env, jlong handle, jlong schema_address, jboolean 
     writer->state["path"] = path;
     writer->state["overwrite"] = overwrite ? "true" : "false";
     writer->state["fail"] = get(source->options, "fail", "");
+    writer->state["zero"] = get(source->options, "zero", "");
     if (writer->state["path"].empty()) {
       delete writer;
       throw std::runtime_error("the option 'path' is required");
     }
-    // Records that a writer was created, which Spark then commits or aborts.
+    // Records that a writer was created, which Spark then commits or aborts, and the ID of the
+    // streaming query.
     makeDirs(path);
     writeFile(path + "/_CREATED", "");
+    if (query_id != nullptr) writeFile(path + "/_QUERY_ID", toString(env, query_id));
     return toHandle(writer);
   });
 }
@@ -1128,12 +1207,12 @@ jlong createAnyWriter(JNIEnv* env, jlong handle, jlong schema_address, jboolean 
 
 SPARK_JNI(jlong, createWriter)(JNIEnv* env, jclass, jlong handle, jlong schema_address,
                                jboolean overwrite) {
-  return createAnyWriter(env, handle, schema_address, overwrite);
+  return createAnyWriter(env, "createWriter", handle, schema_address, overwrite, nullptr);
 }
 
 SPARK_JNI(jlong, createStreamWriter)(JNIEnv* env, jclass, jlong handle, jlong schema_address,
-                                     jboolean overwrite) {
-  return createAnyWriter(env, handle, schema_address, overwrite);
+                                     jboolean overwrite, jstring query_id) {
+  return createAnyWriter(env, "createStreamWriter", handle, schema_address, overwrite, query_id);
 }
 
 SPARK_JNI(jbyteArray, serializeWriter)(JNIEnv* env, jclass, jlong handle) {
@@ -1164,16 +1243,27 @@ SPARK_JNI(void, commit)(JNIEnv* env, jclass, jlong handle, jlong epoch_id,
   });
 }
 
+// Records the aborted write in _ABORTED for a batch write, or _ABORTED_<epoch> for a streaming
+// one, with the number of tasks that did not commit, whose messages are null.
 SPARK_JNI(void, abort)(JNIEnv* env, jclass, jlong handle, jlong epoch_id,
                        jobjectArray messages) {
   guardedVoid(env, [&] {
     auto* writer = fromHandle<Writer>(handle);
     writer->closed_marker = closedMarker(epoch_id);
-    bool has_null = false;
-    for (const auto& temp_file : toByteStrings(env, messages, &has_null)) {
-      unlink(temp_file.c_str());
+    int64_t null_messages = 0;
+    jsize n = env->GetArrayLength(messages);
+    for (jsize i = 0; i < n; i++) {
+      auto message = static_cast<jbyteArray>(env->GetObjectArrayElement(messages, i));
+      if (message == nullptr) {
+        null_messages++;
+      } else {
+        unlink(toBytes(env, message).c_str());
+        env->DeleteLocalRef(message);
+      }
     }
-    writeFile(writer->state["path"] + "/_ABORTED", "");
+    writeFile(writer->state["path"] +
+                  (epoch_id < 0 ? "/_ABORTED" : "/_ABORTED_" + std::to_string(epoch_id)),
+              std::to_string(null_messages));
   });
 }
 
@@ -1190,6 +1280,7 @@ SPARK_JNI(jlong, createDataWriter)(JNIEnv* env, jclass, jbyteArray writer_state,
                                    jint partition_id, jlong task_id, jlong epoch_id) {
   return guarded<jlong>(env, 0, [&] {
     Options state = deserialize(toBytes(env, writer_state));
+    if (returnsZero(state, "createDataWriter")) return jlong{0};
     std::string dir = state["path"] + "/_temporary";
     makeDirs(dir);
     std::string temp_path = dir + "/" + std::to_string(epoch_id) + "-" +
