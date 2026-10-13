@@ -223,7 +223,10 @@ private[spark] class TaskContextImpl(
     // That wait has no time bound: if the other thread's listeners block, so does this task. It
     // logs a warning with that thread's stack trace periodically. If such a task is killed,
     // `spark.task.reaper.enabled` with a positive `spark.task.reaper.killTimeout` bounds how long
-    // it may stay in this state, by killing the executor JVM.
+    // it may stay in this state, by killing the executor JVM, but only if the blocked listeners
+    // do not run within the reaper's own kill call: the reaper calls `Task.kill` before it starts
+    // checking the timeout, and that call runs the failure listeners on the reaper thread if an
+    // interrupt listener throws. Then only the periodic warning shows the hang.
     val mode = synchronized {
       if (completed) return
       completed = true
