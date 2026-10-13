@@ -8137,6 +8137,12 @@
     ],
     "sqlState" : "XXKST"
   },
+  "STREAM_STREAM_JOIN_INCOMPATIBLE_STATE_STORE_CONFIGS" : {
+    "message" : [
+      "The configuration values `<stateFormatVersionConfig>=<stateFormatVersion>` and `<mergeOperatorVersionConfig>=<mergeOperatorVersion>` are incompatible. Stream-stream join state format version <stateFormatVersion> requires RocksDB merge operator version <requiredMergeOperatorVersion>. Start a new query with `<mergeOperatorVersionConfig>` set to <requiredMergeOperatorVersion> and a new checkpoint."
+    ],
+    "sqlState" : "42K06"
+  },
   "STREAM_STREAM_JOIN_INCONSISTENT_STATE" : {
     "message" : [
       "Detected inconsistency in stream-stream join state."
@@ -9906,6 +9912,13 @@
     ],
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_XML_CHAR_VARCHAR_MAP_KEY" : {
+    "message" : [
+      "XML map keys of CHAR or VARCHAR cannot be padded or trimmed.",
+      "The key <key> is not valid for type <dataType>."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNTYPED_SCALA_UDF" : {
     "message" : [
       "You're using untyped Scala UDF, which does not have the input type information. Spark may blindly pass null to the Scala closure with primitive-type argument, and the closure will see the default value of the Java type for the null argument, e.g. `udf((x: Int) => x, IntegerType)`, the result is 0 for null input. To get rid of this error, you could:",
@@ -11052,11 +11065,6 @@
   "_LEGACY_ERROR_TEMP_1338" : {
     "message" : [
       "Sinks cannot request distribution and ordering in continuous execution mode."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2017" : {
-    "message" : [
-      "not resolved."
     ]
   },
   "_LEGACY_ERROR_TEMP_2026" : {

@@ -472,8 +472,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     SparkException.internalError(s"Can not interpolate ${arg.getClass.getName} into code block.")
   }
 
-  def customCollectionClsNotResolvedError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_2017")
+  def customCollectionClsNotResolvedError(): SparkException = {
+    SparkException.internalError(
+      "Cannot determine the data type of an unresolved MapObjects without a collection class.")
   }
 
   def classUnsupportedByMapObjectsError(cls: Class[_]): SparkRuntimeException = {
@@ -2739,6 +2740,20 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     )
   }
 
+  /**
+   * Restricting CHAR/VARCHAR XML map keys is a parser limitation (SQLSTATE 0A000),
+   * but this is a SparkRuntimeException so XML parse modes can handle it: PERMISSIVE
+   * wraps a bad record and FAILFAST surfaces the failure.
+   */
+  def unsupportedXmlCharVarcharMapKey(
+      key: UTF8String, dataType: DataType): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "UNSUPPORTED_XML_CHAR_VARCHAR_MAP_KEY",
+      messageParameters = Map(
+        "key" -> toSQLValue(key, StringType),
+        "dataType" -> toSQLType(dataType)))
+  }
+
   def timestampAddOverflowError(micros: Long, amount: Long, unit: String): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DATETIME_OVERFLOW",
@@ -3612,5 +3627,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       errorClass = "BIN_BY_INVALID_RANGE",
       messageParameters = Map("rangeStart" -> rangeStart, "rangeEnd" -> rangeEnd)
     )
+  }
+
+  def binByOverflowError(): SparkArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map("operation" -> "compute BIN BY bucket boundaries"),
+      context = Array.empty,
+      summary = "")
   }
 }

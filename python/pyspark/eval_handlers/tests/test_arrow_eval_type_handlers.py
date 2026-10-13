@@ -110,7 +110,7 @@ def _one_cogroup(left, right):
 def _grouped_arg_offsets(*dataframes):
     """Encode ``arg_offsets`` from ``(key_cols, value_cols)`` per DataFrame.
 
-    Mirrors BasePandasGroupExec.resolveArgOffsets: each DataFrame is laid out as
+    Mirrors PandasGroupUtils.resolveArgOffsets: each DataFrame is laid out as
     ``[length, num_keys, *key_cols, *value_cols]``.
     """
     offsets: list = []
