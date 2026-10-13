@@ -922,6 +922,44 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
     }
   }
 
+  test("Insert schema evolution: preserve order - anchor matches target column case") {
+    withSQLConf(SQLConf.SCHEMA_EVOLUTION_PRESERVE_COLUMN_ORDER.key -> "true") {
+      val t1 = s"${catalogAndNamespace}tbl"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (Id bigint, data string) USING $v2Format")
+        doInsert(t1, Seq((1L, "a")).toDF("Id", "data"))
+        checkInsertMetrics(t1, numInsertedRows = 1)
+        doInsertWithSchemaEvolution(t1,
+          Seq((2L, true, "b")).toDF("id", "active", "data"), byName = true)
+        checkInsertMetrics(t1, numInsertedRows = 1)
+        assert(spark.table(t1).schema.fieldNames.toSeq === Seq("Id", "active", "data"))
+        verifyTable(t1, Seq[(java.lang.Long, java.lang.Boolean, String)](
+          (1L, null, "a"),
+          (2L, true, "b")
+        ).toDF("Id", "active", "data"))
+      }
+    }
+  }
+
+  test("Insert schema evolution: preserve order - rejected add is skipped " +
+    "when anchoring") {
+    withSQLConf(SQLConf.SCHEMA_EVOLUTION_PRESERVE_COLUMN_ORDER.key -> "true") {
+      val t1 = s"${catalogAndNamespace}tbl"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format " +
+          "TBLPROPERTIES ('reject-added-columns' = 'v')")
+        doInsert(t1, Seq((1L, "a")).toDF("id", "data"))
+        val e = intercept[Exception] {
+          doInsertWithSchemaEvolution(t1,
+            Seq((2L, 5, 9, "b")).toDF("id", "v", "b", "data"), byName = true)
+        }
+        // The insert must fail on the extra `v` column, not inside alterTable on a
+        // dangling AFTER anchor.
+        assert(e.getMessage.contains("too many data columns"))
+      }
+    }
+  }
+
   test("Insert schema evolution: extra nested field by name in overwrite") {
     val t1 = s"${catalogAndNamespace}tbl"
     withTable(t1) {

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector
 
+import org.apache.spark.sql.connector.catalog.CatalogV2Util
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -481,4 +482,219 @@ trait MergeIntoSchemaEvolutionColumnOrderTests extends MergeIntoSchemaEvolutionS
     ),
     confs = preserveOrderConfs
   )
+
+  testNestedStructsEvolution("preserve order - new sibling anchors on the added " +
+      "column's spelling")(
+    target = Seq(
+      """{ "pk": 1, "info": { "salary": 100, "status": "active" }, "dep": "hr" }""",
+      """{ "pk": 2, "info": { "salary": 200, "status": "inactive" }, "dep": "software" }"""
+    ),
+    source = Seq(
+      """{ "pk": 2, "info": { "salary": 150, "bonus": 50, "extra": 10,
+        | "status": "dummy" }, "dep": "finance" }""".stripMargin.replace("\n", "")
+    ),
+    targetSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("info", StructType(Seq(
+        StructField("salary", IntegerType),
+        StructField("status", StringType)
+      ))),
+      StructField("dep", StringType)
+    )),
+    sourceSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("info", StructType(Seq(
+        StructField("salary", IntegerType),
+        StructField("bonus", IntegerType),
+        StructField("extra", IntegerType),
+        StructField("status", StringType)
+      ))),
+      StructField("dep", StringType)
+    )),
+    clauses = Seq(update("info.BONUS = s.info.BONUS, info.extra = s.info.extra")),
+    result = Seq(
+      """{ "pk": 1, "info": { "salary": 100, "status": "active" }, "dep": "hr" }""",
+      """{ "pk": 2, "info": { "salary": 200, "BONUS": 50, "extra": 10,
+        | "status": "inactive" }, "dep": "software" }""".stripMargin.replace("\n", "")
+    ),
+    resultSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("info", StructType(Seq(
+        StructField("salary", IntegerType),
+        StructField("BONUS", IntegerType),
+        StructField("extra", IntegerType),
+        StructField("status", StringType)
+      ))),
+      StructField("dep", StringType)
+    )),
+    expectErrorWithoutEvolutionContains = "No such struct field",
+    confs = preserveOrderConfs
+  )
+
+  testNestedStructsEvolution("preserve order - field added by leaf assignment and " +
+      "insert star is added once")(
+    target = Seq(
+      """{ "pk": 1, "info": { "salary": 100, "status": "active" }, "dep": "hr" }""",
+      """{ "pk": 2, "info": { "salary": 200, "status": "inactive" }, "dep": "software" }"""
+    ),
+    source = Seq(
+      """{ "pk": 2, "info": { "salary": 150, "extra": 10, "bonus": 50,
+        | "status": "dummy" }, "dep": "finance" }""".stripMargin.replace("\n", ""),
+      """{ "pk": 3, "info": { "salary": 250, "extra": 30, "bonus": 75,
+        | "status": "dummy" }, "dep": "finance" }""".stripMargin.replace("\n", "")
+    ),
+    targetSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("info", StructType(Seq(
+        StructField("salary", IntegerType),
+        StructField("status", StringType)
+      ))),
+      StructField("dep", StringType)
+    )),
+    sourceSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("info", StructType(Seq(
+        StructField("salary", IntegerType),
+        StructField("extra", IntegerType),
+        StructField("bonus", IntegerType),
+        StructField("status", StringType)
+      ))),
+      StructField("dep", StringType)
+    )),
+    clauses = Seq(update("info.bonus = s.info.bonus"), insertAll()),
+    result = Seq(
+      """{ "pk": 1, "info": { "salary": 100, "status": "active" }, "dep": "hr" }""",
+      """{ "pk": 2, "info": { "salary": 200, "extra": null, "bonus": 50,
+        | "status": "inactive" }, "dep": "software" }""".stripMargin.replace("\n", ""),
+      """{ "pk": 3, "info": { "salary": 250, "extra": 30, "bonus": 75,
+        | "status": "dummy" }, "dep": "finance" }""".stripMargin.replace("\n", "")
+    ),
+    resultSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("info", StructType(Seq(
+        StructField("salary", IntegerType),
+        StructField("extra", IntegerType),
+        StructField("bonus", IntegerType),
+        StructField("status", StringType)
+      ))),
+      StructField("dep", StringType)
+    )),
+    expectErrorWithoutEvolutionContains = "No such struct field",
+    confs = preserveOrderConfs
+  )
+
+  testNestedStructsEvolution("preserve order - extra field inside array element struct")(
+    target = Seq(
+      """{ "pk": 1, "arr": [ { "a": 1, "c": 3 } ], "dep": "hr" }""",
+      """{ "pk": 2, "arr": [ { "a": 2, "c": 4 } ], "dep": "software" }"""
+    ),
+    source = Seq(
+      """{ "pk": 2, "arr": [ { "a": 3, "b": 10, "c": 5 } ], "dep": "finance" }""",
+      """{ "pk": 3, "arr": [ { "a": 4, "b": 20, "c": 6 } ], "dep": "finance" }"""
+    ),
+    targetSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("arr", ArrayType(StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("c", IntegerType)
+      )))),
+      StructField("dep", StringType)
+    )),
+    sourceSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("arr", ArrayType(StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("b", IntegerType),
+        StructField("c", IntegerType)
+      )))),
+      StructField("dep", StringType)
+    )),
+    clauses = Seq(updateAll(), insertAll()),
+    result = Seq(
+      """{ "pk": 1, "arr": [ { "a": 1, "c": 3 } ], "dep": "hr" }""",
+      """{ "pk": 2, "arr": [ { "a": 3, "b": 10, "c": 5 } ], "dep": "finance" }""",
+      """{ "pk": 3, "arr": [ { "a": 4, "b": 20, "c": 6 } ], "dep": "finance" }"""
+    ),
+    resultSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("arr", ArrayType(StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("b", IntegerType),
+        StructField("c", IntegerType)
+      )))),
+      StructField("dep", StringType)
+    )),
+    expectErrorWithoutEvolutionContains = "Cannot write extra fields",
+    confs = preserveOrderConfs
+  )
+
+  testNestedStructsEvolution("preserve order - extra field inside map value struct")(
+    target = Seq(
+      """{ "pk": 1, "m": { "k": { "a": 1, "c": 3 } }, "dep": "hr" }""",
+      """{ "pk": 2, "m": { "k": { "a": 2, "c": 4 } }, "dep": "software" }"""
+    ),
+    source = Seq(
+      """{ "pk": 2, "m": { "k": { "a": 3, "b": 10, "c": 5 } }, "dep": "finance" }""",
+      """{ "pk": 3, "m": { "k": { "a": 4, "b": 20, "c": 6 } }, "dep": "finance" }"""
+    ),
+    targetSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("m", MapType(StringType, StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("c", IntegerType)
+      )))),
+      StructField("dep", StringType)
+    )),
+    sourceSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("m", MapType(StringType, StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("b", IntegerType),
+        StructField("c", IntegerType)
+      )))),
+      StructField("dep", StringType)
+    )),
+    clauses = Seq(updateAll(), insertAll()),
+    result = Seq(
+      """{ "pk": 1, "m": { "k": { "a": 1, "c": 3 } }, "dep": "hr" }""",
+      """{ "pk": 2, "m": { "k": { "a": 3, "b": 10, "c": 5 } }, "dep": "finance" }""",
+      """{ "pk": 3, "m": { "k": { "a": 4, "b": 20, "c": 6 } }, "dep": "finance" }"""
+    ),
+    resultSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("m", MapType(StringType, StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("b", IntegerType),
+        StructField("c", IntegerType)
+      )))),
+      StructField("dep", StringType)
+    )),
+    expectErrorWithoutEvolutionContains = "Cannot write extra fields",
+    confs = preserveOrderConfs
+  )
+
+  test("preserve order - add rejected by connector is skipped when anchoring") {
+    val targetData = Seq((1, "hr")).toDF("id", "data")
+    val sourceData = Seq((2, 5, 9, "eng")).toDF("id", "v", "b", "data")
+
+    var error = ""
+    withSQLConf(SQLConf.SCHEMA_EVOLUTION_PRESERVE_COLUMN_ORDER.key -> "true") {
+      withTable(tableNameAsString) {
+        withTempView("source") {
+          val columns = CatalogV2Util.structTypeToV2Columns(targetData.schema)
+          createTable(columns, Seq.empty)
+          targetData.writeTo(tableNameAsString).append()
+          sql(s"ALTER TABLE $tableNameAsString SET TBLPROPERTIES " +
+            "('reject-added-columns' = 'v')")
+          sourceData.createOrReplaceTempView("source")
+          error = intercept[Exception] {
+            executeMerge(true, tableNameAsString, "source", "t.id = s.id", Seq(insertAll()))
+          }.getMessage
+        }
+      }
+    }
+    // The merge must fail on the unresolved `v` column, not inside alterTable on a
+    // dangling AFTER anchor.
+    assert(error.contains("cannot be resolved"))
+  }
 }

@@ -179,7 +179,8 @@ abstract class InMemoryBaseTable(
       schema()
         .findNestedField(fieldNames.toImmutableArraySeq, includeCollections = true)
         .exists { field => Cast.canUpCast(field._2.dataType, newType) }
-    case _: TableChange.AddColumn => true
+    case add: TableChange.AddColumn =>
+      !rejectAddedColumns.contains(add.fieldNames().last)
     case _ => false
   }
 
@@ -202,6 +203,10 @@ abstract class InMemoryBaseTable(
   private val acceptAnySchema = properties.getOrDefault("accept-any-schema", "false").toBoolean
   private val autoSchemaEvolution = properties.getOrDefault("auto-schema-evolution", "true")
     .toBoolean
+
+  // Comma-separated leaf names of columns whose AddColumn is reported as unsupported.
+  private val rejectAddedColumns: Set[String] =
+    properties.getOrDefault("reject-added-columns", "").split(",").filter(_.nonEmpty).toSet
   private val generateColumnValuesOnWrite =
     properties.getOrDefault("generate-column-values-on-write", "true").toBoolean
 
