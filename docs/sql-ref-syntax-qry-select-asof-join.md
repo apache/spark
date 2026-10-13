@@ -28,10 +28,6 @@ right relation. The match is the closest row on the right that satisfies a requi
 `ASOF JOIN` is asymmetric: the left relation drives per-row lookups into the right,
 and reversing the operands changes the result.
 
-`ASOF JOIN` is disabled by default. Set `spark.sql.join.asofJoin.enabled` to `true`
-to enable the syntax. When disabled, `ASOF JOIN` fails at parse time with
-`UNSUPPORTED_FEATURE.ASOF_JOIN`.
-
 Only `INNER` (the default) and `LEFT OUTER` join types are supported.
 
 ### Syntax
@@ -133,8 +129,6 @@ comparison_operator
 ### Examples
 
 ```sql
-SET spark.sql.join.asofJoin.enabled=true;
-
 CREATE OR REPLACE TEMP VIEW trades(trade_time, symbol, quantity) AS
   VALUES (TIMESTAMP '2026-06-29 10:00:05', 'AAPL', 100),
          (TIMESTAMP '2026-06-29 10:00:11', 'AAPL', 200),
