@@ -173,6 +173,21 @@ class MutableProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  testBothCodegenAndInterpreted("SPARK-60095: collated strings are copied into the buffer") {
+    val dataTypes = Array[DataType](StringType, StringType("UTF8_LCASE"),
+      StringType("UTF8_LCASE_RTRIM"), StringType("UNICODE_CI"))
+    val proj = createMutableProjection(dataTypes)
+    val bytes = UTF8String.fromString("abc").getBytes
+    val inputRow = new GenericInternalRow(
+      Array.fill[Any](dataTypes.length)(UTF8String.fromBytes(bytes)))
+    val projRow = proj(inputRow)
+    // Overwrite the input memory, as happens when the input UnsafeRow is reused.
+    bytes(0) = 'x'.toByte
+    dataTypes.indices.foreach { i =>
+      assert(projRow.getUTF8String(i) === UTF8String.fromString("abc"))
+    }
+  }
+
   test("unsupported types for unsafe buffer") {
     withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.NO_CODEGEN.toString) {
       val proj = createMutableProjection(Array(StringType))
