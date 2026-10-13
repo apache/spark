@@ -107,11 +107,19 @@ class AsOfJoinResolver(
       rightNameScope = rightNameScope
     )
 
+    val resolvedJoinWithOriginalOutput = retainOriginalOutputIfHiddenColumnIsReferenced(
+      unresolvedAsOfJoin = unresolvedAsOfJoin,
+      resolvedJoin = resolvedJoin,
+      leftNameScope = leftNameScope,
+      rightNameScope = rightNameScope
+    )
+
     usingOutput match {
       case Some((outputList, hiddenList)) =>
         buildUsingProject(
           unresolvedAsOfJoin = unresolvedAsOfJoin,
           resolvedJoin = resolvedJoin,
+          child = resolvedJoinWithOriginalOutput,
           outputList = outputList,
           hiddenList = hiddenList,
           rightNameScope = rightNameScope
@@ -124,8 +132,40 @@ class AsOfJoinResolver(
         )
         cteRegistry.currentScope.tryPutWithCTE(
           unresolvedOperator = unresolvedAsOfJoin,
-          resolvedOperator = resolvedJoin
+          resolvedOperator = resolvedJoinWithOriginalOutput
         )
+    }
+  }
+
+  /**
+   * If the join uses a hidden column, wraps it in a [[Project]] that also keeps the hidden columns.
+   */
+  private def retainOriginalOutputIfHiddenColumnIsReferenced(
+      unresolvedAsOfJoin: AsOfJoin,
+      resolvedJoin: AsOfJoin,
+      leftNameScope: NameScope,
+      rightNameScope: NameScope): LogicalPlan = {
+    val originalOutput = AsOfJoin.computeOutput(
+      joinType = resolvedJoin.joinType,
+      leftOutput = leftNameScope.output,
+      rightOutput = rightNameScope.output
+    )
+    val originalOutputSet = AttributeSet(originalOutput)
+
+    if (resolvedJoin.references.subsetOf(originalOutputSet)) {
+      resolvedJoin
+    } else {
+      val hiddenColumns =
+        if (unresolvedAsOfJoin.containsTag(ResolverTag.TOP_LEVEL_OPERATOR)) {
+          Seq.empty
+        } else {
+          resolvedJoin.output.filter { attribute =>
+            attribute.qualifiedAccessOnly && !originalOutputSet.contains(attribute)
+          }
+        }
+
+      operatorResolutionContextStack.current.baseOperator = Some(resolvedJoin)
+      Project(originalOutput ++ hiddenColumns, resolvedJoin)
     }
   }
 
@@ -165,6 +205,7 @@ class AsOfJoinResolver(
   private def buildUsingProject(
       unresolvedAsOfJoin: AsOfJoin,
       resolvedJoin: AsOfJoin,
+      child: LogicalPlan,
       outputList: Seq[NamedExpression],
       hiddenList: Seq[Attribute],
       rightNameScope: NameScope): Project = {
@@ -196,7 +237,7 @@ class AsOfJoinResolver(
       }
 
     operatorResolutionContextStack.current.baseOperator = Some(resolvedJoin)
-    val project = Project(projectList, resolvedJoin)
+    val project = Project(projectList, child)
     project.setTagValue(Project.hiddenOutputTag, qualifiedAccessOnlyColumns)
     project
   }
