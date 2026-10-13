@@ -962,6 +962,8 @@ int spark_ds_read(const uint8_t* reader_state, int64_t reader_state_length,
   return guarded([&] {
     Options state = deserialize(toBytes(reader_state, reader_state_length));
     maybeFail(state, "open");
+    // Returns success without initializing the stream, which Spark must reject.
+    if (get(state, "fail", "") == "uninitialized") return;
     auto bounds = split(toBytes(partition, partition_length));
     if (bounds.size() != 2) throw std::runtime_error("invalid partition");
     stream->get_schema = streamGetSchema;

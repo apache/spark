@@ -403,6 +403,14 @@ class NativePartitionReader(
   }
 
   private def importSchema(): Schema = {
+    // Arrow calls the callbacks of the stream without checking them, and calling NULL would crash
+    // the JVM.
+    val snapshot = stream.snapshot()
+    if (snapshot.release == 0 || snapshot.get_schema == 0 || snapshot.get_next == 0 ||
+        snapshot.get_last_error == 0) {
+      throw error(name, "read", "The library did not initialize the stream, or a callback of " +
+        "the stream is NULL.")
+    }
     val arrowSchema = ArrowSchema.allocateNew(allocator)
     try {
       call(name, "read")(stream.getSchema(arrowSchema))
