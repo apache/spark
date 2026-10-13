@@ -1932,6 +1932,25 @@ abstract class RoundToDecimal(
     math.pow(10, decimalInputType.precision - decimalInputType.scale)
 
   // Called by generated code as well as interpreted evaluation.
+  def roundDecimal(decimal: Decimal): Decimal = {
+    val resultType = dataType.asInstanceOf[DecimalType]
+    val p = resultType.precision
+    val s = resultType.scale
+    if (_scale >= 0) {
+      decimal.toPrecision(p, s, mode, nullOnOverflow = !ansiEnabled,
+        context = getContextOrNull())
+    } else {
+      // Apply the result precision after rounding so ANSI mode also governs carry overflow.
+      val rounded = Decimal(decimal.toBigDecimal.setScale(_scale, mode))
+      if (ansiEnabled) {
+        CastUtils.changePrecisionExact(rounded, p, s, getContextOrNull())
+      } else {
+        CastUtils.changePrecisionOrNull(rounded, p, s)
+      }
+    }
+  }
+
+  // Called by generated code as well as interpreted evaluation.
   def roundFloatingPoint(value: Double): Decimal = {
     if (value.isNaN || value.isInfinite) {
       null
@@ -1948,7 +1967,7 @@ abstract class RoundToDecimal(
             decimal, decimalInputType.precision, decimalInputType.scale)
         }
       } else {
-        super.nullSafeEval(decimal).asInstanceOf[Decimal]
+        roundDecimal(decimal)
       }
     }
   }
@@ -1956,23 +1975,29 @@ abstract class RoundToDecimal(
   override def nullSafeEval(input: Any): Any = child.dataType match {
     case FloatType => roundFloatingPoint(input.asInstanceOf[Float].toDouble)
     case DoubleType => roundFloatingPoint(input.asInstanceOf[Double])
-    case _ => super.nullSafeEval(input)
+    case _ => roundDecimal(input.asInstanceOf[Decimal])
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = child.dataType match {
-    case FloatType | DoubleType if scale.eval(EmptyRow) != null =>
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    if (scale.eval(EmptyRow) == null) {
+      super.doGenCode(ctx, ev)
+    } else {
       val input = child.genCode(ctx)
       val rounding = ctx.addReferenceObj("rounding", this, classOf[RoundToDecimal].getName)
+      val method = child.dataType match {
+        case FloatType | DoubleType => "roundFloatingPoint"
+        case _ => "roundDecimal"
+      }
       ev.copy(code = code"""
         ${input.code}
         boolean ${ev.isNull} = ${input.isNull};
         Decimal ${ev.value} = null;
         if (!${ev.isNull}) {
-          ${ev.value} = $rounding.roundFloatingPoint(${input.value});
+          ${ev.value} = $rounding.$method(${input.value});
           ${ev.isNull} = ${ev.value} == null;
         }
       """)
-    case _ => super.doGenCode(ctx, ev)
+    }
   }
 }
 
