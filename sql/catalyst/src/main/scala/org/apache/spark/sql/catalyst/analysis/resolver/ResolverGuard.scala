@@ -780,8 +780,7 @@ object ResolverGuard {
   }
 
   /**
-   * Higher order functions that are supported but guarded under the
-   * `ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_HIGHER_ORDER_FUNCTIONS_RESOLUTION` flag.
+   * Higher order functions that are not yet supported by the single-pass resolver.
    */
   private val HIGHER_ORDER_FUNCTIONS = {
     val map = new IdentifierMap[Unit]()

@@ -164,7 +164,6 @@ class SubqueryExpressionResolver(expressionResolver: ExpressionResolver, resolve
    */
   private def resolveSubqueryExpressionPlan(
       unresolvedSubqueryPlan: LogicalPlan): ResolvedSubqueryExpressionPlan = {
-    val parentSubqueryScope = subqueryRegistry.currentScope
     expressionIdAssigner.pushMapping(isSubqueryRoot = true)
     scopes.pushScope(isSubqueryRoot = true)
     cteRegistry.pushScope(isRoot = true)
@@ -178,7 +177,7 @@ class SubqueryExpressionResolver(expressionResolver: ExpressionResolver, resolve
     val resolvedSubqueryExpressionPlan = try {
       val resolvedPlan = resolver.resolve(unresolvedSubqueryPlan)
 
-      val outerReferences = processOuterReferences(resolvedPlan, parentSubqueryScope)
+      val outerReferences = processOuterReferences(resolvedPlan)
 
       ResolvedSubqueryExpressionPlan(
         plan = resolvedPlan,
@@ -204,9 +203,7 @@ class SubqueryExpressionResolver(expressionResolver: ExpressionResolver, resolve
    * Return `outerAttrs` for the resolved subquery plan by collecting the outer references within
    * the subquery plan. Only one level of correlation is supported.
    */
-  private def processOuterReferences(
-      resolvedPlan: LogicalPlan,
-      parentSubqueryScope: SubqueryScope): Seq[Expression] = {
+  private def processOuterReferences(resolvedPlan: LogicalPlan): Seq[Expression] = {
     SubExprUtils.getOuterReferences(resolvedPlan)
   }
 
