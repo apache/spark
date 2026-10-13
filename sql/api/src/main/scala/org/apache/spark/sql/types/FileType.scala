@@ -32,7 +32,7 @@ import org.apache.spark.annotation.Unstable
  *   - offset (BIGINT): the start of the referenced byte range
  *   - size (BIGINT): the size of the file in bytes
  *   - content_type (STRING): the MIME/content type of the file
- *   - checksum (STRING): an algorithm-tagged integrity token for the file, e.g. "ETAG:<etag>"
+ *   - checksum (STRING): an algorithm-tagged integrity token for the file, e.g. "ETAG:{etag}"
  *   - inline (BINARY): the referenced bytes stored inline in the value
  *
  * FileType may be EXTERNAL (simple references, lifecycle independent of the table) or UNKNOWN
@@ -44,7 +44,8 @@ import org.apache.spark.annotation.Unstable
  * operations. This type currently only guarantees the schema-level pieces (DDL and JSON); the
  * physical representation and most of the restrictions are added by later parts.
  *
- * @param mode the mode for this FileType column
+ * @param mode
+ *   the mode for this FileType column
  * @since 4.4.0
  */
 @Unstable
@@ -77,14 +78,19 @@ object FileType {
 
   /** Field index for the uri field. */
   val URI_INDEX = 0
+
   /** Field index for the offset field. */
   val OFFSET_INDEX = 1
+
   /** Field index for the size field. */
   val SIZE_INDEX = 2
+
   /** Field index for the content_type field. */
   val CONTENT_TYPE_INDEX = 3
+
   /** Field index for the checksum field. */
   val CHECKSUM_INDEX = 4
+
   /** Field index for the inline field. */
   val INLINE_INDEX = 5
 
@@ -99,8 +105,7 @@ object FileType {
     StructField("size", LongType, nullable = true),
     StructField("content_type", StringType, nullable = true),
     StructField("checksum", StringType, nullable = true),
-    StructField("inline", BinaryType, nullable = true)
-  )
+    StructField("inline", BinaryType, nullable = true))
 
   /** The user-facing subset of `FIELDS`: everything except `inline`. */
   val PUBLIC_FIELDS: Array[StructField] = FIELDS.take(INLINE_INDEX)

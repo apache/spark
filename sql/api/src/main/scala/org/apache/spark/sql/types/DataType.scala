@@ -540,10 +540,7 @@ object DataType {
           ("name", JString(name)),
           ("nullable", JBool(nullable)),
           ("type", dataType: JValue)) =>
-      StructField(
-        name,
-        parseDataType(dataType, name, Map.empty, inStructField = true),
-        nullable)
+      StructField(name, parseDataType(dataType, name, Map.empty, inStructField = true), nullable)
     // Support reading schema when 'nullable' is missing.
     case JSortedObject(("name", JString(name)), ("type", dataType: JValue)) =>
       StructField(name, parseDataType(dataType, name, Map.empty, inStructField = true))
