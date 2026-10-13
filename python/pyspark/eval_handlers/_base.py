@@ -43,17 +43,39 @@ if TYPE_CHECKING:
 
     from pyspark.worker_util import EvalConf, RunnerConf
 
-# eval type -> handler class, populated by _EvalTypeHandlerMeta at class definition.
-_eval_type_handlers: "dict[int, type[EvalTypeHandler]]" = {}
+# eval type -> (variant_conf or None, {variant_value: handler class}), populated by
+# _EvalTypeHandlerMeta at class definition. Handlers that declare no variant_conf register
+# under the conf name None and the value None.
+_eval_type_handlers: "dict[int, tuple[Optional[str], dict[Any, type[EvalTypeHandler]]]]" = {}
 
 
-def get_eval_type_handler(eval_type: int) -> "Optional[type[EvalTypeHandler]]":
-    """Return the handler class registered for ``eval_type``, or ``None``."""
-    return _eval_type_handlers.get(eval_type)
+def get_eval_type_handler(
+    eval_type: int, runner_conf: "RunnerConf"
+) -> "Optional[type[EvalTypeHandler]]":
+    """Return the handler class registered for ``eval_type``, or ``None``.
+
+    When the eval type's handlers declare a ``variant_conf``, the variant is selected by the
+    value of that ``RunnerConf`` property. This happens per lookup rather than at import, as
+    the conf is per task and Python workers are reused across tasks.
+    """
+    entry = _eval_type_handlers.get(eval_type)
+    if entry is None:
+        return None
+    conf_name, variants = entry
+    key = getattr(runner_conf, conf_name) if conf_name is not None else None
+    handler_cls = variants.get(key)
+    if handler_cls is None:
+        raise RuntimeError(
+            "No eval type handler for {} with {}={!r}; registered values: {}".format(
+                eval_type, conf_name, key, sorted(map(repr, variants))
+            )
+        )
+    return handler_cls
 
 
 class _EvalTypeHandlerMeta(ABCMeta):
-    """Registers a concrete handler under its ``eval_type`` at class definition.
+    """Registers a concrete handler under its ``eval_type`` (and ``variant_value``, if it
+    declares a ``variant_conf``) at class definition.
 
     Runs after ``ABCMeta`` sets ``__abstractmethods__``, so a class that declares
     an ``eval_type`` while leaving ``run``/``serializer`` abstract is rejected at
@@ -70,12 +92,32 @@ class _EvalTypeHandlerMeta(ABCMeta):
                     name, eval_type, sorted(cls.__abstractmethods__)
                 )
             )
-            assert eval_type not in _eval_type_handlers, (
-                "Duplicate eval type handler for {}: {} and {}".format(
-                    eval_type, _eval_type_handlers[eval_type].__name__, name
+            conf_name = namespace.get("variant_conf")
+            assert conf_name is not None or "variant_value" not in namespace, (
+                "Handler {} declares variant_value without variant_conf".format(name)
+            )
+            assert conf_name is None or "variant_value" in namespace, (
+                "Handler {} declares variant_conf {} without variant_value".format(name, conf_name)
+            )
+            value = namespace.get("variant_value")
+            registered_conf_name, variants = _eval_type_handlers.get(eval_type, (conf_name, {}))
+            assert registered_conf_name == conf_name, (
+                "Handlers for eval type {} must share one variant_conf: {} keys on {}, "
+                "but {} keys on {}".format(
+                    eval_type,
+                    next(iter(variants.values())).__name__,
+                    registered_conf_name,
+                    name,
+                    conf_name,
                 )
             )
-            _eval_type_handlers[eval_type] = cls
+            assert value not in variants, (
+                "Duplicate eval type handler for {} with {}={!r}: {} and {}".format(
+                    eval_type, conf_name, value, variants[value].__name__, name
+                )
+            )
+            variants[value] = cls
+            _eval_type_handlers[eval_type] = (conf_name, variants)
         return cls
 
 
@@ -91,6 +133,10 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
 
     # PythonEvalType this handler serves; None on the abstract bases.
     eval_type: ClassVar[Optional[int]] = None
+    # Name of the RunnerConf property that selects between the handlers of one eval type, and
+    # the value of it this handler serves; None when the eval type has a single handler.
+    variant_conf: ClassVar[Optional[str]] = None
+    variant_value: ClassVar[Any] = None
 
     def __init__(
         self, udfs: list[tuple[Any, ...]], runner_conf: "RunnerConf", eval_conf: "EvalConf"

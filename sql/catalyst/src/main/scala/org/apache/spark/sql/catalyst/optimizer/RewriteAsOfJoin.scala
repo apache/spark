@@ -64,6 +64,7 @@ object RewriteAsOfJoin extends Rule[LogicalPlan] {
           _,
           _,
           _,
+          _,
           _)
           if !conf.useSortMergeAsOfJoinOperator(j.requiresSortMergeAsOfJoin) =>
         val conditionWithOuterReference =
