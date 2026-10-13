@@ -106,12 +106,10 @@ case class XmlFileFormat() extends TextBasedFileFormat with DataSourceRegister {
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
-    val xmlOptions = getXmlOptions(sparkSession, options)
-    // Honor the `decompressionCodec` option: force the decompression codec instead of inferring it
-    // from the file name extension.
-    CompressionCodecs.setReadCodecConfiguration(hadoopConf, xmlOptions.decompressionCodec)
     val broadcastedHadoopConf =
       SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
+
+    val xmlOptions = getXmlOptions(sparkSession, options)
 
     val columnNameOfCorruptRecord = xmlOptions.columnNameOfCorruptRecord
     // Check a field requirement for corrupt records here to throw an exception in a driver side

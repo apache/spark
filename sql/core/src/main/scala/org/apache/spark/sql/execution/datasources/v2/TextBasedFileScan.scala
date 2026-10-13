@@ -18,10 +18,13 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.compress.CompressionCodecFactory
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.FileSourceOptions
+import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
@@ -32,6 +35,20 @@ abstract class TextBasedFileScan(
     sparkSession.sessionState.newHadoopConfWithOptions(options.asScala.toMap))
 
   override def isSplitable(path: Path): Boolean = Utils.isFileSplittable(path, codecFactory)
+
+  /**
+   * Creates the Hadoop configuration the readers use, from the scan options (Hadoop configurations
+   * are case sensitive), with the `decompressionCodec` read option, when set, forced onto it so
+   * the readers decompress every file with that codec instead of inferring it from the file name
+   * extension (see [[CompressionCodecs.setReadCodecConfiguration]]).
+   */
+  protected def newReadHadoopConf(): Configuration = {
+    val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(
+      options.asCaseSensitiveMap.asScala.toMap)
+    CompressionCodecs.setReadCodecConfiguration(
+      hadoopConf, new FileSourceOptions(options.asScala.toMap).decompressionCodec)
+    hadoopConf
+  }
 
   override def getFileUnSplittableReason(path: Path): String = {
     assert(!isSplitable(path))

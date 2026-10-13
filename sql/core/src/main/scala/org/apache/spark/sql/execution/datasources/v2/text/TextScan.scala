@@ -22,7 +22,6 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.connector.read.PartitionReaderFactory
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
@@ -71,14 +70,7 @@ case class TextScan(
 
   override def createReaderFactory(): PartitionReaderFactory = {
     verifyReadSchema(readDataSchema)
-    val hadoopConf = {
-      val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
-      // Hadoop Configurations are case sensitive.
-      sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
-    }
-    // Honor the `decompressionCodec` option: force the decompression codec instead of inferring it
-    // from the file name extension.
-    CompressionCodecs.setReadCodecConfiguration(hadoopConf, textOptions.decompressionCodec)
+    val hadoopConf = newReadHadoopConf()
     val broadcastedConf =
       SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     TextPartitionReaderFactory(conf, broadcastedConf, readDataSchema,

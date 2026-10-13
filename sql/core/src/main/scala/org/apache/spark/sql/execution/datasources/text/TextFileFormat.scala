@@ -117,9 +117,6 @@ case class TextFileFormat()
       hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
     verifyReadSchema(requiredSchema)
     val textOptions = new TextOptions(options)
-    // Honor the `decompressionCodec` option: force the decompression codec instead of inferring it
-    // from the file name extension.
-    CompressionCodecs.setReadCodecConfiguration(hadoopConf, textOptions.decompressionCodec)
     val broadcastedHadoopConf =
       SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     val perFileReader = readToUnsafeMem(broadcastedHadoopConf, requiredSchema, textOptions)

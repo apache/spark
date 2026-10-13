@@ -105,12 +105,9 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
-    val parsedOptions = getCsvOptions(sparkSession, options)
-    // Honor the `decompressionCodec` option: force the decompression codec instead of inferring it
-    // from the file name extension.
-    CompressionCodecs.setReadCodecConfiguration(hadoopConf, parsedOptions.decompressionCodec)
     val broadcastedHadoopConf =
       SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
+    val parsedOptions = getCsvOptions(sparkSession, options)
     val isColumnPruningEnabled = parsedOptions.isColumnPruningEnabled(requiredSchema)
     // The effective `ignoredPathSegmentRegex` for skipping hidden archive entries. Reused from the
     // options' lazily-compiled Pattern (Serializable) instead of re-compiling per file or entry.

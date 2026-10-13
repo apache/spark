@@ -92,12 +92,9 @@ case class JsonFileFormat() extends TextBasedFileFormat with DataSourceRegister 
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
-    val parsedOptions = getJsonOptions(sparkSession, options)
-    // Honor the `decompressionCodec` option: force the decompression codec instead of inferring it
-    // from the file name extension.
-    CompressionCodecs.setReadCodecConfiguration(hadoopConf, parsedOptions.decompressionCodec)
     val broadcastedHadoopConf =
       SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
+    val parsedOptions = getJsonOptions(sparkSession, options)
     val actualSchema =
       StructType(requiredSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
     // Check a field requirement for corrupt records here to throw an exception in a driver side
