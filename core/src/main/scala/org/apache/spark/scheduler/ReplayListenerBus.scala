@@ -71,8 +71,23 @@ private[spark] class ReplayListenerBus(
       sourceName: String,
       maybeTruncated: Boolean = false,
       eventsFilter: ReplayEventsFilter = SELECT_ALL_FILTER): Boolean = {
-    val lines = boundedLines(logData, sourceName)
-    replayEntries(lines, sourceName, maybeTruncated, eventsFilter)
+    replayFromOffset(logData, sourceName, 0L, maybeTruncated, eventsFilter)
+  }
+
+  /**
+   * Variant of [[replay()]] for a stream positioned at the start of a line that begins at
+   * `startOffset` bytes into the (uncompressed) source. A positive `startOffset` is added to
+   * the diagnostics so that the reported line numbers, which count from the start of the
+   * stream, can be located in the source.
+   */
+  private[spark] def replayFromOffset(
+      logData: InputStream,
+      sourceName: String,
+      startOffset: Long,
+      maybeTruncated: Boolean,
+      eventsFilter: ReplayEventsFilter): Boolean = {
+    val lines = boundedLines(logData, sourceName, startOffset)
+    replayEntries(lines, sourceName, startOffset, maybeTruncated, eventsFilter)
   }
 
   /**
@@ -83,7 +98,8 @@ private[spark] class ReplayListenerBus(
    */
   private def boundedLines(
       logData: InputStream,
-      sourceName: String): Iterator[(String, Int)] = {
+      sourceName: String,
+      startOffset: Long): Iterator[(String, Int)] = {
     // Fail on malformed input like Source.getLines() does instead of replacing it.
     val decoder = StandardCharsets.UTF_8.newDecoder()
       .onMalformedInput(CodingErrorAction.REPORT)
@@ -145,10 +161,11 @@ private[spark] class ReplayListenerBus(
             if (!warned) {
               logWarning("Skipped event log lines longer than " +
                 s"$effectiveMaxLineLength bytes in " +
-                s"$sourceName; first skipped line: ${index + 1}")
+                s"$sourceName; first skipped line: ${index + 1}" + lineOrigin(startOffset))
               warned = true
             }
-            logDebug(s"Skipped event log line ${index + 1} in $sourceName")
+            logDebug(s"Skipped event log line ${index + 1} in $sourceName" +
+              lineOrigin(startOffset))
             fetchLine()
           } else {
             (maybeLine.get, index)
@@ -167,12 +184,13 @@ private[spark] class ReplayListenerBus(
       sourceName: String,
       maybeTruncated: Boolean,
       eventsFilter: ReplayEventsFilter): Boolean = {
-    replayEntries(lines.zipWithIndex, sourceName, maybeTruncated, eventsFilter)
+    replayEntries(lines.zipWithIndex, sourceName, 0L, maybeTruncated, eventsFilter)
   }
 
   private def replayEntries(
       lines: Iterator[(String, Int)],
       sourceName: String,
+      startOffset: Long,
       maybeTruncated: Boolean,
       eventsFilter: ReplayEventsFilter): Boolean = {
     var currentLine: String = null
@@ -216,7 +234,8 @@ private[spark] class ReplayListenerBus(
               throw jpe
             } else {
               logWarning(s"Got JsonParseException from log file $sourceName" +
-                s" at line $lineNumber, the file might not have finished writing cleanly.")
+                s" at line $lineNumber" + lineOrigin(startOffset) +
+                ", the file might not have finished writing cleanly.")
             }
         }
       }
@@ -228,7 +247,7 @@ private[spark] class ReplayListenerBus(
       case _: EOFException if maybeTruncated => false
       case jpe: JsonProcessingException =>
         logError(s"Exception parsing Spark event log: $sourceName " +
-          s"at line $lineNumber")
+          s"at line $lineNumber" + lineOrigin(startOffset))
         throw jpe
       case ioe: IOException =>
         throw ioe
@@ -236,10 +255,15 @@ private[spark] class ReplayListenerBus(
         logError(s"Exception parsing Spark event log: $sourceName", e)
         val prefix = Option(currentLine).map(_.take(1024)).orNull
         val length = Option(currentLine).fold(0)(_.length)
-        logError(s"Malformed line #$lineNumber: $prefix " +
+        logError(s"Malformed line #$lineNumber" + lineOrigin(startOffset) + s": $prefix " +
           s"(line length: $length characters; showing at most 1024)\n")
         false
     }
+  }
+
+  /** Describes where line numbers start when the replay does not start at the source start. */
+  private def lineOrigin(startOffset: Long): String = {
+    if (startOffset > 0) s" (lines counted from uncompressed byte offset $startOffset)" else ""
   }
 
   override protected def isIgnorableException(e: Throwable): Boolean = {
