@@ -17,11 +17,11 @@
 
 package org.apache.spark.util
 
-import java.io.{File, OutputStream, PrintStream}
-import java.net.{InetAddress, ServerSocket, URI}
+import java.io.{File, IOException, OutputStream, PrintStream}
+import java.net.{InetAddress, InetSocketAddress, ServerSocket, Socket, SocketTimeoutException, URI}
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
-import java.util.concurrent.{CancellationException, CountDownLatch, Executors, TimeUnit}
+import java.util.concurrent.{CancellationException, CountDownLatch, ExecutorService, Executors, TimeUnit}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 
 import scala.collection.mutable.ArrayBuffer
@@ -29,12 +29,13 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
+import com.sun.net.httpserver.HttpServer
 import org.apache.ivy.core.IvyContext
 import org.apache.ivy.core.module.descriptor.{DependencyDescriptor, MDArtifact}
 import org.apache.ivy.core.resolve.{ResolveData, ResolvedModuleRevision}
 import org.apache.ivy.core.settings.IvySettings
 import org.apache.ivy.plugins.resolver.{AbstractResolver, ChainResolver, FileSystemResolver, IBiblioResolver}
-import org.apache.ivy.util.url.URLHandlerRegistry
+import org.apache.ivy.util.url.{URLHandlerDispatcher, URLHandlerRegistry}
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
@@ -84,6 +85,12 @@ class MavenUtilsSuite
     settings.addResolver(resolver)
     settings.setDefaultResolver(resolver.getName)
     settings
+  }
+
+  private def shutdownExecutor(executor: ExecutorService): Unit = {
+    executor.shutdownNow()
+    assert(executor.awaitTermination(10, TimeUnit.SECONDS),
+      "Ivy resolution executor did not terminate")
   }
 
   override def beforeEach(): Unit = {
@@ -257,14 +264,15 @@ class MavenUtilsSuite
   }
 
   test("runtime dependency resolver honors cancellation while waiting for Ivy") {
-    val executor = Executors.newFixedThreadPool(2)
-    implicit val executionContext: ExecutionContext =
-      ExecutionContext.fromExecutorService(executor)
-    try {
-      val main = MavenCoordinate("my.runtime.waiting", "mylib", "0.1")
-      IvyTestUtils.withRepository(main, None, None) { repo =>
+    val main = MavenCoordinate("my.runtime.waiting", "mylib", "0.1")
+    IvyTestUtils.withRepository(main, None, None) { repo =>
+      val executor = Executors.newFixedThreadPool(2)
+      implicit val executionContext: ExecutionContext =
+        ExecutionContext.fromExecutorService(executor)
+      val releaseFirst = new CountDownLatch(1)
+      val cancelled = new AtomicBoolean(false)
+      SparkErrorUtils.tryWithSafeFinally {
         val firstEnteredIvy = new CountDownLatch(1)
-        val releaseFirst = new CountDownLatch(1)
         val blockingPrintStream = new PrintStream(noOpOutputStream) {
           private val blocked = new AtomicBoolean(false)
           // scalastyle:off println
@@ -288,7 +296,6 @@ class MavenUtilsSuite
         }
 
         assert(firstEnteredIvy.await(5, TimeUnit.SECONDS))
-        val cancelled = new AtomicBoolean(false)
         val cancellationChecks = new AtomicInteger(0)
         val waitingForIvy = new CountDownLatch(1)
         val resolver = new RuntimeDependencyResolver(
@@ -317,29 +324,39 @@ class MavenUtilsSuite
           releaseFirst.countDown()
         }
         SparkThreadUtils.awaitResultNoSparkExceptionConversion(first, 5.seconds)
+      } {
+        cancelled.set(true)
+        releaseFirst.countDown()
+        shutdownExecutor(executor)
       }
-    } finally {
-      executor.shutdownNow()
     }
   }
 
-  test("runtime dependency resolver cancels active Ivy resolution") {
+  test("runtime dependency resolver cancels stalled reads using the read timeout") {
     val executor = Executors.newFixedThreadPool(2)
     implicit val executionContext: ExecutionContext =
       ExecutionContext.fromExecutorService(executor)
     val server = new ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))
+    server.setSoTimeout(100)
     val requestAccepted = new CountDownLatch(1)
     val releaseRequest = new CountDownLatch(1)
+    val cancelled = new AtomicBoolean(false)
     val serverFuture = Future {
-      val socket = server.accept()
+      val sockets = ArrayBuffer.empty[Socket]
       try {
-        requestAccepted.countDown()
-        releaseRequest.await()
+        while (releaseRequest.getCount > 0) {
+          try {
+            sockets += server.accept()
+            requestAccepted.countDown()
+          } catch {
+            case _: SocketTimeoutException =>
+          }
+        }
       } finally {
-        socket.close()
+        sockets.foreach(_.close())
       }
     }
-    try {
+    SparkErrorUtils.tryWithSafeFinally {
       val settings = Paths.get(tempIvyPath, "cancellable-ivysettings.xml")
       Files.writeString(
         settings,
@@ -350,7 +367,6 @@ class MavenUtilsSuite
            |      root="http://127.0.0.1:${server.getLocalPort}"/>
            |  </resolvers>
            |</ivysettings>""".stripMargin)
-      val cancelled = new AtomicBoolean(false)
       val resolver = new RuntimeDependencyResolver(
         ivySettingsPath = Some(settings.toString),
         ivyPath = Some(Paths.get(tempIvyPath, "cancelled").toString))
@@ -359,14 +375,15 @@ class MavenUtilsSuite
         resolver.resolve(
           URI.create("ivy://my.runtime.active:mylib:0.1"),
           resolverTimeoutMs,
-          resolverTimeoutMs,
+          readTimeoutMs = 250,
           isCancelled = () => cancelled.get())
       }
 
       assert(requestAccepted.await(5, TimeUnit.SECONDS))
+      assert(URLHandlerRegistry.getDefault eq previousUrlHandler)
       cancelled.set(true)
       intercept[CancellationException] {
-        SparkThreadUtils.awaitResultNoSparkExceptionConversion(resolution, 5.seconds)
+        SparkThreadUtils.awaitResultNoSparkExceptionConversion(resolution, 10.seconds)
       }
       assert(URLHandlerRegistry.getDefault eq previousUrlHandler)
 
@@ -379,11 +396,103 @@ class MavenUtilsSuite
           isTest = true)
         assert(resolved.nonEmpty)
       }
-    } finally {
+    } {
+      cancelled.set(true)
       releaseRequest.countDown()
-      server.close()
-      SparkThreadUtils.awaitResultNoSparkExceptionConversion(serverFuture, 5.seconds)
-      executor.shutdownNow()
+      SparkErrorUtils.tryWithSafeFinally {
+        SparkThreadUtils.awaitResultNoSparkExceptionConversion(serverFuture, 5.seconds)
+      } {
+        SparkErrorUtils.tryWithSafeFinally {
+          server.close()
+        } {
+          shutdownExecutor(executor)
+        }
+      }
+    }
+  }
+
+  test("runtime resolver preserves the HTTP handler when cancelling a progressing download") {
+    val executor = Executors.newSingleThreadExecutor()
+    implicit val executionContext: ExecutionContext =
+      ExecutionContext.fromExecutorService(executor)
+    val server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0)
+    val downloadStarted = new CountDownLatch(1)
+    val releaseDownload = new CountDownLatch(1)
+    val cancelled = new AtomicBoolean(false)
+    val downloadSize = 1024 * 1024
+    val bytesSent = new AtomicInteger(0)
+    val previousUrlHandler = URLHandlerRegistry.getDefault
+    val customUrlHandler = new URLHandlerDispatcher
+    customUrlHandler.setDefault(previousUrlHandler)
+    URLHandlerRegistry.setDefault(customUrlHandler)
+    SparkErrorUtils.tryWithSafeFinally {
+      server.createContext("/", exchange => {
+        try {
+          if (!exchange.getRequestURI.getPath.endsWith(".jar")) {
+            exchange.sendResponseHeaders(404, -1)
+          } else if (exchange.getRequestMethod == "HEAD") {
+            exchange.getResponseHeaders.set("Content-Length", downloadSize.toString)
+            exchange.sendResponseHeaders(200, -1)
+          } else {
+            exchange.sendResponseHeaders(200, downloadSize)
+            val output = exchange.getResponseBody
+            val chunk = new Array[Byte](1024)
+            while (bytesSent.get() < downloadSize && releaseDownload.getCount > 0) {
+              output.write(chunk)
+              output.flush()
+              bytesSent.addAndGet(chunk.length)
+              downloadStarted.countDown()
+              releaseDownload.await(25, TimeUnit.MILLISECONDS)
+            }
+          }
+        } catch {
+          case _: IOException =>
+        } finally {
+          exchange.close()
+        }
+      })
+      server.start()
+      val settings = Paths.get(tempIvyPath, "streaming-ivysettings.xml")
+      Files.writeString(
+        settings,
+        s"""<ivysettings>
+           |  <settings defaultResolver="streaming"/>
+           |  <resolvers>
+           |    <ibiblio name="streaming" m2compatible="true" usepoms="false"
+           |      root="http://127.0.0.1:${server.getAddress.getPort}/"/>
+           |  </resolvers>
+           |</ivysettings>""".stripMargin)
+      val resolver = new RuntimeDependencyResolver(
+        ivySettingsPath = Some(settings.toString),
+        ivyPath = Some(Paths.get(tempIvyPath, "streaming").toString))
+      val resolution = Future {
+        resolver.resolve(
+          URI.create("ivy://my.runtime.streaming:mylib:0.1?transitive=false"),
+          resolverTimeoutMs,
+          resolverTimeoutMs,
+          isCancelled = () => cancelled.get())
+      }
+
+      assert(downloadStarted.await(5, TimeUnit.SECONDS))
+      assert(URLHandlerRegistry.getDefault eq customUrlHandler)
+      cancelled.set(true)
+      intercept[CancellationException] {
+        SparkThreadUtils.awaitResultNoSparkExceptionConversion(resolution, 5.seconds)
+      }
+      assert(bytesSent.get() < downloadSize)
+      assert(URLHandlerRegistry.getDefault eq customUrlHandler)
+    } {
+      cancelled.set(true)
+      releaseDownload.countDown()
+      SparkErrorUtils.tryWithSafeFinally {
+        SparkErrorUtils.tryWithSafeFinally {
+          server.stop(0)
+        } {
+          shutdownExecutor(executor)
+        }
+      } {
+        URLHandlerRegistry.setDefault(previousUrlHandler)
+      }
     }
   }
 
@@ -394,7 +503,8 @@ class MavenUtilsSuite
     val resolverEntered = new CountDownLatch(1)
     val releaseResolver = new CountDownLatch(1)
     val resolverCompleted = new AtomicBoolean(false)
-    try {
+    val cancelled = new AtomicBoolean(false)
+    SparkErrorUtils.tryWithSafeFinally {
       val blockingResolver = new FileSystemResolver {
         override def getDependency(
             _descriptor: DependencyDescriptor,
@@ -419,7 +529,6 @@ class MavenUtilsSuite
       settings.addResolver(blockingResolver)
       settings.setDefaultResolver(blockingResolver.getName)
 
-      val cancelled = new AtomicBoolean(false)
       val resolution = Future {
         MavenUtils.resolveMavenCoordinatesWithCancellation(
           "my.runtime.uncooperative:mylib:0.1",
@@ -446,9 +555,10 @@ class MavenUtilsSuite
       }
       assert(resolverCompleted.get())
       SparkThreadUtils.awaitResultNoSparkExceptionConversion(delayedRelease, 5.seconds)
-    } finally {
+    } {
+      cancelled.set(true)
       releaseResolver.countDown()
-      executor.shutdownNow()
+      shutdownExecutor(executor)
     }
   }
 

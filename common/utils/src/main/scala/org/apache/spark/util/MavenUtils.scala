@@ -22,11 +22,10 @@ import java.net.URI
 import java.text.ParseException
 import java.util.UUID
 import java.util.concurrent.{Callable, CancellationException, ExecutionException, FutureTask, TimeoutException, TimeUnit}
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.ReentrantLock
 
 import scala.jdk.CollectionConverters._
-import scala.util.control.NonFatal
 
 import org.apache.ivy.Ivy
 import org.apache.ivy.core.LogOptions
@@ -39,7 +38,6 @@ import org.apache.ivy.core.settings.{IvySettings, NamedTimeoutConstraint}
 import org.apache.ivy.plugins.matcher.GlobPatternMatcher
 import org.apache.ivy.plugins.repository.file.FileRepository
 import org.apache.ivy.plugins.resolver.{AbstractResolver, ChainResolver, FileSystemResolver, IBiblioResolver}
-import org.apache.ivy.util.url.{HttpClientHandler, URLHandlerDispatcher, URLHandlerRegistry}
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, LogKeys}
@@ -67,35 +65,11 @@ private[spark] object MavenUtils extends Logging {
 
   private class IvyResolutionCancellation {
     private val requested = new AtomicBoolean(false)
-    private val httpHandler = new AtomicReference[HttpClientHandler]()
 
     def isCancelled: Boolean = requested.get()
 
-    def installUrlHandler(): () => Unit = {
-      val previousHandler = URLHandlerRegistry.getDefault
-      val handler = new HttpClientHandler
-      httpHandler.set(handler)
-      val dispatcher = new URLHandlerDispatcher
-      dispatcher.setDefault(previousHandler)
-      dispatcher.setDownloader("http", handler)
-      dispatcher.setDownloader("https", handler)
-      URLHandlerRegistry.setDefault(dispatcher)
-      () => URLHandlerRegistry.setDefault(previousHandler)
-    }
-
-    def closeHttpHandler(): Unit = {
-      Option(httpHandler.getAndSet(null)).foreach { handler =>
-        try {
-          handler.close()
-        } catch {
-          case NonFatal(e) => logWarning("Failed to close Ivy HTTP handler", e)
-        }
-      }
-    }
-
     def cancel(resolutionThread: Thread): Unit = {
       requested.set(true)
-      closeHttpHandler()
       resolutionThread.interrupt()
     }
   }
@@ -671,12 +645,10 @@ private[spark] object MavenUtils extends Logging {
       val isCancelled = () => cancellation.exists(_.isCancelled)
       acquireIvyLock(isCancelled)
       val sysOut = System.out
-      var restoreUrlHandler = Option.empty[() => Unit]
       // Default configuration name for ivy
       val ivyConfName = "default"
       var md: DefaultModuleDescriptor = null
       try {
-        restoreUrlHandler = cancellation.map(_.installUrlHandler())
         // To prevent ivy from logging to system out
         System.setOut(printStream)
         // A Module descriptor must be specified. Entries are dummy strings
@@ -748,6 +720,7 @@ private[spark] object MavenUtils extends Logging {
                 checkCancelled(isCancelled)
                 noCacheIvy.retrieve(
                   noCacheRr.getModuleDescriptor.getModuleRevisionId, retrieveOptions)
+                checkCancelled(isCancelled)
                 resolveDependencyPaths(noCacheRr.getArtifacts.toArray, packagesDirectory)
               }
             } else {
@@ -756,12 +729,11 @@ private[spark] object MavenUtils extends Logging {
           } else {
             checkCancelled(isCancelled)
             ivy.retrieve(rr.getModuleDescriptor.getModuleRevisionId, retrieveOptions)
+            checkCancelled(isCancelled)
             resolveDependencyPaths(rr.getArtifacts.toArray, packagesDirectory)
           }
         }
       } finally {
-        restoreUrlHandler.foreach(_())
-        cancellation.foreach(_.closeHttpHandler())
         System.setOut(sysOut)
         if (md != null) {
           clearIvyResolutionFiles(md.getModuleRevisionId, ivySettings.getDefaultCache, ivyConfName)
