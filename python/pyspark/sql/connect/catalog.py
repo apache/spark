@@ -302,8 +302,8 @@ class Catalog:
 
     uncacheTable.__doc__ = PySparkCatalog.uncacheTable.__doc__
 
-    def clearCache(self) -> None:
-        self._execute_and_fetch(plan.ClearCache())
+    def clearCache(self, allSessions: bool = True) -> None:
+        self._execute_and_fetch(plan.ClearCache(all_sessions=allSessions))
 
     clearCache.__doc__ = PySparkCatalog.clearCache.__doc__
 

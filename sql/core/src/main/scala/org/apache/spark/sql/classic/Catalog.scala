@@ -875,7 +875,21 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog with Logging {
    * @since 2.0.0
    */
   override def clearCache(): Unit = {
-    sparkSession.sharedState.cacheManager.clearCache()
+    clearCache(allSessions = true)
+  }
+
+  /**
+   * Removes cached tables or views from the in-memory cache.
+   *
+   * @group cachemgmt
+   * @since 4.4.0
+   */
+  override def clearCache(allSessions: Boolean): Unit = {
+    if (allSessions) {
+      sparkSession.sharedState.cacheManager.clearCache()
+    } else {
+      sparkSession.sharedState.cacheManager.clearCache(sparkSession)
+    }
   }
 
   /**

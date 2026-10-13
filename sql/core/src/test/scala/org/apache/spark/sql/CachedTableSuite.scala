@@ -83,6 +83,22 @@ class CachedTableSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-50569: clearCache can be scoped to the current session") {
+    val otherSession = spark.newSession()
+    val firstDataFrame = spark.range(1)
+    val secondDataFrame = otherSession.range(1, 2)
+
+    firstDataFrame.cache()
+    secondDataFrame.cache()
+    spark.catalog.clearCache(allSessions = false)
+
+    assert(spark.sharedState.cacheManager.lookupCachedData(firstDataFrame).isEmpty)
+    assert(otherSession.sharedState.cacheManager.lookupCachedData(secondDataFrame).isDefined)
+
+    otherSession.catalog.clearCache(allSessions = false)
+    assert(spark.sharedState.cacheManager.isEmpty)
+  }
+
   def rddIdOf(tableName: String): Int = {
     val plan = spark.table(tableName).queryExecution.sparkPlan
     plan.collect {
