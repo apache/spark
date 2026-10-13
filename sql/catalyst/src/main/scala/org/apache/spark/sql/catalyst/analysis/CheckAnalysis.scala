@@ -762,7 +762,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 "joinCondition" -> toSQLExpr(condition),
                 "conditionType" -> toSQLType(condition.dataType)))
 
-          case j @ AsOfJoin(_, _, _, Some(condition), _, _, _, _, _, _, _, _, _, _)
+          case j @ AsOfJoin(_, _, _, Some(condition), _, _, _, _, _, _, _, _, _, _, _)
               if condition.dataType != BooleanType =>
             j.failAnalysis(
               errorClass = "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE",
@@ -770,7 +770,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 "joinCondition" -> toSQLExpr(condition),
                 "conditionType" -> toSQLType(condition.dataType)))
 
-          case j @ AsOfJoin(_, _, _, _, _, _, Some(toleranceAssertion), _, _, _, _, _, _, _) =>
+          case j @ AsOfJoin(_, _, _, _, _, _, Some(toleranceAssertion), _, _, _, _, _, _, _, _) =>
             if (!toleranceAssertion.foldable) {
               j.failAnalysis(
                 errorClass = "AS_OF_JOIN.TOLERANCE_IS_UNFOLDABLE",
