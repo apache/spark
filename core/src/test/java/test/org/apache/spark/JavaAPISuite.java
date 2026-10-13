@@ -1565,16 +1565,7 @@ public class JavaAPISuite implements Serializable {
       () -> pairRDD.subtractByKey(pairRDD));
     assertEquals("UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER", ex4.getCondition());
 
-    // Array key is not the first element in the collection
-    List<Tuple2<Object, Integer>> mixedKeyPairs = Arrays.asList(
-      new Tuple2<>("nonArrayKey", 1),
-      new Tuple2<>(new byte[]{2}, 2)
-    );
-    JavaPairRDD<Object, Integer> mixedKeyRDD = sc.parallelizePairs(mixedKeyPairs);
-    SparkException exMixed = assertThrows(SparkException.class,
-      () -> mixedKeyRDD.partitionBy(new HashPartitioner(2)));
-    assertEquals("UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER", exMixed.getCondition());
-
+    // Array key is not the first element in the collection (null key first)
     List<Tuple2<byte[], Integer>> nullKeyFirstPairs = Arrays.asList(
       new Tuple2<>(null, 1),
       new Tuple2<>(new byte[]{2}, 2)
@@ -1623,6 +1614,38 @@ public class JavaAPISuite implements Serializable {
     JavaPairRDD<Number, Object> partitioned = pairRDD.partitionBy(new HashPartitioner(2));
     assertEquals(2, partitioned.partitions().size());
     assertEquals(2, partitioned.collect().size());
+
+    // Mixed array and non-array keys do not specialize to a leaf array ClassTag,
+    // so keys().collect() does not throw ArrayStoreException.
+    List<Tuple2<Object, Integer>> mixedKeyPairs1 = Arrays.asList(
+      new Tuple2<>("nonArrayKey", 1),
+      new Tuple2<>(new byte[]{2}, 2)
+    );
+    JavaPairRDD<Object, Integer> mixedKeyRDD1 = sc.parallelizePairs(mixedKeyPairs1);
+    List<Object> mixedKeys1 = mixedKeyRDD1.keys().collect();
+    assertEquals(2, mixedKeys1.size());
+    assertEquals("nonArrayKey", mixedKeys1.get(0));
+    assertArrayEquals(new byte[]{2}, (byte[]) mixedKeys1.get(1));
+
+    List<Tuple2<Object, Integer>> mixedKeyPairs2 = Arrays.asList(
+      new Tuple2<>(new byte[]{2}, 2),
+      new Tuple2<>("nonArrayKey", 1)
+    );
+    JavaPairRDD<Object, Integer> mixedKeyRDD2 = sc.parallelizePairs(mixedKeyPairs2);
+    List<Object> mixedKeys2 = mixedKeyRDD2.keys().collect();
+    assertEquals(2, mixedKeys2.size());
+    assertArrayEquals(new byte[]{2}, (byte[]) mixedKeys2.get(0));
+    assertEquals("nonArrayKey", mixedKeys2.get(1));
+
+    List<Tuple2<Object, Integer>> mixedArrayTypes = Arrays.asList(
+      new Tuple2<>(new byte[]{2}, 2),
+      new Tuple2<>(new int[]{1}, 1)
+    );
+    JavaPairRDD<Object, Integer> mixedArrayRDD = sc.parallelizePairs(mixedArrayTypes);
+    List<Object> mixedArrayKeys = mixedArrayRDD.keys().collect();
+    assertEquals(2, mixedArrayKeys.size());
+    assertArrayEquals(new byte[]{2}, (byte[]) mixedArrayKeys.get(0));
+    assertArrayEquals(new int[]{1}, (int[]) mixedArrayKeys.get(1));
   }
 
 }

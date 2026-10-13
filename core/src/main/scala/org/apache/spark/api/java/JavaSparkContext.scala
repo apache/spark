@@ -153,11 +153,30 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   def parallelizePairs[K, V](list: java.util.List[Tuple2[K, V]], numSlices: Int)
   : JavaPairRDD[K, V] = {
     val seq = list.asScala.toSeq
+    var firstArrayClass: Class[_] = null
+    var isHomogeneousArray = false
+    val iter = seq.iterator
+    var hasConflict = false
+    while (iter.hasNext && !hasConflict) {
+      val elem = iter.next()
+      if (elem != null && elem._1 != null) {
+        val keyCls = elem._1.getClass
+        if (!keyCls.isArray) {
+          hasConflict = true
+        } else if (firstArrayClass == null) {
+          firstArrayClass = keyCls
+          isHomogeneousArray = true
+        } else if (keyCls != firstArrayClass) {
+          hasConflict = true
+        }
+      }
+    }
     implicit val ctagK: ClassTag[K] =
-      seq.iterator.collectFirst {
-        case t if t != null && t._1 != null && t._1.getClass.isArray =>
-          ClassTag(t._1.getClass).asInstanceOf[ClassTag[K]]
-      }.getOrElse(fakeClassTag[K])
+      if (isHomogeneousArray && !hasConflict) {
+        ClassTag(firstArrayClass).asInstanceOf[ClassTag[K]]
+      } else {
+        fakeClassTag[K]
+      }
     implicit val ctagV: ClassTag[V] = fakeClassTag
     JavaPairRDD.fromRDD(sc.parallelize(seq, numSlices))
   }
