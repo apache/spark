@@ -174,20 +174,34 @@ case class StatefulStreamlineAggregateExec(
       // one is produced.
       //
       // flushDirtyWrites is aggIter's completion action, so it runs when aggIter is exhausted and
-      // BEFORE store.commit() in every mode below: Complete drains aggIter (line ~191) ahead of the
-      // commit iterator; Append drains it (~222) ahead of its own; Update chains it inside the
-      // outer CompletionIterator whose completion commits, and draining the outer drains aggIter
-      // first. This ordering is what lets flushDirtyWrites surface a state-write failure (see its
-      // rethrow) in time to fail the task before the batch commits -- a partial write can never be
-      // committed.
+      // BEFORE store.commit() in every mode below: the Complete branch drains aggIter ahead of
+      // the commit iterator; the Append branch drains it ahead of its own; Update chains it
+      // inside the outer CompletionIterator whose completion commits, and draining the outer
+      // drains aggIter first. This ordering is what lets flushDirtyWrites surface a state-write
+      // failure (see its rethrow) in time to fail the task before the batch commits -- a partial
+      // write can never be committed.
       var tmpRow: UnsafeRow = null
-      val aggIter = CompletionIterator[UnsafeRow, Iterator[UnsafeRow]](
-        baseIterator.map { row =>
-          allUpdatesTimeMs += timeTakenMs {
-            tmpRow = aggProcessor.process(row)
+      val processedIter: Iterator[UnsafeRow] =
+        if (groupingExpressions.isEmpty && !baseIterator.hasNext) {
+          // A global aggregation still produces its result for a batch without input, as
+          // HashAggregateExec does for the ordinary plan. The required AllTuples distribution
+          // runs this operator on a single partition, so this fires exactly once per empty batch.
+          Iterator.single(()).map { _ =>
+            allUpdatesTimeMs += timeTakenMs {
+              tmpRow = aggProcessor.processEmptyGroupingKey()
+            }
+            tmpRow
           }
-          tmpRow
-        },
+        } else {
+          baseIterator.map { row =>
+            allUpdatesTimeMs += timeTakenMs {
+              tmpRow = aggProcessor.process(row)
+            }
+            tmpRow
+          }
+        }
+      val aggIter = CompletionIterator[UnsafeRow, Iterator[UnsafeRow]](
+        processedIter,
         aggProcessor.flushDirtyWrites() // Lazily evaluated
       )
 
@@ -476,6 +490,24 @@ class StatefulStreamlineAggregationProcessor(
     }
 
     processRow(buffer, newInput)
+
+    val output = generateOutput(groupingKey, buffer)
+    existingValueRef.putRow(output.copy())
+    output
+  }
+
+  /**
+   * Merges no input into the empty grouping key of a global aggregation: the result is the stored
+   * value if one exists, otherwise the initialized buffer, which is also written to state.
+   */
+  def processEmptyGroupingKey(): UnsafeRow = {
+    val groupingKey = groupingProjection.apply(InternalRow.empty).copy()
+    val buffer = newAggregationBuffer()
+
+    val existingValueRef = dirtyWrites.get(groupingKey)
+    if (existingValueRef.getRow != null) {
+      processRow(buffer, existingValueRef.getRow)
+    }
 
     val output = generateOutput(groupingKey, buffer)
     existingValueRef.putRow(output.copy())

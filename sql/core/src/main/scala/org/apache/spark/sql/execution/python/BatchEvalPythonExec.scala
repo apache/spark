@@ -27,11 +27,12 @@ import org.apache.spark.{JobArtifactSet, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.{BinaryType, DataType, StringType, StructField, StructType}
 
 /**
  * A physical plan that evaluates a [[PythonUDF]]
@@ -60,7 +61,10 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute]
       pythonMetrics,
       jobArtifactUUID,
       sessionUUID,
-      binaryAsBytes)
+      binaryAsBytes,
+      rowSizeGuardEnabled = conf.getConf(SQLConf.PYTHON_UDF_ROW_SIZE_GUARD_ENABLED),
+      rowSizeGuardMaxRowHeapFraction =
+        conf.getConf(SQLConf.PYTHON_UDF_ROW_SIZE_GUARD_MAX_ROW_HEAP_FRACTION))
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): BatchEvalPythonExec =
@@ -76,8 +80,42 @@ class BatchEvalPythonEvaluatorFactory(
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     sessionUUID: Option[String],
-    binaryAsBytes: Boolean)
+    binaryAsBytes: Boolean,
+    rowSizeGuardEnabled: Boolean = false,
+    rowSizeGuardMaxRowHeapFraction: Double = -1.0)
   extends EvalPythonEvaluatorFactory(childOutput, udfs, output) {
+
+  // This lazy val is first used in a task, even when the factory is built on the driver.
+  private lazy val rowSizeGuardMaxRowBytes = if (rowSizeGuardMaxRowHeapFraction > 0) {
+    (Runtime.getRuntime.maxMemory() * rowSizeGuardMaxRowHeapFraction).toLong
+  } else {
+    -1L
+  }
+
+  protected def projectedInputCheck(
+      inputTypes: Seq[DataType]): Option[InternalRow => Unit] = {
+    if (rowSizeGuardEnabled && rowSizeGuardMaxRowBytes >= 0) {
+      BatchEvalPythonExec.projectedInputPayloadSizeEstimator(inputTypes).map { estimate =>
+        row => {
+          val estimatedBytes = estimate(row)
+          if (estimatedBytes > rowSizeGuardMaxRowBytes) {
+            throw QueryExecutionErrors.pythonUDFRowSizeExceededError(
+              rowSizeGuardMaxRowBytes, estimatedBytes)
+          }
+        }
+      }
+    } else {
+      None
+    }
+  }
+
+  private[python] def getInputIterator(
+      iter: Iterator[InternalRow],
+      schema: StructType): Iterator[Array[Byte]] = {
+    BatchEvalPythonExec.getInputIterator(
+      iter, schema, batchSize, binaryAsBytes, maxBytesPerBatch, pythonMetrics,
+      projectedInputCheck(schema.map(_.dataType)))
+  }
 
   override def evaluate(
       funcs: Seq[(ChainedPythonFunctions, Long)],
@@ -88,8 +126,7 @@ class BatchEvalPythonEvaluatorFactory(
     EvaluatePython.registerPicklers() // register pickler for Row
 
     // Input iterator to Python.
-    val inputIterator = BatchEvalPythonExec.getInputIterator(
-      iter, schema, batchSize, binaryAsBytes, maxBytesPerBatch, pythonMetrics)
+    val inputIterator = getInputIterator(iter, schema)
 
     // Output iterator for results from Python.
     val outputIterator =
@@ -125,13 +162,48 @@ class BatchEvalPythonEvaluatorFactory(
 }
 
 object BatchEvalPythonExec {
+  /**
+   * Estimates top-level variable-width payloads in a projected UDF argument row. Nested inputs are
+   * intentionally excluded to avoid a recursive walk of every value.
+   */
+  private[python] def projectedInputPayloadSizeEstimator(
+      inputTypes: Seq[DataType]): Option[InternalRow => Long] = {
+    val projectedPayloads = inputTypes.zipWithIndex.flatMap { case (dataType, ordinal) =>
+      dataType match {
+        case _: StringType | BinaryType => Some((ordinal, dataType))
+        case _ => None
+      }
+    }.toArray
+    if (projectedPayloads.isEmpty) {
+      None
+    } else {
+      Some { row =>
+        var estimatedBytes = 0L
+        var i = 0
+        while (i < projectedPayloads.length) {
+          val (ordinal, dataType) = projectedPayloads(i)
+          if (!row.isNullAt(ordinal)) {
+            estimatedBytes += (dataType match {
+              case _: StringType => row.getUTF8String(ordinal).numBytes.toLong
+              case BinaryType => row.getBinary(ordinal).length.toLong
+              case _ => 0L
+            })
+          }
+          i += 1
+        }
+        estimatedBytes
+      }
+    }
+  }
+
   def getInputIterator(
       iter: Iterator[InternalRow],
       schema: StructType,
       batchSize: Int,
       binaryAsBytes: Boolean,
       maxBytesPerBatch: Long = -1L,
-      pythonMetrics: Map[String, SQLMetric] = Map.empty): Iterator[Array[Byte]] = {
+      pythonMetrics: Map[String, SQLMetric] = Map.empty,
+      projectedInputCheck: Option[InternalRow => Unit] = None): Iterator[Array[Byte]] = {
     val peakPickledBatchBytesMetric = pythonMetrics.get("pythonPeakPickledBatchBytes")
     val oversizedBatchMetric = pythonMetrics.get("pythonOversizedBatchCount")
     val estimatedInputBytesMetric = pythonMetrics.get("pythonEstimatedInputBytes")
@@ -155,7 +227,7 @@ object BatchEvalPythonExec {
     // Converts a row to the java object pickled to Python. When `sizeAcc` is defined, toJava also
     // accumulates the per-row pickled-size estimate at its leaf cases during this same traversal
     // (no second walk).
-    def convertRow(row: InternalRow, sizeAcc: Option[PickledSizeAccumulator]): Any = {
+    def convertRowUnchecked(row: InternalRow, sizeAcc: Option[PickledSizeAccumulator]): Any = {
       if (needConversion) {
         EvaluatePython.toJava(row, schema, binaryAsBytes, sizeAcc)
       } else {
@@ -171,6 +243,14 @@ object BatchEvalPythonExec {
         fields
       }
     }
+    val convertRow: (InternalRow, Option[PickledSizeAccumulator]) => Any =
+      projectedInputCheck match {
+        case Some(check) => (row, sizeAcc) => {
+          check(row)
+          convertRowUnchecked(row, sizeAcc)
+        }
+        case None => convertRowUnchecked
+      }
 
     // Input iterator to Python: input rows are grouped so we send them in batches to Python.
     val batchedIter: Iterator[Array[Any]] =

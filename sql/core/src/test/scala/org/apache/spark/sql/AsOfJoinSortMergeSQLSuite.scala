@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
 
+import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, Backward, Forward}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.joins.SortMergeAsOfJoinExec
 import org.apache.spark.sql.internal.SQLConf
@@ -53,6 +54,13 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
     }.nonEmpty, s"Expected SortMergeAsOfJoinExec in plan:\n$plan")
   }
 
+  private def assertPlannedDirection(query: DataFrame, direction: AsOfJoinDirection): Unit = {
+    val plan = query.queryExecution.executedPlan
+    val directions = collectWithSubqueries(plan) { case j: SortMergeAsOfJoinExec => j.direction }
+    assert(directions === Seq(direction),
+      s"Expected one $direction SortMergeAsOfJoinExec in plan:\n$plan")
+  }
+
   private def checkSortMergeAsOf(query: => DataFrame, expected: Seq[Row]): Unit = {
     val df = query
     assertUsesSortMergeAsOfJoin(df)
@@ -76,6 +84,14 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
         |       (TIMESTAMP '2026-06-29 10:00:10', 'AAPL', 180.20),
         |       (TIMESTAMP '2026-06-29 10:00:08', 'MSFT', 420.50)
         |""".stripMargin)
+  }
+
+  /** Runs `f` with temp view `r` over `rows`, kept in input order so ties keep that order. */
+  private def withOrderedRightView(rows: String, columns: String)(f: => Unit): Unit = {
+    withTempView("r") {
+      sql(s"SELECT * FROM VALUES $rows AS r($columns)").coalesce(1).createOrReplaceTempView("r")
+      f
+    }
   }
 
   test("INNER ASOF JOIN with TIMESTAMP MATCH_CONDITION") {
@@ -162,32 +178,36 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
   test("MATCH_CONDITION with the right operand written first (<=) is a backward match") {
     setupTradeQuoteViews()
     // q.quote_time <= t.trade_time normalizes to t.trade_time >= q.quote_time.
+    val query = sql(
+      """
+        |SELECT t.trade_time, t.symbol, q.bid_price
+        |FROM trades t ASOF JOIN quotes q
+        |  MATCH_CONDITION (q.quote_time <= t.trade_time)
+        |  ON t.symbol = q.symbol
+        |""".stripMargin)
     checkSortMergeAsOf(
-      sql(
-        """
-          |SELECT t.trade_time, t.symbol, q.bid_price
-          |FROM trades t ASOF JOIN quotes q
-          |  MATCH_CONDITION (q.quote_time <= t.trade_time)
-          |  ON t.symbol = q.symbol
-          |""".stripMargin),
+      query,
       Seq(
         Row(Timestamp.valueOf("2026-06-29 10:00:05"), "AAPL", 180.10),
         Row(Timestamp.valueOf("2026-06-29 10:00:11"), "AAPL", 180.20),
         Row(Timestamp.valueOf("2026-06-29 10:00:12"), "MSFT", 420.50)))
+    assertPlannedDirection(query, Backward)
   }
 
   test("MATCH_CONDITION with the right operand written first (>=) is a forward match") {
     setupTradeQuoteViews()
     // q.quote_time >= t.trade_time normalizes to t.trade_time <= q.quote_time.
+    val query = sql(
+      """
+        |SELECT t.trade_time, t.symbol, q.bid_price
+        |FROM trades t ASOF JOIN quotes q
+        |  MATCH_CONDITION (q.quote_time >= t.trade_time)
+        |  ON t.symbol = q.symbol
+        |""".stripMargin)
     checkSortMergeAsOf(
-      sql(
-        """
-          |SELECT t.trade_time, t.symbol, q.bid_price
-          |FROM trades t ASOF JOIN quotes q
-          |  MATCH_CONDITION (q.quote_time >= t.trade_time)
-          |  ON t.symbol = q.symbol
-          |""".stripMargin),
+      query,
       Row(Timestamp.valueOf("2026-06-29 10:00:05"), "AAPL", 180.15) :: Nil)
+    assertPlannedDirection(query, Forward)
   }
 
   test("MATCH_CONDITION right operand first (>=) forward match is inclusive at the boundary") {
@@ -438,6 +458,136 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
       Seq(
         Row(Timestamp.valueOf("2026-06-29 10:00:00"), 5, "v1.1"),
         Row(Timestamp.valueOf("2026-06-29 10:03:00"), 1, "v1.1")))
+  }
+
+  gridTest("NULL whole STRUCT column MATCH_CONDITION never matches")(Seq(
+      ("CAST(NULL AS STRUCT<a: INT>)", "named_struct('a', 1)", "named_struct('a', 5)"),
+      ("CAST(NULL AS STRUCT<a: INT, b: INT>)",
+        "named_struct('a', 1, 'b', 1)", "named_struct('a', 5, 'b', 5)"),
+      ("CAST(NULL AS STRUCT<e: STRUCT<a: INT>>)",
+        "named_struct('e', named_struct('a', 1))", "named_struct('e', named_struct('a', 5))"),
+      // Non-NULL values of this type are all equal.
+      ("CAST(NULL AS STRUCT<e: STRUCT<>>)",
+        "named_struct('e', named_struct())", "named_struct('e', named_struct())"))) {
+    case (nullStruct, one, five) =>
+      // A NULL struct must never match, the same as a NULL scalar operand.
+      Seq(true, false).foreach { ansiEnabled =>
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+          def asOfTags(joinType: String, left: String, op: String, rights: String): DataFrame =
+            sql(
+              s"""
+                 |SELECT r.tag
+                 |FROM VALUES ($left, 'l') AS t(k, tag)
+                 |$joinType ASOF JOIN VALUES $rights AS r(k, tag)
+                 |  MATCH_CONDITION (t.k $op r.k)
+                 |""".stripMargin)
+          checkSortMergeAsOf(
+            asOfTags("", nullStruct, ">=", s"($nullStruct, 'rnull'), ($one, 'r1')"), Nil)
+          checkSortMergeAsOf(asOfTags("", nullStruct, "<=", s"($one, 'r1')"), Nil)
+          checkSortMergeAsOf(asOfTags("", five, ">=", s"($nullStruct, 'rnull')"), Nil)
+          // LEFT ASOF JOIN keeps the NULL left row with NULL right columns.
+          checkSortMergeAsOf(
+            asOfTags("LEFT", nullStruct, ">=", s"($nullStruct, 'rnull'), ($one, 'r1')"),
+            Row(null) :: Nil)
+        }
+      }
+  }
+
+  gridTest("whole STRUCT column MATCH_CONDITION matches a struct whose fields are all NULL")(Seq(
+      ">=" -> Seq(Row("allnull")), "<=" -> Seq(Row("allnull")), ">" -> Nil, "<" -> Nil)) {
+    case (op, expected) =>
+      // Two structs of NULL fields are equal, and a NULL struct never matches.
+      val allNull = "named_struct('a', CAST(NULL AS INT), 'b', CAST(NULL AS INT))"
+      val nullStruct = "CAST(NULL AS STRUCT<a: INT, b: INT>)"
+      Seq(true, false).foreach { ansiEnabled =>
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+          checkSortMergeAsOf(
+            sql(
+              s"""
+                 |SELECT r.tag
+                 |FROM VALUES ($allNull, 'l') AS t(k, tag)
+                 |ASOF JOIN VALUES ($nullStruct, 'rnull'), ($allNull, 'allnull') AS r(k, tag)
+                 |  MATCH_CONDITION (t.k $op r.k)
+                 |""".stripMargin),
+            expected)
+        }
+      }
+  }
+
+  test("nested STRUCT column MATCH_CONDITION keeps a NULL inner struct apart from NULL fields") {
+    // {e: NULL} sorts before {e: {a: NULL}}, as in a plain comparison.
+    val eNull = "named_struct('e', CAST(NULL AS STRUCT<a: INT>))"
+    val aNull = "named_struct('e', named_struct('a', CAST(NULL AS INT)))"
+    for {
+      (left, op, right) <- Seq((aNull, ">", eNull), (eNull, "<", aNull))
+      ansiEnabled <- Seq(true, false)
+    } {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        checkSortMergeAsOf(
+          sql(
+            s"""
+               |SELECT r.tag
+               |FROM VALUES ($left, 'l') AS t(k, tag)
+               |ASOF JOIN VALUES ($right, 'r') AS r(k, tag)
+               |  MATCH_CONDITION (t.k $op r.k)
+               |""".stripMargin),
+          Row("r") :: Nil)
+      }
+    }
+  }
+
+  test("tuple vs nullable STRUCT column MATCH_CONDITION: a NULL struct does not end the scan") {
+    // r.s sorts as one value, so NULL comes before {NULL, NULL}. Sorting by its fields would tie
+    // them, and in one of these input orders the NULL row would end the scan before r11.
+    val allNull = "(named_struct('a', CAST(NULL AS INT), 'b', CAST(NULL AS INT)), 'allnull')"
+    val nullStruct = "(CAST(NULL AS STRUCT<a: INT, b: INT>), 'rnull')"
+    val r11 = "(named_struct('a', 1, 'b', 1), 'r11')"
+    for {
+      rights <- Seq(s"$allNull, $nullStruct, $r11", s"$nullStruct, $allNull, $r11")
+      ansiEnabled <- Seq(true, false)
+    } {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        withOrderedRightView(rights, "s, tag") {
+          checkSortMergeAsOf(
+            sql(
+              """
+                |SELECT r.tag
+                |FROM VALUES (1, 2) AS t(a, b)
+                |ASOF JOIN r
+                |  MATCH_CONDITION ((t.a, t.b) >= r.s)
+                |""".stripMargin),
+            Row("r11") :: Nil)
+        }
+      }
+    }
+  }
+
+  test("tuple with a nullable inner STRUCT MATCH_CONDITION picks the closest row") {
+    // NULL and {a: NULL} have the same field, but the comparison ranks NULL lower. Both input
+    // orders must pick the row equal to the left one, in both directions.
+    val aNull = "named_struct('a', CAST(NULL AS INT))"
+    val nullA = "CAST(NULL AS STRUCT<a: INT>)"
+    val rAnull = s"(1, $aNull, 'r_anull')"
+    val rNull = s"(1, $nullA, 'r_null')"
+    for {
+      rights <- Seq(s"$rAnull, $rNull", s"$rNull, $rAnull")
+      ansiEnabled <- Seq(true, false)
+    } {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        withOrderedRightView(rights, "x, s, tag") {
+          def asOfTag(left: String, op: String): DataFrame =
+            sql(
+              s"""
+                 |SELECT r.tag
+                 |FROM VALUES (1, $left) AS t(x, s)
+                 |ASOF JOIN r
+                 |  MATCH_CONDITION ((t.x, t.s) $op (r.x, r.s))
+                 |""".stripMargin)
+          checkSortMergeAsOf(asOfTag(aNull, ">="), Row("r_anull") :: Nil)
+          checkSortMergeAsOf(asOfTag(nullA, "<="), Row("r_null") :: Nil)
+        }
+      }
+    }
   }
 
   test("whole STRUCT column with an ARRAY field MATCH_CONDITION") {
@@ -789,6 +939,7 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
   }
 
   test("strict > MATCH_CONDITION excludes equal right rows") {
+    // Two rows are strictly earlier, so a forward scan would pick 08:00 instead.
     checkSortMergeAsOf(
       sql(
         """
@@ -796,7 +947,8 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
           |FROM VALUES (TIMESTAMP '2026-06-29 10:00:00', 'X') AS t(trade_time, symbol)
           |ASOF JOIN VALUES
           |  (TIMESTAMP '2026-06-29 10:00:00', 'X'),
-          |  (TIMESTAMP '2026-06-29 09:00:00', 'X') AS q(quote_time, symbol)
+          |  (TIMESTAMP '2026-06-29 09:00:00', 'X'),
+          |  (TIMESTAMP '2026-06-29 08:00:00', 'X') AS q(quote_time, symbol)
           |  MATCH_CONDITION (t.trade_time > q.quote_time)
           |  ON t.symbol = q.symbol
           |""".stripMargin),
@@ -804,6 +956,7 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
   }
 
   test("strict < forward MATCH_CONDITION") {
+    // Two rows are strictly later, so a backward scan would pick 12:00 instead.
     checkSortMergeAsOf(
       sql(
         """
@@ -811,7 +964,8 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
           |FROM VALUES (TIMESTAMP '2026-06-29 10:00:00') AS t(ts)
           |ASOF JOIN VALUES
           |  (TIMESTAMP '2026-06-29 10:00:00'),
-          |  (TIMESTAMP '2026-06-29 11:00:00') AS r(ts)
+          |  (TIMESTAMP '2026-06-29 11:00:00'),
+          |  (TIMESTAMP '2026-06-29 12:00:00') AS r(ts)
           |  MATCH_CONDITION (t.ts < r.ts)
           |""".stripMargin),
       Row(Timestamp.valueOf("2026-06-29 11:00:00")) :: Nil)
