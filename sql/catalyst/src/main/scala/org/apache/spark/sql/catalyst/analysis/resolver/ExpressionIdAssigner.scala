@@ -223,8 +223,8 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  *    plan. In this case we call [[pushMapping]] with `isSubqueryRoot = true` to pass the current
  *    mapping as outer mapping to the subquery branches. Any subquery branch may reference
  *    outer attributes, so if `isSubqueryRoot` is `false`, we pass the previous `outerMapping` to
- *    lower branches. For every subquery level, the current `mapping` is merged with existing
- *    `outerMapping` as the new `outerMapping` for the next level.
+ *    lower branches. For every subquery level, the current `mapping` becomes the new
+ *    `outerMapping` for the next level.
  *  - Continue remapping expressions until we reach the root of the operator tree.
  */
 class ExpressionIdAssigner {
@@ -241,8 +241,8 @@ class ExpressionIdAssigner {
    * @param isSubqueryRoot whether the new branch is related to a subquery root.
    *   If the new branch is not related to a subquery root, we propagate `outerMapping` itself,
    *   because any nested subquery operator may reference outer attributes.
-   *   If the new branch is related to a subquery root, we merge current `mapping` with existing
-   *   `outerMapping` as new `outerMapping`.
+   *   If the new branch is related to a subquery root, we propagate current `mapping` as the new
+   *   `outerMapping` for the next level.
    */
   def pushMapping(isSubqueryRoot: Boolean = false): Unit = {
     val currentStackEntry = mappingStack.peek()
