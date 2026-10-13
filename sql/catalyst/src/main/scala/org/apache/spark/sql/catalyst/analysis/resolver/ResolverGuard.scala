@@ -762,21 +762,8 @@ object ResolverGuard {
     map += ("session_window", ())
     map += ("window", ())
     map += ("window_time", ())
-    // Functions that are not resolved properly.
     // Functions that produce wrong schemas/plans because of alias assignment.
     map += ("from_json", ())
-  }
-
-  /**
-   * Experimental functions that are supported.
-   */
-  private val SUPPORTED_EXPERIMENTAL_FUNCTION_NAMES = {
-    val map = new IdentifierMap[Unit]()
-    map += ("ai_complete", ())
-    map += ("ai_embed", ())
-    map += ("collate", ())
-    map += ("schema_of_json", ())
-    map += ("schema_of_xml", ())
   }
 
   /**
