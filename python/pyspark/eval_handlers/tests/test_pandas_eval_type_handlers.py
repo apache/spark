@@ -141,7 +141,7 @@ class PandasEvalTypeHandlerRegistrationTests(unittest.TestCase):
             (PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF, PandasGroupedMapIterUDFHandler),
             (PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF, PandasCoGroupedMapUDFHandler),
         ):
-            self.assertIs(get_eval_type_handler(eval_type), handler_cls)
+            self.assertIs(get_eval_type_handler(eval_type, RunnerConf({})), handler_cls)
 
 
 @unittest.skipIf(not (have_pandas and have_pyarrow), _missing_message)

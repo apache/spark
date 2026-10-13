@@ -58,7 +58,9 @@ class EvalTypeHandlerTests(unittest.TestCase):
 
     def test_category_bases_are_not_registered(self):
         # Only concrete subclasses that declare an eval type are registered.
-        registered = set(_eval_type_handlers.values())
+        registered = {
+            cls for _, variants in _eval_type_handlers.values() for cls in variants.values()
+        }
         for base in (
             EvalTypeHandler,
             BatchEvalTypeHandler,
@@ -117,7 +119,7 @@ class EvalTypeHandlerTests(unittest.TestCase):
 
             self.assertRaises(AssertionError, _define_duplicate)
             # The failed definition must not clobber the existing registration.
-            self.assertIs(get_eval_type_handler(unused_eval_type), _First)
+            self.assertIs(get_eval_type_handler(unused_eval_type, RunnerConf({})), _First)
         finally:
             _eval_type_handlers.pop(unused_eval_type, None)
 
@@ -132,6 +134,133 @@ class EvalTypeHandlerTests(unittest.TestCase):
                 # run left abstract on purpose
 
         self.assertRaises(AssertionError, _define_abstract)
+        self.assertNotIn(unused_eval_type, _eval_type_handlers)
+
+    def test_variants_selected_by_runner_conf(self):
+        unused_eval_type = -3
+
+        class _Default(BatchEvalTypeHandler["pa.RecordBatch"]):
+            eval_type = unused_eval_type
+            variant_conf = "use_large_var_types"
+            variant_value = False
+
+            def run(self, split_index, data):
+                return data
+
+        class _Large(BatchEvalTypeHandler["pa.RecordBatch"]):
+            eval_type = unused_eval_type
+            variant_conf = "use_large_var_types"
+            variant_value = True
+
+            def run(self, split_index, data):
+                return data
+
+        try:
+            large = RunnerConf({"spark.sql.execution.arrow.useLargeVarTypes": "true"})
+            # Selected per lookup, so one worker serves tasks with either conf value.
+            self.assertIs(get_eval_type_handler(unused_eval_type, RunnerConf({})), _Default)
+            self.assertIs(get_eval_type_handler(unused_eval_type, large), _Large)
+            self.assertIs(get_eval_type_handler(unused_eval_type, RunnerConf({})), _Default)
+        finally:
+            _eval_type_handlers.pop(unused_eval_type, None)
+
+    def test_missing_variant_raises(self):
+        unused_eval_type = -4
+
+        class _Large(BatchEvalTypeHandler["pa.RecordBatch"]):
+            eval_type = unused_eval_type
+            variant_conf = "use_large_var_types"
+            variant_value = True
+
+            def run(self, split_index, data):
+                return data
+
+        try:
+            with self.assertRaisesRegex(RuntimeError, "-4 with use_large_var_types=False"):
+                get_eval_type_handler(unused_eval_type, RunnerConf({}))
+        finally:
+            _eval_type_handlers.pop(unused_eval_type, None)
+
+    def test_mixed_variant_conf_rejected(self):
+        unused_eval_type = -5
+
+        class _First(BatchEvalTypeHandler["pa.RecordBatch"]):
+            eval_type = unused_eval_type
+            variant_conf = "use_large_var_types"
+            variant_value = True
+
+            def run(self, split_index, data):
+                return data
+
+        def _define_other_conf():
+            class _OtherConf(BatchEvalTypeHandler["pa.RecordBatch"]):
+                eval_type = unused_eval_type
+                variant_conf = "use_legacy_pandas_udf_conversion"
+                variant_value = False
+
+                def run(self, split_index, data):
+                    return data
+
+        def _define_no_conf():
+            class _NoConf(BatchEvalTypeHandler["pa.RecordBatch"]):
+                eval_type = unused_eval_type
+
+                def run(self, split_index, data):
+                    return data
+
+        try:
+            self.assertRaises(AssertionError, _define_other_conf)
+            self.assertRaises(AssertionError, _define_no_conf)
+            self.assertEqual(
+                _eval_type_handlers[unused_eval_type], ("use_large_var_types", {True: _First})
+            )
+        finally:
+            _eval_type_handlers.pop(unused_eval_type, None)
+
+    def test_duplicate_variant_rejected(self):
+        unused_eval_type = -6
+
+        def _define(value):
+            class _Variant(BatchEvalTypeHandler["pa.RecordBatch"]):
+                eval_type = unused_eval_type
+                variant_conf = "use_large_var_types"
+                variant_value = value
+
+                def run(self, split_index, data):
+                    return data
+
+            return _Variant
+
+        try:
+            first = _define(True)
+            self.assertRaises(AssertionError, _define, True)
+            self.assertEqual(
+                _eval_type_handlers[unused_eval_type], ("use_large_var_types", {True: first})
+            )
+        finally:
+            _eval_type_handlers.pop(unused_eval_type, None)
+
+    def test_variant_conf_and_value_declared_together(self):
+        unused_eval_type = -7
+
+        def _define_conf_only():
+            class _ConfOnly(BatchEvalTypeHandler["pa.RecordBatch"]):
+                eval_type = unused_eval_type
+                variant_conf = "use_large_var_types"
+
+                def run(self, split_index, data):
+                    return data
+
+        def _define_value_only():
+            class _ValueOnly(BatchEvalTypeHandler["pa.RecordBatch"]):
+                eval_type = unused_eval_type
+                variant_value = True
+
+                def run(self, split_index, data):
+                    return data
+
+        self.assertRaises(AssertionError, _define_conf_only)
+        self.assertRaises(AssertionError, _define_value_only)
         self.assertNotIn(unused_eval_type, _eval_type_handlers)
 
 
