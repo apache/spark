@@ -457,8 +457,9 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
         condition = "NUMERIC_OUT_OF_SUPPORTED_RANGE",
         parameters = Map("value" -> string))
     }
-    // Zero fits any decimal type whatever its exponent.
-    Seq("0e39", "-0E+100", "0e2147483647").foreach { string =>
+    // Zero fits any decimal type whatever its exponent. "0e38" is the smallest exponent that
+    // used to be rejected, and "0e37" used to get precision 38.
+    Seq("0e37", "0e38", "0e39", "-0E+100", "0e2147483647").foreach { string =>
       Seq(Decimal.fromString(UTF8String.fromString(string)),
         Decimal.fromStringANSI(UTF8String.fromString(string))).foreach { d =>
         assert(d === Decimal(0))

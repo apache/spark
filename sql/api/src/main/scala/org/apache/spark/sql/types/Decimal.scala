@@ -646,13 +646,13 @@ object Decimal {
   }
 
   /**
-   * Converts a `JavaBigDecimal` parsed from a string to `Decimal`, or returns null if its integral
-   * part has more than `DecimalType.MAX_PRECISION` digits and negative scales are not allowed. We
-   * fast fail because constructing a very large JavaBigDecimal to Decimal is very slow. For
-   * example: Decimal("6.0790316E+25569151")
+   * Converts a `JavaBigDecimal` parsed from a string to `Decimal`, or returns null if its
+   * integral part has more than `DecimalType.MAX_PRECISION` digits and negative scales are not
+   * allowed. We fast fail because constructing a very large JavaBigDecimal to Decimal is very
+   * slow. For example: Decimal("6.0790316E+25569151")
    *
-   * This runs for every row of a cast, so the conf is read only for a zero with a negative scale
-   * and for a value with too many integral digits.
+   * This runs for every row of a cast, so this helper reads the conf only for a zero with a
+   * negative scale and for a value with too many integral digits.
    */
   private def stringBigDecimalToDecimal(bigDecimal: JavaBigDecimal): Decimal = {
     if (bigDecimal.signum == 0) {
@@ -664,7 +664,7 @@ object Decimal {
         Decimal(bigDecimal)
       }
     } else if (numDigitsInIntegralPart(bigDecimal) > DecimalType.MAX_PRECISION &&
-        !SqlApiConf.get.allowNegativeScaleOfDecimalEnabled) {
+      !SqlApiConf.get.allowNegativeScaleOfDecimalEnabled) {
       null
     } else {
       Decimal(bigDecimal)
