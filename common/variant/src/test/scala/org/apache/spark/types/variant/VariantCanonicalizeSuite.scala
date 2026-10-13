@@ -698,6 +698,39 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
       "dictionary ordered by UTF-16 rather than UTF-8 must be rejected")
   }
 
+  test("object stored in legacy UTF-16 field order canonicalizes to the modern UTF-8 bytes") {
+    // U+E000 and U+1F600 sort oppositely in UTF-8 (k1 < k2) vs UTF-16 (k2 < k1). Older Spark
+    // stored object fields in UTF-16 order, so {k1:1, k2:2} can arrive physically laid out as
+    // [k2, k1]. finishWritingObject reorders the id/offset lists but not the field data, so canon
+    // must lay the data out in UTF-8 key order; this checks it converges with the modern encoding.
+    val k1 = new String(Character.toChars(0xE000))
+    val k2 = new String(Character.toChars(0x1F600))
+    val modern = parse(s"""{"$k1":1,"$k2":2}""") // parse stores fields UTF-8-sorted: [k1, k2]
+    val meta = modern.getMetadata
+    val idk1 = if (VariantUtil.getMetadataKey(meta, 0) == k1) 0 else 1
+    val idk2 = 1 - idk1
+    val v1 = parse("1").getValue // k1's value, INT1(1)
+    val v2 = parse("2").getValue // k2's value, INT1(2)
+    // Hand-build the object with fields physically stored in UTF-16 order [k2, k1].
+    val header = VariantUtil.objectHeader(false, 1, 1) // 1-byte size, idSize 1, offsetSize 1
+    val legacyValue = java.nio.ByteBuffer.allocate(1 + 1 + 2 + 3 + v1.length + v2.length)
+      .order(java.nio.ByteOrder.LITTLE_ENDIAN)
+      .put(header)
+      .put(2.toByte) // size = 2 fields
+      .put(idk2.toByte).put(idk1.toByte) // id list [k2, k1] (UTF-16 order)
+      .put(0.toByte).put(v2.length.toByte).put((v2.length + v1.length).toByte) // offsets [0, 2, 4]
+      .put(v2).put(v1) // data stored as [k2's value, k1's value]
+      .array()
+    val legacy = new Variant(legacyValue, meta)
+    assert(VariantUtil.isValidVariant(legacyValue, meta), "sanity: legacy object is valid")
+    assert(!isCanon(legacy), "sanity: legacy object is not canonical before canon")
+    assert(!bytesEqual(legacy, modern), "sanity: legacy and modern bytes differ before canon")
+    assert(bytesEqual(canon(legacy), canon(modern)),
+      "a legacy UTF-16-ordered object must canonicalize to the modern UTF-8 bytes")
+    assert(isCanon(canon(legacy)), "canon of a legacy-ordered object must be canonical")
+    assert(bytesEqual(canon(canon(legacy)), canon(legacy)), "canonicalize must be idempotent on it")
+  }
+
   test("getMetadataKeyBytes returns the raw key bytes, matching encodeKey(getMetadataKey)") {
     val v = parse("""{"zebra":1,"apple":2,"c":3,"a-longer-key-name":4}""")
     val meta = v.getMetadata

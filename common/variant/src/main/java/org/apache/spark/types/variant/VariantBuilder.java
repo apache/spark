@@ -543,7 +543,23 @@ public class VariantBuilder {
         handleObject(value, pos, (size, idSize, offsetSize, idStart, offsetStart, dataStart) -> {
           ArrayList<FieldEntry> fields = new ArrayList<>(size);
           int start = writePos;
+          // Canonicalize lays field data in UTF-8 key order (finishWritingObject orders the
+          // id/offset lists, not the data); otherwise an object stored differently -- e.g. the
+          // UTF-16 order older Spark used -- stays non-canonical. A plain copy keeps stored order.
+          Integer[] order = new Integer[size];
           for (int i = 0; i < size; ++i) {
+            order[i] = i;
+          }
+          if (needCanonicalization && size > 1) {
+            byte[][] keyBytes = new byte[size][];
+            for (int i = 0; i < size; ++i) {
+              int id = readUnsigned(value, idStart + idSize * i, idSize);
+              keyBytes[i] = getMetadataKeyBytes(metadata, id);
+            }
+            Arrays.sort(order, (a, b) -> compareKeys(keyBytes[a], keyBytes[b]));
+          }
+          for (int k = 0; k < size; ++k) {
+            int i = order[k];
             int id = readUnsigned(value, idStart + idSize * i, idSize);
             int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
             int elementPos = dataStart + offset;
