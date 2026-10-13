@@ -23,7 +23,6 @@ import java.util.concurrent.atomic.AtomicLong
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
-import org.apache.arrow.c.{ArrowArray, ArrowArrayStream, ArrowSchema, CDataDictionaryProvider, Data}
 import org.apache.arrow.vector.{FieldVector, VectorSchemaRoot}
 import org.apache.arrow.vector.complex.MapVector
 import org.apache.arrow.vector.types.pojo.{ArrowType, Field, Schema}
@@ -376,16 +375,16 @@ class NativePartitionReader(
 
   private val allocator =
     ArrowUtils.rootAllocator.newChildAllocator(s"native data source $name", 0, Long.MaxValue)
-  // Read here rather than with `Data.importArrayStream`, to check each array before importing it.
-  private val stream = ArrowArrayStream.allocateNew(allocator)
-  private val dictionaries = new CDataDictionaryProvider()
+  // The ArrowArrayStream that the library exports.
+  private val stream = ArrowCData.allocate(ArrowCData.STREAM_SIZE)
   private var root: VectorSchemaRoot = _
   private var batch: ColumnarBatch = _
 
   try {
     openStream()
-    root = VectorSchemaRoot.create(importSchema(), allocator)
-    checkSchema()
+    val arrowSchema = importSchema()
+    checkSchema(arrowSchema)
+    root = VectorSchemaRoot.create(arrowSchema, allocator)
     batch = new ColumnarBatch(root.getFieldVectors.asScala.map(columnVector).toArray)
   } catch {
     case e: Throwable =>
@@ -395,22 +394,21 @@ class NativePartitionReader(
 
   private def openStream(): Unit = {
     val library = NativeLibraries.get(location)
-    call(name, "read")(optional(library.read(readerState, partition, stream.memoryAddress())))
-      .getOrElse {
-        throw new SparkUnsupportedOperationException(
-          "DATA_SOURCE_BATCH_SCAN_NOT_SUPPORTED", Map("description" -> name))
-      }
+    call(name, "read")(optional(library.read(readerState, partition, stream))).getOrElse {
+      throw new SparkUnsupportedOperationException(
+        "DATA_SOURCE_BATCH_SCAN_NOT_SUPPORTED", Map("description" -> name))
+    }
   }
 
   private def importSchema(): Schema = {
-    val arrowSchema = ArrowSchema.allocateNew(allocator)
+    val arrowSchema = ArrowCData.allocate(ArrowCData.SCHEMA_SIZE)
     try {
-      call(name, "read")(stream.getSchema(arrowSchema))
-      val imported = call(name, "read")(Data.importSchema(allocator, arrowSchema, dictionaries))
+      call(name, "read")(ArrowCData.streamSchema(stream, arrowSchema))
+      val imported = call(name, "read")(ArrowCData.importSchema(arrowSchema))
       new Schema(
         imported.getFields.asScala.map(withMapEntryNames).asJava, imported.getCustomMetadata)
     } finally {
-      arrowSchema.close()
+      ArrowCData.free(arrowSchema)
     }
   }
 
@@ -432,11 +430,12 @@ class NativePartitionReader(
     new Field(field.getName, field.getFieldType, renamed.asJava)
   }
 
-  private def checkSchema(): Unit = {
+  /** Checks the schema of the data, before Spark creates the vectors to import it into. */
+  private def checkSchema(arrowSchema: Schema): Unit = {
     def isDictionaryEncoded(field: Field): Boolean = {
       field.getDictionary != null || field.getChildren.asScala.exists(isDictionaryEncoded)
     }
-    root.getSchema.getFields.asScala.find(isDictionaryEncoded).foreach { field =>
+    arrowSchema.getFields.asScala.find(isDictionaryEncoded).foreach { field =>
       throw error(name, "read", s"The column ${field.getName} is dictionary-encoded, which " +
         "is not supported.")
     }
@@ -448,13 +447,13 @@ class NativePartitionReader(
       case listView: ArrowType.ListView => Some(listView)
       case _ => field.getChildren.asScala.view.flatMap(unsupportedType).headOption
     }
-    root.getSchema.getFields.asScala.foreach { field =>
+    arrowSchema.getFields.asScala.foreach { field =>
       unsupportedType(field).foreach { arrowType =>
         throw error(name, "read", s"The column ${field.getName} contains the Arrow type " +
           s"$arrowType, which is not supported.")
       }
     }
-    val actual = ArrowUtils.fromArrowSchema(root.getSchema)
+    val actual = ArrowUtils.fromArrowSchema(arrowSchema)
     // The schema to read as the library got it: Arrow does not carry everything, such as the
     // collations of strings, the fields of intervals and user-defined types, which still apply to
     // the data that Spark reads.
@@ -483,88 +482,80 @@ class NativePartitionReader(
   }
 
   override def next(): Boolean = {
-    val array = ArrowArray.allocateNew(allocator)
+    val array = ArrowCData.allocate(ArrowCData.ARRAY_SIZE)
     try {
-      call(name, "read")(stream.getNext(array))
-      val snapshot = array.snapshot()
-      if (snapshot.release == 0) {
+      call(name, "read")(ArrowCData.streamNext(stream, array))
+      if (ArrowCData.isArrayReleased(array)) {
         // The end of the stream.
         false
       } else {
-        try {
-          checkArrays(snapshot)
-        } catch {
-          case e: Throwable =>
-            array.release()
-            throw e
-        }
-        call(name, "read")(Data.importIntoVectorSchemaRoot(allocator, array, root, dictionaries))
+        checkArrays(array)
+        // Moves the array, which the root then releases.
+        call(name, "read")(ArrowCData.importIntoRoot(allocator, array, root))
         batch.setNumRows(root.getRowCount)
         true
       }
     } finally {
-      array.close()
+      // Releases the array unless it was imported.
+      Utils.tryWithSafeFinally(ArrowCData.releaseArray(array))(ArrowCData.free(array))
     }
   }
 
   /**
    * Checks the array of a batch, and the arrays of its columns at every level, before importing
-   * them. Arrow Java trusts the arrays, and would read them wrongly otherwise:
-   *  - An array must have an offset of 0. Arrow Java ignores the offsets of the arrays it imports,
-   *    so it would read a sliced array from the start of its buffers.
+   * them into Arrow Java vectors, which would read them wrongly otherwise:
+   *  - An array must have an offset of 0, since the vectors have no offsets. The import rejects
+   *    other offsets too, but this check names the column.
    *  - An array must have at least as many values as its parent refers to: a column as many as
    *    the batch has rows, a field as many as its struct has values, and the elements of a list or
-   *    a map as many as its last offset says. Arrow Java would extend a shorter array with nulls.
+   *    a map as many as its last offset says. The vectors would extend a shorter array with nulls.
    *    Only the lengths that the library exported show this: the import sets the length of each
-   *    array to what its parent refers to.
-   * The buffers are not checked, since the C data interface does not carry their sizes: Arrow
-   * Java takes them from the lengths, so the library must export buffers that hold every value.
+   *    vector to what its parent refers to.
+   * The buffers are not checked, since the C data interface does not carry their sizes: the
+   * import takes them from the lengths, so the library must export buffers that hold every value.
    */
-  private def checkArrays(batch: ArrowArray.Snapshot): Unit = {
-    def children(array: ArrowArray.Snapshot): Seq[ArrowArray.Snapshot] = {
-      (0 until array.n_children.toInt).map { i =>
-        ArrowArray.wrap(Platform.getLong(null, array.children + 8L * i)).snapshot()
-      }
-    }
-    // The last offset of a list or a map, in its second buffer. Arrow Java rejects the array if
+  private def checkArrays(batch: Long): Unit = {
+    import ArrowCData.{child, childCount, length, offset}
+    def children(array: Long): Seq[Long] = (0 until childCount(array).toInt).map(child(array, _))
+    // The last offset of a list or a map, in its second buffer. The import rejects the array if
     // the buffer is missing.
-    def lastOffset(array: ArrowArray.Snapshot): Long = {
-      val offsets = if (array.length > 0 && array.n_buffers >= 2) {
-        Platform.getLong(null, array.buffers + 8L)
+    def lastOffset(array: Long): Long = {
+      val offsets = if (length(array) > 0 && ArrowCData.bufferCount(array) >= 2) {
+        ArrowCData.buffer(array, 1)
       } else {
         0L
       }
-      if (offsets == 0) 0 else Platform.getInt(null, offsets + 4L * array.length)
+      if (offsets == 0) 0 else Platform.getInt(null, offsets + 4L * length(array))
     }
     // The number of values that an array refers to in each of its children.
-    def referenced(array: ArrowArray.Snapshot, arrowType: ArrowType): Long = arrowType match {
-      case _: ArrowType.Struct => array.length
+    def referenced(array: Long, arrowType: ArrowType): Long = arrowType match {
+      case _: ArrowType.Struct => length(array)
       case _: ArrowType.List | _: ArrowType.Map => lastOffset(array)
       // The other types that Spark reads have no children. List views are rejected before.
       case _ => 0
     }
-    def checkColumn(array: ArrowArray.Snapshot, field: Field, column: String): Unit = {
-      if (array.offset != 0) {
-        throw error(name, "read", s"The column $column has an offset of ${array.offset}, but " +
+    def checkColumn(array: Long, field: Field, column: String): Unit = {
+      if (offset(array) != 0) {
+        throw error(name, "read", s"The column $column has an offset of ${offset(array)}, but " +
           "Spark only reads arrays with an offset of 0. Copy sliced arrays before exporting them.")
       }
-      val length = referenced(array, field.getType)
+      val referencedLength = referenced(array, field.getType)
       children(array).zip(field.getChildren.asScala).foreach { case (child, childField) =>
-        if (child.length < length) {
+        if (length(child) < referencedLength) {
           throw error(name, "read", s"The column $column contains an array with a length of " +
-            s"${child.length}, but its parent refers to $length values.")
+            s"${length(child)}, but its parent refers to $referencedLength values.")
         }
         checkColumn(child, childField, column)
       }
     }
-    if (batch.offset != 0) {
-      throw error(name, "read", s"The batch has an offset of ${batch.offset}, but Spark only " +
+    if (offset(batch) != 0) {
+      throw error(name, "read", s"The batch has an offset of ${offset(batch)}, but Spark only " +
         "reads arrays with an offset of 0. Copy sliced arrays before exporting them.")
     }
     children(batch).zip(root.getSchema.getFields.asScala).foreach { case (column, field) =>
-      if (column.length < batch.length) {
+      if (length(column) < length(batch)) {
         throw error(name, "read", s"The column ${field.getName} has a length of " +
-          s"${column.length}, but the batch has a length of ${batch.length}.")
+          s"${length(column)}, but the batch has a length of ${length(batch)}.")
       }
       checkColumn(column, field, field.getName)
     }
@@ -575,12 +566,11 @@ class NativePartitionReader(
   override def close(): Unit = {
     Utils.tryWithSafeFinally {
       if (root != null) {
+        // Releases the last array imported.
         root.close()
       }
-      dictionaries.close()
       // Releases the stream of the library, unless it was not exported.
-      stream.release()
-      stream.close()
+      Utils.tryWithSafeFinally(ArrowCData.releaseStream(stream))(ArrowCData.free(stream))
     }(Utils.tryLogNonFatalError(allocator.close()))
   }
 }
@@ -616,19 +606,21 @@ class NativeDataWriter(
     }
     val root = new VectorSchemaRoot(
       vectors.map(_.getField).asJava, vectors.asJava, batch.numRows())
-    val array = ArrowArray.allocateNew(ArrowUtils.rootAllocator)
-    val arrowSchema = ArrowSchema.allocateNew(ArrowUtils.rootAllocator)
+    val array = ArrowCData.allocate(ArrowCData.ARRAY_SIZE)
+    val arrowSchema = ArrowCData.allocate(ArrowCData.SCHEMA_SIZE)
     try {
-      Data.exportVectorSchemaRoot(ArrowUtils.rootAllocator, root, null, array, arrowSchema)
-      call(name, "write to") {
-        library.write(handle, array.memoryAddress(), arrowSchema.memoryAddress())
-      }
+      ArrowCData.exportSchema(root.getSchema, arrowSchema)
+      ArrowCData.exportRoot(ArrowUtils.rootAllocator, root, array)
+      call(name, "write to")(library.write(handle, array, arrowSchema))
     } finally {
       // Releases the batch unless the library moved it to take ownership.
-      array.release()
-      array.close()
-      arrowSchema.release()
-      arrowSchema.close()
+      Utils.tryWithSafeFinally {
+        ArrowCData.releaseArray(array)
+        ArrowCData.releaseSchema(arrowSchema)
+      } {
+        ArrowCData.free(array)
+        ArrowCData.free(arrowSchema)
+      }
     }
   }
 
@@ -728,15 +720,7 @@ object NativeCalls {
     }
   }
 
-  // How Arrow reports the error message of an Arrow C stream.
-  private val StreamError = """(?s)\[errno \d+\] CDataJniException\{errno=\d+, message=(.*)\}""".r
-
-  private[ffi] def message(e: Throwable): String = {
-    Option(e.getMessage).getOrElse(e.toString) match {
-      case StreamError(message) => message
-      case message => message
-    }
-  }
+  private[ffi] def message(e: Throwable): String = Option(e.getMessage).getOrElse(e.toString)
 
   /** Calls a function that the library may not implement. Returns None if it does not. */
   def optional[T](f: => T): Option[T] = {
@@ -764,31 +748,26 @@ object NativeArrow {
     val arrowSchema = ArrowUtils.toArrowSchema(
       schema, SQLConf.get.sessionLocalTimeZone, errorOnDuplicatedFieldNames = true,
       largeVarTypes = false)
-    val struct = ArrowSchema.allocateNew(ArrowUtils.rootAllocator)
+    val struct = ArrowCData.allocate(ArrowCData.SCHEMA_SIZE)
     try {
-      Data.exportSchema(ArrowUtils.rootAllocator, arrowSchema, null, struct)
-      f(struct.memoryAddress())
+      ArrowCData.exportSchema(arrowSchema, struct)
+      f(struct)
     } finally {
       // Releases the schema unless the library moved it to take ownership.
-      struct.release()
-      struct.close()
+      Utils.tryWithSafeFinally(ArrowCData.releaseSchema(struct))(ArrowCData.free(struct))
     }
   }
 
   /** Calls `f` with the address of an `ArrowSchema` to initialize, and imports it. */
   def importSchema(f: Long => Unit): StructType = {
-    val struct = ArrowSchema.allocateNew(ArrowUtils.rootAllocator)
-    var imported = false
+    val struct = ArrowCData.allocate(ArrowCData.SCHEMA_SIZE)
     try {
-      f(struct.memoryAddress())
-      imported = true
-      // Releases and closes the struct.
-      ArrowUtils.fromArrowSchema(Data.importSchema(ArrowUtils.rootAllocator, struct, null))
+      f(struct)
+      // Releases the schema.
+      ArrowUtils.fromArrowSchema(ArrowCData.importSchema(struct))
     } finally {
-      if (!imported) {
-        struct.release()
-        struct.close()
-      }
+      // Releases the schema if the library initialized it but it was not imported.
+      Utils.tryWithSafeFinally(ArrowCData.releaseSchema(struct))(ArrowCData.free(struct))
     }
   }
 }
