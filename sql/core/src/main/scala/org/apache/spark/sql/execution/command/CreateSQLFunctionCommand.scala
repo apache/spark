@@ -540,14 +540,17 @@ case class CreateSQLFunctionCommand(
     val conf = session.sessionState.conf
     val manager = session.sessionState.catalogManager
 
-    // Only collect temporary object names when the function is a temp function.
-    val (tempViews, tempFunctions) = if (isTemp) {
-      collectTemporaryObjectsInUnresolvedPlan(catalog, plan)
+    // Only collect temporary object names when the function is a temp function. A persistent
+    // function has already rejected them, or discarded them under the legacy flag; as with
+    // persisted views, it stores none.
+    val (tempViews, tempFunctions, tempVars) = if (isTemp) {
+      val (views, functions) = collectTemporaryObjectsInUnresolvedPlan(catalog, plan)
+      val vars =
+        (ViewHelper.collectTemporaryVariables(analyzed) ++ referredTempVarsUnderIdentifier).distinct
+      (views, functions, vars)
     } else {
-      (Nil, Nil)
+      (Nil, Nil, Nil)
     }
-    val tempVars =
-      (ViewHelper.collectTemporaryVariables(analyzed) ++ referredTempVarsUnderIdentifier).distinct
 
     // Capture the effective resolution path at function creation time so the function
     // body resolves with the same path regardless of the caller's session path later.

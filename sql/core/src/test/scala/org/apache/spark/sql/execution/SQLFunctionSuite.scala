@@ -21,6 +21,11 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 
 import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.analysis.SQLFunctionExpression
+import org.apache.spark.sql.catalyst.catalog.SQLFunction
+import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -64,6 +69,44 @@ class SQLFunctionSuite extends SharedSparkSession {
             "tempObj" -> "VARIABLE",
             "tempObjName" -> "`ident_col`"))
         checkAnswer(sql("SELECT ident_caller(0)"), Row(2))
+      } finally {
+        sql("DROP TEMPORARY VARIABLE IF EXISTS ident_col")
+      }
+    }
+  }
+
+  test("SPARK-59970: IDENTIFIER-clause variables are stored for a temporary function only") {
+    val variableNamesKey = "referredTempVariableNames"
+    withUserDefinedFunction("ident_temp_fn" -> true, "ident_perm_fn" -> false) {
+      sql("DECLARE OR REPLACE VARIABLE ident_col STRING DEFAULT 'a'")
+      try {
+        // A temporary function records the variable, like a direct reference, so the stored body
+        // still resolves the IDENTIFIER clause when it is re-analyzed.
+        sql("CREATE TEMPORARY FUNCTION ident_temp_fn(x INT) RETURNS INT " +
+          "RETURN (SELECT IDENTIFIER(ident_col) FROM VALUES (1) AS T(a))")
+        // Temporary functions are registered under the qualified `system.session` namespace.
+        val tempFn = spark.sessionState.functionRegistry
+          .lookupFunctionBuilder(FunctionIdentifier(
+            "ident_temp_fn",
+            Some(CatalogManager.SESSION_NAMESPACE),
+            Some(CatalogManager.SYSTEM_CATALOG_NAME))).get
+          .apply(Seq(Literal(0))) match {
+            case f: SQLFunctionExpression => f.function
+            case other => fail(s"unexpected builder result: $other")
+          }
+        assert(tempFn.properties(variableNamesKey) === """[["ident_col"]]""")
+
+        // A persistent function created under the legacy flag stores no temporary variable, as a
+        // persisted view does not: the dependency is tolerated, not persisted.
+        withSQLConf(SQLConf.VARIABLES_UNDER_IDENTIFIER_IN_VIEW.key -> "true") {
+          sql("CREATE FUNCTION ident_perm_fn(x INT) RETURNS INT " +
+            "RETURN (SELECT IDENTIFIER(ident_col) FROM VALUES (1) AS T(a))")
+        }
+        val permFn = SQLFunction.fromCatalogFunction(
+          spark.sessionState.catalog.getFunctionMetadata(
+            FunctionIdentifier("ident_perm_fn", Some("default"))),
+          spark.sessionState.sqlParser)
+        assert(permFn.properties(variableNamesKey) === "[]")
       } finally {
         sql("DROP TEMPORARY VARIABLE IF EXISTS ident_col")
       }
