@@ -167,7 +167,8 @@ object Connect {
           "the old SparkSession once another client may have created a new session with the " +
           "same session id, because releasing a session does not check the server-side " +
           "session id and would close the new session. Only set this when the client can " +
-          "rebuild its session state.")
+          "rebuild its session state. This is a session configuration, set by the client " +
+          "on its session.")
       .version("4.4.0")
       .booleanConf
       .createWithDefault(false)

@@ -183,6 +183,9 @@ class SparkConnectSessionManager extends Logging {
       Some(() => {
         val session = sessionStore.get(newKey)
         if (session == null) {
+          // Re-check atomically with the store update, the id may have been closed since the
+          // validation above.
+          if (isSessionClosed(newKey)) throw cloneTargetClosedError(newKey)
           // Clone the underlying SparkSession using cloneSession() which preserves
           // configuration, catalog, session state, temporary views, and registered functions
           val clonedSparkSession = sourceSessionHolder.session.cloneSession()
@@ -199,6 +202,11 @@ class SparkConnectSessionManager extends Logging {
     clonedSessionHolder
   }
 
+  private def cloneTargetClosedError(newKey: SessionKey): SparkSQLException =
+    new SparkSQLException(
+      errorClass = "INVALID_CLONE_SESSION_REQUEST.TARGET_SESSION_ID_ALREADY_CLOSED",
+      messageParameters = Map("targetSessionId" -> newKey.sessionId))
+
   private def validateCloneTargetSession(newKey: SessionKey): Unit = {
     // Validate that sessionId is formatted like UUID before creating session.
     try {
@@ -211,9 +219,7 @@ class SparkConnectSessionManager extends Logging {
     }
     // Validate that session with that key has not been already closed.
     if (isSessionClosed(newKey)) {
-      throw new SparkSQLException(
-        errorClass = "INVALID_CLONE_SESSION_REQUEST.TARGET_SESSION_ID_ALREADY_CLOSED",
-        messageParameters = Map("targetSessionId" -> newKey.sessionId))
+      throw cloneTargetClosedError(newKey)
     }
     // Validate that session with that key does not already exist.
     if (sessionStore.containsKey(newKey)) {
@@ -470,17 +476,21 @@ class SparkConnectSessionManager extends Logging {
 
     val key = SessionKey(userId, newSessionId)
 
+    def sessionClosedError = new SparkSQLException(
+      errorClass = "INVALID_HANDLE.SESSION_CLOSED",
+      messageParameters = Map("handle" -> newSessionId))
+
     // Validate that session with this key has not been already closed.
     if (isSessionClosed(key)) {
-      throw new SparkSQLException(
-        errorClass = "INVALID_HANDLE.SESSION_CLOSED",
-        messageParameters = Map("handle" -> newSessionId))
+      throw sessionClosedError
     }
 
     schedulePeriodicChecks()
     sessionStore.computeIfAbsent(
       key,
       _ => {
+        // Re-check atomically with the store update, the id may have been closed since.
+        if (isSessionClosed(key)) throw sessionClosedError
         val h = SessionHolder(userId, newSessionId, existingSession)
         h.initializeSession()
         h.setCustomInactiveTimeoutMs(Some(-1L)) // Never expire; query manages lifetime.
