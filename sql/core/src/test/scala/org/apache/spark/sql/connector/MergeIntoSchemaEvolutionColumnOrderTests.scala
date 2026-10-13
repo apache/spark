@@ -587,8 +587,8 @@ trait MergeIntoSchemaEvolutionColumnOrderTests extends MergeIntoSchemaEvolutionS
     confs = preserveOrderConfs
   )
 
-  // Same scenario without preserveColumnOrder: the dedup is unconditional, so the
-  // field is still added once, appended under the leaf assignment's spelling.
+  // Dedup is unconditional: with the flag off the field is still added once,
+  // appended under the leaf assignment's spelling.
   testNestedStructsEvolution("field added by case-variant leaf assignment and " +
       "insert star is added once")(
     target = Seq(

@@ -1290,8 +1290,6 @@ object MergeIntoTable {
   private def computePendingSchemaChanges(merge: MergeIntoTable): Seq[TableChange] = {
     val resolver = SQLConf.get.resolver
 
-    // Field paths already scheduled for addition, to deduplicate adds produced by
-    // different assignments for the same field.
     val addedFieldPaths = mutable.ArrayBuffer.empty[Seq[String]]
 
     def isAlreadyAdded(fieldPath: Seq[String]): Boolean = {
