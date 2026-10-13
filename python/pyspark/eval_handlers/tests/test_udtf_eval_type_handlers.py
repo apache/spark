@@ -57,9 +57,6 @@ if have_pyarrow:
     from pyspark.sql.conversion import ArrowBatchTransformer
 
 
-_RETURN_TYPE = StructType([StructField("x", LongType())])
-
-
 class _RecordingUDTF:
     """Arrow UDTF that echoes its TABLE argument and records the lifecycle calls."""
 
@@ -81,20 +78,68 @@ class _RecordingUDTF:
         self.calls.append("cleanup")
 
 
+class _RowUDTF:
+    """Row-wise UDTF that emits its argument and its double, and records the lifecycle calls."""
+
+    def __init__(self, skip_after=None):
+        self.calls = []
+        self._skip_after = skip_after
+
+    def eval(self, a):
+        self.calls.append("eval")
+        if self._skip_after is not None and len(self.calls) > self._skip_after:
+            raise SkipRestOfInputTableException()
+        yield a, a * 2
+
+    def terminate(self):
+        self.calls.append("terminate")
+        yield -1, -2
+
+    def cleanup(self):
+        self.calls.append("cleanup")
+
+
+class UDTFEvalTypeHandlerTestCase(PySparkBaseTestCase):
+    """Shared return type for the UDTF handler tests."""
+
+    _RETURN_TYPE = StructType([StructField("x", LongType())])
+
+
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
-class ArrowUDTFHandlerTests(PySparkBaseTestCase):
+class UDTFEvalTypeHandlerRegistrationTests(PySparkBaseTestCase):
+    def test_registered(self):
+        legacy_conf = "spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled"
+        # Each UDTF eval type dispatches to its handler by lookup; SQL_ARROW_TABLE_UDF picks
+        # its variant by the legacy pandas conversion conf.
+        for eval_type, conf, handler_cls in (
+            (PythonEvalType.SQL_ARROW_UDTF, {}, ArrowUDTFHandler),
+            (PythonEvalType.SQL_ARROW_TABLE_UDF, {}, ArrowTableUDTFArrowHandler),
+            (
+                PythonEvalType.SQL_ARROW_TABLE_UDF,
+                {legacy_conf: "false"},
+                ArrowTableUDTFArrowHandler,
+            ),
+            (
+                PythonEvalType.SQL_ARROW_TABLE_UDF,
+                {legacy_conf: "true"},
+                ArrowTableUDTFLegacyPandasHandler,
+            ),
+        ):
+            with self.subTest(eval_type=eval_type, conf=conf):
+                self.assertIs(get_eval_type_handler(eval_type, RunnerConf(conf)), handler_cls)
+
+
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+class ArrowUDTFHandlerTests(UDTFEvalTypeHandlerTestCase):
     def _handler(self, udtf, args=(0,), kwargs=None, table_arg_offsets="0"):
         conf = {} if table_arg_offsets is None else {"table_arg_offsets": table_arg_offsets}
         return ArrowUDTFHandler(
-            udfs=[(udtf, list(args), kwargs or {}, _RETURN_TYPE)],
+            udfs=[(udtf, list(args), kwargs or {}, self._RETURN_TYPE)],
             runner_conf=RunnerConf({}),
             eval_conf=EvalConf(conf),
         )
 
-    def test_registered(self):
-        self.assertIs(
-            get_eval_type_handler(PythonEvalType.SQL_ARROW_UDTF, RunnerConf({})), ArrowUDTFHandler
-        )
+    def test_serializer(self):
         self.assertIsInstance(self._handler(_RecordingUDTF()).serializer, ArrowStreamSerializer)
 
     def test_partition_wrapper(self):
@@ -239,62 +284,27 @@ class ArrowUDTFHandlerTests(PySparkBaseTestCase):
         self.assertEqual(udtf.calls, ["cleanup"])
 
 
-class _RowUDTF:
-    """Row-wise UDTF that emits its argument and its double, and records the lifecycle calls."""
-
-    def __init__(self, skip_after=None):
-        self.calls = []
-        self._skip_after = skip_after
-
-    def eval(self, a):
-        self.calls.append("eval")
-        if self._skip_after is not None and len(self.calls) > self._skip_after:
-            raise SkipRestOfInputTableException()
-        yield a, a * 2
-
-    def terminate(self):
-        self.calls.append("terminate")
-        yield -1, -2
-
-    def cleanup(self):
-        self.calls.append("cleanup")
-
-
-_ROW_RETURN_TYPE = StructType([StructField("x", LongType()), StructField("y", LongType())])
-_ROW_INPUT_TYPE = StructType([StructField("a", LongType())])
-
-
 class ArrowTableUDTFHandlerTestsMixin:
-    """Tests shared by both SQL_ARROW_TABLE_UDF variants; subclasses set ``legacy``."""
+    """Tests shared by both SQL_ARROW_TABLE_UDF variants; subclasses set ``handler_cls``."""
 
-    legacy: bool
+    handler_cls: type
 
-    def _runner_conf(self):
-        return RunnerConf(
-            {
-                "spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled": str(
-                    self.legacy
-                ).lower()
-            }
-        )
+    _ROW_RETURN_TYPE = StructType([StructField("x", LongType()), StructField("y", LongType())])
+    _ROW_INPUT_TYPE = StructType([StructField("a", LongType())])
 
-    def _handler(self, udtf, args=(0,), kwargs=None, return_type=_ROW_RETURN_TYPE):
-        runner_conf = self._runner_conf()
-        handler_cls = get_eval_type_handler(PythonEvalType.SQL_ARROW_TABLE_UDF, runner_conf)
-        return handler_cls(
-            udfs=[(udtf, list(args), kwargs or {}, return_type)],
-            runner_conf=runner_conf,
-            eval_conf=EvalConf({"input_type": _ROW_INPUT_TYPE.json()}),
+    def _handler(self, udtf, args=(0,), kwargs=None, return_type=None):
+        return self.handler_cls(
+            udfs=[(udtf, list(args), kwargs or {}, return_type or self._ROW_RETURN_TYPE)],
+            runner_conf=RunnerConf({}),
+            eval_conf=EvalConf({"input_type": self._ROW_INPUT_TYPE.json()}),
         )
 
     def _run(self, handler, *columns):
         batches = [pa.record_batch({"a": pa.array(c, type=pa.int64())}) for c in columns]
         return [r for b in handler.run(0, iter(batches)) for r in b.column(0).to_pylist()]
 
-    def test_registered(self):
-        handler = self._handler(_RowUDTF())
-        self.assertIsInstance(handler, self.handler_cls)
-        self.assertIsInstance(handler.serializer, ArrowStreamSerializer)
+    def test_serializer_and_partition_wrapper(self):
+        self.assertIsInstance(self._handler(_RowUDTF()).serializer, ArrowStreamSerializer)
         self.assertIs(self.handler_cls.partition_wrapper, UDTFWithPartitions)
 
     def test_eval_terminate_cleanup(self):
@@ -368,31 +378,25 @@ class ArrowTableUDTFHandlerTestsMixin:
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
-class ArrowTableUDTFArrowHandlerTests(ArrowTableUDTFHandlerTestsMixin, unittest.TestCase):
-    legacy = False
-
-    @property
-    def handler_cls(self):
-        return ArrowTableUDTFArrowHandler
+class ArrowTableUDTFArrowHandlerTests(ArrowTableUDTFHandlerTestsMixin, UDTFEvalTypeHandlerTestCase):
+    handler_cls = ArrowTableUDTFArrowHandler if have_pyarrow else None
 
     def test_scalar_result_wrapped_for_single_column(self):
         class ScalarUDTF:
             def eval(self, a):
                 yield a
 
-        out = self._run(self._handler(ScalarUDTF(), return_type=_RETURN_TYPE), [1, 2])
+        out = self._run(self._handler(ScalarUDTF(), return_type=self._RETURN_TYPE), [1, 2])
         self.assertEqual([r["x"] for r in out], [1, 2])
 
 
 @unittest.skipIf(
     not (have_pandas and have_pyarrow), pandas_requirement_message or pyarrow_requirement_message
 )
-class ArrowTableUDTFLegacyPandasHandlerTests(ArrowTableUDTFHandlerTestsMixin, unittest.TestCase):
-    legacy = True
-
-    @property
-    def handler_cls(self):
-        return ArrowTableUDTFLegacyPandasHandler
+class ArrowTableUDTFLegacyPandasHandlerTests(
+    ArrowTableUDTFHandlerTestsMixin, UDTFEvalTypeHandlerTestCase
+):
+    handler_cls = ArrowTableUDTFLegacyPandasHandler if have_pyarrow else None
 
 
 if __name__ == "__main__":
