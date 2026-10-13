@@ -18,9 +18,12 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import scala.annotation.tailrec
+import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils.isBinaryStable
+import org.apache.spark.sql.types.UpCastRule
 
 
 trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
@@ -129,45 +132,54 @@ trait ConstraintHelper {
    * Infers the full additional constraint set for a given set of constraints by combining the
    * equality-based inferences above ([[inferAdditionalConstraints]],
    * [[inferConstraintsFromLiteralBindings]]) with transitive inequality chaining
-   * ([[inferInequalityConstraints]]). The inequality step is iterated to a fixed point because a
-   * single pass only chains pairs present in the input set: e.g. `a < b && b < c && c < 5`
-   * requires one pass to derive `b < 5` and a second to derive `a < 5` from it.
+   * ([[inferInequalityConstraints]]). The two equality-based passes never produce a new literal
+   * binding (an `attr = literal` equality), only new inequalities or substitutions into existing
+   * predicates, so a single downstream call to [[inferInequalityConstraints]] sees every literal
+   * bound they can ever contribute; it does not need to be interleaved with them.
    */
   def inferAllAdditionalConstraints(constraints: ExpressionSet): ExpressionSet = {
-    @tailrec
-    def chainInequalities(inferred: ExpressionSet): ExpressionSet = {
-      val newlyInferred = inferInequalityConstraints(constraints ++ inferred)
-      if (newlyInferred.isEmpty) inferred else chainInequalities(inferred ++ newlyInferred)
-    }
-
-    chainInequalities(
-      inferAdditionalConstraints(constraints) ++
-        inferConstraintsFromLiteralBindings(constraints))
+    val equalityInferred =
+      inferAdditionalConstraints(constraints) ++ inferConstraintsFromLiteralBindings(constraints)
+    equalityInferred ++ inferInequalityConstraints(constraints ++ equalityInferred)
   }
 
   /**
-   * Infers an additional set of constraints from a given set of inequality constraints.
+   * Infers the full set of constraints derivable by transitively chaining inequality constraints.
    * For e.g., if an operator has constraints of the form (`a > b`, `b > 5`), this returns an
-   * additional constraint of the form `a > 5`.
+   * additional constraint of the form `a > 5`; a longer chain such as `a < b && b < c && c < 5`
+   * derives both `b < 5` and `a < 5` in this same call.
+   *
+   * This is computed as a worklist over a directed bound graph rather than a repeated fixed point
+   * over the full candidate set: each candidate comparison becomes a directed edge once, and each
+   * newly discovered bound is propagated only along its adjacent edges, instead of rescanning the
+   * full candidates x bounds product after every newly inferred bound (which costs O(n^3) on a
+   * sparse n-element chain such as `x1 < x2 < ... < xn < lit`). A site only ever keeps its single
+   * tightest bound per direction, so reaching it via multiple literals (e.g. `b < 5` and `b < 10`
+   * both reaching `a` through `a < b`) converges to one inferred predicate instead of one per
+   * literal; a relaxation only re-enters the worklist when it strictly tightens that site's bound,
+   * which bounds the number of relaxations per site by the number of distinct literals that can
+   * reach it and guarantees termination.
    */
   private def inferInequalityConstraints(constraints: ExpressionSet): ExpressionSet = {
-    // Substituting through a comparison is only safe under binary-stable collations, for the
-    // same reason as in inferConstraintsFromLiteralBindings: non-binary-stable collations may
-    // order values differently than their binary representation would suggest. Attribute-to-
-    // attribute equality is excluded here too: its transitivity is already handled by
-    // inferAdditionalConstraints via substitution, so chaining it here would only re-derive the
-    // same fact as a redundant <= / >= pair instead of the clean substituted equality that path
-    // already produces.
-    val validComparisons = constraints.filter {
+    // Admits only comparisons between binary-stable types. This is a conservative guard, not a
+    // strict requirement: chaining never substitutes a value the way
+    // inferConstraintsFromLiteralBindings does, it only reuses an operand under the same
+    // collation-aware comparison, so a non-binary-stable collation could in principle still order
+    // consistently with its binary form here. EqualTo is admitted only when at least one side is
+    // foldable (a literal bound); every other EqualTo -- attribute-to-attribute (handled by
+    // inferAdditionalConstraints's transitivity), as well as any other shape without a foldable
+    // side such as `a + 1 = b` -- is excluded, since no inference path below handles a
+    // non-foldable equality operand.
+    val validComparisons = constraints.toSeq.filter {
       case b: BinaryComparison =>
-        b.deterministic && !b.isInstanceOf[EqualNullSafe] &&
+        b.deterministic && !b.throwable && !b.isInstanceOf[EqualNullSafe] &&
           (!b.isInstanceOf[EqualTo] || b.left.foldable || b.right.foldable) &&
           isBinaryStable(b.left.dataType) && isBinaryStable(b.right.dataType)
       case _ => false
     }
 
     def hasFoldableOperand(e: Expression): Boolean = e match {
-      case BinaryComparison(l, r) => l.foldable || r.foldable
+      case b: BinaryComparison => b.left.foldable || b.right.foldable
       case _ => false
     }
 
@@ -178,37 +190,125 @@ trait ConstraintHelper {
     // Canonicalize comparisons into LessThan / LessThanOrEqual direction. EqualTo is expanded
     // into both directions, unlike GreaterThan/GreaterThanOrEqual, because an equality acts as
     // both an upper and a lower bound and the matching below is direction-sensitive on which
-    // side carries the literal.
-    val canonical = validComparisons.toSet[Expression].flatMap {
+    // side carries the literal. Kept as a Seq, not an ExpressionSet: ExpressionSet canonicalizes
+    // EqualTo(l, r) and EqualTo(r, l) to the same entry and would silently keep only one of the
+    // two directions just expanded.
+    val canonical = validComparisons.flatMap {
       case GreaterThan(l, r) => LessThan(r, l) :: Nil
       case GreaterThanOrEqual(l, r) => LessThanOrEqual(r, l) :: Nil
       case EqualTo(l, r) => EqualTo(l, r) :: EqualTo(r, l) :: Nil
       case other => other :: Nil
     }
 
-    val (bounds, candidates) = canonical.partition(hasFoldableOperand)
-    if (bounds.isEmpty || candidates.isEmpty) return ExpressionSet()
+    val (initialBounds, candidates) = canonical.partition(hasFoldableOperand)
+    if (initialBounds.isEmpty || candidates.isEmpty) return ExpressionSet()
 
-    def isStrict(c: Expression, b: Expression): Boolean =
-      c.isInstanceOf[LessThan] || b.isInstanceOf[LessThan]
+    // A candidate operand is only safe to copy into a newly inferred, single-side filter when
+    // doing so cannot raise an error on rows that never evaluated it before: an attribute
+    // reference, or a lossless (non-truncating, non-failing) widening cast of one. Arbitrary
+    // expressions -- a parsing/narrowing cast, arithmetic that can overflow under ANSI, etc. --
+    // are excluded, since the comparison they came from may have been a cross-side join
+    // condition that only ever ran on matched rows.
+    def isSafeToRelocate(e: Expression): Boolean = e match {
+      case _: Attribute => true
+      case Cast(a: Attribute, toType, _, _) => UpCastRule.canUpCast(a.dataType, toType)
+      case _ => false
+    }
 
-    val inferred = for {
-      candidate @ BinaryComparison(l, r) <- candidates
-      bound <- bounds
-      result <- bound match {
-        // Upper bound on r propagates to l: (l < r) && (r < lit) => (l < lit)
-        case BinaryComparison(b, lit) if lit.foldable && r.semanticEquals(b) =>
-          Some(if (isStrict(candidate, bound)) LessThan(l, lit) else LessThanOrEqual(l, lit))
+    // Bound represents a known literal bound on `site`: `site {<,<=} lit` when `upper`, or
+    // `lit {<,<=} site` otherwise.
+    case class Bound(upper: Boolean, site: Expression, lit: Expression, strict: Boolean)
 
-        // Lower bound on l propagates to r: (l < r) && (lit < l) => (r > lit)
-        case BinaryComparison(lit, b) if lit.foldable && l.semanticEquals(b) =>
-          Some(if (isStrict(candidate, bound)) GreaterThan(r, lit) else GreaterThanOrEqual(r, lit))
+    def toBound(e: Expression): Option[Bound] = e match {
+      case b: BinaryComparison =>
+        val strict = b.isInstanceOf[LessThan]
+        if (b.right.foldable) Some(Bound(upper = true, b.left, b.right, strict))
+        else if (b.left.foldable) Some(Bound(upper = false, b.right, b.left, strict))
+        else None
+      case _ => None
+    }
 
-        case _ => None
+    // Index candidate edges by the semantic key of the endpoint a bound would match, so a newly
+    // discovered bound only revisits the edges that touch it instead of the full candidate list.
+    // An edge `l < r` (or `l <= r`) propagates an upper bound on `r` to `l`, and a lower bound on
+    // `l` to `r`.
+    val upperEdges = new mutable.HashMap[Expression, mutable.Buffer[(Expression, Boolean)]]
+    val lowerEdges = new mutable.HashMap[Expression, mutable.Buffer[(Expression, Boolean)]]
+    candidates.foreach {
+      case c @ BinaryComparison(l, r) =>
+        val strict = c.isInstanceOf[LessThan]
+        if (isSafeToRelocate(l)) {
+          upperEdges.getOrElseUpdate(r.canonicalized, mutable.Buffer.empty) += (l -> strict)
+        }
+        if (isSafeToRelocate(r)) {
+          lowerEdges.getOrElseUpdate(l.canonicalized, mutable.Buffer.empty) += (r -> strict)
+        }
+      case _ =>
+    }
+
+    if (upperEdges.isEmpty && lowerEdges.isEmpty) return ExpressionSet()
+
+    // Key: (upper, site.canonicalized) -> tightest bound discovered for that site so far, keyed
+    // without the literal so that bounding the same site via different literals (e.g. `b < 5` and
+    // `b < 10` both reaching `a` through `a < b`) converges to the single tightest predicate
+    // instead of emitting one inferred conjunct per literal it was ever bounded by.
+    type BoundKey = (Boolean, Expression)
+    val bestBound = new mutable.HashMap[BoundKey, Bound]
+    val inferredBounds = new mutable.LinkedHashMap[BoundKey, Bound]
+    val worklist = new mutable.Queue[Bound]
+
+    // True when `candidate` improves on `current` for the same key: a smaller upper-bound literal
+    // (or larger lower-bound one), or an equal literal newly made strict. Compares with the same
+    // per-type ordering BinaryComparison.eval itself uses, so tightness agrees with the actual
+    // `<`/`<=` runtime semantics (decimal scale, etc.) instead of a parallel notion of "smaller".
+    // A null literal is treated as incomparable and never wins, matching the SQL three-valued
+    // semantics where a comparison against NULL only ever filters, never tightens.
+    def isTighter(upper: Boolean, candidate: Bound, current: Bound): Boolean = {
+      val a = candidate.lit.eval()
+      val b = current.lit.eval()
+      if (a == null || b == null) {
+        false
+      } else {
+        val cmp = TypeUtils.getInterpretedOrdering(candidate.site.dataType).compare(a, b)
+        if (cmp != 0) (if (upper) cmp < 0 else cmp > 0) else candidate.strict && !current.strict
       }
-    } yield result
+    }
 
-    ExpressionSet(inferred) -- constraints
+    // Relaxes the best known bound for `b`'s (direction, site) key: only a genuine improvement
+    // re-enters the worklist, which bounds the number of relaxations per key by the number of
+    // distinct literals that can ever reach it and guarantees termination.
+    def relax(b: Bound, viaEdge: Boolean): Unit = {
+      val key = (b.upper, b.site.canonicalized)
+      if (bestBound.get(key).forall(isTighter(b.upper, b, _))) {
+        bestBound(key) = b
+        worklist += b
+        if (viaEdge) inferredBounds(key) = b
+      }
+    }
+
+    initialBounds.flatMap(toBound(_)).foreach(relax(_, viaEdge = false))
+
+    while (worklist.nonEmpty) {
+      val bound = worklist.dequeue()
+      val key = (bound.upper, bound.site.canonicalized)
+      // Skip propagating a bound that a later, tighter relaxation has already superseded.
+      if (bestBound.get(key).contains(bound)) {
+        val edges = if (bound.upper) upperEdges else lowerEdges
+        edges.get(bound.site.canonicalized).foreach(_.foreach { case (other, edgeStrict) =>
+          relax(Bound(bound.upper, other, bound.lit, bound.strict || edgeStrict), viaEdge = true)
+        })
+      }
+    }
+
+    val inferred = inferredBounds.values.map { b =>
+      if (b.upper) {
+        if (b.strict) LessThan(b.site, b.lit) else LessThanOrEqual(b.site, b.lit)
+      } else {
+        if (b.strict) GreaterThan(b.site, b.lit) else GreaterThanOrEqual(b.site, b.lit)
+      }
+    }
+
+    ExpressionSet(inferred.toSeq) -- constraints
   }
 
   private def replaceConstraints(
