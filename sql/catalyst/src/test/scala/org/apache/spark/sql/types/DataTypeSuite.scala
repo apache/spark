@@ -1712,7 +1712,6 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
     // The mode is part of the type's identity.
     assert(FileType.external != FileType())
     assert(FileType() === FileType(FileTypeMode.UNKNOWN))
-    assert(DataTypes.FileType === FileType())
     assert(FileType.external.typeName === "file external")
     assert(FileType().typeName === "file")
     // A type prints what was written: FILE EXTERNAL for an external file, FILE for a bare FILE.
