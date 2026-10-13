@@ -2628,6 +2628,9 @@ object LateralJoin {
 
 /**
  * A logical plan for as-of join.
+ * @param direction Which matching right row to keep: the last for [[Backward]], the first for
+ *                  [[Forward]], the closest by `orderExpression` for [[Nearest]].
+ *                  `asOfCondition` and `orderExpression` must be built for the same direction.
  */
 case class AsOfJoin(
     left: LogicalPlan,
@@ -2637,6 +2640,7 @@ case class AsOfJoin(
     joinType: JoinType,
     orderExpression: Expression,
     toleranceAssertion: Option[Expression],
+    direction: AsOfJoinDirection,
     usingColumns: Option[Seq[String]] = None,
     matchLeftOperand: Option[Expression] = None,
     matchOperator: Option[MatchComparisonOperator] = None,
@@ -2707,12 +2711,14 @@ object AsOfJoin {
     val asOfCond = makeAsOfCond(leftAsOf, rightAsOf, tolerance, allowExactMatches, direction)
     val orderingExpr = makeOrderingExpr(leftAsOf, rightAsOf, direction)
     AsOfJoin(left, right, asOfCond, condition, joinType,
-      orderingExpr, tolerance.map(t => GreaterThanOrEqual(t, Literal.default(t.dataType))))
+      orderingExpr, tolerance.map(t => GreaterThanOrEqual(t, Literal.default(t.dataType))),
+      direction)
   }
 
   /**
    * Build an [[AsOfJoin]] from a SQL `MATCH_CONDITION (left_expr op right_expr)` clause.
-   * Operand normalization is deferred until analysis when join inputs are resolved.
+   * Operand normalization is deferred until analysis when join inputs are resolved. Analysis
+   * then replaces the placeholder `asOfCondition`, `orderExpression`, and `direction`.
    */
   def fromMatchCondition(
       left: LogicalPlan,
@@ -2731,6 +2737,7 @@ object AsOfJoin {
       joinType = joinType,
       orderExpression = Literal(0),
       toleranceAssertion = None,
+      direction = operator.direction,
       usingColumns = usingColumns,
       matchLeftOperand = Some(leftExpr),
       matchOperator = Some(operator),
@@ -2922,13 +2929,16 @@ object AsOfJoin {
     }
   }
 
+  /**
+   * Returns the `asOfCondition` and `orderExpression` for one MATCH_CONDITION comparison. The
+   * operands are compared as whole values, so a NULL struct never matches, while a struct whose
+   * fields are all NULL can.
+   */
   private def buildMatchExpressions(
       leftOperand: Expression,
       rightOperand: Expression,
       operator: MatchComparisonOperator): (Expression, Expression) = {
     val orderExpression = buildOrderExpression(leftOperand, rightOperand, operator)
-    // Compare the operands as they are: a comparison already matches struct fields by position,
-    // and a NULL struct stays NULL, so it never matches.
     operator match {
       case GreaterThanOrEqualOp =>
         (GreaterThanOrEqual(leftOperand, rightOperand), orderExpression)

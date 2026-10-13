@@ -66,8 +66,7 @@ case class XmlToStructs(
   extends UnaryExpression
   with TimeZoneAwareExpression
   with ExpectsInputTypes
-  with QueryErrorsBase
-  with SupportTrimmedCharInput {
+  with QueryErrorsBase {
 
   def this(child: Expression, schema: Expression, options: Map[String, String]) =
     this(
@@ -116,7 +115,7 @@ case class XmlToStructs(
   }
 
   override def nullSafeEval(xml: Any): Any = {
-    evaluator.evaluate(trimStringInput(xml.asInstanceOf[UTF8String]))
+    evaluator.evaluate(xml.asInstanceOf[UTF8String])
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -177,8 +176,7 @@ case class SchemaOfXml(
   extends UnaryExpression
   with RuntimeReplaceable
   with DefaultStringProducingExpression
-  with QueryErrorsBase
-  with SupportTrimmedCharInput {
+  with QueryErrorsBase {
 
   def this(child: Expression) = this(child, Map.empty[String, String])
 
@@ -236,8 +234,8 @@ case class SchemaOfXml(
     XmlExpressionEvalUtils.getClass,
     dataType,
     "schemaOfXml",
-    Seq(Literal(xmlInferSchema, xmlInferSchemaObjectType), stringInput),
-    Seq(xmlInferSchemaObjectType, stringInput.dataType),
+    Seq(Literal(xmlInferSchema, xmlInferSchemaObjectType), child),
+    Seq(xmlInferSchemaObjectType, child.dataType),
     returnNullable = false)
 }
 

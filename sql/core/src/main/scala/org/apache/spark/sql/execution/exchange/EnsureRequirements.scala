@@ -136,8 +136,8 @@ case class EnsureRequirements(
         case Some(resolution) =>
           (distribution, resolution) match {
             case (o: OrderedDistribution, _) =>
-              // OrderedDistribution requires grouped KeyedPartitioning with sorted keys
-              // according to the distribution's ordering.
+              // OrderedDistribution requires a KeyedPartitioning with keys sorted according to
+              // the distribution's ordering.
               val satisfyingKeyedPartitioning = resolution.fold(identity, _._1)
               // A key row holds the values of the partition expressions. `keysSatisfy` admits a
               // partitioning here only when those expressions are the ordering's, position by
@@ -146,26 +146,18 @@ case class EnsureRequirements(
               // `100 - b`.
               assert(o.areAllClusterKeysMatched(satisfyingKeyedPartitioning.expressions),
                 "the partition expressions must be the ordering's, position by position")
-              val keyRowOrdering = RowOrdering.create(
-                o.ordering.zip(satisfyingKeyedPartitioning.keyDataTypes).zipWithIndex.map {
-                  case ((order, dataType), i) =>
-                    order.copy(child = BoundReference(i, dataType, nullable = true),
-                      sameOrderExpressions = Seq.empty)
-                },
-                Nil)
-              val keyOrdering = keyRowOrdering.on((t: InternalRowComparableWrapper) => t.row)
-              val keys = satisfyingKeyedPartitioning.partitionKeys
-              // An empty zip is vacuously sorted, which is the answer for a single key.
-              if (keys.zip(keys.drop(1)).forall { case (k1, k2) => keyOrdering.lteq(k1, k2) }) {
+              if (satisfyingKeyedPartitioning.keysSortedFor(o)) {
                 child
               } else {
-                // Use distributePartitions to spread splits across expected partitions
-                val sortedGroupedKeys = keys
+                // Spread the splits across the expected partitions, in the ordering's sequence
+                val sortedGroupedKeys = satisfyingKeyedPartitioning.partitionKeys
                   .groupBy(identity).view.mapValues(_.size)
-                  .toSeq.sortBy(_._1)(keyOrdering)
+                  .toSeq.sortBy(_._1)(satisfyingKeyedPartitioning.keyOrderingFor(o))
                 GroupPartitionsExec(child,
                   expectedPartitionKeys = Some(sortedGroupedKeys),
-                  distributePartitions = true
+                  // The keys stay ungrouped so that the ordering the operator reads is the one
+                  // derived from them, which is no side of a pairing.
+                  ungroupingOrigin = Some(SPLIT_FOR_ORDERING)
                 )
               }
 
@@ -607,6 +599,9 @@ case class EnsureRequirements(
       right: SparkPlan,
       rightRequired: ClusteredDistribution): Option[Seq[SparkPlan]] = {
     parent match {
+      // A keyed alignment is planned for these two operators only. A `SortMergeAsOfJoinExec` is
+      // a `ShuffledJoin` and gets none: its matches are read in the order within a partition,
+      // which neither a spread side nor a repeating one preserves.
       case smj: SortMergeJoinExec =>
         checkKeyGroupCompatible(left, leftRequired, right, rightRequired, smj.joinType)
       case sj: ShuffledHashJoinExec =>
@@ -919,13 +914,25 @@ case class EnsureRequirements(
       }
 
       // Now we need to push-down the common partition information to the `GroupPartitionsExec`s.
+      //
+      // Where `applyPartialClustering` holds, exactly one side repeats: `replicateRightSide` is
+      // the negation of `replicateLeftSide`, and the branch above is taken only when the side it
+      // picked may replicate for the join type. That split is the whole of the pairing's
+      // soundness: for a key, a partition holding part of it on the spread side holds all of it
+      // on the repeating side, so pairing the two index by index loses no match, and
+      // `ValidateRequirements` cannot tell such a pair from two sides that split the key between
+      // them. Each side stamps why it is left ungrouped (`UngroupingOrigin`), so a reader of the
+      // finished plan judges the pair on the layouts it holds; the stamp also decides the node's
+      // routing (`GroupPartitionsExec.distributePartitions`).
       (
         GroupPartitionsExec(rawLeft, leftSpec.joinKeyPositions,
           Some(mergedPartitionKeys), leftReducers,
-          distributePartitions = applyPartialClustering && !replicateLeftSide),
+          ungroupingOrigin = Option.when(applyPartialClustering)(
+            if (replicateLeftSide) REPLICATED_FOR_JOIN else SPLIT_FOR_JOIN)),
         GroupPartitionsExec(rawRight, rightSpec.joinKeyPositions,
           Some(mergedPartitionKeys), rightReducers,
-          distributePartitions = applyPartialClustering && !replicateRightSide))
+          ungroupingOrigin = Option.when(applyPartialClustering)(
+            if (replicateRightSide) REPLICATED_FOR_JOIN else SPLIT_FOR_JOIN)))
     }
 
     // The pairing is only worth committing to if both children still declare the same aligned key

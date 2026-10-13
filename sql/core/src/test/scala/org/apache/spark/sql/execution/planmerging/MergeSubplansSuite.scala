@@ -1981,6 +1981,122 @@ class MergeSubplansSuite extends PlanTest {
     }
   }
 
+  // Merging subquery2 into subquery1 aliases `b = 2` as propagatedFilter_0 below the join, and
+  // subquery2's post-join filter folds it into propagatedFilter_2. The Projects above the join only
+  // carry propagatedFilter_2, so when subquery3 reuses propagatedFilter_0 on its own, the merged
+  // Project under the aggregate has to append it.
+  private def checkReusedFilterAfterPostJoinFold(selectInSubquery3: Boolean): Unit = {
+    val subquery1 = ScalarSubquery(
+      testRelation.where($"b" === 1).join(testRelation2, LeftOuter, Some($"a" === $"d"))
+        .select($"a")
+        .groupBy()(sum($"a").as("sum_a")))
+    val subquery2 = ScalarSubquery(
+      testRelation.where($"b" === 2).join(testRelation2, LeftOuter, Some($"a" === $"d"))
+        .where(coalesce($"e", 10) > 5)
+        .select($"a")
+        .groupBy()(max($"a").as("max_a")))
+    val join3 =
+      testRelation.where($"b" === 2).join(testRelation2, LeftOuter, Some($"a" === $"d"))
+    val subquery3 = ScalarSubquery(
+      (if (selectInSubquery3) join3.select($"a") else join3)
+        .groupBy()(count($"a").as("cnt")))
+    val originalQuery = testRelation.select(subquery1, subquery2, subquery3)
+
+    val f0Alias = Alias($"b" === 2, "propagatedFilter_0")()
+    val f0 = f0Alias.toAttribute
+    val f1Alias = Alias($"b" === 1, "propagatedFilter_1")()
+    val f1 = f1Alias.toAttribute
+    val joined = testRelation
+      .select(testRelation.output ++ Seq(f0Alias, f1Alias): _*)
+      .where(Or(f0, f1))
+      .join(testRelation2, LeftOuter, Some($"a" === $"d"))
+    val f2Alias = Alias(And(f0, coalesce($"e", 10) > 5), "propagatedFilter_2")()
+    val f2 = f2Alias.toAttribute
+    // Without its own Project, subquery3 merges all its join columns into the cached Project.
+    val mergedProjectList = if (selectInSubquery3) {
+      Seq($"a", f2, f1, f0)
+    } else {
+      Seq($"a", f2, f1, $"b", $"c", $"d", $"e", f0)
+    }
+    val mergedSubquery = joined
+      .select(joined.output :+ f2Alias: _*)
+      .select(mergedProjectList: _*)
+      .groupBy()(
+        sum($"a", Some(f1)).as("sum_a"),
+        max($"a", Some(f2)).as("max_a"),
+        count($"a", Some(f0)).as("cnt"))
+      .select(CreateNamedStruct(Seq(
+        Literal("sum_a"), $"sum_a",
+        Literal("max_a"), $"max_a",
+        Literal("cnt"), $"cnt"
+      )).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
+      testRelation.select(
+        extractorExpression(0, analyzedMergedSubquery.output, 0),
+        extractorExpression(0, analyzedMergedSubquery.output, 1),
+        extractorExpression(0, analyzedMergedSubquery.output, 2)),
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
+
+    withSQLConf(
+        SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "true",
+        SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_THROUGH_JOIN_ENABLED.key -> "true") {
+      comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+    }
+  }
+
+  test("SPARK-60084: Reuse a filter that an earlier merge folded into a post-join filter") {
+    checkReusedFilterAfterPostJoinFold(selectInSubquery3 = true)
+  }
+
+  test("SPARK-60084: Reuse a folded filter when the new plan has no Project above the join") {
+    // The `(np, cp: Project)` arm builds the merged Project from subquery3's join output, and has
+    // to append the reused filter there.
+    checkReusedFilterAfterPostJoinFold(selectInSubquery3 = false)
+  }
+
+  test("SPARK-60084: Do not reuse a computed column as a propagated filter") {
+    // subquery3 computes `b > 2` as a column and filters on the same expression. The column lands
+    // in the Project under the merged Filter, but the Filter's OR doesn't keep its rows, so
+    // subquery3 needs a filter alias of its own.
+    val subquery1 = ScalarSubquery(testRelation.where($"a" < 1).groupBy()(sum($"a").as("sum_a")))
+    val subquery2 = ScalarSubquery(testRelation.where($"a" > 5).groupBy()(max($"a").as("max_a")))
+    val subquery3 = ScalarSubquery(
+      testRelation.select($"a", $"b", ($"b" > 2).as("flag")).where($"b" > 2)
+        .groupBy()(count($"a").as("cnt")))
+    val originalQuery = testRelation.select(subquery1, subquery2, subquery3)
+
+    val f0Alias = Alias($"a" > 5, "propagatedFilter_0")()
+    val f0 = f0Alias.toAttribute
+    val f1Alias = Alias($"a" < 1, "propagatedFilter_1")()
+    val f1 = f1Alias.toAttribute
+    val f2Alias = Alias($"b" > 2, "propagatedFilter_2")()
+    val f2 = f2Alias.toAttribute
+    val mergedSubquery = testRelation
+      .select(testRelation.output ++ Seq(f0Alias, f1Alias, ($"b" > 2).as("flag"), f2Alias): _*)
+      .where(Or(Or(f0, f1), f2))
+      .groupBy()(
+        sum($"a", Some(f1)).as("sum_a"),
+        max($"a", Some(f0)).as("max_a"),
+        count($"a", Some(f2)).as("cnt"))
+      .select(CreateNamedStruct(Seq(
+        Literal("sum_a"), $"sum_a",
+        Literal("max_a"), $"max_a",
+        Literal("cnt"), $"cnt"
+      )).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
+      testRelation.select(
+        extractorExpression(0, analyzedMergedSubquery.output, 0),
+        extractorExpression(0, analyzedMergedSubquery.output, 1),
+        extractorExpression(0, analyzedMergedSubquery.output, 2)),
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
+
+    withSQLConf(SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "true") {
+      comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+    }
+  }
+
   // ---- SPARK-40259: generic DSv2 scan merge ----
 
   private val v2Table = new TestV2Table(StructType(Seq(
@@ -2859,6 +2975,22 @@ class MergeSubplansSuite extends PlanTest {
       case a: Attribute => a.name
     } == Seq("a")),
       s"the merged scan should re-derive the reported ordering; got ${scans.head.ordering}")
+  }
+
+  test("SPARK-59948: merge DSv2 scans reporting an ordering on a nested field") {
+    // Each scan derives its `s.x ASC` report separately. The nested key resolves to a fresh
+    // `Alias(GetStructField(...))` per derivation, so unless the alias is stripped the two
+    // reports never compare equal and the merge is declined.
+    val table = new TestV2Table(StructType(Seq(
+      StructField("s", StructType(Seq(StructField("x", IntegerType)))),
+      StructField("b", IntegerType), StructField("c", StringType))),
+      reportedOrderingCols = Seq("s.x"))
+    val q = testRelation.select(
+      ScalarSubquery(v2ScanReportingOn(table, Seq("s", "b")).groupBy()(sum($"b").as("sum_b"))),
+      ScalarSubquery(v2ScanReportingOn(table, Seq("s", "c")).groupBy()(sum($"c").as("sum_c"))))
+    val optimized = Optimize.execute(q.analyze)
+
+    assert(v2Scans(optimized).length == 1, s"the two scans should be fused into one:\n$optimized")
   }
 
   test("SPARK-58549: do not merge when the rebuilt scan re-derives less than the combined " +

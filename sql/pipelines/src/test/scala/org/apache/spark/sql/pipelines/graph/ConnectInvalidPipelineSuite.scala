@@ -19,7 +19,7 @@ package org.apache.spark.sql.pipelines.graph
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
-import org.apache.spark.sql.pipelines.autocdc.{ChangeArgs, ScdType, UnqualifiedColumnName}
+import org.apache.spark.sql.pipelines.autocdc.{ChangeArgs, ColumnSelection, ScdType, UnqualifiedColumnName}
 import org.apache.spark.sql.pipelines.utils.{PipelineTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
@@ -770,6 +770,44 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
         ).sorted.mkString(", ")
       )
     )
+  }
+
+  gridTest("AutoCDC flow with ignore-null updates is rejected as unsupported")(
+    Seq(ScdType.Type1, ScdType.Type2)
+  ) { scdType =>
+    val session = spark
+    import session.implicits._
+
+    val graph = new TestGraphRegistrationContext(spark) {
+      val cdcEvents = MemoryStream[Int].toDF().select($"value" as "id", $"value" as "seq")
+      registerTable("target")
+      registerFlow(
+        AutoCdcFlow(
+          identifier = fullyQualifiedIdentifier("auto_cdc_flow"),
+          destinationIdentifier = fullyQualifiedIdentifier("target"),
+          func = dfFlowFunc(cdcEvents),
+          queryContext = QueryContext(
+            currentCatalog = Some(TestGraphRegistrationContext.DEFAULT_CATALOG),
+            currentDatabase = Some(TestGraphRegistrationContext.DEFAULT_DATABASE)
+          ),
+          origin = QueryOrigin.empty,
+          changeArgs = ChangeArgs(
+            keys = Seq(UnqualifiedColumnName("id")),
+            sequencing = $"seq",
+            storedAsScdType = scdType,
+            ignoreNullSelection = Some(ColumnSelection.ExcludeColumns(Seq.empty))
+          )
+        )
+      )
+    }.resolveToDataflowGraph()
+
+    val ex = intercept[UnsupportedOperationException] {
+      validateGraph(graph)
+    }
+    val flowName = fullyQualifiedIdentifier("auto_cdc_flow").unquotedString
+    assert(
+      ex.getMessage ==
+        s"AutoCDC flow $flowName specifies ignore-null updates, which are not yet supported.")
   }
 
   test("DUPLICATE_GRAPH_ELEMENT: duplicate graph element identifiers") {
