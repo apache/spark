@@ -633,4 +633,182 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     assert(pushedToRight, s"Expected b.v >= 5 pushed to right side; plan was:\n$optimized")
   }
 
+  test("SPARK-30768: do not infer filters from throwable expressions") {
+    val x = testRelation.where($"b" < 10).subquery("x")
+    val y = testRelation.subquery("y")
+    val raiseErr = new RaiseError(Literal("neg")).cast(IntegerType)
+    val caseExpr = CaseWhen(Seq(("y.b".attr < 0, raiseErr)), elseValue = Some("y.b".attr))
+    val cond = Some("x.a".attr === "y.a".attr && caseExpr < "x.b".attr)
+    val query = x.join(y, Inner, cond).analyze
+    val optimized = Optimize.execute(query)
+    var inferredThrowable = false
+    optimized.foreach {
+      case Join(_, Filter(cond, _), _, _, _) =>
+        inferredThrowable = cond.throwable
+      case _ =>
+    }
+    assert(!inferredThrowable, s"Unexpected throwable filter condition inferred: $optimized")
+  }
+
+  test("SPARK-30768: equality orientation does not affect inequality chaining") {
+    Seq($"a" + 1 === 5, Literal(5) === ($"a" + 1)).foreach { eq =>
+      val original = testRelation.where(eq && ($"a" + 1) < $"b")
+      val optimized = testRelation.where(
+        IsNotNull($"a") && IsNotNull($"b") && eq && ($"a" + 1) < $"b" && $"b" > 5)
+      comparePlans(Optimize.execute(original.analyze), optimized.analyze)
+    }
+  }
+
+  test("SPARK-30768: equality orientation does not affect join-side inequality pushdown") {
+    def hasPushedFilter(plan: LogicalPlan)(pred: Expression => Boolean): Boolean = {
+      plan.collectFirst {
+        case Join(_, Filter(cond, _), _, _, _) => splitConjunctivePredicates(cond).exists(pred)
+      }.getOrElse(false)
+    }
+
+    Seq($"a" + 1 === 5, Literal(5) === ($"a" + 1)).foreach { eq =>
+      val x = testRelation.where(eq).subquery("x")
+      val y = testRelation.subquery("y")
+
+      // Upper bound on a + 1 propagates to y.b > 5
+      val optUpper = Optimize.execute(x.join(y, Inner, Some(($"x.a" + 1) < $"y.b")).analyze)
+      assert(hasPushedFilter(optUpper) {
+        case GreaterThan(b: Attribute, Literal(5, IntegerType)) => b.name == "b"
+        case _ => false
+      })
+
+      // Lower bound on a + 1 propagates to y.b < 5
+      val optLower = Optimize.execute(x.join(y, Inner, Some($"y.b" < ($"x.a" + 1))).analyze)
+      assert(hasPushedFilter(optLower) {
+        case LessThan(b: Attribute, Literal(5, IntegerType)) => b.name == "b"
+        case _ => false
+      })
+    }
+  }
+
+  test("SPARK-30768: strictness, cycles, and multiple paths without duplicate predicates") {
+    val Seq(a, b, c) = testRelation.output
+    // Combination of strict and non-strict edges:
+    // a < b && b <= c && c <= 10 -> b <= 10 and a < 10 (strict)
+    val rel1 = testRelation.where($"a" < $"b" && $"b" <= $"c" && $"c" <= 10)
+    val constraints1 = rel1.analyze.constraints
+    assert(constraints1.contains(LessThan(a, Literal(10))))
+    assert(constraints1.contains(LessThanOrEqual(b, Literal(10))))
+    assert(!constraints1.contains(LessThanOrEqual(a, Literal(10))))
+
+    // Cycles: a <= b && b <= a && b <= 10 -> terminates and derives a <= 10 without duplicates
+    val rel2 = testRelation.where($"a" <= $"b" && $"b" <= $"a" && $"b" <= 10)
+    val constraints2 = rel2.analyze.constraints
+    assert(constraints2.contains(LessThanOrEqual(a, Literal(10))))
+    assert(!constraints2.contains(LessThan(a, Literal(10))))
+
+    // Multiple paths to same endpoint with different strictness:
+    // Path 1 (non-strict): a <= b && b <= 10 -> a <= 10
+    // Path 2 (strict): a < c && c <= 10 -> a < 10
+    // Only the stronger strict bound a < 10 should be in constraints, not a <= 10.
+    val rel3 = testRelation.where(
+      $"a" <= $"b" && $"b" <= 10 && $"a" < $"c" && $"c" <= 10)
+    val constraints3 = rel3.analyze.constraints
+    assert(constraints3.contains(LessThan(a, Literal(10))))
+    assert(!constraints3.contains(LessThanOrEqual(a, Literal(10))))
+  }
+
+  test("SPARK-30768: converges to the single tightest bound across distinct literals") {
+    val Seq(a, b, _) = testRelation.output
+    // b is bounded by two different literals; a should only inherit the tighter one (5), not
+    // also pick up the redundant a < 10 implied by it.
+    val rel1 = testRelation.where($"a" < $"b" && $"b" < 10 && $"b" < 5)
+    val constraints1 = rel1.analyze.constraints
+    assert(constraints1.contains(LessThan(a, Literal(5))))
+    assert(!constraints1.contains(LessThan(a, Literal(10))))
+
+    // Symmetric case on the lower-bound side: a should only inherit the tighter bound (10).
+    val rel2 = testRelation.where($"b" < $"a" && $"b" > 5 && $"b" > 10)
+    val constraints2 = rel2.analyze.constraints
+    assert(constraints2.contains(GreaterThan(a, Literal(10))))
+    assert(!constraints2.contains(GreaterThan(a, Literal(5))))
+
+    // A tighter bound discovered later than a weaker one (processing order a <= b before
+    // a < b both feed b's upper bound) should still win, regardless of worklist order.
+    val rel3 = testRelation.where($"a" <= $"b" && $"a" < $"b" && $"b" < 20 && $"b" <= 5)
+    val constraints3 = rel3.analyze.constraints
+    assert(constraints3.contains(LessThan(a, Literal(5))))
+    assert(!constraints3.contains(LessThan(a, Literal(20))))
+    assert(!constraints3.contains(LessThanOrEqual(a, Literal(5))))
+  }
+
+  test("SPARK-30768: wide sparse inequality chain scales linearly without rescanning") {
+    val numAttrs = 100
+    val attrs = (0 until numAttrs).map(i => AttributeReference(s"x$i", IntegerType)())
+    val rel = LocalRelation(attrs)
+    val chain = (0 until numAttrs - 1).map(i => LessThan(attrs(i), attrs(i + 1)))
+    val terminalBound = LessThan(attrs.last, Literal(10))
+    val condition = (chain :+ terminalBound).reduce(And)
+    val plan = Filter(condition, rel)
+    val optimized = Optimize.execute(plan.analyze)
+    val filters = optimized match {
+      case Filter(cond, _) => splitConjunctivePredicates(cond)
+      case _ => Seq.empty
+    }
+    attrs.foreach { attr =>
+      assert(filters.contains(LessThan(attr, Literal(10))),
+        s"Expected ${attr.name} < 10 in inferred filters")
+    }
+  }
+
+  test("SPARK-30768: inferred conjunct order is deterministic across exprIds") {
+    def makePlan(): Seq[Expression] = {
+      val a = AttributeReference("a", IntegerType)()
+      val b = AttributeReference("b", IntegerType)()
+      val c = AttributeReference("c", IntegerType)()
+      val rel = LocalRelation(Seq(a, b, c))
+      val cond = a < c && b < c && c < 10 && a > 0 && b > 0
+      val optimized = Optimize.execute(Filter(cond, rel).analyze)
+      optimized match {
+        case Filter(c, _) => splitConjunctivePredicates(c)
+        case _ => Seq.empty
+      }
+    }
+
+    val plan1 = makePlan()
+    val plan2 = makePlan()
+    assert(plan1.map(_.sql) === plan2.map(_.sql))
+  }
+
+  test("SPARK-30768: relocate only safe expressions across joins") {
+    def hasPushedFilter(plan: LogicalPlan)(pred: Expression => Boolean): Boolean = {
+      plan.collectFirst {
+        case Join(Filter(cond, _), _, _, _, _) => splitConjunctivePredicates(cond).exists(pred)
+      }.getOrElse(false)
+    }
+
+    // 1. Lossless widening cast (int -> long) is safe to relocate
+    val x1 = LocalRelation($"a".int).subquery("x")
+    val y1 = LocalRelation($"b".long).where($"b" < 5L).subquery("y")
+    val opt1 = Optimize.execute(
+      x1.join(y1, Inner, Some("x.a".attr.cast(LongType) < "y.b".attr)).analyze)
+    assert(hasPushedFilter(opt1) {
+      case LessThan(Cast(a: Attribute, LongType, _, _), Literal(5L, LongType)) => a.name == "a"
+      case _ => false
+    })
+
+    // 2. Arithmetic expression is NOT safe to relocate
+    val x2 = LocalRelation($"a".int).subquery("x")
+    val y2 = testRelation.where($"b" < 5).subquery("y")
+    val opt2 = Optimize.execute(x2.join(y2, Inner, Some(("x.a".attr + 1) < "y.b".attr)).analyze)
+    assert(!hasPushedFilter(opt2) {
+      case LessThan(Add(_: Attribute, Literal(1, _), _), Literal(5, _)) => true
+      case _ => false
+    })
+
+    // 3. Narrowing/parsing cast (string -> int) is NOT safe to relocate
+    val x3 = LocalRelation($"s".string).subquery("x")
+    val opt3 = Optimize.execute(
+      x3.join(y2, Inner, Some("x.s".attr.cast(IntegerType) < "y.b".attr)).analyze)
+    assert(!hasPushedFilter(opt3) {
+      case LessThan(Cast(s: Attribute, IntegerType, _, _), Literal(5, IntegerType)) =>
+        s.name == "s"
+      case _ => false
+    })
+  }
 }

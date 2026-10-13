@@ -32,7 +32,8 @@ import scala.collection.mutable
 import org.apache.spark.{AccumulatorSuite, SPARK_DOC_ROOT, SparkArithmeticException, SparkDateTimeException, SparkException, SparkNumberFormatException, SparkRuntimeException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, CodegenObjectFactoryMode, DoubleLiteral, GenericRow, Hex, IntegerLiteral, LessThan}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, CodegenObjectFactoryMode,
+  DoubleLiteral, GenericRow, GreaterThan, Hex, IntegerLiteral, LessThan}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, EliminateOffsets, NestedColumnAliasingSuite, RewriteWithExpression}
@@ -5373,6 +5374,31 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
   test("SPARK-30768: inferred inequality chaining does not drop rows with NaN operands") {
     withTempView("t") {
       Seq(
+        (Double.NaN, 5.0), // a > b holds (NaN sorts highest) and b > 3.0 holds; kept
+        (5.0, 4.0), // a > b holds and b > 3.0 holds; kept
+        (4.0, 3.0), // b > 3.0 is false; dropped by the original predicate
+        (3.0, 5.0), // a > b is false; dropped by the original predicate
+        (Double.NaN, Double.NaN) // a > b is false (NaN == NaN); dropped
+      ).toDF("a", "b").createOrReplaceTempView("t")
+
+      Seq(true, false).foreach { enabled =>
+        withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> enabled.toString) {
+          val df = sql("SELECT a, b FROM t WHERE a > b AND b > 3.0")
+          val hasInferred = df.queryExecution.optimizedPlan.exists {
+            case Filter(cond, _) => cond.exists {
+              case GreaterThan(a: Attribute, DoubleLiteral(3.0)) => a.name == "_1"
+              case _ => false
+            }
+            case _ => false
+          }
+          assert(hasInferred == enabled)
+          checkAnswer(df, Seq(Row(Double.NaN, 5.0), Row(5.0, 4.0)))
+        }
+      }
+    }
+
+    withTempView("t") {
+      Seq(
         (1.0, 2.0), // a < b < 3.0 holds; kept, and consistent with inferred a < 3.0
         (2.9, 3.0), // b < 3.0 is false; dropped by the original predicate
         (5.0, Double.NaN), // a < b holds (NaN sorts highest) but b < 3.0 is false; dropped
@@ -5414,6 +5440,35 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
           }
           assert(hasInferred == enabled)
           checkAnswer(df, Row(12))
+        }
+      }
+    }
+  }
+
+  test("SPARK-30768: do not evaluate ANSI-failing cast on unmatched join rows") {
+    withTempView("x", "y") {
+      Seq((1, "abc", 10)).toDF("key", "s", "b").createOrReplaceTempView("x")
+      Seq((2, "def", 3)).toDF("key", "s", "b").createOrReplaceTempView("y")
+
+      val testCases = Seq(
+        // Inner join: unmatched row on x must not evaluate invalid cast
+        ("SELECT x.key FROM x JOIN y ON x.key = y.key AND CAST(x.s AS INT) < y.b WHERE y.b < 5",
+          Nil),
+        // Left outer join: unmatched right row on y must not evaluate invalid cast
+        ("SELECT x.key FROM x LEFT JOIN y ON x.key = y.key AND CAST(y.s AS INT) < x.b " +
+          "WHERE x.b < 15",
+          Row(1) :: Nil),
+        // Left anti join: unmatched right row on y must not evaluate invalid cast
+        ("SELECT x.key FROM x ANTI JOIN y ON x.key = y.key AND CAST(y.s AS INT) < x.b " +
+          "WHERE x.b < 15",
+          Row(1) :: Nil)
+      )
+
+      for ((query, expected) <- testCases; enabled <- Seq(true, false)) {
+        withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> "true",
+          SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> enabled.toString) {
+          checkAnswer(sql(query), expected)
         }
       }
     }
