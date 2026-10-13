@@ -517,7 +517,9 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
       // An offset index the footer lists but parquet fails to read empties that block's store.
       // The row group is then read again over `pushedFilterRanges`, which the empty store has
       // widened to the whole block, so the retry cannot throw. `MissingOffsetIndexException` is
-      // parquet's internal API, and the damaged-index test fails if parquet stops throwing it.
+      // parquet's internal API, as are the `ColumnIndexStore` and `OffsetIndex` that
+      // `ParquetBlockAccounting` reads, so revisit them on a parquet upgrade. The damaged-index
+      // test fails if parquet stops throwing the exception.
       try {
         dataPages = fileReader.readFilteredRowGroup(blockIdx, finalRanges);
       } catch (MissingOffsetIndexException e) {
@@ -720,7 +722,9 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
             // The buffer is optional, so failing to fill it gives splicing up, not the filter. That
             // covers a vector that cannot grow, and a key value the predicate did not read on this
             // row, such as `b` in `coalesce(a, b)`, since the copy decodes every key. It also
-            // absorbs a bug of ours, which only the WARN then shows.
+            // absorbs a bug of ours, which only the WARN then shows. Phase 2 then reads the key
+            // columns as a plain read does, so a value that cannot be decoded fails the read only
+            // where a plain read fails.
             reportOnce(e, SPLICING_GIVEN_UP_ON_ERROR);
             abandonSplicing();
             splicedBytes = 0L;

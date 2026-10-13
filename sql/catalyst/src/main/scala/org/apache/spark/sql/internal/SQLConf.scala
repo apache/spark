@@ -1970,18 +1970,19 @@ object SQLConf {
     buildConf("spark.sql.parquet.storageFilterPushdown.enabled")
       .doc("If true, the vectorized reader of the V1 Parquet file source may apply a runtime " +
         "bloom filter from join runtime filtering while it reads, and skip the pages and row " +
-        "groups of the other columns that hold no matching rows. The filter also stays in the " +
-        "post-scan filter, so the answer does not change, with two exceptions. Under " +
+        "groups of the other columns that hold no matching rows. Only ParquetFileFormat itself " +
+        "is supported, not its subclasses. A table with a column named " +
+        "_tmp_storage_filter_checked is not offered storage filters, and a file holding one " +
+        "outside the table's schema is not supported. The filter also stays in the post-scan " +
+        "filter, so the answer does not change, with two exceptions. Under " +
         "spark.sql.files.ignoreCorruptFiles the rows returned from a corrupt file can differ. A " +
         "file with a wrong Parquet page index can return wrong rows. Setting " +
-        "parquet.filter.columnindex.enabled to false stops relying on the page index. Without a " +
-        "page index, as in the files pyarrow's write_table writes by default, or with that conf " +
-        "set to false, the reader can only skip whole row groups, and it reads the key columns " +
-        "twice in the others. Only ParquetFileFormat itself is supported, not its subclasses. A " +
-        "table with a column named _tmp_storage_filter_checked is not offered storage filters, " +
-        "and a file holding one outside the table's schema is not supported. It can be slower " +
-        "when the matching rows are spread across most pages. The matching key values of a row " +
-        "group are buffered while it is read, outside Spark's memory manager.")
+        "parquet.filter.columnindex.enabled to false stops relying on the page index, and also " +
+        "turns off page skipping for pushed data filters. Without a page index, as in the files " +
+        "pyarrow's write_table writes by default, or with that conf set to false, the reader can " +
+        "only skip whole row groups, and it reads the key columns twice in the others. It can be " +
+        "slower when the matching rows are spread across most pages. The matching key values of " +
+        "a row group are buffered while it is read, outside Spark's memory manager.")
       .version("5.0.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

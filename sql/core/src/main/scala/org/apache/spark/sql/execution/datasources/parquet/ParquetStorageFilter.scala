@@ -32,9 +32,10 @@ import org.apache.spark.util.Utils
  * The SQL metrics the reader updates while applying a [[ParquetStorageFilter]], created by
  * `ParquetFileFormat.storageFilterMetrics`. They count only what the filter saved against a read of
  * the same projection without one. A row group whose filter was given up counts nothing, so a scan
- * that read more than with the feature off can still show a saving. Bytes are the compressed bytes
- * the reader did not ask parquet for, which a vectored read can still fetch when it merges nearby
- * ranges.
+ * that read more than with the feature off can still show a saving. Nor do they take off the offset
+ * indexes phase 2 reads when no data filter is pushed, which a plain read does not. Bytes are the
+ * compressed bytes the reader did not ask parquet for, which a vectored read can still fetch when
+ * it merges nearby ranges.
  *
  *  - [[rowGroupsSkipped]] counts row groups whose non-key columns were never read.
  *  - [[rowsExcludedByRowGroup]] sums those row groups' rows that the pushed data filter kept.
@@ -118,9 +119,10 @@ class ParquetStorageFilter private (
     }
     val created = Predicate.create(boundExpression)
     // A bloom's bytes sit in the expression as a binary literal, while a generated predicate holds
-    // the deserialized filter instead, so dropping the expression lets the task reclaim them. An
-    // interpreted predicate, the fallback, keeps the expression, so its bytes stay. Safe because
-    // every task attempt deserializes its own copy, and this is the field's only reader.
+    // the deserialized filter instead, so dropping the expression lets a columnar scan's task
+    // reclaim them. An interpreted predicate, the fallback, keeps the expression, so its bytes
+    // stay. Safe because every task attempt deserializes its own copy, and this is the field's only
+    // reader.
     boundExpression = null
     created
   }

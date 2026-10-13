@@ -153,9 +153,9 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
 
   /**
    * The conjuncts of the scan's filter the file format can evaluate at the storage layer, to skip
-   * reading the columns they do not reference. They are taken from `normalizedFilters`, so they
-   * carry the relation's column names, as the pushed data filters do. They stay in the post-scan
-   * `Filter` as well, so a reader may give them up anywhere, see
+   * reading the other columns of the rows they reject. They are taken from `normalizedFilters`, so
+   * they carry the relation's column names, as the pushed data filters do. They stay in the
+   * post-scan `Filter` as well, so a reader may give them up anywhere, see
    * [[FileFormat.buildReaderWithStorageFilters]].
    *
    * Per scan, failing any offers nothing:
@@ -429,8 +429,9 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
 
       // The offered conjuncts are skipped on the rows the reader marks as checked. An `If` rather
       // than an `Or`, so a null mark leaves the conjunct as it was, an `And` around it included,
-      // and subexpression elimination cannot hoist a shared hash ahead of the skip. They are
-      // matched by `ExpressionSet`, since `storageFilters` carry the relation's column names.
+      // and subexpression elimination cannot hoist what the conjunct shares with another one
+      // ahead of the skip. They are matched by `ExpressionSet`, since `storageFilters` carry the
+      // relation's column names.
       val postScanFilters = storageFilterCheckedColumn match {
         case Some(checked) =>
           val offered = ExpressionSet(storageFilters)

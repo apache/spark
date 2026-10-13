@@ -303,9 +303,9 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
 
   // Filters on non-partition columns.
   def dataFilters: Seq[Expression]
-  // Filters the storage layer evaluates to skip reading the columns they do not reference, see
-  // `FileFormat.buildReaderWithStorageFilters`. Their subqueries are materialized on the driver
-  // while the RDD is built.
+  // Filters the storage layer evaluates to skip reading the other columns of the rows they reject,
+  // see `FileFormat.buildReaderWithStorageFilters`. Their subqueries are materialized on the
+  // driver while the RDD is built.
   def storageFilters: Seq[Expression] = Nil
   // Disable bucketed scan based on physical query plan, see rule
   // [[DisableUnnecessaryBucketedScan]] for details.
@@ -811,7 +811,8 @@ case class FileSourceScanExec(
   // `output` is `readDataColumns ++ generatedMetadataColumns ++ storageFilterCheckedColumn ++
   // partitionColumns ++ constantMetadataColumns`, and `requiredSchema` is the first three groups,
   // so its fields are the first `requiredSchema.length` attributes of `output`. Subqueries must
-  // be prepared before this is forced, as for `pushedDownFilters`.
+  // be prepared before this is forced, as for `pushedDownFilters`. The conf is not checked again
+  // here, since it decides at planning time whether a scan gets storage filters at all.
   @transient
   protected lazy val preparedStorageFilters: Seq[Expression] = {
     val requestedDataAttrs = output.take(requiredSchema.length)
