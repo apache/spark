@@ -8126,6 +8126,12 @@
     ],
     "sqlState" : "XXKST"
   },
+  "STREAM_STREAM_JOIN_INCOMPATIBLE_STATE_STORE_CONFIGS" : {
+    "message" : [
+      "The configuration values `<stateFormatVersionConfig>=<stateFormatVersion>` and `<mergeOperatorVersionConfig>=<mergeOperatorVersion>` are incompatible. Stream-stream join state format version <stateFormatVersion> requires RocksDB merge operator version <requiredMergeOperatorVersion>. Start a new query with `<mergeOperatorVersionConfig>` set to <requiredMergeOperatorVersion> and a new checkpoint."
+    ],
+    "sqlState" : "42K06"
+  },
   "STREAM_STREAM_JOIN_INCONSISTENT_STATE" : {
     "message" : [
       "Detected inconsistency in stream-stream join state."
