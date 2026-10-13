@@ -31,11 +31,6 @@ import org.apache.spark.unsafe.types.UTF8String
  * into [[CompilationErrors]].
  */
 private[sql] object DataTypeErrors extends DataTypeErrorsBase {
-  // A decimal whose scale is below -MAX_PLAIN_STRING_TRAILING_ZEROS (that is, with more than
-  // this many zeros implied by a negative scale) is rendered in scientific notation in error
-  // messages instead of plain notation.
-  private val MAX_PLAIN_STRING_TRAILING_ZEROS = 1000
-
   def unsupportedOperationExceptionError(): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_2225")
   }
@@ -206,6 +201,11 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
       context: QueryContext = null): ArithmeticException = {
     numericValueOutOfRange(value, decimalPrecision, decimalScale, context)
   }
+
+  // A decimal whose scale is below -MAX_PLAIN_STRING_TRAILING_ZEROS (that is, with more than
+  // this many zeros implied by a negative scale) is rendered in scientific notation in error
+  // messages instead of plain notation.
+  private val MAX_PLAIN_STRING_TRAILING_ZEROS = 1000
 
   private def numericValueOutOfRange(
       value: Decimal,
