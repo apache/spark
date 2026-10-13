@@ -21,9 +21,10 @@ import org.apache.spark.annotation.Unstable
 /**
  * The data type representing a reference to a file, with metadata describing the file.
  *
- * In SQL the type is named `FILE`, and the `EXTERNAL` keyword is required when declaring a
- * column, as in `CREATE TABLE t (f FILE EXTERNAL)`. Its JSON representation is `"file"` inside
- * a struct field and `"file external"` for a standalone type.
+ * In SQL the type is named `FILE`, and the `EXTERNAL` keyword is planned to be required when
+ * declaring a table column, as in `CREATE TABLE t (f FILE EXTERNAL)`; until then a bare `FILE` is
+ * accepted wherever a type is. Its JSON representation is `"file"` inside a struct field. A
+ * standalone type is `"file external"` for `FileType.external` and `"file"` for `FileType()`.
  *
  * FileType is planned to be physically stored as a struct with the following fields (see
  * `FileType.FIELDS`), but it deliberately does not extend [[StructType]]:
@@ -36,8 +37,7 @@ import org.apache.spark.annotation.Unstable
  *
  * FileType may be EXTERNAL (simple references, lifecycle independent of the table) or UNKNOWN
  * (mode not yet determined, such as the result of a cast or of a UDF). Mode is part of type
- * identity - files with different modes are distinct under `equals`. Table column definitions
- * are to require `EXTERNAL`.
+ * identity - files with different modes are distinct under `equals`.
  *
  * FileType is planned to be not comparable -- it cannot be used in join expressions, grouping
  * expressions, or as a partition/clustering column. Users can extract the uri field for such
@@ -58,8 +58,8 @@ case class FileType(mode: FileTypeMode = FileTypeMode.UNKNOWN) extends DataType 
   }
 
   /**
-   * `acceptsType` ignores mode so `ExpectsInputTypes.inputTypes = Seq(FileType())` (e.g.
-   * `GetStructField`) accepts FileType(EXTERNAL). `sameType` / `equals` still distinguish modes.
+   * `acceptsType` ignores mode, so an expression that declares `inputTypes = Seq(FileType())`
+   * accepts FileType(EXTERNAL) as well. `sameType` / `equals` still distinguish modes.
    */
   override private[sql] def acceptsType(other: DataType): Boolean = other.isInstanceOf[FileType]
 

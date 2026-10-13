@@ -1760,6 +1760,33 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
     assert(schema.asNullable("f").nullable)
   }
 
+  test("FileType: a bare file in JSON depends on the context, and decoding ignores the flag") {
+    // Recursion outside a struct field keeps the mode unknown.
+    assert(DataType.fromJson(ArrayType(FileType()).json) === ArrayType(FileType()))
+    assert(DataType.fromJson(MapType(StringType, FileType()).json) ===
+      MapType(StringType, FileType()))
+    assert(DataType.fromJson(ArrayType(FileType.external).json) === ArrayType(FileType.external))
+
+    // Field shapes without metadata or nullable are still fields, so a bare "file" is external.
+    val noMetadata = "{\"type\":\"struct\",\"fields\":[" +
+      "{\"name\":\"f\",\"type\":\"file\",\"nullable\":true}]}"
+    val noNullable = "{\"type\":\"struct\",\"fields\":[{\"name\":\"f\",\"type\":\"file\"}]}"
+    Seq(noMetadata, noNullable).foreach { json =>
+      assert(DataType.fromJson(json) === new StructType().add("f", FileType.external))
+    }
+
+    // A schema that was written with the type enabled can still be read with it disabled.
+    val schema = new StructType()
+      .add("f", FileType.external)
+      .add("a", ArrayType(FileType.external))
+      .add("m", MapType(StringType, FileType.external))
+      .add("s", new StructType().add("g", FileType.external))
+    withSQLConf(SQLConf.FILE_TYPE_ENABLED.key -> "false") {
+      assert(DataType.fromJson(schema.json) === schema)
+      assert(DataType.fromJson(FileType.external.json) === FileType.external)
+    }
+  }
+
   test("FileType: metadata that describes the file in a field is kept as it is") {
     // The metadata of a field is opaque to OSS, so it is neither interpreted nor dropped.
     val json = "{\"type\":\"struct\",\"fields\":[{\"name\":\"f\",\"type\":\"file\"," +
