@@ -22,7 +22,6 @@ Handler-flavor tests live alongside their module, e.g. the Arrow handlers in
 """
 
 import os
-import unittest
 from unittest.mock import patch
 
 from pyspark.eval_handlers._base import (
@@ -38,12 +37,13 @@ from pyspark.sql.pandas.serializers import (
     ArrowStreamGroupSerializer,
     ArrowStreamSerializer,
 )
+from pyspark.testing.utils import PySparkBaseTestCase
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
     from pyspark.worker_util import RunnerConf
 
 
-class EvalTypeHandlerTests(unittest.TestCase):
+class EvalTypeHandlerTests(PySparkBaseTestCase):
     def test_category_bases_are_abstract(self):
         # The interface and the three category bases must not be instantiable:
         # they leave ``run`` abstract.
