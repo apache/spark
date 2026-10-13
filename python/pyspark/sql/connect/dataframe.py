@@ -138,7 +138,7 @@ class DataFrame(ParentDataFrame):
         if self._session is None:
             raise PySparkRuntimeError(
                 errorClass="NO_ACTIVE_SESSION",
-                messageParameters={"operator": "__init__"},
+                messageParameters={},
             )
 
         # Check whether _repr_html is supported or not, we use it to avoid calling RPC twice
