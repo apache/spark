@@ -941,6 +941,26 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
     }
   }
 
+  test("Insert schema evolution: preserve order - by position appends " +
+    "extra columns") {
+    withSQLConf(SQLConf.SCHEMA_EVOLUTION_PRESERVE_COLUMN_ORDER.key -> "true") {
+      val t1 = s"${catalogAndNamespace}tbl"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+        doInsert(t1, Seq((1L, "a")).toDF("id", "data"))
+        checkInsertMetrics(t1, numInsertedRows = 1)
+        doInsertWithSchemaEvolution(t1,
+          Seq((2L, "x", "b")).toDF("a", "b", "c"), byName = false)
+        checkInsertMetrics(t1, numInsertedRows = 1)
+        assert(spark.table(t1).schema.fieldNames.toSeq === Seq("id", "data", "c"))
+        verifyTable(t1, Seq[(java.lang.Long, String, String)](
+          (1L, "a", null),
+          (2L, "x", "b")
+        ).toDF("id", "data", "c"))
+      }
+    }
+  }
+
   test("Insert schema evolution: preserve order - rejected add is skipped " +
     "when anchoring") {
     withSQLConf(SQLConf.SCHEMA_EVOLUTION_PRESERVE_COLUMN_ORDER.key -> "true") {

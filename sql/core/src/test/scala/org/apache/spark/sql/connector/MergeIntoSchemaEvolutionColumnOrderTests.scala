@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.connector.catalog.CatalogV2Util
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -531,7 +532,64 @@ trait MergeIntoSchemaEvolutionColumnOrderTests extends MergeIntoSchemaEvolutionS
     confs = preserveOrderConfs
   )
 
-  testNestedStructsEvolution("preserve order - field added by leaf assignment and " +
+  // The leaf assignment spells the new field differently than the source, so only
+  // the resolver-based dedup prevents a duplicate add; distinct AddColumn objects
+  // with fieldNames [info, BONUS] and [info, bonus] would both survive .distinct.
+  testNestedStructsEvolution("preserve order - field added by case-variant leaf " +
+      "assignment and insert star is added once")(
+    target = Seq(
+      """{ "pk": 1, "info": { "salary": 100, "status": "active" }, "dep": "hr" }""",
+      """{ "pk": 2, "info": { "salary": 200, "status": "inactive" }, "dep": "software" }"""
+    ),
+    source = Seq(
+      """{ "pk": 2, "info": { "salary": 150, "extra": 10, "bonus": 50,
+        | "status": "dummy" }, "dep": "finance" }""".stripMargin.replace("\n", ""),
+      """{ "pk": 3, "info": { "salary": 250, "extra": 30, "bonus": 75,
+        | "status": "dummy" }, "dep": "finance" }""".stripMargin.replace("\n", "")
+    ),
+    targetSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("info", StructType(Seq(
+        StructField("salary", IntegerType),
+        StructField("status", StringType)
+      ))),
+      StructField("dep", StringType)
+    )),
+    sourceSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("info", StructType(Seq(
+        StructField("salary", IntegerType),
+        StructField("extra", IntegerType),
+        StructField("bonus", IntegerType),
+        StructField("status", StringType)
+      ))),
+      StructField("dep", StringType)
+    )),
+    clauses = Seq(update("info.BONUS = s.info.BONUS"), insertAll()),
+    result = Seq(
+      """{ "pk": 1, "info": { "salary": 100, "status": "active" }, "dep": "hr" }""",
+      """{ "pk": 2, "info": { "salary": 200, "extra": null, "BONUS": 50,
+        | "status": "inactive" }, "dep": "software" }""".stripMargin.replace("\n", ""),
+      """{ "pk": 3, "info": { "salary": 250, "extra": 30, "BONUS": 75,
+        | "status": "dummy" }, "dep": "finance" }""".stripMargin.replace("\n", "")
+    ),
+    resultSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("info", StructType(Seq(
+        StructField("salary", IntegerType),
+        StructField("extra", IntegerType),
+        StructField("BONUS", IntegerType),
+        StructField("status", StringType)
+      ))),
+      StructField("dep", StringType)
+    )),
+    expectErrorWithoutEvolutionContains = "No such struct field",
+    confs = preserveOrderConfs
+  )
+
+  // Same scenario without preserveColumnOrder: the dedup is unconditional, so the
+  // field is still added once, appended under the leaf assignment's spelling.
+  testNestedStructsEvolution("field added by case-variant leaf assignment and " +
       "insert star is added once")(
     target = Seq(
       """{ "pk": 1, "info": { "salary": 100, "status": "active" }, "dep": "hr" }""",
@@ -561,26 +619,25 @@ trait MergeIntoSchemaEvolutionColumnOrderTests extends MergeIntoSchemaEvolutionS
       ))),
       StructField("dep", StringType)
     )),
-    clauses = Seq(update("info.bonus = s.info.bonus"), insertAll()),
+    clauses = Seq(update("info.BONUS = s.info.BONUS"), insertAll()),
     result = Seq(
       """{ "pk": 1, "info": { "salary": 100, "status": "active" }, "dep": "hr" }""",
-      """{ "pk": 2, "info": { "salary": 200, "extra": null, "bonus": 50,
-        | "status": "inactive" }, "dep": "software" }""".stripMargin.replace("\n", ""),
-      """{ "pk": 3, "info": { "salary": 250, "extra": 30, "bonus": 75,
-        | "status": "dummy" }, "dep": "finance" }""".stripMargin.replace("\n", "")
+      """{ "pk": 2, "info": { "salary": 200, "status": "inactive", "BONUS": 50 },
+        | "dep": "software" }""".stripMargin.replace("\n", ""),
+      """{ "pk": 3, "info": { "salary": 250, "status": "dummy", "BONUS": 75,
+        | "extra": 30 }, "dep": "finance" }""".stripMargin.replace("\n", "")
     ),
     resultSchema = StructType(Seq(
       StructField("pk", IntegerType, nullable = false),
       StructField("info", StructType(Seq(
         StructField("salary", IntegerType),
-        StructField("extra", IntegerType),
-        StructField("bonus", IntegerType),
-        StructField("status", StringType)
+        StructField("status", StringType),
+        StructField("BONUS", IntegerType),
+        StructField("extra", IntegerType)
       ))),
       StructField("dep", StringType)
     )),
-    expectErrorWithoutEvolutionContains = "No such struct field",
-    confs = preserveOrderConfs
+    expectErrorWithoutEvolutionContains = "No such struct field"
   )
 
   testNestedStructsEvolution("preserve order - extra field inside array element struct")(
@@ -671,6 +728,60 @@ trait MergeIntoSchemaEvolutionColumnOrderTests extends MergeIntoSchemaEvolutionS
     )),
     expectErrorWithoutEvolutionContains = "Cannot write extra fields",
     confs = preserveOrderConfs
+  )
+
+  // DataFrames instead of JSON rows: the JSON reader only supports string map keys.
+  testEvolution("preserve order - extra field inside map key struct")(
+    targetData = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(
+        Row(1, Map(Row(1, 3) -> 5), "hr"),
+        Row(2, Map(Row(2, 4) -> 6), "software"))),
+      StructType(Seq(
+        StructField("pk", IntegerType, nullable = false),
+        StructField("m", MapType(
+          StructType(Seq(StructField("a", IntegerType), StructField("c", IntegerType))),
+          IntegerType)),
+        StructField("dep", StringType)))),
+    sourceData = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(
+        Row(2, Map(Row(3, 10, 5) -> 7), "finance"),
+        Row(3, Map(Row(4, 20, 6) -> 8), "finance"))),
+      StructType(Seq(
+        StructField("pk", IntegerType, nullable = false),
+        StructField("m", MapType(
+          StructType(Seq(
+            StructField("a", IntegerType),
+            StructField("b", IntegerType),
+            StructField("c", IntegerType))),
+          IntegerType)),
+        StructField("dep", StringType)))),
+    clauses = Seq(updateAll(), insertAll()),
+    expected = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(
+        Row(1, Map(Row(1, null, 3) -> 5), "hr"),
+        Row(2, Map(Row(3, 10, 5) -> 7), "finance"),
+        Row(3, Map(Row(4, 20, 6) -> 8), "finance"))),
+      StructType(Seq(
+        StructField("pk", IntegerType, nullable = false),
+        StructField("m", MapType(
+          StructType(Seq(
+            StructField("a", IntegerType),
+            StructField("b", IntegerType),
+            StructField("c", IntegerType))),
+          IntegerType)),
+        StructField("dep", StringType)))),
+    expectedSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("m", MapType(
+        StructType(Seq(
+          StructField("a", IntegerType),
+          StructField("b", IntegerType),
+          StructField("c", IntegerType))),
+        IntegerType)),
+      StructField("dep", StringType))),
+    expectErrorWithoutEvolutionContains = "Cannot write extra fields",
+    confs = preserveOrderConfs,
+    partitionCols = Seq.empty
   )
 
   test("preserve order - add rejected by connector is skipped when anchoring") {
