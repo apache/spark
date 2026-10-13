@@ -349,9 +349,10 @@ class UserDefinedFunction:
                     f"Transpiled UDF {func} still checks for NULL in "
                     f"{', '.join(pending_guard_warning)} and raises if it finds one, so "
                     "Spark may not be able to push a filter on this UDF through a join "
-                    "or combine it with an adjacent filter. Guard the parameter "
-                    "(`if x is not None:`) or bind a non-nullable column to drop the "
-                    "check; binding one already drops it.",
+                    "or combine it with an adjacent filter. Guard the parameters named "
+                    "above (e.g. `if x is not None:`); if the bound column is "
+                    "non-nullable, the optimizer already folds the check away and this "
+                    "warning can be ignored.",
                     UserWarning,
                 )
             except Exception:

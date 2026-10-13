@@ -2878,6 +2878,48 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                     func(None, 1)
                 self._raises(func, schema, [(None, 1)], "cannot compare null", BooleanType())
 
+    def test_udf_transpile_narrowing_never_drops_a_needed_check(self):
+        # The unsafe direction of the narrowing paths: dropping a check that is
+        # still needed turns Python's TypeError into a silent NULL or False.
+        # Each case keeps its raise on the unproven side, next to the guarded
+        # counterpart that earns the elision.
+        boolean = BooleanType()
+        # A comparison BEFORE its guard: `and` narrows an operand only by the
+        # operands before it, so `x > 0` here knows nothing and must still raise
+        # for None, as Python does. Narrowing by LATER operands would drop this
+        # check and quietly return False for None.
+        late_guard = lambda x: x > 0 and x is not None  # noqa: E731
+        self.assertIn("raise_error", self._transpiled_plan(late_guard, boolean, "a long"))
+        self._raises(late_guard, "a long", [(None,)], "cannot compare null", boolean)
+        self.assertEqual([True, False], self._vals(late_guard, boolean, "a long", [(1,), (-1,)]))
+
+        # An arithmetic operand is NULL when either side is, so `x + 1` is
+        # checked until `x` is proven: unguarded it raises like Python, guarded
+        # it loses the check entirely. An `or` in `_is_never_null`'s BinOp arm
+        # would call `x + 1` safe on the strength of the literal alone and
+        # return NULL for a None row.
+        arith = lambda x: x + 1 > 0  # noqa: E731
+        arith_guarded = lambda x: x is not None and x + 1 > 0  # noqa: E731
+        self.assertIn("raise_error", self._transpiled_plan(arith, boolean, "a long"))
+        self._raises(arith, "a long", [(None,)], "cannot compare null", boolean)
+        self.assertNotIn("raise_error", self._transpiled_plan(arith_guarded, boolean, "a long"))
+        rows = [(1,), (-5,), (None,)]
+        self.assertEqual([True, False, False], self._vals(arith_guarded, boolean, "a long", rows))
+
+        # A ternary narrows each arm by its OWN outcome: the body knows `x`,
+        # the else does not, so exactly one check survives -- the else's
+        # `y > 0`. Swapping the branch facts checks `x` in the body too (two
+        # raise_error), and the (None, None) row would stop raising.
+        branches = lambda x, y: (x > 0) if x is not None else (y > 0)  # noqa: E731
+        plan = self._transpiled_plan(branches, boolean, "a long, b long")
+        self.assertEqual(1, plan.count("raise_error"), plan)
+        with self.sql_conf(_TRANSPILE_ON):
+            _, warned = self._udf_and_warnings(branches, boolean)
+        self.assertIn("comparison `>` on y", warned)
+        rows = [(5, None), (None, 5)]
+        self.assertEqual([True, True], self._vals(branches, boolean, "a long, b long", rows))
+        self._raises(branches, "a long, b long", [(None, None)], "cannot compare null", boolean)
+
     def test_udf_transpile_drops_the_coalesce_when_nothing_can_be_null(self):
         # The `if` test and the `not` operand each get coalesced against a literal
         # so that a NULL follows Python's "None is falsy" rule. Neither coalesce
@@ -2970,10 +3012,11 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             # The full label, not " on a": that would match any prose word starting
             # with "a" elsewhere in the message.
             self.assertNotIn("comparison `>` on a", partial)
-            # `_transpiled_udf`, not `_udf_and_warnings`: udf.py reports the fallback
-            # and this warning through mutually exclusive branches, so a `guarded`
-            # that stopped transpiling would satisfy assertNotIn for the wrong
-            # reason. Assert it transpiled, then that it stayed quiet.
+            # `_udf_and_warnings` with an explicit transpiled assertion, not
+            # `_transpiled_udf` (which discards the warnings): udf.py reports the
+            # fallback and this warning through mutually exclusive branches, so a
+            # `guarded` that stopped transpiling would satisfy assertNotIn for the
+            # wrong reason. Assert it transpiled, then that it stayed quiet.
             quiet_udf, quiet = self._udf_and_warnings(guarded, BooleanType())
             self.assertTrue(quiet_udf.transpiled, f"guarded must transpile: {quiet}")
             self.assertNotIn(needle, quiet)
@@ -3032,6 +3075,22 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertIn("comparison `>` on a", len_warned)
             self.assertNotIn("comparison `>` on a, b", len_warned)
 
+    def test_udf_transpile_guard_warning_survives_warnings_as_errors(self):
+        # udf.py DEFERS the surviving-check warning past the `except Exception`
+        # handler that clears ``transpiled``: warned inside that try under an
+        # error filter, the handler would catch the warning-as-error and cost
+        # the UDF its lowering -- and the handler's own warn would then raise
+        # out of the constructor. Under `simplefilter("error")` an unguarded
+        # UDF must still construct with its options intact.
+        import warnings
+
+        unguarded = lambda x: x > 0  # noqa: E731
+        with self.sql_conf(_TRANSPILE_ON):
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                u = UserDefinedFunction(unguarded, BooleanType())
+        self.assertTrue(u.transpiled, "warnings-as-errors must not cost the lowering")
+
     def test_udf_transpile_null_check_blocks_predicate_pushdown(self):
         # Why the checks are worth dropping. RaiseError is throwable, and
         # PushPredicateThroughJoin refuses to push a throwable condition to either
@@ -3057,7 +3116,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                     u = self._transpiled_udf(func, BooleanType())
                     joined = left.join(right, left["a"] == right["k"]).filter(u("a"))
                     # This method builds its own plan rather than going through
-                    # `_optimized_plan`, so it needs the same applied-or-not guard:
+                    # `_transpiled_plan`, so it needs the same applied-or-not guard:
                     # a filter on an interpreted UDF would satisfy the pushed case
                     # for the wrong reason.
                     self.assertEqual(0, self._eval_python_count(joined))
