@@ -388,6 +388,8 @@ public class UTF8StringSuite {
     assertEquals(0, fromString("hello").indexOf(EMPTY_UTF8, 1, 1));
     assertEquals(0, fromString("hello").indexOf(EMPTY_UTF8, 5, 1));
     assertEquals(0, fromString("hello").indexOf(EMPTY_UTF8, -1, 1));
+
+    // Zero start returns -1 regardless of substring
     assertEquals(-1, fromString("hello").indexOf(EMPTY_UTF8, 0, 1));
     assertEquals(-1, fromString("hello").indexOf(EMPTY_UTF8, 0, 2));
     assertEquals(-1, EMPTY_UTF8.indexOf(EMPTY_UTF8, 0, 1));
