@@ -66,9 +66,15 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
       parameters = Map("err" -> ""))
   }
 
+  test("SPARK-59986: trigger metadata is initialized by the constructor") {
+    val triggerJson = """{"type":"ProcessingTime","intervalMs":3000000000}"""
+    val progress = progressWithTrigger(triggerJson)
+    assert(progress.trigger === triggerJson)
+    assert(parse(progress.json) \ "trigger" === parse(triggerJson))
+  }
+
   test("SPARK-59986: trigger JSON serialization") {
-    val progress = StreamingQueryProgress.fromJson(testProgress3.json)
-    progress.trigger = """{"type":"ProcessingTime","intervalMs":3000000000}"""
+    val progress = progressWithTrigger("""{"type":"ProcessingTime","intervalMs":3000000000}""")
     Seq(progress.json, progress.prettyJson, StreamingQueryProgress.jsonString(progress))
       .foreach { json =>
         assert(parse(json) \ "trigger" === parse(progress.trigger))
@@ -853,6 +859,23 @@ object StreamingQueryStatusAndProgressSuite {
     sink = SinkProgress("sink", None),
     observedMetrics = null
   )
+
+  def progressWithTrigger(trigger: String): StreamingQueryProgress = {
+    new StreamingQueryProgress(
+      id = testProgress3.id,
+      runId = testProgress3.runId,
+      name = testProgress3.name,
+      timestamp = testProgress3.timestamp,
+      batchId = testProgress3.batchId,
+      batchDuration = testProgress3.batchDuration,
+      durationMs = testProgress3.durationMs,
+      eventTime = testProgress3.eventTime,
+      stateOperators = testProgress3.stateOperators,
+      sources = testProgress3.sources,
+      sink = testProgress3.sink,
+      observedMetrics = testProgress3.observedMetrics,
+      trigger = trigger)
+  }
 
   val testProgress4 = new StreamingQueryProgress(
     id = UUID.randomUUID,

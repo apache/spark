@@ -359,7 +359,7 @@ abstract class ProgressContext(
       stats.stateOperators.toArray
     }.getOrElse(Array[StateOperatorProgress]())
 
-    val progress = new StreamingQueryProgress(
+    new StreamingQueryProgress(
       id = id,
       runId = runId,
       name = name,
@@ -372,9 +372,8 @@ abstract class ProgressContext(
       stateOperators = stateOperators,
       sources = sourceProgress.toArray,
       sink = sinkProgress,
-      observedMetrics = new java.util.HashMap(observedMetrics.asJava))
-    progress.trigger = progressReporter.triggerJson
-    progress
+      observedMetrics = new java.util.HashMap(observedMetrics.asJava),
+      trigger = progressReporter.triggerJson)
   }
 
   private def extractSourceProgress(

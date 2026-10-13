@@ -201,6 +201,8 @@ class StateOperatorProgress private[spark] (
  *   detailed statistics on data being read from each of the streaming sources.
  * @param sink
  *   detailed statistics on data being written to the sink.
+ * @param trigger
+ *   JSON for the configured trigger, or null when metadata is unavailable.
  * @since 2.1.0
  */
 @Evolving
@@ -217,14 +219,12 @@ class StreamingQueryProgress private[spark] (
     val sources: Array[SourceProgress],
     val sink: SinkProgress,
     @JsonDeserialize(contentAs = classOf[GenericRowWithSchema])
-    val observedMetrics: ju.Map[String, Row])
+    val observedMetrics: ju.Map[String, Row],
+    @JsonRawValue
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonDeserialize(using = classOf[ObjectToStringDeserializer])
+    private[spark] val trigger: String = null)
     extends Serializable {
-
-  // JSON for the configured trigger, omitted for legacy progress records.
-  @JsonRawValue
-  @JsonInclude(JsonInclude.Include.NON_NULL)
-  @JsonDeserialize(using = classOf[ObjectToStringDeserializer])
-  private[spark] var trigger: String = _
 
   /** The aggregate (across all sources) number of records processed in a trigger. */
   def numInputRows: Long = sources.map(_.numInputRows).sum

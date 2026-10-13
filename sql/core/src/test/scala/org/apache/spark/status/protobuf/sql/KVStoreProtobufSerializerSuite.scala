@@ -375,9 +375,9 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         stateOperators = Array(stateOperatorProgress0, stateOperatorProgress1),
         sources = Array(source0, source1),
         sink = sink,
-        observedMetrics = observedMetrics
+        observedMetrics = observedMetrics,
+        trigger = """{"type":"ProcessingTime","intervalMs":3000000000}"""
       )
-      progress.trigger = """{"type":"ProcessingTime","intervalMs":3000000000}"""
       new StreamingQueryProgressWrapper(progress)
     }
 
