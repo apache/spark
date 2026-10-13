@@ -17,18 +17,18 @@
 
 package org.apache.spark.sql.execution
 
+import scala.annotation.tailrec
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
-import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, ResolvedHint, View}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, ResolvedHint, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
@@ -259,7 +259,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       resolver: Resolver,
       includeTimeTravel: Boolean): Boolean = {
 
-    EliminateSubqueryAliases(plan) match {
+    stripRootSubqueryAliases(plan) match {
       case LogicalRelationWithTable(relation, Some(catalogTable)) =>
         isSameName(name, catalogTable.identifier.nameParts, resolver) &&
           (includeTimeTravel || !isTimeTravelRelation(relation))
@@ -276,6 +276,18 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 
       case _ => false
     }
+  }
+
+  /**
+   * Strips the chain of [[SubqueryAlias]] nodes at the root of the given plan. Callers that only
+   * inspect the root node use this instead of `EliminateSubqueryAliases`, which rewrites the whole
+   * tree. That matters because [[isMatchedTableOrView]] is evaluated on every node of every cached
+   * plan, where a full rewrite per node makes cache lookups by name quadratic in plan size.
+   */
+  @tailrec
+  private def stripRootSubqueryAliases(plan: LogicalPlan): LogicalPlan = plan match {
+    case SubqueryAlias(_, child) => stripRootSubqueryAliases(child)
+    case other => other
   }
 
   private def isTimeTravelRelation(relation: BaseRelation): Boolean = relation match {
@@ -429,7 +441,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    */
   private def tryRefreshPlan(spark: SparkSession, plan: LogicalPlan): Option[LogicalPlan] = {
     try {
-      EliminateSubqueryAliases(plan) match {
+      stripRootSubqueryAliases(plan) match {
         case r @ ExtractV2CatalogAndIdentifier(catalog, ident)
             if r.timeTravelSpec.isEmpty && !r.table.isInstanceOf[ChangelogTable] =>
           val table = CatalogV2Util.getTable(catalog, ident, options = r.options)
@@ -477,7 +489,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       name: Seq[String],
       resolver: Resolver): Seq[LogicalPlan] = {
     cachedData.flatMap { cd =>
-      val plan = EliminateSubqueryAliases(cd.plan)
+      val plan = stripRootSubqueryAliases(cd.plan)
       plan match {
         case r @ ExtractV2CatalogAndIdentifier(catalog, ident)
             if isSameName(name, catalog, ident, resolver) && r.timeTravelSpec.isEmpty =>
