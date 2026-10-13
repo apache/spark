@@ -422,23 +422,36 @@ class CatalystTranspiler(AbstractTranspiler):
         skip the narrowing and the warning. Operands proven non-NULL contribute no
         check, and with none left the guard is dropped -- ``RaiseError`` is
         ``throwable`` (SPARK-58627), so a plan holding one cannot be pushed through a
-        join. ``label`` names the construct plus the parameters checked (reached
-        through the whole operand, so ``a > (b + 1)`` names ``b``).
+        join. ``label`` names the construct plus the parameters the emitted
+        ``isNull`` calls actually test -- ``a is not None and a + b > 0`` names
+        ``b`` alone.
         """
         checked = [(node, c) for node, c in operands if not self._is_never_null(params, node)]
         if not checked:
             return otherwise
-        named = sorted(
-            {
-                inner.id
-                for node, _ in checked
-                for inner in ast.walk(node)
-                if isinstance(inner, ast.Name) and inner.id in params
-            }
-        )
+        named = sorted({name for node, _ in checked for name in self._checked_names(params, node)})
         self._pending_null_guards |= {f"{label} on {', '.join(named)}" if named else label}
         guard = self._any_null([c for _, c in checked])
         return when(guard, raise_error(lit(message))).otherwise(otherwise)
+
+    def _checked_names(self, params: List[str], node: ast.AST) -> set:
+        """The parameters in ``node`` whose possible NULL-ness a guard checks.
+
+        The walk prunes whatever ``_is_never_null`` proves: a parameter an
+        enclosing guard already established (``a is not None and a + b > 0``
+        warns about ``b``, not ``a``) and a sub-expression carrying its own
+        check (``len(...)`` never returns NULL and has its own label), so the
+        label points at the guard the user is still missing.
+        """
+        if self._is_never_null(params, node):
+            return set()
+        if isinstance(node, ast.Name):
+            return {node.id} if node.id in params else set()
+        return {
+            name
+            for child in ast.iter_child_nodes(node)
+            for name in self._checked_names(params, child)
+        }
 
     # TODO (SPARK-55218): handle implicit-None return bodies like
     # ``def f(x): x + x`` -- no return statement means return None;

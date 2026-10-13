@@ -3002,6 +3002,36 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertTrue(quiet_len.transpiled, f"guarded len must transpile: {quiet_len_w}")
             self.assertNotIn(needle, quiet_len_w)
 
+    def test_udf_transpile_warns_only_about_the_unproven_parameter(self):
+        # A checked operand that MIXES a proven and an unproven parameter must
+        # name only the unproven one: `a + b` is checked because of `b`, but a
+        # name walk over the whole operand also finds `a` -- and a warning that
+        # asks the user to guard the parameter they already guarded trains them
+        # to ignore it. Same for a sub-expression carrying its own check:
+        # `len(b)` cannot be NULL itself (and has its own label), so the
+        # comparison borrowing its result must not name `b` again.
+        mixed = lambda a, b: a is not None and a + b > 0  # noqa: E731
+        both = lambda a, b: a > b  # noqa: E731
+        borrowed_len = lambda a, b: a + len(b) > 0  # noqa: E731
+        with self.sql_conf(_TRANSPILE_ON):
+            _, warned = self._udf_and_warnings(mixed, BooleanType())
+            self.assertIn("comparison `>` on b", warned)
+            # The full label, not " on a": see the survival test above.
+            self.assertNotIn("comparison `>` on a", warned)
+            # Unguarded, both stay named -- the pruning must not swallow a check
+            # that is still needed.
+            _, both_warned = self._udf_and_warnings(both, BooleanType())
+            self.assertIn("comparison `>` on a, b", both_warned)
+            # `len` has its own label; the comparison names only what IT checks.
+            # LongType mirrors `len(x) > 0` above: a compare over a call is not
+            # classified boolean, so BooleanType would refuse the lowering.
+            len_udf, len_warned = self._udf_and_warnings(borrowed_len, LongType())
+            self.assertTrue(len_udf.transpiled, f"len composite must transpile: {len_warned}")
+            self.assertIn("`len` on b", len_warned)
+            # Positive form too, or an over-pruned label passes the NotIn above.
+            self.assertIn("comparison `>` on a", len_warned)
+            self.assertNotIn("comparison `>` on a, b", len_warned)
+
     def test_udf_transpile_null_check_blocks_predicate_pushdown(self):
         # Why the checks are worth dropping. RaiseError is throwable, and
         # PushPredicateThroughJoin refuses to push a throwable condition to either
