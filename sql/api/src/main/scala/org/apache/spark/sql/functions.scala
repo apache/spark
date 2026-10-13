@@ -8474,8 +8474,8 @@ object functions {
 
   /**
    * Searches a string for a regular expression and returns an integer that indicates the
-   * beginning position of the matched substring. Positions are 1-based, not 0-based. If no match
-   * is found, returns 0.
+   * beginning position of the regex group `idx` in the matched substring. Positions are 1-based,
+   * not 0-based. If no match is found, or the group does not take part in the match, returns 0.
    *
    * @param str
    *   target column to work on. A column that evaluates to a string.

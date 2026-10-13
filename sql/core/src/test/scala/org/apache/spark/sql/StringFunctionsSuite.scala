@@ -274,15 +274,15 @@ class StringFunctionsSuite extends SharedSparkSession {
     checkAnswer(
       df.select(
         regexp_instr($"a", $"b"),
-        regexp_instr($"a", $"b", lit(1)),
-        regexp_instr($"a", $"b", lit(2))),
-      Row(1, 1, 1) :: Row(7, 7, 7) :: Nil)
+        regexp_instr($"a", $"b", lit(0)),
+        regexp_instr($"a", $"b", lit(1))),
+      Row(1, 1, 2) :: Row(7, 7, 9) :: Nil)
     checkAnswer(
       df.selectExpr(
         "regexp_instr(a, b)",
-        "regexp_instr(a, b, 1)",
-        "regexp_instr(a, b, 2)"),
-      Row(1, 1, 1) :: Row(7, 7, 7) :: Nil)
+        "regexp_instr(a, b, 0)",
+        "regexp_instr(a, b, 1)"),
+      Row(1, 1, 2) :: Row(7, 7, 9) :: Nil)
   }
 
   test("string ascii function") {

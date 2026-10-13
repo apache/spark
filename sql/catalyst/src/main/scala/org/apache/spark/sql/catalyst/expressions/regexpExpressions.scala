@@ -853,6 +853,20 @@ object RegExpExtractBase {
     }
     new GenericArrayData(matchResults.toArray.asInstanceOf[Array[Any]])
   }
+
+  // Returns the 1-based code-point position of group `idx` of the first match in `source`, or 0
+  // if there is no match or the group does not take part in it. Shared by RegExpInStr's eval and
+  // codegen.
+  def instr(matcher: Matcher, source: String, idx: Int, prettyName: String): Int = {
+    if (matcher.find()) {
+      checkGroupIndex(prettyName, matcher.groupCount, idx)
+      val start = matcher.start(idx)
+      // Pattern matched, but it's an optional group
+      if (start < 0) 0 else source.codePointCount(0, start) + 1
+    } else {
+      0
+    }
+  }
 }
 
 abstract class RegExpExtractBase
@@ -1131,7 +1145,7 @@ case class RegExpSubStr(left: Expression, right: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(str, regexp) - Searches a string for a regular expression and returns an integer that indicates the beginning position of the matched substring. Positions are 1-based, not 0-based. If no match is found, returns 0.
+    _FUNC_(str, regexp[, idx]) - Searches a string for a regular expression and returns an integer that indicates the beginning position of the matched substring, or of the group `idx` within it. Positions are 1-based, not 0-based. If no match is found, or the group does not take part in the match, returns 0.
   """,
   arguments = """
     Arguments:
@@ -1148,8 +1162,9 @@ case class RegExpSubStr(left: Expression, right: Expression)
           It's recommended to use a raw string literal (with the `r` prefix) to avoid escaping
           special characters in the pattern string if exists.
         An expression that evaluates to a string.
-      * idx - the group index of the regular expression to search for. The default value is 0
-          if not specified.
+      * idx - the group index of the regular expression to search for. The group index should
+          be non-negative and not greater than the number of groups in `regexp`. The value 0
+          means the entire regular expression. The default value is 0 if not specified.
         An expression that evaluates to an integer.
   """,
   examples = """
@@ -1158,6 +1173,8 @@ case class RegExpSubStr(left: Expression, right: Expression)
        1
       > SELECT _FUNC_('user@spark.apache.org', '@[^.]*');
        5
+      > SELECT _FUNC_('abc123', '([a-z]+)([0-9]+)', 2);
+       4
   """,
   since = "3.4.0",
   group = "string_funcs")
@@ -1169,12 +1186,7 @@ case class RegExpInStr(subject: Expression, regexp: Expression, idx: Expression)
   override def nullSafeEval(s: Any, r: Any, i: Any): Any = {
     try {
       val source = s.toString
-      val m = getLastMatcher(source, r)
-      if (m.find) {
-        source.codePointCount(0, m.start()) + 1
-      } else {
-        0
-      }
+      RegExpExtractBase.instr(getLastMatcher(source, r), source, i.asInstanceOf[Int], prettyName)
     } catch {
       case _: IllegalStateException => 0
     }
@@ -1184,26 +1196,22 @@ case class RegExpInStr(subject: Expression, regexp: Expression, idx: Expression)
   override def prettyName: String = "regexp_instr"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val classNameRegExpExtractBase = classOf[RegExpExtractBase].getCanonicalName
     val matcher = ctx.freshName("matcher")
-    val source = ctx.freshName("source")
     val setEvNotNull = if (nullable) {
       s"${ev.isNull} = false;"
     } else {
       ""
     }
 
-    nullSafeCodeGen(ctx, ev, (subject, regexp, _) => {
+    nullSafeCodeGen(ctx, ev, (subject, regexp, idx) => {
       s"""
          |try {
          |  $setEvNotNull
          |  ${RegExpUtils.initLastMatcherCode(ctx, subject, regexp, matcher, prettyName,
         collationId)}
-         |  if ($matcher.find()) {
-         |    String $source = $subject.toString();
-         |    ${ev.value} = $source.codePointCount(0, $matcher.start()) + 1;
-         |  } else {
-         |    ${ev.value} = 0;
-         |  }
+         |  ${ev.value} = $classNameRegExpExtractBase.instr(
+         |    $matcher, $subject.toString(), $idx, "$prettyName");
          |} catch (IllegalStateException e) {
          |  ${ev.value} = 0;
          |}

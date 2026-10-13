@@ -79,4 +79,8 @@ SELECT regexp_instr('ABC', '(?-i)b');
 SELECT regexp_instr('1a 2b 14m', '\\d{2}(a|b|m)');
 SELECT regexp_instr('abc', null);
 SELECT regexp_instr(null, 'b');
+SELECT regexp_instr('1a 2b 14m', '\\d+(a|b|m)', 1);
+SELECT regexp_instr('abc123', '([a-z]+)([0-9]+)', 2);
+SELECT regexp_instr('abc', '([a-z]+)([0-9]+)?', 2);
+SELECT regexp_instr('abc123', '([a-z]+)([0-9]+)', 3);
 SELECT regexp_instr('abc', col0, 1) FROM VALUES(') ?') AS t(col0);
