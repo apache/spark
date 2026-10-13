@@ -463,7 +463,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         joins.SortMergeAsOfJoinExec(
           leftKeys, rightKeys, leftSort, rightSort,
-          j.asOfCondition, j.orderExpression, j.joinType, residual,
+          j.asOfCondition, j.orderExpression, j.direction, j.joinType, residual,
           planLater(j.left), planLater(j.right)) :: Nil
       case _ => Nil
     }
