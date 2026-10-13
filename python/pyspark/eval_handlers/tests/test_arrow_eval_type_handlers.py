@@ -30,7 +30,7 @@ from pyspark.errors import PySparkRuntimeError
 from pyspark.eval_handlers._base import get_eval_type_handler
 from pyspark.eval_handlers.utils import hashable_grouping_key
 from pyspark.sql.pandas.serializers import ArrowStreamCoGroupSerializer, ArrowStreamSerializer
-from pyspark.sql.types import DoubleType, LongType, StructField, StructType
+from pyspark.sql.types import DoubleType, LongType, StringType, StructField, StructType
 from pyspark.testing.utils import PySparkBaseTestCase, have_pyarrow, pyarrow_requirement_message
 from pyspark.util import PythonEvalType
 
@@ -41,6 +41,7 @@ if have_pyarrow:
     import pyarrow as pa
 
     from pyspark.eval_handlers._arrow import (
+        ArrowBatchedUDFArrowHandler,
         ArrowCoGroupedMapUDFHandler,
         ArrowGroupedAggIncrementalFinalUDFHandler,
         ArrowGroupedAggIncrementalPartialUDFHandler,
@@ -171,6 +172,92 @@ class ArrowEvalTypeHandlerRegistrationTests(PySparkBaseTestCase):
             ),
         ):
             self.assertIs(get_eval_type_handler(eval_type, RunnerConf({})), handler_cls)
+
+    def test_arrow_batched_udf_arrow_variant_is_registered(self):
+        # SQL_ARROW_BATCHED_UDF picks its variant by the legacy pandas conversion conf; the
+        # Arrow variant serves the default and the explicit "false".
+        legacy_conf = "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled"
+        for conf in ({}, {legacy_conf: "false"}):
+            with self.subTest(conf=conf):
+                self.assertIs(
+                    get_eval_type_handler(PythonEvalType.SQL_ARROW_BATCHED_UDF, RunnerConf(conf)),
+                    ArrowBatchedUDFArrowHandler,
+                )
+
+
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+class ArrowBatchedUDFArrowHandlerTests(ArrowEvalTypeHandlerTestCase):
+    _INPUT_TYPE = StructType([StructField("a", LongType()), StructField("b", LongType())])
+
+    def _handler(self, *udfs, runner_conf=None, input_type=None):
+        """Build the handler from ``(func, args_offsets, kwargs_offsets, return_type)`` tuples."""
+        return ArrowBatchedUDFArrowHandler(
+            udfs=list(udfs),
+            runner_conf=runner_conf or RunnerConf({}),
+            eval_conf=EvalConf({"input_type": (input_type or self._INPUT_TYPE).json()}),
+        )
+
+    def test_serializer(self):
+        handler = self._handler((lambda a: a, [0], {}, LongType()))
+        self.assertIsInstance(handler.serializer, ArrowStreamSerializer)
+
+    def test_invokes_udf_per_row(self):
+        handler = self._handler(
+            (lambda a: a + 1, [0], {}, LongType()),
+            (lambda a, b: a * b, [0, 1], {}, LongType()),
+        )
+        out = list(
+            handler.run(0, iter([self._batch(a=[1, 2], b=[10, 20]), self._batch(a=[3], b=[4])]))
+        )
+        self.assertEqual([b.schema.names for b in out], [["_0", "_1"], ["_0", "_1"]])
+        self.assertEqual(
+            [b.to_pydict() for b in out],
+            [{"_0": [2, 3], "_1": [10, 40]}, {"_0": [4], "_1": [12]}],
+        )
+
+    def test_passes_arg_by_keyword_offset(self):
+        handler = self._handler((lambda x, y: x - y, [0], {"y": 1}, LongType()))
+        out = list(handler.run(0, iter([self._batch(a=[10, 20], b=[3, 5])])))
+        self.assertEqual(out[0].column(0).to_pylist(), [7, 15])
+
+    def test_zero_arg_udf(self):
+        handler = self._handler((lambda: 7, [], {}, LongType()), input_type=StructType())
+        empty = pa.RecordBatch.from_pydict({"a": [1, 2, 3]}).select([])
+        out = list(handler.run(0, iter([empty])))
+        self.assertEqual(out[0].column(0).to_pylist(), [7, 7, 7])
+
+    def test_none_result_is_null(self):
+        handler = self._handler((lambda a: None if a == 2 else a, [0], {}, LongType()))
+        out = list(handler.run(0, iter([self._batch(a=[1, 2, 3], b=[0, 0, 0])])))
+        self.assertEqual(out[0].column(0).to_pylist(), [1, None, 3])
+
+    def test_converts_result_to_return_type(self):
+        # Results are converted directly to the declared Arrow type, without the legacy
+        # str coercion: an int result for a StringType UDF is cast to its string form.
+        handler = self._handler((lambda a: a, [0], {}, StringType()))
+        out = list(handler.run(0, iter([self._batch(a=[1, 2], b=[0, 0])])))
+        self.assertEqual(out[0].schema.field(0).type, pa.string())
+        self.assertEqual(out[0].column(0).to_pylist(), ["1", "2"])
+
+    def test_forwards_use_large_var_types_to_output_conversion(self):
+        conf = RunnerConf({"spark.sql.execution.arrow.useLargeVarTypes": "true"})
+        handler = self._handler((lambda a: str(a), [0], {}, StringType()), runner_conf=conf)
+        out = list(handler.run(0, iter([self._batch(a=[1], b=[0])])))
+        self.assertTrue(pa.types.is_large_string(out[0].schema.field(0).type))
+
+    def test_concurrency_level(self):
+        conf = RunnerConf({"spark.sql.execution.pythonUDF.arrow.concurrency.level": "4"})
+        handler = self._handler((lambda a: a * 2, [0], {}, LongType()), runner_conf=conf)
+        out = list(handler.run(0, iter([self._batch(a=list(range(10)), b=[0] * 10)])))
+        self.assertEqual(out[0].column(0).to_pylist(), [v * 2 for v in range(10)])
+
+    def test_stop_iteration_raises_runtime_error(self):
+        def stop(a):
+            raise StopIteration()
+
+        handler = self._handler((stop, [0], {}, LongType()))
+        with self.assertRaises(PySparkRuntimeError):
+            list(handler.run(0, iter([self._batch(a=[1], b=[0])])))
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
