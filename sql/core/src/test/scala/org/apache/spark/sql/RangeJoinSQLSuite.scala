@@ -243,6 +243,19 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
       assert(joins.size == 1 && joins.head.buildSide == BuildRight)
       checkAnswer(broadcast, expected)
 
+      val dualHintInner = sql(
+        "SELECT /*+ BROADCAST(s), BROADCAST(l) */ s.id, l.zip_id " +
+          s"FROM signin_ip s JOIN ip_lookup l ON $pointCond")
+      val dualJoins = findRangeJoin(dualHintInner.queryExecution.executedPlan)
+      assert(dualJoins.size == 1 && dualJoins.head.buildSide == BuildRight)
+      checkAnswer(dualHintInner, expected)
+
+      val dualHintLeftOuter = sql(
+        "SELECT /*+ BROADCAST(s), BROADCAST(l) */ s.id, l.zip_id " +
+          s"FROM signin_ip s LEFT JOIN ip_lookup l ON $pointCond")
+      val dualOuterJoins = findRangeJoin(dualHintLeftOuter.queryExecution.executedPlan)
+      assert(dualOuterJoins.size == 1 && dualOuterJoins.head.buildSide == BuildRight)
+
       val unsupported = sql(
         "SELECT /*+ BROADCAST(a) */ a.lo, b.hi FROM intervals_a a LEFT JOIN intervals_b b " +
           "ON a.lo < b.hi")

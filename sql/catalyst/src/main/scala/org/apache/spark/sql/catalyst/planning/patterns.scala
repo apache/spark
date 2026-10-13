@@ -591,9 +591,8 @@ object ExtractRangeJoinKeys extends PredicateHelper {
  */
 object RangePredicate {
   /**
-   * Types the range index orders with the same comparison as the join predicate.
-   * Other orderable types (arrays, intervals, timestamp-with-nanos, UDTs) stay a
-   * nested loop join: the index getter does not produce the value codegen compares.
+   * Types supported as range keys by the broadcast range index.
+   * Other orderable types (arrays, intervals, timestamp-with-nanos, UDTs) stay a nested loop join.
    */
   def supportedType(dataType: DataType): Boolean = dataType match {
     case BooleanType | ByteType | ShortType | IntegerType | LongType |
