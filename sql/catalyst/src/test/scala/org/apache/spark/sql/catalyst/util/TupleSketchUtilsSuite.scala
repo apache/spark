@@ -23,9 +23,34 @@ import org.apache.datasketches.tuple.adouble.{DoubleSummary, DoubleSummaryFactor
 import org.apache.datasketches.tuple.aninteger.{IntegerSummary, IntegerSummaryFactory}
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, TupleUnionDouble}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{TupleSketchAggDouble, TupleUnionAggDouble}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 
 class TupleSketchUtilsSuite extends SparkFunSuite with SQLHelper {
+
+  test("SketchSize: checks input types before evaluating lgNomEntries") {
+    Seq(
+      (Literal("invalid"), "\"invalid\"", "\"STRING\""),
+      (Literal(2.0), "\"2.0\"", "\"DOUBLE\"")
+    ).foreach { case (size, inputSql, inputType) =>
+      val sketch = Literal(Array.emptyByteArray)
+      val expressions: Seq[(Expression, String)] = Seq(
+        (new TupleSketchAggDouble(Literal(1), Literal(1.0), size), "third"),
+        (new TupleUnionAggDouble(sketch, size), "second"),
+        (new TupleUnionDouble(sketch, sketch, size), "third"))
+      expressions.foreach { case (expression, paramIndex) =>
+        assert(expression.checkInputDataTypes() == DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> paramIndex,
+            "requiredType" -> "\"INT\"",
+            "inputSql" -> inputSql,
+            "inputType" -> inputType)))
+      }
+    }
+  }
 
   test("TupleSummaryMode.fromString: accepts valid modes") {
     val validModes = Seq("sum", "min", "max", "alwaysone")

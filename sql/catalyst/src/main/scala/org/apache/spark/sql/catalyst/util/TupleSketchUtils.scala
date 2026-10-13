@@ -28,6 +28,7 @@ import org.apache.datasketches.tuple.aninteger.{IntegerSummary, IntegerSummaryDe
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.util.ThetaSketchUtils.{MAX_LG_NOM_LONGS, MIN_LG_NOM_LONGS}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -122,14 +123,15 @@ trait SketchSize extends Expression {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_NULL",
         messageParameters = Map("exprName" -> "lgNomEntries"))
+    } else if (!ThetaSketchUtils.isValidLgNomLongs(lgNomEntriesInput)) {
+      DataTypeMismatch(
+        errorSubClass = "VALUE_OUT_OF_RANGE",
+        messageParameters = Map(
+          "exprName" -> "lgNomEntries",
+          "valueRange" -> s"[$MIN_LG_NOM_LONGS, $MAX_LG_NOM_LONGS]",
+          "currentValue" -> lgNomEntriesInput.toString))
     } else {
-      try {
-        ThetaSketchUtils.checkLgNomLongs(lgNomEntriesInput, prettyName)
-        TypeCheckResult.TypeCheckSuccess
-      } catch {
-        case e: Exception =>
-          TypeCheckResult.TypeCheckFailure(e.getMessage)
-      }
+      TypeCheckResult.TypeCheckSuccess
     }
   }
 

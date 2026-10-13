@@ -27,8 +27,9 @@ import org.apache.datasketches.memory.Memory
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, HllSketchEstimate, HllUnion, Literal}
-import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType, LongType, StringType, TimeType, TypeCollection}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.{Add, And, BoundReference, HllSketchEstimate, HllUnion, Literal}
+import org.apache.spark.sql.types.{BinaryType, BooleanType, DataType, IntegerType, LongType, StringType, TimeType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
 
 
@@ -212,6 +213,55 @@ class DatasketchesHllSketchSuite extends SparkFunSuite {
         s"but got: ${exception.getClass.getName}: ${exception.getMessage}"
     )
   }
+
+  test("HLL configuration inputs are validated during analysis") {
+    val valueInput = BoundReference(0, IntegerType, nullable = true)
+    val sketchInput = BoundReference(0, BinaryType, nullable = true)
+
+    val nonFoldableK = new HllSketchAgg(
+      valueInput,
+      BoundReference(1, IntegerType, nullable = true))
+    val kResult = nonFoldableK.checkInputDataTypes().asInstanceOf[DataTypeMismatch]
+    assert(kResult.errorSubClass == "NON_FOLDABLE_INPUT")
+    assert(kResult.messageParameters("inputName") == "lgConfigK")
+
+    val nonFoldableFlag = new HllUnionAgg(
+      sketchInput,
+      BoundReference(1, BooleanType, nullable = true))
+    val flagResult = nonFoldableFlag.checkInputDataTypes().asInstanceOf[DataTypeMismatch]
+    assert(flagResult.errorSubClass == "NON_FOLDABLE_INPUT")
+    assert(flagResult.messageParameters("inputName") == "allowDifferentLgConfigK")
+
+    val nullK = new HllSketchAgg(valueInput, Literal.create(null, IntegerType))
+    val nullKResult = nullK.checkInputDataTypes().asInstanceOf[DataTypeMismatch]
+    assert(nullKResult.errorSubClass == "UNEXPECTED_NULL")
+
+    val nullFlag = new HllUnionAgg(sketchInput, Literal.create(null, BooleanType))
+    assert(nullFlag.checkInputDataTypes().isSuccess)
+    assert(!nullFlag.allowDifferentLgConfigK)
+
+    val foldableNullFlag = new HllUnionAgg(
+      sketchInput, And(Literal(true), Literal.create(null, BooleanType)))
+    assert(foldableNullFlag.checkInputDataTypes().isSuccess)
+    assert(!foldableNullFlag.allowDifferentLgConfigK)
+
+    val invalidK = new HllSketchAgg(valueInput, Literal(1))
+    assert(invalidK.checkInputDataTypes() == DataTypeMismatch(
+      errorSubClass = "VALUE_OUT_OF_RANGE",
+      messageParameters = Map(
+        "exprName" -> "lgConfigK",
+        "valueRange" -> "[4, 21]",
+        "currentValue" -> "1")))
+
+    assert(new HllSketchAgg(valueInput, Literal(HllSketch.DEFAULT_LG_K))
+      .checkInputDataTypes().isSuccess)
+    assert(new HllUnionAgg(sketchInput, Literal(false)).checkInputDataTypes().isSuccess)
+    assert(new HllSketchAgg(valueInput, Add(Literal(10), Literal(2)))
+      .checkInputDataTypes().isSuccess)
+    assert(new HllUnionAgg(sketchInput, And(Literal(true), Literal(true)))
+      .checkInputDataTypes().isSuccess)
+  }
+
   /** Runs HllUnionAgg over `inputs` (a NULL entry stands for a NULL sketch) for a single group. */
   private def unionAgg(inputs: Seq[Any], allowDifferentLgConfigK: Boolean): Array[Byte] = {
     val aggFunc = new HllUnionAgg(

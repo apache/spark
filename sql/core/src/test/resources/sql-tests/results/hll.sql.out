@@ -246,16 +246,23 @@ FROM VALUES (50), (60), (60) tab(col)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkRuntimeException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "HLL_INVALID_LG_K",
-  "sqlState" : "22546",
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "function" : "`hll_sketch_agg`",
-    "max" : "21",
-    "min" : "4",
-    "value" : "2"
-  }
+    "currentValue" : "2",
+    "exprName" : "lgConfigK",
+    "sqlExpr" : "\"hll_sketch_agg(col, 2)\"",
+    "valueRange" : "[4, 21]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 29,
+    "fragment" : "hll_sketch_agg(col, 2)"
+  } ]
 }
 
 
@@ -265,16 +272,23 @@ FROM VALUES (50), (60), (60) tab(col)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkRuntimeException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "HLL_INVALID_LG_K",
-  "sqlState" : "22546",
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "function" : "`hll_sketch_agg`",
-    "max" : "21",
-    "min" : "4",
-    "value" : "40"
-  }
+    "currentValue" : "40",
+    "exprName" : "lgConfigK",
+    "sqlExpr" : "\"hll_sketch_agg(col, 40)\"",
+    "valueRange" : "[4, 21]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "hll_sketch_agg(col, 40)"
+  } ]
 }
 
 
@@ -284,16 +298,21 @@ FROM VALUES (15), (16), (17) tab(col)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkRuntimeException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "HLL_INVALID_LG_K",
-  "sqlState" : "22546",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "function" : "`hll_sketch_agg`",
-    "max" : "21",
-    "min" : "4",
-    "value" : "0"
-  }
+    "exprName" : "lgConfigK",
+    "sqlExpr" : "\"hll_sketch_agg(col, CAST(NULL AS INT))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 45,
+    "fragment" : "hll_sketch_agg(col, CAST(NULL AS INT))"
+  } ]
 }
 
 
@@ -303,13 +322,51 @@ FROM VALUES (15), (16), (17) tab(col)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkRuntimeException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "HLL_K_MUST_BE_CONSTANT",
-  "sqlState" : "42K0E",
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "function" : "`hll_sketch_agg`"
-  }
+    "inputExpr" : "CAST(tab.col AS INT)",
+    "inputName" : "lgConfigK",
+    "inputType" : "int",
+    "sqlExpr" : "\"hll_sketch_agg(col, CAST(col AS INT))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 44,
+    "fragment" : "hll_sketch_agg(col, CAST(col AS INT))"
+  } ]
+}
+
+
+-- !query
+SELECT allow_different_lg_config_k,
+    hll_union_agg(CAST('' AS BINARY), allow_different_lg_config_k)
+FROM VALUES (false) tab(allow_different_lg_config_k)
+GROUP BY allow_different_lg_config_k
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputExpr" : "tab.allow_different_lg_config_k",
+    "inputName" : "allowDifferentLgConfigK",
+    "inputType" : "boolean",
+    "sqlExpr" : "\"hll_union_agg(CAST( AS BINARY), allow_different_lg_config_k)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 41,
+    "stopIndex" : 102,
+    "fragment" : "hll_union_agg(CAST('' AS BINARY), allow_different_lg_config_k)"
+  } ]
 }
 
 

@@ -898,16 +898,23 @@ FROM VALUES (50), (60), (60) tab(col)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkRuntimeException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "SKETCH_INVALID_LG_NOM_ENTRIES",
-  "sqlState" : "22003",
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "function" : "`theta_sketch_agg`",
-    "max" : "26",
-    "min" : "4",
-    "value" : "2"
-  }
+    "currentValue" : "2",
+    "exprName" : "lgNomEntries",
+    "sqlExpr" : "\"theta_sketch_agg(col, 2)\"",
+    "valueRange" : "[4, 26]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "theta_sketch_agg(col, 2)"
+  } ]
 }
 
 
@@ -917,16 +924,23 @@ FROM VALUES (50), (60), (60) tab(col)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkRuntimeException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "SKETCH_INVALID_LG_NOM_ENTRIES",
-  "sqlState" : "22003",
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "function" : "`theta_sketch_agg`",
-    "max" : "26",
-    "min" : "4",
-    "value" : "40"
-  }
+    "currentValue" : "40",
+    "exprName" : "lgNomEntries",
+    "sqlExpr" : "\"theta_sketch_agg(col, 40)\"",
+    "valueRange" : "[4, 26]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "theta_sketch_agg(col, 40)"
+  } ]
 }
 
 
@@ -940,16 +954,23 @@ FROM (SELECT theta_sketch_agg(col, 12) as sketch
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkRuntimeException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "SKETCH_INVALID_LG_NOM_ENTRIES",
-  "sqlState" : "22003",
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "function" : "`theta_union_agg`",
-    "max" : "26",
-    "min" : "4",
-    "value" : "3"
-  }
+    "currentValue" : "3",
+    "exprName" : "lgNomEntries",
+    "sqlExpr" : "\"theta_union_agg(sketch, 3)\"",
+    "valueRange" : "[4, 26]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 33,
+    "fragment" : "theta_union_agg(sketch, 3)"
+  } ]
 }
 
 
@@ -963,16 +984,23 @@ FROM (SELECT theta_sketch_agg(col, 12) as sketch
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkRuntimeException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "SKETCH_INVALID_LG_NOM_ENTRIES",
-  "sqlState" : "22003",
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "function" : "`theta_union_agg`",
-    "max" : "26",
-    "min" : "4",
-    "value" : "27"
-  }
+    "currentValue" : "27",
+    "exprName" : "lgNomEntries",
+    "sqlExpr" : "\"theta_union_agg(sketch, 27)\"",
+    "valueRange" : "[4, 26]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 34,
+    "fragment" : "theta_union_agg(sketch, 27)"
+  } ]
 }
 
 
@@ -982,16 +1010,21 @@ FROM VALUES (15), (16), (17) tab(col)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkRuntimeException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "SKETCH_INVALID_LG_NOM_ENTRIES",
-  "sqlState" : "22003",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "function" : "`theta_sketch_agg`",
-    "max" : "26",
-    "min" : "4",
-    "value" : "0"
-  }
+    "exprName" : "lgNomEntries",
+    "sqlExpr" : "\"theta_sketch_agg(col, CAST(NULL AS INT))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 47,
+    "fragment" : "theta_sketch_agg(col, CAST(NULL AS INT))"
+  } ]
 }
 
 
@@ -1001,13 +1034,76 @@ FROM VALUES (15), (16), (17) tab(col)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkRuntimeException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "THETA_LG_NOM_ENTRIES_MUST_BE_CONSTANT",
-  "sqlState" : "42K0E",
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "function" : "`theta_sketch_agg`"
-  }
+    "inputExpr" : "CAST(tab.col AS INT)",
+    "inputName" : "lgNomEntries",
+    "inputType" : "int",
+    "sqlExpr" : "\"theta_sketch_agg(col, CAST(col AS INT))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 46,
+    "fragment" : "theta_sketch_agg(col, CAST(col AS INT))"
+  } ]
+}
+
+
+-- !query
+SELECT lg, theta_union_agg(CAST('' AS BINARY), lg)
+FROM VALUES (12) tab(lg)
+GROUP BY lg
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputExpr" : "tab.lg",
+    "inputName" : "lgNomEntries",
+    "inputType" : "int",
+    "sqlExpr" : "\"theta_union_agg(CAST( AS BINARY), lg)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 50,
+    "fragment" : "theta_union_agg(CAST('' AS BINARY), lg)"
+  } ]
+}
+
+
+-- !query
+SELECT theta_union(CAST('' AS BINARY), CAST('' AS BINARY), lg)
+FROM VALUES (12) tab(lg)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputExpr" : "tab.lg",
+    "inputName" : "lgNomEntries",
+    "inputType" : "int",
+    "sqlExpr" : "\"theta_union(CAST( AS BINARY), CAST( AS BINARY), lg)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 62,
+    "fragment" : "theta_union(CAST('' AS BINARY), CAST('' AS BINARY), lg)"
+  } ]
 }
 
 
