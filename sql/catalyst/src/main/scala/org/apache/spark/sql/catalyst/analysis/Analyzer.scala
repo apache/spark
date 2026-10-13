@@ -1783,8 +1783,14 @@ class Analyzer(
           expanded
         }
       // If the pivot aggregate function argument contains Stars, expand it, e.g. count(*) to
-      // count(1), as for Aggregate.
+      // count(1), as for Aggregate. A bare top-level Star cannot be expanded here and would keep
+      // this case matching, leaving the rest of the Pivot unresolved, so reject it up front.
       case p: Pivot if containsStar(p.aggregates) =>
+        p.aggregates.collectFirst { case s: Star => s }.foreach { s =>
+          withPosition(s) {
+            throw QueryCompilationErrors.invalidStarUsageError(p.nodeName, Seq(s))
+          }
+        }
         p.copy(aggregates = p.aggregates.map(expandStarExpression(_, p.child)))
       case c: CollectMetrics if containsStar(c.metrics) =>
         c.copy(metrics = buildExpandedProjectList(c.metrics, c.child))

@@ -182,6 +182,22 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assert(counts.nonEmpty && counts.forall(_ == Literal(1) :: Nil))
   }
 
+  test("SPARK-60072: reject a bare star in pivot aggregates") {
+    // The grouping and pivot columns are still unresolved when the star is checked, so the
+    // error must name the star rather than one of these existing columns.
+    val pivot = Pivot(
+      Some(UnresolvedAttribute("a") :: Nil),
+      UnresolvedAttribute("b"),
+      Literal("x") :: Literal("y") :: Nil,
+      UnresolvedFunction("sum" :: Nil, UnresolvedAttribute("c") :: Nil, isDistinct = false) ::
+        UnresolvedStar(None) :: Nil,
+      testRelation2)
+    assertAnalysisErrorCondition(
+      pivot,
+      expectedErrorCondition = "INVALID_USAGE_OF_STAR_OR_REGEX",
+      expectedMessageParameters = Map("elem" -> "'*'", "prettyName" -> "Pivot"))
+  }
+
   test("resolve sort references - filter/limit") {
     val a = testRelation2.output(0)
     val b = testRelation2.output(1)
