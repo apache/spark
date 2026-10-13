@@ -160,15 +160,14 @@ object Connect {
           "observed server-side session id, as the built-in Python and Scala clients do. " +
           "Such a client must create a new SparkSession with the same session id. A client " +
           "that does not send it silently gets a new session. The new session is empty: " +
-          "server-side state " +
-          "such as registered UDFs, temporary views, temporary functions, cached data and the " +
-          "current catalog is gone and must be rebuilt, for example by rerunning notebook " +
-          "paragraphs. The new session starts with default configurations, so it must set " +
-          "this configuration again to keep this behavior. Do not stop or release the old " +
-          "SparkSession once another client may have created a new session with the same " +
-          "session id, because releasing a session does not check the server-side session " +
-          "id and would close the new session. Only set this when the client can rebuild its " +
-          "session state.")
+          "server-side state such as registered UDFs, temporary views, temporary functions " +
+          "and the current catalog is gone and must be rebuilt, for example by rerunning " +
+          "notebook paragraphs. The new session starts with default configurations, so it " +
+          "must set this configuration again to keep this behavior. Do not stop or release " +
+          "the old SparkSession once another client may have created a new session with the " +
+          "same session id, because releasing a session does not check the server-side " +
+          "session id and would close the new session. Only set this when the client can " +
+          "rebuild its session state.")
       .version("4.4.0")
       .booleanConf
       .createWithDefault(false)
