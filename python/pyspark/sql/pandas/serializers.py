@@ -113,72 +113,76 @@ class ArrowStreamSerializer(Serializer):
             iterator = self._write_stream_start(iterator, stream)
         import pyarrow as pa
 
-        if self._collect_timing:
-            timed_stream = _TimedStream(stream)
-            metrics = WorkerMetrics()
-            send_timer = metrics.measure("pythonDataSendTime")
-            serialize_timer = metrics.measure("pythonArrowSerializationTime")
-        else:
-            timed_stream = None
-        output_stream = timed_stream if timed_stream is not None else stream
+        if not self._collect_timing:
+            writer = None
+            try:
+                for batch in iterator:
+                    if writer is None:
+                        writer = pa.RecordBatchStreamWriter(stream, batch.schema)
+                    writer.write_batch(batch)
+                    # In pipelined mode, flush after each batch so the JVM can read output
+                    # while still sending input, rather than buffering all output.
+                    if self._flush_per_batch:
+                        stream.flush()
+            finally:
+                if writer is not None:
+                    writer.close()
+            return
+
+        timed_stream = _TimedStream(stream)
+        metrics = WorkerMetrics()
+        send_timer = metrics.measure("pythonDataSendTime")
+        serialize_timer = metrics.measure("pythonArrowSerializationTime")
         clock = time.perf_counter_ns
         write_duration_ns = 0
         writer = None
         try:
             for batch in iterator:
-                if timed_stream is not None:
-                    start_ns = clock()
+                start_ns = clock()
                 if writer is None:
-                    writer = pa.RecordBatchStreamWriter(output_stream, batch.schema)
+                    writer = pa.RecordBatchStreamWriter(timed_stream, batch.schema)
                 writer.write_batch(batch)
                 # In pipelined mode, flush after each batch so the JVM can read output
                 # while still sending input, rather than buffering all output.
                 if self._flush_per_batch:
-                    output_stream.flush()
-                if timed_stream is not None:
-                    write_duration_ns += clock() - start_ns
+                    timed_stream.flush()
+                write_duration_ns += clock() - start_ns
         finally:
             if writer is not None:
-                if timed_stream is not None:
-                    start_ns = clock()
+                start_ns = clock()
                 writer.close()
-                if timed_stream is not None:
-                    write_duration_ns += clock() - start_ns
-        if timed_stream is not None:
-            send_timer.add_duration_ns(timed_stream.duration_ns)
-            serialize_timer.add_duration_ns(write_duration_ns - timed_stream.duration_ns)
+                write_duration_ns += clock() - start_ns
+        send_timer.add_duration_ns(timed_stream.duration_ns)
+        serialize_timer.add_duration_ns(write_duration_ns - timed_stream.duration_ns)
 
     def load_stream(self, stream: IO[bytes]) -> Iterator["pa.RecordBatch"]:
         """Load batches from a plain Arrow stream."""
         import pyarrow as pa
 
-        if self._collect_timing:
-            timed_stream = _TimedStream(stream)
-            metrics = WorkerMetrics()
-            receive_timer = metrics.measure("pythonDataReceiveTime")
-            deserialize_timer = metrics.measure("pythonArrowDeserializationTime")
-        else:
-            timed_stream = None
-        input_stream = timed_stream if timed_stream is not None else stream
+        if not self._collect_timing:
+            reader = pa.ipc.open_stream(stream)
+            for batch in reader:
+                yield batch
+            return
+
+        timed_stream = _TimedStream(stream)
+        metrics = WorkerMetrics()
+        receive_timer = metrics.measure("pythonDataReceiveTime")
+        deserialize_timer = metrics.measure("pythonArrowDeserializationTime")
         clock = time.perf_counter_ns
         read_duration_ns = 0
-        if timed_stream is not None:
-            start_ns = clock()
-        reader = pa.ipc.open_stream(input_stream)
-        if timed_stream is not None:
-            read_duration_ns += clock() - start_ns
+        start_ns = clock()
+        reader = pa.ipc.open_stream(timed_stream)
+        read_duration_ns += clock() - start_ns
         while True:
-            if timed_stream is not None:
-                start_ns = clock()
+            start_ns = clock()
             batch = next(reader, None)
-            if timed_stream is not None:
-                read_duration_ns += clock() - start_ns
+            read_duration_ns += clock() - start_ns
             if batch is None:
                 break
             yield batch
-        if timed_stream is not None:
-            receive_timer.add_duration_ns(timed_stream.duration_ns)
-            deserialize_timer.add_duration_ns(read_duration_ns - timed_stream.duration_ns)
+        receive_timer.add_duration_ns(timed_stream.duration_ns)
+        deserialize_timer.add_duration_ns(read_duration_ns - timed_stream.duration_ns)
 
     def _write_stream_start(
         self, batch_iterator: Iterator["pa.RecordBatch"], stream: IO[bytes]

@@ -569,6 +569,7 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
             {
                 "spark.sql.execution.arrow.maxRecordsPerBatch": "2",
                 "spark.sql.adaptive.enabled": "false",
+                "spark.sql.execution.pythonUDF.detailedTiming.enabled": "true",
             }
         ):
             # Exercise sequential and concurrent evaluation, then an empty worker task.
@@ -610,6 +611,60 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
                     else:
                         self.assertEqual(phases[2:5], [0, 0, 0])
                     self.assertLessEqual(sum(phases), metrics.apply("pythonProcessingTime").value())
+
+    def test_phase_metrics_disabled_by_default(self):
+        add_one = udf(lambda value: value + 1, "long", useArrow=True)
+
+        def run():
+            result = self.spark.range(2, numPartitions=1).select(add_one("id"))
+            self.assertEqual([row[0] for row in result.collect()], [1, 2])
+            plan = result._jdf.queryExecution().executedPlan()
+            while plan.nodeName() != "ArrowEvalPython":
+                self.assertEqual(plan.children().size(), 1)
+                plan = plan.children().apply(0)
+            return plan.metrics()
+
+        timing_conf = "spark.sql.execution.pythonUDF.detailedTiming.enabled"
+        with self.sql_conf({"spark.sql.adaptive.enabled": "false"}):
+            with self.sql_conf({timing_conf: "true"}):
+                self.assertEqual(run().apply("pythonNumTimingReports").value(), 1)
+            self.assertEqual(self.spark.conf.get(timing_conf), "false")
+            metrics = run()
+
+        detailed_metrics = (
+            "pythonDataReceiveTime",
+            "pythonArrowDeserializationTime",
+            "pythonInputPreparationTime",
+            "pythonUDFExecutionTime",
+            "pythonOutputPreparationTime",
+            "pythonArrowSerializationTime",
+            "pythonDataSendTime",
+            "pythonNumTimingReports",
+            "pythonNumTimedBatches",
+        )
+        for name in detailed_metrics:
+            self.assertFalse(metrics.contains(name), name)
+        self.assertTrue(metrics.contains("pythonProcessingTime"))
+        self.assertTrue(metrics.contains("pythonNumPipelinedTasks"))
+
+    def test_phase_metrics_on_materialized_plan_after_config_change(self):
+        add_one = udf(lambda value: value + 1, "long", useArrow=True)
+        timing_conf = "spark.sql.execution.pythonUDF.detailedTiming.enabled"
+
+        with self.sql_conf({"spark.sql.adaptive.enabled": "false"}):
+            with self.sql_conf({timing_conf: "true"}):
+                result = self.spark.range(2, numPartitions=1).select(add_one("id"))
+                plan = result._jdf.queryExecution().executedPlan()
+                while plan.nodeName() != "ArrowEvalPython":
+                    self.assertEqual(plan.children().size(), 1)
+                    plan = plan.children().apply(0)
+                metrics = plan.metrics()
+                self.assertTrue(metrics.contains("pythonNumTimingReports"))
+
+            self.assertEqual(self.spark.conf.get(timing_conf), "false")
+            self.assertEqual([row[0] for row in result.collect()], [1, 2])
+            self.assertEqual(metrics.apply("pythonNumTimingReports").value(), 1)
+            self.assertEqual(metrics.apply("pythonNumTimedBatches").value(), 1)
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)

@@ -734,6 +734,12 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         handler = handler_cls(udfs=udfs, runner_conf=runner_conf, eval_conf=eval_conf)
         return handler.run, handler.serializer
 
+    collect_timing = (
+        eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
+        and not runner_conf.use_legacy_pandas_udf_conversion
+        and runner_conf.detailed_timing_enabled
+    )
+
     if eval_type in (
         PythonEvalType.SQL_ARROW_BATCHED_UDF,
         PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF,
@@ -750,10 +756,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         # NOTE: if timezone is set here, that implies respectSessionTimeZone is True
         ser = ArrowStreamSerializer(
             write_start_stream=True,
-            collect_timing=(
-                eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
-                and not runner_conf.use_legacy_pandas_udf_conversion
-            ),
+            collect_timing=collect_timing,
         )
     else:
         batch_size = int(os.environ.get("PYTHON_UDF_BATCH_SIZE", "100"))
@@ -807,13 +810,18 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             for f in eval_conf.input_type
         ]
 
-        # Keep task-bound duration handles; the batch loop accumulates locally.
+        # Bind task timers only when enabled; the batch loop accumulates locally.
         metrics = WorkerMetrics()
-        input_timer = metrics.measure("pythonInputPreparationTime")
-        udf_timer = metrics.measure("pythonUDFExecutionTime")
-        output_timer = metrics.measure("pythonOutputPreparationTime")
-        metrics.set("pythonNumTimingReports", 1)
-        metrics.set("pythonNumTimedBatches", 0)
+        if collect_timing:
+            phase_timers = (
+                metrics.measure("pythonInputPreparationTime"),
+                metrics.measure("pythonUDFExecutionTime"),
+                metrics.measure("pythonOutputPreparationTime"),
+            )
+            metrics.set("pythonNumTimingReports", 1)
+            metrics.set("pythonNumTimedBatches", 0)
+        else:
+            phase_timers = None
 
         @fail_on_stopiteration
         def _evaluate_batch_udf(udf_func, rows):
@@ -833,8 +841,9 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             try:
                 for input_batch in data:
                     # --- Input: Arrow -> Python columns ---
-                    input_start_ns = clock()
-                    metrics.increment("pythonNumTimedBatches")
+                    if phase_timers is not None:
+                        input_start_ns = clock()
+                        metrics.increment("pythonNumTimedBatches")
                     num_rows = input_batch.num_rows
                     columns = [
                         (
@@ -850,7 +859,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
 
                     # --- Process: evaluate each UDF row-by-row ---
                     for udf_func, offsets, zero_arg, arrow_return_type, result_conv in udf_infos:
-                        if output_arrays:
+                        if phase_timers is not None and output_arrays:
                             # Reuse the batch start for the first UDF, avoiding another clock read.
                             # Later UDFs start input after the loop transition.
                             input_start_ns = clock()
@@ -859,11 +868,13 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                             if zero_arg
                             else list(zip(*[columns[o] for o in offsets]))
                         )
-                        udf_start_ns = clock()
-                        input_duration_ns += udf_start_ns - input_start_ns
+                        if phase_timers is not None:
+                            udf_start_ns = clock()
+                            input_duration_ns += udf_start_ns - input_start_ns
                         results = _evaluate_batch_udf(udf_func, rows)
-                        output_start_ns = clock()
-                        udf_duration_ns += output_start_ns - udf_start_ns
+                        if phase_timers is not None:
+                            output_start_ns = clock()
+                            udf_duration_ns += output_start_ns - udf_start_ns
 
                         # --- Output: Python -> Arrow ---
                         verify_result_row_count(len(results), num_rows)
@@ -882,15 +893,18 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                         # All UDF results for this batch are ready; time its assembly as output.
                         if len(output_arrays) == num_udfs:
                             output_batch = pa.RecordBatch.from_arrays(output_arrays, col_names)
-                        output_duration_ns += clock() - output_start_ns
+                        if phase_timers is not None:
+                            output_duration_ns += clock() - output_start_ns
 
                     yield output_batch
                     del output_batch
             finally:
                 # Flush completed intervals if the generator closes early or raises.
-                input_timer.add_duration_ns(input_duration_ns)
-                udf_timer.add_duration_ns(udf_duration_ns)
-                output_timer.add_duration_ns(output_duration_ns)
+                if phase_timers is not None:
+                    input_timer, udf_timer, output_timer = phase_timers
+                    input_timer.add_duration_ns(input_duration_ns)
+                    udf_timer.add_duration_ns(udf_duration_ns)
+                    output_timer.add_duration_ns(output_duration_ns)
 
         return func, ser
 
