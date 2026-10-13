@@ -329,31 +329,40 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession {
 
   test("session id stays tombstoned until the owning close completes") {
     val sessionManager = SparkConnectService.sessionManager
-    val key = SessionKey("user", UUID.randomUUID().toString)
-    val holder = startBlockingCloseSession(key)
+    Seq(true, false).foreach { allowReconnectAfterClose =>
+      val key = SessionKey("user", UUID.randomUUID().toString)
+      val holder = startBlockingCloseSession(key, allowReconnectAfterClose)
 
-    val owner = new Thread(() => sessionManager.closeSession(key))
-    owner.start()
-    try {
-      assert(holder.closeStarted.await(1, TimeUnit.MINUTES))
-      // The old session is removed but still closing: it must not be recreated in this window.
-      assertSessionClosed(key)
+      val owner = new Thread(() => sessionManager.closeSession(key))
+      owner.start()
+      try {
+        assert(holder.closeStarted.await(1, TimeUnit.MINUTES))
+        // The old session is removed but still closing: it must not be recreated in this window.
+        assertSessionClosed(key)
 
-      // Callers that lose the removal, such as a concurrent ReleaseSession or a later
-      // maintenance run, must not close it again or touch its fence.
-      assert(sessionManager.tryRemoveSessionHolder(holder).isEmpty)
-      sessionManager.closeSession(key)
-      sessionManager.periodicMaintenance(defaultInactiveTimeoutMs = 0L)
-      assertSessionClosed(key)
-    } finally {
-      holder.release.countDown()
-      owner.join(TimeUnit.MINUTES.toMillis(1))
+        // Callers that lose the removal, such as a concurrent ReleaseSession or a later
+        // maintenance run, must not close it again or touch its fence.
+        assert(sessionManager.tryRemoveSessionHolder(holder).isEmpty)
+        sessionManager.closeSession(key)
+        sessionManager.periodicMaintenance(defaultInactiveTimeoutMs = 0L)
+        assertSessionClosed(key)
+      } finally {
+        holder.release.countDown()
+        owner.join(TimeUnit.MINUTES.toMillis(1))
+      }
+      assert(!owner.isAlive)
+      assert(holder.closeCalls.get == 1)
+
+      if (allowReconnectAfterClose) {
+        // The owning close() has finished, so the id can be reused.
+        assert(sessionManager.getOrCreateIsolatedSession(key, None) ne holder)
+      } else {
+        // A default close keeps the tombstone, now with its closed time.
+        assertSessionClosed(key)
+        val closed = sessionManager.listClosedSessions.find(_.key == key)
+        assert(closed.exists(_.closedTimeMs.isDefined))
+      }
     }
-    assert(!owner.isAlive)
-    assert(holder.closeCalls.get == 1)
-
-    // The owning close() has finished, so the id can be reused.
-    sessionManager.getOrCreateIsolatedSession(key, None)
   }
 
   test("maintenance that observed a session but lost its removal does not close it") {
