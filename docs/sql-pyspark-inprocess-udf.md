@@ -205,7 +205,7 @@ of sliced results still copy data.
 ### 1. Install dependencies
 
 ```bash
-pip install "jep>=4.3.2" pyarrow cloudpickle
+pip install "jep>=4.3.2,<4.4" pyarrow cloudpickle
 ```
 
 JEP and `org.apache.arrow:arrow-c-data` are provided dependencies and are not
@@ -334,7 +334,7 @@ def add_noise(x):
 | Requirement | Detail |
 |---|---|
 | Python | 3.11+; driver and embedded major.minor versions must match |
-| jep | 4.3.2+ (`pip install jep`) |
+| jep | 4.3.x, 4.3.2 or later (`pip install "jep>=4.3.2,<4.4"`); Spark is built and tested against 4.3.2, and the plugin uses JEP internals that later minor versions may change |
 | `arrow-c-data` JAR | Provided separately; match Spark's Arrow Java version |
 | PyArrow | 18.0.0+ |
 | cloudpickle | Bundled with PySpark |
@@ -365,7 +365,7 @@ version may not contain this API or match the JVM classes.
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install "jep>=4.3.2" pyarrow
+.venv/bin/pip install "jep>=4.3.2,<4.4" pyarrow
 source .venv/bin/activate
 ```
 
@@ -391,7 +391,7 @@ venv on a machine that matches the executor OS and Python version:
 
 ```bash
 python3 -m venv myvenv
-myvenv/bin/pip install "jep>=4.3.2" pyarrow cloudpickle my-custom-lib
+myvenv/bin/pip install "jep>=4.3.2,<4.4" pyarrow cloudpickle my-custom-lib
 (cd myvenv && zip -r ../myvenv.zip .)
 ```
 

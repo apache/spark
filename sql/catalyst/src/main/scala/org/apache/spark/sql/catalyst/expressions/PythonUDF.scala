@@ -60,6 +60,17 @@ object PythonUDF {
   }
 
   /**
+   * Whether `e` is a scalar Python UDF that runs in a Python worker, where it can be chained
+   * with the scalar Python UDFs around it. In-process UDFs never are: each one is evaluated by
+   * its own operator. Rules that keep or build such chains use this rather than
+   * [[isScalarPythonUDF]].
+   */
+  def chainsInWorker(e: Expression): Boolean = {
+    isScalarPythonUDF(e) &&
+      e.asInstanceOf[PythonUDF].evalType != PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF
+  }
+
+  /**
    * Whether `e` is a Python UDF that can be lifted out of a higher-order function's lambda by
    * `ExtractPythonUDFFromLambda`, which applies it to the whole array outside the lambda.
    *
@@ -431,12 +442,13 @@ case class TranspiledPythonUDF(
     case other => other.children
   }
 
-  // True when every argument is a plain PythonUDF (not a TranspiledPythonUDF). Used to decide
-  // whether to preserve the UDF batch pipeline rather than inserting a Catalyst node in the middle
-  // of a Python UDF chain. Reads `arguments`, not `pythonUDFExpr.children`: for an aggregate UDF
-  // the latter is the aggregate function and its filter, so this said false for every UDAF.
+  // True when every argument is a plain PythonUDF (not a TranspiledPythonUDF) that runs in a
+  // worker. Used to decide whether to preserve the UDF batch pipeline rather than inserting a
+  // Catalyst node in the middle of a Python UDF chain; an in-process argument is not part of one.
+  // Reads `arguments`, not `pythonUDFExpr.children`: for an aggregate UDF the latter is the
+  // aggregate function and its filter, so this said false for every UDAF.
   def hasOnlyPythonUDFInputs: Boolean =
-    arguments.nonEmpty && arguments.forall(_.isInstanceOf[PythonUDF])
+    arguments.nonEmpty && arguments.forall(PythonUDF.chainsInWorker)
 }
 
 /**

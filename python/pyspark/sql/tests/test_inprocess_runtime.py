@@ -811,11 +811,29 @@ class InProcessRuntimeTests(unittest.TestCase):
         self.assertTrue(udf.deterministic)
         self.assertIs(udf.asNondeterministic(), udf)
         self.assertFalse(udf.deterministic)
-        # The keyword matches udf, pandas_udf and arrow_udf.
+        # The keyword and the function form match udf, pandas_udf and arrow_udf.
         self.assertEqual(inprocess_udf(returnType=LongType())(identity).returnType, LongType())
+        direct = inprocess_udf(identity, LongType())
+        self.assertIsInstance(direct, type(udf))
+        self.assertEqual(direct.returnType, LongType())
+        self.assertFalse(inprocess_udf(identity, "long", deterministic=False).deterministic)
+        # Misuse fails at once, not when the decorator or the UDF is called.
+        for args, kwargs, arg_name in [
+            ((42,), {}, "f"),
+            ((), {}, "returnType"),
+            ((identity,), {}, "returnType"),
+            ((identity, 42), {}, "returnType"),
+            (("long",), {"deterministic": "no"}, "deterministic"),
+        ]:
+            with self.subTest(args=args, kwargs=kwargs):
+                with self.assertRaises(PySparkTypeError) as error:
+                    inprocess_udf(*args, **kwargs)
+                self.assertEqual(error.exception.getMessageParameters()["arg_name"], arg_name)
         with self.assertRaises(PySparkTypeError) as error:
-            inprocess_udf(42)(identity)
-        self.assertEqual(error.exception.getMessageParameters()["arg_name"], "returnType")
+            inprocess_udf(LongType(), returnType=LongType())
+        self.assertEqual(error.exception.getCondition(), "CANNOT_SET_TOGETHER")
+        with self.assertRaises(TypeError):
+            inprocess_udf(LongType(), False)
         # DDL decoration does not require a live Spark session.
         self.assertIsNone(inprocess_udf("long")(identity)._parsed_return_type)
 

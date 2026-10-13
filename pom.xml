@@ -238,6 +238,8 @@
     ./python/packaging/client/setup.py, and ./python/packaging/connect/setup.py too.
     -->
     <arrow.version>19.0.0</arrow.version>
+    <!-- For in-process Python UDFs; also read by the PySpark CI image and named by the guide -->
+    <jep.version>4.3.2</jep.version>
     <ammonite.version>3.0.9</ammonite.version>
     <jjwt.version>0.13.0</jjwt.version>
 
@@ -2575,6 +2577,12 @@
             <artifactId>netty-common</artifactId>
           </exclusion>
         </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>black.ninia</groupId>
+        <artifactId>jep</artifactId>
+        <version>${jep.version}</version>
+        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.arrow</groupId>

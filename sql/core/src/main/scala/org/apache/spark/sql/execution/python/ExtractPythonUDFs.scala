@@ -200,7 +200,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
       case Seq(child: PythonUDF) =>
         // The in-process evaluator accepts JVM expressions as inputs. Extract nested calls
         // into separate operators instead of serializing a chain for a Python worker.
-        e.evalType != PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF &&
+        PythonUDF.chainsInWorker(e) &&
           correctEvalType(e, pythonUDFArrowFallbackOnUDT) ==
           correctEvalType(child, pythonUDFArrowFallbackOnUDT) &&
           shouldExtractUDFExpressionTree(child, pythonUDFArrowFallbackOnUDT)

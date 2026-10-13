@@ -66,6 +66,19 @@ def _serialize_udf(func: Callable) -> bytes:
     return buffer.getvalue()
 
 
+def _check_return_type_argument(returnType: Any) -> Union[DataType, str]:
+    if not isinstance(returnType, (DataType, str)):
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "DataType or str",
+                "arg_name": "returnType",
+                "arg_type": type(returnType).__name__,
+            },
+        )
+    return returnType
+
+
 class InProcessUDFWrapper:
     """
     Wraps a Python function as an in-process UDF.
@@ -78,15 +91,7 @@ class InProcessUDFWrapper:
     def __init__(
         self, func: Callable, returnType: Union[DataType, str], deterministic: bool = True
     ) -> None:
-        if not isinstance(returnType, (DataType, str)):
-            raise PySparkTypeError(
-                errorClass="NOT_EXPECTED_TYPE",
-                messageParameters={
-                    "expected_type": "DataType or str",
-                    "arg_name": "returnType",
-                    "arg_type": type(returnType).__name__,
-                },
-            )
+        _check_return_type_argument(returnType)
         self._return_type = returnType
         self._parsed_return_type: Optional[DataType] = None
         self.evalType = PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF
@@ -204,13 +209,18 @@ class InProcessUDFWrapper:
         return Column(self._jfunc.apply(jlist, self._deterministic))
 
 
-def inprocess_udf(returnType: Union[DataType, str], deterministic: bool = True) -> Callable:
+def inprocess_udf(
+    f: Optional[Union[Callable, DataType, str]] = None,
+    returnType: Optional[Union[DataType, str]] = None,
+    *,
+    deterministic: bool = True,
+) -> Any:
     """
-    Decorator to register a Python function as an in-process UDF.
+    Creates an in-process UDF, as a decorator or from a function, like ``arrow_udf``.
 
     .. versionadded:: 4.4.0
 
-    The decorated function receives one ``pa.Array`` per input column and must
+    The function receives one ``pa.Array`` per input column and must
     return a single ``pa.Array`` of the declared ``returnType``.
 
     The result must have the same length as the input batch and its Arrow type
@@ -231,21 +241,28 @@ def inprocess_udf(returnType: Union[DataType, str], deterministic: bool = True) 
 
     Parameters
     ----------
+    f : function, :class:`pyspark.sql.types.DataType` or str, optional
+        The function to wrap. When used as a decorator, the return type may be passed here
+        instead, as in ``@inprocess_udf(LongType())``.
     returnType : :class:`pyspark.sql.types.DataType` or str
         The return type of the UDF, as a DataType or a DDL-formatted type string.
     deterministic : bool, optional
-        Whether this UDF produces the same output for the same input. Set to ``False``
-        for UDFs that use randomness or external state, so the optimizer does not
+        Keyword-only. Whether this UDF produces the same output for the same input. Set to
+        ``False`` for UDFs that use randomness or external state, so the optimizer does not
         deduplicate or reorder calls to this UDF. Default: ``True``.
 
     Returns
     -------
-    function
-        A decorator that wraps the function as an ``InProcessUDFWrapper``.
+    ``InProcessUDFWrapper`` if ``f`` is a function, otherwise a decorator that wraps a
+    function as one.
 
     Examples
     --------
     .. code-block:: python
+
+        import pyarrow.compute as pc
+
+        double = inprocess_udf(lambda x: pc.multiply(x, 2), LongType())
 
         @inprocess_udf(returnType=LongType())
         def double(x):
@@ -258,7 +275,36 @@ def inprocess_udf(returnType: Union[DataType, str], deterministic: bool = True) 
             return pa.array(np.random.randint(0, 100, len(x)), type=pa.int64())
     """
 
-    def decorator(func: Callable) -> InProcessUDFWrapper:
-        return InProcessUDFWrapper(func, returnType, deterministic)
+    if not isinstance(deterministic, bool):
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "bool",
+                "arg_name": "deterministic",
+                "arg_type": type(deterministic).__name__,
+            },
+        )
+    if f is None or isinstance(f, (DataType, str)):
+        # @inprocess_udf(returnType) or @inprocess_udf(returnType=returnType)
+        if f is not None and returnType is not None:
+            raise PySparkTypeError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "a return type in f and returnType"},
+            )
+        # Fails at once rather than when the decorator is applied.
+        return_type = _check_return_type_argument(f if f is not None else returnType)
 
-    return decorator
+        def decorator(func: Callable) -> InProcessUDFWrapper:
+            return InProcessUDFWrapper(func, return_type, deterministic)
+
+        return decorator
+    if not callable(f):
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "function, DataType or str",
+                "arg_name": "f",
+                "arg_type": type(f).__name__,
+            },
+        )
+    return InProcessUDFWrapper(f, _check_return_type_argument(returnType), deterministic)
