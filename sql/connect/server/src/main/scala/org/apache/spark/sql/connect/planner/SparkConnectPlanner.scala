@@ -1051,7 +1051,10 @@ class SparkConnectPlanner(
       val analyzed = session.sessionState.executePlan(logicalPlan).analyzed
 
       assertPlan(groupingExprs.size() == 1)
-      val groupFunc = TypedScalaUdf(groupingExprs.get(0), Some(analyzed.output))
+      val groupFunc = TypedScalaUdf(
+        groupingExprs.get(0),
+        Some(analyzed.output),
+        Some("Dataset.groupByKey"))
       val vEnc = groupFunc.inEnc
       val kEnc = groupFunc.outEnc
 
@@ -1090,9 +1093,24 @@ class SparkConnectPlanner(
 
   private object TypedScalaUdf {
     def apply(expr: proto.Expression, inputAttrs: Option[Seq[Attribute]]): TypedScalaUdf = {
+      apply(expr, inputAttrs, None)
+    }
+
+    def apply(
+        expr: proto.Expression,
+        inputAttrs: Option[Seq[Attribute]],
+        operation: Option[String]): TypedScalaUdf = {
       if (expr.hasCommonInlineUserDefinedFunction
         && expr.getCommonInlineUserDefinedFunction.hasScalarScalaUdf) {
-        apply(expr.getCommonInlineUserDefinedFunction, inputAttrs)
+        // Typed APIs decode UDFs directly instead of going through transformExpression.
+        val origin = if (expr.hasCommon && expr.getCommon.hasOrigin) {
+          transformOrigin(expr.getCommon.getOrigin)
+        } else {
+          CurrentOrigin.get
+        }
+        CurrentOrigin.withOrigin(origin) {
+          apply(unpackUdf(expr.getCommonInlineUserDefinedFunction, operation), inputAttrs)
+        }
       } else {
         throw InvalidInputErrors.expectingScalaUdfButGot(expr.getExprTypeCase)
       }
@@ -2144,15 +2162,19 @@ class SparkConnectPlanner(
     NamedArgumentExpression(namedArg.getKey, transformExpression(namedArg.getValue))
   }
 
-  private def unpackUdf(fun: proto.CommonInlineUserDefinedFunction): UdfPacket = {
-    unpackScalaUDF[UdfPacket](fun.getScalarScalaUdf)
+  private def unpackUdf(
+      fun: proto.CommonInlineUserDefinedFunction,
+      operation: Option[String] = None): UdfPacket = {
+    unpackScalaUDF[UdfPacket](fun.getScalarScalaUdf, operation)
   }
 
   private def unpackForeachWriter(fun: proto.ScalarScalaUDF): ForeachWriterPacket = {
     unpackScalaUDF[ForeachWriterPacket](fun)
   }
 
-  private[connect] def unpackScalaUDF[T](fun: proto.ScalarScalaUDF): T = {
+  private[connect] def unpackScalaUDF[T](
+      fun: proto.ScalarScalaUDF,
+      operation: Option[String] = None): T = {
     try {
       logDebug(s"Unpack using class loader: ${Utils.getContextOrSparkClassLoader}")
       UdfSerialization
@@ -2174,7 +2196,16 @@ class SparkConnectPlanner(
                 "message" -> (s"Failed to load class: ${cnf.getMessage}. " +
                   "Make sure the artifact where the class is defined is installed by calling" +
                   " session.addArtifact.")))
-          case _ => throw SparkException.internalError("Failed to unpack scala udf.", t)
+          case _ =>
+            val context = CurrentOrigin.get.getQueryContext
+            val operationContext = operation.map(op => s" for $op").getOrElse("")
+            throw new SparkException(
+              errorClass = "INTERNAL_ERROR",
+              messageParameters = Map(
+                "message" -> s"Failed to unpack scala udf$operationContext."),
+              cause = t,
+              context = context,
+              summary = context.map(_.summary()).mkString("\n"))
         }
     }
   }

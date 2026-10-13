@@ -21,7 +21,7 @@ import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.{Any, ByteString, StringValue}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression.{Alias, ExpressionString, UnresolvedStar}
 import org.apache.spark.sql.{AnalysisException, Row}
@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.{RelationTimeTravel, UnresolvedAli
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
-import org.apache.spark.sql.catalyst.trees.TreePattern
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connect.SparkConnectTestUtils
@@ -440,6 +440,68 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
     val res = transform(proto.Relation.newBuilder.setAggregate(agg).build())
     assert(res.nodeName == "Aggregate")
+  }
+
+  for (includeOrigin <- Seq(false, true)) {
+    test(s"groupByKey unpacking failure includes operation context (origin=$includeOrigin)") {
+      val grouping = proto.Expression.newBuilder().setCommonInlineUserDefinedFunction(
+        proto.CommonInlineUserDefinedFunction.newBuilder()
+          .setScalarScalaUdf(proto.ScalarScalaUDF.newBuilder()
+            .setPayload(ByteString.copyFromUtf8("invalid serialized function")))
+          .addArguments(proto.Expression.newBuilder()
+            .setUnresolvedStar(proto.Expression.UnresolvedStar.newBuilder())))
+      if (includeOrigin) {
+        grouping.setCommon(proto.ExpressionCommon.newBuilder().setOrigin(
+          proto.Origin.newBuilder().setJvmOrigin(proto.JvmOrigin.newBuilder()
+            .addStackTrace(proto.StackTraceElement.newBuilder()
+              .setDeclaringClass("org.apache.spark.sql.Dataset")
+              .setMethodName("groupByKey")
+              .setFileName("Dataset.scala")
+              .setLineNumber(1))
+            .addStackTrace(proto.StackTraceElement.newBuilder()
+              .setDeclaringClass("example.AggregationJob")
+              .setMethodName("run")
+              .setFileName("AggregationJob.scala")
+              .setLineNumber(42)))))
+      }
+      val input = proto.Relation.newBuilder().setRange(
+        proto.Range.newBuilder().setStart(0).setEnd(1).setStep(1))
+      val aggregate = proto.Aggregate.newBuilder()
+        .setInput(input)
+        .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
+        .addGroupingExpressions(grouping)
+      val originalOrigin = CurrentOrigin.get
+      val error = intercept[SparkException] {
+        transform(proto.Relation.newBuilder().setAggregate(aggregate).build())
+      }
+      assert(error.getCondition == "INTERNAL_ERROR")
+      assert(error.getMessageParameters.get("message") ==
+        "Failed to unpack scala udf for Dataset.groupByKey.")
+      assert(error.getCause.isInstanceOf[java.io.StreamCorruptedException])
+      if (includeOrigin) {
+        assert(error.getQueryContext.length == 1)
+        assert(error.getQueryContext.head.fragment() == "groupByKey")
+        assert(error.getQueryContext.head.callSite() ==
+          "example.AggregationJob.run(AggregationJob.scala:42)")
+        assert(error.getMessage.contains("AggregationJob.scala:42"))
+      } else {
+        assert(error.getQueryContext.isEmpty)
+      }
+      assert(CurrentOrigin.get == originalOrigin)
+    }
+  }
+
+  test("Scala UDF unpacking without operation context preserves the existing message") {
+    val planner = new SparkConnectPlanner(
+      SparkConnectTestUtils.createDummySessionHolder(spark))
+    val error = intercept[SparkException] {
+      planner.unpackScalaUDF[AnyRef](proto.ScalarScalaUDF.newBuilder()
+        .setPayload(ByteString.copyFromUtf8("invalid serialized function"))
+        .build())
+    }
+    assert(error.getMessageParameters.get("message") == "Failed to unpack scala udf.")
+    assert(error.getCause.isInstanceOf[java.io.StreamCorruptedException])
+    assert(error.getQueryContext.isEmpty)
   }
 
   test("Test invalid deduplicate") {
