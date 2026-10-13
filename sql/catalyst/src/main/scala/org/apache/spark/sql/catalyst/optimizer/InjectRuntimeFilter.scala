@@ -42,18 +42,21 @@ import org.apache.spark.sql.internal.SQLConf
  * the creation side, whatever its shape, and waives the checks that only estimate whether a filter
  * pays off, since the user asserts it does. It waives no correctness requirement (see
  * `JoinSelectionHelper.isRepeatableRuntimeFilterSource`) and does not lift the limits on the
- * number of filters and on a Bloom filter's size. A hinted side is never itself filtered, and a
- * hint takes effect through one mechanism: when a DPP filter honors it on any join key, no Bloom
- * filter is added for that join. The rule runs after the DPP filters are pushed down and cleaned
- * up, so it sees only the ones that survive. When the hint is not applied, the reason is
- * reported through the hint error handler.
+ * number of filters and on a Bloom filter's size, nor the requirement that the join keys be
+ * simple expressions. A hinted side is never itself filtered, and a hint takes effect through one
+ * mechanism: when a DPP filter honors it on any join key, no Bloom filter is added for that join.
+ * The rule runs after the DPP filters are pushed down and cleaned up, so it sees only the ones
+ * that survive. When the hint is not applied, the reason is reported through the hint error
+ * handler, and no filter is built in the opposite direction instead.
  */
 object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with JoinSelectionHelper {
 
   private def hintErrorHandler = conf.hintErrorHandler
 
   // Marks a hinted join whose hint has been applied or reported. The optimizer runs this rule on
-  // a subquery before hoisting it into the main plan, where the join is visited again.
+  // a subquery before hoisting it into the main plan, where the join is visited again. A rule
+  // that rebuilds the join in between drops the tag, so a Bloom filter already built from the
+  // hinted side also counts as the hint applied.
   private val HINT_DECIDED = TreeNodeTag[Unit]("runtimeFilterHintDecided")
 
   private case class FilterCreationSide(
@@ -114,10 +117,10 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     } else {
       ColumnPruning(Aggregate(Nil, Seq(alias), filterCreationSidePlan))
     })
-    // Runtime filters are introduced after subquery optimization, so Python UDFs in a new
-    // creation-side subquery cannot be extracted into a Python evaluation operator.
-    if (aggregate.containsPattern(PYTHON_UDF)) {
-      return Left("the creation side contains a Python UDF")
+    // Runtime filters are introduced after subquery optimization, so the functions in a new
+    // creation-side subquery that need an operator of their own cannot be extracted into one.
+    if (containsExtractedFunction(aggregate)) {
+      return Left("the creation side contains a Python UDF, Python UDTF or external UDF")
     }
     val bloomFilterSubquery = ScalarSubquery(aggregate, Nil)
     val filter = BloomFilterMightContain(bloomFilterSubquery,
@@ -466,12 +469,28 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     }
   }
 
-  private def hasBloomFilter(plan: LogicalPlan, key: Expression): Boolean = {
+  /**
+   * Whether `plan` has a Bloom filter on `key`, built from `creationKey` when that is given.
+   */
+  private def hasBloomFilter(
+      plan: LogicalPlan,
+      key: Expression,
+      creationKey: Option[Expression] = None): Boolean = {
+    def builtFrom(bloomFilter: Expression, creationKey: Expression): Boolean = {
+      bloomFilter.exists {
+        case s: ScalarSubquery => s.plan.exists(_.expressions.exists(_.exists {
+          case BloomFilterAggregate(XxHash64(Seq(k), _), _, _, _, _) =>
+            k.semanticEquals(creationKey)
+          case _ => false
+        }))
+        case _ => false
+      }
+    }
     plan.exists {
       case Filter(condition, _) =>
         splitConjunctivePredicates(condition).exists {
-          case BloomFilterMightContain(_, XxHash64(Seq(valueExpression), _))
-            if valueExpression.fastEquals(key) => true
+          case BloomFilterMightContain(bloomFilter, XxHash64(Seq(valueExpression), _))
+            if valueExpression.fastEquals(key) => creationKey.forall(builtFrom(bloomFilter, _))
           case _ => false
         }
       case _ => false
@@ -535,7 +554,15 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             !(applicationHinted || hasShuffle || probablyHasShuffle(applicationSide))) {
             None
           } else if (hasBloomFilter(currentApplicationSide, applicationSideKey)) {
-            blocked("a runtime filter on the join key already exists")
+            if (applicationHinted &&
+              hasBloomFilter(currentApplicationSide, applicationSideKey, Some(creationSideKey))) {
+              // Built from the hinted side in an earlier pass, before a rule rebuilt the join and
+              // dropped its HINT_DECIDED tag.
+              appliedHint = true
+              None
+            } else {
+              blocked("a runtime filter on the join key already exists")
+            }
           } else {
             extractBeneficialFilterCreatePlan(applicationSide, creationSide,
               applicationSideKey, creationSideKey, applicationHinted)

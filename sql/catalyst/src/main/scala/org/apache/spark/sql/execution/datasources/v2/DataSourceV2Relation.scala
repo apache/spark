@@ -195,6 +195,10 @@ case class DataSourceV2Relation(
  *                             false: a pushed limit, offset, top-N, sample, aggregate or join
  *                             decides which rows the scan returns, and a build site that does not
  *                             set it keeps storage filters away from its scan.
+ * @param repeatableScan whether every execution of the scan returns the same rows, see
+ *                       [[LeafNode.isOutputRepeatable]]. Default false: `V2ScanRelationPushDown`
+ *                       sets it true unless the source absorbed an operator whose rows depend on
+ *                       order or chance (limit, offset, top-N, sample) or an aggregate.
  */
 case class DataSourceV2ScanRelation(
     relation: DataSourceV2Relation,
@@ -205,7 +209,8 @@ case class DataSourceV2ScanRelation(
     pushedFilters: Seq[Expression] = Seq.empty,
     inferredFilters: Seq[Expression] = Seq.empty,
     mergeableScan: Boolean = false,
-    onlyRowWisePushdowns: Boolean = false) extends LeafNode with NamedRelation {
+    onlyRowWisePushdowns: Boolean = false,
+    repeatableScan: Boolean = false) extends LeafNode with NamedRelation {
 
   // TODO: Override validConstraints to return ExpressionSet(pushedFilters) so that pushed
   // filters participate in constraint propagation (InferFiltersFromConstraints, PruneFilters).
@@ -311,9 +316,7 @@ case class DataSourceV2ScanRelation(
     s"RelationV2$outputString $nameWithTimeTravelSpec"
   }
 
-  // The scan is planned once, and each of its executions reads what that plan describes, as the
-  // two sides of a self-join do.
-  override def isOutputRepeatable: Boolean = true
+  override def isOutputRepeatable: Boolean = repeatableScan
 
   override def computeStats(): Statistics = {
     if (conf.cboEnabled || conf.planStatsEnabled) {
