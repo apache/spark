@@ -785,7 +785,7 @@ class ArrowBatchedUDFLegacyPandasHandler(BatchEvalTypeHandler["pa.RecordBatch"])
             pandas_columns = ArrowToPandasConversion.to_pandas(
                 input_batch,
                 timezone=runner_conf.timezone,
-                schema=self._eval_conf.input_type,
+                schema=self._eval_conf.input_type,  # type: ignore[arg-type]
                 struct_in_pandas="row",
                 ndarray_as_list=True,
                 prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
@@ -801,7 +801,9 @@ class ArrowBatchedUDFLegacyPandasHandler(BatchEvalTypeHandler["pa.RecordBatch"])
                 rows = (
                     [() for _ in range(num_rows)]
                     if zero_arg
-                    else list(zip(*[pandas_columns[o].tolist() for o in offsets]))
+                    else list(
+                        zip(*[pandas_columns[o].tolist() for o in offsets])  # type: ignore[operator]
+                    )
                 )
                 results = _evaluate_batch_udf_legacy(udf_func, rows)
                 verify_result_row_count(len(results), num_rows)

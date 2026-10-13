@@ -859,7 +859,7 @@ class ArrowBatchedUDFArrowHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
             ArrowTableToRowsConversion._create_converter(
                 f.dataType, none_on_identity=True, binary_as_bytes=runner_conf.binary_as_bytes
             )
-            for f in eval_conf.input_type
+            for f in eval_conf.input_type  # type: ignore[union-attr]
         ]
 
     def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
