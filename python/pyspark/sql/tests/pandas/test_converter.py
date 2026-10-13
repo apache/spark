@@ -643,10 +643,9 @@ class ConverterTests(unittest.TestCase):
         self.assertEqual(result[0][0].nanosecond, 1)
 
         conv = _create_converter_to_pandas(ArrayType(TimestampNTZType()))
-        assert_series_equal(
-            conv(pd.Series([[naive, None], None])),
-            pd.Series([[pd.Timestamp(naive), None], None]),
-        )
+        result = conv(pd.Series([[naive, None], None]))
+        assert_series_equal(result, pd.Series([[pd.Timestamp(naive), None], None]))
+        self.assertIsInstance(result[0][0], pd.Timestamp)
 
 
 if __name__ == "__main__":
