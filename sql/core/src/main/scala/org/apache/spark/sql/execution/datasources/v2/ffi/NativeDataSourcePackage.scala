@@ -33,7 +33,6 @@ import com.google.common.cache.{Cache, CacheBuilder}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.sql.Artifact
-import org.apache.spark.sql.datasource.NativeBridge
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.util.Utils
 
@@ -50,7 +49,7 @@ import org.apache.spark.util.Utils
  *   }
  * }}}
  *
- * @param abiVersion the version of [[NativeBridge]] that the libraries implement
+ * @param abiVersion the version of the native data source interface that the libraries implement
  * @param dataSources the names of the data sources that the libraries implement
  * @param libraries the path of the library in the package for each platform, as returned by
  *                  [[NativePlatform.current]]
@@ -292,15 +291,24 @@ object NativePlatform {
  */
 object NativeLibraries extends Logging {
   // The libraries of the packages, by the checksum of the package, and the installed libraries,
-  // by their canonical path: the JVM loads a library file in a single class loader. A library
-  // that is loaded but rejected stays loaded, so its error is kept: it cannot be loaded again.
+  // by their canonical path, so that each library file is loaded once. A library that is loaded
+  // but rejected stays loaded, so its error is kept: it is not loaded again.
   private val packagedLibraries = new ConcurrentHashMap[String, Try[NativeLibrary]]()
   private val installedLibraries = new ConcurrentHashMap[String, Try[NativeLibrary]]()
 
   private lazy val extractionDir: File = Utils.createTempDir(namePrefix = "native-datasources")
 
   /** Returns the library at the given location, and loads it if needed. */
-  private[ffi] def get(location: NativeLibraryLocation): NativeLibrary = location match {
+  private[ffi] def get(location: NativeLibraryLocation): NativeLibrary = {
+    // The libraries are called with the FFM API, which is final only from Java 22.
+    if (!NativeLibrary.isSupported) {
+      throw QueryExecutionErrors.nativeDataSourceUnsupportedJavaVersionError(
+        NativeLibrary.MINIMUM_JAVA_VERSION, Runtime.version().feature())
+    }
+    getSupported(location)
+  }
+
+  private def getSupported(location: NativeLibraryLocation): NativeLibrary = location match {
     case pkg: NativeDataSourcePackage =>
       getOrLoad(packagedLibraries, pkg.sha256)(loadPackaged(pkg))
     case installed: InstalledNativeLibrary =>
@@ -362,18 +370,18 @@ object NativeLibraries extends Logging {
     val library = try {
       NativeLibrary.load(file.getPath)
     } catch {
-      case e: UnsatisfiedLinkError => throw invalidLibrary(e.getMessage, e)
+      case e: NativeLibrary.LoadException => throw invalidLibrary(e.getMessage, e)
     }
     Try {
       val abiVersion = try {
         library.abiVersion()
       } catch {
-        case e: UnsatisfiedLinkError =>
-          throw invalidLibrary("It does not implement NativeBridge.abiVersion.", e)
+        case e: NativeLibrary.MissingFunctionException =>
+          throw invalidLibrary("It does not implement spark_ds_abi_version.", e)
       }
-      if (abiVersion != NativeBridge.ABI_VERSION) {
+      if (abiVersion != NativeLibrary.ABI_VERSION) {
         throw unsupportedAbiVersion(
-          Map("version" -> abiVersion.toString, "supported" -> NativeBridge.ABI_VERSION.toString))
+          Map("version" -> abiVersion.toString, "supported" -> NativeLibrary.ABI_VERSION.toString))
       }
       library
     }

@@ -43,8 +43,8 @@ import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.Utils
 
 /**
- * A [[ColumnarDataSource]] implemented by a native library, through
- * `org.apache.spark.sql.datasource.NativeBridge`.
+ * A [[ColumnarDataSource]] implemented by a native library, through the C interface in
+ * `org/apache/spark/sql/datasource/spark_datasource.h`.
  *
  * @param location where the library is on the driver. The readers and the writers distribute it
  *                 to the executors of the active session when they are created.
@@ -684,7 +684,7 @@ object NativeHandle extends Logging {
         try {
           release(value)
         } catch {
-          case e @ (NonFatal(_) | _: LinkageError) =>
+          case NonFatal(e) =>
             logWarning("Failed to release a native data source handle.", e)
         }
       }
@@ -720,7 +720,7 @@ object NativeCalls {
       f
     } catch {
       case e: Throwable with SparkThrowable => throw e
-      case e: UnsatisfiedLinkError =>
+      case e: NativeLibrary.MissingFunctionException =>
         throw QueryExecutionErrors.nativeDataSourceError(
           action, name, s"The library does not implement ${e.getMessage}.", e)
       case NonFatal(e) =>
@@ -743,7 +743,7 @@ object NativeCalls {
     try {
       Some(f)
     } catch {
-      case _: UnsatisfiedLinkError => None
+      case _: NativeLibrary.MissingFunctionException => None
     }
   }
 

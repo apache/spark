@@ -48,7 +48,7 @@ import org.apache.spark.util.Utils
 /**
  * Tests native data sources with the library in `native-datasource/test_native_datasource.cc`,
  * compiled with the C++ compiler of the machine by [[NativeDataSourceTestUtils]]. The tests that
- * load a library are skipped when there is no C++ compiler or no JNI headers.
+ * load a library are skipped when there is no C++ compiler, or before Java 22.
  */
 class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
   import NativeDataSourceTestUtils._
@@ -65,6 +65,8 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     compile("test_native_datasource_b", "-DNAME_PREFIX=\"b_\"", "-DID_SIGN=-1")
   private lazy val abiV2Library =
     compile("test_native_datasource_v2", "-DABI_VERSION=2", "-DNAME_PREFIX=\"v2_\"")
+  private lazy val noLastErrorLibrary =
+    compile("test_native_datasource_ne", "-DNO_LAST_ERROR", "-DNAME_PREFIX=\"ne_\"")
   private lazy val installedLibrary =
     compile("test_native_datasource_installed", "-DNAME_PREFIX=\"installed_\"")
   private lazy val installedNegatingLibrary = compile(
@@ -83,7 +85,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
   }
 
   private def nativeTest(name: String)(f: => Unit): Unit = test(name) {
-    assume(toolchain.isDefined, "A C++ compiler and the JNI headers are required.")
+    assume(toolchain.isDefined, "A C++ compiler and Java 22 or later are required.")
     try f finally SparkSession.setActiveSession(spark)
   }
 
@@ -248,6 +250,23 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     second.close()
     other.close()
     assert(released == Seq(1L, 3L, 2L))
+  }
+
+  test("native data sources require Java 22 or later") {
+    assume(!NativeLibrary.isSupported, "The Java version supports native data sources.")
+    val dir = Utils.createTempDir()
+    // Not loaded: Spark fails before it loads the library.
+    Files.writeString(
+      new File(dir, NativeDataSourceRegistry.libraryFileName("old_java")).toPath, "unused")
+    withLibraryPath(dir) {
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          spark.read.format("old_java").load()
+        },
+        condition = "NATIVE_DATA_SOURCE_UNSUPPORTED_JAVA_VERSION",
+        parameters = Map(
+          "required" -> "22", "current" -> Runtime.version().feature().toString))
+    }
   }
 
   nativeTest("disable native data sources") {
@@ -569,6 +588,18 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     check("plan a scan of", "native_sink does not support batch reads", "native_sink") {
       session => session.read.schema("id BIGINT").format("native_sink").load().collect()
     }
+    // Without spark_ds_last_error, only the value that the function returned is reported.
+    val e = intercept[Exception] {
+      newSession(createPackage(noLastErrorLibrary, dataSources("ne_")))
+        .read.format("ne_native_range").option("fail", "create").load()
+    }
+    checkError(
+      exception = findError(e, "NATIVE_DATA_SOURCE_ERROR"),
+      condition = "NATIVE_DATA_SOURCE_ERROR",
+      parameters = Map(
+        "action" -> "create",
+        "name" -> "ne_native_range",
+        "msg" -> "spark_ds_create failed with the error code 1."))
   }
 
   nativeTest("operations that the library does not implement") {

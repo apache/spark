@@ -70,7 +70,7 @@ class NativeDataSourceClusterSuite extends QueryTest {
   }
 
   private def nativeTest(name: String)(f: => Unit): Unit = test(name) {
-    assume(toolchain.isDefined, "A C++ compiler and the JNI headers are required.")
+    assume(toolchain.isDefined, "A C++ compiler and Java 22 or later are required.")
     try f finally SparkSession.setActiveSession(spark)
   }
 

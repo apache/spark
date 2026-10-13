@@ -29,7 +29,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * The Data Source V2 provider of the native data sources: data sources implemented by a native
- * library through `org.apache.spark.sql.datasource.NativeBridge`.
+ * library through the C interface in `org/apache/spark/sql/datasource/spark_datasource.h`.
  */
 class NativeDataSourceV2 extends NamedTableProvider {
   private var shortName: String = _

@@ -846,6 +846,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("fileName" -> fileName, "checksum" -> checksum, "path" -> path))
   }
 
+  def nativeDataSourceUnsupportedJavaVersionError(
+      required: Int, current: Int): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "NATIVE_DATA_SOURCE_UNSUPPORTED_JAVA_VERSION",
+      messageParameters = Map("required" -> required.toString, "current" -> current.toString))
+  }
+
   def removedClassInSpark2Error(className: String, e: Throwable): SparkClassNotFoundException = {
     new SparkClassNotFoundException(
       errorClass = "_LEGACY_ERROR_TEMP_2052",

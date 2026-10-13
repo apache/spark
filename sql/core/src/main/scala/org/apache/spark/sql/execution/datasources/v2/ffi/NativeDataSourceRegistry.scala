@@ -25,7 +25,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.sql.Artifact
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.datasource.NativeBridge
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.util.Utils
@@ -62,7 +61,7 @@ object NativeDataSourceRegistry extends Logging {
       .map(NativeDataSourcePackage.tryRead).partitionMap(identity)
     // A package of a version of the interface that Spark does not support is unusable too.
     val (unsupported, usable) = valid.partitionMap { pkg =>
-      if (pkg.manifest.abiVersion == NativeBridge.ABI_VERSION) Right(pkg) else Left(pkg)
+      if (pkg.manifest.abiVersion == NativeLibrary.ABI_VERSION) Right(pkg) else Left(pkg)
     }
     lookupPackage(name, usable)
       .orElse(lookupInstalledLibrary(name))
@@ -76,7 +75,7 @@ object NativeDataSourceRegistry extends Logging {
             "UNSUPPORTED_ABI_VERSION",
             Map(
               "version" -> pkg.manifest.abiVersion.toString,
-              "supported" -> NativeBridge.ABI_VERSION.toString))
+              "supported" -> NativeLibrary.ABI_VERSION.toString))
         }
         invalid.find(_.dataSources.exists(_.equalsIgnoreCase(name))).foreach(p => throw p.error)
         None
