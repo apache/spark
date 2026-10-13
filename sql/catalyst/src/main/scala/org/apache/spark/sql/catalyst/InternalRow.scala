@@ -206,7 +206,7 @@ object InternalRow {
       (input, v) => input.setDecimal(ordinal, v.asInstanceOf[Decimal], precision)
     case udt: UserDefinedType[_] => getWriter(ordinal, udt.sqlType)
     case NullType => (input, _) => input.setNullAt(ordinal)
-    case StringType => (input, v) => input.update(ordinal, v.asInstanceOf[UTF8String].copy())
+    case _: StringType => (input, v) => input.update(ordinal, v.asInstanceOf[UTF8String].copy())
     case _: GeometryType | _: GeographyType =>
       (input, v) => input.update(ordinal, v.asInstanceOf[BinaryView].copy())
     case _: StructType => (input, v) => input.update(ordinal, v.asInstanceOf[InternalRow].copy())
