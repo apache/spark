@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import scala.annotation.tailrec
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -233,6 +235,7 @@ object OptimizeSkewedKeyGroups extends Rule[SparkPlan] with SQLConfHelper with L
   }
 
   private object KeyedJoinSide {
+    @tailrec
     def unapply(plan: SparkPlan): Option[KeyedJoinSide] = plan match {
       case s: SortExec if !s.global => unapply(s.child)
       case p => PartitioningCollection.representativeOf(p.outputPartitioning)
