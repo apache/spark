@@ -262,7 +262,10 @@ case class GroupPartitionsExec(
   // A merge by an empty ordering would run but sort nothing.
   require(sortedMergeOrdering.forall(_.nonEmpty), "A k-way merge needs an ordering to merge by")
 
-  /** Whether the k-way merge was planned for this node. See `sortedMergeOrdering`. */
+  /**
+   * Whether the k-way merge was planned for this node. See `sortedMergeOrdering`. Driver-only, like
+   * the other accessors of `@transient` fields: a deserialized copy holds no ordering.
+   */
   def enableSortedMerge: Boolean = sortedMergeOrdering.isDefined
 
   /** Whether this node performs the k-way merge. No config term, see `sortedMergeOrdering`. */
@@ -357,7 +360,7 @@ case class GroupPartitionsExec(
    * Like `checkChildStillMatches`, this makes the failure explicit if one starts.
    */
   private def checkPlannedMergeRuns(): Unit = {
-    if (enableSortedMerge && hasCoalescing && !usesSortedMerge) {
+    if (enableSortedMerge && hasCoalescing && !childIsSafeForKWayMerge) {
       throw SparkException.internalError(
         "GroupPartitionsExec was planned with a k-way merge that its child no longer allows")
     }
