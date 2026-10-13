@@ -21,10 +21,8 @@ import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CapturesConfig, FunctionIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{FakeSystemCatalog, ResolvedIdentifier, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{LanguageSQL, RoutineLanguage, UserDefinedFunctionErrors}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateUserDefinedFunctionLike, LogicalPlan}
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
@@ -86,48 +84,6 @@ object CreateUserDefinedFunctionCommand {
     }
   }
 
-  // scalastyle:off argcount
-  def apply(
-      name: FunctionIdentifier,
-      inputParamText: Option[String],
-      returnTypeText: String,
-      exprText: Option[String],
-      queryText: Option[String],
-      comment: Option[String],
-      collation: Option[String],
-      isDeterministic: Option[Boolean],
-      containsSQL: Option[Boolean],
-      language: RoutineLanguage,
-      isTableFunc: Boolean,
-      isTemp: Boolean,
-      ignoreIfExists: Boolean,
-      replace: Boolean
-  ): CreateUserDefinedFunctionCommand = {
-    // scalastyle:on argcount
-    val child = if (isTemp) {
-      ResolvedIdentifier(
-        FakeSystemCatalog,
-        Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), name.funcName))
-    } else {
-      val nameParts = name.database.toSeq :+ name.funcName
-      UnresolvedIdentifier(nameParts)
-    }
-    apply(
-      child,
-      inputParamText,
-      returnTypeText,
-      exprText,
-      queryText,
-      comment,
-      collation,
-      isDeterministic,
-      containsSQL,
-      language,
-      isTableFunc,
-      isTemp,
-      ignoreIfExists,
-      replace)
-  }
 
   /**
    * Check whether the function parameters contain duplicated column names.

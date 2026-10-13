@@ -354,6 +354,6 @@ BEGIN
   FETCH cur INTO fetched_time, fetched_bid;
   CLOSE cur;
   SELECT fetched_time, fetched_bid;
-END;
+END
 -- !query analysis
 LocalRelation [fetched_time#x, fetched_bid#x]

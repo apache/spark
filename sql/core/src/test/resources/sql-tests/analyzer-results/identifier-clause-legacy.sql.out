@@ -3843,7 +3843,8 @@ CreateVariable default(cast(identifier_fn_target as string), sql=''identifier_fn
 -- !query
 CREATE TEMPORARY FUNCTION identifier_fn() RETURN SELECT count(*) FROM IDENTIFIER(identifier_fn_var)
 -- !query analysis
-CreateSQLFunctionCommand identifier_fn, , SELECT count(*) FROM IDENTIFIER(identifier_fn_var), false, true, false, false
+CreateSQLFunctionCommand , SELECT count(*) FROM IDENTIFIER(identifier_fn_var), false, true, false, false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_fn
 
 
 -- !query

@@ -419,8 +419,7 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
 
     // If `--IMPORT` found, load code from another test case file, then insert them
     // into the head in this test.
-    val importedTestCaseName =
-      comments.filter(_.startsWith("--IMPORT ")).map(_.substring(9).trim)
+    val importedTestCaseName = comments.filter(_.startsWith("--IMPORT ")).map(_.substring(9))
     val importedCode = importedTestCaseName.flatMap { testCaseName =>
       allTestCases.find(_.name == testCaseName).map { testCase =>
         val input = Files.readString(new File(testCase.inputFile).toPath)
@@ -505,7 +504,7 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
   def normalizeTestResults(output: String): String = {
     val strippedPythonErrors: String = {
       var traceback = false
-      output.replaceAll("\r\n", "\n").split("\n").filter { line: String =>
+      output.split("\n").filter { line: String =>
         if (line == "Traceback (most recent call last):") {
           traceback = true
         } else if (!line.startsWith(" ")) {
