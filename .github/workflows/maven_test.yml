@@ -52,7 +52,7 @@ on:
         type: string
         default: '{}'
     secrets:
-      DEVELOCITY_ACCESS_KEY:
+      SPARK_DEVELOCITY_ACCESS_KEY:
         description: Develocity access key for develocity.apache.org.
         required: false
 jobs:
@@ -91,7 +91,7 @@ jobs:
         shell: |
           bash -c "if script -qec true 2>/dev/null; then script -qec bash\ {0}; else script -qe /dev/null bash {0}; fi"
         env:
-          DEVELOCITY_ACCESS_KEY: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
+          DEVELOCITY_ACCESS_KEY: ${{ secrets.SPARK_DEVELOCITY_ACCESS_KEY }}
         run: |
           set -e
           export MAVEN_OPTS="-Xss64m -Xmx4g -Xms4g -XX:ReservedCodeCacheSize=128m -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
@@ -189,7 +189,7 @@ jobs:
             excluded-tags: org.apache.spark.tags.ExtendedSQLTest,org.apache.spark.tags.SlowSQLTest
             comment: "- other tests"
     env:
-      DEVELOCITY_ACCESS_KEY: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
+      DEVELOCITY_ACCESS_KEY: ${{ secrets.SPARK_DEVELOCITY_ACCESS_KEY }}
       MODULES_TO_TEST: ${{ matrix.modules }}
       EXCLUDED_TAGS: ${{ matrix.excluded-tags }}
       INCLUDED_TAGS: ${{ matrix.included-tags }}
