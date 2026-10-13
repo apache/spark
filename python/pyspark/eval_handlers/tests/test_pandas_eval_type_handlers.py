@@ -139,7 +139,7 @@ class PandasEvalTypeHandlerRegistrationTests(PySparkBaseTestCase):
             (PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF, PandasGroupedAggIterUDFHandler),
             (PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF, PandasWindowAggUDFHandler),
         ):
-            self.assertIs(get_eval_type_handler(eval_type), handler_cls)
+            self.assertIs(get_eval_type_handler(eval_type, RunnerConf({})), handler_cls)
 
 
 @unittest.skipIf(not (have_pandas and have_pyarrow), _missing_message)

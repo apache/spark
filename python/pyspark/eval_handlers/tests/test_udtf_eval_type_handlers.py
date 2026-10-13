@@ -31,7 +31,13 @@ from pyspark.eval_handlers._base import get_eval_type_handler
 from pyspark.sql.functions import SkipRestOfInputTableException
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 from pyspark.sql.types import LongType, StructField, StructType
-from pyspark.testing.utils import PySparkBaseTestCase, have_pyarrow, pyarrow_requirement_message
+from pyspark.testing.utils import (
+    PySparkBaseTestCase,
+    have_pandas,
+    have_pyarrow,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
+)
 from pyspark.util import PythonEvalType
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
@@ -41,15 +47,14 @@ if have_pyarrow:
     import pyarrow as pa
 
     from pyspark.eval_handlers._udtf import (
+        ArrowTableUDTFArrowHandler,
+        ArrowTableUDTFLegacyPandasHandler,
         ArrowUDTFHandler,
         ArrowUDTFWithPartition,
         UDTFEvalTypeHandler,
         UDTFWithPartitions,
     )
     from pyspark.sql.conversion import ArrowBatchTransformer
-
-
-_RETURN_TYPE = StructType([StructField("x", LongType())])
 
 
 class _RecordingUDTF:
@@ -73,18 +78,68 @@ class _RecordingUDTF:
         self.calls.append("cleanup")
 
 
+class _RowUDTF:
+    """Row-wise UDTF that emits its argument and its double, and records the lifecycle calls."""
+
+    def __init__(self, skip_after=None):
+        self.calls = []
+        self._skip_after = skip_after
+
+    def eval(self, a):
+        self.calls.append("eval")
+        if self._skip_after is not None and len(self.calls) > self._skip_after:
+            raise SkipRestOfInputTableException()
+        yield a, a * 2
+
+    def terminate(self):
+        self.calls.append("terminate")
+        yield -1, -2
+
+    def cleanup(self):
+        self.calls.append("cleanup")
+
+
+class UDTFEvalTypeHandlerTestCase(PySparkBaseTestCase):
+    """Shared return type for the UDTF handler tests."""
+
+    _RETURN_TYPE = StructType([StructField("x", LongType())])
+
+
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
-class ArrowUDTFHandlerTests(PySparkBaseTestCase):
+class UDTFEvalTypeHandlerRegistrationTests(PySparkBaseTestCase):
+    def test_registered(self):
+        legacy_conf = "spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled"
+        # Each UDTF eval type dispatches to its handler by lookup; SQL_ARROW_TABLE_UDF picks
+        # its variant by the legacy pandas conversion conf.
+        for eval_type, conf, handler_cls in (
+            (PythonEvalType.SQL_ARROW_UDTF, {}, ArrowUDTFHandler),
+            (PythonEvalType.SQL_ARROW_TABLE_UDF, {}, ArrowTableUDTFArrowHandler),
+            (
+                PythonEvalType.SQL_ARROW_TABLE_UDF,
+                {legacy_conf: "false"},
+                ArrowTableUDTFArrowHandler,
+            ),
+            (
+                PythonEvalType.SQL_ARROW_TABLE_UDF,
+                {legacy_conf: "true"},
+                ArrowTableUDTFLegacyPandasHandler,
+            ),
+        ):
+            with self.subTest(eval_type=eval_type, conf=conf):
+                self.assertIs(get_eval_type_handler(eval_type, RunnerConf(conf)), handler_cls)
+
+
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+class ArrowUDTFHandlerTests(UDTFEvalTypeHandlerTestCase):
     def _handler(self, udtf, args=(0,), kwargs=None, table_arg_offsets="0"):
         conf = {} if table_arg_offsets is None else {"table_arg_offsets": table_arg_offsets}
         return ArrowUDTFHandler(
-            udfs=[(udtf, list(args), kwargs or {}, _RETURN_TYPE)],
+            udfs=[(udtf, list(args), kwargs or {}, self._RETURN_TYPE)],
             runner_conf=RunnerConf({}),
             eval_conf=EvalConf(conf),
         )
 
-    def test_registered(self):
-        self.assertIs(get_eval_type_handler(PythonEvalType.SQL_ARROW_UDTF), ArrowUDTFHandler)
+    def test_serializer(self):
         self.assertIsInstance(self._handler(_RecordingUDTF()).serializer, ArrowStreamSerializer)
 
     def test_partition_wrapper(self):
@@ -227,6 +282,121 @@ class ArrowUDTFHandlerTests(PySparkBaseTestCase):
                 )
             )
         self.assertEqual(udtf.calls, ["cleanup"])
+
+
+class ArrowTableUDTFHandlerTestsMixin:
+    """Tests shared by both SQL_ARROW_TABLE_UDF variants; subclasses set ``handler_cls``."""
+
+    handler_cls: type
+
+    _ROW_RETURN_TYPE = StructType([StructField("x", LongType()), StructField("y", LongType())])
+    _ROW_INPUT_TYPE = StructType([StructField("a", LongType())])
+
+    def _handler(self, udtf, args=(0,), kwargs=None, return_type=None):
+        return self.handler_cls(
+            udfs=[(udtf, list(args), kwargs or {}, return_type or self._ROW_RETURN_TYPE)],
+            runner_conf=RunnerConf({}),
+            eval_conf=EvalConf({"input_type": self._ROW_INPUT_TYPE.json()}),
+        )
+
+    def _run(self, handler, *columns):
+        batches = [pa.record_batch({"a": pa.array(c, type=pa.int64())}) for c in columns]
+        return [r for b in handler.run(0, iter(batches)) for r in b.column(0).to_pylist()]
+
+    def test_serializer_and_partition_wrapper(self):
+        self.assertIsInstance(self._handler(_RowUDTF()).serializer, ArrowStreamSerializer)
+        self.assertIs(self.handler_cls.partition_wrapper, UDTFWithPartitions)
+
+    def test_eval_terminate_cleanup(self):
+        udtf = _RowUDTF()
+        out = self._run(self._handler(udtf), [1, 2], [3])
+        self.assertEqual([(r["x"], r["y"]) for r in out], [(1, 2), (2, 4), (3, 6), (-1, -2)])
+        self.assertEqual(udtf.calls, ["eval", "eval", "eval", "terminate", "cleanup"])
+
+    def test_kwargs(self):
+        class KwargsUDTF:
+            def eval(self, *, a):
+                yield a, -a
+
+        out = self._run(self._handler(KwargsUDTF(), args=(), kwargs={"a": 0}), [7])
+        self.assertEqual([(r["x"], r["y"]) for r in out], [(7, -7)])
+
+    def test_skip_rest_of_input_table(self):
+        udtf = _RowUDTF(skip_after=1)
+        out = self._run(self._handler(udtf), [1, 2, 3])
+        self.assertEqual([(r["x"], r["y"]) for r in out], [(1, 2), (-1, -2)])
+        self.assertEqual(udtf.calls, ["eval", "eval", "terminate", "cleanup"])
+
+    def test_none_result(self):
+        class NoneUDTF:
+            def eval(self, a):
+                return None
+
+        self.assertEqual(self._run(self._handler(NoneUDTF()), [1]), [])
+
+    def test_non_nullable_column(self):
+        class NullUDTF:
+            def eval(self, a):
+                yield None, a
+
+        return_type = StructType(
+            [StructField("x", LongType(), nullable=False), StructField("y", LongType())]
+        )
+        with self.assertRaises(PySparkRuntimeError) as ctx:
+            self._run(self._handler(NullUDTF(), return_type=return_type), [1])
+        self.assertEqual(ctx.exception.getCondition(), "UDTF_EXEC_ERROR")
+
+    def test_errors(self):
+        class Raises:
+            def eval(self, a):
+                raise ValueError("boom")
+
+        class NotIterable:
+            def eval(self, a):
+                return 1
+
+        class WrongColumns:
+            def eval(self, a):
+                yield a, a, a
+
+        for udtf, error_class in [
+            (Raises(), "UDTF_EXEC_ERROR"),
+            (NotIterable(), "UDTF_RETURN_NOT_ITERABLE"),
+            (WrongColumns(), "UDTF_RETURN_SCHEMA_MISMATCH"),
+        ]:
+            with self.subTest(error_class=error_class):
+                with self.assertRaises(PySparkRuntimeError) as ctx:
+                    self._run(self._handler(udtf), [1])
+                self.assertEqual(ctx.exception.getCondition(), error_class)
+
+    def test_cleanup_on_error(self):
+        udtf = _RowUDTF()
+        udtf.eval = lambda a: 1  # not iterable
+        with self.assertRaises(PySparkRuntimeError):
+            self._run(self._handler(udtf), [1])
+        self.assertEqual(udtf.calls, ["cleanup"])
+
+
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+class ArrowTableUDTFArrowHandlerTests(ArrowTableUDTFHandlerTestsMixin, UDTFEvalTypeHandlerTestCase):
+    handler_cls = ArrowTableUDTFArrowHandler if have_pyarrow else None
+
+    def test_scalar_result_wrapped_for_single_column(self):
+        class ScalarUDTF:
+            def eval(self, a):
+                yield a
+
+        out = self._run(self._handler(ScalarUDTF(), return_type=self._RETURN_TYPE), [1, 2])
+        self.assertEqual([r["x"] for r in out], [1, 2])
+
+
+@unittest.skipIf(
+    not (have_pandas and have_pyarrow), pandas_requirement_message or pyarrow_requirement_message
+)
+class ArrowTableUDTFLegacyPandasHandlerTests(
+    ArrowTableUDTFHandlerTestsMixin, UDTFEvalTypeHandlerTestCase
+):
+    handler_cls = ArrowTableUDTFLegacyPandasHandler if have_pyarrow else None
 
 
 if __name__ == "__main__":
