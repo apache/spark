@@ -16,6 +16,7 @@
 #
 import os
 import tempfile
+from pathlib import Path
 
 from pyspark.errors import PySparkRuntimeError
 from pyspark.sql.functions import assert_true, lit, udf
@@ -121,10 +122,26 @@ class ArtifactTests(ArtifactTestsMixin, ReusedSQLTestCase):
             # together with other files.
             spark.addArtifact(new_file("my_file_source.sparkpkg"), file=True)
             spark.addArtifacts(new_file("my_other_source.sparkpkg"), new_file("other.txt"))
+            # A URI, and a path relative to the working directory of Python, which is not the
+            # one of the JVM.
+            spark.addArtifact(Path(new_file("my_uri_source.sparkpkg")).as_uri())
+            new_file("my_relative_source.sparkpkg")
+            cwd = os.getcwd()
+            os.chdir(d)
+            try:
+                spark.addArtifact("my_relative_source.sparkpkg")
+            finally:
+                os.chdir(cwd)
             packages = spark._jsparkSession.artifactManager().getNativeDataSourcePackages()._1()
             self.assertEqual(
                 sorted(packages.apply(i).getName() for i in range(packages.size())),
-                ["my_file_source.sparkpkg", "my_other_source.sparkpkg", "my_source.sparkpkg"],
+                [
+                    "my_file_source.sparkpkg",
+                    "my_other_source.sparkpkg",
+                    "my_relative_source.sparkpkg",
+                    "my_source.sparkpkg",
+                    "my_uri_source.sparkpkg",
+                ],
             )
 
     def test_add_zipped_package(self):

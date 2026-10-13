@@ -57,23 +57,33 @@ import org.apache.spark.annotation.Evolving;
  *   {@link #createStreamReader} and keeps it until the streaming query stops. For each
  *   micro-batch, it asks for the {@link #latestOffset}, plans the partitions with
  *   {@link #streamPartitions} and serializes the state with {@link #serializeStreamReader}, then
- *   calls {@link #read} on the executors. Offsets are JSON strings defined by the library.</li>
+ *   calls {@link #read} on the executors. Offsets are JSON strings defined by the library. When
+ *   a streaming query restarts, from its checkpoint, Spark creates a new stream reader and may
+ *   call {@link #streamPartitions} again for the last range that it planned before, so the
+ *   partitions of a range must read the same data each time.</li>
  *   <li><b>Writes.</b> On the driver, once it computed the data to write, right before it starts
- *   the tasks of the write (or of a micro-batch), Spark creates a writer with
- *   {@link #createWriter} or {@link #createStreamWriter}, and serializes its state with
- *   {@link #serializeWriter}. If computing the data fails, Spark creates no writer. On the
- *   executors, each task creates a data writer with {@link #createDataWriter}, calls
- *   {@link #write} for each batch of at most {@code spark.sql.execution.arrow.maxRecordsPerBatch}
- *   rows, which also ends once it holds {@code spark.sql.execution.arrow.maxBytesPerBatch} bytes,
- *   and calls {@link #commitDataWriter}, or {@link #abortDataWriter} if the task or the
- *   commit fails. Then the driver calls {@link #commit} with the messages of the tasks if they
- *   all succeeded, or {@link #abort} otherwise, including when {@link #commit} fails, and closes
- *   the writer. A streaming write commits
- *   or aborts each micro-batch (epoch). A micro-batch streaming query creates a new stream writer
- *   for each micro-batch, and Spark closes the previous stream writer of the query when the query
- *   creates a new one. Spark is not told when a streaming query stops, so it closes the last
- *   stream writer of the query once the writer is no longer referenced, or when the query is
- *   restarted.</li>
+ *   the tasks of the write (or of a micro-batch), Spark creates a writer with {@link #createWriter}
+ *   or {@link #createStreamWriter}, and serializes its state with {@link #serializeWriter}. If
+ *   computing the data fails, Spark creates no writer. On the executors, each task creates a data
+ *   writer with {@link #createDataWriter}, calls {@link #write} for each batch of at most
+ *   {@code spark.sql.execution.arrow.maxRecordsPerBatch} rows, which also ends once it holds
+ *   {@code spark.sql.execution.arrow.maxBytesPerBatch} bytes, and calls {@link #commitDataWriter},
+ *   or {@link #abortDataWriter} if the task or the commit fails. Then the driver calls
+ *   {@link #commit} with the messages of the tasks if they all succeeded, or {@link #abort}
+ *   otherwise, including when {@link #commit} fails, and closes the writer. Several attempts of a
+ *   task may write the same partition, after a failure or with speculative execution, each with a
+ *   data writer of its own. Spark lets the attempts of a partition commit one at a time, and passes
+ *   to {@link #commit} the message of one committed attempt for each partition, so the write
+ *   consists of the data of these attempts only. It aborts the data writers of the other attempts,
+ *   except on an executor that is lost, where a data writer is neither committed nor aborted, and
+ *   may even have committed before its message reached the driver. A streaming write commits or
+ *   aborts each micro-batch (epoch). Spark may commit the same epoch more than once, for example
+ *   when a streaming query restarts after a failure, so committing an epoch that is already
+ *   committed must have no effect, for exactly-once output. A micro-batch streaming query creates a
+ *   new stream writer for each micro-batch, and Spark closes the previous stream writer of the
+ *   query when the query creates a new one. Spark is not told when a streaming query stops, so it
+ *   closes the last stream writer of the query once the writer is no longer referenced, or when the
+ *   query is restarted.</li>
  * </ul>
  *
  * <h2>Conventions</h2>
@@ -107,8 +117,8 @@ import org.apache.spark.annotation.Evolving;
  *   {@code timestamp} is {@code timestamp[us]} with a time zone and {@code timestamp_ntz} is
  *   {@code timestamp[us]} without one. Data read from a library may also use
  *   {@code large_utf8}, {@code utf8_view} and the other variants of the same type, and any names
- *   for the fields of the entries of a map, but not unsigned integers, {@code decimal256} or
- *   dictionary encoding.</li>
+ *   for the fields of the entries of a map, but not unsigned integers, {@code decimal256}, list
+ *   views or dictionary encoding.</li>
  *   <li><b>Options.</b> Option keys are passed in lower case, because Spark matches them
  *   case-insensitively.</li>
  *   <li><b>Optional methods.</b> A library only needs to export the functions for the operations
@@ -116,15 +126,36 @@ import org.apache.spark.annotation.Evolving;
  *   the pushdown methods and the {@code serialize} methods, which then push nothing down and
  *   return no state.</li>
  *   <li><b>Threads.</b> Spark calls the library from multiple threads, and calls on different
- *   handles may run concurrently. Calls on the same handle never run concurrently.</li>
+ *   handles may run concurrently. Calls on the same handle never run concurrently. A handle may
+ *   be released from a thread other than the threads that used it, such as a JVM
+ *   {@code Cleaner} thread when Spark releases a handle once it is no longer referenced, for
+ *   example the last stream writer of a streaming query.</li>
  * </ul>
+ *
+ * <h2>Compatibility</h2>
+ * The JVM binds the functions of a library by their names only, so the name of this class, the
+ * names of its methods and their signatures are the interface. Within an {@link #ABI_VERSION}:
+ * <ul>
+ *   <li>the signature and the semantics of an existing method never change;</li>
+ *   <li>new methods may be added, only as optional methods, so that a library that does not
+ *   export them keeps working as before;</li>
+ *   <li>new values may appear where this documentation says so, such as the names of pushed
+ *   predicates.</li>
+ * </ul>
+ * An incompatible change uses a new {@link #ABI_VERSION}, with new names or a new class. A
+ * library reports the version it implements with {@link #abiVersion}, and Spark rejects a library
+ * of a version it does not support. Spark supports version 1 at least in all the releases of
+ * Spark 4 from 4.4.0.
  *
  * @since 4.4.0
  */
 @Evolving
 public final class NativeBridge {
 
-  /** The version of this interface. It changes when the interface changes incompatibly. */
+  /**
+   * The version of this interface. It changes when the interface changes incompatibly: see
+   * Compatibility above.
+   */
   public static final int ABI_VERSION = 1;
 
   private NativeBridge() {}
@@ -224,15 +255,21 @@ public final class NativeBridge {
    *   for {@code string}, a base64 string for {@code binary}, a decimal string for
    *   {@code decimal}, the days since the epoch for {@code date}, and the microseconds since the
    *   epoch for {@code timestamp} and {@code timestamp_ntz}.</li>
-   *   <li>{@code {"type": "function", "name": ">", "children": [...]}}: a predicate or function,
-   *   with the names of {@code org.apache.spark.sql.connector.expressions.filter.Predicate} and
-   *   {@code org.apache.spark.sql.connector.expressions.GeneralScalarExpression}, such as
-   *   {@code =}, {@code <}, {@code IN}, {@code IS_NULL}, {@code STARTS_WITH}, {@code AND},
-   *   {@code OR} and {@code NOT}.</li>
+   *   <li>{@code {"type": "function", "name": ">", "children": [...]}}: a predicate, with the
+   *   name it has in {@code org.apache.spark.sql.connector.expressions.filter.Predicate}. The
+   *   names are {@code =}, {@code <>}, {@code <=>} (equal, with null equal to null), {@code <},
+   *   {@code <=}, {@code >} and {@code >=} with two children, {@code IN} with the value to look
+   *   for and then the values to look in, {@code IS_NULL} and {@code IS_NOT_NULL} with one
+   *   child, {@code STARTS_WITH}, {@code ENDS_WITH} and {@code CONTAINS} with the string and the
+   *   string to look for, {@code AND} and {@code OR} with two predicates, and {@code NOT} with
+   *   one. The children of the other functions are columns, literals or predicates.</li>
    * </ul>
-   * Spark does not pass predicates that it cannot express this way, nor predicates on columns
-   * that contain strings with a non-binary collation, such as {@code UTF8_LCASE}: strings are
-   * compared by their UTF-8 bytes.
+   * Spark does not pass predicates that it cannot express this way, such as predicates that use
+   * arithmetic or other functions, nor predicates on columns that contain strings with a
+   * non-binary collation, such as {@code UTF8_LCASE}: strings are compared by their UTF-8 bytes.
+   * A later version of Spark may pass predicates with other names without changing
+   * {@link #ABI_VERSION}, so a reader must not report a predicate as evaluated completely if it
+   * contains a name that the reader does not know, or a data type that it does not support.
    * <p>
    * A predicate that the reader evaluates completely must follow the semantics of Spark SQL. In
    * particular, for floating-point columns, NaN is equal to NaN and greater than any other value,
@@ -325,6 +362,13 @@ public final class NativeBridge {
    *                      of the stream is a struct array whose fields are the columns to read:
    *                      the columns of the schema to read, or the pruned columns. Spark calls
    *                      the stream from the thread of the task that reads the partition.
+   *                      {@code get_next} may block, for example on network I/O, but Spark
+   *                      cannot interrupt native code: when the task is killed, Spark only
+   *                      stops reading once {@code get_next} returns, and then releases the
+   *                      stream. So a {@code get_next} that blocks forever keeps the task
+   *                      running, unless the task reaper ({@code spark.task.reaper.enabled}
+   *                      and {@code spark.task.reaper.killTimeout}) kills the executor. Use
+   *                      timeouts for blocking operations.
    */
   public static native void read(byte[] readerState, byte[] partition, long streamAddress);
 

@@ -22,12 +22,12 @@
 //   native_range    Reads rows [0, end) with columns of several types. Supports predicate,
 //                   column and limit pushdown. With the option "extra", the schema has one more
 //                   column: "map" adds a map whose entry fields are named "keys" and "values",
-//                   as arrow-rs names them, and "decimal256" adds a decimal256. With the option
-//                   "slice", the columns of the batches have an offset of 1. With the option
-//                   "short", an array of the batches has one value fewer than its parent refers
-//                   to, although its buffers hold them all: "id" shortens the column id,
-//                   "entries" the entries of the map and their fields, and "values" the values
-//                   of the entries.
+//                   as arrow-rs names them, "decimal256" adds a decimal256, and "listview" adds
+//                   a list view. With the option "slice", the columns of the batches have an
+//                   offset of 1. With the option "short", an array of the batches has one value
+//                   fewer than its parent refers to, although its buffers hold them all: "id"
+//                   shortens the column id, "entries" the entries of the map and their fields,
+//                   and "values" the values of the entries.
 //   native_sink     Writes the rows as CSV files under the directory in the option "path".
 //   native_counter  Streams the rows [0, max_offset) with a single column "id", making "step"
 //                   more rows available each time Spark asks for the latest offset.
@@ -147,7 +147,8 @@ const ColumnType kColumns[] = {
 // The columns that native_range adds with the option "extra", by its value.
 const std::map<std::string, ColumnType> kExtraColumns = {
     {"map", {"m", "+m"}},               // map<string, bigint>: {"k<id>": id}
-    {"decimal256", {"dec", "d:10,2,256"}}  // decimal256(10, 2): id
+    {"decimal256", {"dec", "d:10,2,256"}},  // decimal256(10, 2): id
+    {"listview", {"lv", "+vl"}}              // list_view<bigint>: [id]
 };
 
 const ColumnType* findColumn(const std::string& name) {
@@ -228,6 +229,8 @@ void exportSchema(const std::vector<std::string>& columns, ArrowSchema* out) {
       ArrowSchema* entries = addChild(column, "+s", "entries", 0);
       addChild(entries, "u", "keys", 0);
       addChild(entries, "l", "values", ARROW_FLAG_NULLABLE);
+    } else if (name == "lv") {
+      addChild(column, "l", "item", ARROW_FLAG_NULLABLE);
     }
   }
 }
@@ -375,6 +378,18 @@ void exportColumn(const std::string& name, int64_t lo, int64_t hi, ArrowArray* o
       words.insert(words.end(), {unscaled, sign, sign, sign});
     }
     initArray(out, n, 0, {no_validity, toBytes(words)});
+  } else if (name == "lv") {
+    // A list of a single element for each row.
+    std::vector<int32_t> offsets;
+    std::vector<int32_t> sizes;
+    std::vector<int64_t> values;
+    for (int64_t id = lo; id < hi; id++) {
+      offsets.push_back(static_cast<int32_t>(id - lo));
+      sizes.push_back(1);
+      values.push_back(id);
+    }
+    initArray(out, n, 0, {no_validity, toBytes(offsets), toBytes(sizes)});
+    initArray(addChild(out), n, 0, {no_validity, toBytes(values)});
   } else {
     throw std::runtime_error("unknown column " + name);
   }

@@ -33,8 +33,18 @@ object NativePredicates {
   private val mapper = new ObjectMapper()
 
   /**
+   * The names of the predicates that are passed to the libraries, as listed in
+   * `NativeBridge.pushPredicates`. They are part of the interface, so a predicate with any other
+   * name, such as an arithmetic function, is not passed: its semantics, for example on overflow,
+   * would be part of the interface too, and the names of Data Source V2 grow with new releases.
+   */
+  val FUNCTION_NAMES: Set[String] = Set(
+    "=", "<>", "<=>", "<", "<=", ">", ">=", "IN", "IS_NULL", "IS_NOT_NULL",
+    "STARTS_WITH", "ENDS_WITH", "CONTAINS", "AND", "OR", "NOT")
+
+  /**
    * Returns the JSON of the predicate on the columns of the given schema, or None if it cannot
-   * be expressed in JSON.
+   * be expressed in JSON with the functions in [[FUNCTION_NAMES]].
    */
   def toJson(predicate: Predicate, schema: StructType): Option[String] = {
     encode(predicate, schema).map(mapper.writeValueAsString)
@@ -48,7 +58,7 @@ object NativePredicates {
       case literal: Literal[_] =>
         encodeLiteral(literal.value(), literal.dataType())
 
-      case function: GeneralScalarExpression =>
+      case function: GeneralScalarExpression if FUNCTION_NAMES.contains(function.name()) =>
         val children = function.children().map(encode(_, schema))
         if (children.forall(_.isDefined)) {
           val node = mapper.createObjectNode()

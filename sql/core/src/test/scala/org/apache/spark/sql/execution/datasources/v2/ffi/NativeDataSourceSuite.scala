@@ -177,13 +177,21 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         """{"type":"literal","dataType":"bigint","value":5}]}"""))
     assert(toJson(new And(
       predicate("IS_NULL", FieldReference(Seq("a", "b"))),
-      predicate("=", id, new GeneralScalarExpression("+", Array(id, LiteralValue(1, IntegerType))))
+      predicate("IN", id, LiteralValue(1L, LongType), LiteralValue(2L, LongType))
     )).contains(
       """{"type":"function","name":"AND","children":[{"type":"function","name":"IS_NULL",""" +
-        """"children":[{"type":"column","name":["a","b"]}]},{"type":"function","name":"=",""" +
-        """"children":[{"type":"column","name":["id"]},{"type":"function","name":"+",""" +
+        """"children":[{"type":"column","name":["a","b"]}]},{"type":"function","name":"IN",""" +
         """"children":[{"type":"column","name":["id"]},""" +
-        """{"type":"literal","dataType":"int","value":1}]}]}]}"""))
+        """{"type":"literal","dataType":"bigint","value":1},""" +
+        """{"type":"literal","dataType":"bigint","value":2}]}]}"""))
+    // Only the functions listed in NativeBridge.pushPredicates are passed, so not arithmetic.
+    NativePredicates.FUNCTION_NAMES.foreach { name =>
+      assert(toJson(predicate(name, id, id)).nonEmpty, name)
+    }
+    val plusOne = new GeneralScalarExpression("+", Array(id, LiteralValue(1, IntegerType)))
+    assert(toJson(predicate("=", id, plusOne)).isEmpty)
+    assert(toJson(new And(predicate("IS_NULL", id), predicate("=", id, plusOne))).isEmpty)
+    assert(toJson(predicate("UPPER", FieldReference(Seq("s")))).isEmpty)
 
     def literal(value: Any, dataType: DataType): Option[String] = {
       toJson(predicate("=", id, LiteralValue(value, dataType)))
@@ -360,6 +368,10 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     }
     check("The column dec contains the Arrow type Decimal(10, 2, 256), which is not supported.",
       "extra" -> "decimal256")
+    // Arrow Java would also extend the elements of a list view with nulls, and Spark does not
+    // check their lengths.
+    check("The column lv contains the Arrow type ListView, which is not supported.",
+      "extra" -> "listview")
   }
 
   nativeTest("batch write") {
@@ -819,18 +831,34 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
 
       // An executor finds the library in its native library path, if it is not where the driver
       // found it.
+      val checksum = InstalledNativeLibrary(installed).sha256
+      assert(checksum == NativeDataSourcePackage.sha256(installed))
       val elsewhere = new File(Utils.createTempDir(), installed.getName).getPath
-      assert(NativeLibraries.get(InstalledNativeLibrary(elsewhere)) eq
-        NativeLibraries.get(InstalledNativeLibrary(installed.getPath)))
+      assert(NativeLibraries.get(InstalledNativeLibrary(elsewhere, checksum)) eq
+        NativeLibraries.get(InstalledNativeLibrary(installed)))
+
+      // An executor only loads the same build as the driver, which serialized the state for its
+      // build: neither the library at the same path nor the one in its native library path is
+      // loaded if the driver found another build.
+      val otherBuild = NativeDataSourcePackage.sha256(installedNegatingLibrary)
+      Seq(installed.getPath, elsewhere).foreach { path =>
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            NativeLibraries.get(InstalledNativeLibrary(path, otherBuild))
+          },
+          condition = "NATIVE_DATA_SOURCE_LIBRARY_NOT_FOUND",
+          parameters =
+            Map("fileName" -> installed.getName, "checksum" -> otherBuild, "path" -> path))
+      }
     }
 
     val missing = new File(Utils.createTempDir(), installed.getName).getPath
     checkError(
       exception = intercept[SparkRuntimeException] {
-        NativeLibraries.get(InstalledNativeLibrary(missing))
+        NativeLibraries.get(InstalledNativeLibrary(missing, "0"))
       },
       condition = "NATIVE_DATA_SOURCE_LIBRARY_NOT_FOUND",
-      parameters = Map("fileName" -> installed.getName, "path" -> missing))
+      parameters = Map("fileName" -> installed.getName, "checksum" -> "0", "path" -> missing))
     checkError(
       exception = intercept[SparkClassNotFoundException] {
         newSession().read.format("installed_native_range").load()
