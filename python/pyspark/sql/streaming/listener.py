@@ -593,7 +593,7 @@ class StreamingQueryProgress(dict):
         """
         The configured trigger type and options, or ``None`` when unavailable.
 
-        .. versionadded:: 5.0.0
+        .. versionadded:: 4.4.0
         """
         return self["trigger"]
 
