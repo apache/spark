@@ -18,13 +18,48 @@
 package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
-import org.apache.spark.sql.catalyst.expressions.{And, Expression, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{And, Expression, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.planning.{GreaterPartialRangeJoin, IntervalOverlapJoin, LessPartialRangeJoin, PointInRangeJoin, RangeJoin}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.{DataType, IntegerType, StructType}
+import org.apache.spark.util.LongAccumulator
+
+/**
+ * Wraps `child` and adds to `counter` each time it is evaluated, interpreted or
+ * generated. Lets a test count how many build-side candidates a join actually probes,
+ * without needing a metric on the operator under test.
+ */
+private[joins] case class CountingPredicate(counter: LongAccumulator, child: Expression)
+  extends UnaryExpression {
+
+  override def dataType: DataType = child.dataType
+  override def nullable: Boolean = child.nullable
+
+  override def eval(input: InternalRow): Any = {
+    counter.add(1)
+    child.eval(input)
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val childGen = child.genCode(ctx)
+    val counterTerm = ctx.addReferenceObj("counter", counter)
+    val code = code"""
+      |$counterTerm.add(1);
+      |${childGen.code}
+      |"""
+    ev.copy(code = code, isNull = childGen.isNull, value = childGen.value)
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): CountingPredicate =
+    copy(child = newChild)
+}
 
 /**
  * Operator results for [[BroadcastRangeJoinExec]]. The planner is covered by
@@ -191,13 +226,20 @@ class RangeJoinSuite extends QueryTest with SharedSparkSession {
   test("partial range scans upTo or from according to the lower bound") {
     // a.lo < b.hi builds the high side and scans from the stream key.
     // a.lo > b.hi builds the low side and scans up to the stream key.
-    def check(rangeJoin: RangeJoin, condition: (SparkPlan, SparkPlan) => Expression,
-        expected: Seq[Row]): Unit = {
+    def check(
+        rangeJoin: RangeJoin,
+        condition: (SparkPlan, SparkPlan) => Expression,
+        expected: Seq[Row],
+        buildSide: BuildSide = BuildRight): Unit = {
       checkAnswerBothModes(intervals1, intervals2, (left: SparkPlan, right: SparkPlan) => {
+        val (buildKeys, streamedKeys) = buildSide match {
+          case BuildRight => (right.output(1) :: Nil, left.output.head :: Nil)
+          case BuildLeft => (left.output.head :: Nil, right.output(1) :: Nil)
+        }
         rangeJoinExec(
-          left, right, BuildRight, Inner,
-          buildKeys = right.output(1) :: Nil,
-          streamedKeys = left.output.head :: Nil,
+          left, right, buildSide, Inner,
+          buildKeys = buildKeys,
+          streamedKeys = streamedKeys,
           condition = condition(left, right),
           rangeJoin = rangeJoin)
       }, expected)
@@ -214,6 +256,13 @@ class RangeJoinSuite extends QueryTest with SharedSparkSession {
       GreaterPartialRangeJoin,
       (left, right) => GreaterThan(left.output.head, right.output(1)),
       Seq((0, 1, -2, -1), (0, 2, -2, -1), (1, 5, -2, -1)).map(Row.fromTuple))
+    // Same join, built from the other side: GreaterPartialRangeJoin + BuildLeft takes the
+    // opposite PointIndex scan arm (from, not upTo) from the BuildRight case above.
+    check(
+      GreaterPartialRangeJoin,
+      (left, right) => GreaterThan(left.output.head, right.output(1)),
+      Seq((0, 1, -2, -1), (0, 2, -2, -1), (1, 5, -2, -1)).map(Row.fromTuple),
+      buildSide = BuildLeft)
   }
 
   test("interval overlap probes both bounds") {
@@ -232,6 +281,46 @@ class RangeJoinSuite extends QueryTest with SharedSparkSession {
         (0, 2, 1, 3),
         (1, 5, 1, 3)
       ).map(Row.fromTuple))
+  }
+
+  test("left semi and left anti stop probing once the first candidate matches") {
+    // Every build row is the same fully-overlapping interval, so every one of them
+    // satisfies the point-in-range condition. Iterator.exists is then guaranteed,
+    // deterministically, to stop at the first candidate it pulls from the index -
+    // this is the mechanism existenceJoin relies on for its early exit.
+    val n = 2000
+    val overlapping = spark.createDataFrame(
+      sparkContext.parallelize((0 until n).map(_ => Row(0, 100))),
+      new StructType().add("low2", IntegerType).add("high2", IntegerType))
+    val onePoint = spark.createDataFrame(
+      sparkContext.parallelize(Seq(Row(50))), new StructType().add("point", IntegerType))
+
+    val leftPlan = onePoint.queryExecution.sparkPlan
+    val rightPlan = overlapping.queryExecution.sparkPlan
+    val point = leftPlan.output.head
+    val bounds = rightPlan.output
+
+    Seq(true, false).foreach { codegenEnabled =>
+      val factoryMode = if (codegenEnabled) "CODEGEN_ONLY" else "NO_CODEGEN"
+      withSQLConf(
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled.toString,
+        SQLConf.CODEGEN_FALLBACK.key -> "false",
+        SQLConf.CODEGEN_FACTORY_MODE.key -> factoryMode) {
+        Seq(LeftSemi, LeftAnti).foreach { joinType =>
+          val counter = spark.sparkContext.longAccumulator("numCandidates")
+          val baseCond =
+            pointCondition(point, bounds(0), bounds(1), lowInclusive = true, highInclusive = true)
+          val exec = rangeJoinExec(
+            leftPlan, rightPlan, BuildRight, joinType,
+            buildKeys = bounds, streamedKeys = point :: Nil,
+            condition = CountingPredicate(counter, baseCond))
+          QueryTest.executePlan(exec, spark.sqlContext)
+          assert(counter.value < n,
+            s"$joinType (codegen=$codegenEnabled) examined ${counter.value} of $n " +
+              "fully overlapping candidates; the first candidate should have ended the probe")
+        }
+      }
+    }
   }
 
   test("condition and keys stay on the operator") {

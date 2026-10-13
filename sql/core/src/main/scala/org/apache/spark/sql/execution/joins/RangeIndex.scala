@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.execution.joins
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Expression, InterpretedProjection}
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.SizeEstimator
@@ -55,16 +58,60 @@ private[execution] object IntervalIndex {
 
   def build(
       keyType: DataType,
+      buildKeys: Seq[Expression],
+      rows: Iterator[InternalRow],
+      sizeHint: Option[Long]): IntervalIndex = {
+    val initialCapacity = sizeHint.map(n => math.min(n, Int.MaxValue).toInt).getOrElse(64)
+    val buffer = new ArrayBuffer[(Any, Any, InternalRow)](initialCapacity)
+    val projection = new InterpretedProjection(buildKeys)
+    val lowOf = RangeIndex.getValue(buildKeys.head.dataType, 0)
+    val highOf =
+      if (buildKeys.length == 1) lowOf else RangeIndex.getValue(buildKeys(1).dataType, 1)
+    val ordering = PhysicalDataType.ordering(keyType)
+
+    while (rows.hasNext) {
+      val r = rows.next()
+      val p = projection(r)
+      normalizedInterval(ordering, lowOf(p), highOf(p), r, buffer)
+    }
+
+    sortAndBuild(keyType, ordering, buffer.toArray)
+  }
+
+  def build(
+      keyType: DataType,
       intervals: Array[(Any, Any, InternalRow)]): IntervalIndex = {
     val ordering = PhysicalDataType.ordering(keyType)
-    val valid = intervals.iterator
-      .collect {
-        case (lo, hi, r) if lo != null && hi != null =>
-          if (ordering.lteq(lo, hi)) (lo, hi, r) else (hi, lo, r)
-      }
-      .toArray
-    java.util.Arrays.sort(valid, Ordering.by[(Any, Any, InternalRow), Any](_._1)(ordering))
+    val buffer = new ArrayBuffer[(Any, Any, InternalRow)](intervals.length)
+    var i = 0
+    while (i < intervals.length) {
+      val (rawLo, rawHi, r) = intervals(i)
+      normalizedInterval(ordering, rawLo, rawHi, r, buffer)
+      i += 1
+    }
+    sortAndBuild(keyType, ordering, buffer.toArray)
+  }
 
+  /** Drops a null-bounded interval; otherwise orders (lo, hi) and copies the key and row. */
+  private def normalizedInterval(
+      ordering: Ordering[Any],
+      rawLo: Any,
+      rawHi: Any,
+      r: InternalRow,
+      buffer: ArrayBuffer[(Any, Any, InternalRow)]): Unit = {
+    if (rawLo != null && rawHi != null) {
+      val lo = InternalRow.copyValue(rawLo)
+      val hi = InternalRow.copyValue(rawHi)
+      val (normLo, normHi) = if (ordering.lteq(lo, hi)) (lo, hi) else (hi, lo)
+      buffer += ((normLo, normHi, r.copy()))
+    }
+  }
+
+  private def sortAndBuild(
+      keyType: DataType,
+      ordering: Ordering[Any],
+      valid: Array[(Any, Any, InternalRow)]): IntervalIndex = {
+    java.util.Arrays.sort(valid, Ordering.by[(Any, Any, InternalRow), Any](_._1)(ordering))
     val length = valid.length
     val maxHighs = new Array[Any](length)
 
@@ -92,72 +139,94 @@ private[execution] class IntervalIndex private[joins] (
   extends RangeRelation {
 
   @transient
-  private[this] lazy val ordering: Ordering[Any] = PhysicalDataType.ordering(keyType)
+  @volatile private[this] var _ordering: Ordering[Any] = _
+
+  private[joins] def ordering: Ordering[Any] = {
+    var ord = _ordering
+    if (ord == null) {
+      ord = PhysicalDataType.ordering(keyType)
+      _ordering = ord
+    }
+    ord
+  }
 
   override def estimatedSize(): Long =
-    SizeEstimator.estimate(intervals) + SizeEstimator.estimate(maxHighs)
+    SizeEstimator.estimate(Array[AnyRef](intervals, maxHighs))
 
   def overlapping(low: Any, high: Any): Iterator[InternalRow] = {
     if (intervals.isEmpty || low == null || high == null) return Iterator.empty
-    val (probeLow, probeHigh) = if (ordering.lteq(low, high)) (low, high) else (high, low)
+    val ord = ordering
+    val (probeLow, probeHigh) = if (ord.lteq(low, high)) (low, high) else (high, low)
+    new OverlapIterator(intervals, maxHighs, ord, probeLow, probeHigh)
+  }
+}
 
-    new Iterator[InternalRow] {
-      private[this] var stackStart = new Array[Int](128)
-      private[this] var stackEnd = new Array[Int](128)
-      private[this] var stackTop = 0
-      private[this] var nextRow: InternalRow = null
+private[joins] class OverlapIterator(
+    intervals: Array[(Any, Any, InternalRow)],
+    maxHighs: Array[Any],
+    ord: Ordering[Any],
+    probeLow: Any,
+    probeHigh: Any) extends Iterator[InternalRow] {
 
-      push(0, intervals.length)
+  private[this] val depth = 32 - java.lang.Integer.numberOfLeadingZeros(intervals.length)
+  private[joins] var stackStart = new Array[Int](math.max(8, depth * 3))
+  private[joins] var stackEnd = new Array[Int](math.max(8, depth * 3))
+  private[joins] var stackTop = 0
+  private[joins] var steps = 0
+  private[this] var nextRow: InternalRow = null
 
-      private def push(s: Int, e: Int): Unit = {
-        if (stackTop >= stackStart.length) {
-          stackStart = java.util.Arrays.copyOf(stackStart, stackStart.length * 2)
-          stackEnd = java.util.Arrays.copyOf(stackEnd, stackEnd.length * 2)
-        }
-        stackStart(stackTop) = s
-        stackEnd(stackTop) = e
-        stackTop += 1
-      }
+  push(0, intervals.length)
 
-      private def advance(): InternalRow = {
-        while (stackTop > 0) {
-          stackTop -= 1
-          val start = stackStart(stackTop)
-          val end = stackEnd(stackTop)
-          if (start < end) {
-            val mid = (start + end) >>> 1
-            if (ordering.gteq(maxHighs(mid), probeLow)) {
-              if (ordering.lteq(intervals(mid)._1, probeHigh)) {
-                push(mid + 1, end)
-              }
-              push(mid, -1)
-              push(start, mid)
-            }
-          } else if (end == -1) {
-            val (lo, hi, row) = intervals(start)
-            if (ordering.gteq(hi, probeLow) && ordering.lteq(lo, probeHigh)) {
-              return row
-            }
+  private[joins] def stackCapacity: Int = stackStart.length
+
+  private def push(s: Int, e: Int): Unit = {
+    if (stackTop >= stackStart.length) {
+      stackStart = java.util.Arrays.copyOf(stackStart, stackStart.length * 2)
+      stackEnd = java.util.Arrays.copyOf(stackEnd, stackEnd.length * 2)
+    }
+    stackStart(stackTop) = s
+    stackEnd(stackTop) = e
+    stackTop += 1
+  }
+
+  private def advance(): InternalRow = {
+    while (stackTop > 0) {
+      steps += 1
+      stackTop -= 1
+      val start = stackStart(stackTop)
+      val end = stackEnd(stackTop)
+      if (start < end) {
+        val mid = (start + end) >>> 1
+        if (ord.gteq(maxHighs(mid), probeLow)) {
+          if (ord.lteq(intervals(mid)._1, probeHigh)) {
+            push(mid + 1, end)
           }
+          push(mid, -1)
+          push(start, mid)
         }
-        null
-      }
-
-      override def hasNext: Boolean = {
-        if (nextRow != null) true
-        else {
-          nextRow = advance()
-          nextRow != null
+      } else if (end == -1) {
+        val (lo, hi, row) = intervals(start)
+        if (ord.gteq(hi, probeLow) && ord.lteq(lo, probeHigh)) {
+          return row
         }
-      }
-
-      override def next(): InternalRow = {
-        if (!hasNext) throw new NoSuchElementException("empty iterator")
-        val r = nextRow
-        nextRow = null
-        r
       }
     }
+    null
+  }
+
+  override def hasNext: Boolean = {
+    if (nextRow != null) true
+    else {
+      nextRow = advance()
+      nextRow != null
+    }
+  }
+
+  override def next(): InternalRow = {
+    if (!hasNext) throw new NoSuchElementException("empty iterator")
+    val r = nextRow
+    nextRow = null
+    r
   }
 }
 
@@ -166,9 +235,49 @@ private[execution] class IntervalIndex private[joins] (
  */
 private[execution] object PointIndex {
 
+  def build(
+      keyType: DataType,
+      buildKeys: Seq[Expression],
+      rows: Iterator[InternalRow],
+      sizeHint: Option[Long]): PointIndex = {
+    val initialCapacity = sizeHint.map(n => math.min(n, Int.MaxValue).toInt).getOrElse(64)
+    val buffer = new ArrayBuffer[(Any, InternalRow)](initialCapacity)
+    val projection = new InterpretedProjection(buildKeys)
+    val lowOf = RangeIndex.getValue(buildKeys.head.dataType, 0)
+    val ordering = PhysicalDataType.ordering(keyType)
+
+    while (rows.hasNext) {
+      val r = rows.next()
+      val p = projection(r)
+      val rawKey = lowOf(p)
+      if (rawKey != null) {
+        val key = InternalRow.copyValue(rawKey)
+        buffer += ((key, r.copy()))
+      }
+    }
+
+    sortAndBuild(keyType, ordering, buffer.toArray)
+  }
+
   def build(keyType: DataType, keyedRows: Array[(Any, InternalRow)]): PointIndex = {
     val ordering = PhysicalDataType.ordering(keyType)
-    val present = keyedRows.iterator.filter(_._1 != null).toArray
+    val buffer = new ArrayBuffer[(Any, InternalRow)](keyedRows.length)
+    var i = 0
+    while (i < keyedRows.length) {
+      val (rawKey, row) = keyedRows(i)
+      if (rawKey != null) {
+        val key = InternalRow.copyValue(rawKey)
+        buffer += ((key, row.copy()))
+      }
+      i += 1
+    }
+    sortAndBuild(keyType, ordering, buffer.toArray)
+  }
+
+  private def sortAndBuild(
+      keyType: DataType,
+      ordering: Ordering[Any],
+      present: Array[(Any, InternalRow)]): PointIndex = {
     java.util.Arrays.sort(present, Ordering.by[(Any, InternalRow), Any](_._1)(ordering))
     new PointIndex(keyType, present)
   }
@@ -180,7 +289,16 @@ private[execution] class PointIndex private[joins] (
   extends RangeRelation {
 
   @transient
-  private[this] lazy val ordering: Ordering[Any] = PhysicalDataType.ordering(keyType)
+  @volatile private[this] var _ordering: Ordering[Any] = _
+
+  private[joins] def ordering: Ordering[Any] = {
+    var ord = _ordering
+    if (ord == null) {
+      ord = PhysicalDataType.ordering(keyType)
+      _ordering = ord
+    }
+    ord
+  }
 
   private[this] val length = points.length
 
@@ -195,11 +313,12 @@ private[execution] class PointIndex private[joins] (
     if (value == null) Iterator.empty else slice(searchBound(value, skipEquals = false), length)
 
   private def searchBound(value: Any, skipEquals: Boolean): Int = {
+    val ord = ordering
     var lo = 0
     var hi = length
     while (lo < hi) {
       val mid = (lo + hi) >>> 1
-      val c = ordering.compare(points(mid)._1, value)
+      val c = ord.compare(points(mid)._1, value)
       if (c < 0 || (skipEquals && c == 0)) lo = mid + 1 else hi = mid
     }
     lo
