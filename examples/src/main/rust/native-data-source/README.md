@@ -15,170 +15,76 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# Rust native data source SDK demo
+# Rust native range data source
 
-This standalone Cargo workspace demonstrates a Rust API for **batch reads** over
-the JNI ABI proposed in [Spark PR #59313](https://github.com/apache/spark/pull/59313),
-at commit `ff7b1ae0150fbcb3b6a7c67bea8accf6aa4ad9bd`. It does not include that PR's
-Spark implementation. Running the Spark example requires a Spark distribution
-with that native data source framework. Rust and JNI tests run independently of
-a Spark build.
+This example implements batch reads using the [Rust native data source SDK][sdk].
+The connector in [src/lib.rs](src/lib.rs) exports `rust_sdk_range` through the SDK's JNI macro.
+See the SDK guide for API contracts, ownership rules, and local test instructions.
 
-This is an API demo, not a published crate or a compatibility commitment. It is
-not part of the Maven/SBT build and does not add a Rust requirement to building
-Spark. The workspace contains:
+The example targets NativeBridge ABI version 1 from [Spark PR #59313][native-source-pr], pinned
+to commit `ff7b1ae0150fbcb3b6a7c67bea8accf6aa4ad9bd`. Set `SPARK_HOME` to a Spark distribution
+built with that PR before running the Spark commands below.
 
-* `sdk`: the `spark-native-source` crate, with Rust traits and a registration macro.
-* `range`: a `rust_sdk_range` connector producing `id: bigint` and `label: string`.
-* `package.py`: packages a compiled dynamic library as a `.sparkpkg` artifact.
-* `smoke.py`: exercises the connector against a Spark distribution with #59313.
+## Data and options
 
-There are no write or Structured Streaming exports.
-
-## Connector API
-
-A connector implements two traits from [`sdk/src/lib.rs`](sdk/src/lib.rs):
-
-* `BatchSource`: parse options, return the schema, create a driver-side scan
-  builder, and open an Arrow reader on an executor.
-* `ScanBuilder`: negotiate filters, limit and output columns, then build a plan
-  containing typed state and typed partitions.
-
-The state and partition types derive `serde::Serialize` and `serde::Deserialize`.
-The SDK encodes and restores them. Connections, pointers and reader objects stay
-inside the process that created them. Include snapshot identifiers in the plan
-when reads must be repeatable across task retries.
-
-Register one provider in the connector's `cdylib` crate:
-
-```rust
-spark_native_source::export_data_source!(RangeSource);
-```
-
-The macro exports the batch-read JNI functions of
-`org.apache.spark.sql.datasource.NativeBridge`. It handles Java strings and
-arrays, native handles, error conversion, plan serialization, and Arrow C Stream
-export. The connector does not use `JNIEnv`, raw pointers, or `unsafe` code. Rust
-traits remain inside the plugin and are not used as a cross-library Rust ABI.
-
-`BatchSource::open` returns `Box<dyn RecordBatchReader + Send>`. Existing Arrow
-readers can be used when their types and layouts are supported by the pinned
-Spark ABI. That implementation requires zero array offsets at every nesting
-level and does not support dictionary encoding or every Arrow type. Connectors
-must normalize sliced arrays when necessary; the SDK preserves their layout.
-Return batches lazily so a partition does not need to fit in memory. The
-[Range implementation](range/src/lib.rs) demonstrates
-multiple bounded batches, disjoint splits, and an empty output projection that
-preserves row counts.
-
-## Pushdown contracts
-
-Filter results correspond to the input predicates in order:
-
-| Result | Connector responsibility | Spark behavior |
+| Column | Spark type | Value |
 | --- | --- | --- |
-| `Exact` | Evaluate completely with Spark SQL semantics | May remove the filter |
-| `PruningOnly` | Only skip data that cannot match | Keep the residual filter |
-| `Unsupported` | No evaluation | Keep the residual filter |
+| `id` | `BIGINT`, non-null | Integers in `[start, end)` |
+| `label` | `STRING`, non-null | `row-{id}`, such as `row-13` |
 
-Unknown expression names and unsupported data types must remain residual. The
-SDK preserves literal JSON values, including exact 64-bit integers, instead of
-converting every number to floating point. It does not implement a generic
-Spark expression evaluator.
-
-Limit pushdown distinguishes a per-partition cap from a cap on the whole scan:
-
-| Result | JNI `pushLimit` return | Meaning |
+| Option | Default | Meaning |
 | --- | --- | --- |
-| `Unsupported` | `false` | No limit applied |
-| `PerPartition` | `false` | A local cap; the total may exceed the limit |
-| `Global` | `true` | The entire scan returns at most the limit |
+| `start` | `0` | Inclusive start, as a signed 64-bit integer |
+| `end` | `100` | Exclusive end; must be at least `start` |
+| `numpartitions` | `2` | Maximum number of partitions; must be positive |
+| `batchsize` | `1024` | Maximum rows per Arrow batch; must be positive |
 
-The boolean mapping follows #59313's existing contract. Spark retains its final
-limit in either case. Spark's optimizer decides whether a query allows limit
-pushdown; the SDK additionally declines it if any filter it received was not
-`Exact`. Capping rows before a residual filter is unsafe and cannot be repaired
-by retaining the final Spark limit.
+Spark normalizes option names to lower case. Unknown options are rejected.
 
-Projection returns `true` only when the reader will produce exactly the
-requested top-level columns, in order. Keep columns needed internally for exact
-filters even if they are absent from the output projection. An empty projection
-must still produce the correct number of rows.
+The source evaluates `=`, `<=>`, `<`, `<=`, `>`, and `>=` comparisons between `id` and non-null
+integer literals, including conjunctions of supported predicates. Other predicates remain in
+Spark. A global limit is applied after exact filters and before splitting the range into partitions;
+the SDK declines limit pushdown when a residual predicate remains. Column pruning preserves the
+requested order and supports zero-column batches for operations such as `COUNT(*)`.
 
-The Range example accepts integer comparisons on `id`, including reversed
-operands and conjunctions. It intersects the range with the exact predicates,
-applies a global limit, and then creates disjoint partitions. Other predicates
-remain with Spark. Pushdown methods have conservative defaults in the SDK, so
-connectors can add these capabilities incrementally.
+## Build and run
 
-## Build and test without Spark
+Run these commands from the repository root. The workspace, lockfile, and build output belong to
+`sql/native/rust`; the example is a member of that workspace.
 
-Use a Rust toolchain compatible with Arrow 58 and a JDK (17 or newer). Set
-`JAVA_HOME` if the installed JDK is not otherwise discoverable. From this
-directory:
+```sh
+cargo build --manifest-path sql/native/rust/Cargo.toml --workspace --locked
 
-```bash
-cargo build --workspace
-cargo test --workspace
-cargo clippy --workspace --all-targets -- -D warnings
-cargo fmt --all -- --check
-```
-
-Build before testing so the JNI integration test can load the actual connector
-dynamic library. The test compiles a small Java fixture containing the batch
-ABI declarations, starts a real JVM, invokes the JNI exports, and reads the
-resulting Arrow C Stream. This checks the binary boundary independently of
-Spark; it does not substitute for testing Spark's planner and task lifecycle.
-
-The crate unit tests cover filter negotiation, integer boundaries, global
-limits across partitions, projections, and serialized plans. The SDK also
-tests Arrow stream and JNI lifecycle behavior.
-
-## Package and run with Spark
-
-Build a library for the executor platform. For a local Linux demo:
-
-```bash
-python3 package.py \
-  --library target/debug/libspark_datasource_rust_sdk_range.so \
-  --output rust_sdk_range.sparkpkg
+python3 examples/src/main/rust/native-data-source/package.py \
+  --library sql/native/rust/target/debug/libspark_datasource_rust_sdk_range.so \
+  --output sql/native/rust/target/rust_sdk_range.sparkpkg
 
 "$SPARK_HOME/bin/spark-submit" --master 'local[2]' \
-  smoke.py --package rust_sdk_range.sparkpkg
+  examples/src/main/rust/native-data-source/smoke.py \
+  --package sql/native/rust/target/rust_sdk_range.sparkpkg
 ```
 
-On macOS use `libspark_datasource_rust_sdk_range.dylib`; on Windows use
-`spark_datasource_rust_sdk_range.dll`. The helper packages one platform. A
-multi-platform package can list separately built libraries in its manifest.
-The JDK, operating system, C runtime and architecture of executors must be
-compatible with the library you built.
+The library name above is for Linux. On macOS use `libspark_datasource_rust_sdk_range.dylib`;
+on Windows use `spark_datasource_rust_sdk_range.dll`. The packaging script detects the host
+platform. For a cross-compiled library, supply `--platform`, for example `linux-aarch64`.
 
-The equivalent PySpark entry point is:
+The package can also be used from a Python session backed by the same Spark build:
 
 ```python
-spark.addArtifact("/absolute/path/to/rust_sdk_range.sparkpkg")
-df = (spark.read.format("rust_sdk_range")
-      .option("end", "1000")
-      .option("numPartitions", "4")
-      .option("batchSize", "64")
-      .load())
-df.where("id >= 100 AND id < 200").select("label").limit(10).show()
+spark.addArtifact("sql/native/rust/target/rust_sdk_range.sparkpkg")
+df = (
+    spark.read.format("rust_sdk_range")
+    .option("end", 100)
+    .option("numpartitions", 4)
+    .load()
+)
+df.where("id >= 10 AND id < 20").select("label", "id").show()
 ```
 
-## Scope and remaining work
+[smoke.py](smoke.py) checks the resulting rows, projection, limits, zero-column counts, and
+filters that Spark must evaluate. This Spark smoke script has not yet been run against the
+required distribution. The local JVM integration test exercises JNI and Arrow C Stream without
+launching Spark; it does not establish end-to-end Spark compatibility.
 
-The JNI ABI and this demo both run trusted native code inside the driver and
-executors. Arrow buffers cross the language boundary by reference. Files still
-need decoding, and downstream Spark operators can convert batches to rows.
-
-The SDK centralizes resource cleanup and translates provider errors and
-unwinding panics from JNI calls and reader callbacks. Process aborts and panics
-in custom Arrow buffer destructors cannot be recovered.
-Exported buffers must remain valid until their consumer releases them; releasing
-the stream does not release batches already handed to its consumer.
-
-This demo does not introduce task cancellation, Spark memory reservations,
-custom metrics, nested projection, a generic filter evaluator, C++ bindings,
-or a new C ABI. Network readers still need their own I/O timeouts. It does not
-fix the implementation issues tracked on #59313 or claim full end-to-end
-compatibility with later revisions of that PR.
+[sdk]: ../../../../../sql/native/rust/README.md
+[native-source-pr]: https://github.com/apache/spark/pull/59313

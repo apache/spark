@@ -13,23 +13,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-[workspace]
-members = ["sdk", "range"]
-resolver = "2"
+[package]
+name = "spark-native-range-demo"
+workspace = "../../../../../sql/native/rust"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
 
-[workspace.package]
-version = "0.1.0"
-edition = "2021"
-license = "Apache-2.0"
-publish = false
+[lib]
+name = "spark_datasource_rust_sdk_range"
+path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
 
-[workspace.dependencies]
-arrow-array = { version = "58", features = ["ffi"] }
-arrow-schema = { version = "58", features = ["ffi"] }
-jni = "0.21"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+[dependencies]
+spark-native-source = { path = "../../../../../sql/native/rust" }
+arrow-array.workspace = true
+arrow-schema.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 
-[profile.release]
-# Provider panics are translated into Java / Arrow errors by the SDK.
-panic = "unwind"
+[dev-dependencies]
+jni = { workspace = true, features = ["invocation"] }
