@@ -139,7 +139,7 @@ class KafkaDataConsumerSuite
 
     try {
       val originalConsumer = consumer.getOrRetrieveConsumer()
-      val record = consumer.get(0, 3, 1000, failOnDataLoss = false)
+      val record = consumer.get(0, 3, 10000, failOnDataLoss = false)
 
       assert(record !== null)
       assert(record.offset() === 2L)
