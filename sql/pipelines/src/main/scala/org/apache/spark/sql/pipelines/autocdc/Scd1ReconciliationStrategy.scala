@@ -17,14 +17,11 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.{functions => F}
 import org.apache.spark.sql.Column
-import org.apache.spark.sql.catalyst.expressions.KnownNullable
-import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.util.QuotingUtils
-import org.apache.spark.sql.classic.{DataFrame, ExpressionUtils}
-import org.apache.spark.sql.types.{DataType, StructField, StructType}
+import org.apache.spark.sql.classic.DataFrame
+import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.ArrayImplicits._
 
 /** Strategy for reconciling an SCD1 microbatch. */
@@ -417,13 +414,19 @@ private[pipelines] object Scd1LeafLevelReconciliation {
           F.col(QuotingUtils.quoteIdentifier(field.name)).as(field.name, field.metadata)
         } else {
           // Every other column is a top-level user data column; construct the last-authored value
-          // per column per key. A struct column selected for ignore-null is recursively
-          // reconstructed from the last-authored value per leaf.
-          reconstructColumn(
-            path = Seq(field.name),
-            field = field,
-            fieldsBeneath = collapsedFieldsByTopLevelName.getOrElse(field.name, Seq.empty)
-          )
+          // per column per key. A column outside the ignore-null selection takes its value whole,
+          // while a column selected for ignore-null is rebuilt from the last-authored value per
+          // leaf.
+          collapsedFieldsByTopLevelName.getOrElse(field.name, Seq.empty) match {
+            case Seq(column) if !column.isIgnoreNullLeaf =>
+              IgnoreNullColumnReconstruction.conformToField(
+                column.reconciledValue, Seq(field.name), field)
+            case leaves =>
+              IgnoreNullColumnReconstruction.reconstructColumn(
+                path = Seq(field.name),
+                field = field,
+                leafValues = leaves.map(leaf => leaf.path -> leaf.reconciledValue))
+          }
         }
       }: _*
     )
@@ -469,73 +472,6 @@ private[pipelines] object Scd1LeafLevelReconciliation {
     )
   }
 
-  /**
-   * Reconstructs `field` from the collapsed fields beneath it, or returns its reconciled value if
-   * it was reconciled as a whole.
-   *
-   * A struct reconciled leaf by leaf belongs to a column selected for ignore-null, where a null
-   * struct and a struct whose leaves are all null are equivalent, so it is rebuilt from its leaves
-   * even if every leaf is null. A nullable struct with a non-nullable leaf reachable through only
-   * non-nullable structs cannot be rebuilt with that leaf null, so it is instead null unless a leaf
-   * beneath it is non-null.
-   */
-  private def reconstructColumn(
-      path: Seq[String],
-      field: StructField,
-      fieldsBeneath: Seq[CollapsedField]): Column = {
-    if (fieldsBeneath.isEmpty) {
-      throwMissingFields(path)
-    }
-
-    val reconstructed = field.dataType match {
-      case struct: StructType if !fieldsBeneath.exists(_.path == path) =>
-        val fieldsByChildName = fieldsBeneath.groupBy(_.path(path.length))
-        val rebuilt = F.struct(struct.fields.toImmutableArraySeq.map { childField =>
-          val childPath = path :+ childField.name
-          fieldsByChildName
-            .get(childField.name)
-            .map(reconstructColumn(childPath, childField, _))
-            .getOrElse(throwMissingFields(childPath))
-            .as(childField.name, childField.metadata)
-        }: _*)
-
-        if (field.nullable && cannotRebuildAsStructOfNulls(struct)) {
-          // The schema forbids a struct of nulls here, so the equivalent null struct is used when
-          // every leaf is null. If any leaf is non-null, the struct is rebuilt and a null
-          // non-nullable leaf fails its assertion rather than the struct dropping non-null leaves.
-          val everyLeafIsNull = fieldsBeneath.map(_.reconciledValue.isNull).reduce(_ && _)
-          F.when(everyLeafIsNull, F.lit(null).cast(field.dataType)).otherwise(rebuilt)
-        } else {
-          rebuilt
-        }
-      case _ =>
-        fieldsBeneath.head.reconciledValue
-    }
-
-    val withDeclaredNullability =
-      if (field.nullable) {
-        // Spark reports a rebuilt struct as non-nullable; only `KnownNullable` can widen that.
-        ExpressionUtils.column(KnownNullable(ExpressionUtils.expression(reconstructed)))
-      } else {
-        ExpressionUtils.column(
-          AssertNotNull(ExpressionUtils.expression(reconstructed), path))
-      }
-    withDeclaredNullability.cast(field.dataType).as(field.name, field.metadata)
-  }
-
-  /**
-   * Whether `struct` has a non-nullable leaf whose enclosing structs beneath `struct` are all also
-   * non-nullable. If such a leaf has no value, neither it nor any of those enclosing structs can
-   * be null, so `struct` itself cannot be non-null.
-   */
-  private def cannotRebuildAsStructOfNulls(struct: StructType): Boolean =
-    struct.fields.exists { field =>
-      !field.nullable && (field.dataType match {
-        case nested: StructType => cannotRebuildAsStructOfNulls(nested)
-        case _ => true
-      })
-    }
-
   /** Builds a version map containing one entry for every user-data leaf. */
   private def versionMapFrom(
       collapsedFields: Seq[CollapsedField],
@@ -575,6 +511,9 @@ private[pipelines] object Scd1LeafLevelReconciliation {
      */
     def leafPaths: Seq[Seq[String]] = fieldToReconcile.leafPaths
 
+    /** Whether this field is a leaf of a column selected for ignore-null. */
+    def isIgnoreNullLeaf: Boolean = fieldToReconcile.isIgnoreNullLeaf
+
     /** The reconciled value selected for this field. */
     val reconciledValue: Column = microbatchAuthorship.getField(aggregatedValueFieldName)
 
@@ -582,9 +521,4 @@ private[pipelines] object Scd1LeafLevelReconciliation {
     val valueAuthoredAtSequence: Column =
       microbatchAuthorship.getField(aggregatedSequenceFieldName)
   }
-
-  private def throwMissingFields(path: Seq[String]): Nothing =
-    throw SparkException.internalError(
-      s"Cannot construct column ${QuotingUtils.quoteNameParts(path)} because it has no " +
-        "reconciled fields.")
 }
