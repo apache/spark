@@ -368,9 +368,7 @@ public class VectorizedColumnReader {
     if (dataEncoding.usesDictionary()) {
       this.dataColumn = null;
       if (dictionary == null) {
-        throw new IOException(
-            "could not read page in col " + descriptor +
-                " as the dictionary was missing for encoding " + dataEncoding);
+        throw new IOException("the dictionary was missing for encoding " + dataEncoding);
       }
       @SuppressWarnings("deprecation")
       Encoding plainDict = Encoding.PLAIN_DICTIONARY; // var to allow warning suppression
@@ -385,7 +383,8 @@ public class VectorizedColumnReader {
       this.isCurrentPageDictionaryEncoded = false;
     }
 
-    // readPageV1 and readPageV2 add the page and the column to any error thrown here.
+    // readPageV1 and readPageV2 add the page and the column to an IOException or a
+    // ParquetDecodingException thrown here.
     dataColumn.initFromPage(pageValueCount, in);
     // for PARQUET-246 (See VectorizedDeltaByteArrayReader.setPreviousValues)
     if (CorruptDeltaByteArrays.requiresSequentialReads(writerVersion, dataEncoding) &&
