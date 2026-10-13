@@ -58,12 +58,14 @@ udf/worker/
 │           DirectWorkerSession.scala     -- session backed by a direct process
 │           UnixDomainSocketEndpointDirectory.scala -- private UDS path lifecycle
 │
-└── grpc/                         -- gRPC transport (gRPC runtime confined here)
-      DirectGrpcDispatcher.scala  -- launches direct workers over gRPC on UDS
-      GrpcWorkerChannel.scala     -- owns a Netty gRPC channel and event loop
-      GrpcWorkerSession.scala     -- one UDF execution over an Execute stream
-      UnixDomainSocketTransport.scala -- selects native epoll/kqueue transport
-      (generated)                 -- UdfWorkerGrpc stubs from the UDF worker service proto
+├── grpc/                         -- gRPC transport (gRPC runtime confined here)
+│     DirectGrpcDispatcher.scala  -- launches direct workers over gRPC on UDS
+│     GrpcWorkerChannel.scala     -- owns a Netty gRPC channel and event loop
+│     GrpcWorkerSession.scala     -- one UDF execution over an Execute stream
+│     UnixDomainSocketTransport.scala -- selects native epoll/kqueue transport
+│     (generated)                 -- UdfWorkerGrpc stubs from the UDF worker service proto
+│
+└── runtime/                      -- shaded jar of grpc/ for the Spark runtime classpath
 ```
 
 The `core/` package defines abstract interfaces that are independent of how
@@ -77,6 +79,13 @@ implementations, native Unix-domain-socket transport selection, gRPC service-stu
 generation (from the UDF worker service proto above), and the gRPC runtime dependencies.
 Keeping gRPC here means `proto/`, `core/`, and their consumers (`core`, `catalyst`,
 `sql/core`) carry no gRPC dependency on their classpath.
+
+The `runtime/` module has no main sources. Its jar, `spark-udf-worker-runtime`, is the
+`grpc/` module plus gRPC, Guava and their helper libraries, relocated under
+`org.sparkproject.spark_udf_worker`, and it is the jar the Spark assembly ships so
+the engine can load the direct dispatcher. Netty and protobuf-java are neither
+bundled nor relocated: gRPC uses Spark's Netty and its native epoll/kqueue
+transports, and the stubs share protobuf with the `proto/` messages.
 
 ## Wire protocol
 
@@ -194,6 +203,12 @@ build/mvn compile -pl udf/worker/proto,udf/worker/core,udf/worker/grpc -am
 SBT:
 ```
 build/sbt "udf-worker-core/test" "udf-worker-grpc/test"
+```
+
+`udf-worker-runtime/test` builds the assembly first, then checks the shaded jar and
+runs an external UDF through `spark-submit`:
+```
+build/sbt "udf-worker-runtime/test"
 ```
 
 ## Current status
