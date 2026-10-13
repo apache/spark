@@ -1644,7 +1644,11 @@ case class CreateFunction(
 }
 
 /**
- * Used to apply ApplyDefaultCollation to CreateUserDefinedFunctionCommand
+ * A CREATE FUNCTION plan whose first child is the function identifier: an
+ * `UnresolvedIdentifier` before analysis and a `ResolvedIdentifier` after it.
+ * Catalyst rules such as the builtin-name check in `ResolveCatalogs` and
+ * `ApplyDefaultCollation` match on this trait, because the concrete command
+ * lives in sql/core.
  */
 trait CreateUserDefinedFunctionLike extends LogicalPlan {
   def collation: Option[String]
