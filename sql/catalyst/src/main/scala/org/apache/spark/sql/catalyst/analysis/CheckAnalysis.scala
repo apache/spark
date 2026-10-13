@@ -770,17 +770,21 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 "joinCondition" -> toSQLExpr(condition),
                 "conditionType" -> toSQLType(condition.dataType)))
 
-          case j @ AsOfJoin(_, _, _, _, _, _, Some(toleranceAssertion), _, _, _, _, _, _, _, _) =>
-            if (!toleranceAssertion.foldable) {
-              j.failAnalysis(
-                errorClass = "AS_OF_JOIN.TOLERANCE_IS_UNFOLDABLE",
-                messageParameters = Map.empty)
+          case j: AsOfJoin =>
+            j.toleranceAssertion.foreach { toleranceAssertion =>
+              if (!toleranceAssertion.foldable) {
+                j.failAnalysis(
+                  errorClass = "AS_OF_JOIN.TOLERANCE_IS_UNFOLDABLE",
+                  messageParameters = Map.empty)
+              }
+              if (!toleranceAssertion.eval().asInstanceOf[Boolean]) {
+                j.failAnalysis(
+                  errorClass = "AS_OF_JOIN.TOLERANCE_IS_NON_NEGATIVE",
+                  messageParameters = Map.empty)
+              }
             }
-            if (!toleranceAssertion.eval().asInstanceOf[Boolean]) {
-              j.failAnalysis(
-                errorClass = "AS_OF_JOIN.TOLERANCE_IS_NON_NEGATIVE",
-                messageParameters = Map.empty)
-            }
+
+            AsOfJoinValidation.validateTimestampKeyTypes(j)
 
           // Reject streaming inputs early. The optimizer rewrite is built around an
           // unconditioned cross-product fed into a global `Aggregate` keyed by a per-row

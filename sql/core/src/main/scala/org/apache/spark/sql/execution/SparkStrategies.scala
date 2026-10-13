@@ -51,6 +51,7 @@ import org.apache.spark.sql.execution.streaming.runtime.{StreamingExecutionRelat
 import org.apache.spark.sql.execution.streaming.sources.MemoryPlan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.types.StringType
 
 /**
  * Converts a logical plan into zero or more SparkPlans.  This API is exposed for experimenting
@@ -463,7 +464,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         joins.SortMergeAsOfJoinExec(
           leftKeys, rightKeys, leftSort, rightSort,
-          j.asOfCondition, j.orderExpression, j.direction, j.joinType, residual,
+          j.asOfCondition, j.direction, j.joinType, residual,
           planLater(j.left), planLater(j.right)) :: Nil
       case _ => Nil
     }
@@ -535,16 +536,36 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       expr match {
         // Backward: Subtract(leftAsOf, rightAsOf)
         // Forward: Subtract(rightAsOf, leftAsOf)
-        case Subtract(l, r, _)
+        case Subtraction(l, r)
             if l.references.subsetOf(leftAttrs) &&
               r.references.subsetOf(rightAttrs) =>
           Some((l, r))
-        case Subtract(l, r, _)
+        case Subtraction(l, r)
             if l.references.subsetOf(rightAttrs) &&
               r.references.subsetOf(leftAttrs) =>
           Some((r, l))
         // Nearest: If(GT(left, right), Sub(left, right), Sub(right, left))
-        case If(_, thenExpr, _) => findFromOrder(thenExpr, leftAttrs, rightAttrs)
+        // The GT compares two STRING keys as text, but the Sub casts them to numbers.
+        case If(GreaterThan(l, r), _, _)
+            if l.dataType.isInstanceOf[StringType] && r.dataType.isInstanceOf[StringType] =>
+          None
+        case If(_, thenExpr, _) =>
+          findFromOrder(thenExpr, leftAttrs, rightAttrs).filter { case (l, r) =>
+            joins.SortMergeAsOfJoinScanner.supportsNearestKeys(l.dataType, r.dataType)
+          }
+        case _ => None
+      }
+    }
+
+    /**
+     * Matches the operands of a subtraction. The analyzer replaces a Subtract of DATE or
+     * TIMESTAMP operands with SubtractDates or SubtractTimestamps.
+     */
+    private object Subtraction {
+      def unapply(expr: Expression): Option[(Expression, Expression)] = expr match {
+        case Subtract(l, r, _) => Some((l, r))
+        case SubtractTimestamps(l, r, _, _) => Some((l, r))
+        case SubtractDates(l, r, _) => Some((l, r))
         case _ => None
       }
     }

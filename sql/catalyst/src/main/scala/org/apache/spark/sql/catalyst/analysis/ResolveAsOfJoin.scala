@@ -19,8 +19,11 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{
+  Cast,
   Expression,
+  If,
   SubqueryExpression,
+  SubtractTimestamps,
   WindowExpression
 }
 import org.apache.spark.sql.catalyst.expressions.AttributeSet
@@ -32,6 +35,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AS_OF_JOIN, GENERATOR}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryErrorsBase
+import org.apache.spark.sql.types.{DataType, TimestampFamily}
 
 /**
  * Resolves SQL [[AsOfJoin]] operators: materializes `MATCH_CONDITION` into the fields of
@@ -172,7 +176,7 @@ private[analysis] object AsOfJoinMatchConditionResolution {
   }
 }
 
-private[analysis] object AsOfJoinValidation extends QueryErrorsBase {
+private[analysis] object AsOfJoinValidation extends QueryErrorsBase with SQLConfHelper {
 
   def validateMatchConditionTableReferences(
       join: AsOfJoin,
@@ -219,6 +223,27 @@ private[analysis] object AsOfJoinValidation extends QueryErrorsBase {
     }
   }
 
+  /** Rejects mixed LTZ/NTZ keys before constant folding can erase the coercion cast. */
+  def validateTimestampKeyTypes(join: AsOfJoin): Unit = {
+    if (conf.sortMergeAsOfJoinEnabled && !join.requiresSortMergeAsOfJoin) {
+      def validate(expr: Expression): Unit = expr match {
+        case SubtractTimestamps(l, r, _, _) if mixesTimeZoneFamilies(l, r) =>
+          join.failAnalysis(
+            errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+            messageParameters = Map(
+              "sqlExpr" -> toSQLExpr(join.orderExpression),
+              "msg" -> ("Sort-merge as-of joins do not support mixing " +
+                "TIMESTAMP_LTZ and TIMESTAMP_NTZ keys"),
+              "hint" -> "")
+          )
+        case If(_, thenExpr, _) => validate(thenExpr)
+        case _ =>
+      }
+
+      validate(join.orderExpression)
+    }
+  }
+
   private def findInvalidMatchConditionExpression(expr: Expression): Option[Expression] = {
     expr.collect {
       case e: SubqueryExpression => e
@@ -227,5 +252,19 @@ private[analysis] object AsOfJoinValidation extends QueryErrorsBase {
       case e if e.containsPattern(GENERATOR) => e
       case e if !e.deterministic => e
     }.headOption
+  }
+
+  private def mixesTimeZoneFamilies(l: Expression, r: Expression): Boolean = {
+    // Type coercion casts the LTZ operand to NTZ, so read the key type under the cast.
+    def keyType(e: Expression): DataType = e match {
+      case Cast(child, _, _, _)
+          if TimestampFamily.isLtz(child.dataType) || TimestampFamily.isNtz(child.dataType) =>
+        child.dataType
+      case _ => e.dataType
+    }
+
+    val (leftType, rightType) = (keyType(l), keyType(r))
+    (TimestampFamily.isLtz(leftType) && TimestampFamily.isNtz(rightType)) ||
+      (TimestampFamily.isNtz(leftType) && TimestampFamily.isLtz(rightType))
   }
 }
