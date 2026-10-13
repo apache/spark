@@ -19,6 +19,7 @@ import datetime
 import functools
 import io
 import logging
+import os
 import pydoc
 import shutil
 import sys
@@ -35,7 +36,7 @@ from pyspark.errors import (
 )
 from pyspark.logger import PySparkLogger
 from pyspark.sql import Column, Row, SparkSession
-from pyspark.sql.functions import assert_true, col, lit, rand, udf
+from pyspark.sql.functions import assert_true, col, lit, rand, udf, unix_timestamp
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -50,6 +51,7 @@ from pyspark.sql.types import (
     StructField,
     StructType,
     TimestampNTZType,
+    TimestampType,
     VariantType,
     VariantVal,
     _parse_datatype_string,
@@ -816,6 +818,83 @@ class BaseUDFTestsMixin:
             df.selectExpr("assert_true('1970-01-01 00:00:00' == CAST(dt AS STRING))").collect()
             self.assertEqual(df.schema[0].dataType.typeName(), "timestamp_ntz")
             self.assertEqual(df.first()[0], datetime.datetime(1970, 1, 1, 0, 0))
+
+    def test_udf_timestamp_dst_fold_round_trip(self):
+        # SPARK-60081: preserve datetime.fold in the repeated DST hour across the Python-boundary
+        # TIMESTAMP converters. The in-process coverage of TimestampType.toInternal /
+        # TimestampLTZNanosType.toInternal and the Arrow-to-row convert_timestamp lives in
+        # test_types.DataTypeTests; this UDF test is the end-to-end smoke that exercises both the
+        # driver-side converter (via Spark Connect collect() / classic fromInternal) and, when the
+        # Python worker inherits a matching TZ, the UDF-boundary round trip.
+        #
+        # Legacy pandas conversion (spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled)
+        # takes a different path that drops fold on the way to the worker; SPARK-60081 only covers
+        # the current non-legacy Arrow and classic Python UDF paths, so skip under the legacy
+        # variant inherited by ArrowPythonUDFLegacyTests.
+        try:
+            legacy_pandas = (
+                self.spark.conf.get(
+                    "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled", "false"
+                ).lower()
+                == "true"
+            )
+        except Exception:
+            legacy_pandas = False
+        if legacy_pandas:
+            raise unittest.SkipTest(
+                "SPARK-60081 does not cover the legacy pandas pythonUDF conversion path"
+            )
+        tz = "America/Los_Angeles"
+        tz_prev = os.environ.get("TZ", None)
+        try:
+            os.environ["TZ"] = tz
+            time.tzset()
+            with self.sql_conf(
+                {
+                    "spark.sql.session.timeZone": tz,
+                    "spark.sql.execution.pythonUDF.arrow.enabled": "true",
+                }
+            ):
+                second_fold = self.spark.sql("SELECT timestamp'2021-11-07 09:30:00Z' AS t")
+                first_fold = self.spark.sql("SELECT timestamp'2021-11-07 08:30:00Z' AS t")
+
+                # Driver-side collect(): the Spark Connect Arrow converter and the classic
+                # fromInternal must both carry fold=1 for the second local 01:30 occurrence, so
+                # the Python wall time's .timestamp() names the correct UTC instant. These
+                # assertions depend only on the driver TZ set above and therefore run meaningfully
+                # under UDFParityTests, where no SparkContext is available to set a worker TZ.
+                self.assertEqual(1636277400.0, second_fold.first()[0].timestamp())
+                self.assertEqual(1636273800.0, first_fold.first()[0].timestamp())
+
+                # Worker-side round trip: the UDF receives a naive local wall time and reports
+                # the epoch via x.timestamp(). This is informative only when the Python worker
+                # itself was started under the same TZ as the driver -- the shared ReusedSQLTestCase
+                # workers inherit the launch-time environment, so in a UTC-default CI they see
+                # UTC and 01:30 is never a repeated hour. Keep the assertions anyway as end-to-end
+                # smoke; the type-level regression tests (test_types.DataTypeTests) are the ones
+                # that catch a regression in the converters independently of worker TZ.
+                for kwargs in [{}, {"useArrow": False}]:
+                    to_epoch = udf(lambda x: int(x.timestamp()), LongType(), **kwargs)
+                    identity = udf(lambda x: x, TimestampType(), **kwargs)
+
+                    self.assertEqual(1636277400, second_fold.select(to_epoch("t")).first()[0])
+                    self.assertEqual(
+                        1636277400,
+                        second_fold.select(unix_timestamp(identity("t")).alias("epoch")).first()[0],
+                    )
+
+                    # Control case: the first local 01:30 occurrence (fold=0) must stay unchanged.
+                    self.assertEqual(1636273800, first_fold.select(to_epoch("t")).first()[0])
+                    self.assertEqual(
+                        1636273800,
+                        first_fold.select(unix_timestamp(identity("t")).alias("epoch")).first()[0],
+                    )
+        finally:
+            if tz_prev is None:
+                del os.environ["TZ"]
+            else:
+                os.environ["TZ"] = tz_prev
+            time.tzset()
 
     def test_udf_daytime_interval(self):
         # SPARK-37277: Support DayTimeIntervalType in Python UDF
