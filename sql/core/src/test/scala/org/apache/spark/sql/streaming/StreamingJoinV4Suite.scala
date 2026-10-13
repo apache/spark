@@ -20,6 +20,7 @@ package org.apache.spark.sql.streaming
 import org.apache.hadoop.fs.Path
 import org.scalatest.Tag
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
 import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinExec
@@ -83,6 +84,82 @@ class StreamingInnerJoinV4Suite
         }
         assert(joinNodes.length == 1)
         assert(joinNodes.head.stateFormatVersion == 4)
+      },
+      StopStream
+    )
+  }
+
+  test("state format version 4 promotes RocksDB merge operator version 1 for new joins") {
+    withTempDir { checkpointDir =>
+      withSQLConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key -> "1") {
+        val input1 = MemoryStream[Int]
+        val input2 = MemoryStream[Int]
+        val df1 = input1.toDF().select($"value" as "key", ($"value" * 2) as "leftValue")
+        val df2 = input2.toDF().select($"value" as "key", ($"value" * 3) as "rightValue")
+        val joined = df1.join(df2, "key")
+
+        def checkMergeOperatorVersion(query: StreamExecution): Unit = {
+          val join = query.lastExecution.executedPlan.collectFirst {
+            case join: StreamingSymmetricHashJoinExec => join
+          }.getOrElse(fail("StreamingSymmetricHashJoinExec not found"))
+          assert(join.stateFormatVersion == 4)
+          assert(SQLConf.get.getConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION) == 1,
+            "the guardrail must not mutate the caller's session")
+        }
+
+        testStream(joined)(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(input1, 1),
+          AddData(input2, 1),
+          CheckAnswer((1, 2, 3)),
+          Execute { query =>
+            checkMergeOperatorVersion(query)
+            assert(query.offsetLog.getLatest().flatMap(_._2.metadataOpt)
+              .flatMap(_.conf.get(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key))
+              .contains("2"))
+          },
+          StopStream,
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(input1, 2),
+          AddData(input2, 2),
+          CheckNewAnswer((2, 4, 6)),
+          Execute(checkMergeOperatorVersion),
+          StopStream
+        )
+      }
+    }
+  }
+
+  test("state format version 4 rejects an incompatible merge operator in a physical plan") {
+    val input1 = MemoryStream[Int]
+    val input2 = MemoryStream[Int]
+    val joined = input1.toDF().join(input2.toDF(), "value")
+
+    testStream(joined)(
+      AddData(input1, 1),
+      CheckAnswer(),
+      Execute { query =>
+        val join = query.lastExecution.executedPlan.collectFirst {
+          case join: StreamingSymmetricHashJoinExec => join
+        }.getOrElse(fail("StreamingSymmetricHashJoinExec not found"))
+        withSQLConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key -> "1") {
+          // New streams promote v1 to v2 before planning. copy() rebuilds this join with the
+          // caller's v1 setting so the incompatible-plan validation remains covered.
+          val error = intercept[SparkIllegalArgumentException] {
+            join.copy()
+          }
+          checkError(
+            exception = error,
+            condition = "STREAM_STREAM_JOIN_INCOMPATIBLE_STATE_STORE_CONFIGS",
+            sqlState = Some("42K06"),
+            parameters = Map(
+              "stateFormatVersionConfig" -> SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key,
+              "stateFormatVersion" -> "4",
+              "mergeOperatorVersionConfig" ->
+                SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key,
+              "mergeOperatorVersion" -> "1",
+              "requiredMergeOperatorVersion" -> "2"))
+        }
       },
       StopStream
     )
