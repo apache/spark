@@ -644,6 +644,57 @@ class ColumnExpressionSuite extends SharedSparkSession {
     }
   }
 
+  test("nested field updates should retain resolved parents when case sensitivity changes") {
+    val childType = StructType(Seq(
+      StructField("x", IntegerType), StructField("y", IntegerType)))
+    Seq(false, true).foreach { caseSensitive =>
+      val parents = if (caseSensitive) Seq("a", "A") else Seq("a")
+      val schema = StructType(Seq(StructField("s",
+        StructType(parents.map(StructField(_, childType))))))
+      val row = Row(Row.fromSeq(parents.indices.map(index => Row(index + 1, index + 2))))
+      val source = spark.createDataFrame(sparkContext.parallelize(Seq(row)), schema)
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        Seq(false, true).foreach { drop =>
+          val column = if (drop) col("s").dropFields("A.x")
+            else col("s").withField("A.x", lit(9))
+          val updated = source.select(column.as("s"))
+          val analyzedSchema = updated.schema
+          val changedIndex = if (caseSensitive) 1 else 0
+          val expected = Row(Row.fromSeq(parents.indices.map { index =>
+            if (index != changedIndex) Row(index + 1, index + 2)
+            else if (drop) Row(index + 2) else Row(9, index + 2)
+          }))
+          withTempView("nested_update_resolution") {
+            updated.createOrReplaceTempView("nested_update_resolution")
+            withSQLConf(SQLConf.CASE_SENSITIVE.key -> (!caseSensitive).toString) {
+              checkAnswer(updated, expected)
+              assert(updated.queryExecution.optimizedPlan.schema == analyzedSchema)
+              val view = spark.table("nested_update_resolution")
+              checkAnswer(view, expected)
+              assert(view.schema == analyzedSchema)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("three-part nested updates should evaluate their input once on every evaluation path") {
+    onEachEvalPath {
+      withSQLConf(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1") {
+        val counter = new java.util.concurrent.atomic.AtomicLong()
+        val nextStruct = udf((id: Long) => {
+          val value = counter.getAndIncrement()
+          if (id == 0) null else (((value, value), value), value)
+        }).asNondeterministic()
+        val updated = nextStruct($"id").withField("_1._1.extra", lit(9L))
+          .dropFields("_1._1._2")
+        checkAnswer(spark.range(0, 10, 1, 1).select(updated),
+          Row(null) +: (1L until 10L).map(value => Row(Row(Row(Row(value, 9L), value), value))))
+      }
+    }
+  }
+
   test("chained nested field updates should use compact generated column names") {
     val df = Seq((((1, 2, 3), (4, 5, 6)), 0)).toDF("s", "z")
     val updated = df.select(

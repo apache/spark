@@ -1111,7 +1111,7 @@ object UpdateFields {
           s"Unsupported StructFieldsOperation: ${op.getClass.getName}")
     }
     fieldOps.foldLeft(fields) { (current, operation) =>
-      val expanded = operation match {
+      operation match {
         case nested: UpdateNestedField =>
           val currentType = StructType(current.map(_._1))
           val field = ExtractValue(
@@ -1127,10 +1127,10 @@ object UpdateFields {
           if (updated.checkInputDataTypes().isFailure) {
             TypeCoercionValidation.failOnTypeCheckResult(updated)
           }
-          WithField(nested.name, updated)
-        case other => other
+          current.updated(field.ordinal,
+            StructField(nested.name, updated.dataType, updated.nullable) -> Updated(updated))
+        case other => applyOperation(current, other)
       }
-      applyOperation(current, expanded)
     }
   }
 

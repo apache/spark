@@ -53,6 +53,8 @@ object OptimizeUpdateFields extends Rule[LogicalPlan] {
       operations
     } else {
       val combined = mutable.LinkedHashMap.empty[String, StructFieldsOperation]
+      val nestedChunks =
+        mutable.Map.empty[String, mutable.ArrayBuffer[Seq[StructFieldsOperation]]]
       operations.foreach { operation =>
         val name = operation match {
           case WithField(name, _) => name
@@ -62,16 +64,29 @@ object OptimizeUpdateFields extends Rule[LogicalPlan] {
         val updated = operation match {
           case nested: UpdateNestedField => combined.get(key) match {
             case Some(previous: UpdateNestedField) =>
-              nested.copy(fieldOps = optimizeFieldOps(previous.fieldOps ++ nested.fieldOps))
+              nestedChunks.getOrElseUpdate(key,
+                mutable.ArrayBuffer(previous.fieldOps)) += nested.fieldOps
+              nested
             case Some(WithField(_, value)) =>
               WithField(name, UpdateFields(value, nested.fieldOps))
             case _ => nested
           }
-          case other => other
+          case other =>
+            nestedChunks.remove(key)
+            other
         }
         combined.update(key, updated)
       }
-      combined.values.toSeq
+      combined.iterator.map {
+        case (key, nested: UpdateNestedField) if nestedChunks.contains(key) =>
+          val (prefix, tail) = nestedChunks(key).span(_.forall {
+            case _: WithField | _: UpdateNestedField => true
+            case _ => false
+          })
+          nested.copy(fieldOps =
+            optimizeFieldOps(prefix.iterator.flatten.toVector) ++ tail.iterator.flatten.toVector)
+        case (_, operation) => operation
+      }.toSeq
     }
   }
 
