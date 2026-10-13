@@ -1237,6 +1237,16 @@ world'))"""))
         assert(!analyzed.exists(_.expressions.exists(_.exists(
           _.isInstanceOf[JsonImplicitFormatCarrier]))),
           s"carrier should not survive analysis for $query")
+        // The carrier must be unwrapped into rawJson = true, not merely stripped: a strip would
+        // pass the assertion above yet quote the nested object instead of splicing it raw.
+        if (query.contains("json_object('a', json_object('b', 1))")) {
+          val objs = analyzed.expressions.flatMap(_.collect { case j: JsonObjectExpr => j })
+          val outer = objs.filter(_.members.exists { case (_, v) =>
+            v.exists(_.isInstanceOf[JsonObjectExpr])
+          })
+          assert(outer.map(_.rawJson) == Seq(Seq(true)),
+            s"nested producer must be marked raw-spliced for $query")
+        }
       }
     }
   }
