@@ -20,22 +20,27 @@ package org.apache.spark.sql.execution.datasources.v2.ffi;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.lang.reflect.Array;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
-import org.apache.spark.sql.execution.datasources.v2.ffi.Ffm.C;
 import org.apache.spark.unsafe.Platform;
 
 /**
  * A native data source library, which implements the C interface in
  * {@code org/apache/spark/sql/datasource/spark_datasource.h}, called through the Foreign Function
- * and Memory (FFM) API of Java 22 and later, see {@link Ffm}. Each function of the library is
- * bound once, when the library is loaded. The memory that Spark passes to the library is allocated
- * with {@link Platform}.
+ * and Memory (FFM) API of Java 22 and later.
+ * <p>
+ * Spark compiles for Java 17, where the FFM API does not exist, so the API is only reached
+ * through method handles, looked up once when the first library is loaded. Each function of a
+ * library is bound to a method handle that takes and returns primitive values only, with
+ * pointers as {@code long} addresses, so the calls themselves use no reflection. The memory that
+ * Spark passes to the library is allocated with {@link Platform}.
  * <p>
  * Each library is looked up separately, so all the libraries can export the same functions.
  * Calling a function that the library does not export throws {@link MissingFunctionException}. A
@@ -54,6 +59,9 @@ final class NativeLibrary {
   static boolean isSupported() {
     return Runtime.version().feature() >= MINIMUM_JAVA_VERSION;
   }
+
+  // The C types of the parameters and the results of the functions.
+  private enum C { VOID, BOOL, INT32, INT64, POINTER }
 
   private final MethodHandle lastError;
   private final MethodHandle abiVersion;
@@ -86,44 +94,44 @@ final class NativeLibrary {
   private final MethodHandle commitDataWriter;
   private final MethodHandle abortDataWriter;
 
-  private NativeLibrary(Object library) throws Throwable {
+  private NativeLibrary(Object lookup) throws Throwable {
     C i32 = C.INT32;
     C i64 = C.INT64;
     C ptr = C.POINTER;
-    lastError = Ffm.bind(library, "spark_ds_last_error", ptr);
-    abiVersion = Ffm.bind(library, "spark_ds_abi_version", i32);
-    create = Ffm.bind(library, "spark_ds_create", i32, ptr, ptr, ptr, i64, ptr);
-    schema = Ffm.bind(library, "spark_ds_schema", i32, ptr, ptr);
-    createReader = Ffm.bind(library, "spark_ds_create_reader", i32, ptr, ptr, ptr);
-    createStreamReader = Ffm.bind(library, "spark_ds_create_stream_reader", i32, ptr, ptr, ptr);
-    createWriter = Ffm.bind(library, "spark_ds_create_writer", i32, ptr, ptr, C.BOOL, ptr);
+    lastError = bind(lookup, "spark_ds_last_error", ptr);
+    abiVersion = bind(lookup, "spark_ds_abi_version", i32);
+    create = bind(lookup, "spark_ds_create", i32, ptr, ptr, ptr, i64, ptr);
+    schema = bind(lookup, "spark_ds_schema", i32, ptr, ptr);
+    createReader = bind(lookup, "spark_ds_create_reader", i32, ptr, ptr, ptr);
+    createStreamReader = bind(lookup, "spark_ds_create_stream_reader", i32, ptr, ptr, ptr);
+    createWriter = bind(lookup, "spark_ds_create_writer", i32, ptr, ptr, C.BOOL, ptr);
     createStreamWriter =
-      Ffm.bind(library, "spark_ds_create_stream_writer", i32, ptr, ptr, C.BOOL, ptr);
-    close = Ffm.bind(library, "spark_ds_close", C.VOID, ptr);
-    pushPredicates = Ffm.bind(library, "spark_ds_push_predicates", i32, ptr, ptr, i64, ptr);
-    pushLimit = Ffm.bind(library, "spark_ds_push_limit", i32, ptr, i32, ptr);
-    pruneColumns = Ffm.bind(library, "spark_ds_prune_columns", i32, ptr, ptr, i64, ptr);
-    partitions = Ffm.bind(library, "spark_ds_partitions", i32, ptr, ptr, ptr);
-    serializeReader = Ffm.bind(library, "spark_ds_serialize_reader", i32, ptr, ptr, ptr);
-    closeReader = Ffm.bind(library, "spark_ds_close_reader", C.VOID, ptr);
-    initialOffset = Ffm.bind(library, "spark_ds_initial_offset", i32, ptr, ptr, ptr);
-    latestOffset = Ffm.bind(library, "spark_ds_latest_offset", i32, ptr, ptr, ptr);
+      bind(lookup, "spark_ds_create_stream_writer", i32, ptr, ptr, C.BOOL, ptr);
+    close = bind(lookup, "spark_ds_close", C.VOID, ptr);
+    pushPredicates = bind(lookup, "spark_ds_push_predicates", i32, ptr, ptr, i64, ptr);
+    pushLimit = bind(lookup, "spark_ds_push_limit", i32, ptr, i32, ptr);
+    pruneColumns = bind(lookup, "spark_ds_prune_columns", i32, ptr, ptr, i64, ptr);
+    partitions = bind(lookup, "spark_ds_partitions", i32, ptr, ptr, ptr);
+    serializeReader = bind(lookup, "spark_ds_serialize_reader", i32, ptr, ptr, ptr);
+    closeReader = bind(lookup, "spark_ds_close_reader", C.VOID, ptr);
+    initialOffset = bind(lookup, "spark_ds_initial_offset", i32, ptr, ptr, ptr);
+    latestOffset = bind(lookup, "spark_ds_latest_offset", i32, ptr, ptr, ptr);
     streamPartitions =
-      Ffm.bind(library, "spark_ds_stream_partitions", i32, ptr, ptr, ptr, ptr, ptr);
+      bind(lookup, "spark_ds_stream_partitions", i32, ptr, ptr, ptr, ptr, ptr);
     serializeStreamReader =
-      Ffm.bind(library, "spark_ds_serialize_stream_reader", i32, ptr, ptr, ptr);
-    commitOffset = Ffm.bind(library, "spark_ds_commit_offset", i32, ptr, ptr);
-    closeStreamReader = Ffm.bind(library, "spark_ds_close_stream_reader", C.VOID, ptr);
-    read = Ffm.bind(library, "spark_ds_read", i32, ptr, i64, ptr, i64, ptr);
-    serializeWriter = Ffm.bind(library, "spark_ds_serialize_writer", i32, ptr, ptr, ptr);
-    commit = Ffm.bind(library, "spark_ds_commit", i32, ptr, i64, ptr, ptr, i64);
-    abort = Ffm.bind(library, "spark_ds_abort", i32, ptr, i64, ptr, ptr, i64);
-    closeWriter = Ffm.bind(library, "spark_ds_close_writer", C.VOID, ptr);
+      bind(lookup, "spark_ds_serialize_stream_reader", i32, ptr, ptr, ptr);
+    commitOffset = bind(lookup, "spark_ds_commit_offset", i32, ptr, ptr);
+    closeStreamReader = bind(lookup, "spark_ds_close_stream_reader", C.VOID, ptr);
+    read = bind(lookup, "spark_ds_read", i32, ptr, i64, ptr, i64, ptr);
+    serializeWriter = bind(lookup, "spark_ds_serialize_writer", i32, ptr, ptr, ptr);
+    commit = bind(lookup, "spark_ds_commit", i32, ptr, i64, ptr, ptr, i64);
+    abort = bind(lookup, "spark_ds_abort", i32, ptr, i64, ptr, ptr, i64);
+    closeWriter = bind(lookup, "spark_ds_close_writer", C.VOID, ptr);
     createDataWriter =
-      Ffm.bind(library, "spark_ds_create_data_writer", i32, ptr, i64, i32, i64, i64, ptr);
-    write = Ffm.bind(library, "spark_ds_write", i32, ptr, ptr, ptr);
-    commitDataWriter = Ffm.bind(library, "spark_ds_commit_data_writer", i32, ptr, ptr, ptr);
-    abortDataWriter = Ffm.bind(library, "spark_ds_abort_data_writer", i32, ptr);
+      bind(lookup, "spark_ds_create_data_writer", i32, ptr, i64, i32, i64, i64, ptr);
+    write = bind(lookup, "spark_ds_write", i32, ptr, ptr, ptr);
+    commitDataWriter = bind(lookup, "spark_ds_commit_data_writer", i32, ptr, ptr, ptr);
+    abortDataWriter = bind(lookup, "spark_ds_abort_data_writer", i32, ptr);
   }
 
   /**
@@ -136,9 +144,9 @@ final class NativeLibrary {
       throw new UnsupportedOperationException(
         "Native data sources require Java " + MINIMUM_JAVA_VERSION + " or later.");
     }
-    Object library;
+    Object lookup;
     try {
-      library = Ffm.libraryLookup(Path.of(path));
+      lookup = Ffm.LIBRARY_LOOKUP.invoke(Path.of(path), Ffm.GLOBAL_ARENA);
     } catch (IllegalArgumentException | IllegalCallerException e) {
       // The library is not a valid library, or native access is not enabled for Spark.
       throw new LoadException(e.getMessage(), e);
@@ -146,9 +154,145 @@ final class NativeLibrary {
       // The FFM API could not be initialized, see Ffm: report why, such as an
       // IllegalCallerException when native access is not enabled for Spark.
       throw new LoadException(
-        "Cannot use the Foreign Function and Memory API: " + Ffm.rootCause(e), e);
+        "Cannot use the Foreign Function and Memory API: " + rootCause(e), e);
     }
-    return new NativeLibrary(library);
+    return new NativeLibrary(lookup);
+  }
+
+  /**
+   * Binds a function of the library to a method handle whose parameters and result have the
+   * Java types of the given C types, with {@code long} for pointers. Returns null if the library
+   * does not export the function.
+   */
+  private static MethodHandle bind(Object lookup, String name, C result, C... parameters)
+      throws Throwable {
+    Optional<?> symbol = (Optional<?>) Ffm.FIND.invoke(lookup, name);
+    if (symbol.isEmpty()) {
+      return null;
+    }
+    Object layouts = Ffm.layouts(parameters);
+    Object descriptor = result == C.VOID
+      ? Ffm.FUNCTION_OF_VOID.invoke(layouts)
+      : Ffm.FUNCTION_OF.invoke(Ffm.layout(result), layouts);
+    MethodHandle handle = (MethodHandle) Ffm.DOWNCALL.invoke(
+      Ffm.LINKER, symbol.get(), descriptor, Ffm.NO_OPTIONS);
+    // Passes and returns the pointers, which are MemorySegments in the FFM API, as addresses.
+    for (int i = 0; i < parameters.length; i++) {
+      if (parameters[i] == C.POINTER) {
+        handle = MethodHandles.filterArguments(handle, i, Ffm.OF_ADDRESS);
+      }
+    }
+    if (result == C.POINTER) {
+      handle = MethodHandles.filterReturnValue(handle, Ffm.ADDRESS_OF);
+    }
+    return handle;
+  }
+
+  /** The method handles of the FFM API, initialized when the first library is loaded. */
+  private static final class Ffm {
+    static final Class<?> LAYOUT_CLASS;
+    static final Object LINKER;
+    static final Object GLOBAL_ARENA;
+    static final Object NO_OPTIONS;
+    static final MethodHandle LIBRARY_LOOKUP;
+    static final MethodHandle FIND;
+    static final MethodHandle DOWNCALL;
+    static final MethodHandle FUNCTION_OF;
+    static final MethodHandle FUNCTION_OF_VOID;
+    // (long) -> MemorySegment and (MemorySegment) -> long.
+    static final MethodHandle OF_ADDRESS;
+    static final MethodHandle ADDRESS_OF;
+    static final Object BOOL;
+    static final Object INT32;
+    static final Object INT64;
+    static final Object POINTER;
+    // The address of the C function SparkDsSink, which calls NativeLibrary.sink.
+    static final long SINK;
+
+    static {
+      try {
+        // A full-privilege lookup, so that the restricted methods of the FFM API see this class
+        // as their caller, in the unnamed module that Spark enables native access for.
+        MethodHandles.Lookup lookup = MethodHandles.lookup();
+        Class<?> linker = Class.forName("java.lang.foreign.Linker");
+        Class<?> option = Class.forName("java.lang.foreign.Linker$Option");
+        Class<?> symbolLookup = Class.forName("java.lang.foreign.SymbolLookup");
+        Class<?> arena = Class.forName("java.lang.foreign.Arena");
+        Class<?> segment = Class.forName("java.lang.foreign.MemorySegment");
+        Class<?> layout = Class.forName("java.lang.foreign.MemoryLayout");
+        Class<?> layoutArray = Array.newInstance(layout, 0).getClass();
+        Class<?> valueLayout = Class.forName("java.lang.foreign.ValueLayout");
+        Class<?> descriptor = Class.forName("java.lang.foreign.FunctionDescriptor");
+        Class<?> options = Array.newInstance(option, 0).getClass();
+
+        LAYOUT_CLASS = layout;
+        LINKER = lookup.findStatic(linker, "nativeLinker", MethodType.methodType(linker))
+          .invoke();
+        GLOBAL_ARENA = lookup.findStatic(arena, "global", MethodType.methodType(arena)).invoke();
+        NO_OPTIONS = Array.newInstance(option, 0);
+        LIBRARY_LOOKUP = lookup.findStatic(symbolLookup, "libraryLookup",
+          MethodType.methodType(symbolLookup, Path.class, arena));
+        FIND = lookup.findVirtual(symbolLookup, "find",
+          MethodType.methodType(Optional.class, String.class));
+        DOWNCALL = lookup.findVirtual(linker, "downcallHandle",
+          MethodType.methodType(MethodHandle.class, segment, descriptor, options))
+          .asFixedArity();
+        FUNCTION_OF = lookup.findStatic(descriptor, "of",
+          MethodType.methodType(descriptor, layout, layoutArray)).asFixedArity();
+        FUNCTION_OF_VOID = lookup.findStatic(descriptor, "ofVoid",
+          MethodType.methodType(descriptor, layoutArray)).asFixedArity();
+        OF_ADDRESS = lookup.findStatic(segment, "ofAddress",
+          MethodType.methodType(segment, long.class));
+        ADDRESS_OF = lookup.findVirtual(segment, "address", MethodType.methodType(long.class));
+        BOOL = valueLayout.getField("JAVA_BOOLEAN").get(null);
+        INT32 = valueLayout.getField("JAVA_INT").get(null);
+        INT64 = valueLayout.getField("JAVA_LONG").get(null);
+        POINTER = valueLayout.getField("ADDRESS").get(null);
+
+        // The upcall stub of the sink, which lives as long as the JVM.
+        MethodHandle target = lookup.findStatic(NativeLibrary.class, "sink",
+          MethodType.methodType(void.class, long.class, long.class, long.class));
+        target = MethodHandles.filterArguments(target, 0, ADDRESS_OF, ADDRESS_OF);
+        Object sinkDescriptor =
+          FUNCTION_OF_VOID.invoke(layouts(C.POINTER, C.POINTER, C.INT64));
+        Object stub = lookup.findVirtual(linker, "upcallStub",
+          MethodType.methodType(segment, MethodHandle.class, descriptor, arena, options))
+          .asFixedArity()
+          .invoke(LINKER, target, sinkDescriptor, GLOBAL_ARENA, NO_OPTIONS);
+        SINK = (long) ADDRESS_OF.invoke(stub);
+      } catch (Throwable e) {
+        // The message names the cause, because the JVM only keeps this message for the later
+        // uses of the class.
+        throw new IllegalStateException("Cannot initialize the FFM API: " + rootCause(e), e);
+      }
+    }
+
+    /** Returns a MemoryLayout[] with the layouts of the given types. */
+    static Object layouts(C... types) {
+      Object layouts = Array.newInstance(LAYOUT_CLASS, types.length);
+      for (int i = 0; i < types.length; i++) {
+        Array.set(layouts, i, layout(types[i]));
+      }
+      return layouts;
+    }
+
+    static Object layout(C type) {
+      return switch (type) {
+        case BOOL -> BOOL;
+        case INT32 -> INT32;
+        case INT64 -> INT64;
+        case POINTER -> POINTER;
+        case VOID -> throw new IllegalArgumentException("void has no layout");
+      };
+    }
+  }
+
+  private static Throwable rootCause(Throwable e) {
+    Throwable cause = e;
+    while (cause.getCause() != null && cause.getCause() != cause) {
+      cause = cause.getCause();
+    }
+    return cause;
   }
 
   /** Thrown when a library cannot be loaded. */
@@ -300,7 +444,7 @@ final class NativeLibrary {
   byte[][] partitions(long reader) throws Throwable {
     MethodHandle f = require(partitions, "spark_ds_partitions");
     try (Sink sink = new Sink()) {
-      check((int) f.invokeExact(reader, Sinks.SINK, sink.id), "spark_ds_partitions");
+      check((int) f.invokeExact(reader, Ffm.SINK, sink.id), "spark_ds_partitions");
       return sink.all();
     }
   }
@@ -334,7 +478,7 @@ final class NativeLibrary {
     MethodHandle f = require(streamPartitions, "spark_ds_stream_partitions");
     try (Memory memory = new Memory(); Sink sink = new Sink()) {
       check((int) f.invokeExact(streamReader, memory.string(start), memory.string(end),
-        Sinks.SINK, sink.id), "spark_ds_stream_partitions");
+        Ffm.SINK, sink.id), "spark_ds_stream_partitions");
       return sink.all();
     }
   }
@@ -432,7 +576,7 @@ final class NativeLibrary {
   private byte[] serialize(MethodHandle function, String name, long handle) throws Throwable {
     MethodHandle f = require(function, name);
     try (Sink sink = new Sink()) {
-      check((int) f.invokeExact(handle, Sinks.SINK, sink.id), name);
+      check((int) f.invokeExact(handle, Ffm.SINK, sink.id), name);
       byte[][] values = sink.all();
       if (values.length > 1) {
         throw new IllegalStateException(
@@ -501,28 +645,12 @@ final class NativeLibrary {
   // Sink
   // ---------------------------------------------------------------------------------------------
 
-  /** The C function SparkDsSink, which calls {@link #sink}. */
-  private static final class Sinks {
-    static final long SINK;
-
-    static {
-      try {
-        SINK = Ffm.upcall(
-          MethodHandles.lookup().findStatic(NativeLibrary.class, "sink",
-            MethodType.methodType(void.class, long.class, long.class, long.class)),
-          C.VOID, C.POINTER, C.POINTER, C.INT64);
-      } catch (Throwable e) {
-        throw new IllegalStateException("Cannot create the sink of native data sources.", e);
-      }
-    }
-  }
-
   private static final AtomicLong nextSinkId = new AtomicLong(1);
   private static final ConcurrentHashMap<Long, Sink> sinks = new ConcurrentHashMap<>();
 
   /**
    * Collects the byte arrays that a library returns during a call, through the C function
-   * {@link Sinks#SINK}. The library passes {@link #id} back to identify it.
+   * {@link Ffm#SINK}. The library passes {@link #id} back to identify it.
    */
   private static final class Sink implements AutoCloseable {
     final long id = nextSinkId.getAndIncrement();
@@ -547,7 +675,7 @@ final class NativeLibrary {
   }
 
   /**
-   * Called by the library, through the C function {@link Sinks#SINK}, with a byte array to copy.
+   * Called by the library, through the upcall stub {@link Ffm#SINK}, with a byte array to copy.
    * It must not throw: an exception thrown by an upcall crashes the JVM.
    */
   private static void sink(long id, long data, long length) {
