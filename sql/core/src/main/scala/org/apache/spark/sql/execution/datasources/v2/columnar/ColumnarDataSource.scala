@@ -67,7 +67,10 @@ trait ColumnarDataSource {
  */
 trait ColumnarReader extends Serializable {
 
-  /** Returns the predicates that Spark still has to evaluate after reading. */
+  /**
+   * Returns the predicates that the reader does not evaluate completely. Spark evaluates all the
+   * predicates after reading anyway, and shows the others as pushed in the plan.
+   */
   def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = predicates
 
   /** Returns whether the reader returns at most `limit` rows. Spark applies it again anyway. */
@@ -75,7 +78,8 @@ trait ColumnarReader extends Serializable {
 
   /**
    * Returns whether `read` returns exactly the columns of `requiredSchema`, the top-level columns
-   * that the query needs, instead of all the columns of the read schema.
+   * that the query needs, including the columns of the pushed predicates, instead of all the
+   * columns of the read schema.
    */
   def pruneColumns(requiredSchema: StructType): Boolean = false
 

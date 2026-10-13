@@ -122,14 +122,16 @@ class ArtifactTests(ArtifactTestsMixin, ReusedSQLTestCase):
             # together with other files.
             spark.addArtifact(new_file("my_file_source.sparkpkg"), file=True)
             spark.addArtifacts(new_file("my_other_source.sparkpkg"), new_file("other.txt"))
-            # A URI, and a path relative to the working directory of Python, which is not the
-            # one of the JVM.
+            # A URI, and paths relative to the working directory of Python, which is not the
+            # one of the JVM, also with a colon, which is not the scheme of a URI.
             spark.addArtifact(Path(new_file("my_uri_source.sparkpkg")).as_uri())
             new_file("my_relative_source.sparkpkg")
+            new_file("my_source:1.sparkpkg")
             cwd = os.getcwd()
             os.chdir(d)
             try:
                 spark.addArtifact("my_relative_source.sparkpkg")
+                spark.addArtifact("my_source:1.sparkpkg")
             finally:
                 os.chdir(cwd)
             packages = spark._jsparkSession.artifactManager().getNativeDataSourcePackages()._1()
@@ -140,6 +142,7 @@ class ArtifactTests(ArtifactTestsMixin, ReusedSQLTestCase):
                     "my_other_source.sparkpkg",
                     "my_relative_source.sparkpkg",
                     "my_source.sparkpkg",
+                    "my_source:1.sparkpkg",
                     "my_uri_source.sparkpkg",
                 ],
             )

@@ -19,22 +19,31 @@ package org.apache.spark.sql.execution.datasources.v2.ffi
 import java.io.File
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.Files
+import java.nio.file.StandardCopyOption.REPLACE_EXISTING
 import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDate}
 import java.util.UUID
+import java.util.concurrent.{Callable, CountDownLatch, TimeUnit}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
+
+import com.fasterxml.jackson.core.json.JsonWriteFeature
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.json.JsonMapper
 
 import org.apache.spark.{SparkClassNotFoundException, SparkFiles, SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.api.python.{PythonBroadcast, SimplePythonFunction}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.catalyst.expressions.{Literal => CatalystLiteral}
+import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{And, Predicate}
+import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, DataSourceV2Strategy}
 import org.apache.spark.sql.execution.datasources.v2.columnar.ColumnarScan
 import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, UserDefinedPythonDataSource}
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -43,7 +52,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * Tests native data sources with the library in `native-datasource/test_native_datasource.cc`,
@@ -207,6 +216,12 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(literal(2.5, DoubleType).contains(""""dataType":"double","value":2.5"""))
     assert(literal(UTF8String.fromString("a\"b"), StringType)
       .contains(""""dataType":"string","value":"a\"b""""))
+    // The JSON is ASCII, with the other characters escaped, such as the characters outside the
+    // Basic Multilingual Plane.
+    val text = "x" + new String(Character.toChars(0x1F600)) + new String(Character.toChars(0xE9))
+    val encoded = literal(UTF8String.fromString(text), StringType).get
+    assert(encoded.forall(_ < 128), encoded)
+    assert(new ObjectMapper().readTree(s"{$encoded}").get("value").asText() == text)
     assert(literal(Array[Byte](1, 2), BinaryType)
       .contains(""""dataType":"binary","value":"AQI=""""))
     assert(literal(Decimal("12.30"), DecimalType(10, 2))
@@ -236,6 +251,113 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(compare("missing", "id").isEmpty)
     assert(compare("a.missing", "id").isEmpty)
     assert(compare("id.b", "id").isEmpty)
+  }
+
+  /**
+   * Generates `org/apache/spark/sql/datasource/predicate-cases.json`, which lists predicates as
+   * Spark passes them to `spark_ds_push_predicates`, with the rows of a table for which Spark
+   * finds them true, for libraries to test their pushdown with. Regenerate it with
+   * `SPARK_GENERATE_GOLDEN_FILES=1`.
+   */
+  test("predicate cases") {
+    val schema = StructType.fromDDL("id INT, i INT, d DOUBLE, s STRING")
+    def char(codePoint: Int): String = new String(Character.toChars(codePoint))
+    val (emoji, eAcute, replacement) = (char(0x1F600), char(0xE9), char(0xFFFD))
+    val rows = Seq(
+      Row(0, 1, 0.0, "a"),
+      Row(1, 2, -0.0, ""),
+      Row(2, null, Double.NaN, eAcute),
+      Row(3, 3, Double.PositiveInfinity, emoji),
+      Row(4, 1, Double.NegativeInfinity, null),
+      Row(5, null, 1.5, "ab"),
+      Row(6, 2, null, "b" + eAcute),
+      Row(7, 4, 2.5, replacement))
+    val filters = Seq(
+      // NaN is equal to NaN and greater than any other value, and -0.0 is equal to 0.0.
+      "d = 0.0D", "d = -0.0D", "d < 0.0D", "d > 1.0D", "d >= 2.5D", "d <> 0.0D", "d <=> 0.0D",
+      "d IN (0.0D, 1.5D)", "NOT (d > 1.0D)", "NOT (d < 1.0D)", "d IS NULL", "d IS NOT NULL",
+      // Comparisons with null are null, also under NOT.
+      "i = 1", "i = NULL", "i <=> NULL", "NOT (i <=> NULL)", "i IN (1, NULL)",
+      "NOT (i IN (1, NULL))", "NOT (i IN (1, 3))", "i IS NULL OR d > 1.0D",
+      "i > 1 AND d IS NOT NULL",
+      // Strings are compared by their UTF-8 bytes.
+      s"s = '$emoji'", s"s > '$replacement'", "s < 'b'", "startswith(s, 'a')",
+      s"endswith(s, '$eAcute')", s"contains(s, '$emoji')", s"s IN ('', '$eAcute')")
+
+    val mapper = JsonMapper.builder().enable(JsonWriteFeature.ESCAPE_NON_ASCII).build()
+    def json(value: Any): String = mapper.writeValueAsString(value)
+    def jsonValue(value: Any): String = value match {
+      case d: Double if d.isNaN || d.isInfinite => json(d.toString)
+      case other => json(other)
+    }
+    val df = spark.createDataFrame(rows.asJava, schema)
+    val cases = filters.map { filter =>
+      val filtered = df.where(filter)
+      // The predicates that Spark pushes for the filter: its conjuncts, with constants folded.
+      val condition = filtered.queryExecution.analyzed.collectFirst {
+        case Filter(condition, _) => condition
+      }.get
+      val predicates = splitConjunctivePredicates(condition.transformUp {
+        case e if e.foldable && !e.isInstanceOf[CatalystLiteral] =>
+          CatalystLiteral.create(e.eval(), e.dataType)
+      }).map { predicate =>
+        DataSourceV2Strategy.translateFilterV2(predicate)
+          .flatMap(NativePredicates.toJson(_, schema))
+          .getOrElse(fail(s"$filter is not pushed down"))
+      }
+      val matches = filtered.select("id").collect().map(_.getInt(0)).sorted
+      s"""    {"sql": ${json(filter)}, "predicates": [${predicates.mkString(", ")}], """ +
+        s""""rows": [${matches.mkString(", ")}]}"""
+    }
+    val generated =
+      s"""{
+         |  "description": ${json("Predicates as Spark passes them to spark_ds_push_" +
+        "predicates, with the ids of the rows of the table for which they are true. A " +
+        "case lists the predicates that Spark pushes for the filter in its SQL, which are " +
+        "combined with AND. A row has a value for each column of the schema; NaN and infinite " +
+        "doubles are strings.")},
+         |  "schema": ${json(schema.toDDL)},
+         |  "rows": [
+         |${rows.map(row => row.toSeq.map(jsonValue).mkString("    [", ", ", "]")).mkString(",\n")}
+         |  ],
+         |  "cases": [
+         |${cases.mkString(",\n")}
+         |  ]
+         |}
+         |""".stripMargin
+    assert(generated.forall(_ < 128))
+    val file = getWorkspaceFilePath("sql", "core", "src", "main", "resources", "org", "apache",
+      "spark", "sql", "datasource", "predicate-cases.json").toFile
+    if (regenerateGoldenFiles) {
+      Files.createDirectories(file.toPath.getParent)
+      Files.writeString(file.toPath, generated)
+    } else {
+      assert(Files.readString(file.toPath) == generated,
+        s"$file is out of date: regenerate it with SPARK_GENERATE_GOLDEN_FILES=1.")
+    }
+    // The file is in the jar of Spark SQL.
+    assert(getClass.getClassLoader.getResource(
+      "org/apache/spark/sql/datasource/predicate-cases.json") != null)
+  }
+
+  test("tell missing functions from link errors") {
+    // A function that the library does not export is an unsupported operation.
+    val missing = new NativeLibrary.MissingFunctionException("spark_ds_f")
+    assert(NativeCalls.optional(throw missing).isEmpty)
+    checkError(
+      exception = intercept[SparkRuntimeException](NativeCalls.call("x", "read")(throw missing)),
+      condition = "NATIVE_DATA_SOURCE_ERROR",
+      parameters = Map(
+        "action" -> "read", "name" -> "x", "msg" -> "The library does not implement spark_ds_f."))
+    // Link errors are reported as they are, such as when Arrow, which still calls the Arrow C
+    // structs through JNI, cannot load its JNI library, which it extracts to java.io.tmpdir, for
+    // example if the directory does not allow it.
+    val linkError = new UnsatisfiedLinkError("/tmp/libarrow_cdata_jni.so: failed to map segment")
+    assert(intercept[UnsatisfiedLinkError](NativeCalls.optional(throw linkError)) eq linkError)
+    checkError(
+      exception = intercept[SparkRuntimeException](NativeCalls.call("x", "read")(throw linkError)),
+      condition = "NATIVE_DATA_SOURCE_ERROR",
+      parameters = Map("action" -> "read", "name" -> "x", "msg" -> linkError.getMessage))
   }
 
   test("close the previous stream writer of a streaming query") {
@@ -334,12 +456,33 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       .filter("id < 10 AND name LIKE 'n1%'")
     checkRows(partly, Seq(1L).map(expectedRow))
     assert(scan(partly).getMetaData()("PushedPredicates").contains("id < 10"))
+
+    // Spark evaluates all the predicates again after reading, even the ones that the library
+    // reports as evaluated completely: here, a library that ignores them.
+    val claimed = range(newSession(defaultPackage), "end" -> "20", "claim_predicates" -> "true")
+      .filter("id > 15")
+    checkRows(claimed, (16L until 20L).map(expectedRow))
+    assert(scan(claimed).getMetaData()("PushedPredicates").contains("id > 15"))
+
+    // The answers of the library are for the predicates that Spark passes to it: here, not the
+    // first one, which uses another function.
+    val mapped = range(newSession(defaultPackage), "end" -> "20")
+      .filter("upper(name) = 'N1' AND id < 5")
+    checkRows(mapped, Seq(expectedRow(1L)))
+    assert(scan(mapped).getMetaData()("PushedPredicates") == "[id < 5]")
   }
 
   nativeTest("prune columns") {
     val df = range(newSession(defaultPackage), "end" -> "10").select("name", "id")
     checkRows(df, (0L until 10L).map(id => Row(if (id % 5 == 0) null else s"n$id", id)))
     assert(scan(df).readSchema() == StructType.fromDDL("id BIGINT, name STRING"))
+
+    // The columns of the pushed predicates are read too, since Spark evaluates the predicates
+    // again after reading, even the ones that the library evaluates completely.
+    val filtered = range(newSession(defaultPackage), "end" -> "10").filter("id > 7").select("name")
+    checkRows(filtered, Seq(Row("n8"), Row("n9")))
+    assert(scan(filtered).getMetaData()("PushedPredicates").contains("id > 7"))
+    assert(scan(filtered).readSchema() == StructType.fromDDL("id BIGINT, name STRING"))
 
     // A count reads no column at all.
     assert(range(newSession(defaultPackage), "end" -> "37", "batch_size" -> "10").count() == 37)
@@ -356,6 +499,11 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       .limit(10).offset(5)
     checkRows(withOffset, (5L until 10L).map(expectedRow))
     assert(scan(withOffset).getMetaData()("PushedLimit") == "LIMIT 10")
+
+    // Spark evaluates the predicates after reading, so it does not push a limit with them.
+    val filtered = range(newSession(defaultPackage), "end" -> "100").filter("id > 5").limit(3)
+    assert(filtered.collect().length == 3)
+    assert(!scan(filtered).getMetaData().contains("PushedLimit"))
   }
 
   nativeTest("read maps whose entry fields have other names") {
@@ -365,10 +513,32 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     checkRows(df, (0L until 3L).map(id => Row(id, Map(s"k$id" -> id))))
   }
 
+  nativeTest("read structs in several batches") {
+    // The reader imports the batches of a partition into the same vectors, which Spark must not
+    // close when it moves to the next batch: closing a struct drops its child vectors.
+    val df = range(newSession(defaultPackage), "end" -> "10", "partitions" -> "1",
+      "batch_size" -> "3", "extra" -> "struct").select("id", "st")
+    assert(df.queryExecution.executedPlan.exists(_.isInstanceOf[WholeStageCodegenExec]))
+    checkRows(df, (0L until 10L).map(id => Row(id, Row(id, s"s$id"))))
+
+    // A nested field is read with its top-level column: the library only prunes the top-level
+    // columns, and Spark the nested fields.
+    val nested = range(newSession(defaultPackage), "end" -> "4", "extra" -> "struct")
+      .select("st.b")
+    checkRows(nested, (0L until 4L).map(id => Row(s"s$id")))
+    assert(scan(nested).readSchema() == StructType.fromDDL("st STRUCT<a: BIGINT, b: STRING>"))
+  }
+
   nativeTest("reject the Arrow data that Spark cannot read") {
     def check(msg: String, options: (String, String)*): Unit = {
+      checkWithSchema(None, msg, options: _*)
+    }
+    // The schema to read is given for the types from which Spark cannot infer it either.
+    def checkWithSchema(schema: Option[String], msg: String, options: (String, String)*): Unit = {
       val e = intercept[Exception] {
-        range(newSession(defaultPackage), options :+ ("end" -> "4"): _*).collect()
+        val reader = newSession(defaultPackage).read.format("native_range")
+        schema.fold(reader)(s => reader.schema(s)).options(options.toMap + ("end" -> "4")).load()
+          .collect()
       }
       checkError(
         exception = findError(e, "NATIVE_DATA_SOURCE_ERROR"),
@@ -391,6 +561,13 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     // check their lengths.
     check("The column lv contains the Arrow type ListView, which is not supported.",
       "extra" -> "listview")
+    // Types that Spark does not convert, and dictionary encoding.
+    checkWithSchema(Some("id BIGINT, ll ARRAY<BIGINT>"),
+      "The column ll contains the Arrow type LargeList, which is not supported.",
+      "extra" -> "largelist")
+    checkWithSchema(Some("id BIGINT, dict STRING"),
+      "The column dict is dictionary-encoded, which is not supported.",
+      "extra" -> "dictionary")
   }
 
   nativeTest("batch write") {
@@ -520,13 +697,40 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(!dir.listFiles().exists(_.getName.startsWith("part-")))
   }
 
+  nativeTest("abort a micro-batch whose write failed") {
+    val session = newSession(defaultPackage)
+    val dir = Utils.createTempDir()
+    val e = intercept[Exception] {
+      val query = session.readStream.format("native_counter").option("max_offset", "4").load()
+        .writeStream
+        .format("native_sink")
+        .option("path", dir.getPath)
+        .option("fail", "write")
+        .option("checkpointLocation", Utils.createTempDir().getPath)
+        .start()
+      try query.processAllAvailable() finally query.stop()
+    }
+    checkError(
+      exception = findError(e, "NATIVE_DATA_SOURCE_ERROR"),
+      condition = "NATIVE_DATA_SOURCE_ERROR",
+      parameters = Map(
+        "action" -> "write to",
+        "name" -> "native_sink",
+        "msg" -> "injected failure in write"))
+    // Spark aborted the first epoch, with a null message for its task, which did not commit.
+    assert(Files.readString(new File(dir, "_ABORTED_0").toPath) == "1")
+    assert(!new File(dir, "_EPOCH_0").exists())
+  }
+
   nativeTest("streaming read and write") {
     val session = newSession(defaultPackage)
     val dir = Utils.createTempDir()
     val commitPath = new File(Utils.createTempDir(), "committed")
+    val closedPath = new File(Utils.createTempDir(), "closed")
     val query = session.readStream.format("native_counter")
       .option("max_offset", "12").option("step", "5").option("batch_size", "2")
       .option("commit_path", commitPath.getPath)
+      .option("closed_path", closedPath.getPath)
       .load()
       .writeStream
       .format("native_sink")
@@ -548,6 +752,8 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(written.sorted.toSeq == (0 until 12).map(_.toString).sorted)
     // Spark commits the offsets of a micro-batch when it runs the next one.
     assert(Files.readString(commitPath.toPath) == "{\"offset\":10}")
+    // The stream reader is closed when the query stops.
+    assert(closedPath.isFile)
 
     // The streaming source can also be read in micro-batches into a memory sink.
     val memoryQuery = session.readStream.format("native_counter").option("max_offset", "4")
@@ -558,6 +764,56 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     } finally {
       memoryQuery.stop()
     }
+  }
+
+  nativeTest("reject offsets that are not JSON on a single line") {
+    // Spark writes each offset as a line of the offset log of the checkpoint.
+    def check(badOffset: String, msg: String): Unit = {
+      val e = intercept[Exception] {
+        val query = newSession(defaultPackage).readStream.format("native_counter")
+          .option("bad_offset", badOffset).load()
+          .writeStream
+          .format("noop")
+          .option("checkpointLocation", Utils.createTempDir().getPath)
+          .start()
+        try query.processAllAvailable() finally query.stop()
+      }
+      checkError(
+        exception = findError(e, "NATIVE_DATA_SOURCE_ERROR"),
+        condition = "NATIVE_DATA_SOURCE_ERROR",
+        parameters = Map("action" -> "plan a scan of", "name" -> "native_counter", "msg" -> msg))
+    }
+    check("none", "spark_ds_latest_offset returned no offset.")
+    check("multiline", "spark_ds_latest_offset returned an offset with a line break, but an " +
+      "offset must be JSON on a single line.")
+    check("invalid", "spark_ds_latest_offset returned an offset that is not valid JSON: offset 10")
+  }
+
+  nativeTest("pass the ID of a streaming query to its stream writers") {
+    val session = newSession(defaultPackage)
+    val dir = Utils.createTempDir()
+    val checkpoint = Utils.createTempDir().getPath
+    // Runs the query until it processed the rows [0, maxOffset).
+    def run(maxOffset: Int): StreamingQuery = {
+      val query = session.readStream.format("native_counter")
+        .option("max_offset", maxOffset.toString).load()
+        .writeStream
+        .format("native_sink")
+        .option("path", dir.getPath)
+        .option("checkpointLocation", checkpoint)
+        .start()
+      try query.processAllAvailable() finally query.stop()
+      query
+    }
+    val queryId = new File(dir, "_QUERY_ID")
+    val first = run(3)
+    assert(Files.readString(queryId.toPath) == first.id.toString)
+    // The ID stays the same when the query restarts from its checkpoint, unlike the ID of the
+    // run, so that the library can tell the commits of the query from those of other queries.
+    assert(queryId.delete())
+    val restarted = run(6)
+    assert(restarted.id == first.id && restarted.runId != first.runId)
+    assert(Files.readString(queryId.toPath) == first.id.toString)
   }
 
   nativeTest("report the errors of native code") {
@@ -604,6 +860,78 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         "action" -> "create",
         "name" -> "ne_native_range",
         "msg" -> "spark_ds_create failed with the error code 1."))
+  }
+
+  nativeTest("a scan whose planning failed fails again with the same error") {
+    // The reader is released after planning, even if it failed. The query execution of a
+    // DataFrame keeps the failure of its plan, but a scan can be planned again, for example by
+    // the lazy values of the physical plan that call it.
+    val session = newSession(defaultPackage)
+    val (name, location) =
+      NativeDataSourceRegistry.lookup("native_range", session.sessionState.conf).get
+    val options = new CaseInsensitiveStringMap(Map("fail" -> "plan").asJava)
+    val reader =
+      new NativeDataSource(location, name, options).reader(StructType.fromDDL("id BIGINT"))
+    (1 to 2).foreach { _ =>
+      checkError(
+        exception = intercept[SparkRuntimeException](reader.partitions()),
+        condition = "NATIVE_DATA_SOURCE_ERROR",
+        parameters = Map(
+          "action" -> "plan a scan of",
+          "name" -> "native_range",
+          "msg" -> "injected failure in plan"))
+    }
+  }
+
+  nativeTest("reject NULL handles") {
+    def check(function: String, action: String, name: String)(f: SparkSession => Unit): Unit = {
+      val e = intercept[Exception](f(newSession(defaultPackage)))
+      checkError(
+        exception = findError(e, "NATIVE_DATA_SOURCE_ERROR"),
+        condition = "NATIVE_DATA_SOURCE_ERROR",
+        parameters = Map(
+          "action" -> action,
+          "name" -> name,
+          "msg" -> s"$function returned a NULL handle."))
+    }
+    def runStream(start: => StreamingQuery): Unit = {
+      val query = start
+      try query.processAllAvailable() finally query.stop()
+    }
+    check("spark_ds_create", "create", "native_range") { session =>
+      range(session, "zero" -> "spark_ds_create")
+    }
+    check("spark_ds_create_reader", "plan a scan of", "native_range") { session =>
+      range(session, "zero" -> "spark_ds_create_reader").collect()
+    }
+    check("spark_ds_create_stream_reader", "plan a scan of", "native_counter") { session =>
+      runStream {
+        session.readStream.format("native_counter")
+          .option("zero", "spark_ds_create_stream_reader").load()
+          .writeStream.format("noop").start()
+      }
+    }
+    Seq(
+      "spark_ds_create_writer" -> "plan a write to",
+      "spark_ds_create_data_writer" -> "write to"
+    ).foreach { case (function, action) =>
+      check(function, action, "native_sink") { session =>
+        session.range(2).write.format("native_sink")
+          .option("path", Utils.createTempDir().getPath).option("zero", function)
+          .mode("append").save()
+      }
+    }
+    check("spark_ds_create_stream_writer", "plan a write to", "native_sink") { session =>
+      runStream {
+        session.readStream.format("native_counter").load()
+          .writeStream
+          .format("native_sink")
+          .option("path", Utils.createTempDir().getPath)
+          .option("zero", "spark_ds_create_stream_writer")
+          .option("checkpointLocation", Utils.createTempDir().getPath)
+          .start()
+      }
+    }
   }
 
   nativeTest("operations that the library does not implement") {
@@ -705,6 +1033,42 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     } finally {
       Utils.deleteRecursively(sessionDir)
     }
+  }
+
+  nativeTest("distribute a configured package for concurrent queries") {
+    // Queries of a session can use a configured package for the first time at the same time.
+    val configured = createPackage(library, dataSources(""), dir = Utils.createTempDir())
+    val session = newSession(configured)
+    val pkg = NativeDataSourcePackage.read(configured)
+    val threads = 8
+    val pool = ThreadUtils.newDaemonFixedThreadPool(threads, "distribute-package")
+    try {
+      val start = new CountDownLatch(1)
+      val results = (1 to threads).map { _ =>
+        pool.submit(new Callable[NativeDataSourcePackage] {
+          override def call(): NativeDataSourcePackage = {
+            start.await()
+            NativeDataSourceRegistry.addToArtifacts(session, pkg)
+          }
+        })
+      }
+      start.countDown()
+      val distributed = results.map(_.get(1, TimeUnit.MINUTES)).distinct
+      assert(distributed.length == 1)
+      assert(session.artifactManager.hasFileArtifact(distributed.head.distributedFileName.get))
+    } finally {
+      pool.shutdownNow()
+    }
+  }
+
+  nativeTest("load a package only with the checksum of the driver") {
+    // The package at the path of the driver is valid, but it is not the package that the driver
+    // read, for example because it was replaced since, and neither is any distributed copy.
+    val pkg = NativeDataSourcePackage.read(defaultPackage).copy(sha256 = "0" * 64)
+    checkError(
+      exception = intercept[SparkRuntimeException](NativeLibraries.get(pkg)),
+      condition = "NATIVE_DATA_SOURCE_PACKAGE_NOT_FOUND",
+      parameters = Map("fileName" -> defaultPackage.getName, "checksum" -> pkg.sha256))
   }
 
   test("distribute a package without an active session") {
@@ -902,6 +1266,36 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       parameters = Map("provider" -> "installed_native_range"))
   }
 
+  nativeTest("reject an installed library replaced in place") {
+    val dir = Utils.createTempDir()
+    val installed = installLibrary(installedLibrary, "installed_native_range", dir)
+    withLibraryPath(dir) {
+      def read(): DataFrame = {
+        newSession().read.format("installed_native_range").option("end", "2").load().select("id")
+      }
+      checkRows(read(), Seq(Row(0L), Row(1L)))
+      val loaded = NativeDataSourcePackage.sha256(installed)
+
+      // An operator installs another build at the same path, as `make install` does. The JVM
+      // cannot load it from the same path, so the driver and the executors that loaded the
+      // previous build reject it, rather than running a build that does not match the state
+      // that the driver serializes.
+      Files.copy(installedNegatingLibrary.toPath, installed.toPath, REPLACE_EXISTING)
+      val replaced = NativeDataSourcePackage.sha256(installed)
+      checkError(
+        exception = intercept[SparkRuntimeException](read()),
+        condition = "INVALID_NATIVE_DATA_SOURCE_LIBRARY.REPLACED",
+        parameters = Map(
+          "path" -> installed.getCanonicalPath,
+          "loadedChecksum" -> loaded,
+          "checksum" -> replaced))
+
+      // The library works again once the build that was loaded is installed again.
+      Files.copy(installedLibrary.toPath, installed.toPath, REPLACE_EXISTING)
+      checkRows(read(), Seq(Row(0L), Row(1L)))
+    }
+  }
+
   nativeTest("find packages in directories") {
     val dir = Utils.createTempDir()
     createPackage(library, dataSources(""), dir = dir, fileName = "a.sparkpkg")
@@ -1047,6 +1441,23 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
           .select("id"),
         Seq(Row(0L), Row(1L)))
     }
+  }
+
+  nativeTest("log the packages of a version that Spark does not support") {
+    // An operator left an outdated package in a configured directory.
+    val dir = Utils.createTempDir()
+    val outdated = createPackage(library, Seq("other_native_range"), dir = dir,
+      fileName = "outdated.sparkpkg", abiVersion = 2)
+    val logAppender = new LogAppender("packages of an unsupported version")
+    withLogAppender(logAppender, level = Some(org.apache.logging.log4j.Level.WARN)) {
+      checkRows(range(newSession(dir, defaultPackage), "end" -> "2"),
+        (0L until 2L).map(expectedRow))
+    }
+    assert(logAppender.loggingEvents.exists { event =>
+      val message = event.getMessage.getFormattedMessage
+      message.contains(outdated.getCanonicalPath) &&
+        message.contains("implements version 2 of the native data source interface")
+    })
   }
 
   nativeTest("forget the packages of a session that is cleaned up") {

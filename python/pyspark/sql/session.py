@@ -20,7 +20,6 @@ import sys
 import warnings
 from collections.abc import Sized
 from functools import cached_property, reduce
-from pathlib import PureWindowsPath
 from threading import RLock
 from types import TracebackType
 from typing import (
@@ -2299,12 +2298,13 @@ class SparkSession(SparkConversionMixin):
                 },
             )
         # Native data source packages are artifacts of the session in the JVM, whatever the
-        # flags, as with Spark Connect. The JVM resolves URIs, such as file:///tmp/a.sparkpkg,
-        # but resolves a relative path against its own working directory, so it gets an absolute
-        # path instead. A Windows path, such as C:/a.sparkpkg, is a path too.
+        # flags, as with Spark Connect. The JVM resolves file URIs, such as
+        # file:///tmp/a.sparkpkg, but resolves a relative path against its own working directory,
+        # so it gets an absolute path instead. Anything else is a path, such as C:/a.sparkpkg on
+        # Windows, or a file name with a colon, such as a:1.sparkpkg.
         for p in path:
             if p.endswith(".sparkpkg"):
-                if urlparse(p).scheme and not PureWindowsPath(p).drive:
+                if urlparse(p).scheme == "file":
                     self._jsparkSession.addArtifact(p)
                 else:
                     self._jsparkSession.addArtifact(os.path.abspath(p))

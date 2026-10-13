@@ -20,17 +20,29 @@
 // hand. It provides three data sources:
 //
 //   native_range    Reads rows [0, end) with columns of several types. Supports predicate,
-//                   column and limit pushdown. With the option "extra", the schema has one more
-//                   column: "map" adds a map whose entry fields are named "keys" and "values",
-//                   as arrow-rs names them, "decimal256" adds a decimal256, and "listview" adds
-//                   a list view. With the option "slice", the columns of the batches have an
-//                   offset of 1. With the option "short", an array of the batches has one value
-//                   fewer than its parent refers to, although its buffers hold them all: "id"
-//                   shortens the column id, "entries" the entries of the map and their fields,
-//                   and "values" the values of the entries.
+//                   column and limit pushdown. With the option "claim_predicates", it reports
+//                   all the predicates as evaluated completely, but ignores them. With the
+//                   option "extra", the schema has one more column: "map" adds a map whose
+//                   entry fields are named "keys" and "values", as arrow-rs names them, "struct"
+//                   adds a struct, "decimal256" adds a decimal256, "listview" adds a list view,
+//                   "largelist" adds a large list, and "dictionary" adds a dictionary-encoded
+//                   string column, whose data Spark rejects before reading it. With the option
+//                   "slice", the columns of the batches have an offset of 1. With the option
+//                   "short", an array of the batches has one value fewer than its parent refers
+//                   to, although its buffers hold them all: "id" shortens the column id,
+//                   "entries" the entries of the map and their fields, and "values" the values
+//                   of the entries.
 //   native_sink     Writes the rows as CSV files under the directory in the option "path".
 //   native_counter  Streams the rows [0, max_offset) with a single column "id", making "step"
-//                   more rows available each time Spark asks for the latest offset.
+//                   more rows available each time Spark asks for the latest offset. With the
+//                   option "bad_offset", the latest offset is "none", "multiline" JSON or
+//                   "invalid" JSON. With the option "closed_path", closing the stream reader
+//                   creates that file.
+//
+// With the option "fail", a step fails with an error. With the option "zero", a function that
+// creates a handle succeeds without setting it: "spark_ds_create", "spark_ds_create_reader",
+// "spark_ds_create_stream_reader", "spark_ds_create_writer", "spark_ds_create_stream_writer" or
+// "spark_ds_create_data_writer".
 //
 // The suite compiles it with these macros to get several distinct libraries:
 //
@@ -95,9 +107,12 @@ const ColumnType kColumns[] = {
 
 // The columns that native_range adds with the option "extra", by its value.
 const std::map<std::string, ColumnType> kExtraColumns = {
-    {"map", {"m", "+m"}},               // map<string, bigint>: {"k<id>": id}
+    {"map", {"m", "+m"}},                   // map<string, bigint>: {"k<id>": id}
+    {"struct", {"st", "+s"}},               // struct<a: bigint, b: string>: {id, "s<id>"}
     {"decimal256", {"dec", "d:10,2,256"}},  // decimal256(10, 2): id
-    {"listview", {"lv", "+vl"}}              // list_view<bigint>: [id]
+    {"listview", {"lv", "+vl"}},            // list_view<bigint>: [id]
+    {"largelist", {"ll", "+L"}},            // large_list<bigint>, without data
+    {"dictionary", {"dict", "i"}}           // dictionary<int32, string>, without data
 };
 
 const ColumnType* findColumn(const std::string& name) {
@@ -131,6 +146,7 @@ struct SchemaData {
   std::string name;
   std::vector<std::unique_ptr<ArrowSchema>> children;
   std::vector<ArrowSchema*> child_pointers;
+  std::unique_ptr<ArrowSchema> dictionary;
 };
 
 void releaseSchema(ArrowSchema* schema) {
@@ -138,13 +154,16 @@ void releaseSchema(ArrowSchema* schema) {
   for (auto& child : data->children) {
     if (child->release != nullptr) child->release(child.get());
   }
+  if (data->dictionary != nullptr && data->dictionary->release != nullptr) {
+    data->dictionary->release(data->dictionary.get());
+  }
   delete data;
   schema->release = nullptr;
 }
 
 void initSchema(ArrowSchema* out, const std::string& format, const std::string& name,
                 int64_t flags) {
-  auto* data = new SchemaData{format, name, {}, {}};
+  auto* data = new SchemaData{format, name, {}, {}, nullptr};
   out->format = data->format.c_str();
   out->name = data->name.c_str();
   out->metadata = nullptr;
@@ -178,8 +197,16 @@ void exportSchema(const std::vector<std::string>& columns, ArrowSchema* out) {
       ArrowSchema* entries = addChild(column, "+s", "entries", 0);
       addChild(entries, "u", "keys", 0);
       addChild(entries, "l", "values", ARROW_FLAG_NULLABLE);
-    } else if (name == "lv") {
+    } else if (name == "st") {
+      addChild(column, "l", "a", ARROW_FLAG_NULLABLE);
+      addChild(column, "u", "b", ARROW_FLAG_NULLABLE);
+    } else if (name == "lv" || name == "ll") {
       addChild(column, "l", "item", ARROW_FLAG_NULLABLE);
+    } else if (name == "dict") {
+      auto* data = static_cast<SchemaData*>(column->private_data);
+      data->dictionary = std::make_unique<ArrowSchema>();
+      initSchema(data->dictionary.get(), "u", "", ARROW_FLAG_NULLABLE);
+      column->dictionary = data->dictionary.get();
     }
   }
 }
@@ -318,6 +345,19 @@ void exportColumn(const std::string& name, int64_t lo, int64_t hi, ArrowArray* o
     initArray(addChild(entries), n, 0,
               {no_validity, toBytes(key_offsets), std::vector<uint8_t>(keys.begin(), keys.end())});
     initArray(addChild(entries), n, 0, {no_validity, toBytes(values)});
+  } else if (name == "st") {
+    initArray(out, n, 0, {no_validity});
+    std::vector<int64_t> ids;
+    std::vector<int32_t> offsets{0};
+    std::string chars;
+    for (int64_t id = lo; id < hi; id++) {
+      ids.push_back(id);
+      chars += "s" + std::to_string(id);
+      offsets.push_back(static_cast<int32_t>(chars.size()));
+    }
+    initArray(addChild(out), n, 0, {no_validity, toBytes(ids)});
+    initArray(addChild(out), n, 0,
+              {no_validity, toBytes(offsets), std::vector<uint8_t>(chars.begin(), chars.end())});
   } else if (name == "dec") {
     // 256-bit little-endian unscaled values of the scale 2.
     std::vector<int64_t> words;
@@ -340,7 +380,8 @@ void exportColumn(const std::string& name, int64_t lo, int64_t hi, ArrowArray* o
     initArray(out, n, 0, {no_validity, toBytes(offsets), toBytes(sizes)});
     initArray(addChild(out), n, 0, {no_validity, toBytes(values)});
   } else {
-    throw std::runtime_error("unknown column " + name);
+    // Including "ll" and "dict", which Spark rejects from the schema, before reading data.
+    throw std::runtime_error("no data for the column " + name);
   }
 }
 
@@ -614,6 +655,11 @@ void maybeFail(const Options& options, const std::string& step) {
   if (get(options, "fail", "") == step) throw std::runtime_error("injected failure in " + step);
 }
 
+// Whether the given function succeeds without setting its handle, with the option "zero".
+bool returnsZero(const Options& options, const std::string& function) {
+  return get(options, "zero", "") == function;
+}
+
 // The driver-side reader of native_range and native_counter.
 struct Reader {
   Options state;  // Serialized to the executors.
@@ -767,6 +813,7 @@ int spark_ds_create(const char* name_value, const char* const* option_keys,
         source->name != name("native_counter")) {
       throw std::runtime_error("unknown data source " + source->name);
     }
+    if (returnsZero(source->options, "spark_ds_create")) return;
     *handle = source.release();
   });
 }
@@ -791,6 +838,7 @@ int spark_ds_create_reader(void* handle, struct ArrowSchema* schema, void** out)
     }
     auto columns = importColumns(schema);
     for (const auto& column : columns) findColumn(column);
+    if (returnsZero(source->options, "spark_ds_create_reader")) return;
     auto* reader = new Reader();
     reader->state["columns"] = join(columns);
     reader->state["lo"] = "0";
@@ -800,6 +848,7 @@ int spark_ds_create_reader(void* handle, struct ArrowSchema* schema, void** out)
     reader->state["fail"] = get(source->options, "fail", "");
     reader->state["slice"] = get(source->options, "slice", "");
     reader->state["short"] = get(source->options, "short", "");
+    reader->state["claim_predicates"] = get(source->options, "claim_predicates", "");
     *out = reader;
   });
 }
@@ -812,13 +861,17 @@ int spark_ds_create_stream_reader(void* handle, struct ArrowSchema* schema, void
     if (source->name != name("native_counter")) {
       throw std::runtime_error(source->name + " does not support streaming reads");
     }
+    auto columns = join(importColumns(schema));
+    if (returnsZero(source->options, "spark_ds_create_stream_reader")) return;
     auto* reader = new Reader();
-    reader->state["columns"] = join(importColumns(schema));
+    reader->state["columns"] = columns;
     reader->state["max_offset"] = get(source->options, "max_offset", "10");
     reader->state["step"] = get(source->options, "step", reader->state["max_offset"]);
     reader->state["current"] = "0";
     reader->state["batch_size"] = get(source->options, "batch_size", "1000");
     reader->state["commit_path"] = get(source->options, "commit_path", "");
+    reader->state["bad_offset"] = get(source->options, "bad_offset", "");
+    reader->state["closed_path"] = get(source->options, "closed_path", "");
     *out = reader;
   });
 }
@@ -836,6 +889,12 @@ int spark_ds_push_predicates(void* handle, const char* const* predicates, int64_
     auto json = toStrings(predicates, count);
     int64_t lo = getLong(reader->state, "lo", 0);
     int64_t hi = getLong(reader->state, "hi", 0);
+    // With the option "claim_predicates", reports every predicate as evaluated completely, but
+    // evaluates none of them.
+    if (reader->state["claim_predicates"] == "true") {
+      for (size_t i = 0; i < json.size(); i++) evaluated[i] = true;
+      return;
+    }
     for (size_t i = 0; i < json.size(); i++) {
       // Accepts "id <op> <integer literal>" for the comparison operators.
       Json predicate = JsonParser(json[i]).parse();
@@ -928,7 +987,16 @@ int spark_ds_latest_offset(void* handle, SparkDsSink set_offset, void* sink) {
     int64_t latest = std::min(getLong(state, "max_offset", 10),
                               getLong(state, "current", 0) + getLong(state, "step", 10));
     state["current"] = std::to_string(latest);
-    sendBytes(set_offset, sink, "{\"offset\":" + std::to_string(latest) + "}");
+    std::string bad_offset = get(state, "bad_offset", "");
+    if (bad_offset == "none") return;
+    if (bad_offset == "multiline") {
+      // Pretty-printed JSON, as serde_json::to_string_pretty writes it.
+      sendBytes(set_offset, sink, "{\n  \"offset\": " + std::to_string(latest) + "\n}");
+    } else if (bad_offset == "invalid") {
+      sendBytes(set_offset, sink, "offset " + std::to_string(latest));
+    } else {
+      sendBytes(set_offset, sink, "{\"offset\":" + std::to_string(latest) + "}");
+    }
   });
 }
 
@@ -952,7 +1020,13 @@ int spark_ds_commit_offset(void* handle, const char* end) {
   });
 }
 
-void spark_ds_close_stream_reader(void* handle) { delete fromHandle<Reader>(handle); }
+void spark_ds_close_stream_reader(void* handle) {
+  std::unique_ptr<Reader> reader(fromHandle<Reader>(handle));
+  guarded([&] {
+    std::string path = get(reader->state, "closed_path", "");
+    if (!path.empty()) writeFile(path, "");
+  });
+}
 
 #endif  // READ_ONLY
 
@@ -984,7 +1058,9 @@ int spark_ds_read(const uint8_t* reader_state, int64_t reader_state_length,
 
 namespace {
 
-int createAnyWriter(void* handle, struct ArrowSchema* schema, bool overwrite, void** out) {
+// Creates the writer of a batch write, or of a streaming write with the ID of its query.
+int createAnyWriter(const char* function, void* handle, struct ArrowSchema* schema,
+                    bool overwrite, const char* query_id, void** out) {
   return guarded([&] {
     auto* source = fromHandle<DataSource>(handle);
     if (source->name != name("native_sink")) {
@@ -1000,13 +1076,17 @@ int createAnyWriter(void* handle, struct ArrowSchema* schema, bool overwrite, vo
       path = path.substr(5);
     }
     if (path.empty()) throw std::runtime_error("the option 'path' is required");
+    if (returnsZero(source->options, function)) return;
     auto* writer = new Writer();
     writer->state["path"] = path;
     writer->state["overwrite"] = overwrite ? "true" : "false";
     writer->state["fail"] = get(source->options, "fail", "");
-    // Records that a writer was created, which Spark then commits or aborts.
+    writer->state["zero"] = get(source->options, "zero", "");
+    // Records that a writer was created, which Spark then commits or aborts, and the ID of the
+    // streaming query.
     makeDirs(path);
     writeFile(path + "/_CREATED", "");
+    if (query_id != nullptr) writeFile(path + "/_QUERY_ID", query_id);
     *out = writer;
   });
 }
@@ -1017,12 +1097,13 @@ extern "C" {
 
 int spark_ds_create_writer(void* handle, struct ArrowSchema* schema, bool overwrite,
                            void** writer) {
-  return createAnyWriter(handle, schema, overwrite, writer);
+  return createAnyWriter("spark_ds_create_writer", handle, schema, overwrite, nullptr, writer);
 }
 
 int spark_ds_create_stream_writer(void* handle, struct ArrowSchema* schema, bool overwrite,
-                                  void** writer) {
-  return createAnyWriter(handle, schema, overwrite, writer);
+                                  const char* query_id, void** writer) {
+  return createAnyWriter("spark_ds_create_stream_writer", handle, schema, overwrite, query_id,
+                         writer);
 }
 
 int spark_ds_serialize_writer(void* handle, SparkDsSink set_state, void* sink) {
@@ -1051,6 +1132,8 @@ int spark_ds_commit(void* handle, int64_t epoch_id, const uint8_t* const* messag
   });
 }
 
+// Records the aborted write in _ABORTED for a batch write, or _ABORTED_<epoch> for a streaming
+// one, with the number of tasks that did not commit, whose messages are NULL.
 int spark_ds_abort(void* handle, int64_t epoch_id, const uint8_t* const* messages,
                    const int64_t* message_lengths, int64_t num_messages) {
   return guarded([&] {
@@ -1061,7 +1144,13 @@ int spark_ds_abort(void* handle, int64_t epoch_id, const uint8_t* const* message
          toByteStrings(messages, message_lengths, num_messages, &has_null)) {
       unlink(temp_file.c_str());
     }
-    writeFile(writer->state["path"] + "/_ABORTED", "");
+    int64_t null_messages = 0;
+    for (int64_t i = 0; i < num_messages; i++) {
+      if (messages[i] == nullptr) null_messages++;
+    }
+    writeFile(writer->state["path"] +
+                  (epoch_id < 0 ? "/_ABORTED" : "/_ABORTED_" + std::to_string(epoch_id)),
+              std::to_string(null_messages));
   });
 }
 
@@ -1079,6 +1168,7 @@ int spark_ds_create_data_writer(const uint8_t* writer_state, int64_t writer_stat
                                 void** out) {
   return guarded([&] {
     Options state = deserialize(toBytes(writer_state, writer_state_length));
+    if (returnsZero(state, "spark_ds_create_data_writer")) return;
     std::string dir = state["path"] + "/_temporary";
     makeDirs(dir);
     std::string temp_path = dir + "/" + std::to_string(epoch_id) + "-" +

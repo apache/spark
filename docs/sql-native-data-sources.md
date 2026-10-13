@@ -66,23 +66,34 @@ Spark calls the functions of the library as follows:
 - **Streaming reads**: on the driver, Spark creates a stream reader with
   `spark_ds_create_stream_reader`. For each micro-batch, it asks for the `spark_ds_latest_offset`,
   plans the partitions with `spark_ds_stream_partitions`, and calls `spark_ds_read` on the
-  executors. Offsets are JSON strings defined by the library.
-- **Writes**: on the driver, Spark creates a writer with `spark_ds_create_writer` or
-  `spark_ds_create_stream_writer`. On the executors, each task creates a data writer with
+  executors. Offsets are defined by the library, as compact JSON on a single line: Spark stores
+  each offset as a line of the offset log of the checkpoint, and rejects an offset that is not
+  valid JSON or contains a line break, such as pretty-printed JSON.
+- **Writes**: on the driver, right before the tasks of the write (or of a micro-batch) start, Spark
+  creates a writer with `spark_ds_create_writer` or `spark_ds_create_stream_writer`. With adaptive
+  query execution, it first runs the shuffle stages of the data to write, and creates no writer if
+  they fail, but the last stage runs in the tasks of the write, so a writer can still be aborted
+  because computing the data failed: do irreversible work, such as removing the existing data for
+  an overwrite, in `spark_ds_commit`. On the executors, each task creates a data writer with
   `spark_ds_create_data_writer`, writes the batches of its data with `spark_ds_write`, and calls
   `spark_ds_commit_data_writer`, or `spark_ds_abort_data_writer` if the task or the commit fails.
   Then the driver calls `spark_ds_commit` with the messages of the tasks, or `spark_ds_abort` if
-  the write failed. A micro-batch streaming query creates a new stream writer for each
-  micro-batch, and Spark closes the previous one when it creates the next one. Because Spark is not
-  told when a streaming query stops, the last stream writer of a query is closed once it is no
-  longer referenced, or when the query is restarted.
+  the write failed. A streaming write commits each micro-batch with its epoch ID, and
+  `spark_ds_create_stream_writer` gets the ID of the query, which stays the same when the query
+  restarts from its checkpoint: together, they identify the output of a micro-batch, so that a
+  library can skip an epoch that it already committed. A micro-batch streaming query creates a new
+  stream writer for each micro-batch, and Spark closes the previous one when it creates the next
+  one. Because Spark is not told when a streaming query stops, the last stream writer of a query is
+  closed once it is no longer referenced, or when the query is restarted.
 
 The library defines the format of the partitions, of the state of its readers and writers, and of
 the commit messages, which Spark sends to the executors and back as byte arrays. The library
 returns them, and the offsets, by passing them to a `SparkDsSink` callback, which copies them. A
 function reports an error by returning a non-zero value, with the message returned by
 `spark_ds_last_error`, and Spark reports it as a `NATIVE_DATA_SOURCE_ERROR`. A C++ exception or a
-Rust panic must not cross the interface.
+Rust panic must not cross the interface. The close functions cannot fail, and they can run after
+the query, so do the work that can fail, such as flushing data, in `spark_ds_commit`. Strings are
+UTF-8, and the JSON of the predicates is ASCII, with the other characters escaped.
 
 A library only exports the functions of the operations it supports. If a function is missing,
 Spark treats the operation as unsupported, except for the optional functions:
@@ -97,13 +108,25 @@ Spark treats the operation as unsupported, except for the optional functions:
 
 The comments of [`spark_datasource.h`]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/sql/core/src/main/resources/org/apache/spark/sql/datasource/spark_datasource.h)
 specify each function, including the ownership of the Arrow structs and the JSON format of the
-pushed predicates. A predicate that a library reports as evaluated completely must follow the
-semantics of Spark SQL, for example for NaN values, which are equal to each other and greater
-than any other value. The arrays that a library exports must have an offset of 0: copy a sliced
-array, such as the result of `RecordBatch::slice` in arrow-rs, before exporting it. Spark also
-checks that each array has at least as many values as its parent refers to, but it cannot check
-that the buffers of the arrays hold those values, because the C data interface does not carry the
-sizes of buffers: a library that exports a buffer that is too short makes Spark read past its end.
+pushed predicates. Spark evaluates all the pushed predicates again after reading, so a library can
+use them to skip data, for example files or row groups whose statistics show that no row matches,
+but it must never skip a row for which the predicates are true under the semantics of Spark SQL:
+NaN values are equal to each other and greater than any other value, `-0.0` is equal to `0.0`,
+comparisons with null are null, and strings compare by their UTF-8 bytes. The comparisons of IEEE
+754 and the total orders of Arrow libraries, such as the comparison kernels of arrow-rs, differ for
+some of these values. The jar of Spark SQL contains test cases for a library,
+`org/apache/spark/sql/datasource/predicate-cases.json`: predicates as Spark pushes them, with the
+rows of a table for which they are true:
+
+```bash
+unzip -p "$SPARK_HOME"/jars/spark-sql_*.jar org/apache/spark/sql/datasource/predicate-cases.json
+```
+
+The arrays that a library exports must have an offset of 0: copy a sliced array, such as the
+result of `RecordBatch::slice` in arrow-rs, before exporting it. Spark also checks that each array
+has at least as many values as its parent refers to, but it cannot check that the buffers of the
+arrays hold those values, because the C data interface does not carry the sizes of buffers: a
+library that exports a buffer that is too short makes Spark read past its end.
 
 The `get_next` function of the stream that `spark_ds_read` exports may block, for example on
 network I/O, but Spark cannot interrupt native code: when a task is killed, Spark stops reading
@@ -119,7 +142,7 @@ which `spark_ds_abi_version` returns and the manifest of a package declares. Wit
 signature and the semantics of an existing function never change, and new functions are only
 added as optional functions, so a library keeps working with later releases of Spark. New values
 may appear where the header says so: for example, later releases may push down predicates with
-other names, which a library must not report as evaluated completely. An incompatible change comes
+other names, which a library must ignore if it does not know them. An incompatible change comes
 with a new version, with new names. Spark supports version 1 at least in all the releases of Spark
 4 from 4.4.0.
 
@@ -128,13 +151,29 @@ with a new version, with new names. Spark supports version 1 at least in all the
 Version 1 of the interface does not cover these features of Data Source V2 yet. They can be added
 later as optional functions:
 
-- statistics: Spark estimates the size of a native scan with `spark.sql.defaultSizeInBytes`, so a
-  native scan is never the broadcast side of a join, unless the query has a broadcast hint;
+- statistics: Spark estimates the size of a native scan with `spark.sql.defaultSizeInBytes`, so it
+  does not plan a native scan as the broadcast side of a join, unless the query has a broadcast
+  hint. Adaptive query execution can still broadcast it at run time, from the size of a shuffle of
+  the scan;
 - custom metrics, shown in the Spark UI;
 - admission control for streaming reads, such as a maximum number of rows for each micro-batch,
   and continuous streaming;
 - the pushdown of aggregates, of the sort order and of the partitioning of the data;
-- a function to cancel a read in progress.
+- a function to cancel a read in progress;
+- memory accounting: see below.
+
+### Memory
+
+Spark does not manage the memory of native data sources. The memory that a library allocates, and
+the Arrow buffers that it exports, which Spark reads without copying them, are not accounted by the
+memory manager of Spark, nor limited by `spark.memory.offHeap.size`. Neither are the Arrow batches
+that Spark writes, which end at `spark.sql.execution.arrow.maxRecordsPerBatch` rows or once they
+hold `spark.sql.execution.arrow.maxBytesPerBatch` bytes, while the size of the batches that a
+library reads is up to the library. This memory comes out of the memory overhead of the driver and
+the executors, `spark.driver.memoryOverhead` and `spark.executor.memoryOverhead`, which are 10% of
+their memory, and at least 384 MiB, by default. Increase it for libraries that use much memory, and
+bound the memory that a library uses, for example with the size of its batches: on YARN or
+Kubernetes, an executor that uses more memory than it requested is killed.
 
 ## Finding Native Data Sources
 
@@ -182,6 +221,11 @@ the cluster. An executor only loads the same build of the library as the driver,
 with the SHA-256 checksum of the file, because the partitions and the state that the driver
 serializes are only meant for that build: a query fails with
 `NATIVE_DATA_SOURCE_LIBRARY_NOT_FOUND` on a node where a different build is installed.
+
+A JVM loads a library from a path only once. So after a new build is installed at the same path,
+the queries of an application that loaded the previous build fail with
+`INVALID_NATIVE_DATA_SOURCE_LIBRARY.REPLACED`, on the driver or on the executors that loaded it,
+rather than running mixed builds: restart the application to use the new build.
 
 ### Packages
 
