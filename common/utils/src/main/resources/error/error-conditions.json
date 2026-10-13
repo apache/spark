@@ -6316,7 +6316,7 @@
   },
   "NATIVE_DATA_SOURCE_LIBRARY_NOT_FOUND" : {
     "message" : [
-      "Cannot find the native data source library <fileName>, which is installed at <path> on the driver. Install the same library on every node, at the same path or in the native library path."
+      "Cannot find the native data source library <fileName> with the SHA-256 checksum <checksum>, which is installed at <path> on the driver. Install the same build of the library on every node, at the same path or in the native library path."
     ],
     "sqlState" : "42K02"
   },

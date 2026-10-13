@@ -217,7 +217,7 @@ object NativeDataSourcePackage extends Logging {
       libraries.properties().asScala.map(e => e.getKey -> e.getValue.asText()).toMap))
   }
 
-  private def sha256(file: File): String = {
+  private[ffi] def sha256(file: File): String = {
     val digest = MessageDigest.getInstance("SHA-256")
     Utils.tryWithResource(new FileInputStream(file)) { in =>
       val buffer = new Array[Byte](64 * 1024)
@@ -233,11 +233,37 @@ object NativeDataSourcePackage extends Logging {
 
 /**
  * A native data source library installed in the native library path, where
- * [[NativeDataSourceRegistry]] finds it by its file name. It must be installed on every node.
+ * [[NativeDataSourceRegistry]] finds it by its file name. It must be installed on every node. The
+ * SHA-256 checksum of the file identifies the build of the library, so that an executor can check
+ * that it loads the same build as the driver: the state that the driver serializes is only
+ * meant for the same build.
  *
  * @param path the path of the library on the driver
+ * @param sha256 the SHA-256 checksum of the library on the driver
  */
-case class InstalledNativeLibrary(path: String) extends NativeLibraryLocation
+case class InstalledNativeLibrary(path: String, sha256: String) extends NativeLibraryLocation
+
+object InstalledNativeLibrary {
+  private case class CacheKey(path: String, length: Long, lastModified: Long)
+
+  // Bounded, like the cache of the packages, although few libraries are installed.
+  private val checksums: Cache[CacheKey, String] =
+    CacheBuilder.newBuilder().maximumSize(1000).build[CacheKey, String]()
+
+  /** The installed library in the given file. */
+  def apply(file: File): InstalledNativeLibrary = InstalledNativeLibrary(file.getPath, sha256(file))
+
+  /** The SHA-256 checksum of the given file. The result is cached until the file changes. */
+  private[ffi] def sha256(file: File): String = {
+    val canonical = file.getCanonicalFile
+    val key = CacheKey(canonical.getPath, canonical.length(), canonical.lastModified())
+    Option(checksums.getIfPresent(key)).getOrElse {
+      val checksum = NativeDataSourcePackage.sha256(canonical)
+      checksums.put(key, checksum)
+      checksum
+    }
+  }
+}
 
 /** The platform names used in [[NativeDataSourceManifest.libraries]]. */
 object NativePlatform {
@@ -365,19 +391,17 @@ object NativeLibraries extends Logging {
   }
 
   /**
-   * Finds an installed library on this node: where the driver found it, or else in the native
-   * library path of this node.
+   * Finds an installed library on this node with the same checksum as on the driver: where the
+   * driver found it, or else in the native library path of this node.
    */
   private def locate(installed: InstalledNativeLibrary): File = {
     val file = new File(installed.path)
-    if (file.isFile) {
-      file
-    } else {
-      NativeDataSourceRegistry.findInstalledLibrary(file.getName).getOrElse {
+    (file +: NativeDataSourceRegistry.findInstalledLibraries(file.getName))
+      .find(f => f.isFile && InstalledNativeLibrary.sha256(f) == installed.sha256)
+      .getOrElse {
         throw QueryExecutionErrors.nativeDataSourceLibraryNotFoundError(
-          file.getName, installed.path)
+          file.getName, installed.sha256, installed.path)
       }
-    }
   }
 
   private def extract(packageFile: File, libraryPath: String, target: File): Unit = {

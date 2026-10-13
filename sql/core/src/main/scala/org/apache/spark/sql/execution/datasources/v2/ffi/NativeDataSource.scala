@@ -440,9 +440,12 @@ class NativePartitionReader(
       throw error(name, "read", s"The column ${field.getName} is dictionary-encoded, which " +
         "is not supported.")
     }
-    // The Arrow types that convert to Spark types, but that ArrowColumnVector cannot read.
+    // The Arrow types that convert to Spark types, but that Spark does not read: ArrowColumnVector
+    // cannot read decimals of other widths than 128 bits, and the lengths of the elements of a
+    // list view cannot be checked without a pass over all its lists (see checkArrays).
     def unsupportedType(field: Field): Option[ArrowType] = field.getType match {
       case decimal: ArrowType.Decimal if decimal.getBitWidth != 128 => Some(decimal)
+      case listView: ArrowType.ListView => Some(listView)
       case _ => field.getChildren.asScala.view.flatMap(unsupportedType).headOption
     }
     root.getSchema.getFields.asScala.foreach { field =>
@@ -537,7 +540,7 @@ class NativePartitionReader(
     def referenced(array: ArrowArray.Snapshot, arrowType: ArrowType): Long = arrowType match {
       case _: ArrowType.Struct => array.length
       case _: ArrowType.List | _: ArrowType.Map => lastOffset(array)
-      // A list view has no last offset: its lists refer to ranges of its elements in any order.
+      // The other types that Spark reads have no children. List views are rejected before.
       case _ => 0
     }
     def checkColumn(array: ArrowArray.Snapshot, field: Field, column: String): Unit = {

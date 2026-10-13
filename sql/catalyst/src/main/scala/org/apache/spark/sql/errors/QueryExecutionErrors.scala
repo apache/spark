@@ -840,10 +840,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def nativeDataSourceLibraryNotFoundError(
-      fileName: String, path: String): SparkRuntimeException = {
+      fileName: String, checksum: String, path: String): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "NATIVE_DATA_SOURCE_LIBRARY_NOT_FOUND",
-      messageParameters = Map("fileName" -> fileName, "path" -> path))
+      messageParameters = Map("fileName" -> fileName, "checksum" -> checksum, "path" -> path))
   }
 
   def removedClassInSpark2Error(className: String, e: Throwable): SparkClassNotFoundException = {

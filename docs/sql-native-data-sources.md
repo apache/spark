@@ -94,6 +94,37 @@ checks that each array has at least as many values as its parent refers to, but 
 that the buffers of the arrays hold those values, because the C data interface does not carry the
 sizes of buffers: a library that exports a buffer that is too short makes Spark read past its end.
 
+The `get_next` function of the stream that `read` exports may block, for example on network I/O,
+but Spark cannot interrupt native code: when a task is killed, Spark stops reading only once
+`get_next` returns. Use timeouts for blocking operations, or enable the task reaper with
+`spark.task.reaper.enabled` and `spark.task.reaper.killTimeout`, which kills an executor whose
+killed task does not end.
+
+### Compatibility
+
+The JVM binds the functions of a library by their names only, so the names and the signatures of
+the methods of `NativeBridge` are the interface. Its version, 1, is the `abiVersion` that a
+library returns and that the manifest of a package declares. Within a version, the signature and
+the semantics of an existing function never change, and new functions are only added as optional
+functions, so a library keeps working with later releases of Spark. New values may appear where
+the Javadoc says so: for example, later releases may push down predicates with other names, which
+a library must not report as evaluated completely. An incompatible change comes with a new
+version, with new names or a new class. Spark supports version 1 at least in all the releases of
+Spark 4 from 4.4.0.
+
+### Limitations
+
+Version 1 of the interface does not cover these features of Data Source V2 yet. They can be added
+later as optional functions:
+
+- statistics: Spark estimates the size of a native scan with `spark.sql.defaultSizeInBytes`, so a
+  native scan is never the broadcast side of a join, unless the query has a broadcast hint;
+- custom metrics, shown in the Spark UI;
+- admission control for streaming reads, such as a maximum number of rows for each micro-batch,
+  and continuous streaming;
+- the pushdown of aggregates, of the sort order and of the partitioning of the data;
+- a function to cancel a read in progress.
+
 ## Finding Native Data Sources
 
 When no Java or Python data source has the name that a query uses, Spark looks for a native data
@@ -134,8 +165,12 @@ these directories. A library in any other directory is found with `LD_LIBRARY_PA
 `spark.driver.extraLibraryPath` and `spark.executor.extraLibraryPath`.
 
 The executors load the library from the same path as the driver, or else find it in their own
-native library path, so install it on every node, for example in the container image of the
-cluster.
+native library path, which they get from their own environment, such as the `PATH` of the
+executor processes. So install the library on every node, for example in the container image of
+the cluster. An executor only loads the same build of the library as the driver, which it checks
+with the SHA-256 checksum of the file, because the partitions and the state that the driver
+serializes are only meant for that build: a query fails with
+`NATIVE_DATA_SOURCE_LIBRARY_NOT_FOUND` on a node where a different build is installed.
 
 ### Packages
 

@@ -129,15 +129,18 @@ object NativeDataSourceRegistry extends Logging {
       return None
     }
     val dataSource = name.toLowerCase(Locale.ROOT)
-    findInstalledLibrary(libraryFileName(dataSource))
-      .map(file => dataSource -> InstalledNativeLibrary(file.getPath))
+    findInstalledLibraries(libraryFileName(dataSource)).headOption
+      .map(file => dataSource -> InstalledNativeLibrary(file))
   }
 
-  /** Finds the library with the given file name in the native library path of this node. */
-  private[ffi] def findInstalledLibrary(fileName: String): Option[File] = {
+  /**
+   * Finds the libraries with the given file name in the native library path of this node, in the
+   * order of the path.
+   */
+  private[ffi] def findInstalledLibraries(fileName: String): Seq[File] = {
     librarySearchPath(System.getProperty("java.library.path"), System.getenv("PATH"))
       .map(new File(_, fileName))
-      .find(_.isFile)
+      .filter(_.isFile)
   }
 
   /**
