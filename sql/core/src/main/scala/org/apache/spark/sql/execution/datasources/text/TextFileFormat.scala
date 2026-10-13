@@ -64,10 +64,14 @@ case class TextFileFormat()
       path: Path): Boolean = {
     val textOptions = new TextOptions(options)
     if (textOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(path)) {
+      SupportsArchiveFormat.checkNoDecompressionCodec(path, textOptions.decompressionCodec)
       // A tar archive is read as one sequential stream (entry by entry), so it is never split.
       return false
     }
-    super.isSplitable(sparkSession, options, path) && !textOptions.wholeText
+    // When `decompressionCodec` is set, its splittability wins over the file extension.
+    textOptions.decompressionCodecSplittable.getOrElse(
+      super.isSplitable(sparkSession, options, path)) &&
+      !textOptions.wholeText
   }
 
   override def inferSchema(
@@ -113,6 +117,9 @@ case class TextFileFormat()
       hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
     verifyReadSchema(requiredSchema)
     val textOptions = new TextOptions(options)
+    // Honor the `decompressionCodec` option: force the decompression codec instead of inferring it
+    // from the file name extension.
+    CompressionCodecs.setReadCodecConfiguration(hadoopConf, textOptions.decompressionCodec)
     val broadcastedHadoopConf =
       SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     val perFileReader = readToUnsafeMem(broadcastedHadoopConf, requiredSchema, textOptions)

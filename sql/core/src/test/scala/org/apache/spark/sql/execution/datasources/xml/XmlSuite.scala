@@ -37,7 +37,7 @@ import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, GzipCodec}
 import org.xml.sax.SAXException
 
-import org.apache.spark.{DebugFilesystem, SparkConf, SparkException}
+import org.apache.spark.{DebugFilesystem, SparkConf, SparkException, SparkIllegalArgumentException}
 import org.apache.spark.io.ZStdCompressionCodec
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders, Row, SaveMode, YearUDT}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UDTEncoder
@@ -3679,7 +3679,7 @@ class XmlSuite
   }
 
   test("validate XML Options") {
-    assert(XmlOptions.getAllOptions.size == 32)
+    assert(XmlOptions.getAllOptions.size == 33)
     // Please add validation on any new XML options here
     assert(XmlOptions.isValidOption("rowTag"))
     assert(XmlOptions.isValidOption("rootTag"))
@@ -3698,6 +3698,7 @@ class XmlSuite
     assert(XmlOptions.isValidOption("mode"))
     assert(XmlOptions.isValidOption("locale"))
     assert(XmlOptions.isValidOption("compression"))
+    assert(XmlOptions.isValidOption("decompressionCodec"))
     assert(XmlOptions.isValidOption("multiLine"))
     assert(XmlOptions.isValidOption("samplingRatio"))
     assert(XmlOptions.isValidOption("columnNameOfCorruptRecord"))
@@ -3780,6 +3781,96 @@ class XmlSuite
         assert(df.schema("ts").dataType === StringType,
           s"Expected StringType for nano + non-datetime, got ${df.schema("ts").dataType}")
       }
+    }
+  }
+
+  // Writes `data` to `file` compressed with `codec` (a short name; "" means no compression), using
+  // Spark's built-in Zstandard codec for zstd (which Hadoop may not be compiled with) and Hadoop's
+  // CompressionCodecFactory otherwise. The file name intentionally does NOT carry the codec's
+  // extension, so extension-based detection cannot pick the right codec and the
+  // `decompressionCodec` option is what makes the read succeed.
+  private def writeCompressed(file: File, data: String, codec: String): Unit = {
+    val codecFactory = new CompressionCodecFactory(spark.sessionState.newHadoopConf())
+    val os = new FileOutputStream(file)
+    val out = codec match {
+      case "" => os
+      case "zstd" | "zstandard" => new ZStdCompressionCodec(sparkConf).compressedOutputStream(os)
+      case name => codecFactory.getCodecByName(name).createOutputStream(os)
+    }
+    out.write(data.getBytes(StandardCharsets.UTF_8))
+    out.close()
+  }
+
+  private def xmlDoc(records: Seq[(Int, String)]): String =
+    records.map { case (id, v) =>
+      s"  <ROW><id>$id</id><value>$v</value></ROW>"
+    }.mkString("<ROWS>\n", "\n", "\n</ROWS>")
+
+  test("SPARK-60217 decompressionCodec option overrides file name extension") {
+    val numRecord = 100
+    val records = (1 to numRecord).map(i => (i, s"value_$i"))
+    // Every read-supported codec, including zstd/zstandard which the writers do not support.
+    val codecs = HadoopCompressionCodec.values().map(_.lowerCaseName())
+      .filterNot(c => c == HadoopCompressionCodec.NONE.lowerCaseName() ||
+        c == HadoopCompressionCodec.UNCOMPRESSED.lowerCaseName()) ++ Seq("zstd", "zstandard")
+    codecs.foreach { codec =>
+      withTempDir { dir =>
+        // Misleading `.xml` name (no codec suffix): extension-based detection would read it as
+        // plain text and fail. The `decompressionCodec` option forces the correct codec.
+        val file = new File(dir, "data.xml")
+        writeCompressed(file, xmlDoc(records), codec)
+
+        val df = spark.read
+          .option("decompressionCodec", codec)
+          .option("rowTag", "ROW")
+          .xml(file.getCanonicalPath)
+        checkAnswer(df.select("id", "value"), records.map { case (id, v) => Row(id, v) })
+      }
+    }
+  }
+
+  test("SPARK-60217 decompressionCodec option none reads a file with a codec extension as-is") {
+    withTempDir { dir =>
+      // A plain-text XML that happens to carry a `.gz` extension. Extension-based detection would
+      // try (and fail) to gunzip it; `decompressionCodec` = none must read the raw bytes.
+      val file = new File(dir, "plain.xml.gz")
+      writeCompressed(file, xmlDoc(Seq((1, "a"))), "")
+
+      val df = spark.read
+        .option("decompressionCodec", HadoopCompressionCodec.NONE.lowerCaseName())
+        .option("rowTag", "ROW")
+        .xml(file.getCanonicalPath)
+      checkAnswer(df.select("id", "value"), Seq(Row(1, "a")))
+    }
+  }
+
+  test("SPARK-60217 decompressionCodec option rejects an invalid codec") {
+    withTempDir { dir =>
+      val file = new File(dir, "data.xml")
+      writeCompressed(file, xmlDoc(Seq((1, "a"))), "")
+      checkErrorMatchPVals(
+        exception = intercept[SparkIllegalArgumentException] {
+          spark.read.option("decompressionCodec", "illegal").option("rowTag", "ROW")
+            .xml(file.getCanonicalPath).collect()
+        },
+        condition = "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
+        parameters = Map("codecName" -> "illegal", "availableCodecs" -> ".*zstd.*")
+      )
+    }
+  }
+
+  test("SPARK-60217 compression option does not force a codec on read") {
+    withTempDir { dir =>
+      // Unlike `decompressionCodec`, the write-side `compression` option (which may be persisted
+      // in a table's options) must not force a codec on read: a plain file is still read as-is.
+      val file = new File(dir, "plain.xml")
+      writeCompressed(file, xmlDoc(Seq((1, "a"))), "")
+
+      val df = spark.read
+        .option("compression", HadoopCompressionCodec.GZIP.lowerCaseName())
+        .option("rowTag", "ROW")
+        .xml(file.getCanonicalPath)
+      checkAnswer(df, Row(1L, "a") :: Nil)
     }
   }
 

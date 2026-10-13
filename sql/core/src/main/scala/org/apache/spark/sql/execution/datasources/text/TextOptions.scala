@@ -61,6 +61,7 @@ class TextOptions(@transient private val parameters: CaseInsensitiveMap[String])
 
 private[sql] object TextOptions extends DataSourceOptions {
   val COMPRESSION = newOption("compression")
+  val DECOMPRESSION_CODEC = newOption(DataSourceOptions.DECOMPRESSION_CODEC)
   val WHOLETEXT = newOption("wholetext")
   val ENCODING = newOption("encoding")
   val LINE_SEP = newOption("lineSep")

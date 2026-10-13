@@ -41,10 +41,14 @@ case class JsonFileFormat() extends TextBasedFileFormat with DataSourceRegister 
       path: Path): Boolean = {
     val parsedOptions = getJsonOptions(sparkSession, options)
     if (parsedOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(path)) {
+      SupportsArchiveFormat.checkNoDecompressionCodec(path, parsedOptions.decompressionCodec)
       // A tar archive is read as one sequential stream (entry by entry), so it is never split.
       return false
     }
-    JsonDataSource(parsedOptions).isSplitable && super.isSplitable(sparkSession, options, path)
+    // When `decompressionCodec` is set, its splittability wins over the file extension.
+    JsonDataSource(parsedOptions).isSplitable &&
+      parsedOptions.decompressionCodecSplittable.getOrElse(
+        super.isSplitable(sparkSession, options, path))
   }
 
   override def inferSchema(
@@ -88,9 +92,12 @@ case class JsonFileFormat() extends TextBasedFileFormat with DataSourceRegister 
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
+    val parsedOptions = getJsonOptions(sparkSession, options)
+    // Honor the `decompressionCodec` option: force the decompression codec instead of inferring it
+    // from the file name extension.
+    CompressionCodecs.setReadCodecConfiguration(hadoopConf, parsedOptions.decompressionCodec)
     val broadcastedHadoopConf =
       SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
-    val parsedOptions = getJsonOptions(sparkSession, options)
     val actualSchema =
       StructType(requiredSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
     // Check a field requirement for corrupt records here to throw an exception in a driver side

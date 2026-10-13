@@ -327,6 +327,7 @@ object JSONOptions extends DataSourceOptions {
   val ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER = newOption("allowBackslashEscapingAnyCharacter")
   val ALLOW_UNQUOTED_CONTROL_CHARS = newOption("allowUnquotedControlChars")
   val COMPRESSION = newOption("compression")
+  val DECOMPRESSION_CODEC = newOption(DataSourceOptions.DECOMPRESSION_CODEC)
   val MODE = newOption("mode")
   val DROP_FIELD_IF_ALL_NULL = newOption("dropFieldIfAllNull")
   val IGNORE_NULL_FIELDS = newOption("ignoreNullFields")

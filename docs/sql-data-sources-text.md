@@ -67,5 +67,11 @@ Data source options of text can be set via:
     <td>Compression codec to use when saving to file. This can be one of the known case-insensitive shorten names (none, bzip2, gzip, lz4, snappy and deflate).</td>
     <td>write</td>
   </tr>
+  <tr>
+    <td><code>decompressionCodec</code></td>
+    <td>(none)</td>
+    <td>Compression codec used to decompress the input files, instead of inferring it from each file name extension. This can be one of the known case-insensitive short names (<code>none</code>, <code>uncompressed</code>, <code>bzip2</code>, <code>deflate</code>, <code>gzip</code>, <code>lz4</code>, <code>snappy</code>, <code>zstd</code> and <code>zstandard</code>) or a fully qualified Hadoop <code>CompressionCodec</code> class name. <code>none</code> and <code>uncompressed</code> read the files as-is, even when the file name carries a compression extension. The codec applies to every file read; setting it when the input includes an archive file (<code>.tar</code>, <code>.tar.gz</code>, <code>.tgz</code>, <code>.zip</code> or <code>.7z</code>) is not supported and fails the query. Unlike the write option <code>compression</code>, which is ignored on read, it does not affect writes.</td>
+    <td>read</td>
+  </tr>
 </table>
 Other generic options can be found in <a href="https://spark.apache.org/docs/latest/sql-data-sources-generic-options.html"> Generic File Source Options</a>.

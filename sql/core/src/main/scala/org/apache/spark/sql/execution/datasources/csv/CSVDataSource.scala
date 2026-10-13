@@ -38,6 +38,7 @@ import org.apache.spark.rdd.{BinaryFileRDD, RDD}
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVInferSchema, CSVOptions, UnivocityParser}
+import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SQLExecution
@@ -245,6 +246,9 @@ object CSVDataSource extends Logging {
       options.parameters))
     FileInputFormat.setInputPaths(job, paths: _*)
     val conf = job.getConfiguration
+    // Honor the `decompressionCodec` option during multiLine schema inference too, so the codec is
+    // forced rather than inferred from the file name extension.
+    CompressionCodecs.setReadCodecConfiguration(conf, options.decompressionCodec)
 
     val rdd = new BinaryFileRDD(
       sparkSession.sparkContext,

@@ -4431,7 +4431,7 @@ abstract class JsonSuite
   }
 
   test("SPARK-40667: validate JSON Options") {
-    assert(JSONOptions.getAllOptions.size == 34)
+    assert(JSONOptions.getAllOptions.size == 35)
     // Please add validation on any new Json options here
     assert(JSONOptions.isValidOption("samplingRatio"))
     assert(JSONOptions.isValidOption("primitivesAsString"))
@@ -4444,6 +4444,7 @@ abstract class JsonSuite
     assert(JSONOptions.isValidOption("allowBackslashEscapingAnyCharacter"))
     assert(JSONOptions.isValidOption("allowUnquotedControlChars"))
     assert(JSONOptions.isValidOption("compression"))
+    assert(JSONOptions.isValidOption("decompressionCodec"))
     assert(JSONOptions.isValidOption("mode"))
     assert(JSONOptions.isValidOption("dropFieldIfAllNull"))
     assert(JSONOptions.isValidOption("ignoreNullFields"))
@@ -4870,6 +4871,89 @@ abstract class JsonSuite
           .json(path)
         assert(df.schema("time").dataType === TimeType(TimeType.DEFAULT_PRECISION))
       }
+    }
+  }
+
+  // Writes `data` to `file` compressed with `codec` (a short name; "" means no compression), using
+  // Spark's built-in Zstandard codec for zstd (which Hadoop may not be compiled with) and Hadoop's
+  // CompressionCodecFactory otherwise. The file name intentionally does NOT carry the codec's
+  // extension, so extension-based detection cannot pick the right codec and the
+  // `decompressionCodec` option is what makes the read succeed.
+  private def writeCompressed(file: File, data: String, codec: String): Unit = {
+    val codecFactory = new CompressionCodecFactory(spark.sessionState.newHadoopConf())
+    val os = new FileOutputStream(file)
+    val out = codec match {
+      case "" => os
+      case "zstd" | "zstandard" => new ZStdCompressionCodec(sparkConf).compressedOutputStream(os)
+      case name => codecFactory.getCodecByName(name).createOutputStream(os)
+    }
+    out.write(data.getBytes(StandardCharsets.UTF_8))
+    out.close()
+  }
+
+  test("SPARK-60217 decompressionCodec option overrides file name extension") {
+    val numRecord = 100
+    val records = (1 to numRecord).map(i => (i, s"value_$i"))
+    // Every read-supported codec, including zstd/zstandard which the writers do not support.
+    val codecs = HadoopCompressionCodec.values().map(_.lowerCaseName())
+      .filterNot(c => c == HadoopCompressionCodec.NONE.lowerCaseName() ||
+        c == HadoopCompressionCodec.UNCOMPRESSED.lowerCaseName()) ++ Seq("zstd", "zstandard")
+    for (multiLine <- Seq(true, false); codec <- codecs) {
+      withTempDir { dir =>
+        val lines = records.map { case (id, v) => s"""{"id": $id, "value": "$v"}""" }
+        val data = if (multiLine) lines.mkString("[\n", ",\n", "\n]") else lines.mkString("\n")
+        // Misleading `.json` name (no codec suffix): extension-based detection would read it as
+        // plain text and fail. The `decompressionCodec` option forces the correct codec.
+        val file = new File(dir, "data.json")
+        writeCompressed(file, data, codec)
+
+        val df = spark.read
+          .option("decompressionCodec", codec)
+          .option("multiLine", multiLine.toString)
+          .json(file.getCanonicalPath)
+        checkAnswer(df.select("id", "value"), records.map { case (id, v) => Row(id, v) })
+      }
+    }
+  }
+
+  test("SPARK-60217 decompressionCodec option none reads a file with a codec extension as-is") {
+    withTempDir { dir =>
+      // A plain-text JSON that happens to carry a `.gz` extension. Extension-based detection would
+      // try (and fail) to gunzip it; `decompressionCodec` = none must read the raw bytes.
+      val file = new File(dir, "plain.json.gz")
+      writeCompressed(file, """{"id": 1, "value": "a"}""", "")
+
+      val df = spark.read
+        .option("decompressionCodec", HadoopCompressionCodec.NONE.lowerCaseName())
+        .json(file.getCanonicalPath)
+      checkAnswer(df.select("id", "value"), Seq(Row(1, "a")))
+    }
+  }
+
+  test("SPARK-60217 decompressionCodec option rejects an invalid codec") {
+    withTempPath { dir =>
+      Seq("""{"a": 1}""").toDF().write.text(dir.getCanonicalPath)
+      checkErrorMatchPVals(
+        exception = intercept[SparkIllegalArgumentException] {
+          spark.read.option("decompressionCodec", "illegal").json(dir.getCanonicalPath).collect()
+        },
+        condition = "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
+        parameters = Map("codecName" -> "illegal", "availableCodecs" -> ".*zstd.*")
+      )
+    }
+  }
+
+  test("SPARK-60217 compression option does not force a codec on read") {
+    withTempDir { dir =>
+      // Unlike `decompressionCodec`, the write-side `compression` option (which may be persisted
+      // in a table's options) must not force a codec on read: a plain file is still read as-is.
+      val file = new File(dir, "plain.json")
+      writeCompressed(file, """{"a": 1}""", "")
+
+      val df = spark.read
+        .option("compression", GZIP.lowerCaseName())
+        .json(file.getCanonicalPath)
+      checkAnswer(df, Row(1L) :: Nil)
     }
   }
 }

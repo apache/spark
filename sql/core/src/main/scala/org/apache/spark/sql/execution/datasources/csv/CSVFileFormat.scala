@@ -47,9 +47,13 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
     // A tar archive is decompressed/unpacked as a sequential stream, so it must be read as a
     // single split rather than carved into byte ranges.
     if (parsedOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(path)) {
+      SupportsArchiveFormat.checkNoDecompressionCodec(path, parsedOptions.decompressionCodec)
       return false
     }
-    CSVDataSource(parsedOptions).isSplitable && super.isSplitable(sparkSession, options, path)
+    // When `decompressionCodec` is set, its splittability wins over the file extension.
+    CSVDataSource(parsedOptions).isSplitable &&
+      parsedOptions.decompressionCodecSplittable.getOrElse(
+        super.isSplitable(sparkSession, options, path))
   }
 
   override def inferSchema(
@@ -101,9 +105,12 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
+    val parsedOptions = getCsvOptions(sparkSession, options)
+    // Honor the `decompressionCodec` option: force the decompression codec instead of inferring it
+    // from the file name extension.
+    CompressionCodecs.setReadCodecConfiguration(hadoopConf, parsedOptions.decompressionCodec)
     val broadcastedHadoopConf =
       SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
-    val parsedOptions = getCsvOptions(sparkSession, options)
     val isColumnPruningEnabled = parsedOptions.isColumnPruningEnabled(requiredSchema)
     // The effective `ignoredPathSegmentRegex` for skipping hidden archive entries. Reused from the
     // options' lazily-compiled Pattern (Serializable) instead of re-compiling per file or entry.

@@ -23,7 +23,7 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.fs.GlobPattern
 
 import org.apache.spark.sql.catalyst.FileSourceOptions.{ARCHIVE_PATH_FILTER, IGNORE_CORRUPT_FILES, IGNORE_MISSING_FILES, IGNORED_PATH_SEGMENT_REGEX}
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateFormatter}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs, DateFormatter}
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 
 /**
@@ -99,6 +99,30 @@ class FileSourceOptions(
    */
   @transient lazy val archivePathFilterPattern: Option[GlobPattern] =
     archivePathFilter.map(FileSourceOptions.compileArchivePathFilter)
+
+  // The raw option value, captured eagerly because `parameters` is transient and so unavailable
+  // once these options are deserialized on an executor.
+  private val decompressionCodecName: Option[String] =
+    parameters.get(DataSourceOptions.DECOMPRESSION_CODEC)
+
+  /**
+   * Read-only codec used to decompress the input files instead of inferring it from their file
+   * name extension, as a codec class name (`null` for `none`/`uncompressed`, read as-is), or
+   * `None` when the option is absent. Accepts the `compression` short names plus
+   * `zstd`/`zstandard`, which readers support even though writers do not.
+   *
+   * Honored only by the CSV, JSON, XML and text data sources. Lazy so that the other file formats,
+   * which ignore the option, never parse or validate it.
+   */
+  lazy val decompressionCodec: Option[String] =
+    decompressionCodecName.map(CompressionCodecs.getReadCodecClassName)
+
+  /**
+   * Whether [[decompressionCodec]] keeps the files splittable (`None` when the option is absent),
+   * resolved once rather than by loading the codec class for every file.
+   */
+  lazy val decompressionCodecSplittable: Option[Boolean] =
+    decompressionCodec.map(CompressionCodecs.isSplittableReadCodec)
 }
 
 object FileSourceOptions {

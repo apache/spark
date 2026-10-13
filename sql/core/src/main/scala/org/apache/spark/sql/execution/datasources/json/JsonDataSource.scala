@@ -37,7 +37,7 @@ import org.apache.spark.rdd.{BinaryFileRDD, RDD}
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JsonInferSchema, JSONOptions}
-import org.apache.spark.sql.catalyst.util.FailureSafeParser
+import org.apache.spark.sql.catalyst.util.{CompressionCodecs, FailureSafeParser}
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SQLExecution
@@ -148,6 +148,9 @@ object JsonDataSource {
     val job = Job.getInstance(sparkSession.sessionState.newHadoopConfWithOptions(
       parsedOptions.parameters))
     val conf = job.getConfiguration
+    // Honor the `decompressionCodec` option during multiLine schema inference too, so the codec is
+    // forced rather than inferred from the file name extension.
+    CompressionCodecs.setReadCodecConfiguration(conf, parsedOptions.decompressionCodec)
     val name = paths.mkString(",")
     FileInputFormat.setInputPaths(job, paths: _*)
     new BinaryFileRDD(

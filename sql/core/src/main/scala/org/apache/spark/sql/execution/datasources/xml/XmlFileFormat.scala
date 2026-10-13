@@ -52,10 +52,14 @@ case class XmlFileFormat() extends TextBasedFileFormat with DataSourceRegister {
       path: Path): Boolean = {
     val xmlOptions = getXmlOptions(sparkSession, options)
     if (xmlOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(path)) {
+      SupportsArchiveFormat.checkNoDecompressionCodec(path, xmlOptions.decompressionCodec)
       // A tar archive is read as one sequential stream (entry by entry), so it is never split.
       return false
     }
-    XmlDataSource(xmlOptions).isSplitable && super.isSplitable(sparkSession, options, path)
+    // When `decompressionCodec` is set, its splittability wins over the file extension.
+    XmlDataSource(xmlOptions).isSplitable &&
+      xmlOptions.decompressionCodecSplittable.getOrElse(
+        super.isSplitable(sparkSession, options, path))
   }
 
   override def inferSchema(
@@ -102,10 +106,12 @@ case class XmlFileFormat() extends TextBasedFileFormat with DataSourceRegister {
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
+    val xmlOptions = getXmlOptions(sparkSession, options)
+    // Honor the `decompressionCodec` option: force the decompression codec instead of inferring it
+    // from the file name extension.
+    CompressionCodecs.setReadCodecConfiguration(hadoopConf, xmlOptions.decompressionCodec)
     val broadcastedHadoopConf =
       SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
-
-    val xmlOptions = getXmlOptions(sparkSession, options)
 
     val columnNameOfCorruptRecord = xmlOptions.columnNameOfCorruptRecord
     // Check a field requirement for corrupt records here to throw an exception in a driver side
