@@ -23,6 +23,8 @@ import scala.util.Random
 
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
+import org.apache.spark.SparkRuntimeException
+
 /**
  * Direct unit tests for `VariantBuilder.canonicalize`.
  *
@@ -741,6 +743,25 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
           VariantUtil.encodeKey(VariantUtil.getMetadataKey(meta, id))),
         s"getMetadataKeyBytes must equal encodeKey(getMetadataKey) at id $id")
     }
+  }
+
+  // ----- canonicalize: malformed metadata (robustness) -----
+
+  test("canonicalize rejects a dictionary-size header too large for the metadata (no OOM)") {
+    // A corrupt/foreign metadata can set the dictionary-size header up to Integer.MAX_VALUE in a
+    // few bytes; canonicalize must reject the inconsistent header instead of OOMing on it.
+    val value = parse("1").getValue // scalar: the rebuild never reads the bogus dictionary
+    val meta = java.nio.ByteBuffer.allocate(1 + 4 + 4) // header + numKeys(4B) + offset[0](4B)
+      .order(java.nio.ByteOrder.LITTLE_ENDIAN)
+      .put((VariantUtil.VERSION | (3 << 6)).toByte) // version 1, 4-byte offset width
+      .putInt(1 << 20) // dictionary size: far more keys than 9 bytes can hold
+      .putInt(1) // offset[0] != 0 so isCanonical returns false and the rebuild runs
+      .array()
+    val malformed = new Variant(value, meta)
+    val eDirect = intercept[SparkRuntimeException](VariantBuilder.doCanonicalize(malformed))
+    assert(eDirect.getCondition == "MALFORMED_VARIANT", eDirect.getCondition)
+    val eCanon = intercept[SparkRuntimeException](VariantBuilder.canonicalize(malformed))
+    assert(eCanon.getCondition == "MALFORMED_VARIANT", eCanon.getCondition)
   }
 
   // ----- fuzz: random legal-but-non-canonical variants -----

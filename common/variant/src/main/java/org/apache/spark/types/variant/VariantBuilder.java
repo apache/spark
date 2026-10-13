@@ -658,6 +658,11 @@ public class VariantBuilder {
 
   private void buildCanonicalized(byte[] value, byte[] metadata, int pos) {
     int numKeys = getMetadataNumKeys(metadata);
+    // Check that numKeys is not malformed before sizing `seen` from it (a huge value would OOM).
+    int metaOffsetSize = ((metadata[0] >> 6) & 0x3) + 1;
+    if (1L + ((long) numKeys + 2) * metaOffsetSize > metadata.length) {
+      throw malformedVariant();
+    }
     boolean[] seen = new boolean[numKeys];
     ArrayList<byte[]> keys = new ArrayList<>();
     collectAllObjectKeys(value, metadata, pos, seen, keys);
