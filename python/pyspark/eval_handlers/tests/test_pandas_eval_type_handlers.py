@@ -50,11 +50,14 @@ if have_pandas and have_pyarrow:
 
     from pyspark.eval_handlers._pandas import (
         PandasCoGroupedMapUDFHandler,
+        PandasGroupedAggIterUDFHandler,
+        PandasGroupedAggUDFHandler,
         PandasGroupedMapIterUDFHandler,
         PandasGroupedMapUDFHandler,
         PandasMapUDFHandler,
         PandasScalarIterUDFHandler,
         PandasScalarUDFHandler,
+        PandasWindowAggUDFHandler,
     )
     from pyspark.sql.conversion import ArrowBatchTransformer
 
@@ -100,6 +103,26 @@ class PandasEvalTypeHandlerTestCase(PySparkBaseTestCase):
         """Flatten the ``v`` field of each output batch's wrapping struct column."""
         return [v for b in batches for v in b.column(0).field("v").to_pylist()]
 
+    @staticmethod
+    def _udf(func, return_type=None, args=(0,), kwargs=None):
+        """A pandas UDF tuple ``(func, args_offsets, kwargs_offsets, return_type)``."""
+        return (func, list(args), dict(kwargs or {}), return_type or LongType())
+
+    @staticmethod
+    def _agg_handler(handler_cls, *udfs, runner_conf=None):
+        """Build a grouped-agg/window-agg handler from one or more ``_udf`` tuples."""
+        return handler_cls(
+            udfs=list(udfs), runner_conf=runner_conf or RunnerConf({}), eval_conf=None
+        )
+
+    @staticmethod
+    def _columns(batches):
+        """Each output column's values, concatenated across batches."""
+        return [
+            [v for b in batches for v in b.column(i).to_pylist()]
+            for i in range(batches[0].num_columns)
+        ]
+
 
 @unittest.skipIf(not (have_pandas and have_pyarrow), _missing_message)
 class PandasEvalTypeHandlerRegistrationTests(PySparkBaseTestCase):
@@ -112,17 +135,15 @@ class PandasEvalTypeHandlerRegistrationTests(PySparkBaseTestCase):
             (PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF, PandasGroupedMapUDFHandler),
             (PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF, PandasGroupedMapIterUDFHandler),
             (PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF, PandasCoGroupedMapUDFHandler),
+            (PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF, PandasGroupedAggUDFHandler),
+            (PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF, PandasGroupedAggIterUDFHandler),
+            (PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF, PandasWindowAggUDFHandler),
         ):
             self.assertIs(get_eval_type_handler(eval_type), handler_cls)
 
 
 @unittest.skipIf(not (have_pandas and have_pyarrow), _missing_message)
 class PandasScalarUDFHandlerTests(PandasEvalTypeHandlerTestCase):
-    @staticmethod
-    def _udf(func, return_type=None, args=(0,), kwargs=None):
-        """A scalar pandas UDF tuple ``(func, args_offsets, kwargs_offsets, return_type)``."""
-        return (func, list(args), dict(kwargs or {}), return_type or LongType())
-
     @staticmethod
     def _handler(*udfs, runner_conf=None):
         """Build a PandasScalarUDFHandler from one or more ``_udf`` tuples."""
@@ -517,6 +538,159 @@ class PandasCoGroupedMapUDFHandlerTests(PandasEvalTypeHandlerTestCase):
         cogroup = ([self._batch(a=[1], b=[1])], [self._batch(a=[1], b=[2])])
         with self.assertRaises(PySparkTypeError):
             list(handler.run(0, iter([cogroup])))
+
+
+@unittest.skipIf(not (have_pandas and have_pyarrow), _missing_message)
+class PandasGroupedAggUDFHandlerTests(PandasEvalTypeHandlerTestCase):
+    def test_one_row_per_group_one_column_per_udf(self):
+        handler = self._agg_handler(
+            PandasGroupedAggUDFHandler,
+            self._udf(lambda s: s.sum(), args=(1,)),
+            self._udf(lambda a, b: (a * b).max(), args=(0, 1)),
+        )
+        groups = [
+            iter([self._batch(a=[1, 1], b=[1, 2]), self._batch(a=[1], b=[3])]),
+            iter([self._batch(a=[2], b=[5])]),
+        ]
+        out = list(handler.run(0, iter(groups)))
+        self.assertEqual([b.num_rows for b in out], [1, 1])
+        self.assertEqual(self._columns(out), [[6, 5], [3, 10]])
+
+    def test_passes_kwargs(self):
+        handler = self._agg_handler(
+            PandasGroupedAggUDFHandler, self._udf(lambda *, x: x.sum(), args=(), kwargs={"x": 0})
+        )
+        out = list(handler.run(0, iter([iter([self._batch(a=[1, 2, 3])])])))
+        self.assertEqual(self._columns(out), [[6]])
+
+    def test_skips_empty_group(self):
+        handler = self._agg_handler(PandasGroupedAggUDFHandler, self._udf(lambda s: s.sum()))
+        out = list(handler.run(0, iter([iter([]), iter([self._batch(a=[4])])])))
+        self.assertEqual(self._columns(out), [[4]])
+
+    def test_honors_large_var_types(self):
+        conf = RunnerConf({"spark.sql.execution.arrow.useLargeVarTypes": "true"})
+        handler = self._agg_handler(
+            PandasGroupedAggUDFHandler,
+            self._udf(lambda s: str(s.sum()), return_type=StringType()),
+            runner_conf=conf,
+        )
+        out = list(handler.run(0, iter([iter([self._batch(a=[1, 2])])])))
+        self.assertEqual(out[0].column(0).type, pa.large_string())
+
+
+@unittest.skipIf(not (have_pandas and have_pyarrow), _missing_message)
+class PandasGroupedAggIterUDFHandlerTests(PandasEvalTypeHandlerTestCase):
+    def test_single_arg_receives_series_per_batch(self):
+        def total(series_iter):
+            return sum(s.sum() for s in series_iter)
+
+        handler = self._agg_handler(PandasGroupedAggIterUDFHandler, self._udf(total, args=(1,)))
+        groups = [
+            iter([self._batch(a=[1, 1], b=[1, 2]), self._batch(a=[1], b=[3])]),
+            iter([self._batch(a=[2], b=[5])]),
+        ]
+        out = list(handler.run(0, iter(groups)))
+        self.assertEqual(self._columns(out), [[6, 5]])
+
+    def test_multiple_args_receive_tuple_of_series(self):
+        def dot(pairs):
+            return sum((a * b).sum() for a, b in pairs)
+
+        handler = self._agg_handler(PandasGroupedAggIterUDFHandler, self._udf(dot, args=(0, 1)))
+        group = iter([self._batch(a=[1, 2], b=[3, 4]), self._batch(a=[5], b=[6])])
+        out = list(handler.run(0, iter([group])))
+        self.assertEqual(self._columns(out), [[41]])
+
+    def test_drains_unconsumed_group_batches(self):
+        # A UDF that reads only the first batch must not leave the rest of its group
+        # in the stream.
+        handler = self._agg_handler(
+            PandasGroupedAggIterUDFHandler, self._udf(lambda it: next(it).sum())
+        )
+        group1 = iter([self._batch(a=[1]), self._batch(a=[2])])
+        group2 = iter([self._batch(a=[3])])
+        out = list(handler.run(0, iter([group1, group2])))
+        self.assertEqual(self._columns(out), [[1, 3]])
+        self.assertIsNone(next(group1, None))
+
+    def test_ignores_large_var_types(self):
+        # This eval type always emits non-large Arrow types, regardless of the conf.
+        conf = RunnerConf({"spark.sql.execution.arrow.useLargeVarTypes": "true"})
+        handler = self._agg_handler(
+            PandasGroupedAggIterUDFHandler,
+            self._udf(lambda it: str(sum(s.sum() for s in it)), return_type=StringType()),
+            runner_conf=conf,
+        )
+        out = list(handler.run(0, iter([iter([self._batch(a=[1, 2])])])))
+        self.assertEqual(out[0].column(0).type, pa.string())
+
+
+@unittest.skipIf(not (have_pandas and have_pyarrow), _missing_message)
+class PandasWindowAggUDFHandlerTests(PandasEvalTypeHandlerTestCase):
+    @staticmethod
+    def _conf(*bound_types):
+        return RunnerConf({"window_bound_types": ",".join(bound_types)})
+
+    def test_unbounded_repeats_result_per_row(self):
+        handler = self._agg_handler(
+            PandasWindowAggUDFHandler,
+            self._udf(lambda s: s.sum()),
+            runner_conf=self._conf("unbounded"),
+        )
+        groups = [iter([self._batch(a=[1, 2]), self._batch(a=[3])]), iter([self._batch(a=[10])])]
+        out = list(handler.run(0, iter(groups)))
+        self.assertEqual([b.num_rows for b in out], [3, 1])
+        self.assertEqual(self._columns(out), [[6, 6, 6, 10]])
+
+    def test_bounded_slices_per_row(self):
+        # args_offsets[0] / [1] are the per-row frame begin / end indexes.
+        handler = self._agg_handler(
+            PandasWindowAggUDFHandler,
+            self._udf(lambda s: s.sum(), args=(0, 1, 2)),
+            runner_conf=self._conf("bounded"),
+        )
+        group = iter([self._batch(begin=[0, 0, 1], end=[1, 2, 3], v=[1, 2, 3])])
+        out = list(handler.run(0, iter([group])))
+        self.assertEqual(self._columns(out), [[1, 3, 5]])
+
+    def test_bounded_slices_kwargs(self):
+        handler = self._agg_handler(
+            PandasWindowAggUDFHandler,
+            self._udf(lambda *, x: x.max(), args=(0, 1), kwargs={"x": 2}),
+            runner_conf=self._conf("bounded"),
+        )
+        group = iter([self._batch(begin=[0, 1], end=[2, 2], v=[4, 7])])
+        out = list(handler.run(0, iter([group])))
+        self.assertEqual(self._columns(out), [[7, 7]])
+
+    def test_mixed_bound_types(self):
+        handler = self._agg_handler(
+            PandasWindowAggUDFHandler,
+            self._udf(lambda s: s.sum(), args=(2,)),
+            self._udf(lambda s: s.sum(), args=(0, 1, 2)),
+            runner_conf=self._conf("unbounded", "bounded"),
+        )
+        group = iter([self._batch(begin=[0, 1], end=[1, 2], v=[3, 4])])
+        out = list(handler.run(0, iter([group])))
+        self.assertEqual(self._columns(out), [[7, 7], [3, 4]])
+
+    def test_skips_empty_group(self):
+        handler = self._agg_handler(
+            PandasWindowAggUDFHandler,
+            self._udf(lambda s: s.sum()),
+            runner_conf=self._conf("unbounded"),
+        )
+        out = list(handler.run(0, iter([iter([]), iter([self._batch(a=[5])])])))
+        self.assertEqual(self._columns(out), [[5]])
+
+    def test_rejects_invalid_bound_type(self):
+        handler = self._agg_handler(
+            PandasWindowAggUDFHandler, self._udf(lambda s: s.sum()), runner_conf=self._conf("bogus")
+        )
+        with self.assertRaises(PySparkRuntimeError) as ctx:
+            list(handler.run(0, iter([iter([self._batch(a=[1])])])))
+        self.assertEqual(ctx.exception.getCondition(), "INVALID_WINDOW_BOUND_TYPE")
 
 
 if __name__ == "__main__":
