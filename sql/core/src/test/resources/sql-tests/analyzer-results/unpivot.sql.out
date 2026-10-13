@@ -215,7 +215,7 @@ ORDER BY store, half
 Sort [store#x ASC NULLS FIRST, half#x ASC NULLS FIRST], true
 +- Project [store#x, half#x, b#x.lo AS lo#x, b#x.hi AS hi#x, isnull(b#x.hi) AS hi_is_null#x]
    +- Filter isnotnull(coalesce(b#x))
-      +- Expand [[store#x, h1, cast(h1#x as struct<lo:int,hi:int>)], [store#x, h2, h2#x]], [store#x, half#x, b#x]
+      +- Expand [[store#x, h1, h1#x], [store#x, h2, h2#x]], [store#x, half#x, b#x]
          +- SubqueryAlias __auto_generated_subquery_name
             +- Project [store#x, named_struct(lo, jan#x, hi, feb#x) AS h1#x, named_struct(lo, mar#x, hi, apr#x) AS h2#x]
                +- SubqueryAlias monthlysales
@@ -238,7 +238,7 @@ ORDER BY store, half
 Sort [store#x ASC NULLS FIRST, half#x ASC NULLS FIRST], true
 +- Project [store#x, half#x, b#x.lo AS lo#x, b#x.hi AS hi#x, isnull(b#x.hi) AS hi_is_null#x]
    +- Filter isnotnull(coalesce(b#x))
-      +- Expand [[store#x, h2, h2#x], [store#x, h1, cast(h1#x as struct<lo:int,hi:int>)]], [store#x, half#x, b#x]
+      +- Expand [[store#x, h2, h2#x], [store#x, h1, h1#x]], [store#x, half#x, b#x]
          +- SubqueryAlias __auto_generated_subquery_name
             +- Project [store#x, named_struct(lo, jan#x, hi, feb#x) AS h1#x, named_struct(lo, mar#x, hi, apr#x) AS h2#x]
                +- SubqueryAlias monthlysales
@@ -260,7 +260,7 @@ Sort [store#x ASC NULLS FIRST, half#x ASC NULLS FIRST, m#x ASC NULLS FIRST], tru
 +- Project [store#x, half#x, m#x, isnull(m#x) AS m_is_null#x]
    +- Generate explode(months#x), false, e, [m#x]
       +- Filter isnotnull(coalesce(months#x))
-         +- Expand [[store#x, h1, cast(h1#x as array<int>)], [store#x, h2, h2#x]], [store#x, half#x, months#x]
+         +- Expand [[store#x, h1, h1#x], [store#x, h2, h2#x]], [store#x, half#x, months#x]
             +- SubqueryAlias __auto_generated_subquery_name
                +- Project [store#x, array(jan#x, feb#x) AS h1#x, array(mar#x, apr#x) AS h2#x]
                   +- SubqueryAlias monthlysales
@@ -280,7 +280,7 @@ ORDER BY store, half
 Sort [store#x ASC NULLS FIRST, half#x ASC NULLS FIRST], true
 +- Project [store#x, half#x, m#x[k] AS v#x, isnull(m#x[k]) AS v_is_null#x]
    +- Filter isnotnull(coalesce(m#x))
-      +- Expand [[store#x, m1, cast(m1#x as map<string,int>)], [store#x, m2, m2#x]], [store#x, half#x, m#x]
+      +- Expand [[store#x, m1, m1#x], [store#x, m2, m2#x]], [store#x, half#x, m#x]
          +- SubqueryAlias __auto_generated_subquery_name
             +- Project [store#x, map(k, jan#x) AS m1#x, map(k, mar#x) AS m2#x]
                +- SubqueryAlias monthlysales
@@ -303,7 +303,7 @@ ORDER BY store, half
 Sort [store#x ASC NULLS FIRST, half#x ASC NULLS FIRST], true
 +- Project [store#x, half#x, s#x.hi AS hi#x, isnull(s#x.hi) AS hi_is_null#x, a#x]
    +- Filter (isnotnull(s#x) OR isnotnull(a#x))
-      +- Expand [[store#x, x, cast(s1#x as struct<hi:int>), a1#x], [store#x, y, s2#x, a2#x]], [store#x, half#x, s#x, a#x]
+      +- Expand [[store#x, x, s1#x, a1#x], [store#x, y, s2#x, a2#x]], [store#x, half#x, s#x, a#x]
          +- SubqueryAlias __auto_generated_subquery_name
             +- Project [store#x, named_struct(hi, feb#x) AS s1#x, jan#x AS a1#x, named_struct(hi, apr#x) AS s2#x, mar#x AS a2#x]
                +- SubqueryAlias monthlysales

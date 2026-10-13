@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.functions.{array, explode, length, lit, map, struct, sum}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -736,6 +737,32 @@ class DatasetUnpivotSuite extends SharedSparkSession {
       Seq(
         Row("north", "m1", false), Row("north", "m2", false),
         Row("south", "m1", false), Row("south", "m2", true)))
+  }
+
+  test("unpivot keeps nested field names and metadata of the first value") {
+    val metadata1 = new MetadataBuilder().putString("comment", "first").build()
+    val metadata2 = new MetadataBuilder().putString("comment", "second").build()
+    // s1 and s2 differ only in the nested field name case, nullability and metadata
+    val schema = new StructType()
+      .add("id", IntegerType, nullable = false)
+      .add("s1", new StructType().add("f", IntegerType, nullable = false, metadata1))
+      .add("s2", new StructType().add("F", IntegerType, nullable = true, metadata2))
+    val df = spark.createDataFrame(
+      sparkContext.parallelize(Seq(Row(1, Row(1), Row(null)))), schema)
+
+    Seq(
+      Array[Column]($"s1", $"s2") -> new StructType().add("f", IntegerType, true, metadata1),
+      Array[Column]($"s2", $"s1") -> new StructType().add("F", IntegerType, true, metadata2)
+    ).foreach { case (values, expectedType) =>
+      val unpivoted = df.unpivot(Array($"id"), values, "col", "value")
+      assert(unpivoted.schema("value").dataType === expectedType)
+      // the values are not cast, since they have the same data type up to nullability
+      assert(!unpivoted.queryExecution.analyzed.exists(
+        _.expressions.exists(_.exists(_.isInstanceOf[Cast]))))
+      checkAnswer(
+        unpivoted.select($"col", $"value.f".isNull),
+        Seq(Row("s1", false), Row("s2", true)))
+    }
   }
 
   test("unpivot takes nested nullability of the first value with the legacy flag") {
