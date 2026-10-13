@@ -234,6 +234,8 @@ private[pipelines] object Scd1LeafLevelReconciliation {
     s"${AutoCdcReservedNames.prefix}aggregated_delete_sequence"
   private val aggregatedUpsertSequenceColName: String =
     s"${AutoCdcReservedNames.prefix}aggregated_upsert_sequence"
+  private val latestDeleteUserDataColName: String =
+    s"${AutoCdcReservedNames.prefix}latest_delete_user_data"
   private def latestAuthorshipColName(index: Int): String =
     s"${AutoCdcReservedNames.prefix}aggregated_field_$index"
 
@@ -324,8 +326,9 @@ private[pipelines] object Scd1LeafLevelReconciliation {
    * @return One row per key, representing a delete if the key's greatest delete sequence is
    *         greater than its greatest upsert sequence, and an upsert otherwise. An upsert row
    *         carries its greatest upsert sequence and an entry for every user-data leaf in the
-   *         aggregated version map, with a null delete sequence. A delete row carries only its
-   *         greatest delete sequence, with a null upsert sequence and version map.
+   *         aggregated version map, with a null delete sequence. A delete row carries its greatest
+   *         delete sequence, with a null upsert sequence and version map, and the user data of the
+   *         delete event at that sequence.
    */
   private[autocdc] def collapseMicrobatchRowsPerKey(
       changeArgs: ChangeArgs,
@@ -349,12 +352,16 @@ private[pipelines] object Scd1LeafLevelReconciliation {
     )
     val latestAuthorshipColNames = fieldsToReconcile.indices.map(latestAuthorshipColName)
 
-    // Per AutoCDC key, track the largest row-wide upsert and delete sequences. Additionally, per
-    // reconciled field per key, track the last sequence to author that specific field within this
-    // microbatch along with the value it authored.
+    // Per AutoCDC key, track the largest row-wide upsert and delete sequences, and the user data of
+    // the latest delete event. Additionally, per reconciled field per key, track the last sequence
+    // to author that specific field within this microbatch along with the value it authored.
+    val userData = F.struct(userDataSchema.fieldNames.toImmutableArraySeq.map { name =>
+      microbatchDf.col(QuotingUtils.quoteIdentifier(name))
+    }: _*)
     val aggregateColumns = Seq(
       F.max(deleteSequence).as(aggregatedDeleteSequenceColName),
-      F.max(upsertSequence).as(aggregatedUpsertSequenceColName)
+      F.max(upsertSequence).as(aggregatedUpsertSequenceColName),
+      F.max_by(userData, deleteSequence).as(latestDeleteUserDataColName)
     ) ++ fieldsToReconcile.zip(latestAuthorshipColNames).map {
       case (fieldToReconcile, authorshipColName) =>
         latestMicrobatchAuthorship(fieldToReconcile, microbatchDf).as(authorshipColName)
@@ -383,6 +390,14 @@ private[pipelines] object Scd1LeafLevelReconciliation {
     val aggregatedUpsertSequence = F.col(aggregatedUpsertSequenceColName)
     val collapsedRowRepresentsDelete = aggregatedDeleteSequence.isNotNull &&
       (aggregatedUpsertSequence.isNull || aggregatedDeleteSequence > aggregatedUpsertSequence)
+    val latestDeleteUserData = F.col(latestDeleteUserDataColName)
+
+    // A net delete's user data is never stored, but must still satisfy the schema, so it carries
+    // the values of the key's latest delete event rather than the nulls that delete authored.
+    def collapsedValueOf(collapsedField: CollapsedField): Column = F.when(
+      collapsedRowRepresentsDelete,
+      collapsedField.path.foldLeft(latestDeleteUserData)(_.getField(_))
+    ).otherwise(collapsedField.reconciledValue)
 
     // Reconstruct the `microbatchDf` but using the aggregated results per key. The resulting
     // dataframe has the same shape as the `microbatchDf`, but a single row per key, representing
@@ -420,12 +435,12 @@ private[pipelines] object Scd1LeafLevelReconciliation {
           collapsedFieldsByTopLevelName.getOrElse(field.name, Seq.empty) match {
             case Seq(column) if !column.isIgnoreNullLeaf =>
               IgnoreNullColumnReconstruction.conformToField(
-                column.reconciledValue, Seq(field.name), field)
+                collapsedValueOf(column), Seq(field.name), field)
             case leaves =>
               IgnoreNullColumnReconstruction.reconstructColumn(
                 path = Seq(field.name),
                 field = field,
-                leafValues = leaves.map(leaf => leaf.path -> leaf.reconciledValue))
+                leafValues = leaves.map(leaf => leaf.path -> collapsedValueOf(leaf)))
           }
         }
       }: _*

@@ -470,6 +470,30 @@ class Scd1LeafLevelReconciliationSuite extends QueryTest with SharedSparkSession
     )
   }
 
+  test("collapseMicrobatchRowsPerKey carries the latest delete event's values on net deletes") {
+    val schema = new StructType()
+      .add("id", IntegerType)
+      .add("name", StringType, nullable = false)
+      .add("value", StringType, nullable = false)
+      .add(metadataColName, metadataSchema)
+    val authored = Map(encodedPath("name") -> 1L, encodedPath("value") -> 1L)
+    val input = dataFrameOf(schema)(
+      Row(1, "name-1", "value-1", Row(null, 1L, authored)),
+      Row(1, "name-2", "value-2", Row(2L, null, null)),
+      Row(1, "name-3", "value-3", Row(3L, null, null)))
+
+    // `name` is reconciled leaf by leaf and `value` as a whole column. Both are non-nullable, so
+    // the nulls that the deletes authored cannot be carried.
+    val result = collapseMicrobatchRowsPerKey(
+      input,
+      ignoreNullSelection =
+        Some(ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("name")))))
+
+    assert(result.schema("name") == schema("name"))
+    assert(result.schema("value") == schema("value"))
+    checkAnswer(result, Row(1, "name-3", "value-3", Row(3L, null, null)))
+  }
+
   test("collapseMicrobatchRowsPerKey handles quoted paths and non-struct complex leaves") {
     val profileType = new StructType().add("city", StringType)
     val schema = new StructType()
