@@ -37,6 +37,7 @@ from pyspark.eval_handlers._base import BatchEvalTypeHandler, EvalTypeHandler
 from pyspark.eval_handlers._typing import InputBatch, OutputBatch
 from pyspark.eval_handlers.utils import wrap_kwargs_support
 from pyspark.eval_handlers.verification import verify_arrow_result, verify_pandas_result
+from pyspark.serializers import BatchedSerializer, CPickleSerializer, Serializer
 from pyspark.sql.conversion import (
     ArrowBatchTransformer,
     ArrowTableToRowsConversion,
@@ -633,6 +634,132 @@ class UDTFEvalTypeHandler(EvalTypeHandler[InputBatch, OutputBatch]):
         except SkipRestOfInputTableException:
             if terminate is not None:
                 yield from self._eval_terminate()
+        finally:
+            if cleanup is not None:
+                cleanup()
+
+
+class TableUDTFHandler(EvalTypeHandler[Any, tuple]):
+    """SQL_TABLE_UDF, the Python UDTF: input rows arrive pickled one at a time and the UDTF's
+    ``eval`` is called once per row; the results of each call are converted to the internal
+    representation and returned to the executor as one tuple."""
+
+    eval_type = PythonEvalType.SQL_TABLE_UDF
+    # Wraps the UDTF when its TABLE argument has PARTITION BY expressions; see read_single_udtf.
+    partition_wrapper: ClassVar[type[PartitionedUDTF]] = UDTFWithPartitions
+
+    def __init__(
+        self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
+    ) -> None:
+        super().__init__(udfs, runner_conf, eval_conf)
+        assert len(udfs) == 1, "One UDTF expected here."
+        udtf, args_offsets, kwargs_offsets, return_type = udfs[0]
+        self._check_output_row_against_schema = build_null_checker(return_type)
+
+        eval_func_kwargs_support, self._args_kwargs_offsets = wrap_kwargs_support(
+            getattr(udtf, "eval"), args_offsets, kwargs_offsets
+        )
+        self._eval = self._wrap_udtf(eval_func_kwargs_support, return_type)
+
+        self._terminate: Optional[Callable[..., tuple]]
+        if hasattr(udtf, "terminate"):
+            self._terminate = self._wrap_udtf(getattr(udtf, "terminate"), return_type)
+        else:
+            self._terminate = None
+
+        self._cleanup = getattr(udtf, "cleanup") if hasattr(udtf, "cleanup") else None
+
+    @property
+    def serializer(self) -> Serializer:
+        # Each row is a group so do not batch but send one by one.
+        return BatchedSerializer(CPickleSerializer(), 1)
+
+    def _wrap_udtf(self, f: Callable, return_type: StructType) -> Callable[..., tuple]:
+        assert return_type.needConversion()
+        toInternal = return_type.toInternal
+        return_type_size = len(return_type)
+        check_output_row_against_schema = self._check_output_row_against_schema
+
+        def verify_and_convert_result(result: Any) -> Any:
+            if result is not None:
+                if hasattr(result, "__UDT__"):
+                    # UDT object should not be returned directly.
+                    raise PySparkRuntimeError(
+                        errorClass="UDTF_INVALID_OUTPUT_ROW_TYPE",
+                        messageParameters={
+                            "type": type(result).__name__,
+                            "func": f.__name__,
+                        },
+                    )
+
+                if hasattr(result, "__len__") and len(result) != return_type_size:
+                    raise PySparkRuntimeError(
+                        errorClass="UDTF_RETURN_SCHEMA_MISMATCH",
+                        messageParameters={
+                            "expected": str(return_type_size),
+                            "actual": str(len(result)),
+                            "func": f.__name__,
+                        },
+                    )
+
+                if not (isinstance(result, (list, dict, tuple)) or hasattr(result, "__dict__")):
+                    raise PySparkRuntimeError(
+                        errorClass="UDTF_INVALID_OUTPUT_ROW_TYPE",
+                        messageParameters={
+                            "type": type(result).__name__,
+                            "func": f.__name__,
+                        },
+                    )
+                if check_output_row_against_schema is not None:
+                    check_output_row_against_schema(result)
+            return toInternal(result)
+
+        # Evaluate the function and return a tuple back to the executor.
+        def evaluate(*a: Any) -> tuple:
+            try:
+                res = f(*a)
+            except SkipRestOfInputTableException:
+                raise
+            except Exception as e:
+                raise PySparkRuntimeError(
+                    errorClass="UDTF_EXEC_ERROR",
+                    messageParameters={"method_name": f.__name__, "error": str(e)},
+                )
+
+            if res is None:
+                # If the function returns None or does not have an explicit return statement,
+                # an empty tuple is returned to the executor.
+                # This is because directly constructing tuple(None) results in an exception.
+                return tuple()
+
+            if not isinstance(res, Iterable):
+                raise PySparkRuntimeError(
+                    errorClass="UDTF_RETURN_NOT_ITERABLE",
+                    messageParameters={
+                        "type": type(res).__name__,
+                        "func": f.__name__,
+                    },
+                )
+
+            # If the function returns a result, we map it to the internal representation and
+            # returns the results as a tuple.
+            return tuple(map(verify_and_convert_result, res))
+
+        return evaluate
+
+    def run(self, split_index: int, data: Iterator[Any]) -> Iterator[tuple]:
+        eval = self._eval
+        terminate = self._terminate
+        cleanup = self._cleanup
+        args_kwargs_offsets = self._args_kwargs_offsets
+        try:
+            for a in data:
+                yield eval(*[a[o] for o in args_kwargs_offsets])
+            if terminate is not None:
+                yield terminate()
+        except SkipRestOfInputTableException:
+            if terminate is not None:
+                yield terminate()
         finally:
             if cleanup is not None:
                 cleanup()

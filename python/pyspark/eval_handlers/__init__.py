@@ -20,8 +20,8 @@
 Not a supported extension API: the registry is per executor process and filled at
 import time, so handlers must be defined in this package rather than by user code.
 Each eval type handled here is an ``EvalTypeHandler`` subclass (in ``_base``) that
-declares its ``eval_type`` and self-registers at class definition, which
-``read_udfs`` and ``read_udtf`` look up via ``get_eval_type_handler``. An eval type may have
+declares its ``eval_type`` and self-registers at class definition, which the worker
+looks up via ``get_eval_type_handler``. An eval type may have
 several handlers, each declaring the ``variant_value`` of a ``variant_conf`` ``RunnerConf``
 property that selects it at lookup. Importing this package imports the concrete handler
 submodules so they register.
