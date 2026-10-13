@@ -1629,7 +1629,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
 
   test("SPARK-59747: don't retry compaction of event log files with malformed input") {
     withTempDir { dir =>
-      val conf = createTestConf()
+      val conf = createTestConf().set(FAST_IN_PROGRESS_PARSING, true)
       conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
       conf.set(EVENT_LOG_ROLLING_MAX_FILES_TO_RETAIN, 1)
       conf.set(EVENT_LOG_COMPACTION_SCORE_THRESHOLD, 0.0d)
@@ -1643,9 +1643,9 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
       val writer = new RollingEventLogFilesWriter("app", None, dir.toURI, conf, hadoopConf)
       writer.start()
 
-      // The listing replay halts once it has seen the environment update, so pad the first file
-      // with enough events that the malformed bytes appended below are never decoded while
-      // listing, but are when the file is replayed in full for compaction.
+      // Keep the writer running so fast listing replay halts after the environment update.
+      // Pad the first file so the malformed bytes are not decoded by listing's read-ahead,
+      // but are decoded when compaction replays the file in full.
       writeEventsToRollingWriter(writer, Seq(
         SparkListenerApplicationStart("app", Some("app"), 0, "user", None),
         SparkListenerEnvironmentUpdate(Map(

@@ -1210,6 +1210,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
                 compactor.compact(reader.listEventLogFiles)
               } catch {
                 case e: CharacterCodingException =>
+                  // This relies on initializeBuilders decoding every input file in full before
+                  // rewrite() creates a compact file, so no files have been written or deleted.
                   // Only rolled event log files are compacted and they are no longer modified,
                   // so retrying would fail the same way. Record this index as evaluated to
                   // avoid replaying the same files on every scan.
