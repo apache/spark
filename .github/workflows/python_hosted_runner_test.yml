@@ -56,7 +56,7 @@ on:
         type: string
         default: '{}'
     secrets:
-      DEVELOCITY_ACCESS_KEY:
+      SPARK_DEVELOCITY_ACCESS_KEY:
         description: Develocity access key for develocity.apache.org.
         required: false
 jobs:
@@ -92,7 +92,7 @@ jobs:
           coursier: cache
       - name: Build Spark
         env:
-          DEVELOCITY_ACCESS_KEY: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
+          DEVELOCITY_ACCESS_KEY: ${{ secrets.SPARK_DEVELOCITY_ACCESS_KEY }}
         run: |
           ./build/sbt -Phadoop-3 -Pyarn -Pspark-ganglia-lgpl -Phadoop-cloud -Phive \
             -Pkubernetes -Pjvm-profiler -Pkinesis-asl -Pcredential-aws -Phive-thriftserver \
@@ -146,7 +146,7 @@ jobs:
           - >-
             pyspark-pandas-slow-connect
     env:
-      DEVELOCITY_ACCESS_KEY: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
+      DEVELOCITY_ACCESS_KEY: ${{ secrets.SPARK_DEVELOCITY_ACCESS_KEY }}
       MODULES_TO_TEST: ${{ matrix.modules }}
       PYTHON_TO_TEST: python${{inputs.python}}
       HADOOP_PROFILE: ${{ inputs.hadoop }}

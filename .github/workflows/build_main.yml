@@ -36,4 +36,4 @@ jobs:
       || github.ref != 'refs/heads/master'
     uses: ./.github/workflows/build_and_test.yml
     secrets:
-      DEVELOCITY_ACCESS_KEY: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
+      SPARK_DEVELOCITY_ACCESS_KEY: ${{ secrets.SPARK_DEVELOCITY_ACCESS_KEY }}

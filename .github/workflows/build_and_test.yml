@@ -72,7 +72,7 @@ on:
       codecov_token:
         description: The upload token of codecov.
         required: false
-      DEVELOCITY_ACCESS_KEY:
+      SPARK_DEVELOCITY_ACCESS_KEY:
         description: Develocity access key for develocity.apache.org.
         required: false
 concurrency:
@@ -346,7 +346,7 @@ jobs:
           # full-build workflows that set only "build": "true" keep running this entry).
           - modules: ${{ fromJson(needs.precondition.outputs.required).build-core-utils == 'false' && 'core, unsafe, kvstore, utils, utils-java, config, network-common, network-shuffle, sketch, variant, launcher' }}
     env:
-      DEVELOCITY_ACCESS_KEY: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
+      DEVELOCITY_ACCESS_KEY: ${{ secrets.SPARK_DEVELOCITY_ACCESS_KEY }}
       MODULES_TO_TEST: ${{ matrix.modules }}
       EXCLUDED_TAGS: ${{ matrix.excluded-tags }}
       INCLUDED_TAGS: ${{ matrix.included-tags }}
@@ -548,7 +548,7 @@ jobs:
         coursier: cache
     - name: Build Spark
       env:
-        DEVELOCITY_ACCESS_KEY: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
+        DEVELOCITY_ACCESS_KEY: ${{ secrets.SPARK_DEVELOCITY_ACCESS_KEY }}
       run: |
         ./build/sbt -Phadoop-3 -Pyarn -Pspark-ganglia-lgpl -Phadoop-cloud -Phive \
           -Pkubernetes -Pjvm-profiler -Pkinesis-asl -Pcredential-aws -Phive-thriftserver \
@@ -620,7 +620,7 @@ jobs:
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-connect' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-slow-connect' }}
     env:
-      DEVELOCITY_ACCESS_KEY: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
+      DEVELOCITY_ACCESS_KEY: ${{ secrets.SPARK_DEVELOCITY_ACCESS_KEY }}
       MODULES_TO_TEST: ${{ matrix.modules }}
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
@@ -764,7 +764,7 @@ jobs:
     container:
       image: ${{ needs.precondition.outputs.image_sparkr_url_link }}
     env:
-      DEVELOCITY_ACCESS_KEY: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
+      DEVELOCITY_ACCESS_KEY: ${{ secrets.SPARK_DEVELOCITY_ACCESS_KEY }}
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
@@ -886,15 +886,15 @@ jobs:
       run: ./dev/check-license
     - name: Dependencies test
       env:
-        DEVELOCITY_ACCESS_KEY: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
+        DEVELOCITY_ACCESS_KEY: ${{ secrets.SPARK_DEVELOCITY_ACCESS_KEY }}
       run: ./dev/test-dependencies.sh
     - name: MIMA test
       env:
-        DEVELOCITY_ACCESS_KEY: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
+        DEVELOCITY_ACCESS_KEY: ${{ secrets.SPARK_DEVELOCITY_ACCESS_KEY }}
       run: ./dev/mima
     - name: Scala linter
       env:
-        DEVELOCITY_ACCESS_KEY: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
+        DEVELOCITY_ACCESS_KEY: ${{ secrets.SPARK_DEVELOCITY_ACCESS_KEY }}
       run: ./dev/lint-scala
     # The config binding policy exceptions file lists pre-existing configs that were created before
     # the binding policy was introduced. It must never grow: new configs must declare a binding
@@ -930,11 +930,11 @@ jobs:
         python3.12 ./dev/structured_logging_style.py
     - name: Java linter
       env:
-        DEVELOCITY_ACCESS_KEY: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
+        DEVELOCITY_ACCESS_KEY: ${{ secrets.SPARK_DEVELOCITY_ACCESS_KEY }}
       run: ./dev/lint-java
     - name: Spark connect jvm client mima check
       env:
-        DEVELOCITY_ACCESS_KEY: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
+        DEVELOCITY_ACCESS_KEY: ${{ secrets.SPARK_DEVELOCITY_ACCESS_KEY }}
       run: ./dev/connect-jvm-client-mima-check
     - name: List Python packages
       shell: 'script -q -e -c "bash {0}"'
@@ -967,7 +967,7 @@ jobs:
         java-version: 25
     - name: Build with Maven
       env:
-        DEVELOCITY_ACCESS_KEY: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
+        DEVELOCITY_ACCESS_KEY: ${{ secrets.SPARK_DEVELOCITY_ACCESS_KEY }}
       run: |
         export MAVEN_OPTS="-Xss64m -Xmx4g -Xms4g -XX:ReservedCodeCacheSize=128m -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
         export MAVEN_CLI_OPTS="--no-transfer-progress"
@@ -1015,7 +1015,7 @@ jobs:
         bundle install --retry=100
     - name: Run documentation build
       env:
-        DEVELOCITY_ACCESS_KEY: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
+        DEVELOCITY_ACCESS_KEY: ${{ secrets.SPARK_DEVELOCITY_ACCESS_KEY }}
       run: |
         # We need this link to make sure `python3` points to `python3.12` which contains the prerequisite packages.
         ln -s "$(which python3.12)" "/usr/local/bin/python3"
@@ -1088,13 +1088,13 @@ jobs:
     - name: Generate TPC-DS (SF=1) table data
       if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
       env:
-        DEVELOCITY_ACCESS_KEY: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
+        DEVELOCITY_ACCESS_KEY: ${{ secrets.SPARK_DEVELOCITY_ACCESS_KEY }}
       run: build/sbt "sql/Test/runMain org.apache.spark.sql.GenTPCDSData --dsdgenDir `pwd`/tpcds-kit/tools --location `pwd`/tpcds-sf-1 --scaleFactor 1 --numPartitions 1 --overwrite"
     - name: Run TPC-DS queries (Sort merge join)
       run: |
         SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSQueryTestSuite"
       env:
-        DEVELOCITY_ACCESS_KEY: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
+        DEVELOCITY_ACCESS_KEY: ${{ secrets.SPARK_DEVELOCITY_ACCESS_KEY }}
         SPARK_ANSI_SQL_MODE: ${{ fromJSON(inputs.envs).SPARK_ANSI_SQL_MODE }}
         SPARK_CODEGEN_COMPILER: ${{ fromJSON(inputs.envs).SPARK_CODEGEN_COMPILER }}
         SPARK_TPCDS_JOIN_CONF: |
@@ -1104,7 +1104,7 @@ jobs:
       run: |
         SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSQueryTestSuite"
       env:
-        DEVELOCITY_ACCESS_KEY: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
+        DEVELOCITY_ACCESS_KEY: ${{ secrets.SPARK_DEVELOCITY_ACCESS_KEY }}
         SPARK_ANSI_SQL_MODE: ${{ fromJSON(inputs.envs).SPARK_ANSI_SQL_MODE }}
         SPARK_CODEGEN_COMPILER: ${{ fromJSON(inputs.envs).SPARK_CODEGEN_COMPILER }}
         SPARK_TPCDS_JOIN_CONF: |
@@ -1113,7 +1113,7 @@ jobs:
       run: |
         SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSQueryTestSuite"
       env:
-        DEVELOCITY_ACCESS_KEY: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
+        DEVELOCITY_ACCESS_KEY: ${{ secrets.SPARK_DEVELOCITY_ACCESS_KEY }}
         SPARK_ANSI_SQL_MODE: ${{ fromJSON(inputs.envs).SPARK_ANSI_SQL_MODE }}
         SPARK_CODEGEN_COMPILER: ${{ fromJSON(inputs.envs).SPARK_CODEGEN_COMPILER }}
         SPARK_TPCDS_JOIN_CONF: |
@@ -1123,7 +1123,7 @@ jobs:
       run: |
         SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSCollationQueryTestSuite"
       env:
-        DEVELOCITY_ACCESS_KEY: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
+        DEVELOCITY_ACCESS_KEY: ${{ secrets.SPARK_DEVELOCITY_ACCESS_KEY }}
         SPARK_CODEGEN_COMPILER: ${{ fromJSON(inputs.envs).SPARK_CODEGEN_COMPILER }}
     - name: Upload test results to report
       if: always()
@@ -1154,7 +1154,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.docker_integration_tests_timeout_minutes }}
     env:
-      DEVELOCITY_ACCESS_KEY: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
+      DEVELOCITY_ACCESS_KEY: ${{ secrets.SPARK_DEVELOCITY_ACCESS_KEY }}
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
@@ -1258,7 +1258,7 @@ jobs:
           kubectl describe node
       - name: Run Spark on K8S integration test
         env:
-          DEVELOCITY_ACCESS_KEY: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
+          DEVELOCITY_ACCESS_KEY: ${{ secrets.SPARK_DEVELOCITY_ACCESS_KEY }}
         run: |
           # Prepare PV test
           PVC_TMP_DIR=$(mktemp -d)
@@ -1365,7 +1365,7 @@ jobs:
           echo "SPARK_IMAGE=${SPARK_IMAGE}" >> $GITHUB_ENV
       - name: Run OIDC E2E integration tests
         env:
-          DEVELOCITY_ACCESS_KEY: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
+          DEVELOCITY_ACCESS_KEY: ${{ secrets.SPARK_DEVELOCITY_ACCESS_KEY }}
         run: |
           # moto must be started in the same step as the test run: GitHub Actions
           # terminates background processes when a step's shell exits, so a moto

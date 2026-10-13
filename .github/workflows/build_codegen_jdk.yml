@@ -39,7 +39,7 @@ jobs:
     name: Run
     uses: ./.github/workflows/build_and_test.yml
     secrets:
-      DEVELOCITY_ACCESS_KEY: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
+      SPARK_DEVELOCITY_ACCESS_KEY: ${{ secrets.SPARK_DEVELOCITY_ACCESS_KEY }}
     if: github.repository == 'apache/spark'
     with:
       java: 17
