@@ -644,6 +644,23 @@ class ColumnExpressionSuite extends SharedSparkSession {
     }
   }
 
+  test("chained nested field updates should use compact generated column names") {
+    val df = Seq((((1, 2, 3), (4, 5, 6)), 0)).toDF("s", "z")
+    val updated = df.select(
+      col("s").withField("_1.x", lit(1)).withField("_1.y", lit(2)),
+      col("s").withField("_1.x", lit(1)).withField("_2.y", lit(2)),
+      col("s").withField("extra", lit(1)).withField("_1.x", lit(2)),
+      col("s").withField("_1.x", lit(1)).withField("_1.x", lit(2)),
+      col("s").dropFields("_1._1", "_1._2"))
+    assert(updated.columns.toSeq == Seq(
+      "update_fields(s, WithField(update_fields(s._1, WithField(1), WithField(2))))",
+      "update_fields(s, WithField(update_fields(s._1, WithField(1))), " +
+        "WithField(update_fields(s._2, WithField(2))))",
+      "update_fields(s, WithField(1), WithField(update_fields(s._1, WithField(2))))",
+      "update_fields(s, WithField(update_fields(s._1, WithField(2))))",
+      "update_fields(s, WithField(update_fields(s._1, dropfield(), dropfield())))"))
+  }
+
   test("nested field updates should preserve generated column names") {
     val df = Seq((((1, 2), (3, 4)), 0)).toDF("s", "z")
     val added = df.select(
@@ -1622,6 +1639,37 @@ class ColumnExpressionSuite extends SharedSparkSession {
           StructField("a", structType, nullable = false))),
           nullable = false))),
         nullable = false))))
+
+  test("nested updates should report type errors through non-struct inputs") {
+    val cases = Seq(
+      (testData, "key", "a.b", "key", "a"),
+      (structLevel1, "a", "b.x.y", "a.b", "x"))
+    cases.foreach { case (df, column, path, input, parent) =>
+      Seq("withField", "dropFields").foreach { operation =>
+        val value = if (operation == "withField") "WithField(2)" else "dropfield()"
+        checkError(
+          exception = intercept[AnalysisException] {
+            val updated = if (operation == "withField") {
+              col(column).withField(path, lit(2))
+            } else {
+              col(column).dropFields(path)
+            }
+            df.select(updated)
+          },
+          condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+          parameters = Map(
+            "sqlExpr" ->
+              s""""update_fields($input, WithField(update_fields($input.$parent, $value)))"""",
+            "paramIndex" -> "first",
+            "inputSql" -> s""""$input"""",
+            "inputType" -> "\"INT\"",
+            "requiredType" -> "\"STRUCT\""),
+          context = ExpectedContext(
+            fragment = operation,
+            callSitePattern = getCurrentClassCallSitePattern))
+      }
+    }
+  }
 
   test("withField should throw an exception if called on a non-StructType column") {
     checkError(

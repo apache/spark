@@ -91,8 +91,12 @@ package object util extends Logging {
       e: Expression,
       shouldTrimTempResolvedColumn: Boolean = false): Expression = e transform {
     case u: UpdateFields if u.fieldOps.exists(_.isInstanceOf[UpdateNestedField]) =>
-      PrettyAttribute(
-        u.sqlString(toPrettySQL(_, shouldTrimTempResolvedColumn), identity), u.dataType)
+      val sql = u.sqlString(toPrettySQL(_, shouldTrimTempResolvedColumn), identity)
+      if (u.checkInputDataTypes().isSuccess) {
+        PrettyAttribute(sql, u.dataType)
+      } else {
+        PrettyAttribute(sql)
+      }
     case a: Attribute => new PrettyAttribute(a)
     case Literal(s: UTF8String, StringType) => PrettyAttribute(s.toString, StringType)
     case Literal(v, t: NumericType) if v != null => PrettyAttribute(v.toString, t)
