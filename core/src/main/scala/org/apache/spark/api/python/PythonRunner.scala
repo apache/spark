@@ -22,7 +22,7 @@ import java.net._
 import java.nio.ByteBuffer
 import java.nio.channels.{AsynchronousCloseException, Channels, SelectionKey, ServerSocketChannel, SocketChannel}
 import java.util.UUID
-import java.util.concurrent.{ConcurrentHashMap, CountDownLatch, Future, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.jdk.CollectionConverters._
@@ -197,8 +197,8 @@ private[spark] object BasePythonRunner extends Logging {
    * `addTaskPreCompletionListener` so that it runs before all of them, including the ones that
    * the writer thread adds lazily while it pulls the upstream iterator, which would run first if
    * this were an ordinary completion listener. `Future.get()` cannot be used for this wait:
-   * once `cancel(true)` succeeds it throws `CancellationException` immediately, without waiting
-   * for the interrupted runnable to return.
+   * once `Future.cancel(true)` succeeds it throws `CancellationException` immediately, without
+   * waiting for the interrupted runnable to return.
    *
    * The wait has no time bound, so a writer blocked in upstream I/O that ignores interrupts
    * (e.g. a socket read without a timeout) holds task completion until that I/O returns. This
@@ -209,10 +209,9 @@ private[spark] object BasePythonRunner extends Logging {
    */
   private[python] def startPipelinedWriter(writer: Runnable, context: TaskContext): Unit = {
     val writerTask = new PipelinedWriterTask(writer, taskIdentifier(context))
-    val writerFuture = pipelinedWriterThreadPool.submit(writerTask)
+    pipelinedWriterThreadPool.submit(writerTask)
     context.addTaskPreCompletionListener(new TaskCompletionListener {
-      override def onTaskCompletion(context: TaskContext): Unit =
-        writerTask.stopAndAwaitExit(writerFuture)
+      override def onTaskCompletion(context: TaskContext): Unit = writerTask.stopAndAwaitExit()
     })
   }
 
@@ -257,8 +256,7 @@ private[spark] object BasePythonRunner extends Logging {
           writer.run()
         } catch {
           case t: Throwable =>
-            // The thread pool's FutureTask would keep this to itself, and the result of a
-            // cancelled future cannot be retrieved, so log it here.
+            // The thread pool's FutureTask would keep this to itself, so log it here.
             logError(log"Pipelined Python writer of ${MDC(TASK_NAME, taskName)} failed", t)
             throw t
         } finally {
@@ -279,32 +277,36 @@ private[spark] object BasePythonRunner extends Logging {
      * Stops the writer and waits until it has exited, or makes sure it never runs. Leaves the
      * interrupt status of the calling thread as it was on entry.
      */
-    def stopAndAwaitExit(future: Future[_]): Unit = {
+    def stopAndAwaitExit(): Unit = {
       val wasInterrupted = Thread.interrupted()
       try {
-        // Interrupts the writer thread if the writer is running. This unblocks channel.write
-        // (the JDK closes the channel and throws ClosedByInterruptException). Otherwise the
-        // writer sees the interrupt only between calls to writeNextInputToStream, each of which
-        // can pull and serialize a whole batch of input rows (e.g. for the Arrow runners).
-        future.cancel(true)
         val runningThread = synchronized {
           state match {
             case PipelinedWriterNotStarted =>
               // The writer never started and now never will.
               finish()
               None
-            case PipelinedWriterRunning(thread) => Some(thread)
+            case PipelinedWriterRunning(thread) =>
+              // Interrupts the writer thread. This unblocks channel.write (the JDK closes the
+              // channel and throws ClosedByInterruptException). Otherwise the writer sees the
+              // interrupt only between calls to writeNextInputToStream, each of which can pull
+              // and serialize a whole batch of input rows (e.g. for the Arrow runners).
+              if (thread ne Thread.currentThread()) {
+                thread.interrupt()
+              }
+              Some(thread)
             case PipelinedWriterFinished => None
           }
         }
         runningThread.foreach { thread =>
           if (thread eq Thread.currentThread()) {
-            // TaskContextImpl runs the completion listeners on the completing thread, so this
-            // means that invariant is broken. The writer can only exit after this returns, so
-            // waiting would never end; but it does not stop either: the remaining listeners run
-            // on this thread right after this one and free memory that the writer uses again
-            // when they return. Clearing the interrupt that cancel(true) set on this thread at
-            // least lets those listeners clean up.
+            // TaskContextImpl can still let a thread that adds a listener run the pending
+            // completion listeners: when another thread is invoking listeners as the task
+            // completes, or while a failing listener's failure listeners run. If that thread is
+            // this writer, in the middle of pulling its input, the writer can only exit after
+            // this returns, so waiting would never end. It is not stopped either: the remaining
+            // listeners run on this thread right after this one and free memory that the writer
+            // uses again when they return, as before this listener waited at all.
             logError(log"Task completion listeners of ${MDC(TASK_NAME, taskName)} run on its " +
               log"pipelined Python writer thread while the writer is running; not waiting " +
               log"for the writer to exit, which may lead to a use-after-free.")
@@ -1485,7 +1487,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         }
       } catch {
         case _: InterruptedException =>
-          // Task cancelled via Future.cancel(true)
+          // Interrupted by the task completion listener that stops the writer.
           Thread.currentThread().interrupt()
         case _: java.nio.channels.ClosedByInterruptException =>
           // Task cancelled while blocked in channel.write(). The channel is

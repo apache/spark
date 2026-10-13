@@ -23,7 +23,7 @@ import java.nio.ByteBuffer
 import java.nio.channels.{ServerSocketChannel, SocketChannel}
 import java.nio.charset.StandardCharsets
 import java.util.{ArrayList => JArrayList, HashMap => JHashMap}
-import java.util.concurrent.{CountDownLatch, FutureTask, TimeUnit}
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.concurrent.duration._
@@ -237,12 +237,10 @@ class BasePythonRunnerSuite extends SparkFunSuite {
   test("SPARK-60113: a pipelined writer stopped before it starts never runs") {
     val writer = new UninterruptibleWriter
     val writerTask = new BasePythonRunner.PipelinedWriterTask(writer, "test task")
-    // A future the pool has not started yet: stopping must not wait for it.
-    val future = new FutureTask[Unit](writerTask, ())
-    writerTask.stopAndAwaitExit(future)
-    assert(future.isCancelled)
+    // The pool has not started the writer yet: stopping must not wait for it.
+    writerTask.stopAndAwaitExit()
     // Stopping again does not wait either.
-    writerTask.stopAndAwaitExit(future)
+    writerTask.stopAndAwaitExit()
     // Even if the pool thread reaches the task afterwards, the writer must not run. Release it
     // up front so that a writer that wrongly runs fails the test instead of hanging it.
     writer.release.countDown()
@@ -252,18 +250,16 @@ class BasePythonRunnerSuite extends SparkFunSuite {
   }
 
   test("SPARK-60113: stopping waits for a writer that started after the interrupt") {
-    // The pool thread has entered FutureTask.run, cancel(true) interrupts it, and run() still
-    // claims the writer, which then starts with the interrupt flag already set.
+    // The writer starts with the interrupt flag of its thread already set, and ignores it.
     val writer = new UninterruptibleWriter
     val writerTask = new BasePythonRunner.PipelinedWriterTask(writer, "test task")
-    val future = new FutureTask[Unit](() => (), ())
     val writerThread = startThread {
       Thread.currentThread().interrupt()
       writerTask.run()
     }
     assert(writer.started.await(1, TimeUnit.MINUTES))
 
-    val stopper = startThread(writerTask.stopAndAwaitExit(future))
+    val stopper = startThread(writerTask.stopAndAwaitExit())
     try {
       stopper.join(500)
       assert(stopper.isAlive)
@@ -294,32 +290,29 @@ class BasePythonRunnerSuite extends SparkFunSuite {
         event.getThrown.getMessage == "fatal writer error"
     })
     // The writer has exited, so stopping does not wait.
-    writerTask.stopAndAwaitExit(new FutureTask[Unit](() => (), ()))
+    writerTask.stopAndAwaitExit()
   }
 
   test("SPARK-60113: stopping on the writer thread itself does not wait for the writer") {
-    val futureRef = new AtomicReference[FutureTask[Unit]]()
     val taskRef = new AtomicReference[BasePythonRunner.PipelinedWriterTask]()
     val stopReturned = new CountDownLatch(1)
     val interruptedAfterStop = new AtomicReference[Option[Boolean]](None)
     val writerTask = new BasePythonRunner.PipelinedWriterTask(() => {
       // Like task completion listeners handed to the writer thread while it pulls its input.
-      // cancel(true) interrupts this thread, as it runs the future.
-      taskRef.get.stopAndAwaitExit(futureRef.get)
+      taskRef.get.stopAndAwaitExit()
       interruptedAfterStop.set(Some(Thread.currentThread().isInterrupted))
       stopReturned.countDown()
     }, "test task")
     taskRef.set(writerTask)
-    futureRef.set(new FutureTask[Unit](writerTask, ()))
-    val writerThread = startThread(futureRef.get.run())
+    val writerThread = startThread(writerTask.run())
     assert(stopReturned.await(1, TimeUnit.MINUTES))
-    // The interrupt that stopping set on this thread is cleared, so that the listeners that run
-    // next on it can clean up.
+    // Stopping leaves the interrupt status of the thread it runs on as it was, so that the
+    // listeners that run next on it can clean up.
     assert(interruptedAfterStop.get === Some(false))
     writerThread.join(TimeUnit.MINUTES.toMillis(1))
     assert(!writerThread.isAlive)
     // The writer has exited, so stopping from another thread does not wait either.
-    writerTask.stopAndAwaitExit(new FutureTask[Unit](() => (), ()))
+    writerTask.stopAndAwaitExit()
   }
 
   test("SPARK-60113: the writer is interrupted again if it consumed the interrupt") {
@@ -338,13 +331,12 @@ class BasePythonRunnerSuite extends SparkFunSuite {
         }
       }
     }, "test task", warnIntervalMs = 100)
-    val future = new FutureTask[Unit](writerTask, ())
-    val writerThread = startThread(future.run())
+    val writerThread = startThread(writerTask.run())
     eventually(timeout(1.minute)) {
       assert(writerThread.getState == Thread.State.WAITING)
     }
 
-    val stopper = startThread(writerTask.stopAndAwaitExit(future))
+    val stopper = startThread(writerTask.stopAndAwaitExit())
     stopper.join(TimeUnit.MINUTES.toMillis(1))
     assert(!stopper.isAlive)
     assert(interrupts.get >= 2)
@@ -362,19 +354,16 @@ class BasePythonRunnerSuite extends SparkFunSuite {
         case _: InterruptedException =>
       }
     }, "test task")
-    val runningFuture = new FutureTask[Unit](running, ())
-    val writerThread = startThread(runningFuture.run())
+    val writerThread = startThread(running.run())
     eventually(timeout(1.minute)) {
       assert(writerThread.getState == Thread.State.WAITING)
     }
 
-    Seq(
-      (notStarted, new FutureTask[Unit](notStarted, ())),
-      (running, runningFuture)).foreach { case (writerTask, future) =>
+    Seq(notStarted, running).foreach { writerTask =>
       val interruptedAfterStop = new AtomicReference[Option[Boolean]](None)
       val stopper = startThread {
         Thread.currentThread().interrupt()
-        writerTask.stopAndAwaitExit(future)
+        writerTask.stopAndAwaitExit()
         interruptedAfterStop.set(Some(Thread.currentThread().isInterrupted))
       }
       stopper.join(TimeUnit.MINUTES.toMillis(1))

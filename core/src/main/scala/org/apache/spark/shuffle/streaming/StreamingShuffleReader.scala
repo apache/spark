@@ -400,8 +400,8 @@ class StreamingShuffleReader[K, C](
   private def checkTaskFailure(): Unit = {
     context.getTaskFailure.foreach(throw _)
     // Surface any background error on the task thread so that markTaskFailed and
-    // markTaskCompleted are called from this thread, so that the failure and completion
-    // listeners (including cleanupResources) run here without waiting for another thread.
+    // markTaskCompleted are called from this thread, ensuring completion listeners
+    // (including cleanupResources) run without contention.
     errorNotifier.throwErrorIfExists()
     if (context.isInterrupted()) {
       throw new InterruptedException("Task interrupted. Exiting read loop.")
