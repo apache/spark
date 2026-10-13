@@ -63,7 +63,6 @@ final class NativeLibrary {
   // The C types of the parameters and the results of the functions.
   private enum C { VOID, BOOL, INT32, INT64, POINTER }
 
-  private final String path;
   private final MethodHandle lastError;
   private final MethodHandle abiVersion;
   private final MethodHandle create;
@@ -95,8 +94,7 @@ final class NativeLibrary {
   private final MethodHandle commitDataWriter;
   private final MethodHandle abortDataWriter;
 
-  private NativeLibrary(String path, Object lookup) throws Throwable {
-    this.path = path;
+  private NativeLibrary(Object lookup) throws Throwable {
     C i32 = C.INT32;
     C i64 = C.INT64;
     C ptr = C.POINTER;
@@ -149,10 +147,16 @@ final class NativeLibrary {
     Object lookup;
     try {
       lookup = Ffm.LIBRARY_LOOKUP.invoke(Path.of(path), Ffm.GLOBAL_ARENA);
-    } catch (IllegalArgumentException e) {
+    } catch (IllegalArgumentException | IllegalCallerException e) {
+      // The library is not a valid library, or native access is not enabled for Spark.
       throw new LoadException(e.getMessage(), e);
+    } catch (LinkageError e) {
+      // The FFM API could not be initialized, see Ffm: report why, such as an
+      // IllegalCallerException when native access is not enabled for Spark.
+      throw new LoadException(
+        "Cannot use the Foreign Function and Memory API: " + rootCause(e), e);
     }
-    return new NativeLibrary(path, lookup);
+    return new NativeLibrary(lookup);
   }
 
   /**
@@ -257,7 +261,9 @@ final class NativeLibrary {
           .invoke(LINKER, target, sinkDescriptor, GLOBAL_ARENA, NO_OPTIONS);
         SINK = (long) ADDRESS_OF.invoke(stub);
       } catch (Throwable e) {
-        throw new IllegalStateException("Cannot initialize the FFM API.", e);
+        // The message names the cause, because the JVM only keeps this message for the later
+        // uses of the class.
+        throw new IllegalStateException("Cannot initialize the FFM API: " + rootCause(e), e);
       }
     }
 
@@ -279,6 +285,14 @@ final class NativeLibrary {
         case VOID -> throw new IllegalArgumentException("void has no layout");
       };
     }
+  }
+
+  private static Throwable rootCause(Throwable e) {
+    Throwable cause = e;
+    while (cause.getCause() != null && cause.getCause() != cause) {
+      cause = cause.getCause();
+    }
+    return cause;
   }
 
   /** Thrown when a library cannot be loaded. */
@@ -311,10 +325,11 @@ final class NativeLibrary {
     if (status == 0) {
       return;
     }
-    long message = lastError == null ? 0 : (long) lastError.invokeExact();
-    throw new RuntimeException(message == 0
+    long address = lastError == null ? 0 : (long) lastError.invokeExact();
+    String message = address == 0 ? "" : new String(readCString(address), StandardCharsets.UTF_8);
+    throw new RuntimeException(message.isEmpty()
       ? name + " failed with the error code " + status + "."
-      : new String(readCString(message), StandardCharsets.UTF_8));
+      : message);
   }
 
   private static long readHandle(long out, String name) {
@@ -571,11 +586,6 @@ final class NativeLibrary {
     }
   }
 
-  @Override
-  public String toString() {
-    return "NativeLibrary(" + path + ")";
-  }
-
   // ---------------------------------------------------------------------------------------------
   // Memory
   // ---------------------------------------------------------------------------------------------
@@ -669,11 +679,12 @@ final class NativeLibrary {
    * It must not throw: an exception thrown by an upcall crashes the JVM.
    */
   private static void sink(long id, long data, long length) {
-    Sink sink = sinks.get(id);
-    if (sink == null || sink.error != null) {
-      return;
-    }
+    Sink sink = null;
     try {
+      sink = sinks.get(id);
+      if (sink == null || sink.error != null) {
+        return;
+      }
       if (length < 0 || length > Integer.MAX_VALUE - 8 || (data == 0 && length > 0)) {
         throw new IllegalStateException("The library returned an invalid byte array, of " +
           length + " bytes at the address " + data + ".");
@@ -682,7 +693,9 @@ final class NativeLibrary {
       Platform.copyMemory(null, data, bytes, Platform.BYTE_ARRAY_OFFSET, length);
       sink.values.add(bytes);
     } catch (Throwable e) {
-      sink.error = e;
+      if (sink != null) {
+        sink.error = e;
+      }
     }
   }
 }
