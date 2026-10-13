@@ -1425,6 +1425,7 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
   private val inputArtifactRequests: mutable.ListBuffer[AddArtifactsRequest] =
     mutable.ListBuffer.empty
   private val inputConfigRequests = mutable.ListBuffer.empty[proto.ConfigRequest]
+  private val inputArtifactStatusesRequests = mutable.ListBuffer.empty[ArtifactStatusesRequest]
   private val sparkConfigs = mutable.Map.empty[String, String]
 
   var errorToThrowOnExecute: Option[Throwable] = None
@@ -1447,6 +1448,13 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
     synchronized {
       val requests = inputArtifactRequests.toSeq
       inputArtifactRequests.clear()
+      requests
+    }
+
+  private[sql] def getAndClearLatestArtifactStatusesRequests(): Seq[ArtifactStatusesRequest] =
+    synchronized {
+      val requests = inputArtifactStatusesRequests.toSeq
+      inputArtifactStatusesRequests.clear()
       requests
     }
 
@@ -1557,6 +1565,7 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
   override def artifactStatus(
       request: ArtifactStatusesRequest,
       responseObserver: StreamObserver[ArtifactStatusesResponse]): Unit = {
+    synchronized(inputArtifactStatusesRequests.append(request))
     val builder = proto.ArtifactStatusesResponse.newBuilder()
     request.getNamesList().iterator().asScala.foreach { name =>
       val status = proto.ArtifactStatusesResponse.ArtifactStatus.newBuilder()

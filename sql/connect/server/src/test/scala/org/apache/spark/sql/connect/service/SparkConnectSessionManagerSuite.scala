@@ -117,6 +117,31 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession {
     assert(newHolder.session.conf.get("spark.sql.shuffle.partitions") != "7")
   }
 
+  test("an artifact status request from a stale client does not create a session") {
+    val key = SessionKey("user", UUID.randomUUID().toString)
+    val oldHolder = SparkConnectService.sessionManager.getOrCreateIsolatedSession(key, None)
+    oldHolder.session.conf.set(Connect.CONNECT_SESSION_ALLOW_RECONNECT_AFTER_CLOSE.key, "true")
+    SparkConnectService.sessionManager.periodicMaintenance(defaultInactiveTimeoutMs = 0L)
+
+    val observer = new StreamObserver[proto.ArtifactStatusesResponse] {
+      override def onNext(v: proto.ArtifactStatusesResponse): Unit = {}
+      override def onError(t: Throwable): Unit = throw t
+      override def onCompleted(): Unit = {}
+    }
+    val request = proto.ArtifactStatusesRequest
+      .newBuilder()
+      .setUserContext(proto.UserContext.newBuilder().setUserId(key.userId))
+      .setSessionId(key.sessionId)
+      .setClientObservedServerSideSessionId(oldHolder.session.sessionUUID)
+      .addNames("cache/abc")
+      .build()
+    val ex = intercept[SparkSQLException] {
+      new SparkConnectArtifactStatusesHandler(observer).handle(request)
+    }
+    assert(ex.getCondition == "INVALID_HANDLE.SESSION_CHANGED")
+    assert(SparkConnectService.sessionManager.getIsolatedSessionIfPresent(key).isEmpty)
+  }
+
   test("lookups by a stale client of an expired reconnect-allowed session get SESSION_CHANGED") {
     val sessionManager = SparkConnectService.sessionManager
     val key = SessionKey("user", UUID.randomUUID().toString)

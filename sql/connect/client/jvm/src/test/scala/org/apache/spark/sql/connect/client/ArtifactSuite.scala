@@ -439,6 +439,33 @@ class ArtifactSuite extends ConnectFunSuite {
     assert(receivedRequests.size == 1)
   }
 
+  test("artifact requests carry the observed server-side session id once there is one") {
+    // Before the client has observed a server-side session id, none is sent.
+    artifactManager.cacheArtifact("before".getBytes("UTF-8"))
+    assert(
+      service
+        .getAndClearLatestArtifactStatusesRequests()
+        .map(_.hasClientObservedServerSideSessionId) ===
+        Seq(false))
+    assert(
+      !service
+        .getAndClearLatestAddArtifactRequests()
+        .exists(_.hasClientObservedServerSideSessionId))
+
+    state.responseValidator.hijackServerSideSessionIdForTesting("observed")
+    artifactManager.cacheArtifacts(Array("batched".getBytes("UTF-8")))
+    artifactManager.addArtifact(artifactFilePath.resolve("largeJar.jar").toString)
+    val statusRequests = service.getAndClearLatestArtifactStatusesRequests()
+    val addRequests = service.getAndClearLatestAddArtifactRequests()
+    assert(statusRequests.nonEmpty)
+    assert(addRequests.exists(_.hasBatch))
+    assert(addRequests.exists(_.hasBeginChunk))
+    (statusRequests.map(_.getClientObservedServerSideSessionId) ++
+      addRequests.map(_.getClientObservedServerSideSessionId)).foreach { id =>
+      assert(id === "observed")
+    }
+  }
+
   test("resolve ivy") {
     val main = new MavenCoordinate("my.artifactsuite.lib", "mylib", "0.1")
     val dep = "my.artifactsuite.dep:mydep:0.5"
