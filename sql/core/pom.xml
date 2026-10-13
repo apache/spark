@@ -299,6 +299,10 @@
       <artifactId>arrow-compression</artifactId>
     </dependency>
     <dependency>
+      <groupId>org.apache.arrow</groupId>
+      <artifactId>arrow-c-data</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-udf-worker-proto_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
