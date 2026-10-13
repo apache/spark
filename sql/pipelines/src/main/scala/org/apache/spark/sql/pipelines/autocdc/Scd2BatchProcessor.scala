@@ -22,8 +22,7 @@ import org.apache.spark.sql.{functions => F}
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.Resolver
-import org.apache.spark.sql.catalyst.expressions.{CreateMap, If, KnownNullable, Literal, RaiseError}
-import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
+import org.apache.spark.sql.catalyst.expressions.{CreateMap, If, Literal, RaiseError}
 import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.classic.{DataFrame, ExpressionUtils}
 import org.apache.spark.sql.expressions.{Window, WindowSpec}
@@ -1115,12 +1114,12 @@ case class Scd2BatchProcessor(
           case colName
               if ignoreNullContextsByTopLevelColumn.contains(colName) =>
             // Rebuild only user-data columns containing an active ignore-null leaf.
-            val field = userDataColumnSchema(colName)
-            Scd2BatchProcessor.constructCoalescedIgnoreNullColumn(
-              Seq(colName),
-              field,
-              ignoreNullContextsByTopLevelColumn(colName)
-            ).as(colName, field.metadata)
+            IgnoreNullColumnReconstruction.reconstructColumn(
+              path = Seq(colName),
+              field = userDataColumnSchema(colName),
+              leafValues = ignoreNullContextsByTopLevelColumn(colName)
+                .map(context => context.path -> context.coalescedValue)
+            )
           case colName =>
             // Pass through keys, framework columns, and user data outside the
             // active selection.
@@ -1722,89 +1721,6 @@ object Scd2BatchProcessor {
       F.map_concat(versionMap, F.map_from_entries(newEntries))
     )
   }
-
-  /**
-   * Rebuilds the column at `path` with coalesced leaf values. For struct types the function
-   * recurses into each field, reassembling the struct from its coalesced children. For leaf
-   * types it substitutes the inherited value when the leaf's `inherits` predicate holds.
-   *
-   * The supplied contexts must be nonempty and cover `path`. Struct fields without a context are
-   * passed through unchanged.
-   *
-   * An ignore-null column treats a null struct and a struct whose leaves are all null as
-   * equivalent, so each struct is rebuilt from its leaves even if every leaf is null. A leaf the
-   * schema declares non-nullable can still have an effective value of null, but only through a
-   * null struct enclosing it. So when every leaf beneath a nullable struct is null and the struct
-   * has such a leaf with no nullable struct in between, the struct itself is null rather than
-   * rebuilt.
-   *
-   * A non-nullable field raises `NOT_NULL_ASSERT_VIOLATION` when coalescing cannot supply it a
-   * non-null value: for example, when no preceding row authored it, when a delete boundary reset
-   * inheritance, or when another leaf beneath its nullable enclosing struct is non-null and this
-   * field has no value.
-   *
-   * @param path the name parts of the column or nested field to rebuild.
-   * @param field the schema field at `path`.
-   * @param contextsBeneath the inheritance contexts of the leaves at or beneath `path`.
-   * @return the rebuilt value of `field`.
-   */
-  private def constructCoalescedIgnoreNullColumn(
-      path: Seq[String],
-      field: StructField,
-      contextsBeneath: Seq[LeafInheritanceContext]): Column = {
-    val reconstructed = field.dataType match {
-      case struct: StructType =>
-        // If this field is a struct, recursively reconstruct all of its children by applying their
-        // resolved values after ignore-null coalescing.
-        val contextsByChildName = contextsBeneath.groupBy(_.path(path.length))
-        val rebuilt = F.struct(
-          struct.fields.toImmutableArraySeq.map { childField =>
-            val childPath = path :+ childField.name
-            contextsByChildName
-              .get(childField.name)
-              .map(constructCoalescedIgnoreNullColumn(childPath, childField, _))
-              .getOrElse(F.col(QuotingUtils.quoteNameParts(childPath)))
-              .as(childField.name, childField.metadata)
-          }: _*
-        )
-        if (field.nullable && cannotRebuildAsStructOfNulls(struct)) {
-          // The schema forbids a struct of nulls here, so the equivalent null struct is used when
-          // every leaf is null. If any leaf is non-null, the struct is rebuilt and a null
-          // non-nullable leaf fails its assertion rather than the struct dropping non-null leaves.
-          val everyLeafIsNull = contextsBeneath.map(_.coalescedValue.isNull).reduce(_ && _)
-          F.when(everyLeafIsNull, F.lit(null).cast(field.dataType)).otherwise(rebuilt)
-        } else {
-          rebuilt
-        }
-      case _ =>
-        contextsBeneath.head.coalescedValue
-    }
-    val validatedReconstructed =
-      if (field.nullable) {
-        // Spark reports a rebuilt struct as non-nullable; only `KnownNullable` can widen that.
-        ExpressionUtils.column(KnownNullable(ExpressionUtils.expression(reconstructed)))
-      } else {
-        // If the field was marked as non-nullable but coalescing deduces it will resolve to a
-        // null, throw an explicit exception. Pushing `AssertNotNull` into the plan for a
-        // non-nullable field also prevents Spark from preemptively complaining during analysis.
-        ExpressionUtils.column(
-          AssertNotNull(ExpressionUtils.expression(reconstructed), path))
-      }
-    validatedReconstructed.cast(field.dataType)
-  }
-
-  /**
-   * Whether `struct` has a non-nullable leaf whose enclosing structs beneath `struct` are all also
-   * non-nullable. If such a leaf has no value, neither it nor any of those enclosing structs can
-   * be null, so `struct` itself cannot be non-null.
-   */
-  private def cannotRebuildAsStructOfNulls(struct: StructType): Boolean =
-    struct.fields.exists { field =>
-      !field.nullable && (field.dataType match {
-        case nested: StructType => cannotRebuildAsStructOfNulls(nested)
-        case _ => true
-      })
-    }
 
   /**
    * Name of temporary column projected onto microbatch to compute the min sequencing value per

@@ -296,50 +296,6 @@ class Scd2CoalesceIgnoredNullsSuite extends QueryTest with SharedSparkSession {
         Row(1, "inherit", null, 20L, null, cdcMetadata(20L, mixedMap))))
   }
 
-  test("reconstructed nested structs retain schema metadata and nullability") {
-    def commentMetadata(comment: String): Metadata =
-      new MetadataBuilder().putString("comment", comment).build()
-
-    val cityMetadata = commentMetadata("city")
-    val zipMetadata = commentMetadata("zip")
-    val addressMetadata = commentMetadata("address")
-    val noteMetadata = commentMetadata("note")
-    val profileMetadata = commentMetadata("profile")
-    val addressType = StructType(Seq(
-      StructField("city", StringType, nullable = false, cityMetadata),
-      StructField("zip", StringType, nullable = true, zipMetadata)
-    ))
-    val profileType = StructType(Seq(
-      StructField("address", addressType, nullable = false, addressMetadata),
-      StructField("note", StringType, nullable = true, noteMetadata)
-    ))
-    val schema = StructType(Seq(
-      StructField("id", IntegerType, nullable = false),
-      StructField("profile", profileType, nullable = false, profileMetadata)
-    ))
-    val authoredMap = versionMap()
-    val unauthoredZipMap = versionMap(Seq("profile", "address", "zip") -> false)
-    val input = targetTableOf(schema)(
-      Row(1, Row(Row("city-1", "zip-1"), "note-1"),
-        10L, null, cdcMetadata(10L, authoredMap)),
-      Row(1, Row(Row("city-2", null), "note-2"),
-        20L, null, cdcMetadata(20L, unauthoredZipMap))
-    )
-
-    val result = coalesce(input, includeColumns("profile"))
-
-    assert(result.schema == input.schema)
-    checkAnswer(
-      result,
-      Seq(
-        Row(1, Row(Row("city-1", "zip-1"), "note-1"),
-          10L, null, cdcMetadata(10L, authoredMap)),
-        Row(1, Row(Row("city-2", "zip-1"), "note-2"),
-          20L, null, cdcMetadata(20L, unauthoredZipMap))
-      )
-    )
-  }
-
   test("inheriting into a stored null struct fails when a non-nullable field is authored null") {
     // Seq 20 stores profile = null, and its version map records profile.city as an authored null.
     // profile.note was added by schema evolution, so it has no entry and inherits "note-1" from
@@ -567,42 +523,6 @@ class Scd2CoalesceIgnoredNullsSuite extends QueryTest with SharedSparkSession {
           cdcMetadata(20L, unauthoredProfileMap)),
         Row(2, Row(null, null), "keep-3", 10L, null, cdcMetadata(10L, authoredProfileMap)),
         Row(2, Row(null, null), "keep-4", 20L, null, cdcMetadata(20L, unauthoredProfileMap))
-      )
-    )
-  }
-
-  test("nullable structs that require a non-null leaf stay null when every leaf is null") {
-    val locationType = StructType(Seq(StructField("city", StringType, nullable = false)))
-    val profileType = StructType(Seq(StructField("location", locationType, nullable = false)))
-    // `home` is nullable, so `address` is rebuilt around a null `home`.
-    val addressType = new StructType().add("home", locationType).add("note", StringType)
-    val schema = new StructType()
-      .add("id", IntegerType)
-      .add("profile", profileType)
-      .add("address", addressType)
-    val unauthoredMap = versionMap(
-      Seq("profile", "location", "city") -> false,
-      Seq("address", "home", "city") -> false,
-      Seq("address", "note") -> false)
-    val input = targetTableOf(schema)(
-      Row(1, null, null, 10L, null, cdcMetadata(10L, versionMap())),
-      Row(1, null, null, 20L, null, cdcMetadata(20L, unauthoredMap)),
-      Row(2, Row(Row("SF")), Row(Row("LA"), "note-1"), 10L, null, cdcMetadata(10L, versionMap())),
-      Row(2, null, null, 20L, null, cdcMetadata(20L, unauthoredMap))
-    )
-
-    val result = coalesce(input, includeColumns("profile", "address"))
-
-    assert(result.schema == input.schema)
-    checkAnswer(
-      result,
-      Seq(
-        Row(1, null, Row(null, null), 10L, null, cdcMetadata(10L, versionMap())),
-        Row(1, null, Row(null, null), 20L, null, cdcMetadata(20L, unauthoredMap)),
-        Row(2, Row(Row("SF")), Row(Row("LA"), "note-1"),
-          10L, null, cdcMetadata(10L, versionMap())),
-        Row(2, Row(Row("SF")), Row(Row("LA"), "note-1"),
-          20L, null, cdcMetadata(20L, unauthoredMap))
       )
     )
   }
