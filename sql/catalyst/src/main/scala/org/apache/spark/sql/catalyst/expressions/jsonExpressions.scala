@@ -1873,7 +1873,14 @@ case class JsonToStructs(
     options: Map[String, String],
     child: Expression,
     timeZoneId: Option[String] = None,
-    variantAllowDuplicateKeys: Boolean = SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS))
+    variantAllowDuplicateKeys: Boolean = SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS),
+    // `spark.sql.charVarchar.standardSemantics.enabled` has PERSISTED binding, so it is captured
+    // here at analysis time (as the default arg, like `variantAllowDuplicateKeys`) and then
+    // threaded all the way into the parser via `charVarcharStandardSemanticsOverride`. This keeps
+    // a view's CHAR/VARCHAR map-key semantics tied to its creation-time flag rather than the
+    // caller's session setting. (`variantAllowDuplicateKeys` is only captured, not threaded: the
+    // parser still reads that one live from `SQLConf.get`.)
+    charVarcharStandardSemantics: Boolean = SQLConf.get.charVarcharStandardSemantics)
   extends UnaryExpression
   with TimeZoneAwareExpression
   with CodegenFallback
@@ -1935,7 +1942,8 @@ case class JsonToStructs(
 
   @transient
   private lazy val evaluator = new JsonToStructsEvaluator(
-    options, nullableSchema, nameOfCorruptRecord, timeZoneId, variantAllowDuplicateKeys)
+    options, nullableSchema, nameOfCorruptRecord, timeZoneId, variantAllowDuplicateKeys,
+    charVarcharStandardSemantics)
   override def stateful: Boolean = true
 
   override def nullSafeEval(json: Any): Any = {

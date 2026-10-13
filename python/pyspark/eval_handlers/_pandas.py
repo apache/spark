@@ -31,7 +31,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any
 
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.eval_handlers._base import (
     BatchEvalTypeHandler,
     CoGroupedEvalTypeHandler,
@@ -521,3 +521,200 @@ class PandasGroupedMapUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
                 int_to_decimal_coercion_enabled=self._runner_conf.int_to_decimal_coercion_enabled,
             )
             del result
+
+
+class PandasGroupedAggUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
+    """SQL_GROUPED_AGG_PANDAS_UDF: each UDF reduces its input columns (pandas Series)
+    over the whole group to a single scalar; emit one row per group with one column
+    per UDF, converted back to Arrow. The pandas counterpart of
+    ArrowGroupedAggUDFHandler."""
+
+    eval_type = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
+
+    def __init__(
+        self, udfs: list[tuple[Any, ...]], runner_conf: "RunnerConf", eval_conf: "EvalConf"
+    ) -> None:
+        require_minimum_pandas_version()
+        require_minimum_pyarrow_version()
+        super().__init__(udfs, runner_conf, eval_conf)
+        self._return_schema = StructType(
+            [StructField("_%d" % i, rt) for i, (_, _, _, rt) in enumerate(udfs)]
+        )
+
+    def run(self, split_index: int, data: "Iterator[GroupedBatch]") -> "Iterator[pa.RecordBatch]":
+        import pandas as pd
+        import pyarrow as pa
+
+        for group in data:
+            batch_list = list(group)
+            if not batch_list:
+                continue
+            table = pa.Table.from_batches(batch_list).combine_chunks()
+            all_series = ArrowToPandasConversion.to_pandas(
+                table,
+                timezone=self._runner_conf.timezone,
+                prefer_int_ext_dtype=self._runner_conf.prefer_int_ext_dtype,
+            )
+            results = [
+                udf_func(
+                    *[all_series[o] for o in args_offsets],
+                    **{k: all_series[v] for k, v in kwargs_offsets.items()},
+                )
+                for udf_func, args_offsets, kwargs_offsets, _ in self._udfs
+            ]
+            yield PandasToArrowConversion.from_pandas(
+                [pd.Series([r]) for r in results],
+                self._return_schema,
+                timezone=self._runner_conf.timezone,
+                safecheck=self._runner_conf.safecheck,
+                arrow_cast=True,
+                prefers_large_types=self._runner_conf.use_large_var_types,
+                assign_cols_by_name=self._runner_conf.assign_cols_by_name,
+                int_to_decimal_coercion_enabled=self._runner_conf.int_to_decimal_coercion_enabled,
+            )
+
+
+class PandasGroupedAggIterUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
+    """SQL_GROUPED_AGG_PANDAS_ITER_UDF: the single UDF receives each group as an
+    iterator of its input columns (one pandas Series, or a tuple of Series, per input
+    batch) and returns one scalar; emit one row per group. The pandas counterpart of
+    ArrowGroupedAggIterUDFHandler."""
+
+    eval_type = PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF
+
+    def __init__(
+        self, udfs: list[tuple[Any, ...]], runner_conf: "RunnerConf", eval_conf: "EvalConf"
+    ) -> None:
+        require_minimum_pandas_version()
+        require_minimum_pyarrow_version()
+        super().__init__(udfs, runner_conf, eval_conf)
+        assert len(udfs) == 1, "One GROUPED_AGG_PANDAS_ITER UDF expected here."
+        self._udf_func, self._args_offsets, _, return_type = udfs[0]
+        self._return_schema = StructType([StructField("_0", return_type)])
+
+    def run(self, split_index: int, data: "Iterator[GroupedBatch]") -> "Iterator[pa.RecordBatch]":
+        import pandas as pd
+
+        args_offsets = self._args_offsets
+
+        def extract_series(batch: "pa.RecordBatch") -> Any:
+            # Convert one RecordBatch to a pandas Series per column, then select args:
+            # - pd.Series for a single column
+            # - tuple[pd.Series, ...] for multiple columns
+            all_series = ArrowToPandasConversion.to_pandas(
+                batch,
+                timezone=self._runner_conf.timezone,
+                prefer_int_ext_dtype=self._runner_conf.prefer_int_ext_dtype,
+            )
+            series = tuple(all_series[o] for o in args_offsets)
+            return series[0] if len(series) == 1 else series
+
+        for group in data:
+            series_iter = map(extract_series, group)
+            result = self._udf_func(series_iter)
+            # Drain remaining batches to maintain stream position
+            for _ in series_iter:
+                pass
+            yield PandasToArrowConversion.from_pandas(
+                [pd.Series([result])],
+                self._return_schema,
+                timezone=self._runner_conf.timezone,
+                safecheck=self._runner_conf.safecheck,
+                arrow_cast=True,
+                prefers_large_types=False,
+                assign_cols_by_name=self._runner_conf.assign_cols_by_name,
+                int_to_decimal_coercion_enabled=self._runner_conf.int_to_decimal_coercion_enabled,
+            )
+
+
+class PandasWindowAggUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
+    """SQL_WINDOW_AGG_PANDAS_UDF: each UDF produces one value per input row over its
+    window frame -- an unbounded frame is computed once and repeated for every row,
+    a bounded frame slices the input Series per row -- emitted as one column per UDF,
+    converted back to Arrow. The pandas counterpart of ArrowWindowAggUDFHandler."""
+
+    eval_type = PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF
+
+    def __init__(
+        self, udfs: list[tuple[Any, ...]], runner_conf: "RunnerConf", eval_conf: "EvalConf"
+    ) -> None:
+        require_minimum_pandas_version()
+        require_minimum_pyarrow_version()
+        super().__init__(udfs, runner_conf, eval_conf)
+        self._window_bound_types = runner_conf.window_bound_types
+        self._return_schema = StructType(
+            [StructField("_%d" % i, rt) for i, (_, _, _, rt) in enumerate(udfs)]
+        )
+
+    def run(self, split_index: int, data: "Iterator[GroupedBatch]") -> "Iterator[pa.RecordBatch]":
+        import pandas as pd
+        import pyarrow as pa
+
+        for group in data:
+            batch_list = list(group)
+            if not batch_list:
+                continue
+            table = pa.Table.from_batches(batch_list).combine_chunks()
+            all_series = ArrowToPandasConversion.to_pandas(
+                table,
+                timezone=self._runner_conf.timezone,
+                prefer_int_ext_dtype=self._runner_conf.prefer_int_ext_dtype,
+            )
+            num_rows = table.num_rows
+
+            result_series = []
+            for udf_index, (udf_func, args_offsets, kwargs_offsets, _) in enumerate(self._udfs):
+                bound_type = self._window_bound_types[udf_index]
+                if bound_type == "unbounded":
+                    result = udf_func(
+                        *[all_series[o] for o in args_offsets],
+                        **{k: all_series[v] for k, v in kwargs_offsets.items()},
+                    )
+                    # Repeat the scalar result to match the window (group) length.
+                    result_series.append(pd.Series([result]).repeat(num_rows))
+                elif bound_type == "bounded":
+                    # args_offsets[0] and args_offsets[1] are begin_index and end_index.
+                    assert len(args_offsets) >= 2, len(args_offsets)
+                    # Index operation is faster on np.ndarray, so we turn the
+                    # index series into np arrays here for performance.
+                    begin_array = all_series[args_offsets[0]].values
+                    end_array = all_series[args_offsets[1]].values
+                    series = [all_series[o] for o in args_offsets[2:]]
+                    kw_series = {k: all_series[v] for k, v in kwargs_offsets.items()}
+                    results = []
+                    for i in range(num_rows):
+                        # Note: Creating a slice from a series for each window is
+                        #       actually pretty expensive. However, there
+                        #       is no easy way to reduce cost here.
+                        # Note: s.iloc[i : j] is about 30% faster than s[i: j], with
+                        #       the caveat that the created slices shares the same
+                        #       memory with s. Therefore, user are not allowed to
+                        #       change the value of input series inside the window
+                        #       function. It is rare that user needs to modify the
+                        #       input series in the window function, and therefore,
+                        #       it is a reasonable restriction.
+                        # Note: Calling reset_index on the slices will increase the
+                        #       cost of creating slices by about 100%. Therefore, for
+                        #       performance reasons we don't do it here.
+                        slices = [s.iloc[begin_array[i] : end_array[i]] for s in series]
+                        kw_slices = {
+                            k: s.iloc[begin_array[i] : end_array[i]] for k, s in kw_series.items()
+                        }
+                        results.append(udf_func(*slices, **kw_slices))
+                    result_series.append(pd.Series(results))
+                else:
+                    raise PySparkRuntimeError(
+                        errorClass="INVALID_WINDOW_BOUND_TYPE",
+                        messageParameters={"window_bound_type": bound_type},
+                    )
+
+            yield PandasToArrowConversion.from_pandas(
+                result_series,
+                self._return_schema,
+                timezone=self._runner_conf.timezone,
+                safecheck=self._runner_conf.safecheck,
+                arrow_cast=True,
+                prefers_large_types=self._runner_conf.use_large_var_types,
+                assign_cols_by_name=self._runner_conf.assign_cols_by_name,
+                int_to_decimal_coercion_enabled=self._runner_conf.int_to_decimal_coercion_enabled,
+            )
