@@ -170,8 +170,13 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
   protected def supportsSchemaMerge: Boolean = true
 
   /**
-   * Whether this format accepts the `decompressionCodec` read option, which is rejected for
-   * archives. Gates the shared rejection tests; CSV, JSON and XML set it true.
+   * Whether this format accepts the `decompressionCodec` read option. It does not mean archives
+   * support the option: a format that accepts it must reject it for archive inputs, failing with
+   * `UNSUPPORTED_FEATURE.DECOMPRESSION_CODEC_FOR_ARCHIVE`, since an archive is always decoded based
+   * on its file name extension. Gates the shared tests that assert that rejection. CSV, JSON and
+   * XML set it true; formats that ignore the option (e.g. Parquet, ORC, Avro) keep the default,
+   * because their archive reads succeed with it set. Text has its own archive base,
+   * [[TextArchiveReadBase]], with the same test.
    */
   protected def supportsDecompressionCodec: Boolean = false
 
