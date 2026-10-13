@@ -593,6 +593,17 @@ class StreamingQueryProgress(dict):
         """
         The configured trigger type and options, or ``None`` when unavailable.
 
+        The ``type`` field specifies the trigger mode. The interval fields depend
+        on that mode:
+
+        * When ``type`` is ``ProcessingTime`` or ``Continuous``, ``intervalMs``
+          specifies the configured interval in milliseconds.
+        * When ``type`` is ``RealTime``, ``batchDurationMs`` specifies the batch
+          duration in milliseconds.
+        * When ``type`` is ``AvailableNow`` or ``OneTime``, there are no other fields.
+
+        Returns ``None`` when the progress record has no trigger metadata.
+
         .. versionadded:: 4.4.0
         """
         return self["trigger"]
