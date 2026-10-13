@@ -457,6 +457,13 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     checkRows(df, (0L until 10L).map(id => Row(if (id % 5 == 0) null else s"n$id", id)))
     assert(scan(df).readSchema() == StructType.fromDDL("id BIGINT, name STRING"))
 
+    // The columns of the pushed predicates are read too, since Spark evaluates the predicates
+    // again after reading, even the ones that the library evaluates completely.
+    val filtered = range(newSession(defaultPackage), "end" -> "10").filter("id > 7").select("name")
+    checkRows(filtered, Seq(Row("n8"), Row("n9")))
+    assert(scan(filtered).getMetaData()("PushedPredicates").contains("id > 7"))
+    assert(scan(filtered).readSchema() == StructType.fromDDL("id BIGINT, name STRING"))
+
     // A count reads no column at all.
     assert(range(newSession(defaultPackage), "end" -> "37", "batch_size" -> "10").count() == 37)
   }
