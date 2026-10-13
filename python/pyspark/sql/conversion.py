@@ -182,17 +182,24 @@ class ArrowBatchTransformer:
         )
 
     @classmethod
-    def concat_batches(cls, batches: Iterable["pa.RecordBatch"]) -> "pa.RecordBatch":
+    def concat_batches(
+        cls, batches: Iterable["pa.RecordBatch"], schema: Optional["pa.Schema"] = None
+    ) -> "pa.RecordBatch":
         """Concatenate same-schema RecordBatches by row.
 
-        A single batch is returned unchanged. PyArrow before 19.0.0 has no ``concat_batches``;
-        the fallback concatenates the equivalent StructArrays and converts the result back to a
-        RecordBatch.
+        ``batches`` may be any iterable of RecordBatches and is consumed once, and zero-row
+        batches are dropped. If no rows remain, an empty batch of ``schema`` is returned, or an
+        error is raised when ``schema`` is not given. A single remaining batch is returned
+        unchanged. PyArrow before 19.0.0 has no ``concat_batches``; the fallback concatenates
+        the equivalent StructArrays and converts the result back to a RecordBatch.
         """
         import pyarrow as pa
 
-        batches = tuple(batches)
-        assert batches
+        batches = [batch for batch in batches if batch.num_rows]
+        if not batches:
+            if schema is None:
+                raise PySparkValueError("concat_batches needs a schema when the input has no rows")
+            return pa.RecordBatch.from_pylist([], schema=schema)
         if len(batches) == 1:
             return batches[0]
         if hasattr(pa, "concat_batches"):
@@ -1817,7 +1824,7 @@ class ArrowToPandasConversion:
     def to_pandas(
         cls,
         batch: Union["pa.RecordBatch", "pa.Table"],
-        timezone: str,
+        timezone: Optional[str],
         schema: Optional["StructType"] = None,
         struct_in_pandas: str = "dict",
         ndarray_as_list: bool = False,
@@ -1831,8 +1838,9 @@ class ArrowToPandasConversion:
         ----------
         batch : pa.RecordBatch or pa.Table
             The Arrow RecordBatch or Table to convert.
-        timezone : str
-            Timezone for timestamp conversion.
+        timezone : str or None
+            Timezone for timestamp conversion. Required if the data contains
+            timestamp types.
         schema : StructType, optional
             Spark schema for type conversion. If None, types are inferred from Arrow.
         struct_in_pandas : str

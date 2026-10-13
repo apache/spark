@@ -165,18 +165,25 @@ private[spark] object History {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("1m")
 
+  val EVENT_LOG_MAX_LINE_LENGTH_LIMIT: Int = 512 * 1024 * 1024
+
   val EVENT_LOG_MAX_LINE_LENGTH =
     ConfigBuilder("spark.history.fs.eventLog.maxLineLength")
-      .doc("Maximum length of a single event log line during replay. Lines longer than " +
-        "this are skipped with a warning instead of being read into memory, bounding the " +
-        "memory replay can use when an event log is corrupt or unexpectedly large. Setting " +
-        "this to 0 or a negative value disables the limit. " +
+      .doc("Maximum UTF-8 byte length of a single event log line during replay, excluding " +
+        "the line ending. Longer lines are skipped with a warning, bounding the " +
+        "memory replay can use when an event log is corrupt or unexpectedly large. Buffer " +
+        "growth, UTF-16 storage and JSON parsing can require several times this limit in heap " +
+        "space. Buffer capacity grows in steps: reducing 256m to 200m or 150m may not reduce " +
+        "the retained buffer; use 128m to reach a smaller capacity. Values at or below 0, " +
+        s"or above $EVENT_LOG_MAX_LINE_LENGTH_LIMIT, use the maximum supported limit of " +
+        s"$EVENT_LOG_MAX_LINE_LENGTH_LIMIT bytes (512 MiB). This cap avoids JVM array-size " +
+        "limits but does not guarantee sufficient heap space. " +
         "Introduced in 4.3.0; also available in 3.5.10, 4.0.5, 4.1.4 and 4.2.1; and in " +
         "all versions after 4.3.0.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .bytesConf(ByteUnit.BYTE)
-      .createWithDefaultString("512m")
+      .createWithDefaultString("256m")
 
   private[spark] val EVENT_LOG_ROLLING_MAX_FILES_TO_RETAIN =
     ConfigBuilder("spark.history.fs.eventLog.rolling.maxFilesToRetain")

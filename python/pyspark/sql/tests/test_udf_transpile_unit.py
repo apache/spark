@@ -179,6 +179,42 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 "when both transpilePyUDFs and ANSI mode are enabled",
             )
 
+    def test_udf_transpile_does_not_mask_char_varchar_ddl(self):
+        # DDL CHAR/VARCHAR is parsed via ``returnType`` inside the optional
+        # transpilation try. That structured error must not become a
+        # transpilation UserWarning (which warnings-as-errors would raise).
+        import warnings
+
+        from pyspark.errors import PySparkNotImplementedError
+
+        def identity(x):
+            return x
+
+        def _assert_char_varchar(return_type, data_type):
+            with self.assertRaises(PySparkNotImplementedError) as pe:
+                UserDefinedFunction(identity, return_type)
+            self.check_error(
+                exception=pe.exception,
+                errorClass="CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON",
+                messageParameters={
+                    "feature": "Python UDF return types",
+                    "data_type": data_type,
+                },
+            )
+
+        with self.sql_conf(_TRANSPILE_ON):
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                _assert_char_varchar("char(3)", "char(3)")
+            self.assertFalse(
+                any("Exception transpiling" in str(w.message) for w in caught),
+                "CHAR/VARCHAR DDL must not be reported as a transpilation failure",
+            )
+
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                _assert_char_varchar("varchar(8)", "varchar(8)")
+
     def test_udf_transpile_falls_back_for_unsupported_patterns(self):
         # The transpiler intentionally only handles a small subset of
         # Python AST today. Everything outside that subset must
@@ -2467,6 +2503,31 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         for i, (func, rt, schema, rows, expected) in enumerate(cases):
             with self.subTest(case=i):
                 self.assertEqual(self._vals(func, rt, schema, rows), expected, f"case {i}")
+
+    def test_udf_transpile_string_len(self):
+        # SPARK-55214: Empty, ASCII, and concat inputs match Python.
+        # Unguarded ``len(NULL)`` raises like CPython (not Spark length's NULL).
+        # A proven-non-null branch still returns None for NULL rows. ``len`` on
+        # a numeric column has no matching string option, so the UDF falls back
+        # and Python raises TypeError.
+        L = LongType()
+        strlen = lambda x: len(x)  # noqa: E731
+        len_concat = lambda a, b: len(a + b)  # noqa: E731
+        strlen_guarded = lambda x: len(x) if x is not None else None  # noqa: E731
+        self.assertEqual(
+            self._vals(strlen, L, "a string", [("",), ("ab",), ("a",)]),
+            [0, 2, 1],
+        )
+        self.assertEqual(
+            self._vals(len_concat, L, "a string, b string", [("x", "yz"), ("", "ab")]),
+            [3, 2],
+        )
+        self.assertEqual(
+            self._vals(strlen_guarded, L, "a string", [("ab",), (None,)]),
+            [2, None],
+        )
+        self._raises(strlen, "a string", [(None,)], needle="len()")
+        self._raises(strlen, "a long", [(5,)], needle="")
 
     def test_udf_transpile_string_operands_fall_back(self):
         # Operand/type combos with no valid string lowering for the bound column

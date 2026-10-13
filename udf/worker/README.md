@@ -29,6 +29,12 @@ framework currently provides **direct worker creation** (local OS
 processes) and is designed for future **indirect creation** (via a
 provisioning service or daemon).
 
+Spark selects its built-in implementation from the closed `worker`
+choice in `UDFWorkerSpecification`; `DirectWorker` selects local-process
+dispatch. The worker command, environment, capabilities, and connection
+belong in that specification. Spark does not load a user-supplied
+dispatcher class into the engine.
+
 ## Sub-packages
 
 ```

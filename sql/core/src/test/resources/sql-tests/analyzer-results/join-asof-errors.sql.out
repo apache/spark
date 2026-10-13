@@ -439,8 +439,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
   "sqlState" : "42K0E",
   "messageParameters" : {
-    "operand1" : "\"(trade_time + (quote_time - trade_time))\"",
-    "operand2" : "\"quote_time\""
+    "refs1" : "\"(trade_time + (quote_time - trade_time))\"",
+    "refs2" : "\"quote_time\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -462,8 +462,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
   "sqlState" : "42K0E",
   "messageParameters" : {
-    "operand1" : "\"trade_time\"",
-    "operand2" : "\"trade_time - INTERVAL '01' HOUR\""
+    "refs1" : "\"trade_time\"",
+    "refs2" : "\"trade_time - INTERVAL '01' HOUR\""
   }
 }
 
@@ -602,8 +602,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
   "sqlState" : "42K0E",
   "messageParameters" : {
-    "operand1" : "\"quote_time\"",
-    "operand2" : "\"quote_time - INTERVAL '01' HOUR\""
+    "refs1" : "\"quote_time\"",
+    "refs2" : "\"quote_time - INTERVAL '01' HOUR\""
   }
 }
 
@@ -618,8 +618,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
   "sqlState" : "42K0E",
   "messageParameters" : {
-    "operand1" : "\"trade_time\"",
-    "operand2" : "\"TIMESTAMP '2026-06-29 10:00:00'\""
+    "refs1" : "\"trade_time\"",
+    "refs2" : "\"TIMESTAMP '2026-06-29 10:00:00'\""
   }
 }
 
@@ -634,8 +634,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
   "sqlState" : "42K0E",
   "messageParameters" : {
-    "operand1" : "\"TIMESTAMP '2026-06-29 10:00:00'\"",
-    "operand2" : "\"quote_time\""
+    "refs1" : "\"TIMESTAMP '2026-06-29 10:00:00'\"",
+    "refs2" : "\"quote_time\""
   }
 }
 
@@ -650,8 +650,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
   "sqlState" : "42K0E",
   "messageParameters" : {
-    "operand1" : "\"current_timestamp()\"",
-    "operand2" : "\"quote_time\""
+    "refs1" : "\"current_timestamp()\"",
+    "refs2" : "\"quote_time\""
   }
 }
 
@@ -666,7 +666,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
   "sqlState" : "42K0E",
   "messageParameters" : {
-    "operand1" : "\"TIMESTAMP '2026-06-29 10:00:01'\"",
-    "operand2" : "\"TIMESTAMP '2026-06-29 10:00:00'\""
+    "refs1" : "\"TIMESTAMP '2026-06-29 10:00:01'\"",
+    "refs2" : "\"TIMESTAMP '2026-06-29 10:00:00'\""
   }
 }

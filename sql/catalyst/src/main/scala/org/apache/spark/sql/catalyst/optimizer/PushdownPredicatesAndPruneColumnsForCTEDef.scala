@@ -19,13 +19,12 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeSet}
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, Or, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.CTE
-import org.apache.spark.util.collection.Utils
 
 /**
  * Infer predicates and column pruning for [[CTERelationDef]] from its reference points, and push
@@ -50,8 +49,7 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] with
       input: Seq[Expression],
       mapping: Map[Attribute, Expression]): Seq[Expression] = {
     input.map(e => e.transform {
-      case a: Attribute =>
-        mapping.keys.find(_.semanticEquals(a)).map(mapping).getOrElse(a)
+      case a: Attribute => mapping.getOrElse(a, a)
     })
   }
 
@@ -75,7 +73,7 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] with
 
       case PhysicalOperation(projects, predicates, ref: CTERelationRef) =>
         val (cteDef, precedence, preds, attrs) = cteMap(ref.cteId)
-        val attrMapping = Utils.toMap(ref.output, cteDef.output)
+        val attrMapping = AttributeMap(ref.output.zip(cteDef.output))
         val newPredicates = if (isTruePredicate(preds)) {
           preds
         } else {

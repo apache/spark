@@ -1095,6 +1095,183 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     )
   }
 
+  // A global aggregation (no grouping key) must return its initialized row for an executed batch
+  // whose rows are all dropped upstream, so the aggregation's input is empty. The micro-batch plan
+  // seeds that row for the empty grouping key in HashAggregateExec; the streamline plan must match.
+  testWithAllStateVersions("streamline aggregation: global aggregation over empty input emits " +
+    "the initialized result", streamlineEnabled) {
+    val inputData = MemoryStream[Int]
+
+    val aggregated = inputData.toDF()
+      .filter($"value" < 0)
+      .agg(count("*").as("count"), sum("value").as("sum"))
+
+    testStream(aggregated, Complete)(
+      AddData(inputData, 1, 2),
+      // Every row is filtered out: count 0, sum null.
+      CheckLastBatch((0L, null)),
+      AddData(inputData, -5),
+      CheckLastBatch((1L, -5L))
+    )
+  }
+
+  testWithAllStateVersions("streamline aggregation: global aggregation over empty input emits " +
+    "the initialized result in update mode", streamlineEnabled) {
+    val inputData = MemoryStream[Int]
+
+    val aggregated = inputData.toDF()
+      .filter($"value" < 0)
+      .agg(count("*").as("count"), sum("value").as("sum"))
+
+    testStream(aggregated, Update)(
+      AddData(inputData, 1, 2),
+      CheckLastBatch((0L, null)),
+      // Update mode emits an intermediate result per input row.
+      AddData(inputData, -3, -4),
+      CheckLastBatch((1L, -3L), (2L, -7L))
+    )
+  }
+
+  testWithAllStateVersions("streamline aggregation: complete mode retains the accumulated global " +
+    "result when a later batch has no input", streamlineEnabled) {
+    val inputData = MemoryStream[Int]
+
+    val aggregated = inputData.toDF()
+      .filter($"value" < 0)
+      .agg(count("*").as("count"), sum("value").as("sum"))
+
+    testStream(aggregated, Complete)(
+      AddData(inputData, -1, -2),
+      CheckLastBatch((2L, -3L)),
+      AddData(inputData, 3, 4),
+      // The batch has no surviving rows; the accumulated result must be re-emitted unchanged.
+      CheckLastBatch((2L, -3L))
+    )
+  }
+
+  testWithAllStateVersions("streamline aggregation: update mode retains the accumulated global " +
+    "result when a later batch has no input", streamlineEnabled) {
+    val inputData = MemoryStream[Int]
+
+    val aggregated = inputData.toDF()
+      .filter($"value" < 0)
+      .agg(count("*").as("count"), sum("value").as("sum"))
+
+    testStream(aggregated, Update)(
+      AddData(inputData, -1, -2),
+      CheckLastBatch((1L, -1L), (2L, -3L)),
+      AddData(inputData, 3, 4),
+      CheckLastBatch((2L, -3L))
+    )
+  }
+
+  testWithAllStateVersions("streamline aggregation: global aggregation with multiple partitions " +
+    "over empty input emits a single initialized row", streamlineEnabled) {
+    val inputData = MemoryStream[Int](2)
+
+    val aggregated = inputData.toDF()
+      .filter($"value" < 0)
+      .agg(count("*").as("count"), sum("value").as("sum"))
+
+    testStream(aggregated, Complete)(
+      AddData(inputData, 1, 2, 3, 4),
+      // Two partitions with no surviving rows must still produce one initialized global row.
+      CheckLastBatch((0L, null))
+    )
+  }
+
+  testWithAllStateVersions("streamline aggregation: multi-partition empty batch emits exactly " +
+    "one initialized row in update mode", streamlineEnabled) {
+    val inputData = MemoryStream[Int](2)
+
+    val aggregated = inputData.toDF()
+      .filter($"value" < 0)
+      .agg(count("*").as("count"), sum("value").as("sum"))
+
+    testStream(aggregated, Update)(
+      AddData(inputData, 1, 2, 3, 4),
+      // Both partitions have no surviving rows, and the batch must seed the global key exactly
+      // once, not once per empty partition.
+      CheckLastBatch((0L, null))
+    )
+  }
+
+  testWithAllStateVersions("streamline aggregation: an empty sibling partition does not seed " +
+    "a non-empty batch", streamlineEnabled) {
+    val inputData = MemoryStream[Int](2)
+
+    val aggregated = inputData.toDF()
+      .filter($"value" < 0)
+      .agg(count("*").as("count"), sum("value").as("sum"))
+
+    testStream(aggregated, Update)(
+      // Only one partition carries the surviving row; the empty sibling must not add a row.
+      AddData(inputData, -5),
+      CheckLastBatch((1L, -5L))
+    )
+  }
+
+  testWithAllStateVersions("streamline aggregation: coalesce(1) with a 0 partition RDD still " +
+    "initializes the global aggregate", streamlineEnabled) {
+    val inputSource = new BlockRDDBackedSource(spark)
+    MockSourceProvider.withMockSources(inputSource) {
+      val aggregated: Dataset[Long] =
+        spark.readStream.format((new MockSourceProvider).getClass.getCanonicalName)
+          .load().coalesce(1).groupBy().count().as[Long]
+
+      testStream(aggregated, Complete())(
+        // The very first batch is an empty trigger with a 0-partition RDD: without an
+        // initialization path for it, no state is written and Complete emits nothing.
+        AddBlockData(inputSource),
+        CheckLastBatch(0),
+        AddBlockData(inputSource, Seq(1)),
+        CheckLastBatch(1),
+        AddBlockData(inputSource), // another empty trigger with a 0-partition RDD
+        CheckLastBatch(1),
+        AddBlockData(inputSource, Seq(2, 3)),
+        CheckLastBatch(3),
+        StopStream
+      )
+    }
+  }
+
+  testWithAllStateVersions("streamline aggregation: a 0 partition source batch still initializes " +
+    "the global aggregate", streamlineEnabled) {
+    val inputSource = new BlockRDDBackedSource(spark)
+    MockSourceProvider.withMockSources(inputSource) {
+      val aggregated: Dataset[Long] =
+        spark.readStream.format((new MockSourceProvider).getClass.getCanonicalName)
+          .load().groupBy().count().as[Long]
+
+      testStream(aggregated, Complete())(
+        // The first batch has no blocks at all: the source RDD has zero partitions.
+        AddBlockData(inputSource),
+        CheckLastBatch(0),
+        AddBlockData(inputSource, Seq(1)),
+        CheckLastBatch(1),
+        StopStream
+      )
+    }
+  }
+
+  testWithAllStateVersions("streamline aggregation: grouped aggregation over empty input emits " +
+    "no rows", streamlineEnabled) {
+    val inputData = MemoryStream[Int]
+
+    val aggregated = inputData.toDF()
+      .filter($"value" < 0)
+      .groupBy($"value")
+      .agg(count("*").as("count"))
+
+    testStream(aggregated, Update)(
+      AddData(inputData, 1, 2),
+      // No group is created for an empty input.
+      CheckLastBatch(),
+      AddData(inputData, -5),
+      CheckLastBatch((-5, 1L))
+    )
+  }
+
   // Append mode is the one mode that drives the operator's eviction path: a windowed grouping key
   // is emitted only once the watermark passes it, via EvictionIterator (which removes in hasNext).
   // Mirrors the stateStoreSave Append test above so the streamline operator is held to the same

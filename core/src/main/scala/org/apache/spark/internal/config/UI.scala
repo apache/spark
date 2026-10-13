@@ -99,7 +99,8 @@ private[spark] object UI {
       "spark.decommission.enabled is true, the shuffle data is kept outside the executors " +
       "(through either spark.shuffle.service.enabled or a ShuffleDataIO with reliable " +
       "storage), and the cluster manager can hold executors: Standalone, YARN, and " +
-      "Kubernetes with spark.kubernetes.allocation.pods.allocator=direct.")
+      "Kubernetes with spark.kubernetes.allocation.pods.allocator=direct. On a Standalone " +
+      "Master, this also gates the hold and resume actions of the Master REST API.")
     .version("4.4.0")
     .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .booleanConf

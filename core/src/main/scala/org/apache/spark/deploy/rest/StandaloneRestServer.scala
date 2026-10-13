@@ -67,6 +67,10 @@ private[deploy] class StandaloneRestServer(
     new StandaloneKillRequestServlet(masterEndpoint, masterConf)
   protected override val killAllRequestServlet =
     new StandaloneKillAllRequestServlet(masterEndpoint, masterConf)
+  protected override val holdRequestServlet =
+    new StandaloneHoldRequestServlet(masterEndpoint, masterConf, hold = true)
+  protected override val resumeRequestServlet =
+    new StandaloneHoldRequestServlet(masterEndpoint, masterConf, hold = false)
   protected override val statusRequestServlet =
     new StandaloneStatusRequestServlet(masterEndpoint, masterConf)
   protected override val clearRequestServlet =
@@ -107,6 +111,32 @@ private[rest] class StandaloneKillAllRequestServlet(masterEndpoint: RpcEndpointR
     k.message = response.message
     k.success = response.success
     k
+  }
+}
+
+/**
+ * A servlet for handling hold or resume requests passed to the [[StandaloneRestServer]].
+ *
+ * The Master checks `spark.ui.holdEnabled` on both itself and the application, like for the
+ * Master UI controls. The response tells only whether the request was forwarded to the driver:
+ * the resulting hold status is reported by the Master's `/json/` endpoint once the driver acts
+ * on it.
+ */
+private[rest] class StandaloneHoldRequestServlet(
+    masterEndpoint: RpcEndpointRef,
+    conf: SparkConf,
+    hold: Boolean)
+  extends HoldRequestServlet(hold) {
+
+  protected def handleHold(appId: String): HoldApplicationResponse = {
+    val response = masterEndpoint.askSync[DeployMessages.ApplicationHoldResponse](
+      DeployMessages.RequestApplicationHold(appId, hold))
+    val h = new HoldApplicationResponse
+    h.serverSparkVersion = sparkVersion
+    h.message = response.message
+    h.appId = appId
+    h.success = response.success
+    h
   }
 }
 

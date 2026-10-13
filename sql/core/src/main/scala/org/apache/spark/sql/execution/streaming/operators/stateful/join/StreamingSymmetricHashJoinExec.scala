@@ -21,6 +21,7 @@ import java.util.concurrent.TimeUnit.NANOSECONDS
 
 import org.apache.hadoop.conf.Configuration
 
+import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
@@ -171,6 +172,21 @@ case class StreamingSymmetricHashJoinExec(
       s"The query is using stream-stream $joinType join with state" +
       s" format version ${stateFormatVersion} - correctness issue is discovered. Please discard" +
       " the checkpoint and rerun the query. See SPARK-26154 for more details.")
+  }
+
+  if (stateFormatVersion == 4) {
+    val mergeOperatorVersion =
+      conf.getConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION)
+    SparkException.require(
+      mergeOperatorVersion == 2,
+      errorClass = "STREAM_STREAM_JOIN_INCOMPATIBLE_STATE_STORE_CONFIGS",
+      messageParameters = Map(
+        "stateFormatVersionConfig" -> SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key,
+        "stateFormatVersion" -> stateFormatVersion.toString,
+        "mergeOperatorVersionConfig" ->
+          SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key,
+        "mergeOperatorVersion" -> mergeOperatorVersion.toString,
+        "requiredMergeOperatorVersion" -> "2"))
   }
 
   private lazy val errorMessageForJoinType =
