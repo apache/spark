@@ -20,9 +20,10 @@ package org.apache.spark.util
 import java.io.{File, IOException, OutputStream, PrintStream}
 import java.net.{InetAddress, InetSocketAddress, ServerSocket, Socket, SocketTimeoutException, URI}
 import java.nio.charset.StandardCharsets
-import java.nio.file.{Files, Paths}
-import java.util.concurrent.{CancellationException, CountDownLatch, ExecutorService, Executors, TimeUnit}
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
+import java.nio.file.{Files, Path, Paths}
+import java.nio.file.attribute.FileTime
+import java.util.concurrent.{CancellationException, CountDownLatch, Executors, ExecutorService, TimeUnit}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{ExecutionContext, Future}
@@ -251,6 +252,24 @@ class MavenUtilsSuite
     assert(error.getMessage.contains("do not allow repositories"))
   }
 
+  test("cancellable Maven resolution unwraps worker failures") {
+    val missingRepo = new File(tempIvyPath, "missing-repo")
+    assert(missingRepo.mkdirs())
+
+    val error = intercept[RuntimeException] {
+      MavenUtils.resolveMavenCoordinatesWithCancellation(
+        "my.runtime.missing:mylib:0.1",
+        buildTestIvySettings(missingRepo, Paths.get(tempIvyPath, "missing-cache").toString),
+        noCacheIvySettings = None,
+        transitive = false,
+        exclusions = Nil,
+        isTest = true,
+        isCancelled = () => false)
+    }
+    assert(error.getMessage.contains("unresolved dependency"))
+    assert(error.getMessage.contains("my.runtime.missing#mylib;0.1"))
+  }
+
   test("runtime dependency resolver honors cancellation before resolution") {
     val resolver = new RuntimeDependencyResolver(None, Some(tempIvyPath))
 
@@ -296,7 +315,6 @@ class MavenUtilsSuite
         }
 
         assert(firstEnteredIvy.await(5, TimeUnit.SECONDS))
-        val cancellationChecks = new AtomicInteger(0)
         val waitingForIvy = new CountDownLatch(1)
         val resolver = new RuntimeDependencyResolver(
           ivySettingsPath = None,
@@ -307,7 +325,15 @@ class MavenUtilsSuite
             resolverTimeoutMs,
             resolverTimeoutMs,
             isCancelled = () => {
-              if (cancellationChecks.incrementAndGet() >= 5) {
+              val workerWaiting = Thread.getAllStackTraces.asScala.exists { case (worker, trace) =>
+                worker.getName == "spark-ivy-resolution" &&
+                  worker.getState == Thread.State.TIMED_WAITING &&
+                  trace.exists { frame =>
+                    frame.getClassName == MavenUtils.getClass.getName &&
+                      frame.getMethodName == "acquireIvyLock"
+                  }
+              }
+              if (workerWaiting) {
                 waitingForIvy.countDown()
               }
               cancelled.get()
@@ -562,6 +588,92 @@ class MavenUtilsSuite
     }
   }
 
+  test("cancellable Maven resolution restores caller interruption after joining the worker") {
+    val resolverEntered = new CountDownLatch(1)
+    val resolverInterrupted = new CountDownLatch(1)
+    val releaseResolver = new CountDownLatch(1)
+    val callerWaiting = new CountDownLatch(1)
+    val releaseCaller = new CountDownLatch(1)
+    val workerThread = new AtomicReference[Thread]()
+    val callerFailure = new AtomicReference[Throwable]()
+    val callerInterrupted = new AtomicBoolean(false)
+    val blockingResolver = new FileSystemResolver {
+      override def getDependency(
+          _descriptor: DependencyDescriptor,
+          _data: ResolveData): ResolvedModuleRevision = {
+        workerThread.set(Thread.currentThread())
+        resolverEntered.countDown()
+        var released = false
+        while (!released) {
+          try {
+            released = releaseResolver.await(100, TimeUnit.MILLISECONDS)
+          } catch {
+            case _: InterruptedException => resolverInterrupted.countDown()
+          }
+        }
+        null
+      }
+    }
+    blockingResolver.setName("blocking")
+    val settings = MavenUtils.buildIvySettings(
+      remoteRepos = None,
+      ivyPath = Some(Paths.get(tempIvyPath, "caller-interrupted").toString))
+    settings.addResolver(blockingResolver)
+    settings.setDefaultResolver(blockingResolver.getName)
+    val caller = new Thread(() => {
+      try {
+        MavenUtils.resolveMavenCoordinatesWithCancellation(
+          "my.runtime.caller.interrupted:mylib:0.1",
+          settings,
+          noCacheIvySettings = None,
+          transitive = false,
+          exclusions = Nil,
+          isTest = true,
+          isCancelled = () => {
+            if (resolverEntered.getCount == 0) {
+              callerWaiting.countDown()
+              releaseCaller.await()
+            }
+            false
+          })
+      } catch {
+        case error: Throwable => callerFailure.set(error)
+      } finally {
+        callerInterrupted.set(Thread.currentThread().isInterrupted)
+      }
+    }, "ivy-interrupted-caller")
+
+    SparkErrorUtils.tryWithSafeFinally {
+      caller.start()
+      assert(resolverEntered.await(5, TimeUnit.SECONDS))
+      assert(callerWaiting.await(5, TimeUnit.SECONDS))
+      caller.interrupt()
+      assert(resolverInterrupted.await(5, TimeUnit.SECONDS))
+      caller.join(TimeUnit.SECONDS.toMillis(1))
+      assert(caller.isAlive, "Caller returned before the Ivy worker was released")
+      releaseResolver.countDown()
+      caller.join(TimeUnit.SECONDS.toMillis(5))
+
+      assert(!caller.isAlive)
+      assert(callerFailure.get().isInstanceOf[CancellationException])
+      assert(callerInterrupted.get())
+      assert(!workerThread.get().isAlive)
+    } {
+      releaseCaller.countDown()
+      releaseResolver.countDown()
+      caller.interrupt()
+      SparkErrorUtils.tryWithSafeFinally {
+        caller.join(TimeUnit.SECONDS.toMillis(10))
+        assert(!caller.isAlive, "Ivy resolution caller did not terminate")
+      } {
+        Option(workerThread.get()).foreach { worker =>
+          worker.join(TimeUnit.SECONDS.toMillis(10))
+          assert(!worker.isAlive, "Ivy resolution worker did not terminate")
+        }
+      }
+    }
+  }
+
   test("runtime dependency resolver preserves the local Ivy repository") {
     val main = MavenCoordinate("my.runtime.local", "mylib", "0.1")
     val localIvyHome = Paths.get(tempIvyPath, "local-ivy")
@@ -583,6 +695,44 @@ class MavenUtilsSuite
 
       assert(resolved.exists(_.getFileName.toString.contains("my.runtime.local_mylib-0.1")))
       assert(resolved.forall(_.startsWith(runtimeIvyPath)))
+    }
+  }
+
+  test("runtime dependency resolver replaces truncated retrieved jars") {
+    val main = MavenCoordinate("my.runtime.retrieve", "mylib", "0.1")
+    val localIvyHome = Paths.get(tempIvyPath, "local-ivy")
+    val runtimeIvyPath = Paths.get(tempIvyPath, "runtime-ivy")
+    IvyTestUtils.withRepository(
+      main,
+      dependencies = None,
+      rootDir = Some(localIvyHome.resolve("local").toFile),
+      useIvyLayout = true) { _ =>
+      val resolver = new RuntimeDependencyResolver(
+        ivySettingsPath = None,
+        ivyPath = Some(runtimeIvyPath.toString),
+        localIvyPath = Some(localIvyHome.toString))
+      def resolve(): Seq[Path] = {
+        resolver.resolve(
+          URI.create(s"ivy://${main.toString}?transitive=false"),
+          resolverTimeoutMs,
+          resolverTimeoutMs)
+      }
+
+      val resolved = resolve()
+      assert(resolved.size == 1)
+      val jar = resolved.head
+      val completeBytes = Files.readAllBytes(jar)
+      val lastModified = Files.getLastModifiedTime(jar)
+      Files.write(jar, completeBytes.take(completeBytes.length / 2))
+      val newerTime = FileTime.fromMillis(lastModified.toMillis + TimeUnit.MINUTES.toMillis(1))
+      Files.setLastModifiedTime(jar, newerTime)
+      assert(Files.size(jar) < completeBytes.length)
+      assert(Files.getLastModifiedTime(jar).toMillis > lastModified.toMillis)
+
+      assert(resolve() == resolved)
+      assert(Files.readAllBytes(jar).sameElements(completeBytes))
+      assert(resolve() == resolved)
+      assert(Files.readAllBytes(jar).sameElements(completeBytes))
     }
   }
 

@@ -670,6 +670,9 @@ private[spark] object MavenUtils extends Logging {
           val resolveOptions = new ResolveOptions
           resolveOptions.setTransitive(transitive)
           val retrieveOptions = new RetrieveOptions
+          if (cancellation.isDefined) {
+            retrieveOptions.setOverwriteMode(RetrieveOptions.OVERWRITEMODE_DIFFERENT)
+          }
           // Turn downloading and logging off for testing
           if (isTest) {
             resolveOptions.setDownload(false)
