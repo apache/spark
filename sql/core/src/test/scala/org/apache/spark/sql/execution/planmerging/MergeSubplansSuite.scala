@@ -2024,8 +2024,10 @@ class MergeSubplansSuite extends PlanTest {
       DataSourceV2Relation(table, fullOutput, None, None, CaseInsensitiveStringMap.empty())
     val output = cols.map(c => fullOutput.find(_.name == c).get)
     val scan = TestV2Scan(StructType(output.map(a => StructField(a.name, a.dataType, a.nullable))))
-    // These stand in for a plain scan produced by the column-pruning path, which is mergeable.
-    DataSourceV2ScanRelation(relation, scan, output, mergeableScan = true)
+    // These stand in for a plain scan produced by the column-pruning path, which is mergeable and
+    // repeatable.
+    DataSourceV2ScanRelation(relation, scan, output, mergeableScan = true,
+      repeatableScan = true)
   }
 
   /** A `DataSourceV2ScanRelation` over [[v2Table]] projecting only the given columns. */
@@ -2051,7 +2053,8 @@ class MergeSubplansSuite extends PlanTest {
     builder.asInstanceOf[SupportsPushDownRequiredColumns].pruneColumns(
       StructType(output.map(a => StructField(a.name, a.dataType, a.nullable))))
     V2ScanPartitioningAndOrdering(
-      DataSourceV2ScanRelation(relation, builder.build(), output, mergeableScan = true))
+      DataSourceV2ScanRelation(relation, builder.build(), output, mergeableScan = true,
+        repeatableScan = true))
       .asInstanceOf[DataSourceV2ScanRelation]
   }
 
@@ -2233,10 +2236,10 @@ class MergeSubplansSuite extends PlanTest {
       "s", StructType(Seq(StructField("b", IntegerType))))(sFull.exprId)
     val npScan = DataSourceV2ScanRelation(relation,
       TestV2Scan(StructType(Seq(StructField("s", sPruned.dataType)))),
-      Seq(sPruned), mergeableScan = true)
+      Seq(sPruned), mergeableScan = true, repeatableScan = true)
     val cpScan = DataSourceV2ScanRelation(relation,
       TestV2Scan(StructType(Seq(StructField("x", IntegerType)))),
-      Seq(xFull), mergeableScan = true)
+      Seq(xFull), mergeableScan = true, repeatableScan = true)
 
     val sub1 = ScalarSubquery(npScan.groupBy()(sum(GetStructField(sPruned, 0)).as("sb")))
     val sub2 = ScalarSubquery(cpScan.groupBy()(sum(xFull).as("sx")))
@@ -3168,6 +3171,16 @@ class MergeSubplansSuite extends PlanTest {
     assert(!pushDown(r => Sample(0.0, 0.5, withReplacement = false, Some(0L), r))
         .mergeableScan,
       "a pushed sample must block merging")
+
+    // The same pushdowns make the scan's rows depend on order or chance, so it is not trusted to
+    // return them again, see LeafNode.isOutputRepeatable.
+    assert(pushDown(r => Project(Seq(r.output.head), r)).repeatableScan)
+    Seq[DataSourceV2Relation => LogicalPlan](
+      r => Limit(Literal(1), r),
+      r => Offset(Literal(1), r),
+      r => Limit(Literal(1), Sort(Seq(SortOrder(r.output.head, Ascending)), global = true, r)),
+      r => Sample(0.0, 0.5, withReplacement = false, Some(0L), r)
+    ).foreach(op => assert(!pushDown(op).repeatableScan))
 
     // End-to-end: a scan that pushed a sample does not fuse with another (plain) scan of the same
     // table -- the classification declines the scan merge, so the plan is left unchanged. The two

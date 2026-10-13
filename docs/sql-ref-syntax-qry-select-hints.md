@@ -178,6 +178,8 @@ Runtime filter hints allow users to suggest which side of a join Spark should bu
 filter from, to prune the other side. Spark decides on its own whether a runtime filter is worth
 building, based on statistics; the hint overrides that decision, but not the requirements that make
 the filter correct, so Spark is not guaranteed to follow it and issues a warning when it cannot.
+Spark may also decline the hint because of configured limits on runtime filters; the warning names
+the reason. When Spark declines the hint, it does not build a filter in the other direction instead.
 
 #### Runtime Filter Hints Types
 
@@ -186,8 +188,9 @@ the filter correct, so Spark is not guaranteed to follow it and issues a warning
     Suggests that Spark build a runtime filter from the hinted relation and use it to prune the
     other side of the join. Use it when the hinted side matches only a small fraction of the other
     side but Spark does not choose a runtime filter on its own, e.g. because table statistics are
-    missing or misleading. The hinted side must produce the same rows and join keys whenever it is
-    evaluated. `RUNTIME_FILTER` can be combined with a join strategy hint.
+    missing or misleading. The hinted side must produce the same set of rows, with the same join key
+    values, whenever it is evaluated; its other columns may differ. `RUNTIME_FILTER` can be combined
+    with a join strategy hint.
 
 #### Examples
 
