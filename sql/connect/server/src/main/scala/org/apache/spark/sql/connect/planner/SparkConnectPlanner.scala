@@ -3209,8 +3209,8 @@ class SparkConnectPlanner(
    * path. For a valid SQL-with-references [[proto.WithRelations]], the root SQL is parsed
    * (without execution) and each reference's input is inspected recursively so nested
    * [[proto.WithRelations]] cannot re-trigger the executing transformation chain. For other
-   * relation types, [[transformRelation]] produces an unresolved plan without side effects and
-   * is forwarded directly to the blocklist.
+   * relation types, [[transformRelation]] produces an unresolved plan without side effects and is
+   * forwarded directly to the blocklist.
    */
   private def blockUnsupportedSqlCommandIn(rel: proto.Relation): Unit = {
     rel.getRelTypeCase match {

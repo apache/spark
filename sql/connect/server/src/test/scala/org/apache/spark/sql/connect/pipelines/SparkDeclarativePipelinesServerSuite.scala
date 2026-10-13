@@ -1272,8 +1272,10 @@ class SparkDeclarativePipelinesServerSuite
   }
 
   test(
-    "SPARK-57189: blockUnsupportedSqlCommand allows valid SELECT WITH_RELATIONS in pipeline " +
-      "analysis context") {
+    "SPARK-57189: blockUnsupportedSqlCommand does not over-block a valid SELECT " +
+      "WITH_RELATIONS in pipeline analysis context") {
+    // This passes with and without the fix. It keeps the new recursive check from blocking a
+    // valid SELECT in the future. The two tests above are the ones that verify the fix.
     withRawBlockingStub { implicit stub =>
       val graphId = createDataflowGraph
       val request = buildSqlCommandRequestWithPipelineContext(
