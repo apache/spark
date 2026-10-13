@@ -149,10 +149,7 @@ case class AdaptiveSparkPlanExec(
       // decision under the same value the exchanges were planned against.
       new SnapshotUnionPreparationConf(unionConf),
       ensureRequirements,
-      // Must run after `ensureRequirements`: it reads back the key group alignment that rule
-      // plans, splitting the skewed groups of a pair and settling a split an operator above the
-      // join cannot read. It runs on every pass for the same reason, since the rule above
-      // re-plans a pair on one.
+      // Split skewed key groups after EnsureRequirements aligns the join inputs.
       OptimizeSkewedKeyGroups,
       // Must run after `EnsureRequirements`: it fixes each `UnionExec`'s partitioning decision, so
       // every rule below and the execution itself read the answer the exchanges above it were

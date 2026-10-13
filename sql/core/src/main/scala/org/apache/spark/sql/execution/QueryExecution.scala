@@ -846,9 +846,7 @@ object QueryExecution {
       // decision under the same value the exchanges were planned against.
       new SnapshotUnionPreparationConf(unionConf),
       EnsureRequirements(),
-      // Must run after `EnsureRequirements`: it reads back the key group alignment that rule
-      // plans, splitting the skewed groups of a pair and settling a split an operator above the
-      // join cannot read.
+      // Split skewed key groups after EnsureRequirements aligns the join inputs.
       OptimizeSkewedKeyGroups,
       // Must run after `EnsureRequirements`: it fixes each `UnionExec`'s partitioning decision, and
       // the answer to fix is the one the exchanges around it were planned against.

@@ -6103,10 +6103,10 @@ class KeyGroupedPartitioningSuite
              |""".stripMargin)
         val simpleAndExtendedKeyword =
           s"GroupPartitions JoinKeyPositions: [0] ExpectedPartitionKeys: $expectedKeys " +
-          "Reducers: [BucketReducer(2)] DistributePartitions: false SortedMerge: false"
+          "Reducers: [BucketReducer(2)] DistributesAnyKey: false SortedMerge: false"
         val formattedKeyword =
           s"Arguments: JoinKeyPositions: [0], ExpectedPartitionKeys: $expectedKeys, " +
-          "Reducers: [BucketReducer(2)], DistributePartitions: false, SortedMerge: false"
+          "Reducers: [BucketReducer(2)], DistributesAnyKey: false, SortedMerge: false"
         checkKeywordsExistsInExplain(df, SimpleMode, simpleAndExtendedKeyword)
         checkKeywordsExistsInExplain(df, ExtendedMode, simpleAndExtendedKeyword)
         checkKeywordsExistsInExplain(df, FormattedMode, formattedKeyword)

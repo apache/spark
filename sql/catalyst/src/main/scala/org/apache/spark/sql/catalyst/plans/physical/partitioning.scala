@@ -512,7 +512,7 @@ case object SPLIT_FOR_ORDERING extends UngroupingOrigin
  *                          A clustering refuses an ungrouped layout whatever this says: on its
  *                          own such a layout never holds a key's rows together. The two
  *                          alignment roles are read only where a pair is judged
- *                          (`KeyedPartitioning.pairsUngrouped`, `rolesPair`). An ordering pairs
+ *                          (`KeyedPartitioning.pairsUngrouped`, `KeyedShuffleSpec.isCompatibleWith`). An ordering pairs
  *                          nothing, which an empty claim and [[SPLIT_FOR_ORDERING]] answer.
  *                          See [[UngroupingOrigin]].
  */

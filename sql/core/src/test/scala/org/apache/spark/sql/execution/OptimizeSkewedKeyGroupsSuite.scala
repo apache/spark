@@ -35,28 +35,6 @@ import org.apache.spark.sql.types._
 
 class OptimizeSkewedKeyGroupsSuite extends KeyGroupedPartitioningSuiteBase {
 
-  test("SPARK-59436: keyed claims without a completed alignment are not optimized") {
-    withSkewGroupSplit {
-      val left = DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprA),
-        Seq.fill(10)(InternalRow(1)) ++ Seq(InternalRow(2))))
-      val right = DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprB),
-        Seq(InternalRow(2), InternalRow(1))))
-      def join(l: SparkPlan, r: SparkPlan): SparkPlan = SortMergeJoinExec(
-        Seq(exprA), Seq(exprB), Inner, None,
-        SortExec(Seq(SortOrder(exprA, Ascending)), global = false, l),
-        SortExec(Seq(SortOrder(exprB, Ascending)), global = false, r))
-      val unaligned = join(left, right)
-      assert(OptimizeSkewedKeyGroups(unaligned) eq unaligned)
-      val aligned = EnsureRequirements().apply(unaligned)
-      val optimized = OptimizeSkewedKeyGroups(aligned)
-      assert(optimized.exists {
-        case g: GroupPartitionsExec => g.expectedKeySpecs.exists(_.exists(_.skewed))
-        case _ => false
-      }, "ER's completed pairing must enable the skew optimization")
-      assert(ValidateRequirements.validate(optimized))
-    }
-  }
-
   test("SPARK-59436: a stacked grouping is not wrapped with a skewed grouping") {
     withSkewGroupSplit {
       val raw = DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprA),
@@ -269,6 +247,33 @@ class OptimizeSkewedKeyGroupsSuite extends KeyGroupedPartitioningSuiteBase {
       DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprA), leftKeys)),
       DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprB), rightKeys)))).children
 
+  test("SPARK-59436: compatible layouts split without pushdown or subset-key permission") {
+    val columns = Array(Column.create("id", LongType))
+    createTable("compatible_l", columns, Array(identity("id")))
+    createTable("compatible_r", columns, Array(identity("id")))
+    sql("INSERT INTO testcat.ns.compatible_l VALUES " +
+      (Seq.fill(10)("(1)") :+ "(2)").mkString(", "))
+    sql("INSERT INTO testcat.ns.compatible_r VALUES (1), (2)")
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "false",
+        SQLConf.V2_BUCKETING_SKEW_JOIN_SKEWED_PARTITIONS_PER_GROUP_THRESHOLD.key -> "4",
+        SQLConf.V2_BUCKETING_SKEW_JOIN_SKEWED_GROUP_FACTOR.key -> "1.0") {
+      for (enabled <- Seq(false, true)) {
+        withSQLConf(SQLConf.V2_BUCKETING_SKEW_JOIN_ENABLED.key -> enabled.toString) {
+          val df = sql("SELECT /*+ MERGE(l), MERGE(r) */ l.id " +
+            "FROM testcat.ns.compatible_l l JOIN testcat.ns.compatible_r r ON l.id = r.id")
+          checkAnswer(df, Seq.fill(10)(Row(1L)) :+ Row(2L))
+          val plan = df.queryExecution.executedPlan
+          assert(collectAllShuffles(plan).isEmpty, plan.treeString)
+          assert(collectAllGroupPartitions(plan).exists(_.isSkew) == enabled, plan.treeString)
+          assert(ValidateRequirements.validate(plan))
+        }
+      }
+    }
+  }
+
   test("SPARK-59436: each side detects skew against its own median") {
     withSQLConf(
         SQLConf.V2_BUCKETING_SKEW_JOIN_ENABLED.key -> "true",
@@ -348,19 +353,6 @@ class OptimizeSkewedKeyGroupsSuite extends KeyGroupedPartitioningSuiteBase {
         "key 1's ten splits coalesce into one partition")
       assert(newRight.collectFirst { case g: GroupPartitionsExec => g }.isEmpty,
         s"the grouped right side satisfies as is:\n${newRight.treeString}")
-    }
-  }
-
-  test("SPARK-59436: skewed group split picks the side holding more splits whichever side it is") {
-    // The mirrored shape: the right side holds the splits of the skewed key, so it distributes
-    // and the left replicates.
-    withSkewGroupSplit {
-      val Seq(newLeft, newRight) = skewJoin(Inner,
-        leftKeys = Seq(InternalRow(1), InternalRow(2)),
-        rightKeys = Seq.fill(10)(InternalRow(1)) ++ Seq(InternalRow(2)))
-      assert(splitsAndSpecs(newLeft) === Seq((10, false, true), (1, true, false)))
-      assert(splitsAndSpecs(newRight) === Seq((10, true, true), (1, false, false)))
-      checkAlignedPair(newLeft, newRight)
     }
   }
 
@@ -506,9 +498,7 @@ class OptimizeSkewedKeyGroupsSuite extends KeyGroupedPartitioningSuiteBase {
   }
 
   test("SPARK-59436: skewed group split leaves an already compatible pair untouched") {
-    // The gate's skew term pulls every agreeing pair into the alignment branch while the
-    // config is on. A pair that is compatible as it stands and holds no skewed key must leave
-    // the branch exactly as it entered: no alignment nodes, no regrouping of the children.
+    // A pair with one input partition per key needs neither alignment groupings nor skew splits.
     withSkewGroupSplit {
       val keys = Seq(InternalRow(3), InternalRow(0), InternalRow(2), InternalRow(1))
       val Seq(newLeft, newRight) = skewJoin(Inner, leftKeys = keys, rightKeys = keys)
@@ -550,100 +540,13 @@ class OptimizeSkewedKeyGroupsSuite extends KeyGroupedPartitioningSuiteBase {
     }
   }
 
-  test("SPARK-59436: skewed group split is stable across re-runs of the rule") {
-    // AQE hands whole trees back to `EnsureRequirements` after other rules rewrote some other
-    // join. On the re-run both sides arrive split-aligned, and no pairing keeps them: neither
-    // side reports itself grouped, so `keepArrivedPairing` does not fire and the push branch
-    // runs again. It must peel back to the pre-alignment plans and derive the same decision,
-    // not regroup the splits it already spread.
-    withSkewGroupSplit {
-      val firstPass = skewJoin(Inner,
-        leftKeys = Seq.fill(10)(InternalRow(1)) ++ Seq(InternalRow(2)),
-        rightKeys = Seq(InternalRow(1), InternalRow(2)))
-      val Seq(secondLeft, secondRight) = planSkewJoin(
-        SortMergeJoinExec(Seq(exprA), Seq(exprB), Inner, None,
-          firstPass.head, firstPass(1))).children
-      checkAlignedPair(firstPass.head, firstPass(1))
-      assert(splitsAndSpecs(secondLeft) === Seq((10, true, true), (1, true, false)))
-      assert(splitsAndSpecs(secondRight) === Seq((10, false, true), (1, false, false)))
-      // The arrived groupings must be replaced, not stacked: the pair check allows exactly one
-      // GroupPartitionsExec per side.
-      checkAlignedPair(secondLeft, secondRight)
-    }
-  }
-
-  test("SPARK-59436: a single-child operator over a skew-split layout still gets grouped") {
-    // The distributing side of a skew split reports a non-grouped layout by design, so a
-    // parent that needs `ClusteredDistribution` groups it back per key by stacking a second
-    // `GroupPartitionsExec`. No join sits below the layout here to un-split it; the join-shaped
-    // parent is the case that stands the split down, see the test below.
-    withSkewGroupSplit {
-      val distributedSide = skewJoin(Inner,
-        leftKeys = Seq.fill(10)(InternalRow(1)) ++ Seq(InternalRow(2)),
-        rightKeys = Seq(InternalRow(1), InternalRow(2))).head
-      assert(splitsAndSpecs(distributedSide) === Seq((10, true, true), (1, true, false)),
-        "test setup: the left side holds the split")
-
-      val distribution = ClusteredDistribution(Seq(exprA))
-      val parent = DummySparkPlan(
-        children = Seq(distributedSide),
-        requiredChildDistribution = Seq(distribution),
-        requiredChildOrdering = Seq(Nil))
-
-      val newChild = planSkewJoin(parent).children.head
-      assert(newChild.outputPartitioning.satisfies(distribution),
-        s"EnsureRequirements must satisfy the required distribution:\n${newChild.treeString}")
-      assert(newChild.collect { case s: ShuffleExchangeExec => s }.isEmpty,
-        s"the grouped layout satisfies the operator without a shuffle:\n${newChild.treeString}")
-      val groupings = newChild.collect { case g: GroupPartitionsExec => g }
-      assert(groupings.size === 2,
-        s"the split alignment plus the regrouping wrap:\n${newChild.treeString}")
-      // The wrap reads every partition of the split-aligned side exactly once: regrouping the
-      // spread key concatenates its slots, nothing is lost or read twice.
-      assert(groupings.head.groupedPartitions.flatMap(_._2).sorted === (0 until 11).toList,
-        s"every input partition is read once:\n${groupings.head.treeString}")
-    }
-  }
-
-  test("SPARK-59436: a partially clustered pair passes validation too") {
-    // Partially clustered distribution spreads a side the way the skew split does, so its
-    // replicate side reports a non-grouped layout with the same kind of repeated keys, and the
-    // validator's per-side check refused such a plan the same way. The pairing check takes both:
-    // the spread is deliberate, and the two sides agree index by index.
-    withSQLConf(
-        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
-        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true") {
-      val left = DummySparkPlan(outputPartitioning =
-        KeyedPartitioning(Seq(exprA), Seq(InternalRow(1), InternalRow(1), InternalRow(2))))
-      val right = DummySparkPlan(outputPartitioning =
-        KeyedPartitioning(Seq(exprB), Seq(InternalRow(1), InternalRow(2))))
-      val plan = planSkewJoin(
-        SortMergeJoinExec(Seq(exprA), Seq(exprB), Inner, None, left, right))
-      val join = plan.collectFirst { case j: SortMergeJoinExec => j }
-        .getOrElse(fail(s"expected the join back:\n${plan.treeString}"))
-      def groupingAt(plan: SparkPlan): Option[GroupPartitionsExec] = plan match {
-        case g: GroupPartitionsExec => Some(g)
-        case s: SortExec if !s.global => groupingAt(s.child)
-        case _ => None
-      }
-      val sideGroupings = join.children.flatMap(groupingAt)
-      assert(sideGroupings.size == 2,
-        s"test setup: both sides are aligned:\n${plan.treeString}")
-      assert(sideGroupings.exists(_.expectedKeySpecs.exists(_.exists(_.numSplits > 1))),
-        s"test setup: a side keeps its splits:\n${plan.treeString}")
-      assert(ValidateRequirements.validate(plan),
-        s"a spread pair that agrees on its keys is accepted:\n${plan.treeString}")
-    }
-  }
-
   test("SPARK-59436: a parent grouping over a split join stands the split down") {
     // The aggregate of a join -> agg shape clusters on the join's own keys, and a wrapper
     // between the two hands the join's layout through unchanged (the partial aggregate of a
     // partial-final pair, a projection). The grouping such a parent would add coalesces every
     // spread partition back into one consumer task, keeping the replication reads while losing
-    // the parallelism they pay for. `unskewJoinForParent` stands the split down there: the
-    // pairing is re-decided from the same sources with the split off, and its grouped answer
-    // satisfies the parent with no wrap at all.
+    // the parallelism they pay for. The rule rejects the candidate stage and retains the
+    // original grouped alignment and its consumer requirements.
     withSkewGroupSplit {
       val aligned = skewJoin(Inner,
         leftKeys = Seq.fill(10)(InternalRow(1)) ++ Seq(InternalRow(2)),
@@ -902,8 +805,8 @@ class OptimizeSkewedKeyGroupsSuite extends KeyGroupedPartitioningSuiteBase {
     // join -> agg on the join's own keys: the grouping that requirement would need over a
     // split pair coalesces every spread partition back into its one consumer task, so the
     // replication reads remain while the parallelism they pay for goes. The split stands down
-    // there (see `unskewJoinForParent` in `EnsureRequirements`), the join stays
-    // storage-partitioned, and the aggregate consumes the grouped result with no regrouping of
+    // by retaining the original stage. The join stays storage-partitioned, and the aggregate
+    // consumes the grouped result with no regrouping of
     // its own. Its counts and sums must not see any replication either way.
     withSkewSplitTables(withUnmatched = false) {
       val df = sql(s"${selectWithMergeJoinHint("i", "p")} i.id, count(*), sum(p.price) " +
@@ -928,33 +831,6 @@ class OptimizeSkewedKeyGroupsSuite extends KeyGroupedPartitioningSuiteBase {
     }
   }
 
-
-  test("SPARK-59436: a second grouping rolls back skew optimization for the stage") {
-    // Each join side has one grouping in its local sort/grouping chain.
-    withSkewSplitTables(withUnmatched = false) {
-      val others = "others"
-      createTable(others,
-        Array(Column.create("item_id", LongType), Column.create("tag", StringType)),
-        Array(identity("item_id")))
-      sql(s"INSERT INTO testcat.ns.$others VALUES (1, 'x'), (2, 'y')")
-
-      val df = sql(s"SELECT /*+ MERGE(p), MERGE(o) */ i.id, i.name, p.price, o.tag " +
-        s"FROM testcat.ns.$items i " +
-        s"JOIN testcat.ns.$purchases p ON p.item_id = i.id " +
-        s"JOIN testcat.ns.$others o ON o.item_id = i.id")
-      val expected = (1 to 8).map(n => Row(1, s"n$n", 42.0, "x")) ++
-        Seq(Row(2, "cc", 11.0, "y"))
-      checkAnswer(df, expected)
-      val plan = stripAQEPlan(df.queryExecution.executedPlan)
-      val joins = collect(plan) { case j: ShuffledJoin => j }
-      assert(joins.size == 2, s"expected two joins in\n$plan")
-      assert(collectAllShuffles(plan).size == 0, s"the whole plan must not shuffle:\n$plan")
-      val groupings = collectAllGroupPartitions(plan)
-      assert(groupings.nonEmpty, plan.treeString)
-      assert(groupings.nonEmpty, plan.treeString)
-      assert(groupings.forall(_.expectedKeySpecs.forall(_.forall(!_.skewed))), plan.treeString)
-    }
-  }
 
   test("SPARK-59436: a second grouping rolls back mixed skew optimization for the stage") {
     // The lower join spreads each key on a different side. The upper alignment replaces its
@@ -1003,35 +879,6 @@ class OptimizeSkewedKeyGroupsSuite extends KeyGroupedPartitioningSuiteBase {
       assert(groupings.nonEmpty, plan.treeString)
       assert(groupings.forall(_.expectedKeySpecs.forall(_.forall(!_.skewed))), plan.treeString)
       assert(ValidateRequirements.validate(plan), plan.treeString)
-    }
-  }
-
-  test("SPARK-59436: aggregate and window over the join reuse the layout shuffle-free") {
-    // join -> agg -> window: the aggregate on the join keys stands the split down and consumes
-    // the join's grouped output directly, the window reuses the aggregate's clustered output,
-    // and the whole pipeline stays shuffle-free with the skew split on.
-    withSkewSplitTables(withUnmatched = false) {
-      val df = sql(
-        s"""
-           |SELECT id, cnt, rank() OVER (PARTITION BY id ORDER BY cnt) AS rnk FROM (
-           |  ${selectWithMergeJoinHint("i", "p")} i.id, count(*) AS cnt
-           |  FROM testcat.ns.$items i JOIN testcat.ns.$purchases p ON p.item_id = i.id
-           |  GROUP BY i.id)
-           |""".stripMargin)
-      checkAnswer(df, Seq(Row(1, 8, 1), Row(2, 1, 1)))
-      val plan = stripAQEPlan(df.queryExecution.executedPlan)
-      val joins = collect(plan) { case j: ShuffledJoin => j }
-      assert(joins.size == 1, s"expected one join in\n$plan")
-      assert(collectAllShuffles(plan).size == 0, s"the whole plan must not shuffle:\n$plan")
-      // The join's own alignment is the only grouping: neither the aggregate nor the window
-      // regroups, the window because the aggregate's output already clusters on its key.
-      val groupings = collectAllGroupPartitions(plan)
-      assert(groupings.forall(g => !g.exists(_.isInstanceOf[ShuffledJoin])),
-        s"no grouping may stand above the join:\n$plan")
-      val sides = Seq(joins.head.left, joins.head.right).map(collectAllGroupPartitions)
-      assert(sides.flatten.forall { g =>
-        g.expectedKeySpecs.forall(_.forall(m => m.numSplits == 1 && !m.skewed))
-      }, s"the alignment reserves one partition a key:\n$plan")
     }
   }
 

@@ -186,7 +186,7 @@ case class GroupPartitionsExec(
   } ++ {
     if (isSkew) {
       Map("numSkewedKeyGroups" ->
-        SQLMetrics.createMetric(sparkContext, "number of skewed key groups"))
+        SQLMetrics.createMetric(sparkContext, "number of key groups reserved by skew alignment"))
     } else {
       Map.empty[String, SQLMetric]
     }
@@ -497,8 +497,8 @@ case class GroupPartitionsExec(
       val names = seq.map(_.map(_.reducer.displayName()).getOrElse("identity"))
       s"Reducers: ${truncatedString(names, "[", ", ", "]", joinKeyMaxFields)}"
     }
-    val distributeStr = Iterator(s"DistributePartitions: $distributePartitions")
-    // Rendered from the constructor field, as `DistributePartitions` above is, and not from
+    val distributeStr = Iterator(s"DistributesAnyKey: $distributePartitions")
+    // Rendered from the constructor field, as `DistributesAnyKey` above is, and not from
     // `usesSortedMerge`, which reads the child's ordering. This method feeds `simpleString`, which
     // `treeString` calls on error paths, so it stays on what the node was built with.
     val sortedMergeStr = Iterator(s"SortedMerge: $enableSortedMerge")
@@ -551,9 +551,9 @@ private[sql] case class PartitionGrouping(
  *               from disagreeing. A partial clustering sets the side-wide role; a skew split sets
  *               it per key, which no side-wide role can express once both features spread on one
  *               side.
- * @param skewed Whether the count and origin of this key came from the skew-split decision, which
- *               is what the skew metrics of [[GroupPartitionsExec]] count. The spreads the other
- *               producers reserve are not skew and leave it false.
+ * @param skewed Whether this key participates in a skew alignment. Both sides carry the mark,
+ *               including the replicated side and an empty side padded for an unmatched key.
+ *               The metric counts these reservations, not only groups split on this side.
  */
 case class ExpectedKeySpec(
     numSplits: Int,

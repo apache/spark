@@ -878,7 +878,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     assert(gpe.metrics("maxPartitionsPerGroup").value === 1)
     // Only the marked key counts as skewed, whichever mode this side holds it in.
     assert(gpe.metrics("numSkewedKeyGroups").value === 1)
-    assert(gpe.simpleString(Int.MaxValue).contains("DistributePartitions: true"),
+    assert(gpe.simpleString(Int.MaxValue).contains("DistributesAnyKey: true"),
       "any distribute key marks the node")
     // Key 1's splits stay apart over its two slots; key 2's single split is re-read by both of
     // its slots. Row i comes from child partition i.

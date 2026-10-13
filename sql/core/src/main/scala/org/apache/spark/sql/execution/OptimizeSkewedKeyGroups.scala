@@ -186,6 +186,7 @@ object OptimizeSkewedKeyGroups extends Rule[SparkPlan] with SQLConfHelper with L
     // index by index over the origins a layout holds, and a partition holding none is one no
     // producer vouched for, which leaves the whole layout unclaimed and the pair unjudged.
     def specsOf(side: KeyedJoinSide, isLeft: Boolean): Seq[ExpectedKeySpec] = {
+      // ER constructs both sides from the same merged keys, one specification per key.
       val specsByKey = side.keys.zip(side.specs).toMap
       expected.map { key =>
         val spec = specsByKey(key)

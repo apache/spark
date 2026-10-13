@@ -2720,9 +2720,9 @@ object SQLConf {
         "stays coalesced. When " +
         s"${V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key} is also enabled, a " +
         "skewed key takes the per-key split and the remaining keys keep the partially " +
-        "clustered layout. This config requires " +
-        s"${V2_BUCKETING_ENABLED.key}, and either ${V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key} " +
-        s"or ${V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key} to be enabled")
+        s"clustered layout. This config requires ${V2_BUCKETING_ENABLED.key}. " +
+        "Already compatible key layouts do not require partition-value pushdown or " +
+        "subset-key permission.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
