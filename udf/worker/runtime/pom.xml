@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Licensed to the Apache Software Foundation (ASF) under one or more
+  ~ contributor license agreements.  See the NOTICE file distributed with
+  ~ this work for additional information regarding copyright ownership.
+  ~ The ASF licenses this file to You under the Apache License, Version 2.0
+  ~ (the "License"); you may not use this file except in compliance with
+  ~ the License.  You may obtain a copy of the License at
+  ~
+  ~    http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.apache.spark</groupId>
+    <artifactId>spark-parent_2.13</artifactId>
+    <version>5.0.0-SNAPSHOT</version>
+    <relativePath>../../../pom.xml</relativePath>
+  </parent>
+
+  <artifactId>spark-udf-worker-runtime_2.13</artifactId>
+  <packaging>jar</packaging>
+  <name>Spark Project UDF Worker Runtime</name>
+  <url>https://spark.apache.org/</url>
+
+  <properties>
+    <sbt.project.name>udf-worker-runtime</sbt.project.name>
+  </properties>
+
+  <!--
+    Packages spark-udf-worker-grpc for the Spark runtime classpath. This module has
+    no main sources: its jar is spark-udf-worker-grpc plus the gRPC runtime,
+    with gRPC, Guava and their small helper libraries relocated under
+    org.sparkproject.spark_udf_worker so they cannot clash with Spark Connect's
+    relocated gRPC or with the Guava that Spark exposes to applications.
+
+    Two dependencies are deliberately left unrelocated and unbundled:
+    - Netty. gRPC's Netty transport links to the Netty that Spark ships, including
+      the epoll and kqueue native transports that Unix domain sockets need.
+      Relocating Netty would change the native library names it loads.
+    - protobuf-java. The generated stubs and gRPC's protobuf marshallers must use
+      the same protobuf classes as the spark-udf-worker-proto messages, which are
+      not part of this jar.
+
+    The relocations must stay consistent with UDFWorkerRuntime in
+    project/SparkBuild.scala.
+  -->
+  <dependencies>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-udf-worker-grpc_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <!-- Bundled and relocated below; the parent manages both as provided. -->
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>failureaccess</artifactId>
+      <scope>compile</scope>
+    </dependency>
+    <!--
+      The jar links to classes it does not bundle: the UDF worker proto and core
+      modules, Netty and protobuf-java. Spark provides them, and declaring Spark core
+      keeps that requirement in the published POM.
+    -->
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-core_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <scope>provided</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-core_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-sql_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-udf-worker-grpc_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-tags_${scala.binary.version}</artifactId>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
+    <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
+    <plugins>
+      <plugin>
+        <groupId>net.alchim31.maven</groupId>
+        <artifactId>scala-maven-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <configuration combine.self="override">
+          <shadedArtifactAttached>false</shadedArtifactAttached>
+          <shadeTestJar>false</shadeTestJar>
+          <artifactSet>
+            <includes>
+              <include>org.apache.spark:spark-udf-worker-grpc_${scala.binary.version}</include>
+              <include>io.grpc:*</include>
+              <include>io.perfmark:perfmark-api</include>
+              <include>com.google.guava:guava</include>
+              <include>com.google.guava:failureaccess</include>
+              <include>com.google.code.gson:gson</include>
+              <include>com.google.android:annotations</include>
+              <include>org.codehaus.mojo:animal-sniffer-annotations</include>
+            </includes>
+          </artifactSet>
+          <relocations>
+            <relocation>
+              <pattern>io.grpc</pattern>
+              <shadedPattern>${spark.shade.packageName}.spark_udf_worker.grpc</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.common</pattern>
+              <shadedPattern>${spark.shade.packageName}.spark_udf_worker.guava</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.thirdparty</pattern>
+              <shadedPattern>${spark.shade.packageName}.spark_udf_worker.guava.thirdparty</shadedPattern>
+            </relocation>
+            <!--
+              The parent shade configuration already rewrote Guava references in the
+              spark-udf-worker-grpc jar (for example in the generated future stub) to
+              Spark's shared org.sparkproject.guava. Point them at this jar's Guava,
+              which is the copy the bundled gRPC classes use.
+            -->
+            <relocation>
+              <pattern>${spark.shade.packageName}.guava</pattern>
+              <shadedPattern>${spark.shade.packageName}.spark_udf_worker.guava</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>io.perfmark</pattern>
+              <shadedPattern>${spark.shade.packageName}.spark_udf_worker.io_perfmark</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.gson</pattern>
+              <shadedPattern>${spark.shade.packageName}.spark_udf_worker.gson</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>android.annotation</pattern>
+              <shadedPattern>${spark.shade.packageName}.spark_udf_worker.android_annotation</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>org.codehaus.mojo.animal_sniffer</pattern>
+              <shadedPattern>${spark.shade.packageName}.spark_udf_worker.animal_sniffer</shadedPattern>
+            </relocation>
+          </relocations>
+          <transformers>
+            <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+          </transformers>
+          <filters>
+            <filter>
+              <artifact>*:*</artifact>
+              <excludes>
+                <exclude>META-INF/*.SF</exclude>
+                <exclude>META-INF/*.DSA</exclude>
+                <exclude>META-INF/*.RSA</exclude>
+                <exclude>**/*.proto</exclude>
+                <exclude>**/module-info.class</exclude>
+              </excludes>
+            </filter>
+          </filters>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

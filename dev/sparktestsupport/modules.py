@@ -384,6 +384,19 @@ sql = Module(
     ),
 )
 
+# The shaded UDF worker runtime jar. Its tests build the assembly and submit an
+# application that runs an external UDF, so they depend on sql.
+udf_worker_runtime = Module(
+    name="udf-worker-runtime",
+    dependencies=[sql, udf_worker],
+    source_file_regexes=[
+        "udf/worker/runtime/",
+    ],
+    sbt_test_goals=[
+        "udf-worker-runtime/test",
+    ],
+)
+
 hive = Module(
     name="hive",
     dependencies=[sql],

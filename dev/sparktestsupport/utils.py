@@ -113,7 +113,7 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
      'pyspark-mllib', 'pyspark-pandas', 'pyspark-pandas-connect', 'pyspark-pandas-slow',
      'pyspark-pandas-slow-connect', 'pyspark-pipelines', 'pyspark-sql',
      'pyspark-structured-streaming', 'pyspark-structured-streaming-connect',
-     'pyspark-testing', 'repl', 'sparkr', 'sql', 'sql-kafka-0-10']
+     'pyspark-testing', 'repl', 'sparkr', 'sql', 'sql-kafka-0-10', 'udf-worker-runtime']
     >>> sorted([x.name for x in determine_modules_to_test(
     ...     [modules.sparkr, modules.sql], deduplicated=False)])
     ... # doctest: +NORMALIZE_WHITESPACE
@@ -122,7 +122,7 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
      'pyspark-mllib', 'pyspark-pandas', 'pyspark-pandas-connect', 'pyspark-pandas-slow',
      'pyspark-pandas-slow-connect', 'pyspark-pipelines', 'pyspark-sql',
      'pyspark-structured-streaming', 'pyspark-structured-streaming-connect',
-     'pyspark-testing', 'repl', 'sparkr', 'sql', 'sql-kafka-0-10']
+     'pyspark-testing', 'repl', 'sparkr', 'sql', 'sql-kafka-0-10', 'udf-worker-runtime']
     >>> sorted([x.name for x in determine_modules_to_test(
     ...     [modules.sql, modules.core], deduplicated=False)])
     ... # doctest: +NORMALIZE_WHITESPACE
@@ -134,7 +134,7 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
      'pyspark-pandas-slow-connect', 'pyspark-pipelines', 'pyspark-resource', 'pyspark-sql',
      'pyspark-streaming', 'pyspark-structured-streaming', 'pyspark-structured-streaming-connect',
      'pyspark-testing', 'repl', 'root', 'sparkr', 'sql', 'sql-kafka-0-10', 'streaming',
-     'streaming-kafka-0-10', 'streaming-kinesis-asl']
+     'streaming-kafka-0-10', 'streaming-kinesis-asl', 'udf-worker-runtime']
     """
     modules_to_test = set()
     for module in changed_modules:
