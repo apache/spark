@@ -4802,6 +4802,11 @@
           "<reason>"
         ]
       },
+      "REPLACED" : {
+        "message" : [
+          "The library was replaced after Spark loaded it: Spark loaded the build with the SHA-256 checksum <loadedChecksum>, but the file now has the checksum <checksum>. A JVM cannot load another build of a library from the same path, so restart the Spark application to use the new build."
+        ]
+      },
       "UNSUPPORTED_ABI_VERSION" : {
         "message" : [
           "It requires version <version> of the native data source interface, but Spark supports version <supported>."

@@ -106,7 +106,7 @@ final class NativeLibrary {
     createStreamReader = bind(lookup, "spark_ds_create_stream_reader", i32, ptr, ptr, ptr);
     createWriter = bind(lookup, "spark_ds_create_writer", i32, ptr, ptr, C.BOOL, ptr);
     createStreamWriter =
-      bind(lookup, "spark_ds_create_stream_writer", i32, ptr, ptr, C.BOOL, ptr);
+      bind(lookup, "spark_ds_create_stream_writer", i32, ptr, ptr, C.BOOL, ptr, ptr);
     close = bind(lookup, "spark_ds_close", C.VOID, ptr);
     pushPredicates = bind(lookup, "spark_ds_push_predicates", i32, ptr, ptr, i64, ptr);
     pushLimit = bind(lookup, "spark_ds_push_limit", i32, ptr, i32, ptr);
@@ -380,27 +380,23 @@ final class NativeLibrary {
   }
 
   long createWriter(long dataSource, long schemaAddress, boolean overwrite) throws Throwable {
-    return createAnyWriter(
-      createWriter, "spark_ds_create_writer", dataSource, schemaAddress, overwrite);
-  }
-
-  long createStreamWriter(long dataSource, long schemaAddress, boolean overwrite)
-      throws Throwable {
-    return createAnyWriter(
-      createStreamWriter, "spark_ds_create_stream_writer", dataSource, schemaAddress, overwrite);
-  }
-
-  private long createAnyWriter(
-      MethodHandle function,
-      String name,
-      long dataSource,
-      long schemaAddress,
-      boolean overwrite) throws Throwable {
-    MethodHandle f = require(function, name);
+    MethodHandle f = require(createWriter, "spark_ds_create_writer");
     try (Memory memory = new Memory()) {
       long out = memory.zeroed(8);
-      check((int) f.invokeExact(dataSource, schemaAddress, overwrite, out), name);
-      return readHandle(out, name);
+      check((int) f.invokeExact(dataSource, schemaAddress, overwrite, out),
+        "spark_ds_create_writer");
+      return readHandle(out, "spark_ds_create_writer");
+    }
+  }
+
+  long createStreamWriter(long dataSource, long schemaAddress, boolean overwrite, String queryId)
+      throws Throwable {
+    MethodHandle f = require(createStreamWriter, "spark_ds_create_stream_writer");
+    try (Memory memory = new Memory()) {
+      long out = memory.zeroed(8);
+      check((int) f.invokeExact(dataSource, schemaAddress, overwrite, memory.string(queryId), out),
+        "spark_ds_create_stream_writer");
+      return readHandle(out, "spark_ds_create_stream_writer");
     }
   }
 

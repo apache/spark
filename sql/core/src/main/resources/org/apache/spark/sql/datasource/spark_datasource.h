@@ -46,20 +46,28 @@
  *   operations down by calling, each at most once and in this order, spark_ds_push_predicates,
  *   spark_ds_push_limit and spark_ds_prune_columns, plans the partitions with
  *   spark_ds_partitions, serializes the state of the reader with spark_ds_serialize_reader, and
- *   closes it. Then it calls spark_ds_read on the executors, in one task for each partition.
+ *   closes it. Then it calls spark_ds_read on the executors, in one task for each partition. If
+ *   Spark never plans the partitions, for example to only explain the plan of the query, it
+ *   closes the reader once the reader is no longer referenced.
  * - Streaming reads. On the driver, Spark creates a stream reader with
  *   spark_ds_create_stream_reader and keeps it until the streaming query stops. For each
  *   micro-batch, it asks for the spark_ds_latest_offset, plans the partitions with
  *   spark_ds_stream_partitions and serializes the state with spark_ds_serialize_stream_reader,
- *   then calls spark_ds_read on the executors. Offsets are JSON strings defined by the library.
- *   When a streaming query restarts, from its checkpoint, Spark creates a new stream reader and
- *   may call spark_ds_stream_partitions again for the last range that it planned before, so the
- *   partitions of a range must read the same data each time.
- * - Writes. On the driver, once it computed the data to write, right before it starts the tasks
- *   of the write (or of a micro-batch), Spark creates a writer with spark_ds_create_writer or
- *   spark_ds_create_stream_writer, and serializes its state with spark_ds_serialize_writer. If
- *   computing the data fails, Spark creates no writer. On the executors, each task creates a data
- *   writer with spark_ds_create_data_writer, calls spark_ds_write for each batch of at most
+ *   then calls spark_ds_read on the executors. Offsets are defined by the library, as compact
+ *   JSON on a single line: Spark stores each offset as a line of the offset log of the
+ *   checkpoint, so it rejects an offset that is not valid JSON or contains a line break. When a
+ *   streaming query restarts, from its checkpoint, Spark creates a new stream reader and may call
+ *   spark_ds_stream_partitions again for the last range that it planned before, so the partitions
+ *   of a range must read the same data each time.
+ * - Writes. On the driver, right before it starts the tasks of the write (or of a micro-batch),
+ *   Spark creates a writer with spark_ds_create_writer or spark_ds_create_stream_writer, and
+ *   serializes its state with spark_ds_serialize_writer. With adaptive query execution, Spark
+ *   first runs the stages of the data to write that end with a shuffle, and creates no writer if
+ *   they fail. The rest of the data, such as its last stage, is computed in the tasks of the
+ *   write, so a writer may still be aborted because computing the data failed: do irreversible
+ *   work, such as removing the existing data for an overwrite, in spark_ds_commit. On the
+ *   executors, each task creates a data writer with spark_ds_create_data_writer, calls
+ *   spark_ds_write for each batch of at most
  *   spark.sql.execution.arrow.maxRecordsPerBatch rows, which also ends once it holds
  *   spark.sql.execution.arrow.maxBytesPerBatch bytes, and calls spark_ds_commit_data_writer, or
  *   spark_ds_abort_data_writer if the task or the commit fails. Then the driver calls
@@ -73,28 +81,36 @@
  *   nor aborted, and may even have committed before its message reached the driver. A streaming
  *   write commits or aborts each micro-batch (epoch). Spark may commit the same epoch more than
  *   once, for example when a streaming query restarts after a failure, so committing an epoch
- *   that is already committed must have no effect, for exactly-once output. A micro-batch
- *   streaming query creates a new stream writer for each micro-batch, and Spark closes the
- *   previous stream writer of the query when the query creates a new one. Spark is not told when
- *   a streaming query stops, so it closes the last stream writer of the query once the writer is
- *   no longer referenced, or when the query is restarted.
+ *   that is already committed must have no effect, for exactly-once output. The ID of the query,
+ *   which spark_ds_create_stream_writer gets, stays the same when the query restarts from its
+ *   checkpoint, so the ID of the query and the epoch ID identify the output of a micro-batch,
+ *   also when other queries write to the same destination. A micro-batch streaming query creates
+ *   a new stream writer for each micro-batch, and Spark closes the previous stream writer of the
+ *   query when the query creates a new one. Spark is not told when a streaming query stops, so it
+ *   closes the last stream writer of the query once the writer is no longer referenced, or when
+ *   the query is restarted.
  *
  * Conventions
  * -----------
  * - Errors. The functions that return an int return 0 on success, or any other value on failure.
  *   They then set the message that spark_ds_last_error returns, and Spark reports it as a
- *   NATIVE_DATA_SOURCE_ERROR. The close functions cannot fail. A C++ exception or a Rust panic
- *   must not cross the interface: catch it and return an error instead.
+ *   NATIVE_DATA_SOURCE_ERROR. The close functions cannot fail, and they may run after the query,
+ *   from another thread: do the work that can fail a query, such as flushing data, in
+ *   spark_ds_commit. A C++ exception or a Rust panic must not cross the interface: catch it and
+ *   return an error instead.
  * - Handles. The create functions return an opaque, non-NULL handle in their last argument,
  *   typically a pointer: Spark reports a NULL handle as an error. Spark releases each handle
  *   exactly once with the matching close function, or with spark_ds_commit_data_writer or
- *   spark_ds_abort_data_writer for data writers, though not always right after the last use of a
- *   stream writer (see Writes above). A reader or writer handle must not depend on the data
+ *   spark_ds_abort_data_writer for data writers, though not always right after its last use: a
+ *   batch reader whose partitions are never planned and the last stream writer of a query are
+ *   released once they are no longer referenced (see Lifecycle above). A reader or writer handle
+ *   must not depend on the data
  *   source handle it was created from, because Spark closes the data source handle right after
  *   creating it.
  * - Memory. What Spark passes to a function, such as strings and byte arrays, is only valid
- *   during the call. Strings are UTF-8 and NUL-terminated. The library returns strings and byte
- *   arrays by passing them to a SparkDsSink, which copies them.
+ *   during the call. Strings are UTF-8 and NUL-terminated. The JSON of the predicates is ASCII:
+ *   it escapes the other characters, which any JSON parser decodes. The library returns strings
+ *   and byte arrays by passing them to a SparkDsSink, which copies them.
  * - State. Partitions, the state of readers and writers, and commit messages are byte arrays in a
  *   format defined by the library. Spark sends them to the executors and back.
  * - Arrow data. Schemas and data are exchanged with the Arrow C data interface
@@ -110,9 +126,10 @@
  *   buffers, so Spark cannot check them, and reads past the end of a buffer that is too short.
  * - Schemas. Spark types map to Arrow types as in spark.sql.execution.arrow: for example, bigint
  *   is int64, string is utf8, timestamp is timestamp[us] with a time zone and timestamp_ntz is
- *   timestamp[us] without one. Data read from a library may also use large_utf8, utf8_view and
- *   the other variants of the same type, and any names for the fields of the entries of a map,
- *   but not unsigned integers, decimal256, list views or dictionary encoding.
+ *   timestamp[us] without one. Data read from a library may also use large_utf8 and utf8_view for
+ *   strings, large_binary and binary_view for binary data, and any names for the fields of the
+ *   entries of a map. Spark rejects the other Arrow types, such as unsigned integers, decimal256,
+ *   large lists, fixed-size lists and list views, and dictionary encoding.
  * - Options. Option keys are passed in lower case, because Spark matches them
  *   case-insensitively.
  * - Optional functions. A library only needs to export the functions for the operations it
@@ -273,10 +290,13 @@ int spark_ds_create_writer(void* source, struct ArrowSchema* schema, bool overwr
  * schema: the schema of the data to write
  * overwrite: whether to replace the existing data in each micro-batch (output mode "complete")
  *            instead of appending to it
+ * query_id: the ID of the streaming query. It stays the same when the query restarts from its
+ *           checkpoint, so with the epoch IDs, it identifies the commits of the query: see Writes
+ *           above.
  * writer: set to the writer handle
  */
 int spark_ds_create_stream_writer(void* source, struct ArrowSchema* schema, bool overwrite,
-                                  void** writer);
+                                  const char* query_id, void** writer);
 
 /* Releases a data source handle. */
 void spark_ds_close(void* source);
@@ -307,25 +327,39 @@ void spark_ds_close(void* source);
  * arithmetic or other functions, nor predicates on columns that contain strings with a
  * non-binary collation, such as UTF8_LCASE: strings are compared by their UTF-8 bytes. A later
  * version of Spark may pass predicates with other names without changing SPARK_DS_ABI_VERSION,
- * so a reader must not report a predicate as evaluated completely if it contains a name that the
- * reader does not know, or a data type that it does not support.
+ * so a reader must ignore a predicate that contains a name that it does not know, or a data type
+ * that it does not support.
  *
- * A predicate that the reader evaluates completely must follow the semantics of Spark SQL. In
- * particular, for floating-point columns, NaN is equal to NaN and greater than any other value,
- * including positive infinity, and -0.0 is equal to 0.0, unlike IEEE 754 comparisons. For
- * example, d > 1.0 is true for a NaN value of d. Comparisons with null are null, so a row only
- * matches if the predicate is true.
+ * Spark evaluates all the predicates again after reading, so a reader may use them only to skip
+ * data, for example the files whose statistics show that no row matches. But it must never drop
+ * or skip a row for which the predicates are true under the semantics of Spark SQL, which Spark
+ * cannot detect. In particular:
+ * - For floating-point columns, NaN is equal to NaN and greater than any other value, including
+ *   positive infinity, and -0.0 is equal to 0.0. IEEE 754 comparisons treat NaN differently, and
+ *   total orders, such as f64::total_cmp in Rust or the comparison kernels of arrow-rs, also
+ *   order -0.0 before 0.0. For example, d > 1.0 is true for a NaN value of d, and d = 0.0 for
+ *   -0.0.
+ * - Comparisons with null are null, and a row only matches if the predicates are true. For
+ *   example, NOT (i IN (1, NULL)) matches no row.
+ * - Strings are compared by their UTF-8 bytes, which order the characters outside the Basic
+ *   Multilingual Plane after all the others, unlike comparisons of UTF-16 strings.
+ * - To use only a part of a predicate, a reader may take the parts that it does not support as
+ *   true, but not under a NOT, where that would drop rows.
+ * The file org/apache/spark/sql/datasource/predicate-cases.json in the jar of Spark SQL lists
+ * predicates as Spark passes them to this function, with the rows of a table for which they are
+ * true, to test a reader with.
  *
  * predicates: the count predicates, as JSON
  * evaluated: an array of count values, all false, to set to whether the reader evaluates each
- *            predicate completely, so that Spark does not have to evaluate it again. The reader
- *            can still use the other predicates to skip data.
+ *            predicate completely. Spark shows these predicates as pushed in the plan of the
+ *            query, and evaluates all the predicates again after reading anyway.
  */
 int spark_ds_push_predicates(void* reader, const char* const* predicates, int64_t count,
                              bool* evaluated);
 
 /*
- * Pushes a LIMIT down to the reader.
+ * Pushes a LIMIT down to the reader. Spark only pushes a limit when the query does not filter the
+ * rows, since it evaluates the predicates after reading.
  *
  * applied: set to whether the reader returns at most `limit` rows in total. Spark applies the
  *          limit again after reading either way.
@@ -335,7 +369,9 @@ int spark_ds_push_limit(void* reader, int32_t limit, bool* applied);
 /*
  * Prunes the columns to read.
  *
- * columns: the names of the count top-level columns that the query needs
+ * columns: the names of the count top-level columns that the query needs, which include the
+ *          columns of the pushed predicates. There may be none, for example for
+ *          SELECT count(*): then the batches only have a number of rows.
  * pruned: set to whether spark_ds_read returns exactly these columns, in this order. If not, it
  *         returns all the columns of the schema to read.
  */
@@ -367,14 +403,14 @@ void spark_ds_close_reader(void* reader);
 /*
  * Returns the offset to start from when the streaming query has no checkpoint.
  *
- * set_offset: called once with the offset, as JSON
+ * set_offset: called once with the offset, as compact JSON on a single line
  */
 int spark_ds_initial_offset(void* reader, SparkDsSink set_offset, void* sink);
 
 /*
  * Returns the most recent offset available.
  *
- * set_offset: called once with the offset, as JSON
+ * set_offset: called once with the offset, as compact JSON on a single line
  */
 int spark_ds_latest_offset(void* reader, SparkDsSink set_offset, void* sink);
 
