@@ -669,6 +669,37 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on nonascii
   }
 
+  test("SPARK-60125: regexp_instr returns the position of the selected group") {
+    val expr = RegExpInStr($"s".string.at(0), $"p".string.at(1), $"r".int.at(2))
+    checkEvaluation(expr, 1, create_row("abc123", "([a-z]+)([0-9]+)", 0))
+    checkEvaluation(expr, 1, create_row("abc123", "([a-z]+)([0-9]+)", 1))
+    checkEvaluation(expr, 4, create_row("abc123", "([a-z]+)([0-9]+)", 2))
+    // The optional group does not take part in the match.
+    checkEvaluation(expr, 0, create_row("abc", "([a-z]+)([0-9]+)?", 2))
+    // The group index is checked only when the pattern matches.
+    checkEvaluation(expr, 0, create_row("abc", "([0-9]+)", 3))
+    // scalastyle:off nonascii
+    checkEvaluation(RegExpInStr(Literal("😀ab1"), Literal("([a-z]+)([0-9])"), Literal(2)), 4)
+    // scalastyle:on nonascii
+
+    Seq(
+      ("abc123", "([a-z]+)([0-9]+)", 3, "2", "3"),
+      ("abc123", "([a-z]+)([0-9]+)", -1, "2", "-1"),
+      ("abc", "b", 1, "0", "1")
+    ).foreach { case (s, p, r, groupCount, groupIndex) =>
+      checkErrorInExpression[SparkRuntimeException](
+        expr,
+        create_row(s, p, r),
+        "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
+        Map("parameter" -> "`idx`",
+          "functionName" -> "`regexp_instr`",
+          "groupCount" -> groupCount,
+          "groupIndex" -> groupIndex
+        )
+      )
+    }
+  }
+
   test("SPARK-39758: invalid regexp pattern") {
     val s = $"s".string.at(0)
     val p = $"p".string.at(1)

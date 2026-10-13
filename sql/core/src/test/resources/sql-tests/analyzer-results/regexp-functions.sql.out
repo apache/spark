@@ -509,6 +509,34 @@ Project [regexp_instr(cast(null as string), b, 0) AS regexp_instr(NULL, b, 0)#x]
 
 
 -- !query
+SELECT regexp_instr('1a 2b 14m', '\\d+(a|b|m)', 1)
+-- !query analysis
+Project [regexp_instr(1a 2b 14m, \d+(a|b|m), 1) AS regexp_instr(1a 2b 14m, \d+(a|b|m), 1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT regexp_instr('abc123', '([a-z]+)([0-9]+)', 2)
+-- !query analysis
+Project [regexp_instr(abc123, ([a-z]+)([0-9]+), 2) AS regexp_instr(abc123, ([a-z]+)([0-9]+), 2)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT regexp_instr('abc', '([a-z]+)([0-9]+)?', 2)
+-- !query analysis
+Project [regexp_instr(abc, ([a-z]+)([0-9]+)?, 2) AS regexp_instr(abc, ([a-z]+)([0-9]+)?, 2)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT regexp_instr('abc123', '([a-z]+)([0-9]+)', 3)
+-- !query analysis
+Project [regexp_instr(abc123, ([a-z]+)([0-9]+), 3) AS regexp_instr(abc123, ([a-z]+)([0-9]+), 3)#x]
++- OneRowRelation
+
+
+-- !query
 SELECT regexp_instr('abc', col0, 1) FROM VALUES(') ?') AS t(col0)
 -- !query analysis
 Project [regexp_instr(abc, col0#x, 1) AS regexp_instr(abc, col0, 1)#x]
