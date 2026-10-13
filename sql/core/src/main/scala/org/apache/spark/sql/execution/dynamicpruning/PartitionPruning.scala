@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, JoinSelec
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.PYTHON_UDF
 import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
@@ -320,16 +319,14 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
    * (2) is evidence that pruning pays off, which a [[RuntimeFilterHint]] on the filtering side
    * (`hinted`) supplies directly. A hinted side only has to be a repeatable source of the
    * filtering key, see `JoinSelectionHelper.isRepeatableRuntimeFilterSource`, since DPP
-   * re-evaluates it. It must not contain a Python UDF either: the filtering side is planned as a
-   * standalone subquery without the Python UDF extraction the main plan gets, so a Python UDF
-   * could not be evaluated there.
+   * re-evaluates it.
    */
   private def hasPartitionPruningFilter(
       plan: LogicalPlan,
       hinted: Boolean,
       filteringKey: Expression): Boolean = {
     if (hinted) {
-      isRepeatableRuntimeFilterSource(plan, filteringKey) && !plan.containsPattern(PYTHON_UDF)
+      isRepeatableRuntimeFilterSource(plan, filteringKey)
     } else {
       !plan.isStreaming &&
         (hasSelectivePredicate(plan) || isCheaplyRecomputableMaterializedPlan(plan))
