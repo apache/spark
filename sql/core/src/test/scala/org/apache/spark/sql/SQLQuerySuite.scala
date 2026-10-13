@@ -3380,6 +3380,34 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     }
   }
 
+  test("SPARK-60178: subexpression elimination does not re-associate floating-point arithmetic") {
+    // Floating-point + and * are not associative: with a = 1.0E16, b = -1.0E16, c = 1.0,
+    // (a + b) + c = 1.0 but a + (b + c) = 0.0; with x = y = 1.0E200, z = 1.0E-200, (x * y) * z
+    // overflows to Infinity but x * (y * z) does not.
+    val query =
+      """
+        |SELECT (a + b) + c, a + (b + c), (x * y) * z, x * (y * z)
+        |FROM (
+        |  SELECT CAST(id AS DOUBLE) + 1.0E16 AS a,
+        |         CAST(id AS DOUBLE) - 1.0E16 AS b,
+        |         CAST(id AS DOUBLE) + 1.0 AS c,
+        |         CAST(id AS DOUBLE) + 1.0E200 AS x,
+        |         CAST(id AS DOUBLE) + 1.0E200 AS y,
+        |         CAST(id AS DOUBLE) + 1.0E-200 AS z
+        |  FROM range(0, 1, 1, 1))
+      """.stripMargin
+    val expected = Row(1.0, 0.0, (1.0E200 * 1.0E200) * 1.0E-200, 1.0E200 * (1.0E200 * 1.0E-200))
+    Seq("true", "false").foreach { cse =>
+      Seq("true", "false").foreach { wholeStage =>
+        withSQLConf(
+          SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> cse,
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage) {
+          checkAnswer(sql(query), expected)
+        }
+      }
+    }
+  }
+
   test("SPARK-29213: FilterExec should not throw NPE") {
     // Under ANSI mode, casting string '' as numeric will cause runtime error
     if (!conf.ansiEnabled) {
