@@ -45,6 +45,29 @@ class RangeIndexSuite extends SparkFunSuite {
   private def probeIds(index: IntervalIndex, low: Any, high: Any): List[Int] =
     ids(index.overlapping(low, high))
 
+  /**
+   * An iterator that hands back the same mutable row on every `next()` call, each field
+   * set to the current index. Mirrors how Spark's row iterators commonly reuse a single
+   * buffer (e.g. `UnsafeRow` deserialization) instead of allocating a fresh row per record.
+   */
+  private def reusingRowIterator(
+      fields: Int,
+      n: Int): (org.apache.spark.sql.catalyst.expressions.GenericInternalRow,
+      Iterator[InternalRow]) = {
+    val shared = new org.apache.spark.sql.catalyst.expressions.GenericInternalRow(fields)
+    val iter = new Iterator[InternalRow] {
+      private var i = 0
+      override def hasNext: Boolean = i < n
+      override def next(): InternalRow = {
+        var c = 0
+        while (c < fields) { shared.update(c, i); c += 1 }
+        i += 1
+        shared
+      }
+    }
+    (shared, iter)
+  }
+
   private def javaRoundTrip(index: IntervalIndex): (Array[Byte], IntervalIndex) = {
     val bytes = new ByteArrayOutputStream()
     val out = new ObjectOutputStream(bytes)
@@ -69,6 +92,29 @@ class RangeIndexSuite extends SparkFunSuite {
     assert(ids(index.overlapping(2, 2)).sorted == List(1, 3))
     assert(ids(index.overlapping(5, 5)) == List(5))
     assert(ids(index.overlapping(4, 4)).isEmpty)
+  }
+
+  test("IntervalIndex.build defends against a build-side iterator reusing its row buffer") {
+    // If build() captured keys or rows by reference instead of copying them, every stored
+    // entry would collapse to the iterator's last value once the shared buffer is mutated
+    // again after the build-side iterator is drained -- exactly what a broadcast's row
+    // iterator does once BroadcastExchangeExec finishes feeding it to RangeBroadcastMode.
+    val n = 50
+    val buildKeys = Seq(
+      BoundReference(0, IntegerType, nullable = true),
+      BoundReference(1, IntegerType, nullable = true))
+    val (shared, rows) = reusingRowIterator(fields = 3, n)
+    val index = IntervalIndex.build(IntegerType, buildKeys, rows, Some(n))
+
+    // Simulate the caller reusing the buffer after the build-side iterator is exhausted.
+    shared.update(0, -1)
+    shared.update(1, -1)
+    shared.update(2, -1)
+
+    (0 until n).foreach { i =>
+      val payloads = index.overlapping(i, i).map(_.getInt(2)).toList
+      assert(payloads == List(i), s"interval $i was corrupted by later reuse of the row buffer")
+    }
   }
 
   test("an inverted build interval reaches the windows the condition accepts") {
@@ -310,6 +356,23 @@ class RangeIndexSuite extends SparkFunSuite {
     assert(index.estimatedSize() > empty.estimatedSize())
   }
 
+  test("PointIndex.build defends against a build-side iterator reusing its row buffer") {
+    // Same hazard as the IntervalIndex case above: a point index built straight off a
+    // reused row buffer must copy both the key and the row, not just reference them.
+    val n = 50
+    val buildKeys = Seq(BoundReference(0, IntegerType, nullable = true))
+    val (shared, rows) = reusingRowIterator(fields = 2, n)
+    val index = PointIndex.build(IntegerType, buildKeys, rows, Some(n))
+
+    shared.update(0, -1)
+    shared.update(1, -1)
+
+    (0 until n).foreach { i =>
+      val payload = index.from(i).next().getInt(1)
+      assert(payload == i, s"point $i was corrupted by later reuse of the row buffer")
+    }
+  }
+
   test("point index orders NaN above +Infinity and -Infinity below every finite value") {
     // Total order: -Inf < -1.0 < 0.0 < 1.0 < +Inf < NaN, with NaN the unique maximum.
     val keyed = Array[(Any, InternalRow)](
@@ -347,11 +410,93 @@ class RangeIndexSuite extends SparkFunSuite {
     assert(pointRestored.upTo(UTF8String.fromString("ABC")).nonEmpty)
   }
 
+  test("strict Kryo serialization round-trips interval and point indices") {
+    val conf = new org.apache.spark.SparkConf()
+      .set(org.apache.spark.internal.config.Kryo.KRYO_REGISTRATION_REQUIRED, true)
+    val kryoSerializer = new org.apache.spark.serializer.KryoSerializer(conf)
+    val ser = kryoSerializer.newInstance()
+
+    val testCases: Seq[(DataType, Any, Any, Any)] = Seq(
+      (ByteType, 0.toByte, 10.toByte, 5.toByte),
+      (ShortType, 0.toShort, 10.toShort, 5.toShort),
+      (IntegerType, 0, 10, 5),
+      (LongType, 0L, 10L, 5L),
+      (FloatType, 0.0f, 10.0f, 5.0f),
+      (DoubleType, 0.0, 10.0, 5.0),
+      (DecimalType(10, 2), Decimal(0.0), Decimal(10.0), Decimal(5.0)),
+      (StringType("UTF8_LCASE"),
+        UTF8String.fromString("aaa"), UTF8String.fromString("zzz"), UTF8String.fromString("mmm")),
+      (BinaryType, Array[Byte](0), Array[Byte](10), Array[Byte](5)),
+      (DateType, 100, 200, 150),
+      (TimestampType, 1000L, 2000L, 1500L),
+      (TimestampNTZType, 1000L, 2000L, 1500L),
+      (BooleanType, false, true, true)
+    )
+
+    testCases.foreach { case (dt, lo, hi, probe) =>
+      val interval = IntervalIndex.build(dt, Array(((lo: Any), (hi: Any), row(0))))
+      val point = PointIndex.build(dt, Array(((probe: Any), row(0))))
+
+      val restoredInterval = ser.deserialize[IntervalIndex](ser.serialize(interval))
+      val restoredPoint = ser.deserialize[PointIndex](ser.serialize(point))
+
+      assert(restoredInterval.overlapping(probe, probe).nonEmpty, s"failed for type $dt")
+      assert(restoredPoint.upTo(probe).nonEmpty, s"failed for type $dt")
+    }
+  }
+
+  test("overlap iterator right-sizes scratch stack to tree depth") {
+    val oneRowIndex = buildIntervals(Seq(span(0, 10, 0)))
+    val oneRowIter = oneRowIndex.overlapping(5, 5).asInstanceOf[OverlapIterator]
+    assert(oneRowIter.stackCapacity == 8,
+      s"one-row index should allocate minimal scratch (8), got ${oneRowIter.stackCapacity}")
+
+    val largeIndex = buildIntervals((0 until 10000).map(i => span(0, 100, i)))
+    val largeIter = largeIndex.overlapping(50, 50).asInstanceOf[OverlapIterator]
+    // 10,000 rows has tree depth 14, requiring 3 * 14 = 42 capacity.
+    assert(largeIter.stackCapacity == 42,
+      s"10,000-row index should size scratch to tree depth (42), got ${largeIter.stackCapacity}")
+  }
+
   test("overlapping traversal is lazy and supports early exit under high overlap") {
+    // The pending-work stack tracks tree depth, not match count: draining a handful
+    // of candidates out of n fully-overlapping intervals must not grow it toward n.
     val n = 10000
     val overlappingSpans = (0 until n).map(i => span(0, 100, i))
     val index = buildIntervals(overlappingSpans)
-    val iter = index.overlapping(50, 50)
+    val iter = index.overlapping(50, 50).asInstanceOf[OverlapIterator]
+    val initialCapacity = iter.stackCapacity
+
     assert(iter.take(3).size == 3)
+    assert(iter.steps < 50,
+      s"lazy traversal must perform bounded steps ($n total intervals), but took ${iter.steps}")
+    assert(iter.stackCapacity == initialCapacity,
+      s"stack grew from $initialCapacity to ${iter.stackCapacity} after taking 3 of $n matches")
+  }
+
+  test("overlapping matches a brute-force reference across randomized interval sets") {
+    // Cross-checks the tree-pruning search in overlapping() against an independent
+    // O(n) scan, across many random interval sets and probe windows. Hand-written
+    // cases above cover specific shapes; this covers combinations they would miss.
+    val rand = new scala.util.Random(42)
+    val bound = 50
+    for (_ <- 0 until 30) {
+      val n = 1 + rand.nextInt(300)
+      // Endpoints are not pre-sorted, exercising build()'s lo/hi-swap normalization.
+      val raw = (0 until n).map(i => (rand.nextInt(bound), rand.nextInt(bound), i))
+      val index = buildIntervals(raw.map { case (a, b, i) => span(a, b, i) })
+      val normalized = raw.map { case (a, b, i) => (math.min(a, b), math.max(a, b), i) }
+
+      for (_ <- 0 until 20) {
+        val a = rand.nextInt(bound)
+        val b = rand.nextInt(bound)
+        val (low, high) = (math.min(a, b), math.max(a, b))
+        val expected = normalized.collect {
+          case (lo, hi, i) if lo <= high && low <= hi => i
+        }.toSet
+        assert(probeIds(index, low, high).toSet == expected,
+          s"n=$n low=$low high=$high expected=$expected")
+      }
+    }
   }
 }

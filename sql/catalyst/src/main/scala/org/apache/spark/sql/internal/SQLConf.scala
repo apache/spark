@@ -1229,7 +1229,7 @@ object SQLConf {
       "Point-in-range and interval overlap (a.lo < b.hi AND b.lo < a.hi) broadcast " +
       "an interval index. A single inequality broadcasts a sorted point index. " +
       "Only types the index compares with the join predicate are recognized. " +
-      "A non-deterministic key stays a nested loop join. " +
+      "A non-deterministic expression is not used as a range key. " +
       "Deeply overlapping intervals can increase candidate evaluation cost during probing. " +
       "Off by default.")
     .version("4.4.0")
