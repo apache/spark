@@ -26,7 +26,6 @@ import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Random, Success, Try}
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
-import org.apache.spark.internal.config.ConfigBindingPolicy
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.TableOutputResolver.DefaultValueFillMode._
@@ -60,10 +59,10 @@ import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, ProcedureParameter, UnboundProcedure}
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation}
+import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation, ExtractV2Table}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PartitionOverwriteMode, StoreAssignmentPolicy}
-import org.apache.spark.sql.internal.connector.V1Function
+import org.apache.spark.sql.internal.connector.{SchemaAlignmentConfig, SupportsConfigurableSchemaAlignment, V1Function}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -322,25 +321,15 @@ object AnalysisContext {
 object Analyzer {
   // Configs with bindingPolicy SESSION or NOT_APPLICABLE are retained when resolving views and
   // SQL UDFs, so that their values propagate from the active session rather than falling back to
-  // Spark defaults. Note: configs defined in lazily-loaded modules (e.g., sql/hive) will only
-  // be included if their holding Scala object has been initialized before this set is computed.
+  // Spark defaults. Entries from lazily-loaded modules are recognized once registered.
   def retainResolutionConfigsForAnalysis(
       newConf: SQLConf,
       existingConf: SQLConf,
       createSparkVersion: String = ""): Unit = {
-    val retainedConfigKeys = SQLConf.getConfigEntries().asScala
-      .filter(entry =>
-        entry.bindingPolicy.contains(ConfigBindingPolicy.SESSION) ||
-        entry.bindingPolicy.contains(ConfigBindingPolicy.NOT_APPLICABLE))
-      .map(_.key)
-      .toSet
-
-    val retainedConfigs = existingConf.getAllConfs.filter { case (key, _) =>
-      retainedConfigKeys.contains(key) || key.startsWith("spark.sql.catalog.")
-    }
-
-    retainedConfigs.foreach { case (k, v) =>
-      newConf.settings.put(k, v)
+    existingConf.getAllConfs.foreach { case (key, value) =>
+      if (key.startsWith("spark.sql.catalog.") || SQLConf.isSessionBindingPolicy(key)) {
+        newConf.settings.put(key, value)
+      }
     }
 
     trySetAnsiValue(newConf, createSparkVersion)
@@ -4064,10 +4053,15 @@ class Analyzer(
           case r: DataSourceV2Relation => GeneratedColumn.attachGenerationExpressions(r)
           case _ => v2Write.table.output
         }
+        val schemaAlignmentConfig = v2Write.table match {
+          case ExtractV2Table(table: SupportsConfigurableSchemaAlignment) =>
+            table.schemaAlignmentConfig()
+          case _ => SchemaAlignmentConfig.DEFAULT
+        }
         val (projection, autoFilledGenCols) =
           TableOutputResolver.resolveOutputColumnsWithGeneratedInfo(
             v2Write.table.name, expected, v2Write.query, v2Write.isByName, conf,
-            defaultValueFillMode)
+            defaultValueFillMode, schemaAlignmentConfig.ansiStoreAssignmentCastCheck())
         if (projection != v2Write.query) {
           val cleanedTable = v2Write.table match {
             case r: DataSourceV2Relation =>

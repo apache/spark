@@ -49,15 +49,17 @@ case class SortMergeAsOfJoinExec(
     rightSortExprs: Seq[Expression],
     asOfCondition: Expression,
     orderExpression: Expression,
+    direction: AsOfJoinDirection,
     joinType: JoinType,
     condition: Option[Expression],
     left: SparkPlan,
     right: SparkPlan,
-    isSkewJoin: Boolean = false) extends ShuffledJoin with PredicateHelper {
+    isSkewJoin: Boolean = false) extends ShuffledJoin {
 
-  require(leftSortExprs.nonEmpty && rightSortExprs.nonEmpty &&
-    leftSortExprs.length == rightSortExprs.length,
-    s"$nodeName requires matching non-empty sort expressions on both sides")
+  // The sides may have different key counts: each side is sorted on its own, and only the
+  // equi-keys are compared across sides.
+  require(leftSortExprs.nonEmpty && rightSortExprs.nonEmpty,
+    s"$nodeName requires non-empty sort expressions on both sides")
 
   require(Seq(Inner, LeftOuter).exists(joinType == _),
     s"$nodeName does not support join type: $joinType")
@@ -92,24 +94,9 @@ case class SortMergeAsOfJoinExec(
 
   override def outputOrdering: Seq[SortOrder] = left.outputOrdering
 
-  // The first `left op right` comparison gives the direction. Nearest has none.
-  private val asOfDirection: AsOfJoinDirection =
-    splitConjunctivePredicates(asOfCondition).head match {
-      case c: BinaryComparison
-          if c.left.references.subsetOf(left.outputSet) &&
-            c.right.references.subsetOf(right.outputSet) =>
-        c match {
-          case _: GreaterThanOrEqual | _: GreaterThan => Backward
-          case _: LessThanOrEqual | _: LessThan => Forward
-          case _ => Nearest
-        }
-      case _ => Nearest
-    }
-
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
     val spillSize = longMetric("spillSize")
-    val direction = asOfDirection
     val inMemoryThreshold = conf.sortMergeJoinExecBufferInMemoryThreshold
     val sizeInBytesSpillThreshold = conf.sortMergeJoinExecBufferSpillSizeThreshold
     val spillThreshold = conf.sortMergeJoinExecBufferSpillThreshold

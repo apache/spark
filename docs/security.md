@@ -1222,7 +1222,12 @@ delegation tokens rather than the original ticket-granting ticket.
 * Service credentials are not written to shuffle files, event logs, or checkpoints.
 * Credentials are carried over Spark's RPC channels and therefore rely on Spark's existing RPC
   encryption configuration. Operators are strongly encouraged to enable RPC encryption whenever
-  credential propagation is enabled. See [Network Encryption](#network-encryption) for details.
+  credential propagation is enabled. If credential propagation is enabled while RPC encryption is
+  not configured, Spark logs a warning at startup, since credentials would otherwise be transmitted
+  to executors over an unencrypted channel. To turn this into a hard requirement, set
+  `spark.security.oidc.requireRpcEncryption=true`, which makes Spark refuse to start unless RPC
+  encryption is configured. See [Network Encryption](#network-encryption) for
+  details.
 
 ## Custom CredentialProvider
 
@@ -1310,6 +1315,19 @@ each provider.
     token from a file, exchanges it for short-lived service credentials via
     <code>CredentialProvider</code> implementations, and propagates those credentials to executors.
     When disabled (the default), the feature's components are not started.
+  </td>
+  <td>4.4.0</td>
+</tr>
+<tr>
+  <td><code>spark.security.oidc.requireRpcEncryption</code></td>
+  <td><code>false</code></td>
+  <td>
+    When OIDC credential propagation is enabled, whether to require RPC channel encryption. By
+    default (<code>false</code>), Spark only logs a warning if credential propagation is enabled
+    without RPC encryption, since credentials would then travel over the RPC channel in cleartext.
+    When set to <code>true</code>, Spark instead refuses to start unless RPC encryption is
+    configured. Leave it <code>false</code> if the channel is protected outside Spark (for
+    example, a service mesh or a private network).
   </td>
   <td>4.4.0</td>
 </tr>

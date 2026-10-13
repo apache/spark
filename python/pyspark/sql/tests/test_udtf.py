@@ -30,6 +30,7 @@ from pyspark.errors import (
     AnalysisException,
     IllegalArgumentException,
     PySparkAttributeError,
+    PySparkNotImplementedError,
     PySparkPicklingError,
     PySparkTypeError,
     PythonException,
@@ -53,6 +54,7 @@ from pyspark.sql.functions import (
 from pyspark.sql.types import (
     ArrayType,
     BooleanType,
+    CharType,
     DataType,
     IntegerType,
     LongType,
@@ -64,6 +66,7 @@ from pyspark.sql.types import (
     StructType,
     VariantVal,
 )
+from pyspark.sql.utils import is_remote
 from pyspark.testing import assertDataFrameEqual, assertSchemaEqual
 from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -84,6 +87,60 @@ class BaseUDTFTestsMixin:
 
         func = udtf(TestUDTF, returnType="c1: string, c2: string")
         assertDataFrameEqual(func(), [Row(c1="hello", c2="world")])
+
+    def test_udtf_char_varchar_return_type(self):
+        class TestUDTF:
+            def eval(self):
+                yield ("a",)
+
+        schema = StructType([StructField("c", CharType(3))])
+        with self.assertRaises(PySparkNotImplementedError) as pe:
+            udtf(TestUDTF, returnType=schema)()
+        self.check_error(
+            exception=pe.exception,
+            errorClass="CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON",
+            messageParameters={
+                "feature": "Python UDTF return types",
+                "data_type": schema.simpleString(),
+            },
+        )
+
+    def test_udtf_char_varchar_return_type_ddl(self):
+        class TestUDTF:
+            def eval(self):
+                yield ("a",)
+
+        def invoke():
+            return udtf(TestUDTF, returnType="c: char(3)")()
+
+        if is_remote():
+            with self.assertRaises(AnalysisException) as pe:
+                invoke().collect()
+            self.assertEqual(pe.exception.getCondition(), "CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON")
+        else:
+            with self.assertRaises(PySparkNotImplementedError) as pe:
+                invoke()
+            self.check_error(
+                exception=pe.exception,
+                errorClass="CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON",
+                messageParameters={
+                    "feature": "Python UDTF return types",
+                    "data_type": "struct<c:char(3)>",
+                },
+            )
+
+    def test_udtf_char_varchar_analyze_schema(self):
+        class TestUDTF:
+            @staticmethod
+            def analyze(*args):
+                return AnalyzeResult(StructType([StructField("c", CharType(3))]))
+
+            def eval(self, *args):
+                yield ("a",)
+
+        with self.assertRaises(AnalysisException) as pe:
+            udtf(TestUDTF)().collect()
+        self.assertEqual(pe.exception.getCondition(), "CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON")
 
     def test_udtf_yield_single_row_col(self):
         class TestUDTF:

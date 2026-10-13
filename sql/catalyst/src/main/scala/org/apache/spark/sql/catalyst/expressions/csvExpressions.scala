@@ -66,8 +66,7 @@ case class CsvToStructs(
     requiredSchema: Option[StructType] = None)
   extends UnaryExpression
   with TimeZoneAwareExpression
-  with ExpectsInputTypes
-  with SupportTrimmedCharInput {
+  with ExpectsInputTypes {
 
   override def nullable: Boolean = child.nullable
   override def nullIntolerant: Boolean = true
@@ -113,12 +112,12 @@ case class CsvToStructs(
   override def stateful: Boolean = true
 
   override def nullSafeEval(input: Any): Any = {
-    evaluator.evaluate(trimStringInput(input.asInstanceOf[UTF8String]))
+    evaluator.evaluate(input.asInstanceOf[UTF8String])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val refEvaluator = ctx.addReferenceObj("evaluator", evaluator)
-    val eval = stringInput.genCode(ctx)
+    val eval = child.genCode(ctx)
     val resultType = CodeGenerator.boxedType(dataType)
     val resultTerm = ctx.freshName("result")
     ev.copy(code =
@@ -161,8 +160,7 @@ case class SchemaOfCsv(
   extends UnaryExpression
   with RuntimeReplaceable
   with DefaultStringProducingExpression
-  with QueryErrorsBase
-  with SupportTrimmedCharInput {
+  with QueryErrorsBase {
 
   def this(child: Expression) = this(child, Map.empty[String, String])
 
@@ -210,8 +208,8 @@ case class SchemaOfCsv(
     Literal.create(evaluator, ObjectType(classOf[SchemaOfCsvEvaluator])),
     "evaluate",
     dataType,
-    Seq(stringInput),
-    Seq(stringInput.dataType),
+    Seq(child),
+    Seq(child.dataType),
     returnNullable = false)
 }
 
