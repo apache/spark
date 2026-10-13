@@ -781,8 +781,6 @@ object ResolverGuard {
    */
   private val SUPPORTED_EXPERIMENTAL_FUNCTION_NAMES = {
     val map = new IdentifierMap[Unit]()
-    map += ("ai_complete", ())
-    map += ("ai_embed", ())
     map += ("collate", ())
     map += ("schema_of_json", ())
     map += ("schema_of_xml", ())
