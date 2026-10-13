@@ -346,9 +346,9 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
           // scalastyle:off line.size.limit
           code"$evPrim = UTF8String.fromString($iu.toDayTimeIntervalString($c, $style, (byte)${i.startField}, (byte)${i.endField}));"
           // scalastyle:on line.size.limit
-      // In ANSI mode, Spark always use plain string representation on casting Decimal values
-      // as strings. Otherwise, the casting is using `BigDecimal.toString` which may use scientific
-      // notation if an exponent is needed.
+      // In ANSI mode, Spark uses plain string representation when casting Decimal values unless a
+      // huge negative scale would make the result unbounded. Otherwise, the casting uses
+      // `BigDecimal.toString`, which may use scientific notation if an exponent is needed.
       case _: DecimalType if useDecimalPlainString =>
         (c, evPrim) => code"$evPrim = UTF8String.fromString($c.toPlainString());"
       case _: StringType =>

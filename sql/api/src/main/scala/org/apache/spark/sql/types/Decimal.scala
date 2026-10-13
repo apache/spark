@@ -232,7 +232,12 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   override def toString: String = toBigDecimal.toString()
 
-  def toPlainString: String = toJavaBigDecimal.toPlainString
+  def toPlainString: String = {
+    val decimal = toJavaBigDecimal
+    // A huge negative scale can make BigDecimal.toPlainString allocate an unbounded string.
+    if (decimal.scale < -MAX_PLAIN_STRING_TRAILING_ZEROS) decimal.toString
+    else decimal.toPlainString
+  }
 
   def toDebugString: String = {
     if (decimalVal.ne(null)) {
@@ -581,6 +586,8 @@ object Decimal {
   val ROUND_CEILING = BigDecimal.RoundingMode.CEILING
   val ROUND_FLOOR = BigDecimal.RoundingMode.FLOOR
   val ROUND_DOWN = BigDecimal.RoundingMode.DOWN
+
+  private val MAX_PLAIN_STRING_TRAILING_ZEROS = 1000
 
   /** Maximum number of decimal digits an Int can represent */
   val MAX_INT_DIGITS = 9
