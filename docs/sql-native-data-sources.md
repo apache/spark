@@ -25,10 +25,10 @@ license: |
 ## Overview
 
 A native data source is a data source implemented in native code, such as Rust or C++, without
-any JVM code. It is a shared library that implements the
-[`NativeBridge`](api/java/org/apache/spark/sql/datasource/NativeBridge.html) binary interface.
-Spark finds the library automatically when it is installed like other native libraries, or when a
-session adds it in a package, and loads it when a query uses the data source. Spark adapts it to
+any JVM code. It is a shared library that exports the C functions declared in the header
+[`spark_datasource.h`]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/sql/core/src/main/resources/org/apache/spark/sql/datasource/spark_datasource.h). Spark finds the library
+automatically when it is installed like other native libraries, or when a session adds it in a
+package, and loads it when a query uses the data source. Spark adapts it to
 [Data Source V2](sql-v2-data-sources.html), so it supports:
 
 - batch and micro-batch streaming reads,
@@ -39,53 +39,64 @@ Data is exchanged only as columnar batches, through the
 [Arrow C data interface](https://arrow.apache.org/docs/format/CDataInterface.html), so Spark reads
 the data that a library returns without copying it.
 
+Spark calls native data sources with the
+[Foreign Function and Memory API](https://openjdk.org/jeps/454) of Java, which is final from Java
+22, so they require Java 22 or later on the driver and the executors. With an earlier version of
+Java, a query that uses a native data source fails with
+`NATIVE_DATA_SOURCE_UNSUPPORTED_JAVA_VERSION`.
+
 ## How It Works
 
-A native data source library implements the `native` methods of `NativeBridge` as JNI functions,
-named after the class, such as `Java_org_apache_spark_sql_datasource_NativeBridge_createDataSource`.
-Spark loads each library into its own copy of the class, so any number of native data sources can
-be loaded side by side.
+A native data source library exports the functions of `spark_datasource.h`, such as
+`spark_ds_create`, as plain C functions: it needs no JVM headers or bindings. Spark looks the
+functions up in each library separately, so any number of native data sources can be loaded side
+by side, although they export the same functions.
 
 Spark calls the functions of the library as follows:
 
 - **Data sources**: for each schema inference, scan and write, Spark creates a data source on the
-  driver with `createDataSource`, which receives the options of the user, and closes it right
-  after. When the user does not specify a schema, Spark asks for it with `schema`.
-- **Batch reads**: on the driver, Spark creates a reader with `createReader`, pushes operations down
-  with `pushPredicates`, `pushLimit` and `pruneColumns`, plans the partitions with `partitions`,
-  and serializes the state of the reader with `serializeReader`. Then it calls `read` on the
-  executors, in one task for each partition, and `read` exports an `ArrowArrayStream`.
-- **Streaming reads**: on the driver, Spark creates a stream reader with `createStreamReader`. For
-  each micro-batch, it asks for the `latestOffset`, plans the partitions with `streamPartitions`,
-  and calls `read` on the executors. Offsets are JSON strings defined by the library.
-- **Writes**: on the driver, Spark creates a writer with `createWriter` or `createStreamWriter`. On
-  the executors, each task creates a data writer with `createDataWriter`, writes the batches of its
-  data with `write`, and calls `commitDataWriter`, or `abortDataWriter` if the task or the commit
-  fails. Then the driver calls `commit` with the messages of the tasks, or `abort` if the write
-  failed. A micro-batch streaming query creates a new stream writer for each micro-batch, and Spark
-  closes the previous one when it creates the next one. Because Spark is not told when a streaming
-  query stops, the last stream writer of a query is closed once it is no longer referenced, or
-  when the query is restarted.
+  driver with `spark_ds_create`, which receives the options of the user, and closes it right after
+  with `spark_ds_close`. When the user does not specify a schema, Spark asks for it with
+  `spark_ds_schema`.
+- **Batch reads**: on the driver, Spark creates a reader with `spark_ds_create_reader`, pushes
+  operations down with `spark_ds_push_predicates`, `spark_ds_push_limit` and
+  `spark_ds_prune_columns`, plans the partitions with `spark_ds_partitions`, and serializes the
+  state of the reader with `spark_ds_serialize_reader`. Then it calls `spark_ds_read` on the
+  executors, in one task for each partition, and `spark_ds_read` exports an `ArrowArrayStream`.
+- **Streaming reads**: on the driver, Spark creates a stream reader with
+  `spark_ds_create_stream_reader`. For each micro-batch, it asks for the `spark_ds_latest_offset`,
+  plans the partitions with `spark_ds_stream_partitions`, and calls `spark_ds_read` on the
+  executors. Offsets are JSON strings defined by the library.
+- **Writes**: on the driver, Spark creates a writer with `spark_ds_create_writer` or
+  `spark_ds_create_stream_writer`. On the executors, each task creates a data writer with
+  `spark_ds_create_data_writer`, writes the batches of its data with `spark_ds_write`, and calls
+  `spark_ds_commit_data_writer`, or `spark_ds_abort_data_writer` if the task or the commit fails.
+  Then the driver calls `spark_ds_commit` with the messages of the tasks, or `spark_ds_abort` if
+  the write failed. A micro-batch streaming query creates a new stream writer for each
+  micro-batch, and Spark closes the previous one when it creates the next one. Because Spark is not
+  told when a streaming query stops, the last stream writer of a query is closed once it is no
+  longer referenced, or when the query is restarted.
 
 The library defines the format of the partitions, of the state of its readers and writers, and of
-the commit messages, which Spark sends to the executors and back as byte arrays. A library reports
-an error by throwing a Java exception, for example with the JNI function `ThrowNew`, and Spark
-reports it as a `NATIVE_DATA_SOURCE_ERROR`.
+the commit messages, which Spark sends to the executors and back as byte arrays. The library
+returns them, and the offsets, by passing them to a `SparkDsSink` callback, which copies them. A
+function reports an error by returning a non-zero value, with the message returned by
+`spark_ds_last_error`, and Spark reports it as a `NATIVE_DATA_SOURCE_ERROR`. A C++ exception or a
+Rust panic must not cross the interface.
 
 A library only exports the functions of the operations it supports. If a function is missing,
-Spark treats the operation as unsupported, except for the pushdown and `serialize` functions, which
-are optional:
+Spark treats the operation as unsupported, except for the optional functions:
 
 | Operation | Required functions | Optional functions |
 |-----------|--------------------|--------------------|
-| All | `abiVersion`, `createDataSource`, `closeDataSource` | `schema` |
-| Batch read | `createReader`, `partitions`, `read`, `closeReader` | `pushPredicates`, `pushLimit`, `pruneColumns`, `serializeReader` |
-| Streaming read | `createStreamReader`, `initialOffset`, `latestOffset`, `streamPartitions`, `read`, `closeStreamReader` | `serializeStreamReader`, `commitOffset` |
-| Batch write | `createWriter`, `commit`, `abort`, `closeWriter`, `createDataWriter`, `write`, `commitDataWriter`, `abortDataWriter` | `serializeWriter` |
-| Streaming write | `createStreamWriter`, `commit`, `abort`, `closeWriter`, `createDataWriter`, `write`, `commitDataWriter`, `abortDataWriter` | `serializeWriter` |
+| All | `spark_ds_abi_version`, `spark_ds_create`, `spark_ds_close` | `spark_ds_last_error`, `spark_ds_schema` |
+| Batch read | `spark_ds_create_reader`, `spark_ds_partitions`, `spark_ds_read`, `spark_ds_close_reader` | `spark_ds_push_predicates`, `spark_ds_push_limit`, `spark_ds_prune_columns`, `spark_ds_serialize_reader` |
+| Streaming read | `spark_ds_create_stream_reader`, `spark_ds_initial_offset`, `spark_ds_latest_offset`, `spark_ds_stream_partitions`, `spark_ds_read`, `spark_ds_close_stream_reader` | `spark_ds_serialize_stream_reader`, `spark_ds_commit_offset` |
+| Batch write | `spark_ds_create_writer`, `spark_ds_commit`, `spark_ds_abort`, `spark_ds_close_writer`, `spark_ds_create_data_writer`, `spark_ds_write`, `spark_ds_commit_data_writer`, `spark_ds_abort_data_writer` | `spark_ds_serialize_writer` |
+| Streaming write | `spark_ds_create_stream_writer`, `spark_ds_commit`, `spark_ds_abort`, `spark_ds_close_writer`, `spark_ds_create_data_writer`, `spark_ds_write`, `spark_ds_commit_data_writer`, `spark_ds_abort_data_writer` | `spark_ds_serialize_writer` |
 
-The [Javadoc of `NativeBridge`](api/java/org/apache/spark/sql/datasource/NativeBridge.html)
-specifies each function, including the ownership of the Arrow structs and the JSON format of the
+The comments of [`spark_datasource.h`]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/sql/core/src/main/resources/org/apache/spark/sql/datasource/spark_datasource.h)
+specify each function, including the ownership of the Arrow structs and the JSON format of the
 pushed predicates. A predicate that a library reports as evaluated completely must follow the
 semantics of Spark SQL, for example for NaN values, which are equal to each other and greater
 than any other value. The arrays that a library exports must have an offset of 0: copy a sliced
@@ -94,23 +105,23 @@ checks that each array has at least as many values as its parent refers to, but 
 that the buffers of the arrays hold those values, because the C data interface does not carry the
 sizes of buffers: a library that exports a buffer that is too short makes Spark read past its end.
 
-The `get_next` function of the stream that `read` exports may block, for example on network I/O,
-but Spark cannot interrupt native code: when a task is killed, Spark stops reading only once
-`get_next` returns. Use timeouts for blocking operations, or enable the task reaper with
+The `get_next` function of the stream that `spark_ds_read` exports may block, for example on
+network I/O, but Spark cannot interrupt native code: when a task is killed, Spark stops reading
+only once `get_next` returns. Use timeouts for blocking operations, or enable the task reaper with
 `spark.task.reaper.enabled` and `spark.task.reaper.killTimeout`, which kills an executor whose
 killed task does not end.
 
 ### Compatibility
 
-The JVM binds the functions of a library by their names only, so the names and the signatures of
-the methods of `NativeBridge` are the interface. Its version, 1, is the `abiVersion` that a
-library returns and that the manifest of a package declares. Within a version, the signature and
-the semantics of an existing function never change, and new functions are only added as optional
-functions, so a library keeps working with later releases of Spark. New values may appear where
-the Javadoc says so: for example, later releases may push down predicates with other names, which
-a library must not report as evaluated completely. An incompatible change comes with a new
-version, with new names or a new class. Spark supports version 1 at least in all the releases of
-Spark 4 from 4.4.0.
+Spark binds the functions of a library by their names, so the names and the signatures of the
+functions of `spark_datasource.h` are the interface. Its version, 1, is `SPARK_DS_ABI_VERSION`,
+which `spark_ds_abi_version` returns and the manifest of a package declares. Within a version, the
+signature and the semantics of an existing function never change, and new functions are only
+added as optional functions, so a library keeps working with later releases of Spark. New values
+may appear where the header says so: for example, later releases may push down predicates with
+other names, which a library must not report as evaluated completely. An incompatible change comes
+with a new version, with new names. Spark supports version 1 at least in all the releases of Spark
+4 from 4.4.0.
 
 ### Limitations
 
@@ -139,7 +150,7 @@ like other native libraries is found automatically, without any configuration. T
 named after the data source, in lower case, with the prefix `spark_datasource_`: the library of
 `rust_range` is `libspark_datasource_rust_range.so` on Linux,
 `libspark_datasource_rust_range.dylib` on macOS and `spark_datasource_rust_range.dll` on Windows.
-Spark passes the name of the data source to `createDataSource`. A library that implements several
+Spark passes the name of the data source to `spark_ds_create`. A library that implements several
 data sources is installed under each of their names, for example with symbolic links.
 
 Spark looks for the library in the native library path, which consists of, in order:
@@ -190,9 +201,9 @@ is a zip file with the extension `.sparkpkg`, which contains a manifest named
 }
 ```
 
-- `abiVersion` is the version of `NativeBridge` that the library implements, currently 1.
+- `abiVersion` is the version of `spark_datasource.h` that the library implements, currently 1.
 - `dataSources` lists the names of the data sources that the library implements. The names are
-  case-insensitive, and Spark passes the name to `createDataSource`.
+  case-insensitive, and Spark passes the name to `spark_ds_create`.
 - `libraries` maps each platform, `<os>-<arch>` with an `os` of `linux`, `osx` or `windows` and an
   `arch` of `x86_64` or `aarch64`, to the path of the library in the package.
 
@@ -218,11 +229,11 @@ installed library provides it.
 
 ## Example in Rust
 
-This data source reads the numbers `[0, end)` as a column `id`, in two partitions. It uses the
-[`jni`](https://crates.io/crates/jni) crate, and the `arrow-array` and `arrow-schema` crates of
-[arrow-rs](https://github.com/apache/arrow-rs), which export schemas and streams with
-`FFI_ArrowSchema` and `FFI_ArrowArrayStream`. `Cargo.toml`, where the name of the library is the
-name that Spark finds when it is installed:
+This data source reads the numbers `[0, end)` as a column `id`, in two partitions. It only depends
+on the `arrow-array` and `arrow-schema` crates of [arrow-rs](https://github.com/apache/arrow-rs),
+which export schemas and streams with `FFI_ArrowSchema` and `FFI_ArrowArrayStream`, and declares
+the functions of `spark_datasource.h` that it implements as `extern "C"` functions. `Cargo.toml`,
+where the name of the library is the name that Spark finds when it is installed:
 
 ```toml
 [package]
@@ -237,7 +248,6 @@ crate-type = ["cdylib"]
 [dependencies]
 arrow-array = { version = "58", features = ["ffi"] }
 arrow-schema = { version = "58", features = ["ffi"] }
-jni = "0.21"
 ```
 
 `src/lib.rs`:
@@ -247,6 +257,8 @@ jni = "0.21"
 //! A native data source for Apache Spark, written in Rust. It reads the numbers [0, end) as a
 //! column `id`, in two partitions. The option `end` defaults to 10.
 
+use std::cell::RefCell;
+use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
 
@@ -254,11 +266,11 @@ use arrow_array::ffi_stream::FFI_ArrowArrayStream;
 use arrow_array::{Int64Array, RecordBatch, RecordBatchIterator};
 use arrow_schema::ffi::FFI_ArrowSchema;
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
-use jni::objects::{JByteArray, JClass, JObject, JObjectArray, JString};
-use jni::sys::{jint, jlong, jobjectArray};
-use jni::JNIEnv;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+
+/// `SparkDsSink`: receives a byte array returned to Spark, and copies it.
+type Sink = extern "C" fn(sink: *mut c_void, data: *const u8, length: i64);
 
 struct RangeSource {
     end: i64,
@@ -268,140 +280,118 @@ struct RangeReader {
     end: i64,
 }
 
+thread_local! {
+    static LAST_ERROR: RefCell<CString> = RefCell::new(CString::default());
+}
+
 fn schema() -> SchemaRef {
     Arc::new(Schema::new(vec![Field::new("id", DataType::Int64, false)]))
 }
 
-/// Runs `f`, and reports its error or panic as a Java exception: neither may cross into the JVM.
-fn call<T>(env: &mut JNIEnv, default: T, f: impl FnOnce(&mut JNIEnv) -> Result<T>) -> T {
-    let message = match catch_unwind(AssertUnwindSafe(|| f(env))) {
-        Ok(Ok(value)) => return value,
+/// Runs `f`, and reports its error or panic to Spark: neither may cross into the JVM.
+fn call(f: impl FnOnce() -> Result<()>) -> c_int {
+    let message = match catch_unwind(AssertUnwindSafe(f)) {
+        Ok(Ok(())) => return 0,
         Ok(Err(e)) => e.to_string(),
         Err(_) => "the data source panicked".to_string(),
     };
-    if !env.exception_check().unwrap_or(true) {
-        let _ = env.throw_new("java/lang/RuntimeException", message);
-    }
-    default
-}
-
-fn strings(env: &mut JNIEnv, array: &JObjectArray) -> Result<Vec<String>> {
-    let mut result = Vec::new();
-    for i in 0..env.get_array_length(array)? {
-        let value = JString::from(env.get_object_array_element(array, i)?);
-        result.push(env.get_string(&value)?.into());
-    }
-    Ok(result)
-}
-
-#[no_mangle]
-pub extern "system" fn Java_org_apache_spark_sql_datasource_NativeBridge_abiVersion(
-    _env: JNIEnv,
-    _class: JClass,
-) -> jint {
+    LAST_ERROR.with(|error| *error.borrow_mut() = CString::new(message).unwrap_or_default());
     1
 }
 
 #[no_mangle]
-pub extern "system" fn Java_org_apache_spark_sql_datasource_NativeBridge_createDataSource(
-    mut env: JNIEnv,
-    _class: JClass,
-    _name: JString,
-    keys: JObjectArray,
-    values: JObjectArray,
-) -> jlong {
-    call(&mut env, 0, |env| {
-        let mut source = RangeSource { end: 10 };
-        for (key, value) in strings(env, &keys)?.into_iter().zip(strings(env, &values)?) {
-            if key == "end" {
-                source.end = value.parse()?;
-            }
-        }
-        Ok(Box::into_raw(Box::new(source)) as jlong)
-    })
+pub extern "C" fn spark_ds_last_error() -> *const c_char {
+    LAST_ERROR.with(|error| error.borrow().as_ptr())
 }
 
 #[no_mangle]
-pub extern "system" fn Java_org_apache_spark_sql_datasource_NativeBridge_schema(
-    mut env: JNIEnv,
-    _class: JClass,
-    _source: jlong,
-    schema_address: jlong,
-) {
-    call(&mut env, (), |_| {
-        let schema = FFI_ArrowSchema::try_from(schema().as_ref())?;
-        unsafe { std::ptr::write(schema_address as *mut FFI_ArrowSchema, schema) };
+pub extern "C" fn spark_ds_abi_version() -> i32 {
+    1
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn spark_ds_create(
+    _name: *const c_char,
+    option_keys: *const *const c_char,
+    option_values: *const *const c_char,
+    num_options: i64,
+    source: *mut *mut c_void,
+) -> c_int {
+    call(|| {
+        let mut range = RangeSource { end: 10 };
+        for i in 0..num_options as usize {
+            if CStr::from_ptr(*option_keys.add(i)).to_str()? == "end" {
+                range.end = CStr::from_ptr(*option_values.add(i)).to_str()?.parse()?;
+            }
+        }
+        *source = Box::into_raw(Box::new(range)) as *mut c_void;
         Ok(())
     })
 }
 
 #[no_mangle]
-pub extern "system" fn Java_org_apache_spark_sql_datasource_NativeBridge_createReader(
-    mut env: JNIEnv,
-    _class: JClass,
-    source: jlong,
-    _schema_address: jlong,
-) -> jlong {
-    call(&mut env, 0, |_| {
-        let source = unsafe { &*(source as *const RangeSource) };
-        Ok(Box::into_raw(Box::new(RangeReader { end: source.end })) as jlong)
+pub unsafe extern "C" fn spark_ds_schema(_source: *mut c_void, out: *mut FFI_ArrowSchema) -> c_int {
+    call(|| {
+        std::ptr::write(out, FFI_ArrowSchema::try_from(schema().as_ref())?);
+        Ok(())
     })
 }
 
 #[no_mangle]
-pub extern "system" fn Java_org_apache_spark_sql_datasource_NativeBridge_closeDataSource(
-    _env: JNIEnv,
-    _class: JClass,
-    source: jlong,
-) {
-    drop(unsafe { Box::from_raw(source as *mut RangeSource) });
+pub unsafe extern "C" fn spark_ds_create_reader(
+    source: *mut c_void,
+    _schema: *mut FFI_ArrowSchema,
+    reader: *mut *mut c_void,
+) -> c_int {
+    call(|| {
+        let end = (*(source as *const RangeSource)).end;
+        *reader = Box::into_raw(Box::new(RangeReader { end })) as *mut c_void;
+        Ok(())
+    })
 }
 
 #[no_mangle]
-pub extern "system" fn Java_org_apache_spark_sql_datasource_NativeBridge_partitions(
-    mut env: JNIEnv,
-    _class: JClass,
-    reader: jlong,
-) -> jobjectArray {
-    call(&mut env, std::ptr::null_mut(), |env| {
-        let end = unsafe { &*(reader as *const RangeReader) }.end;
-        let bounds = [(0, end / 2), (end / 2, end)];
-        let partitions = env.new_object_array(bounds.len() as i32, "[B", JObject::null())?;
-        for (i, (start, end)) in bounds.into_iter().enumerate() {
+pub unsafe extern "C" fn spark_ds_close(source: *mut c_void) {
+    drop(Box::from_raw(source as *mut RangeSource));
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn spark_ds_partitions(
+    reader: *mut c_void,
+    add_partition: Sink,
+    sink: *mut c_void,
+) -> c_int {
+    call(|| {
+        let end = (*(reader as *const RangeReader)).end;
+        for (start, end) in [(0, end / 2), (end / 2, end)] {
             let bytes = [start.to_le_bytes(), end.to_le_bytes()].concat();
-            let partition = env.byte_array_from_slice(&bytes)?;
-            env.set_object_array_element(&partitions, i as i32, partition)?;
+            add_partition(sink, bytes.as_ptr(), bytes.len() as i64);
         }
-        Ok(partitions.into_raw())
+        Ok(())
     })
 }
 
 #[no_mangle]
-pub extern "system" fn Java_org_apache_spark_sql_datasource_NativeBridge_closeReader(
-    _env: JNIEnv,
-    _class: JClass,
-    reader: jlong,
-) {
-    drop(unsafe { Box::from_raw(reader as *mut RangeReader) });
+pub unsafe extern "C" fn spark_ds_close_reader(reader: *mut c_void) {
+    drop(Box::from_raw(reader as *mut RangeReader));
 }
 
 #[no_mangle]
-pub extern "system" fn Java_org_apache_spark_sql_datasource_NativeBridge_read(
-    mut env: JNIEnv,
-    _class: JClass,
-    _reader_state: JByteArray,
-    partition: JByteArray,
-    stream_address: jlong,
-) {
-    call(&mut env, (), |env| {
-        let bytes = env.convert_byte_array(&partition)?;
+pub unsafe extern "C" fn spark_ds_read(
+    _reader_state: *const u8,
+    _reader_state_length: i64,
+    partition: *const u8,
+    partition_length: i64,
+    out: *mut FFI_ArrowArrayStream,
+) -> c_int {
+    call(|| {
+        let bytes = std::slice::from_raw_parts(partition, partition_length as usize);
         let start = i64::from_le_bytes(bytes[0..8].try_into()?);
         let end = i64::from_le_bytes(bytes[8..16].try_into()?);
         let ids = Int64Array::from_iter_values(start..end);
         let batch = RecordBatch::try_new(schema(), vec![Arc::new(ids)])?;
         let batches = RecordBatchIterator::new(vec![Ok(batch)], schema());
-        let stream = FFI_ArrowArrayStream::new(Box::new(batches));
-        unsafe { std::ptr::write(stream_address as *mut FFI_ArrowArrayStream, stream) };
+        std::ptr::write(out, FFI_ArrowArrayStream::new(Box::new(batches)));
         Ok(())
     })
 }
@@ -439,26 +429,25 @@ EOF
 ## Example in C++
 
 The same data source in C++, with [Arrow C++](https://arrow.apache.org/docs/cpp/), which exports
-schemas and streams with `arrow::ExportSchema` and `arrow::ExportRecordBatchReader`:
+schemas and streams with `arrow::ExportSchema` and `arrow::ExportRecordBatchReader`. It includes
+`spark_datasource.h`, which is also in the `spark-sql` JAR, under
+`org/apache/spark/sql/datasource/`:
 
 {% raw %}
 ```cpp
 // A native data source for Apache Spark, written in C++ with Arrow C++. It reads the numbers
 // [0, end) as a column `id`, in two partitions. The option `end` defaults to 10.
 
-#include <jni.h>
-
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <stdexcept>
 #include <string>
-#include <type_traits>
 
 #include <arrow/api.h>
 #include <arrow/c/bridge.h>
 
-#define SPARK_JNI(ret, method) \
-  extern "C" JNIEXPORT ret JNICALL Java_org_apache_spark_sql_datasource_NativeBridge_##method
+#include "spark_datasource.h"
 
 namespace {
 
@@ -470,18 +459,21 @@ struct RangeReader {
   int64_t end;
 };
 
+thread_local std::string last_error;
+
 std::shared_ptr<arrow::Schema> Schema() {
   return arrow::schema({arrow::field("id", arrow::int64(), /*nullable=*/false)});
 }
 
-// Runs `f`, and reports its error as a Java exception: no C++ exception may cross into the JVM.
+// Runs `f`, and reports its error to Spark: no C++ exception may cross into the JVM.
 template <typename F>
-auto Call(JNIEnv* env, F&& f) -> decltype(f()) {
+int Call(F&& f) {
   try {
-    return f();
+    f();
+    return 0;
   } catch (const std::exception& e) {
-    env->ThrowNew(env->FindClass("java/lang/RuntimeException"), e.what());
-    if constexpr (!std::is_void_v<decltype(f())>) return {};
+    last_error = e.what();
+    return 1;
   }
 }
 
@@ -489,81 +481,63 @@ void Check(const arrow::Status& status) {
   if (!status.ok()) throw std::runtime_error(status.ToString());
 }
 
-std::string ToString(JNIEnv* env, jobject value) {
-  const char* chars = env->GetStringUTFChars(static_cast<jstring>(value), nullptr);
-  std::string result(chars);
-  env->ReleaseStringUTFChars(static_cast<jstring>(value), chars);
-  return result;
-}
-
 }  // namespace
 
-SPARK_JNI(jint, abiVersion)(JNIEnv*, jclass) { return 1; }
+extern "C" {
 
-SPARK_JNI(jlong, createDataSource)(JNIEnv* env, jclass, jstring, jobjectArray keys,
-                                   jobjectArray values) {
-  return Call(env, [&] {
-    auto source = std::make_unique<RangeSource>();
-    for (jsize i = 0; i < env->GetArrayLength(keys); i++) {
-      if (ToString(env, env->GetObjectArrayElement(keys, i)) == "end") {
-        source->end = std::stoll(ToString(env, env->GetObjectArrayElement(values, i)));
-      }
+const char* spark_ds_last_error(void) { return last_error.c_str(); }
+
+int32_t spark_ds_abi_version(void) { return SPARK_DS_ABI_VERSION; }
+
+int spark_ds_create(const char*, const char* const* option_keys,
+                    const char* const* option_values, int64_t num_options, void** source) {
+  return Call([&] {
+    auto range = std::make_unique<RangeSource>();
+    for (int64_t i = 0; i < num_options; i++) {
+      if (std::string(option_keys[i]) == "end") range->end = std::stoll(option_values[i]);
     }
-    return reinterpret_cast<jlong>(source.release());
+    *source = range.release();
   });
 }
 
-SPARK_JNI(void, schema)(JNIEnv* env, jclass, jlong, jlong schema_address) {
-  Call(env, [&] {
-    Check(arrow::ExportSchema(*Schema(), reinterpret_cast<ArrowSchema*>(schema_address)));
-  });
+int spark_ds_schema(void*, struct ArrowSchema* out) {
+  return Call([&] { Check(arrow::ExportSchema(*Schema(), out)); });
 }
 
-SPARK_JNI(jlong, createReader)(JNIEnv* env, jclass, jlong source, jlong) {
-  return Call(env, [&] {
-    auto* reader = new RangeReader{reinterpret_cast<RangeSource*>(source)->end};
-    return reinterpret_cast<jlong>(reader);
-  });
+int spark_ds_create_reader(void* source, struct ArrowSchema*, void** reader) {
+  return Call([&] { *reader = new RangeReader{static_cast<RangeSource*>(source)->end}; });
 }
 
-SPARK_JNI(void, closeDataSource)(JNIEnv*, jclass, jlong source) {
-  delete reinterpret_cast<RangeSource*>(source);
-}
+void spark_ds_close(void* source) { delete static_cast<RangeSource*>(source); }
 
-SPARK_JNI(jobjectArray, partitions)(JNIEnv* env, jclass, jlong reader) {
-  return Call(env, [&] {
-    int64_t end = reinterpret_cast<RangeReader*>(reader)->end;
+int spark_ds_partitions(void* reader, SparkDsSink add_partition, void* sink) {
+  return Call([&] {
+    int64_t end = static_cast<RangeReader*>(reader)->end;
     int64_t bounds[2][2] = {{0, end / 2}, {end / 2, end}};
-    jobjectArray partitions = env->NewObjectArray(2, env->FindClass("[B"), nullptr);
-    for (jsize i = 0; i < 2; i++) {
-      jbyteArray partition = env->NewByteArray(sizeof(bounds[i]));
-      env->SetByteArrayRegion(partition, 0, sizeof(bounds[i]),
-                              reinterpret_cast<const jbyte*>(bounds[i]));
-      env->SetObjectArrayElement(partitions, i, partition);
+    for (const auto& partition : bounds) {
+      add_partition(sink, reinterpret_cast<const uint8_t*>(partition), sizeof(partition));
     }
-    return partitions;
   });
 }
 
-SPARK_JNI(void, closeReader)(JNIEnv*, jclass, jlong reader) {
-  delete reinterpret_cast<RangeReader*>(reader);
-}
+void spark_ds_close_reader(void* reader) { delete static_cast<RangeReader*>(reader); }
 
-SPARK_JNI(void, read)(JNIEnv* env, jclass, jbyteArray, jbyteArray partition,
-                      jlong stream_address) {
-  Call(env, [&] {
+int spark_ds_read(const uint8_t*, int64_t, const uint8_t* partition, int64_t,
+                  struct ArrowArrayStream* out) {
+  return Call([&] {
     int64_t bounds[2];
-    env->GetByteArrayRegion(partition, 0, sizeof(bounds), reinterpret_cast<jbyte*>(bounds));
+    std::memcpy(bounds, partition, sizeof(bounds));
     arrow::Int64Builder ids;
     for (int64_t id = bounds[0]; id < bounds[1]; id++) Check(ids.Append(id));
     std::shared_ptr<arrow::Array> array;
     Check(ids.Finish(&array));
     auto batch = arrow::RecordBatch::Make(Schema(), array->length(), {array});
     auto batches = arrow::RecordBatchReader::Make({batch}, Schema()).ValueOrDie();
-    Check(arrow::ExportRecordBatchReader(batches,
-                                         reinterpret_cast<ArrowArrayStream*>(stream_address)));
+    Check(arrow::ExportRecordBatchReader(batches, out));
   });
 }
+
+}  // extern "C"
 ```
 {% endraw %}
 
@@ -572,8 +546,7 @@ package it as above:
 
 ```bash
 c++ -std=c++20 -O2 -shared -fPIC \
-  -I"$JAVA_HOME/include" -I"$JAVA_HOME/include/darwin" \
-  -I"$ARROW_HOME/include" -L"$ARROW_HOME/lib" -larrow \
+  -I/path/to/spark_datasource.h/dir -I"$ARROW_HOME/include" -L"$ARROW_HOME/lib" -larrow \
   -o libspark_datasource_cpp_range.dylib cpp_range.cc
 cp libspark_datasource_cpp_range.dylib /usr/local/lib/
 ```

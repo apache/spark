@@ -29,7 +29,7 @@ import org.apache.spark.util.Utils
  * Builds the native data source library of the tests,
  * `native-datasource/test_native_datasource.cc`, with the C++ compiler of the machine, and
  * packages or installs it. The tests that load the library are skipped when [[toolchain]] is not
- * defined.
+ * defined, which includes the versions of Java that cannot load native data sources.
  */
 object NativeDataSourceTestUtils {
 
@@ -41,17 +41,19 @@ object NativeDataSourceTestUtils {
   // each package has its own name.
   private val packageCount = new AtomicInteger()
 
-  /** The C++ compiler and the JNI include directories, if available. */
+  /**
+   * The C++ compiler, if available on a version of Java that can load native data sources, and
+   * the include directory with `spark_datasource.h`.
+   */
   lazy val toolchain: Option[(String, Seq[String])] = {
-    val include = new File(System.getProperty("java.home"), "include")
-    val platformInclude = Option(include.listFiles()).toSeq.flatten
-      .find(dir => new File(dir, "jni_md.h").isFile)
     val compiler = Seq("c++", "g++", "clang++").find(Utils.checkCommandAvailable)
-    for {
-      compiler <- compiler
-      platformInclude <- platformInclude
-      if new File(include, "jni.h").isFile
-    } yield (compiler, Seq(include.getPath, platformInclude.getPath))
+    compiler.filter(_ => NativeLibrary.isSupported).map { compiler =>
+      val header = new File(buildDir, "spark_datasource.h")
+      val in = getClass.getClassLoader
+        .getResourceAsStream("org/apache/spark/sql/datasource/spark_datasource.h")
+      Utils.tryWithResource(in)(Files.copy(_, header.toPath))
+      (compiler, Seq(buildDir.getPath))
+    }
   }
 
   /**

@@ -29,7 +29,7 @@ import org.apache.spark.util.Utils
 /**
  * Tests native data sources with Spark Connect: a client adds packages to its session with
  * `spark.addArtifact`, and the server finds the data sources in the packages of the session or in
- * the installed libraries. The tests are skipped when there is no C++ compiler or no JNI headers.
+ * the installed libraries. The tests are skipped when there is no C++ compiler, or before Java 22.
  */
 class NativeDataSourceConnectSuite extends SparkConnectServerTest {
 
@@ -38,7 +38,7 @@ class NativeDataSourceConnectSuite extends SparkConnectServerTest {
     compile("test_native_datasource_installed", "-DNAME_PREFIX=\"installed_\"")
 
   private def nativeTest(name: String)(f: => Unit): Unit = test(name) {
-    assume(toolchain.isDefined, "A C++ compiler and the JNI headers are required.")
+    assume(toolchain.isDefined, "A C++ compiler and Java 22 or later are required.")
     f
   }
 

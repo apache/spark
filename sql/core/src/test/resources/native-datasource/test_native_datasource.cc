@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-// A native data source library used by NativeDataSourceSuite. It implements the JNI functions of
-// org.apache.spark.sql.datasource.NativeBridge without any dependency, building the Arrow C data
-// interface structs by hand. It provides three data sources:
+// A native data source library used by NativeDataSourceSuite. It implements the C interface in
+// spark_datasource.h without any other dependency, building the Arrow C data interface structs by
+// hand. It provides three data sources:
 //
 //   native_range    Reads rows [0, end) with columns of several types. Supports predicate,
 //                   column and limit pushdown. With the option "extra", the schema has one more
@@ -37,9 +37,10 @@
 //   NAME_PREFIX     A prefix for the names of the data sources, "" by default.
 //   ID_SIGN         Multiplies the ids produced by native_range, 1 by default.
 //   READ_ONLY       Leaves out the functions for writes, streaming reads and pushdown.
-//   ABI_VERSION     The version returned by abiVersion(), 1 by default.
+//   ABI_VERSION     The version returned by spark_ds_abi_version, 1 by default.
+//   NO_LAST_ERROR   Leaves out spark_ds_last_error.
 
-#include <jni.h>
+#include "spark_datasource.h"
 
 #include <algorithm>
 #include <cctype>
@@ -69,58 +70,6 @@
 #ifndef ABI_VERSION
 #define ABI_VERSION 1
 #endif
-
-#define SPARK_JNI(ret, method) \
-  extern "C" JNIEXPORT ret JNICALL Java_org_apache_spark_sql_datasource_NativeBridge_##method
-
-// ---------------------------------------------------------------------------------------------
-// The Arrow C data interface: https://arrow.apache.org/docs/format/CDataInterface.html
-// ---------------------------------------------------------------------------------------------
-
-#ifndef ARROW_C_DATA_INTERFACE
-#define ARROW_C_DATA_INTERFACE
-
-#define ARROW_FLAG_NULLABLE 2
-
-struct ArrowSchema {
-  const char* format;
-  const char* name;
-  const char* metadata;
-  int64_t flags;
-  int64_t n_children;
-  struct ArrowSchema** children;
-  struct ArrowSchema* dictionary;
-  void (*release)(struct ArrowSchema*);
-  void* private_data;
-};
-
-struct ArrowArray {
-  int64_t length;
-  int64_t null_count;
-  int64_t offset;
-  int64_t n_buffers;
-  int64_t n_children;
-  const void** buffers;
-  struct ArrowArray** children;
-  struct ArrowArray* dictionary;
-  void (*release)(struct ArrowArray*);
-  void* private_data;
-};
-
-#endif  // ARROW_C_DATA_INTERFACE
-
-#ifndef ARROW_C_STREAM_INTERFACE
-#define ARROW_C_STREAM_INTERFACE
-
-struct ArrowArrayStream {
-  int (*get_schema)(struct ArrowArrayStream*, struct ArrowSchema* out);
-  int (*get_next)(struct ArrowArrayStream*, struct ArrowArray* out);
-  const char* (*get_last_error)(struct ArrowArrayStream*);
-  void (*release)(struct ArrowArrayStream*);
-  void* private_data;
-};
-
-#endif  // ARROW_C_STREAM_INTERFACE
 
 namespace {
 
@@ -601,103 +550,53 @@ std::vector<std::string> split(const std::string& text) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// JNI helpers
+// Helpers for the C interface
 // ---------------------------------------------------------------------------------------------
 
-void throwJava(JNIEnv* env, const std::string& message) {
-  jclass cls = env->FindClass("java/lang/RuntimeException");
-  if (cls != nullptr) env->ThrowNew(cls, message.c_str());
-}
+thread_local std::string last_error;
 
-// Runs `f`, and turns a C++ exception into a Java exception: none may cross the boundary.
-template <typename T, typename F>
-T guarded(JNIEnv* env, T fallback, F&& f) {
-  try {
-    return f();
-  } catch (const std::exception& e) {
-    throwJava(env, e.what());
-    return fallback;
-  }
-}
-
+// Runs `f`, and turns a C++ exception into an error: none may cross the boundary.
 template <typename F>
-void guardedVoid(JNIEnv* env, F&& f) {
+int guarded(F&& f) {
   try {
     f();
+    return 0;
   } catch (const std::exception& e) {
-    throwJava(env, e.what());
+    last_error = e.what();
+    return 1;
   }
 }
 
-std::string toString(JNIEnv* env, jstring value) {
-  if (value == nullptr) return "";
-  const char* chars = env->GetStringUTFChars(value, nullptr);
-  std::string result(chars);
-  env->ReleaseStringUTFChars(value, chars);
-  return result;
+std::vector<std::string> toStrings(const char* const* values, int64_t count) {
+  return std::vector<std::string>(values, values + count);
 }
 
-std::vector<std::string> toStrings(JNIEnv* env, jobjectArray values) {
-  std::vector<std::string> result;
-  jsize n = env->GetArrayLength(values);
-  for (jsize i = 0; i < n; i++) {
-    auto value = static_cast<jstring>(env->GetObjectArrayElement(values, i));
-    result.push_back(toString(env, value));
-    env->DeleteLocalRef(value);
-  }
-  return result;
+std::string toBytes(const uint8_t* data, int64_t length) {
+  return std::string(reinterpret_cast<const char*>(data), static_cast<size_t>(length));
 }
 
-std::string toBytes(JNIEnv* env, jbyteArray bytes) {
-  if (bytes == nullptr) return "";
-  jsize n = env->GetArrayLength(bytes);
-  std::string result(static_cast<size_t>(n), '\0');
-  if (n > 0) env->GetByteArrayRegion(bytes, 0, n, reinterpret_cast<jbyte*>(&result[0]));
-  return result;
-}
-
-jbyteArray newBytes(JNIEnv* env, const std::string& bytes) {
-  jbyteArray result = env->NewByteArray(static_cast<jsize>(bytes.size()));
-  env->SetByteArrayRegion(result, 0, static_cast<jsize>(bytes.size()),
-                          reinterpret_cast<const jbyte*>(bytes.data()));
-  return result;
-}
-
-jobjectArray newByteArrays(JNIEnv* env, const std::vector<std::string>& values) {
-  jobjectArray result =
-      env->NewObjectArray(static_cast<jsize>(values.size()), env->FindClass("[B"), nullptr);
-  for (size_t i = 0; i < values.size(); i++) {
-    jbyteArray value = newBytes(env, values[i]);
-    env->SetObjectArrayElement(result, static_cast<jsize>(i), value);
-    env->DeleteLocalRef(value);
-  }
-  return result;
+void sendBytes(SparkDsSink sink_function, void* sink, const std::string& bytes) {
+  sink_function(sink, reinterpret_cast<const uint8_t*>(bytes.data()),
+                static_cast<int64_t>(bytes.size()));
 }
 
 [[maybe_unused]]
-std::vector<std::string> toByteStrings(JNIEnv* env, jobjectArray values, bool* has_null) {
+std::vector<std::string> toByteStrings(const uint8_t* const* messages, const int64_t* lengths,
+                                       int64_t count, bool* has_null) {
   std::vector<std::string> result;
-  jsize n = env->GetArrayLength(values);
-  for (jsize i = 0; i < n; i++) {
-    auto value = static_cast<jbyteArray>(env->GetObjectArrayElement(values, i));
-    if (value == nullptr) {
+  for (int64_t i = 0; i < count; i++) {
+    if (messages[i] == nullptr) {
       *has_null = true;
     } else {
-      result.push_back(toBytes(env, value));
-      env->DeleteLocalRef(value);
+      result.push_back(toBytes(messages[i], lengths[i]));
     }
   }
   return result;
 }
 
 template <typename T>
-jlong toHandle(T* object) {
-  return reinterpret_cast<jlong>(object);
-}
-
-template <typename T>
-T* fromHandle(jlong handle) {
-  return reinterpret_cast<T*>(handle);
+T* fromHandle(void* handle) {
+  return static_cast<T*>(handle);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -771,7 +670,7 @@ struct Writer {
   std::string closed_marker;
 };
 
-[[maybe_unused]] std::string closedMarker(jlong epoch_id) {
+[[maybe_unused]] std::string closedMarker(int64_t epoch_id) {
   return epoch_id < 0 ? "/_CLOSED" : "/_CLOSED_" + std::to_string(epoch_id);
 }
 
@@ -843,51 +742,54 @@ std::vector<std::string> listFiles(const std::string& dir, const std::string& pr
 
 }  // namespace
 
+
 // ---------------------------------------------------------------------------------------------
-// NativeBridge
+// spark_datasource.h
 // ---------------------------------------------------------------------------------------------
 
-SPARK_JNI(jint, abiVersion)(JNIEnv*, jclass) { return ABI_VERSION; }
+extern "C" {
 
-SPARK_JNI(jlong, createDataSource)(JNIEnv* env, jclass, jstring name_value, jobjectArray keys,
-                                   jobjectArray values) {
-  return guarded<jlong>(env, 0, [&] {
-    auto* source = new DataSource{toString(env, name_value), {}};
-    std::unique_ptr<DataSource> owner(source);
-    auto key_strings = toStrings(env, keys);
-    auto value_strings = toStrings(env, values);
-    for (size_t i = 0; i < key_strings.size(); i++) {
-      source->options[key_strings[i]] = value_strings[i];
-    }
+#ifndef NO_LAST_ERROR
+const char* spark_ds_last_error(void) { return last_error.c_str(); }
+#endif
+
+int32_t spark_ds_abi_version(void) { return ABI_VERSION; }
+
+int spark_ds_create(const char* name_value, const char* const* option_keys,
+                    const char* const* option_values, int64_t num_options, void** handle) {
+  return guarded([&] {
+    auto source = std::make_unique<DataSource>(DataSource{name_value, {}});
+    auto keys = toStrings(option_keys, num_options);
+    auto values = toStrings(option_values, num_options);
+    for (size_t i = 0; i < keys.size(); i++) source->options[keys[i]] = values[i];
     maybeFail(source->options, "create");
     if (source->name != name("native_range") && source->name != name("native_sink") &&
         source->name != name("native_counter")) {
       throw std::runtime_error("unknown data source " + source->name);
     }
-    return toHandle(owner.release());
+    *handle = source.release();
   });
 }
 
-SPARK_JNI(void, schema)(JNIEnv* env, jclass, jlong handle, jlong schema_address) {
-  guardedVoid(env, [&] {
+int spark_ds_schema(void* handle, struct ArrowSchema* out) {
+  return guarded([&] {
     auto* source = fromHandle<DataSource>(handle);
     maybeFail(source->options, "schema");
     if (source->name == name("native_sink")) {
       throw std::runtime_error("native_sink has no schema; it can only be written");
     }
     bool counter = source->name == name("native_counter");
-    exportSchema(allColumns(counter, get(source->options, "extra", "")),
-                 reinterpret_cast<ArrowSchema*>(schema_address));
+    exportSchema(allColumns(counter, get(source->options, "extra", "")), out);
   });
 }
 
-SPARK_JNI(jlong, createReader)(JNIEnv* env, jclass, jlong handle, jlong schema_address) {
-  return guarded<jlong>(env, 0, [&] {
+int spark_ds_create_reader(void* handle, struct ArrowSchema* schema, void** out) {
+  return guarded([&] {
     auto* source = fromHandle<DataSource>(handle);
     if (source->name != name("native_range")) {
       throw std::runtime_error(source->name + " does not support batch reads");
     }
-    auto columns = importColumns(reinterpret_cast<ArrowSchema*>(schema_address));
+    auto columns = importColumns(schema);
     for (const auto& column : columns) findColumn(column);
     auto* reader = new Reader();
     reader->state["columns"] = join(columns);
@@ -898,48 +800,45 @@ SPARK_JNI(jlong, createReader)(JNIEnv* env, jclass, jlong handle, jlong schema_a
     reader->state["fail"] = get(source->options, "fail", "");
     reader->state["slice"] = get(source->options, "slice", "");
     reader->state["short"] = get(source->options, "short", "");
-    return toHandle(reader);
+    *out = reader;
   });
 }
 
 #ifndef READ_ONLY
 
-SPARK_JNI(jlong, createStreamReader)(JNIEnv* env, jclass, jlong handle, jlong schema_address) {
-  return guarded<jlong>(env, 0, [&] {
+int spark_ds_create_stream_reader(void* handle, struct ArrowSchema* schema, void** out) {
+  return guarded([&] {
     auto* source = fromHandle<DataSource>(handle);
     if (source->name != name("native_counter")) {
       throw std::runtime_error(source->name + " does not support streaming reads");
     }
     auto* reader = new Reader();
-    reader->state["columns"] = join(importColumns(reinterpret_cast<ArrowSchema*>(schema_address)));
+    reader->state["columns"] = join(importColumns(schema));
     reader->state["max_offset"] = get(source->options, "max_offset", "10");
     reader->state["step"] = get(source->options, "step", reader->state["max_offset"]);
     reader->state["current"] = "0";
     reader->state["batch_size"] = get(source->options, "batch_size", "1000");
     reader->state["commit_path"] = get(source->options, "commit_path", "");
-    return toHandle(reader);
+    *out = reader;
   });
 }
 
 #endif  // READ_ONLY
 
-SPARK_JNI(void, closeDataSource)(JNIEnv*, jclass, jlong handle) {
-  delete fromHandle<DataSource>(handle);
-}
+void spark_ds_close(void* handle) { delete fromHandle<DataSource>(handle); }
 
 #ifndef READ_ONLY
 
-SPARK_JNI(jbooleanArray, pushPredicates)(JNIEnv* env, jclass, jlong handle,
-                                         jobjectArray predicates) {
-  return guarded<jbooleanArray>(env, nullptr, [&] {
+int spark_ds_push_predicates(void* handle, const char* const* predicates, int64_t count,
+                             bool* evaluated) {
+  return guarded([&] {
     auto* reader = fromHandle<Reader>(handle);
-    auto json = toStrings(env, predicates);
-    std::vector<jboolean> accepted;
+    auto json = toStrings(predicates, count);
     int64_t lo = getLong(reader->state, "lo", 0);
     int64_t hi = getLong(reader->state, "hi", 0);
-    for (const auto& text : json) {
+    for (size_t i = 0; i < json.size(); i++) {
       // Accepts "id <op> <integer literal>" for the comparison operators.
-      Json predicate = JsonParser(text).parse();
+      Json predicate = JsonParser(json[i]).parse();
       const Json& children = predicate["children"];
       std::string op = predicate["name"].text;
       bool comparison = op == ">" || op == ">=" || op == "<" || op == "<=" || op == "=";
@@ -960,40 +859,38 @@ SPARK_JNI(jbooleanArray, pushPredicates)(JNIEnv* env, jclass, jlong handle,
           hi = std::min(hi, value + 1);
         }
       }
-      accepted.push_back(ok ? JNI_TRUE : JNI_FALSE);
+      evaluated[i] = ok;
     }
     reader->state["lo"] = std::to_string(lo);
     reader->state["hi"] = std::to_string(std::max(lo, hi));
     reader->state["predicates"] = std::to_string(json.size());
-    jbooleanArray result = env->NewBooleanArray(static_cast<jsize>(accepted.size()));
-    env->SetBooleanArrayRegion(result, 0, static_cast<jsize>(accepted.size()), accepted.data());
-    return result;
   });
 }
 
-SPARK_JNI(jboolean, pushLimit)(JNIEnv* env, jclass, jlong handle, jint limit) {
-  return guarded<jboolean>(env, JNI_FALSE, [&] {
+int spark_ds_push_limit(void* handle, int32_t limit, bool* applied) {
+  return guarded([&] {
     auto* reader = fromHandle<Reader>(handle);
-    // NativeBridge calls pushLimit at most once.
+    // Spark calls spark_ds_push_limit at most once.
     if (reader->state.count("limit") > 0) throw std::runtime_error("pushLimit was called twice");
     reader->state["limit"] = std::to_string(limit);
-    return JNI_TRUE;
+    *applied = true;
   });
 }
 
-SPARK_JNI(jboolean, pruneColumns)(JNIEnv* env, jclass, jlong handle, jobjectArray columns) {
-  return guarded<jboolean>(env, JNI_FALSE, [&] {
-    auto names = toStrings(env, columns);
+int spark_ds_prune_columns(void* handle, const char* const* columns, int64_t count,
+                           bool* pruned) {
+  return guarded([&] {
+    auto names = toStrings(columns, count);
     for (const auto& column : names) findColumn(column);
     fromHandle<Reader>(handle)->state["columns"] = join(names);
-    return JNI_TRUE;
+    *pruned = true;
   });
 }
 
 #endif  // READ_ONLY
 
-SPARK_JNI(jobjectArray, partitions)(JNIEnv* env, jclass, jlong handle) {
-  return guarded<jobjectArray>(env, nullptr, [&] {
+int spark_ds_partitions(void* handle, SparkDsSink add_partition, void* sink) {
+  return guarded([&] {
     auto* reader = fromHandle<Reader>(handle);
     maybeFail(reader->state, "plan");
     int64_t lo = getLong(reader->state, "lo", 0);
@@ -1004,79 +901,69 @@ SPARK_JNI(jobjectArray, partitions)(JNIEnv* env, jclass, jlong handle) {
       hi = std::min(hi, lo + getLong(reader->state, "limit", 0));
       count = 1;
     }
-    std::vector<std::string> partitions;
     int64_t step = std::max<int64_t>(1, (hi - lo + count - 1) / count);
     for (int64_t start = lo; start < hi; start += step) {
       int64_t stop = std::min(hi, start + step);
-      partitions.push_back(std::to_string(start) + "," + std::to_string(stop));
+      sendBytes(add_partition, sink, std::to_string(start) + "," + std::to_string(stop));
     }
-    return newByteArrays(env, partitions);
   });
 }
 
-SPARK_JNI(jbyteArray, serializeReader)(JNIEnv* env, jclass, jlong handle) {
-  return guarded<jbyteArray>(env, nullptr, [&] {
-    return newBytes(env, serialize(fromHandle<Reader>(handle)->state));
-  });
+int spark_ds_serialize_reader(void* handle, SparkDsSink set_state, void* sink) {
+  return guarded([&] { sendBytes(set_state, sink, serialize(fromHandle<Reader>(handle)->state)); });
 }
 
-SPARK_JNI(void, closeReader)(JNIEnv*, jclass, jlong handle) { delete fromHandle<Reader>(handle); }
+void spark_ds_close_reader(void* handle) { delete fromHandle<Reader>(handle); }
 
 #ifndef READ_ONLY
 
-SPARK_JNI(jstring, initialOffset)(JNIEnv* env, jclass, jlong) {
-  return env->NewStringUTF("{\"offset\":0}");
+int spark_ds_initial_offset(void*, SparkDsSink set_offset, void* sink) {
+  return guarded([&] { sendBytes(set_offset, sink, "{\"offset\":0}"); });
 }
 
 // Each call makes `step` more rows available, up to `max_offset`.
-SPARK_JNI(jstring, latestOffset)(JNIEnv* env, jclass, jlong handle) {
-  return guarded<jstring>(env, nullptr, [&] {
+int spark_ds_latest_offset(void* handle, SparkDsSink set_offset, void* sink) {
+  return guarded([&] {
     Options& state = fromHandle<Reader>(handle)->state;
     int64_t latest = std::min(getLong(state, "max_offset", 10),
                               getLong(state, "current", 0) + getLong(state, "step", 10));
     state["current"] = std::to_string(latest);
-    return env->NewStringUTF(("{\"offset\":" + std::to_string(latest) + "}").c_str());
+    sendBytes(set_offset, sink, "{\"offset\":" + std::to_string(latest) + "}");
   });
 }
 
-SPARK_JNI(jobjectArray, streamPartitions)(JNIEnv* env, jclass, jlong, jstring start,
-                                          jstring end) {
-  return guarded<jobjectArray>(env, nullptr, [&] {
-    auto lo = static_cast<int64_t>(JsonParser(toString(env, start)).parse()["offset"].number);
-    auto hi = static_cast<int64_t>(JsonParser(toString(env, end)).parse()["offset"].number);
-    std::vector<std::string> partitions;
-    if (hi > lo) partitions.push_back(std::to_string(lo) + "," + std::to_string(hi));
-    return newByteArrays(env, partitions);
+int spark_ds_stream_partitions(void*, const char* start, const char* end,
+                               SparkDsSink add_partition, void* sink) {
+  return guarded([&] {
+    auto lo = static_cast<int64_t>(JsonParser(start).parse()["offset"].number);
+    auto hi = static_cast<int64_t>(JsonParser(end).parse()["offset"].number);
+    if (hi > lo) sendBytes(add_partition, sink, std::to_string(lo) + "," + std::to_string(hi));
   });
 }
 
-SPARK_JNI(jbyteArray, serializeStreamReader)(JNIEnv* env, jclass, jlong handle) {
-  return guarded<jbyteArray>(env, nullptr, [&] {
-    return newBytes(env, serialize(fromHandle<Reader>(handle)->state));
-  });
+int spark_ds_serialize_stream_reader(void* handle, SparkDsSink set_state, void* sink) {
+  return guarded([&] { sendBytes(set_state, sink, serialize(fromHandle<Reader>(handle)->state)); });
 }
 
-SPARK_JNI(void, commitOffset)(JNIEnv* env, jclass, jlong handle, jstring end) {
-  guardedVoid(env, [&] {
+int spark_ds_commit_offset(void* handle, const char* end) {
+  return guarded([&] {
     std::string path = get(fromHandle<Reader>(handle)->state, "commit_path", "");
-    if (!path.empty()) writeFile(path, toString(env, end));
+    if (!path.empty()) writeFile(path, end);
   });
 }
 
-SPARK_JNI(void, closeStreamReader)(JNIEnv*, jclass, jlong handle) {
-  delete fromHandle<Reader>(handle);
-}
+void spark_ds_close_stream_reader(void* handle) { delete fromHandle<Reader>(handle); }
 
 #endif  // READ_ONLY
 
-SPARK_JNI(void, read)(JNIEnv* env, jclass, jbyteArray reader_state, jbyteArray partition,
-                      jlong stream_address) {
-  guardedVoid(env, [&] {
-    Options state = deserialize(toBytes(env, reader_state));
+int spark_ds_read(const uint8_t* reader_state, int64_t reader_state_length,
+                  const uint8_t* partition, int64_t partition_length,
+                  struct ArrowArrayStream* stream) {
+  return guarded([&] {
+    Options state = deserialize(toBytes(reader_state, reader_state_length));
     maybeFail(state, "open");
-    auto bounds = split(toBytes(env, partition));
+    auto bounds = split(toBytes(partition, partition_length));
     if (bounds.size() != 2) throw std::runtime_error("invalid partition");
-    auto* stream = reinterpret_cast<ArrowArrayStream*>(stream_address);
     stream->get_schema = streamGetSchema;
     stream->get_next = streamGetNext;
     stream->get_last_error = streamGetLastError;
@@ -1091,18 +978,18 @@ SPARK_JNI(void, read)(JNIEnv* env, jclass, jbyteArray reader_state, jbyteArray p
 
 #ifndef READ_ONLY
 
+}  // extern "C"
+
 namespace {
 
-jlong createAnyWriter(JNIEnv* env, jlong handle, jlong schema_address, jboolean overwrite) {
-  return guarded<jlong>(env, 0, [&] {
+int createAnyWriter(void* handle, struct ArrowSchema* schema, bool overwrite, void** out) {
+  return guarded([&] {
     auto* source = fromHandle<DataSource>(handle);
     if (source->name != name("native_sink")) {
       throw std::runtime_error(source->name + " does not support writes");
     }
     // Spark releases the schema after the call, since it is not moved here.
-    auto* schema = reinterpret_cast<ArrowSchema*>(schema_address);
     if (schema->n_children == 0) throw std::runtime_error("no columns to write");
-    auto* writer = new Writer();
     // The location of a table in a catalog is passed as a URI.
     std::string path = get(source->options, "path", "");
     if (path.rfind("file://", 0) == 0) {
@@ -1110,46 +997,44 @@ jlong createAnyWriter(JNIEnv* env, jlong handle, jlong schema_address, jboolean 
     } else if (path.rfind("file:", 0) == 0) {
       path = path.substr(5);
     }
+    if (path.empty()) throw std::runtime_error("the option 'path' is required");
+    auto* writer = new Writer();
     writer->state["path"] = path;
     writer->state["overwrite"] = overwrite ? "true" : "false";
     writer->state["fail"] = get(source->options, "fail", "");
-    if (writer->state["path"].empty()) {
-      delete writer;
-      throw std::runtime_error("the option 'path' is required");
-    }
     // Records that a writer was created, which Spark then commits or aborts.
     makeDirs(path);
     writeFile(path + "/_CREATED", "");
-    return toHandle(writer);
+    *out = writer;
   });
 }
 
 }  // namespace
 
-SPARK_JNI(jlong, createWriter)(JNIEnv* env, jclass, jlong handle, jlong schema_address,
-                               jboolean overwrite) {
-  return createAnyWriter(env, handle, schema_address, overwrite);
+extern "C" {
+
+int spark_ds_create_writer(void* handle, struct ArrowSchema* schema, bool overwrite,
+                           void** writer) {
+  return createAnyWriter(handle, schema, overwrite, writer);
 }
 
-SPARK_JNI(jlong, createStreamWriter)(JNIEnv* env, jclass, jlong handle, jlong schema_address,
-                                     jboolean overwrite) {
-  return createAnyWriter(env, handle, schema_address, overwrite);
+int spark_ds_create_stream_writer(void* handle, struct ArrowSchema* schema, bool overwrite,
+                                  void** writer) {
+  return createAnyWriter(handle, schema, overwrite, writer);
 }
 
-SPARK_JNI(jbyteArray, serializeWriter)(JNIEnv* env, jclass, jlong handle) {
-  return guarded<jbyteArray>(env, nullptr, [&] {
-    return newBytes(env, serialize(fromHandle<Writer>(handle)->state));
-  });
+int spark_ds_serialize_writer(void* handle, SparkDsSink set_state, void* sink) {
+  return guarded([&] { sendBytes(set_state, sink, serialize(fromHandle<Writer>(handle)->state)); });
 }
 
-SPARK_JNI(void, commit)(JNIEnv* env, jclass, jlong handle, jlong epoch_id,
-                        jobjectArray messages) {
-  guardedVoid(env, [&] {
+int spark_ds_commit(void* handle, int64_t epoch_id, const uint8_t* const* messages,
+                    const int64_t* message_lengths, int64_t num_messages) {
+  return guarded([&] {
     auto* writer = fromHandle<Writer>(handle);
     std::string path = writer->state["path"];
     maybeFail(writer->state, "commit");
     bool has_null = false;
-    auto temp_files = toByteStrings(env, messages, &has_null);
+    auto temp_files = toByteStrings(messages, message_lengths, num_messages, &has_null);
     if (has_null) throw std::runtime_error("commit got a null message");
     if (writer->state["overwrite"] == "true") {
       for (const auto& file : listFiles(path, "part-")) unlink((path + "/" + file).c_str());
@@ -1164,48 +1049,47 @@ SPARK_JNI(void, commit)(JNIEnv* env, jclass, jlong handle, jlong epoch_id,
   });
 }
 
-SPARK_JNI(void, abort)(JNIEnv* env, jclass, jlong handle, jlong epoch_id,
-                       jobjectArray messages) {
-  guardedVoid(env, [&] {
+int spark_ds_abort(void* handle, int64_t epoch_id, const uint8_t* const* messages,
+                   const int64_t* message_lengths, int64_t num_messages) {
+  return guarded([&] {
     auto* writer = fromHandle<Writer>(handle);
     writer->closed_marker = closedMarker(epoch_id);
     bool has_null = false;
-    for (const auto& temp_file : toByteStrings(env, messages, &has_null)) {
+    for (const auto& temp_file :
+         toByteStrings(messages, message_lengths, num_messages, &has_null)) {
       unlink(temp_file.c_str());
     }
     writeFile(writer->state["path"] + "/_ABORTED", "");
   });
 }
 
-SPARK_JNI(void, closeWriter)(JNIEnv* env, jclass, jlong handle) {
+void spark_ds_close_writer(void* handle) {
   std::unique_ptr<Writer> writer(fromHandle<Writer>(handle));
-  guardedVoid(env, [&] {
+  guarded([&] {
     if (!writer->closed_marker.empty()) {
       writeFile(writer->state["path"] + writer->closed_marker, "");
     }
   });
 }
 
-SPARK_JNI(jlong, createDataWriter)(JNIEnv* env, jclass, jbyteArray writer_state,
-                                   jint partition_id, jlong task_id, jlong epoch_id) {
-  return guarded<jlong>(env, 0, [&] {
-    Options state = deserialize(toBytes(env, writer_state));
+int spark_ds_create_data_writer(const uint8_t* writer_state, int64_t writer_state_length,
+                                int32_t partition_id, int64_t task_id, int64_t epoch_id,
+                                void** out) {
+  return guarded([&] {
+    Options state = deserialize(toBytes(writer_state, writer_state_length));
     std::string dir = state["path"] + "/_temporary";
     makeDirs(dir);
     std::string temp_path = dir + "/" + std::to_string(epoch_id) + "-" +
                             std::to_string(partition_id) + "-" + std::to_string(task_id) + ".csv";
     FILE* file = std::fopen(temp_path.c_str(), "w");
     if (file == nullptr) throw std::runtime_error("cannot write " + temp_path);
-    return toHandle(new DataWriter{temp_path, file, state});
+    *out = new DataWriter{temp_path, file, state};
   });
 }
 
-SPARK_JNI(void, write)(JNIEnv* env, jclass, jlong handle, jlong array_address,
-                       jlong schema_address) {
-  guardedVoid(env, [&] {
+int spark_ds_write(void* handle, struct ArrowArray* array, struct ArrowSchema* schema) {
+  return guarded([&] {
     auto* writer = fromHandle<DataWriter>(handle);
-    auto* array = reinterpret_cast<ArrowArray*>(array_address);
-    auto* schema = reinterpret_cast<ArrowSchema*>(schema_address);
     // The batch is released here, so Spark does not release it after the call.
     std::unique_ptr<ArrowArray, void (*)(ArrowArray*)> array_owner(
         array, [](ArrowArray* a) { a->release(a); });
@@ -1224,22 +1108,25 @@ SPARK_JNI(void, write)(JNIEnv* env, jclass, jlong handle, jlong array_address,
   });
 }
 
-SPARK_JNI(jbyteArray, commitDataWriter)(JNIEnv* env, jclass, jlong handle) {
-  return guarded<jbyteArray>(env, nullptr, [&] {
+int spark_ds_commit_data_writer(void* handle, SparkDsSink set_message, void* sink) {
+  return guarded([&] {
     auto* writer = fromHandle<DataWriter>(handle);
-    // If the commit fails, the data writer stays valid: Spark aborts it with abortDataWriter.
+    // If the commit fails, the data writer stays valid: Spark aborts it with
+    // spark_ds_abort_data_writer.
     maybeFail(writer->state, "commitDataWriter");
-    jbyteArray message = newBytes(env, writer->temp_path);
+    sendBytes(set_message, sink, writer->temp_path);
     std::fclose(writer->file);
     delete writer;
-    return message;
   });
 }
 
-SPARK_JNI(void, abortDataWriter)(JNIEnv*, jclass, jlong handle) {
+int spark_ds_abort_data_writer(void* handle) {
   std::unique_ptr<DataWriter> writer(fromHandle<DataWriter>(handle));
   std::fclose(writer->file);
   unlink(writer->temp_path.c_str());
+  return 0;
 }
 
 #endif  // READ_ONLY
+
+}  // extern "C"
