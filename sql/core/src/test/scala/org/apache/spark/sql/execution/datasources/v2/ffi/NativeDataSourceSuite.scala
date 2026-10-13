@@ -186,7 +186,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         """"children":[{"type":"column","name":["id"]},""" +
         """{"type":"literal","dataType":"bigint","value":1},""" +
         """{"type":"literal","dataType":"bigint","value":2}]}]}"""))
-    // Only the functions listed in NativeBridge.pushPredicates are passed, so not arithmetic.
+    // Only the functions listed in spark_ds_push_predicates are passed, so not arithmetic.
     NativePredicates.FUNCTION_NAMES.foreach { name =>
       assert(toJson(predicate(name, id, id)).nonEmpty, name)
     }
@@ -583,6 +583,10 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     }
     check("read", "injected failure in get_next") { session =>
       range(session, "fail" -> "read").collect()
+    }
+    check("read", "The library did not initialize the stream, or a callback of the stream is " +
+        "NULL.") { session =>
+      range(session, "fail" -> "uninitialized").collect()
     }
     // An error of the library is not an unsupported operation.
     check("plan a scan of", "native_sink does not support batch reads", "native_sink") {
