@@ -1119,8 +1119,9 @@ def _get_transpilers(session: "SparkSession") -> List[AbstractTranspiler]:
     configured_transpilers = session.conf.get("spark.sql.experimental.optimizer.pyTranspilers")
     if not configured_transpilers:
         return []
-    null_strictness = session.conf.get(
-        "spark.sql.experimental.optimizer.transpileNullStrictness", "strict"
+    null_strictness = (
+        session.conf.get("spark.sql.experimental.optimizer.transpileNullStrictness", "strict")
+        or "strict"
     )
     transpiler_names = configured_transpilers.split(",")
     unknown_names = [name for name in transpiler_names if name not in AbstractTranspiler.varieties]
