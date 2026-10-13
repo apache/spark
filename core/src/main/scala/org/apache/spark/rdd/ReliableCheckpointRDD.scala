@@ -173,8 +173,9 @@ private[spark] object ReliableCheckpointRDD extends Logging {
    * a 1-byte format version, a 4-byte big-endian Int partition count, and an 8-byte big-endian
    * CRC32 of the preceding 5 bytes. The checksum makes the payload self-validating: count bytes
    * that are corrupted to another valid Int are rejected on read instead of being compared
-   * against the files found, so metadata corruption degrades to the tolerated
-   * "detection inactive" path rather than a false truncation error. See SPARK-58883.
+   * against the files found, and the fixed length exposes a torn write, so metadata corruption
+   * degrades to the tolerated "detection inactive" path rather than a false truncation error.
+   * See SPARK-58883.
    */
   private val PARTITION_COUNT_FORMAT_VERSION: Byte = 1
   private val PARTITION_COUNT_HEADER_LENGTH: Int = 5
@@ -219,7 +220,6 @@ private[spark] object ReliableCheckpointRDD extends Logging {
     if (originalRDD.partitioner.nonEmpty) {
       writePartitionerToCheckpointDir(sc, originalRDD.partitioner.get, checkpointDirPath)
     }
-    writePartitionCountToCheckpointDir(sc, originalRDD.partitions.length, checkpointDirPath)
 
     val checkpointDurationMs =
       TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - checkpointStartTimeNs)
@@ -231,6 +231,11 @@ private[spark] object ReliableCheckpointRDD extends Logging {
       throw SparkCoreErrors.checkpointRDDHasDifferentNumberOfPartitionsFromOriginalRDDError(
         originalRDD.id, originalRDD.partitions.length, newRDD.id, newRDD.partitions.length)
     }
+    // Record the partition count only once the directory is known to hold that many part files.
+    // Written earlier, the read-back above would compare against it first and report a mismatch
+    // as lost trailing files, hiding the diagnosis in the error above (typically a checkpoint
+    // directory that is not on storage both the driver and the executors can reach).
+    writePartitionCountToCheckpointDir(sc, originalRDD.partitions.length, checkpointDirPath)
     newRDD
   }
 
@@ -333,61 +338,28 @@ private[spark] object ReliableCheckpointRDD extends Logging {
   /**
    * Write the partition count of the checkpointed RDD to the checkpoint directory so that
    * a later read via [[SparkContext.checkpointFile]] can detect a truncated directory.
-   * The file is written atomically (temp path then rename) so a torn write leaves no partial
-   * file, and the temp file is removed if publication fails at any point after it is created;
-   * the payload layout is documented at [[PARTITION_COUNT_FORMAT_VERSION]].
-   * This is done on a best-effort basis; any exception is caught, logged and ignored so that
-   * an inability to write the file does not prevent checkpointing. See SPARK-58883.
+   * The payload layout is documented at [[PARTITION_COUNT_FORMAT_VERSION]]; its fixed length
+   * means a torn write leaves a short file that the reader rejects, so no temp-then-rename
+   * publication is needed. This is done on a best-effort basis, like `_partitioner`: any
+   * exception is caught, logged and ignored so that an inability to write the file does not
+   * prevent checkpointing, and detection is inactive for that directory. See SPARK-58883.
    */
   private def writePartitionCountToCheckpointDir(
       sc: SparkContext, partitionCount: Int, checkpointDirPath: Path): Unit = {
     try {
       val countFilePath = new Path(checkpointDirPath, checkpointPartitionCountFileName())
-      val tmpFilePath = new Path(
-        checkpointDirPath, s".${checkpointPartitionCountFileName()}-tmp")
       val bufferSize = sc.conf.get(BUFFER_SIZE)
       val fs = countFilePath.getFileSystem(sc.hadoopConfiguration)
-      // A cleanup failure must not mask the publication failure being handled, so it is only
-      // logged, whether reported by a false return value or by an exception.
-      def deleteTempFile(): Unit = {
-        try {
-          if (!fs.delete(tmpFilePath, false)) {
-            logWarning(log"Failed to delete ${MDC(TEMP_OUTPUT_PATH, tmpFilePath)}, " +
-              log"it may be left behind in the checkpoint directory")
-          }
-        } catch {
-          case NonFatal(e) =>
-            logWarning(log"Failed to delete ${MDC(TEMP_OUTPUT_PATH, tmpFilePath)}, " +
-              log"it may be left behind in the checkpoint directory", e)
-        }
+      // overwrite = false keeps this consistent with `_partitioner`.
+      val dos = new DataOutputStream(fs.create(countFilePath, false, bufferSize))
+      Utils.tryWithSafeFinally {
+        val header = partitionCountHeader(partitionCount)
+        dos.write(header)
+        dos.writeLong(partitionCountChecksum(header))
+      } {
+        dos.close()
       }
-      // Write to a temp path first so readers never see a partial file.
-      val fileOutputStream = fs.create(tmpFilePath, true, bufferSize)
-      // From here on the temp file exists and must not be left behind on any failure.
-      val renamed = try {
-        val dos = new DataOutputStream(fileOutputStream)
-        Utils.tryWithSafeFinally {
-          val header = partitionCountHeader(partitionCount)
-          dos.write(header)
-          dos.writeLong(partitionCountChecksum(header))
-        } {
-          dos.close()
-        }
-        fs.rename(tmpFilePath, countFilePath)
-      } catch {
-        case NonFatal(e) =>
-          deleteTempFile()
-          throw e
-      }
-      if (!renamed) {
-        deleteTempFile()
-        logWarning(
-          log"Failed to rename ${MDC(TEMP_OUTPUT_PATH, tmpFilePath)} to " +
-          log"${MDC(PATH, countFilePath)}, " +
-          log"truncation detection will be inactive for this directory")
-      } else {
-        logDebug(s"Written partition count $partitionCount to $countFilePath")
-      }
+      logDebug(s"Written partition count $partitionCount to $countFilePath")
     } catch {
       case NonFatal(e) =>
         logWarning(log"Error writing partition count to ${MDC(PATH, checkpointDirPath)}, " +

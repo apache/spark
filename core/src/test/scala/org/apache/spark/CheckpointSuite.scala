@@ -25,7 +25,7 @@ import java.util.zip.CRC32
 
 import scala.reflect.ClassTag
 
-import org.apache.hadoop.fs.{FileAlreadyExistsException, FileSystem, FSDataOutputStream, LocalFileSystem, Path, RawLocalFileSystem}
+import org.apache.hadoop.fs.{FileAlreadyExistsException, FileStatus, FileSystem, FSDataOutputStream, LocalFileSystem, Path, RawLocalFileSystem}
 import org.apache.hadoop.fs.permission.FsPermission
 import org.apache.hadoop.util.Progressable
 
@@ -878,10 +878,50 @@ class CheckpointStorageSuite extends SparkFunSuite with LocalSparkContext {
       assert(fs.exists(countFile), "expected _num_partitions to exist before deletion")
       fs.delete(countFile, false)
 
-      // Must recover normally with all 4 partitions and correct data.
-      val recovered = sc.checkpointFile[Int](rdd.getCheckpointFile.get)
-      assert(recovered.partitions.length === 4)
-      assert(recovered.collect().sorted === (1 to 20).toArray)
+      // Must recover normally with all 4 partitions and correct data, and silently: an absent
+      // file is the expected state of a pre-upgrade directory, not a corrupted one, so it must
+      // not log the inactive-check warning on every read.
+      val logAppender = new LogAppender("pre-SPARK-58883 checkpoint directory")
+      withLogAppender(logAppender,
+          loggerNames = Seq(classOf[ReliableCheckpointRDD[_]].getName),
+          level = Some(org.apache.logging.log4j.Level.WARN)) {
+        val recovered = sc.checkpointFile[Int](rdd.getCheckpointFile.get)
+        assert(recovered.partitions.length === 4)
+        assert(recovered.collect().sorted === (1 to 20).toArray)
+      }
+      val warnings = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
+      assert(warnings.isEmpty, s"reading a directory without _num_partitions warned: $warnings")
+    }
+  }
+
+  test("SPARK-58883: _num_partitions is written only after the read-back check passes") {
+    // On the write path, the read-back in writeRDDToCheckpointDirectory compares the new RDD's
+    // partition count against the original's and reports a mismatch with the SPARK-58770 hint
+    // (the usual cause is a checkpoint directory not shared by the driver and the executors).
+    // The count file must be written after that check, otherwise the read-back would find it
+    // first and report lost trailing files instead, hiding that diagnosis.
+    withTempDir { checkpointDir =>
+      val conf = new SparkConf()
+        .set("spark.hadoop.fs.file.impl", classOf[LastPartFileHidingFilesystem].getName)
+        .set("spark.hadoop.fs.file.impl.disable.cache", "true")
+        .set(UI_ENABLED.key, "false")
+      sc = new SparkContext("local", "test", conf)
+      sc.setCheckpointDir(checkpointDir.toString)
+      val rdd = sc.makeRDD(1 to 20, numSlices = 4)
+      rdd.checkpoint()
+
+      val e = intercept[SparkException](rdd.collect())
+      assert(e.getCondition === "CHECKPOINT_RDD_PARTITION_COUNT_MISMATCH")
+      assert(e.getMessageParameters.get("originalRDDLength") === "4")
+      assert(e.getMessageParameters.get("newRDDLength") === "3")
+
+      // The check failed before the count was recorded, so no _num_partitions file exists.
+      val checkpointPath = new Path(checkpointDir.toString)
+      val fs = checkpointPath.getFileSystem(sc.hadoopConfiguration)
+      val rddDirs = fs.listStatus(checkpointPath).flatMap(d => fs.listStatus(d.getPath))
+        .map(_.getPath).filter(_.getName.startsWith("rdd-"))
+      assert(rddDirs.length === 1)
+      assert(!fs.exists(new Path(rddDirs.head, "_num_partitions")))
     }
   }
 
@@ -1000,16 +1040,15 @@ class CheckpointStorageSuite extends SparkFunSuite with LocalSparkContext {
     ByteBuffer.allocate(13).put(header).putLong(crc.getValue).array()
   }
 
-  // SPARK-58883: the _num_partitions file is best effort. A failure to publish it must neither
-  // fail the action that triggered checkpointing (the partition files are already committed by
-  // then) nor leave a partial or temp file behind; it must only log the inactive-check warning.
-  // The write and rename-throws cases fail after the temp file exists, exercising its cleanup.
+  // SPARK-58883: the _num_partitions file is best effort. A failure to publish it must not fail
+  // the action that triggered checkpointing (the partition files are already committed by then);
+  // it must only log the inactive-check warning. When the write fails after `create`, a partial
+  // file is left behind; its fixed-length format lets the reader reject it, so the directory
+  // still reads back with detection inactive.
   Seq(
-    ("create throws", classOf[PartitionCountCreateFailingFilesystem]),
-    ("write throws after create", classOf[PartitionCountWriteFailingFilesystem]),
-    ("rename returns false", classOf[PartitionCountRenameFailingFilesystem]),
-    ("rename throws", classOf[PartitionCountRenameThrowingFilesystem])
-  ).foreach { case (failure, fsClass) =>
+    ("create throws", classOf[PartitionCountCreateFailingFilesystem], false),
+    ("write throws after create", classOf[PartitionCountWriteFailingFilesystem], true)
+  ).foreach { case (failure, fsClass, partialFileLeft) =>
     test(s"SPARK-58883: checkpointing succeeds when publishing _num_partitions fails " +
         s"($failure)") {
       withTempDir { checkpointDir =>
@@ -1022,65 +1061,50 @@ class CheckpointStorageSuite extends SparkFunSuite with LocalSparkContext {
         val rdd = sc.makeRDD(1 to 20, numSlices = 4)
         rdd.checkpoint()
 
-        val logAppender = new LogAppender(s"_num_partitions publication: $failure")
-        withLogAppender(logAppender,
+        val writeAppender = new LogAppender(s"_num_partitions publication: $failure")
+        withLogAppender(writeAppender,
             loggerNames = Seq(classOf[ReliableCheckpointRDD[_]].getName),
             level = Some(org.apache.logging.log4j.Level.WARN)) {
           assert(rdd.collect().sorted === (1 to 20).toArray)
         }
         assert(rdd.isCheckpointed)
-        val warnings = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
-        assert(warnings.exists(_.contains("truncation detection will be inactive")), failure)
-        // Cleanup succeeded (or was never needed), so no cleanup warning may be added.
-        assert(!warnings.exists(_.contains("Failed to delete")), failure)
+        val writeWarnings = writeAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
+        assert(writeWarnings.exists(_.contains("truncation detection will be inactive")), failure)
 
-        // Neither the final file nor the temp file may be left behind.
         val checkpointPath = new Path(rdd.getCheckpointFile.get)
         val fs = checkpointPath.getFileSystem(sc.hadoopConfiguration)
-        assert(!fs.exists(new Path(checkpointPath, "_num_partitions")), failure)
-        assert(!fs.exists(new Path(checkpointPath, "._num_partitions-tmp")), failure)
+        val countFile = new Path(checkpointPath, "_num_partitions")
+        assert(fs.exists(countFile) === partialFileLeft, failure)
 
-        // The directory reads back as a checkpoint without metadata: detection inactive.
-        val recovered = sc.checkpointFile[Int](rdd.getCheckpointFile.get)
-        assert(recovered.partitions.length === 4)
-        assert(recovered.collect().sorted === (1 to 20).toArray)
+        // The directory reads back with detection inactive: silently when there is no file, and
+        // with the reader rejecting the partial file (and warning) when there is one.
+        val readAppender = new LogAppender(s"_num_partitions read-back: $failure")
+        withLogAppender(readAppender,
+            loggerNames = Seq(classOf[ReliableCheckpointRDD[_]].getName),
+            level = Some(org.apache.logging.log4j.Level.WARN)) {
+          val recovered = sc.checkpointFile[Int](rdd.getCheckpointFile.get)
+          assert(recovered.partitions.length === 4)
+          assert(recovered.collect().sorted === (1 to 20).toArray)
+        }
+        val readWarnings = readAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
+        assert(
+          readWarnings.exists(_.contains("truncation detection will be inactive")) ===
+            partialFileLeft,
+          s"$failure: $readWarnings")
       }
     }
   }
+}
 
-  test("SPARK-58883: a false result from _num_partitions temp file cleanup is reported") {
-    withTempDir { checkpointDir =>
-      val conf = new SparkConf()
-        .set("spark.hadoop.fs.file.impl", classOf[PartitionCountCleanupFailingFilesystem].getName)
-        .set("spark.hadoop.fs.file.impl.disable.cache", "true")
-        .set(UI_ENABLED.key, "false")
-      sc = new SparkContext("local", "test", conf)
-      sc.setCheckpointDir(checkpointDir.toString)
-      val rdd = sc.makeRDD(1 to 20, numSlices = 4)
-      rdd.checkpoint()
-
-      val logAppender = new LogAppender("_num_partitions cleanup returns false")
-      withLogAppender(logAppender,
-          loggerNames = Seq(classOf[ReliableCheckpointRDD[_]].getName),
-          level = Some(org.apache.logging.log4j.Level.WARN)) {
-        assert(rdd.collect().sorted === (1 to 20).toArray)
-      }
-      assert(rdd.isCheckpointed)
-      // Both the publication failure and the cleanup failure must leave evidence.
-      val warnings = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
-      assert(warnings.exists(_.contains("truncation detection will be inactive")))
-      assert(warnings.exists(_.contains("Failed to delete")))
-
-      // The temp file is left behind because delete reported false; the final file was never
-      // published. Recovery ignores the temp file and reads back with detection inactive.
-      val checkpointPath = new Path(rdd.getCheckpointFile.get)
-      val fs = checkpointPath.getFileSystem(sc.hadoopConfiguration)
-      assert(!fs.exists(new Path(checkpointPath, "_num_partitions")))
-      assert(fs.exists(new Path(checkpointPath, "._num_partitions-tmp")))
-      val recovered = sc.checkpointFile[Int](rdd.getCheckpointFile.get)
-      assert(recovered.partitions.length === 4)
-      assert(recovered.collect().sorted === (1 to 20).toArray)
-    }
+/**
+ * A filesystem whose directory listings omit the last part file of a four-partition checkpoint
+ * (SPARK-58883). The file is written and readable; only `listStatus` hides it, which is what the
+ * read-back in `writeRDDToCheckpointDirectory` consults, so the write path sees fewer part files
+ * than the RDD has partitions.
+ */
+class LastPartFileHidingFilesystem extends LocalFileSystem {
+  override def listStatus(f: Path): Array[FileStatus] = {
+    super.listStatus(f).filterNot(_.getPath.getName == "part-00003")
   }
 }
 
@@ -1114,10 +1138,10 @@ class FileAlreadyExistsRenameFileSystem extends RawLocalFileSystem {
 }
 
 /**
- * A filesystem that throws when `ReliableCheckpointRDD` creates the temp file for the
- * `_num_partitions` metadata (SPARK-58883). Partition files and everything else are written
- * normally, so the test isolates the best-effort metadata publication path. All `create`
- * overloads of `FileSystem` funnel into this one.
+ * A filesystem that throws when `ReliableCheckpointRDD` creates the `_num_partitions` metadata
+ * file (SPARK-58883). Partition files and everything else are written normally, so the test
+ * isolates the best-effort metadata publication path. All `create` overloads of `FileSystem`
+ * funnel into this one.
  */
 class PartitionCountCreateFailingFilesystem extends LocalFileSystem {
   override def create(
@@ -1128,7 +1152,7 @@ class PartitionCountCreateFailingFilesystem extends LocalFileSystem {
       replication: Short,
       blockSize: Long,
       progress: Progressable): FSDataOutputStream = {
-    if (f.getName == "._num_partitions-tmp") {
+    if (f.getName == "_num_partitions") {
       throw new IOException(s"Injected failure creating $f")
     }
     super.create(f, permission, overwrite, bufferSize, replication, blockSize, progress)
@@ -1136,9 +1160,9 @@ class PartitionCountCreateFailingFilesystem extends LocalFileSystem {
 }
 
 /**
- * A filesystem whose output stream for the `_num_partitions` temp file throws on the first write
- * (SPARK-58883). Unlike [[PartitionCountCreateFailingFilesystem]], `create` succeeds, so the temp
- * file exists when publication fails and its cleanup path is exercised.
+ * A filesystem whose output stream for the `_num_partitions` file throws on the first write
+ * (SPARK-58883). Unlike [[PartitionCountCreateFailingFilesystem]], `create` succeeds, so an empty
+ * partial file is left behind for the reader to reject.
  */
 class PartitionCountWriteFailingFilesystem extends LocalFileSystem {
   override def create(
@@ -1150,7 +1174,7 @@ class PartitionCountWriteFailingFilesystem extends LocalFileSystem {
       blockSize: Long,
       progress: Progressable): FSDataOutputStream = {
     val out = super.create(f, permission, overwrite, bufferSize, replication, blockSize, progress)
-    if (f.getName == "._num_partitions-tmp") {
+    if (f.getName == "_num_partitions") {
       new FSDataOutputStream(new FilterOutputStream(out) {
         override def write(b: Int): Unit = {
           throw new IOException(s"Injected failure writing $f")
@@ -1162,42 +1186,5 @@ class PartitionCountWriteFailingFilesystem extends LocalFileSystem {
     } else {
       out
     }
-  }
-}
-
-/**
- * A filesystem that reports failure to publish the `_num_partitions` metadata the way HDFS and
- * S3A do (SPARK-58883): `rename` onto the final path returns false instead of throwing. Partition
- * file renames are unaffected.
- */
-class PartitionCountRenameFailingFilesystem extends LocalFileSystem {
-  override def rename(src: Path, dst: Path): Boolean = {
-    if (dst.getName == "_num_partitions") false else super.rename(src, dst)
-  }
-}
-
-/**
- * A filesystem whose `rename` onto the final `_num_partitions` path throws instead of returning
- * false (SPARK-58883), as some object-store connectors do. The temp file exists when the exception
- * is raised, so this exercises its cleanup on the exceptional path.
- */
-class PartitionCountRenameThrowingFilesystem extends LocalFileSystem {
-  override def rename(src: Path, dst: Path): Boolean = {
-    if (dst.getName == "_num_partitions") {
-      throw new IOException(s"Injected failure renaming $src to $dst")
-    }
-    super.rename(src, dst)
-  }
-}
-
-/**
- * A filesystem that fails `_num_partitions` publication after the temp file exists and then
- * reports the temp file cleanup as failed through a false `delete` result rather than an
- * exception (SPARK-58883), the way HDFS does when the path could not be removed. The temp file is
- * intentionally left in place so the test can observe that the false result was not ignored.
- */
-class PartitionCountCleanupFailingFilesystem extends PartitionCountRenameThrowingFilesystem {
-  override def delete(f: Path, recursive: Boolean): Boolean = {
-    if (f.getName == "._num_partitions-tmp") false else super.delete(f, recursive)
   }
 }
