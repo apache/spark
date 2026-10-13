@@ -169,8 +169,12 @@ private[python] case class DiskRowQueue(
  *
  * HybridRowQueue could be safely appended in one thread, and pulled in another thread in the same
  * time.
+ *
+ * This is not a case class: as a memory consumer it must use identity equality. TaskMemoryManager
+ * tracks consumers in a HashSet, so two queues created with the same arguments in one task would
+ * be tracked (and offered for spilling) as one, and each would refuse to spill for the other.
  */
-private[python] case class HybridRowQueue(
+private[python] class HybridRowQueue(
     memManager: TaskMemoryManager,
     tempDir: File,
     numFields: Int,
@@ -187,7 +191,7 @@ private[python] case class HybridRowQueue(
   private[python] def numQueues(): Int = queues.size()
 
   def spill(size: Long, trigger: MemoryConsumer): Long = {
-    if (trigger == this) {
+    if (trigger eq this) {
       // When it's triggered by itself, it should write upcoming rows into disk instead of copying
       // the rows already in the queue.
       return 0L
@@ -280,15 +284,37 @@ private[python] case class HybridRowQueue(
       reading.close()
       reading = null
     }
-    synchronized {
-      while (!queues.isEmpty) {
-        queues.remove().close()
-      }
+    // Detach the queues under the lock but close them (which frees their pages through the
+    // TaskMemoryManager) after releasing it. `spill` is called with the TaskMemoryManager's
+    // monitor held and then takes this queue's lock, so freeing pages while holding this lock
+    // could deadlock with a concurrent spill of this queue triggered from another thread.
+    val detached = synchronized {
+      val current = queues
+      queues = new java.util.LinkedList[RowQueue]()
+      current
+    }
+    while (!detached.isEmpty) {
+      detached.remove().close()
     }
   }
+
+  // Shown in the per-consumer memory usage breakdown and TaskMemoryManager logs. The identity
+  // hash tells apart queues created with the same arguments.
+  override def toString: String =
+    s"HybridRowQueue(numFields=$numFields)@" + Integer.toHexString(System.identityHashCode(this))
 }
 
 private[python] object HybridRowQueue {
+  // Same parameter names as the constructor, like the apply of the former case class, so that
+  // calls with named arguments keep compiling.
+  def apply(
+      memManager: TaskMemoryManager,
+      tempDir: File,
+      numFields: Int,
+      serMgr: SerializerManager): HybridRowQueue = {
+    new HybridRowQueue(memManager, tempDir, numFields, serMgr)
+  }
+
   def apply(taskMemoryMgr: TaskMemoryManager, file: File, fields: Int): HybridRowQueue = {
     HybridRowQueue(taskMemoryMgr, file, fields, SparkEnv.get.serializerManager)
   }
