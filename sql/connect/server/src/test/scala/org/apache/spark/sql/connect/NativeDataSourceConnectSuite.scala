@@ -29,7 +29,7 @@ import org.apache.spark.util.Utils
 /**
  * Tests native data sources with Spark Connect: a client adds packages to its session with
  * `spark.addArtifact`, and the server finds the data sources in the packages of the session or in
- * the installed libraries. The tests are skipped when there is no C++ compiler, or before Java 22.
+ * the installed libraries. The tests are skipped without a C++ compiler, or before Java 22.
  */
 class NativeDataSourceConnectSuite extends SparkConnectServerTest {
 
