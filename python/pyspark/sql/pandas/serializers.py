@@ -1573,8 +1573,11 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                         # no more data with grouping key + state
                         break
 
-                    data_start_offset = state_info_col["startOffset"]
-                    num_data_rows = state_info_col["numRows"]
+                    # The int fields of the state struct are converted to float when the batch
+                    # contains padding (null) state rows. PyArrow >= 26 rejects float offsets
+                    # in slice(), so convert them back to int.
+                    data_start_offset = int(state_info_col["startOffset"])
+                    num_data_rows = int(state_info_col["numRows"])
                     is_last_chunk = state_info_col["isLastChunk"]
 
                     if state_for_current_group:
