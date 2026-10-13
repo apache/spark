@@ -170,7 +170,7 @@ class ArrowEvalTypeHandlerRegistrationTests(PySparkBaseTestCase):
                 ArrowWindowAggIncrementalUDFHandler,
             ),
         ):
-            self.assertIs(get_eval_type_handler(eval_type), handler_cls)
+            self.assertIs(get_eval_type_handler(eval_type, RunnerConf({})), handler_cls)
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
