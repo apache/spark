@@ -167,11 +167,6 @@ class InProcessArrowEvalPythonEvaluatorFactory(
           override def spill(size: Long, trigger: MemoryConsumer): Long = synchronized {
             if (queueAbandoned) 0L else super.spill(size, trigger)
           }
-
-          // Queues of a task are distinct memory consumers, whatever their case-class fields.
-          override def equals(other: Any): Boolean = this eq other.asInstanceOf[AnyRef]
-          override def hashCode(): Int = System.identityHashCode(this)
-          override def canEqual(other: Any): Boolean = false
         }
         (queue, projection.orNull)
       case ReadBack => (null, null)
