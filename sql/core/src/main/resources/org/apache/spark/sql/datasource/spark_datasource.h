@@ -81,16 +81,17 @@
  *
  * Conventions
  * -----------
- * - Errors. A function that can fail returns 0 on success, or any other value on failure. It then
- *   sets the message that spark_ds_last_error returns, and Spark reports it as a
- *   NATIVE_DATA_SOURCE_ERROR. A C++ exception or a Rust panic must not cross the interface: catch
- *   it and return an error instead.
+ * - Errors. The functions that return an int return 0 on success, or any other value on failure.
+ *   They then set the message that spark_ds_last_error returns, and Spark reports it as a
+ *   NATIVE_DATA_SOURCE_ERROR. The close functions cannot fail. A C++ exception or a Rust panic
+ *   must not cross the interface: catch it and return an error instead.
  * - Handles. The create functions return an opaque, non-NULL handle in their last argument,
- *   typically a pointer. Spark releases each handle exactly once with the matching close
- *   function, or with spark_ds_commit_data_writer or spark_ds_abort_data_writer for data writers,
- *   though not always right after the last use of a stream writer (see Writes above). A reader or
- *   writer handle must not depend on the data source handle it was created from, because Spark
- *   closes the data source handle right after creating it.
+ *   typically a pointer: Spark reports a NULL handle as an error. Spark releases each handle
+ *   exactly once with the matching close function, or with spark_ds_commit_data_writer or
+ *   spark_ds_abort_data_writer for data writers, though not always right after the last use of a
+ *   stream writer (see Writes above). A reader or writer handle must not depend on the data
+ *   source handle it was created from, because Spark closes the data source handle right after
+ *   creating it.
  * - Memory. What Spark passes to a function, such as strings and byte arrays, is only valid
  *   during the call. Strings are UTF-8 and NUL-terminated. The library returns strings and byte
  *   arrays by passing them to a SparkDsSink, which copies them.
@@ -117,7 +118,8 @@
  * - Optional functions. A library only needs to export the functions for the operations it
  *   supports. If a function is missing, Spark treats the operation as unsupported, except for the
  *   pushdown functions and the serialize functions, which then push nothing down and return no
- *   state, and spark_ds_commit_offset, which then does nothing. spark_ds_abi_version is required.
+ *   state, spark_ds_commit_offset, which then does nothing, and spark_ds_last_error.
+ *   spark_ds_abi_version is required.
  * - Threads. Spark calls the library from multiple threads, and calls on different handles may
  *   run concurrently. Calls on the same handle never run concurrently. A handle may be released
  *   from a thread other than the threads that used it, such as a JVM Cleaner thread when Spark
@@ -223,8 +225,8 @@ int32_t spark_ds_abi_version(void);
  * Creates a data source with the options given by the user, such as
  * spark.read.option("key", "value").
  *
- * name: the name of the data source, as listed in the package manifest. A library can implement
- *       several data sources.
+ * name: the name of the data source, as listed in the package manifest, or in lower case for an
+ *       installed library. A library can implement several data sources.
  * option_keys, option_values: the num_options options, with the keys in lower case
  * source: set to the data source handle
  */
