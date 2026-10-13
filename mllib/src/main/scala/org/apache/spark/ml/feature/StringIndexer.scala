@@ -381,113 +381,6 @@ class StringIndexerModel (
     }.asNondeterministic()
   }
 
-  private def transformWithKeepInvalid(
-      dataset: Dataset[_],
-      inputColNames: Array[String],
-      outputColNames: Array[String],
-      labelsToIndexArray: Array[OpenHashMap[String, Int]]): DataFrame = {
-    val (transformedDataset, _) = transformWithIndexers(
-      dataset,
-      inputColNames,
-      outputColNames,
-      labelsToIndexArray,
-      keepInvalid = true,
-      getKeepInvalidIndexer)
-    transformedDataset
-  }
-
-  private def transformWithSkipInvalid(
-      dataset: Dataset[_],
-      inputColNames: Array[String],
-      outputColNames: Array[String],
-      labelsToIndexArray: Array[OpenHashMap[String, Int]]): DataFrame = {
-    val (transformedDataset, filteredOutputColNames) = transformWithIndexers(
-      dataset,
-      inputColNames,
-      outputColNames,
-      labelsToIndexArray,
-      keepInvalid = false,
-      (_: Array[String], labelToIndex: OpenHashMap[String, Int]) =>
-        getSkipInvalidIndexer(labelToIndex))
-    if (filteredOutputColNames.length > 0) {
-      // The skip indexers return null for invalid labels. Their nondeterminism keeps this filter
-      // above the projection, so each label is looked up only once.
-      transformedDataset.na.drop(filteredOutputColNames)
-    } else {
-      transformedDataset
-    }
-  }
-
-  private def transformWithErrorInvalid(
-      dataset: Dataset[_],
-      inputColNames: Array[String],
-      outputColNames: Array[String],
-      labelsToIndexArray: Array[OpenHashMap[String, Int]]): DataFrame = {
-    val (transformedDataset, _) = transformWithIndexers(
-      dataset,
-      inputColNames,
-      outputColNames,
-      labelsToIndexArray,
-      keepInvalid = false,
-      (_: Array[String], labelToIndex: OpenHashMap[String, Int]) =>
-        getErrorInvalidIndexer(labelToIndex))
-    transformedDataset
-  }
-
-  private def transformWithIndexers(
-      dataset: Dataset[_],
-      inputColNames: Array[String],
-      outputColNames: Array[String],
-      labelsToIndexArray: Array[OpenHashMap[String, Int]],
-      keepInvalid: Boolean,
-      getIndexer: (Array[String], OpenHashMap[String, Int]) => UserDefinedFunction):
-      (DataFrame, Array[String]) = {
-    val filteredOutputColNames = ArrayBuffer.empty[String]
-    val filteredOutputColumns = ArrayBuffer.empty[Column]
-
-    for (i <- outputColNames.indices) {
-      val inputColName = inputColNames(i)
-      val outputColName = outputColNames(i)
-      val labelToIndex = labelsToIndexArray(i)
-      val labels = labelsArray(i)
-
-      try {
-        dataset.col(inputColName)
-        val filteredLabels = if (keepInvalid) {
-          labels :+ "__unknown"
-        } else {
-          labels
-        }
-        val metadata = NominalAttribute.defaultAttr
-          .withName(outputColName)
-          .withValues(filteredLabels)
-          .toMetadata()
-
-        val indexer = getIndexer(labels, labelToIndex)
-
-        filteredOutputColNames += outputColName
-        filteredOutputColumns += indexer(dataset(inputColName).cast(StringType))
-          .as(outputColName, metadata)
-      } catch {
-        case _: AnalysisException =>
-          logWarning(log"Input column ${MDC(LogKeys.COLUMN_NAME, inputColName)} does not exist " +
-            log"during transformation. Skip StringIndexerModel for this column.")
-      }
-    }
-
-    require(filteredOutputColNames.length == filteredOutputColumns.length)
-    if (filteredOutputColNames.length > 0) {
-      val filteredOutputColNamesArray = filteredOutputColNames.toArray
-      val filteredOutputColumnsArray = filteredOutputColumns.toArray
-      val transformedDataset = dataset.withColumns(
-        filteredOutputColNamesArray.toImmutableArraySeq,
-        filteredOutputColumnsArray.toImmutableArraySeq)
-      (transformedDataset, filteredOutputColNamesArray)
-    } else {
-      (dataset.toDF(), filteredOutputColNames.toArray)
-    }
-  }
-
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
@@ -500,14 +393,56 @@ class StringIndexerModel (
       }
       map
     }
+    val handleInvalid = getHandleInvalid
+    val keepInvalid = handleInvalid == StringIndexer.KEEP_INVALID
+    val filteredOutputColNames = ArrayBuffer.empty[String]
+    val filteredOutputColumns = ArrayBuffer.empty[Column]
 
-    getHandleInvalid match {
-      case StringIndexer.KEEP_INVALID =>
-        transformWithKeepInvalid(dataset, inputColNames, outputColNames, labelsToIndexArray)
-      case StringIndexer.SKIP_INVALID =>
-        transformWithSkipInvalid(dataset, inputColNames, outputColNames, labelsToIndexArray)
-      case StringIndexer.ERROR_INVALID =>
-        transformWithErrorInvalid(dataset, inputColNames, outputColNames, labelsToIndexArray)
+    for (i <- outputColNames.indices) {
+      val inputColName = inputColNames(i)
+      val outputColName = outputColNames(i)
+      val labelToIndex = labelsToIndexArray(i)
+      val labels = labelsArray(i)
+
+      try {
+        dataset.col(inputColName)
+        val filteredLabels = if (keepInvalid) labels :+ "__unknown" else labels
+        val metadata = NominalAttribute.defaultAttr
+          .withName(outputColName)
+          .withValues(filteredLabels)
+          .toMetadata()
+
+        val indexer = handleInvalid match {
+          case StringIndexer.KEEP_INVALID => getKeepInvalidIndexer(labels, labelToIndex)
+          case StringIndexer.SKIP_INVALID => getSkipInvalidIndexer(labelToIndex)
+          case StringIndexer.ERROR_INVALID => getErrorInvalidIndexer(labelToIndex)
+        }
+
+        filteredOutputColNames += outputColName
+        filteredOutputColumns += indexer(dataset(inputColName).cast(StringType))
+          .as(outputColName, metadata)
+      } catch {
+        case _: AnalysisException =>
+          logWarning(log"Input column ${MDC(LogKeys.COLUMN_NAME, inputColName)} does not exist " +
+            log"during transformation. Skip StringIndexerModel for this column.")
+      }
+    }
+
+    require(filteredOutputColNames.length == filteredOutputColumns.length)
+    if (filteredOutputColNames.nonEmpty) {
+      val outputNames = filteredOutputColNames.toArray
+      val transformedDataset = dataset.withColumns(
+        outputNames.toImmutableArraySeq,
+        filteredOutputColumns.toArray.toImmutableArraySeq)
+      if (handleInvalid == StringIndexer.SKIP_INVALID) {
+        // Nondeterministic indexers keep this filter above the projection, avoiding a
+        // second lookup.
+        transformedDataset.na.drop(outputNames)
+      } else {
+        transformedDataset
+      }
+    } else {
+      dataset.toDF()
     }
   }
 
