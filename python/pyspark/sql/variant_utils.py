@@ -463,7 +463,10 @@ class VariantUtils:
                 other = math.copysign(struct.unpack("<f", struct.pack("<I", bits))[0], rounded)
                 midpoint = (rounded + other) / 2
                 if x == midpoint:
-                    exact, exact_midpoint = decimal.Decimal(s), decimal.Decimal(midpoint)
+                    # from_float() is exact and, unlike Decimal(float), does not consult the
+                    # caller's decimal context, which may trap FloatOperation.
+                    exact = decimal.Decimal(s)
+                    exact_midpoint = decimal.Decimal.from_float(midpoint)
                     if exact != exact_midpoint and (exact < exact_midpoint) != (rounded < midpoint):
                         rounded = other
             return rounded == f

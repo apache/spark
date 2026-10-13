@@ -3910,6 +3910,7 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
             # midpoint between them.
             (variant(14, struct.pack("<I", 0x15AE43FE)), "7.0385313E-26"),
             (variant(14, struct.pack("<I", 0x15AE43FD)), "7.038531E-26"),
+            (float32(33554448.0), "3.355445E7"),
             (float32(float("nan")), '"NaN"'),
             (float32(1.1), "1.1"),
             (float32(1e10), "1.0E10"),
@@ -3924,9 +3925,11 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
                 self.assertEqual(v.toJson(), expected)
                 # The output must always be valid JSON.
                 json.loads(v.toJson())
-                # The output must not depend on the caller's decimal context.
+                # The output must not depend on the caller's decimal context, and must work when
+                # the caller traps mixing floats with decimals.
                 with decimal.localcontext() as ctx:
                     ctx.prec = 5
+                    ctx.traps[decimal.FloatOperation] = True
                     self.assertEqual(v.toJson(), expected)
 
         self.assertEqual(
