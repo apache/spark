@@ -33,6 +33,7 @@ from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueEr
 from pyspark.eval_handlers._base import get_eval_type_handler
 from pyspark.sql.types import LongType, StringType, StructField, StructType
 from pyspark.testing.utils import (
+    PySparkBaseTestCase,
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
@@ -60,7 +61,7 @@ if have_pandas and have_pyarrow:
 _missing_message = pandas_requirement_message or pyarrow_requirement_message
 
 
-class PandasEvalTypeHandlerTestCase(unittest.TestCase):
+class PandasEvalTypeHandlerTestCase(PySparkBaseTestCase):
     """Builders for handler input in the wire format the serializers produce."""
 
     _GROUPED_RETURN_TYPE = StructType([StructField("v", LongType())])
@@ -101,7 +102,7 @@ class PandasEvalTypeHandlerTestCase(unittest.TestCase):
 
 
 @unittest.skipIf(not (have_pandas and have_pyarrow), _missing_message)
-class PandasEvalTypeHandlerRegistrationTests(unittest.TestCase):
+class PandasEvalTypeHandlerRegistrationTests(PySparkBaseTestCase):
     def test_pandas_eval_types_are_registered(self):
         # Each migrated pandas eval type dispatches to its handler by lookup.
         for eval_type, handler_cls in (

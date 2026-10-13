@@ -31,7 +31,7 @@ from pyspark.eval_handlers._base import get_eval_type_handler
 from pyspark.sql.functions import SkipRestOfInputTableException
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 from pyspark.sql.types import LongType, StructField, StructType
-from pyspark.testing.utils import have_pyarrow, pyarrow_requirement_message
+from pyspark.testing.utils import PySparkBaseTestCase, have_pyarrow, pyarrow_requirement_message
 from pyspark.util import PythonEvalType
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
@@ -74,7 +74,7 @@ class _RecordingUDTF:
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
-class ArrowUDTFHandlerTests(unittest.TestCase):
+class ArrowUDTFHandlerTests(PySparkBaseTestCase):
     def _handler(self, udtf, args=(0,), kwargs=None, table_arg_offsets="0"):
         conf = {} if table_arg_offsets is None else {"table_arg_offsets": table_arg_offsets}
         return ArrowUDTFHandler(

@@ -31,7 +31,7 @@ from pyspark.eval_handlers._base import get_eval_type_handler
 from pyspark.eval_handlers.utils import hashable_grouping_key
 from pyspark.sql.pandas.serializers import ArrowStreamCoGroupSerializer, ArrowStreamSerializer
 from pyspark.sql.types import DoubleType, LongType, StructField, StructType
-from pyspark.testing.utils import have_pyarrow, pyarrow_requirement_message
+from pyspark.testing.utils import PySparkBaseTestCase, have_pyarrow, pyarrow_requirement_message
 from pyspark.util import PythonEvalType
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
@@ -84,7 +84,7 @@ class _SumAggregator:
         return buffer[0]
 
 
-class ArrowEvalTypeHandlerTestCase(unittest.TestCase):
+class ArrowEvalTypeHandlerTestCase(PySparkBaseTestCase):
     """Builders for handler input in the wire format the serializers produce."""
 
     _RETURN_TYPE = StructType([StructField("v", LongType())])
@@ -144,7 +144,7 @@ class ArrowEvalTypeHandlerTestCase(unittest.TestCase):
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
-class ArrowEvalTypeHandlerRegistrationTests(unittest.TestCase):
+class ArrowEvalTypeHandlerRegistrationTests(PySparkBaseTestCase):
     def test_arrow_eval_types_are_registered(self):
         # Every migrated Arrow eval type dispatches to its handler by lookup.
         for eval_type, handler_cls in (
@@ -541,7 +541,7 @@ class ArrowWindowAggIncrementalUDFHandlerTests(ArrowEvalTypeHandlerTestCase):
             list(handler.run(0, self._one_group(self._batch(v=[1]))))
 
 
-class HashableGroupingKeyTests(unittest.TestCase):
+class HashableGroupingKeyTests(PySparkBaseTestCase):
     def test_nested_values_hash_by_value(self):
         self.assertEqual(
             hashable_grouping_key(([1, [2]], {"a": 1})), hashable_grouping_key(([1, [2]], {"a": 1}))
