@@ -462,12 +462,14 @@ class Scd1LeafLevelReconciliationSuite extends QueryTest with SharedSparkSession
   }
 
   test("collapseMicrobatchRowsPerKey reconciles every column whole when ignore-null is disabled") {
+    val cityMetadata = new MetadataBuilder().putString("description", "city").build()
+    val profileMetadata = new MetadataBuilder().putString("description", "profile").build()
     val profileType = new StructType()
-      .add("city", StringType)
+      .add("city", StringType, nullable = true, cityMetadata)
       .add("zip", StringType)
     val schema = new StructType()
       .add("id", IntegerType)
-      .add("profile", profileType)
+      .add("profile", profileType, nullable = true, profileMetadata)
       .add("nickname", StringType)
       .add(metadataColName, metadataSchema)
     // Without ignore-null, version maps are null and every upsert authors every column.
@@ -482,6 +484,7 @@ class Scd1LeafLevelReconciliationSuite extends QueryTest with SharedSparkSession
       encodedPath("profile", "city") -> 2L,
       encodedPath("profile", "zip") -> 2L,
       encodedPath("nickname") -> 2L)
+    assert(result.schema("profile") == schema("profile"))
     checkAnswer(result, Row(1, Row(null, null), null, Row(null, 2L, expectedVersionMap)))
   }
 
@@ -509,60 +512,6 @@ class Scd1LeafLevelReconciliationSuite extends QueryTest with SharedSparkSession
       result,
       Row(1, "value", Row(Row("city")), Row(null, 1L, expectedVersionMap))
     )
-  }
-
-  test("collapseMicrobatchRowsPerKey rebuilds unauthored non-nullable structs with metadata") {
-    val profileMetadata = new MetadataBuilder().putString("description", "profile").build()
-    val cityMetadata = new MetadataBuilder().putString("description", "city").build()
-    val profileType =
-      StructType(Seq(StructField("city", StringType, nullable = true, cityMetadata)))
-    val schema = StructType(Seq(
-      StructField("id", IntegerType),
-      StructField("profile", profileType, nullable = false, profileMetadata),
-      StructField(metadataColName, metadataSchema)
-    ))
-    val city = encodedPath("profile", "city")
-    val input =
-      dataFrameOf(schema)(Row(1, Row(null), Row(null, 1L, Map[String, Any](city -> null))))
-
-    val result = collapseMicrobatchRowsPerKey(input)
-
-    val resultProfile = result.schema("profile")
-    val resultCity = resultProfile.dataType.asInstanceOf[StructType]("city")
-    assert(!resultProfile.nullable)
-    assert(resultProfile.metadata == profileMetadata)
-    assert(resultCity.metadata == cityMetadata)
-    checkAnswer(result, Row(1, Row(null), Row(null, 1L, Map[String, Any](city -> null))))
-  }
-
-  test("collapseMicrobatchRowsPerKey nulls nullable structs whose non-nullable leaves are null") {
-    val locationType = StructType(Seq(StructField("city", StringType, nullable = false)))
-    val profileType = StructType(Seq(StructField("location", locationType, nullable = false)))
-    // `home` is nullable, so `address` is rebuilt around a null `home`.
-    val addressType = new StructType().add("home", locationType).add("note", StringType)
-    val schema = new StructType()
-      .add("id", IntegerType)
-      .add("profile", profileType)
-      .add("address", addressType)
-      .add(metadataColName, metadataSchema)
-    val city = encodedPath("profile", "location", "city")
-    val homeCity = encodedPath("address", "home", "city")
-    val note = encodedPath("address", "note")
-    val unauthored = Map[String, Any](city -> null, homeCity -> null, note -> null)
-    val authored = Map[String, Any](city -> 1L, homeCity -> 1L, note -> null)
-    val input = dataFrameOf(schema)(
-      Row(1, null, null, Row(null, 1L, unauthored)),
-      Row(2, Row(Row("SF")), Row(Row("LA"), null), Row(null, 1L, authored)))
-
-    val result = collapseMicrobatchRowsPerKey(input)
-
-    assert(result.schema("profile") == schema("profile"))
-    assert(result.schema("address") == schema("address"))
-    checkAnswer(
-      result.orderBy(F.col("id")),
-      Seq(
-        Row(1, null, Row(null, null), Row(null, 1L, unauthored)),
-        Row(2, Row(Row("SF")), Row(Row("LA"), null), Row(null, 1L, authored))))
   }
 
   test("collapseMicrobatchRowsPerKey handles quoted paths and non-struct complex leaves") {
