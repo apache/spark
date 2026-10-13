@@ -208,8 +208,7 @@ class AsyncProgressTrackingMicroBatchExecution(
     // Because we are using a thread pool with only one thread, async writes to the offset log
     // are still written in a serial / in order fashion
     logInfo(log"Submitting async offset log write for batch ${MDC(BATCH_ID, execCtx.batchId)}.")
-    val offsetSeq = execCtx.endOffsets.toOffsets(
-      sources, sourceIdMap, execCtx.offsetSeqMetadata)
+    val offsetSeq = streamProgressToOffsets(execCtx.endOffsets, execCtx.offsetSeqMetadata)
     offsetLog.addAsync(execCtx.batchId, offsetSeq)
       .thenAccept { case (batchId, persistedToDurableStorage) =>
         enqueueLastPersistedBatchForCommit(batchId, persistedToDurableStorage)

@@ -29,8 +29,8 @@ import org.scalatest.time.{Seconds, Span}
 import org.apache.spark.{SparkIllegalArgumentException, TestUtils}
 import org.apache.spark.sql._
 import org.apache.spark.sql.connector.read.streaming
-import org.apache.spark.sql.execution.streaming.checkpointing.{AsyncCommitLog, AsyncOffsetSeqLog, CommitMetadata, OffsetSeq}
-import org.apache.spark.sql.execution.streaming.runtime.{AsyncProgressTrackingMicroBatchExecution, LongOffset, MemoryStream, StreamExecution}
+import org.apache.spark.sql.execution.streaming.checkpointing.{AsyncCommitLog, AsyncOffsetSeqLog, CommitMetadata, OffsetMap, OffsetSeq, OffsetSeqLog}
+import org.apache.spark.sql.execution.streaming.runtime.{AsyncProgressTrackingMicroBatchExecution, LongOffset, MemoryStream, StreamExecution, StreamingQueryWrapper}
 import org.apache.spark.sql.execution.streaming.runtime.AsyncProgressTrackingMicroBatchExecution.{ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS, ASYNC_PROGRESS_TRACKING_ENABLED, ASYNC_PROGRESS_TRACKING_OVERRIDE_SINK_SUPPORT_CHECK}
 import org.apache.spark.sql.functions.{column, window}
 import org.apache.spark.sql.internal.SQLConf
@@ -131,6 +131,37 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
       spark.table(tableName),
       expected.toSeq
     )
+  }
+
+  test("async WAL commits retain both v2 self-union source slots") {
+    withTempDir { checkpointDir =>
+      val checkpoint = checkpointDir.getCanonicalPath
+      val inputData = MemoryStream[Int]
+      val df = inputData.toDF()
+
+      withSQLConf(SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key -> "2") {
+        val query = df.union(df).writeStream
+          .format("memory")
+          .queryName("asyncSelfUnionV2")
+          .option(ASYNC_PROGRESS_TRACKING_ENABLED, true)
+          .option(ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS, 0)
+          .option("checkpointLocation", checkpoint)
+          .start()
+        try {
+          inputData.addData(1)
+          query.processAllAvailable()
+          waitPendingOffsetWrites(query.asInstanceOf[StreamingQueryWrapper].streamingQuery)
+
+          val offsets = new OffsetSeqLog(spark, s"$checkpoint/offsets")
+            .getLatest().get._2.asInstanceOf[OffsetMap]
+          assert(offsets.offsetsMap.keySet == Set("0", "1"))
+          assert(offsets.offsetsMap("0") == offsets.offsetsMap("1"))
+          checkAnswer(spark.table("asyncSelfUnionV2"), Seq(Row(1), Row(1)))
+        } finally {
+          query.stop()
+        }
+      }
+    }
   }
 
   test("async WAL commits recovery") {

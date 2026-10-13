@@ -44,7 +44,7 @@ import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsTrunc
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.StreamingExplainCommand
 import org.apache.spark.sql.execution.streaming.{ContinuousTrigger, RealTimeTrigger}
-import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CommitLog, OffsetSeqLog, OffsetSeqMetadata}
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CommitLog, OffsetSeqBase, OffsetSeqLog, OffsetSeqMetadata, OffsetSeqMetadataBase}
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperator, StateStoreWriter}
 import org.apache.spark.sql.execution.streaming.sources.{ForeachBatchUserFuncException, ForeachUserFuncException}
 import org.apache.spark.sql.execution.streaming.state.{RocksDBConf, RocksDBStateStoreProvider}
@@ -154,11 +154,9 @@ abstract class StreamExecution(
    */
   protected def sources: Seq[SparkDataStream]
 
-  /**
-   * Source-to-ID mapping for OffsetMap support.
-   * Using index as sourceId initially, can be extended to support user-provided names.
-   */
-  protected def sourceToIdMap: Map[SparkDataStream, String]
+  protected def streamProgressToOffsets(
+      streamProgress: StreamProgress,
+      metadata: OffsetSeqMetadataBase): OffsetSeqBase
 
   /** Isolated spark session to run the batches with. */
   protected[sql] val sparkSessionForStream: SparkSession = sparkSession.cloneSession()
@@ -379,14 +377,12 @@ abstract class StreamExecution(
         streamDeathCause = new StreamingQueryException(
           toDebugString(includeLogicalPlan = isInitialized),
           cause = cause,
-          getLatestExecutionContext().startOffsets
-            .toOffsets(sources.toSeq, sourceToIdMap.map(_.swap),
-              getLatestExecutionContext().offsetSeqMetadata)
-            .toString,
-          getLatestExecutionContext().endOffsets
-            .toOffsets(sources.toSeq, sourceToIdMap.map(_.swap),
-              getLatestExecutionContext().offsetSeqMetadata)
-            .toString,
+          streamProgressToOffsets(
+            getLatestExecutionContext().startOffsets,
+            getLatestExecutionContext().offsetSeqMetadata).toString,
+          streamProgressToOffsets(
+            getLatestExecutionContext().endOffsets,
+            getLatestExecutionContext().offsetSeqMetadata).toString,
           errorClass = "STREAM_FAILED",
           messageParameters = Map(
             "id" -> id.toString,

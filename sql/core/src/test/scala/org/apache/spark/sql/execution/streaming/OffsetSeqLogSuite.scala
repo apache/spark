@@ -22,6 +22,7 @@ import java.io.File
 import org.apache.hadoop.fs.Path
 import org.scalatest.Tag
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame}
 import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
@@ -29,7 +30,7 @@ import org.apache.spark.sql.execution.streaming.checkpointing.{
   CommitLog, OffsetMap, OffsetSeq, OffsetSeqBase, OffsetSeqLog, OffsetSeqMetadata,
   OffsetSeqMetadataV2}
 import org.apache.spark.sql.execution.streaming.runtime.{
-  LongOffset, MemoryStream, SerializedOffset, StreamingQueryWrapper}
+  LongOffset, MemoryStream, SerializedOffset, StreamingQueryWrapper, StreamProgress}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.test.SharedSparkSession
@@ -276,6 +277,32 @@ class OffsetSeqLogSuite extends SharedSparkSession {
 
   def getConfWith(shufflePartitions: Int): Map[String, String] = {
     Map(SQLConf.SHUFFLE_PARTITIONS.key -> shufflePartitions.toString)
+  }
+
+  test("v2 stream progress retains repeated source slots and omits missing offsets") {
+    val inputData = MemoryStream[Int]
+    val idleInput = MemoryStream[Int]
+    val offset = LongOffset(7)
+    val progress = new StreamProgress ++ Seq(inputData -> offset)
+    val sourceIdMap = Map("0" -> inputData, "1" -> inputData, "2" -> idleInput)
+    val sources = Seq(inputData, inputData, idleInput)
+    val offsets = progress.toOffsets(sources, sourceIdMap, OffsetSeqMetadataV2())
+      .asInstanceOf[OffsetMap]
+
+    assert(offsets.offsetsMap == Map("0" -> Some(offset), "1" -> Some(offset)))
+    assert(offsets.toStreamProgress(sources, sourceIdMap) == progress)
+    assert(progress.toOffsets(sources, sourceIdMap, OffsetSeqMetadata()).offsets ==
+      Seq(Some(offset), Some(offset), None))
+  }
+
+  test("v2 stream progress rejects sources missing from the source ID mapping") {
+    val inputData = MemoryStream[Int]
+    val progress = new StreamProgress ++ Seq(inputData -> LongOffset(7))
+    val error = intercept[SparkException] {
+      progress.toOffsets(Seq(inputData), Map.empty, OffsetSeqMetadataV2())
+    }
+    assert(error.getCondition == "INTERNAL_ERROR")
+    assert(error.getMessage.contains("not found in sourceIdMap"))
   }
 
   test("STREAMING_OFFSET_LOG_FORMAT_VERSION config - new query with VERSION_2") {

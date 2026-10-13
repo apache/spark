@@ -40,8 +40,8 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.checkpointing.{CommitMetadata, OffsetSeq}
-import org.apache.spark.sql.execution.streaming.runtime.{AcceptsLatestSeenOffsetHandler, ACTIVE, ContinuousExecutionContext, IncrementalExecution, ProcessingTimeExecutor, RECONFIGURING, State, StreamExecution, StreamExecutionContext, TERMINATED, WatermarkPropagator}
+import org.apache.spark.sql.execution.streaming.checkpointing.{CommitMetadata, OffsetSeq, OffsetSeqBase, OffsetSeqMetadataBase}
+import org.apache.spark.sql.execution.streaming.runtime.{AcceptsLatestSeenOffsetHandler, ACTIVE, ContinuousExecutionContext, IncrementalExecution, ProcessingTimeExecutor, RECONFIGURING, State, StreamExecution, StreamExecutionContext, StreamProgress, TERMINATED, WatermarkPropagator}
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Clock
@@ -66,7 +66,11 @@ class ContinuousExecution(
 
   @volatile protected var sources: Seq[ContinuousStream] = Seq()
 
-  def sourceToIdMap: Map[SparkDataStream, String] = Map.empty
+  override protected def streamProgressToOffsets(
+      streamProgress: StreamProgress,
+      metadata: OffsetSeqMetadataBase): OffsetSeqBase = {
+    streamProgress.toOffsets(sources, Map.empty, metadata)
+  }
 
   // For use only in test harnesses.
   private[sql] var currentEpochCoordinatorId: String = _
