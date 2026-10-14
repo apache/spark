@@ -30,6 +30,7 @@ import org.apache.spark.sql.types.{
   ArrayType,
   BinaryType,
   DataType,
+  DoubleType,
   FloatType,
   LongType,
   StringType,
@@ -374,11 +375,68 @@ case class VectorNormalize(vector: Expression, degree: Expression)
   }
 }
 
+private[expressions] sealed abstract class VectorElementAccessor(val size: Int) {
+
+  protected def offset(i: Int): Long = Platform.BYTE_ARRAY_OFFSET + i.toLong * size
+
+  def get(bytes: Array[Byte], i: Int): Double
+
+  def put(bytes: Array[Byte], i: Int, value: Double): Unit
+
+  def getInput(array: ArrayData, i: Int): Double
+
+  def toArrayData(bytes: Array[Byte], dim: Int): ArrayData
+}
+
+private[expressions] object VectorElementAccessor {
+
+  private object FloatAccessor extends VectorElementAccessor(4) {
+    override def get(bytes: Array[Byte], i: Int): Double = Platform.getFloat(bytes, offset(i))
+
+    override def put(bytes: Array[Byte], i: Int, value: Double): Unit =
+      Platform.putFloat(bytes, offset(i), value.toFloat)
+
+    override def getInput(array: ArrayData, i: Int): Double = array.getFloat(i)
+
+    override def toArrayData(bytes: Array[Byte], dim: Int): ArrayData = {
+      val result = new Array[Float](dim)
+      var i = 0
+      while (i < dim) {
+        result(i) = Platform.getFloat(bytes, offset(i))
+        i += 1
+      }
+      ArrayData.toArrayData(result)
+    }
+  }
+
+  private object DoubleAccessor extends VectorElementAccessor(8) {
+    override def get(bytes: Array[Byte], i: Int): Double = Platform.getDouble(bytes, offset(i))
+
+    override def put(bytes: Array[Byte], i: Int, value: Double): Unit =
+      Platform.putDouble(bytes, offset(i), value)
+
+    override def getInput(array: ArrayData, i: Int): Double = array.getDouble(i)
+
+    override def toArrayData(bytes: Array[Byte], dim: Int): ArrayData = {
+      val result = new Array[Double](dim)
+      var i = 0
+      while (i < dim) {
+        result(i) = Platform.getDouble(bytes, offset(i))
+        i += 1
+      }
+      ArrayData.toArrayData(result)
+    }
+  }
+
+  val elementTypeToAccessorMap: Map[DataType, VectorElementAccessor] =
+    Map(FloatType -> FloatAccessor, DoubleType -> DoubleAccessor)
+}
+
 // Base trait for vector aggregate functions (vector_avg, vector_sum).
 // Provides a unified aggregate buffer schema: (acc: BINARY, count: LONG)
 // - acc: BINARY representation of the running vector (sum or average)
 // - count: number of valid vectors seen so far
-// - dimension is inferred from acc.length / 4 (4 bytes per float)
+// - dimension is inferred from acc.length / element size (4 bytes per float, 8 per double)
 // Subclasses only need to implement the element-wise update and merge logic.
 trait VectorAggregateBase extends ImperativeAggregate
     with UnaryLike[Expression]
@@ -386,18 +444,29 @@ trait VectorAggregateBase extends ImperativeAggregate
 
   override def nullable: Boolean = true
 
-  override def dataType: DataType = ArrayType(FloatType, containsNull = false)
+  override def dataType: DataType = ArrayType(elementType, containsNull = false)
+
+  protected def supportedElementTypes: Seq[DataType] = Seq(FloatType)
+
+  protected lazy val elementType: DataType = child.dataType match {
+    case ArrayType(et, _) if supportedElementTypes.contains(et) => et
+    case _ => FloatType
+  }
+
+  private[expressions] lazy val elementAccessor: VectorElementAccessor =
+    VectorElementAccessor.elementTypeToAccessorMap(elementType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     child.dataType match {
-      case ArrayType(FloatType, _) =>
+      case ArrayType(et, _) if supportedElementTypes.contains(et) =>
         TypeCheckResult.TypeCheckSuccess
       case _ =>
         DataTypeMismatch(
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
           messageParameters = Map(
             "paramIndex" -> ordinalNumber(0),
-            "requiredType" -> toSQLType(ArrayType(FloatType)),
+            "requiredType" ->
+              supportedElementTypes.map(et => toSQLType(ArrayType(et))).mkString(" or "),
             "inputSql" -> toSQLExpr(child),
             "inputType" -> toSQLType(child.dataType)
           )
@@ -435,8 +504,8 @@ trait VectorAggregateBase extends ImperativeAggregate
     buffer.setLong(mutableAggBufferOffset + countIndex, 0L)
   }
 
-  // Infer vector dimension from byte array length (4 bytes per float)
-  protected def getDim(bytes: Array[Byte]): Int = bytes.length / 4
+  // Infer vector dimension from byte array length (element size bytes per element)
+  protected def getDim(bytes: Array[Byte]): Int = bytes.length / elementAccessor.size
 
   // Element-wise update for non-first vectors.
   // accBytes contains the running vector; update it in-place with inputArray.
@@ -484,10 +553,10 @@ trait VectorAggregateBase extends ImperativeAggregate
 
     if (currentCount == 0L) {
       // First valid vector - just copy it
-      val bytes = new Array[Byte](inputLen * 4)
+      val bytes = new Array[Byte](inputLen * elementAccessor.size)
       var i = 0
       while (i < inputLen) {
-        Platform.putFloat(bytes, Platform.BYTE_ARRAY_OFFSET + i.toLong * 4, inputArray.getFloat(i))
+        elementAccessor.put(bytes, i, elementAccessor.getInput(inputArray, i))
         i += 1
       }
       buffer.update(accOffset, bytes)
@@ -568,14 +637,7 @@ trait VectorAggregateBase extends ImperativeAggregate
       null
     } else {
       val accBytes = buffer.getBinary(mutableAggBufferOffset + accIndex)
-      val dim = getDim(accBytes)
-      val result = new Array[Float](dim)
-      var i = 0
-      while (i < dim) {
-        result(i) = Platform.getFloat(accBytes, Platform.BYTE_ARRAY_OFFSET + i.toLong * 4)
-        i += 1
-      }
-      ArrayData.toArrayData(result)
+      elementAccessor.toArrayData(accBytes, getDim(accBytes))
     }
   }
 }
@@ -668,24 +730,28 @@ case class VectorAvg(
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(array) - Returns the element-wise sum of float vectors in a group.
+    _FUNC_(array) - Returns the element-wise sum of float or double vectors in a group.
     All vectors must have the same dimension.
   """,
   arguments = """
     Arguments:
-      * array - An ARRAY of FLOAT values representing a vector. All vectors aggregated in the
-          group must have the same dimension.
+      * array - An ARRAY of FLOAT or DOUBLE values representing a vector. All vectors aggregated
+          in the group must have the same dimension. The result has the same element type as
+          the input.
   """,
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (array(1.0F, 2.0F)), (array(3.0F, 4.0F)) AS tab(col);
+       [4.0,6.0]
+      > SELECT _FUNC_(col) FROM VALUES (array(1.0D, 2.0D)), (array(3.0D, 4.0D)) AS tab(col);
        [4.0,6.0]
   """,
   since = "4.2.0",
   group = "vector_funcs"
 )
 // scalastyle:on line.size.limit
-// Note: This implementation uses single-precision floating-point arithmetic (Float).
+// Note: For ARRAY<FLOAT> input this implementation uses single-precision floating-point
+// arithmetic (Float); ARRAY<DOUBLE> input is summed in double precision.
 // Precision loss is expected for very large aggregates due to:
 // 1. Accumulated rounding errors when summing many values
 // 2. Loss of significance when adding small values to large accumulated sums
@@ -698,6 +764,8 @@ case class VectorSum(
   def this(child: Expression) = this(child, 0, 0)
 
   override def prettyName: String = "vector_sum"
+
+  override protected def supportedElementTypes: Seq[DataType] = Seq(FloatType, DoubleType)
 
   override def withNewMutableAggBufferOffset(
       newMutableAggBufferOffset: Int
@@ -717,8 +785,8 @@ case class VectorSum(
     // Update sum: new_sum = old_sum + new_value
     var i = 0
     while (i < dim) {
-      val off = Platform.BYTE_ARRAY_OFFSET + i.toLong * 4
-      Platform.putFloat(accBytes, off, Platform.getFloat(accBytes, off) + inputArray.getFloat(i))
+      elementAccessor.put(accBytes, i,
+        elementAccessor.get(accBytes, i) + elementAccessor.getInput(inputArray, i))
       i += 1
     }
   }
@@ -733,9 +801,8 @@ case class VectorSum(
     // Merge sums: combined_sum = left_sum + right_sum
     var i = 0
     while (i < dim) {
-      val off = Platform.BYTE_ARRAY_OFFSET + i.toLong * 4
-      Platform.putFloat(accBytes, off,
-        Platform.getFloat(accBytes, off) + Platform.getFloat(inputBytes, off))
+      elementAccessor.put(accBytes, i,
+        elementAccessor.get(accBytes, i) + elementAccessor.get(inputBytes, i))
       i += 1
     }
   }

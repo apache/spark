@@ -17,11 +17,15 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.SparkFunSuite
+import java.lang.{Double => JDouble}
+
+import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, SpecificInternalRow, VectorAvg, VectorSum}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, Expression, Literal, SpecificInternalRow, VectorAvg, VectorCosineSimilarity, VectorInnerProduct, VectorL2Distance, VectorNorm, VectorNormalize, VectorSum}
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
-import org.apache.spark.sql.types.{ArrayType, FloatType}
+import org.apache.spark.sql.types.{ArrayType, DoubleType, FloatType, IntegerType}
 
 class VectorAggSuite extends SparkFunSuite {
 
@@ -99,6 +103,40 @@ class VectorAggSuite extends SparkFunSuite {
       assertFloatEquals(a, e, tolerance)
     }
   }
+
+  def createDoubleVectorSum(): (VectorSum, InternalRow) = {
+    val input = new BoundReference(0, ArrayType(DoubleType), nullable = true)
+    val agg = new VectorSum(input)
+    val buffer = new SpecificInternalRow(agg.aggBufferAttributes.map(_.dataType))
+    agg.initialize(buffer)
+    (agg, buffer)
+  }
+
+  def createDoubleInputRow(values: Array[Double]): InternalRow = {
+    InternalRow(ArrayData.toArrayData(values))
+  }
+
+  def createDoubleInputRowWithNullElement(values: Array[JDouble]): InternalRow = {
+    InternalRow(new GenericArrayData(values.map {
+      case null => null
+      case v => v.doubleValue().asInstanceOf[AnyRef]
+    }))
+  }
+
+  def evalAsDoubleArray(agg: VectorSum, buffer: InternalRow): Array[Double] = {
+    val result = agg.eval(buffer)
+    if (result == null) return null
+    val arrayData = result.asInstanceOf[ArrayData]
+    (0 until arrayData.numElements()).map(i => arrayData.getDouble(i)).toArray
+  }
+
+  private val floatOnlyVectorFunctions: Map[String, Expression => Expression] = Map(
+    "vector_avg" -> ((v: Expression) => new VectorAvg(v)),
+    "vector_cosine_similarity" -> ((v: Expression) => VectorCosineSimilarity(v, v)),
+    "vector_inner_product" -> ((v: Expression) => VectorInnerProduct(v, v)),
+    "vector_l2_distance" -> ((v: Expression) => VectorL2Distance(v, v)),
+    "vector_norm" -> ((v: Expression) => VectorNorm(v, Literal(2.0f))),
+    "vector_normalize" -> ((v: Expression) => VectorNormalize(v, Literal(2.0f))))
 
   test("VectorSum - empty buffer returns null") {
     val (agg, buffer, _) = createVectorSum()
@@ -493,5 +531,127 @@ class VectorAggSuite extends SparkFunSuite {
     agg.update(buffer, createInputRow(Array(3.0f)))
     val result = evalAsFloatArray(agg, buffer)
     assert(result === Array(4.0f))
+  }
+
+  test("VectorSum - result type follows input element type") {
+    val (doubleAgg, _) = createDoubleVectorSum()
+    assert(doubleAgg.checkInputDataTypes() === TypeCheckResult.TypeCheckSuccess)
+    assert(doubleAgg.dataType === ArrayType(DoubleType, containsNull = false))
+
+    val (floatAgg, _, _) = createVectorSum()
+    assert(floatAgg.checkInputDataTypes() === TypeCheckResult.TypeCheckSuccess)
+    assert(floatAgg.dataType === ArrayType(FloatType, containsNull = false))
+  }
+
+  test("VectorSum - rejects unsupported element type") {
+    val input = new BoundReference(0, ArrayType(IntegerType), nullable = true)
+    new VectorSum(input).checkInputDataTypes() match {
+      case DataTypeMismatch(errorSubClass, params) =>
+        assert(errorSubClass === "UNEXPECTED_INPUT_TYPE")
+        assert(params("requiredType") === "\"ARRAY<FLOAT>\" or \"ARRAY<DOUBLE>\"")
+        assert(params("inputType") === "\"ARRAY<INT>\"")
+      case other => fail(s"Expected DataTypeMismatch but got $other")
+    }
+  }
+
+  gridTest("Vector functions other than vector_sum reject double vectors")(
+      floatOnlyVectorFunctions.keys.toSeq.sorted) { name =>
+    val input = new BoundReference(0, ArrayType(DoubleType), nullable = true)
+    floatOnlyVectorFunctions(name)(input).checkInputDataTypes() match {
+      case DataTypeMismatch(errorSubClass, params) =>
+        assert(errorSubClass === "UNEXPECTED_INPUT_TYPE")
+        assert(params("requiredType") === "\"ARRAY<FLOAT>\"")
+        assert(params("inputType") === "\"ARRAY<DOUBLE>\"")
+      case other => fail(s"Expected DataTypeMismatch but got $other")
+    }
+  }
+
+  test("VectorSum - double: empty buffer returns null") {
+    val (agg, buffer) = createDoubleVectorSum()
+    assert(agg.eval(buffer) === null)
+  }
+
+  test("VectorSum - double: multiple vectors") {
+    val (agg, buffer) = createDoubleVectorSum()
+    agg.update(buffer, createDoubleInputRow(Array(1.0, 2.0)))
+    agg.update(buffer, createDoubleInputRow(Array(3.0, 4.0)))
+    agg.update(buffer, createDoubleInputRow(Array(5.0, 6.0)))
+    assert(evalAsDoubleArray(agg, buffer) === Array(9.0, 12.0))
+  }
+
+  test("VectorSum - double: keeps precision lost by float") {
+    val (agg, buffer) = createDoubleVectorSum()
+    agg.update(buffer, createDoubleInputRow(Array(16777216.0, 0.1, 1.0e300)))
+    agg.update(buffer, createDoubleInputRow(Array(1.0, 0.2, 1.0e300)))
+    assert(evalAsDoubleArray(agg, buffer) === Array(16777217.0, 0.1 + 0.2, 2.0e300))
+  }
+
+  test("VectorSum - double: merge two buffers") {
+    val (agg, buffer1) = createDoubleVectorSum()
+    val (_, buffer2) = createDoubleVectorSum()
+    agg.update(buffer1, createDoubleInputRow(Array(1.0e-10, 2.0)))
+    agg.update(buffer1, createDoubleInputRow(Array(3.0, 4.0)))
+    agg.update(buffer2, createDoubleInputRow(Array(1.0e10, 6.0)))
+    agg.update(buffer2, createDoubleInputRow(Array(7.0, 8.0)))
+    agg.merge(buffer1, buffer2)
+    assert(evalAsDoubleArray(agg, buffer1) ===
+      Array((1.0e-10 + 3.0) + (1.0e10 + 7.0), 20.0))
+  }
+
+  test("VectorSum - double: merge with empty buffers") {
+    val (agg, buffer1) = createDoubleVectorSum()
+    val (_, buffer2) = createDoubleVectorSum()
+    agg.merge(buffer1, buffer2)
+    assert(agg.eval(buffer1) === null)
+
+    agg.update(buffer2, createDoubleInputRow(Array(1.5, 2.5)))
+    agg.merge(buffer1, buffer2)
+    assert(evalAsDoubleArray(agg, buffer1) === Array(1.5, 2.5))
+  }
+
+  test("VectorSum - double: null vectors and vectors with null elements are skipped") {
+    val (agg, buffer) = createDoubleVectorSum()
+    agg.update(buffer, createDoubleInputRow(Array(1.0, 2.0)))
+    agg.update(buffer, createNullInputRow())
+    agg.update(buffer, createDoubleInputRowWithNullElement(Array(null, 10.0)))
+    agg.update(buffer, createDoubleInputRow(Array(3.0, 4.0)))
+    assert(evalAsDoubleArray(agg, buffer) === Array(4.0, 6.0))
+  }
+
+  test("VectorSum - double: empty vectors") {
+    val (agg, buffer) = createDoubleVectorSum()
+    agg.update(buffer, createDoubleInputRow(Array.empty[Double]))
+    agg.update(buffer, createDoubleInputRow(Array.empty[Double]))
+    assert(evalAsDoubleArray(agg, buffer) === Array.empty[Double])
+  }
+
+  test("VectorSum - double: special values") {
+    val (agg, buffer) = createDoubleVectorSum()
+    agg.update(buffer, createDoubleInputRow(Array(1.0, 2.0, Double.MaxValue)))
+    agg.update(buffer, createDoubleInputRow(Array(Double.NaN, Double.NegativeInfinity, 1.0)))
+    val result = evalAsDoubleArray(agg, buffer)
+    assert(result(0).isNaN)
+    assert(result(1) === Double.NegativeInfinity)
+    assert(result(2) === Double.MaxValue)
+  }
+
+  test("VectorSum - double: dimension mismatch") {
+    val (agg, buffer1) = createDoubleVectorSum()
+    val (_, buffer2) = createDoubleVectorSum()
+    agg.update(buffer1, createDoubleInputRow(Array(1.0, 2.0)))
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        agg.update(buffer1, createDoubleInputRow(Array(1.0, 2.0, 3.0)))
+      },
+      condition = "VECTOR_DIMENSION_MISMATCH",
+      parameters = Map("functionName" -> "`vector_sum`", "leftDim" -> "2", "rightDim" -> "3"))
+
+    agg.update(buffer2, createDoubleInputRow(Array(1.0, 2.0, 3.0)))
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        agg.merge(buffer1, buffer2)
+      },
+      condition = "VECTOR_DIMENSION_MISMATCH",
+      parameters = Map("functionName" -> "`vector_sum`", "leftDim" -> "2", "rightDim" -> "3"))
   }
 }
