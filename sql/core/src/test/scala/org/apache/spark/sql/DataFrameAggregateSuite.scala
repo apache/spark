@@ -1307,6 +1307,28 @@ class DataFrameAggregateSuite extends SharedSparkSession
     checkAnswer(zeros.groupBy("x").count().where(col("x") === 0.0d), Row(0.0d, 2))
   }
 
+  test("SPARK-60150: IN and NOT IN subqueries on a float/double grouping key") {
+    withTempView("t", "u") {
+      // Two rows, so that OptimizeOneRowPlan does not remove the aggregate. Nullable columns, so
+      // that NOT IN is planned as a null-aware anti join.
+      Seq(Some(0.0d), Some(0.0d)).toDF("x").createOrReplaceTempView("t")
+      Seq(Some(-0.0d)).toDF("y").createOrReplaceTempView("u")
+
+      // The subquery becomes a join on the pushed, normalized key. The subquery side of the join
+      // must be normalized too, so that 0.0 matches -0.0.
+      checkAnswer(
+        sql("SELECT * FROM (SELECT DISTINCT x FROM t) WHERE x IN (SELECT y FROM u)"),
+        Row(0.0d))
+      checkAnswer(
+        sql("SELECT * FROM (SELECT DISTINCT x FROM t) WHERE x NOT IN (SELECT y FROM u)"),
+        Nil)
+      checkAnswer(
+        sql("SELECT * FROM (SELECT x * 1.0 AS k FROM t GROUP BY x * 1.0) " +
+          "WHERE k IN (SELECT y FROM u)"),
+        Row(0.0d))
+    }
+  }
+
   test("SPARK-57329: mode normalizes -0.0/0.0 in the frequency buffer") {
     checkAnswer(
       Seq(0.0d, 0.0d, -0.0d, -0.0d, 9.0d, 9.0d, 9.0d).toDF("d").select(expr("mode(d)")),
