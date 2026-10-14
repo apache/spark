@@ -2906,6 +2906,34 @@ class AdaptiveQueryExecSuite
     assert(LogicalQueryStageStrategy(mismatchedKind).isEmpty)
   }
 
+  test("LogicalQueryStageStrategy binds range broadcast keys to the physical stage output, " +
+      "not the logical query stage output") {
+    // The exchange was planned against a projection that put `hi` before `lo`, so the
+    // mode's bound key has ordinal 1. By the time AQE replans, RemoveRedundantProjects
+    // may have dropped that reordering projection from the logical side, leaving the
+    // LogicalQueryStage wrapping the original, differently-ordered `right` relation.
+    // Binding buildKeys against that logical output (ordinal 0) instead of the physical
+    // stage's output (ordinal 1) would fail to match the mode and lose the range join.
+    val leftAttr = AttributeReference("a", IntegerType)()
+    val lo = AttributeReference("lo", IntegerType)()
+    val hi = AttributeReference("hi", IntegerType)()
+    val left = LocalRelation(leftAttr)
+    val right = LocalRelation(lo, hi)
+    val cond = LessThan(leftAttr, lo)
+
+    val physicalOutput = Seq(hi, lo)
+    val bound: Expression = BindReferences.bindReference(lo, physicalOutput)
+    val mode = RangeBroadcastMode(Seq(bound), PointIndexKind)
+    val scan = LocalTableScanExec(physicalOutput, Nil, None)
+    val exchange = BroadcastExchangeExec(mode, scan)
+    val bqs = BroadcastQueryStageExec(0, exchange, exchange)
+    assert(bqs.output == physicalOutput)
+
+    val join = Join(left, LogicalQueryStage(right, bqs), Inner, Some(cond), JoinHint.NONE)
+    val planned = LogicalQueryStageStrategy(join).head.asInstanceOf[BroadcastRangeJoinExec]
+    assert(planned.rightKeys.head.semanticEquals(lo))
+  }
+
   test("range broadcast satisfies its distribution after AQE changes nullability") {
     // The exchange was built when lo was non-nullable. AQE rewrites the stage
     // output to nullable. Reuse must still satisfy BroadcastDistribution: the

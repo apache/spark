@@ -198,4 +198,12 @@ class ExtractRangeJoinKeysSuite extends PlanTest {
     assertUnrecognized(Join(left, right, Inner,
       Some(LessThan(left.output.head, right.output.head)), JoinHint.NONE))
   }
+
+  test("subquery expressions in range keys are not recognized") {
+    val subquery = ScalarSubquery(points)
+    val keyWithSubquery = Add(rLo, subquery)
+    assertUnrecognized(join(points, ranges, LessThanOrEqual(p, keyWithSubquery)))
+    assertUnrecognized(join(points, ranges,
+      And(GreaterThanOrEqual(p, keyWithSubquery), LessThanOrEqual(p, keyWithSubquery))))
+  }
 }
