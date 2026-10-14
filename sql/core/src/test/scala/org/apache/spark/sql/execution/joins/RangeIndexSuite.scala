@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.BoundReference
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -66,6 +67,26 @@ class RangeIndexSuite extends SparkFunSuite {
       }
     }
     (shared, iter)
+  }
+
+  private def reusingByteBufferStringIterator(
+      n: Int): (Array[Byte], Iterator[InternalRow]) = {
+    val sharedBytes = new Array[Byte](4)
+    val sharedRow = new org.apache.spark.sql.catalyst.expressions.GenericInternalRow(2)
+    val iter = new Iterator[InternalRow] {
+      private var i = 0
+      override def hasNext: Boolean = i < n
+      override def next(): InternalRow = {
+        val s = f"$i%04d"
+        java.lang.System.arraycopy(s.getBytes("UTF-8"), 0, sharedBytes, 0, 4)
+        val utf8 = UTF8String.fromAddress(sharedBytes, Platform.BYTE_ARRAY_OFFSET, 4)
+        sharedRow.update(0, utf8)
+        sharedRow.update(1, i)
+        i += 1
+        sharedRow
+      }
+    }
+    (sharedBytes, iter)
   }
 
   private def javaRoundTrip(index: IntervalIndex): (Array[Byte], IntervalIndex) = {
@@ -114,6 +135,24 @@ class RangeIndexSuite extends SparkFunSuite {
     (0 until n).foreach { i =>
       val payloads = index.overlapping(i, i).map(_.getInt(2)).toList
       assert(payloads == List(i), s"interval $i was corrupted by later reuse of the row buffer")
+    }
+  }
+
+  test("IntervalIndex.build defends against string keys sharing a reused byte buffer") {
+    val n = 50
+    val buildKeys = Seq(
+      BoundReference(0, StringType, nullable = true),
+      BoundReference(0, StringType, nullable = true))
+    val (sharedBytes, rows) = reusingByteBufferStringIterator(n)
+    val index = IntervalIndex.build(StringType, buildKeys, rows, Some(n))
+
+    java.util.Arrays.fill(sharedBytes, 'X'.toByte)
+
+    (0 until n).foreach { i =>
+      val key = UTF8String.fromString(f"$i%04d")
+      val matching = index.overlapping(key, key).toList
+      assert(matching.size == 1, s"interval $i was corrupted by shared buffer reuse")
+      assert(matching.head.getInt(1) == i)
     }
   }
 
@@ -370,6 +409,22 @@ class RangeIndexSuite extends SparkFunSuite {
     (0 until n).foreach { i =>
       val payload = index.from(i).next().getInt(1)
       assert(payload == i, s"point $i was corrupted by later reuse of the row buffer")
+    }
+  }
+
+  test("PointIndex.build defends against string keys sharing a reused byte buffer") {
+    val n = 50
+    val buildKeys = Seq(BoundReference(0, StringType, nullable = true))
+    val (sharedBytes, rows) = reusingByteBufferStringIterator(n)
+    val index = PointIndex.build(StringType, buildKeys, rows, Some(n))
+
+    java.util.Arrays.fill(sharedBytes, 'X'.toByte)
+
+    (0 until n).foreach { i =>
+      val key = UTF8String.fromString(f"$i%04d")
+      val matching = index.from(key).take(1).toList
+      assert(matching.nonEmpty && matching.head.getInt(1) == i,
+        s"point $i was corrupted by shared buffer reuse")
     }
   }
 

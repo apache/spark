@@ -557,7 +557,8 @@ object ExtractRangeJoinKeys extends PredicateHelper {
 
   private def supportedKeys(keys: Seq[Expression]*): Boolean = {
     keys.flatten.forall { key =>
-      key.references.nonEmpty && key.deterministic && RangePredicate.supportedType(key.dataType)
+      key.references.nonEmpty && key.deterministic &&
+        !SubqueryExpression.hasSubquery(key) && RangePredicate.supportedType(key.dataType)
     }
   }
 
