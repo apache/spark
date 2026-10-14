@@ -30,6 +30,7 @@ import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.distributions.Distributions
 import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.connector.expressions.Expressions._
+import org.apache.spark.sql.connector.read.HasPartitionKey
 import org.apache.spark.sql.execution.{RDDScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
@@ -2908,8 +2909,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     }
   }
 
-  test("SPARK-60203: SPJ with join-key subset projects originalPartitionValues when AQE " +
-      "is enabled") {
+  test("SPARK-60203: SPJ with join-key subset projects originalPartitionValues") {
     val table1 = "table1"
     val table2 = "table2"
     val cols = Array(
@@ -2917,9 +2917,11 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       Column.create("date", StringType),
       Column.create("data", StringType))
     // The join key is the second partition key of `table1` (`bucket(32, id)`), after the
-    // leading identity key `date`. After SPJ pushdown, callers such as ValidateRequirements
-    // invoke `createShuffleSpec` on the scan's projected `outputPartitioning`, which
-    // re-projects `originalPartitionValues` using the already-trimmed expressions.
+    // leading identity key `date`. After SPJ pushdown, the scan's `outputPartitioning`
+    // must carry `originalPartitionValues` projected to the join keys. When they are not,
+    // `KeyGroupedPartitioning.createShuffleSpec` re-projects the full rows with the trimmed
+    // expressions; connectors such as Iceberg throw a type mismatch, while the in-memory
+    // source here only misaligns the values.
     createTable(table1, cols,
       Array(identity("date"), bucket(32, "id"), bucket(32, "data")))
     sql(s"INSERT INTO testcat.ns.$table1 VALUES " +
@@ -2959,14 +2961,15 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
         assert(shuffles.isEmpty, "SPJ should be triggered")
         val smjs = collect(executedPlan) { case j: SortMergeJoinExec => j }
         assert(smjs.size == 1, "expected a sort-merge join")
-        val smj = smjs.head
         val projectedScan = scans.find(_.spjParams.joinKeyPositions.contains(Seq(1))).get
         val kgp = projectedScan.outputPartitioning.asInstanceOf[KeyGroupedPartitioning]
         assert(kgp.originalPartitionValues.nonEmpty)
         assert(kgp.originalPartitionValues.forall(_.numFields == kgp.expressions.length),
           "originalPartitionValues should be projected to the join keys")
-        // Without the fix, this throws when a string leading partition value is read as int.
-        kgp.createShuffleSpec(physical.ClusteredDistribution(smj.leftKeys))
+        // Each split's `bucket(32, id)` value, the second field of its raw partition key.
+        val expectedOriginals = projectedScan.inputPartitions.map(
+          _.asInstanceOf[HasPartitionKey].partitionKey().getInt(1))
+        assert(kgp.originalPartitionValues.map(_.getInt(0)).sorted == expectedOriginals.sorted)
         checkAnswer(df, Seq(
           Row("a", "2026-05-01", "aa", "xx"),
           Row("b", "2026-05-01", "bb", "yy")))
