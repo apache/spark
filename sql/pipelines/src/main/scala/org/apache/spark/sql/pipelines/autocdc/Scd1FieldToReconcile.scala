@@ -41,7 +41,7 @@ private[autocdc] case class Scd1FieldToReconcile(
 private[autocdc] object Scd1FieldToReconcile {
 
   /**
-   * Returns the fields to reconcile independently of each other, preserving schema order.
+   * Returns the fields to reconcile independently of each other.
    *
    * A column selected for ignore-null is reconciled leaf by leaf, since an upsert authors only the
    * leaves it provides as non-null. A null leaf in such a column means no live value was found to

@@ -29,11 +29,11 @@ class Scd1FieldToReconcileSuite extends SparkFunSuite {
 
   private def fieldsOf(
       schema: StructType,
-      ignoreNullSelection: Option[ColumnSelection]): Seq[Scd1FieldToReconcile] =
+      ignoreNullSelection: Option[ColumnSelection]): Set[Scd1FieldToReconcile] =
     Scd1FieldToReconcile.fromSchema(
       schema = schema,
       ignoreNullSelection = ignoreNullSelection,
-      resolver = caseSensitiveResolution)
+      resolver = caseSensitiveResolution).toSet
 
   private def includeColumns(names: String*): Option[ColumnSelection] =
     Some(ColumnSelection.IncludeColumns(names.map(UnqualifiedColumnName(_))))
@@ -49,18 +49,18 @@ class Scd1FieldToReconcileSuite extends SparkFunSuite {
       .add("name", StringType)
       .add("profile", profileType)
 
-    assert(fieldsOf(schema, ignoreNullSelection = None) == Seq(
+    assert(fieldsOf(schema, ignoreNullSelection = None) == Set(
       wholeColumn("name", Seq("name")),
       wholeColumn("profile", Seq("profile", "city"), Seq("profile", "contact", "zip"))))
   }
 
-  test("a column selected for ignore-null is reconciled leaf by leaf, in schema order") {
+  test("a column selected for ignore-null is reconciled leaf by leaf") {
     val schema = new StructType()
       .add("name", StringType)
       .add("profile", profileType)
       .add("age", IntegerType)
 
-    assert(fieldsOf(schema, includeColumns("profile", "age")) == Seq(
+    assert(fieldsOf(schema, includeColumns("profile", "age")) == Set(
       wholeColumn("name", Seq("name")),
       ignoreNullLeaf("profile", "city"),
       ignoreNullLeaf("profile", "contact", "zip"),
@@ -74,7 +74,7 @@ class Scd1FieldToReconcileSuite extends SparkFunSuite {
     val ignoreNullSelection =
       Some(ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("name"))))
 
-    assert(fieldsOf(schema, ignoreNullSelection) == Seq(
+    assert(fieldsOf(schema, ignoreNullSelection) == Set(
       wholeColumn("name", Seq("name")),
       ignoreNullLeaf("profile", "city"),
       ignoreNullLeaf("profile", "contact", "zip")))
@@ -85,7 +85,7 @@ class Scd1FieldToReconcileSuite extends SparkFunSuite {
       .add("tags", ArrayType(new StructType().add("label", StringType)))
       .add("properties", MapType(StringType, profileType))
 
-    assert(fieldsOf(schema, includeColumns("tags")) == Seq(
+    assert(fieldsOf(schema, includeColumns("tags")) == Set(
       ignoreNullLeaf("tags"),
       wholeColumn("properties", Seq("properties"))))
   }
@@ -95,10 +95,10 @@ class Scd1FieldToReconcileSuite extends SparkFunSuite {
       .add("empty", new StructType())
       .add("name", StringType)
 
-    assert(fieldsOf(schema, ignoreNullSelection = None) == Seq(
+    assert(fieldsOf(schema, ignoreNullSelection = None) == Set(
       wholeColumn("empty"),
       wholeColumn("name", Seq("name"))))
-    assert(fieldsOf(schema, includeColumns("empty")) == Seq(wholeColumn("name", Seq("name"))))
+    assert(fieldsOf(schema, includeColumns("empty")) == Set(wholeColumn("name", Seq("name"))))
   }
 
   test("a top-level name containing a dot stays distinct from a nested path") {
@@ -106,7 +106,7 @@ class Scd1FieldToReconcileSuite extends SparkFunSuite {
       .add("profile", new StructType().add("city", StringType))
       .add("profile.city", StringType)
 
-    assert(fieldsOf(schema, includeColumns("profile")) == Seq(
+    assert(fieldsOf(schema, includeColumns("profile")) == Set(
       ignoreNullLeaf("profile", "city"),
       wholeColumn("profile.city", Seq("profile.city"))))
   }
@@ -121,6 +121,6 @@ class Scd1FieldToReconcileSuite extends SparkFunSuite {
       ignoreNullSelection = includeColumns("profile"),
       resolver = caseInsensitiveResolution)
 
-    assert(fields == Seq(ignoreNullLeaf("Profile", "City"), wholeColumn("Name", Seq("Name"))))
+    assert(fields.toSet == Set(ignoreNullLeaf("Profile", "City"), wholeColumn("Name", Seq("Name"))))
   }
 }
