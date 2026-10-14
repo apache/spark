@@ -164,7 +164,7 @@ object ResolveWriteToStream extends Rule[LogicalPlan] {
   private def checkDuplicateSourceNames(plan: LogicalPlan): Unit = {
     // should use the same relation equality as the source reuse in MicroBatchExecution
     val allSourceNames = plan.collect {
-      case s: StreamingRelation   => s -> s.sourceIdentifyingName
+      case s: StreamingRelation => s -> s.sourceIdentifyingName
       case s: StreamingRelationV2 => s -> s.sourceIdentifyingName
     }.distinct.map(_._2)
 
