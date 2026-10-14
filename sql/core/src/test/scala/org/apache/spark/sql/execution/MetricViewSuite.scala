@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.metricview.serde.{AssetSource, Column, DimensionExpression, MeasureExpression, MetricView, MetricViewFactory, SQLSource}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -185,6 +186,50 @@ abstract class MetricViewSuite extends QueryTest {
         checkAnswer(
           sql(s"SELECT measure(count_sum) FROM $testMetricViewName"),
           sql(s"SELECT sum(count) FROM default.$testTableName"))
+      }
+    }
+  }
+
+  test("metric view source is analyzed with the configs captured at creation") {
+    // `PRODUCT` only resolves case-insensitively, which is the default at creation.
+    val metricView = MetricView(
+      "0.1", AssetSource(testTableName), Some("PRODUCT = 'product_1'"), testMetricViewColumns)
+    withMetricView(testMetricViewName, metricView) {
+      val expected = sql(s"SELECT sum(count) FROM $testTableName WHERE product = 'product_1'")
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        checkAnswer(sql(s"SELECT measure(count_sum) FROM $testMetricViewName"), expected)
+        withSQLConf(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_VIEW.key -> "true") {
+          val e = intercept[AnalysisException] {
+            sql(s"SELECT measure(count_sum) FROM $testMetricViewName")
+          }
+          assert(e.getCondition === "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+        }
+      }
+    }
+  }
+
+  test("metric view counts toward the nested view depth") {
+    withView("v") {
+      sql(s"CREATE VIEW v AS SELECT * FROM $testTableName")
+      val metricView = MetricView("0.1", AssetSource("v"), None, testMetricViewColumns)
+      withMetricView(testMetricViewName, metricView) {
+        withSQLConf(SQLConf.MAX_NESTED_VIEW_DEPTH.key -> "1") {
+          checkAnswer(sql("SELECT count(*) FROM v"), Row(testTableData.length))
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"SELECT measure(count_sum) FROM $testMetricViewName")
+            },
+            condition = "VIEW_EXCEED_MAX_NESTED_DEPTH",
+            parameters = Map(
+              "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`v`",
+              "maxNestedDepth" -> "1"),
+            context = ExpectedContext(
+              "METRIC VIEW",
+              s"$SESSION_CATALOG_NAME.default.$testMetricViewName",
+              31,
+              30 + testMetricViewName.length,
+              testMetricViewName))
+        }
       }
     }
   }
