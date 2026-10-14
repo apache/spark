@@ -47,7 +47,7 @@ class RuntimeConfig private[sql](val sqlConf: SQLConf = new SQLConf) extends sql
       //
       // Scoped to the prefix so an ordinary configuration write does not take the monitor. Check
       // and write under the monitor that guards the session configurations -- every method of
-      // `settings` locks the map itself, so every `put` locks the map this block locks -- because
+      // `settings` except its views locks the map itself, so `put` takes this lock too -- because
       // the count and total-size limits are properties of the whole environment: without it two
       // concurrent writers could each validate against the pre-write environment and jointly exceed
       // a limit that neither write appeared to break. `Option` rather than `Some`, so a null value
