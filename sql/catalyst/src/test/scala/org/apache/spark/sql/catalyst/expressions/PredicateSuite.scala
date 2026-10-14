@@ -576,21 +576,25 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     // PushPredicateThroughNonJoin pushes these comparisons below an Aggregate without
     // normalizing a float/double grouping key that is a direct operand, so each must give the
     // same result for a value and for its normalized form: -0.0 and 0.0, and NaNs with different
-    // bit patterns.
+    // bit patterns. The values come from the input row rather than literals, because literal
+    // codegen emits every NaN as the canonical NaN, and pushed filters read raw input values.
     val binary: Seq[(Expression, Expression) => Expression] = Seq(
       EqualTo, EqualNullSafe, LessThan, LessThanOrEqual, GreaterThan, GreaterThanOrEqual,
       (l, r) => In(l, Seq(r)))
     val unary: Seq[Expression => Expression] = Seq(IsNull, IsNotNull, IsNaN)
 
     def check(dataType: DataType, values: Seq[Any]): Unit = {
-      def lit(v: Any): Expression = Literal.create(v, dataType)
-      def norm(v: Any): Expression = lit(NormalizeNaNAndZero(lit(v)).eval())
+      val left = BoundReference(0, dataType, nullable = true)
+      val right = BoundReference(1, dataType, nullable = true)
+      def norm(v: Any): Any = NormalizeNaNAndZero(Literal.create(v, dataType)).eval()
       for (v <- values; w <- values; op <- binary) {
-        checkEvaluation(op(lit(v), lit(w)), op(norm(v), lit(w)).eval())
-        checkEvaluation(op(lit(v), lit(w)), op(lit(v), norm(w)).eval())
+        val e = op(left, right)
+        checkEvaluation(e, e.eval(InternalRow(norm(v), w)), InternalRow(v, w))
+        checkEvaluation(e, e.eval(InternalRow(v, norm(w))), InternalRow(v, w))
       }
       for (v <- values; op <- unary) {
-        checkEvaluation(op(lit(v)), op(norm(v)).eval())
+        val e = op(left)
+        checkEvaluation(e, e.eval(InternalRow(norm(v))), InternalRow(v))
       }
     }
 
