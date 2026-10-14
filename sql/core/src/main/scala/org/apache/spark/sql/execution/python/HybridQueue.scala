@@ -62,9 +62,8 @@ abstract class HybridQueue[T, Q <: Queue[T]](
   // exposed for testing
   private[python] def numQueues(): Int = queues.size()
 
-  // A memory consumer must use identity equality. TaskMemoryManager tracks consumers in a
-  // HashSet, so two queues that compare equal would be tracked (and offered for spilling) as one.
-  // These are final so that no subclass, including a case class, can switch to value equality.
+  // MemoryConsumer already defines identity equality (see its class Javadoc). These overrides
+  // only make it final, so that no subclass of HybridQueue can switch to value equality.
   final override def equals(other: Any): Boolean = other match {
     case ref: AnyRef => this eq ref
     case _ => false

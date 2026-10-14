@@ -158,3 +158,98 @@ struct<id:int,kind:string,date_value:date,int_value:int>
 1	all_null	NULL	NULL
 1	date_only	2026-01-01	NULL
 1	int_only	NULL	2
+
+
+-- !query
+create temporary view monthlySales as select * from values
+  ("north", 10, 20, 30, cast(null as int)),
+  ("south", 5, 6, NULL, NULL)
+  as monthlySales(store, jan, feb, mar, apr)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT store, half, b.lo, b.hi, b.hi IS NULL AS hi_is_null
+FROM (
+  SELECT store, named_struct('lo', jan, 'hi', feb) AS h1, named_struct('lo', mar, 'hi', apr) AS h2
+  FROM monthlySales
+)
+UNPIVOT (b FOR half IN (h1, h2))
+ORDER BY store, half
+-- !query schema
+struct<store:string,half:string,lo:int,hi:int,hi_is_null:boolean>
+-- !query output
+north	h1	10	20	false
+north	h2	30	NULL	true
+south	h1	5	6	false
+south	h2	NULL	NULL	true
+
+
+-- !query
+SELECT store, half, b.lo, b.hi, b.hi IS NULL AS hi_is_null
+FROM (
+  SELECT store, named_struct('lo', jan, 'hi', feb) AS h1, named_struct('lo', mar, 'hi', apr) AS h2
+  FROM monthlySales
+)
+UNPIVOT (b FOR half IN (h2, h1))
+ORDER BY store, half
+-- !query schema
+struct<store:string,half:string,lo:int,hi:int,hi_is_null:boolean>
+-- !query output
+north	h1	10	20	false
+north	h2	30	NULL	true
+south	h1	5	6	false
+south	h2	NULL	NULL	true
+
+
+-- !query
+SELECT store, half, m, m IS NULL AS m_is_null
+FROM (SELECT store, array(jan, feb) AS h1, array(mar, apr) AS h2 FROM monthlySales)
+UNPIVOT (months FOR half IN (h1, h2))
+LATERAL VIEW explode(months) e AS m
+ORDER BY store, half, m
+-- !query schema
+struct<store:string,half:string,m:int,m_is_null:boolean>
+-- !query output
+north	h1	10	false
+north	h1	20	false
+north	h2	NULL	true
+north	h2	30	false
+south	h1	5	false
+south	h1	6	false
+south	h2	NULL	true
+south	h2	NULL	true
+
+
+-- !query
+SELECT store, half, m['k'] AS v, m['k'] IS NULL AS v_is_null
+FROM (SELECT store, map('k', jan) AS m1, map('k', mar) AS m2 FROM monthlySales)
+UNPIVOT (m FOR half IN (m1, m2))
+ORDER BY store, half
+-- !query schema
+struct<store:string,half:string,v:int,v_is_null:boolean>
+-- !query output
+north	m1	10	false
+north	m2	30	false
+south	m1	5	false
+south	m2	NULL	true
+
+
+-- !query
+SELECT store, half, s.hi, s.hi IS NULL AS hi_is_null, a
+FROM (
+  SELECT store, named_struct('hi', feb) AS s1, jan AS a1, named_struct('hi', apr) AS s2, mar AS a2
+  FROM monthlySales
+)
+UNPIVOT ((s, a) FOR half IN ((s1, a1) AS x, (s2, a2) AS y))
+ORDER BY store, half
+-- !query schema
+struct<store:string,half:string,hi:int,hi_is_null:boolean,a:int>
+-- !query output
+north	x	20	false	10
+north	y	NULL	true	30
+south	x	6	false	5
+south	y	NULL	true	NULL

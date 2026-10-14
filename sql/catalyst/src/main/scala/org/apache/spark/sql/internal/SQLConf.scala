@@ -1108,6 +1108,7 @@ object SQLConf {
 
   val SORT_MERGE_AS_OF_JOIN_ENABLED =
     buildConf("spark.sql.join.sortMergeAsOfJoin.enabled")
+      .internal()
       .doc("When true, use a dedicated sort-merge physical operator for AS-OF joins " +
         "instead of rewriting to a correlated subquery. The sort-merge operator evaluates " +
         "AS-OF joins in O(N log N) by co-sorting both sides on the as-of key and scanning " +
@@ -1119,6 +1120,7 @@ object SQLConf {
 
   val SQL_ASOF_JOIN_ENABLED =
     buildConf("spark.sql.join.asofJoin.enabled")
+      .internal()
       .doc("When true, enable SQL ASOF JOIN syntax with MATCH_CONDITION and plan it with " +
         "the sort-merge ASOF join physical operator. When false, ASOF JOIN fails at parse time.")
       .version("4.3.0")
@@ -7711,6 +7713,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_UNPIVOT_USE_FIRST_VALUE_NESTED_NULLABILITY =
+    buildConf("spark.sql.legacy.unpivot.useFirstValueNestedNullability")
+      .internal()
+      .doc("When true, the value columns of UNPIVOT and Dataset.unpivot take the nested " +
+        "nullability (array element, map value, and struct field nullability) of the first " +
+        "listed value, which is the behavior in Spark 4.3 and earlier. A NULL nested value of " +
+        "a later value can then be returned as a non-NULL value. When false, the nested " +
+        "nullability of all values is merged.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT =
     buildConf("spark.sql.legacy.createHiveTableByDefault")
       .internal()
@@ -7987,7 +8002,10 @@ object SQLConf {
       "FILTER (WHERE ...) clauses on each aggregate expression. " +
       "Merging two filtered scans broadens the combined filter to OR(f1, f2), which may " +
       "reduce IO pruning (e.g. partition or file skipping) compared to the individual " +
-      "filters. Disabled by default; enable once the behaviour has been validated in your " +
+      "filters. When both subplans filter both join children, the merged join can also " +
+      "produce pairs that neither subplan needs, increasing join work or making a formerly " +
+      "broadcastable input too large to broadcast. Disabled by default; enable once the " +
+      "behaviour has been validated in your " +
       "workload, particularly on heavily partitioned or file-pruned tables. " +
       s"Has no effect when ${MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key} is false.")
     .version("4.2.0")
