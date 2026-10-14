@@ -46,11 +46,31 @@ class OptimizeSkewedKeyGroupsSuite extends KeyGroupedPartitioningSuiteBase {
       val join = SortMergeJoinExec(Seq(exprA), Seq(exprB), Inner, None,
         SortExec(Seq(SortOrder(exprA, Ascending)), global = false, outer),
         SortExec(Seq(SortOrder(exprB, Ascending)), global = false, right))
-      assert(OptimizeSkewedKeyGroups(join) == join)
+      assert(OptimizeSkewedKeyGroups().apply(join) == join)
       assert(!join.exists {
         case g: GroupPartitionsExec => g.expectedKeySpecs.exists(_.exists(_.skewed))
         case _ => false
       })
+    }
+  }
+
+  test("SPARK-59436: skew optimization preserves the required final distribution") {
+    withSkewGroupSplit {
+      val join = SortMergeJoinExec(Seq(exprA), Seq(exprB), Inner, None,
+        DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprA),
+          Seq.fill(10)(InternalRow(1)) ++ Seq(InternalRow(2)))),
+        DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprB),
+          Seq(InternalRow(1), InternalRow(2)))))
+      val required = ClusteredDistribution(Seq(exprA))
+      val original = EnsureRequirements().apply(join)
+      assert(original.outputPartitioning.satisfies(required))
+      val split = OptimizeSkewedKeyGroups().apply(original)
+      assert(split.exists { case g: GroupPartitionsExec => g.isSkew; case _ => false })
+      assert(ValidateRequirements.validate(split))
+      assert(!split.outputPartitioning.satisfies(required))
+      val retained = OptimizeSkewedKeyGroups(Some(required)).apply(original)
+      assert(retained eq original)
+      assert(ValidateRequirements.validate(retained, required))
     }
   }
 
@@ -65,7 +85,7 @@ class OptimizeSkewedKeyGroupsSuite extends KeyGroupedPartitioningSuiteBase {
       val consumer = DummySparkPlan(children = Seq(FilterExec(Literal(true), aligned)),
         requiredChildDistribution = Seq(ClusteredDistribution(Seq(exprA))),
         requiredChildOrdering = Seq(Nil))
-      assert(OptimizeSkewedKeyGroups(consumer) eq consumer,
+      assert(OptimizeSkewedKeyGroups().apply(consumer) eq consumer,
         "a rejected candidate must return the original stage, including its wrappers")
       val exchange = ShuffleExchangeExec(
         ClusteredDistribution(Seq(exprA)).createPartitioning(5), aligned)
@@ -73,14 +93,14 @@ class OptimizeSkewedKeyGroupsSuite extends KeyGroupedPartitioningSuiteBase {
         requiredChildDistribution = Seq(ClusteredDistribution(Seq(exprA)),
           org.apache.spark.sql.catalyst.plans.physical.UnspecifiedDistribution),
         requiredChildOrdering = Seq(Nil, Nil))
-      val result = OptimizeSkewedKeyGroups(outer)
+      val result = OptimizeSkewedKeyGroups().apply(outer)
       assert(result.children(1) eq consumer, "rollback must retain the original local branch")
       assert(result.children.head.exists {
         case g: GroupPartitionsExec => g.expectedKeySpecs.exists(_.exists(_.skewed))
         case _ => false
       }, "the independent exchange input must retain its skew optimization")
       assert(ValidateRequirements.validate(result))
-      assert(OptimizeSkewedKeyGroups(result) == result)
+      assert(OptimizeSkewedKeyGroups().apply(result) == result)
     }
   }
 
@@ -93,10 +113,10 @@ class OptimizeSkewedKeyGroupsSuite extends KeyGroupedPartitioningSuiteBase {
         DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprB),
           Seq(InternalRow(1), InternalRow(2))))))
       withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "false") {
-        assert(OptimizeSkewedKeyGroups(plan) eq plan)
+        assert(OptimizeSkewedKeyGroups().apply(plan) eq plan)
       }
       withSQLConf(SQLConf.V2_BUCKETING_SKEW_JOIN_ENABLED.key -> "false") {
-        assert(OptimizeSkewedKeyGroups(plan) eq plan)
+        assert(OptimizeSkewedKeyGroups().apply(plan) eq plan)
       }
     }
   }
@@ -106,11 +126,11 @@ class OptimizeSkewedKeyGroupsSuite extends KeyGroupedPartitioningSuiteBase {
     // over what they left: a pass has to be a fixed point of the two, or the plan changes under
     // the rules that read it.
     def stable(plan: SparkPlan, what: String): Unit = {
-      val first = OptimizeSkewedKeyGroups.apply(EnsureRequirements().apply(plan))
-      val direct = OptimizeSkewedKeyGroups(first)
+      val first = OptimizeSkewedKeyGroups().apply(EnsureRequirements().apply(plan))
+      val direct = OptimizeSkewedKeyGroups().apply(first)
       assert(first == direct, s"$what: applying the skew rule twice changed the plan")
       assert(ValidateRequirements.validate(first), s"$what: the result must satisfy requirements")
-      val second = OptimizeSkewedKeyGroups.apply(EnsureRequirements().apply(first))
+      val second = OptimizeSkewedKeyGroups().apply(EnsureRequirements().apply(first))
       assert(first == second,
         s"$what: a second pass changed the plan:\n--- first ---\n${first.treeString}" +
           s"\n--- second ---\n${second.treeString}")
@@ -150,7 +170,7 @@ class OptimizeSkewedKeyGroupsSuite extends KeyGroupedPartitioningSuiteBase {
   private val exprB = AttributeReference("b", IntegerType)()
 
   private def planSkewJoin(plan: SparkPlan): SparkPlan = {
-    val optimized = OptimizeSkewedKeyGroups(EnsureRequirements().apply(plan))
+    val optimized = OptimizeSkewedKeyGroups().apply(EnsureRequirements().apply(plan))
     optimized.foreach {
       case join: ShuffledJoin => join.children.foreach { side =>
         def groupings(p: SparkPlan): Seq[GroupPartitionsExec] = p match {
@@ -669,6 +689,92 @@ class OptimizeSkewedKeyGroupsSuite extends KeyGroupedPartitioningSuiteBase {
         SQLConf.V2_BUCKETING_SKEW_JOIN_SKEWED_GROUP_FACTOR.key -> "1.0")(body)
   }
 
+  test("SPARK-59436: shuffled hash joins share the skew alignment contract") {
+    withSkewSplitTables(withUnmatched = false) {
+      for (aqe <- Seq(false, true); codegen <- Seq(false, true)) {
+        withSQLConf(
+            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+            SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString) {
+          val df = sql(s"SELECT /*+ SHUFFLE_HASH(p) */ i.id, i.name, p.price " +
+            s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p ON i.id = p.item_id")
+          checkAnswer(df, (1 to 8).map(n => Row(1L, s"n$n", 42.0)) :+ Row(2L, "cc", 11.0))
+          val plan = stripAQEPlan(df.queryExecution.executedPlan)
+          assert(plan.exists(_.isInstanceOf[
+            org.apache.spark.sql.execution.joins.ShuffledHashJoinExec]), plan.treeString)
+          assert(collectAllGroupPartitions(plan).count(_.isSkew) == 2, plan.treeString)
+          assert(collectAllShuffles(plan).isEmpty, plan.treeString)
+          assert(ValidateRequirements.validate(plan))
+        }
+      }
+    }
+  }
+
+  test("SPARK-59436: a join with unique keyed inputs needs no grouping") {
+    createTable("unique_l", Array(Column.create("id", LongType)), Array(identity("id")))
+    createTable("unique_r", Array(Column.create("id", LongType)), Array(identity("id")))
+    sql("INSERT INTO testcat.ns.unique_l VALUES (1), (2)")
+    sql("INSERT INTO testcat.ns.unique_r VALUES (1), (2)")
+    for (aqe <- Seq(false, true); enabled <- Seq(false, true)) {
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+          SQLConf.V2_BUCKETING_SKEW_JOIN_ENABLED.key -> enabled.toString) {
+        val df = sql("SELECT /*+ MERGE(l), MERGE(r) */ l.id " +
+          "FROM testcat.ns.unique_l l JOIN testcat.ns.unique_r r ON l.id = r.id")
+        checkAnswer(df, Seq(Row(1L), Row(2L)))
+        val plan = stripAQEPlan(df.queryExecution.executedPlan)
+        assert(collectAllGroupPartitions(plan).isEmpty, plan.treeString)
+        assert(collectAllShuffles(plan).isEmpty, plan.treeString)
+        assert(ValidateRequirements.validate(plan))
+      }
+    }
+  }
+
+  test("SPARK-59436: an aggregate before the join preserves its grouping") {
+    withSkewSplitTables(withUnmatched = false) {
+      for (aqe <- Seq(false, true); enabled <- Seq(false, true)) {
+        withSQLConf(
+            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+            SQLConf.V2_BUCKETING_SKEW_JOIN_ENABLED.key -> enabled.toString) {
+          val df = sql(s"SELECT /*+ MERGE(i), MERGE(p) */ i.id, i.n, p.price FROM " +
+            s"(SELECT id, count(*) AS n FROM testcat.ns.$items GROUP BY id) i " +
+            s"JOIN testcat.ns.$purchases p ON i.id = p.item_id")
+          checkAnswer(df, Seq(Row(1L, 8L, 42.0), Row(2L, 1L, 11.0)))
+          val plan = stripAQEPlan(df.queryExecution.executedPlan)
+          val joins = collect(plan) { case j: ShuffledJoin => j }
+          assert(joins.size == 1, plan.treeString)
+          assert(joins.head.children.exists(_.exists(
+            _.isInstanceOf[org.apache.spark.sql.execution.aggregate.BaseAggregateExec])),
+            "the aggregate must remain below the join")
+          assert(collectAllGroupPartitions(plan).nonEmpty, plan.treeString)
+          assert(!collectAllGroupPartitions(plan).exists(_.isSkew), plan.treeString)
+          assert(collectAllShuffles(plan).isEmpty, plan.treeString)
+          assert(ValidateRequirements.validate(plan))
+        }
+      }
+    }
+  }
+
+  test("SPARK-59436: a one-sided keyed shuffle remains an exchange boundary") {
+    withSkewSplitTables(withUnmatched = false) {
+      for (aqe <- Seq(false, true); enabled <- Seq(false, true)) {
+        withSQLConf(
+            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+            SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false",
+            SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+            SQLConf.V2_BUCKETING_SKEW_JOIN_ENABLED.key -> enabled.toString) {
+          val df = sql(s"SELECT /*+ MERGE(i), MERGE(r) */ i.id, i.name FROM " +
+            s"testcat.ns.$items i JOIN range(1, 3) r ON i.id = r.id")
+          checkAnswer(df, (1 to 8).map(n => Row(1L, s"n$n")) :+ Row(2L, "cc"))
+          val plan = stripAQEPlan(df.queryExecution.executedPlan)
+          assert(collectAllShuffles(plan).size == 1, plan.treeString)
+          assert(collectAllGroupPartitions(plan).nonEmpty, plan.treeString)
+          assert(!collectAllGroupPartitions(plan).exists(_.isSkew), plan.treeString)
+          assert(ValidateRequirements.validate(plan))
+        }
+      }
+    }
+  }
+
   test("SPARK-59436: skewed group split spreads a many-splits key and replicates the other side") {
     // The join key `id` is coarser than the items side's `(id, name)` partitioning, so key 1
     // collects 8 input splits there against 1 on purchases; key 2 is even. With the split on,
@@ -833,52 +939,55 @@ class OptimizeSkewedKeyGroupsSuite extends KeyGroupedPartitioningSuiteBase {
 
 
   test("SPARK-59436: a second grouping rolls back mixed skew optimization for the stage") {
-    // The lower join spreads each key on a different side. The upper alignment replaces its
-    // own grouping rather than stacking another grouping directly over it.
-    createTable(items, itemsColumns, Array(identity("id"), identity("name")))
-    sql(s"INSERT INTO testcat.ns.$items VALUES " +
-      (1 to 8).map(n => s"(1, 'n$n', ${40.0 + n}, cast('2020-01-01' as timestamp))")
-        .mkString("", ", ", ", ") +
-      s"(2, 'cc', 10.0, cast('2020-01-01' as timestamp))")
+    for (aqe <- Seq(false, true)) {
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
+        catalog.clearTables()
+        // The lower join spreads each key on a different side. The upper alignment replaces its
+        // own grouping rather than stacking another grouping directly over it.
+        createTable(items, itemsColumns, Array(identity("id"), identity("name")))
+        sql(s"INSERT INTO testcat.ns.$items VALUES " +
+          (1 to 8).map(n => s"(1, 'n$n', ${40.0 + n}, cast('2020-01-01' as timestamp))")
+            .mkString("", ", ", ", ") +
+          s"(2, 'cc', 10.0, cast('2020-01-01' as timestamp))")
 
-    // The mirror of the left side: one split for key 1 and eight for key 2.
-    createTable(purchases, purchasesColumns, Array(identity("item_id"), identity("price")))
-    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
-      s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
-      (1 to 8).map(n => s"(2, $n.0, cast('2020-01-01' as timestamp))").mkString(", "))
+        // The mirror of the left side: one split for key 1 and eight for key 2.
+        createTable(purchases, purchasesColumns, Array(identity("item_id"), identity("price")))
+        sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+          s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+          (1 to 8).map(n => s"(2, $n.0, cast('2020-01-01' as timestamp))").mkString(", "))
 
-    val others = "others"
-    createTable(others,
-      Array(Column.create("item_id", LongType), Column.create("tag", StringType)),
-      Array(identity("item_id")))
-    sql(s"INSERT INTO testcat.ns.$others VALUES (1, 'x'), (2, 'y')")
+        val others = "others"
+        createTable(others,
+          Array(Column.create("item_id", LongType), Column.create("tag", StringType)),
+          Array(identity("item_id")))
+        sql(s"INSERT INTO testcat.ns.$others VALUES (1, 'x'), (2, 'y')")
 
-    withSQLConf(
-        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
-        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
-        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
-        SQLConf.V2_BUCKETING_SKEW_JOIN_ENABLED.key -> "true",
-        SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "false",
-        // Each side uses its own median; the absolute threshold keeps small groups coalesced.
-        SQLConf.V2_BUCKETING_SKEW_JOIN_SKEWED_PARTITIONS_PER_GROUP_THRESHOLD.key -> "4",
-        SQLConf.V2_BUCKETING_SKEW_JOIN_SKEWED_GROUP_FACTOR.key -> "0.5") {
-      val df = sql(s"SELECT /*+ MERGE(p), MERGE(o) */ i.id, i.name, p.price, o.tag " +
-        s"FROM testcat.ns.$items i " +
-        s"JOIN testcat.ns.$purchases p ON p.item_id = i.id " +
-        s"JOIN testcat.ns.$others o ON o.item_id = i.id")
-      val expected = (1 to 8).map(n => Row(1, s"n$n", 42.0, "x")) ++
-        (1 to 8).map(n => Row(2, "cc", n.toDouble, "y"))
-      checkAnswer(df, expected)
+        withSQLConf(
+            SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+            SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+            SQLConf.V2_BUCKETING_SKEW_JOIN_ENABLED.key -> "true",
+            SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "false",
+            // Each side uses its own median; the absolute threshold keeps small groups coalesced.
+            SQLConf.V2_BUCKETING_SKEW_JOIN_SKEWED_PARTITIONS_PER_GROUP_THRESHOLD.key -> "4",
+            SQLConf.V2_BUCKETING_SKEW_JOIN_SKEWED_GROUP_FACTOR.key -> "0.5") {
+          val df = sql(s"SELECT /*+ MERGE(p), MERGE(o) */ i.id, i.name, p.price, o.tag " +
+            s"FROM testcat.ns.$items i " +
+            s"JOIN testcat.ns.$purchases p ON p.item_id = i.id " +
+            s"JOIN testcat.ns.$others o ON o.item_id = i.id")
+          val expected = (1 to 8).map(n => Row(1, s"n$n", 42.0, "x")) ++
+            (1 to 8).map(n => Row(2, "cc", n.toDouble, "y"))
+          checkAnswer(df, expected)
 
-      val plan = stripAQEPlan(df.queryExecution.executedPlan)
-      val joins = collect(plan) { case j: ShuffledJoin => j }
-      assert(joins.size == 2, s"expected two joins in\n$plan")
-      assert(collectAllShuffles(plan).size == 0, s"the whole plan must not shuffle:\n$plan")
-      val groupings = collectAllGroupPartitions(plan)
-      assert(groupings.nonEmpty, plan.treeString)
-      assert(groupings.nonEmpty, plan.treeString)
-      assert(groupings.forall(_.expectedKeySpecs.forall(_.forall(!_.skewed))), plan.treeString)
-      assert(ValidateRequirements.validate(plan), plan.treeString)
+          val plan = stripAQEPlan(df.queryExecution.executedPlan)
+          val joins = collect(plan) { case j: ShuffledJoin => j }
+          assert(joins.size == 2, s"expected two joins in\n$plan")
+          assert(collectAllShuffles(plan).size == 0, s"the whole plan must not shuffle:\n$plan")
+          val groupings = collectAllGroupPartitions(plan)
+          assert(groupings.nonEmpty, plan.treeString)
+          assert(groupings.forall(_.expectedKeySpecs.forall(_.forall(!_.skewed))), plan.treeString)
+          assert(ValidateRequirements.validate(plan), plan.treeString)
+        }
+      }
     }
   }
 

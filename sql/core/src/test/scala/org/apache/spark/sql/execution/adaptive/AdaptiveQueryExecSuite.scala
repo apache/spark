@@ -5356,8 +5356,8 @@ class AdaptiveQueryExecSuite
       assert(snapshot >= 0 && snapshot == ensureRequirements - 1,
         s"expected the conf snapshot right before EnsureRequirements at $ensureRequirements, " +
           s"got $snapshot")
-      val skew = rules.indexWhere(_ ==
-        org.apache.spark.sql.execution.OptimizeSkewedKeyGroups)
+      val skew = rules.indexWhere(
+        _.isInstanceOf[org.apache.spark.sql.execution.OptimizeSkewedKeyGroups])
       assert(skew == ensureRequirements + 1)
       assert(stamps.headOption.contains(skew + 1),
         s"expected the stamp right behind EnsureRequirements at $ensureRequirements, got $stamps")

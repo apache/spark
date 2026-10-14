@@ -847,7 +847,7 @@ object QueryExecution {
       new SnapshotUnionPreparationConf(unionConf),
       EnsureRequirements(),
       // Split skewed key groups after EnsureRequirements aligns the join inputs.
-      OptimizeSkewedKeyGroups,
+      OptimizeSkewedKeyGroups(),
       // Must run after `EnsureRequirements`: it fixes each `UnionExec`'s partitioning decision, and
       // the answer to fix is the one the exchanges around it were planned against.
       new StampUnionDecisions(unionConf),

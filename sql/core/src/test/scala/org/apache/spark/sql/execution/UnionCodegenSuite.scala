@@ -1001,8 +1001,8 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       val ensureRequirements = rules.indexWhere(_.isInstanceOf[EnsureRequirements])
       val columnarRules =
         rules.indexWhere(_.isInstanceOf[ApplyColumnarRulesAndInsertTransitions])
-      val skew = rules.indexWhere(_ ==
-        org.apache.spark.sql.execution.OptimizeSkewedKeyGroups)
+      val skew = rules.indexWhere(
+        _.isInstanceOf[org.apache.spark.sql.execution.OptimizeSkewedKeyGroups])
       assert(ensureRequirements >= 0 && skew == ensureRequirements + 1 && firstStamp == skew + 1 &&
           firstStamp < columnarRules,
         "expected a stamping pass right behind EnsureRequirements and before the columnar " +

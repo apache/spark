@@ -24,7 +24,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
-import org.apache.spark.sql.catalyst.plans.physical.{KeyedPartitioning, KeyReducer, Partitioning, PartitioningCollection, REPLICATED_FOR_JOIN, SPLIT_FOR_JOIN}
+import org.apache.spark.sql.catalyst.plans.physical.{Distribution, KeyedPartitioning, KeyReducer, Partitioning, PartitioningCollection, REPLICATED_FOR_JOIN, SPLIT_FOR_JOIN}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.execution.datasources.v2.{ExpectedKeySpec, GroupPartitionsExec}
@@ -50,7 +50,8 @@ import org.apache.spark.util.Utils
  * satisfied. A rejected candidate returns the original stage, preserving every existing grouping,
  * projection and aggregate. Rollback never reconstructs the original alignment.
  */
-object OptimizeSkewedKeyGroups extends Rule[SparkPlan] with SQLConfHelper with Logging {
+case class OptimizeSkewedKeyGroups(requiredDistribution: Option[Distribution] = None)
+  extends Rule[SparkPlan] with SQLConfHelper with Logging {
 
   override def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.v2BucketingEnabled || !conf.v2BucketingSkewJoinEnabled) {
@@ -65,7 +66,12 @@ object OptimizeSkewedKeyGroups extends Rule[SparkPlan] with SQLConfHelper with L
       case SkewKeyGroupExchangeWrapper(exchange) => exchange.mapChildren(unwrap)
       case other => other.mapChildren(unwrap)
     }
-    unwrap(optimized)
+    val result = unwrap(optimized)
+    val satisfied = requiredDistribution match {
+      case Some(distribution) => ValidateRequirements.validate(result, distribution)
+      case None => ValidateRequirements.validate(result)
+    }
+    if (satisfied) result else plan
   }
 
   // Hide already optimized exchange inputs from stage-local rewrites and benefit checks.
