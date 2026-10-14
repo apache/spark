@@ -463,7 +463,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
         // setScale's cost grows with the scale change, and it throws once 10^change exceeds
         // BigInteger's range (e.g. for 1e-2147483647) or the change exceeds the Int range.
         // Skip it when the result is known.
-        val numIntegralDigits = dv.precision.toLong - dv.scale
+        val numIntegralDigits = numDigitsInIntegralPart(dv.underlying)
         if (dv.signum != 0 && numIntegralDigits > precision.toLong - scale) {
           return false
         }
