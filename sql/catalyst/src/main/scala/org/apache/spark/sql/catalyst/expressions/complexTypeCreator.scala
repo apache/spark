@@ -1063,7 +1063,7 @@ object UpdateFields {
   /** Copies the field at `ordinal` from the input struct. */
   private case class Original(ordinal: Int) extends FieldSource
 
-  /** Computes the field from an expression supplied to `withField`. */
+  /** Computes the field from a `withField` value or a nested update of the current field. */
   private case class Updated(expr: Expression) extends FieldSource
 
   /**
