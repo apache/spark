@@ -15716,14 +15716,15 @@ def regexp_instr(
     +---------+----------+--------------------------------+
 
     Example 2: Returns the position of the first substring in the `str` column name that
-    match the regex pattern `(\d+(a|b|m))` (one or more digits followed by 'a', 'b', or 'm'),
+    match the regex pattern `(\d+)(a|b|m)`, with the regex group index 1. The group 1
+    `(\d+)` starts at the same position as the match.
 
-    >>> df.select('*', sf.regexp_instr('str', sf.lit(r'\d+(a|b|m)'), sf.lit(1))).show()
-    +---------+----------+--------------------------------+
-    |      str|    regexp|regexp_instr(str, \d+(a|b|m), 1)|
-    +---------+----------+--------------------------------+
-    |1a 2b 14m|\d+(a|b|m)|                               1|
-    +---------+----------+--------------------------------+
+    >>> df.select('*', sf.regexp_instr('str', sf.lit(r'(\d+)(a|b|m)'), sf.lit(1))).show()
+    +---------+----------+----------------------------------+
+    |      str|    regexp|regexp_instr(str, (\d+)(a|b|m), 1)|
+    +---------+----------+----------------------------------+
+    |1a 2b 14m|\d+(a|b|m)|                                 1|
+    +---------+----------+----------------------------------+
 
     Example 3: Returns the position of the first substring in the `str` column name that
     match the regex pattern in `regexp` Column.
