@@ -230,6 +230,38 @@ class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
     }
   }
 
+  test("SPARK-59345: a pushed join with a pushed sample is not repeatable") {
+    val joinSampleCatalog = "testjoinsamplerepeatable"
+    registerCatalog(joinSampleCatalog, classOf[InMemoryTableWithJoinAndSampleCatalog])
+    val t1 = s"$joinSampleCatalog.ns.t1"
+    val t2 = s"$joinSampleCatalog.ns.t2"
+    sql(s"CREATE TABLE $t1 (id bigint, data string) USING _")
+    sql(s"CREATE TABLE $t2 (id bigint, data string) USING _")
+    try {
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+      sql(s"INSERT INTO $t2 VALUES (2, 'x'), (3, 'y'), (4, 'z')")
+      withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+        def repeatableScans(df: DataFrame): Seq[Boolean] = {
+          checkJoinPushed(df)
+          df.queryExecution.optimizedPlan.collect {
+            case s: DataSourceV2ScanRelation => s.repeatableScan
+          }
+        }
+        assert(repeatableScans(sql(s"SELECT * FROM $t1 JOIN $t2 ON $t1.id = $t2.id")) ==
+          Seq(true))
+        Seq(
+          s"SELECT * FROM $t1 TABLESAMPLE SYSTEM (50 PERCENT) JOIN $t2 ON $t1.id = $t2.id",
+          s"SELECT * FROM $t1 JOIN $t2 TABLESAMPLE BERNOULLI (50 PERCENT) ON $t1.id = $t2.id"
+        ).foreach { query =>
+          assert(repeatableScans(sql(query)) == Seq(false))
+        }
+      }
+    } finally {
+      sql(s"DROP TABLE IF EXISTS $t1")
+      sql(s"DROP TABLE IF EXISTS $t2")
+    }
+  }
+
   test("SPARK-55978: 100% SYSTEM sample does not block join pushdown") {
     val joinSampleCatalog = "testjoinsample100"
     registerCatalog(joinSampleCatalog, classOf[InMemoryTableWithJoinAndSampleCatalog])
