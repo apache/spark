@@ -23,8 +23,7 @@ import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.PodResource
 import io.fabric8.kubernetes.client.dsl.base.PatchContext
 import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
-import org.mockito.ArgumentMatchers.any
-import org.mockito.ArgumentMatchers.anyString
+import org.mockito.ArgumentMatchers.{any, anyString, eq => meq}
 import org.mockito.Mockito.{mock, never, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
@@ -161,12 +160,27 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
     when(mockPodResource.get()).thenReturn(failedPod)
     snapshotsStore.updatePod(failedPod)
     snapshotsStore.notifySubscribers()
-    snapshotsStore.updatePod(runningExecutor(2))
+    snapshotsStore.updatePod(failedPod)
     snapshotsStore.notifySubscribers()
     val msg = exitReasonMessage(1, failedPod, 1)
     val expectedLossReason = ExecutorExited(1, exitCausedByApp = true, msg)
     verify(schedulerBackend, times(1)).doRemoveExecutor("1", expectedLossReason)
     verify(namedExecutorPods(failedPod.getMetadata.getName), times(2)).delete()
+  }
+
+  test("Retry removing failed executors from K8s when other pods are updated") {
+    val failedPod = failedExecutorWithoutDeletion(1)
+    val mockPodResource = mock(classOf[PodResource])
+    namedExecutorPods.put("spark-executor-1", mockPodResource)
+    when(mockPodResource.get()).thenReturn(failedPod)
+    snapshotsStore.updatePod(failedPod)
+    snapshotsStore.notifySubscribers()
+    snapshotsStore.updatePod(runningExecutor(2))
+    snapshotsStore.notifySubscribers()
+    val msg = exitReasonMessage(1, failedPod, 1)
+    val expectedLossReason = ExecutorExited(1, exitCausedByApp = true, msg)
+    verify(schedulerBackend, times(1)).doRemoveExecutor("1", expectedLossReason)
+    verify(mockPodResource, times(2)).delete()
     assert(eventHandlerUnderTest.getNumExecutorsFailed == 1)
   }
 
@@ -228,7 +242,7 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
     val expectedLossReason = ExecutorExited(-1, exitCausedByApp = false, msg)
     verify(schedulerBackend).doRemoveExecutor("1", expectedLossReason)
     // Healthy executors are absent from the lifecycle index but are not missing.
-    verify(schedulerBackend, never()).doRemoveExecutor(org.mockito.ArgumentMatchers.eq("2"), any())
+    verify(schedulerBackend, never()).doRemoveExecutor(meq("2"), any())
   }
 
   test("Keep executor pods in k8s if configured.") {
