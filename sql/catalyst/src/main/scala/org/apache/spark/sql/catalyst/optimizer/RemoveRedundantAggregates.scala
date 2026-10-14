@@ -61,7 +61,13 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
     // relation, while a global aggregation will return a single row.
     lazy val lowerIsGlobalAgg = lower.groupingExpressions.isEmpty
 
-    upperHasNoDuplicateSensitiveAgg && upperRefsOnlyDeterministicNonAgg && !lowerIsGlobalAgg
+    // The lower aggregation normalizes float/double grouping keys, so it is not redundant if the
+    // upper aggregation reads them: without it, the upper one would see the raw keys.
+    lazy val upperReadsNormalizedKeys = NormalizeFloatingNumbers.readsNormalizedKeys(
+      lower, lower.aggregateExpressions.filter(upper.references.contains(_)))
+
+    upperHasNoDuplicateSensitiveAgg && upperRefsOnlyDeterministicNonAgg && !lowerIsGlobalAgg &&
+      !upperReadsNormalizedKeys
   }
 
   private def isDuplicateSensitive(ae: AggregateExpression): Boolean = {
