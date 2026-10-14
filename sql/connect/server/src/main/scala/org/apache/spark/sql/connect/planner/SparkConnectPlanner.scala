@@ -1051,10 +1051,8 @@ class SparkConnectPlanner(
       val analyzed = session.sessionState.executePlan(logicalPlan).analyzed
 
       assertPlan(groupingExprs.size() == 1)
-      val groupFunc = TypedScalaUdf(
-        groupingExprs.get(0),
-        Some(analyzed.output),
-        Some("Dataset.groupByKey"))
+      val groupFunc =
+        TypedScalaUdf(groupingExprs.get(0), Some(analyzed.output), Some("Dataset.groupByKey"))
       val vEnc = groupFunc.inEnc
       val kEnc = groupFunc.outEnc
 
@@ -1868,9 +1866,7 @@ class SparkConnectPlanner(
     }
   }
 
-  private def transformTypedFilter(
-      expr: proto.Expression,
-      child: LogicalPlan): TypedFilter = {
+  private def transformTypedFilter(expr: proto.Expression, child: LogicalPlan): TypedFilter = {
     val analyzed = session.sessionState.executePlan(child).analyzed
     val udf = TypedScalaUdf(expr, Some(analyzed.output), Some("Dataset.filter"))
     TypedFilter(udf.function, analyzed)(udf.inEnc)
