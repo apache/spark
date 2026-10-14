@@ -26,9 +26,9 @@ import org.apache.spark.sql.types.DataType
  * Callers decide which authorship wins. The companion then builds version maps independently of
  * how the winning value was selected.
  *
- * The reconciled value may be null, since deletes and upserts can both author null. Callers must
- * keep the value and its sequence paired: a non-null `reconciledValue` has a non-null
- * `valueAuthoredAtSequence`, and an unauthored field, whose sequence is null, has a null value.
+ * Deletes and upserts can both author null, so a null value may be authored. An unauthored field,
+ * whose sequence is null, must have a null value, so readers can use the value without checking
+ * its sequence.
  *
  * @param fieldToReconcile The field this reconciles.
  * @param reconciledValue The value selected for the field.
