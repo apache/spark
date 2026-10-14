@@ -55,7 +55,7 @@ import org.apache.spark.util.{Clock, Utils}
 class ProgressReporter(
     private val sparkSession: SparkSession,
     private val triggerClock: Clock,
-    trigger: Trigger,
+    private[runtime] val triggerConfig: Trigger,
     val logicalPlan: () => LogicalPlan)
   extends Logging {
 
@@ -371,7 +371,7 @@ abstract class ProgressContext(
       sources = sourceProgress.toArray,
       sink = sinkProgress,
       observedMetrics = new java.util.HashMap(observedMetrics.asJava),
-      triggerConfig = trigger)
+      triggerConfig = progressReporter.triggerConfig)
   }
 
   private def extractSourceProgress(
