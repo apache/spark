@@ -2228,7 +2228,12 @@ class AstBuilder extends DataTypeAstBuilder
     if (ctx.groupingExpressionsWithGroupingAnalytics.isEmpty) {
       val groupByExpressions: Seq[Expression] =
         ctx.groupingExpressions.asScala.map { n: NamedExpressionContext =>
-          if (!allowNamedGroupingExpressions && (n.name != null || n.identifierList != null)) {
+          lazy val groupingExpression = visitNamedExpression(n)
+          val allowAlias = allowNamedGroupingExpressions && (groupingExpression match {
+            case Alias(Literal(_: Int, IntegerType), _) => false
+            case _ => true
+          })
+          if (!allowAlias && (n.name != null || n.identifierList != null)) {
             // If we do not allow grouping expressions to have aliases in this context, we throw a
             // syntax error here accordingly.
             val error: String = (if (n.name != null) n.name else n.identifierList).getText
@@ -2241,7 +2246,7 @@ class AstBuilder extends DataTypeAstBuilder
                 "hint" -> s": extra input '$error'"),
               queryContext = Array.empty)
           }
-          visitNamedExpression(n)
+          groupingExpression
         }.toSeq
       val groupByExpressionsWithOrdinals =
         replaceOrdinalsInGroupingExpressions(groupByExpressions)

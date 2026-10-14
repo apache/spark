@@ -22,7 +22,7 @@ import scala.annotation.nowarn
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, RelationChanges, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedInsertTarget, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, RelationChanges, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedInsertTarget, UnresolvedOrdinal, UnresolvedPipeAggregateOrdinal, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -546,6 +546,43 @@ class PlanParserSuite extends AnalysisTest {
       exception = parseException(sql1),
       condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'b'", "hint" -> ": extra input 'b'"))
+  }
+
+  test("pipe AGGREGATE rejects aliased ordinals with the regular GROUP BY syntax error") {
+    for {
+      ordinal <- Seq("0", "1", "2", "3", "-1", "(2)")
+      alias <- Seq("AS grp", "grp")
+      prefix <- Seq("", "g, ")
+      query <- Seq(
+        s"TABLE t |> AGGREGATE sum(x) AS s GROUP BY $prefix$ordinal $alias",
+        s"SELECT x, sum(x) FROM t GROUP BY $prefix$ordinal $alias")
+    } {
+      checkError(
+        exception = parseException(query),
+        condition = "PARSE_SYNTAX_ERROR",
+        sqlState = Some("42601"),
+        parameters = Map("error" -> "'grp'", "hint" -> ": extra input 'grp'"))
+    }
+  }
+
+  test("pipe AGGREGATE preserves unaliased GROUP BY ordinals") {
+    Seq(1, 2, 3).foreach { ordinal =>
+      val query = s"TABLE t |> AGGREGATE sum(x) AS s GROUP BY $ordinal"
+      val aggregate = parsePlan(query).asInstanceOf[Aggregate]
+      assert(aggregate.groupingExpressions == Seq(UnresolvedOrdinal(1)))
+      assert(aggregate.aggregateExpressions.head == UnresolvedPipeAggregateOrdinal(ordinal))
+    }
+  }
+
+  test("pipe AGGREGATE preserves aliases on non-ordinal GROUP BY expressions") {
+    Seq("g", "1 + 1", "CAST(2 AS INT)", "2L", "2.0").foreach { expression =>
+      val query = s"TABLE t |> AGGREGATE sum(x) AS s GROUP BY $expression AS grp"
+      val aggregate = parsePlan(query).asInstanceOf[Aggregate]
+      val alias = aggregate.groupingExpressions.head.asInstanceOf[Alias]
+      assert(alias.child == parseExpression(expression))
+      assert(alias.name == "grp")
+      assert(aggregate.aggregateExpressions.head == alias)
+    }
   }
 
   test("limit") {
