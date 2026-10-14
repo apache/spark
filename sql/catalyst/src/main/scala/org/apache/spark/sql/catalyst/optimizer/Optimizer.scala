@@ -2801,11 +2801,18 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
   // Expressions above the aggregate see its float/double grouping keys normalized (see
   // NormalizeFloatingNumbers: -0.0 becomes 0.0 and every NaN becomes one canonical NaN), so the
   // pushed conjuncts read them normalized too, wherever the raw value could change the result.
+  // The exception is an aggregate whose functions are all grouped-agg pandas UDFs: it is planned
+  // as ArrowAggregatePythonExec, which outputs the raw keys (see SparkStrategies.Aggregation).
   private[optimizer] def pushBelowAggregate(
       conds: Seq[Expression],
       aggregate: Aggregate): Expression = {
     val aliasMap = getAliasMap(aggregate)
-    val normalizedGrouping = aggregate.groupingExpressions
+    val aggregateFunctions = aggregate.aggregateExpressions.flatMap(_.collect {
+      case ae: AggregateExpression => ae.aggregateFunction
+    })
+    val outputsRawKeys =
+      aggregateFunctions.nonEmpty && aggregateFunctions.forall(_.isInstanceOf[PythonUDAF])
+    val normalizedGrouping = if (outputsRawKeys) Nil else aggregate.groupingExpressions
       .filter(e => NormalizeFloatingNumbers.needNormalize(e.dataType))
       .map(trimAliases)
     conds.map { cond =>
