@@ -637,9 +637,9 @@ public class VariantBuilder {
   // hash partitioning) group and compare Variants by value rather than by
   // their incidental physical encoding.
   //
-  // The metadata dictionary is rebuilt with its keys sorted by (the same order
-  // finishWritingObject already uses for object fields, so the two stay
-  // consistent) and unused entries stripped, with field ids remapped to the sorted positions.
+  // The metadata dictionary is rebuilt with its keys sorted by unsigned UTF-8 bytes
+  // (VariantUtil.compareKeys, the same order finishWritingObject uses for object fields)
+  // and unused entries stripped, with field ids remapped to the sorted positions.
   public static Variant canonicalize(Variant v) {
     // Fast path: an already-canonical input is returned unchanged. isCanonical rejects sub-variants
     // (pos != 0) -- a view into a parent's shared value/metadata -- so those fall through to the
