@@ -532,7 +532,8 @@ int spark_ds_write(void* data_writer, struct ArrowArray* array, struct ArrowSche
 /*
  * Commits the data written by the task and releases the data writer handle. If it fails, the
  * handle is not released: Spark then calls spark_ds_abort_data_writer with it, to abort the data
- * written by the task and release the handle.
+ * written by the task and release the handle. If it succeeds, Spark does not use the handle again,
+ * even if it then fails the task, for example because set_message was called more than once.
  *
  * set_message: called once with the message to pass to spark_ds_commit on the driver, or not at
  *              all for an empty message
