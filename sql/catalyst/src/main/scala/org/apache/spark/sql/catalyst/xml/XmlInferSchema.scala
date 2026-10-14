@@ -756,13 +756,10 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
     val isTimestamp =
       try {
         if (legacyTimeParser) {
-          StaxXmlParser.parseLegacyTimestamp(field, {
-            if (options.parameters.contains(XmlOptions.TIMESTAMP_FORMAT)) {
-              timestampFormatter.parseOptional(field)
-            } else {
-              None
-            }
-          }).isDefined
+          StaxXmlParser.parseLegacyTimestamp(
+            field,
+            options.parameters.get(XmlOptions.TIMESTAMP_FORMAT),
+            input => timestampFormatter.parseOptional(input)).isDefined
         } else {
           timestampFormatter.parseOptional(field).isDefined
         }

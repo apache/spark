@@ -176,6 +176,8 @@ Data source options of XML can be set via:
     <code>timestampFormat</code> is tried next using legacy pattern semantics, the configured
     <code>locale</code>, and <code>timeZone</code> (or the session time zone). Zone-less ISO
     timestamps are tried last and interpreted as UTC, matching the external spark-xml connector.
+    For zone-less ISO values matched by a custom format ending in seconds (with or without a
+    fractional part), the input fraction is preserved independently of the format's fraction width.
     This does not change <code>TIMESTAMP_NTZ</code> or nanosecond timestamp parsing.</td>
     <td>read/write</td>
   </tr>

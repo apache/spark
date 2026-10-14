@@ -168,6 +168,90 @@ class XmlLegacyTimestampSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-60199: LEGACY XML local ISO fractions retain custom format timezone semantics") {
+    val fractions = Seq(".1", ".000001", ".123456", ".123456789")
+    withSQLConf(
+        SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "LEGACY",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+      for {
+        separator <- Seq(" ", "T")
+        multiLine <- Seq(false, true)
+      } {
+        val values = fractions.map(fraction => s"2024-02-29${separator}12:34:56$fraction")
+        val rows = values.map(value => s"<ROW><stamp>$value</stamp></ROW>")
+        val records = if (multiLine) Seq(rows.mkString("<ROWS>\n", "\n", "\n</ROWS>")) else rows
+        withTempPath { path =>
+          records.toDS().coalesce(1).write.text(path.getAbsolutePath)
+          for {
+            fractionPattern <- Seq("", ".SSS", ".SSSSSS")
+            zone <- Seq(None, Some("UTC"), Some("+8:00"))
+            mode <- Seq("PERMISSIVE", "FAILFAST")
+          } {
+            val dateTimePattern = if (separator == "T") "yyyy-MM-dd'T'" else "yyyy-MM-dd "
+            val options = Map(
+              "rowTag" -> "ROW",
+              "multiLine" -> multiLine.toString,
+              "mode" -> mode,
+              "timestampFormat" -> s"${dateTimePattern}HH:mm:ss$fractionPattern") ++
+              zone.map("timeZone" -> _)
+            val expectedZone = zone.map(DateTimeUtils.getZoneId)
+              .getOrElse(ZoneId.of("America/Los_Angeles"))
+            val expected = fractions.map { fraction =>
+              val instant = LocalDateTime.parse(s"2024-02-29T12:34:56$fraction")
+                .atZone(expectedZone).toInstant
+              Row(DateTimeUtils.instantToMicros(instant))
+            }
+            for (infer <- Seq(false, true)) {
+              val reader = spark.read.options(options)
+              if (!infer) {
+                reader.schema(schema)
+              }
+              val result = reader.xml(path.getAbsolutePath)
+              assert(result.schema == schema)
+              checkAnswer(result.selectExpr("unix_micros(stamp)"), expected)
+            }
+            val parsed = rows.toDF("xml")
+              .select(from_xml($"xml", schema, options.asJava).as("parsed"))
+            checkAnswer(parsed.selectExpr("unix_micros(parsed.stamp)"), expected)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60199: LEGACY XML local ISO fractions preserve custom dates and literals") {
+    val cases = Seq(
+      ("yyyy-dd-MM HH:mm:ss.SSS", "2024-03-04 12:34:56.123456",
+        "2024-04-03T19:34:56.123456Z"),
+      ("yyyy-dd-MM HH:mm:ss", "2024-03-04 12:34:56.123456",
+        "2024-04-03T19:34:56.123456Z"),
+      ("yyyy-MM-dd HH:mm:ss.SSS", "1969-12-31 15:59:59.999999",
+        "1969-12-31T23:59:59.999999Z"),
+      ("yyyy-MM-dd HH:mm:ss.SSSSSS", "1969-12-31 15:59:59.000001",
+        "1969-12-31T23:59:59.000001Z"),
+      ("yyyy-MM-dd HH:mm:ss'.123456'", "2024-02-29 12:34:56.123456",
+        "2024-02-29T20:34:56Z"),
+      ("yyyy-MM-dd HH:mm:'ss.SSS'", "2024-02-29 12:34:ss.SSS",
+        "2024-02-29T20:34:00Z"))
+    withSQLConf(
+        SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "LEGACY",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+      for {
+        (format, input, expected) <- cases
+        mode <- Seq("PERMISSIVE", "FAILFAST")
+      } {
+        val options = Map("rowTag" -> "ROW", "mode" -> mode, "timestampFormat" -> format)
+        val xml = Seq(s"<ROW><stamp>$input</stamp></ROW>").toDS()
+        val expectedMicros = Row(DateTimeUtils.instantToMicros(Instant.parse(expected)))
+        val reader = spark.read.options(options)
+        checkAnswer(reader.xml(xml).selectExpr("unix_micros(stamp)"), expectedMicros)
+        checkAnswer(reader.schema(schema).xml(xml).selectExpr("unix_micros(stamp)"), expectedMicros)
+        val parsed = xml.toDF("xml").select(from_xml($"xml", schema, options.asJava).as("parsed"))
+        checkAnswer(parsed.selectExpr("unix_micros(parsed.stamp)"), expectedMicros)
+      }
+    }
+  }
+
   test("SPARK-60199: LEGACY XML short timezone IDs do not corrupt inferred string fields") {
     withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "LEGACY") {
       val xml = Seq("<ROW><label>example</label></ROW>").toDS()

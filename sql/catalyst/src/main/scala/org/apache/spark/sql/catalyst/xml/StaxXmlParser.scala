@@ -44,6 +44,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow, ToStringBase}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, BadRecordException, CharVarcharUtils, DateFormatter, DateTimeUtils, DropMalformedMode, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, PermissiveMode, TimeFormatter, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.xml.StaxXmlParser.convertStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -790,13 +791,10 @@ class StaxXmlParser(
 
   private def parseXmlTimestamp(value: String, options: XmlOptions): Long = {
     if (legacyTimeParser) {
-      StaxXmlParser.parseLegacyTimestamp(value, {
-        if (options.parameters.contains(XmlOptions.TIMESTAMP_FORMAT)) {
-          timestampFormatter.parseOptional(value)
-        } else {
-          None
-        }
-      }).getOrElse {
+      StaxXmlParser.parseLegacyTimestamp(
+        value,
+        options.parameters.get(XmlOptions.TIMESTAMP_FORMAT),
+        input => timestampFormatter.parseOptional(input)).getOrElse {
         throw new SparkIllegalArgumentException(
           errorClass = "_LEGACY_ERROR_TEMP_3260",
           messageParameters = Map("s" -> value))
@@ -1205,9 +1203,12 @@ object StaxXmlParser {
       .withZone(ZoneOffset.UTC),
     DateTimeFormatter.ISO_LOCAL_DATE_TIME.withZone(ZoneOffset.UTC))
 
+  private val legacySecondsSuffix = """s+(\.S+)?$""".r
+
   private[xml] def parseLegacyTimestamp(
       value: String,
-      customTimestamp: => Option[Long]): Option[Long] = {
+      customFormat: Option[String],
+      customTimestamp: String => Option[Long]): Option[Long] = {
     def parseWithFormatter(format: DateTimeFormatter): Option[Long] = {
       val position = new ParsePosition(0)
       val parsed = format.parseUnresolved(value, position)
@@ -1228,9 +1229,31 @@ object StaxXmlParser {
       }
     }
 
+    lazy val localTimestamp = parseIsoTimestamp(legacyLocalTimestampFormatters)
+
+    def parseCustomTimestamp(): Option[Long] = customFormat.flatMap { pattern =>
+      val fractionIndex = value.lastIndexOf('.')
+      val fractionalTimestamp = if (fractionIndex >= 0) {
+        for {
+          suffix <- legacySecondsSuffix.findFirstMatchIn(pattern)
+          if pattern.take(suffix.start).count(_ == '\'') % 2 == 0
+          timestamp <- localTimestamp
+          zeroFraction = Option(suffix.group(1)).map(s => "." + "0" * (s.length - 1))
+            .getOrElse("")
+          // Keep the custom calendar/timezone, but do not let its fraction width scale the digits.
+          wholeSecond <- customTimestamp(value.take(fractionIndex) + zeroFraction)
+          result <- Try(Math.addExact(
+            wholeSecond, Math.floorMod(timestamp, MICROS_PER_SECOND))).toOption
+        } yield result
+      } else {
+        None
+      }
+      fractionalTimestamp.orElse(customTimestamp(value))
+    }
+
     parseIsoTimestamp(legacyZonedTimestampFormatters)
-      .orElse(customTimestamp)
-      .orElse(parseIsoTimestamp(legacyLocalTimestampFormatters))
+      .orElse(parseCustomTimestamp())
+      .orElse(localTimestamp)
   }
 
   /**
