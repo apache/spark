@@ -155,17 +155,36 @@ class AsOfJoinResolver(
     if (resolvedJoin.references.subsetOf(originalOutputSet)) {
       resolvedJoin
     } else {
-      val hiddenColumns =
-        if (unresolvedAsOfJoin.containsTag(ResolverTag.TOP_LEVEL_OPERATOR)) {
-          Seq.empty
-        } else {
-          resolvedJoin.output.filter { attribute =>
-            attribute.qualifiedAccessOnly && !originalOutputSet.contains(attribute)
-          }
-        }
+      val qualifiedAccessOnlyColumns = AsOfJoin.computeOutput(
+        joinType = resolvedJoin.joinType,
+        leftOutput = leftNameScope.hiddenOutput.filter(_.qualifiedAccessOnly),
+        rightOutput = rightNameScope.hiddenOutput.filter(_.qualifiedAccessOnly)
+      )
 
       operatorResolutionContextStack.current.baseOperator = Some(resolvedJoin)
-      Project(originalOutput ++ hiddenColumns, resolvedJoin)
+      Project(
+        withQualifiedAccessOnlyColumns(
+          unresolvedAsOfJoin = unresolvedAsOfJoin,
+          output = originalOutput,
+          qualifiedAccessOnlyColumns = qualifiedAccessOnlyColumns
+        ),
+        resolvedJoin
+      )
+    }
+  }
+
+  /**
+   * Appends the qualified-access-only columns for the operators above, unless the join is the top
+   * operator. [[PruneMetadataColumns]] later drops the ones they don't use.
+   */
+  private def withQualifiedAccessOnlyColumns(
+      unresolvedAsOfJoin: AsOfJoin,
+      output: Seq[NamedExpression],
+      qualifiedAccessOnlyColumns: Seq[Attribute]): Seq[NamedExpression] = {
+    if (unresolvedAsOfJoin.containsTag(ResolverTag.TOP_LEVEL_OPERATOR)) {
+      output
+    } else {
+      output ++ qualifiedAccessOnlyColumns
     }
   }
 
@@ -229,12 +248,11 @@ class AsOfJoinResolver(
     )
 
     val qualifiedAccessOnlyColumns = newHiddenOutput.filter(_.qualifiedAccessOnly)
-    val projectList =
-      if (unresolvedAsOfJoin.containsTag(ResolverTag.TOP_LEVEL_OPERATOR)) {
-        resolvedOutputList
-      } else {
-        resolvedOutputList ++ qualifiedAccessOnlyColumns
-      }
+    val projectList = withQualifiedAccessOnlyColumns(
+      unresolvedAsOfJoin = unresolvedAsOfJoin,
+      output = resolvedOutputList,
+      qualifiedAccessOnlyColumns = qualifiedAccessOnlyColumns
+    )
 
     operatorResolutionContextStack.current.baseOperator = Some(resolvedJoin)
     val project = Project(projectList, child)
