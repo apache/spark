@@ -1489,7 +1489,7 @@ private[spark] class DAGScheduler(
     checkPipelinedStageCreation(finalRDD, partitions, jobId)
   }
 
-  /** Validate the stages a native result job would create, without registering them. */
+  /** Validate the stages a pipelined result job would create, without registering them. */
   private def checkPipelinedStageCreation(
       finalRDD: RDD[_], partitions: Array[Int], jobId: Int): Unit = {
     val checkedShuffleIds = new HashSet[Int]

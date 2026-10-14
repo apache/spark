@@ -8988,7 +8988,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
-  test("pipelined preflight: warm a cold regular prefix before native producer validation") {
+  test("pipelined preflight: warm a cold regular prefix before pipelined producer validation") {
     val evaluated = new ArrayBuffer[Int]
     val root = new MyRDD(sc, 0, Nil, indeterminate = true) {
       override protected def getOutputDeterministicLevel = {
@@ -9010,14 +9010,14 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         super.getOutputDeterministicLevel
       }
     }
-    val native = new PipelinedShuffleDependency(producer, new HashPartitioner(1))
-    val result = new MyRDD(sc, 1, List(native))
+    val pipelined = new PipelinedShuffleDependency(producer, new HashPartitioner(1))
+    val result = new MyRDD(sc, 1, List(pipelined))
     // A zero-map regular prefix is already available even without registered outputs. Its
-    // determinism is still cold, so evaluating the native producer first would recurse into it.
+    // determinism is still cold, so evaluating the pipelined producer first would recurse into it.
     assert(evaluated.isEmpty)
     assertPipelinedUnsupported(submitAndCaptureFailure(result, Array(0)), "indeterminate")
     assert(evaluated.toSeq === Seq(root.id, middle.id, producer.id))
-    assertNoPipelinedStageRegistration(Seq(first.shuffleId, second.shuffleId, native.shuffleId))
+    assertNoPipelinedStageRegistration(Seq(first.shuffleId, second.shuffleId, pipelined.shuffleId))
     assertDataStructuresEmpty()
   }
 
@@ -9129,10 +9129,10 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val frontiers = (0 until 2).map { _ =>
       new ShuffleDependency(new MyRDD(sc, 0, List(shared)), new HashPartitioner(2))
     }
-    val native = frontiers.map { frontier =>
+    val pipelined = frontiers.map { frontier =>
       new PipelinedShuffleDependency(new MyRDD(sc, 2, List(frontier)), new HashPartitioner(2))
     }
-    val result = new MyRDD(sc, 2, native.toList)
+    val result = new MyRDD(sc, 2, pipelined.toList)
     val jobId = submit(result, Array(0, 1))
     assert(failure === null)
     assert(scheduler.shuffleIdToMapStage.size === 5)
@@ -9146,7 +9146,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
     assert(taskSets.size === 3)
     assert(taskSets.forall(_.isPipelined))
-    native.foreach { dep =>
+    pipelined.foreach { dep =>
       completeShuffleMapStageSuccessfully(scheduler.shuffleIdToMapStage(dep.shuffleId).id, 0, 2)
     }
     complete(taskSets.last, Seq((Success, 42), (Success, 43)))
@@ -9254,7 +9254,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
           }
           shared = new MyRDD(sc, 2, List(dependency))
         }
-        val native = if (roots == "consumer") {
+        val pipelined = if (roots == "consumer") {
           Seq(new PipelinedShuffleDependency(new MyRDD(sc, 2, Nil), new HashPartitioner(2)))
         } else {
           (0 until numRoots).map { _ =>
@@ -9271,7 +9271,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
           case "no-checkpoint" => Seq.empty[MyCheckpointRDD]
         }
         checkpoints.foreach(_.checkpoint())
-        val dependencies = native.toList ++ checkpoints.map(new OneToOneDependency(_)).toList
+        val dependencies = pipelined.toList ++ checkpoints.map(new OneToOneDependency(_)).toList
         val result = new MyRDD(sc, 2, dependencies)
         var preflightEdgeReads = Seq.empty[Int]
         doAnswer { invocation =>
@@ -9288,7 +9288,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         // rooted on this shared chain adds a visit, regardless of the number of roots.
         val expected = if (roots == "no-checkpoint") 3 else 4
         assert(preflightEdgeReads === Seq.fill(edgeReads.size)(expected))
-        native.foreach { dep =>
+        pipelined.foreach { dep =>
           completeShuffleMapStageSuccessfully(
             scheduler.shuffleIdToMapStage(dep.shuffleId).id, 0, 2)
         }
