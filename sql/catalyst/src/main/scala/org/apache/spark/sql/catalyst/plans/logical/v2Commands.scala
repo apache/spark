@@ -1644,11 +1644,12 @@ case class CreateFunction(
 }
 
 /**
- * A CREATE FUNCTION plan whose first child is the function identifier: an
- * `UnresolvedIdentifier` before analysis and a `ResolvedIdentifier` after it.
- * Catalyst rules such as the builtin-name check in `ResolveCatalogs` and
- * `ApplyDefaultCollation` match on this trait, because the concrete command
- * lives in sql/core.
+ * A CREATE FUNCTION plan whose first child is the function identifier. Persistent functions
+ * start with an `UnresolvedIdentifier` that analysis resolves to a `ResolvedIdentifier`;
+ * temporary functions are built by the parser with a `ResolvedIdentifier` on
+ * `FakeSystemCatalog` in the session namespace. Catalyst rules such as the builtin-name check
+ * in `ResolveCatalogs` and `ApplyDefaultCollation` match on this trait, because the concrete
+ * command lives in sql/core.
  */
 trait CreateUserDefinedFunctionLike extends LogicalPlan {
   def collation: Option[String]
