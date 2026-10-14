@@ -121,7 +121,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     this.decimalVal = decimal.setScale(scale, ROUND_HALF_UP)
     if (decimalVal.precision > precision) {
       throw new SparkArithmeticException(
-        errorClass = "NUMERIC_VALUE_OUT_OF_RANGE.WITHOUT_SUGGESTION",
+        errorClass = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_ROUND_ATTEMPT",
         messageParameters = Map(
           "roundedValue" -> decimalVal.toString,
           "originalValue" -> decimal.toString,
