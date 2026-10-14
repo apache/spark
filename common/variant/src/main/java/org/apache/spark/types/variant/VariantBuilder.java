@@ -282,23 +282,17 @@ public class VariantBuilder {
   // range of the long value.
   public void appendLong(long l) {
     checkCapacity(1 + 8);
-    if (l == (byte) l) {
-      writeBuffer[writePos++] = primitiveHeader(INT1);
-      writeLong(writeBuffer, writePos, l, 1);
-      writePos += 1;
-    } else if (l == (short) l) {
-      writeBuffer[writePos++] = primitiveHeader(INT2);
-      writeLong(writeBuffer, writePos, l, 2);
-      writePos += 2;
-    } else if (l == (int) l) {
-      writeBuffer[writePos++] = primitiveHeader(INT4);
-      writeLong(writeBuffer, writePos, l, 4);
-      writePos += 4;
-    } else {
-      writeBuffer[writePos++] = primitiveHeader(INT8);
-      writeLong(writeBuffer, writePos, l, 8);
-      writePos += 8;
+    int typeInfo = minimalLongTypeInfo(l);
+    int numBytes;
+    switch (typeInfo) {
+      case INT1: numBytes = 1; break;
+      case INT2: numBytes = 2; break;
+      case INT4: numBytes = 4; break;
+      default:   numBytes = 8; break; // INT8
     }
+    writeBuffer[writePos++] = primitiveHeader(typeInfo);
+    writeLong(writeBuffer, writePos, l, numBytes);
+    writePos += numBytes;
   }
 
   public void appendDouble(double d) {
@@ -313,31 +307,32 @@ public class VariantBuilder {
   public void appendDecimal(BigDecimal d) {
     checkCapacity(2 + 16);
     BigInteger unscaled = d.unscaledValue();
-    if (d.scale() <= MAX_DECIMAL4_PRECISION && d.precision() <= MAX_DECIMAL4_PRECISION) {
-      writeBuffer[writePos++] = primitiveHeader(DECIMAL4);
-      writeBuffer[writePos++] = (byte) d.scale();
-      writeLong(writeBuffer, writePos, unscaled.intValueExact(), 4);
-      writePos += 4;
-    } else if (d.scale() <= MAX_DECIMAL8_PRECISION && d.precision() <= MAX_DECIMAL8_PRECISION) {
-      writeBuffer[writePos++] = primitiveHeader(DECIMAL8);
-      writeBuffer[writePos++] = (byte) d.scale();
-      writeLong(writeBuffer, writePos, unscaled.longValueExact(), 8);
-      writePos += 8;
-    } else {
-      assert d.scale() <= MAX_DECIMAL16_PRECISION && d.precision() <= MAX_DECIMAL16_PRECISION;
-      writeBuffer[writePos++] = primitiveHeader(DECIMAL16);
-      writeBuffer[writePos++] = (byte) d.scale();
-      // `toByteArray` returns a big-endian representation. We need to copy it reversely and sign
-      // extend it to 16 bytes.
-      byte[] bytes = unscaled.toByteArray();
-      for (int i = 0; i < bytes.length; ++i) {
-        writeBuffer[writePos + i] = bytes[bytes.length - 1 - i];
+    int typeInfo = minimalDecimalTypeInfo(d);
+    writeBuffer[writePos++] = primitiveHeader(typeInfo);
+    writeBuffer[writePos++] = (byte) d.scale();
+    switch (typeInfo) {
+      case DECIMAL4:
+        writeLong(writeBuffer, writePos, unscaled.intValueExact(), 4);
+        writePos += 4;
+        break;
+      case DECIMAL8:
+        writeLong(writeBuffer, writePos, unscaled.longValueExact(), 8);
+        writePos += 8;
+        break;
+      default: { // DECIMAL16
+        assert d.scale() <= MAX_DECIMAL16_PRECISION && d.precision() <= MAX_DECIMAL16_PRECISION;
+        // `toByteArray` returns a big-endian representation. We need to copy it reversely and sign
+        // extend it to 16 bytes.
+        byte[] bytes = unscaled.toByteArray();
+        for (int i = 0; i < bytes.length; ++i) {
+          writeBuffer[writePos + i] = bytes[bytes.length - 1 - i];
+        }
+        byte sign = (byte) (bytes[0] < 0 ? -1 : 0);
+        for (int i = bytes.length; i < 16; ++i) {
+          writeBuffer[writePos + i] = sign;
+        }
+        writePos += 16;
       }
-      byte sign = (byte) (bytes[0] < 0 ? -1 : 0);
-      for (int i = bytes.length; i < 16; ++i) {
-        writeBuffer[writePos + i] = sign;
-      }
-      writePos += 16;
     }
   }
 
@@ -599,8 +594,8 @@ public class VariantBuilder {
   // Canonicalize and append a single scalar value: integers re-emitted at the smallest int width,
   // integer-valued decimals promoted to the integer encoding, decimal trailing zeros stripped,
   // -0.0 mapped to +0.0, and short strings short-encoded -- so e.g. `1.0`, `1`, and a wide-encoded
-  // `1` all produce byte-equal output. The scalar canonicalization rules that the read-side check
-  // (`isValueCanonical`) must mirror are factored into shared helpers so the two cannot drift.
+  // `1` all produce byte-equal output. The read-side check (`isValueCanonical`) mirrors these
+  // rules through the same shared helpers, so the write and read sides cannot drift.
   private void appendCanonicalizedScalar(byte[] value, int pos) {
     switch (VariantUtil.getType(value, pos)) {
       case LONG:
@@ -855,7 +850,7 @@ public class VariantBuilder {
       case LONG:
         // Must use the smallest int width `appendLong` would pick.
         return VariantUtil.getTypeInfo(value, pos)
-            == canonicalLongTypeInfo(VariantUtil.getLong(value, pos));
+            == minimalLongTypeInfo(VariantUtil.getLong(value, pos));
       case DECIMAL: {
         BigDecimal onDisk = VariantUtil.getDecimalWithOriginalScale(value, pos);
         BigDecimal stripped = onDisk.stripTrailingZeros();
@@ -865,7 +860,7 @@ public class VariantBuilder {
         }
         BigDecimal canonForm = canonicalDecimalForm(stripped);
         return onDisk.scale() == canonForm.scale()
-            && VariantUtil.getTypeInfo(value, pos) == canonicalDecimalTypeInfo(canonForm);
+            && VariantUtil.getTypeInfo(value, pos) == minimalDecimalTypeInfo(canonForm);
       }
       case FLOAT: {
         // Canonical iff the stored 4 bytes are exactly what `appendFloat` would write.
@@ -900,7 +895,7 @@ public class VariantBuilder {
   }
 
   // Smallest long type width that can hold `l`.
-  private static int canonicalLongTypeInfo(long l) {
+  private static int minimalLongTypeInfo(long l) {
     if (l == (byte) l) return INT1;
     if (l == (short) l) return INT2;
     if (l == (int) l) return INT4;
@@ -908,7 +903,7 @@ public class VariantBuilder {
   }
 
   // Smallest decimal type width that can hold `d`.
-  private static int canonicalDecimalTypeInfo(BigDecimal d) {
+  private static int minimalDecimalTypeInfo(BigDecimal d) {
     if (d.scale() <= MAX_DECIMAL4_PRECISION && d.precision() <= MAX_DECIMAL4_PRECISION) {
       return DECIMAL4;
     } else if (d.scale() <= MAX_DECIMAL8_PRECISION && d.precision() <= MAX_DECIMAL8_PRECISION) {
