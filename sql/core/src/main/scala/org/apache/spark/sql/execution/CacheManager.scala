@@ -238,19 +238,12 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       name: Seq[String],
       cascade: Boolean,
       blocking: Boolean = false): Unit = {
+    val resolver = spark.sessionState.conf.resolver
     uncacheByCondition(
       spark,
-      isMatchedTableOrView(_, name, spark.sessionState.conf, includeTimeTravel = true),
+      isMatchedTableOrView(_, name, resolver, includeTimeTravel = true),
       cascade,
       blocking)
-  }
-
-  private def isMatchedTableOrView(
-      plan: LogicalPlan,
-      name: Seq[String],
-      conf: SQLConf,
-      includeTimeTravel: Boolean): Boolean = {
-    isMatchedTableOrView(plan, name, conf.resolver, includeTimeTravel)
   }
 
   private def isMatchedTableOrView(
@@ -283,6 +276,8 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    * inspect the root node use this instead of `EliminateSubqueryAliases`, which rewrites the whole
    * tree. That matters because [[isMatchedTableOrView]] is evaluated on every node of every cached
    * plan, where a full rewrite per node makes cache lookups by name quadratic in plan size.
+   * Inside those `exists` traversals the strip is redundant, since the alias's child is visited
+   * anyway; it is needed only where the predicate is applied to an entry's root.
    */
   @tailrec
   private def stripRootSubqueryAliases(plan: LogicalPlan): LogicalPlan = plan match {
@@ -378,8 +373,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       spark: SparkSession,
       name: Seq[String],
       includeTimeTravel: Boolean = true): Unit = {
+    val resolver = spark.sessionState.conf.resolver
     def shouldInvalidate(entry: CachedData): Boolean = {
-      entry.plan.exists(isMatchedTableOrView(_, name, spark.sessionState.conf, includeTimeTravel))
+      entry.plan.exists(isMatchedTableOrView(_, name, resolver, includeTimeTravel))
     }
     recacheByCondition(spark, shouldInvalidate)
   }

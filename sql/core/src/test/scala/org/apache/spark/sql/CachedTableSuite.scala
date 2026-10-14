@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.AsOfVersion
 import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join, JoinStrategyHint, LogicalPlan, SHUFFLE_HASH, UnaryNode}
+import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join, JoinStrategyHint, LogicalPlan, SHUFFLE_HASH, SubqueryAlias, UnaryNode}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.CatalogPlugin
@@ -1996,6 +1996,10 @@ class CachedTableSuite extends SharedSparkSession
         }
         cacheManager.cacheQuery(spark, plan, tableName = None, MEMORY_AND_DISK)
         assert(cacheManager.numCachedEntries == 1)
+        // Without an alias in the cache key, the old full-tree rewrite would not copy anything
+        // either, and the assertions below would pass vacuously.
+        val cacheKey = cacheManager.lookupCachedData(spark, plan).get.plan
+        assert(cacheKey.exists(_.isInstanceOf[SubqueryAlias]))
         CopyCountingNode.numCopies.set(0)
 
         // Scanning the cache for a table that is not referenced must leave the entry alone.
@@ -2020,6 +2024,30 @@ class CachedTableSuite extends SharedSparkSession
       } finally {
         spark.experimental.extraStrategies = originalStrategies
       }
+    }
+  }
+
+  test("cache lookups by table name see through a chain of root aliases") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      // The cache key is rooted at SubqueryAlias(x, SubqueryAlias(testcat.tbl, relation)).
+      val df = spark.table(t).as("x")
+      df.cache()
+      assert(df.queryExecution.analyzed.asInstanceOf[SubqueryAlias].child
+        .isInstanceOf[SubqueryAlias])
+
+      assert(cacheManager.lookupCachedTable(
+        catalog("testcat"),
+        Identifier.of(Array(), "tbl"),
+        tableId = None,
+        CaseInsensitiveStringMap.empty(),
+        spark.sessionState.conf.resolver).isDefined)
+
+      cacheManager.uncacheTableOrView(spark, Seq("testcat", "tbl"), cascade = false)
+      assert(cacheManager.lookupCachedData(df).isEmpty)
     }
   }
 
