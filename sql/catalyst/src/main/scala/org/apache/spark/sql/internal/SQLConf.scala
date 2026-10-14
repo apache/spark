@@ -1108,6 +1108,7 @@ object SQLConf {
 
   val SORT_MERGE_AS_OF_JOIN_ENABLED =
     buildConf("spark.sql.join.sortMergeAsOfJoin.enabled")
+      .internal()
       .doc("When true, use a dedicated sort-merge physical operator for AS-OF joins " +
         "instead of rewriting to a correlated subquery. The sort-merge operator evaluates " +
         "AS-OF joins in O(N log N) by co-sorting both sides on the as-of key and scanning " +
@@ -1119,6 +1120,7 @@ object SQLConf {
 
   val SQL_ASOF_JOIN_ENABLED =
     buildConf("spark.sql.join.asofJoin.enabled")
+      .internal()
       .doc("When true, enable SQL ASOF JOIN syntax with MATCH_CONDITION and plan it with " +
         "the sort-merge ASOF join physical operator. When false, ASOF JOIN fails at parse time.")
       .version("4.3.0")
