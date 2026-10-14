@@ -594,6 +594,7 @@ class JacksonParser(
       fieldConverters: Array[ValueConverter],
       structFilters: StructFilters = new NoopFilters(),
       isRoot: Boolean = false): Option[InternalRow] = {
+    val containerDepth = parser.getParsingContext.getNestingDepth
     val row = new GenericInternalRow(schema.length)
     var badRecordException: Option[Throwable] = None
     var skipRow = false
@@ -620,7 +621,7 @@ class JacksonParser(
               parser.skipChildren()
             case NonFatal(e) =>
               // Nested non-partial: drain before rethrow so parent fields stay aligned.
-              skipRestAndRethrow(parser, JsonToken.END_OBJECT, e)
+              skipRestAndRethrow(parser, JsonToken.END_OBJECT, containerDepth, e)
           }
         case None =>
           parser.skipChildren()
@@ -656,6 +657,7 @@ class JacksonParser(
       parser: JsonParser,
       fieldConverter: ValueConverter,
       keyChecker: Option[UTF8String => Option[Throwable]]): MapData = {
+    val containerDepth = parser.getParsingContext.getNestingDepth
     val keys = ArrayBuffer.empty[UTF8String]
     val values = ArrayBuffer.empty[Any]
     var badRecordException: Option[Throwable] = None
@@ -688,7 +690,7 @@ class JacksonParser(
               parser.skipChildren()
             case NonFatal(e) =>
               // Nested non-partial: drain before rethrow so parent fields stay aligned.
-              skipRestAndRethrow(parser, JsonToken.END_OBJECT, e)
+              skipRestAndRethrow(parser, JsonToken.END_OBJECT, containerDepth, e)
           }
       }
     }
@@ -759,6 +761,7 @@ class JacksonParser(
       fieldConverter: ValueConverter,
       isRoot: Boolean = false,
       arrayAsStructs: Boolean = false): ArrayData = {
+    val containerDepth = parser.getParsingContext.getNestingDepth
     val values = ArrayBuffer.empty[Any]
     var badRecordException: Option[Throwable] = None
 
@@ -771,9 +774,9 @@ class JacksonParser(
         case err: PartialValueException if enablePartialResults =>
           badRecordException = badRecordException.orElse(Some(err.cause))
           values += err.partialResult
-        case NonFatal(e) if !enablePartialResults =>
+        case NonFatal(e) if !isRoot && !enablePartialResults =>
           // Nested non-partial: drain before rethrow so parent fields stay aligned.
-          skipRestAndRethrow(parser, JsonToken.END_ARRAY, e)
+          skipRestAndRethrow(parser, JsonToken.END_ARRAY, containerDepth, e)
       }
     }
 
@@ -790,17 +793,38 @@ class JacksonParser(
   }
 
   /**
-   * Drain this object or array through `stopOn` and rethrow `cause`. skipChildren() must run
-   * first: nextUntil(stopOn) can otherwise stop at the failed value's own end token and leave
-   * parent siblings unconsumed, so an enclosing convertObject would treat remaining names as
-   * its own. Skip failures are suppressed on `cause` so the original error is preserved.
+   * Drain this object or array through its own END token and rethrow `cause`. A child can fail
+   * below this container (VARIANT_DUPLICATE_KEY at an inner END_OBJECT), so stopping at the
+   * first matching END would leave remaining siblings unconsumed. Unwind to `containerDepth`
+   * captured at this container's START, then skip remaining siblings. Compare nesting depth,
+   * not context identity: Jackson recycles child context objects. Skip failures are suppressed
+   * on `cause` so the original error is preserved.
    */
   private def skipRestAndRethrow(
-      parser: JsonParser, stopOn: JsonToken, cause: Throwable): Nothing = {
+      parser: JsonParser,
+      stopOn: JsonToken,
+      containerDepth: Int,
+      cause: Throwable): Nothing = {
     try {
-      parser.skipChildren()
-      while (nextUntil(parser, stopOn)) {
+      var eof = false
+      while (!eof && {
+        val ctx = parser.getParsingContext
+        ctx != null && ctx.getNestingDepth > containerDepth
+      }) {
         parser.skipChildren()
+        eof = parser.nextToken() == null
+      }
+      // An inner END token pops to this container, so the current token can already be
+      // END_OBJECT/END_ARRAY of a child. Only skip remaining siblings when we are still
+      // inside this container; our own END pops to the parent (depth < containerDepth).
+      if (!eof) {
+        val ctx = parser.getParsingContext
+        if (ctx != null && ctx.getNestingDepth == containerDepth) {
+          parser.skipChildren()
+          while (nextUntil(parser, stopOn)) {
+            parser.skipChildren()
+          }
+        }
       }
     } catch {
       case NonFatal(skipErr) =>

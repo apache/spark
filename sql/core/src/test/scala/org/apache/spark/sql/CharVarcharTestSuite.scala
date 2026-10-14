@@ -3595,8 +3595,8 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         }
       }
 
-      // Array element failure must drain to END_ARRAY so an inner field name cannot
-      // overwrite an earlier sibling (SPARK-60229 convertArray).
+      // A failing array element must not leak inner field names to the parent, and
+      // later siblings must still be parsed.
       val arrayJson = """{"tail":1,"arr":[{"m":{"a":1},"tail":5}],"after":2}"""
       val arraySchema =
         "tail INT, arr ARRAY<STRUCT<m MAP<CHAR(3), INT>, tail INT>>, after INT"

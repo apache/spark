@@ -480,7 +480,9 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
 
   /**
    * True when `dt` has a MAP whose key type is CHAR or VARCHAR at any nesting.
-   * Only keys: JacksonParser length-checks CHAR/VARCHAR map keys, not map values.
+   * Only keys: this preserves the SPARK-60108 map-key check, which runs only under the captured
+   * standard semantics and never pads or trims. CHAR/VARCHAR values get pad/length semantics from
+   * applyTextParseSemantics regardless of that flag and are outside this guard.
    */
   private def hasCharVarcharMapKey(dt: DataType): Boolean = dt.existsRecursively {
     case MapType(_: CharType | _: VarcharType, _, _) => true
