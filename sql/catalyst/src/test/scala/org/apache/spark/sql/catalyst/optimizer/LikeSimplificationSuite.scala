@@ -337,9 +337,8 @@ class LikeSimplificationSuite extends PlanTest {
     // whose case-folded form equals the anchor satisfies BOTH StartsWith(prefix) and
     // EndsWith(suffix). The Kelvin sign (U+212A) is one code point of three UTF-8 bytes
     // that folds to 'k'. LIKE 'k%k' is false for it -- the pattern requires two 'k's --
-    // so the rewrite's length guard must reject it. A byte-length guard (OctetLength >=
-    // numBytes("k") + numBytes("k") = 2) is satisfied by the 3-byte Kelvin sign and would
-    // wrongly accept it; the code-point guard kept for non-binary collations rejects it.
+    // and a byte-length guard (OctetLength >= numBytes("k") + numBytes("k") = 2) would
+    // wrongly accept it. LIKE is not rewritten under UTF8_LCASE, so it stays false.
     val lcase = StringType("UTF8_LCASE")
     val relation = LocalRelation(AttributeReference("a", lcase)())
     val attr = relation.output.head
@@ -359,6 +358,23 @@ class LikeSimplificationSuite extends PlanTest {
     assert(simplifiedResult === likeResult,
       s"LikeSimplification changed the LIKE 'k%k' result under UTF8_LCASE: expected " +
         s"$likeResult but the rewritten predicate returned $simplifiedResult")
+  }
+
+  test("SPARK-60250: LikeSimplification does not rewrite LIKE under UTF8_LCASE") {
+    // Under UTF8_LCASE, LIKE matches with a Unicode case-insensitive regex, while the
+    // replacements compare lowercase strings, and the two disagree on some characters. So
+    // every pattern is left to LIKE.
+    val lcase = StringType("UTF8_LCASE")
+    val relation = LocalRelation(AttributeReference("a", lcase)())
+    val attr = relation.output.head
+    Seq("s", "s%", "%s", "s%x", "%s%").foreach { pattern =>
+      val query = relation.where(Like(attr, Literal.create(pattern, lcase), '\\')).analyze
+      comparePlans(Optimize.execute(query), query)
+    }
+    val multiLike = relation.where(
+      attr.likeAny("s%", "%s") && attr.notLikeAny("s%", "%s") &&
+        attr.likeAll("s%", "%s") && attr.notLikeAll("s%", "%s")).analyze
+    comparePlans(Optimize.execute(multiLike), multiLike)
   }
 
   test("SPARK-59063: LikeSimplification preserves LIKE semantics for multibyte UTF8_BINARY") {

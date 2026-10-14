@@ -77,11 +77,12 @@ class CollationSQLRegexpSuite
       SimplifyLikeTestCase("UTF8_BINARY", "a%c", classOf[And], false),
       SimplifyLikeTestCase("UTF8_BINARY", "%b%", classOf[Contains], false),
       SimplifyLikeTestCase("UTF8_BINARY", "abc", classOf[EqualTo], false),
-      SimplifyLikeTestCase("UTF8_LCASE", "ab%", classOf[StartsWith], true),
-      SimplifyLikeTestCase("UTF8_LCASE", "%bc", classOf[EndsWith], true),
-      SimplifyLikeTestCase("UTF8_LCASE", "a%c", classOf[And], true),
-      SimplifyLikeTestCase("UTF8_LCASE", "%b%", classOf[Contains], true),
-      SimplifyLikeTestCase("UTF8_LCASE", "abc", classOf[EqualTo], true)
+      // Not simplified, as the replacements would not match the same strings as LIKE does.
+      SimplifyLikeTestCase("UTF8_LCASE", "ab%", classOf[Like], true),
+      SimplifyLikeTestCase("UTF8_LCASE", "%bc", classOf[Like], true),
+      SimplifyLikeTestCase("UTF8_LCASE", "a%c", classOf[Like], true),
+      SimplifyLikeTestCase("UTF8_LCASE", "%b%", classOf[Like], true),
+      SimplifyLikeTestCase("UTF8_LCASE", "abc", classOf[Like], true)
     )
     val tableName = "T"
     withTable(tableName) {
@@ -93,6 +94,36 @@ class CollationSQLRegexpSuite
         val optimizedPlan = query.queryExecution.optimizedPlan.asInstanceOf[Project]
         assert(optimizedPlan.projectList.head.asInstanceOf[Alias].child.getClass == t.cls)
       }
+    }
+  }
+
+  test("SPARK-60250: LIKE under UTF8_LCASE does not depend on the shape of the pattern") {
+    // LIKE under UTF8_LCASE is a Unicode case-insensitive regex match. It matches U+017F
+    // (long s) to 's', as both uppercase to 'S', but not U+0130 to 'i' followed by U+0307,
+    // although UTF8_LCASE lowercases U+0130 to that. A pattern the optimizer could rewrite
+    // into StartsWith, EndsWith, Contains or EqualTo, which compare the lowercase strings,
+    // must give the same result as one it cannot rewrite.
+    val longS = "\u017f"
+    val dottedI = "\u0130"
+    val iDot = "i\u0307"
+    withTable("t") {
+      sql("CREATE TABLE t(c STRING COLLATE UTF8_LCASE) USING PARQUET")
+      sql(s"INSERT INTO t VALUES ('$longS'), ('${longS}x'), ('x$longS'), ('$dottedI'), " +
+        s"('${dottedI}x')")
+      checkAnswer(
+        sql(
+          s"""SELECT c,
+             |  c LIKE 's', c LIKE 's%', c LIKE '%s', c LIKE '%s%', c LIKE 's_%',
+             |  c LIKE ANY ('s%', 'zz'), c NOT LIKE ALL ('s%', '%s'),
+             |  c LIKE '$iDot', c LIKE '$iDot%', c LIKE '${iDot}_%'
+             |FROM t""".stripMargin),
+        Seq(
+          Row(longS, true, true, true, true, false, true, false, false, false, false),
+          Row(s"${longS}x", false, true, false, true, true, true, false, false, false, false),
+          Row(s"x$longS", false, false, true, true, false, false, false, false, false, false),
+          Row(dottedI, false, false, false, false, false, false, true, false, false, false),
+          Row(s"${dottedI}x", false, false, false, false, false, false, true, false, false,
+            false)))
     }
   }
 
