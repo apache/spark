@@ -454,6 +454,42 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
       "an array with a 4-byte size field where 1 byte fits is not canonical")
   }
 
+  test("isCanonical rejects reserved container header bits and canonicalize clears them") {
+    // The object/array header byte has reserved type-info bits that the parser ignores:
+    // the object's top bit (0x80) and the array's top three bits (0xE0). A foreign writer can
+    // set them on an otherwise-canonical container, so two containers differing only in reserved
+    // bits would both pass a width-only fast path and split hash-agg buckets. isCanonical must
+    // reject them, and canonicalize (which always emits reserved = 0) must clear them.
+
+    // OBJECT: flip on the single reserved bit (0x80) of a canonical {"a":1}.
+    val canonicalObj = parse("""{"a":1}""")
+    assert(isCanon(canonicalObj), "sanity: {\"a\":1} is canonical")
+    val objValue = canonicalObj.getValue.clone()
+    objValue(0) = (objValue(0) | 0x80).toByte
+    val reservedObj = new Variant(objValue, canonicalObj.getMetadata)
+    assert(VariantUtil.isValidVariant(objValue, canonicalObj.getMetadata),
+      "sanity: a reserved bit keeps the object structurally valid")
+    assert(!bytesEqual(reservedObj, canonicalObj), "sanity: the reserved bit changed the bytes")
+    assert(!isCanon(reservedObj), "an object with a reserved header bit set is not canonical")
+    assert(bytesEqual(canon(reservedObj), canonicalObj),
+      "canonicalize must clear the object's reserved bit")
+    assert(isCanon(canon(reservedObj)), "the cleared canonical form is canonical")
+
+    // ARRAY: flip on all three reserved bits (0xE0) of a canonical [1,2].
+    val canonicalArr = parse("[1,2]")
+    assert(isCanon(canonicalArr), "sanity: [1,2] is canonical")
+    val arrValue = canonicalArr.getValue.clone()
+    arrValue(0) = (arrValue(0) | 0xE0).toByte
+    val reservedArr = new Variant(arrValue, canonicalArr.getMetadata)
+    assert(VariantUtil.isValidVariant(arrValue, canonicalArr.getMetadata),
+      "sanity: reserved bits keep the array structurally valid")
+    assert(!bytesEqual(reservedArr, canonicalArr), "sanity: the reserved bits changed the bytes")
+    assert(!isCanon(reservedArr), "an array with reserved header bits set is not canonical")
+    assert(bytesEqual(canon(reservedArr), canonicalArr),
+      "canonicalize must clear the array's reserved bits")
+    assert(isCanon(canon(reservedArr)), "the cleared canonical form is canonical")
+  }
+
   // ----- isCanonical + canonicalize: 2/3-byte offset and id widths -----
 
   test("canonicalize and isCanonical handle 2-byte and 3-byte array offset widths") {
