@@ -119,13 +119,15 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
   }
 
   test("Remove redundant aggregate with non-deterministic lower") {
+    // An integer key: the lower aggregate normalizes a float/double key, so it would be kept.
+    val nondeterministic = (rand(0) * 10).cast(IntegerType)
     val query = relation
-      .groupBy($"a", $"c")($"a", rand(0) as "c")
+      .groupBy($"a", $"c")($"a", nondeterministic as "c")
       .groupBy($"a", $"c")($"a", $"c")
       .analyze
     val expected = relation
       .select($"a", $"b", rand(0) as "_nondeterministic")
-      .select($"a", $"_nondeterministic" as "c")
+      .select($"a", ($"_nondeterministic" * 10).cast(IntegerType) as "c")
       .groupBy($"a", $"c")($"a", $"c")
       .analyze
     val optimized = Optimize.execute(query)
@@ -252,6 +254,18 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
       .analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-60150: Keep lower aggregate that normalizes a float key the upper one reads") {
+    val d = $"d".double
+    val doubles = LocalRelation(d, $"a".int)
+    // The lower aggregate outputs d normalized, which the upper aggregate would read raw.
+    val query = doubles.groupBy(d, $"a")(d, $"a").groupBy(d)(d, max($"a").as("m")).analyze
+    comparePlans(Optimize.execute(query), query)
+    // Removed when the upper aggregate does not read the float key.
+    comparePlans(
+      Optimize.execute(doubles.groupBy(d, $"a")(d, $"a").groupBy($"a")($"a").analyze),
+      doubles.select($"a").groupBy($"a")($"a").analyze)
   }
 
   test("SPARK-60150: Keep group only aggregate that normalizes a float key") {

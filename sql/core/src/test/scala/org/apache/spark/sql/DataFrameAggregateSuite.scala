@@ -1348,6 +1348,22 @@ class DataFrameAggregateSuite extends SharedSparkSession
     assert(first == 0.0d && 1.0d / first > 0, s"$first is not 0.0")
   }
 
+  test("SPARK-60150: filter pushed below a DISTINCT that an upper aggregate makes redundant") {
+    withTempView("t") {
+      Seq(-0.0d, -0.0d).toDF("x").createOrReplaceTempView("t")
+      // The DISTINCT outputs 0.0, which the filter keeps and the upper aggregate groups as '0.0'.
+      checkAnswer(
+        sql("SELECT cast(x AS STRING) AS k FROM (SELECT DISTINCT x FROM t) " +
+          "WHERE cast(x AS STRING) = '0.0' GROUP BY 1"),
+        Row("0.0"))
+      // Without a filter too (SPARK-60093): the upper aggregate reads the DISTINCT's 0.0.
+      checkAnswer(
+        sql("SELECT cast(x AS STRING) AS k, max(x) AS m FROM " +
+          "(SELECT DISTINCT x FROM VALUES (-0.0D), (0.0D) t(x)) GROUP BY 1"),
+        Row("0.0", 0.0d))
+    }
+  }
+
   test("SPARK-60150: filter pushed through two aggregates whose upper key is computed") {
     withTempView("t") {
       Seq(-0.0d, -0.0d).toDF("x").createOrReplaceTempView("t")
