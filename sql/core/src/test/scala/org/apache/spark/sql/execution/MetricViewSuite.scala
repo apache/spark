@@ -82,6 +82,24 @@ abstract class MetricViewSuite extends QueryTest {
     }
   }
 
+  test("SPARK-60192: invalid metric view YAML version lists supported versions") {
+    val exception = intercept[AnalysisException] {
+      sql(
+        """
+          |CREATE VIEW invalid_version_metric_view
+          |WITH METRICS
+          |LANGUAGE YAML
+          |AS $$ version: 1.1 $$
+          |""".stripMargin)
+    }
+
+    checkError(
+      exception = exception,
+      condition = "INVALID_METRIC_VIEW_YAML",
+      parameters = Map(
+        "message" -> "Invalid YAML version: 1.1. Supported YAML versions: 0.1"))
+  }
+
   test("metric view SQL source rejects a temporary variable read via an IDENTIFIER clause") {
     // A variable read via an IDENTIFIER clause in the metric-view SQL source is absent from the
     // analyzed plan, so it is captured during analysis and must be rejected for a persisted metric

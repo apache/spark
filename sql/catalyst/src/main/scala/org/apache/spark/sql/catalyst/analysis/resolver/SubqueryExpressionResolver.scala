@@ -159,12 +159,11 @@ class SubqueryExpressionResolver(expressionResolver: ExpressionResolver, resolve
    *    under the subquery root.
    *  - Fresh [[SubqueryRegistry]] scope to isolate the subquery expression plan resolution.
    *  - Fresh [[OperatorResolutionContext]] in order to preserve the context of the outer operator.
-   * Collect outer expressions because they may be required for [[Window]] resolution. For
-   * further context look at [[CollectsWindowSourceExpressions]].
+   * Collect outer references from the resolved subquery plan to use them as the subquery
+   * expression's `outerAttrs`.
    */
   private def resolveSubqueryExpressionPlan(
       unresolvedSubqueryPlan: LogicalPlan): ResolvedSubqueryExpressionPlan = {
-    val parentSubqueryScope = subqueryRegistry.currentScope
     expressionIdAssigner.pushMapping(isSubqueryRoot = true)
     scopes.pushScope(isSubqueryRoot = true)
     cteRegistry.pushScope(isRoot = true)
@@ -178,7 +177,7 @@ class SubqueryExpressionResolver(expressionResolver: ExpressionResolver, resolve
     val resolvedSubqueryExpressionPlan = try {
       val resolvedPlan = resolver.resolve(unresolvedSubqueryPlan)
 
-      val outerReferences = processOuterReferences(resolvedPlan, parentSubqueryScope)
+      val outerReferences = processOuterReferences(resolvedPlan)
 
       ResolvedSubqueryExpressionPlan(
         plan = resolvedPlan,
@@ -201,62 +200,10 @@ class SubqueryExpressionResolver(expressionResolver: ExpressionResolver, resolve
   }
 
   /**
-   * Return `outerAttrs` for the resolved subquery plan.
-   * If `spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled` is set to false, simply
-   * collect the outer references within the subquery plan.
-   *
-   * Otherwise,
-   *  1. Get the outer references within the resolved subquery plan and also get the outer
-   *  attributes from any nested subqueries.
-   *  2. For each outer reference, using the `outerReferenceScopeLevel` map from current subquery
-   *  scope to check if it has only one level of correlation or beyond one level of correlation.
-   *  If it is beyond one level of correlation, wrap it with [[OuterScopeReference]] and add it to
-   *  the parent subquery scope's `outerReferenceScopeLevel` map with level - 1. E.g: For the
-   *  following query:
-   *
-   * {{{
-   *    SELECT *
-   *    FROM t1
-   *    WHERE t1.a = (
-   *      SELECT MAX(t2.a)
-   *      FROM t2
-   *      WHERE t2.a = (
-   *        SELECT MAX(t3.a)
-   *        FROM t3
-   *        WHERE t3.b > t2.b AND t3.c > t1.c
-   *   ) AND t2.b > t1.b
-   * }}}
-   *
-   * After resolving:
-   *
-   * {{{
-   *   Aggregate (MAX(t3.a))
-   *     Filter (t3.b > OuterReference(t2.b) AND t3.c > OuterReference(t1.c))
-   *       Scan t3
-   * }}}
-   *
-   * The innermost subquery has two outer references: `t2.b(outerScopeReferenceLevel = 1)` and
-   * `t1.c(outerScopeReferenceLevel = 2)`. The innermost subquery expression is resolved as
-   * `scalar-subquery(outerAttrs = [t2.b, OuterScopeReference(t1.c)])` and
-   * `(t1.c.exprId -> outerScopeReferenceLevel = 1)` is added to the `outerReferenceScopeLevel`
-   * map of the parent subquery scope.
-   * After resolving the parent subquery plan:
-   *
-   * {{{
-   *    Aggregate (MAX(t2.a))
-   *     Filter (t2.a = scalar-subquery(outerAttrs = [t2.b, OuterScopeReference(t1.c)]) AND
-   *              t2.b > OuterReference(t1.b))
-   *       Scan t2
-   * }}}
-   *
-   * The collected outer references are `t1.b` and the `OuterScopeReference(t1.c)` from the
-   * innermost subquery. Both of them have `outerScopeReferenceLevel = 1`, they are all resolved
-   * as one level outer references. The subquery expression is then resolved as
-   * `scalar-subquery(outerAttrs = [t1.b, t1.c])`.
+   * Return `outerAttrs` for the resolved subquery plan by collecting the outer references within
+   * the subquery plan. Only one level of correlation is supported.
    */
-  private def processOuterReferences(
-      resolvedPlan: LogicalPlan,
-      parentSubqueryScope: SubqueryScope): Seq[Expression] = {
+  private def processOuterReferences(resolvedPlan: LogicalPlan): Seq[Expression] = {
     SubExprUtils.getOuterReferences(resolvedPlan)
   }
 

@@ -164,7 +164,7 @@ class SparkContext:
         None  # zip and egg files that need to be added to PYTHONPATH
     )
     serializer: Serializer
-    profiler_collector: ProfilerCollector
+    profiler_collector: Optional[ProfilerCollector]
 
     PACKAGE_EXTENSIONS: Iterable[str] = (".zip", ".egg", ".jar")
 
@@ -399,7 +399,7 @@ class SparkContext:
                 profiler_cls, udf_profiler_cls, memory_profiler_cls, dump_path
             )
         else:
-            self.profiler_collector = None  # type: ignore[assignment]
+            self.profiler_collector = None
 
         # create a signal handler which would be invoked on receiving SIGINT
         def signal_handler(signal: Any, frame: Any) -> NoReturn:
