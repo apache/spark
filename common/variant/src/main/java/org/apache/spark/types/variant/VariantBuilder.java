@@ -632,6 +632,13 @@ public class VariantBuilder {
   // hash partitioning) group and compare Variants by value rather than by
   // their incidental physical encoding.
   //
+  // Numeric equality follows the parquet-format spec's equivalence classes:
+  //   - Exact Numeric (every int width and every decimal) unify by value: an integer-valued
+  //     decimal in signed 64-bit range becomes the minimal-width int; other decimals use the
+  //     minimal width with trailing zeros stripped. So 1, 1.0 and 1.00 are equal.
+  //   - float and double are each their own class (only -0.0 -> +0.0 and NaN -> canonical
+  //     NaN), never unified with each other or with Exact Numeric. So the double 1e0 != 1.
+  //
   // The metadata dictionary is rebuilt with its keys sorted by unsigned UTF-8 bytes
   // (VariantUtil.compareKeys, the same order finishWritingObject uses for object fields)
   // and unused entries stripped, with field ids remapped to the sorted positions.
