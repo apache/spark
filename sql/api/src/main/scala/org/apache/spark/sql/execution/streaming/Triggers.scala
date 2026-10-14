@@ -27,7 +27,6 @@ import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
 import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils.microsToMillis
 import org.apache.spark.sql.catalyst.util.SparkIntervalUtils
-import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -41,7 +40,7 @@ private[spark] object Triggers {
       s"""{"type":"RealTime","batchDurationMs":$batchDurationMs}"""
     case AvailableNowTrigger => """{"type":"AvailableNow"}"""
     case OneTimeTrigger => """{"type":"OneTime"}"""
-    case _ => throw ExecutionErrors.unreachableError()
+    case other => throw new IllegalStateException(s"Unknown type of trigger: $other")
   }
 
   def validate(intervalMs: Long): Unit = {

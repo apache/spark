@@ -32,7 +32,6 @@ import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.execution.streaming.Triggers
@@ -57,13 +56,28 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
     case (trigger, expected) => assert(Triggers.toJson(trigger) === expected)
   }
 
-  test("SPARK-59986: unknown trigger metadata throws an unreachable error") {
-    checkError(
-      exception = intercept[SparkRuntimeException] {
-        Triggers.toJson(new Trigger {})
-      },
-      condition = "_LEGACY_ERROR_TEMP_2028",
-      parameters = Map("err" -> ""))
+  test("SPARK-59986: unknown trigger metadata identifies the unsupported trigger") {
+    val trigger = new Trigger {}
+    val exception = intercept[IllegalStateException] {
+      Triggers.toJson(trigger)
+    }
+    assert(exception.getMessage === s"Unknown type of trigger: $trigger")
+  }
+
+  test("SPARK-59986: starting a query with an unknown trigger identifies the input") {
+    import testImplicits._
+
+    val input = MemoryStream[Int]
+    val trigger = new Trigger {}
+    val exception = intercept[IllegalStateException] {
+      input.toDS().writeStream
+        .format("memory")
+        .queryName("unsupported_trigger")
+        .trigger(trigger)
+        .start()
+        .stop()
+    }
+    assert(exception.getMessage === s"Unknown type of trigger: $trigger")
   }
 
   test("SPARK-59986: trigger metadata is initialized by the constructor") {
