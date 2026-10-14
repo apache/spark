@@ -72,15 +72,15 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
 
     val input = MemoryStream[Int]
     val trigger = new Trigger {}
-    val exception = intercept[IllegalStateException] {
-      input.toDS().writeStream
-        .format("memory")
-        .queryName("unsupported_trigger")
-        .trigger(trigger)
-        .start()
-        .stop()
+    val query = input.toDS().writeStream
+      .format("memory")
+      .queryName("unsupported_trigger")
+      .trigger(trigger)
+      .start()
+    val exception = intercept[StreamingQueryException] {
+      query.processAllAvailable()
     }
-    assert(exception.getMessage === s"Unknown type of trigger: $trigger")
+    assert(exception.getCause.getMessage === s"Unknown type of trigger: $trigger")
   }
 
   test("SPARK-59986: trigger metadata has a public read-only JVM accessor") {
