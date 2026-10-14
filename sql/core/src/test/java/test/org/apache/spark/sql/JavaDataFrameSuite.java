@@ -28,6 +28,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 import javax.annotation.Nonnull;
 
 import scala.collection.Seq;
@@ -37,6 +38,7 @@ import com.google.common.primitives.Ints;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.function.Executable;
 
+import org.apache.spark.SparkArithmeticException;
 import org.apache.spark.SparkRuntimeException;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -45,7 +47,11 @@ import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation;
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan;
+import org.apache.spark.sql.execution.LogicalRDD;
 import org.apache.spark.sql.expressions.UserDefinedFunction;
+import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.util.sketch.BloomFilter;
@@ -589,6 +595,93 @@ public class JavaDataFrameSuite {
       CollectionConverters.asScala(Map.of("k", nested)));
     Assertions.assertEquals(
       Arrays.asList(expected), df.select("array", "list", "map").collectAsList());
+  }
+
+  @Test
+  public void testCreateDataFramePlanForBeans() {
+    // SPARK-55396: the List overload builds a LocalRelation, and the RDD overload a LogicalRDD
+    // named after the source RDD.
+    List<Bean.NestedBean> data = Arrays.asList(new Bean.NestedBean());
+    org.apache.spark.sql.classic.Dataset<Row> fromList =
+      spark.createDataFrame(data, Bean.NestedBean.class);
+    Assertions.assertInstanceOf(LocalRelation.class, fromList.queryExecution().analyzed());
+    JavaRDD<Bean.NestedBean> rdd = jsc.parallelize(data).setName("beans");
+    LogicalPlan fromRdd =
+      spark.createDataFrame(rdd, Bean.NestedBean.class).queryExecution().analyzed();
+    Assertions.assertInstanceOf(LogicalRDD.class, fromRdd);
+    Assertions.assertEquals("beans", ((LogicalRDD) fromRdd).rdd().name());
+  }
+
+  public static class GetterOnlyBean implements Serializable {
+    private final int id;
+    private final String name;
+
+    public GetterOnlyBean(int id, String name) {
+      this.id = id;
+      this.name = name;
+    }
+
+    public int getId() { return id; }
+    public String getName() { return name; }
+  }
+
+  @Test
+  public void testCreateDataFrameWithGetterOnlyBean() {
+    // SPARK-55396: beans without setters or a no-arg constructor are supported, since only
+    // the serializer is used.
+    List<GetterOnlyBean> data = Arrays.asList(new GetterOnlyBean(1, "a"));
+    for (Dataset<Row> df : Arrays.asList(
+        spark.createDataFrame(data, GetterOnlyBean.class),
+        spark.createDataFrame(jsc.parallelize(data), GetterOnlyBean.class))) {
+      Assertions.assertEquals(Encoders.bean(GetterOnlyBean.class).schema(), df.schema());
+      Assertions.assertEquals(Arrays.asList(RowFactory.create(1, "a")), df.collectAsList());
+    }
+  }
+
+  public static class DecimalBean implements Serializable {
+    public BigDecimal getValue() { return new BigDecimal("1e30"); }
+  }
+
+  private List<Supplier<List<Row>>> createDecimalBeanDataFrames() {
+    List<DecimalBean> data = Arrays.asList(new DecimalBean());
+    return Arrays.asList(
+      () -> spark.createDataFrame(data, DecimalBean.class).collectAsList(),
+      () -> spark.createDataFrame(jsc.parallelize(data), DecimalBean.class).collectAsList());
+  }
+
+  private void withAnsi(boolean enabled, Runnable body) {
+    String key = SQLConf.ANSI_ENABLED().key();
+    String original = spark.conf().get(key);
+    spark.conf().set(key, String.valueOf(enabled));
+    try {
+      body.run();
+    } finally {
+      spark.conf().set(key, original);
+    }
+  }
+
+  @Test
+  public void testCreateDataFrameWithDecimalOverflowNonAnsi() {
+    // SPARK-55396: without ANSI mode, a BigDecimal that doesn't fit decimal(38, 18) is null.
+    withAnsi(false, () -> {
+      for (Supplier<List<Row>> call : createDecimalBeanDataFrames()) {
+        Assertions.assertEquals(Arrays.asList(RowFactory.create((Object) null)), call.get());
+      }
+    });
+  }
+
+  @Test
+  public void testCreateDataFrameWithDecimalOverflowAnsi() {
+    // SPARK-55396: with ANSI mode, the overflow fails to encode, as in createDataset.
+    withAnsi(true, () -> {
+      for (Supplier<List<Row>> call : createDecimalBeanDataFrames()) {
+        SparkRuntimeException e = Assertions.assertThrows(SparkRuntimeException.class, call::get);
+        Assertions.assertEquals("EXPRESSION_ENCODING_FAILED", e.getCondition());
+        Assertions.assertInstanceOf(SparkArithmeticException.class, e.getCause());
+        Assertions.assertTrue(((SparkArithmeticException) e.getCause()).getCondition()
+          .startsWith("NUMERIC_VALUE_OUT_OF_RANGE"));
+      }
+    });
   }
 
   @Test
