@@ -51,11 +51,7 @@ from pyspark.accumulators import (
 )
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.eval_handlers._base import get_eval_type_handler
-from pyspark.eval_handlers._udtf import (
-    UDTFEvalTypeHandler,
-    UDTFWithPartitions,
-    build_null_checker,
-)
+from pyspark.eval_handlers._udtf import TableUDTFHandler, UDTFEvalTypeHandler
 from pyspark.eval_handlers.utils import extract_key_value_indexes, wrap_kwargs_support
 from pyspark.eval_handlers.verification import (
     verify_iterator_exhausted,
@@ -83,7 +79,6 @@ from pyspark.sql.conversion import (
     LocalDataToArrowConversion,
     PandasToArrowConversion,
 )
-from pyspark.sql.functions import SkipRestOfInputTableException
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
@@ -108,7 +103,7 @@ from pyspark.util import (
     start_faulthandler_periodic_traceback,
     with_faulthandler,
 )
-from pyspark.worker_message import WorkerInitInfo
+from pyspark.worker_message import UDTFInfo, WorkerInitInfo
 from pyspark.worker_util import (
     EvalConf,
     RunnerConf,
@@ -431,130 +426,6 @@ def read_single_udtf(pickleSer, udtf_info, partition_wrapper):
     return udtf, udtf_info.args, udtf_info.kwargs, return_type
 
 
-# Read and process a serialized user-defined table function (UDTF) from a socket.
-# It expects the UDTF to be in a specific format and performs various checks to
-# ensure the UDTF is valid. This function also prepares a mapper function for applying
-# the UDTF logic to input rows.
-def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
-    # If an eval type has a registered handler, dispatch through it: the handler
-    # provides both the function and the serializer.
-    handler_cls = get_eval_type_handler(eval_type, runner_conf)
-    if handler_cls is not None:
-        assert issubclass(handler_cls, UDTFEvalTypeHandler)
-        udfs = [read_single_udtf(pickleSer, udtf_info, handler_cls.partition_wrapper)]
-        handler = handler_cls(udfs=udfs, runner_conf=runner_conf, eval_conf=eval_conf)
-        return handler.run, handler.serializer
-
-    # Each row is a group so do not batch but send one by one.
-    ser = BatchedSerializer(CPickleSerializer(), 1)
-
-    udtf, args_offsets, kwargs_offsets, return_type = read_single_udtf(
-        pickleSer, udtf_info, UDTFWithPartitions
-    )
-
-    check_output_row_against_schema = build_null_checker(return_type)
-
-    def wrap_udtf(f, return_type):
-        assert return_type.needConversion()
-        toInternal = return_type.toInternal
-        return_type_size = len(return_type)
-
-        def verify_and_convert_result(result):
-            if result is not None:
-                if hasattr(result, "__UDT__"):
-                    # UDT object should not be returned directly.
-                    raise PySparkRuntimeError(
-                        errorClass="UDTF_INVALID_OUTPUT_ROW_TYPE",
-                        messageParameters={
-                            "type": type(result).__name__,
-                            "func": f.__name__,
-                        },
-                    )
-
-                if hasattr(result, "__len__") and len(result) != return_type_size:
-                    raise PySparkRuntimeError(
-                        errorClass="UDTF_RETURN_SCHEMA_MISMATCH",
-                        messageParameters={
-                            "expected": str(return_type_size),
-                            "actual": str(len(result)),
-                            "func": f.__name__,
-                        },
-                    )
-
-                if not (isinstance(result, (list, dict, tuple)) or hasattr(result, "__dict__")):
-                    raise PySparkRuntimeError(
-                        errorClass="UDTF_INVALID_OUTPUT_ROW_TYPE",
-                        messageParameters={
-                            "type": type(result).__name__,
-                            "func": f.__name__,
-                        },
-                    )
-                if check_output_row_against_schema is not None:
-                    check_output_row_against_schema(result)
-            return toInternal(result)
-
-        # Evaluate the function and return a tuple back to the executor.
-        def evaluate(*a) -> tuple:
-            try:
-                res = f(*a)
-            except SkipRestOfInputTableException:
-                raise
-            except Exception as e:
-                raise PySparkRuntimeError(
-                    errorClass="UDTF_EXEC_ERROR",
-                    messageParameters={"method_name": f.__name__, "error": str(e)},
-                )
-
-            if res is None:
-                # If the function returns None or does not have an explicit return statement,
-                # an empty tuple is returned to the executor.
-                # This is because directly constructing tuple(None) results in an exception.
-                return tuple()
-
-            if not isinstance(res, Iterable):
-                raise PySparkRuntimeError(
-                    errorClass="UDTF_RETURN_NOT_ITERABLE",
-                    messageParameters={
-                        "type": type(res).__name__,
-                        "func": f.__name__,
-                    },
-                )
-
-            # If the function returns a result, we map it to the internal representation and
-            # returns the results as a tuple.
-            return tuple(map(verify_and_convert_result, res))
-
-        return evaluate
-
-    eval_func_kwargs_support, args_kwargs_offsets = wrap_kwargs_support(
-        getattr(udtf, "eval"), args_offsets, kwargs_offsets
-    )
-    eval = wrap_udtf(eval_func_kwargs_support, return_type)
-
-    if hasattr(udtf, "terminate"):
-        terminate = wrap_udtf(getattr(udtf, "terminate"), return_type)
-    else:
-        terminate = None
-
-    cleanup = getattr(udtf, "cleanup") if hasattr(udtf, "cleanup") else None
-
-    # Return an iterator of iterators.
-    def mapper(_, it):
-        try:
-            for a in it:
-                yield eval(*[a[o] for o in args_kwargs_offsets])
-            if terminate is not None:
-                yield terminate()
-        except SkipRestOfInputTableException:
-            if terminate is not None:
-                yield terminate()
-        finally:
-            if cleanup is not None:
-                cleanup()
-
-    return mapper, ser
-
-
 def _elementwise_udf_input_type(data_type: DataType, depth: int) -> DataType:
     """The element type ``depth`` ``ArrayType`` levels below ``data_type``.
 
@@ -734,17 +605,6 @@ def _elementwise_pandas_or_arrow_udf_output_to_flat_batch(
 
 
 def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
-    # If an eval type has a registered handler, dispatch through it: the handler
-    # provides both the function and the serializer.
-    handler_cls = get_eval_type_handler(eval_type, runner_conf)
-    if handler_cls is not None:
-        udfs = [
-            read_single_udf(pickleSer, udf_info, eval_type, runner_conf, udf_index=udf_index)
-            for udf_index, udf_info in enumerate(udf_info_list)
-        ]
-        handler = handler_cls(udfs=udfs, runner_conf=runner_conf, eval_conf=eval_conf)
-        return handler.run, handler.serializer
-
     if eval_type in (
         PythonEvalType.SQL_ARROW_BATCHED_UDF,
         PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF,
@@ -2418,15 +2278,31 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
             func, profiler, deserializer, serializer = read_command(pickleSer, init_info.udf_info)
         else:
             # UDF and UDTF runners read input and write output through a single serializer.
-            is_udtf = eval_type in (
-                PythonEvalType.SQL_TABLE_UDF,
-                PythonEvalType.SQL_ARROW_TABLE_UDF,
-                PythonEvalType.SQL_ARROW_UDTF,
-            )
-            read = read_udtf if is_udtf else read_udfs
-            func, serializer = read(
-                pickleSer, init_info.udf_info, eval_type, runner_conf, eval_conf
-            )
+            # If an eval type has a registered handler, dispatch through it: the handler
+            # provides both the function and the serializer.
+            handler_cls = get_eval_type_handler(eval_type, runner_conf)
+            if handler_cls is not None:
+                if isinstance(init_info.udf_info, UDTFInfo):
+                    assert issubclass(handler_cls, (UDTFEvalTypeHandler, TableUDTFHandler))
+                    udfs = [
+                        read_single_udtf(
+                            pickleSer, init_info.udf_info, handler_cls.partition_wrapper
+                        )
+                    ]
+                else:
+                    assert isinstance(init_info.udf_info, list)
+                    udfs = [
+                        read_single_udf(
+                            pickleSer, udf_info, eval_type, runner_conf, udf_index=udf_index
+                        )
+                        for udf_index, udf_info in enumerate(init_info.udf_info)
+                    ]
+                handler = handler_cls(udfs=udfs, runner_conf=runner_conf, eval_conf=eval_conf)
+                func, serializer = handler.run, handler.serializer
+            else:
+                func, serializer = read_udfs(
+                    pickleSer, init_info.udf_info, eval_type, runner_conf, eval_conf
+                )
             deserializer = serializer
 
         split_index = init_info.split_index
