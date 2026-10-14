@@ -527,15 +527,20 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
    * only be evaluated by `subPlan`, and whether they need both plans.
    *
    * An attribute that both plans produce is attributed to `subPlan` rather than to `outerPlan`,
-   * which is what the `subPlan` probe coming first does. The two plans share no ExprId in any
-   * shape reached by the suite: `DeduplicateRelations` has given the sub-query its own, and the
-   * EXISTS arms classify against the raw sub-query plan while the IN arms classify against the
-   * plan `dedupSubqueryOnSelfJoin` has already separated from the outer plan. The order is
-   * therefore defensive rather than something a query exercises, and it is the safe one: a
-   * nested sub-query resolves in the scope of the sub-query it is nested in, so an attribute
-   * both plans produce is one of that sub-query's own, and attributing it to `outerPlan` instead
-   * would let a single shared attribute satisfy both sides of the classification and have a
-   * nested sub-query referencing only the inner query rejected as referencing both.
+   * which is what the `subPlan` probe coming first does. A nested sub-query resolves in the scope
+   * of the sub-query it is nested in, so an attribute both plans produce is one of that
+   * sub-query's own; attributing it to `outerPlan` instead would let a single shared attribute
+   * satisfy both sides of the classification and have a nested sub-query referencing only the
+   * inner query rejected as referencing both.
+   *
+   * No plan the analyzer produces from SQL reaches this: `DeduplicateRelations` has given the
+   * sub-query its own ExprIds, and the EXISTS arms classify against the raw sub-query plan while
+   * the IN arms classify against the plan `dedupSubqueryOnSelfJoin` has already separated from the
+   * outer plan. What does reach it is the shared-attribute fixture in `RewriteSubquerySuite`,
+   * which builds the overlap directly because the analyzer is not involved there. That fixture
+   * pins the shape, not the outcome of this ordering: `dedupSubqueryOnSelfJoin`'s pre-existing
+   * conflict check reports the duplicated attribute first, so it ends in the same error whichever
+   * plan the shared attribute is attributed to.
    *
    * An attribute neither plan produces leaves both answers false, which declines the rewrite
    * without rejecting the sub-query, as a sub-query referencing neither plan can be left in the

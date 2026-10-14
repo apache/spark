@@ -3517,7 +3517,7 @@ class SubquerySuite extends SharedSparkSession
   }
 
   test("SPARK-59351: nested IN subquery whose result can be unknown") {
-    withTempView("t1", "t2", "t2n", "t3n", "t3", "t4", "tb") {
+    withTempView("t1", "t2", "t2n", "t3n", "t3", "t4", "tb", "t2r", "t2rn", "t6", "t7") {
       Seq((1), (2), (3)).toDF("a").persist().createOrReplaceTempView("t1")
       Seq((1), (8), (9)).toDF("c1").persist().createOrReplaceTempView("t2")
       // A nullable compared value, against a subquery column that is not nullable.
@@ -3525,6 +3525,14 @@ class SubquerySuite extends SharedSparkSession
       Seq((1, 1), (9, 9)).toDF("col1", "k").persist().createOrReplaceTempView("t4")
       // A boolean relation, to compare the result of a nested IN subquery against.
       Seq(false).toDF("b").persist().createOrReplaceTempView("tb")
+      // Row-valued shapes. t2r and t7 are not nullable anywhere; the nullability of t2rn and of
+      // t6 sits in the second field, so the first pair of the comparison does not expose it.
+      Seq((1, 1), (8, 8), (9, 9)).toDF("c1", "c2").persist().createOrReplaceTempView("t2r")
+      Seq((1, Option.empty[Int]), (8, Some(8))).toDF("c1", "c2n").persist()
+        .createOrReplaceTempView("t2rn")
+      Seq((1, Option.empty[Int]), (5, Some(5))).toDF("col1", "col2").persist()
+        .createOrReplaceTempView("t6")
+      Seq((1, 1), (5, 5)).toDF("col1", "col2").persist().createOrReplaceTempView("t7")
       // The NULL matches no value of t2, so c1 IN (SELECT col1 FROM t3n) is unknown there, and
       // c1 NOT IN (SELECT col1 FROM t3n) is never true.
       Seq(Some(3), None).toDF("col1").persist().createOrReplaceTempView("t3n")
@@ -3610,6 +3618,67 @@ class SubquerySuite extends SharedSparkSession
             "NESTED_IN_SUBQUERY_WITH_UNKNOWN_RESULT")
         }
       }
+
+      // The other direction is what the legacy configuration actually suppresses: a non-nullable
+      // compared value, t2.c1, against a nullable list output, t3n.col1. The two settings do not
+      // agree here, and the difference is not a gap in the guard.
+      //
+      // Under the default, `InSubquery.nullable` is true, the comparison against FALSE stays an
+      // EqualNullSafe, the value of the IN is therefore observed beyond being TRUE, and the guard
+      // rejects it.
+      val nullableListOutput = intercept[AnalysisException] {
+        sql("""SELECT * FROM t1 WHERE EXISTS (
+              |  SELECT 1 FROM t2
+              |  WHERE a = c1 OR ((c1 IN (SELECT col1 FROM t3n)) <=> false))""".stripMargin)
+          .collect()
+      }
+      assert(nullableListOutput.getCondition == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+        "NESTED_IN_SUBQUERY_WITH_UNKNOWN_RESULT")
+      assert(nullableListOutput.getMessageParameters.get("subqueryExpression") ==
+        "(t2.c1 IN (listquery()))",
+        nullableListOutput.getMessageParameters.get("subqueryExpression"))
+
+      // Under legacy = true the same query is accepted, and correctly so. That configuration
+      // makes `InSubquery.nullable` false here, so SimplifyBinaryComparison turns `x <=> false`
+      // into `NOT x`, and a NOT directly over an IN takes the null-aware rewrite, whose join
+      // condition is `cond OR isnull(cond)`. Its `exists` is TRUE where the comparison is
+      // unknown, so `NOT exists` is FALSE there, which is what `unknown <=> false` is. The
+      // guard is not reached because there is no longer an EqualNullSafe to reach it, not
+      // because it failed to re-derive the nullability.
+      withSQLConf(SQLConf.LEGACY_IN_SUBQUERY_NULLABILITY.key -> "true") {
+        checkAnswerAndPlan(
+          """SELECT * FROM t1 WHERE EXISTS (
+            |  SELECT 1 FROM t2
+            |  WHERE a = c1 OR ((c1 IN (SELECT col1 FROM t3n)) <=> false))""".stripMargin,
+          Row(1) :: Nil)
+      }
+
+      // A row-valued nested IN: the guard pairs every compared value with the matching list
+      // output, so a shape whose first pair is non-nullable on both sides and whose nullability
+      // sits in a later pair is what tells that apart from inspecting only the first pair. Taken
+      // once on the list-output side and once on the compared-value side.
+      Seq(
+        // t2r.c2 and t6.col1 are not nullable; t6.col2 is.
+        "((c1, c2) IN (SELECT col1, col2 FROM t6)) <=> false" -> "t2r",
+        // t7 is not nullable at all; t2rn.c2n is.
+        "((c1, c2n) IN (SELECT col1, col2 FROM t7)) <=> false" -> "t2rn")
+        .foreach { case (predicate, inner) =>
+          val rowValued = intercept[AnalysisException] {
+            sql(s"SELECT * FROM t1 WHERE EXISTS (" +
+              s"SELECT 1 FROM $inner WHERE a = c1 OR $predicate)").collect()
+          }
+          assert(rowValued.getCondition == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+            "NESTED_IN_SUBQUERY_WITH_UNKNOWN_RESULT",
+            s"$predicate over $inner was not rejected")
+        }
+
+      // And the fully non-nullable row-valued shape cannot be unknown, so it is still rewritten
+      // rather than rejected by a guard that gave up on arity.
+      checkAnswerAndPlan(
+        """SELECT * FROM t1 WHERE EXISTS (
+          |  SELECT 1 FROM t2r
+          |  WHERE a = c1 OR (((c1, c2) IN (SELECT col1, col2 FROM t7)) <=> false))""".stripMargin,
+        Row(1) :: Row(2) :: Row(3) :: Nil)
 
       // An IN subquery nested in the hoisted condition of another one is reached only by
       // descending through that one, which is a Predicate and not a SubqueryExpression. Leaving
