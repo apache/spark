@@ -28,7 +28,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-from pyspark.errors import PySparkRuntimeError, PySparkTypeError
+from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.eval_handlers._base import get_eval_type_handler
 from pyspark.serializers import CPickleSerializer
 from pyspark.sql.types import LongType, StructField, StructType
@@ -48,9 +48,70 @@ if have_pandas and have_pyarrow:
     import pandas as pd
     import pyarrow as pa
 
-    from pyspark.eval_handlers._stateful import PandasGroupedMapWithStateUDFHandler
+    from pyspark.eval_handlers._stateful import (
+        PandasGroupedMapWithStateUDFHandler,
+        PandasTransformWithStateInitStateUDFHandler,
+        PandasTransformWithStateUDFHandler,
+    )
+    from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPandasFuncMode
+
+    _PROCESS_DATA = TransformWithStateInPandasFuncMode.PROCESS_DATA
+    _PROCESS_TIMER = TransformWithStateInPandasFuncMode.PROCESS_TIMER
+    _COMPLETE = TransformWithStateInPandasFuncMode.COMPLETE
 
 _missing_message = pandas_requirement_message or pyarrow_requirement_message
+
+
+class TransformWithStateHandlerTestCase(PySparkBaseTestCase):
+    """Builders for the transformWithState handlers. ``StatefulProcessorApiClient`` is patched
+    out, as it connects to the JVM state server at construction."""
+
+    _RETURN_TYPE = StructType([StructField("k", LongType()), StructField("n", LongType())])
+    _KEY_SCHEMA = StructType([StructField("k", LongType())])
+    # [length, num_keys, *key_cols, *value_cols]: key "k" at 0, value "v" at 1.
+    _ARG_OFFSETS = [3, 1, 0, 1]
+    # The same layout for the input data, then for the initial state.
+    _INIT_STATE_ARG_OFFSETS = [3, 1, 0, 1, 3, 1, 0, 1]
+
+    def setUp(self):
+        super().setUp()
+        patcher = patch("pyspark.eval_handlers._stateful.StatefulProcessorApiClient")
+        self.client_cls = patcher.start()
+        self.addCleanup(patcher.stop)
+
+    @staticmethod
+    def _batch(**columns):
+        """A RecordBatch of int64 columns, one per ``name=values`` kwarg."""
+        return pa.RecordBatch.from_arrays(
+            [pa.array(values, type=pa.int64()) for values in columns.values()],
+            list(columns),
+        )
+
+    @classmethod
+    def _eval_conf(cls):
+        return EvalConf(
+            {
+                "state_server_socket_port": "1234",
+                "grouping_key_schema": cls._KEY_SCHEMA.json(),
+                "state_server_auth_secret": "secret",
+            }
+        )
+
+    @classmethod
+    def _handler(cls, handler_cls, udf, arg_offsets, runner_conf=None):
+        return handler_cls(
+            udfs=[(udf, arg_offsets, cls._RETURN_TYPE)],
+            runner_conf=runner_conf or RunnerConf({}),
+            eval_conf=cls._eval_conf(),
+        )
+
+    def _assert_client_constructed(self):
+        self.client_cls.assert_called_once_with(1234, self._KEY_SCHEMA, auth_secret="secret")
+
+    @staticmethod
+    def _output_rows(batches):
+        """The rows of the ``_0`` struct column wrapping each output batch."""
+        return [row for b in batches for row in b.column(0).to_pylist()]
 
 
 @unittest.skipIf(not (have_pandas and have_pyarrow), _missing_message)
@@ -61,6 +122,14 @@ class StatefulEvalTypeHandlerRegistrationTests(PySparkBaseTestCase):
             (
                 PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
                 PandasGroupedMapWithStateUDFHandler,
+            ),
+            (
+                PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,
+                PandasTransformWithStateUDFHandler,
+            ),
+            (
+                PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF,
+                PandasTransformWithStateInitStateUDFHandler,
             ),
         ):
             with self.subTest(eval_type=eval_type):
@@ -237,6 +306,163 @@ class PandasGroupedMapWithStateUDFHandlerTests(PySparkBaseTestCase):
         with self.assertRaises(PySparkRuntimeError) as ctx:
             list(self._handler(udf).run(0, iter([batch])))
         self.assertEqual(ctx.exception.getCondition(), "RESULT_COLUMN_SCHEMA_MISMATCH")
+
+
+@unittest.skipIf(not (have_pandas and have_pyarrow), _missing_message)
+class PandasTransformWithStateUDFHandlerTests(TransformWithStateHandlerTestCase):
+    """SQL_TRANSFORM_WITH_STATE_PANDAS_UDF: a flat input batch, the rows of one grouping key
+    sequential but possibly spanning batches."""
+
+    def test_regroups_by_key_then_runs_timer_and_complete(self):
+        calls = []
+
+        def udf(client, mode, key, values):
+            values = [pdf.to_dict("list") for pdf in values]
+            calls.append((mode, key, values))
+            if mode == _PROCESS_DATA:
+                yield pd.DataFrame({"k": [key[0]], "n": [sum(sum(v["v"]) for v in values)]})
+
+        batches = [self._batch(k=[1, 1], v=[1, 2]), self._batch(k=[1, 2], v=[3, 4])]
+        handler = self._handler(PandasTransformWithStateUDFHandler, udf, self._ARG_OFFSETS)
+        out = list(handler.run(0, iter(batches)))
+
+        self._assert_client_constructed()
+        self.assertEqual(
+            calls,
+            [
+                (_PROCESS_DATA, (1,), [{"v": [1, 2, 3]}]),
+                (_PROCESS_DATA, (2,), [{"v": [4]}]),
+                (_PROCESS_TIMER, None, []),
+                (_COMPLETE, None, []),
+            ],
+        )
+        self.assertEqual(self._output_rows(out), [{"k": 1, "n": 6}, {"k": 2, "n": 4}])
+
+    def test_passes_client_to_every_call(self):
+        clients = []
+
+        def udf(client, mode, key, values):
+            list(values)
+            clients.append(client)
+            return iter([])
+
+        handler = self._handler(PandasTransformWithStateUDFHandler, udf, self._ARG_OFFSETS)
+        list(handler.run(0, iter([self._batch(k=[1], v=[1])])))
+
+        self.assertEqual(clients, [self.client_cls.return_value] * 3)
+
+    def test_chunks_key_by_max_records(self):
+        chunks = []
+
+        def udf(client, mode, key, values):
+            chunks.extend(pdf["v"].tolist() for pdf in values)
+            return iter([])
+
+        runner_conf = RunnerConf({"spark.sql.execution.arrow.maxRecordsPerBatch": "2"})
+        handler = self._handler(
+            PandasTransformWithStateUDFHandler, udf, self._ARG_OFFSETS, runner_conf
+        )
+        list(handler.run(0, iter([self._batch(k=[1, 1, 1, 1, 1], v=[1, 2, 3, 4, 5])])))
+
+        self.assertEqual(chunks, [[1, 2], [3, 4], [5]])
+
+    def test_rejects_non_dataframe_result_for_struct_return_type(self):
+        def udf(client, mode, key, values):
+            return iter([1])
+
+        handler = self._handler(PandasTransformWithStateUDFHandler, udf, self._ARG_OFFSETS)
+        with self.assertRaisesRegex(PySparkValueError, "Invalid return type"):
+            list(handler.run(0, iter([self._batch(k=[1], v=[1])])))
+
+
+@unittest.skipIf(not (have_pandas and have_pyarrow), _missing_message)
+class PandasTransformWithStateInitStateUDFHandlerTests(TransformWithStateHandlerTestCase):
+    """SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF: each input batch carries an
+    ``inputData`` and an ``initState`` struct column, exactly one of them non-null."""
+
+    _STRUCT_TYPE = pa.struct([("k", pa.int64()), ("v", pa.int64())]) if have_pyarrow else None
+
+    @classmethod
+    def _input_batch(cls, input_rows=None, init_rows=None):
+        num_rows = len(input_rows or init_rows)
+        return pa.RecordBatch.from_arrays(
+            [
+                pa.array(input_rows or [None] * num_rows, type=cls._STRUCT_TYPE),
+                pa.array(init_rows or [None] * num_rows, type=cls._STRUCT_TYPE),
+            ],
+            ["inputData", "initState"],
+        )
+
+    def test_splits_data_and_init_state_per_key(self):
+        calls = []
+
+        def udf(client, mode, key, values, init_states):
+            calls.append(
+                (
+                    mode,
+                    key,
+                    [pdf["v"].tolist() for pdf in values],
+                    [pdf["v"].tolist() for pdf in init_states],
+                )
+            )
+            if mode == _PROCESS_DATA:
+                yield pd.DataFrame({"k": [key[0]], "n": [len(calls)]})
+
+        batches = [
+            self._input_batch(init_rows=[{"k": 1, "v": 100}, {"k": 2, "v": 200}]),
+            self._input_batch(input_rows=[{"k": 2, "v": 1}, {"k": 2, "v": 2}]),
+        ]
+        handler = self._handler(
+            PandasTransformWithStateInitStateUDFHandler, udf, self._INIT_STATE_ARG_OFFSETS
+        )
+        out = list(handler.run(0, iter(batches)))
+
+        self._assert_client_constructed()
+        self.assertEqual(
+            calls,
+            [
+                (_PROCESS_DATA, (1,), [], [[100]]),
+                (_PROCESS_DATA, (2,), [[1, 2]], [[200]]),
+                (_PROCESS_TIMER, None, [], []),
+                (_COMPLETE, None, [], []),
+            ],
+        )
+        self.assertEqual(self._output_rows(out), [{"k": 1, "n": 1}, {"k": 2, "n": 2}])
+
+    def test_chunks_key_by_max_records(self):
+        chunks = []
+
+        def udf(client, mode, key, values, init_states):
+            chunks.append(
+                ([pdf["v"].tolist() for pdf in values], [pdf["v"].tolist() for pdf in init_states])
+            )
+            return iter([])
+
+        batches = [
+            self._input_batch(init_rows=[{"k": 1, "v": 100}]),
+            self._input_batch(input_rows=[{"k": 1, "v": 1}, {"k": 1, "v": 2}]),
+        ]
+        runner_conf = RunnerConf({"spark.sql.execution.arrow.maxRecordsPerBatch": "2"})
+        handler = self._handler(
+            PandasTransformWithStateInitStateUDFHandler,
+            udf,
+            self._INIT_STATE_ARG_OFFSETS,
+            runner_conf,
+        )
+        list(handler.run(0, iter(batches)))
+
+        # The first chunk fills up with the init-state row and one data row.
+        self.assertEqual(chunks, [([[1], [2]], [[100]]), ([], []), ([], [])])
+
+    def test_rejects_non_dataframe_result_for_struct_return_type(self):
+        def udf(client, mode, key, values, init_states):
+            return iter([1])
+
+        handler = self._handler(
+            PandasTransformWithStateInitStateUDFHandler, udf, self._INIT_STATE_ARG_OFFSETS
+        )
+        with self.assertRaisesRegex(PySparkValueError, "Invalid return type"):
+            list(handler.run(0, iter([self._input_batch(input_rows=[{"k": 1, "v": 1}])])))
 
 
 if __name__ == "__main__":

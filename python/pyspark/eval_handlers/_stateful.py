@@ -15,7 +15,8 @@
 # limitations under the License.
 #
 
-"""Handlers for the stateful streaming UDF eval types (``applyInPandasWithState``).
+"""Handlers for the stateful streaming UDF eval types (``applyInPandasWithState`` and
+``transformWithStateInPandas``).
 
 The input stream is a flat ``Iterator[pa.RecordBatch]`` in which the rows of one grouping
 key arrive sequentially, possibly spanning batch boundaries, so each handler regroups the
@@ -34,7 +35,7 @@ import json
 from collections.abc import Iterable, Iterator
 from typing import TYPE_CHECKING, Any
 
-from pyspark.errors import PySparkRuntimeError, PySparkTypeError
+from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.eval_handlers._base import BatchEvalTypeHandler
 from pyspark.eval_handlers.utils import extract_key_value_indexes
 from pyspark.serializers import CPickleSerializer
@@ -44,6 +45,8 @@ from pyspark.sql.pandas.utils import (
     require_minimum_pyarrow_version,
 )
 from pyspark.sql.streaming.state import GroupState
+from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
+from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPandasFuncMode
 from pyspark.sql.types import (
     BinaryType,
     IntegerType,
@@ -411,3 +414,392 @@ class PandasGroupedMapWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]
             yield construct_record_batch(
                 pdfs, pdf_data_cnt, return_type, state_pdfs, state_data_cnt
             )
+
+
+class PandasTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
+    """SQL_TRANSFORM_WITH_STATE_PANDAS_UDF (``transformWithStateInPandas``): regroup the input
+    rows by grouping key into bounded pandas DataFrame chunks, invoke the UDF once per key
+    (PROCESS_DATA), then once for PROCESS_TIMER and once for COMPLETE, talking to the JVM state
+    server through a ``StatefulProcessorApiClient``."""
+
+    eval_type = PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF
+
+    def __init__(
+        self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
+    ) -> None:
+        require_minimum_pandas_version()
+        require_minimum_pyarrow_version()
+        super().__init__(udfs, runner_conf, eval_conf)
+
+        assert len(udfs) == 1, "One TRANSFORM_WITH_STATE_PANDAS UDF expected here."
+        self._func, arg_offsets, self._return_type = udfs[0]
+
+        # See TransformWithStateInPandasExec for how arg_offsets are used to
+        # distinguish between grouping attributes and data attributes
+        parsed_offsets = extract_key_value_indexes(arg_offsets)
+        assert len(parsed_offsets) == 1, (
+            "Expected one pair of offsets for TRANSFORM_WITH_STATE_PANDAS UDF."
+        )
+
+        self._key_offsets = parsed_offsets[0][0]
+        self._value_offsets = parsed_offsets[0][1]
+        self._output_schema = StructType([StructField("_0", self._return_type)])
+
+        self._stateful_processor_api_client = StatefulProcessorApiClient(
+            eval_conf.state_server_socket_port,  # type: ignore[arg-type]
+            eval_conf.grouping_key_schema,  # type: ignore[arg-type]
+            auth_secret=eval_conf.state_server_auth_secret,
+        )
+
+        arrow_max_records_per_batch = runner_conf.arrow_max_records_per_batch
+        self._arrow_max_records_per_batch = (
+            arrow_max_records_per_batch if arrow_max_records_per_batch > 0 else 2**31 - 1
+        )
+        self._arrow_max_bytes_per_batch = runner_conf.arrow_max_bytes_per_batch
+
+    def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
+        """Apply transformWithStateInPandas UDF.
+
+        Data chunks for the same grouping key appear sequentially in the
+        input batches but may span batch boundaries, so rows are regrouped
+        by key and re-chunked into pandas DataFrames bounded by
+        arrow_max_records_per_batch and arrow_max_bytes_per_batch. The UDF
+        is invoked once per grouping key with a lazy iterator of chunks,
+        then once for PROCESS_TIMER and once for COMPLETE.
+        """
+        import pandas as pd
+
+        runner_conf = self._runner_conf
+        udf = self._func
+        return_type = self._return_type
+        key_offsets = self._key_offsets
+        value_offsets = self._value_offsets
+        output_schema = self._output_schema
+        stateful_processor_api_client = self._stateful_processor_api_client
+        arrow_max_records_per_batch = self._arrow_max_records_per_batch
+        arrow_max_bytes_per_batch = self._arrow_max_bytes_per_batch
+
+        total_bytes = 0
+        total_rows = 0
+        average_arrow_row_size = 0.0
+
+        def row_stream() -> Iterator[tuple]:
+            nonlocal total_bytes, total_rows, average_arrow_row_size
+            for batch in data:
+                # Short circuit batch size stats if the batch size is
+                # unlimited as computing batch size is computationally
+                # expensive.
+                if arrow_max_bytes_per_batch != 2**31 - 1 and batch.num_rows > 0:
+                    total_bytes += sum(
+                        buf.size
+                        for col in batch.columns
+                        for buf in col.buffers()
+                        if buf is not None
+                    )
+                    total_rows += batch.num_rows
+                    average_arrow_row_size = total_bytes / total_rows
+                data_pandas = ArrowToPandasConversion.to_pandas(
+                    batch,
+                    timezone=runner_conf.timezone,
+                    prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
+                )
+                for row in pd.concat(data_pandas, axis=1).itertuples(index=False):
+                    batch_key = tuple(row[o] for o in key_offsets)
+                    yield (batch_key, row)
+
+        def generate_data_batches() -> Iterator[tuple]:
+            """
+            Deserialize ArrowRecordBatches and return a generator of
+            (grouping key, pandas.DataFrame) chunks.
+
+            This function must avoid materializing multiple Arrow
+            RecordBatches into memory at the same time, and data chunks
+            from the same grouping key should appear sequentially.
+            """
+            for batch_key, group_rows in itertools.groupby(row_stream(), key=lambda x: x[0]):
+                rows = []
+                for _, row in group_rows:
+                    rows.append(row)
+                    if (
+                        len(rows) >= arrow_max_records_per_batch
+                        or len(rows) * average_arrow_row_size >= arrow_max_bytes_per_batch
+                    ):
+                        yield (batch_key, pd.DataFrame(rows))
+                        rows = []
+                if rows:
+                    yield (batch_key, pd.DataFrame(rows))
+
+        def convert_results(result_iter: Iterable[pd.DataFrame]) -> Iterator[pa.RecordBatch]:
+            for result in result_iter:
+                if isinstance(return_type, StructType) and not isinstance(result, pd.DataFrame):
+                    raise PySparkValueError(
+                        "Invalid return type. Please make sure that the UDF returns a "
+                        "pandas.DataFrame when the specified return type is StructType."
+                    )
+                yield PandasToArrowConversion.from_pandas(
+                    [result],
+                    output_schema,
+                    timezone=runner_conf.timezone,
+                    safecheck=runner_conf.safecheck,
+                    arrow_cast=True,
+                    assign_cols_by_name=runner_conf.assign_cols_by_name,
+                    int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
+                )
+
+        for key, group in itertools.groupby(generate_data_batches(), key=lambda x: x[0]):
+            # This must be a generator expression - do not materialize.
+            values_gen = (df.iloc[:, value_offsets] for _, df in group)
+            yield from convert_results(
+                udf(
+                    stateful_processor_api_client,
+                    TransformWithStateInPandasFuncMode.PROCESS_DATA,
+                    key,
+                    values_gen,
+                )
+            )
+
+        yield from convert_results(
+            udf(
+                stateful_processor_api_client,
+                TransformWithStateInPandasFuncMode.PROCESS_TIMER,
+                None,
+                iter([]),
+            )
+        )
+
+        yield from convert_results(
+            udf(
+                stateful_processor_api_client,
+                TransformWithStateInPandasFuncMode.COMPLETE,
+                None,
+                iter([]),
+            )
+        )
+
+
+class PandasTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
+    """SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF (``transformWithStateInPandas`` with an
+    initial state): like ``PandasTransformWithStateUDFHandler``, but each input batch carries
+    either input data or initial state, and the UDF receives the two as separate lazy
+    iterators of pandas DataFrames."""
+
+    eval_type = PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF
+
+    def __init__(
+        self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
+    ) -> None:
+        require_minimum_pandas_version()
+        require_minimum_pyarrow_version()
+        super().__init__(udfs, runner_conf, eval_conf)
+
+        assert len(udfs) == 1, "One TRANSFORM_WITH_STATE_PANDAS_INIT_STATE UDF expected here."
+        self._func, arg_offsets, self._return_type = udfs[0]
+
+        # See TransformWithStateInPandasExec for how arg_offsets are used to
+        # distinguish between grouping attributes and data attributes.
+        # parsed offsets:
+        # [
+        #     [groupingKeyOffsets, dedupDataOffsets],
+        #     [initStateGroupingOffsets, dedupInitDataOffsets]
+        # ]
+        parsed_offsets = extract_key_value_indexes(arg_offsets)
+        self._key_offsets = parsed_offsets[0][0]
+        self._init_key_offsets = parsed_offsets[1][0]
+        self._output_schema = StructType([StructField("_0", self._return_type)])
+
+        self._stateful_processor_api_client = StatefulProcessorApiClient(
+            eval_conf.state_server_socket_port,  # type: ignore[arg-type]
+            eval_conf.grouping_key_schema,  # type: ignore[arg-type]
+            auth_secret=eval_conf.state_server_auth_secret,
+        )
+
+        arrow_max_records_per_batch = runner_conf.arrow_max_records_per_batch
+        self._arrow_max_records_per_batch = (
+            arrow_max_records_per_batch if arrow_max_records_per_batch > 0 else 2**31 - 1
+        )
+        self._arrow_max_bytes_per_batch = runner_conf.arrow_max_bytes_per_batch
+
+    def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
+        """Apply transformWithStateInPandas UDF with initial state.
+
+        The input batches carry two struct columns, ``inputData`` and
+        ``initState``; each batch holds one or the other but never both.
+        Rows are flattened out of whichever struct is present, regrouped by
+        grouping key, and re-chunked into pandas DataFrames bounded by
+        arrow_max_records_per_batch and arrow_max_bytes_per_batch. The UDF
+        is invoked once per grouping key with two separate lazy iterators
+        (data DataFrames and init-state DataFrames), then once for
+        PROCESS_TIMER and once for COMPLETE.
+        """
+        import pandas as pd
+        import pyarrow as pa
+
+        runner_conf = self._runner_conf
+        udf = self._func
+        return_type = self._return_type
+        key_offsets = self._key_offsets
+        init_key_offsets = self._init_key_offsets
+        output_schema = self._output_schema
+        stateful_processor_api_client = self._stateful_processor_api_client
+        arrow_max_records_per_batch = self._arrow_max_records_per_batch
+        arrow_max_bytes_per_batch = self._arrow_max_bytes_per_batch
+
+        total_bytes = 0
+        total_rows = 0
+        average_arrow_row_size = 0.0
+
+        def flatten_columns(cur_batch: pa.RecordBatch, col_name: str) -> pa.Table:
+            struct_column = cur_batch.column(cur_batch.schema.get_field_index(col_name))
+            # Check if the entire column is null: an empty table (no columns)
+            # signals the struct is absent from this batch.
+            if struct_column.null_count == len(struct_column):
+                return pa.Table.from_arrays([], names=[])
+            field_names = [struct_column.type[i].name for i in range(struct_column.type.num_fields)]
+            field_arrays = [struct_column.field(i) for i in range(struct_column.type.num_fields)]
+            return pa.Table.from_arrays(field_arrays, names=field_names)
+
+        def to_pandas(table: pa.Table) -> list:
+            return ArrowToPandasConversion.to_pandas(
+                table,
+                timezone=runner_conf.timezone,
+                prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
+            )
+
+        def row_stream() -> Iterator[tuple]:
+            nonlocal total_bytes, total_rows, average_arrow_row_size
+            for batch in data:
+                # Short circuit batch size stats if the batch size is
+                # unlimited as computing batch size is computationally
+                # expensive.
+                if arrow_max_bytes_per_batch != 2**31 - 1 and batch.num_rows > 0:
+                    total_bytes += sum(
+                        buf.size
+                        for col in batch.columns
+                        for buf in col.buffers()
+                        if buf is not None
+                    )
+                    total_rows += batch.num_rows
+                    average_arrow_row_size = total_bytes / total_rows
+
+                data_table = flatten_columns(batch, "inputData")
+                init_table = flatten_columns(batch, "initState")
+
+                # Empty table has no columns. Each batch carries either
+                # input data or init state, never both.
+                has_data = data_table.num_columns > 0
+                has_init = init_table.num_columns > 0
+                assert not (has_data and has_init)
+
+                if has_data:
+                    for row in pd.concat(to_pandas(data_table), axis=1).itertuples(index=False):
+                        batch_key = tuple(row[o] for o in key_offsets)
+                        yield (batch_key, row, None)
+                elif has_init:
+                    for row in pd.concat(to_pandas(init_table), axis=1).itertuples(index=False):
+                        batch_key = tuple(row[o] for o in init_key_offsets)
+                        yield (batch_key, None, row)
+
+        empty_dataframe = pd.DataFrame()
+
+        def generate_data_batches() -> Iterator[tuple]:
+            """
+            Deserialize ArrowRecordBatches and return a generator of
+            (grouping key, data DataFrame, init-state DataFrame) chunks.
+
+            This function must avoid materializing multiple Arrow
+            RecordBatches into memory at the same time, and data chunks
+            from the same grouping key should appear sequentially.
+            """
+            for batch_key, group_rows in itertools.groupby(row_stream(), key=lambda x: x[0]):
+                rows = []
+                init_state_rows = []
+                for _, row, init_state_row in group_rows:
+                    if row is not None:
+                        rows.append(row)
+                    if init_state_row is not None:
+                        init_state_rows.append(init_state_row)
+
+                    total_len = len(rows) + len(init_state_rows)
+                    if (
+                        total_len >= arrow_max_records_per_batch
+                        or total_len * average_arrow_row_size >= arrow_max_bytes_per_batch
+                    ):
+                        yield (
+                            batch_key,
+                            pd.DataFrame(rows) if rows else empty_dataframe.copy(),
+                            (
+                                pd.DataFrame(init_state_rows)
+                                if init_state_rows
+                                else empty_dataframe.copy()
+                            ),
+                        )
+                        rows = []
+                        init_state_rows = []
+                if rows or init_state_rows:
+                    yield (
+                        batch_key,
+                        pd.DataFrame(rows) if rows else empty_dataframe.copy(),
+                        (
+                            pd.DataFrame(init_state_rows)
+                            if init_state_rows
+                            else empty_dataframe.copy()
+                        ),
+                    )
+
+        def convert_results(
+            result_iter: Iterable[pd.DataFrame],
+        ) -> Iterator[pa.RecordBatch]:
+            # TODO(SPARK-49100): add verification that elements in result_iter are
+            # indeed of type pd.DataFrame and conform to assigned cols
+            for result in result_iter:
+                if isinstance(return_type, StructType) and not isinstance(result, pd.DataFrame):
+                    raise PySparkValueError(
+                        "Invalid return type. Please make sure that the UDF returns a "
+                        "pandas.DataFrame when the specified return type is StructType."
+                    )
+                yield PandasToArrowConversion.from_pandas(
+                    [result],
+                    output_schema,
+                    timezone=runner_conf.timezone,
+                    safecheck=runner_conf.safecheck,
+                    arrow_cast=True,
+                    assign_cols_by_name=runner_conf.assign_cols_by_name,
+                    int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
+                )
+
+        for key, group in itertools.groupby(generate_data_batches(), key=lambda x: x[0]):
+            # These must be generator expressions - do not materialize. The
+            # UDF receives the data and init-state DataFrames as two
+            # separate iterators, with empty chunks filtered out.
+            group_data, group_init = itertools.tee(group, 2)
+            state_values = (data_df for _, data_df, _ in group_data if not data_df.empty)
+            init_states = (init_df for _, _, init_df in group_init if not init_df.empty)
+            yield from convert_results(
+                udf(
+                    stateful_processor_api_client,
+                    TransformWithStateInPandasFuncMode.PROCESS_DATA,
+                    key,
+                    state_values,
+                    init_states,
+                )
+            )
+
+        yield from convert_results(
+            udf(
+                stateful_processor_api_client,
+                TransformWithStateInPandasFuncMode.PROCESS_TIMER,
+                None,
+                iter([]),
+                iter([]),
+            )
+        )
+
+        yield from convert_results(
+            udf(
+                stateful_processor_api_client,
+                TransformWithStateInPandasFuncMode.COMPLETE,
+                None,
+                iter([]),
+                iter([]),
+            )
+        )
