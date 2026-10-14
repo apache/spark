@@ -27,12 +27,14 @@ import org.apache.spark.sql.internal.SQLConf
  * `spark.sql.optimizer.windowReorder.enabled` (default false). The query
  * mirrors the window-function shape of a typical LLM-serving ETL: one wide
  * SELECT that annotates every inference request with a batch of ROW_NUMBER /
- * LAG ranking columns, keyed on a single user dimension. The window functions
- * share one timestamp ORDER BY but are partitioned over two overlapping key
- * groups (user id plus a core flag and plus a service-tier flag, and user id
- * plus a model and a priority flag), so the analyzer stacks them into a single
- * chain of adjacent Window operators. Reordering the stack groups windows by
- * their partition spec and can reduce the number of inserted shuffles and sorts.
+ * LAG ranking columns, keyed on a single user dimension. The windows are
+ * partitioned over two overlapping key groups (user id plus a core flag and
+ * plus a service-tier flag, and user id plus a model and a priority flag), so
+ * the analyzer stacks them into a single chain of adjacent Window operators.
+ * Several windows use `ORDER BY create_ts` and others `ORDER BY create_ts DESC`,
+ * so every complete required child ordering is distinct and reordering cannot
+ * share sorts here; the measured win is from grouping by partition spec and
+ * removing redundant shuffles.
  *
  * This benchmark compares the baseline (default, reordering off) against the
  * optimized behavior (reordering on), and measures the wall-clock runtime only:
