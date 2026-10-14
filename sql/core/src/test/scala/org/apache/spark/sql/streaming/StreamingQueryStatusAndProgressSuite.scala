@@ -54,7 +54,9 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
     Trigger.RealTime(3000) -> """{"type":"RealTime","batchDurationMs":3000}""",
     Trigger.AvailableNow() -> """{"type":"AvailableNow"}""",
     Trigger.Once() -> """{"type":"Once"}""")) {
-    case (trigger, expected) => assert(Triggers.toJson(trigger) === expected)
+    case (trigger, expected) =>
+      assert(Triggers.toJson(trigger) === expected)
+      assert(Triggers.fromJson(expected) === trigger)
   }
 
   test("SPARK-59986: unknown trigger metadata identifies the unsupported trigger") {
@@ -91,14 +93,14 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
   }
 
   test("SPARK-59986: trigger metadata is initialized by the constructor") {
-    val triggerJson = """{"type":"ProcessingTime","intervalMs":3000000000}"""
-    val progress = progressWithTrigger(triggerJson)
-    assert(progress.trigger === triggerJson)
-    assert(parse(progress.json) \ "trigger" === parse(triggerJson))
+    val trigger = Trigger.ProcessingTime(3000000000L)
+    val progress = progressWithTrigger(trigger)
+    assert(progress.trigger === Triggers.toJson(trigger))
+    assert(parse(progress.json) \ "trigger" === parse(Triggers.toJson(trigger)))
   }
 
   test("SPARK-59986: trigger JSON serialization") {
-    val progress = progressWithTrigger("""{"type":"ProcessingTime","intervalMs":3000000000}""")
+    val progress = progressWithTrigger(Trigger.ProcessingTime(3000000000L))
     Seq(progress.json, progress.prettyJson, StreamingQueryProgress.jsonString(progress))
       .foreach { json =>
         assert(parse(json) \ "trigger" === parse(progress.trigger))
@@ -884,7 +886,7 @@ object StreamingQueryStatusAndProgressSuite {
     observedMetrics = null
   )
 
-  def progressWithTrigger(trigger: String): StreamingQueryProgress = {
+  def progressWithTrigger(trigger: Trigger): StreamingQueryProgress = {
     new StreamingQueryProgress(
       id = testProgress3.id,
       runId = testProgress3.runId,
@@ -898,7 +900,7 @@ object StreamingQueryStatusAndProgressSuite {
       sources = testProgress3.sources,
       sink = testProgress3.sink,
       observedMetrics = testProgress3.observedMetrics,
-      triggerJson = trigger)
+      configuredTrigger = trigger)
   }
 
   val testProgress4 = new StreamingQueryProgress(

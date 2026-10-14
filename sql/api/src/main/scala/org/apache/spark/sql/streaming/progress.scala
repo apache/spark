@@ -38,6 +38,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+import org.apache.spark.sql.execution.streaming.Triggers
 import org.apache.spark.sql.streaming.SafeJsonSerializer.{safeDecimalToJValue, safeMapToJValue}
 import org.apache.spark.sql.streaming.SinkProgress.DEFAULT_NUM_OUTPUT_ROWS
 
@@ -201,8 +202,8 @@ class StateOperatorProgress private[spark] (
  *   detailed statistics on data being read from each of the streaming sources.
  * @param sink
  *   detailed statistics on data being written to the sink.
- * @param triggerJson
- *   JSON for the configured trigger, or null when metadata is unavailable.
+ * @param configuredTrigger
+ *   The configured trigger, or null when metadata is unavailable.
  * @since 2.1.0
  */
 @Evolving
@@ -221,8 +222,8 @@ class StreamingQueryProgress private[spark] (
     @JsonDeserialize(contentAs = classOf[GenericRowWithSchema])
     val observedMetrics: ju.Map[String, Row],
     @JsonProperty("trigger")
-    @JsonDeserialize(using = classOf[ObjectToStringDeserializer])
-    triggerJson: String = null)
+    @JsonDeserialize(using = classOf[ObjectToTriggerDeserializer])
+    configuredTrigger: Trigger = null)
     extends Serializable {
 
   /**
@@ -237,7 +238,7 @@ class StreamingQueryProgress private[spark] (
    */
   @JsonRawValue
   @JsonInclude(JsonInclude.Include.NON_NULL)
-  val trigger: String = triggerJson
+  val trigger: String = Option(configuredTrigger).map(Triggers.toJson).orNull
 
   /** The aggregate (across all sources) number of records processed in a trigger. */
   def numInputRows: Long = sources.map(_.numInputRows).sum
@@ -263,7 +264,10 @@ class StreamingQueryProgress private[spark] (
       ("timestamp" -> JString(timestamp)) ~
       ("batchId" -> JInt(batchId)) ~
       ("batchDuration" -> JInt(batchDuration)) ~
-      ("trigger" -> Option(trigger).map(parse(_)).getOrElse(JNothing)) ~
+      ("trigger" ->
+        Option(configuredTrigger)
+          .map(value => parse(Triggers.toJson(value)))
+          .getOrElse(JNothing)) ~
       ("numInputRows" -> JInt(numInputRows)) ~
       ("inputRowsPerSecond" -> safeDecimalToJValue(inputRowsPerSecond)) ~
       ("processedRowsPerSecond" -> safeDecimalToJValue(processedRowsPerSecond)) ~
@@ -313,6 +317,13 @@ private class ObjectToStringDeserializer extends JsonDeserializer[String] {
       // Convert JSON object/array to string representation
       node.toString
     }
+  }
+}
+
+private class ObjectToTriggerDeserializer extends JsonDeserializer[Trigger] {
+  override def deserialize(parser: JsonParser, context: DeserializationContext): Trigger = {
+    val node: JsonNode = parser.readValueAsTree()
+    Triggers.fromJson(if (node.isTextual) node.asText() else node.toString)
   }
 }
 

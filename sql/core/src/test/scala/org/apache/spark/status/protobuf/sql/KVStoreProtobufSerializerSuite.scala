@@ -25,6 +25,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+import org.apache.spark.sql.execution.streaming.ProcessingTimeTrigger
 import org.apache.spark.sql.execution.ui._
 import org.apache.spark.sql.streaming.{SinkProgress, SourceProgress, StateOperatorProgress, StreamingQueryProgress}
 import org.apache.spark.sql.streaming.ui.{StreamingQueryData, StreamingQueryProgressWrapper}
@@ -376,7 +377,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         sources = Array(source0, source1),
         sink = sink,
         observedMetrics = observedMetrics,
-        triggerJson = """{"type":"ProcessingTime","intervalMs":3000000000}"""
+        configuredTrigger = ProcessingTimeTrigger(3000000000L)
       )
       new StreamingQueryProgressWrapper(progress)
     }

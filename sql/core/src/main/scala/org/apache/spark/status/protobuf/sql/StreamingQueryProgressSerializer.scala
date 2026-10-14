@@ -24,6 +24,7 @@ import com.fasterxml.jackson.module.scala.DefaultScalaModule
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+import org.apache.spark.sql.execution.streaming.Triggers
 import org.apache.spark.sql.streaming.StreamingQueryProgress
 import org.apache.spark.status.protobuf.StoreTypes
 import org.apache.spark.status.protobuf.Utils.{getStringField, setJMapField, setStringField}
@@ -80,7 +81,9 @@ private[protobuf] object StreamingQueryProgressSerializer {
       sources = SourceProgressSerializer.deserializeToArray(process.getSourcesList),
       sink = SinkProgressSerializer.deserialize(process.getSink),
       observedMetrics = convertToObservedMetrics(process.getObservedMetricsMap),
-      triggerJson = getStringField(process.hasTrigger, () => process.getTrigger)
+      configuredTrigger = Option(getStringField(process.hasTrigger, () => process.getTrigger))
+        .map(Triggers.fromJson)
+        .orNull
     )
   }
 
