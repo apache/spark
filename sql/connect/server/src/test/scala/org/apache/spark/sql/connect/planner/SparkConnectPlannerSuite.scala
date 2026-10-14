@@ -443,16 +443,21 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   }
 
   // Builds a typed Scala UDF expression whose payload cannot be deserialized, optionally carrying
-  // a JVM origin whose head frame reports `fragment` as the API call site.
+  // a JVM origin whose head frame reports `fragment` as the API call site. `numArgs` controls how
+  // many `UnresolvedStar` arguments the UDF carries, matching the client encoding of each operation
+  // (1 for groupByKey/filter, 2 for Dataset.reduce's `udf(col("*"), col("*"))`).
   private def malformedTypedScalaUdf(
       includeOrigin: Boolean,
-      fragment: String): proto.Expression = {
-    val expr = proto.Expression.newBuilder().setCommonInlineUserDefinedFunction(
-      proto.CommonInlineUserDefinedFunction.newBuilder()
-        .setScalarScalaUdf(proto.ScalarScalaUDF.newBuilder()
-          .setPayload(ByteString.copyFromUtf8("invalid serialized function")))
-        .addArguments(proto.Expression.newBuilder()
-          .setUnresolvedStar(proto.Expression.UnresolvedStar.newBuilder())))
+      fragment: String,
+      numArgs: Int = 1): proto.Expression = {
+    val udf = proto.CommonInlineUserDefinedFunction.newBuilder()
+      .setScalarScalaUdf(proto.ScalarScalaUDF.newBuilder()
+        .setPayload(ByteString.copyFromUtf8("invalid serialized function")))
+    (1 to numArgs).foreach { _ =>
+      udf.addArguments(proto.Expression.newBuilder()
+        .setUnresolvedStar(proto.Expression.UnresolvedStar.newBuilder()))
+    }
+    val expr = proto.Expression.newBuilder().setCommonInlineUserDefinedFunction(udf)
     if (includeOrigin) {
       expr.setCommon(proto.ExpressionCommon.newBuilder().setOrigin(
         proto.Origin.newBuilder().setJvmOrigin(proto.JvmOrigin.newBuilder()
@@ -475,27 +480,30 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       proto.Range.newBuilder().setStart(0).setEnd(1).setStep(1))
 
   // name: test name; operation: the label expected in the failure message; fragment: the API
-  // method name reported by the origin's head frame; relation: wraps the typed UDF for the op.
+  // method name reported by the origin's head frame; udfArgs: number of UnresolvedStar arguments
+  // in the client encoding; relation: wraps the typed UDF for the op.
   private case class TypedUdfUnpackScenario(
       name: String,
       operation: String,
       fragment: String,
+      udfArgs: Int,
       relation: proto.Expression => proto.Relation)
 
   private val typedUdfUnpackScenarios: Seq[TypedUdfUnpackScenario] = Seq(
-    TypedUdfUnpackScenario("groupByKey", "Dataset.groupByKey", "groupByKey", udf =>
+    TypedUdfUnpackScenario("groupByKey", "Dataset.groupByKey", "groupByKey", 1, udf =>
       proto.Relation.newBuilder().setAggregate(
         proto.Aggregate.newBuilder()
           .setInput(rangeRelation)
           .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
           .addGroupingExpressions(udf)).build()),
-    TypedUdfUnpackScenario("filter", "Dataset.filter", "filter", udf =>
+    TypedUdfUnpackScenario("filter", "Dataset.filter", "filter", 1, udf =>
       proto.Relation.newBuilder().setFilter(
         proto.Filter.newBuilder()
           .setInput(rangeRelation)
           .setCondition(udf)).build()),
-    TypedUdfUnpackScenario(
-      "reduceGroups", "KeyValueGroupedDataset.reduceGroups", "reduceGroups", udf =>
+    // Mirrors Dataset.reduce: a GROUP_TYPE_GROUPBY aggregate whose only aggregate expression is the
+    // deprecated unresolved `reduce` function wrapping a two-argument scalar Scala UDF.
+    TypedUdfUnpackScenario("reduce", "Dataset.reduce", "reduce", 2, udf =>
       proto.Relation.newBuilder().setAggregate(
         proto.Aggregate.newBuilder()
           .setInput(rangeRelation)
@@ -511,7 +519,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   } {
     test(s"${scenario.name} unpacking failure includes operation context " +
       s"(origin=$includeOrigin)") {
-      val udf = malformedTypedScalaUdf(includeOrigin, scenario.fragment)
+      val udf = malformedTypedScalaUdf(includeOrigin, scenario.fragment, scenario.udfArgs)
       val originalOrigin = CurrentOrigin.get
       val error = intercept[SparkException] {
         transform(scenario.relation(udf))

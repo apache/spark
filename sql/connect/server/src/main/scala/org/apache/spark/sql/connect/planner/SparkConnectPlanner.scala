@@ -2882,9 +2882,7 @@ class SparkConnectPlanner(
           if e.hasCommonInlineUserDefinedFunction &&
             e.getCommonInlineUserDefinedFunction.hasScalarScalaUdf =>
         withExpressionOrigin(e) {
-          unpackUdf(
-            e.getCommonInlineUserDefinedFunction,
-            Some("KeyValueGroupedDataset.reduceGroups"))
+          unpackUdf(e.getCommonInlineUserDefinedFunction, Some("Dataset.reduce"))
         }
       case other =>
         throw InvalidInputErrors.reduceShouldCarryScalarScalaUdf(other)
