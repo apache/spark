@@ -24,6 +24,7 @@ import java.util.UUID
 
 import scala.jdk.CollectionConverters._
 import scala.math.BigDecimal.RoundingMode
+import scala.reflect.runtime.universe.{runtimeMirror, NoSymbol, TermName}
 
 import org.json4s.JNothing
 import org.json4s.jackson.JsonMethods._
@@ -78,6 +79,15 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
         .stop()
     }
     assert(exception.getMessage === s"Unknown type of trigger: $trigger")
+  }
+
+  test("SPARK-59986: trigger metadata has a public read-only JVM accessor") {
+    val accessor = runtimeMirror(getClass.getClassLoader)
+      .classSymbol(classOf[StreamingQueryProgress])
+      .toType.member(TermName("trigger"))
+    assert(accessor.isPublic)
+    assert(accessor.privateWithin === NoSymbol)
+    assert(!classOf[StreamingQueryProgress].getMethods.exists(_.getName == "trigger_$eq"))
   }
 
   test("SPARK-59986: trigger metadata is initialized by the constructor") {
@@ -888,7 +898,7 @@ object StreamingQueryStatusAndProgressSuite {
       sources = testProgress3.sources,
       sink = testProgress3.sink,
       observedMetrics = testProgress3.observedMetrics,
-      trigger = trigger)
+      triggerJson = trigger)
   }
 
   val testProgress4 = new StreamingQueryProgress(

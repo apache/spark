@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 import scala.math.BigDecimal.RoundingMode
 import scala.util.control.NonFatal
 
-import com.fasterxml.jackson.annotation.{JsonInclude, JsonRawValue}
+import com.fasterxml.jackson.annotation.{JsonInclude, JsonProperty, JsonRawValue}
 import com.fasterxml.jackson.core.JsonParser
 import com.fasterxml.jackson.databind.{DeserializationContext, DeserializationFeature, JsonDeserializer, JsonNode, ObjectMapper}
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
@@ -201,7 +201,7 @@ class StateOperatorProgress private[spark] (
  *   detailed statistics on data being read from each of the streaming sources.
  * @param sink
  *   detailed statistics on data being written to the sink.
- * @param trigger
+ * @param triggerJson
  *   JSON for the configured trigger, or null when metadata is unavailable.
  * @since 2.1.0
  */
@@ -220,11 +220,24 @@ class StreamingQueryProgress private[spark] (
     val sink: SinkProgress,
     @JsonDeserialize(contentAs = classOf[GenericRowWithSchema])
     val observedMetrics: ju.Map[String, Row],
-    @JsonRawValue
-    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonProperty("trigger")
     @JsonDeserialize(using = classOf[ObjectToStringDeserializer])
-    private[spark] val trigger: String = null)
+    triggerJson: String = null)
     extends Serializable {
+
+  /**
+   * JSON metadata for the configured trigger, or null when metadata is unavailable.
+   *
+   * The {{{type}}} field is {{{ProcessingTime}}}, {{{Continuous}}}, {{{RealTime}}},
+   * {{{AvailableNow}}}, or {{{Once}}}. {{{ProcessingTime}}} and {{{Continuous}}} include
+   * {{{intervalMs}}}; {{{RealTime}}} includes {{{batchDurationMs}}}. Both intervals are in
+   * milliseconds. {{{AvailableNow}}} and {{{Once}}} contain only the {{{type}}} field.
+   *
+   * @since 4.4.0
+   */
+  @JsonRawValue
+  @JsonInclude(JsonInclude.Include.NON_NULL)
+  val trigger: String = triggerJson
 
   /** The aggregate (across all sources) number of records processed in a trigger. */
   def numInputRows: Long = sources.map(_.numInputRows).sum
