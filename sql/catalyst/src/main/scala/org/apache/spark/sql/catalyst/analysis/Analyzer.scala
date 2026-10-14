@@ -342,9 +342,10 @@ object Analyzer {
   }
 
   /**
-   * True if a view or SQL function body takes the caller's value for `key` rather than the
-   * value saved when the body was created: catalog configs and SQL configs bound SESSION or
-   * NOT_APPLICABLE.
+   * True if `retainResolutionConfigsForAnalysis` overlays the caller's explicitly set value for
+   * `key` onto a view or SQL function body conf, replacing the value saved with the body: catalog
+   * configs and SQL configs bound SESSION or NOT_APPLICABLE. A key the caller has not set keeps
+   * its saved value, and so do all keys where no session overlay is applied.
    */
   def bodyFollowsCaller(key: String): Boolean = {
     key.startsWith("spark.sql.catalog.") || SQLConf.isSessionBindingPolicy(key)
