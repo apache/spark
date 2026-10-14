@@ -3543,6 +3543,81 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-60229: from_json(to_json) keeps CHAR/VARCHAR map key check") {
+    Seq(
+      ("CHAR(3)", "a", "t_spark_60229_char"),
+      ("VARCHAR(3)", "abcd", "t_spark_60229_varchar")
+    ).foreach { case (keyType, badKey, viewName) =>
+      withView(viewName) {
+        withSQLConf(
+            SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+            SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+          sql(s"""CREATE TEMPORARY VIEW $viewName AS
+            |SELECT from_json('{"$badKey":1}', 'MAP<$keyType, INT>') AS m""".stripMargin)
+        }
+        withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+          checkAnswer(
+            sql(s"SELECT from_json(to_json(m), 'MAP<$keyType, INT>') FROM $viewName"),
+            Row(null))
+          assertUnsupportedJsonMapKey(
+            s"""SELECT from_json(to_json(m), 'MAP<$keyType, INT>', map('mode', 'FAILFAST'))
+               |FROM $viewName""".stripMargin,
+            key = badKey,
+            dataTypeSql = keyType)
+        }
+      }
+    }
+  }
+
+  test("SPARK-60229: nested struct map key rejection does not steal sibling fields") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val schema = "s STRUCT<m MAP<CHAR(3), INT>, tail INT>, tail INT"
+      // Inner tail after the map: without draining s, the parent can take inner tail=5
+      // and then hit s's END_OBJECT, never seeing outer tail=1.
+      val jsonAfter = """{"s":{"m":{"a":1},"tail":5},"tail":1}"""
+      // Inner tail after an already-parsed outer tail: without draining s, inner
+      // tail=5 overwrites the sibling that was already 1.
+      val jsonBefore = """{"tail":1,"s":{"m":{"a":1},"tail":5}}"""
+      Seq(true, false).foreach { partial =>
+        withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> partial.toString) {
+          val expected = if (partial) {
+            Row(Row(Row(null, 5), 1))
+          } else {
+            Row(Row(null, 1))
+          }
+          Seq(jsonAfter, jsonBefore).foreach { json =>
+            checkAnswer(sql(s"SELECT from_json('$json', '$schema')"), expected)
+            assertUnsupportedJsonMapKey(
+              s"""SELECT from_json('$json', '$schema', map('mode', 'FAILFAST'))""",
+              key = "a",
+              dataTypeSql = "CHAR(3)")
+          }
+        }
+      }
+
+      // Array element failure must drain to END_ARRAY so an inner field name cannot
+      // overwrite an earlier sibling (SPARK-60229 convertArray).
+      val arrayJson = """{"tail":1,"arr":[{"m":{"a":1},"tail":5}],"after":2}"""
+      val arraySchema =
+        "tail INT, arr ARRAY<STRUCT<m MAP<CHAR(3), INT>, tail INT>>, after INT"
+      Seq(true, false).foreach { partial =>
+        withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> partial.toString) {
+          val expected = if (partial) {
+            Row(Row(1, Seq(Row(null, 5)), 2))
+          } else {
+            Row(Row(1, null, 2))
+          }
+          checkAnswer(sql(s"SELECT from_json('$arrayJson', '$arraySchema')"), expected)
+          assertUnsupportedJsonMapKey(
+            s"""SELECT from_json('$arrayJson', '$arraySchema',
+               |  map('mode', 'FAILFAST'))""".stripMargin,
+            key = "a",
+            dataTypeSql = "CHAR(3)")
+        }
+      }
+    }
+  }
+
   test("SPARK-59274: JSON map value overflow keeps EXCEED_LIMIT_LENGTH") {
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
       val json = """{"m":{"k":"abcdef"},"tail":1}"""
@@ -3553,11 +3628,9 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         Seq(true, false).foreach { partial =>
           withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> partial.toString) {
             withClue(s"$valueType partial=$partial") {
-              if (partial) {
-                checkAnswer(sql(fromJson), Row(Row(null, 1)))
-              } else {
-                checkAnswer(sql(fromJson), Row(Row(null, null)))
-              }
+              // SPARK-60229: a nested map value failure consumes the map object, so
+              // sibling `tail` is parsed in both partial-results modes.
+              checkAnswer(sql(fromJson), Row(Row(null, 1)))
               assertParseExceedLimit(
                 s"SELECT from_json('$json', '$schema', map('mode', 'FAILFAST'))",
                 expectedLimit = "2")
@@ -3568,11 +3641,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
                   .write.text(path.getCanonicalPath)
                 val fileSchema = schema
                 val permissive = spark.read.schema(fileSchema).json(path.getCanonicalPath)
-                if (partial) {
-                  checkAnswer(permissive, Seq(Row(null, 1), Row(Map("k" -> "ab"), 2)))
-                } else {
-                  checkAnswer(permissive, Seq(Row(null, null), Row(Map("k" -> "ab"), 2)))
-                }
+                checkAnswer(permissive, Seq(Row(null, 1), Row(Map("k" -> "ab"), 2)))
                 val failFast = spark.read
                   .option("mode", "FAILFAST")
                   .schema(fileSchema)

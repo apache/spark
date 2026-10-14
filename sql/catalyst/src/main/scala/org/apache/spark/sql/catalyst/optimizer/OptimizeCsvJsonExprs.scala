@@ -25,7 +25,8 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CREATE_NAMED_STRUCT, EXTRACT_VALUE,
   GET_JSON_OBJECT, JSON_TO_STRUCT}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, StringType, StructType}
+import org.apache.spark.sql.types.{ArrayType, CharType, DataType, MapType, StringType, StructType,
+  VarcharType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -443,7 +444,12 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
     case jsonToStructs @ JsonToStructs(_, options1,
       StructsToJson(options2, child, timeZoneId2), timeZoneId1)
         if options1.isEmpty && options2.isEmpty && timeZoneId1 == timeZoneId2 &&
-          jsonToStructs.dataType == child.dataType =>
+          jsonToStructs.dataType == child.dataType &&
+          // SPARK-60108 length-checks CHAR/VARCHAR map keys in from_json. Folding
+          // from_json(to_json(m)) => m would skip that check when m already carries
+          // an off-width key (SPARK-60229).
+          !(jsonToStructs.charVarcharStandardSemantics &&
+            hasCharVarcharMapKey(jsonToStructs.dataType)) =>
       // `StructsToJson` only fails when `JacksonGenerator` encounters data types it
       // cannot convert to JSON. But `StructsToJson.checkInputDataTypes` already
       // verifies its child's data types is convertible to JSON. But in
@@ -470,6 +476,15 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
       // Obtain the pruned schema by picking the `ordinal` field of the struct.
       val prunedSchema = ArrayType(StructType(Array(schema(ordinal))), g.containsNull)
       g.copy(child = j.copy(schema = prunedSchema), ordinal = 0, numFields = 1)
+  }
+
+  /**
+   * True when `dt` has a MAP whose key type is CHAR or VARCHAR at any nesting.
+   * Only keys: JacksonParser length-checks CHAR/VARCHAR map keys, not map values.
+   */
+  private def hasCharVarcharMapKey(dt: DataType): Boolean = dt.existsRecursively {
+    case MapType(_: CharType | _: VarcharType, _, _) => true
+    case _ => false
   }
 
   private val csvOptimization: PartialFunction[Expression, Expression] = {

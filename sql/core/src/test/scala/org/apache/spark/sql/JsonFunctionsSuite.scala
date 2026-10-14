@@ -1621,6 +1621,7 @@ class JsonFunctionsSuite extends SharedSparkSession {
     // Map "c2" has "k2" key that is a string, not an integer.
     val df = Seq("""{"c1": {"k1": 1, "k2": "A", "k3": 3}, "c2": "abc"}""").toDF("c0")
 
+    // SPARK-60229: draining the failed map keeps sibling c2 in both partial-results modes.
     withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
       checkAnswer(
         df.select(from_json($"c0", st)),
@@ -1631,7 +1632,7 @@ class JsonFunctionsSuite extends SharedSparkSession {
     withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
       checkAnswer(
         df.select(from_json($"c0", st)),
-        Row(Row(null, null))
+        Row(Row(null, "abc"))
       )
     }
   }

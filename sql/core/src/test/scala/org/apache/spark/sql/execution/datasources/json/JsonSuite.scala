@@ -4213,9 +4213,12 @@ abstract class JsonSuite
               Seq(Row(Row(1, null), Row(1)), Row(Row(2, null), Row(2)))
             )
           } else {
+            // SPARK-60229: any nested object/map failure (not only CHAR map keys)
+            // still nulls `a`, but the rest of that object is consumed so sibling
+            // `b` is parsed.
             checkAnswer(
               df,
-              Seq(Row(null, null), Row(Row(2, null), Row(2)))
+              Seq(Row(null, Row(1)), Row(Row(2, null), Row(2)))
             )
           }
         }
@@ -4247,7 +4250,7 @@ abstract class JsonSuite
         checkAnswer(
           df,
           Seq(
-            Row("AAA", null, null, null),
+            Row("AAA", null, "id1", "XXX"),
             Row("BBB", Seq(Row(12, "")), "id2", "YYY")
           )
         )
@@ -4283,8 +4286,8 @@ abstract class JsonSuite
         checkAnswer(
           df,
           Seq(
-            Row("AAA", null, null),
-            Row("BBB", null, null)
+            Row("AAA", null, "id1"),
+            Row("BBB", null, "id2")
           )
         )
       }
@@ -4317,7 +4320,7 @@ abstract class JsonSuite
         checkAnswer(
           df,
           Seq(
-            Row("AAA", null, null),
+            Row("AAA", null, "id1"),
             Row("BBB", Map("key" -> Row(12, "")), "id2")
           )
         )
@@ -4349,7 +4352,7 @@ abstract class JsonSuite
         checkAnswer(
           df,
           Seq(
-            Row("AAA", null, null, null),
+            Row("AAA", null, "id1", "XXX"),
             Row("BBB", Row(Seq(12)), "id2", "YYY")
           )
         )

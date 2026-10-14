@@ -618,6 +618,9 @@ class JacksonParser(
             case NonFatal(e) if isRoot || enablePartialResults =>
               badRecordException = badRecordException.orElse(Some(e))
               parser.skipChildren()
+            case NonFatal(e) =>
+              // Nested non-partial: drain before rethrow so parent fields stay aligned.
+              skipRestAndRethrow(parser, JsonToken.END_OBJECT, e)
           }
         case None =>
           parser.skipChildren()
@@ -661,9 +664,9 @@ class JacksonParser(
       val key = UTF8String.fromString(parser.currentName)
       keys += key
       // Avoid allocating a closure per entry on the common no-checker path. Only run the check
-      // while the parser is on a FIELD_NAME: if a nested value failed and escaped non-partially
-      // (an array value only contains PartialValueException), the loop can resume mid-value on a
-      // non-field token whose `currentName` is null, which would otherwise NPE in the check.
+      // while the parser is on a FIELD_NAME: if a nested value failed and escaped non-partially,
+      // the loop can resume mid-value on a non-field token whose `currentName` is null, which
+      // would otherwise NPE in the check.
       val keyRejection = keyChecker match {
         case Some(check) if parser.currentToken == JsonToken.FIELD_NAME => check(key)
         case _ => None
@@ -683,6 +686,9 @@ class JacksonParser(
             case NonFatal(e) if enablePartialResults =>
               badRecordException = badRecordException.orElse(Some(e))
               parser.skipChildren()
+            case NonFatal(e) =>
+              // Nested non-partial: drain before rethrow so parent fields stay aligned.
+              skipRestAndRethrow(parser, JsonToken.END_OBJECT, e)
           }
       }
     }
@@ -765,6 +771,9 @@ class JacksonParser(
         case err: PartialValueException if enablePartialResults =>
           badRecordException = badRecordException.orElse(Some(err.cause))
           values += err.partialResult
+        case NonFatal(e) if !enablePartialResults =>
+          // Nested non-partial: drain before rethrow so parent fields stay aligned.
+          skipRestAndRethrow(parser, JsonToken.END_ARRAY, e)
       }
     }
 
@@ -778,6 +787,26 @@ class JacksonParser(
     } else {
       throw PartialArrayDataResultException(arrayData, badRecordException.get)
     }
+  }
+
+  /**
+   * Drain this object or array through `stopOn` and rethrow `cause`. skipChildren() must run
+   * first: nextUntil(stopOn) can otherwise stop at the failed value's own end token and leave
+   * parent siblings unconsumed, so an enclosing convertObject would treat remaining names as
+   * its own. Skip failures are suppressed on `cause` so the original error is preserved.
+   */
+  private def skipRestAndRethrow(
+      parser: JsonParser, stopOn: JsonToken, cause: Throwable): Nothing = {
+    try {
+      parser.skipChildren()
+      while (nextUntil(parser, stopOn)) {
+        parser.skipChildren()
+      }
+    } catch {
+      case NonFatal(skipErr) =>
+        cause.addSuppressed(skipErr)
+    }
+    throw cause
   }
 
   /**
