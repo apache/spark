@@ -517,18 +517,22 @@ private[spark] object Utils
       in: InputStream,
       destFile: File,
       fileOverwrite: Boolean): Unit = {
-    val tempFile = Files.createTempFile(
-      new File(destFile.getParentFile.getAbsolutePath).toPath, "fetchFileTemp", null).toFile
-    logInfo(log"Fetching ${MDC(LogKeys.URL, url)} to ${MDC(FILE_ABSOLUTE_PATH, tempFile)}")
-
+    var tempFile: File = null
     try {
+      tempFile = Files.createTempFile(
+        new File(destFile.getParentFile.getAbsolutePath).toPath, "fetchFileTemp", null).toFile
+      logInfo(log"Fetching ${MDC(LogKeys.URL, url)} to ${MDC(FILE_ABSOLUTE_PATH, tempFile)}")
       val out = new FileOutputStream(tempFile)
       Utils.copyStream(in, out, closeStreams = true)
       copyFile(url, tempFile, destFile, fileOverwrite, removeSourceFile = true)
     } finally {
+      // Close `in` on every path, including when creating the temp file fails. For a `spark://`
+      // URL it wraps an RPC download channel, and an unclosed channel blocks the single
+      // file-download thread once its pipe fills. Closing an already-closed stream is a no-op.
+      Utils.closeQuietly(in)
       // Catch-all for the couple of cases where for some reason we didn't move `tempFile` to
       // `destFile`.
-      if (tempFile.exists()) {
+      if (tempFile != null && tempFile.exists()) {
         tempFile.delete()
       }
     }
