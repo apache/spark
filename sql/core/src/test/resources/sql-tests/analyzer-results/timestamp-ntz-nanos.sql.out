@@ -920,6 +920,38 @@ Sort [c#x ASC NULLS FIRST], true
 
 
 -- !query
+SELECT typeof(c), c FROM (
+    SELECT '2020-01-01 00:00:00.1234567' :: timestamp_ntz(7) AS c
+    UNION ALL SELECT '2021-07-15 12:34:56.12345678' :: timestamp_ntz(8)) ORDER BY c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Project [typeof(c#x) AS typeof(c)#x, c#x]
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Union false, false
+         :- Project [cast(c#x as timestamp_ntz(8)) AS c#x]
+         :  +- Project [cast(2020-01-01 00:00:00.1234567 as timestamp_ntz(7)) AS c#x]
+         :     +- OneRowRelation
+         +- Project [cast(2021-07-15 12:34:56.12345678 as timestamp_ntz(8)) AS CAST(2021-07-15 12:34:56.12345678 AS TIMESTAMP_NTZ(8))#x]
+            +- OneRowRelation
+
+
+-- !query
+SELECT typeof(c), c FROM (
+    SELECT '2020-01-01 00:00:00.12345678' :: timestamp_ntz(8) AS c
+    UNION ALL SELECT '2021-07-15 12:34:56.123456789' :: timestamp_ntz(9)) ORDER BY c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Project [typeof(c#x) AS typeof(c)#x, c#x]
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Union false, false
+         :- Project [cast(c#x as timestamp_ntz(9)) AS c#x]
+         :  +- Project [cast(2020-01-01 00:00:00.12345678 as timestamp_ntz(8)) AS c#x]
+         :     +- OneRowRelation
+         +- Project [cast(2021-07-15 12:34:56.123456789 as timestamp_ntz(9)) AS CAST(2021-07-15 12:34:56.123456789 AS TIMESTAMP_NTZ(9))#x]
+            +- OneRowRelation
+
+
+-- !query
 SELECT typeof(v), v FROM (SELECT coalesce(
     '1969-12-31 23:59:59.0000001' :: timestamp_ntz(7),
     '1969-12-31 23:59:59.999999999' :: timestamp_ntz(9)) AS v)

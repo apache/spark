@@ -38,7 +38,7 @@ import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType, TimeType}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -543,6 +543,19 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       assert(s"str-$i" == array(i).getString(1))
       assert(i == array(i).getStruct(2).getInt(0))
     }
+  }
+
+  test("SPARK-59276: restore an ordinary requested UDT in a local relation") {
+    val ordinaryUdt = new PythonUserDefinedType(
+      ArrayType(DoubleType, containsNull = false),
+      "pyspark.testing.objects.PythonOnlyUDT",
+      "serialized")
+    val requestedSchema = StructType(StructField("value", ordinaryUdt) :: Nil)
+    val relation = proto.Relation
+      .newBuilder()
+      .setLocalRelation(proto.LocalRelation.newBuilder().setSchema(requestedSchema.json))
+      .build()
+    assert(Dataset.ofRows(spark, transform(relation)).schema("value").dataType === ordinaryUdt)
   }
 
   test("Empty ArrowBatch") {

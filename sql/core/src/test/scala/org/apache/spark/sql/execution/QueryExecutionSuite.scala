@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.{QueryPlanningTracker, QueryPlanningTracker
 import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, UnresolvedFunction, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, NamedLambdaVariable, RegExpReplace, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, LogicalPlan, OneRowRelation, Project, ShowTables, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, CommandResult, LogicalPlan, OneRowRelation, Project, ShowTables, SubqueryAlias, Union, WithCTE}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.classic.Dataset
@@ -753,6 +753,29 @@ class QueryExecutionSuite extends SharedSparkSession {
       assert(trackerAnalyzed != null)
       assert(trackerReadyForExecution != null)
     }
+  }
+
+  test("SPARK-59689: isEagerlyExecutedCommand classifies eager-command plan shapes") {
+    val parser = spark.sessionState.sqlParser
+    // A bare command and a non-command query, obtained without executing them.
+    val command = parser.parsePlan("SET spark.sql.ansi.enabled=true")
+    assert(command.isInstanceOf[Command])
+    val query = parser.parsePlan("SELECT 1")
+    assert(!query.isInstanceOf[Command])
+
+    // The WithCTE-wrapped shapes cannot arise from SQL parsing (a CTE on a DML command is pushed
+    // into the command's query child), so build them directly. This is the classifier EXECUTE
+    // IMMEDIATE's deferral and INTO rejection both gate on.
+    assert(QueryExecution.isEagerlyExecutedCommand(command))
+    assert(QueryExecution.isEagerlyExecutedCommand(Union(Seq(command, command))))
+    assert(QueryExecution.isEagerlyExecutedCommand(WithCTE(command, Nil)))
+    assert(QueryExecution.isEagerlyExecutedCommand(WithCTE(Union(Seq(command, command)), Nil)))
+
+    // Queries -- including a Union or WithCTE that wraps them -- are not eager commands.
+    assert(!QueryExecution.isEagerlyExecutedCommand(query))
+    assert(!QueryExecution.isEagerlyExecutedCommand(Union(Seq(query, query))))
+    assert(!QueryExecution.isEagerlyExecutedCommand(WithCTE(query, Nil)))
+    assert(!QueryExecution.isEagerlyExecutedCommand(Union(Seq(command, query))))
   }
 }
 

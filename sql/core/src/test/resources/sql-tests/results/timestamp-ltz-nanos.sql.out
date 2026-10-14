@@ -1177,6 +1177,28 @@ timestamp_ltz(9)	1582-10-15 23:59:59.123456789
 
 
 -- !query
+SELECT typeof(c), c FROM (
+    SELECT '2020-01-01 00:00:00.1234567' :: timestamp_ltz(7) AS c
+    UNION ALL SELECT '2021-07-15 12:34:56.12345678' :: timestamp_ltz(8)) ORDER BY c
+-- !query schema
+struct<typeof(c):string,c:timestamp_ltz(8)>
+-- !query output
+timestamp_ltz(8)	2020-01-01 00:00:00.1234567
+timestamp_ltz(8)	2021-07-15 12:34:56.12345678
+
+
+-- !query
+SELECT typeof(c), c FROM (
+    SELECT '2020-01-01 00:00:00.12345678' :: timestamp_ltz(8) AS c
+    UNION ALL SELECT '2021-07-15 12:34:56.123456789' :: timestamp_ltz(9)) ORDER BY c
+-- !query schema
+struct<typeof(c):string,c:timestamp_ltz(9)>
+-- !query output
+timestamp_ltz(9)	2020-01-01 00:00:00.12345678
+timestamp_ltz(9)	2021-07-15 12:34:56.123456789
+
+
+-- !query
 SELECT typeof(v), v FROM (SELECT coalesce(
     '1969-12-31 23:59:59.0000001 Asia/Kolkata' :: timestamp_ltz(7),
     '1969-12-31 23:59:59.999999999 UTC' :: timestamp_ltz(9)) AS v)

@@ -1380,7 +1380,10 @@ class AstBuilder extends DataTypeAstBuilder
         excludeColumns = params.excludeColumns,
         storedAsScdType = params.storedAsScdType,
         trackHistoryColumns = params.trackHistoryColumns,
-        trackHistoryExceptColumns = params.trackHistoryExceptColumns)
+        trackHistoryExceptColumns = params.trackHistoryExceptColumns,
+        ignoreNullUpdates = params.ignoreNullUpdates,
+        ignoreNullUpdatesColumns = params.ignoreNullUpdatesColumns,
+        ignoreNullUpdatesExceptColumns = params.ignoreNullUpdatesExceptColumns)
     }
 
   protected def parseAutoCdcParams(params: AutoCdcParametersContext): AutoCdcParams =
@@ -1405,6 +1408,7 @@ class AstBuilder extends DataTypeAstBuilder
       checkDuplicateClauses(params.autoCdcColumnsClause(), "COLUMNS", params)
       checkDuplicateClauses(params.autoCdcStoredAsClause(), "STORED AS SCD TYPE", params)
       checkDuplicateClauses(params.autoCdcTrackHistoryClause(), "TRACK HISTORY ON", params)
+      checkDuplicateClauses(params.autoCdcIgnoreNullClause(), "IGNORE NULL UPDATES", params)
 
       val deleteCondition = params.autoCdcDeleteClause().asScala.headOption
         .map(c => expression(c.deleteCondition))
@@ -1453,6 +1457,21 @@ class AstBuilder extends DataTypeAstBuilder
           visitIdentifierSeq(c.nonTrackCols).map(UnresolvedAttribute.quoted)
       }
 
+      // IGNORE NULL UPDATES [ON (cols) | ON * EXCEPT (cols)]. The bare clause ignores nulls on all
+      // columns; the two subset forms are mutually exclusive by construction. `ignoreNullUpdates`
+      // records whether the clause is present at all, which distinguishes "ignore nulls on all
+      // columns" (present, no subset) from "off" (absent) when both column lists are empty.
+      val ignoreNullClause = params.autoCdcIgnoreNullClause().asScala.headOption
+      val ignoreNullUpdates = ignoreNullClause.isDefined
+      val ignoreNullUpdatesColumns = ignoreNullClause.collect {
+        case c if c.ignoreNullCols != null =>
+          visitIdentifierSeq(c.ignoreNullCols).map(UnresolvedAttribute.quoted)
+      }
+      val ignoreNullUpdatesExceptColumns = ignoreNullClause.collect {
+        case c if c.ignoreNullExceptCols != null =>
+          visitIdentifierSeq(c.ignoreNullExceptCols).map(UnresolvedAttribute.quoted)
+      }
+
       AutoCdcParams(
         source = source,
         keys = keys,
@@ -1462,7 +1481,10 @@ class AstBuilder extends DataTypeAstBuilder
         excludeColumns = excludeColumns,
         storedAsScdType = storedAsScdType,
         trackHistoryColumns = trackHistoryColumns,
-        trackHistoryExceptColumns = trackHistoryExceptColumns)
+        trackHistoryExceptColumns = trackHistoryExceptColumns,
+        ignoreNullUpdates = ignoreNullUpdates,
+        ignoreNullUpdatesColumns = ignoreNullUpdatesColumns,
+        ignoreNullUpdatesExceptColumns = ignoreNullUpdatesExceptColumns)
     }
 
   /**
@@ -1792,21 +1814,23 @@ class AstBuilder extends DataTypeAstBuilder
     if (transformClause.setQuantifier != null) {
       throw QueryParsingErrors.transformNotSupportQuantifierError(transformClause.setQuantifier)
     }
-    // Create the attributes.
-    val (attributes, schemaLess) = if (transformClause.colTypeList != null) {
+    // Create the attributes. Script I/O is always unbounded STRING (Hive wire format).
+    // Declared CHAR/VARCHAR types are assigned in a Project below when first-class types
+    // are enabled, using the original schema so quoted field names are not re-parsed.
+    val (attributes, schema, schemaLess) = if (transformClause.colTypeList != null) {
       // Typed return columns.
-      val schema = createSchema(transformClause.colTypeList)
-      val replacedSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
-      (DataTypeUtils.toAttributes(replacedSchema), false)
+      val origSchema = createSchema(transformClause.colTypeList)
+      val replacedSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchemaAlways(origSchema)
+      (DataTypeUtils.toAttributes(replacedSchema), origSchema, false)
     } else if (transformClause.identifierSeq != null) {
       // Untyped return columns.
       val attrs = visitIdentifierSeq(transformClause.identifierSeq).map { name =>
         AttributeReference(name, StringType, nullable = true)()
       }
-      (attrs, false)
+      (attrs, StructType(Nil), false)
     } else {
       (Seq(AttributeReference("key", StringType)(),
-        AttributeReference("value", StringType)()), true)
+        AttributeReference("value", StringType)()), StructType(Nil), true)
     }
 
     val plan = visitCommonSelectQueryClausePlan(
@@ -1821,7 +1845,7 @@ class AstBuilder extends DataTypeAstBuilder
       isDistinct = false,
       isPipeOperatorSelect = false)
 
-    ScriptTransformation(
+    val scriptTransform = ScriptTransformation(
       string(visitStringLit(transformClause.script)),
       attributes,
       plan,
@@ -1834,6 +1858,29 @@ class AstBuilder extends DataTypeAstBuilder
         schemaLess
       )
     )
+    // First-class CHAR/VARCHAR (standard semantics or preserveCharVarcharTypeInfo):
+    // assign declared types in a Project so the result matches AS (...). Flag off keeps
+    // the historical STRING result with no pad and no EXCEED_LIMIT_LENGTH. The check can
+    // be pruned like scan-side assignment when the column is unreferenced.
+    if (conf.charVarcharFirstClassTypes &&
+        schema.exists(f => CharVarcharUtils.hasCharVarchar(f.dataType))) {
+      Project(
+        attributes.zip(schema).map { case (a, field) =>
+          if (CharVarcharUtils.hasCharVarchar(field.dataType)) {
+            // Keep the raw CHAR/VARCHAR metadata, matching scan-side
+            // readSidePadding. First-class CHAR vs STRING still promotes to
+            // STRING equality, so this metadata does not pad the literal.
+            Alias(
+              CharVarcharUtils.stringLengthCheck(a, field.dataType),
+              a.name)(explicitMetadata = Some(a.metadata))
+          } else {
+            a
+          }
+        },
+        scriptTransform)
+    } else {
+      scriptTransform
+    }
   }
 
   /**
@@ -8407,4 +8454,7 @@ case class AutoCdcParams(
     excludeColumns: Option[Seq[UnresolvedAttribute]],
     storedAsScdType: Int,
     trackHistoryColumns: Option[Seq[UnresolvedAttribute]],
-    trackHistoryExceptColumns: Option[Seq[UnresolvedAttribute]])
+    trackHistoryExceptColumns: Option[Seq[UnresolvedAttribute]],
+    ignoreNullUpdates: Boolean,
+    ignoreNullUpdatesColumns: Option[Seq[UnresolvedAttribute]],
+    ignoreNullUpdatesExceptColumns: Option[Seq[UnresolvedAttribute]])

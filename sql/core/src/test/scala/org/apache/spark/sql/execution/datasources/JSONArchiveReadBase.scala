@@ -21,7 +21,8 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.SparkException
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{NullType, StringType}
 
@@ -164,6 +165,73 @@ trait JSONArchiveReadBase extends ArchiveReadSuiteBase {
         "a.json" -> jsonBytes("{\n  \"id\": 1,\n  \"name\": \"Alice\"\n}"),
         "b.json" -> jsonBytes("{\n  \"id\": 2,\n  \"name\": \"Bob\"\n}")),
       extraOptions = Map("multiLine" -> "true"))
+  }
+
+  test("JSON: streaming multi-line top-level arrays match a directory read") {
+    withSQLConf(SQLConf.JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY.key -> "true") {
+      assertArchiveMatchesDir(
+        Seq(
+          "a.json" -> jsonBytes("""[{"id":1,"name":"Alice"},{"id":2,"name":"Bob"}]"""),
+          "b.json" -> jsonBytes("""[{"id":3,"name":"Carol"}]""")),
+        extraOptions = Map("multiLine" -> "true"))
+      // Jackson auto-detects UTF-16/32, so only a non-UTF charset shows `encoding` is applied.
+      // scalastyle:off nonascii
+      assertArchiveMatchesDir(
+        Seq("a.json" -> "[{\"id\":1,\"name\":\"Jos\u00e9\"},{\"id\":2,\"name\":\"Bob\"}]"
+          .getBytes(StandardCharsets.ISO_8859_1)),
+        extraOptions = Map("multiLine" -> "true", "encoding" -> "ISO-8859-1"))
+      // scalastyle:on nonascii
+    }
+  }
+
+  gridTest("JSON: streaming archive arrays resume after a partial element")(
+      Seq("PERMISSIVE", "DROPMALFORMED", "FAILFAST")) { mode =>
+    withSQLConf(SQLConf.JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY.key -> "true") {
+      val document = """[{"id":"bad","name":"Alice"},{"id":2,"name":"Bob"}]"""
+      withArchiveFile() { archive =>
+        writeArchive(archive, Seq(entryName(0) -> jsonBytes(document)))
+        val df = read(
+          archive.getCanonicalPath,
+          Map("multiLine" -> "true", "mode" -> mode),
+          s"$readSchema, _corrupt_record STRING")
+
+        mode match {
+          case "PERMISSIVE" =>
+            checkAnswer(df, Seq(Row(null, "Alice", document), Row(2, "Bob", null)))
+          case "DROPMALFORMED" =>
+            checkAnswer(df, Row(2, "Bob", null))
+          case "FAILFAST" =>
+            val error = intercept[SparkException](df.collect())
+            assert(error.getCause.asInstanceOf[SparkException].getCondition ===
+              "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION")
+        }
+      }
+    }
+  }
+
+  gridTest("JSON: streaming archive arrays handle terminal malformed input")(
+      Seq("PERMISSIVE", "DROPMALFORMED", "FAILFAST")) { mode =>
+    withSQLConf(SQLConf.JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY.key -> "true") {
+      val document = """[{"id":1,"name":"Alice"} {"id":2,"name":"Bob"}]"""
+      withArchiveFile() { archive =>
+        writeArchive(archive, Seq(entryName(0) -> jsonBytes(document)))
+        val df = read(
+          archive.getCanonicalPath,
+          Map("multiLine" -> "true", "mode" -> mode),
+          s"$readSchema, _corrupt_record STRING")
+
+        mode match {
+          case "PERMISSIVE" =>
+            checkAnswer(df, Seq(Row(1, "Alice", null), Row(null, null, document)))
+          case "DROPMALFORMED" =>
+            checkAnswer(df, Row(1, "Alice", null))
+          case "FAILFAST" =>
+            val error = intercept[SparkException](df.collect())
+            assert(error.getCause.asInstanceOf[SparkException].getCondition ===
+              "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION")
+        }
+      }
+    }
   }
 
   test("JSON: a malformed record in an archive entry matches a directory read (both modes)") {

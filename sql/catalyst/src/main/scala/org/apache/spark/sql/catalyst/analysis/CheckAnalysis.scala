@@ -488,9 +488,9 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           context = u.origin.getQueryContext,
           summary = u.origin.context.summary)
 
-      case r: V2TableReference =>
+      case r: V2Reference =>
         throw SparkException.internalError(
-          s"V2TableReference should be resolved during analysis: ${r.name}")
+          s"V2Reference should be resolved during analysis: ${r.name}")
 
       case u: UnresolvedInlineTable if unresolvedInlineTableContainsScalarSubquery(u) =>
         throw QueryCompilationErrors.inlineTableContainsScalarSubquery(u)
@@ -762,7 +762,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 "joinCondition" -> toSQLExpr(condition),
                 "conditionType" -> toSQLType(condition.dataType)))
 
-          case j @ AsOfJoin(_, _, _, Some(condition), _, _, _, _, _, _, _, _, _, _)
+          case j @ AsOfJoin(_, _, _, Some(condition), _, _, _, _, _, _, _, _, _, _, _)
               if condition.dataType != BooleanType =>
             j.failAnalysis(
               errorClass = "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE",
@@ -770,7 +770,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 "joinCondition" -> toSQLExpr(condition),
                 "conditionType" -> toSQLType(condition.dataType)))
 
-          case j @ AsOfJoin(_, _, _, _, _, _, Some(toleranceAssertion), _, _, _, _, _, _, _) =>
+          case j @ AsOfJoin(_, _, _, _, _, _, Some(toleranceAssertion), _, _, _, _, _, _, _, _) =>
             if (!toleranceAssertion.foldable) {
               j.failAnalysis(
                 errorClass = "AS_OF_JOIN.TOLERANCE_IS_UNFOLDABLE",

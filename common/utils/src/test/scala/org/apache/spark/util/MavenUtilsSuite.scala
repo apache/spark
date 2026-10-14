@@ -21,11 +21,17 @@ import java.io.{File, OutputStream, PrintStream}
 import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
+import java.util.concurrent.{CancellationException, CountDownLatch, Executors, TimeUnit}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
-import org.apache.ivy.core.module.descriptor.MDArtifact
+import org.apache.ivy.core.IvyContext
+import org.apache.ivy.core.module.descriptor.{DependencyDescriptor, MDArtifact}
+import org.apache.ivy.core.resolve.{ResolveData, ResolvedModuleRevision}
 import org.apache.ivy.core.settings.IvySettings
 import org.apache.ivy.plugins.resolver.{AbstractResolver, ChainResolver, FileSystemResolver, IBiblioResolver}
 import org.scalatest.BeforeAndAfterEach
@@ -37,6 +43,7 @@ class MavenUtilsSuite
     extends AnyFunSuite // scalastyle:ignore funsuite
     with BeforeAndAfterEach {
 
+  private val resolverTimeoutMs = 30 * 1000
   private var tempIvyPath: String = _
 
   private val noOpOutputStream = new OutputStream {
@@ -53,6 +60,29 @@ class MavenUtilsSuite
       lineBuffer += line
     }
     // scalastyle:on println
+  }
+
+  private def buildTestIvySettings(
+      repo: File,
+      ivyPath: String,
+      resolutionStarted: Option[AtomicBoolean] = None): IvySettings = {
+    val settings = new IvySettings
+    MavenUtils.processIvyPathArg(settings, Some(ivyPath))
+    val resolver = new IBiblioResolver {
+      override def getDependency(
+          descriptor: DependencyDescriptor,
+          data: ResolveData): ResolvedModuleRevision = {
+        resolutionStarted.foreach(_.set(true))
+        super.getDependency(descriptor, data)
+      }
+    }
+    resolver.setM2compatible(true)
+    resolver.setUsepoms(true)
+    resolver.setRoot(repo.toURI.toString)
+    resolver.setName("test-repo")
+    settings.addResolver(resolver)
+    settings.setDefaultResolver(resolver.getName)
+    settings
   }
 
   override def beforeEach(): Unit = {
@@ -100,6 +130,21 @@ class MavenUtilsSuite
     }
   }
 
+  test("runtime resolver configures Ivy network timeouts") {
+    val settings = MavenUtils.buildIvySettings(None, Some(tempIvyPath))
+
+    MavenUtils.setResolverTimeouts(settings, connectTimeoutMs = 1234, readTimeoutMs = 5678)
+
+    val resolvers = settings.getDefaultResolver
+      .asInstanceOf[ChainResolver]
+      .getResolvers
+      .asScala
+      .collect { case resolver: AbstractResolver => resolver }
+    assert(resolvers.nonEmpty)
+    assert(resolvers.forall(_.getTimeoutConstraint.getConnectionTimeout == 1234))
+    assert(resolvers.forall(_.getTimeoutConstraint.getReadTimeout == 5678))
+  }
+
   test("add dependencies works correctly") {
     val md = MavenUtils.getModuleDescriptor
     val artifacts = MavenUtils.extractMavenCoordinates("com.databricks:spark-csv_2.12:0.1," +
@@ -145,6 +190,148 @@ class MavenUtilsSuite
     }
   }
 
+  test("runtime dependency resolver loads custom Ivy settings") {
+    val main = MavenCoordinate("my.runtime.lib", "mylib", "0.1")
+    IvyTestUtils.withRepository(main, None, None) { repo =>
+      val settings = Paths.get(tempIvyPath, "ivysettings.xml")
+      Files.writeString(
+        settings,
+        s"""<ivysettings>
+           |  <settings defaultResolver="runtime"/>
+           |  <resolvers>
+           |    <ibiblio name="runtime" m2compatible="true" root="$repo"/>
+           |  </resolvers>
+           |</ivysettings>""".stripMargin)
+      val resolver = new RuntimeDependencyResolver(
+        ivySettingsPath = Some(settings.toString),
+        ivyPath = Some(tempIvyPath))
+
+      val resolved = resolver.resolve(
+        URI.create(s"ivy://${main.toString}"),
+        resolverTimeoutMs,
+        resolverTimeoutMs)
+
+      assert(resolved.exists(_.getFileName.toString.contains("my.runtime.lib_mylib-0.1")))
+      assert(resolved.forall(_.startsWith(Paths.get(tempIvyPath))))
+    }
+  }
+
+  test("runtime dependency resolver applies the repository policy") {
+    val resolver = new RuntimeDependencyResolver(None, Some(tempIvyPath))
+    val error = intercept[IllegalArgumentException] {
+      resolver.resolve(
+        URI.create("ivy://my.runtime.lib:mylib:0.1?repos=https://example.com/repository"),
+        resolverTimeoutMs,
+        resolverTimeoutMs,
+        RuntimeDependencyResolver.RejectRequestedRepositories)
+    }
+
+    assert(error.getMessage.contains("do not allow repositories"))
+  }
+
+  test("runtime dependency resolver honors cancellation before resolution") {
+    val resolver = new RuntimeDependencyResolver(None, Some(tempIvyPath))
+
+    intercept[CancellationException] {
+      resolver.resolve(
+        URI.create("ivy://my.runtime.lib:mylib:0.1"),
+        resolverTimeoutMs,
+        resolverTimeoutMs,
+        isCancelled = () => true)
+    }
+  }
+
+  test("runtime dependency resolver honors cancellation while waiting for Ivy") {
+    val executor = Executors.newFixedThreadPool(2)
+    implicit val executionContext: ExecutionContext =
+      ExecutionContext.fromExecutorService(executor)
+    try {
+      val main = MavenCoordinate("my.runtime.waiting", "mylib", "0.1")
+      IvyTestUtils.withRepository(main, None, None) { repo =>
+        val firstEnteredIvy = new CountDownLatch(1)
+        val releaseFirst = new CountDownLatch(1)
+        val blockingPrintStream = new PrintStream(noOpOutputStream) {
+          private val blocked = new AtomicBoolean(false)
+          // scalastyle:off println
+          override def println(line: String): Unit = {
+            if (blocked.compareAndSet(false, true)) {
+              firstEnteredIvy.countDown()
+              releaseFirst.await()
+            }
+          }
+          // scalastyle:on println
+        }
+        val firstSettings = MavenUtils.buildIvySettings(
+          Some(repo),
+          Some(Paths.get(tempIvyPath, "first").toString))
+        val first = Future {
+          MavenUtils.resolveMavenCoordinates(
+            main.toString,
+            firstSettings,
+            transitive = true,
+            isTest = true)(blockingPrintStream)
+        }
+
+        assert(firstEnteredIvy.await(5, TimeUnit.SECONDS))
+        val cancelled = new AtomicBoolean(false)
+        val cancellationChecks = new AtomicInteger(0)
+        val waitingForIvy = new CountDownLatch(1)
+        val resolver = new RuntimeDependencyResolver(
+          ivySettingsPath = None,
+          ivyPath = Some(Paths.get(tempIvyPath, "second").toString))
+        val second = Future {
+          resolver.resolve(
+            URI.create(s"ivy://${main.toString}"),
+            resolverTimeoutMs,
+            resolverTimeoutMs,
+            isCancelled = () => {
+              if (cancellationChecks.incrementAndGet() >= 5) {
+                waitingForIvy.countDown()
+              }
+              cancelled.get()
+            })
+        }
+
+        try {
+          assert(waitingForIvy.await(5, TimeUnit.SECONDS))
+          cancelled.set(true)
+          intercept[CancellationException] {
+            SparkThreadUtils.awaitResultNoSparkExceptionConversion(second, 5.seconds)
+          }
+        } finally {
+          releaseFirst.countDown()
+        }
+        SparkThreadUtils.awaitResultNoSparkExceptionConversion(first, 5.seconds)
+      }
+    } finally {
+      executor.shutdownNow()
+    }
+  }
+
+  test("runtime dependency resolver preserves the local Ivy repository") {
+    val main = MavenCoordinate("my.runtime.local", "mylib", "0.1")
+    val localIvyHome = Paths.get(tempIvyPath, "local-ivy")
+    val runtimeIvyPath = Paths.get(tempIvyPath, "runtime-ivy")
+    IvyTestUtils.withRepository(
+      main,
+      dependencies = None,
+      rootDir = Some(localIvyHome.resolve("local").toFile),
+      useIvyLayout = true) { _ =>
+      val resolver = new RuntimeDependencyResolver(
+        ivySettingsPath = None,
+        ivyPath = Some(runtimeIvyPath.toString),
+        localIvyPath = Some(localIvyHome.toString))
+
+      val resolved = resolver.resolve(
+        URI.create(s"ivy://${main.toString}"),
+        resolverTimeoutMs,
+        resolverTimeoutMs)
+
+      assert(resolved.exists(_.getFileName.toString.contains("my.runtime.local_mylib-0.1")))
+      assert(resolved.forall(_.startsWith(runtimeIvyPath)))
+    }
+  }
+
   test("search for artifact at local repositories") {
     val main = new MavenCoordinate("my.great.lib", "mylib", "0.1")
     val dep = "my.great.dep:mydep:0.5"
@@ -186,14 +373,65 @@ class MavenUtilsSuite
     }
   }
 
-  test("dependency not found throws RuntimeException") {
+  test("primary Ivy context is restored after a resolution failure") {
+    val missingRepo = new File(tempIvyPath, "missing-repo")
+    assert(missingRepo.mkdirs())
+    val initialContext = IvyContext.getContext
+
     intercept[RuntimeException] {
       MavenUtils.resolveMavenCoordinates(
-      "a:b:c",
-      MavenUtils.buildIvySettings(None, Some(tempIvyPath)),
+        "a:b:c",
+        buildTestIvySettings(
+          missingRepo,
+          Paths.get(tempIvyPath, "missing-cache").toString),
         transitive = true,
-      isTest = true)
+        isTest = true)
     }
+    assert(IvyContext.getContext eq initialContext)
+
+    val valid = MavenCoordinate("my.context.after.failure", "mylib", "0.1")
+    val validRepo = IvyTestUtils.createLocalRepositoryForTests(
+      valid,
+      dependencies = None,
+      rootDir = Some(new File(tempIvyPath, "valid-repo")))
+    val resolved = MavenUtils.resolveMavenCoordinates(
+      valid.toString,
+      buildTestIvySettings(validRepo, Paths.get(tempIvyPath, "valid-cache").toString),
+      transitive = true,
+      isTest = true)
+    assert(resolved.nonEmpty)
+    assert(IvyContext.getContext eq initialContext)
+  }
+
+  test("no-cache Ivy context is restored after a resolution failure") {
+    val artifact = MavenCoordinate("my.context.no.cache", "mylib", "0.1")
+    val primaryRepo = IvyTestUtils.createLocalRepositoryForTests(
+      artifact,
+      dependencies = None,
+      rootDir = Some(new File(tempIvyPath, "primary-repo")))
+    val jar = new File(
+      IvyTestUtils.pathFromCoordinate(artifact, primaryRepo, "jar", useIvyLayout = false),
+      IvyTestUtils.artifactName(artifact, useIvyLayout = false))
+    assert(jar.delete())
+
+    val noCacheRepo = new File(tempIvyPath, "no-cache-repo")
+    assert(noCacheRepo.mkdirs())
+    val fallbackStarted = new AtomicBoolean(false)
+    val initialContext = IvyContext.getContext
+    intercept[RuntimeException] {
+      MavenUtils.resolveMavenCoordinates(
+        artifact.toString,
+        buildTestIvySettings(
+          primaryRepo,
+          Paths.get(tempIvyPath, "primary-cache").toString),
+        noCacheIvySettings = Some(buildTestIvySettings(
+          noCacheRepo,
+          Paths.get(tempIvyPath, "no-cache").toString,
+          resolutionStarted = Some(fallbackStarted))),
+        transitive = true)
+    }
+    assert(fallbackStarted.get())
+    assert(IvyContext.getContext eq initialContext)
   }
 
   test("neglects Spark and Spark's dependencies") {

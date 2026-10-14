@@ -1062,7 +1062,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("default trim uses collation-aware space matching") {
-    val source = "\u00A0abc\u00A0"
+    val nbsp = 0xA0.toChar.toString
+    val source = nbsp + "abc" + nbsp
 
     // Case-insensitive ICU collations treat NBSP as equal to ASCII space, so the default
     // (unary) trim removes it, matching the explicit two-argument form with a space trim string.
@@ -1071,8 +1072,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       val src = Literal.create(source, StringType(collationId))
       val space = Literal.create(" ", StringType(collationId))
 
-      checkEvaluation(StringTrimLeft(src), "abc\u00A0")
-      checkEvaluation(StringTrimRight(src), "\u00A0abc")
+      checkEvaluation(StringTrimLeft(src), "abc" + nbsp)
+      checkEvaluation(StringTrimRight(src), nbsp + "abc")
       checkEvaluation(StringTrim(src), "abc")
 
       // The unary form matches the explicit two-argument form with a space trim string.
@@ -1081,11 +1082,11 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(StringTrim(src), StringTrim(src, space).eval())
 
       // Mixed padding of NBSP and ASCII space is fully trimmed.
-      val mixed = Literal.create("\u00A0 abc \u00A0", StringType(collationId))
+      val mixed = Literal.create(nbsp + " abc " + nbsp, StringType(collationId))
       checkEvaluation(StringTrim(mixed), "abc")
 
       // A string consisting solely of space separators trims to empty.
-      val allSpaces = Literal.create("\u00A0 \u00A0", StringType(collationId))
+      val allSpaces = Literal.create(nbsp + " " + nbsp, StringType(collationId))
       checkEvaluation(StringTrimLeft(allSpaces), "")
       checkEvaluation(StringTrimRight(allSpaces), "")
       checkEvaluation(StringTrim(allSpaces), "")

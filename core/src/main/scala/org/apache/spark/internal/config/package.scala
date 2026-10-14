@@ -1251,7 +1251,7 @@ package object config {
   private[spark] val DRIVER_TIMEOUT = ConfigBuilder("spark.driver.timeout")
     .doc("A timeout for Spark driver in minutes. 0 means infinite. For the positive time value, " +
       "terminate the driver with the exit code 124 if it runs after timeout duration. To use, " +
-      "it's required to set `spark.plugins=org.apache.spark.deploy.DriverTimeoutPlugin`.")
+      "it's required to set `spark.plugins=DriverTimeoutPlugin`.")
     .version("4.0.0")
     .timeConf(TimeUnit.MINUTES)
     .checkValue(v => v >= 0, "The value should be a non-negative time value.")
@@ -1745,6 +1745,17 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(_ > 0, "The minimum renewal interval must be a positive time value.")
       .createWithDefaultString("30s")
+
+  private[spark] val SECURITY_OIDC_REQUIRE_RPC_ENCRYPTION =
+    ConfigBuilder("spark.security.oidc.requireRpcEncryption")
+      .doc("When OIDC credential propagation is enabled, whether to require RPC channel " +
+        "encryption. When true, Spark refuses to start if RPC encryption is not configured, " +
+        "instead of only logging a warning. Defaults to false to preserve the warn-by-default " +
+        "behavior described in the SPIP.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val DIRECT_CREDENTIAL_PROVIDERS_ENABLED =
     ConfigBuilder("spark.security.directCredentialProviders.enabled")
@@ -2832,6 +2843,22 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val STANDALONE_SUBMIT_FILTER_ENVIRONMENT =
+    ConfigBuilder("spark.standalone.submit.filterEnvironment")
+      .doc("In standalone cluster mode, controls whether the client forwards only " +
+        "Spark-related environment variables (i.e. SPARK_* excluding SPARK_ENV_LOADED, " +
+        "SPARK_HOME, SPARK_CONF_DIR, SPARK_LOCAL_IP, and SPARK_LOCAL_HOSTNAME) to the driver, " +
+        "matching the REST submission gateway. If set to false, the full environment of the " +
+        "submitting process is forwarded to the driver, except SPARK_LOCAL_IP and " +
+        "SPARK_LOCAL_HOSTNAME, which are never forwarded since they describe the submitting " +
+        "host rather than the worker the driver runs on. This governs the RPC submission " +
+        "gateway, which is what spark-submit uses unless spark.master.rest.enabled is set to " +
+        "true; REST submissions filter regardless of this setting.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val EXECUTOR_ALLOW_SPARK_CONTEXT =
     ConfigBuilder("spark.executor.allowSparkContext")
       .doc("If set to true, SparkContext can be created in executors.")
@@ -3043,15 +3070,44 @@ package object config {
   private[spark] val JAR_IVY_SETTING_PATH =
     ConfigBuilder(MavenUtils.JAR_IVY_SETTING_PATH_KEY)
       .doc("Path to an Ivy settings file to customize resolution of jars specified " +
-        "using spark.jars.packages instead of the built-in defaults, such as maven central. " +
-        "Additional repositories given by the command-line option --repositories " +
-        "or spark.jars.repositories will also be included. " +
+        "using spark.jars.packages or ivy:// URIs passed to SparkSession.addArtifact instead " +
+        "of the built-in defaults, such as maven central. " +
+        "For spark.jars.packages, additional repositories from spark.jars.repositories will " +
+        "also be included. " +
+        "Client-resolved Spark Connect Ivy URIs do not use this setting. " +
+        "The spark-submit --repositories option applies to submission-time resolution. " +
         "Useful for allowing Spark to resolve artifacts from behind a firewall " +
         "e.g. via an in-house artifact server like Artifactory. " +
         "Details on the settings file format can be found at Settings Files")
       .version("2.2.0")
       .stringConf
       .createOptional
+
+  private[spark] val JAR_IVY_CONNECT_TIMEOUT =
+    ConfigBuilder("spark.jars.ivyConnectTimeout")
+      .doc("Connection timeout for Ivy repository requests made by " +
+        "SparkSession.addArtifact. Client-resolved Spark Connect Ivy URIs do not use this " +
+        "setting. This must be set before the SparkContext starts.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(
+        timeout => timeout > 0 && timeout <= Int.MaxValue,
+        s"Timeout must be positive and no greater than ${Int.MaxValue} milliseconds.")
+      .createWithDefaultString("30s")
+
+  private[spark] val JAR_IVY_READ_TIMEOUT =
+    ConfigBuilder("spark.jars.ivyReadTimeout")
+      .doc("Read timeout for Ivy repository requests made by SparkSession.addArtifact. " +
+        "Client-resolved Spark Connect Ivy URIs do not use this setting. " +
+        "This must be set before the SparkContext starts.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(
+        timeout => timeout > 0 && timeout <= Int.MaxValue,
+        s"Timeout must be positive and no greater than ${Int.MaxValue} milliseconds.")
+      .createWithDefaultString("5m")
 
   private[spark] val JAR_PACKAGES =
     ConfigBuilder("spark.jars.packages")
@@ -3280,7 +3336,7 @@ package object config {
     ConfigBuilder("spark.driver.log.redirectConsoleOutputs")
       .doc("Comma-separated list of the console output kind for driver that needs to redirect " +
         "to logging system. Supported values are `stdout`, `stderr`. It only takes affect when " +
-        s"`${PLUGINS.key}` is configured with `org.apache.spark.deploy.RedirectConsolePlugin`.")
+        s"`${PLUGINS.key}` is configured with `RedirectConsolePlugin`.")
       .version("4.1.0")
       .stringConf
       .transform(_.toLowerCase(Locale.ROOT))
@@ -3293,7 +3349,7 @@ package object config {
     ConfigBuilder("spark.executor.logs.redirectConsoleOutputs")
       .doc("Comma-separated list of the console output kind for executor that needs to redirect " +
         "to logging system. Supported values are `stdout`, `stderr`. It only takes affect when " +
-        s"`${PLUGINS.key}` is configured with `org.apache.spark.deploy.RedirectConsolePlugin`.")
+        s"`${PLUGINS.key}` is configured with `RedirectConsolePlugin`.")
       .version("4.1.0")
       .stringConf
       .transform(_.toLowerCase(Locale.ROOT))

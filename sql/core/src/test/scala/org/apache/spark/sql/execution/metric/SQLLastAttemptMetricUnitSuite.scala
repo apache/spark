@@ -23,6 +23,7 @@ import org.mockito.Mockito.when
 import org.scalatestplus.mockito.MockitoSugar.mock
 
 import org.apache.spark.{SharedSparkContext, SparkFunSuite}
+import org.apache.spark.internal.LogKey
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.TaskInfo
 
@@ -286,5 +287,50 @@ class SQLLastAttemptMetricUnitSuite extends SparkFunSuite with SharedSparkContex
     val sIds4 = overrideStageIdsFld.get(rddVals).asInstanceOf[Array[Int]]
     assert(sIds4(0) === 12)
     assert(slam.lastAttemptValueForRDDId(1) === Some(105)) // 40 + 15 + 30 + 10*2
+  }
+
+  test("logAccumulatorState and logAccumulatorUpdate are lazy and catch formatting failures") {
+    var failFormatting = false
+    var logStateEvaluations = 0
+    val slam = new SQLLastAttemptMetric(SQLMetrics.SUM_METRIC) {
+      override protected def logKeyAccumulatorState: LogKey = {
+        logStateEvaluations += 1
+        if (failFormatting) {
+          throw new IllegalStateException("state formatting failure")
+        }
+        super.logKeyAccumulatorState
+      }
+    }
+    slam.register(sc, name = Some("test SLAM state logging"), countFailedValues = false)
+    slam.initializeLastAttemptAccumulator()
+    val acc = slam.copy()
+    setMockAttempt(rddId = 1, partitionId = 0)
+    acc.set(10)
+    logStateEvaluations = 0
+    // With TRACE off, mergeLastAttempt does not format its logAccumulatorUpdate TRACE entry.
+    slam.mergeLastAttempt(acc, mockRdd, mockTaskInfo, 0, 0, mockProperties)
+    assert(logStateEvaluations === 0)
+    assert(slam.lastAttemptValueForRDDId(1) === Some(10))
+
+    val entry = slam.logAccumulatorState
+    assert(logStateEvaluations === 0)
+    assert(entry.message.contains("Direct driver QE values"))
+    assert(logStateEvaluations > 0)
+
+    failFormatting = true
+    assert(slam.logAccumulatorState.message.contains(
+      "<Unexpected exception in logAccumulatorState>"))
+    // A driver-side set after task updates is an unexpected update, which logs the state and the
+    // update. It must still invalidate the accumulator when formatting them fails.
+    val appender = new LogAppender()
+    withLogAppender(appender, Seq(slam.getClass.getName)) {
+      slam.set(5)
+    }
+    assert(slam.lastAttemptValueForRDDId(1) === None)
+    val warnings = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+      .filter(_.startsWith("Unexpected last attempt tracking"))
+    assert(warnings.size === 1)
+    assert(warnings.head.contains("<Unexpected exception in logAccumulatorState>"))
+    assert(warnings.head.contains("<Unexpected exception in logAccumulatorUpdate>"))
   }
 }

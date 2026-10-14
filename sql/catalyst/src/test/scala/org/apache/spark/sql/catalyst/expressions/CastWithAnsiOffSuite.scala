@@ -559,6 +559,9 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
       Decimal("60000000000000000000000000000000000000"))
     checkEvaluation(cast("6E+38", DecimalType(38, 0)), null)
     checkEvaluation(cast("6E+37", DecimalType(38, 1)), null)
+    Seq("1e2147483647", "1.5e2147483647", "12e2147483647").foreach { s =>
+      checkEvaluation(cast(s, DecimalType(10, 2)), null)
+    }
 
     checkEvaluation(cast("abcd", DecimalType(38, 1)), null)
   }
