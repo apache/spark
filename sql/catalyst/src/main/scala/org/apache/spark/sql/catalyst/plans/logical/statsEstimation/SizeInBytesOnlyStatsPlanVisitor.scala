@@ -113,6 +113,15 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
       case LeftAnti | LeftSemi =>
         // LeftSemi and LeftAnti won't ever be bigger than left
         p.left.stats
+      case ExistenceJoin(_) =>
+        // An existence join returns exactly the rows of its left child, each with one extra
+        // non-nullable Boolean attribute recording whether the right child had a match, so its
+        // size follows from the left child and not from the product of both children that
+        // `default` would compute. Getting this wrong is not only inaccurate: an existence join
+        // over a small left child can end up on the build side of an enclosing join, where a
+        // size inflated by the right child's cardinality would disqualify a broadcast that the
+        // real size allows.
+        visitExistenceJoin(p)
       case Inner | LeftOuter | RightOuter | FullOuter =>
         p match {
           case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, left, right, _)
@@ -126,6 +135,29 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
       case _ =>
         default(p)
     }
+  }
+
+  /**
+   * Rescales the left child's size to the output of an existence join, the same way
+   * [[visitUnaryNode]] rescales a unary node's child: the row count is unchanged, so the size
+   * changes only by the width the appended `exists` attribute adds to each row.
+   *
+   * The left child's row count and attribute statistics are propagated as they are, which is
+   * exact rather than approximate here, since every left row reaches the output and the join adds
+   * no attribute the left child's statistics describe. [[LeftSemi]] above propagates them too,
+   * where they are only an upper bound.
+   */
+  private def visitExistenceJoin(p: Join): Statistics = {
+    val leftStats = p.left.stats
+    val leftRowSize = EstimationUtils.getSizePerRow(p.left.output)
+    val outputRowSize = EstimationUtils.getSizePerRow(p.output)
+    var sizeInBytes = (leftStats.sizeInBytes * outputRowSize) / leftRowSize
+    if (sizeInBytes == 0) {
+      // sizeInBytes can't be zero, or sizeInBytes of BinaryNode will also be zero
+      // (product of children).
+      sizeInBytes = 1
+    }
+    leftStats.copy(sizeInBytes = sizeInBytes)
   }
 
   override def visitLocalLimit(p: LocalLimit): Statistics = {

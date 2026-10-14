@@ -32,7 +32,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.datasources.FileScanRDD
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
-import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec}
+import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.IntegerType
@@ -3713,6 +3713,51 @@ class SubquerySuite extends SharedSparkSession
       // own compared value would be printed as an IN in turn.
       val reportedNested = nestedInValues.getMessageParameters.get("subqueryExpression")
       assert(reportedNested == "(t2.c1 IN (listquery()))", reportedNested)
+    }
+  }
+
+  test("SPARK-59351: an existence join on the build side does not disqualify a broadcast",
+    DisableAdaptiveExecution("the estimate under test is the one the planner uses")) {
+    // The nested subquery is rewritten into an existence join on top of the subquery plan, which
+    // is the build side of the enclosing semi join. An existence join returns exactly the rows of
+    // its left child, so that build side is as small as `small` is, but a generic product estimate
+    // would scale it by the cardinality of `nested` and disqualify the broadcast, planning a sort
+    // merge join over the much larger outer input instead.
+    withTable("outer_side", "small", "nested") {
+      spark.range(0, 20000).selectExpr("id as a").write.saveAsTable("outer_side")
+      spark.range(0, 400).selectExpr("id as c1").write.saveAsTable("small")
+      spark.range(0, 400).selectExpr("id as col1").write.saveAsTable("nested")
+      // The hoisted predicate is `a > c1` rather than the key equality, so the semi join keeps an
+      // equi key and a broadcast hash join is available at all; with a disjunction as the whole
+      // condition it would be a broadcast nested loop join whatever the statistics say.
+      val query =
+        """SELECT * FROM outer_side
+          |WHERE a IN (
+          |  SELECT c1 FROM small
+          |  WHERE a > c1 OR c1 IN (SELECT col1 FROM nested))""".stripMargin
+      val plan = sql(query).queryExecution.optimizedPlan
+      val existenceJoin = plan.collectFirst {
+        case j: Join if j.joinType.isInstanceOf[ExistenceJoin] => j
+      }
+      assert(existenceJoin.nonEmpty, s"expected an existence join in\n$plan")
+      // The estimate has to stay within reach of the left child rather than the product.
+      val j = existenceJoin.get
+      assert(j.stats.sizeInBytes < j.left.stats.sizeInBytes * 2,
+        s"the existence join is estimated at ${j.stats.sizeInBytes} from a left child of " +
+          s"${j.left.stats.sizeInBytes} and a right child of ${j.right.stats.sizeInBytes}")
+      // A threshold above the real build side but below what the product would be.
+      val threshold = j.left.stats.sizeInBytes * 4
+      assert(threshold < j.left.stats.sizeInBytes * j.right.stats.sizeInBytes,
+        "the fixture must distinguish the left-derived estimate from the product")
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> threshold.toString) {
+        val executed = sql(query).queryExecution.executedPlan
+        val semiJoins = collect(executed) { case j: BaseJoinExec => j }
+        assert(semiJoins.exists(_.isInstanceOf[BroadcastHashJoinExec]),
+          s"the build side must stay broadcastable in\n$executed")
+        assert(!semiJoins.exists(_.isInstanceOf[SortMergeJoinExec]),
+          s"no sort merge join should be planned in\n$executed")
+      }
+      checkAnswer(sql(query), spark.range(0, 400).selectExpr("id as a").collect().toSeq)
     }
   }
 }

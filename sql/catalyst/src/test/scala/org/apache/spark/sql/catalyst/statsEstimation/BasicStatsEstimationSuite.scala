@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.ResolvedNamespace
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeMap, AttributeReference, Literal, SortOrder}
-import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
+import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces
 import org.apache.spark.sql.internal.SQLConf
@@ -200,6 +200,44 @@ test("range with invalid long value") {
       windows,
       expectedStatsCboOn = windowsStats,
       expectedStatsCboOff = windowsStats)
+  }
+
+  test("existence join is estimated from its left child in both statistics modes") {
+    // An existence join returns every row of its left child with one extra non-nullable Boolean
+    // attribute, so neither its row count nor its size may be scaled by the right child's
+    // cardinality. Before SPARK-59351 neither mode knew the join type: the size-only visitor fell
+    // through to the product of both children and the CBO estimator returned None, which falls
+    // back to that same product. A nested predicate subquery can put such a join on the build
+    // side of an enclosing join, where the inflated size disqualifies a broadcast that the real
+    // size allows.
+    val exists = AttributeReference("exists", BooleanType, nullable = false)()
+    // A right child far larger than the left, so the product and the left-derived estimate cannot
+    // be confused.
+    val rightAttribute = attr("right_key")
+    val right = StatsTestPlan(
+      outputList = Seq(rightAttribute),
+      attributeStats = AttributeMap(Seq(rightAttribute -> colStat)),
+      rowCount = 2000,
+      size = Some(2000 * (8 + 4)))
+    val join = Join(plan, right, ExistenceJoin(exists), None, JoinHint.NONE)
+
+    // 10 rows of the left child, widened from (8 + 4) to (8 + 4 + 1) by the Boolean.
+    val expectedSize = plan.size.get * (8 + 4 + 1) / (8 + 4)
+    checkStats(
+      join,
+      // The CBO estimator knows the row count exactly and keeps the left child's column stats.
+      expectedStatsCboOn = Statistics(
+        sizeInBytes = expectedSize,
+        rowCount = Some(10),
+        attributeStats = AttributeMap(Seq(attribute -> colStat))),
+      // The size-only visitor rescales the left child's statistics the same way.
+      expectedStatsCboOff = Statistics(
+        sizeInBytes = expectedSize,
+        rowCount = Some(10),
+        attributeStats = AttributeMap(Seq(attribute -> colStat))))
+    // The product both modes used to compute, which must not be what either reports.
+    assert(join.stats.sizeInBytes < plan.size.get * right.size.get,
+      "the estimate must not be the product of both children")
   }
 
   test("offset estimation: offset < child's rowCount") {
