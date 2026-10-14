@@ -300,6 +300,29 @@ class TorchDistributorBaselineUnitTestsMixin:
         self.assertIn("Start torch distributor log streaming server failed", message)
         self.assertIn("Address already in use", message)
 
+    def test_reserve_free_port(self) -> None:
+        import socket
+        from datetime import timedelta
+
+        from torch.distributed import TCPStore
+
+        sock = TorchDistributor._reserve_free_port("127.0.0.1")
+        try:
+            port = sock.getsockname()[1]
+            # Other sockets cannot take the reserved port.
+            other = socket.socket()
+            try:
+                with self.assertRaises(OSError):
+                    other.bind(("127.0.0.1", port))
+            finally:
+                other.close()
+            # torchrun's TCPStore can still listen on it.
+            store = TCPStore("127.0.0.1", port, 1, True, timeout=timedelta(seconds=30))
+            store.set("key", "value")
+            self.assertEqual(store.get("key"), b"value")
+        finally:
+            sock.close()
+
     def test_create_torchrun_command(self) -> None:
         train_path = "train.py"
         args_string = ["1", "3"]
