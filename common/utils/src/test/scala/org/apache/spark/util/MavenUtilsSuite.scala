@@ -588,87 +588,108 @@ class MavenUtilsSuite
     }
   }
 
-  test("cancellable Maven resolution restores caller interruption after joining the worker") {
-    val resolverEntered = new CountDownLatch(1)
-    val resolverInterrupted = new CountDownLatch(1)
-    val releaseResolver = new CountDownLatch(1)
-    val callerWaiting = new CountDownLatch(1)
-    val releaseCaller = new CountDownLatch(1)
-    val workerThread = new AtomicReference[Thread]()
-    val callerFailure = new AtomicReference[Throwable]()
-    val callerInterrupted = new AtomicBoolean(false)
-    val blockingResolver = new FileSystemResolver {
-      override def getDependency(
-          _descriptor: DependencyDescriptor,
-          _data: ResolveData): ResolvedModuleRevision = {
-        workerThread.set(Thread.currentThread())
-        resolverEntered.countDown()
-        var released = false
-        while (!released) {
-          try {
-            released = releaseResolver.await(100, TimeUnit.MILLISECONDS)
-          } catch {
-            case _: InterruptedException => resolverInterrupted.countDown()
-          }
-        }
-        null
-      }
-    }
-    blockingResolver.setName("blocking")
-    val settings = MavenUtils.buildIvySettings(
-      remoteRepos = None,
-      ivyPath = Some(Paths.get(tempIvyPath, "caller-interrupted").toString))
-    settings.addResolver(blockingResolver)
-    settings.setDefaultResolver(blockingResolver.getName)
-    val caller = new Thread(() => {
-      try {
-        MavenUtils.resolveMavenCoordinatesWithCancellation(
-          "my.runtime.caller.interrupted:mylib:0.1",
-          settings,
-          noCacheIvySettings = None,
-          transitive = false,
-          exclusions = Nil,
-          isTest = true,
-          isCancelled = () => {
-            if (resolverEntered.getCount == 0) {
-              callerWaiting.countDown()
-              releaseCaller.await()
+  for {
+    cancellationTrigger <- Seq("caller interrupt", "interrupt flag", "cancelled predicate")
+    interruptDuringJoin <- Seq(false, true)
+  } {
+    test("cancellable Maven resolution restores caller interruption after joining the worker " +
+        s"(cancellationTrigger=$cancellationTrigger, " +
+        s"interruptDuringJoin=$interruptDuringJoin)") {
+      val resolverEntered = new CountDownLatch(1)
+      val resolverInterrupted = new CountDownLatch(1)
+      val releaseResolver = new CountDownLatch(1)
+      val callerWaiting = new CountDownLatch(1)
+      val releaseCaller = new CountDownLatch(1)
+      val workerThread = new AtomicReference[Thread]()
+      val callerFailure = new AtomicReference[Throwable]()
+      val callerInterrupted = new AtomicBoolean(false)
+      val blockingResolver = new FileSystemResolver {
+        override def getDependency(
+            _descriptor: DependencyDescriptor,
+            _data: ResolveData): ResolvedModuleRevision = {
+          workerThread.set(Thread.currentThread())
+          resolverEntered.countDown()
+          var released = false
+          while (!released) {
+            try {
+              released = releaseResolver.await(100, TimeUnit.MILLISECONDS)
+            } catch {
+              case _: InterruptedException => resolverInterrupted.countDown()
             }
-            false
-          })
-      } catch {
-        case error: Throwable => callerFailure.set(error)
-      } finally {
-        callerInterrupted.set(Thread.currentThread().isInterrupted)
+          }
+          null
+        }
       }
-    }, "ivy-interrupted-caller")
+      blockingResolver.setName("blocking")
+      val settings = MavenUtils.buildIvySettings(
+        remoteRepos = None,
+        ivyPath = Some(Paths.get(tempIvyPath, "caller-interrupted").toString))
+      settings.addResolver(blockingResolver)
+      settings.setDefaultResolver(blockingResolver.getName)
+      val caller = new Thread(() => {
+        try {
+          MavenUtils.resolveMavenCoordinatesWithCancellation(
+            "my.runtime.caller.interrupted:mylib:0.1",
+            settings,
+            noCacheIvySettings = None,
+            transitive = false,
+            exclusions = Nil,
+            isTest = true,
+            isCancelled = () => {
+              if (resolverEntered.getCount == 0) {
+                callerWaiting.countDown()
+                releaseCaller.await()
+                if (cancellationTrigger == "interrupt flag") {
+                  Thread.currentThread().interrupt()
+                }
+                cancellationTrigger == "cancelled predicate"
+              } else {
+                false
+              }
+            })
+        } catch {
+          case error: Throwable => callerFailure.set(error)
+        } finally {
+          callerInterrupted.set(Thread.currentThread().isInterrupted)
+        }
+      }, "ivy-interrupted-caller")
 
-    SparkErrorUtils.tryWithSafeFinally {
-      caller.start()
-      assert(resolverEntered.await(5, TimeUnit.SECONDS))
-      assert(callerWaiting.await(5, TimeUnit.SECONDS))
-      caller.interrupt()
-      assert(resolverInterrupted.await(5, TimeUnit.SECONDS))
-      caller.join(TimeUnit.SECONDS.toMillis(1))
-      assert(caller.isAlive, "Caller returned before the Ivy worker was released")
-      releaseResolver.countDown()
-      caller.join(TimeUnit.SECONDS.toMillis(5))
-
-      assert(!caller.isAlive)
-      assert(callerFailure.get().isInstanceOf[CancellationException])
-      assert(callerInterrupted.get())
-      assert(!workerThread.get().isAlive)
-    } {
-      releaseCaller.countDown()
-      releaseResolver.countDown()
-      caller.interrupt()
       SparkErrorUtils.tryWithSafeFinally {
-        caller.join(TimeUnit.SECONDS.toMillis(10))
-        assert(!caller.isAlive, "Ivy resolution caller did not terminate")
+        caller.start()
+        assert(resolverEntered.await(5, TimeUnit.SECONDS))
+        assert(callerWaiting.await(5, TimeUnit.SECONDS))
+        if (cancellationTrigger == "caller interrupt") {
+          caller.interrupt()
+        } else {
+          releaseCaller.countDown()
+        }
+        assert(resolverInterrupted.await(5, TimeUnit.SECONDS))
+        if (interruptDuringJoin) {
+          caller.interrupt()
+        }
+        caller.join(TimeUnit.SECONDS.toMillis(1))
+        assert(caller.isAlive, "Caller returned before the Ivy worker was released")
+        releaseResolver.countDown()
+        caller.join(TimeUnit.SECONDS.toMillis(5))
+
+        assert(!caller.isAlive)
+        assert(callerFailure.get().isInstanceOf[CancellationException])
+        val shouldBeInterrupted =
+          cancellationTrigger != "cancelled predicate" || interruptDuringJoin
+        assert(callerInterrupted.get() == shouldBeInterrupted)
+        assert(!workerThread.get().isAlive)
       } {
-        Option(workerThread.get()).foreach { worker =>
-          worker.join(TimeUnit.SECONDS.toMillis(10))
-          assert(!worker.isAlive, "Ivy resolution worker did not terminate")
+        releaseCaller.countDown()
+        releaseResolver.countDown()
+        caller.interrupt()
+        SparkErrorUtils.tryWithSafeFinally {
+          caller.join(TimeUnit.SECONDS.toMillis(10))
+          assert(!caller.isAlive, "Ivy resolution caller did not terminate")
+        } {
+          Option(workerThread.get()).foreach { worker =>
+            worker.join(TimeUnit.SECONDS.toMillis(10))
+            assert(!worker.isAlive, "Ivy resolution worker did not terminate")
+          }
         }
       }
     }
