@@ -717,9 +717,22 @@ object PushDownUtils extends Logging {
       relation: DataSourceV2Relation): Seq[AttributeReference] = {
     val nameToAttr = Utils.toMap(relation.output.map(_.name), relation.output)
     val cleaned = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
-    toAttributes(cleaned).map {
-      // we have to keep the attribute id during transformation
-      a => a.withExprId(nameToAttr(a.name).exprId)
+    toAttributes(cleaned).map { a =>
+      val orig = nameToAttr(a.name)
+      // Keep exprId. Do not re-stamp __CHAR_VARCHAR_TYPE_STRING: that marker
+      // means "not yet padded", and this runs in the optimizer with no
+      // second padding pass. File sources usually already substituted STRING,
+      // so the stamp was latent; a V2 scan whose readSchema() still surfaces
+      // CHAR/VARCHAR would otherwise look unpadded. Under standardSemantics
+      // the analyzer has already padded, so always drop a stamp that
+      // replaceCharVarcharWithStringInSchema just added from readSchema.
+      val metadata = if (SQLConf.get.charVarcharStandardSemantics ||
+          CharVarcharUtils.getRawTypeString(orig.metadata).isEmpty) {
+        CharVarcharUtils.cleanMetadata(a.metadata)
+      } else {
+        a.metadata
+      }
+      a.withExprId(orig.exprId).withMetadata(metadata)
     }
   }
 }

@@ -36,7 +36,9 @@ import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.SchemaRequiredDataSource
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, InMemoryPartitionTableCatalog}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.{
+  DataSourceV2Relation, DataSourceV2ScanRelation, PushDownUtils
+}
 import org.apache.spark.sql.functions
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.SimpleInsertSource
@@ -1521,16 +1523,18 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     "any_value", "approx_top_k", "approx_top_k_accumulate", "array", "array_agg", "array_compact",
     "array_distinct", "array_max", "array_min", "array_repeat", "array_sort", "arrays_zip",
     "coalesce", "collect_list", "collect_set", "collect_union", "concat", "explode",
-    "explode_outer", "first", "first_value", "flatten", "get", "greatest", "ifnull", "last",
-    "last_value", "least", "map", "map_concat", "map_entries", "map_keys", "map_values", "max",
-    "max_by", "measure", "min", "min_by", "mode", "named_struct", "nullif", "nullifzero", "nvl",
-    "nvl2", "reverse", "shuffle", "sort_array", "struct", "trim_array", "when")
+    "explode_outer", "filter", "first", "first_value", "flatten", "get", "greatest", "ifnull",
+    "lag", "last", "last_value", "lead", "least", "map", "map_concat", "map_entries",
+    "map_filter", "map_keys", "map_values", "map_zip_with", "max", "max_by", "measure", "min",
+    "min_by", "mode", "named_struct", "nth_value", "nullif", "nullifzero", "nvl", "nvl2",
+    "reverse", "shuffle", "sort_array", "struct", "transform", "transform_keys",
+    "transform_values", "trim_array", "when", "zip_with")
 
   // String-transforming shapes of otherwise pass-through functions. These must reduce to
   // unconstrained STRING even though the same function keeps CHAR on collection inputs.
   private val charVarcharTransformingCalls = Set(
     "concat(c)", "concat(c, c)", "concat(c, c, c)", "concat(c, 'x')", "concat('x', c)",
-    "reverse(c)")
+    "reverse(c)", "transform(array(c), x -> reverse(x))")
 
   private val inventoryScalarShapes = Seq(
     "%s(c)", "%s(c, c)", "%s(c, 'x')", "%s('x', c)", "%s(c, 1)", "%s(array(c))",
@@ -1539,6 +1543,41 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
   private val inventoryNestedShapes = Seq(
     "%s(c, c, c)", "%s(array(array(c)))", "%s(named_struct('x', c))",
     "%s(map(c, 1))", "%s(map(1, c))")
+
+  // Signatures the scalar/nested templates do not typecheck: 3-string (translate),
+  // (string, string, int) overlay/split_part/substring_index, format_string's format
+  // arg, HOF lambdas, and window OVER. '%%s' survives String.format as '%s'.
+  private val inventoryGatedShapes = Seq(
+    "%s(c, 'x', 1)", "%s(c, '-', 1)", "%s(c, c, 1)", "%s(c, 'ab', 'xy')",
+    "%s('%%s', c)", "%s(array(c), x -> x)", "%s(array(c), x -> reverse(x))",
+    "%s(c) OVER (ORDER BY 1)", "%s(c, 1) OVER (ORDER BY 1)")
+
+  // These must typecheck (not Try.toOption). split_part / substring_index /
+  // translate reject case-insensitive collations (NonCSAI).
+  private val requiredTransformingCalls = Seq(
+    "translate(c, 'ab', 'xy')",
+    "overlay(c, 'x', 1)",
+    "overlay(c PLACING 'x' FROM 1)",
+    "format_string('%s', c)",
+    "printf('%s', c)",
+    "split_part(c, '-', 1)",
+    "substring_index(c, '-', 1)",
+    "transform(array(c), x -> reverse(x))[0]")
+
+  private val requiredTransformingCallsOnAnyCollation = Seq(
+    "overlay(c, 'x', 1)",
+    "overlay(c PLACING 'x' FROM 1)",
+    "format_string('%s', c)",
+    "printf('%s', c)",
+    "transform(array(c), x -> reverse(x))[0]")
+
+  private val requiredPassThroughCalls = Seq(
+    "transform(array(c), x -> x)[0]",
+    "filter(array(c), x -> true)[0]",
+    "lag(c) OVER (ORDER BY 1)",
+    "lead(c) OVER (ORDER BY 1)",
+    "nth_value(c, 1) OVER (ORDER BY 1)",
+    "first_value(c) OVER (ORDER BY 1)")
 
   private def assertNoInventoriedCharVarcharLeaks(argumentShapes: Seq[String]): Unit = {
     val (passThroughLeaks, transformingLeaks) =
@@ -1564,9 +1603,30 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         "plain STRING: " + transformingLeaks.map(_._2).mkString(", "))
   }
 
-  test("SPARK-58794: inventoried shapes do not leak CHAR/VARCHAR under standardSemantics") {
+  private def assertRequiredInventoryCalls(
+      transforming: Seq[String],
+      passThrough: Seq[String]): Unit = {
+    transforming.foreach { call =>
+      val dt = sql(s"SELECT $call AS r FROM std_inventory").schema.head.dataType
+      assert(!CharVarcharUtils.hasCharVarchar(dt),
+        s"$call typechecked but returned $dt; expected plain STRING")
+    }
+    passThrough.foreach { call =>
+      val dt = sql(s"SELECT $call AS r FROM std_inventory").schema.head.dataType
+      assert(CharVarcharUtils.hasCharVarchar(dt),
+        s"$call typechecked but returned $dt; expected CHAR/VARCHAR")
+    }
+  }
+
+  private def withInventoryCol(colDdl: String)(body: => Unit): Unit = {
     withTable("std_inventory") {
-      sql("CREATE TABLE std_inventory (c CHAR(5)) USING parquet")
+      sql(s"CREATE TABLE std_inventory ($colDdl) USING parquet")
+      body
+    }
+  }
+
+  test("SPARK-58794: inventoried shapes do not leak CHAR/VARCHAR under standardSemantics") {
+    withInventoryCol("c CHAR(5)") {
       withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
         assertNoInventoriedCharVarcharLeaks(inventoryScalarShapes)
       }
@@ -1574,10 +1634,38 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
   }
 
   test("SPARK-59016: nested inventoried shapes do not leak CHAR/VARCHAR") {
-    withTable("std_inventory") {
-      sql("CREATE TABLE std_inventory (c CHAR(5)) USING parquet")
+    withInventoryCol("c CHAR(5)") {
       withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
         assertNoInventoriedCharVarcharLeaks(inventoryNestedShapes)
+      }
+    }
+  }
+
+  test("SPARK-59016: gated inventoried shapes do not leak CHAR/VARCHAR") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      Seq(
+        "c CHAR(5)",
+        "c VARCHAR(5)",
+        "c CHAR(5) COLLATE UTF8_LCASE",
+        "c VARCHAR(5) COLLATE UNICODE").foreach { colDdl =>
+        withInventoryCol(colDdl) {
+          assertNoInventoriedCharVarcharLeaks(inventoryGatedShapes)
+        }
+      }
+    }
+  }
+
+  test("SPARK-59016: typecheck-gated transforming calls return STRING") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      Seq("c CHAR(5)", "c VARCHAR(5)", "c CHAR(5) COLLATE UNICODE").foreach { colDdl =>
+        withInventoryCol(colDdl) {
+          assertRequiredInventoryCalls(
+            requiredTransformingCalls, requiredPassThroughCalls)
+        }
+      }
+      withInventoryCol("c CHAR(5) COLLATE UTF8_LCASE") {
+        assertRequiredInventoryCalls(
+          requiredTransformingCallsOnAnyCollation, requiredPassThroughCalls)
       }
     }
   }
@@ -3996,6 +4084,38 @@ class DSV2CharVarcharTestSuite extends CharVarcharTestSuite
         sql(s"CREATE TABLE t(m MAP<INT, STRUCT<n_c: $typ, n_i: INT>>) USING $format")
         val inputDF = sql("SELECT map(1, named_struct('n_i', 1, 'n_c', '123456')) AS m")
         assertLengthCheckFailure(() => inputDF.writeTo("t").append())
+      }
+    }
+  }
+
+  test("SPARK-59016: V2 column prune does not re-stamp CHAR padding breadcrumb") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withTable("std_v2_prune") {
+        sql(s"CREATE TABLE std_v2_prune (c CHAR(5), extra INT) USING $format")
+        sql("INSERT INTO std_v2_prune VALUES ('ab', 1)")
+        val df = sql("SELECT c FROM std_v2_prune")
+        val rel = df.queryExecution.analyzed.collect {
+          case r: DataSourceV2Relation => r
+        }.head
+        val cAttr = rel.output.find(_.name == "c").get
+        assert(CharVarcharUtils.getRawType(cAttr.metadata).isEmpty,
+          "ApplyCharTypePadding should have cleaned the relation breadcrumb")
+        // A V2 scan that surfaces CHAR in readSchema() after padding ran.
+        val fromCharReadSchema = PushDownUtils.toOutputAttrs(
+          new StructType().add("c", CharType(5)), rel)
+        assert(CharVarcharUtils.getRawType(fromCharReadSchema.head.metadata).isEmpty,
+          "toOutputAttrs must not re-stamp CHAR metadata on a padded relation")
+        val scans = df.queryExecution.optimizedPlan.collect {
+          case s: DataSourceV2ScanRelation => s
+        }
+        assert(scans.nonEmpty)
+        scans.foreach { s =>
+          s.output.foreach { a =>
+            assert(CharVarcharUtils.getRawType(a.metadata).isEmpty,
+              s"pruned scan ${a.name} re-stamped ${a.metadata}")
+          }
+        }
+        checkAnswer(df, Row("ab   "))
       }
     }
   }
