@@ -30,6 +30,7 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, FSDataInputStream, Path}
 import org.apache.hadoop.hdfs.{DFSInputStream, DistributedFileSystem}
 import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
 import org.apache.hadoop.security.AccessControlException
+import org.apache.logging.log4j.Level
 import org.mockito.ArgumentMatchers.{any, argThat}
 import org.mockito.Mockito.{doThrow, mock, spy, verify, when}
 import org.scalatest.PrivateMethodTester
@@ -1664,16 +1665,23 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
       writeEventsToRollingWriter(writer, Seq(SparkListenerJobEnd(1, 1, JobSucceeded)),
         rollFile = false)
 
-      updateAndCheck(provider) { list =>
-        assert(list.map(_.id) === Seq("app"))
-        val logFiles = EventLogFileReader(fs, new Path(writer.logPath)).get.listEventLogFiles
-        assert(!logFiles.exists(file => EventLogFileWriter.isCompacted(file.getPath)))
-        assert(logFiles.map { file =>
-          RollingEventLogFilesWriter.getEventLogFileIndex(file.getPath.getName)
-        } === Seq(1, 2))
-        val info = provider.listing.read(classOf[LogInfo], writer.logPath)
-        assert(info.lastEvaluatedForCompaction === Some(2))
+      val logAppender = new LogAppender("malformed event log compaction")
+      withLogAppender(logAppender, loggerNames = Seq(classOf[EventLogFileCompactor].getName)) {
+        updateAndCheck(provider) { list =>
+          assert(list.map(_.id) === Seq("app"))
+          val logFiles = EventLogFileReader(fs, new Path(writer.logPath)).get.listEventLogFiles
+          assert(!logFiles.exists(file => EventLogFileWriter.isCompacted(file.getPath)))
+          assert(logFiles.map { file =>
+            RollingEventLogFilesWriter.getEventLogFileIndex(file.getPath.getName)
+          } === Seq(1, 2))
+          val info = provider.listing.read(classOf[LogInfo], writer.logPath)
+          assert(info.lastEvaluatedForCompaction === Some(2))
+        }
       }
+      assert(logAppender.loggingEvents.exists { event =>
+        event.getLevel == Level.WARN && event.getMessage.getFormattedMessage ==
+          s"Event log file ${firstFile.getPath} contains malformed input"
+      })
 
       writer.stop()
       provider.stop()
