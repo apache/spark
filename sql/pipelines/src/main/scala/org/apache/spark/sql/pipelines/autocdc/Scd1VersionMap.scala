@@ -34,7 +34,7 @@ import org.apache.spark.sql.types.{DataType, MapType, StringType, StructType}
  *    value.
  * 3. A null entry means the leaf has no authored value.
  *
- * A user-data leaf is a non-framework field obtained by recursively expanding structs.
+ * A user-data leaf is a non-key, non-framework field obtained by recursively expanding structs.
  *
  * Version-map keys are field paths rendered as fully quoted multipart identifiers using
  * [[org.apache.spark.sql.catalyst.util.QuotingUtils.quoteNameParts]]. Quoting each name part
@@ -63,9 +63,11 @@ private[pipelines] object Scd1VersionMap {
    * read by path from the row: a null value receives a null entry, and a non-null value receives
    * `upsertSequence`. Every other leaf receives `upsertSequence` regardless of its value.
    *
-   * @param schema The schema whose leaves receive version-map entries. Its leaves selected by
-   *               `ignoreNullSelection` must resolve by path in the DataFrame on which the
-   *               returned column is evaluated.
+   * @param schema The user-data schema, without keys or framework columns, whose leaves receive
+   *               version-map entries. Keys take each name part's spelling verbatim from this
+   *               schema, so callers that persist the map must supply a spelling that stays the
+   *               same across runs. Its leaves selected by `ignoreNullSelection` must resolve by
+   *               path in the DataFrame on which the returned column is evaluated.
    * @param ignoreNullSelection The selection identifying leaves whose null values are unauthored.
    * @param upsertSequence The upsert event's non-null sequencing value.
    * @param sequencingType The data type of `upsertSequence`.
