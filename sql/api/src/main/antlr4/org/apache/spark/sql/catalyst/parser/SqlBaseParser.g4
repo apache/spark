@@ -117,9 +117,18 @@ options { tokenVocab = SqlBaseLexer; }
               // Only count a top-level CASE: one inside parens/brackets has its colons balanced by
               // `depth` already, so counting it would misread a parenthesized `case` column (e.g.
               // `CAST(case AS ...)`) as keyword nesting no `END` clears. A `case` column, not the
-              // keyword, when an operator/terminator follows.
-              if (depth == 0 &&
-                  !jsonKeyTokenFollowsOperand(nextDefaultChannelType(i, stop))) caseDepth++;
+              // keyword, when an operator/terminator follows -- except a following COLON, which is
+              // ambiguous: `CASE :p WHEN ... END` (a simple CASE over a named-parameter operand)
+              // and `case : value` (a `case` column before the member separator) both read as
+              // `CASE COLON identifier`, so the one-token peek cannot tell them apart. Only a
+              // following top-level WHEN proves the keyword, so look ahead for it there.
+              if (depth == 0) {
+                int follow = nextDefaultChannelType(i, stop);
+                boolean caseKeyword = (follow == COLON)
+                    ? caseFollowedByWhen(i)
+                    : !jsonKeyTokenFollowsOperand(follow);
+                if (caseKeyword) caseDepth++;
+              }
               break;
             case END:
               // Matched to the top-level CASE above; an `end` column in an operand position.
@@ -148,6 +157,60 @@ options { tokenVocab = SqlBaseLexer; }
       }
     }
     return -1;
+  }
+
+  /**
+   * Disambiguates a `CASE` directly before a COLON. Looks ahead from the `CASE` at {@code caseIdx}
+   * for a top-level WHEN, which proves it is the keyword (`CASE :p WHEN ... END`) rather than a
+   * `case` column before the member separator (`case : value`). Tracks paren/bracket depth and
+   * returns false if a depth-0 CASE, member terminator (depth-0 COMMA/SEMICOLON), unmatched closing
+   * paren/bracket, or EOF is reached first: a depth-0 CASE before any WHEN means the WHEN pairs with
+   * that inner CASE
+   * (the leading `case` is the key column and the COLON is the separator), and a terminator means
+   * the member ended with no WHEN at all. Unlike the backward scan this reads ahead of the current
+   * token, so it fetches through {@code tokenAt} rather than indexing the buffer directly.
+   */
+  private boolean caseFollowedByWhen(int caseIdx) {
+    int depth = 0;
+    for (int i = caseIdx + 1; ; i++) {
+      Token tok = tokenAt(i);
+      if (tok == null || tok.getType() == Token.EOF) {
+        return false;
+      }
+      if (tok.getChannel() != Token.DEFAULT_CHANNEL) {
+        continue;
+      }
+      switch (tok.getType()) {
+        case LEFT_PAREN: case LEFT_BRACKET: depth++; break;
+        case RIGHT_PAREN: case RIGHT_BRACKET:
+          if (depth == 0) return false;
+          depth--;
+          break;
+        case WHEN:
+          if (depth == 0) return true;
+          break;
+        case CASE:
+          if (depth == 0) return false;
+          break;
+        case COMMA: case SEMICOLON:
+          if (depth == 0) return false;
+          break;
+        default: break;
+      }
+    }
+  }
+
+  /**
+   * Returns the token at absolute index {@code i}, forcing a lazy fetch (via {@code LT}, which does
+   * not consume) when {@code i} is at or ahead of the current position, or null past EOF. Needed
+   * because {@code caseFollowedByWhen} scans ahead of the current token, which may not be buffered.
+   */
+  private Token tokenAt(int i) {
+    int cur = _input.index();
+    if (i >= cur) {
+      _input.LT(i - cur + 1);
+    }
+    return i < _input.size() ? _input.get(i) : null;
   }
 
   /**

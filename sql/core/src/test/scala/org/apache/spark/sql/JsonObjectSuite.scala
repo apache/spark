@@ -140,6 +140,34 @@ class JsonObjectSuite extends QueryTest with SharedSparkSession {
       spark.sql("SELECT json_object('k' :p VALUE 1)", Map("p" -> "x")), Row("""{"kx":1}"""))
   }
 
+  test("a simple CASE over a named-parameter operand is a valid colon key") {
+    // `CASE :p WHEN ... END : value`: the `:p` operand must parse as a named-parameter marker, not
+    // be read as the member separator. `CASE :` is ambiguous with a `case` column before the
+    // separator (`case : value`), so the separator check decides it by looking ahead for the
+    // CASE's WHEN -- present here, so `CASE` is the keyword and `:p` stays its operand.
+    val from = "FROM (SELECT parse_json('{\"x\":1}') AS v)"
+    checkAnswer(
+      spark.sql(
+        s"SELECT json_object(CASE :p WHEN 1 THEN 'one' ELSE 'other' END : v:x) $from",
+        Map("p" -> 1)),
+      Row("""{"one":1}"""))
+    checkAnswer(
+      spark.sql(
+        s"SELECT json_object(CASE :p WHEN 1 THEN 'one' ELSE 'other' END : v:x) $from",
+        Map("p" -> 2)),
+      Row("""{"other":1}"""))
+  }
+
+  test("a CASE-valued value does not flip a bare `case` key to the CASE keyword") {
+    // `case : CASE WHEN ... END`: the value's WHEN belongs to the value's CASE, not to the key, so
+    // the WHEN lookahead must stop at that inner CASE and keep the leading `case` a column with the
+    // top-level colon as the member separator. Guards the lookahead against over-triggering.
+    checkAnswer(
+      sql("""SELECT json_object(case : CASE WHEN v:x::int = 1 THEN 'y' ELSE 'z' END)
+            |FROM (SELECT 'c' AS `case`, parse_json('{"x":1}') AS v)""".stripMargin),
+      Row("""{"c":"y"}"""))
+  }
+
   test("a case column nested in a colon key is a column, not a CASE keyword") {
     // A `case` column in a CAST or parens is below the key's top level, where the token after it
     // (`AS`, `+`) does not prove it is a column; without the depth guard the spurious CASE count
@@ -1247,6 +1275,21 @@ world'))"""))
           assert(outer.map(_.rawJson) == Seq(Seq(true)),
             s"nested producer must be marked raw-spliced for $query")
         }
+      }
+    }
+  }
+
+  test("single-pass: a direct star in stock JSON_OBJECT is rejected, not expanded") {
+    // The single-pass resolver reaches a distinct branch (RejectStockBuiltin) for a direct
+    // `json_object(*)` than the routed/nested-star cases above. Guard it explicitly: if that branch
+    // ever expanded the star like an ordinary routine, the default-analyzer rejection would still
+    // pass while the forbidden call silently became valid only under single-pass.
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+      Seq("json_object", "builtin.json_object", "system.builtin.json_object").foreach { func =>
+        val e = intercept[AnalysisException] {
+          sql(s"SELECT $func(*) FROM VALUES ('id', 7) AS t(a, b)").queryExecution.analyzed
+        }
+        assert(e.getCondition == "INVALID_USAGE_OF_STAR_OR_REGEX", s"for $func(*)")
       }
     }
   }
