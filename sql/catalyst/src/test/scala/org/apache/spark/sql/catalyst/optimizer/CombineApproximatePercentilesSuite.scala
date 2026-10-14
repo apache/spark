@@ -229,7 +229,7 @@ class CombineApproximatePercentilesSuite extends PlanTest {
     assertNotCombined(crossDistinctFilter)
   }
 
-  test("do not fuse canonically equivalent but differently evaluated accuracies") {
+  test("fuse differently evaluated floating-point accuracies separately") {
     val firstAccuracy =
       ((Literal(1.0e16) + Literal(-1.0e16)) + Literal(3.0)).cast(IntegerType)
     val secondAccuracy =
@@ -249,11 +249,16 @@ class CombineApproximatePercentilesSuite extends PlanTest {
 
     assert(firstAccuracy.eval() == 3)
     assert(secondAccuracy.eval() == 4)
-    assert(firstAccuracy.canonicalized == secondAccuracy.canonicalized)
-    assertNotCombined(result)
+    assert(firstAccuracy.canonicalized != secondAccuracy.canonicalized)
+    val aggregates = percentileAggregates(result).distinctBy(_.resultId)
+    assert(aggregates.size == 2)
+    val percentiles = aggregates.map(_.aggregateFunction.asInstanceOf[ApproximatePercentile])
+    assert(percentiles.map(_.accuracyExpression.eval()) == Seq(3, 4))
+    assert(percentiles.map(percentageValues) == Seq(Seq(0.5, 0.9), Seq(0.5, 0.9)))
+    assert(ordinals(result) == Seq(Some(0), Some(0), Some(1), Some(1)))
   }
 
-  test("do not fuse canonically equal percentages that evaluate differently") {
+  test("fuse differently evaluated floating-point percentages by evaluated value") {
     val firstPercentage =
       (Literal(1.0e16) + Literal(-1.0e16)) + Literal(0.5)
     val secondPercentage =
@@ -268,8 +273,12 @@ class CombineApproximatePercentilesSuite extends PlanTest {
       Alias(percentile(value, 0.9), "p90")())
     assert(firstPercentage.eval() == 0.5d)
     assert(secondPercentage.eval() == 0.0d)
-    assert(firstPercentage.canonicalized == secondPercentage.canonicalized)
-    assertNotCombined(scalarResult)
+    assert(firstPercentage.canonicalized != secondPercentage.canonicalized)
+    val scalarAggregates = percentileAggregates(scalarResult)
+    assert(scalarAggregates.map(_.resultId).distinct.size == 1)
+    assert(percentageValues(scalarAggregates.head.aggregateFunction
+      .asInstanceOf[ApproximatePercentile]) == Seq(0.5, 0.0, 0.9))
+    assert(ordinals(scalarResult) == Seq(Some(0), Some(1), Some(2)))
 
     val arrayPercentile = new ApproximatePercentile(
       value,
