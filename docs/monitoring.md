@@ -128,6 +128,12 @@ The compaction tries to exclude the events which point to the outdated data. As 
 * Events for the executor which is terminated
 * Events for the SQL execution which is finished, and related job/stage/tasks events
 
+Spark History Server skips the compaction if it cannot read all the events in the target files, since it
+would not be able to tell which events are still needed. As the target files always start from the oldest one,
+compaction of that application then stays skipped. If an event log line in the target files is longer than
+<code>spark.history.fs.eventLog.maxLineLength</code>, compaction is skipped until the limit is increased and
+a new event log file is rolled.
+
 Once rewriting is done, original log files will be deleted, via best-effort manner. The History Server may not be able to delete
 the original log files, but it will not affect the operation of the History Server.
 
@@ -402,7 +408,10 @@ Security options for the Spark History Server are covered more detail in the
       in steps: reducing 256m to 200m or 150m may not reduce the retained buffer; use 128m to
       reach a smaller capacity. Values at or below
       0, or above 536870912, use the maximum supported limit of 536870912 bytes (512 MiB).
-      This cap avoids JVM array-size limits but does not guarantee sufficient heap space.<br/>
+      This cap avoids JVM array-size limits but does not guarantee sufficient heap space.
+      If a longer line is in the event log files to compact, compaction of the rolling event
+      log files of that application is skipped until the limit is increased and a new event log
+      file is rolled.<br/>
       Introduced in 4.3.0; also available in 3.5.10, 4.0.5, 4.1.4 and 4.2.1; and in all
       versions after 4.3.0.
     </td>
