@@ -241,15 +241,13 @@ class ArrowElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
         import pyarrow as pa
 
-        runner_conf = self._runner_conf
-
         @fail_on_stopiteration
         def _evaluate_elementwise_udf(udf_func: Any, rows: Iterator[tuple]) -> list[Any]:
-            if runner_conf.arrow_concurrency_level <= 0:
+            if self._runner_conf.arrow_concurrency_level <= 0:
                 return [udf_func(*row) for row in rows]
             from concurrent.futures import ThreadPoolExecutor
 
-            with ThreadPoolExecutor(max_workers=runner_conf.arrow_concurrency_level) as pool:
+            with ThreadPoolExecutor(max_workers=self._runner_conf.arrow_concurrency_level) as pool:
                 return list(pool.map(lambda row: udf_func(*row), rows))
 
         for input_batch in data:
@@ -296,7 +294,7 @@ class ArrowElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
                 # cast.
                 except (pa.lib.ArrowInvalid, pa.lib.ArrowTypeError):
                     flat_arr = pa.array(converted).cast(
-                        target_type=arrow_element_type, safe=runner_conf.safecheck
+                        target_type=arrow_element_type, safe=self._runner_conf.safecheck
                     )
                 output_arrays.append(
                     _elementwise_renest_output(flat_arr, list_lengths_by_level, large_list_by_level)
@@ -572,11 +570,6 @@ class _ScalarIterElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
         import pyarrow as pa
 
-        args_offsets = self._args_offsets
-        depth = self._depth
-        return_type = self._return_type
-        udf_output_schema = self._udf_output_schema
-
         # FIFO of per-input-batch nesting shapes awaiting their flat leaf results. Each entry
         # (per-level shapes, per-level list width, leaf count) re-nests one input batch's worth
         # of rows back to ``array^depth<R>`` once that many leaf results have streamed in.
@@ -589,7 +582,7 @@ class _ScalarIterElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
             # shapes re-nest this batch's rows. The user function sees the flat leaves as a
             # pandas Series / DataFrame (pandas) or a pa.Array (Arrow), each with its leaf type.
             flat_batch, list_lengths_by_level, large_list_by_level = _elementwise_flatten_inputs(
-                batch, args_offsets, depth
+                batch, self._args_offsets, self._depth
             )
             pending_shapes.append((list_lengths_by_level, large_list_by_level, flat_batch.num_rows))
             num_input_elements += flat_batch.num_rows
@@ -610,11 +603,11 @@ class _ScalarIterElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         # buffer. ``empty_schema`` supplies the type for a zero-length emit; it tracks the most
         # recent chunk's schema (even a zero-length chunk carries the flavor's type - the
         # pandas flavor types timestamps with the session timezone), falling back to the
-        # UTC-typed ``udf_output_schema`` only before any chunk arrives, so all emitted batches
+        # UTC-typed ``_udf_output_schema`` only before any chunk arrives, so all emitted batches
         # use one schema.
         pending_chunks: list = []
         pending_len = 0
-        empty_schema = udf_output_schema
+        empty_schema = self._udf_output_schema
         num_output_elements = 0
 
         def emit_ready() -> Iterator[pa.RecordBatch]:
@@ -640,7 +633,7 @@ class _ScalarIterElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         def process_results() -> Iterator[pa.RecordBatch]:
             nonlocal pending_chunks, pending_len, empty_schema, num_output_elements
             for result in verified_iter:
-                chunk = self._to_flat_batch(result, return_type, udf_output_schema)
+                chunk = self._to_flat_batch(result, self._return_type, self._udf_output_schema)
                 num_output_elements += chunk.num_rows
                 # Fail fast if the UDF over-produces, before the buffer grows unbounded (the
                 # base iterator paths do the same via verify_output_row_limit).
