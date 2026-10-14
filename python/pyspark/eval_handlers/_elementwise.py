@@ -21,9 +21,10 @@ lambdas such as ``transform(arr, x -> udf(x))`` by ``ExtractPythonUDFFromLambda`
 Each UDF argument arrives as ``array^depth<T>`` (one ``array`` level per enclosing lambda, see
 ``EvalConf.elementwise_nesting``). The handlers flatten the arguments to their leaves, evaluate the
 UDF over the flat elements, and re-nest the flat result using the first argument's list shape. The
-row-at-a-time handler converts the leaves to Python values; the scalar and scalar iterator
-handlers share their flatten / re-nest logic in an abstract base whose Arrow and pandas subclasses
-supply the flavor's input conversion, result checks and output conversion.
+row-at-a-time handler converts the leaves to Python values. The scalar and scalar iterator
+handlers pass whole flat columns to the UDF: each family shares its flatten / re-nest logic in an
+abstract base, whose Arrow subclass uses the base's Arrow conversions and whose pandas subclass
+takes the pandas conversions from ``_PandasElementwiseUDFHandler``.
 
 pyarrow (and pandas) are imported lazily so the module stays importable and its handlers register
 without them installed.
@@ -34,7 +35,7 @@ from __future__ import annotations
 import collections
 from abc import abstractmethod
 from collections.abc import Iterator, Sequence
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional
 
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.eval_handlers._base import BatchEvalTypeHandler
@@ -59,7 +60,6 @@ from pyspark.sql.types import ArrayType, DataType, StructField, StructType
 from pyspark.util import PythonEvalType, fail_on_stopiteration
 
 if TYPE_CHECKING:
-    import pandas as pd
     import pyarrow as pa
 
     from pyspark.worker_util import EvalConf, RunnerConf
@@ -303,22 +303,27 @@ class ArrowElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
             yield pa.RecordBatch.from_arrays(output_arrays, self._col_names)
 
 
-class _ArrowElementwiseConversion:
-    """Arrow flavor of the scalar / scalar iterator element-wise conversions: the UDF receives and
-    returns ``pa.Array`` objects."""
+class _VectorizedElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
+    """Base of the scalar and scalar iterator element-wise handlers, whose UDF receives and returns
+    whole flat columns. The conversions below are the Arrow flavor (``pa.Array`` in and out);
+    ``_PandasElementwiseUDFHandler`` overrides them for pandas."""
 
-    _runner_conf: RunnerConf
+    def __init__(
+        self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
+    ) -> None:
+        require_minimum_pyarrow_version()
+        super().__init__(udfs, runner_conf, eval_conf)
 
-    def _to_udf_inputs(
-        self, flat_batch: pa.RecordBatch, input_schema: StructType
-    ) -> list[pa.Array]:
-        """Pass the flat leaf Arrays to the UDF unchanged."""
+    def _to_udf_inputs(self, flat_batch: pa.RecordBatch, input_schema: StructType) -> list[Any]:
+        """Adapt one flattened input batch (one aligned leaf Array per argument) to the UDF's
+        inputs, using the leaf ``input_schema``: the flat leaf Arrays, unchanged."""
         return flat_batch.columns
 
     def _to_flat_batch(
-        self, output: pa.Array, return_type: DataType, output_schema: pa.Schema
+        self, output: Any, return_type: DataType, output_schema: pa.Schema
     ) -> pa.RecordBatch:
-        """Coerce one UDF result over flat elements to the UTC-typed ``output_schema``."""
+        """Convert one UDF result over flat elements to a one-column batch, one row per element:
+        coerce it to the UTC-typed ``output_schema``."""
         import pyarrow as pa
 
         return ArrowBatchTransformer.enforce_schema(
@@ -328,15 +333,11 @@ class _ArrowElementwiseConversion:
         )
 
 
-class _PandasElementwiseConversion:
-    """pandas flavor of the scalar / scalar iterator element-wise conversions: the UDF receives and
+class _PandasElementwiseUDFHandler(_VectorizedElementwiseUDFHandler):
+    """pandas flavor of the scalar and scalar iterator element-wise handlers: the UDF receives and
     returns pandas Series (DataFrames for struct types)."""
 
-    _runner_conf: RunnerConf
-
-    def _to_udf_inputs(
-        self, flat_batch: pa.RecordBatch, input_schema: StructType
-    ) -> list[Union[pd.Series, pd.DataFrame]]:
+    def _to_udf_inputs(self, flat_batch: pa.RecordBatch, input_schema: StructType) -> list[Any]:
         """Convert the flat batch to Series / DataFrames using the leaf ``input_schema`` and the
         same options as the ordinary scalar pandas UDF path.
 
@@ -364,10 +365,7 @@ class _PandasElementwiseConversion:
         return results
 
     def _to_flat_batch(
-        self,
-        output: Union[pd.Series, pd.DataFrame],
-        return_type: DataType,
-        output_schema: pa.Schema,
+        self, output: Any, return_type: DataType, output_schema: pa.Schema
     ) -> pa.RecordBatch:
         """Convert one UDF result over flat elements to a one-column batch. It is typed by
         ``PandasToArrowConversion`` using the session timezone, so its timestamp type may differ
@@ -384,7 +382,7 @@ class _PandasElementwiseConversion:
         )
 
 
-class _ScalarElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
+class _ScalarElementwiseUDFHandler(_VectorizedElementwiseUDFHandler):
     """Shared logic of the scalar pandas / Arrow UDFs lifted out of a higher-order function's
     lambda. Each argument arrives as ``array<T>`` aligned with the iterated array. Flatten each
     list column to its element column, run the function once over that flat column (so it still
@@ -395,7 +393,6 @@ class _ScalarElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     def __init__(
         self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
     ) -> None:
-        require_minimum_pyarrow_version()
         super().__init__(udfs, runner_conf, eval_conf)
 
         nesting = eval_conf.elementwise_nesting
@@ -425,19 +422,8 @@ class _ScalarElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         self._col_names = [f"_{i}" for i in range(len(udfs))]
 
     @abstractmethod
-    def _to_udf_inputs(self, flat_batch: pa.RecordBatch, input_schema: StructType) -> list[Any]:
-        """Adapt one flattened input batch (one aligned leaf Array per argument) to the UDF's
-        inputs, using the leaf ``input_schema``."""
-
-    @abstractmethod
     def _verify_result(self, result: Any, return_type: DataType, num_elements: int) -> None:
         """Check one UDF result over ``num_elements`` flat elements before it is converted."""
-
-    @abstractmethod
-    def _to_flat_batch(
-        self, output: Any, return_type: DataType, output_schema: pa.Schema
-    ) -> pa.RecordBatch:
-        """Convert one UDF result over flat elements to a one-column batch, one row per element."""
 
     def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
         import pyarrow as pa
@@ -475,7 +461,7 @@ class _ScalarElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
             yield pa.RecordBatch.from_arrays(output_arrays, self._col_names)
 
 
-class ArrowScalarElementwiseUDFHandler(_ArrowElementwiseConversion, _ScalarElementwiseUDFHandler):
+class ArrowScalarElementwiseUDFHandler(_ScalarElementwiseUDFHandler):
     """SQL_SCALAR_ARROW_ELEMENTWISE_UDF: a scalar Arrow UDF lifted out of a higher-order function
     lambda; it receives and returns ``pa.Array`` over the flat elements."""
 
@@ -488,7 +474,7 @@ class ArrowScalarElementwiseUDFHandler(_ArrowElementwiseConversion, _ScalarEleme
         verify_scalar_result(result, num_elements)
 
 
-class PandasScalarElementwiseUDFHandler(_PandasElementwiseConversion, _ScalarElementwiseUDFHandler):
+class PandasScalarElementwiseUDFHandler(_PandasElementwiseUDFHandler, _ScalarElementwiseUDFHandler):
     """SQL_SCALAR_PANDAS_ELEMENTWISE_UDF: a scalar pandas UDF lifted out of a higher-order function
     lambda; it receives and returns pandas Series (DataFrames for struct types) over the flat
     elements."""
@@ -518,7 +504,7 @@ class PandasScalarElementwiseUDFHandler(_PandasElementwiseConversion, _ScalarEle
         verify_result_row_count(len(result), num_elements)
 
 
-class _ScalarIterElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
+class _ScalarIterElementwiseUDFHandler(_VectorizedElementwiseUDFHandler):
     """Shared logic of the scalar iterator pandas / Arrow UDFs lifted out of a higher-order
     function's lambda.
 
@@ -533,7 +519,6 @@ class _ScalarIterElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     def __init__(
         self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
     ) -> None:
-        require_minimum_pyarrow_version()
         super().__init__(udfs, runner_conf, eval_conf)
 
         assert len(udfs) == 1, "One SCALAR_*_ITER_ELEMENTWISE UDF expected here."
@@ -551,21 +536,9 @@ class _ScalarIterElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         self._udf_output_schema = _elementwise_output_schema(self._return_type, runner_conf)
 
     @abstractmethod
-    def _to_udf_inputs(self, flat_batch: pa.RecordBatch, input_schema: StructType) -> list[Any]:
-        """Adapt one flattened input batch (one aligned leaf Array per argument) to the UDF's
-        inputs, using the leaf ``input_schema``."""
-
-    @abstractmethod
     def _verify_return_type(self, results: Any) -> Iterator[Any]:
         """Check that the UDF returned an iterator of the flavor's batch type, returning the
         verifying iterator."""
-
-    @abstractmethod
-    def _to_flat_batch(
-        self, output: Any, return_type: DataType, output_schema: pa.Schema
-    ) -> pa.RecordBatch:
-        """Check and convert one result chunk over flat elements to a one-column batch, one row
-        per element."""
 
     def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
         import pyarrow as pa
@@ -662,9 +635,7 @@ class _ScalarIterElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         yield from process_results()
 
 
-class ArrowScalarIterElementwiseUDFHandler(
-    _ArrowElementwiseConversion, _ScalarIterElementwiseUDFHandler
-):
+class ArrowScalarIterElementwiseUDFHandler(_ScalarIterElementwiseUDFHandler):
     """SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF: a scalar iterator Arrow UDF lifted out of a
     higher-order function lambda; it maps an iterator of flat ``pa.Array`` inputs to an iterator
     of ``pa.Array`` results."""
@@ -678,7 +649,7 @@ class ArrowScalarIterElementwiseUDFHandler(
 
 
 class PandasScalarIterElementwiseUDFHandler(
-    _PandasElementwiseConversion, _ScalarIterElementwiseUDFHandler
+    _PandasElementwiseUDFHandler, _ScalarIterElementwiseUDFHandler
 ):
     """SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF: a scalar iterator pandas UDF lifted out of a
     higher-order function lambda; it maps an iterator of flat pandas Series / DataFrame inputs to
@@ -697,11 +668,9 @@ class PandasScalarIterElementwiseUDFHandler(
         return verify_return_type(results, pandas_iter_type)
 
     def _to_flat_batch(
-        self,
-        output: Union[pd.Series, pd.DataFrame],
-        return_type: DataType,
-        output_schema: pa.Schema,
+        self, output: Any, return_type: DataType, output_schema: pa.Schema
     ) -> pa.RecordBatch:
+        """Check the chunk's pandas type and columns, then convert it."""
         verify_pandas_result(
             output, return_type, assign_cols_by_name=True, truncate_return_schema=True
         )
