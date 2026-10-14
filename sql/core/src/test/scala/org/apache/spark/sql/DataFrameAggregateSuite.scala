@@ -30,7 +30,7 @@ import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.plans.logical.Expand
 import org.apache.spark.sql.catalyst.util.AUTO_GENERATED_ALIAS
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
-import org.apache.spark.sql.execution.WholeStageCodegenExec
+import org.apache.spark.sql.execution.{FileSourceScanExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -1326,6 +1326,21 @@ class DataFrameAggregateSuite extends SharedSparkSession
         sql("SELECT * FROM (SELECT x * 1.0 AS k FROM t GROUP BY x * 1.0) " +
           "WHERE k IN (SELECT y FROM u)"),
         Row(0.0d))
+    }
+  }
+
+  test("SPARK-60150: comparisons on a FLOAT grouping key are pushed to the data source") {
+    withTempPath { path =>
+      Seq(-0.0f, 1.0f, 2.0f).toDF("f").write.parquet(path.getCanonicalPath)
+      val df = spark.read.parquet(path.getCanonicalPath)
+        .groupBy("f").count().where(col("f") > 1.5)
+      checkAnswer(df, Row(2.0f, 1L))
+      // The FLOAT key is compared with a DOUBLE value through a widening cast. That comparison is
+      // pushed below the aggregate without normalizing the key, so the scan can still use it.
+      val pushedFilters = df.queryExecution.sparkPlan.collectFirst {
+        case scan: FileSourceScanExec => scan.metadata("PushedFilters")
+      }
+      assert(pushedFilters.exists(_.contains("GreaterThan(f,1.5)")), pushedFilters)
     }
   }
 
