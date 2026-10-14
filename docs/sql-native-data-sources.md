@@ -52,6 +52,19 @@ A native data source library exports the functions of `spark_datasource.h`, such
 functions up in each library separately, so any number of native data sources can be loaded side
 by side, even though they export the same functions.
 
+A Spark distribution contains the header in its `include` directory, as
+`$SPARK_HOME/include/spark_datasource.h`, and the `spark-sql` JAR contains it as
+`org/apache/spark/sql/datasource/spark_datasource.h`. The header only depends on the C standard
+library, so a library can also copy it into its source tree, to build without Spark, for example
+from the source of a release:
+
+```bash
+curl -LO {{site.SPARK_GITHUB_URL}}/raw/v{{site.SPARK_VERSION_SHORT}}/sql/core/src/main/resources/org/apache/spark/sql/datasource/spark_datasource.h
+```
+
+A library built against the header works with all the releases of Spark that support its version,
+`SPARK_DS_ABI_VERSION`: see [Compatibility](#compatibility).
+
 Spark calls the functions of the library as follows:
 
 - **Data sources**: for each schema inference, scan and write, Spark creates a data source on the
@@ -474,11 +487,7 @@ EOF
 
 The same data source in C++, with [Arrow C++](https://arrow.apache.org/docs/cpp/), which exports
 schemas and streams with `arrow::ExportSchema` and `arrow::ExportRecordBatchReader`. It includes
-`spark_datasource.h`, which is also in the `spark-sql` JAR of a Spark distribution:
-
-```bash
-unzip -j "$SPARK_HOME"/jars/spark-sql_*.jar org/apache/spark/sql/datasource/spark_datasource.h
-```
+`spark_datasource.h`, here from the `include` directory of a Spark distribution.
 
 `cpp_range.cc`:
 
@@ -597,8 +606,8 @@ Build the library, here on macOS with Arrow C++ 24, which requires C++20, and in
 package it as above:
 
 ```bash
-c++ -std=c++20 -O2 -shared -fPIC -I. -I"$ARROW_HOME/include" -L"$ARROW_HOME/lib" -larrow \
-  -o libspark_datasource_cpp_range.dylib cpp_range.cc
+c++ -std=c++20 -O2 -shared -fPIC -I"$SPARK_HOME/include" -I"$ARROW_HOME/include" \
+  -L"$ARROW_HOME/lib" -larrow -o libspark_datasource_cpp_range.dylib cpp_range.cc
 cp libspark_datasource_cpp_range.dylib /usr/local/lib/
 ```
 
