@@ -1102,13 +1102,7 @@ class SparkConnectPlanner(
         operation: Option[String]): TypedScalaUdf = {
       if (expr.hasCommonInlineUserDefinedFunction
         && expr.getCommonInlineUserDefinedFunction.hasScalarScalaUdf) {
-        // Typed APIs decode UDFs directly instead of going through transformExpression.
-        val origin = if (expr.hasCommon && expr.getCommon.hasOrigin) {
-          transformOrigin(expr.getCommon.getOrigin)
-        } else {
-          CurrentOrigin.get
-        }
-        CurrentOrigin.withOrigin(origin) {
+        withExpressionOrigin(expr) {
           apply(unpackUdf(expr.getCommonInlineUserDefinedFunction, operation), inputAttrs)
         }
       } else {
@@ -1854,7 +1848,7 @@ class SparkConnectPlanner(
     val baseRel = transformRelation(rel.getInput)
     val cond = rel.getCondition
     if (isTypedScalaUdfExpr(cond)) {
-      transformTypedFilter(cond.getCommonInlineUserDefinedFunction, baseRel)
+      transformTypedFilter(cond, baseRel)
     } else {
       logical.Filter(condition = transformExpression(cond), child = baseRel)
     }
@@ -1875,10 +1869,10 @@ class SparkConnectPlanner(
   }
 
   private def transformTypedFilter(
-      fun: proto.CommonInlineUserDefinedFunction,
+      expr: proto.Expression,
       child: LogicalPlan): TypedFilter = {
     val analyzed = session.sessionState.executePlan(child).analyzed
-    val udf = TypedScalaUdf(fun, Some(analyzed.output))
+    val udf = TypedScalaUdf(expr, Some(analyzed.output), Some("Dataset.filter"))
     TypedFilter(udf.function, analyzed)(udf.inEnc)
   }
 
@@ -1941,6 +1935,21 @@ class SparkConnectPlanner(
     } else {
       doTransformExpression(exp, baseRelationOpt)
     }
+  }
+
+  /**
+   * Installs the origin carried by `expr` (if any) as the current origin while `f` runs. Typed
+   * UDFs are decoded directly instead of going through `transformExpression`, so without this the
+   * expression's query context would be lost and unpacking failures would surface only internal
+   * planner frames. Falls back to the current origin when `expr` carries none.
+   */
+  private def withExpressionOrigin[T](expr: proto.Expression)(f: => T): T = {
+    val origin = if (expr.hasCommon && expr.getCommon.hasOrigin) {
+      transformOrigin(expr.getCommon.getOrigin)
+    } else {
+      CurrentOrigin.get
+    }
+    CurrentOrigin.withOrigin(origin)(f)
   }
 
   private def transformOrigin(origin: proto.Origin): Origin = {
@@ -2872,7 +2881,11 @@ class SparkConnectPlanner(
       case collection.Seq(e)
           if e.hasCommonInlineUserDefinedFunction &&
             e.getCommonInlineUserDefinedFunction.hasScalarScalaUdf =>
-        unpackUdf(e.getCommonInlineUserDefinedFunction)
+        withExpressionOrigin(e) {
+          unpackUdf(
+            e.getCommonInlineUserDefinedFunction,
+            Some("KeyValueGroupedDataset.reduceGroups"))
+        }
       case other =>
         throw InvalidInputErrors.reduceShouldCarryScalarScalaUdf(other)
     }

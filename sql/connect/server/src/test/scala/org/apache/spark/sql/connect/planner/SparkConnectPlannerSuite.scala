@@ -442,45 +442,87 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     assert(res.nodeName == "Aggregate")
   }
 
-  for (includeOrigin <- Seq(false, true)) {
-    test(s"groupByKey unpacking failure includes operation context (origin=$includeOrigin)") {
-      val grouping = proto.Expression.newBuilder().setCommonInlineUserDefinedFunction(
-        proto.CommonInlineUserDefinedFunction.newBuilder()
-          .setScalarScalaUdf(proto.ScalarScalaUDF.newBuilder()
-            .setPayload(ByteString.copyFromUtf8("invalid serialized function")))
-          .addArguments(proto.Expression.newBuilder()
-            .setUnresolvedStar(proto.Expression.UnresolvedStar.newBuilder())))
-      if (includeOrigin) {
-        grouping.setCommon(proto.ExpressionCommon.newBuilder().setOrigin(
-          proto.Origin.newBuilder().setJvmOrigin(proto.JvmOrigin.newBuilder()
-            .addStackTrace(proto.StackTraceElement.newBuilder()
-              .setDeclaringClass("org.apache.spark.sql.Dataset")
-              .setMethodName("groupByKey")
-              .setFileName("Dataset.scala")
-              .setLineNumber(1))
-            .addStackTrace(proto.StackTraceElement.newBuilder()
-              .setDeclaringClass("example.AggregationJob")
-              .setMethodName("run")
-              .setFileName("AggregationJob.scala")
-              .setLineNumber(42)))))
-      }
-      val input = proto.Relation.newBuilder().setRange(
-        proto.Range.newBuilder().setStart(0).setEnd(1).setStep(1))
-      val aggregate = proto.Aggregate.newBuilder()
-        .setInput(input)
-        .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
-        .addGroupingExpressions(grouping)
+  // Builds a typed Scala UDF expression whose payload cannot be deserialized, optionally carrying
+  // a JVM origin whose head frame reports `fragment` as the API call site.
+  private def malformedTypedScalaUdf(
+      includeOrigin: Boolean,
+      fragment: String): proto.Expression = {
+    val expr = proto.Expression.newBuilder().setCommonInlineUserDefinedFunction(
+      proto.CommonInlineUserDefinedFunction.newBuilder()
+        .setScalarScalaUdf(proto.ScalarScalaUDF.newBuilder()
+          .setPayload(ByteString.copyFromUtf8("invalid serialized function")))
+        .addArguments(proto.Expression.newBuilder()
+          .setUnresolvedStar(proto.Expression.UnresolvedStar.newBuilder())))
+    if (includeOrigin) {
+      expr.setCommon(proto.ExpressionCommon.newBuilder().setOrigin(
+        proto.Origin.newBuilder().setJvmOrigin(proto.JvmOrigin.newBuilder()
+          .addStackTrace(proto.StackTraceElement.newBuilder()
+            .setDeclaringClass("org.apache.spark.sql.Dataset")
+            .setMethodName(fragment)
+            .setFileName("Dataset.scala")
+            .setLineNumber(1))
+          .addStackTrace(proto.StackTraceElement.newBuilder()
+            .setDeclaringClass("example.AggregationJob")
+            .setMethodName("run")
+            .setFileName("AggregationJob.scala")
+            .setLineNumber(42)))))
+    }
+    expr.build()
+  }
+
+  private def rangeRelation: proto.Relation.Builder =
+    proto.Relation.newBuilder().setRange(
+      proto.Range.newBuilder().setStart(0).setEnd(1).setStep(1))
+
+  // name: test name; operation: the label expected in the failure message; fragment: the API
+  // method name reported by the origin's head frame; relation: wraps the typed UDF for the op.
+  private case class TypedUdfUnpackScenario(
+      name: String,
+      operation: String,
+      fragment: String,
+      relation: proto.Expression => proto.Relation)
+
+  private val typedUdfUnpackScenarios: Seq[TypedUdfUnpackScenario] = Seq(
+    TypedUdfUnpackScenario("groupByKey", "Dataset.groupByKey", "groupByKey", udf =>
+      proto.Relation.newBuilder().setAggregate(
+        proto.Aggregate.newBuilder()
+          .setInput(rangeRelation)
+          .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
+          .addGroupingExpressions(udf)).build()),
+    TypedUdfUnpackScenario("filter", "Dataset.filter", "filter", udf =>
+      proto.Relation.newBuilder().setFilter(
+        proto.Filter.newBuilder()
+          .setInput(rangeRelation)
+          .setCondition(udf)).build()),
+    TypedUdfUnpackScenario(
+      "reduceGroups", "KeyValueGroupedDataset.reduceGroups", "reduceGroups", udf =>
+      proto.Relation.newBuilder().setAggregate(
+        proto.Aggregate.newBuilder()
+          .setInput(rangeRelation)
+          .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
+          .addAggregateExpressions(proto.Expression.newBuilder()
+            .setUnresolvedFunction(proto.Expression.UnresolvedFunction.newBuilder()
+              .setFunctionName("reduce")
+              .addArguments(udf)))).build()))
+
+  for {
+    scenario <- typedUdfUnpackScenarios
+    includeOrigin <- Seq(false, true)
+  } {
+    test(s"${scenario.name} unpacking failure includes operation context " +
+      s"(origin=$includeOrigin)") {
+      val udf = malformedTypedScalaUdf(includeOrigin, scenario.fragment)
       val originalOrigin = CurrentOrigin.get
       val error = intercept[SparkException] {
-        transform(proto.Relation.newBuilder().setAggregate(aggregate).build())
+        transform(scenario.relation(udf))
       }
       assert(error.getCondition == "INTERNAL_ERROR")
       assert(error.getMessageParameters.get("message") ==
-        "Failed to unpack scala udf for Dataset.groupByKey.")
+        s"Failed to unpack scala udf for ${scenario.operation}.")
       assert(error.getCause.isInstanceOf[java.io.StreamCorruptedException])
       if (includeOrigin) {
         assert(error.getQueryContext.length == 1)
-        assert(error.getQueryContext.head.fragment() == "groupByKey")
+        assert(error.getQueryContext.head.fragment() == scenario.fragment)
         assert(error.getQueryContext.head.callSite() ==
           "example.AggregationJob.run(AggregationJob.scala:42)")
         assert(error.getMessage.contains("AggregationJob.scala:42"))
