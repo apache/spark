@@ -8876,6 +8876,31 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
+  test("pipelined preflight: an owned parent of a new stage is rejected before registration") {
+    val owned = new PipelinedShuffleDependency(new MyRDD(sc, 2, Nil), new HashPartitioner(2))
+    val ownerJobId = submit(new MyRDD(sc, 2, List(owned)), Array(0, 1))
+    // The owned stage is not a parent of the result stage: only the check of the new frontier
+    // stage reaches it. Construction builds the fresh sibling first, so a missed check would
+    // register it before the frontier stage fails on its owned parent.
+    val fresh = new PipelinedShuffleDependency(new MyRDD(sc, 2, Nil), new HashPartitioner(2))
+    val frontier = new PipelinedShuffleDependency(
+      new MyRDD(sc, 2, List(owned, fresh)), new HashPartitioner(2))
+    val result = new MyRDD(sc, 2, List(frontier))
+    val shufflesBefore = scheduler.shuffleIdToMapStage.toMap
+    for (_ <- 0 until 2) {
+      clearInvocations(scheduler, mapOutputTracker)
+      checkError(
+        exception = submitAndCaptureFailure(result, Array(0, 1)).asInstanceOf[SparkException],
+        condition = "PIPELINED_SHUFFLE_CROSS_JOB_REUSE",
+        parameters = scala.collection.immutable.Map("shuffleId" -> owned.shuffleId.toString))
+      assertNoPipelinedStageRegistration(Seq(fresh.shuffleId, frontier.shuffleId))
+      assert(scheduler.shuffleIdToMapStage.toMap === shufflesBefore)
+      assert(scheduler.jobIdToActiveJob.keySet.toSet === Set(ownerJobId))
+    }
+    cancel(ownerJobId)
+    assertDataStructuresEmpty()
+  }
+
   test("pipelined preflight: result barrier validation precedes producer validation") {
     val producer = new MyRDD(sc, 2, Nil, indeterminate = true)
     val dependency = new PipelinedShuffleDependency(producer, new HashPartitioner(2))
