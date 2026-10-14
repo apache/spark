@@ -900,7 +900,7 @@ object StreamingQueryStatusAndProgressSuite {
       sources = testProgress3.sources,
       sink = testProgress3.sink,
       observedMetrics = testProgress3.observedMetrics,
-      configuredTrigger = trigger)
+      triggerConfig = trigger)
   }
 
   val testProgress4 = new StreamingQueryProgress(

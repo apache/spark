@@ -81,7 +81,7 @@ private[protobuf] object StreamingQueryProgressSerializer {
       sources = SourceProgressSerializer.deserializeToArray(process.getSourcesList),
       sink = SinkProgressSerializer.deserialize(process.getSink),
       observedMetrics = convertToObservedMetrics(process.getObservedMetricsMap),
-      configuredTrigger = Option(getStringField(process.hasTrigger, () => process.getTrigger))
+      triggerConfig = Option(getStringField(process.hasTrigger, () => process.getTrigger))
         .map(Triggers.fromJson)
         .orNull
     )

@@ -371,7 +371,7 @@ abstract class ProgressContext(
       sources = sourceProgress.toArray,
       sink = sinkProgress,
       observedMetrics = new java.util.HashMap(observedMetrics.asJava),
-      configuredTrigger = trigger)
+      triggerConfig = trigger)
   }
 
   private def extractSourceProgress(

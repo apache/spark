@@ -377,7 +377,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         sources = Array(source0, source1),
         sink = sink,
         observedMetrics = observedMetrics,
-        configuredTrigger = ProcessingTimeTrigger(3000000000L)
+        triggerConfig = ProcessingTimeTrigger(3000000000L)
       )
       new StreamingQueryProgressWrapper(progress)
     }
