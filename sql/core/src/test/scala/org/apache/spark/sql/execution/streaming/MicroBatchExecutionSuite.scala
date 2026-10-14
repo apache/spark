@@ -18,17 +18,20 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.io.File
+import java.nio.charset.StandardCharsets.UTF_8
 
+import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfter
 import org.scalatest.matchers.should._
 import org.scalatest.time.{Seconds, Span}
 
 import org.apache.spark.{SparkException, SparkThrowable}
+import org.apache.spark.sql.{Dataset => PublicDataset, Row}
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.connector.read.streaming
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
-import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetSeq, OffsetSeqLog, OffsetSeqMetadata}
+import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeq, OffsetSeqLog, OffsetSeqMetadata}
 import org.apache.spark.sql.execution.streaming.runtime.{LongOffset, MemoryStream, MicroBatchExecution, SerializedOffset, StreamExecution, StreamingExecutionRelation}
 import org.apache.spark.sql.functions.{count, timestamp_seconds, window}
 import org.apache.spark.sql.internal.SQLConf
@@ -50,6 +53,90 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
       d.listFiles.filter(_.isFile).toList
     } else {
       List[File]()
+    }
+  }
+
+  gridTest("v2 self-union retains both source slots across restarts")(Seq(false, true)) {
+    legacyCheckpoint =>
+      withTempDir { checkpointDir =>
+        val checkpoint = checkpointDir.getCanonicalPath
+        val inputData = MemoryStream[Int]
+        val df = inputData.toDF()
+
+        def checkSourceSlots(): Unit = {
+          val offsets = new OffsetSeqLog(spark, s"$checkpoint/offsets")
+            .getLatest().get._2.asInstanceOf[OffsetMap]
+          assert(offsets.offsetsMap.keySet == Set("0", "1"))
+          assert(offsets.offsetsMap("0") == offsets.offsetsMap("1"))
+        }
+
+        withSQLConf(SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key -> "2") {
+          testStream(df.union(df))(
+            StartStream(checkpointLocation = checkpoint),
+            AddData(inputData, 1),
+            CheckNewAnswer(1, 1),
+            Execute { _ => checkSourceSlots() },
+            StopStream,
+            Execute { _ =>
+              if (legacyCheckpoint) {
+                val offsetLog = new OffsetSeqLog(spark, s"$checkpoint/offsets")
+                offsetLog.get(None, None).foreach { case (batchId, batchOffsets) =>
+                  val offsets = batchOffsets.asInstanceOf[OffsetMap]
+                  val offsetJson = offsets.offsetsMap("1").get.json
+                  val path = new Path(s"$checkpoint/offsets/$batchId")
+                  val output = path.getFileSystem(spark.sessionState.newHadoopConf())
+                    .create(path, true)
+                  try {
+                    output.write(s"v2\n${offsets.metadata.json}\n1:$offsetJson".getBytes(UTF_8))
+                  } finally {
+                    output.close()
+                  }
+                }
+                val offsets = new OffsetSeqLog(spark, s"$checkpoint/offsets")
+                  .getLatest().get._2.asInstanceOf[OffsetMap]
+                assert(offsets.offsetsMap.keySet == Set("1"))
+              }
+            },
+            StartStream(checkpointLocation = checkpoint),
+            AddData(inputData, 2),
+            CheckNewAnswer(2, 2),
+            Execute { _ => checkSourceSlots() },
+            StopStream,
+            StartStream(checkpointLocation = checkpoint),
+            AddData(inputData, 3),
+            CheckNewAnswer(3, 3),
+            Execute { _ => checkSourceSlots() },
+            StopStream)
+        }
+      }
+  }
+
+  test("failed v2 self-union reports both source slots") {
+    withTempDir { checkpointDir =>
+      val checkpoint = checkpointDir.getCanonicalPath
+      val inputData = MemoryStream[Int]
+      val df = inputData.toDF()
+      withSQLConf(SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key -> "2") {
+        val query = df.union(df).writeStream
+          .foreachBatch { (_: PublicDataset[Row], _: Long) =>
+            throw new IllegalStateException("expected sink failure")
+          }
+          .option("checkpointLocation", checkpoint)
+          .start()
+        try {
+          inputData.addData(1)
+          val error = intercept[StreamingQueryException] {
+            query.processAllAvailable()
+          }
+          assert(error.getCause.getMessage.contains("expected sink failure"))
+          val offsets = new OffsetSeqLog(spark, s"$checkpoint/offsets")
+            .getLatest().get._2.asInstanceOf[OffsetMap]
+          assert(offsets.offsetsMap.keySet == Set("0", "1"))
+          assert(error.endOffset == offsets.toString)
+        } finally {
+          query.stop()
+        }
+      }
     }
   }
 

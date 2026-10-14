@@ -113,7 +113,11 @@ class MicroBatchExecution(
   // in the same way, when OffsetLog v2 is used.
   @volatile protected var sourceIdMap: Map[String, SparkDataStream] = Map.empty
 
-  override protected def sourceToIdMap: Map[SparkDataStream, String] = sourceIdMap.map(_.swap)
+  override protected def streamProgressToOffsets(
+      streamProgress: StreamProgress,
+      metadata: OffsetSeqMetadataBase): OffsetSeqBase = {
+    streamProgress.toOffsets(sources, sourceIdMap, metadata)
+  }
 
   // Sink name for commit log support
   // If sink evolution is enabled, use user-provided sinkName (or error if not provided)
@@ -1450,7 +1454,7 @@ class MicroBatchExecution(
     if (!trigger.isInstanceOf[RealTimeTrigger]) {
       if (!offsetLog.add(
           execCtx.batchId,
-          execCtx.endOffsets.toOffsets(sources, sourceIdMap, execCtx.offsetSeqMetadata)
+          streamProgressToOffsets(execCtx.endOffsets, execCtx.offsetSeqMetadata)
         )) {
         throw QueryExecutionErrors.concurrentStreamLogUpdate(execCtx.batchId)
       }
@@ -1592,7 +1596,7 @@ class MicroBatchExecution(
       execCtx.reportTimeTaken("walCommit") {
         if (!offsetLog.add(
           execCtx.batchId,
-          execCtx.endOffsets.toOffsets(sources, sourceIdMap, execCtx.offsetSeqMetadata)
+          streamProgressToOffsets(execCtx.endOffsets, execCtx.offsetSeqMetadata)
           )) {
           throw QueryExecutionErrors.concurrentStreamLogUpdate(execCtx.batchId)
         }
