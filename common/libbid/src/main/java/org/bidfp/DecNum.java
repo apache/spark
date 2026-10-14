@@ -93,6 +93,32 @@ final class DecNum {
     return exp;
   }
 
+  long leastDigitParity() {
+    return limbs[0];
+  }
+
+  void setFromBigIntegerAbsolute(java.math.BigInteger value) {
+    clear();
+    if (value.signum() == 0) {
+      return;
+    }
+    java.math.BigInteger magnitude = value.abs();
+    java.math.BigInteger base = java.math.BigInteger.valueOf(BASE);
+    int[] buf = new int[64];
+    int n = 0;
+    while (magnitude.signum() != 0) {
+      java.math.BigInteger[] split = magnitude.divideAndRemainder(base);
+      buf[n++] = split[1].intValue();
+      magnitude = split[0];
+      if (n == buf.length) {
+        throw new ArithmeticException("decimal coefficient exceeds conversion limit");
+      }
+    }
+    ensureRoom(n);
+    System.arraycopy(buf, 0, limbs, 0, n);
+    length = n;
+  }
+
   void setLong(long value) {
     clear();
     if (value == 0L) {
@@ -118,19 +144,50 @@ final class DecNum {
   }
 
   void setUnsigned(long high, long low) {
+    setUnsigned(new long[] {low, high}, 2);
+  }
+
+  void setUnsigned(long[] littleEndian, int wordCount) {
     clear();
-    if ((high | low) == 0L) {
+    boolean empty = true;
+    for (int i = 0; i < wordCount; i++) {
+      if (littleEndian[i] != 0L) {
+        empty = false;
+        break;
+      }
+    }
+    if (empty) {
       return;
     }
     DecNum acc = ofLong(0L);
-    if (high != 0L) {
-      acc.setUnsigned64(high);
-      acc.shiftLeftBits(64);
+    for (int i = wordCount - 1; i >= 0; i--) {
+      if (!acc.isZero()) {
+        acc.shiftLeftBits(64);
+      }
+      DecNum part = new DecNum();
+      part.setUnsigned64(littleEndian[i]);
+      acc.addAbsolute(part);
     }
-    DecNum lowPart = new DecNum();
-    lowPart.setUnsigned64(low);
-    acc.addAbsolute(lowPart);
     copyFrom(acc);
+  }
+
+  void setCoefficient(boolean signed, UIntLimbs coefficient, int unbiasedExp) {
+    long[] words = new long[UIntLimbs.MAX_LIMBS];
+    coefficient.copyTo(words);
+    setUnsigned(words, UIntLimbs.MAX_LIMBS);
+    negative = signed;
+    exp = unbiasedExp;
+  }
+
+  void toUIntLimbs(UIntLimbs dest) {
+    dest.clear();
+    if (isZero()) {
+      return;
+    }
+    for (int i = length - 1; i >= 0; i--) {
+      dest.multiplySmall(BASE);
+      dest.addSmall(limbs[i]);
+    }
   }
 
   private void setUnsigned64(long value) {

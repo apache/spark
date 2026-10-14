@@ -17,8 +17,11 @@
 
 # LibBID
 
-LibBID implements IEEE 754 decimal64 and decimal128 arithmetic using the
-Binary Integer Decimal (BID) encoding.
+LibBID implements IEEE 754 decimal floating-point arithmetic using the
+Binary Integer Decimal (BID) encoding. Specialized kernels cover decimal64
+and decimal128. A generic BID-k path covers every packed width
+`k = 32, 64, ..., 256`, including Decimal96 and Decimal160 through
+Decimal256.
 
 The module is an internal Spark foundation. No Spark execution path depends on
 it yet, and its Maven and SBT publication tasks are disabled until a consumer
@@ -134,6 +137,9 @@ the fixed-size IEEE 754 decimal floating-point model, including:
 
 The library exposes immutable `Bid64` and `Bid128` objects as well as
 allocation-conscious `Bid64Raw` and `Bid128Raw` kernels over encoded bits.
+Generic encodings use `FormatParams` plus `BidK`. Transcendental functions
+for `k <= 128` convert through decimal128 and the binary128 DPML engine.
+`k > 128` libm is out of scope unless a binary256 engine is funded.
 
 Arithmetic and conversion operations report the full IEEE status flags.
 Transcendental compatibility specifies invalid-operation and division-by-zero

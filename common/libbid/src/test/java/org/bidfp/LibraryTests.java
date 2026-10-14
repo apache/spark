@@ -161,4 +161,9 @@ class LibraryTests {
   void bidObjectApi() {
     BidObjectApiTest.main(new String[0]);
   }
+
+  @Test
+  void bidK() {
+    BidKTest.main(new String[0]);
+  }
 }
