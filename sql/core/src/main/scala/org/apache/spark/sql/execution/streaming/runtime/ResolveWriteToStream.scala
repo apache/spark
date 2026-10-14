@@ -165,7 +165,7 @@ object ResolveWriteToStream extends Rule[LogicalPlan] {
     // should use the same relation equality as the source reuse in MicroBatchExecution
     val allSourceNames = plan.collect {
       case s: StreamingRelation   => s -> s.sourceIdentifyingName
-      case s: StremaingRelationV2 => s -> s.sourceIdentifyingName
+      case s: StreamingRelationV2 => s -> s.sourceIdentifyingName
     }.distinct.map(_._2)
 
     // Extract actual name strings only from named sources (ignore Unassigned)
