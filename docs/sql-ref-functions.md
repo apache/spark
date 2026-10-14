@@ -44,6 +44,7 @@ This subsection presents the usages and descriptions of these functions.
  * [JSON Functions](sql-ref-functions-builtin.html#json-functions)
  * [XML Functions](sql-ref-functions-builtin.html#xml-functions)
  * [URL Functions](sql-ref-functions-builtin.html#url-functions)
+ * [Vector Functions](sql-ref-functions-builtin.html#vector-functions)
  * [Misc Functions](sql-ref-functions-builtin.html#misc-functions)
 
 #### Aggregate-like Functions
