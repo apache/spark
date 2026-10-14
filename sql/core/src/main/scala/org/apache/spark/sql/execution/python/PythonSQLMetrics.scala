@@ -35,6 +35,14 @@ trait PythonSQLMetrics { self: SparkPlan =>
   // empty so the shared trait stays minimal; see [[PythonPickleBatchMetrics]].
   protected def additionalMetrics: Map[String, SQLMetric] = Map.empty
 
+  protected def createPythonPhaseMetrics(): Map[String, SQLMetric] = {
+    PythonSQLMetrics.pythonPhaseTimingMetricsDesc.map { case (k, v) =>
+      k -> SQLMetrics.createTimingMetric(sparkContext, v)
+    } ++ PythonSQLMetrics.pythonPhaseCountMetricsDesc.map { case (k, v) =>
+      k -> SQLMetrics.createMetric(sparkContext, v)
+    }
+  }
+
   override lazy val metrics: Map[String, SQLMetric] = pythonMetrics
 }
 
@@ -56,7 +64,26 @@ object PythonSQLMetrics {
   }
 
   val pythonOtherMetricsDesc: Map[String, String] = {
-    Map("pythonNumRowsReceived" -> "number of output rows")
+    Map(
+      "pythonNumRowsReceived" -> "number of output rows",
+      "pythonNumPipelinedTasks" -> "number of pipelined Python worker tasks")
+  }
+
+  val pythonPhaseTimingMetricsDesc: Map[String, String] = {
+    Map(
+      "pythonDataReceiveTime" -> "time to read Python input from the buffered stream",
+      "pythonArrowDeserializationTime" -> "time to deserialize Arrow IPC outside stream I/O",
+      "pythonInputPreparationTime" -> "time to prepare Python UDF input",
+      "pythonUDFExecutionTime" -> "time to evaluate Python UDFs",
+      "pythonOutputPreparationTime" -> "time to prepare Python UDF output",
+      "pythonArrowSerializationTime" -> "time to serialize Arrow IPC outside stream I/O",
+      "pythonDataSendTime" -> "time to write Python output to the buffered stream")
+  }
+
+  val pythonPhaseCountMetricsDesc: Map[String, String] = {
+    Map(
+      "pythonNumTimingReports" -> "number of Python tasks with detailed timing",
+      "pythonNumTimedBatches" -> "number of Python batches with detailed timing")
   }
 }
 

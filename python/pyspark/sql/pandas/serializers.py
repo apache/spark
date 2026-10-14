@@ -19,6 +19,7 @@
 Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for more details.
 """
 
+import time
 from typing import IO, TYPE_CHECKING, Iterable, Iterator, List, Tuple
 
 from pyspark.errors import PySparkRuntimeError, PySparkValueError
@@ -28,6 +29,7 @@ from pyspark.serializers import (
     read_int,
     write_int,
 )
+from pyspark.worker_metrics import WorkerMetrics
 
 if TYPE_CHECKING:
     import pyarrow as pa
@@ -42,6 +44,36 @@ class SpecialLengths:
     START_ARROW_STREAM = -6
 
 
+class _TimedStream:
+    """Count I/O time without buffering or owning the wrapped stream."""
+
+    def __init__(self, stream: IO[bytes]) -> None:
+        self._stream = stream
+        self._clock = time.perf_counter_ns
+        self.duration_ns = 0
+
+    @property
+    def closed(self) -> bool:
+        return self._stream.closed
+
+    def read(self, size: int = -1) -> bytes:
+        start_ns = self._clock()
+        result = self._stream.read(size)
+        self.duration_ns += self._clock() - start_ns
+        return result
+
+    def write(self, data: bytes) -> int:
+        start_ns = self._clock()
+        result = self._stream.write(data)
+        self.duration_ns += self._clock() - start_ns
+        return result
+
+    def flush(self) -> None:
+        start_ns = self._clock()
+        self._stream.flush()
+        self.duration_ns += self._clock() - start_ns
+
+
 class ArrowStreamSerializer(Serializer):
     """
     Serializes Arrow record batches as a plain stream.
@@ -51,12 +83,28 @@ class ArrowStreamSerializer(Serializer):
     write_start_stream : bool
         If True, writes the START_ARROW_STREAM marker before the first
         output batch. Default False.
+    collect_timing : bool
+        Separate Arrow IPC processing from buffered stream I/O in worker metrics.
+        Enable only for UDF paths that report the corresponding SQL metrics.
+
+    Timed batch intervals accumulate locally and publish when the stream completes.
+    Failed worker tasks do not send a metrics report.
+    Arrow IPC times exclude measured stream calls.
+    Stream timings include existing read, write and flush calls. A later flush by the
+    worker's owner is outside these intervals, so they do not measure all socket I/O.
     """
 
-    def __init__(self, write_start_stream: bool = False, flush_per_batch: bool = False) -> None:
+    def __init__(
+        self,
+        write_start_stream: bool = False,
+        flush_per_batch: bool = False,
+        *,
+        collect_timing: bool = False,
+    ) -> None:
         super().__init__()
         self._write_start_stream: bool = write_start_stream
         self._flush_per_batch: bool = flush_per_batch
+        self._collect_timing = collect_timing
 
     def dump_stream(self, iterator: Iterable["pa.RecordBatch"], stream: IO[bytes]) -> None:
         """Optionally prepend START_ARROW_STREAM, then write batches."""
@@ -65,27 +113,76 @@ class ArrowStreamSerializer(Serializer):
             iterator = self._write_stream_start(iterator, stream)
         import pyarrow as pa
 
+        if not self._collect_timing:
+            writer = None
+            try:
+                for batch in iterator:
+                    if writer is None:
+                        writer = pa.RecordBatchStreamWriter(stream, batch.schema)
+                    writer.write_batch(batch)
+                    # In pipelined mode, flush after each batch so the JVM can read output
+                    # while still sending input, rather than buffering all output.
+                    if self._flush_per_batch:
+                        stream.flush()
+            finally:
+                if writer is not None:
+                    writer.close()
+            return
+
+        timed_stream = _TimedStream(stream)
+        metrics = WorkerMetrics()
+        send_timer = metrics.measure("pythonDataSendTime")
+        serialize_timer = metrics.measure("pythonArrowSerializationTime")
+        clock = time.perf_counter_ns
+        write_duration_ns = 0
         writer = None
         try:
             for batch in iterator:
+                start_ns = clock()
                 if writer is None:
-                    writer = pa.RecordBatchStreamWriter(stream, batch.schema)
+                    writer = pa.RecordBatchStreamWriter(timed_stream, batch.schema)
                 writer.write_batch(batch)
                 # In pipelined mode, flush after each batch so the JVM can read output
                 # while still sending input, rather than buffering all output.
                 if self._flush_per_batch:
-                    stream.flush()
+                    timed_stream.flush()
+                write_duration_ns += clock() - start_ns
         finally:
             if writer is not None:
+                start_ns = clock()
                 writer.close()
+                write_duration_ns += clock() - start_ns
+        send_timer.add_duration_ns(timed_stream.duration_ns)
+        serialize_timer.add_duration_ns(write_duration_ns - timed_stream.duration_ns)
 
     def load_stream(self, stream: IO[bytes]) -> Iterator["pa.RecordBatch"]:
         """Load batches from a plain Arrow stream."""
         import pyarrow as pa
 
-        reader = pa.ipc.open_stream(stream)
-        for batch in reader:
+        if not self._collect_timing:
+            reader = pa.ipc.open_stream(stream)
+            for batch in reader:
+                yield batch
+            return
+
+        timed_stream = _TimedStream(stream)
+        metrics = WorkerMetrics()
+        receive_timer = metrics.measure("pythonDataReceiveTime")
+        deserialize_timer = metrics.measure("pythonArrowDeserializationTime")
+        clock = time.perf_counter_ns
+        read_duration_ns = 0
+        start_ns = clock()
+        reader = pa.ipc.open_stream(timed_stream)
+        read_duration_ns += clock() - start_ns
+        while True:
+            start_ns = clock()
+            batch = next(reader, None)
+            read_duration_ns += clock() - start_ns
+            if batch is None:
+                break
             yield batch
+        receive_timer.add_duration_ns(timed_stream.duration_ns)
+        deserialize_timer.add_duration_ns(read_duration_ns - timed_stream.duration_ns)
 
     def _write_stream_start(
         self, batch_iterator: Iterator["pa.RecordBatch"], stream: IO[bytes]
@@ -99,7 +196,12 @@ class ArrowStreamSerializer(Serializer):
 
         # Signal the JVM after the first batch succeeds, so errors during
         # batch creation can be reported before the Arrow stream starts.
+        if self._collect_timing:
+            send_timer = WorkerMetrics().measure("pythonDataSendTime")
+            start_ns = time.perf_counter_ns()
         write_int(SpecialLengths.START_ARROW_STREAM, stream)
+        if self._collect_timing:
+            send_timer.add_duration_ns(time.perf_counter_ns() - start_ns)
         yield from itertools.chain([first], batch_iterator)
 
     def __repr__(self) -> str:

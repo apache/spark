@@ -109,6 +109,7 @@ from pyspark.util import (
     with_faulthandler,
 )
 from pyspark.worker_message import WorkerInitInfo
+from pyspark.worker_metrics import WorkerMetrics
 from pyspark.worker_util import (
     EvalConf,
     RunnerConf,
@@ -123,21 +124,9 @@ from pyspark.worker_util import (
 )
 
 
-def report_metrics(
-    outfile, boot, init, finish, execution_duration_ms, memory_bytes_spilled, disk_bytes_spilled
-):
+def report_metrics(outfile: BinaryIO, metrics: dict[str, int]) -> None:
     """Write the worker metrics as a length-prefixed JSON report after METRICS_DATA."""
-    payload = json.dumps(
-        {
-            "bootTimestampMs": int(1000 * boot),
-            "initTimestampMs": int(1000 * init),
-            "finishTimestampMs": int(1000 * finish),
-            "pythonExecutionDurationMs": execution_duration_ms,
-            "memoryBytesSpilled": memory_bytes_spilled,
-            "diskBytesSpilled": disk_bytes_spilled,
-        },
-        separators=(",", ":"),
-    ).encode("utf-8")
+    payload = json.dumps(metrics, separators=(",", ":")).encode("utf-8")
     write_int(SpecialLengths.METRICS_DATA, outfile)
     write_with_length(payload, outfile)
 
@@ -745,6 +734,12 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         handler = handler_cls(udfs=udfs, runner_conf=runner_conf, eval_conf=eval_conf)
         return handler.run, handler.serializer
 
+    collect_timing = (
+        eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
+        and not runner_conf.use_legacy_pandas_udf_conversion
+        and runner_conf.detailed_timing_enabled
+    )
+
     if eval_type in (
         PythonEvalType.SQL_ARROW_BATCHED_UDF,
         PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF,
@@ -759,7 +754,10 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF,
     ):
         # NOTE: if timezone is set here, that implies respectSessionTimeZone is True
-        ser = ArrowStreamSerializer(write_start_stream=True)
+        ser = ArrowStreamSerializer(
+            write_start_stream=True,
+            collect_timing=collect_timing,
+        )
     else:
         batch_size = int(os.environ.get("PYTHON_UDF_BATCH_SIZE", "100"))
         ser = BatchedSerializer(CPickleSerializer(), batch_size)
@@ -801,6 +799,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     ),
                 )
             )
+        assert udf_infos, "At least one Arrow UDF expected here."
         col_names = [f"_{i}" for i in range(len(udfs))]
 
         # --- Input preparation ---
@@ -810,6 +809,19 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             )
             for f in eval_conf.input_type
         ]
+
+        # Bind task timers only when enabled; the batch loop accumulates locally.
+        metrics = WorkerMetrics()
+        if collect_timing:
+            phase_timers = (
+                metrics.measure("pythonInputPreparationTime"),
+                metrics.measure("pythonUDFExecutionTime"),
+                metrics.measure("pythonOutputPreparationTime"),
+            )
+            metrics.set("pythonNumTimingReports", 1)
+            metrics.set("pythonNumTimedBatches", 0)
+        else:
+            phase_timers = None
 
         @fail_on_stopiteration
         def _evaluate_batch_udf(udf_func, rows):
@@ -821,45 +833,78 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 return list(pool.map(lambda row: udf_func(*row), rows))
 
         def func(split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
-            for input_batch in data:
-                num_rows = input_batch.num_rows
-
-                # --- Input: Arrow -> Python columns ---
-                columns = [
-                    (
-                        [conv(v) for v in ArrowTableToRowsConversion._to_pylist(col)]
-                        if conv is not None
-                        else ArrowTableToRowsConversion._to_pylist(col)
-                    )
-                    for col, conv in zip(input_batch.itercolumns(), arrow_to_py_converters)
-                ]
-                if not columns:
-                    columns = [[_NoValue] * num_rows]
-
-                # --- Process: evaluate each UDF row-by-row ---
-                output_arrays = []
-                for udf_func, offsets, zero_arg, arrow_return_type, result_conv in udf_infos:
-                    rows = (
-                        [() for _ in range(num_rows)]
-                        if zero_arg
-                        else list(zip(*[columns[o] for o in offsets]))
-                    )
-                    results = _evaluate_batch_udf(udf_func, rows)
-                    verify_result_row_count(len(results), num_rows)
-
-                    # --- Output: Python -> Arrow ---
-                    converted = (
-                        [result_conv(r) for r in results] if result_conv is not None else results
-                    )
-                    try:
-                        arr = pa.array(converted, type=arrow_return_type)
-                    except pa.lib.ArrowInvalid:
-                        arr = pa.array(converted).cast(
-                            target_type=arrow_return_type, safe=runner_conf.safecheck
+            # Keep phase totals local so each metric is updated once instead of per batch.
+            input_duration_ns = 0
+            udf_duration_ns = 0
+            output_duration_ns = 0
+            clock = time.perf_counter_ns
+            try:
+                for input_batch in data:
+                    # --- Input: Arrow -> Python columns ---
+                    if phase_timers is not None:
+                        input_start_ns = clock()
+                        metrics.increment("pythonNumTimedBatches")
+                    num_rows = input_batch.num_rows
+                    columns = [
+                        (
+                            [conv(v) for v in ArrowTableToRowsConversion._to_pylist(col)]
+                            if conv is not None
+                            else ArrowTableToRowsConversion._to_pylist(col)
                         )
-                    output_arrays.append(arr)
+                        for col, conv in zip(input_batch.itercolumns(), arrow_to_py_converters)
+                    ]
+                    if not columns:
+                        columns = [[_NoValue] * num_rows]
+                    output_arrays: list[pa.Array] = []
 
-                yield pa.RecordBatch.from_arrays(output_arrays, col_names)
+                    # --- Process: evaluate each UDF row-by-row ---
+                    for udf_func, offsets, zero_arg, arrow_return_type, result_conv in udf_infos:
+                        if phase_timers is not None and output_arrays:
+                            # Reuse the batch start for the first UDF, avoiding another clock read.
+                            # Later UDFs start input after the loop transition.
+                            input_start_ns = clock()
+                        rows = (
+                            [() for _ in range(num_rows)]
+                            if zero_arg
+                            else list(zip(*[columns[o] for o in offsets]))
+                        )
+                        if phase_timers is not None:
+                            udf_start_ns = clock()
+                            input_duration_ns += udf_start_ns - input_start_ns
+                        results = _evaluate_batch_udf(udf_func, rows)
+                        if phase_timers is not None:
+                            output_start_ns = clock()
+                            udf_duration_ns += output_start_ns - udf_start_ns
+
+                        # --- Output: Python -> Arrow ---
+                        verify_result_row_count(len(results), num_rows)
+                        converted = (
+                            [result_conv(r) for r in results]
+                            if result_conv is not None
+                            else results
+                        )
+                        try:
+                            arr = pa.array(converted, type=arrow_return_type)
+                        except pa.lib.ArrowInvalid:
+                            arr = pa.array(converted).cast(
+                                target_type=arrow_return_type, safe=runner_conf.safecheck
+                            )
+                        output_arrays.append(arr)
+                        # All UDF results for this batch are ready; time its assembly as output.
+                        if len(output_arrays) == num_udfs:
+                            output_batch = pa.RecordBatch.from_arrays(output_arrays, col_names)
+                        if phase_timers is not None:
+                            output_duration_ns += clock() - output_start_ns
+
+                    yield output_batch
+                    del output_batch
+            finally:
+                # Flush completed intervals if the generator closes early or raises.
+                if phase_timers is not None:
+                    input_timer, udf_timer, output_timer = phase_timers
+                    input_timer.add_duration_ns(input_duration_ns)
+                    udf_timer.add_duration_ns(udf_duration_ns)
+                    output_timer.add_duration_ns(output_duration_ns)
 
         return func, ser
 
@@ -2382,7 +2427,9 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
     Initialization -> Processing -> Finish/Cleanup
     """
     try:
-        boot_time = time.time()
+        metrics = WorkerMetrics()
+        metrics.reset()
+        metrics.set_current_timestamp("bootTimestampMs")
         # Initialization
         init_message = message_receiver.get_init_message()
         init_info = WorkerInitInfo.from_stream(init_message)
@@ -2432,7 +2479,7 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
         split_index = init_info.split_index
         del init_info
 
-        init_time = time.time()
+        metrics.set_current_timestamp("initTimestampMs")
 
         # Processing
 
@@ -2539,17 +2586,17 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                     )
 
         is_pipelined = os.environ.get("SPARK_PIPELINED_UDF") == "1"
+        # Pipelined reads can overlap UDF work, so mark these task reports for filtering.
+        metrics.set("pythonNumPipelinedTasks", int(is_pipelined))
         if is_pipelined and hasattr(serializer, "_flush_per_batch"):
             serializer._flush_per_batch = True
         run_process = pipelined_process if is_pipelined else process
 
-        execution_start_time = time.time()
-        with capture_outputs():
+        with metrics.measure("pythonExecutionDurationMs"), capture_outputs():
             if profiler:
                 profiler.profile(run_process)
             else:
                 run_process()
-        execution_duration_ms = int(1000 * (time.time() - execution_start_time))
 
         # Cleanup
         # Reset task context to None. This is a guard code to avoid residual context when worker
@@ -2559,16 +2606,11 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
     except BaseException as e:
         handle_worker_exception(e, outfile)
         sys.exit(-1)
-    finish_time = time.time()
-    report_metrics(
-        outfile,
-        boot_time,
-        init_time,
-        finish_time,
-        execution_duration_ms,
-        shuffle.MemoryBytesSpilled,
-        shuffle.DiskBytesSpilled,
-    )
+    metrics.set_current_timestamp("finishTimestampMs")
+    # Spill totals are byte counts already expressed in their reporting unit.
+    metrics.set("memoryBytesSpilled", shuffle.MemoryBytesSpilled)
+    metrics.set("diskBytesSpilled", shuffle.DiskBytesSpilled)
+    report_metrics(outfile, metrics.to_dict())
 
     # Mark the beginning of the accumulators section of the output
     write_int(SpecialLengths.END_OF_DATA_SECTION, outfile)
