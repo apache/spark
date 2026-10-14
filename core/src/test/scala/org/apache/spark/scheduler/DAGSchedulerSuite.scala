@@ -9521,11 +9521,17 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
   private def assertPipelinedUnsupported(failure: Exception, reasonSubstring: String): Unit = {
     assert(failure != null, "the job must fail fast on the unsupported pipelined idiom")
-    val msg = failure.getMessage
-    assert(msg.contains("PIPELINED_SHUFFLE_UNSUPPORTED") || msg.contains("unsupported feature"),
-      s"expected a PIPELINED_SHUFFLE_UNSUPPORTED error, got: $msg")
-    assert(msg.contains(reasonSubstring),
-      s"expected reason to mention '$reasonSubstring', got: $msg")
+    failure match {
+      // handleJobSubmitted matches on this type, so pin it along with the condition and reason.
+      case e: PipelinedShuffleUnsupportedException =>
+        checkError(
+          exception = e,
+          condition = "PIPELINED_SHUFFLE_UNSUPPORTED",
+          parameters = scala.collection.immutable.Map(
+            "reason" -> s".*${java.util.regex.Pattern.quote(reasonSubstring)}.*"),
+          matchPVals = true)
+      case other => fail(s"expected a PipelinedShuffleUnsupportedException, not $other")
+    }
   }
 
   test("submitMapStage on an RDD with 0 partitions reports an internal error") {
