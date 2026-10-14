@@ -2566,6 +2566,8 @@ private[spark] class DAGScheduler(
       logWarning(log"Rejecting job ${MDC(JOB_ID, jobId)}: a job mixing a pipelined shuffle with " +
         log"a regular shuffle is only supported when every regular shuffle is a materialized " +
         log"prefix below the pipelined shuffles")
+      // Clear the slot-check retry count an earlier deferral may have left.
+      barrierJobIdToNumTasksCheckFailures.remove(jobId)
       listener.jobFailed(new SparkException(
         "A job that mixes a pipelined shuffle dependency with a regular shuffle dependency is " +
           "only supported when every regular shuffle is a fully-materialized prefix below the " +
@@ -2580,6 +2582,8 @@ private[spark] class DAGScheduler(
     // slots (true all-or-nothing gang admission). Inert for a regular job (no pipelined
     // dependency).
     if (hasPipelined && rejectUnadmittablePipelinedGroup(jobId, finalRDD, partitions, listener)) {
+      // Clear the slot-check retry count an earlier deferral may have left.
+      barrierJobIdToNumTasksCheckFailures.remove(jobId)
       return
     }
     var finalStage: ResultStage = null
@@ -2640,11 +2644,15 @@ private[spark] class DAGScheduler(
         // generic "Creating new stage failed" message below would be misleading). Matched by TYPE,
         // not by the error-condition string, so a rename or a wrapped cause cannot misroute it.
         logWarning(log"Rejecting job ${MDC(JOB_ID, jobId)}: unsupported pipelined-shuffle idiom", e)
+        // Clear the slot-check retry count an earlier deferral may have left.
+        barrierJobIdToNumTasksCheckFailures.remove(jobId)
         listener.jobFailed(e)
         return
 
       case e: Exception =>
         logWarning(log"Creating new stage failed due to exception - job: ${MDC(JOB_ID, jobId)}", e)
+        // Clear the slot-check retry count an earlier deferral may have left.
+        barrierJobIdToNumTasksCheckFailures.remove(jobId)
         listener.jobFailed(e)
         return
     }

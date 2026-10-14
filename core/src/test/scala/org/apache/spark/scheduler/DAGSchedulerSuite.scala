@@ -1910,6 +1910,81 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
+  for (pipelinedRejection <- Seq(false, true)) {
+    test("a barrier job rejected on its slot-check re-post clears its retry count " +
+        s"(pipelinedRejection=$pipelinedRejection)") {
+      conf.set(config.BARRIER_MAX_CONCURRENT_TASKS_CHECK_INTERVAL.key, "1h")
+      // 3 barrier tasks on the local[2] backend fail the max concurrent tasks check.
+      val barrierRdd = new MyRDD(sc, 3, Nil).barrier().mapPartitions(iter => iter)
+      val listener = new SimpleListener
+      val jobId = submit(barrierRdd, Array(0, 1, 2), listener = listener)
+      assert(scheduler.deferredBarrierJobs.containsKey(jobId))
+      assert(scheduler.barrierJobIdToNumTasksCheckFailures.get(jobId) === 1)
+      // Slot capacity cannot grow on this backend, so the re-post carries a job the slot check no
+      // longer defers, standing in for a re-post that finds enough slots. It is then rejected
+      // before any stage is registered: a barrier job over a subset of partitions in the generic
+      // handler, or an indeterminate pipelined producer as an unsupported idiom.
+      val rejected = if (pipelinedRejection) {
+        val producer = new MyRDD(sc, 1, Nil, indeterminate = true)
+        new MyRDD(sc, 1, List(new PipelinedShuffleDependency(producer, new HashPartitioner(1))))
+      } else {
+        new MyRDD(sc, 2, Nil).barrier().mapPartitions(iter => iter)
+      }
+      runEvent(JobSubmitted(jobId, rejected, jobComputeFunc, Array(0), CallSite("", ""),
+        listener, JobArtifactSet.getActiveOrDefault(sc), null))
+      if (pipelinedRejection) {
+        assertPipelinedUnsupported(listener.failure, "indeterminate")
+      } else {
+        assert(listener.failure.isInstanceOf[BarrierJobUnsupportedRDDChainException])
+      }
+      assert(scheduler.deferredBarrierJobs.isEmpty)
+      assert(scheduler.barrierJobIdToNumTasksCheckFailures.isEmpty)
+      assertDataStructuresEmpty()
+    }
+  }
+
+  for (prefixLost <- Seq(false, true)) {
+    test("a deferred pipelined barrier job rejected up front on re-post clears its retry count " +
+        s"(prefixLost=$prefixLost)") {
+      conf.set(config.BARRIER_MAX_CONCURRENT_TASKS_CHECK_INTERVAL.key, "1h")
+      // A pipelined group with a barrier producer over a materialized regular prefix. The group
+      // fits the 1000 slots the test scheduler reports, but its 3 barrier tasks exceed the
+      // local[2] backend, so the barrier slot check defers the job.
+      val prefix = new ShuffleDependency(new MyRDD(sc, 2, Nil), new HashPartitioner(3))
+      mapOutputTracker.registerShuffle(prefix.shuffleId, 2, 3)
+      (0 until 2).foreach { mapIndex =>
+        mapOutputTracker.registerMapOutput(prefix.shuffleId, mapIndex,
+          makeMapStatus("hostA", 3, mapTaskId = mapIndex))
+      }
+      val producer = new MyRDD(sc, 3, List(prefix)).barrier().mapPartitions(iter => iter)
+      val pipelined = new PipelinedShuffleDependency(producer, new HashPartitioner(3))
+      val result = new MyRDD(sc, 3, List(pipelined))
+      val listener = new SimpleListener
+      val jobId = submit(result, Array(0, 1, 2), listener = listener)
+      assert(scheduler.deferredBarrierJobs.containsKey(jobId))
+      assert(scheduler.barrierJobIdToNumTasksCheckFailures.get(jobId) === 1)
+      // Before the re-post, either the prefix loses its outputs, so the job is an unsupported mix,
+      // or other work takes the free slots, so gang admission rejects it.
+      val myScheduler = scheduler.asInstanceOf[MyDAGScheduler]
+      try {
+        if (prefixLost) {
+          mapOutputTracker.unregisterAllMapAndMergeOutput(prefix.shuffleId)
+        } else {
+          myScheduler.outstandingTasksForOtherWorkForTest = (_, _) => 1000
+        }
+        runEvent(JobSubmitted(jobId, result, jobComputeFunc, Array(0, 1, 2), CallSite("", ""),
+          listener, JobArtifactSet.getActiveOrDefault(sc), null))
+      } finally {
+        myScheduler.outstandingTasksForOtherWorkForTest = (_, _) => 0
+      }
+      val reason = if (prefixLost) "fully-materialized prefix" else "INSUFFICIENT_SLOT"
+      assert(listener.failure.getMessage.contains(reason))
+      assert(scheduler.deferredBarrierJobs.isEmpty)
+      assert(scheduler.barrierJobIdToNumTasksCheckFailures.isEmpty)
+      assertDataStructuresEmpty()
+    }
+  }
+
   test("Fail the job if a barrier ResultTask failed") {
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
