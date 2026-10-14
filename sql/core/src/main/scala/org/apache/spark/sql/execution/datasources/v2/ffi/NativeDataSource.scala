@@ -31,7 +31,7 @@ import org.apache.arrow.vector.{FieldVector, ValueVector, VectorSchemaRoot}
 import org.apache.arrow.vector.complex.MapVector
 import org.apache.arrow.vector.types.pojo.{ArrowType, Field, Schema}
 
-import org.apache.spark.{SparkException, SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkThrowable, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
@@ -65,7 +65,7 @@ class NativeDataSource(
     val library = NativeLibraries.get(location)
     withDataSource(library, "infer the schema of") { dataSource =>
       call(name, "infer the schema of") {
-        optional(NativeArrow.importSchema(address => library.schema(dataSource, address)))
+        optional(NativeArrow.importSchema(address => library.schema(dataSource.handle, address)))
       }.getOrElse(throw QueryCompilationErrors.dataSchemaNotSpecifiedError(name))
     }
   }
@@ -73,9 +73,12 @@ class NativeDataSource(
   override def reader(schema: StructType): ColumnarReader = {
     val executorLocation = NativeDataSourceRegistry.distribute(location)
     val library = NativeLibraries.get(location)
-    val handle = create(library, "plan a scan of", "DATA_SOURCE_BATCH_SCAN_NOT_SUPPORTED") {
+    val handle = create(library, "plan a scan of", NativeLibrary.BATCH_READ,
+        "DATA_SOURCE_BATCH_SCAN_NOT_SUPPORTED", NativeDataSource.BatchReadFunctions) {
       dataSource =>
-        NativeArrow.exportSchema(schema)(address => library.createReader(dataSource, address))
+        NativeArrow.exportSchema(schema) { address =>
+          library.createReader(dataSource.handle, address)
+        }
     }
     new NativeDataSourceReader(
       executorLocation, name, schema, new NativeHandle(handle, library.closeReader))
@@ -84,9 +87,12 @@ class NativeDataSource(
   override def streamReader(schema: StructType): ColumnarStreamReader = {
     val executorLocation = NativeDataSourceRegistry.distribute(location)
     val library = NativeLibraries.get(location)
-    val handle = create(library, "plan a scan of", "DATA_SOURCE_MICRO_BATCH_SCAN_NOT_SUPPORTED") {
+    val handle = create(library, "plan a scan of", NativeLibrary.MICRO_BATCH_READ,
+        "DATA_SOURCE_MICRO_BATCH_SCAN_NOT_SUPPORTED", NativeDataSource.MicroBatchReadFunctions) {
       dataSource =>
-        NativeArrow.exportSchema(schema)(address => library.createStreamReader(dataSource, address))
+        NativeArrow.exportSchema(schema) { address =>
+          library.createStreamReader(dataSource.handle, address)
+        }
     }
     new NativeDataSourceStreamReader(
       executorLocation, name, schema, new NativeHandle(handle, library.closeStreamReader))
@@ -96,12 +102,7 @@ class NativeDataSource(
     val executorLocation = NativeDataSourceRegistry.distribute(location)
     val library = NativeLibraries.get(location)
     val handle = new NativeHandle(
-      create(library, "plan a write to", "DATA_SOURCE_BATCH_WRITE_NOT_SUPPORTED") { dataSource =>
-        NativeArrow.exportSchema(schema) { address =>
-          library.createWriter(dataSource, address, overwrite)
-        }
-      },
-      library.closeWriter)
+      createWriter(library, schema, overwrite, queryId = null), library.closeWriter)
     new NativeDataSourceWriter(executorLocation, name, handle, serializeWriter(library, handle))
   }
 
@@ -111,14 +112,8 @@ class NativeDataSource(
       queryId: String): ColumnarStreamWriter = {
     val executorLocation = NativeDataSourceRegistry.distribute(location)
     val library = NativeLibraries.get(location)
-    val handle = new NativeHandle(
-      create(library, "plan a write to", "DATA_SOURCE_STREAMING_WRITE_NOT_SUPPORTED") {
-        dataSource =>
-          NativeArrow.exportSchema(schema) { address =>
-            library.createStreamWriter(dataSource, address, overwrite, queryId)
-          }
-      },
-      library.closeWriter)
+    val handle =
+      new NativeHandle(createWriter(library, schema, overwrite, queryId), library.closeWriter)
     val writer = new NativeDataSourceStreamWriter(
       executorLocation, name, handle, serializeWriter(library, handle))
     NativeStreamWriters.register(queryId, handle)
@@ -126,24 +121,72 @@ class NativeDataSource(
   }
 
   /** Runs `f` with a new native data source, which is closed afterwards. */
-  private def withDataSource[T](library: NativeLibrary, action: String)(f: Long => T): T = {
+  private def withDataSource[T](library: NativeLibrary, action: String)(
+      f: NativeLibrary.DataSourceHandle => T): T = {
+    // Checked first, so that a data source is never created without a way to release it.
+    requireFunctions(library, action, Seq(NativeLibrary.Function.CLOSE))
     // The keys of a case-insensitive map are in lower case.
     val entries = options.entrySet().asScala.toArray
     val dataSource = call(name, "create") {
       library.createDataSource(name, entries.map(_.getKey), entries.map(_.getValue))
     }
     Utils.tryWithSafeFinally(f(dataSource)) {
-      call(name, action)(library.closeDataSource(dataSource))
+      call(name, action)(library.closeDataSource(dataSource.handle))
     }
   }
 
-  /** Creates a reader or a writer with `f`, which fails if the library does not implement it. */
-  private def create(library: NativeLibrary, action: String, unsupportedError: String)(
-      f: Long => Long): Long = {
+  /**
+   * Creates a reader or a writer with `f`, which fails if the data source does not declare the
+   * capability, or if the library does not implement the functions that it requires.
+   */
+  private def create(
+      library: NativeLibrary,
+      action: String,
+      capability: Long,
+      unsupportedError: String,
+      functions: Seq[NativeLibrary.Function])(
+      f: NativeLibrary.DataSourceHandle => Long): Long = {
     withDataSource(library, action) { dataSource =>
-      call(name, action)(optional(f(dataSource))).getOrElse {
+      if ((dataSource.capabilities & capability) == 0) {
         throw new SparkUnsupportedOperationException(unsupportedError, Map("description" -> name))
       }
+      requireFunctions(library, action, functions)
+      call(name, action)(f(dataSource))
+    }
+  }
+
+  /** Creates a writer for a batch write, or for a streaming write with the ID of its query. */
+  private def createWriter(
+      library: NativeLibrary,
+      schema: StructType,
+      overwrite: Boolean,
+      queryId: String): Long = {
+    val action = "plan a write to"
+    val (capability, unsupportedError, overwriteMode) = if (queryId == null) {
+      (NativeLibrary.BATCH_WRITE, "DATA_SOURCE_BATCH_WRITE_NOT_SUPPORTED",
+        "the save mode overwrite")
+    } else {
+      (NativeLibrary.STREAMING_WRITE, "DATA_SOURCE_STREAMING_WRITE_NOT_SUPPORTED",
+        "the output mode complete")
+    }
+    create(library, action, capability, unsupportedError, NativeDataSource.WriteFunctions) {
+      dataSource =>
+        if (overwrite && (dataSource.capabilities & NativeLibrary.TRUNCATE) == 0) {
+          throw error(name, action, s"The data source does not support $overwriteMode.")
+        }
+        val mode = if (overwrite) NativeLibrary.WRITE_TRUNCATE else NativeLibrary.WRITE_APPEND
+        NativeArrow.exportSchema(schema) { address =>
+          library.createWriter(dataSource.handle, address, mode, queryId)
+        }
+    }
+  }
+
+  private def requireFunctions(
+      library: NativeLibrary,
+      action: String,
+      functions: Seq[NativeLibrary.Function]): Unit = {
+    functions.find(!library.hasFunction(_)).foreach { function =>
+      throw error(name, action, s"The library does not implement ${function.fieldName}.")
     }
   }
 
@@ -156,6 +199,18 @@ class NativeDataSource(
         throw e
     }
   }
+}
+
+object NativeDataSource {
+  import NativeLibrary.Function._
+
+  // The functions that the operations of a data source require, besides create and close. The
+  // others are optional. They are checked on the driver, before the operation starts.
+  private val BatchReadFunctions = Seq(CREATE_READER, PARTITIONS, CLOSE_READER, READ)
+  private val MicroBatchReadFunctions = Seq(CREATE_STREAM_READER, INITIAL_OFFSET, LATEST_OFFSET,
+    STREAM_PARTITIONS, CLOSE_STREAM_READER, READ)
+  private val WriteFunctions = Seq(CREATE_WRITER, COMMIT, ABORT, CLOSE_WRITER, CREATE_DATA_WRITER,
+    WRITE, COMMIT_DATA_WRITER, ABORT_DATA_WRITER, CLOSE_DATA_WRITER)
 }
 
 /** Reads a native data source for a batch scan. */
@@ -182,21 +237,20 @@ class NativeDataSourceReader(
     val encoded = predicates.zipWithIndex.flatMap { case (predicate, i) =>
       NativePredicates.toJson(predicate, schema).map(_ -> i)
     }
-    val pushed = if (encoded.isEmpty) {
+    val used = if (encoded.isEmpty) {
       Set.empty[Int]
     } else {
+      // How the reader uses each predicate: whether it uses it completely or only to skip data
+      // does not matter, since Spark evaluates all the predicates again after reading.
       call(name, "plan a scan of") {
         optional(library.pushPredicates(handle.get, encoded.map(_._1)))
-      } match {
-        case Some(flags) if flags != null && flags.length == encoded.length =>
-          encoded.map(_._2).zip(flags).collect { case (i, true) => i }.toSet
-        case Some(flags) =>
-          throw error(name, "plan a scan of", s"pushPredicates returned " +
-            s"${Option(flags).map(_.length).getOrElse(0)} values for ${encoded.length} predicates.")
-        case None => Set.empty[Int]
-      }
+      }.map { uses =>
+        encoded.map(_._2).zip(uses).collect {
+          case (i, use) if use != NativeLibrary.PREDICATE_UNUSED => i
+        }.toSet
+      }.getOrElse(Set.empty[Int])
     }
-    predicates.zipWithIndex.collect { case (predicate, i) if !pushed.contains(i) => predicate }
+    predicates.zipWithIndex.collect { case (predicate, i) if used.contains(i) => predicate }
   }
 
   override def pushLimit(limit: Int): Boolean = {
@@ -257,13 +311,11 @@ class NativeDataSourceStreamReader(
   @transient private lazy val library = NativeLibraries.get(location)
 
   override def initialOffset(): String = {
-    checkOffset("spark_ds_initial_offset",
-      call(name, "plan a scan of")(library.initialOffset(handle.get)))
+    checkOffset("initial_offset", call(name, "plan a scan of")(library.initialOffset(handle.get)))
   }
 
   override def latestOffset(): String = {
-    checkOffset("spark_ds_latest_offset",
-      call(name, "plan a scan of")(library.latestOffset(handle.get)))
+    checkOffset("latest_offset", call(name, "plan a scan of")(library.latestOffset(handle.get)))
   }
 
   /**
@@ -422,6 +474,8 @@ class NativePartitionReader(
   // Read here rather than with `Data.importArrayStream`, to check each array before importing it.
   private val stream = ArrowArrayStream.allocateNew(allocator)
   private val dictionaries = new CDataDictionaryProvider()
+  // The task that reads the partition, which the library may use until the stream is released.
+  private var task: NativeLibrary.Task = _
   private var root: VectorSchemaRoot = _
   private var batch: ColumnarBatch = _
 
@@ -438,11 +492,8 @@ class NativePartitionReader(
 
   private def openStream(): Unit = {
     val library = NativeLibraries.get(location)
-    call(name, "read")(optional(library.read(readerState, partition, stream.memoryAddress())))
-      .getOrElse {
-        throw new SparkUnsupportedOperationException(
-          "DATA_SOURCE_BATCH_SCAN_NOT_SUPPORTED", Map("description" -> name))
-      }
+    task = NativeTask.create()
+    call(name, "read")(library.read(task, readerState, partition, stream.memoryAddress()))
   }
 
   private def importSchema(): Schema = {
@@ -641,7 +692,12 @@ class NativePartitionReader(
       // Releases the stream of the library, unless it was not exported.
       stream.release()
       stream.close()
-    }(Utils.tryLogNonFatalError(allocator.close()))
+    } {
+      if (task != null) {
+        task.close()
+      }
+      Utils.tryLogNonFatalError(allocator.close())
+    }
   }
 }
 
@@ -668,14 +724,23 @@ class NativeDataWriter(
   import NativeCalls._
 
   private val library = NativeLibraries.get(location)
-  // Zero once the data writer was committed or aborted, which releases it. It stays set if the
-  // library fails to commit, so that Spark aborts the data writer.
-  private var handle: Long = call(name, "write to") {
-    library.createDataWriter(writerState, partitionId, taskId, epochId)
+  // The task, which the library may use until the data writer is closed.
+  private val task = NativeTask.create(Some(partitionId), Some(taskId))
+  private val handle: Long = try {
+    call(name, "write to")(library.createDataWriter(task, writerState, epochId))
+  } catch {
+    case e: Throwable =>
+      task.close()
+      throw e
   }
+  // Whether the data writer was committed or aborted. It stays false if the library fails to
+  // commit, so that Spark aborts the data writer, but becomes true as soon as the library commits,
+  // even if Spark then fails the commit, for example because of an invalid message.
+  private var finished = false
+  private var closed = false
 
   override def write(batch: ColumnarBatch): Unit = {
-    if (handle == 0) {
+    if (finished || closed) {
       throw SparkException.internalError("The data writer was already committed or aborted.")
     }
     val vectors = (0 until batch.numCols()).map { i =>
@@ -704,24 +769,49 @@ class NativeDataWriter(
   }
 
   override def commit(): WriterCommitMessage = {
-    if (handle == 0) {
+    if (finished || closed) {
       throw SparkException.internalError("The data writer was already committed or aborted.")
     }
-    // The library releases the data writer once it commits, even if its message is then rejected,
-    // so Spark must not abort it afterwards.
-    val message = call(name, "write to")(library.commitDataWriter(handle, () => handle = 0))
+    val message = call(name, "write to")(library.commitDataWriter(handle, () => finished = true))
     NativeWriterCommitMessage(bytesOrEmpty(Some(message)))
   }
 
   override def abort(): Unit = {
-    if (handle != 0) {
-      val dataWriter = handle
-      handle = 0
-      call(name, "write to")(library.abortDataWriter(dataWriter))
+    if (!finished && !closed) {
+      finished = true
+      call(name, "write to")(library.abortDataWriter(handle))
     }
   }
 
-  override def close(): Unit = abort()
+  override def close(): Unit = {
+    if (!closed) {
+      closed = true
+      Utils.tryWithSafeFinally {
+        call(name, "write to")(library.closeDataWriter(handle))
+      }(task.close())
+    }
+  }
+}
+
+/** Creates the `SparkDsTaskContext` of the running task. */
+private[ffi] object NativeTask {
+  /**
+   * @param partitionId the partition that the task reads or writes, by default the partition of
+   *                    the task
+   * @param taskAttemptId the ID of the task attempt, by default the one of the task
+   */
+  def create(
+      partitionId: Option[Int] = None,
+      taskAttemptId: Option[Long] = None): NativeLibrary.Task = {
+    val context = Option(TaskContext.get())
+    new NativeLibrary.Task(
+      context.map(_.stageId()).getOrElse(-1),
+      context.map(_.stageAttemptNumber()).getOrElse(-1),
+      partitionId.orElse(context.map(_.partitionId())).getOrElse(-1),
+      context.map(_.attemptNumber()).getOrElse(0),
+      taskAttemptId.orElse(context.map(_.taskAttemptId())).getOrElse(-1L),
+      () => context.exists(_.isInterrupted()))
+  }
 }
 
 /**

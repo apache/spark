@@ -41,13 +41,9 @@ object NativeDataSourceTestUtils {
   // each package has its own name.
   private val packageCount = new AtomicInteger()
 
-  /**
-   * The C++ compiler, if available on a version of Java that can load native data sources, and
-   * the include directory with `spark_datasource.h`.
-   */
-  lazy val toolchain: Option[(String, Seq[String])] = {
-    val compiler = Seq("c++", "g++", "clang++").find(Utils.checkCommandAvailable)
-    compiler.filter(_ => NativeLibrary.isSupported).map { compiler =>
+  /** The C++ compiler, if available, and the include directory with `spark_datasource.h`. */
+  lazy val compiler: Option[(String, Seq[String])] = {
+    Seq("c++", "g++", "clang++").find(Utils.checkCommandAvailable).map { compiler =>
       val header = new File(buildDir, "spark_datasource.h")
       val in = getClass.getClassLoader
         .getResourceAsStream("org/apache/spark/sql/datasource/spark_datasource.h")
@@ -55,6 +51,10 @@ object NativeDataSourceTestUtils {
       (compiler, Seq(buildDir.getPath))
     }
   }
+
+  /** [[compiler]], if available on a version of Java that can load native data sources. */
+  lazy val toolchain: Option[(String, Seq[String])] =
+    compiler.filter(_ => NativeLibrary.isSupported)
 
   /**
    * Compiles the test library with the given preprocessor definitions, once for each name. The
@@ -73,12 +73,29 @@ object NativeDataSourceTestUtils {
       Utils.tryWithResource(in)(Files.copy(_, source.toPath))
     }
     val library = new File(buildDir, System.mapLibraryName(name))
-    val command = Seq(compiler, "-std=c++17", "-O1", "-shared", "-fPIC") ++
-      includes.map("-I" + _) ++ defines ++ Seq("-o", library.getPath, source.getPath)
+    // The symbols are hidden, as libraries are often built, so only spark_ds_init is exported.
+    run(Seq(compiler, "-std=c++17", "-O1", "-shared", "-fPIC", "-fvisibility=hidden") ++
+      includes.map("-I" + _) ++ defines ++ Seq("-o", library.getPath, source.getPath))
+    library
+  }
+
+  /** Compiles a C++ program that includes `spark_datasource.h`, runs it and returns its output. */
+  def runProgram(name: String, source: String): String = {
+    val (compiler, includes) = this.compiler.get
+    val sourceFile = new File(buildDir, s"$name.cc")
+    Files.writeString(sourceFile.toPath, source)
+    val program = new File(buildDir, name)
+    run(Seq(compiler, "-std=c++17") ++ includes.map("-I" + _) ++
+      Seq("-o", program.getPath, sourceFile.getPath))
+    run(Seq(program.getPath))
+  }
+
+  /** Runs a command, checks that it succeeds and returns its output. */
+  private def run(command: Seq[String]): String = {
     val process = new ProcessBuilder(command: _*).redirectErrorStream(true).start()
     val output = new String(process.getInputStream.readAllBytes(), UTF_8)
-    assert(process.waitFor() == 0, s"Failed to compile the test library: $output")
-    library
+    assert(process.waitFor() == 0, s"Failed to run ${command.mkString(" ")}: $output")
+    output
   }
 
   /** The data sources of the test library compiled with the given `NAME_PREFIX`. */

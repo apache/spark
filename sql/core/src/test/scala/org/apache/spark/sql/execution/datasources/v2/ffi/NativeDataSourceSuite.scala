@@ -24,6 +24,7 @@ import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDate}
 import java.util.UUID
 import java.util.concurrent.{Callable, CountDownLatch, TimeUnit}
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
@@ -31,8 +32,9 @@ import scala.jdk.CollectionConverters._
 import com.fasterxml.jackson.core.json.JsonWriteFeature
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.json.JsonMapper
+import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkClassNotFoundException, SparkFiles, SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.{SPARK_VERSION, SparkClassNotFoundException, SparkFiles, SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.api.python.{PythonBroadcast, SimplePythonFunction}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
@@ -76,6 +78,14 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     compile("test_native_datasource_v2", "-DABI_VERSION=2", "-DNAME_PREFIX=\"v2_\"")
   private lazy val noLastErrorLibrary =
     compile("test_native_datasource_ne", "-DNO_LAST_ERROR", "-DNAME_PREFIX=\"ne_\"")
+  private lazy val smallTableLibrary = compile("test_native_datasource_small",
+    "-DTABLE_SIZE=offsetof(SparkDsLibrary,read)", "-DNAME_PREFIX=\"small_\"")
+  private lazy val failingInitLibrary =
+    compile("test_native_datasource_if", "-DINIT_FAILURE=1", "-DNAME_PREFIX=\"if_\"")
+  private lazy val noTableLibrary =
+    compile("test_native_datasource_nt", "-DINIT_FAILURE=2", "-DNAME_PREFIX=\"nt_\"")
+  private lazy val noInitLibrary =
+    compile("test_native_datasource_ni", "-DNO_INIT", "-DNAME_PREFIX=\"ni_\"")
   private lazy val installedLibrary =
     compile("test_native_datasource_installed", "-DNAME_PREFIX=\"installed_\"")
   private lazy val installedNegatingLibrary = compile(
@@ -129,6 +139,19 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     Iterator.iterate(e)(_.getCause).takeWhile(_ != null)
       .collectFirst { case t: SparkThrowable if t.getCondition == condition => t }
       .getOrElse(throw e)
+  }
+
+  /**
+   * Checks that Spark closed each data writer that native_sink created under `dir`, and did not
+   * use it afterwards. When a write fails, the tasks that Spark kills may still close their data
+   * writers after the write returns.
+   */
+  private def checkDataWritersClosed(dir: File): Unit = eventually(timeout(1.minute)) {
+    def names(subdir: String): Set[String] =
+      Option(new File(dir, subdir).list()).map(_.toSet).getOrElse(Set.empty)
+    assert(names("_created_data_writers").nonEmpty)
+    assert(names("_closed_data_writers") == names("_created_data_writers"))
+    assert(!new File(dir, "_DATA_WRITER_USED_AFTER_CLOSE").exists())
   }
 
   // Formats a double as the test library does.
@@ -195,7 +218,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         """"children":[{"type":"column","name":["id"]},""" +
         """{"type":"literal","dataType":"bigint","value":1},""" +
         """{"type":"literal","dataType":"bigint","value":2}]}]}"""))
-    // Only the functions listed in spark_ds_push_predicates are passed, so not arithmetic.
+    // Only the functions listed in push_predicates are passed, so not arithmetic.
     NativePredicates.FUNCTION_NAMES.foreach { name =>
       assert(toJson(predicate(name, id, id)).nonEmpty, name)
     }
@@ -255,7 +278,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
 
   /**
    * Generates `org/apache/spark/sql/datasource/predicate-cases.json`, which lists predicates as
-   * Spark passes them to `spark_ds_push_predicates`, with the rows of a table for which Spark
+   * Spark passes them to `push_predicates`, with the rows of a table for which Spark
    * finds them true, for libraries to test their pushdown with. Regenerate it with
    * `SPARK_GENERATE_GOLDEN_FILES=1`.
    */
@@ -311,8 +334,8 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     }
     val generated =
       s"""{
-         |  "description": ${json("Predicates as Spark passes them to spark_ds_push_" +
-        "predicates, with the ids of the rows of the table for which they are true. A " +
+         |  "description": ${json("Predicates as Spark passes them to push_predicates of " +
+        "spark_datasource.h, with the ids of the rows of the table for which they are true. A " +
         "case lists the predicates that Spark pushes for the filter in its SQL, which are " +
         "combined with AND. A row has a value for each column of the schema; NaN and infinite " +
         "doubles are strings.")},
@@ -341,14 +364,14 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
   }
 
   test("tell missing functions from link errors") {
-    // A function that the library does not export is an unsupported operation.
-    val missing = new NativeLibrary.MissingFunctionException("spark_ds_f")
+    // A function that the library leaves NULL in its table is an unsupported operation.
+    val missing = new NativeLibrary.MissingFunctionException("push_limit")
     assert(NativeCalls.optional(throw missing).isEmpty)
     checkError(
       exception = intercept[SparkRuntimeException](NativeCalls.call("x", "read")(throw missing)),
       condition = "NATIVE_DATA_SOURCE_ERROR",
       parameters = Map(
-        "action" -> "read", "name" -> "x", "msg" -> "The library does not implement spark_ds_f."))
+        "action" -> "read", "name" -> "x", "msg" -> "The library does not implement push_limit."))
     // Link errors are reported as they are, such as when Arrow, which still calls the Arrow C
     // structs through JNI, cannot load its JNI library, which it extracts to java.io.tmpdir, for
     // example if the directory does not allow it.
@@ -389,6 +412,33 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         parameters = Map(
           "required" -> "22", "current" -> Runtime.version().feature().toString))
     }
+  }
+
+  test("the bindings match the layout of spark_datasource.h") {
+    assume(compiler.isDefined, "A C++ compiler is required.")
+    val layout = NativeLibrary.layout().asScala.map { case (key, value) => key -> value.longValue }
+    val prints = layout.keys.map { key =>
+      val value = key.split('.') match {
+        case Array(struct) => s"sizeof($struct)"
+        case Array(struct, field) => s"offsetof($struct, $field)"
+      }
+      s"""  std::printf("%s %zu\\n", "$key", $value);"""
+    }
+    val output = runProgram("layout",
+      s"""#include <cstddef>
+         |#include <cstdio>
+         |#include "spark_datasource.h"
+         |
+         |int main() {
+         |${prints.mkString("\n")}
+         |  return 0;
+         |}
+         |""".stripMargin)
+    val actual = output.linesIterator.map { line =>
+      val Array(key, value) = line.split(" ")
+      key -> value.toLong
+    }.toMap
+    assert(actual == layout.toMap)
   }
 
   nativeTest("disable native data sources") {
@@ -463,6 +513,17 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       .filter("id > 15")
     checkRows(claimed, (16L until 20L).map(expectedRow))
     assert(scan(claimed).getMetaData()("PushedPredicates").contains("id > 15"))
+
+    // A library that only uses the predicates to skip data, here by reading the blocks of 10
+    // rows that may match, with all their rows. Spark shows these predicates as pushed too, and
+    // so it does with a value that it does not know.
+    Seq("partial", "7").foreach { use =>
+      val skipping = range(newSession(defaultPackage), "end" -> "45", "predicate_use" -> use)
+        .filter("id > 13 AND id < 27")
+      checkRows(skipping, (14L until 27L).map(expectedRow))
+      val pushed = scan(skipping).getMetaData()("PushedPredicates")
+      assert(pushed.contains("id > 13") && pushed.contains("id < 27"), pushed)
+    }
 
     // The answers of the library are for the predicates that Spark passes to it: here, not the
     // first one, which uses another function.
@@ -584,8 +645,9 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     write("append", 0 until 4)
     assert(written() == (0 until 4).map(i => s"$i,v$i").toSet)
     assert(new File(dir, "_SUCCESS").isFile)
-    // The writer is closed after the commit.
+    // The writer is closed after the commit, and so are the data writers of the tasks.
     assert(new File(dir, "_CLOSED").isFile)
+    checkDataWritersClosed(dir)
     write("append", 4 until 6)
     assert(written() == (0 until 6).map(i => s"$i,v$i").toSet)
     write("overwrite", 10 until 12)
@@ -691,16 +753,18 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         "action" -> "write to",
         "name" -> "native_sink",
         "msg" -> "injected failure in commitDataWriter"))
-    // abortDataWriter removed the temporary files of the tasks.
+    // abort_data_writer removed the temporary files of the tasks, whose data writers were then
+    // closed.
     assert(new File(dir, "_ABORTED").isFile)
     assert(new File(dir, "_temporary").listFiles().isEmpty)
     assert(!dir.listFiles().exists(_.getName.startsWith("part-")))
+    checkDataWritersClosed(dir)
   }
 
   nativeTest("do not abort a data writer that committed with an invalid message") {
     val session = newSession(defaultPackage)
     val dir = Utils.createTempDir()
-    // The library commits and releases the data writer, but passes two commit messages.
+    // The library commits the data writer, but passes two commit messages.
     val e = intercept[Exception] {
       session.range(10).repartition(1).write.format("native_sink").option("path", dir.getPath)
         .option("commit_messages", "2").mode("append").save()
@@ -711,9 +775,11 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "action" -> "write to",
         "name" -> "native_sink",
-        "msg" -> "spark_ds_commit_data_writer returned 2 values instead of one."))
-    // The task failed without aborting the released data writer, and the driver aborted the write.
-    assert(!new File(dir, "_ABORTED_RELEASED_DATA_WRITER").exists())
+        "msg" -> "commit_data_writer returned 2 values instead of one."))
+    // The task failed without aborting the committed data writer, which it closed, and the driver
+    // aborted the write.
+    assert(!new File(dir, "_ABORTED_COMMITTED_DATA_WRITER").exists())
+    checkDataWritersClosed(dir)
     assert(new File(dir, "_ABORTED").isFile)
     assert(!dir.listFiles().exists(_.getName.startsWith("part-")))
   }
@@ -804,10 +870,10 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         condition = "NATIVE_DATA_SOURCE_ERROR",
         parameters = Map("action" -> "plan a scan of", "name" -> "native_counter", "msg" -> msg))
     }
-    check("none", "spark_ds_latest_offset returned no offset.")
-    check("multiline", "spark_ds_latest_offset returned an offset with a line break, but an " +
+    check("none", "latest_offset returned no offset.")
+    check("multiline", "latest_offset returned an offset with a line break, but an " +
       "offset must be JSON on a single line.")
-    check("invalid", "spark_ds_latest_offset returned an offset that is not valid JSON: offset 10")
+    check("invalid", "latest_offset returned an offset that is not valid JSON: offset 10")
   }
 
   nativeTest("pass the ID of a streaming query to its stream writers") {
@@ -865,11 +931,13 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         "NULL.") { session =>
       range(session, "fail" -> "uninitialized").collect()
     }
-    // An error of the library is not an unsupported operation.
+    // An error of the library is not an unsupported operation: here, of a data source that
+    // declares batch reads that it does not support.
     check("plan a scan of", "native_sink does not support batch reads", "native_sink") {
-      session => session.read.schema("id BIGINT").format("native_sink").load().collect()
+      session => session.read.schema("id BIGINT").format("native_sink")
+        .option("capabilities", NativeLibrary.BATCH_READ.toString).load().collect()
     }
-    // Without spark_ds_last_error, only the value that the function returned is reported.
+    // Without last_error, only the value that the function returned is reported.
     val e = intercept[Exception] {
       newSession(createPackage(noLastErrorLibrary, dataSources("ne_")))
         .read.format("ne_native_range").option("fail", "create").load()
@@ -880,7 +948,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "action" -> "create",
         "name" -> "ne_native_range",
-        "msg" -> "spark_ds_create failed with the error code 1."))
+        "msg" -> "create failed with the error code 1."))
   }
 
   nativeTest("a scan whose planning failed fails again with the same error") {
@@ -919,71 +987,204 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       val query = start
       try query.processAllAvailable() finally query.stop()
     }
-    check("spark_ds_create", "create", "native_range") { session =>
-      range(session, "zero" -> "spark_ds_create")
+    check("create", "create", "native_range") { session =>
+      range(session, "zero" -> "create")
     }
-    check("spark_ds_create_reader", "plan a scan of", "native_range") { session =>
-      range(session, "zero" -> "spark_ds_create_reader").collect()
+    check("create_reader", "plan a scan of", "native_range") { session =>
+      range(session, "zero" -> "create_reader").collect()
     }
-    check("spark_ds_create_stream_reader", "plan a scan of", "native_counter") { session =>
+    check("create_stream_reader", "plan a scan of", "native_counter") { session =>
       runStream {
         session.readStream.format("native_counter")
-          .option("zero", "spark_ds_create_stream_reader").load()
+          .option("zero", "create_stream_reader").load()
           .writeStream.format("noop").start()
       }
     }
-    Seq(
-      "spark_ds_create_writer" -> "plan a write to",
-      "spark_ds_create_data_writer" -> "write to"
-    ).foreach { case (function, action) =>
-      check(function, action, "native_sink") { session =>
-        session.range(2).write.format("native_sink")
-          .option("path", Utils.createTempDir().getPath).option("zero", function)
-          .mode("append").save()
-      }
+    Seq("create_writer" -> "plan a write to", "create_data_writer" -> "write to").foreach {
+      case (function, action) =>
+        check(function, action, "native_sink") { session =>
+          session.range(2).write.format("native_sink")
+            .option("path", Utils.createTempDir().getPath).option("zero", function)
+            .mode("append").save()
+        }
     }
-    check("spark_ds_create_stream_writer", "plan a write to", "native_sink") { session =>
+    check("create_writer", "plan a write to", "native_sink") { session =>
       runStream {
         session.readStream.format("native_counter").load()
           .writeStream
           .format("native_sink")
           .option("path", Utils.createTempDir().getPath)
-          .option("zero", "spark_ds_create_stream_writer")
+          .option("zero", "create_writer")
           .option("checkpointLocation", Utils.createTempDir().getPath)
           .start()
       }
     }
   }
 
-  nativeTest("operations that the library does not implement") {
-    val session = newSession(createPackage(readOnlyLibrary, dataSources("ro_")))
+  nativeTest("operations that a data source does not support") {
+    val session = newSession(defaultPackage, createPackage(readOnlyLibrary, dataSources("ro_")))
     // The library does not push anything down, so Spark evaluates the filter.
     val df = session.read.format("ro_native_range").option("end", "10").load().filter("id > 6")
     checkRows(df, (7L until 10L).map(expectedRow))
     assert(scan(df).getMetaData()("PushedPredicates") == "[]")
 
-    checkError(
-      exception = intercept[SparkUnsupportedOperationException] {
-        session.range(1).write.format("ro_native_sink").mode("append").save()
-      },
-      condition = "DATA_SOURCE_BATCH_WRITE_NOT_SUPPORTED",
-      parameters = Map("description" -> "ro_native_sink"))
-    def checkStreaming(condition: String, name: String)(start: => StreamingQuery): Unit = {
-      val e = intercept[Exception] {
-        val query = start
-        try query.processAllAvailable() finally query.stop()
+    def check(condition: String, parameters: Map[String, String])(f: => Unit): Unit = {
+      val e = intercept[Exception](f)
+      checkError(exception = findError(e, condition), condition = condition,
+        parameters = parameters)
+    }
+    def runStream(start: => StreamingQuery): Unit = {
+      val query = start
+      try query.processAllAvailable() finally query.stop()
+    }
+    // A data source declares the operations that it supports with its capabilities. Spark
+    // reports the others as unsupported, without calling the library, which here does not
+    // implement them either.
+    check("DATA_SOURCE_BATCH_WRITE_NOT_SUPPORTED", Map("description" -> "ro_native_sink")) {
+      session.range(1).write.format("ro_native_sink").mode("append").save()
+    }
+    check("DATA_SOURCE_MICRO_BATCH_SCAN_NOT_SUPPORTED", Map("description" -> "ro_native_counter")) {
+      runStream {
+        session.readStream.format("ro_native_counter").load().writeStream.format("noop").start()
       }
-      checkError(
-        exception = findError(e, condition),
-        condition = condition,
-        parameters = Map("description" -> name))
     }
-    checkStreaming("DATA_SOURCE_MICRO_BATCH_SCAN_NOT_SUPPORTED", "ro_native_counter") {
-      session.readStream.format("ro_native_counter").load().writeStream.format("noop").start()
+    check("DATA_SOURCE_STREAMING_WRITE_NOT_SUPPORTED", Map("description" -> "ro_native_sink")) {
+      runStream {
+        session.readStream.format("rate").load().writeStream.format("ro_native_sink")
+          .option("checkpointLocation", Utils.createTempDir().getPath).start()
+      }
     }
-    checkStreaming("DATA_SOURCE_STREAMING_WRITE_NOT_SUPPORTED", "ro_native_sink") {
-      session.readStream.format("rate").load().writeStream.format("ro_native_sink")
-        .option("checkpointLocation", Utils.createTempDir().getPath).start()
+    // The capabilities are those of each data source: native_counter only supports streaming
+    // reads, although its library implements batch reads.
+    check("DATA_SOURCE_BATCH_SCAN_NOT_SUPPORTED", Map("description" -> "native_counter")) {
+      session.read.format("native_counter").load().collect()
+    }
+    // A data source that declares a capability must implement its functions.
+    check("NATIVE_DATA_SOURCE_ERROR", Map("action" -> "plan a write to",
+        "name" -> "ro_native_sink", "msg" -> "The library does not implement create_writer.")) {
+      session.range(1).write.format("ro_native_sink")
+        .option("capabilities", NativeLibrary.BATCH_WRITE.toString).mode("append").save()
+    }
+    // Replacing the existing data requires the capability SPARK_DS_TRUNCATE.
+    val dir = Utils.createTempDir()
+    val noTruncate = (NativeLibrary.BATCH_WRITE | NativeLibrary.STREAMING_WRITE).toString
+    check("NATIVE_DATA_SOURCE_ERROR", Map("action" -> "plan a write to", "name" -> "native_sink",
+        "msg" -> "The data source does not support the save mode overwrite.")) {
+      session.range(1).write.format("native_sink").option("path", dir.getPath)
+        .option("capabilities", noTruncate).mode("overwrite").save()
+    }
+    check("NATIVE_DATA_SOURCE_ERROR", Map("action" -> "plan a write to", "name" -> "native_sink",
+        "msg" -> "The data source does not support the output mode complete.")) {
+      runStream {
+        session.readStream.format("rate").load().groupBy().count().writeStream
+          .outputMode("complete")
+          .format("native_sink")
+          .option("path", dir.getPath)
+          .option("capabilities", noTruncate)
+          .option("checkpointLocation", Utils.createTempDir().getPath)
+          .start()
+      }
+    }
+    assert(!new File(dir, "_CREATED").exists())
+  }
+
+  nativeTest("read only the functions that fit in the table of a library") {
+    // The table of the library ends before read, as the table of a library built against an
+    // earlier header ends before the functions added later: Spark does not read past its end.
+    val session = newSession(createPackage(smallTableLibrary, dataSources("small_")))
+    val df = session.read.format("small_native_range").load()
+    assert(df.schema.length == 7)
+    checkError(
+      exception = findError(intercept[Exception](df.collect()), "NATIVE_DATA_SOURCE_ERROR"),
+      condition = "NATIVE_DATA_SOURCE_ERROR",
+      parameters = Map(
+        "action" -> "plan a scan of",
+        "name" -> "small_native_range",
+        "msg" -> "The library does not implement read."))
+  }
+
+  nativeTest("pass the version of Spark, and log with the log of Spark") {
+    val session = newSession(defaultPackage)
+    checkRows(range(session, "end" -> "2", "spark_version" -> SPARK_VERSION).select("id"),
+      Seq(Row(0L), Row(1L)))
+    checkError(
+      exception = findError(
+        intercept[Exception](range(session, "spark_version" -> "1.0.0")),
+        "NATIVE_DATA_SOURCE_ERROR"),
+      condition = "NATIVE_DATA_SOURCE_ERROR",
+      parameters = Map(
+        "action" -> "create",
+        "name" -> "native_range",
+        "msg" -> (s"the version of Spark is $SPARK_VERSION, which supports version 1 of the " +
+          "interface")))
+
+    val logAppender = new LogAppender("native data source logs")
+    withLogAppender(logAppender, loggerNames = Seq(classOf[NativeLibrary].getName)) {
+      range(session, "log" -> "a message from native code")
+    }
+    assert(logAppender.loggingEvents.exists { event =>
+      val message = event.getMessage.getFormattedMessage
+      event.getLevel == org.apache.logging.log4j.Level.WARN &&
+        message.contains("a message from native code") &&
+        message.contains(System.mapLibraryName("test_native_datasource"))
+    })
+  }
+
+  nativeTest("pass the task to reads and data writers") {
+    val session = newSession(defaultPackage)
+    // Checks the SparkDsTaskContext that the library got in each task, by partition.
+    def check(dir: File): Unit = {
+      val tasks = dir.listFiles().map { file =>
+        file.getName.toInt -> Files.readString(file.toPath).split(",").map(_.toLong).toSeq
+      }.toMap
+      assert(tasks.keySet == Set(0, 1))
+      tasks.foreach {
+        case (partition, Seq(size, stageId, stageAttempt, partitionId, attempt, taskAttemptId)) =>
+          assert(size == NativeLibrary.layout().get("SparkDsTaskContext").longValue)
+          assert(partitionId == partition)
+          assert(stageId >= 0 && stageAttempt == 0 && attempt == 0 && taskAttemptId >= 0)
+      }
+      assert(tasks.values.map(_(5)).toSet.size == 2)
+    }
+    val readTasks = Utils.createTempDir()
+    checkRows(range(session, "end" -> "6", "task_path" -> readTasks.getPath).select("id"),
+      (0L until 6L).map(Row(_)))
+    check(readTasks)
+    val writeTasks = Utils.createTempDir()
+    session.range(6).repartition(2).write.format("native_sink")
+      .option("path", Utils.createTempDir().getPath)
+      .option("task_path", writeTasks.getPath)
+      .mode("append")
+      .save()
+    check(writeTasks)
+  }
+
+  nativeTest("tell a read that its task was killed") {
+    val session = newSession(defaultPackage)
+    val marker = new File(Utils.createTempDir(), "interrupted")
+    val df = range(session, "end" -> "10", "partitions" -> "1",
+      "wait_for_interrupt" -> marker.getPath)
+    val jobGroup = s"native-data-source-${UUID.randomUUID()}"
+    val error = new AtomicReference[Throwable]()
+    val thread = new Thread(() => {
+      session.sparkContext.setJobGroup(jobGroup, "a read that waits", interruptOnCancel = true)
+      try df.collect() catch {
+        case e: Throwable => error.set(e)
+      }
+    })
+    thread.start()
+    // The read waits until its task is killed, which it only learns from is_interrupted: Spark
+    // cannot interrupt native code.
+    eventually(timeout(1.minute)) {
+      assert(new File(marker.getPath + ".waiting").isFile)
+    }
+    session.sparkContext.cancelJobGroup(jobGroup)
+    thread.join(TimeUnit.MINUTES.toMillis(1))
+    assert(!thread.isAlive)
+    assert(error.get() != null)
+    // The job fails right away, and its task ends once the library sees that it was killed.
+    eventually(timeout(1.minute)) {
+      assert(marker.isFile && Files.readString(marker.toPath) == "interrupted")
     }
   }
 
@@ -1521,5 +1722,35 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
             "path" -> newerAbi.getCanonicalPath, "version" -> "2", "supported" -> "1"))
       }
     }
+  }
+
+  nativeTest("reject the libraries that spark_ds_init does not initialize") {
+    def check(library: File, prefix: String, reason: String): Unit = {
+      val pkg = createPackage(library, dataSources(prefix))
+      // The library stays loaded, and the error is the same when it is used again: Spark
+      // initializes a library only once.
+      (1 to 2).foreach { _ =>
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            newSession(pkg).read.format(prefix + "native_range").load()
+          },
+          condition = "INVALID_NATIVE_DATA_SOURCE_PACKAGE.INVALID_LIBRARY",
+          parameters = Map(
+            "path" -> pkg.getCanonicalPath,
+            "library" -> s"${NativePlatform.current}/${library.getName}",
+            "reason" -> reason))
+      }
+    }
+    val logAppender = new LogAppender("spark_ds_init")
+    withLogAppender(logAppender, loggerNames = Seq(classOf[NativeLibrary].getName)) {
+      check(failingInitLibrary, "if_", "spark_ds_init failed with the error code 1.")
+    }
+    // The library logged why it failed, once.
+    assert(logAppender.loggingEvents.count { event =>
+      event.getLevel == org.apache.logging.log4j.Level.ERROR &&
+        event.getMessage.getFormattedMessage.contains("injected failure in spark_ds_init")
+    } == 1)
+    check(noTableLibrary, "nt_", "spark_ds_init returned no function table.")
+    check(noInitLibrary, "ni_", "The library does not export the function spark_ds_init.")
   }
 }

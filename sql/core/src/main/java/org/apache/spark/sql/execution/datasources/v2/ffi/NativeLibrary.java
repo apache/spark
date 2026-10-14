@@ -24,11 +24,18 @@ import java.lang.reflect.Array;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BooleanSupplier;
 
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.unsafe.Platform;
 
 /**
@@ -37,17 +44,20 @@ import org.apache.spark.unsafe.Platform;
  * and Memory (FFM) API of Java 22 and later.
  * <p>
  * Spark compiles for Java 17, where the FFM API does not exist, so the API is only reached
- * through method handles, looked up once when the first library is loaded. Each function of a
- * library is bound to a method handle that takes and returns primitive values only, with
- * pointers as {@code long} addresses, so the calls themselves use no reflection. The memory that
- * Spark passes to the library is allocated with {@link Platform}.
+ * through method handles, looked up once when the first library is loaded. The library exports
+ * {@code spark_ds_init}, which returns its table of functions, {@code SparkDsLibrary}. Each
+ * function of the table is bound to a method handle that takes and returns primitive values only,
+ * with pointers as {@code long} addresses, so the calls themselves use no reflection. The memory
+ * that Spark passes to the library is allocated with {@link Platform}, at the offsets of the
+ * structs of the header, which {@link #layout()} lists for the tests.
  * <p>
- * Each library is looked up separately, so all the libraries can export the same functions.
- * Calling a function that the library does not export throws {@link MissingFunctionException}. A
- * function that fails throws a {@link RuntimeException} with the message of
- * {@code spark_ds_last_error}.
+ * Calling a function that the library leaves NULL in its table throws
+ * {@link MissingFunctionException}. A function that fails throws a {@link RuntimeException} with
+ * the message of {@code last_error}.
  */
 final class NativeLibrary {
+
+  private static final SparkLogger LOGGER = SparkLoggerFactory.getLogger(NativeLibrary.class);
 
   /** The version of the interface that Spark supports, {@code SPARK_DS_ABI_VERSION}. */
   static final int ABI_VERSION = 1;
@@ -60,86 +70,158 @@ final class NativeLibrary {
     return Runtime.version().feature() >= MINIMUM_JAVA_VERSION;
   }
 
+  // The capabilities of a data source, SPARK_DS_BATCH_READ and the others.
+  static final long BATCH_READ = 1;
+  static final long MICRO_BATCH_READ = 2;
+  static final long BATCH_WRITE = 4;
+  static final long STREAMING_WRITE = 8;
+  static final long TRUNCATE = 16;
+
+  // The modes of a write, SPARK_DS_WRITE_APPEND and SPARK_DS_WRITE_TRUNCATE.
+  static final int WRITE_APPEND = 0;
+  static final int WRITE_TRUNCATE = 1;
+
+  /** A predicate that the reader does not use, SPARK_DS_PREDICATE_UNUSED. */
+  static final int PREDICATE_UNUSED = 0;
+
   // The C types of the parameters and the results of the functions.
-  private enum C { VOID, BOOL, INT32, INT64, POINTER }
+  private enum C { VOID, BOOL, I32, I64, PTR }
 
-  private final MethodHandle lastError;
-  private final MethodHandle abiVersion;
-  private final MethodHandle create;
-  private final MethodHandle schema;
-  private final MethodHandle createReader;
-  private final MethodHandle createStreamReader;
-  private final MethodHandle createWriter;
-  private final MethodHandle createStreamWriter;
-  private final MethodHandle close;
-  private final MethodHandle pushPredicates;
-  private final MethodHandle pushLimit;
-  private final MethodHandle pruneColumns;
-  private final MethodHandle partitions;
-  private final MethodHandle serializeReader;
-  private final MethodHandle closeReader;
-  private final MethodHandle initialOffset;
-  private final MethodHandle latestOffset;
-  private final MethodHandle streamPartitions;
-  private final MethodHandle serializeStreamReader;
-  private final MethodHandle commitOffset;
-  private final MethodHandle closeStreamReader;
-  private final MethodHandle read;
-  private final MethodHandle serializeWriter;
-  private final MethodHandle commit;
-  private final MethodHandle abort;
-  private final MethodHandle closeWriter;
-  private final MethodHandle createDataWriter;
-  private final MethodHandle write;
-  private final MethodHandle commitDataWriter;
-  private final MethodHandle abortDataWriter;
+  /** The functions of the table {@code SparkDsLibrary}, in their order in the table. */
+  enum Function {
+    LAST_ERROR("last_error", C.PTR),
+    CREATE("create", C.I32, C.PTR, C.PTR, C.PTR, C.I64, C.PTR, C.PTR),
+    SCHEMA("schema", C.I32, C.PTR, C.PTR),
+    CREATE_READER("create_reader", C.I32, C.PTR, C.PTR, C.PTR),
+    CREATE_STREAM_READER("create_stream_reader", C.I32, C.PTR, C.PTR, C.PTR),
+    CREATE_WRITER("create_writer", C.I32, C.PTR, C.PTR, C.PTR, C.PTR),
+    CLOSE("close", C.VOID, C.PTR),
+    PUSH_PREDICATES("push_predicates", C.I32, C.PTR, C.PTR, C.I64, C.PTR),
+    PUSH_LIMIT("push_limit", C.I32, C.PTR, C.I32, C.PTR),
+    PRUNE_COLUMNS("prune_columns", C.I32, C.PTR, C.PTR, C.I64, C.PTR),
+    PARTITIONS("partitions", C.I32, C.PTR, C.PTR, C.PTR),
+    SERIALIZE_READER("serialize_reader", C.I32, C.PTR, C.PTR, C.PTR),
+    CLOSE_READER("close_reader", C.VOID, C.PTR),
+    INITIAL_OFFSET("initial_offset", C.I32, C.PTR, C.PTR, C.PTR),
+    LATEST_OFFSET("latest_offset", C.I32, C.PTR, C.PTR, C.PTR),
+    STREAM_PARTITIONS("stream_partitions", C.I32, C.PTR, C.PTR, C.PTR, C.PTR, C.PTR),
+    SERIALIZE_STREAM_READER("serialize_stream_reader", C.I32, C.PTR, C.PTR, C.PTR),
+    COMMIT_OFFSET("commit_offset", C.I32, C.PTR, C.PTR),
+    CLOSE_STREAM_READER("close_stream_reader", C.VOID, C.PTR),
+    READ("read", C.I32, C.PTR, C.PTR, C.I64, C.PTR, C.I64, C.PTR),
+    SERIALIZE_WRITER("serialize_writer", C.I32, C.PTR, C.PTR, C.PTR),
+    COMMIT("commit", C.I32, C.PTR, C.I64, C.PTR, C.PTR, C.I64),
+    ABORT("abort", C.I32, C.PTR, C.I64, C.PTR, C.PTR, C.I64),
+    CLOSE_WRITER("close_writer", C.VOID, C.PTR),
+    CREATE_DATA_WRITER("create_data_writer", C.I32, C.PTR, C.PTR, C.I64, C.I64, C.PTR),
+    WRITE("write", C.I32, C.PTR, C.PTR, C.PTR),
+    COMMIT_DATA_WRITER("commit_data_writer", C.I32, C.PTR, C.PTR, C.PTR),
+    ABORT_DATA_WRITER("abort_data_writer", C.I32, C.PTR),
+    CLOSE_DATA_WRITER("close_data_writer", C.VOID, C.PTR);
 
-  private NativeLibrary(Object lookup) throws Throwable {
-    C i32 = C.INT32;
-    C i64 = C.INT64;
-    C ptr = C.POINTER;
-    lastError = bind(lookup, "spark_ds_last_error", ptr);
-    abiVersion = bind(lookup, "spark_ds_abi_version", i32);
-    create = bind(lookup, "spark_ds_create", i32, ptr, ptr, ptr, i64, ptr);
-    schema = bind(lookup, "spark_ds_schema", i32, ptr, ptr);
-    createReader = bind(lookup, "spark_ds_create_reader", i32, ptr, ptr, ptr);
-    createStreamReader = bind(lookup, "spark_ds_create_stream_reader", i32, ptr, ptr, ptr);
-    createWriter = bind(lookup, "spark_ds_create_writer", i32, ptr, ptr, C.BOOL, ptr);
-    createStreamWriter =
-      bind(lookup, "spark_ds_create_stream_writer", i32, ptr, ptr, C.BOOL, ptr, ptr);
-    close = bind(lookup, "spark_ds_close", C.VOID, ptr);
-    pushPredicates = bind(lookup, "spark_ds_push_predicates", i32, ptr, ptr, i64, ptr);
-    pushLimit = bind(lookup, "spark_ds_push_limit", i32, ptr, i32, ptr);
-    pruneColumns = bind(lookup, "spark_ds_prune_columns", i32, ptr, ptr, i64, ptr);
-    partitions = bind(lookup, "spark_ds_partitions", i32, ptr, ptr, ptr);
-    serializeReader = bind(lookup, "spark_ds_serialize_reader", i32, ptr, ptr, ptr);
-    closeReader = bind(lookup, "spark_ds_close_reader", C.VOID, ptr);
-    initialOffset = bind(lookup, "spark_ds_initial_offset", i32, ptr, ptr, ptr);
-    latestOffset = bind(lookup, "spark_ds_latest_offset", i32, ptr, ptr, ptr);
-    streamPartitions =
-      bind(lookup, "spark_ds_stream_partitions", i32, ptr, ptr, ptr, ptr, ptr);
-    serializeStreamReader =
-      bind(lookup, "spark_ds_serialize_stream_reader", i32, ptr, ptr, ptr);
-    commitOffset = bind(lookup, "spark_ds_commit_offset", i32, ptr, ptr);
-    closeStreamReader = bind(lookup, "spark_ds_close_stream_reader", C.VOID, ptr);
-    read = bind(lookup, "spark_ds_read", i32, ptr, i64, ptr, i64, ptr);
-    serializeWriter = bind(lookup, "spark_ds_serialize_writer", i32, ptr, ptr, ptr);
-    commit = bind(lookup, "spark_ds_commit", i32, ptr, i64, ptr, ptr, i64);
-    abort = bind(lookup, "spark_ds_abort", i32, ptr, i64, ptr, ptr, i64);
-    closeWriter = bind(lookup, "spark_ds_close_writer", C.VOID, ptr);
-    createDataWriter =
-      bind(lookup, "spark_ds_create_data_writer", i32, ptr, i64, i32, i64, i64, ptr);
-    write = bind(lookup, "spark_ds_write", i32, ptr, ptr, ptr);
-    commitDataWriter = bind(lookup, "spark_ds_commit_data_writer", i32, ptr, ptr, ptr);
-    abortDataWriter = bind(lookup, "spark_ds_abort_data_writer", i32, ptr);
+    /** The name of the field of the function in the table. */
+    final String fieldName;
+    private final C result;
+    private final C[] parameters;
+
+    Function(String fieldName, C result, C... parameters) {
+      this.fieldName = fieldName;
+      this.result = result;
+      this.parameters = parameters;
+    }
+
+    /** The offset of the function in the table, after the size and the version of the table. */
+    long offset() {
+      return TABLE_FUNCTIONS + 8L * ordinal();
+    }
+  }
+
+  // The layouts of the structs of the header, on the 64-bit platforms that Spark supports. Each
+  // struct starts with its size.
+  private static final long TABLE_ABI_VERSION = 8;
+  private static final long TABLE_FUNCTIONS = 16;
+  private static final long HOST_SIZE = 32;
+  private static final long HOST_ABI_VERSION = 8;
+  private static final long HOST_SPARK_VERSION = 16;
+  private static final long HOST_LOG = 24;
+  private static final long TASK_SIZE = 40;
+  private static final long TASK_STAGE_ID = 8;
+  private static final long TASK_STAGE_ATTEMPT_NUMBER = 12;
+  private static final long TASK_PARTITION_ID = 16;
+  private static final long TASK_ATTEMPT_NUMBER = 20;
+  private static final long TASK_ATTEMPT_ID = 24;
+  private static final long TASK_IS_INTERRUPTED = 32;
+  private static final long WRITE_INFO_SIZE = 24;
+  private static final long WRITE_INFO_MODE = 8;
+  private static final long WRITE_INFO_QUERY_ID = 16;
+
+  /**
+   * The offsets of the fields of the structs that Spark reads or writes, by {@code struct.field},
+   * and the sizes of the structs, by {@code struct}, for the tests to compare with the header.
+   */
+  static Map<String, Long> layout() {
+    Map<String, Long> layout = new LinkedHashMap<>();
+    layout.put("SparkDsLibrary", TABLE_FUNCTIONS + 8L * Function.values().length);
+    layout.put("SparkDsLibrary.size", 0L);
+    layout.put("SparkDsLibrary.abi_version", TABLE_ABI_VERSION);
+    for (Function function : Function.values()) {
+      layout.put("SparkDsLibrary." + function.fieldName, function.offset());
+    }
+    layout.put("SparkDsHost", HOST_SIZE);
+    layout.put("SparkDsHost.size", 0L);
+    layout.put("SparkDsHost.abi_version", HOST_ABI_VERSION);
+    layout.put("SparkDsHost.spark_version", HOST_SPARK_VERSION);
+    layout.put("SparkDsHost.log", HOST_LOG);
+    layout.put("SparkDsTaskContext", TASK_SIZE);
+    layout.put("SparkDsTaskContext.size", 0L);
+    layout.put("SparkDsTaskContext.stage_id", TASK_STAGE_ID);
+    layout.put("SparkDsTaskContext.stage_attempt_number", TASK_STAGE_ATTEMPT_NUMBER);
+    layout.put("SparkDsTaskContext.partition_id", TASK_PARTITION_ID);
+    layout.put("SparkDsTaskContext.attempt_number", TASK_ATTEMPT_NUMBER);
+    layout.put("SparkDsTaskContext.task_attempt_id", TASK_ATTEMPT_ID);
+    layout.put("SparkDsTaskContext.is_interrupted", TASK_IS_INTERRUPTED);
+    layout.put("SparkDsWriteInfo", WRITE_INFO_SIZE);
+    layout.put("SparkDsWriteInfo.size", 0L);
+    layout.put("SparkDsWriteInfo.mode", WRITE_INFO_MODE);
+    layout.put("SparkDsWriteInfo.query_id", WRITE_INFO_QUERY_ID);
+    return layout;
+  }
+
+  private final int abiVersion;
+  // The functions of the table, by ordinal, null for the functions that the library leaves NULL.
+  private final MethodHandle[] functions = new MethodHandle[Function.values().length];
+
+  private NativeLibrary(long table) throws Throwable {
+    long size = Platform.getLong(null, table);
+    if (size < TABLE_FUNCTIONS) {
+      throw new LoadException(
+        "spark_ds_init returned a function table with a size of " + size + " bytes.", null, true);
+    }
+    abiVersion = Platform.getInt(null, table + TABLE_ABI_VERSION);
+    // The table of another version of the interface has another layout. Only the functions that
+    // fit in the size of the table are read: the table of a library built against an earlier
+    // header ends before the functions that were added later.
+    if (abiVersion == ABI_VERSION) {
+      for (Function function : Function.values()) {
+        if (function.offset() + 8 <= size) {
+          long address = Platform.getLong(null, table + function.offset());
+          if (address != 0) {
+            functions[function.ordinal()] = Ffm.downcall(
+              Ffm.OF_ADDRESS.invoke(address), function.result, function.parameters);
+          }
+        }
+      }
+    }
   }
 
   /**
-   * Loads the library at the given path. The library stays loaded until the JVM exits.
+   * Loads the library at the given path, and gets its table with {@code spark_ds_init}. The
+   * library stays loaded until the JVM exits.
    *
+   * @param sparkVersion the version of Spark, which the library gets in {@code SparkDsHost}
    * @throws LoadException if the library cannot be loaded
    */
-  static NativeLibrary load(String path) throws Throwable {
+  static NativeLibrary load(String path, String sparkVersion) throws Throwable {
     if (!isSupported()) {
       throw new UnsupportedOperationException(
         "Native data sources require Java " + MINIMUM_JAVA_VERSION + " or later.");
@@ -156,36 +238,30 @@ final class NativeLibrary {
       throw new LoadException(
         "Cannot use the Foreign Function and Memory API: " + rootCause(e), e);
     }
-    return new NativeLibrary(lookup);
-  }
-
-  /**
-   * Binds a function of the library to a method handle whose parameters and result have the
-   * Java types of the given C types, with {@code long} for pointers. Returns null if the library
-   * does not export the function.
-   */
-  private static MethodHandle bind(Object lookup, String name, C result, C... parameters)
-      throws Throwable {
-    Optional<?> symbol = (Optional<?>) Ffm.FIND.invoke(lookup, name);
-    if (symbol.isEmpty()) {
-      return null;
+    Optional<?> init = (Optional<?>) Ffm.FIND.invoke(lookup, "spark_ds_init");
+    if (init.isEmpty()) {
+      throw new LoadException(
+        "The library does not export the function spark_ds_init.", null, true);
     }
-    Object layouts = Ffm.layouts(parameters);
-    Object descriptor = result == C.VOID
-      ? Ffm.FUNCTION_OF_VOID.invoke(layouts)
-      : Ffm.FUNCTION_OF.invoke(Ffm.layout(result), layouts);
-    MethodHandle handle = (MethodHandle) Ffm.DOWNCALL.invoke(
-      Ffm.LINKER, symbol.get(), descriptor, Ffm.NO_OPTIONS);
-    // Passes and returns the pointers, which are MemorySegments in the FFM API, as addresses.
-    for (int i = 0; i < parameters.length; i++) {
-      if (parameters[i] == C.POINTER) {
-        handle = MethodHandles.filterArguments(handle, i, Ffm.OF_ADDRESS);
+    MethodHandle initFunction = Ffm.downcall(init.get(), C.I32, C.PTR, C.PTR);
+    // The library may keep the host until the JVM exits, even if spark_ds_init fails.
+    long host = Ffm.host(path, sparkVersion);
+    long out = Platform.allocateMemory(8);
+    try {
+      Platform.putLong(null, out, 0);
+      int status = (int) initFunction.invokeExact(host, out);
+      if (status != 0) {
+        throw new LoadException(
+          "spark_ds_init failed with the error code " + status + ".", null, true);
       }
+      long table = Platform.getLong(null, out);
+      if (table == 0) {
+        throw new LoadException("spark_ds_init returned no function table.", null, true);
+      }
+      return new NativeLibrary(table);
+    } finally {
+      Platform.freeMemory(out);
     }
-    if (result == C.POINTER) {
-      handle = MethodHandles.filterReturnValue(handle, Ffm.ADDRESS_OF);
-    }
-    return handle;
   }
 
   /** The method handles of the FFM API, initialized when the first library is loaded. */
@@ -197,6 +273,7 @@ final class NativeLibrary {
     static final MethodHandle LIBRARY_LOOKUP;
     static final MethodHandle FIND;
     static final MethodHandle DOWNCALL;
+    static final MethodHandle UPCALL;
     static final MethodHandle FUNCTION_OF;
     static final MethodHandle FUNCTION_OF_VOID;
     // (long) -> MemorySegment and (MemorySegment) -> long.
@@ -206,8 +283,13 @@ final class NativeLibrary {
     static final Object INT32;
     static final Object INT64;
     static final Object POINTER;
-    // The address of the C function SparkDsSink, which calls NativeLibrary.sink.
+    // NativeLibrary.log, which SparkDsHost.log calls with the path of its library.
+    static final MethodHandle LOG;
+    // The addresses of the C functions that call Java, which live as long as the JVM:
+    // SparkDsSink, which calls NativeLibrary.sink, and SparkDsTaskContext.is_interrupted, which
+    // calls NativeLibrary.isInterrupted.
     static final long SINK;
+    static final long IS_INTERRUPTED;
 
     static {
       try {
@@ -237,6 +319,9 @@ final class NativeLibrary {
         DOWNCALL = lookup.findVirtual(linker, "downcallHandle",
           MethodType.methodType(MethodHandle.class, segment, descriptor, options))
           .asFixedArity();
+        UPCALL = lookup.findVirtual(linker, "upcallStub",
+          MethodType.methodType(segment, MethodHandle.class, descriptor, arena, options))
+          .asFixedArity();
         FUNCTION_OF = lookup.findStatic(descriptor, "of",
           MethodType.methodType(descriptor, layout, layoutArray)).asFixedArity();
         FUNCTION_OF_VOID = lookup.findStatic(descriptor, "ofVoid",
@@ -249,17 +334,16 @@ final class NativeLibrary {
         INT64 = valueLayout.getField("JAVA_LONG").get(null);
         POINTER = valueLayout.getField("ADDRESS").get(null);
 
-        // The upcall stub of the sink, which lives as long as the JVM.
-        MethodHandle target = lookup.findStatic(NativeLibrary.class, "sink",
-          MethodType.methodType(void.class, long.class, long.class, long.class));
-        target = MethodHandles.filterArguments(target, 0, ADDRESS_OF, ADDRESS_OF);
-        Object sinkDescriptor =
-          FUNCTION_OF_VOID.invoke(layouts(C.POINTER, C.POINTER, C.INT64));
-        Object stub = lookup.findVirtual(linker, "upcallStub",
-          MethodType.methodType(segment, MethodHandle.class, descriptor, arena, options))
-          .asFixedArity()
-          .invoke(LINKER, target, sinkDescriptor, GLOBAL_ARENA, NO_OPTIONS);
-        SINK = (long) ADDRESS_OF.invoke(stub);
+        LOG = lookup.findStatic(NativeLibrary.class, "log",
+          MethodType.methodType(void.class, String.class, int.class, long.class));
+        SINK = upcall(
+          lookup.findStatic(NativeLibrary.class, "sink",
+            MethodType.methodType(void.class, long.class, long.class, long.class)),
+          C.VOID, C.PTR, C.PTR, C.I64);
+        IS_INTERRUPTED = upcall(
+          lookup.findStatic(NativeLibrary.class, "isInterrupted",
+            MethodType.methodType(boolean.class, long.class)),
+          C.BOOL, C.PTR);
       } catch (Throwable e) {
         // The message names the cause, because the JVM only keeps this message for the later
         // uses of the class.
@@ -267,23 +351,81 @@ final class NativeLibrary {
       }
     }
 
-    /** Returns a MemoryLayout[] with the layouts of the given types. */
-    static Object layouts(C... types) {
-      Object layouts = Array.newInstance(LAYOUT_CLASS, types.length);
-      for (int i = 0; i < types.length; i++) {
-        Array.set(layouts, i, layout(types[i]));
+    /** Returns the FunctionDescriptor of a C function with the given types. */
+    static Object descriptor(C result, C... parameters) throws Throwable {
+      Object layouts = Array.newInstance(LAYOUT_CLASS, parameters.length);
+      for (int i = 0; i < parameters.length; i++) {
+        Array.set(layouts, i, layout(parameters[i]));
       }
-      return layouts;
+      return result == C.VOID
+        ? FUNCTION_OF_VOID.invoke(layouts)
+        : FUNCTION_OF.invoke(layout(result), layouts);
     }
 
     static Object layout(C type) {
       return switch (type) {
         case BOOL -> BOOL;
-        case INT32 -> INT32;
-        case INT64 -> INT64;
-        case POINTER -> POINTER;
+        case I32 -> INT32;
+        case I64 -> INT64;
+        case PTR -> POINTER;
         case VOID -> throw new IllegalArgumentException("void has no layout");
       };
+    }
+
+    /**
+     * Binds the C function at the given address, a MemorySegment, to a method handle whose
+     * parameters and result have the Java types of the given C types, with {@code long} for
+     * pointers.
+     */
+    static MethodHandle downcall(Object address, C result, C... parameters) throws Throwable {
+      MethodHandle handle = (MethodHandle) DOWNCALL.invoke(
+        LINKER, address, descriptor(result, parameters), NO_OPTIONS);
+      // Passes and returns the pointers, which are MemorySegments in the FFM API, as addresses.
+      for (int i = 0; i < parameters.length; i++) {
+        if (parameters[i] == C.PTR) {
+          handle = MethodHandles.filterArguments(handle, i, OF_ADDRESS);
+        }
+      }
+      if (result == C.PTR) {
+        handle = MethodHandles.filterReturnValue(handle, ADDRESS_OF);
+      }
+      return handle;
+    }
+
+    /**
+     * Returns the address of a C function with the given types that calls `target`, whose
+     * parameters have the Java types of the C types, with {@code long} for pointers. The
+     * function lives as long as the JVM.
+     */
+    static long upcall(MethodHandle target, C result, C... parameters) throws Throwable {
+      for (int i = 0; i < parameters.length; i++) {
+        if (parameters[i] == C.PTR) {
+          target = MethodHandles.filterArguments(target, i, ADDRESS_OF);
+        }
+      }
+      Object stub = UPCALL.invoke(
+        LINKER, target, descriptor(result, parameters), GLOBAL_ARENA, NO_OPTIONS);
+      return (long) ADDRESS_OF.invoke(stub);
+    }
+
+    /**
+     * Allocates the SparkDsHost of a library. The library may keep it until the JVM exits, so it
+     * is never freed.
+     */
+    static long host(String path, String sparkVersion) throws Throwable {
+      long log = upcall(MethodHandles.insertArguments(LOG, 0, path), C.VOID, C.I32, C.PTR);
+      byte[] version = sparkVersion.getBytes(StandardCharsets.UTF_8);
+      long versionAddress = Platform.allocateMemory(version.length + 1L);
+      Platform.copyMemory(
+        version, Platform.BYTE_ARRAY_OFFSET, null, versionAddress, version.length);
+      Platform.putByte(null, versionAddress + version.length, (byte) 0);
+      long host = Platform.allocateMemory(HOST_SIZE);
+      Platform.setMemory(host, (byte) 0, HOST_SIZE);
+      Platform.putLong(null, host, HOST_SIZE);
+      Platform.putInt(null, host + HOST_ABI_VERSION, ABI_VERSION);
+      Platform.putLong(null, host + HOST_SPARK_VERSION, versionAddress);
+      Platform.putLong(null, host + HOST_LOG, log);
+      return host;
     }
   }
 
@@ -295,17 +437,50 @@ final class NativeLibrary {
     return cause;
   }
 
-  /** Thrown when a library cannot be loaded. */
+  /** Thrown when a library cannot be loaded, or cannot be used. */
   static final class LoadException extends RuntimeException {
+    /**
+     * Whether the library was loaded, in which case it stays loaded: Spark found that it cannot
+     * use it afterwards, for example because {@code spark_ds_init} failed.
+     */
+    final boolean loaded;
+
     LoadException(String message, Throwable cause) {
+      this(message, cause, false);
+    }
+
+    LoadException(String message, Throwable cause, boolean loaded) {
       super(message, cause);
+      this.loaded = loaded;
     }
   }
 
-  /** Thrown when a function is called that the library does not export, with its name. */
+  /** Thrown when a function is called that the library leaves NULL in its table, with its name. */
   static final class MissingFunctionException extends RuntimeException {
     MissingFunctionException(String name) {
       super(name);
+    }
+  }
+
+  /**
+   * Called by the library, through {@code SparkDsHost.log}, with the path of the library. It must
+   * not throw: an exception thrown by an upcall crashes the JVM.
+   */
+  private static void log(String path, int level, long message) {
+    try {
+      String text = message == 0 ? "" : new String(readCString(message), StandardCharsets.UTF_8);
+      switch (level) {
+        case 1 -> LOGGER.error("Native data source library {}: {}",
+          MDC.of(LogKeys.PATH, path), MDC.of(LogKeys.MESSAGE, text));
+        case 2 -> LOGGER.warn("Native data source library {}: {}",
+          MDC.of(LogKeys.PATH, path), MDC.of(LogKeys.MESSAGE, text));
+        case 4 -> LOGGER.debug("Native data source library {}: {}", path, text);
+        case 5 -> LOGGER.trace("Native data source library {}: {}", path, text);
+        default -> LOGGER.info("Native data source library {}: {}",
+          MDC.of(LogKeys.PATH, path), MDC.of(LogKeys.MESSAGE, text));
+      }
+    } catch (Throwable e) {
+      // The message is lost.
     }
   }
 
@@ -313,214 +488,233 @@ final class NativeLibrary {
   // Calls
   // ---------------------------------------------------------------------------------------------
 
-  private static MethodHandle require(MethodHandle function, String name) {
-    if (function == null) {
-      throw new MissingFunctionException(name);
-    }
-    return function;
-  }
-
-  /** Throws the error that the library reported if a function failed. */
-  private void check(int status, String name) throws Throwable {
-    if (status == 0) {
-      return;
-    }
-    long address = lastError == null ? 0 : (long) lastError.invokeExact();
-    String message = address == 0 ? "" : new String(readCString(address), StandardCharsets.UTF_8);
-    throw new RuntimeException(message.isEmpty()
-      ? name + " failed with the error code " + status + "."
-      : message);
-  }
-
-  private static long readHandle(long out, String name) {
-    long handle = Platform.getLong(null, out);
-    if (handle == 0) {
-      throw new IllegalStateException(name + " returned a NULL handle.");
+  private MethodHandle function(Function function) {
+    MethodHandle handle = functions[function.ordinal()];
+    if (handle == null) {
+      throw new MissingFunctionException(function.fieldName);
     }
     return handle;
   }
 
-  int abiVersion() throws Throwable {
-    return (int) require(abiVersion, "spark_ds_abi_version").invokeExact();
+  /** Throws the error that the library reported if a function failed. */
+  private void check(int status, Function function) throws Throwable {
+    if (status == 0) {
+      return;
+    }
+    MethodHandle lastError = functions[Function.LAST_ERROR.ordinal()];
+    long address = lastError == null ? 0 : (long) lastError.invokeExact();
+    String message = address == 0 ? "" : new String(readCString(address), StandardCharsets.UTF_8);
+    throw new RuntimeException(message.isEmpty()
+      ? function.fieldName + " failed with the error code " + status + "."
+      : message);
   }
 
-  long createDataSource(String name, String[] optionKeys, String[] optionValues)
+  private static long readHandle(long out, Function function) {
+    long handle = Platform.getLong(null, out);
+    if (handle == 0) {
+      throw new IllegalStateException(function.fieldName + " returned a NULL handle.");
+    }
+    return handle;
+  }
+
+  /** The version of the interface that the table of the library implements. */
+  int abiVersion() {
+    return abiVersion;
+  }
+
+  /** Whether the library implements the function, which it does not leave NULL in its table. */
+  boolean hasFunction(Function function) {
+    return functions[function.ordinal()] != null;
+  }
+
+  /** A data source handle, with the capabilities of the data source. */
+  static final class DataSourceHandle {
+    final long handle;
+    final long capabilities;
+
+    DataSourceHandle(long handle, long capabilities) {
+      this.handle = handle;
+      this.capabilities = capabilities;
+    }
+  }
+
+  DataSourceHandle createDataSource(String name, String[] optionKeys, String[] optionValues)
       throws Throwable {
-    MethodHandle f = require(create, "spark_ds_create");
+    MethodHandle f = function(Function.CREATE);
     try (Memory memory = new Memory()) {
+      long capabilities = memory.zeroed(8);
       long out = memory.zeroed(8);
       check((int) f.invokeExact(memory.string(name), memory.strings(optionKeys),
-        memory.strings(optionValues), (long) optionKeys.length, out), "spark_ds_create");
-      return readHandle(out, "spark_ds_create");
+        memory.strings(optionValues), (long) optionKeys.length, capabilities, out),
+        Function.CREATE);
+      return new DataSourceHandle(
+        readHandle(out, Function.CREATE), Platform.getLong(null, capabilities));
     }
   }
 
   void schema(long dataSource, long schemaAddress) throws Throwable {
-    check((int) require(schema, "spark_ds_schema").invokeExact(dataSource, schemaAddress),
-      "spark_ds_schema");
+    check((int) function(Function.SCHEMA).invokeExact(dataSource, schemaAddress),
+      Function.SCHEMA);
   }
 
   long createReader(long dataSource, long schemaAddress) throws Throwable {
-    return createWithSchema(createReader, "spark_ds_create_reader", dataSource, schemaAddress);
+    return createWithSchema(Function.CREATE_READER, dataSource, schemaAddress);
   }
 
   long createStreamReader(long dataSource, long schemaAddress) throws Throwable {
-    return createWithSchema(
-      createStreamReader, "spark_ds_create_stream_reader", dataSource, schemaAddress);
+    return createWithSchema(Function.CREATE_STREAM_READER, dataSource, schemaAddress);
   }
 
-  private long createWithSchema(
-      MethodHandle function, String name, long dataSource, long schemaAddress) throws Throwable {
-    MethodHandle f = require(function, name);
-    try (Memory memory = new Memory()) {
-      long out = memory.zeroed(8);
-      check((int) f.invokeExact(dataSource, schemaAddress, out), name);
-      return readHandle(out, name);
-    }
-  }
-
-  long createWriter(long dataSource, long schemaAddress, boolean overwrite) throws Throwable {
-    MethodHandle f = require(createWriter, "spark_ds_create_writer");
-    try (Memory memory = new Memory()) {
-      long out = memory.zeroed(8);
-      check((int) f.invokeExact(dataSource, schemaAddress, overwrite, out),
-        "spark_ds_create_writer");
-      return readHandle(out, "spark_ds_create_writer");
-    }
-  }
-
-  long createStreamWriter(long dataSource, long schemaAddress, boolean overwrite, String queryId)
+  private long createWithSchema(Function function, long dataSource, long schemaAddress)
       throws Throwable {
-    MethodHandle f = require(createStreamWriter, "spark_ds_create_stream_writer");
+    MethodHandle f = function(function);
     try (Memory memory = new Memory()) {
       long out = memory.zeroed(8);
-      check((int) f.invokeExact(dataSource, schemaAddress, overwrite, memory.string(queryId), out),
-        "spark_ds_create_stream_writer");
-      return readHandle(out, "spark_ds_create_stream_writer");
+      check((int) f.invokeExact(dataSource, schemaAddress, out), function);
+      return readHandle(out, function);
+    }
+  }
+
+  /**
+   * Creates a writer.
+   *
+   * @param mode {@link #WRITE_APPEND} or {@link #WRITE_TRUNCATE}
+   * @param queryId the ID of the streaming query of a streaming write, or null for a batch write
+   */
+  long createWriter(long dataSource, long schemaAddress, int mode, String queryId)
+      throws Throwable {
+    MethodHandle f = function(Function.CREATE_WRITER);
+    try (Memory memory = new Memory()) {
+      long info = memory.zeroed(WRITE_INFO_SIZE);
+      Platform.putLong(null, info, WRITE_INFO_SIZE);
+      Platform.putInt(null, info + WRITE_INFO_MODE, mode);
+      Platform.putLong(
+        null, info + WRITE_INFO_QUERY_ID, queryId == null ? 0 : memory.string(queryId));
+      long out = memory.zeroed(8);
+      check((int) f.invokeExact(dataSource, schemaAddress, info, out), Function.CREATE_WRITER);
+      return readHandle(out, Function.CREATE_WRITER);
     }
   }
 
   void closeDataSource(long dataSource) throws Throwable {
-    require(close, "spark_ds_close").invokeExact(dataSource);
+    function(Function.CLOSE).invokeExact(dataSource);
   }
 
-  boolean[] pushPredicates(long reader, String[] predicates) throws Throwable {
-    MethodHandle f = require(pushPredicates, "spark_ds_push_predicates");
+  /** Returns how the reader uses each predicate, as SPARK_DS_PREDICATE_* values. */
+  int[] pushPredicates(long reader, String[] predicates) throws Throwable {
+    MethodHandle f = function(Function.PUSH_PREDICATES);
     try (Memory memory = new Memory()) {
-      long evaluated = memory.zeroed(Math.max(1, predicates.length));
+      long uses = memory.zeroed(4L * Math.max(1, predicates.length));
       check((int) f.invokeExact(reader, memory.strings(predicates), (long) predicates.length,
-        evaluated), "spark_ds_push_predicates");
-      boolean[] result = new boolean[predicates.length];
+        uses), Function.PUSH_PREDICATES);
+      int[] result = new int[predicates.length];
       for (int i = 0; i < result.length; i++) {
-        result[i] = Platform.getByte(null, evaluated + i) != 0;
+        result[i] = Platform.getInt(null, uses + 4L * i);
       }
       return result;
     }
   }
 
   boolean pushLimit(long reader, int limit) throws Throwable {
-    MethodHandle f = require(pushLimit, "spark_ds_push_limit");
+    MethodHandle f = function(Function.PUSH_LIMIT);
     try (Memory memory = new Memory()) {
       long applied = memory.zeroed(1);
-      check((int) f.invokeExact(reader, limit, applied), "spark_ds_push_limit");
+      check((int) f.invokeExact(reader, limit, applied), Function.PUSH_LIMIT);
       return Platform.getByte(null, applied) != 0;
     }
   }
 
   boolean pruneColumns(long reader, String[] columnNames) throws Throwable {
-    MethodHandle f = require(pruneColumns, "spark_ds_prune_columns");
+    MethodHandle f = function(Function.PRUNE_COLUMNS);
     try (Memory memory = new Memory()) {
       long pruned = memory.zeroed(1);
       check((int) f.invokeExact(reader, memory.strings(columnNames), (long) columnNames.length,
-        pruned), "spark_ds_prune_columns");
+        pruned), Function.PRUNE_COLUMNS);
       return Platform.getByte(null, pruned) != 0;
     }
   }
 
   byte[][] partitions(long reader) throws Throwable {
-    MethodHandle f = require(partitions, "spark_ds_partitions");
+    MethodHandle f = function(Function.PARTITIONS);
     try (Sink sink = new Sink()) {
-      check((int) f.invokeExact(reader, Ffm.SINK, sink.id), "spark_ds_partitions");
+      check((int) f.invokeExact(reader, Ffm.SINK, sink.id), Function.PARTITIONS);
       return sink.all();
     }
   }
 
   byte[] serializeReader(long reader) throws Throwable {
-    return serialize(serializeReader, "spark_ds_serialize_reader", reader);
+    return serialize(Function.SERIALIZE_READER, reader);
   }
 
   void closeReader(long reader) throws Throwable {
-    require(closeReader, "spark_ds_close_reader").invokeExact(reader);
+    function(Function.CLOSE_READER).invokeExact(reader);
   }
 
   String initialOffset(long streamReader) throws Throwable {
-    return offset(initialOffset, "spark_ds_initial_offset", streamReader);
+    return offset(Function.INITIAL_OFFSET, streamReader);
   }
 
   String latestOffset(long streamReader) throws Throwable {
-    return offset(latestOffset, "spark_ds_latest_offset", streamReader);
+    return offset(Function.LATEST_OFFSET, streamReader);
   }
 
-  private String offset(MethodHandle function, String name, long streamReader)
-      throws Throwable {
-    byte[] offset = serialize(function, name, streamReader);
+  private String offset(Function function, long streamReader) throws Throwable {
+    byte[] offset = serialize(function, streamReader);
     if (offset == null) {
-      throw new IllegalStateException(name + " returned no offset.");
+      throw new IllegalStateException(function.fieldName + " returned no offset.");
     }
     return new String(offset, StandardCharsets.UTF_8);
   }
 
   byte[][] streamPartitions(long streamReader, String start, String end) throws Throwable {
-    MethodHandle f = require(streamPartitions, "spark_ds_stream_partitions");
+    MethodHandle f = function(Function.STREAM_PARTITIONS);
     try (Memory memory = new Memory(); Sink sink = new Sink()) {
       check((int) f.invokeExact(streamReader, memory.string(start), memory.string(end),
-        Ffm.SINK, sink.id), "spark_ds_stream_partitions");
+        Ffm.SINK, sink.id), Function.STREAM_PARTITIONS);
       return sink.all();
     }
   }
 
   byte[] serializeStreamReader(long streamReader) throws Throwable {
-    return serialize(serializeStreamReader, "spark_ds_serialize_stream_reader", streamReader);
+    return serialize(Function.SERIALIZE_STREAM_READER, streamReader);
   }
 
   void commitOffset(long streamReader, String end) throws Throwable {
-    MethodHandle f = require(commitOffset, "spark_ds_commit_offset");
+    MethodHandle f = function(Function.COMMIT_OFFSET);
     try (Memory memory = new Memory()) {
-      check((int) f.invokeExact(streamReader, memory.string(end)), "spark_ds_commit_offset");
+      check((int) f.invokeExact(streamReader, memory.string(end)), Function.COMMIT_OFFSET);
     }
   }
 
   void closeStreamReader(long streamReader) throws Throwable {
-    require(closeStreamReader, "spark_ds_close_stream_reader").invokeExact(streamReader);
+    function(Function.CLOSE_STREAM_READER).invokeExact(streamReader);
   }
 
-  void read(byte[] readerState, byte[] partition, long streamAddress) throws Throwable {
-    MethodHandle f = require(read, "spark_ds_read");
+  void read(Task task, byte[] readerState, byte[] partition, long streamAddress)
+      throws Throwable {
+    MethodHandle f = function(Function.READ);
     try (Memory memory = new Memory()) {
-      check((int) f.invokeExact(memory.bytes(readerState), (long) readerState.length,
-        memory.bytes(partition), (long) partition.length, streamAddress), "spark_ds_read");
+      check((int) f.invokeExact(task.address, memory.bytes(readerState),
+        (long) readerState.length, memory.bytes(partition), (long) partition.length,
+        streamAddress), Function.READ);
     }
   }
 
   byte[] serializeWriter(long writer) throws Throwable {
-    return serialize(serializeWriter, "spark_ds_serialize_writer", writer);
+    return serialize(Function.SERIALIZE_WRITER, writer);
   }
 
   void commit(long writer, long epochId, byte[][] messages) throws Throwable {
-    finishWrite(commit, "spark_ds_commit", writer, epochId, messages);
+    finishWrite(Function.COMMIT, writer, epochId, messages);
   }
 
   void abort(long writer, long epochId, byte[][] messages) throws Throwable {
-    finishWrite(abort, "spark_ds_abort", writer, epochId, messages);
+    finishWrite(Function.ABORT, writer, epochId, messages);
   }
 
-  private void finishWrite(
-      MethodHandle function,
-      String name,
-      long writer,
-      long epochId,
-      byte[][] messages) throws Throwable {
-    MethodHandle f = require(function, name);
+  private void finishWrite(Function function, long writer, long epochId, byte[][] messages)
+      throws Throwable {
+    MethodHandle f = function(function);
     try (Memory memory = new Memory()) {
       long pointers = memory.zeroed(8L * Math.max(1, messages.length));
       long lengths = memory.zeroed(8L * Math.max(1, messages.length));
@@ -531,68 +725,70 @@ final class NativeLibrary {
         }
       }
       check((int) f.invokeExact(writer, epochId, pointers, lengths, (long) messages.length),
-        name);
+        function);
     }
   }
 
   void closeWriter(long writer) throws Throwable {
-    require(closeWriter, "spark_ds_close_writer").invokeExact(writer);
+    function(Function.CLOSE_WRITER).invokeExact(writer);
   }
 
-  long createDataWriter(byte[] writerState, int partitionId, long taskId, long epochId)
-      throws Throwable {
-    MethodHandle f = require(createDataWriter, "spark_ds_create_data_writer");
+  long createDataWriter(Task task, byte[] writerState, long epochId) throws Throwable {
+    MethodHandle f = function(Function.CREATE_DATA_WRITER);
     try (Memory memory = new Memory()) {
       long out = memory.zeroed(8);
-      check((int) f.invokeExact(memory.bytes(writerState), (long) writerState.length,
-        partitionId, taskId, epochId, out), "spark_ds_create_data_writer");
-      return readHandle(out, "spark_ds_create_data_writer");
+      check((int) f.invokeExact(task.address, memory.bytes(writerState),
+        (long) writerState.length, epochId, out), Function.CREATE_DATA_WRITER);
+      return readHandle(out, Function.CREATE_DATA_WRITER);
     }
   }
 
   void write(long dataWriter, long arrayAddress, long schemaAddress) throws Throwable {
-    check((int) require(write, "spark_ds_write").invokeExact(
-      dataWriter, arrayAddress, schemaAddress), "spark_ds_write");
+    check((int) function(Function.WRITE).invokeExact(dataWriter, arrayAddress, schemaAddress),
+      Function.WRITE);
   }
 
   /**
-   * Commits a data writer, whose handle the library releases when the commit succeeds. Then
-   * {@code released} runs right away, before the message is checked: if the message is invalid,
-   * the commit fails, but the handle must not be used again.
+   * Commits a data writer. Then {@code committed} runs right away, before the message is checked:
+   * if the message is invalid, the commit fails, but the data writer must not be aborted.
    */
-  byte[] commitDataWriter(long dataWriter, Runnable released) throws Throwable {
-    MethodHandle f = require(commitDataWriter, "spark_ds_commit_data_writer");
+  byte[] commitDataWriter(long dataWriter, Runnable committed) throws Throwable {
+    MethodHandle f = function(Function.COMMIT_DATA_WRITER);
     try (Sink sink = new Sink()) {
-      check((int) f.invokeExact(dataWriter, Ffm.SINK, sink.id), "spark_ds_commit_data_writer");
-      released.run();
-      byte[] message = single(sink, "spark_ds_commit_data_writer");
+      check((int) f.invokeExact(dataWriter, Ffm.SINK, sink.id), Function.COMMIT_DATA_WRITER);
+      committed.run();
+      byte[] message = single(sink, Function.COMMIT_DATA_WRITER);
       return message == null ? new byte[0] : message;
     }
   }
 
   void abortDataWriter(long dataWriter) throws Throwable {
-    check((int) require(abortDataWriter, "spark_ds_abort_data_writer").invokeExact(dataWriter),
-      "spark_ds_abort_data_writer");
+    check((int) function(Function.ABORT_DATA_WRITER).invokeExact(dataWriter),
+      Function.ABORT_DATA_WRITER);
+  }
+
+  void closeDataWriter(long dataWriter) throws Throwable {
+    function(Function.CLOSE_DATA_WRITER).invokeExact(dataWriter);
   }
 
   /**
    * Calls a function that returns a single byte array through a sink. Returns null if the
    * function does not call the sink.
    */
-  private byte[] serialize(MethodHandle function, String name, long handle) throws Throwable {
-    MethodHandle f = require(function, name);
+  private byte[] serialize(Function function, long handle) throws Throwable {
+    MethodHandle f = function(function);
     try (Sink sink = new Sink()) {
-      check((int) f.invokeExact(handle, Ffm.SINK, sink.id), name);
-      return single(sink, name);
+      check((int) f.invokeExact(handle, Ffm.SINK, sink.id), function);
+      return single(sink, function);
     }
   }
 
   /** Returns the single byte array that a function passed to the sink, or null if none. */
-  private static byte[] single(Sink sink, String name) throws Throwable {
+  private static byte[] single(Sink sink, Function function) throws Throwable {
     byte[][] values = sink.all();
     if (values.length > 1) {
       throw new IllegalStateException(
-        name + " returned " + values.length + " values instead of one.");
+        function.fieldName + " returned " + values.length + " values instead of one.");
     }
     return values.length == 0 ? null : values[0];
   }
@@ -650,6 +846,65 @@ final class NativeLibrary {
     byte[] bytes = new byte[length];
     Platform.copyMemory(null, address, bytes, Platform.BYTE_ARRAY_OFFSET, length);
     return bytes;
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Task contexts
+  // ---------------------------------------------------------------------------------------------
+
+  // Whether the task of each SparkDsTaskContext was killed, by the address of the struct.
+  private static final ConcurrentHashMap<Long, BooleanSupplier> tasks = new ConcurrentHashMap<>();
+
+  /**
+   * The {@code SparkDsTaskContext} of a task that reads a partition or writes data. The reader or
+   * the data writer closes it once the library no longer uses it, which frees it.
+   */
+  static final class Task implements AutoCloseable {
+    final long address;
+    private boolean closed;
+
+    Task(
+        int stageId,
+        int stageAttemptNumber,
+        int partitionId,
+        int attemptNumber,
+        long taskAttemptId,
+        BooleanSupplier interrupted) {
+      address = Platform.allocateMemory(TASK_SIZE);
+      Platform.setMemory(address, (byte) 0, TASK_SIZE);
+      Platform.putLong(null, address, TASK_SIZE);
+      Platform.putInt(null, address + TASK_STAGE_ID, stageId);
+      Platform.putInt(null, address + TASK_STAGE_ATTEMPT_NUMBER, stageAttemptNumber);
+      Platform.putInt(null, address + TASK_PARTITION_ID, partitionId);
+      Platform.putInt(null, address + TASK_ATTEMPT_NUMBER, attemptNumber);
+      Platform.putLong(null, address + TASK_ATTEMPT_ID, taskAttemptId);
+      Platform.putLong(null, address + TASK_IS_INTERRUPTED, Ffm.IS_INTERRUPTED);
+      tasks.put(address, interrupted);
+    }
+
+    @Override
+    public void close() {
+      if (!closed) {
+        closed = true;
+        // A call to is_interrupted that is still running only looks the address up.
+        tasks.remove(address);
+        Platform.freeMemory(address);
+      }
+    }
+  }
+
+  /**
+   * Called by the library, through {@code SparkDsTaskContext.is_interrupted}, with the address of
+   * the struct. It must not throw: an exception thrown by an upcall crashes the JVM.
+   */
+  private static boolean isInterrupted(long task) {
+    try {
+      BooleanSupplier interrupted = tasks.get(task);
+      // A freed task context belongs to a read or a write that is over.
+      return interrupted == null || interrupted.getAsBoolean();
+    } catch (Throwable e) {
+      return false;
+    }
   }
 
   // ---------------------------------------------------------------------------------------------

@@ -248,7 +248,7 @@ class TestRangeReader(end: Long, schema: StructType) extends ColumnarReader {
   private var readSchema = schema
 
   override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
-    predicates.filterNot { predicate =>
+    predicates.filter { predicate =>
       (predicate.name(), predicate.children()) match {
         case (">", Array(column: NamedReference, literal: Literal[_]))
             if column.fieldNames().sameElements(Array("id")) =>

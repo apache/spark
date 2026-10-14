@@ -26,11 +26,12 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.ZipFile
 
 import scala.jdk.CollectionConverters._
-import scala.util.Try
+import scala.util.{Failure, Try}
 
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import com.google.common.cache.{Cache, CacheBuilder}
 
+import org.apache.spark.SPARK_VERSION
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{PATH, VERSION_NUM}
 import org.apache.spark.sql.Artifact
@@ -385,7 +386,8 @@ object NativeLibraries extends Logging {
 
   /**
    * Loads a library, and checks the version of the interface that it implements. Throws the error
-   * if the library cannot be loaded, and returns it if the library is loaded but rejected.
+   * if the library cannot be loaded, and returns it if the library is loaded but rejected, so that
+   * it is kept: the library stays loaded, and Spark only initializes it once.
    *
    * @param invalidLibrary returns the error for an invalid library, with the reason
    * @param unsupportedAbiVersion returns the error for an unsupported version of the interface,
@@ -397,20 +399,18 @@ object NativeLibraries extends Logging {
       unsupportedAbiVersion: Map[String, String] => Throwable): Try[NativeLibrary] = {
     logInfo(log"Loading the native data source library ${MDC(PATH, file)}.")
     val library = try {
-      NativeLibrary.load(file.getPath)
+      NativeLibrary.load(file.getPath, SPARK_VERSION)
     } catch {
+      // A library that was loaded stays loaded, and Spark must not initialize it again.
+      case e: NativeLibrary.LoadException if e.loaded =>
+        return Failure(invalidLibrary(e.getMessage, e))
       case e: NativeLibrary.LoadException => throw invalidLibrary(e.getMessage, e)
     }
     Try {
-      val abiVersion = try {
-        library.abiVersion()
-      } catch {
-        case e: NativeLibrary.MissingFunctionException =>
-          throw invalidLibrary("It does not implement spark_ds_abi_version.", e)
-      }
-      if (abiVersion != NativeLibrary.ABI_VERSION) {
-        throw unsupportedAbiVersion(
-          Map("version" -> abiVersion.toString, "supported" -> NativeLibrary.ABI_VERSION.toString))
+      if (library.abiVersion() != NativeLibrary.ABI_VERSION) {
+        throw unsupportedAbiVersion(Map(
+          "version" -> library.abiVersion().toString,
+          "supported" -> NativeLibrary.ABI_VERSION.toString))
       }
       library
     }
