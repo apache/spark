@@ -228,10 +228,10 @@ class StreamingQueryProgress private[spark] (
   /**
    * JSON metadata for the configured trigger, or null when metadata is unavailable.
    *
-   * The {{{type}}} field is {{{ProcessingTime}}}, {{{Continuous}}}, {{{RealTime}}},
-   * {{{AvailableNow}}}, or {{{Once}}}. {{{ProcessingTime}}} and {{{Continuous}}} include
-   * {{{intervalMs}}}; {{{RealTime}}} includes {{{batchDurationMs}}}. Both intervals are in
-   * milliseconds. {{{AvailableNow}}} and {{{Once}}} contain only the {{{type}}} field.
+   * The `type` field is `ProcessingTime`, `Continuous`, `RealTime`,
+   * `AvailableNow`, or `Once`. `ProcessingTime` and `Continuous` include
+   * `intervalMs`; `RealTime` includes `batchDurationMs`. Both intervals are in
+   * milliseconds. `AvailableNow` and `Once` contain only the `type` field.
    *
    * @since 4.4.0
    */
