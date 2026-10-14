@@ -17,7 +17,6 @@
 
 package org.apache.spark.deploy.history
 
-import java.io.File
 import java.util.Properties
 
 import scala.collection.mutable
@@ -27,7 +26,7 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.history.EventLogTestHelper.{convertEvent, writeEventsToRollingWriter}
+import org.apache.spark.deploy.history.EventLogTestHelper.{convertEvent, writeEventsToRollingWriter, writeLinesToRollingWriter}
 import org.apache.spark.internal.config.History
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
@@ -265,7 +264,7 @@ class EventLogFileCompactorSuite extends SparkFunSuite {
 
       // 1~2 are candidates to compact. Replay would throw on the malformed line in file 2 if it
       // were not stopped after file 1.
-      val fileStatuses = writeLinesToRollingWriter(fs, dir,
+      val fileStatuses = writeLinesToRollingWriter(fs, "app", dir, sparkConf, hadoopConf,
         Seq(testLine, "x" * (maxLineLength + 1)),
         Seq("{"),
         Seq(testLine),
@@ -291,7 +290,7 @@ class EventLogFileCompactorSuite extends SparkFunSuite {
       val testLine = convertEvent(testEvent.head)
 
       // 1~2 are candidates to compact, 3~5 are dummies to ensure max files to retain
-      val fileStatuses = writeLinesToRollingWriter(fs, dir,
+      val fileStatuses = writeLinesToRollingWriter(fs, "app", dir, sparkConf, hadoopConf,
         Seq("{\"Event\":\"SparkListenerJobStart\"}") ++
           (Seq(SparkListenerJobStart(1, 0, Seq(stage1)), SparkListenerStageSubmitted(stage1)) ++
             tasks1).map(convertEvent),
@@ -423,20 +422,6 @@ class EventLogFileCompactorSuite extends SparkFunSuite {
     assert(expectedCompactRet === compactRet.code)
     assert(None === compactRet.compactIndex)
     originalFiles.foreach { status => assert(fs.exists(status.getPath)) }
-  }
-
-  private def writeLinesToRollingWriter(
-      fs: FileSystem,
-      dir: File,
-      linesFiles: Seq[String]*): Seq[FileStatus] = {
-    val writer = new RollingEventLogFilesWriter("app", None, dir.toURI, sparkConf, hadoopConf)
-    writer.start()
-    linesFiles.zipWithIndex.foreach { case (lines, index) =>
-      lines.foreach(writer.writeEvent(_, flushLogger = true))
-      if (index < linesFiles.length - 1) writer.rollEventLogFile()
-    }
-    writer.stop()
-    EventLogFileReader(fs, new Path(writer.logPath)).get.listEventLogFiles
   }
 
   private def testEvent: Seq[SparkListenerEvent] =

@@ -147,12 +147,14 @@ class EventLogFileCompactor(
           log"${MDC(LogKeys.PATH, log.getParent)}: ${MDC(LogKeys.FILE_NAME, log.getName)} has " +
           log"lines longer than ${MDC(LogKeys.CONFIG, History.EVENT_LOG_MAX_LINE_LENGTH.key)} " +
           log"(${MDC(LogKeys.MAX_SIZE, ReplayListenerBus.maxLineLength(sparkConf))} bytes). " +
-          log"Compaction stays skipped until the limit is increased.")
+          log"Compaction of this application stays skipped until the limit is increased and " +
+          log"a new event log file is rolled.")
         false
       } else if (!completed) {
         logWarning(log"Skipping compaction of event log files in " +
           log"${MDC(LogKeys.PATH, log.getParent)}: failed to replay " +
-          log"${MDC(LogKeys.FILE_NAME, log.getName)} entirely.")
+          log"${MDC(LogKeys.FILE_NAME, log.getName)} entirely. Compaction of this application " +
+          log"stays skipped.")
         false
       } else {
         true
