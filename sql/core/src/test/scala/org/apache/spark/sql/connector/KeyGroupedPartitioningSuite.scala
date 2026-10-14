@@ -2926,6 +2926,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       Array(identity("date"), bucket(32, "id"), bucket(32, "data")))
     sql(s"INSERT INTO testcat.ns.$table1 VALUES " +
         "('a', '2026-05-01', 'aa'), " +
+        "('a', '2026-05-02', 'cc'), " +
         "('b', '2026-05-01', 'bb'), " +
         "('c', '2026-05-02', 'aa')")
 
@@ -2969,9 +2970,11 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
         // Each split's `bucket(32, id)` value, the second field of its raw partition key.
         val expectedOriginals = projectedScan.inputPartitions.map(
           _.asInstanceOf[HasPartitionKey].partitionKey().getInt(1))
+        assert(kgp.originalPartitionValues.size == expectedOriginals.size)
         assert(kgp.originalPartitionValues.map(_.getInt(0)).sorted == expectedOriginals.sorted)
         checkAnswer(df, Seq(
           Row("a", "2026-05-01", "aa", "xx"),
+          Row("a", "2026-05-02", "cc", "xx"),
           Row("b", "2026-05-01", "bb", "yy")))
       }
     }
