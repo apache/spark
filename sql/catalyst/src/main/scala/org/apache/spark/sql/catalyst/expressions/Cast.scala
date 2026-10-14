@@ -440,10 +440,11 @@ object Cast extends QueryErrorsBase {
   /**
    * Whether rendering a value of this type as a string reads the session time zone. Only the LTZ
    * families carry an absolute instant that has to be localized; TIMESTAMP_NTZ, DATE and TIME
-   * render on a fixed grid. VARIANT may hold a timestamp at runtime, as in `needsTimeZone`.
+   * render on a fixed grid, and a nested VARIANT renders through `VariantVal.toString` at UTC
+   * (only a top-level VARIANT reads the zone, via the `(VariantType, _)` arm).
    */
   private def needsTimeZoneToString(dt: DataType): Boolean = dt match {
-    case TimestampType | _: TimestampLTZNanosType | VariantType => true
+    case TimestampType | _: TimestampLTZNanosType => true
     // A Python UDT renders through its `sqlType`; a Scala UDT through its `stringifyValue`.
     case pudt: PythonUserDefinedType => pudt.sqlType.existsRecursively(needsTimeZoneToString)
     case _ => false

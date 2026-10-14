@@ -2670,7 +2670,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       new StructType().add("i", IntegerType).add("t", TimestampLTZNanosType(9)),
       ArrayType(ArrayType(TimestampType)),
       ArrayType(new StructType().add("t", TimestampType)),
-      ArrayType(VariantType),
       new PythonUserDefinedType(ArrayType(TimestampType), "pyClass", "serializedClass"))
       .foreach { from =>
       assert(Cast.needsTimeZone(from, StringType), s"$from -> STRING")
@@ -2678,18 +2677,24 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       assert(Cast.needsTimeZone(ArrayType(from), ArrayType(StringType)),
         s"ARRAY<$from> -> ARRAY<STRING>")
     }
-    // TIMESTAMP_NTZ, DATE and TIME render on a fixed grid, so they stay zone-independent.
+    // TIMESTAMP_NTZ, DATE and TIME render on a fixed grid, and a nested VARIANT renders at UTC.
     Seq(
       ArrayType(TimestampNTZType),
       MapType(IntegerType, DateType),
       new StructType().add("t", TimestampNTZNanosType(9)).add("d", DateType),
       ArrayType(ArrayType(TimeType(TimeType.MAX_PRECISION))),
+      ArrayType(VariantType),
+      MapType(IntegerType, VariantType),
+      new StructType().add("v", VariantType),
       new PythonUserDefinedType(ArrayType(TimestampNTZType), "pyClass", "serializedClass"))
       .foreach { from =>
       assert(!Cast.needsTimeZone(from, StringType), s"$from -> STRING")
       assert(!Cast.needsTimeZone(ArrayType(from), ArrayType(StringType)),
         s"ARRAY<$from> -> ARRAY<STRING>")
     }
+    // A top-level VARIANT still reads the zone, element-wise casts included.
+    assert(Cast.needsTimeZone(VariantType, StringType))
+    assert(Cast.needsTimeZone(ArrayType(VariantType), ArrayType(StringType)))
   }
 
   test("SPARK-60179: a complex-to-string cast needs a time zone to be resolved") {
