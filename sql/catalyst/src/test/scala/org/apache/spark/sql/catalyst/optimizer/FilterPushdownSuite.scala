@@ -2217,6 +2217,19 @@ class FilterPushdownSuite extends PlanTest {
         .analyze)
   }
 
+  test("SPARK-60150: push a filter below a grouped-agg pandas UDF aggregate unchanged") {
+    val x = $"x".double
+    val relation = LocalRelation(x)
+    // Such an aggregate is planned as ArrowAggregatePythonExec, which outputs the raw keys, so the
+    // pushed filter reads them raw too.
+    val pandasAgg = PythonUDAF("pandasAgg", null, IntegerType, Seq(x), udfDeterministic = true)
+      .toAggregateExpression().as("p")
+    comparePlans(
+      Optimize.execute(
+        relation.groupBy(x)(x, pandasAgg).where(x.cast(StringType) === "-0.0").analyze),
+      relation.where(x.cast(StringType) === "-0.0").groupBy(x)(x, pandasAgg).analyze)
+  }
+
   test("SPARK-60150: normalizeGroupingExpressions") {
     val x = $"x".double
     val f = $"f".float
