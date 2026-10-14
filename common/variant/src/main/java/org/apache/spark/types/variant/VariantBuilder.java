@@ -734,25 +734,40 @@ public class VariantBuilder {
     checkIndex(0, metadata.length);
     int metaOffsetSize = ((metadata[0] >> 6) & 0x3) + 1;
     int numKeys = readUnsigned(metadata, 1, metaOffsetSize);
+    // Start of the dictionary string region: header + dict-size field + (numKeys + 1) offsets.
+    int stringStart = 1 + (numKeys + 2) * metaOffsetSize;
 
     if (readUnsigned(metadata, 1 + metaOffsetSize, metaOffsetSize) != 0) {
       return false;
     }
 
     if (numKeys > 1) {
-      byte[] prevKey = getMetadataKeyBytes(metadata, 0);
+      // Dictionary keys must be strictly ascending in unsigned-UTF-8 order.
+      int prevOffset = readUnsigned(metadata, 1 + metaOffsetSize, metaOffsetSize);
+      int curOffset = readUnsigned(metadata, 1 + 2 * metaOffsetSize, metaOffsetSize);
+      if (prevOffset > curOffset) {
+        throw malformedVariant();
+      }
+      checkIndex(stringStart + curOffset - 1, metadata.length);
       for (int id = 1; id < numKeys; ++id) {
-        byte[] key = getMetadataKeyBytes(metadata, id);
-        if (compareKeys(prevKey, key) >= 0) {
+        int nextOffset = readUnsigned(metadata, 1 + (id + 2) * metaOffsetSize, metaOffsetSize);
+        if (curOffset > nextOffset) {
+          throw malformedVariant();
+        }
+        checkIndex(stringStart + nextOffset - 1, metadata.length);
+        if (Arrays.compareUnsigned(
+            metadata, stringStart + prevOffset, stringStart + curOffset,
+            metadata, stringStart + curOffset, stringStart + nextOffset) >= 0) {
           return false;
         }
-        prevKey = key;
+        prevOffset = curOffset;
+        curOffset = nextOffset;
       }
     }
     int lastOffset = readUnsigned(metadata, 1 + (numKeys + 1) * metaOffsetSize, metaOffsetSize);
     // No trailing bytes: canonicalize emits exactly this length (header + dict-size field +
     // (numKeys + 1) offsets + the lastOffset string bytes)
-    if (metadata.length != 1 + (numKeys + 2) * metaOffsetSize + lastOffset) {
+    if (metadata.length != stringStart + lastOffset) {
       return false;
     }
     // numKeys > lastOffset is possible if we have an empty key.
