@@ -121,11 +121,12 @@ options { tokenVocab = SqlBaseLexer; }
               // ambiguous: `CASE :p WHEN ... END` (a simple CASE over a named-parameter operand)
               // and `case : value` (a `case` column before the member separator) both read as
               // `CASE COLON identifier`, so the one-token peek cannot tell them apart. Only a
-              // following top-level WHEN proves the keyword, so look ahead for it there.
+              // complete CASE body ahead -- a top-level WHEN closed by its END -- proves the
+              // keyword, so look ahead for that.
               if (depth == 0) {
                 int follow = nextDefaultChannelType(i, stop);
                 boolean caseKeyword = (follow == COLON)
-                    ? caseFollowedByWhen(i)
+                    ? caseKeywordBeforeColon(i)
                     : !jsonKeyTokenFollowsOperand(follow);
                 if (caseKeyword) caseDepth++;
               }
@@ -160,18 +161,18 @@ options { tokenVocab = SqlBaseLexer; }
   }
 
   /**
-   * Disambiguates a `CASE` directly before a COLON. Looks ahead from the `CASE` at {@code caseIdx}
-   * for a top-level WHEN, which proves it is the keyword (`CASE :p WHEN ... END`) rather than a
-   * `case` column before the member separator (`case : value`). Tracks paren/bracket depth and
-   * returns false if a depth-0 CASE, member terminator (depth-0 COMMA/SEMICOLON), unmatched closing
-   * paren/bracket, or EOF is reached first: a depth-0 CASE before any WHEN means the WHEN pairs with
-   * that inner CASE
-   * (the leading `case` is the key column and the COLON is the separator), and a terminator means
-   * the member ended with no WHEN at all. Unlike the backward scan this reads ahead of the current
-   * token, so it fetches through {@code tokenAt} rather than indexing the buffer directly.
+   * True when the `CASE` at {@code caseIdx} (sitting right before a COLON) opens a complete simple
+   * CASE (`CASE operand WHEN ... END`), proving it is the keyword, not a `case` column before the
+   * member separator. Requires the matching top-level END, not just a WHEN: a bare `when` value
+   * column (non-reserved outside ANSI) would otherwise masquerade as the WHEN, e.g.
+   * `JSON_OBJECT(case : when)`. Tracks paren/bracket depth and nested CASE...END; stops at depth-0
+   * terminator (COMMA/SEMICOLON), an unmatched closer, or EOF. Reads ahead of the current token, so
+   * it fetches via {@code tokenAt}.
    */
-  private boolean caseFollowedByWhen(int caseIdx) {
-    int depth = 0;
+  private boolean caseKeywordBeforeColon(int caseIdx) {
+    int depth = 0;        // paren/bracket depth
+    int caseNesting = 0;  // nested CASE...END below this CASE
+    boolean seenWhen = false;
     for (int i = caseIdx + 1; ; i++) {
       Token tok = tokenAt(i);
       if (tok == null || tok.getType() == Token.EOF) {
@@ -186,14 +187,20 @@ options { tokenVocab = SqlBaseLexer; }
           if (depth == 0) return false;
           depth--;
           break;
-        case WHEN:
-          if (depth == 0) return true;
-          break;
         case CASE:
-          if (depth == 0) return false;
+          if (depth == 0) caseNesting++;
+          break;
+        case WHEN:
+          if (depth == 0 && caseNesting == 0) seenWhen = true;
+          break;
+        case END:
+          if (depth == 0) {
+            if (caseNesting == 0) return seenWhen;
+            caseNesting--;
+          }
           break;
         case COMMA: case SEMICOLON:
-          if (depth == 0) return false;
+          if (depth == 0 && caseNesting == 0) return false;
           break;
         default: break;
       }
@@ -203,7 +210,8 @@ options { tokenVocab = SqlBaseLexer; }
   /**
    * Returns the token at absolute index {@code i}, forcing a lazy fetch (via {@code LT}, which does
    * not consume) when {@code i} is at or ahead of the current position, or null past EOF. Needed
-   * because {@code caseFollowedByWhen} scans ahead of the current token, which may not be buffered.
+   * because {@code caseKeywordBeforeColon} scans ahead of the current token, which may not be
+   * buffered.
    */
   private Token tokenAt(int i) {
     int cur = _input.index();

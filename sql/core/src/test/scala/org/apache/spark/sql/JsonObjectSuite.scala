@@ -168,6 +168,18 @@ class JsonObjectSuite extends QueryTest with SharedSparkSession {
       Row("""{"c":"y"}"""))
   }
 
+  test("a bare `when` column value does not flip a `case` colon key to the CASE keyword") {
+    // Outside ANSI mode `when` is a bare column; its WHEN token must not be read as the WHEN of a
+    // CASE keyword in the `case` key. A lone `when` value has no closing END, so `case` stays a
+    // column and the colon stays the member separator.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkAnswer(
+        sql("""SELECT json_object(case : when)
+              |FROM (SELECT 'c' AS `case`, 'w' AS `when`)""".stripMargin),
+        Row("""{"c":"w"}"""))
+    }
+  }
+
   test("a case column nested in a colon key is a column, not a CASE keyword") {
     // A `case` column in a CAST or parens is below the key's top level, where the token after it
     // (`AS`, `+`) does not prove it is a column; without the depth guard the spurious CASE count
@@ -990,6 +1002,19 @@ world'))"""))
     }
     assert(runtimeErr.getCondition == "INVALID_JSON_FORMAT_JSON_VALUE")
     assert(runtimeErr.getMessageParameters.get("position") == "4")
+  }
+
+  test("malformed FORMAT JSON is validated per row, so a filtered-out row does not raise") {
+    // FORMAT JSON validation is throwable, so the constructor is not constant-folded and runs per
+    // row at eval time: a row the WHERE drops is never validated and must not raise.
+    val values = "FROM VALUES ('ok', '[1]'), ('bad', '{oops') AS t(id, j)"
+    checkAnswer(
+      sql(s"SELECT json_object('a' VALUE j FORMAT JSON) $values WHERE id = 'ok'"),
+      Row("""{"a":[1]}"""))
+    val e = intercept[SparkRuntimeException] {
+      sql(s"SELECT json_object('a' VALUE j FORMAT JSON) $values").collect()
+    }
+    assert(e.getCondition == "INVALID_JSON_FORMAT_JSON_VALUE")
   }
 
   test("FORMAT JSON on a non-string value is rejected at analysis") {
