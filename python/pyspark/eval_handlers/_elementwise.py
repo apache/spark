@@ -65,17 +65,24 @@ if TYPE_CHECKING:
     from pyspark.worker_util import EvalConf, RunnerConf
 
 
-def _elementwise_udf_input_type(data_type: DataType, depth: int) -> DataType:
-    """The element type ``depth`` ``ArrayType`` levels below ``data_type``.
+def _elementwise_input_schema(
+    input_type: Optional[DataType], offsets: Sequence[int], depth: int
+) -> StructType:
+    """The leaf schema of a UDF's arguments, one positional ``_N`` field per argument.
 
     A lifted UDF's input arrives as ``array^depth<T>`` (one ``array`` level per enclosing higher-
     order function lambda); this peels them off to the scalar leaf ``T`` the user function sees. See
     ``ExtractPythonUDFFromLambda``.
     """
-    for _ in range(depth):
-        assert isinstance(data_type, ArrayType)
-        data_type = data_type.elementType
-    return data_type
+    assert isinstance(input_type, StructType)
+    fields = []
+    for i, offset in enumerate(offsets):
+        data_type = input_type.fields[offset].dataType
+        for _ in range(depth):
+            assert isinstance(data_type, ArrayType)
+            data_type = data_type.elementType
+        fields.append(StructField(f"_{i}", data_type))
+    return StructType(fields)
 
 
 def _elementwise_flatten_inputs(
@@ -159,18 +166,10 @@ def _elementwise_output_schema(return_type: DataType, runner_conf: RunnerConf) -
     element, so its declared return type is the element type of the ``array<R>`` produced."""
     import pyarrow as pa
 
-    return pa.schema(
-        [
-            pa.field(
-                "_0",
-                to_arrow_type(
-                    return_type,
-                    timezone="UTC",
-                    prefers_large_types=runner_conf.use_large_var_types,
-                ),
-            )
-        ]
+    arrow_type = to_arrow_type(
+        return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
     )
+    return pa.schema([pa.field("_0", arrow_type)])
 
 
 class ArrowElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
@@ -197,7 +196,6 @@ class ArrowElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         # Example: array<array<int>> -> udf(depth 2) -> array<array<int>>.
 
         # UDF preparation
-        input_fields = list(eval_conf.input_type)  # type: ignore[call-overload]
         nesting = eval_conf.elementwise_nesting
         self._udf_infos = []
         for udf_index, udf in enumerate(udfs):
@@ -210,11 +208,13 @@ class ArrowElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
             # ``T`` reached by peeling ``depth`` array levels.
             arg_converters = [
                 ArrowTableToRowsConversion._create_converter(
-                    _elementwise_udf_input_type(input_fields[o].dataType, depth),
+                    field.dataType,
                     none_on_identity=True,
                     binary_as_bytes=runner_conf.binary_as_bytes,
                 )
-                for o in args_kwargs_offsets
+                for field in _elementwise_input_schema(
+                    eval_conf.input_type, args_kwargs_offsets, depth
+                )
             ]
             self._udf_infos.append(
                 (
@@ -258,15 +258,14 @@ class ArrowElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
             # shape would misalign every UDF but the first. The rewrite always passes at least
             # one array argument, so `offsets` is non-empty.
             output_arrays = []
-            for info in self._udf_infos:
-                (
-                    wrapped_func,
-                    offsets,
-                    depth,
-                    arg_converters,
-                    arrow_element_type,
-                    result_conv,
-                ) = info
+            for (
+                wrapped_func,
+                offsets,
+                depth,
+                arg_converters,
+                arrow_element_type,
+                result_conv,
+            ) in self._udf_infos:
                 # Flatten each argument `depth` list levels to its leaves; the first argument's
                 # per-level shapes drive the re-nest.
                 flat_batch, list_lengths_by_level, large_list_by_level = (
@@ -401,7 +400,6 @@ class _ScalarElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         require_minimum_pyarrow_version()
         super().__init__(udfs, runner_conf, eval_conf)
 
-        input_fields = list(eval_conf.input_type)  # type: ignore[call-overload]
         nesting = eval_conf.elementwise_nesting
         self._udf_infos = []
         for udf_index, udf in enumerate(udfs):
@@ -413,13 +411,8 @@ class _ScalarElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
             depth = nesting[udf_index] if nesting is not None else 1
             # Each argument arrives as ``array^depth<T>``; the vectorized function must see the leaf
             # element type ``T`` reached by peeling ``depth`` array levels.
-            udf_input_schema = StructType(
-                [
-                    StructField(
-                        f"_{i}", _elementwise_udf_input_type(input_fields[o].dataType, depth)
-                    )
-                    for i, o in enumerate(args_kwargs_offsets)
-                ]
+            udf_input_schema = _elementwise_input_schema(
+                eval_conf.input_type, args_kwargs_offsets, depth
             )
             self._udf_infos.append(
                 (
@@ -552,16 +545,10 @@ class _ScalarIterElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         # Each argument arrives as ``array^depth<T>``; the vectorized function must see the leaf
         # element type ``T`` (arguments may differ, e.g. an outer column repeated into an aligned
         # array). ``depth`` > 1 for a UDF lifted out of nested lambdas.
-        input_fields = list(eval_conf.input_type)  # type: ignore[call-overload]
         nesting = eval_conf.elementwise_nesting
         self._depth = nesting[0] if nesting is not None else 1
-        self._udf_input_schema = StructType(
-            [
-                StructField(
-                    f"_{i}", _elementwise_udf_input_type(input_fields[o].dataType, self._depth)
-                )
-                for i, o in enumerate(self._args_offsets)
-            ]
+        self._udf_input_schema = _elementwise_input_schema(
+            eval_conf.input_type, self._args_offsets, self._depth
         )
         self._udf_output_schema = _elementwise_output_schema(self._return_type, runner_conf)
 
@@ -576,15 +563,11 @@ class _ScalarIterElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         verifying iterator."""
 
     @abstractmethod
-    def _verify_chunk(self, result: Any) -> None:
-        """Check one result chunk before it is converted."""
-
-    @abstractmethod
     def _to_flat_batch(
         self, output: Any, return_type: DataType, output_schema: pa.Schema
     ) -> pa.RecordBatch:
-        """Convert one result chunk over flat elements to a one-column batch, one row per
-        element."""
+        """Check and convert one result chunk over flat elements to a one-column batch, one row
+        per element."""
 
     def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
         import pyarrow as pa
@@ -657,7 +640,6 @@ class _ScalarIterElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         def process_results() -> Iterator[pa.RecordBatch]:
             nonlocal pending_chunks, pending_len, empty_schema, num_output_elements
             for result in verified_iter:
-                self._verify_chunk(result)
                 chunk = self._to_flat_batch(result, return_type, udf_output_schema)
                 num_output_elements += chunk.num_rows
                 # Fail fast if the UDF over-produces, before the buffer grows unbounded (the
@@ -701,9 +683,6 @@ class ArrowScalarIterElementwiseUDFHandler(
 
         return verify_return_type(results, Iterator[pa.Array])
 
-    def _verify_chunk(self, result: Any) -> None:
-        """Nothing to check: ``_to_flat_batch`` coerces each chunk to the declared type."""
-
 
 class PandasScalarIterElementwiseUDFHandler(
     _PandasElementwiseConversion, _ScalarIterElementwiseUDFHandler
@@ -724,10 +703,13 @@ class PandasScalarIterElementwiseUDFHandler(
         )
         return verify_return_type(results, pandas_iter_type)
 
-    def _verify_chunk(self, result: Any) -> None:
+    def _to_flat_batch(
+        self,
+        output: Union[pd.Series, pd.DataFrame],
+        return_type: DataType,
+        output_schema: pa.Schema,
+    ) -> pa.RecordBatch:
         verify_pandas_result(
-            result,
-            self._return_type,
-            assign_cols_by_name=True,
-            truncate_return_schema=True,
+            output, return_type, assign_cols_by_name=True, truncate_return_schema=True
         )
+        return super()._to_flat_batch(output, return_type, output_schema)
