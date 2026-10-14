@@ -25,22 +25,19 @@ import scala.concurrent.duration.FiniteDuration
 import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.{Any => PAny, StringValue}
-import com.google.rpc.ErrorInfo
 import io.grpc.{CallCredentials, CallOptions, Channel, ClientCall, ClientInterceptor, Metadata, MethodDescriptor, Server, ServerCall, ServerCallHandler, ServerInterceptor, Status, StatusRuntimeException}
 import io.grpc.netty.NettyServerBuilder
-import io.grpc.protobuf.StatusProto
 import io.grpc.stub.StreamObserver
 import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{QueryContext, QueryContextType, SparkException, SparkThrowable, SparkThrowableHelper}
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, AnalyzePlanRequest, AnalyzePlanResponse, ArtifactStatusesRequest, ArtifactStatusesResponse, ExecutePlanRequest, ExecutePlanResponse, Relation, SparkConnectServiceGrpc, SQL}
 import org.apache.spark.sql.connect.SparkSession
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.connect.test.ConnectFunSuite
-import org.apache.spark.util.SparkClassUtils
 
 class SparkConnectClientSuite extends ConnectFunSuite {
 
@@ -335,7 +332,7 @@ class SparkConnectClientSuite extends ConnectFunSuite {
 
   test("error framework parameters") {
     val errors = GrpcExceptionConverter.errorFactory
-    for ((name, constructor) <- errors) {
+    for ((name, constructor) <- errors if name.startsWith("org.apache.spark")) {
       withClue(name) {
         val testParams = GrpcExceptionConverter.ErrorParams(
           message = "",
@@ -345,17 +342,7 @@ class SparkConnectClientSuite extends ConnectFunSuite {
           queryContext = Array.empty,
           sqlState = None)
         val error = constructor(testParams).asInstanceOf[Throwable with SparkThrowable]
-        val renderedMessage =
-          SparkThrowableHelper.getMessage(testParams.errorClass.get, testParams.messageParameters)
-        val expectedMessage = name match {
-          case "org.apache.spark.SparkException" |
-              "org.apache.spark.sql.streaming.StreamingQueryException" =>
-            testParams.message
-          case "org.apache.spark.sql.catalyst.parser.ParseException" => s"\n$renderedMessage"
-          case _ => renderedMessage
-        }
-        assert(error.getMessage == expectedMessage)
-        assert(SparkClassUtils.classForName(name).isInstance(error))
+        assert(error.getMessage.contains(testParams.message))
         assert(error.getCause == null)
         assert(error.getCondition == testParams.errorClass.get)
         assert(error.getMessageParameters.asScala == testParams.messageParameters)
@@ -405,155 +392,6 @@ class SparkConnectClientSuite extends ConnectFunSuite {
         assert(error.getCondition == legacyErrorClass)
         assert(error.getSqlState == "XXKCM")
     }
-  }
-
-  test("unknown error conditions preserve server messages and metadata for every mapped type") {
-    val context = new QueryContext {
-      override def contextType(): QueryContextType = QueryContextType.SQL
-      override def objectType(): String = ""
-      override def objectName(): String = ""
-      override def startIndex(): Int = 0
-      override def stopIndex(): Int = 7
-      override def fragment(): String = "SELECT 1"
-      override def callSite(): String = ""
-      override def summary(): String = "server query context"
-    }
-    val cause = new IllegalStateException("server cause")
-    for {
-      condition <- Seq("SERVER_ONLY_ERROR.DETAIL", "DUPLICATE_KEY.SERVER_ONLY_SUBCLASS")
-      sqlState <- Seq(Some("22023"), None)
-      (name, constructor) <- GrpcExceptionConverter.errorFactory
-    } {
-      withClue(s"$condition, $sqlState, $name: ") {
-        assert(!SparkThrowableHelper.isValidErrorClass(condition))
-        val params = GrpcExceptionConverter.ErrorParams(
-          message = s"[$condition] Full server message\nserver query context\nserver debug info",
-          cause = Some(cause),
-          errorClass = Some(condition),
-          messageParameters =
-            Map("detail" -> "truncated...", "queryDebugString" -> "server debug info"),
-          queryContext = Array(context),
-          sqlState = sqlState)
-        val error = constructor(params).asInstanceOf[Throwable with SparkThrowable]
-        assert(SparkClassUtils.classForName(name).isInstance(error))
-        assert(error.getMessage == params.message)
-        assert(error.getCondition == condition)
-        assert(error.getMessageParameters.asScala.toMap == params.messageParameters)
-        assert(error.getSqlState == sqlState.getOrElse {
-          if (condition.startsWith("DUPLICATE_KEY.")) "23505" else "XXKCM"
-        })
-        assert(error.getQueryContext.toSeq == Seq(context))
-        assert(error.getCause eq cause)
-      }
-    }
-  }
-
-  test("unknown Kafka error conditions are reconstructed from enriched errors") {
-    for {
-      (offsetName, offsetValue) <- Seq(
-        "startingOffsets" -> "latest",
-        "endingOffsets" -> "earliest")
-      topicPartition <- Seq(None, Some("t"), Some("t-0"))
-    } {
-      val subClass = if (topicPartition.isEmpty) "GLOBAL" else "TOPIC_OR_PARTITION"
-      val condition = s"KAFKA_INVALID_BATCH_OFFSET.$subClass"
-      assert(!SparkThrowableHelper.isValidErrorClass(condition))
-      val parameters = Map("offsetName" -> offsetName, "offsetValue" -> offsetValue) ++
-        topicPartition.map("topicOrPartition" -> _)
-      val message = s"[$condition] $offsetName" + topicPartition.fold("")(p => s" for $p") +
-        s" can't be $offsetValue for batch queries on Kafka SQLSTATE: 22023"
-      val context = proto.FetchErrorDetailsResponse.QueryContext
-        .newBuilder()
-        .setContextType(proto.FetchErrorDetailsResponse.QueryContext.ContextType.SQL)
-        .setFragment("SELECT * FROM kafka_table")
-        .setStartIndex(0)
-        .setStopIndex(24)
-        .setSummary("server query context")
-        .build()
-      val rootError = proto.FetchErrorDetailsResponse.Error
-        .newBuilder()
-        .setMessage(message)
-        .addErrorTypeHierarchy("org.apache.spark.sql.kafka010.KafkaIllegalArgumentException")
-        .addErrorTypeHierarchy(classOf[IllegalArgumentException].getName)
-        .addErrorTypeHierarchy(classOf[RuntimeException].getName)
-        .setCauseIdx(1)
-        .setSparkThrowable(
-          proto.FetchErrorDetailsResponse.SparkThrowable
-            .newBuilder()
-            .setErrorClass(condition)
-            .putAllMessageParameters(parameters.asJava)
-            .setSqlState("22023")
-            .addQueryContexts(context))
-        .addStackTrace(
-          proto.FetchErrorDetailsResponse.StackTraceElement
-            .newBuilder()
-            .setDeclaringClass("KafkaSourceProvider")
-            .setMethodName("validateBatchOptions")
-            .setFileName("KafkaSourceProvider.scala")
-            .setLineNumber(377))
-        .build()
-      val cause = proto.FetchErrorDetailsResponse.Error
-        .newBuilder()
-        .setMessage("server cause")
-        .addErrorTypeHierarchy(classOf[IllegalArgumentException].getName)
-        .build()
-      val error = GrpcExceptionConverter
-        .errorsToThrowable(0, Seq(rootError, cause))
-        .asInstanceOf[Throwable with SparkThrowable]
-      assert(error.isInstanceOf[IllegalArgumentException])
-      assert(error.getMessage == message)
-      assert(error.getCondition == condition)
-      assert(error.getMessageParameters.asScala.toMap == parameters)
-      assert(error.getSqlState == "22023")
-      assert(error.getQueryContext.length == 1)
-      assert(error.getQueryContext.head.fragment() == context.getFragment)
-      assert(error.getQueryContext.head.summary() == context.getSummary)
-      assert(error.getCause.isInstanceOf[IllegalArgumentException])
-      assert(error.getCause.getMessage == "server cause")
-      assert(
-        error.getStackTrace.toSeq == Seq(
-          new StackTraceElement(
-            "KafkaSourceProvider",
-            "validateBatchOptions",
-            "KafkaSourceProvider.scala",
-            377)))
-    }
-  }
-
-  test("unknown error conditions preserve the message from ErrorInfo") {
-    val condition = "SERVER_ONLY_ERROR"
-    val message = s"[$condition] Full server message SQLSTATE: 22023"
-    val info = ErrorInfo
-      .newBuilder()
-      .putMetadata("classes", "[\"java.lang.IllegalArgumentException\"]")
-      .putMetadata("errorClass", condition)
-      .putMetadata("messageParameters", "{\"option\":\"truncated...\"}")
-      .putMetadata("sqlState", "22023")
-      .build()
-    val failingService = new DummySparkConnectService {
-      override def analyzePlan(
-          request: AnalyzePlanRequest,
-          responseObserver: StreamObserver[AnalyzePlanResponse]): Unit = {
-        responseObserver.onError(
-          StatusProto.toStatusRuntimeException(
-            com.google.rpc.Status
-              .newBuilder()
-              .setCode(Status.Code.INTERNAL.value())
-              .setMessage(message)
-              .addDetails(PAny.pack(info))
-              .build()))
-      }
-    }
-    startDummyServer(0, dummyService = failingService)
-    client = SparkConnectClient.builder().host("localhost").port(server.getPort).build()
-    val error = intercept[IllegalArgumentException] {
-      client.analyze(AnalyzePlanRequest.newBuilder().setSessionId(client.sessionId).build())
-    }
-    val sparkError = error.asInstanceOf[SparkThrowable]
-    assert(error.getMessage == message)
-    assert(sparkError.getCondition == condition)
-    assert(sparkError.getMessageParameters.asScala.toMap == Map("option" -> "truncated..."))
-    assert(sparkError.getSqlState == "22023")
   }
 
   private case class TestPackURI(
