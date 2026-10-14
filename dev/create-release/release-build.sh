@@ -534,7 +534,7 @@ EOF
   fi
 
   git add .
-  git commit -m "Add docs and website updates for Apache Spark $RELEASE_VERSION"
+  git commit -m "Update docs and website for Apache Spark $RELEASE_VERSION"
   # One commit and one push.
   # We want to `git push` the website only once to eliminate the chance that
   # multiple pushes will race with spark-website CI pushing HTML commits,
