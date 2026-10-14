@@ -1329,6 +1329,18 @@ class DataFrameAggregateSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-60150: filter pushed through two aggregates whose upper key is computed") {
+    withTempView("t") {
+      Seq(-0.0d, -0.0d).toDF("x").createOrReplaceTempView("t")
+      // The lower aggregate computes pow on the normalized key 0.0, so k is Infinity.
+      checkAnswer(
+        sql("SELECT * FROM (SELECT k, count(*) AS c FROM " +
+          "(SELECT pow(x, -1) AS k FROM t GROUP BY x) GROUP BY k) " +
+          "WHERE cast(k AS STRING) = 'Infinity'"),
+        Row(Double.PositiveInfinity, 1L))
+    }
+  }
+
   test("SPARK-60150: comparisons on a FLOAT grouping key are pushed to the data source") {
     withTempPath { path =>
       Seq(-0.0f, 1.0f, 2.0f).toDF("f").write.parquet(path.getCanonicalPath)

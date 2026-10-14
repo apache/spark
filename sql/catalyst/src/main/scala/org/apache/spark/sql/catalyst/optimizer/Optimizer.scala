@@ -2831,7 +2831,13 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
   private[optimizer] def normalizeGroupingExpressions(
       e: Expression,
       grouping: Seq[Expression]): Expression = e match {
-    case _: KnownFloatingPointNormalized => e
+    // A grouping key already normalized when the filter was pushed through an Aggregate above on
+    // the same key. Any other normalized expression may be computed from a grouping key (when the
+    // upper Aggregate groups by an expression of this one's key), so the key inside it still has
+    // to be normalized. `normalize` builds new lambda variables for array and map keys, so those
+    // are normalized again, which gives the same values.
+    case _: KnownFloatingPointNormalized
+        if grouping.exists(g => NormalizeFloatingNumbers.normalize(g).semanticEquals(e)) => e
     case _: EqualTo | _: EqualNullSafe | _: LessThan | _: LessThanOrEqual | _: GreaterThan |
          _: GreaterThanOrEqual | _: In | _: IsNull | _: IsNotNull | _: IsNaN =>
       e.mapChildren {
