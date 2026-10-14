@@ -226,6 +226,34 @@ object Scd1BatchProcessor {
     cdcMetadataCol.getField(cdcUpsertSequenceFieldName)
 
   /**
+   * When a row last authored any of the user-data leaves at `leafPaths`, according to its CDC
+   * metadata: the greatest sequence at which it authored one of them. A delete authors every leaf
+   * at its delete sequence.
+   *
+   * @param cdcMetadataCol The row's CDC metadata.
+   * @param leafPaths The name parts of the leaves, as keyed in the version map.
+   * @return The sequence at which the row last authored any of the leaves, or null if it authored
+   *         none of them.
+   */
+  private[autocdc] def lastAuthoredIn(
+      cdcMetadataCol: Column,
+      leafPaths: Seq[Seq[String]]): Column = {
+    val deleteSequence = deleteSequenceOf(cdcMetadataCol)
+    val upsertSequence = upsertSequenceOf(cdcMetadataCol)
+    val versionMap = cdcMetadataCol.getField(versionMapFieldName)
+
+    val greatestLeafSequence = leafPaths
+      .map(leafPath => versionMap(Scd1VersionMap.serializeKey(leafPath)))
+      .reduceOption(F.greatest(_, _))
+      // An empty struct has no leaves, and so no version-map entries.
+      .getOrElse(upsertSequence)
+
+    F.when(deleteSequence.isNotNull, deleteSequence)
+      .when(versionMap.isNull, upsertSequence)
+      .otherwise(greatestLeafSequence)
+  }
+
+  /**
    * Schema of the CDC metadata struct column for SCD1.
    *
    * The CDC metadata of every microbatch, target, and auxiliary-table row represents either a
