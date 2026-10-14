@@ -193,6 +193,8 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
    * With first-class CHAR/VARCHAR semantics enabled, for example,
    * `from_json('{"c":"ab"}', 'c CHAR(4)')` produces `"ab  "`, while parsing `{"v":"abcd"}`
    * as `v VARCHAR(3)` in FAILFAST mode raises EXCEED_LIMIT_LENGTH.
+   * from_avro / to_avro use the same helper so externally produced Avro is checked
+   * in-flight.
    */
   def applyTextParseSemantics(value: UTF8String, dt: DataType): UTF8String = {
     if (value == null) {

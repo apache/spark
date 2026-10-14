@@ -2234,13 +2234,15 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       withTempPath { file =>
         val ser = new org.apache.spark.sql.avro.AvroSerializer(
           nestedSchema, nestedAvro, nullable = false)
+        // Unpadded CHAR/CHAR-map-key values: serializer and deserializer apply
+        // applyTextParseSemantics in-flight (pad CHAR, reject oversize).
         val row = org.apache.spark.sql.catalyst.InternalRow(
-          org.apache.spark.unsafe.types.UTF8String.fromString("ab  "),
+          org.apache.spark.unsafe.types.UTF8String.fromString("ab"),
           org.apache.spark.sql.catalyst.InternalRow(
             org.apache.spark.unsafe.types.UTF8String.fromString("xy")),
           new org.apache.spark.sql.catalyst.util.ArrayBasedMapData(
             new org.apache.spark.sql.catalyst.util.GenericArrayData(Array(
-              org.apache.spark.unsafe.types.UTF8String.fromString("k "))),
+              org.apache.spark.unsafe.types.UTF8String.fromString("k"))),
             new org.apache.spark.sql.catalyst.util.GenericArrayData(Array(
               org.apache.spark.unsafe.types.UTF8String.fromString("v")))))
         val record = ser.serialize(row)
@@ -2270,6 +2272,38 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         } finally {
           reader.close()
         }
+      }
+
+      // SPARK-60242: in-flight CHAR/VARCHAR checks on Avro decode/encode, including
+      // externally produced STRING payloads whose Avro schema stamps CHAR/VARCHAR.
+      Seq(CharType(4), VarcharType(4)).foreach { dt =>
+        val avro = converters.toAvroType(dt, nullable = false)
+        val deser = new org.apache.spark.sql.avro.AvroDeserializer(
+          avro, dt, "CORRECTED", false, "", -1)
+        val padded = dt match {
+          case _: CharType => "ab  "
+          case _ => "ab"
+        }
+        assert(
+          deser.deserialize(new org.apache.avro.util.Utf8("ab")).get.toString === padded,
+          s"from_avro-equivalent decode should assign $dt")
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            deser.deserialize(new org.apache.avro.util.Utf8("abcde"))
+          },
+          condition = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "4"))
+        val ser = new org.apache.spark.sql.avro.AvroSerializer(dt, avro, nullable = false)
+        val encoded = ser.serialize(
+          org.apache.spark.unsafe.types.UTF8String.fromString("ab"))
+          .asInstanceOf[org.apache.avro.util.Utf8]
+        assert(encoded.toString === padded, s"to_avro-equivalent encode should assign $dt")
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            ser.serialize(org.apache.spark.unsafe.types.UTF8String.fromString("abcde"))
+          },
+          condition = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "4"))
       }
 
       // JSON has no embedded schema, so a user-specified schema supplies the logical type.

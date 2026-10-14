@@ -26,7 +26,7 @@ import org.apache.avro.file.SeekableByteArrayInput
 import org.apache.avro.generic.{GenericDatumReader, GenericDatumWriter, GenericRecord, GenericRecordBuilder}
 import org.apache.avro.io.{DecoderFactory, EncoderFactory}
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.avro.{functions => Fns}
 import org.apache.spark.sql.avro.functions.{from_avro, to_avro}
@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.LocalTableScanExec
 import org.apache.spark.sql.functions.{col, lit, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{BinaryType, IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{BinaryType, CharType, IntegerType, StructField, StructType, VarcharType}
 
 class AvroFunctionsSuite extends SharedSparkSession {
   import testImplicits._
@@ -767,6 +767,47 @@ class AvroFunctionsSuite extends SharedSparkSession {
     }
     assert(!ex.isInstanceOf[NullPointerException],
       s"Should not throw NPE, but got: ${ex.getClass.getName}: ${ex.getMessage}")
+  }
+
+  test("SPARK-60242: from_avro/to_avro CHAR/VARCHAR length enforcement") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val stringSchema = """{"type": "string"}"""
+      val charSchema = SchemaConverters.toAvroType(CharType(4), nullable = false).toString
+      val varcharSchema = SchemaConverters.toAvroType(VarcharType(4), nullable = false).toString
+
+      val padded = spark.range(1).select(
+        from_avro(to_avro(lit("ab"), stringSchema), charSchema).as("c"))
+      assert(padded.schema.head.dataType === CharType(4))
+      checkAnswer(padded.selectExpr("concat('<', c, '>')"), Row("<ab  >"))
+
+      val varcharShort = spark.range(1).select(
+        from_avro(to_avro(lit("ab"), stringSchema), varcharSchema).as("v"))
+      assert(varcharShort.schema.head.dataType === VarcharType(4))
+      checkAnswer(varcharShort, Row("ab"))
+
+      val roundTrip = spark.range(1).selectExpr("cast('ab' AS CHAR(4)) AS c")
+        .select(from_avro(to_avro($"c", charSchema), charSchema).as("c"))
+      checkAnswer(roundTrip.selectExpr("concat('<', c, '>')"), Row("<ab  >"))
+
+      def assertExceedLimit(body: => Any): Unit = {
+        val e = intercept[SparkException] { body }
+        val cause = e.getCause match {
+          case r: SparkRuntimeException => r
+          case other =>
+            Option(other).flatMap(t => Option(t.getCause)).getOrElse(other) match {
+              case r: SparkRuntimeException => r
+              case _ => fail(s"expected EXCEED_LIMIT_LENGTH cause, got: $e")
+            }
+        }
+        checkError(
+          exception = cause,
+          condition = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "4"))
+      }
+      val oversize = spark.range(1).select(to_avro(lit("abcde"), stringSchema).as("bin"))
+      assertExceedLimit(oversize.select(from_avro($"bin", charSchema)).collect())
+      assertExceedLimit(oversize.select(from_avro($"bin", varcharSchema)).collect())
+    }
   }
 
   test("SPARK-56043: from_avro with completely unparseable schema should not throw NPE") {

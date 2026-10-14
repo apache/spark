@@ -34,7 +34,7 @@ import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.avro.AvroUtils.{nonNullUnionBranches, toFieldStr, AvroMatchedField}
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArrayData}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, CharVarcharUtils, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_DAY
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -260,7 +260,7 @@ private[sql] class AvroDeserializer(
       case (DOUBLE, DoubleType) => (updater, ordinal, value) =>
         updater.setDouble(ordinal, value.asInstanceOf[Double])
 
-      case (STRING, _: StringType) => (updater, ordinal, value) =>
+      case (STRING, st: StringType) => (updater, ordinal, value) =>
         val str = value match {
           case s: String => UTF8String.fromString(s)
           case s: Utf8 =>
@@ -268,10 +268,11 @@ private[sql] class AvroDeserializer(
             System.arraycopy(s.getBytes, 0, bytes, 0, s.getByteLength)
             UTF8String.fromBytes(bytes)
         }
-        updater.set(ordinal, str)
+        updater.set(ordinal, CharVarcharUtils.applyTextParseSemantics(str, st))
 
-      case (ENUM, _: StringType) => (updater, ordinal, value) =>
-        updater.set(ordinal, UTF8String.fromString(value.toString))
+      case (ENUM, st: StringType) => (updater, ordinal, value) =>
+        updater.set(ordinal,
+          CharVarcharUtils.applyTextParseSemantics(UTF8String.fromString(value.toString), st))
 
       case (FIXED, BinaryType) => (updater, ordinal, value) =>
         updater.set(ordinal, value.asInstanceOf[GenericFixed].bytes().clone())
