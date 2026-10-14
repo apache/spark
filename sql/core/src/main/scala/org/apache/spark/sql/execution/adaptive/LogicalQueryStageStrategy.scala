@@ -63,14 +63,14 @@ object LogicalQueryStageStrategy extends Strategy {
   }
 
   /**
-   * Extracts the [[RangeBroadcastMode]] carried by a broadcast query stage, if any.
-   * Keys and the join condition come from the logical join. The mode identifies
-   * the already-built range index.
+   * Extracts the [[RangeBroadcastMode]] and [[BroadcastQueryStageExec]] carried by
+   * a broadcast query stage, if any.
    */
-  private def broadcastRangeMode(plan: LogicalPlan): Option[RangeBroadcastMode] = plan match {
+  private def broadcastRangeStage(
+      plan: LogicalPlan): Option[(RangeBroadcastMode, BroadcastQueryStageExec)] = plan match {
     case LogicalQueryStage(_, bqs: BroadcastQueryStageExec) =>
       bqs.broadcast.outputPartitioning match {
-        case BroadcastPartitioning(m: RangeBroadcastMode) => Some(m)
+        case BroadcastPartitioning(m: RangeBroadcastMode) => Some((m, bqs))
         case _ => None
       }
     case _ => None
@@ -96,26 +96,22 @@ object LogicalQueryStageStrategy extends Strategy {
       case j @ Join(_, _, _, Some(cond), _) =>
         j match {
           case ExtractRangeJoinKeys(left, right, leftKeys, rightKeys, joinType, rangeJoin) =>
-            def fromMode(
+            def fromStage(
                 mode: RangeBroadcastMode,
+                bqs: BroadcastQueryStageExec,
                 buildSide: BuildSide): Option[RangeBroadcastJoinStage] = {
               if (!mode.indexKind.matches(rangeJoin) ||
                   !BroadcastRangeJoinExec.supports(joinType, buildSide)) {
                 None
               } else {
-                val buildPlan = buildSide match {
-                  case BuildLeft => left
-                  case BuildRight => right
-                }
                 val buildKeys = buildSide match {
                   case BuildLeft => leftKeys
                   case BuildRight => rightKeys
                 }
-                // Same index kind is not enough: a point index of column y must not
-                // serve a join on column z. Mode equality ignores nullability, and
-                // BroadcastPartitioning.satisfies uses the same ==, so a stage
-                // whose nullability AQE rewrote still satisfies the distribution.
-                val bound = BindReferences.bindReferences(buildKeys, buildPlan.output)
+                // Mode was bound against the physical exchange output (`bqs.output`).
+                // Binding against `bqs.output` ensures ordinals align even when logical
+                // projections above the stage were collapsed or eliminated.
+                val bound = BindReferences.bindReferences(buildKeys, bqs.output)
                 if (mode == RangeBroadcastMode(bound, mode.indexKind)) {
                   Some(RangeBroadcastJoinStage(
                     left, right, joinType, buildSide, leftKeys, rightKeys, cond, rangeJoin))
@@ -124,8 +120,10 @@ object LogicalQueryStageStrategy extends Strategy {
                 }
               }
             }
-            broadcastRangeMode(left).flatMap(fromMode(_, BuildLeft))
-              .orElse(broadcastRangeMode(right).flatMap(fromMode(_, BuildRight)))
+            broadcastRangeStage(left).flatMap { case (m, bqs) => fromStage(m, bqs, BuildLeft) }
+              .orElse(broadcastRangeStage(right).flatMap {
+                case (m, bqs) => fromStage(m, bqs, BuildRight)
+              })
           case _ => None
         }
       case _ => None
