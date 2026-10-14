@@ -61,9 +61,6 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
 
-  @transient private lazy val customLegacyTimestampFormatter =
-    StaxXmlParser.customLegacyTimestampFormatter(options)
-
   private lazy val timestampNTZFormatter = TimestampFormatter(
     options.timestampNTZFormatInRead,
     options.zoneId,
@@ -759,7 +756,13 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
     val isTimestamp =
       try {
         if (legacyTimeParser) {
-          StaxXmlParser.parseLegacyTimestamp(field, customLegacyTimestampFormatter).isDefined
+          StaxXmlParser.parseLegacyTimestamp(field, {
+            if (options.parameters.contains(XmlOptions.TIMESTAMP_FORMAT)) {
+              timestampFormatter.parseOptional(field)
+            } else {
+              None
+            }
+          }).isDefined
         } else {
           timestampFormatter.parseOptional(field).isDefined
         }

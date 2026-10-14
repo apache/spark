@@ -18,9 +18,8 @@ package org.apache.spark.sql.catalyst.xml
 
 import java.io.{BufferedReader, CharConversionException, FileNotFoundException, InputStream, InputStreamReader, IOException, StringReader}
 import java.nio.charset.{Charset, MalformedInputException}
-import java.sql.Timestamp
-import java.text.NumberFormat
-import java.time.{Instant, ZoneId, ZoneOffset}
+import java.text.{NumberFormat, ParsePosition}
+import java.time.{Instant, ZoneOffset}
 import java.time.format.{DateTimeFormatter, DateTimeFormatterBuilder}
 import java.util
 import java.util.Locale
@@ -69,9 +68,6 @@ class StaxXmlParser(
 
   private lazy val legacyTimeParser =
     SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY
-
-  private lazy val customLegacyTimestampFormatter =
-    StaxXmlParser.customLegacyTimestampFormatter(options)
 
   private lazy val timestampNTZFormatter = TimestampFormatter(
     options.timestampNTZFormatInRead,
@@ -794,7 +790,13 @@ class StaxXmlParser(
 
   private def parseXmlTimestamp(value: String, options: XmlOptions): Long = {
     if (legacyTimeParser) {
-      StaxXmlParser.parseLegacyTimestamp(value, customLegacyTimestampFormatter).getOrElse {
+      StaxXmlParser.parseLegacyTimestamp(value, {
+        if (options.parameters.contains(XmlOptions.TIMESTAMP_FORMAT)) {
+          timestampFormatter.parseOptional(value)
+        } else {
+          None
+        }
+      }).getOrElse {
         throw new SparkIllegalArgumentException(
           errorClass = "_LEGACY_ERROR_TEMP_3260",
           messageParameters = Map("s" -> value))
@@ -1189,7 +1191,11 @@ class XmlTokenizer(
 }
 
 object StaxXmlParser {
-  private val legacyTimestampFormatters = Seq(
+  private val legacyZonedTimestampFormatters = Seq(
+    DateTimeFormatter.ISO_OFFSET_DATE_TIME,
+    DateTimeFormatter.ISO_INSTANT)
+
+  private val legacyLocalTimestampFormatters = Seq(
     new DateTimeFormatterBuilder()
       .parseCaseInsensitive()
       .append(DateTimeFormatter.ISO_LOCAL_DATE)
@@ -1197,38 +1203,34 @@ object StaxXmlParser {
       .append(DateTimeFormatter.ISO_LOCAL_TIME)
       .toFormatter()
       .withZone(ZoneOffset.UTC),
-    DateTimeFormatter.ISO_LOCAL_DATE_TIME.withZone(ZoneOffset.UTC),
-    DateTimeFormatter.ISO_OFFSET_DATE_TIME,
-    DateTimeFormatter.ISO_INSTANT)
-
-  private[xml] def customLegacyTimestampFormatter(
-      options: XmlOptions): Option[DateTimeFormatter] = {
-    options.parameters.get(XmlOptions.TIMESTAMP_FORMAT).map { pattern =>
-      val format = DateTimeFormatter.ofPattern(pattern)
-      if (pattern.exists("VzOXxZ".contains(_))) {
-        format
-      } else {
-        format.withZone(options.timezone.map(ZoneId.of).orNull)
-      }
-    }
-  }
+    DateTimeFormatter.ISO_LOCAL_DATE_TIME.withZone(ZoneOffset.UTC))
 
   private[xml] def parseLegacyTimestamp(
       value: String,
-      customFormatter: => Option[DateTimeFormatter]): Option[Long] = {
+      customTimestamp: => Option[Long]): Option[Long] = {
     def parseWithFormatter(format: DateTimeFormatter): Option[Long] = {
-      // Preserve spark-xml's java.sql.Timestamp conversion, including historical calendar rebasing.
-      Try(
-        DateTimeUtils.fromJavaTimestamp(Timestamp.from(Instant.from(format.parse(value))))).toOption
+      val position = new ParsePosition(0)
+      val parsed = format.parseUnresolved(value, position)
+      if (parsed != null && position.getIndex == value.length) {
+        // ISO parsing already produces proleptic-Gregorian instants; do not rebase them again.
+        Try(DateTimeUtils.instantToMicros(Instant.from(format.parse(value)))).toOption
+      } else {
+        None
+      }
     }
 
-    val isoTimestamp = if (value.nonEmpty && Character.isDigit(value.head)) {
-      legacyTimestampFormatters.iterator.map(parseWithFormatter)
-        .collectFirst { case Some(timestamp) => timestamp }
-    } else {
-      None
+    def parseIsoTimestamp(formatters: Seq[DateTimeFormatter]): Option[Long] = {
+      if (value.nonEmpty && Character.isDigit(value.head)) {
+        formatters.iterator.map(parseWithFormatter)
+          .collectFirst { case Some(timestamp) => timestamp }
+      } else {
+        None
+      }
     }
-    isoTimestamp.orElse(customFormatter.flatMap(parseWithFormatter))
+
+    parseIsoTimestamp(legacyZonedTimestampFormatters)
+      .orElse(customTimestamp)
+      .orElse(parseIsoTimestamp(legacyLocalTimestampFormatters))
   }
 
   /**

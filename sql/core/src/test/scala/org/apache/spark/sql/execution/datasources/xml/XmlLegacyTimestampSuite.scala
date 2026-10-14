@@ -18,11 +18,15 @@
 package org.apache.spark.sql.execution.datasources.xml
 
 import java.sql.Timestamp
-import java.time.{Instant, LocalDateTime}
+import java.time.{Instant, LocalDateTime, ZoneId}
+
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.functions.from_xml
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.withDefaultTimeZone
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.functions.{from_xml, struct, to_xml}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -74,9 +78,9 @@ class XmlLegacyTimestampSuite extends QueryTest with SharedSparkSession {
               val result = reader.xml(path.getAbsolutePath)
               assert(result.schema == schema)
               checkAnswer(
-                result,
+                result.selectExpr("unix_micros(stamp)"),
                 timestamps.map { case (_, expected) =>
-                  Row(Timestamp.from(Instant.parse(expected)))
+                  Row(DateTimeUtils.instantToMicros(Instant.parse(expected)))
                 })
             }
           }
@@ -121,6 +125,81 @@ class XmlLegacyTimestampSuite extends QueryTest with SharedSparkSession {
             reader.option("mode", "FAILFAST").xml(xml).collect()
           }
         }
+    }
+  }
+
+  test("SPARK-60199: LEGACY XML custom formats retain timezone, locale and pattern semantics") {
+    val cases = Seq(
+      ("dd/MM/yyyy HH:mm:ss", "29/02/2024 12:34:56", Map.empty[String, String],
+        "2024-02-29T20:34:56Z"),
+      ("yyyy-MM-dd HH:mm:ss", "2024-02-29 12:34:56", Map.empty[String, String],
+        "2024-02-29T20:34:56Z"),
+      ("yyyy-MM-dd HH:mm:ss", "2024-02-29 12:34:56", Map("timeZone" -> "+8:00"),
+        "2024-02-29T04:34:56Z"),
+      ("dd/MM/yyyy HH:mm:ss", "29/02/2024 12:34:56", Map("timeZone" -> "PST"),
+        "2024-02-29T20:34:56Z"),
+      ("dd MMM yyyy HH:mm:ss", "04 mars 2024 12:34:56", Map("locale" -> "fr-FR"),
+        "2024-03-04T20:34:56Z"),
+      ("dd/MM/yy HH:mm:ss", "01/01/70 00:00:00", Map("timeZone" -> "UTC"),
+        "1970-01-01T00:00:00Z"),
+      ("dd/MM/yyyy HH:mm:ss 'Z'", "29/02/2024 12:34:56 Z", Map.empty[String, String],
+        "2024-02-29T20:34:56Z"),
+      ("yyyy-dd-MM HH:mm:ss", "2024-03-04 12:34:56", Map.empty[String, String],
+        "2024-04-03T19:34:56Z"))
+    withSQLConf(
+      SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "LEGACY",
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+      for {
+        (format, input, extraOptions, expected) <- cases
+        mode <- Seq("PERMISSIVE", "FAILFAST")
+      } {
+        val options = extraOptions ++ Map(
+          "rowTag" -> "ROW", "timestampFormat" -> format, "mode" -> mode)
+        val xml = Seq(s"<ROW><stamp>$input</stamp></ROW>").toDS()
+        val reader = spark.read.options(options)
+        val expectedMicros = Row(DateTimeUtils.instantToMicros(Instant.parse(expected)))
+        val inferred = reader.xml(xml)
+        assert(inferred.schema == schema)
+        checkAnswer(inferred.selectExpr("unix_micros(stamp)"), expectedMicros)
+        checkAnswer(reader.schema(schema).xml(xml).selectExpr("unix_micros(stamp)"), expectedMicros)
+        val parsed = xml.toDF("xml").select(from_xml($"xml", schema, options.asJava).as("parsed"))
+        checkAnswer(parsed.selectExpr("unix_micros(parsed.stamp)"), expectedMicros)
+      }
+    }
+  }
+
+  test("SPARK-60199: LEGACY XML short timezone IDs do not corrupt inferred string fields") {
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "LEGACY") {
+      val xml = Seq("<ROW><label>example</label></ROW>").toDS()
+      for (zone <- Seq("PST", "+8:00"); mode <- Seq("PERMISSIVE", "FAILFAST")) {
+        val result = spark.read.option("rowTag", "ROW")
+          .option("timestampFormat", "dd/MM/yyyy HH:mm:ss")
+          .option("timeZone", zone).option("mode", mode).xml(xml)
+        assert(result.schema == new StructType().add("label", StringType))
+        checkAnswer(result, Row("example"))
+      }
+    }
+  }
+
+  test("SPARK-60199: LEGACY XML historical instants do not depend on the JVM timezone") {
+    withSQLConf(
+      SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "LEGACY",
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      for (zone <- Seq("UTC", "America/Los_Angeles")) {
+        withDefaultTimeZone(ZoneId.of(zone)) {
+          for (year <- Seq("1500", "1800", "2024")) {
+            val value = s"$year-01-01T12:34:56.123456Z"
+            val expected = Row(DateTimeUtils.instantToMicros(Instant.parse(value)))
+            val xml = Seq(s"<ROW><stamp>$value</stamp></ROW>").toDS()
+            val parsed = spark.read.option("rowTag", "ROW").schema(schema).xml(xml)
+            checkAnswer(parsed.selectExpr("unix_micros(stamp)"), expected)
+            val writeOptions = Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss.SSSSSSXXX")
+            val written = parsed.select(to_xml(struct($"stamp"), writeOptions.asJava).as("xml"))
+            val roundTrip = written.select(from_xml($"xml", schema).as("parsed"))
+            checkAnswer(roundTrip.selectExpr("unix_micros(parsed.stamp)"), expected)
+          }
+        }
+      }
     }
   }
 
