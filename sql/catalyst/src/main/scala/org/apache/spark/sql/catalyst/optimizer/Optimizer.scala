@@ -2818,12 +2818,14 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     }.reduce(And)
   }
 
-  // Replaces each occurrence of `grouping` in `e` with its normalized form, except a float/double
-  // attribute that is a direct operand of one of the comparisons below. Those treat -0.0 and 0.0
-  // as equal and all NaNs as equal (see SQLOrderingUtil.compareDoubles and
-  // CodegenContext.genEqual), and normalization never changes whether a value is null or NaN, so
-  // they give the same result on the raw value. Leaving them unwrapped keeps them usable by data
-  // sources and partition pruning.
+  // Rewrites `e` so that it gives the same result on the raw values of `grouping` as `e` gives on
+  // their normalized values (see NormalizeFloatingNumbers). Each occurrence of a grouping
+  // expression is wrapped in its normalized form, with one exception: a float/double attribute
+  // that is a direct operand of one of the comparisons matched below is left as is. Those
+  // comparisons already treat -0.0 and 0.0 as equal and all NaNs as equal (see
+  // SQLOrderingUtil.compareDoubles and CodegenContext.genEqual), and IsNull, IsNotNull and IsNaN
+  // cannot tell normalized values apart either, so wrapping would not change the result. Leaving
+  // them as is keeps plain comparisons usable by data sources and partition pruning.
   private[optimizer] def normalizeGroupingExpressions(
       e: Expression,
       grouping: Seq[Expression]): Expression = e match {
