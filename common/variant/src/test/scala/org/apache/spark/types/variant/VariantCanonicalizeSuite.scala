@@ -399,8 +399,9 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
       .put(1.toByte).put(0.toByte) // offset[1] = 1 (one key byte)
       .put('a'.toByte) // key "a"
       .array()
-    // isCanonical inspects only the metadata at this step, so any value bytes suffice.
-    assert(!VariantBuilder.isCanonical(new Variant(parse("1").getValue, meta)),
+    val referencingValue = parse("""{"a":1}""").getValue
+    assert(isCanon(parse("""{"a":1}""")), "sanity: a minimal-width dict is canonical")
+    assert(!VariantBuilder.isCanonical(new Variant(referencingValue, meta)),
       "a 2-byte offset width where 1 byte fits is not canonical")
   }
 
