@@ -919,6 +919,20 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       holder.pushedSample.isDefined ||
       holder.sortOrders.nonEmpty
 
+  /**
+   * Whether a side of a pushed join carries a pushdown whose rows depend on order or chance. Join
+   * pushdown moves each side's pushdowns into
+   * [[ScanBuilderHolder.joinedRelationsPushedDownOperators]] (and clears the side's
+   * `pushedSample`), so [[hasBlockingPushdown]] does not see them.
+   */
+  private def hasNonRepeatablePushdown(ops: PushedDownOperators): Boolean =
+    ops.aggregation.isDefined ||
+      ops.sample.isDefined ||
+      ops.limit.isDefined ||
+      ops.offset.isDefined ||
+      ops.sortValues.nonEmpty ||
+      ops.joinedRelationPushedDownOperators.exists(hasNonRepeatablePushdown)
+
   def buildScanWithPushedAggregate(plan: LogicalPlan): LogicalPlan = plan.transform {
     case holder: ScanBuilderHolder if holder.pushedAggregate.isDefined =>
       // No need to do column pruning because only the aggregate columns are used as
@@ -956,7 +970,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // A pushed join cannot be reproduced by rebuilding the scan, so this scan stays not-mergeable
       // (the default `mergeableScan = false`).
       val scanRelation = DataSourceV2ScanRelation(holder.relation, wrappedScan, realOutput,
-        repeatableScan = !hasBlockingPushdown(holder))
+        repeatableScan = !hasBlockingPushdown(holder) &&
+          !holder.joinedRelationsPushedDownOperators.exists(hasNonRepeatablePushdown))
 
       // When join is pushed down, the real output is going to be, for example,
       // SALARY_01234#0, NAME_ab123#1, DEPT_cd123#2.
