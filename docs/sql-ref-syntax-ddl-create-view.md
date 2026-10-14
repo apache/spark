@@ -77,7 +77,8 @@ CREATE [ OR REPLACE ] [ [ GLOBAL ] TEMPORARY ] VIEW [ IF NOT EXISTS ] view_ident
 
     * `[ ( column_name [ COMMENT column_comment ], ... ) ]` to specify column-level comments.
     * `[ COMMENT view_comment ]` to specify view-level comments.
-    * `[ TBLPROPERTIES ( property_name = property_value [ , ... ] ) ]` to add metadata key-value pairs.
+    * `[ TBLPROPERTIES ( property_name [=] property_value [ , ... ] ) ]` to add metadata key-value pairs.
+      The `=` between a key and its value is optional.
     * `[ WITH SCHEMA { BINDING | COMPENSATION | [ TYPE ] EVOLUTION } ]` to specify how the view reacts to schema changes
 
       This clause is not supported for `TEMPORARY` views.
