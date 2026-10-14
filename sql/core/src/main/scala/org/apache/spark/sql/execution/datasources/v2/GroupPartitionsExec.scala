@@ -668,9 +668,10 @@ private[sql] object GroupPartitionsExec {
       numMatchedPartitions += splits.size
       if (distributePartitions) {
         // `padTo` only pads, never truncates, so a key holding more splits than its expected
-        // count would emit more partitions than the pairing side expects while `isGrouped` can
-        // still read as grouped. Fail fast here, where the alignment is owned, rather than let
-        // the inconsistency surface downstream in `PartitioningCollection.fromPartitionings`.
+        // count would be emitted more times than the count says, while `isGrouped` can still read
+        // as grouped. A join split would then fail the `committed` gate in `EnsureRequirements`
+        // and silently fall back to a shuffle, and an ordering split would report duplicate keys
+        // as grouped. Fail fast here, where the alignment is owned, instead of either.
         assert(splits.size <= numSplits,
           s"a distributed partition key holds more splits (${splits.size}) than its expected " +
             s"count ($numSplits)")
