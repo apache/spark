@@ -503,12 +503,16 @@ class StaxXmlParser(
    */
   private def convertXmlMapKey(rawName: String, keyType: DataType): UTF8String = {
     val key = UTF8String.fromString(rawName)
-    if (charVarcharStandardSemantics &&
-        (keyType.isInstanceOf[CharType] || keyType.isInstanceOf[VarcharType])) {
-      if (CharVarcharUtils.charVarcharMapKeyExceedsLimit(key, keyType)) {
-        throw QueryExecutionErrors.unsupportedXmlCharVarcharMapKey(key, keyType)
+    if (charVarcharStandardSemantics) {
+      keyType match {
+        case c: CharType if key.numChars() != c.length =>
+          throw QueryExecutionErrors.unsupportedXmlCharVarcharMapKey(key, c)
+        case _: CharType => key
+        case v: VarcharType if key.numChars() > v.length =>
+          throw QueryExecutionErrors.unsupportedXmlCharVarcharMapKey(key, v)
+        case _: VarcharType => key
+        case _ => CharVarcharUtils.applyTextParseSemantics(key, keyType)
       }
-      key
     } else {
       CharVarcharUtils.applyTextParseSemantics(key, keyType)
     }

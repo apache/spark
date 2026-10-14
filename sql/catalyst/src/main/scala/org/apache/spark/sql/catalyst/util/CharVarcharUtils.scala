@@ -211,6 +211,7 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
   /**
    * CHAR/VARCHAR map keys are never padded or trimmed. A CHAR(n) key must already be exactly
    * n characters; a VARCHAR(n) key must already be at most n. STRING and other key types fit.
+   * Avro map-key checks use this; JSON/XML keep equivalent local checks for now.
    */
   def charVarcharMapKeyExceedsLimit(key: UTF8String, keyType: DataType): Boolean = {
     keyType match {

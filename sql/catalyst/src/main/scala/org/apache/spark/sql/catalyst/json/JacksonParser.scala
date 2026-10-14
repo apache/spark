@@ -720,16 +720,28 @@ class JacksonParser(
       None
     } else {
       keyType match {
-        case _: CharType | _: VarcharType =>
-          Some { key =>
-            if (CharVarcharUtils.charVarcharMapKeyExceedsLimit(key, keyType)) {
-              Some(QueryExecutionErrors.unsupportedJsonCharVarcharMapKey(key, keyType))
-            } else {
-              None
-            }
-          }
+        case c: CharType => Some(checkCharJsonMapKey(_, c))
+        case v: VarcharType => Some(checkVarcharJsonMapKey(_, v))
         case _ => None
       }
+    }
+  }
+
+  // A CHAR(n) JSON object name is never padded: it must already be exactly n characters.
+  private def checkCharJsonMapKey(key: UTF8String, keyType: CharType): Option[Throwable] = {
+    if (key.numChars() != keyType.length) {
+      Some(QueryExecutionErrors.unsupportedJsonCharVarcharMapKey(key, keyType))
+    } else {
+      None
+    }
+  }
+
+  // A VARCHAR(n) JSON object name is never trimmed: it must already be at most n characters.
+  private def checkVarcharJsonMapKey(key: UTF8String, keyType: VarcharType): Option[Throwable] = {
+    if (key.numChars() > keyType.length) {
+      Some(QueryExecutionErrors.unsupportedJsonCharVarcharMapKey(key, keyType))
+    } else {
+      None
     }
   }
 

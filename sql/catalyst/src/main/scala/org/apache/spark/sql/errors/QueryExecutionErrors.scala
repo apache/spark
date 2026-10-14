@@ -2753,7 +2753,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       key: UTF8String, dataType: DataType): SparkRuntimeException = {
     // The key is a raw JSON object name, which in map-shaped data is often user data (ids,
     // emails) and can run up to Jackson's 50,000-character name limit, so cap what we echo.
-    val displayKey = CharVarcharUtils.truncateMapKeyForError(key)
+    val maxKeyChars = 128
+    val displayKey = if (key.numChars() > maxKeyChars) {
+      UTF8String.concat(key.substring(0, maxKeyChars), UTF8String.fromString("..."))
+    } else {
+      key
+    }
     new SparkRuntimeException(
       errorClass = "UNSUPPORTED_JSON_CHAR_VARCHAR_MAP_KEY",
       messageParameters = Map(
@@ -2768,11 +2773,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
    */
   def unsupportedXmlCharVarcharMapKey(
       key: UTF8String, dataType: DataType): SparkRuntimeException = {
-    val displayKey = CharVarcharUtils.truncateMapKeyForError(key)
     new SparkRuntimeException(
       errorClass = "UNSUPPORTED_XML_CHAR_VARCHAR_MAP_KEY",
       messageParameters = Map(
-        "key" -> toSQLValue(displayKey, StringType),
+        "key" -> toSQLValue(key, StringType),
         "dataType" -> toSQLType(dataType)))
   }
 
