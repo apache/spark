@@ -39,7 +39,7 @@ private[spark] object Triggers {
     case RealTimeTrigger(batchDurationMs) =>
       s"""{"type":"RealTime","batchDurationMs":$batchDurationMs}"""
     case AvailableNowTrigger => """{"type":"AvailableNow"}"""
-    case OneTimeTrigger => """{"type":"OneTime"}"""
+    case OneTimeTrigger => """{"type":"Once"}"""
     case other => throw new IllegalStateException(s"Unknown type of trigger: $other")
   }
 

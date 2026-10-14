@@ -600,7 +600,7 @@ class StreamingQueryProgress(dict):
           specifies the configured interval in milliseconds.
         * When ``type`` is ``RealTime``, ``batchDurationMs`` specifies the batch
           duration in milliseconds.
-        * When ``type`` is ``AvailableNow`` or ``OneTime``, there are no other fields.
+        * When ``type`` is ``AvailableNow`` or ``Once``, there are no other fields.
 
         Returns ``None`` when the progress record has no trigger metadata.
 

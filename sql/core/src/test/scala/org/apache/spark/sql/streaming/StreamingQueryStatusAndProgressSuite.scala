@@ -52,7 +52,7 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
     Trigger.Continuous(2000) -> """{"type":"Continuous","intervalMs":2000}""",
     Trigger.RealTime(3000) -> """{"type":"RealTime","batchDurationMs":3000}""",
     Trigger.AvailableNow() -> """{"type":"AvailableNow"}""",
-    Trigger.Once() -> """{"type":"OneTime"}""")) {
+    Trigger.Once() -> """{"type":"Once"}""")) {
     case (trigger, expected) => assert(Triggers.toJson(trigger) === expected)
   }
 
