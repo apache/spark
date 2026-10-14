@@ -472,8 +472,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     SparkException.internalError(s"Can not interpolate ${arg.getClass.getName} into code block.")
   }
 
-  def customCollectionClsNotResolvedError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_2017")
+  def customCollectionClsNotResolvedError(): SparkException = {
+    SparkException.internalError(
+      "Cannot determine the data type of an unresolved MapObjects without a collection class.")
   }
 
   def classUnsupportedByMapObjectsError(cls: Class[_]): SparkRuntimeException = {
@@ -2739,6 +2740,44 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     )
   }
 
+  // SQLSTATE is 0A000 (feature-not-supported), not the 54006 of the value-side
+  // EXCEED_LIMIT_LENGTH: a too-long CHAR/VARCHAR value is truncatable overflow, but a JSON object
+  // name is a key that is never padded or trimmed, so an off-width name has no representation in
+  // a CHAR(n)/VARCHAR(n) map at all. It is a SparkRuntimeException (not
+  // SparkSQLFeatureNotSupportedException) because it is raised while parsing a row and must flow
+  // through Jackson's throw/catch parse-mode model (PERMISSIVE wraps it as a bad record, FAILFAST
+  // surfaces it).
+  def unsupportedJsonCharVarcharMapKey(
+      key: UTF8String, dataType: DataType): SparkRuntimeException = {
+    // The key is a raw JSON object name, which in map-shaped data is often user data (ids,
+    // emails) and can run up to Jackson's 50,000-character name limit, so cap what we echo.
+    val maxKeyChars = 128
+    val displayKey = if (key.numChars() > maxKeyChars) {
+      UTF8String.concat(key.substring(0, maxKeyChars), UTF8String.fromString("..."))
+    } else {
+      key
+    }
+    new SparkRuntimeException(
+      errorClass = "UNSUPPORTED_JSON_CHAR_VARCHAR_MAP_KEY",
+      messageParameters = Map(
+        "key" -> toSQLValue(displayKey, StringType),
+        "dataType" -> toSQLType(dataType)))
+  }
+
+  /**
+   * Restricting CHAR/VARCHAR XML map keys is a parser limitation (SQLSTATE 0A000),
+   * but this is a SparkRuntimeException so XML parse modes can handle it: PERMISSIVE
+   * wraps a bad record and FAILFAST surfaces the failure.
+   */
+  def unsupportedXmlCharVarcharMapKey(
+      key: UTF8String, dataType: DataType): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "UNSUPPORTED_XML_CHAR_VARCHAR_MAP_KEY",
+      messageParameters = Map(
+        "key" -> toSQLValue(key, StringType),
+        "dataType" -> toSQLType(dataType)))
+  }
+
   def timestampAddOverflowError(micros: Long, amount: Long, unit: String): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DATETIME_OVERFLOW",
@@ -3612,5 +3651,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       errorClass = "BIN_BY_INVALID_RANGE",
       messageParameters = Map("rangeStart" -> rangeStart, "rangeEnd" -> rangeEnd)
     )
+  }
+
+  def binByOverflowError(): SparkArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map("operation" -> "compute BIN BY bucket boundaries"),
+      context = Array.empty,
+      summary = "")
   }
 }

@@ -96,8 +96,6 @@ class ResolverGuard(
    * their children. For unimplemented ones, return Some("reason").
    */
   private def checkOperator(operator: LogicalPlan): Option[String] = {
-    checkOperatorSecondPassAnalysis(operator)
-
     operator match {
       case unresolvedWith: UnresolvedWith =>
         checkUnresolvedWith(unresolvedWith)
@@ -169,9 +167,6 @@ class ResolverGuard(
 
   private object CheckOperator {
     def unapply(operator: LogicalPlan): Option[String] = checkOperator(operator)
-  }
-
-  private def checkOperatorSecondPassAnalysis(operator: LogicalPlan): Unit = {
   }
 
   /**
@@ -666,8 +661,6 @@ class ResolverGuard(
     } else if (conf.getConf(SQLConf.LEGACY_CTE_PRECEDENCE_POLICY) !=
       LegacyBehaviorPolicy.CORRECTED) {
       Some("legacyCTEPrecedencePolicy")
-    } else if (conf.getConfString("pipelines.id", null) != null) {
-      Some("dlt")
     } else if (!conf.getConf(SQLConf.PRIORITIZE_ORDINAL_RESOLUTION_IN_SORT)) {
       Some("prioritizeOrdinalResolutionInSortDisabled")
     } else if (conf.getConf(SQLConf.PERSISTENT_CATALOG_FIRST)) {
@@ -762,8 +755,6 @@ object ResolverGuard {
   private val UNSUPPORTED_FUNCTION_NAMES = {
     val map = new IdentifierMap[Unit]()
     // User info functions are not supported.
-    // [[InlineUserInfoExpressions]] cannot be invoked as a post-hoc rule as it produces
-    // inconsistent aliases based on the table type (because of the rule ordering in fixed-point).
     map += ("current_user", ())
     map += ("session_user", ())
     map += ("user", ())
@@ -771,26 +762,12 @@ object ResolverGuard {
     map += ("session_window", ())
     map += ("window", ())
     map += ("window_time", ())
-    // Functions that are not resolved properly.
     // Functions that produce wrong schemas/plans because of alias assignment.
     map += ("from_json", ())
   }
 
   /**
-   * Experimental functions that are supported.
-   */
-  private val SUPPORTED_EXPERIMENTAL_FUNCTION_NAMES = {
-    val map = new IdentifierMap[Unit]()
-    map += ("ai_complete", ())
-    map += ("ai_embed", ())
-    map += ("collate", ())
-    map += ("schema_of_json", ())
-    map += ("schema_of_xml", ())
-  }
-
-  /**
-   * Higher order functions that are supported but guarded under the
-   * `ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_HIGHER_ORDER_FUNCTIONS_RESOLUTION` flag.
+   * Higher order functions that are not yet supported by the single-pass resolver.
    */
   private val HIGHER_ORDER_FUNCTIONS = {
     val map = new IdentifierMap[Unit]()
