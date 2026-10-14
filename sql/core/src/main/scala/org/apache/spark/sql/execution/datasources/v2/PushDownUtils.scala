@@ -719,15 +719,14 @@ object PushDownUtils extends Logging {
     val cleaned = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
     toAttributes(cleaned).map { a =>
       val orig = nameToAttr(a.name)
-      // Keep exprId. Do not re-stamp __CHAR_VARCHAR_TYPE_STRING: that marker
-      // means "not yet padded", and this runs in the optimizer with no
-      // second padding pass. File sources usually already substituted STRING,
-      // so the stamp was latent; a V2 scan whose readSchema() still surfaces
-      // CHAR/VARCHAR would otherwise look unpadded. Under standardSemantics
-      // the analyzer has already padded, so always drop a stamp that
-      // replaceCharVarcharWithStringInSchema just added from readSchema.
-      val metadata = if (SQLConf.get.charVarcharStandardSemantics ||
-          CharVarcharUtils.getRawTypeString(orig.metadata).isEmpty) {
+      // Keep exprId. Do not re-stamp __CHAR_VARCHAR_TYPE_STRING after
+      // ApplyCharTypePadding cleaned it: that marker means "not yet padded",
+      // and this runs in the optimizer with no second padding pass. File
+      // sources usually already substituted STRING, so the stamp was latent;
+      // a V2 scan whose readSchema() still surfaces CHAR/VARCHAR would
+      // otherwise look unpadded. Key off the relation's own padding state,
+      // not the session conf: a still-stamped relation was not padded.
+      val metadata = if (CharVarcharUtils.getRawTypeString(orig.metadata).isEmpty) {
         CharVarcharUtils.cleanMetadata(a.metadata)
       } else {
         a.metadata

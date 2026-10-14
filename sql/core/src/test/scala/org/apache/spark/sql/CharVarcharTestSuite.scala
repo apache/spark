@@ -1544,16 +1544,21 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     "%s(c, c, c)", "%s(array(array(c)))", "%s(named_struct('x', c))",
     "%s(map(c, 1))", "%s(map(1, c))")
 
-  // Signatures the scalar/nested templates do not typecheck: 3-string (translate),
-  // (string, string, int) overlay/split_part/substring_index, format_string's format
-  // arg, HOF lambdas, and window OVER. '%%s' survives String.format as '%s'.
+  // HOF lambdas and window OVER are the shapes the scalar/nested templates
+  // never typecheck. Nested already has "%s(c, c, c)" (translate, and overlay /
+  // split_part / substring_index via ANSI cast of the third arg to INT) and
+  // scalar already has "%s('x', c)" (format_string / printf). The other
+  // templates here add literal argument positions (translate's from/to,
+  // overlay / split_part / substring_index's count) and a format string that
+  // actually consumes c ('%%s' survives String.format as '%s').
   private val inventoryGatedShapes = Seq(
     "%s(c, 'x', 1)", "%s(c, '-', 1)", "%s(c, c, 1)", "%s(c, 'ab', 'xy')",
     "%s('%%s', c)", "%s(array(c), x -> x)", "%s(array(c), x -> reverse(x))",
     "%s(c) OVER (ORDER BY 1)", "%s(c, 1) OVER (ORDER BY 1)")
 
-  // These must typecheck (not Try.toOption). split_part / substring_index /
-  // translate reject case-insensitive collations (NonCSAI).
+  // These must typecheck (not Try.toOption), including on UTF8_LCASE:
+  // StringTypeNonCSAICollation rejects only case-sensitive accent-insensitive
+  // collations (e.g. UNICODE_AI), not UTF8_LCASE.
   private val requiredTransformingCalls = Seq(
     "translate(c, 'ab', 'xy')",
     "overlay(c, 'x', 1)",
@@ -1562,13 +1567,6 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     "printf('%s', c)",
     "split_part(c, '-', 1)",
     "substring_index(c, '-', 1)",
-    "transform(array(c), x -> reverse(x))[0]")
-
-  private val requiredTransformingCallsOnAnyCollation = Seq(
-    "overlay(c, 'x', 1)",
-    "overlay(c PLACING 'x' FROM 1)",
-    "format_string('%s', c)",
-    "printf('%s', c)",
     "transform(array(c), x -> reverse(x))[0]")
 
   private val requiredPassThroughCalls = Seq(
@@ -1657,15 +1655,15 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
 
   test("SPARK-59016: typecheck-gated transforming calls return STRING") {
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
-      Seq("c CHAR(5)", "c VARCHAR(5)", "c CHAR(5) COLLATE UNICODE").foreach { colDdl =>
+      Seq(
+        "c CHAR(5)",
+        "c VARCHAR(5)",
+        "c CHAR(5) COLLATE UNICODE",
+        "c CHAR(5) COLLATE UTF8_LCASE").foreach { colDdl =>
         withInventoryCol(colDdl) {
           assertRequiredInventoryCalls(
             requiredTransformingCalls, requiredPassThroughCalls)
         }
-      }
-      withInventoryCol("c CHAR(5) COLLATE UTF8_LCASE") {
-        assertRequiredInventoryCalls(
-          requiredTransformingCallsOnAnyCollation, requiredPassThroughCalls)
       }
     }
   }
@@ -4088,34 +4086,76 @@ class DSV2CharVarcharTestSuite extends CharVarcharTestSuite
     }
   }
 
+  private def withPrunedV2CharRelation(body: (DataFrame, DataSourceV2Relation) => Unit): Unit = {
+    withTable("std_v2_prune") {
+      sql(s"CREATE TABLE std_v2_prune (c CHAR(5), extra INT) USING $format")
+      sql("INSERT INTO std_v2_prune VALUES ('ab', 1)")
+      val df = sql("SELECT c FROM std_v2_prune")
+      val rel = df.queryExecution.analyzed.collect {
+        case r: DataSourceV2Relation => r
+      }.head
+      body(df, rel)
+    }
+  }
+
+  private def attrsFromCharReadSchema(rel: DataSourceV2Relation) =
+    PushDownUtils.toOutputAttrs(new StructType().add("c", CharType(5)), rel)
+
   test("SPARK-59016: V2 column prune does not re-stamp CHAR padding breadcrumb") {
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
-      withTable("std_v2_prune") {
-        sql(s"CREATE TABLE std_v2_prune (c CHAR(5), extra INT) USING $format")
-        sql("INSERT INTO std_v2_prune VALUES ('ab', 1)")
-        val df = sql("SELECT c FROM std_v2_prune")
-        val rel = df.queryExecution.analyzed.collect {
-          case r: DataSourceV2Relation => r
-        }.head
+      withPrunedV2CharRelation { (df, rel) =>
         val cAttr = rel.output.find(_.name == "c").get
         assert(CharVarcharUtils.getRawType(cAttr.metadata).isEmpty,
           "ApplyCharTypePadding should have cleaned the relation breadcrumb")
-        // A V2 scan that surfaces CHAR in readSchema() after padding ran.
-        val fromCharReadSchema = PushDownUtils.toOutputAttrs(
-          new StructType().add("c", CharType(5)), rel)
-        assert(CharVarcharUtils.getRawType(fromCharReadSchema.head.metadata).isEmpty,
+        // Direct toOutputAttrs with CHAR readSchema is the regression guard.
+        // The InMemory prune path can still see a stamped relation object,
+        // so the optimized scan output is not a reliable check for this.
+        assert(CharVarcharUtils.getRawType(attrsFromCharReadSchema(rel).head.metadata).isEmpty,
           "toOutputAttrs must not re-stamp CHAR metadata on a padded relation")
+        checkAnswer(df, Row("ab   "))
+      }
+    }
+  }
+
+  test("SPARK-59016: default-mode padded V2 prune does not re-stamp CHAR breadcrumb") {
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "true") {
+      withPrunedV2CharRelation { (df, rel) =>
+        val cAttr = rel.output.find(_.name == "c").get
+        assert(CharVarcharUtils.getRawType(cAttr.metadata).isEmpty,
+          "default read-side padding should have cleaned the relation breadcrumb")
+        // Direct toOutputAttrs with CHAR readSchema is the regression guard:
+        // always-keeping the marker would pass the end-to-end scan check.
+        assert(CharVarcharUtils.getRawType(attrsFromCharReadSchema(rel).head.metadata).isEmpty,
+          "toOutputAttrs must drop the marker on a padded default-mode relation")
+        checkAnswer(df, Row("ab   "))
+      }
+    }
+  }
+
+  test("SPARK-59016: unpadded default-mode V2 prune keeps CHAR breadcrumb") {
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+      withPrunedV2CharRelation { (df, rel) =>
+        val cAttr = rel.output.find(_.name == "c").get
+        assert(CharVarcharUtils.getRawType(cAttr.metadata).isDefined,
+          "disabled read-side padding should leave the relation stamped")
+        assert(CharVarcharUtils.getRawType(attrsFromCharReadSchema(rel).head.metadata).isDefined,
+          "toOutputAttrs must keep the marker on a still-stamped relation")
         val scans = df.queryExecution.optimizedPlan.collect {
           case s: DataSourceV2ScanRelation => s
         }
         assert(scans.nonEmpty)
         scans.foreach { s =>
           s.output.foreach { a =>
-            assert(CharVarcharUtils.getRawType(a.metadata).isEmpty,
-              s"pruned scan ${a.name} re-stamped ${a.metadata}")
+            if (a.name == "c") {
+              assert(CharVarcharUtils.getRawType(a.metadata).isDefined,
+                s"pruned scan ${a.name} dropped the CHAR breadcrumb")
+            }
           }
         }
-        checkAnswer(df, Row("ab   "))
       }
     }
   }
