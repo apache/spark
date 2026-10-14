@@ -26,6 +26,12 @@
  * source to Data Source V2, with batch and micro-batch streaming reads, batch and streaming
  * writes, and predicate, column and limit pushdown.
  *
+ * This header is self-contained: it only depends on the C standard library, and defines the
+ * structs of the Arrow C data interface unless they are already defined, as by Arrow C++. A library
+ * can copy it into its source tree, or use the copy in the include directory of a Spark
+ * distribution. A library built against it works with all the releases of Spark that support its
+ * SPARK_DS_ABI_VERSION.
+ *
  * Spark finds the library of a data source automatically when it is installed like other native
  * libraries and named after the data source: the library of my_source is
  * spark_datasource_my_source, such as libspark_datasource_my_source.so in /usr/local/lib on Linux.
