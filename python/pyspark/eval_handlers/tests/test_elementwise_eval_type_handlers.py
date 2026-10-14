@@ -58,16 +58,6 @@ if have_pandas and have_pyarrow:
         _ScalarIterElementwiseUDFHandler,
     )
 
-_missing_message = pandas_requirement_message or pyarrow_requirement_message
-
-_A = [[1, 2], [], None, [3]]
-_B = [[[1], [2, 3]], None, [[], None], [[4]]]
-_C = [[10, 20], [], None, [30]]
-
-_A_PLUS_ONE = [[2, 3], [], None, [4]]
-_B_PLUS_ONE = [[[2], [3, 4]], None, [[], None], [[5]]]
-_A_TIMES_C = [[10, 40], [], None, [90]]
-
 
 class ElementwiseEvalTypeHandlerTestCase(PySparkBaseTestCase):
     """Builders for the shared ``a`` / ``b`` / ``c`` input layout."""
@@ -80,15 +70,24 @@ class ElementwiseEvalTypeHandlerTestCase(PySparkBaseTestCase):
         ]
     )
 
-    @staticmethod
-    def _batch(a=_A, b=_B, c=_C, large_list=False):
-        """A RecordBatch of the ``a`` / ``b`` / ``c`` columns."""
+    # Input column values, and the expected outputs of ``a + 1``, ``b + 1`` and ``a * c``.
+    _A = [[1, 2], [], None, [3]]
+    _B = [[[1], [2, 3]], None, [[], None], [[4]]]
+    _C = [[10, 20], [], None, [30]]
+    _A_PLUS_ONE = [[2, 3], [], None, [4]]
+    _B_PLUS_ONE = [[[2], [3, 4]], None, [[], None], [[5]]]
+    _A_TIMES_C = [[10, 40], [], None, [90]]
+
+    @classmethod
+    def _batch(cls, a=None, b=None, c=None, large_list=False):
+        """A RecordBatch of the ``a`` / ``b`` / ``c`` columns, defaulting to ``_A`` / ``_B`` /
+        ``_C``."""
         list_ = pa.large_list if large_list else pa.list_
         return pa.RecordBatch.from_arrays(
             [
-                pa.array(a, type=list_(pa.int64())),
-                pa.array(b, type=list_(list_(pa.int64()))),
-                pa.array(c, type=list_(pa.int64())),
+                pa.array(cls._A if a is None else a, type=list_(pa.int64())),
+                pa.array(cls._B if b is None else b, type=list_(list_(pa.int64()))),
+                pa.array(cls._C if c is None else c, type=list_(pa.int64())),
             ],
             ["a", "b", "c"],
         )
@@ -111,7 +110,9 @@ class ElementwiseEvalTypeHandlerTestCase(PySparkBaseTestCase):
         return [v for batch in out for v in batch.column(index).to_pylist()]
 
 
-@unittest.skipIf(not have_pandas or not have_pyarrow, _missing_message)
+@unittest.skipIf(
+    not (have_pandas and have_pyarrow), pandas_requirement_message or pyarrow_requirement_message
+)
 class ElementwiseEvalTypeHandlerRegistrationTests(PySparkBaseTestCase):
     def test_elementwise_eval_types_are_registered(self):
         for eval_type, handler_cls in (
@@ -137,7 +138,9 @@ class ElementwiseEvalTypeHandlerRegistrationTests(PySparkBaseTestCase):
                 self.assertTrue(base.__abstractmethods__)
 
 
-@unittest.skipIf(not have_pandas or not have_pyarrow, _missing_message)
+@unittest.skipIf(
+    not (have_pandas and have_pyarrow), pandas_requirement_message or pyarrow_requirement_message
+)
 class ArrowElementwiseUDFHandlerTests(ElementwiseEvalTypeHandlerTestCase):
     def test_serializer(self):
         handler = self._handler(ArrowElementwiseUDFHandler, (lambda x: x, [0], {}, LongType()))
@@ -147,14 +150,14 @@ class ArrowElementwiseUDFHandlerTests(ElementwiseEvalTypeHandlerTestCase):
         handler = self._handler(ArrowElementwiseUDFHandler, (lambda x: x + 1, [0], {}, LongType()))
         out = list(handler.run(0, iter([self._batch()])))
         self.assertEqual(out[0].schema.names, ["_0"])
-        self.assertEqual(self._column(out), _A_PLUS_ONE)
+        self.assertEqual(self._column(out), self._A_PLUS_ONE)
 
     def test_nesting_greater_than_one(self):
         handler = self._handler(
             ArrowElementwiseUDFHandler, (lambda x: x + 1, [1], {}, LongType()), nesting=[2]
         )
         out = list(handler.run(0, iter([self._batch()])))
-        self.assertEqual(self._column(out), _B_PLUS_ONE)
+        self.assertEqual(self._column(out), self._B_PLUS_ONE)
 
     def test_fused_udfs_renest_by_own_shape(self):
         handler = self._handler(
@@ -166,9 +169,9 @@ class ArrowElementwiseUDFHandlerTests(ElementwiseEvalTypeHandlerTestCase):
         )
         out = list(handler.run(0, iter([self._batch(), self._batch()])))
         self.assertEqual([b.schema.names for b in out], [["_0", "_1", "_2"]] * 2)
-        self.assertEqual(self._column(out, 0), _A_PLUS_ONE * 2)
-        self.assertEqual(self._column(out, 1), _B_PLUS_ONE * 2)
-        self.assertEqual(self._column(out, 2), _A_TIMES_C * 2)
+        self.assertEqual(self._column(out, 0), self._A_PLUS_ONE * 2)
+        self.assertEqual(self._column(out, 1), self._B_PLUS_ONE * 2)
+        self.assertEqual(self._column(out, 2), self._A_TIMES_C * 2)
 
     def test_passes_arg_by_keyword_offset(self):
         handler = self._handler(
@@ -183,7 +186,7 @@ class ArrowElementwiseUDFHandlerTests(ElementwiseEvalTypeHandlerTestCase):
         )
         out = list(handler.run(0, iter([self._batch(large_list=True)])))
         self.assertEqual(out[0].schema.field(0).type, pa.large_list(pa.large_list(pa.int64())))
-        self.assertEqual(self._column(out), _B_PLUS_ONE)
+        self.assertEqual(self._column(out), self._B_PLUS_ONE)
 
     def test_casts_result_to_return_type(self):
         handler = self._handler(ArrowElementwiseUDFHandler, (lambda x: x, [0], {}, StringType()))
@@ -197,7 +200,7 @@ class ArrowElementwiseUDFHandlerTests(ElementwiseEvalTypeHandlerTestCase):
             ArrowElementwiseUDFHandler, (lambda x: x + 1, [0], {}, LongType()), runner_conf=conf
         )
         out = list(handler.run(0, iter([self._batch()])))
-        self.assertEqual(self._column(out), _A_PLUS_ONE)
+        self.assertEqual(self._column(out), self._A_PLUS_ONE)
 
     def test_stop_iteration_raises_runtime_error(self):
         def stop(x):
@@ -208,22 +211,14 @@ class ArrowElementwiseUDFHandlerTests(ElementwiseEvalTypeHandlerTestCase):
             list(handler.run(0, iter([self._batch()])))
 
 
-class _ScalarElementwiseUDFHandlerTests:
-    """Flavor-independent scalar tests; subclasses set ``_HANDLER_CLS`` and the flavor's
-    arithmetic over a UDF input (``pa.Array`` or ``pd.Series``)."""
+class ScalarElementwiseUDFHandlerTestsMixin:
+    """Tests shared by both scalar element-wise flavors; subclasses set ``handler_cls`` and define
+    ``_add(x, n)`` / ``_mul(x, y)`` over the flavor's UDF input (``pa.Array`` or ``pd.Series``)."""
 
-    _HANDLER_CLS = None
-
-    @staticmethod
-    def _add(x, n):
-        raise NotImplementedError
-
-    @staticmethod
-    def _mul(x, y):
-        raise NotImplementedError
+    handler_cls: type
 
     def _scalar_handler(self, *udfs, **kwargs):
-        return self._handler(self._HANDLER_CLS, *udfs, **kwargs)
+        return self._handler(self.handler_cls, *udfs, **kwargs)
 
     def test_serializer(self):
         handler = self._scalar_handler((lambda x: x, [0], {}, LongType()))
@@ -240,14 +235,14 @@ class _ScalarElementwiseUDFHandlerTests:
         out = list(handler.run(0, iter([self._batch()])))
         self.assertEqual(calls, [3])
         self.assertEqual(out[0].schema.names, ["_0"])
-        self.assertEqual(self._column(out), _A_PLUS_ONE)
+        self.assertEqual(self._column(out), self._A_PLUS_ONE)
 
     def test_nesting_greater_than_one(self):
         handler = self._scalar_handler(
             (lambda x: self._add(x, 1), [1], {}, LongType()), nesting=[2]
         )
         out = list(handler.run(0, iter([self._batch()])))
-        self.assertEqual(self._column(out), _B_PLUS_ONE)
+        self.assertEqual(self._column(out), self._B_PLUS_ONE)
 
     def test_fused_udfs_renest_by_own_shape(self):
         handler = self._scalar_handler(
@@ -258,14 +253,14 @@ class _ScalarElementwiseUDFHandlerTests:
         )
         out = list(handler.run(0, iter([self._batch(), self._batch()])))
         self.assertEqual([b.schema.names for b in out], [["_0", "_1", "_2"]] * 2)
-        self.assertEqual(self._column(out, 0), _A_PLUS_ONE * 2)
-        self.assertEqual(self._column(out, 1), _B_PLUS_ONE * 2)
-        self.assertEqual(self._column(out, 2), _A_TIMES_C * 2)
+        self.assertEqual(self._column(out, 0), self._A_PLUS_ONE * 2)
+        self.assertEqual(self._column(out, 1), self._B_PLUS_ONE * 2)
+        self.assertEqual(self._column(out, 2), self._A_TIMES_C * 2)
 
     def test_passes_arg_by_keyword_offset(self):
         handler = self._scalar_handler((lambda x, y: self._mul(x, y), [0], {"y": 2}, LongType()))
         out = list(handler.run(0, iter([self._batch()])))
-        self.assertEqual(self._column(out), _A_TIMES_C)
+        self.assertEqual(self._column(out), self._A_TIMES_C)
 
     def test_preserves_large_list(self):
         handler = self._scalar_handler(
@@ -273,7 +268,7 @@ class _ScalarElementwiseUDFHandlerTests:
         )
         out = list(handler.run(0, iter([self._batch(large_list=True)])))
         self.assertEqual(out[0].schema.field(0).type, pa.large_list(pa.large_list(pa.int64())))
-        self.assertEqual(self._column(out), _B_PLUS_ONE)
+        self.assertEqual(self._column(out), self._B_PLUS_ONE)
 
     def test_all_empty_and_null_arrays(self):
         handler = self._scalar_handler((lambda x: self._add(x, 1), [0], {}, LongType()))
@@ -292,11 +287,13 @@ class _ScalarElementwiseUDFHandlerTests:
             list(handler.run(0, iter([self._batch()])))
 
 
-@unittest.skipIf(not have_pandas or not have_pyarrow, _missing_message)
+@unittest.skipIf(
+    not (have_pandas and have_pyarrow), pandas_requirement_message or pyarrow_requirement_message
+)
 class ArrowScalarElementwiseUDFHandlerTests(
-    _ScalarElementwiseUDFHandlerTests, ElementwiseEvalTypeHandlerTestCase
+    ScalarElementwiseUDFHandlerTestsMixin, ElementwiseEvalTypeHandlerTestCase
 ):
-    _HANDLER_CLS = ArrowScalarElementwiseUDFHandler if have_pyarrow else None
+    handler_cls = ArrowScalarElementwiseUDFHandler if have_pyarrow else None
 
     @staticmethod
     def _add(x, n):
@@ -322,14 +319,16 @@ class ArrowScalarElementwiseUDFHandlerTests(
         handler = self._scalar_handler((lambda x: pc.cast(x, pa.int32()), [0], {}, LongType()))
         out = list(handler.run(0, iter([self._batch()])))
         self.assertEqual(out[0].schema.field(0).type, pa.list_(pa.int64()))
-        self.assertEqual(self._column(out), _A)
+        self.assertEqual(self._column(out), self._A)
 
 
-@unittest.skipIf(not have_pandas or not have_pyarrow, _missing_message)
+@unittest.skipIf(
+    not (have_pandas and have_pyarrow), pandas_requirement_message or pyarrow_requirement_message
+)
 class PandasScalarElementwiseUDFHandlerTests(
-    _ScalarElementwiseUDFHandlerTests, ElementwiseEvalTypeHandlerTestCase
+    ScalarElementwiseUDFHandlerTestsMixin, ElementwiseEvalTypeHandlerTestCase
 ):
-    _HANDLER_CLS = PandasScalarElementwiseUDFHandler if have_pandas and have_pyarrow else None
+    handler_cls = PandasScalarElementwiseUDFHandler if have_pandas and have_pyarrow else None
 
     @staticmethod
     def _add(x, n):
@@ -377,23 +376,16 @@ class PandasScalarElementwiseUDFHandlerTests(
         self.assertEqual(self._column(out), [[{"v": 2}, {"v": 3}], [], None, [{"v": 4}]])
 
 
-class _ScalarIterElementwiseUDFHandlerTests:
-    """Flavor-independent scalar iterator tests; subclasses set ``_HANDLER_CLS`` and convert
-    between a UDF batch (``pa.Array`` or ``pd.Series``) and a Python list."""
+class ScalarIterElementwiseUDFHandlerTestsMixin:
+    """Tests shared by both scalar iterator element-wise flavors; subclasses set ``handler_cls``
+    and define ``_to_list(x)`` / ``_from_list(values)`` to convert between the flavor's UDF batch
+    (``pa.Array`` or ``pd.Series``) and a Python list."""
 
-    _HANDLER_CLS = None
-
-    @staticmethod
-    def _to_list(x):
-        raise NotImplementedError
-
-    @staticmethod
-    def _from_list(values):
-        raise NotImplementedError
+    handler_cls: type
 
     def _iter_handler(self, udf, args_offsets=(0,), nesting=None, return_type=None):
         return self._handler(
-            self._HANDLER_CLS,
+            self.handler_cls,
             (udf, list(args_offsets), {}, return_type or LongType()),
             nesting=nesting,
         )
@@ -407,12 +399,12 @@ class _ScalarIterElementwiseUDFHandlerTests:
 
     def test_maps_batch_stream(self):
         batches = [
-            self._batch(a=_A[:2], b=_B[:2], c=_C[:2]),
-            self._batch(a=_A[2:], b=_B[2:], c=_C[2:]),
+            self._batch(a=self._A[:2], b=self._B[:2], c=self._C[:2]),
+            self._batch(a=self._A[2:], b=self._B[2:], c=self._C[2:]),
         ]
         out = list(self._iter_handler(self._plus_one).run(0, iter(batches)))
         self.assertEqual({b.schema.names[0] for b in out}, {"_0"})
-        self.assertEqual(self._column(out), _A_PLUS_ONE)
+        self.assertEqual(self._column(out), self._A_PLUS_ONE)
 
     def test_regroups_rechunked_results(self):
         # The UDF consumes every input batch before yielding one element per chunk, so the
@@ -423,13 +415,13 @@ class _ScalarIterElementwiseUDFHandlerTests:
                 yield self._from_list([v + 1])
 
         out = list(self._iter_handler(udf).run(0, iter([self._batch(), self._batch()])))
-        self.assertEqual(self._column(out), _A_PLUS_ONE * 2)
+        self.assertEqual(self._column(out), self._A_PLUS_ONE * 2)
 
     def test_nesting_greater_than_one(self):
         out = list(
             self._iter_handler(self._plus_one, (1,), nesting=[2]).run(0, iter([self._batch()]))
         )
-        self.assertEqual(self._column(out), _B_PLUS_ONE)
+        self.assertEqual(self._column(out), self._B_PLUS_ONE)
 
     def test_multiple_args(self):
         def udf(batches):
@@ -437,7 +429,7 @@ class _ScalarIterElementwiseUDFHandlerTests:
                 yield self._from_list([a * b for a, b in zip(self._to_list(x), self._to_list(y))])
 
         out = list(self._iter_handler(udf, (0, 2)).run(0, iter([self._batch()])))
-        self.assertEqual(self._column(out), _A_TIMES_C)
+        self.assertEqual(self._column(out), self._A_TIMES_C)
 
     def test_emits_empty_and_null_arrays_without_results(self):
         # The UDF yields nothing for an all-empty batch; its rows are still emitted.
@@ -491,11 +483,13 @@ class _ScalarIterElementwiseUDFHandlerTests:
             list(self._iter_handler(udf).run(0, iter([self._batch()])))
 
 
-@unittest.skipIf(not have_pandas or not have_pyarrow, _missing_message)
+@unittest.skipIf(
+    not (have_pandas and have_pyarrow), pandas_requirement_message or pyarrow_requirement_message
+)
 class ArrowScalarIterElementwiseUDFHandlerTests(
-    _ScalarIterElementwiseUDFHandlerTests, ElementwiseEvalTypeHandlerTestCase
+    ScalarIterElementwiseUDFHandlerTestsMixin, ElementwiseEvalTypeHandlerTestCase
 ):
-    _HANDLER_CLS = ArrowScalarIterElementwiseUDFHandler if have_pyarrow else None
+    handler_cls = ArrowScalarIterElementwiseUDFHandler if have_pyarrow else None
 
     @staticmethod
     def _to_list(x):
@@ -512,14 +506,16 @@ class ArrowScalarIterElementwiseUDFHandlerTests(
 
         out = list(self._iter_handler(udf).run(0, iter([self._batch()])))
         self.assertEqual(out[0].schema.field(0).type, pa.list_(pa.int64()))
-        self.assertEqual(self._column(out), _A)
+        self.assertEqual(self._column(out), self._A)
 
 
-@unittest.skipIf(not have_pandas or not have_pyarrow, _missing_message)
+@unittest.skipIf(
+    not (have_pandas and have_pyarrow), pandas_requirement_message or pyarrow_requirement_message
+)
 class PandasScalarIterElementwiseUDFHandlerTests(
-    _ScalarIterElementwiseUDFHandlerTests, ElementwiseEvalTypeHandlerTestCase
+    ScalarIterElementwiseUDFHandlerTestsMixin, ElementwiseEvalTypeHandlerTestCase
 ):
-    _HANDLER_CLS = PandasScalarIterElementwiseUDFHandler if have_pandas and have_pyarrow else None
+    handler_cls = PandasScalarIterElementwiseUDFHandler if have_pandas and have_pyarrow else None
 
     @staticmethod
     def _to_list(x):
