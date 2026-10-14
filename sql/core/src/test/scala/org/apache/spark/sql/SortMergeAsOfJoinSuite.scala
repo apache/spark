@@ -635,6 +635,38 @@ class SortMergeAsOfJoinSuite extends QueryTest
     )
   }
 
+  test("nearest join - right rows sharing an as-of value before the nearest one") {
+    // Right rows sharing an as-of value are the same distance from the left row, so the distance
+    // does not always decrease up to the nearest row. The scan must not stop at such a row: here
+    // it would return ts=1 (distance 9) instead of ts=9 (distance 1).
+    val schema1 = StructType(
+      StructField("grp", StringType) ::
+        StructField("ts", IntegerType) :: Nil)
+    val schema2 = StructType(
+      StructField("grp", StringType) ::
+        StructField("ts", IntegerType) ::
+        StructField("val", StringType) :: Nil)
+    val left = spark.createDataFrame(List(Row("A", 10)).asJava, schema1)
+    val right = spark.createDataFrame(
+      List(Row("A", 1, "x"), Row("A", 1, "y"), Row("A", 9, "z")).asJava, schema2)
+    def nearest(usingColumns: Seq[String]): classic.DataFrame =
+      left.joinAsOf(
+        right, left.col("ts"), right.col("ts"), usingColumns = usingColumns,
+        joinType = "inner", tolerance = null,
+        allowExactMatches = true, direction = "nearest")
+    val expected = Seq(Row("A", 10, "A", 9, "z"))
+    // No equi-key (bufferAllRight path) and with an equi-key (bufferRightGroup path), with the
+    // right-side buffer in memory and spilled.
+    checkAnswer(nearest(Seq.empty), expected)
+    checkAnswer(nearest(Seq("grp")), expected)
+    withSQLConf(
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
+      checkAnswerAndSpill(nearest(Seq.empty), expected)
+      checkAnswerAndSpill(nearest(Seq("grp")), expected)
+    }
+  }
+
   test("null equi-keys with EqualTo condition") {
     // NULL = NULL -> NULL under EqualTo semantics, so null-keyed rows
     // should NOT match each other.

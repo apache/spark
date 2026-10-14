@@ -417,8 +417,8 @@ private[joins] class SortMergeAsOfJoinScanner(
   }
 
   /**
-   * Nearest joins: keeps the row with the smallest distance. The scan stops once the
-   * distance stops decreasing.
+   * Nearest joins: keeps the row with the smallest distance, the first one on a tie. The scan
+   * stops once the distance increases.
    */
   private def findNearest(leftRow: InternalRow): InternalRow = {
     var bestMatch: InternalRow = null
@@ -441,8 +441,10 @@ private[joins] class SortMergeAsOfJoinScanner(
             if (bestMatch == null || ordering.lt(distance, bestDistance)) {
               bestMatch = retainMatch(rightRow, needsCopy)
               bestDistance = distance
-            } else {
-              // The distance stopped decreasing. It is V-shaped, so no later row is closer.
+            } else if (ordering.gt(distance, bestDistance)) {
+              // The distance increased. It is V-shaped, so no later row is closer. An equal
+              // distance does not stop the scan: right rows sharing an as-of value are the same
+              // distance away, also before the nearest row.
               return bestMatch
             }
           }
