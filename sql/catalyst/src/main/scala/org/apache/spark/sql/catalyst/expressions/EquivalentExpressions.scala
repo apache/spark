@@ -159,16 +159,40 @@ class EquivalentExpressions(
   // that the peel lands on rather than about the `And`/`Or` chain above it.
   private def childrenToRecurse(expr: Expression): Seq[Expression] = expr match {
     case _: CodegenFallback => Nil
-    // Definitions are lazy. Only the generated body exposes always-evaluated subexpressions;
+    // Definitions stay lazy unless the body always reaches their references;
     // supportedExpression excludes candidates whose references would escape their binding scope.
     case withExpr: With =>
-      if (withExpr.refUnderCodegenFallback) Nil else Seq(withExpr.child)
+      if (withExpr.refUnderCodegenFallback) Nil
+      else withExpr.child +: alwaysEvaluatedDefinitions(withExpr)
     // Peeling here is redundant for safety: `updateExprTree` peels before it descends, so this
     // method sees the peeled node either way. It stays because dropping it would pass
     // `updateExprTree` the input itself rather than the operand its peel lands on.
     case c: ConditionalExpression => c.alwaysEvaluatedInputs.map(skipForShortcut)
     case h: HigherOrderFunction => h.alwaysEvaluatedArguments
     case other => other.children
+  }
+
+  private def alwaysEvaluatedDefinitions(withExpr: With): Seq[Expression] = {
+    val definitions = withExpr.defs.map(definition => definition.id -> definition).toMap
+    val required = mutable.HashSet.empty[CommonExpressionId]
+    def collect(expression: Expression, shadowed: Set[CommonExpressionId]): Unit = {
+      val alwaysEvaluated = skipForShortcut(expression)
+      if (alwaysEvaluated.containsPattern(COMMON_EXPR_REF)) {
+        alwaysEvaluated match {
+          case ref: CommonExpressionRef if !shadowed.contains(ref.id) =>
+            definitions.get(ref.id).foreach { definition =>
+              if (required.add(ref.id)) collect(definition.child, Set.empty)
+            }
+          case nested: With =>
+            val innerIds = shadowed ++ nested.defs.map(_.id)
+            childrenToRecurse(nested).foreach(collect(_, innerIds))
+          case other =>
+            childrenToRecurse(other).foreach(collect(_, shadowed))
+        }
+      }
+    }
+    collect(withExpr.child, Set.empty)
+    withExpr.defs.filter(definition => required.contains(definition.id)).map(_.child)
   }
 
   // For some special expressions we cannot just recurse into all of its children, but we can

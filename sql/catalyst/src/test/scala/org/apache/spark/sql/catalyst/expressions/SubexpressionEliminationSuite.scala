@@ -546,6 +546,52 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     assert(equivalence1.getCommonSubexpressions.size == 1)
   }
 
+  test("With exposes always-evaluated definitions through nested scopes") {
+    val input = AttributeReference("input", IntegerType)()
+    val shared = Add(input, Literal(1))
+    val direct = With(shared) { case Seq(ref) => Add(ref, Literal(2)) }
+    val nested = With(shared) { case Seq(outerRef) =>
+      With(Add(outerRef, Literal(2))) { case Seq(innerRef) => Add(innerRef, input) }
+    }
+    Seq(direct, nested).foreach { expression =>
+      val equivalence = new EquivalentExpressions
+      equivalence.addExprTree(expression)
+      equivalence.addExprTree(Multiply(shared, input))
+      assert(equivalence.getCommonSubexpressions == Seq(shared))
+      assert(equivalence.getAllExprStates().forall { state =>
+        state.expr == expression || !state.expr.exists(_.isInstanceOf[CommonExpressionRef])
+      })
+    }
+  }
+
+  test("With definitions stay lazy behind guards, fallback and shadowing") {
+    val input = AttributeReference("input", IntegerType)()
+    val shared = Add(input, Literal(1))
+    val unused = With(shared) { case Seq(_) => input }
+    val guarded = With(shared) { case Seq(ref) =>
+      If(GreaterThan(input, Literal(0)), ref, input)
+    }
+    val shortcut = With(shared) { case Seq(ref) =>
+      And(GreaterThan(input, Literal(0)), GreaterThan(ref, Literal(0)))
+    }
+    val fallback = With(shared) { case Seq(ref) => CodegenFallbackExpression(ref) }
+    val lambdaVar = NamedLambdaVariable("x", IntegerType, nullable = false)
+    val higherOrder = With(shared) { case Seq(ref) =>
+      ArrayExists(CreateArray(Seq(input)),
+        LambdaFunction(GreaterThan(ref, lambdaVar), Seq(lambdaVar)),
+        followThreeValuedLogic = true)
+    }
+    val outerDef = CommonExpressionDef(shared)
+    val innerDef = CommonExpressionDef(Add(input, Literal(2)), outerDef.id)
+    val shadowed = With(With(new CommonExpressionRef(innerDef), Seq(innerDef)), Seq(outerDef))
+    Seq(unused, guarded, shortcut, fallback, higherOrder, shadowed).foreach { expression =>
+      val equivalence = new EquivalentExpressions(skipForShortcutEnable = true)
+      equivalence.addExprTree(expression)
+      equivalence.addExprTree(Multiply(shared, input))
+      assert(equivalence.getCommonSubexpressions.isEmpty, s"$expression")
+    }
+  }
+
   test("With exposes independent subexpressions but not unbound references") {
     val input = AttributeReference("input", IntegerType)()
     val shared = Add(input, Literal(1))

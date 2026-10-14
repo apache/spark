@@ -504,6 +504,59 @@ class ColumnExpressionSuite extends SharedSparkSession {
     }
   }
 
+  test("nested field updates should share their struct input with other columns") {
+    onEachEvalPath {
+      withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true") {
+        Seq(false, true).foreach { drop =>
+          val calls = spark.sparkContext.longAccumulator
+          val source = udf((id: Long) => {
+            calls.add(1)
+            ((id, id), id)
+          }).asNonNullable()($"id")
+          val updated = if (drop) source.dropFields("_1._2")
+            else source.withField("_1.extra", lit(9L))
+          val rows = spark.range(0, 10, 1, 1)
+            .select(updated, source.getField("_2")).collect()
+          rows.zipWithIndex.foreach { case (row, index) =>
+            val value = index.toLong
+            val nested = if (drop) Row(value) else Row(value, value, 9L)
+            assert(row == Row(Row(nested, value), value))
+          }
+          assert(calls.value == 10, s"drop=$drop calls=${calls.value}")
+        }
+      }
+    }
+  }
+
+  test("nested field updates should share always-evaluated values from a With body") {
+    onEachEvalPath {
+      withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true") {
+        val innerType = StructType(Seq(StructField("x", LongType, nullable = false)))
+        val structType = StructType(Seq(
+          StructField("a", innerType, nullable = false),
+          StructField("b", LongType, nullable = false)))
+        val schema = StructType(Seq(
+          StructField("s", structType, nullable = false),
+          StructField("id", LongType, nullable = false)))
+        val input = (0L until 10L).map(value => Row(Row(Row(value), value), value))
+        val df = spark.createDataFrame(sparkContext.parallelize(input, 1), schema)
+        val calls = spark.sparkContext.longAccumulator
+        val value = udf((id: Long) => {
+          calls.add(1)
+          id + 1
+        }).apply($"id")
+        val updated = col("s").withField("a.first", value).withField("a.second", value)
+        val rows = df.select(updated, value).collect()
+        rows.zipWithIndex.foreach { case (row, index) =>
+          val original = index.toLong
+          assert(row == Row(Row(Row(original, original + 1, original + 1), original),
+            original + 1))
+        }
+        assert(calls.value == 10)
+      }
+    }
+  }
+
   test("field updates should preserve shared value subexpression elimination") {
     withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
       SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
