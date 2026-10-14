@@ -21,7 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Cast, EqualTo, Exists, InSubquery, IsNull, ListQuery, Literal, Not, Or}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, AttributeReference, Cast, EqualTo, Exists, Expression, InSubquery, IsNull, ListQuery, Literal, Not, Or}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, LeftSemi, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -227,5 +227,59 @@ class RewriteSubquerySuite extends PlanTest {
       s"the replacement must carry the sub-query's origin, got ${replacements.head.origin}")
     assert(replacements.head.getTagValue(tag).contains("kept"),
       "the replacement must carry the sub-query's tags")
+  }
+
+  test("SPARK-59351: the rewrite keeps the origin on the conditions it synthesizes for IN") {
+    // The Exists arm above only has to keep the origin on its `exists` attribute, since its join
+    // condition is the one the pull-up hoisted and is reused as it is. The IN arms synthesize the
+    // comparison against the sub-query output, and NOT IN also synthesizes the null-aware wrapper
+    // and combines both with the hoisted condition. Those nodes end up in the join condition, so a
+    // runtime failure evaluating one of them reports their origin, and nothing else asserts it.
+    val outer = LocalRelation($"a".int)
+    val inner = LocalRelation($"x".int)
+    val origin = Origin(line = Some(42), startPosition = Some(7))
+    // A distinct origin for the hoisted condition, which the rewrite reuses rather than builds,
+    // and must therefore leave alone.
+    val hoistedOrigin = Origin(line = Some(7), startPosition = Some(42))
+    val a = outer.output.head
+    val x = inner.output.head
+
+    // Returns the condition of the existence join the sub-query was rewritten into.
+    def joinCondOf(expr: Expression): Expression = {
+      val rewritten = RewritePredicateSubquery(Project(Seq(Alias(expr, "e")()), outer))
+      val joins = rewritten.collect {
+        case j: Join if j.joinType.isInstanceOf[ExistenceJoin] => j
+      }
+      assert(joins.size == 1, s"expected one existence join in\n$rewritten")
+      joins.head.condition.getOrElse(
+        fail(s"the existence join must have a condition in\n$rewritten"))
+    }
+
+    // Positive IN, uncorrelated: the condition is exactly the synthesized comparison.
+    val in = CurrentOrigin.withOrigin(origin)(InSubquery(Seq(a), ListQuery(inner)))
+    joinCondOf(in) match {
+      case cond @ EqualTo(_, _) => assert(cond.origin == origin,
+        s"the synthesized comparison must carry the sub-query's origin, got ${cond.origin}")
+      case other => fail(s"unexpected condition for a positive IN: $other")
+    }
+
+    // NOT IN, correlated: the condition is And(Or(cmp, IsNull(cmp)), hoisted). Every node the
+    // rewrite builds must take the sub-query's origin, and the hoisted condition must keep its
+    // own.
+    val hoisted = CurrentOrigin.withOrigin(hoistedOrigin)(EqualTo(a, x))
+    val notIn = CurrentOrigin.withOrigin(origin) {
+      Not(InSubquery(Seq(a), ListQuery(inner, outerAttrs = Seq(a), joinCond = Seq(hoisted))))
+    }
+    joinCondOf(notIn) match {
+      case cond @ And(nullAware @ Or(cmp @ EqualTo(_, _), isNull @ IsNull(_)), keptHoisted) =>
+        Seq("combined condition" -> cond, "null-aware wrapper" -> nullAware,
+          "comparison" -> cmp, "null check" -> isNull).foreach { case (what, node) =>
+          assert(node.origin == origin,
+            s"the synthesized $what must carry the sub-query's origin, got ${node.origin}")
+        }
+        assert(keptHoisted.origin == hoistedOrigin,
+          s"the hoisted condition must keep its own origin, got ${keptHoisted.origin}")
+      case other => fail(s"unexpected condition for a NOT IN: $other")
+    }
   }
 }
