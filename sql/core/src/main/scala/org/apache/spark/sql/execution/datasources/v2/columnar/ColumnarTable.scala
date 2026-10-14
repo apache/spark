@@ -103,8 +103,7 @@ class ColumnarScanBuilder(
   }
 
   override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
-    val remaining = batchReader.pushPredicates(predicates)
-    pushed = predicates.filterNot(remaining.contains)
+    pushed = batchReader.pushPredicates(predicates)
     // Spark evaluates all the predicates again after reading, even the ones that the reader
     // evaluates completely: Spark SQL compares values in ways that a data source can easily get
     // wrong, such as NaN with other values. The pushed predicates are shown in the plan.

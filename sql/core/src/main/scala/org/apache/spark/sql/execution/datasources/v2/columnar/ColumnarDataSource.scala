@@ -68,10 +68,11 @@ trait ColumnarDataSource {
 trait ColumnarReader extends Serializable {
 
   /**
-   * Returns the predicates that the reader does not evaluate completely. Spark evaluates all the
-   * predicates after reading anyway, and shows the others as pushed in the plan.
+   * Returns the predicates that the reader uses, to skip data or to only return the rows for which
+   * they are true. Spark evaluates all the predicates after reading anyway, and shows the returned
+   * ones as pushed in the plan.
    */
-  def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = predicates
+  def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = Array.empty
 
   /** Returns whether the reader returns at most `limit` rows. Spark applies it again anyway. */
   def pushLimit(limit: Int): Boolean = false
