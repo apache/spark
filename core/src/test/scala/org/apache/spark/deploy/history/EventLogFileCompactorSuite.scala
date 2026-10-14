@@ -232,8 +232,9 @@ class EventLogFileCompactorSuite extends SparkFunSuite {
         testEvent,
         testEvent)
 
-      // Replay skips job 2's start, so the filters would treat job 2 as finished and drop
-      // all of its events. Compaction must not proceed.
+      // Replay skips job 2's start, so the filters would not know that job 2 is live and the
+      // rewrite would drop its job start, leaving its stage and task events without the job.
+      // Compaction must not proceed.
       val limitedConf = sparkConf.clone()
         .set(History.EVENT_LOG_MAX_LINE_LENGTH, maxLineLength.toLong)
       val limitedCompactor = new EventLogFileCompactor(limitedConf, hadoopConf, fs,
