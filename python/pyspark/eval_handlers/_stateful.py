@@ -134,24 +134,13 @@ class PandasGroupedMapWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]
         import pandas as pd
         import pyarrow as pa
 
-        runner_conf = self._runner_conf
-        f = self._func
-        return_type = self._return_type
-        key_offsets = self._key_offsets
-        value_offsets = self._value_offsets
-        state_object_schema = self._state_object_schema
-        arrow_max_records_per_batch = self._arrow_max_records_per_batch
-        pickle_ser = self._pickle_ser
-        result_count_df_type = self._RESULT_COUNT_DF_TYPE
-        result_state_df_type = self._RESULT_STATE_DF_TYPE
-
         def to_pandas(batch: pa.RecordBatch) -> list:
             return ArrowToPandasConversion.to_pandas(
                 batch,
-                timezone=runner_conf.timezone,
+                timezone=self._runner_conf.timezone,
                 struct_in_pandas="dict",
                 ndarray_as_list=False,
-                prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
+                prefer_int_ext_dtype=self._runner_conf.prefer_int_ext_dtype,
                 df_for_struct=False,
             )
 
@@ -160,13 +149,13 @@ class PandasGroupedMapWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]
             state_properties = json.loads(state_info_col["properties"])
             state_info_col_object = state_info_col["object"]
             if state_info_col_object:
-                state_object = pickle_ser.loads(state_info_col_object)
+                state_object = self._pickle_ser.loads(state_info_col_object)
             else:
                 state_object = None
             state_properties["optionalValue"] = state_object
             return GroupState(
                 keyAsUnsafe=state_info_col["keyRowAsUnsafe"],
-                valueSchema=state_object_schema,  # type: ignore[arg-type]
+                valueSchema=self._state_object_schema,  # type: ignore[arg-type]
                 **state_properties,
             )
 
@@ -239,13 +228,13 @@ class PandasGroupedMapWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]
             # The number of columns of the result must match the return type,
             # but an empty result with no columns at all is acceptable.
             if not (
-                len(result.columns) == len(return_type)
+                len(result.columns) == len(self._return_type)
                 or (len(result.columns) == 0 and result.empty)
             ):
                 raise PySparkRuntimeError(
                     errorClass="RESULT_COLUMN_SCHEMA_MISMATCH",
                     messageParameters={
-                        "expected": str(len(return_type)),
+                        "expected": str(len(self._return_type)),
                         "actual": str(len(result.columns)),
                     },
                 )
@@ -273,7 +262,7 @@ class PandasGroupedMapWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]
             else:
                 values = (pd.concat(x, axis=1) for x in value_series_gen)
 
-            result_iter = f(key, values, state)
+            result_iter = self._func(key, values, state)
 
             if isinstance(result_iter, pd.DataFrame):
                 raise PySparkTypeError(
@@ -301,7 +290,7 @@ class PandasGroupedMapWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]
             state_properties = state.json().encode("utf-8")
             state_key_row_as_binary = state._keyAsUnsafe
             if state.exists:
-                state_object = pickle_ser.dumps(state._value_schema.toInternal(state._value))
+                state_object = self._pickle_ser.dumps(state._value_schema.toInternal(state._value))
             else:
                 state_object = None
             state_old_timeout_timestamp = state.oldTimeoutTimestamp
@@ -359,19 +348,19 @@ class PandasGroupedMapWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]
             data = [count_pdf, merged_pdf, merged_state_pdf]
             schema = StructType(
                 [
-                    StructField("_0", result_count_df_type),
+                    StructField("_0", self._RESULT_COUNT_DF_TYPE),
                     StructField("_1", pdf_schema),
-                    StructField("_2", result_state_df_type),
+                    StructField("_2", self._RESULT_STATE_DF_TYPE),
                 ]
             )
             return PandasToArrowConversion.from_pandas(
                 data,
                 schema,
-                timezone=runner_conf.timezone,
-                safecheck=runner_conf.safecheck,
+                timezone=self._runner_conf.timezone,
+                safecheck=self._runner_conf.safecheck,
                 arrow_cast=True,
-                assign_cols_by_name=runner_conf.assign_cols_by_name,
-                int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
+                assign_cols_by_name=self._runner_conf.assign_cols_by_name,
+                int_to_decimal_coercion_enabled=self._runner_conf.int_to_decimal_coercion_enabled,
             )
 
         def result_and_state_stream() -> Iterator[tuple]:
@@ -382,9 +371,10 @@ class PandasGroupedMapWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]
                 data_gen = (data_pandas for data_pandas, _ in group)
                 # Consume the first chunk to extract the grouping key series.
                 first_elem = next(data_gen)
-                key_series = [first_elem[o] for o in key_offsets]
+                key_series = [first_elem[o] for o in self._key_offsets]
                 value_series_gen = (
-                    [x[o] for o in value_offsets] for x in itertools.chain([first_elem], data_gen)
+                    [x[o] for o in self._value_offsets]
+                    for x in itertools.chain([first_elem], data_gen)
                 )
                 yield (apply_udf_to_group(key_series, value_series_gen, state), state)
 
@@ -401,9 +391,9 @@ class PandasGroupedMapWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]
                     pdfs.append(pdf)
 
                     # Flush a batch once the record threshold is exceeded.
-                    if pdf_data_cnt > arrow_max_records_per_batch:
+                    if pdf_data_cnt > self._arrow_max_records_per_batch:
                         yield construct_record_batch(
-                            pdfs, pdf_data_cnt, return_type, state_pdfs, state_data_cnt
+                            pdfs, pdf_data_cnt, self._return_type, state_pdfs, state_data_cnt
                         )
                         pdfs = []
                         state_pdfs = []
@@ -418,7 +408,7 @@ class PandasGroupedMapWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]
         # Flush the trailing batch if it has any data or state left.
         if pdf_data_cnt > 0 or state_data_cnt > 0:
             yield construct_record_batch(
-                pdfs, pdf_data_cnt, return_type, state_pdfs, state_data_cnt
+                pdfs, pdf_data_cnt, self._return_type, state_pdfs, state_data_cnt
             )
 
 
@@ -475,16 +465,6 @@ class PandasTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"])
         """
         import pandas as pd
 
-        runner_conf = self._runner_conf
-        udf = self._func
-        return_type = self._return_type
-        key_offsets = self._key_offsets
-        value_offsets = self._value_offsets
-        output_schema = self._output_schema
-        stateful_processor_api_client = self._stateful_processor_api_client
-        arrow_max_records_per_batch = self._arrow_max_records_per_batch
-        arrow_max_bytes_per_batch = self._arrow_max_bytes_per_batch
-
         total_bytes = 0
         total_rows = 0
         average_arrow_row_size = 0.0
@@ -495,7 +475,7 @@ class PandasTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"])
                 # Short circuit batch size stats if the batch size is
                 # unlimited as computing batch size is computationally
                 # expensive.
-                if arrow_max_bytes_per_batch != 2**31 - 1 and batch.num_rows > 0:
+                if self._arrow_max_bytes_per_batch != 2**31 - 1 and batch.num_rows > 0:
                     total_bytes += sum(
                         buf.size
                         for col in batch.columns
@@ -506,11 +486,11 @@ class PandasTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"])
                     average_arrow_row_size = total_bytes / total_rows
                 data_pandas = ArrowToPandasConversion.to_pandas(
                     batch,
-                    timezone=runner_conf.timezone,
-                    prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
+                    timezone=self._runner_conf.timezone,
+                    prefer_int_ext_dtype=self._runner_conf.prefer_int_ext_dtype,
                 )
                 for row in pd.concat(data_pandas, axis=1).itertuples(index=False):
-                    batch_key = tuple(row[o] for o in key_offsets)
+                    batch_key = tuple(row[o] for o in self._key_offsets)
                     yield (batch_key, row)
 
         def generate_data_batches() -> Iterator[tuple]:
@@ -527,8 +507,8 @@ class PandasTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"])
                 for _, row in group_rows:
                     rows.append(row)
                     if (
-                        len(rows) >= arrow_max_records_per_batch
-                        or len(rows) * average_arrow_row_size >= arrow_max_bytes_per_batch
+                        len(rows) >= self._arrow_max_records_per_batch
+                        or len(rows) * average_arrow_row_size >= self._arrow_max_bytes_per_batch
                     ):
                         yield (batch_key, pd.DataFrame(rows))
                         rows = []
@@ -537,27 +517,31 @@ class PandasTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"])
 
         def convert_results(result_iter: Iterable[pd.DataFrame]) -> Iterator[pa.RecordBatch]:
             for result in result_iter:
-                if isinstance(return_type, StructType) and not isinstance(result, pd.DataFrame):
+                if isinstance(self._return_type, StructType) and not isinstance(
+                    result, pd.DataFrame
+                ):
                     raise PySparkValueError(
                         "Invalid return type. Please make sure that the UDF returns a "
                         "pandas.DataFrame when the specified return type is StructType."
                     )
                 yield PandasToArrowConversion.from_pandas(
                     [result],
-                    output_schema,
-                    timezone=runner_conf.timezone,
-                    safecheck=runner_conf.safecheck,
+                    self._output_schema,
+                    timezone=self._runner_conf.timezone,
+                    safecheck=self._runner_conf.safecheck,
                     arrow_cast=True,
-                    assign_cols_by_name=runner_conf.assign_cols_by_name,
-                    int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
+                    assign_cols_by_name=self._runner_conf.assign_cols_by_name,
+                    int_to_decimal_coercion_enabled=(
+                        self._runner_conf.int_to_decimal_coercion_enabled
+                    ),
                 )
 
         for key, group in itertools.groupby(generate_data_batches(), key=lambda x: x[0]):
             # This must be a generator expression - do not materialize.
-            values_gen = (df.iloc[:, value_offsets] for _, df in group)
+            values_gen = (df.iloc[:, self._value_offsets] for _, df in group)
             yield from convert_results(
-                udf(
-                    stateful_processor_api_client,
+                self._func(
+                    self._stateful_processor_api_client,
                     TransformWithStateInPandasFuncMode.PROCESS_DATA,
                     key,
                     values_gen,
@@ -565,8 +549,8 @@ class PandasTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"])
             )
 
         yield from convert_results(
-            udf(
-                stateful_processor_api_client,
+            self._func(
+                self._stateful_processor_api_client,
                 TransformWithStateInPandasFuncMode.PROCESS_TIMER,
                 None,
                 iter([]),
@@ -574,8 +558,8 @@ class PandasTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"])
         )
 
         yield from convert_results(
-            udf(
-                stateful_processor_api_client,
+            self._func(
+                self._stateful_processor_api_client,
                 TransformWithStateInPandasFuncMode.COMPLETE,
                 None,
                 iter([]),
@@ -640,16 +624,6 @@ class PandasTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.Recor
         import pandas as pd
         import pyarrow as pa
 
-        runner_conf = self._runner_conf
-        udf = self._func
-        return_type = self._return_type
-        key_offsets = self._key_offsets
-        init_key_offsets = self._init_key_offsets
-        output_schema = self._output_schema
-        stateful_processor_api_client = self._stateful_processor_api_client
-        arrow_max_records_per_batch = self._arrow_max_records_per_batch
-        arrow_max_bytes_per_batch = self._arrow_max_bytes_per_batch
-
         total_bytes = 0
         total_rows = 0
         average_arrow_row_size = 0.0
@@ -667,8 +641,8 @@ class PandasTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.Recor
         def to_pandas(table: pa.Table) -> list:
             return ArrowToPandasConversion.to_pandas(
                 table,
-                timezone=runner_conf.timezone,
-                prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
+                timezone=self._runner_conf.timezone,
+                prefer_int_ext_dtype=self._runner_conf.prefer_int_ext_dtype,
             )
 
         def row_stream() -> Iterator[tuple]:
@@ -677,7 +651,7 @@ class PandasTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.Recor
                 # Short circuit batch size stats if the batch size is
                 # unlimited as computing batch size is computationally
                 # expensive.
-                if arrow_max_bytes_per_batch != 2**31 - 1 and batch.num_rows > 0:
+                if self._arrow_max_bytes_per_batch != 2**31 - 1 and batch.num_rows > 0:
                     total_bytes += sum(
                         buf.size
                         for col in batch.columns
@@ -698,11 +672,11 @@ class PandasTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.Recor
 
                 if has_data:
                     for row in pd.concat(to_pandas(data_table), axis=1).itertuples(index=False):
-                        batch_key = tuple(row[o] for o in key_offsets)
+                        batch_key = tuple(row[o] for o in self._key_offsets)
                         yield (batch_key, row, None)
                 elif has_init:
                     for row in pd.concat(to_pandas(init_table), axis=1).itertuples(index=False):
-                        batch_key = tuple(row[o] for o in init_key_offsets)
+                        batch_key = tuple(row[o] for o in self._init_key_offsets)
                         yield (batch_key, None, row)
 
         empty_dataframe = pd.DataFrame()
@@ -727,8 +701,8 @@ class PandasTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.Recor
 
                     total_len = len(rows) + len(init_state_rows)
                     if (
-                        total_len >= arrow_max_records_per_batch
-                        or total_len * average_arrow_row_size >= arrow_max_bytes_per_batch
+                        total_len >= self._arrow_max_records_per_batch
+                        or total_len * average_arrow_row_size >= self._arrow_max_bytes_per_batch
                     ):
                         yield (
                             batch_key,
@@ -758,19 +732,23 @@ class PandasTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.Recor
             # TODO(SPARK-49100): add verification that elements in result_iter are
             # indeed of type pd.DataFrame and conform to assigned cols
             for result in result_iter:
-                if isinstance(return_type, StructType) and not isinstance(result, pd.DataFrame):
+                if isinstance(self._return_type, StructType) and not isinstance(
+                    result, pd.DataFrame
+                ):
                     raise PySparkValueError(
                         "Invalid return type. Please make sure that the UDF returns a "
                         "pandas.DataFrame when the specified return type is StructType."
                     )
                 yield PandasToArrowConversion.from_pandas(
                     [result],
-                    output_schema,
-                    timezone=runner_conf.timezone,
-                    safecheck=runner_conf.safecheck,
+                    self._output_schema,
+                    timezone=self._runner_conf.timezone,
+                    safecheck=self._runner_conf.safecheck,
                     arrow_cast=True,
-                    assign_cols_by_name=runner_conf.assign_cols_by_name,
-                    int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
+                    assign_cols_by_name=self._runner_conf.assign_cols_by_name,
+                    int_to_decimal_coercion_enabled=(
+                        self._runner_conf.int_to_decimal_coercion_enabled
+                    ),
                 )
 
         for key, group in itertools.groupby(generate_data_batches(), key=lambda x: x[0]):
@@ -781,8 +759,8 @@ class PandasTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.Recor
             state_values = (data_df for _, data_df, _ in group_data if not data_df.empty)
             init_states = (init_df for _, _, init_df in group_init if not init_df.empty)
             yield from convert_results(
-                udf(
-                    stateful_processor_api_client,
+                self._func(
+                    self._stateful_processor_api_client,
                     TransformWithStateInPandasFuncMode.PROCESS_DATA,
                     key,
                     state_values,
@@ -791,8 +769,8 @@ class PandasTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.Recor
             )
 
         yield from convert_results(
-            udf(
-                stateful_processor_api_client,
+            self._func(
+                self._stateful_processor_api_client,
                 TransformWithStateInPandasFuncMode.PROCESS_TIMER,
                 None,
                 iter([]),
@@ -801,8 +779,8 @@ class PandasTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.Recor
         )
 
         yield from convert_results(
-            udf(
-                stateful_processor_api_client,
+            self._func(
+                self._stateful_processor_api_client,
                 TransformWithStateInPandasFuncMode.COMPLETE,
                 None,
                 iter([]),
@@ -852,11 +830,6 @@ class RowTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         """
         import pyarrow as pa
 
-        udf = self._func
-        return_type = self._return_type
-        key_offsets = self._key_offsets
-        stateful_processor_api_client = self._stateful_processor_api_client
-
         def generate_data_batches() -> Iterator[tuple[Any, Any]]:
             """
             Deserialize ArrowRecordBatches and return a generator of
@@ -872,7 +845,7 @@ class RowTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
                 # Iterate row by row without converting the whole batch.
                 num_cols = batch.num_columns
                 for row_idx in range(batch.num_rows):
-                    row_key = tuple(batch[o][row_idx].as_py() for o in key_offsets)
+                    row_key = tuple(batch[o][row_idx].as_py() for o in self._key_offsets)
                     row = DataRow(*(batch.column(i)[row_idx].as_py() for i in range(num_cols)))
                     yield row_key, row
 
@@ -883,7 +856,7 @@ class RowTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
             # Convert spark type to arrow type
             # TODO: we need to make this configurable, currently using default values.
             arrow_type = to_arrow_type(
-                return_type,
+                self._return_type,
                 timezone="UTC",
                 prefers_large_types=False,
             )
@@ -898,8 +871,8 @@ class RowTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
             # This must be a generator expression - do not materialize.
             values_gen = map(lambda x: x[1], group)
             yield from convert_results(
-                udf(
-                    stateful_processor_api_client,
+                self._func(
+                    self._stateful_processor_api_client,
                     TransformWithStateInPandasFuncMode.PROCESS_DATA,
                     key,
                     values_gen,
@@ -907,8 +880,8 @@ class RowTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
             )
 
         yield from convert_results(
-            udf(
-                stateful_processor_api_client,
+            self._func(
+                self._stateful_processor_api_client,
                 TransformWithStateInPandasFuncMode.PROCESS_TIMER,
                 None,
                 iter([]),
@@ -916,8 +889,8 @@ class RowTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         )
 
         yield from convert_results(
-            udf(
-                stateful_processor_api_client,
+            self._func(
+                self._stateful_processor_api_client,
                 TransformWithStateInPandasFuncMode.COMPLETE,
                 None,
                 iter([]),
@@ -979,13 +952,6 @@ class RowTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.RecordBa
         """
         import pyarrow as pa
 
-        udf = self._func
-        return_type = self._return_type
-        key_offsets = self._key_offsets
-        init_key_offsets = self._init_key_offsets
-        stateful_processor_api_client = self._stateful_processor_api_client
-        arrow_max_records_per_batch = self._arrow_max_records_per_batch
-
         def extract_rows(
             cur_batch: pa.RecordBatch, col_name: str, offsets: list
         ) -> Optional[Iterator[tuple[Any, Any]]]:
@@ -1025,8 +991,8 @@ class RowTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.RecordBa
             # We parse each batch into tuples of (key, inputData, initState).
             # Each batch will have either init_data or input_data, not both.
             for batch in data:
-                input_result = extract_rows(batch, "inputData", key_offsets)
-                init_result = extract_rows(batch, "initState", init_key_offsets)
+                input_result = extract_rows(batch, "inputData", self._key_offsets)
+                init_result = extract_rows(batch, "initState", self._init_key_offsets)
 
                 assert not (input_result is not None and init_result is not None)
 
@@ -1058,7 +1024,7 @@ class RowTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.RecordBa
                         init_rows.append(init_row)
 
                     total_len = len(input_rows) + len(init_rows)
-                    if total_len >= arrow_max_records_per_batch:
+                    if total_len >= self._arrow_max_records_per_batch:
                         yield (k, (iter(input_rows), iter(init_rows)))
                         input_rows = []
                         init_rows = []
@@ -1073,7 +1039,7 @@ class RowTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.RecordBa
             # Convert spark type to arrow type
             # TODO: we need to make this configurable, currently using default values.
             arrow_type = to_arrow_type(
-                return_type,
+                self._return_type,
                 timezone="UTC",
                 prefers_large_types=False,
             )
@@ -1088,8 +1054,8 @@ class RowTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.RecordBa
             # These must be generator expressions - do not materialize.
             for _, (values_gen, init_states_gen) in group:
                 yield from convert_results(
-                    udf(
-                        stateful_processor_api_client,
+                    self._func(
+                        self._stateful_processor_api_client,
                         TransformWithStateInPandasFuncMode.PROCESS_DATA,
                         key,
                         values_gen,
@@ -1098,8 +1064,8 @@ class RowTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.RecordBa
                 )
 
         yield from convert_results(
-            udf(
-                stateful_processor_api_client,
+            self._func(
+                self._stateful_processor_api_client,
                 TransformWithStateInPandasFuncMode.PROCESS_TIMER,
                 None,
                 iter([]),
@@ -1108,8 +1074,8 @@ class RowTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.RecordBa
         )
 
         yield from convert_results(
-            udf(
-                stateful_processor_api_client,
+            self._func(
+                self._stateful_processor_api_client,
                 TransformWithStateInPandasFuncMode.COMPLETE,
                 None,
                 iter([]),
