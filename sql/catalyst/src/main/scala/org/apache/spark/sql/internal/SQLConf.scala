@@ -2939,7 +2939,7 @@ object SQLConf {
     buildConf("spark.sql.analyzer.memoizeRetainedResolutionConfigs.enabled")
       .internal()
       .version("4.4.0")
-      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .doc("When true, each SQL conf memoizes the session-following configs that are copied " +
         "from it into the confs that resolve view and SQL function bodies, including nested " +
         "ones, and reuses them until that conf's settings or the registered SQL configs " +
