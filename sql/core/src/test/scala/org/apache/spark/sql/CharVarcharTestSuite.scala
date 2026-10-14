@@ -2234,15 +2234,14 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       withTempPath { file =>
         val ser = new org.apache.spark.sql.avro.AvroSerializer(
           nestedSchema, nestedAvro, nullable = false)
-        // Unpadded CHAR/CHAR-map-key values: serializer and deserializer apply
-        // applyTextParseSemantics in-flight (pad CHAR, reject oversize).
+        // File-scan deserializers do not assign CHAR padding; values are stored padded.
         val row = org.apache.spark.sql.catalyst.InternalRow(
-          org.apache.spark.unsafe.types.UTF8String.fromString("ab"),
+          org.apache.spark.unsafe.types.UTF8String.fromString("ab  "),
           org.apache.spark.sql.catalyst.InternalRow(
             org.apache.spark.unsafe.types.UTF8String.fromString("xy")),
           new org.apache.spark.sql.catalyst.util.ArrayBasedMapData(
             new org.apache.spark.sql.catalyst.util.GenericArrayData(Array(
-              org.apache.spark.unsafe.types.UTF8String.fromString("k"))),
+              org.apache.spark.unsafe.types.UTF8String.fromString("k "))),
             new org.apache.spark.sql.catalyst.util.GenericArrayData(Array(
               org.apache.spark.unsafe.types.UTF8String.fromString("v")))))
         val record = ser.serialize(row)
@@ -2274,22 +2273,29 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         }
       }
 
-      // SPARK-60242: in-flight CHAR/VARCHAR checks on Avro decode/encode, including
-      // externally produced STRING payloads whose Avro schema stamps CHAR/VARCHAR.
+      // SPARK-60242: from_avro-equivalent decode assigns CHAR/VARCHAR STRING values.
+      // File-scan deserializers (default) and to_avro encoding do not.
       Seq(CharType(4), VarcharType(4)).foreach { dt =>
         val avro = converters.toAvroType(dt, nullable = false)
-        val deser = new org.apache.spark.sql.avro.AvroDeserializer(
+        val fromAvroDeser = new org.apache.spark.sql.avro.AvroDeserializer(
+          avro, dt, "CORRECTED", false, "", -1,
+          applyCharVarcharAssignment = true,
+          charVarcharStandardSemanticsOverride = None)
+        val scanDeser = new org.apache.spark.sql.avro.AvroDeserializer(
           avro, dt, "CORRECTED", false, "", -1)
         val padded = dt match {
           case _: CharType => "ab  "
           case _ => "ab"
         }
         assert(
-          deser.deserialize(new org.apache.avro.util.Utf8("ab")).get.toString === padded,
+          fromAvroDeser.deserialize(new org.apache.avro.util.Utf8("ab")).get.toString === padded,
           s"from_avro-equivalent decode should assign $dt")
+        assert(
+          scanDeser.deserialize(new org.apache.avro.util.Utf8("ab")).get.toString === "ab",
+          s"file-scan decode should not assign $dt")
         checkError(
           exception = intercept[SparkRuntimeException] {
-            deser.deserialize(new org.apache.avro.util.Utf8("abcde"))
+            fromAvroDeser.deserialize(new org.apache.avro.util.Utf8("abcde"))
           },
           condition = "EXCEED_LIMIT_LENGTH",
           parameters = Map("limit" -> "4"))
@@ -2297,13 +2303,41 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         val encoded = ser.serialize(
           org.apache.spark.unsafe.types.UTF8String.fromString("ab"))
           .asInstanceOf[org.apache.avro.util.Utf8]
-        assert(encoded.toString === padded, s"to_avro-equivalent encode should assign $dt")
+        assert(encoded.toString === "ab", s"to_avro-equivalent encode should not assign $dt")
+      }
+
+      val enumSchema = org.apache.avro.Schema.createEnum(
+        "Spark60242Enum", "", "", java.util.Arrays.asList("ab", "cd"))
+      val enumVal = new org.apache.avro.generic.GenericData.EnumSymbol(enumSchema, "ab")
+      val enumDeser = new org.apache.spark.sql.avro.AvroDeserializer(
+        enumSchema, CharType(4), "CORRECTED", false, "", -1,
+        applyCharVarcharAssignment = true,
+        charVarcharStandardSemanticsOverride = None)
+      assert(
+        enumDeser.deserialize(enumVal).get.toString === "ab",
+        "ENUM symbols must not be CHAR-padded")
+
+      val mapDt = MapType(CharType(2), IntegerType)
+      val mapAvro = converters.toAvroType(mapDt, nullable = false)
+      val shortKeyMap = new java.util.HashMap[AnyRef, AnyRef]()
+      shortKeyMap.put(new org.apache.avro.util.Utf8("a"), Integer.valueOf(1))
+      withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+        val captured = new org.apache.spark.sql.avro.AvroDeserializer(
+          mapAvro, mapDt, "CORRECTED", false, "", -1,
+          applyCharVarcharAssignment = false,
+          charVarcharStandardSemanticsOverride = Some(true))
         checkError(
           exception = intercept[SparkRuntimeException] {
-            ser.serialize(org.apache.spark.unsafe.types.UTF8String.fromString("abcde"))
+            captured.deserialize(shortKeyMap)
           },
-          condition = "EXCEED_LIMIT_LENGTH",
-          parameters = Map("limit" -> "4"))
+          condition = "UNSUPPORTED_AVRO_CHAR_VARCHAR_MAP_KEY",
+          sqlState = "0A000",
+          parameters = Map("key" -> "'a'", "dataType" -> "\"CHAR(2)\""))
+        val live = new org.apache.spark.sql.avro.AvroDeserializer(
+          mapAvro, mapDt, "CORRECTED", false, "", -1)
+        val liveMap = live.deserialize(shortKeyMap).get
+          .asInstanceOf[org.apache.spark.sql.catalyst.util.MapData]
+        assert(liveMap.keyArray().getUTF8String(0).toString === "a")
       }
 
       // JSON has no embedded schema, so a user-specified schema supplies the logical type.

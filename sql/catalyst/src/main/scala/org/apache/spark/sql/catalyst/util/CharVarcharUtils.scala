@@ -193,8 +193,6 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
    * With first-class CHAR/VARCHAR semantics enabled, for example,
    * `from_json('{"c":"ab"}', 'c CHAR(4)')` produces `"ab  "`, while parsing `{"v":"abcd"}`
    * as `v VARCHAR(3)` in FAILFAST mode raises EXCEED_LIMIT_LENGTH.
-   * from_avro / to_avro use the same helper so externally produced Avro is checked
-   * in-flight.
    */
   def applyTextParseSemantics(value: UTF8String, dt: DataType): UTF8String = {
     if (value == null) {
@@ -207,6 +205,29 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
           CharVarcharCodegenUtils.varcharTypeWriteSideCheck(value, v.length)
         case _ => value
       }
+    }
+  }
+
+  /**
+   * CHAR/VARCHAR map keys are never padded or trimmed. A CHAR(n) key must already be exactly
+   * n characters; a VARCHAR(n) key must already be at most n. STRING and other key types fit.
+   */
+  def charVarcharMapKeyExceedsLimit(key: UTF8String, keyType: DataType): Boolean = {
+    keyType match {
+      case c: CharType => key.numChars() != c.length
+      case v: VarcharType => key.numChars() > v.length
+      case _ => false
+    }
+  }
+
+  /**
+   * Caps a map key echoed in an error so a long user-supplied name cannot blow the message.
+   */
+  def truncateMapKeyForError(key: UTF8String, maxChars: Int = 128): UTF8String = {
+    if (key != null && key.numChars() > maxChars) {
+      UTF8String.concat(key.substring(0, maxChars), UTF8String.fromString("..."))
+    } else {
+      key
     }
   }
 

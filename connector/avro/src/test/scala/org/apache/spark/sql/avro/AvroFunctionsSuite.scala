@@ -31,10 +31,12 @@ import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.avro.{functions => Fns}
 import org.apache.spark.sql.avro.functions.{from_avro, to_avro}
 import org.apache.spark.sql.execution.LocalTableScanExec
-import org.apache.spark.sql.functions.{col, lit, struct}
+import org.apache.spark.sql.functions.{col, lit, map, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{BinaryType, CharType, IntegerType, StructField, StructType, VarcharType}
+import org.apache.spark.sql.types.{
+  BinaryType, CharType, IntegerType, MapType, StringType, StructField, StructType, VarcharType
+}
 
 class AvroFunctionsSuite extends SharedSparkSession {
   import testImplicits._
@@ -769,11 +771,18 @@ class AvroFunctionsSuite extends SharedSparkSession {
       s"Should not throw NPE, but got: ${ex.getClass.getName}: ${ex.getMessage}")
   }
 
-  test("SPARK-60242: from_avro/to_avro CHAR/VARCHAR length enforcement") {
+  test("SPARK-60242: from_avro CHAR/VARCHAR length enforcement") {
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
       val stringSchema = """{"type": "string"}"""
       val charSchema = SchemaConverters.toAvroType(CharType(4), nullable = false).toString
       val varcharSchema = SchemaConverters.toAvroType(VarcharType(4), nullable = false).toString
+      val stringMapSchema =
+        SchemaConverters.toAvroType(MapType(StringType, IntegerType), nullable = false).toString
+      val charMapSchema =
+        SchemaConverters.toAvroType(MapType(CharType(2), IntegerType), nullable = false).toString
+      val varcharMapSchema =
+        SchemaConverters.toAvroType(
+          MapType(VarcharType(3), IntegerType), nullable = false).toString
 
       val padded = spark.range(1).select(
         from_avro(to_avro(lit("ab"), stringSchema), charSchema).as("c"))
@@ -807,6 +816,190 @@ class AvroFunctionsSuite extends SharedSparkSession {
       val oversize = spark.range(1).select(to_avro(lit("abcde"), stringSchema).as("bin"))
       assertExceedLimit(oversize.select(from_avro($"bin", charSchema)).collect())
       assertExceedLimit(oversize.select(from_avro($"bin", varcharSchema)).collect())
+
+      val permissive = oversize.select(
+        from_avro($"bin", charSchema, Map("mode" -> "PERMISSIVE").asJava))
+      checkAnswer(permissive, Row(null))
+
+      def assertUnsupportedAvroMapKey(
+          body: => Any, key: String, dataTypeSql: String): Unit = {
+        val error = intercept[Exception] { body }
+        val cause = Iterator.iterate[Throwable](error)(_.getCause)
+          .takeWhile(_ != null)
+          .collectFirst {
+            case e: SparkRuntimeException
+              if e.getCondition == "UNSUPPORTED_AVRO_CHAR_VARCHAR_MAP_KEY" => e
+          }
+          .getOrElse(
+            fail("expected UNSUPPORTED_AVRO_CHAR_VARCHAR_MAP_KEY cause", error))
+        checkError(
+          exception = cause,
+          condition = "UNSUPPORTED_AVRO_CHAR_VARCHAR_MAP_KEY",
+          sqlState = "0A000",
+          parameters = Map("key" -> s"'$key'", "dataType" -> s""""$dataTypeSql""""))
+      }
+
+      val exactCharKey = spark.range(1).select(
+        from_avro(
+          to_avro(map(lit("ab"), lit(1)), stringMapSchema), charMapSchema).as("m"))
+      assert(exactCharKey.schema.head.dataType.asInstanceOf[MapType].keyType ===
+        CharType(2))
+      checkAnswer(exactCharKey, Row(Map("ab" -> 1)))
+
+      assertUnsupportedAvroMapKey(
+        spark.range(1).select(
+          from_avro(
+            to_avro(map(lit("a"), lit(1)), stringMapSchema), charMapSchema)).collect(),
+        "a",
+        "CHAR(2)")
+      assertUnsupportedAvroMapKey(
+        spark.range(1).select(
+          from_avro(
+            to_avro(map(lit("abc"), lit(1)), stringMapSchema), charMapSchema)).collect(),
+        "abc",
+        "CHAR(2)")
+
+      val varcharKey = spark.range(1).select(
+        from_avro(
+          to_avro(map(lit("ab"), lit(1)), stringMapSchema), varcharMapSchema).as("m"))
+      checkAnswer(varcharKey, Row(Map("ab" -> 1)))
+      val varcharSpacedKey = spark.range(1).select(
+        from_avro(
+          to_avro(map(lit("ab "), lit(1)), stringMapSchema), varcharMapSchema).as("m"))
+      checkAnswer(varcharSpacedKey, Row(Map("ab " -> 1)))
+      assertUnsupportedAvroMapKey(
+        spark.range(1).select(
+          from_avro(
+            to_avro(map(lit("abcd"), lit(1)), stringMapSchema),
+            varcharMapSchema)).collect(),
+        "abcd",
+        "VARCHAR(3)")
+
+      checkAnswer(
+        spark.range(1).select(
+          from_avro(
+            to_avro(map(lit("a"), lit(1)), stringMapSchema),
+            charMapSchema,
+            Map("mode" -> "PERMISSIVE").asJava)),
+        Row(null))
+
+      val char0MapSchema =
+        SchemaConverters.toAvroType(MapType(CharType(0), IntegerType), nullable = false)
+          .toString
+      checkAnswer(
+        spark.range(1).select(
+          from_avro(
+            to_avro(map(lit(""), lit(1)), stringMapSchema), char0MapSchema).as("m")),
+        Row(Map("" -> 1)))
+      assertUnsupportedAvroMapKey(
+        spark.range(1).select(
+          from_avro(
+            to_avro(map(lit("a"), lit(1)), stringMapSchema), char0MapSchema)).collect(),
+        "a",
+        "CHAR(0)")
+
+      val stringStructSchema =
+        SchemaConverters.toAvroType(
+          new StructType().add("c", StringType), nullable = false).toString
+      val charStructSchema =
+        SchemaConverters.toAvroType(
+          new StructType().add("c", CharType(4)), nullable = false).toString
+      checkAnswer(
+        spark.range(1).select(
+          from_avro(
+            to_avro(struct(lit("ab").as("c")), stringStructSchema),
+            charStructSchema).as("s"))
+          .selectExpr("concat('<', s.c, '>')"),
+        Row("<ab  >"))
+
+      withTempView("avro_cv_map_view") {
+        spark.range(1).select(
+          from_avro(
+            to_avro(map(lit("a"), lit(1)), stringMapSchema), charMapSchema).as("m"))
+          .createOrReplaceTempView("avro_cv_map_view")
+        withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+          assertUnsupportedAvroMapKey(
+            spark.sql("SELECT * FROM avro_cv_map_view").collect(),
+            "a",
+            "CHAR(2)")
+        }
+      }
+
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        spark.range(1).select(
+          map(lit("a"), lit(1), lit("a "), lit(2)).as("m"))
+          .write.mode("overwrite").format("avro").save(path)
+        assertUnsupportedAvroMapKey(
+          spark.read.schema("m MAP<CHAR(2), INT>").format("avro").load(path).collect(),
+          "a",
+          "CHAR(2)")
+      }
+
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        spark.range(1).select(
+          map(lit("ab"), lit(1), lit("a "), lit(2)).as("m"))
+          .write.mode("overwrite").format("avro").save(path)
+        checkAnswer(
+          spark.read.schema("m MAP<CHAR(2), INT>").format("avro").load(path),
+          Row(Map("ab" -> 1, "a " -> 2)))
+      }
+
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        spark.range(1).select(map(lit("ab"), lit("xy")).as("m"))
+          .write.mode("overwrite").format("avro").save(path)
+        val nested = spark.read.schema("m MAP<CHAR(2), CHAR(4)>").format("avro").load(path)
+        checkAnswer(nested.selectExpr("concat('<', m['ab'], '>')"), Row("<xy  >"))
+      }
+
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        spark.range(1).select(map(lit("abcd"), lit(1)).as("m"))
+          .write.mode("overwrite").format("avro").save(path)
+        assertUnsupportedAvroMapKey(
+          spark.read.schema("m MAP<VARCHAR(3), INT>").format("avro").load(path).collect(),
+          "abcd",
+          "VARCHAR(3)")
+      }
+    }
+
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      val stringSchema = """{"type": "string"}"""
+      val charSchema = SchemaConverters.toAvroType(CharType(4), nullable = false).toString
+      val stringMapSchema =
+        SchemaConverters.toAvroType(MapType(StringType, IntegerType), nullable = false).toString
+      val charMapSchema =
+        SchemaConverters.toAvroType(MapType(CharType(2), IntegerType), nullable = false).toString
+      val padded = spark.range(1).select(
+        from_avro(to_avro(lit("ab"), stringSchema), charSchema).as("c"))
+      assert(padded.schema.head.dataType === CharType(4))
+      checkAnswer(padded.selectExpr("concat('<', c, '>')"), Row("<ab  >"))
+      // Off-width CHAR keys are not rejected or rewritten when standardSemantics is off.
+      // Exclude ConstantFolding so a CHAR Cast cannot pad the folded map key. Collecting
+      // MAP<CHAR(n), _> would still pad via the encoder, so to_json shows the raw key.
+      withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+          "org.apache.spark.sql.catalyst.optimizer.ConstantFolding") {
+        val shortKey = spark.range(1).select(
+          from_avro(
+            to_avro(map(lit("a"), lit(1)), stringMapSchema), charMapSchema).as("m"))
+        assert(shortKey.schema.head.dataType.asInstanceOf[MapType].keyType === CharType(2))
+        checkAnswer(shortKey.selectExpr("to_json(m)"), Row("""{"a":1}"""))
+      }
+    }
+
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false") {
+      val stringSchema = """{"type": "string"}"""
+      val charSchema = SchemaConverters.toAvroType(CharType(4), nullable = false).toString
+      val df = spark.range(1).select(
+        from_avro(to_avro(lit("abcdef"), stringSchema), charSchema).as("c"))
+      assert(df.schema.head.dataType === StringType)
+      checkAnswer(df, Row("abcdef"))
     }
   }
 

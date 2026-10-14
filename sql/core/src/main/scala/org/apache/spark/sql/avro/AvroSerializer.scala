@@ -34,7 +34,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.avro.AvroUtils.{nonNullUnionBranches, toFieldStr, AvroMatchedField}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, SpecificInternalRow}
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
@@ -137,11 +137,10 @@ private[sql] class AvroSerializer(
           decimalConversions.toBytes(decimal.toJavaBigDecimal, avroType,
             LogicalTypes.decimal(d.precision, d.scale))
 
-      case (st: StringType, ENUM) =>
+      case (_: StringType, ENUM) =>
         val enumSymbols: Set[String] = avroType.getEnumSymbols.asScala.toSet
         (getter, ordinal) =>
-          val data = CharVarcharUtils.applyTextParseSemantics(
-            getter.getUTF8String(ordinal), st).toString
+          val data = getter.getUTF8String(ordinal).toString
           if (!enumSymbols.contains(data)) {
             throw new IncompatibleSchemaException(errorPrefix +
               s""""$data" cannot be written since it's not defined in enum """ +
@@ -149,10 +148,8 @@ private[sql] class AvroSerializer(
           }
           new EnumSymbol(avroType, data)
 
-      case (st: StringType, STRING) =>
-        (getter, ordinal) =>
-          val data = CharVarcharUtils.applyTextParseSemantics(getter.getUTF8String(ordinal), st)
-          new Utf8(data.getBytes)
+      case (_: StringType, STRING) =>
+        (getter, ordinal) => new Utf8(getter.getUTF8String(ordinal).getBytes)
 
       case (BinaryType, FIXED) =>
         val size = avroType.getFixedSize
@@ -262,7 +259,7 @@ private[sql] class AvroSerializer(
       case (LongType, UNION) if nonNullUnionTypes(avroType) == Set(INT, LONG) =>
         (getter, ordinal) => getter.getLong(ordinal)
 
-      case (MapType(kt: StringType, vt, valueContainsNull), MAP) =>
+      case (MapType(_: StringType, vt, valueContainsNull), MAP) =>
         val valueConverter = newConverter(
           vt, resolveNullableType(avroType.getValueType, valueContainsNull),
           catalystPath :+ "value", avroPath :+ "value")
@@ -274,8 +271,7 @@ private[sql] class AvroSerializer(
           val valueArray = mapData.valueArray()
           var i = 0
           while (i < len) {
-            val key = CharVarcharUtils.applyTextParseSemantics(
-              keyArray.getUTF8String(i), kt).toString
+            val key = keyArray.getUTF8String(i).toString
             if (valueContainsNull && valueArray.isNullAt(i)) {
               result.put(key, null)
             } else {

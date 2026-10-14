@@ -4012,11 +4012,18 @@ abstract class AvroSuite
       withTempPath { dir =>
         Seq("abcdef").toDF("c").write.format("avro").save(dir.getCanonicalPath)
         Seq("CHAR", "VARCHAR").foreach { typ =>
+          // Avro file reads wrap the row-level SparkRuntimeException in SparkException
+          // (FAILED_READ_FILE), unlike a Project-side pad check.
+          val error = intercept[Exception] {
+            spark.read.schema(s"c $typ(4)").format("avro")
+              .load(dir.getCanonicalPath).collect()
+          }
+          val cause = Iterator.iterate[Throwable](error)(_.getCause)
+            .takeWhile(_ != null)
+            .collectFirst { case e: SparkRuntimeException => e }
+            .getOrElse(fail(s"expected EXCEED_LIMIT_LENGTH cause, got: $error"))
           checkError(
-            exception = intercept[SparkRuntimeException] {
-              spark.read.schema(s"c $typ(4)").format("avro")
-                .load(dir.getCanonicalPath).collect()
-            },
+            exception = cause,
             condition = "EXCEED_LIMIT_LENGTH",
             parameters = Map("limit" -> "4"))
         }
