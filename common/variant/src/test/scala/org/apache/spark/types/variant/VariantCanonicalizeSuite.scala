@@ -75,6 +75,9 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
   private def idWidth(v: Variant): Int =
     ((v.getValue()(0) >> (VariantUtil.BASIC_TYPE_BITS + 2)) & 0x3) + 1
 
+  // basic-type bits (0..3) of the scalar value header at position 0
+  private def basicType(v: Variant): Int = v.getValue()(0) & VariantUtil.BASIC_TYPE_MASK
+
   test("object key order does not affect the canonical form") {
     val a = canon(parse("""{"a":1,"b":2}"""))
     val b = canon(parse("""{"b":2,"a":1}"""))
@@ -162,6 +165,55 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
       "10^20 must remain a DECIMAL, not be wrapped into a long")
     val actual = VariantUtil.getDecimal(canonBig.getValue, 0)
     assert(actual.compareTo(new java.math.BigDecimal(big)) == 0, "10^20 value must be preserved")
+  }
+
+  test("integer-valued decimal at the Long.MIN/MAX boundary promotes to a minimal long") {
+    // A decimal whose integer value is exactly Long.MAX_VALUE / Long.MIN_VALUE must promote to the
+    // integer encoding (INT8, the smallest width that holds it); the decimal and the plain-long
+    // spellings must converge to identical bytes. The ".0" suffix forces a DECIMAL encoding -- a
+    // bare in-range integer literal would already parse as a long.
+    val cases = Seq(Long.MaxValue.toString + ".0" -> Long.MaxValue,
+      Long.MinValue.toString + ".0" -> Long.MinValue)
+    for ((decimalJson, longValue) <- cases) {
+      assert(VariantUtil.getType(parse(decimalJson).getValue, 0) == VariantUtil.Type.DECIMAL,
+        s"sanity: $decimalJson parses as a DECIMAL")
+      assert(!isCanon(parse(decimalJson)),
+        s"$decimalJson strips to a promotable long, so it is not canonical as a decimal")
+      val promoted = canon(parse(decimalJson))
+      assert(VariantUtil.getType(promoted.getValue, 0) == VariantUtil.Type.LONG,
+        s"$decimalJson must promote to a long at the boundary")
+      assert(VariantUtil.getTypeInfo(promoted.getValue, 0) == VariantUtil.INT8,
+        s"$longValue needs the full INT8 width")
+      assert(VariantUtil.getLong(promoted.getValue, 0) == longValue,
+        s"$decimalJson must preserve the value $longValue")
+      assert(isCanon(promoted), "the promoted long must be recognized as canonical")
+      assert(bytesEqual(promoted, canon(parse(longValue.toString))),
+        s"$decimalJson and $longValue must canonicalize to identical bytes")
+    }
+  }
+
+  test("integer decimal just outside the long range stays a decimal (no promotion)") {
+    // Long.MAX_VALUE + 1 and Long.MIN_VALUE - 1 sit one unit outside the promotable range, so canon
+    // must keep them as DECIMAL -- promoting would overflow the long and corrupt the value. Both
+    // are 19-digit integers, i.e. DECIMAL16.
+    val cases = Seq((BigInt(Long.MaxValue) + 1).toString, (BigInt(Long.MinValue) - 1).toString)
+    for (intJson <- cases) {
+      val expected = new java.math.BigDecimal(intJson)
+      // The bare integer literal is already a canonical DECIMAL: isCanonical must NOT demand a
+      // promotion that would not fit a long.
+      val bare = parse(intJson)
+      assert(VariantUtil.getType(bare.getValue, 0) == VariantUtil.Type.DECIMAL,
+        s"sanity: $intJson parses as a DECIMAL")
+      assert(isCanon(bare), s"$intJson is already canonical as an out-of-long-range decimal")
+      // A non-canonical (trailing-zero) spelling canonicalizes back to that decimal, not a long.
+      val canonicalized = canon(parse(intJson + ".0"))
+      assert(VariantUtil.getType(canonicalized.getValue, 0) == VariantUtil.Type.DECIMAL,
+        s"$intJson must remain a DECIMAL, not be wrapped into a long")
+      assert(VariantUtil.getDecimal(canonicalized.getValue, 0).compareTo(expected) == 0,
+        s"$intJson value must be preserved")
+      assert(bytesEqual(canonicalized, bare),
+        s"the trailing-zero and bare spellings of $intJson must converge")
+    }
   }
 
   test("canonicalize and isCanonical handle the DECIMAL8 and DECIMAL16 branches") {
@@ -273,6 +325,52 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
     val longEncoded = new Variant(bytes, parse("1").getMetadata)
     assert(!bytesEqual(longEncoded, parse("\"hi\"")), "sanity: long_str and short_str 'hi' differ")
     assert(bytesEqual(canon(longEncoded), parse("\"hi\"")), "long_str 'hi' -> short_str")
+  }
+
+  test("short-string boundary: the SHORT_STR/LONG_STR cut is at 63/64 UTF-8 bytes") {
+    val utf8 = java.nio.charset.StandardCharsets.UTF_8
+
+    // 63 bytes -> SHORT_STR on parse, and canonical. The same 63 bytes stored as a LONG_STR is
+    // not canonical and canonicalizes (via a real rebuild) back to the short form.
+    val s63 = "x" * VariantUtil.MAX_SHORT_STR_SIZE // 63 ASCII bytes
+    assert(s63.getBytes(utf8).length == 63, "sanity: 63 bytes")
+    val short63 = parse("\"" + s63 + "\"")
+    assert(basicType(short63) == VariantUtil.SHORT_STR, "a 63-byte string short-encodes")
+    assert(isCanon(short63), "a 63-byte short string is canonical")
+    val p63 = s63.getBytes(utf8)
+    val longStrHeader =
+      ((VariantUtil.LONG_STR << VariantUtil.BASIC_TYPE_BITS) | VariantUtil.PRIMITIVE).toByte
+    val long63 = new Variant(
+      java.nio.ByteBuffer.allocate(1 + 4 + p63.length).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        .put(longStrHeader).putInt(p63.length).put(p63).array(),
+      parse("1").getMetadata)
+    assert(!isCanon(long63), "a 63-byte string stored as long_str is not canonical")
+    assert(bytesEqual(canon(long63), short63), "63-byte long_str canonicalizes to short")
+
+    // 64 bytes cannot be short-encoded (max short payload is 63), so parse long-encodes it. That
+    // long encoding is canonical, and the rebuild re-emits it as long_str unchanged.
+    val s64 = "x" * (VariantUtil.MAX_SHORT_STR_SIZE + 1) // 64 ASCII bytes
+    assert(s64.getBytes(utf8).length == 64, "sanity: 64 bytes")
+    val long64 = parse("\"" + s64 + "\"")
+    assert(basicType(long64) == VariantUtil.PRIMITIVE &&
+      VariantUtil.getTypeInfo(long64.getValue, 0) == VariantUtil.LONG_STR,
+      "a 64-byte string long-encodes")
+    assert(isCanon(long64), "a 64-byte long string is canonical (cannot be short-encoded)")
+    assert(bytesEqual(VariantBuilder.doCanonicalize(long64), long64),
+      "the rebuild re-emits a 64-byte string as long_str (writer honors the 63/64 cut)")
+
+    // The cut is on UTF-8 BYTES, not Java char count: two 32-char strings fall on opposite sides.
+    val twoByte = new String(Character.toChars(0x00E9)) // U+00E9, 2 UTF-8 bytes
+    val cp63 = twoByte * 31 + "x" // 31*2 + 1 = 63 bytes, 32 chars
+    val cp64 = twoByte * 32       // 32*2     = 64 bytes, 32 chars
+    assert(cp63.getBytes(utf8).length == 63, "sanity: cp63 is 63 bytes")
+    assert(cp64.getBytes(utf8).length == 64, "sanity: cp64 is 64 bytes")
+    assert(basicType(parse("\"" + cp63 + "\"")) == VariantUtil.SHORT_STR,
+      "63 UTF-8 bytes short-encode even though the string is 32 chars")
+    val cp64Variant = parse("\"" + cp64 + "\"")
+    assert(basicType(cp64Variant) == VariantUtil.PRIMITIVE &&
+      VariantUtil.getTypeInfo(cp64Variant.getValue, 0) == VariantUtil.LONG_STR,
+      "64 UTF-8 bytes long-encode (same char count, one more byte)")
   }
 
   // ----- isCanonical: metadata dictionary -----
