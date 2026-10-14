@@ -975,7 +975,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       sparkTestRelation.withColumns(Map("id" -> lit(1024), "col_not_exist" -> lit(2048))))
   }
 
-  test("SPARK-60096: IN-subquery with an unattached plan id is a user-facing resolution error") {
+  test("SPARK-60096: IN-subquery with an unattached plan id is an invalid Connect plan") {
     // A Connect `col.isin(<subquery>)` inside `when(...)` whose plan id is not attached by any
     // WithRelations leaves an UnresolvedInSubqueryPlanId in the plan.
     val unattachedPlanId = 42L
@@ -1010,13 +1010,14 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     assert(survivingInSubqueries.map(_.planId) == Seq(unattachedPlanId))
     assert(!transformed.resolved)
 
-    // CheckAnalysis now rejects the surviving plan-id subquery with a user-facing resolution
-    // error instead of the previous INTERNAL_ERROR / XX000 "Found the unresolved operator".
+    // CheckAnalysis now rejects the surviving plan-id subquery as an invalid Spark Connect plan
+    // instead of the previous INTERNAL_ERROR / XX000 "Found the unresolved operator".
     checkError(
       exception = intercept[AnalysisException] {
         analyzePlan(transformed)
       },
-      condition = "CANNOT_RESOLVE_DATAFRAME_SUBQUERY",
+      condition = "CONNECT_INVALID_PLAN.SUBQUERY_PLAN_NOT_ATTACHED",
+      sqlState = Some("56K00"),
       parameters = Map("planId" -> unattachedPlanId.toString))
   }
 

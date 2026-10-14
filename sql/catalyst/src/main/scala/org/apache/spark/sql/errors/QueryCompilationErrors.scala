@@ -4878,9 +4878,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def cannotResolveDataFrameSubquery(u: UnresolvedPlanId): Throwable = {
+  def subqueryPlanNotAttached(u: UnresolvedPlanId): Throwable = {
     new AnalysisException(
-      errorClass = "CANNOT_RESOLVE_DATAFRAME_SUBQUERY",
+      errorClass = "CONNECT_INVALID_PLAN.SUBQUERY_PLAN_NOT_ATTACHED",
       messageParameters = Map("planId" -> u.planId.toString),
       origin = u.origin
     )
