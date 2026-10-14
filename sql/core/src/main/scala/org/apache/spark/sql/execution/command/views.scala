@@ -621,7 +621,7 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
     // when it is the source of another metric view, not a `View`.
     val viewRef = plan match {
       case v: View => Some(v.desc.fullIdent)
-      case mv: ResolvedMetricView => Some(mv.identifier.nameParts)
+      case mv: ResolvedMetricView => Some(mv.identifier)
       case mv: MetricViewPlaceholder => Some(mv.metadata.fullIdent)
       case _ => None
     }

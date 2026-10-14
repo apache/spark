@@ -194,6 +194,29 @@ abstract class MetricViewSuite extends QueryTest {
     checkAnswer(sql(s"SELECT count(*) FROM $testTableName"), Row(testTableData.length))
   }
 
+  test("CREATE OR REPLACE VIEW ... WITH METRICS keeps the existing metric view if rejected") {
+    val metricView = MetricView("0.1", AssetSource(testTableName), None, testMetricViewColumns)
+    withMetricView(testMetricViewName, metricView) {
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"""
+              |CREATE OR REPLACE VIEW $testMetricViewName (a, a, b, c, d)
+              |WITH METRICS
+              |LANGUAGE YAML
+              |AS
+              |$$$$
+              |${MetricViewFactory.toYAML(metricView)}
+              |$$$$
+              |""".stripMargin)
+        },
+        condition = "COLUMN_ALREADY_EXISTS",
+        parameters = Map("columnName" -> "`a`"))
+      checkAnswer(
+        sql(s"SELECT measure(count_sum) FROM $testMetricViewName"),
+        sql(s"SELECT sum(count) FROM $testTableName"))
+    }
+  }
+
   test("CREATE OR REPLACE VIEW ... WITH METRICS detects a metric view referencing itself") {
     def replaceMetricView(name: String, metricView: MetricView): Unit = {
       sql(s"""

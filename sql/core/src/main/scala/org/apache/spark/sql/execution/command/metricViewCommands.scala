@@ -79,6 +79,11 @@ case class CreateMetricViewCommand(
     // `where`) into the user-supplied properties so v1 DESCRIBE TABLE EXTENDED surfaces the
     // same descriptor rows as the v2 path in `DataSourceV2Strategy`.
     val mergedProps = properties ++ metricView.getProperties
+    // Built before an existing view is dropped, so a definition it rejects leaves the view intact.
+    val newTable = ViewHelper.prepareTable(
+      sparkSession, name, Some(originalText), analyzed, userSpecifiedColumns,
+      mergedProps, SchemaUnsupported, comment,
+      None, isMetricView = true)
     if (replace && catalog.tableExists(name)) {
       // Handles `CREATE OR REPLACE VIEW ... WITH METRICS` on an existing view, the same way
       // `CreateViewCommand` does: nothing is retained from the old view, so drop and recreate.
@@ -91,12 +96,7 @@ case class CreateMetricViewCommand(
       CommandUtils.uncacheTableOrView(sparkSession, existing.identifier)
       catalog.dropTable(existing.identifier, ignoreIfNotExists = false, purge = false)
     }
-    catalog.createTable(
-      ViewHelper.prepareTable(
-        sparkSession, name, Some(originalText), analyzed, userSpecifiedColumns,
-        mergedProps, SchemaUnsupported, comment,
-        None, isMetricView = true),
-      ignoreIfExists = allowExisting)
+    catalog.createTable(newTable, ignoreIfExists = allowExisting)
     Seq.empty
   }
 

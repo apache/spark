@@ -21,7 +21,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchViewException, ViewAlreadyExistsException}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog, Relation, RelationCatalog, TableCatalog, TableDependency, TableSummary, View}
 import org.apache.spark.sql.metricview.serde.{AssetSource, Column, Constants, DimensionExpression, MeasureExpression, MetricView, MetricViewFactory, SQLSource}
@@ -479,6 +479,44 @@ class MetricViewV2CatalogSuite extends SharedSparkSession {
         sql(s"DROP NAMESPACE IF EXISTS " +
           s"$testCatalogName.${deepNamespace.mkString(".")} CASCADE")
         sql(s"DROP NAMESPACE IF EXISTS $testCatalogName.${deepNamespace.head} CASCADE")
+      }
+    }
+  }
+
+  test("CREATE OR REPLACE VIEW compares full v2 names of metric views it reads") {
+    // `testcat.a.b.v` and `testcat.b.v` share their last namespace segment and name.
+    val deepName = s"$testCatalogName.a.b.v"
+    val shallowName = s"$testCatalogName.b.v"
+    withTestCatalogTables {
+      sql(s"CREATE NAMESPACE $testCatalogName.a")
+      sql(s"CREATE NAMESPACE $testCatalogName.a.b")
+      sql(s"CREATE NAMESPACE $testCatalogName.b")
+      try {
+        createMetricView(deepName,
+          MetricView("0.1", AssetSource(fullSourceTableName), None, metricViewColumns))
+        sql(s"CREATE VIEW $shallowName AS SELECT 1 AS count_sum")
+
+        // A different view with a similar name is not a cycle.
+        sql(s"CREATE OR REPLACE VIEW $shallowName AS " +
+          s"SELECT measure(count_sum) AS count_sum FROM $deepName")
+        checkAnswer(sql(s"SELECT * FROM $shallowName"), Row(3))
+
+        // A view reading itself through `measure()` is.
+        val deepIdent = s"`$testCatalogName`.`a`.`b`.`v`"
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"CREATE OR REPLACE VIEW $deepName AS " +
+              s"SELECT measure(count_sum) AS count_sum FROM $deepName")
+          },
+          condition = "RECURSIVE_VIEW",
+          parameters = Map(
+            "viewIdent" -> deepIdent,
+            "newPath" -> s"$deepIdent -> $deepIdent"))
+      } finally {
+        scala.util.Try(sql(s"DROP VIEW IF EXISTS $shallowName"))
+        scala.util.Try(sql(s"DROP VIEW IF EXISTS $deepName"))
+        sql(s"DROP NAMESPACE IF EXISTS $testCatalogName.b CASCADE")
+        sql(s"DROP NAMESPACE IF EXISTS $testCatalogName.a CASCADE")
       }
     }
   }
