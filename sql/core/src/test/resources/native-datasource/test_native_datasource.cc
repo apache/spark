@@ -32,7 +32,9 @@
 //                   to, although its buffers hold them all: "id" shortens the column id,
 //                   "entries" the entries of the map and their fields, and "values" the values
 //                   of the entries.
-//   native_sink     Writes the rows as CSV files under the directory in the option "path".
+//   native_sink     Writes the rows as CSV files under the directory in the option "path". With
+//                   the option "commit_messages", a data writer passes its commit message that
+//                   many times.
 //   native_counter  Streams the rows [0, max_offset) with a single column "id", making "step"
 //                   more rows available each time Spark asks for the latest offset. With the
 //                   option "bad_offset", the latest offset is "none", "multiline" JSON or
@@ -63,6 +65,7 @@
 #include <cstring>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -727,6 +730,12 @@ struct DataWriter {
   Options state;
 };
 
+// The data writers that a commit released, with the path of their write, so that aborting one of
+// them afterwards, which the header forbids, is recorded in the file _ABORTED_RELEASED_DATA_WRITER
+// rather than crashing.
+std::mutex released_data_writers_lock;
+[[maybe_unused]] std::map<void*, std::string> released_data_writers;
+
 [[maybe_unused]] void makeDirs(const std::string& path) {
   for (size_t pos = path.find('/', 1); pos != std::string::npos; pos = path.find('/', pos + 1)) {
     mkdir(path.substr(0, pos).c_str(), 0755);
@@ -1082,6 +1091,7 @@ int createAnyWriter(const char* function, void* handle, struct ArrowSchema* sche
     writer->state["overwrite"] = overwrite ? "true" : "false";
     writer->state["fail"] = get(source->options, "fail", "");
     writer->state["zero"] = get(source->options, "zero", "");
+    writer->state["commit_messages"] = get(source->options, "commit_messages", "1");
     // Records that a writer was created, which Spark then commits or aborts, and the ID of the
     // streaming query.
     makeDirs(path);
@@ -1175,7 +1185,13 @@ int spark_ds_create_data_writer(const uint8_t* writer_state, int64_t writer_stat
                             std::to_string(partition_id) + "-" + std::to_string(task_id) + ".csv";
     FILE* file = std::fopen(temp_path.c_str(), "w");
     if (file == nullptr) throw std::runtime_error("cannot write " + temp_path);
-    *out = new DataWriter{temp_path, file, state};
+    auto* writer = new DataWriter{temp_path, file, state};
+    {
+      // The allocator may reuse the address of a released data writer.
+      std::lock_guard<std::mutex> guard(released_data_writers_lock);
+      released_data_writers.erase(writer);
+    }
+    *out = writer;
   });
 }
 
@@ -1206,13 +1222,27 @@ int spark_ds_commit_data_writer(void* handle, SparkDsSink set_message, void* sin
     // If the commit fails, the data writer stays valid: Spark aborts it with
     // spark_ds_abort_data_writer.
     maybeFail(writer->state, "commitDataWriter");
-    sendBytes(set_message, sink, writer->temp_path);
+    // With the option "commit_messages", the message is passed that many times.
+    int64_t messages = getLong(writer->state, "commit_messages", 1);
+    for (int64_t i = 0; i < messages; i++) sendBytes(set_message, sink, writer->temp_path);
     std::fclose(writer->file);
+    {
+      std::lock_guard<std::mutex> guard(released_data_writers_lock);
+      released_data_writers[handle] = writer->state["path"];
+    }
     delete writer;
   });
 }
 
 int spark_ds_abort_data_writer(void* handle) {
+  {
+    std::lock_guard<std::mutex> guard(released_data_writers_lock);
+    auto released = released_data_writers.find(handle);
+    if (released != released_data_writers.end()) {
+      writeFile(released->second + "/_ABORTED_RELEASED_DATA_WRITER", "");
+      return 0;
+    }
+  }
   std::unique_ptr<DataWriter> writer(fromHandle<DataWriter>(handle));
   std::fclose(writer->file);
   unlink(writer->temp_path.c_str());

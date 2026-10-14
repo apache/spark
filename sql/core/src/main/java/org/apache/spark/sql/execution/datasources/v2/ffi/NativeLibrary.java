@@ -555,9 +555,19 @@ final class NativeLibrary {
       dataWriter, arrayAddress, schemaAddress), "spark_ds_write");
   }
 
-  byte[] commitDataWriter(long dataWriter) throws Throwable {
-    byte[] message = serialize(commitDataWriter, "spark_ds_commit_data_writer", dataWriter);
-    return message == null ? new byte[0] : message;
+  /**
+   * Commits a data writer, whose handle the library releases when the commit succeeds. Then
+   * {@code released} runs right away, before the message is checked: if the message is invalid,
+   * the commit fails, but the handle must not be used again.
+   */
+  byte[] commitDataWriter(long dataWriter, Runnable released) throws Throwable {
+    MethodHandle f = require(commitDataWriter, "spark_ds_commit_data_writer");
+    try (Sink sink = new Sink()) {
+      check((int) f.invokeExact(dataWriter, Ffm.SINK, sink.id), "spark_ds_commit_data_writer");
+      released.run();
+      byte[] message = single(sink, "spark_ds_commit_data_writer");
+      return message == null ? new byte[0] : message;
+    }
   }
 
   void abortDataWriter(long dataWriter) throws Throwable {
@@ -573,13 +583,18 @@ final class NativeLibrary {
     MethodHandle f = require(function, name);
     try (Sink sink = new Sink()) {
       check((int) f.invokeExact(handle, Ffm.SINK, sink.id), name);
-      byte[][] values = sink.all();
-      if (values.length > 1) {
-        throw new IllegalStateException(
-          name + " returned " + values.length + " values instead of one.");
-      }
-      return values.length == 0 ? null : values[0];
+      return single(sink, name);
     }
+  }
+
+  /** Returns the single byte array that a function passed to the sink, or null if none. */
+  private static byte[] single(Sink sink, String name) throws Throwable {
+    byte[][] values = sink.all();
+    if (values.length > 1) {
+      throw new IllegalStateException(
+        name + " returned " + values.length + " values instead of one.");
+    }
+    return values.length == 0 ? null : values[0];
   }
 
   // ---------------------------------------------------------------------------------------------

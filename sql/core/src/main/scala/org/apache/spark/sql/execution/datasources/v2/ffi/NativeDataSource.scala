@@ -669,7 +669,7 @@ class NativeDataWriter(
 
   private val library = NativeLibraries.get(location)
   // Zero once the data writer was committed or aborted, which releases it. It stays set if the
-  // commit fails, so that Spark aborts the data writer.
+  // library fails to commit, so that Spark aborts the data writer.
   private var handle: Long = call(name, "write to") {
     library.createDataWriter(writerState, partitionId, taskId, epochId)
   }
@@ -707,8 +707,9 @@ class NativeDataWriter(
     if (handle == 0) {
       throw SparkException.internalError("The data writer was already committed or aborted.")
     }
-    val message = call(name, "write to")(library.commitDataWriter(handle))
-    handle = 0
+    // The library releases the data writer once it commits, even if its message is then rejected,
+    // so Spark must not abort it afterwards.
+    val message = call(name, "write to")(library.commitDataWriter(handle, () => handle = 0))
     NativeWriterCommitMessage(bytesOrEmpty(Some(message)))
   }
 

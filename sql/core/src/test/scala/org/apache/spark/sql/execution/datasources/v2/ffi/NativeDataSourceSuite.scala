@@ -697,6 +697,27 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(!dir.listFiles().exists(_.getName.startsWith("part-")))
   }
 
+  nativeTest("do not abort a data writer that committed with an invalid message") {
+    val session = newSession(defaultPackage)
+    val dir = Utils.createTempDir()
+    // The library commits and releases the data writer, but passes two commit messages.
+    val e = intercept[Exception] {
+      session.range(10).repartition(1).write.format("native_sink").option("path", dir.getPath)
+        .option("commit_messages", "2").mode("append").save()
+    }
+    checkError(
+      exception = findError(e, "NATIVE_DATA_SOURCE_ERROR"),
+      condition = "NATIVE_DATA_SOURCE_ERROR",
+      parameters = Map(
+        "action" -> "write to",
+        "name" -> "native_sink",
+        "msg" -> "spark_ds_commit_data_writer returned 2 values instead of one."))
+    // The task failed without aborting the released data writer, and the driver aborted the write.
+    assert(!new File(dir, "_ABORTED_RELEASED_DATA_WRITER").exists())
+    assert(new File(dir, "_ABORTED").isFile)
+    assert(!dir.listFiles().exists(_.getName.startsWith("part-")))
+  }
+
   nativeTest("abort a micro-batch whose write failed") {
     val session = newSession(defaultPackage)
     val dir = Utils.createTempDir()
