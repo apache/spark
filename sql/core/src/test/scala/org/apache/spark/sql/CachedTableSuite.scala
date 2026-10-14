@@ -21,7 +21,7 @@ import java.io.{File, FilenameFilter}
 import java.nio.file.{Files, Paths}
 import java.time.{Duration, LocalDateTime, LocalTime, Period}
 import java.util
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 
 import scala.collection.mutable.HashSet
 import scala.concurrent.duration._
@@ -34,8 +34,8 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListe
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.AsOfVersion
 import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
-import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join, JoinStrategyHint, SHUFFLE_HASH}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
+import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join, JoinStrategyHint, LogicalPlan, SHUFFLE_HASH, SubqueryAlias, UnaryNode}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.CatalogPlugin
@@ -44,7 +44,7 @@ import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.InMemoryCatalog
 import org.apache.spark.sql.connector.catalog.TableWritePrivilege
 import org.apache.spark.sql.connector.catalog.TruncatableTable
-import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, RDDScanExec, SparkPlan, SparkPlanInfo}
+import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, RDDScanExec, SparkPlan, SparkPlanInfo, SparkStrategy}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEPropagateEmptyRelation}
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.command.CommandUtils
@@ -55,14 +55,38 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
-import org.apache.spark.sql.util.PartitionKeyedAccumulator
+import org.apache.spark.sql.util.{CaseInsensitiveStringMap, PartitionKeyedAccumulator}
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
-import org.apache.spark.storage.StorageLevel.{MEMORY_AND_DISK_2, MEMORY_ONLY}
+import org.apache.spark.storage.StorageLevel.{MEMORY_AND_DISK, MEMORY_AND_DISK_2, MEMORY_ONLY}
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.{AccumulatorContext, Utils}
 
 private case class BigData(s: String)
+
+/**
+ * A pass-through node that counts how many times it is copied with a new child, i.e. how many
+ * times a plan containing it is rewritten.
+ */
+private case class CopyCountingNode(child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): CopyCountingNode = {
+    CopyCountingNode.numCopies.incrementAndGet()
+    copy(child = newChild)
+  }
+}
+
+private object CopyCountingNode {
+  val numCopies = new AtomicInteger(0)
+}
+
+private object CopyCountingNodeStrategy extends SparkStrategy {
+  override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+    case CopyCountingNode(child) => planLater(child) :: Nil
+    case _ => Nil
+  }
+}
 
 @SlowSQLTest
 class CachedTableSuite extends SharedSparkSession
@@ -1949,6 +1973,81 @@ class CachedTableSuite extends SharedSparkSession
 
       // verify view is not cached anymore
       assertNotCached(sql("SELECT * FROM v"))
+    }
+  }
+
+  test("cache lookups by table name do not rewrite cached plans") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      val originalStrategies = spark.experimental.extraStrategies
+      try {
+        // Set the strategy before caching, since caching plans the query in a cloned session.
+        spark.experimental.extraStrategies = CopyCountingNodeStrategy +: originalStrategies
+
+        // Stack several nodes above the aliased table relation. Rewriting the subtree under every
+        // node that the by-name checks visit would copy each of these nodes once for itself and
+        // once for every node above it, which is quadratic in the plan size.
+        val numNodes = 10
+        val plan = (1 to numNodes).foldLeft(spark.table(t).queryExecution.analyzed) {
+          (child, _) => CopyCountingNode(child)
+        }
+        cacheManager.cacheQuery(spark, plan, tableName = None, MEMORY_AND_DISK)
+        assert(cacheManager.numCachedEntries == 1)
+        // Without an alias in the cache key, the old full-tree rewrite would not copy anything
+        // either, and the assertions below would pass vacuously.
+        val cacheKey = cacheManager.lookupCachedData(spark, plan).get.plan
+        assert(cacheKey.exists(_.isInstanceOf[SubqueryAlias]))
+        CopyCountingNode.numCopies.set(0)
+
+        // Scanning the cache for a table that is not referenced must leave the entry alone.
+        val otherName = Seq("testcat", "other")
+        cacheManager.uncacheTableOrView(spark, otherName, cascade = true)
+        cacheManager.uncacheTableOrView(spark, otherName, cascade = false)
+        cacheManager.recacheTableOrView(spark, otherName)
+        // The cached plan is not rooted at the relation, so this finds nothing; it is called to
+        // check that it does not rewrite the plan either.
+        assert(cacheManager.lookupCachedTable(
+          catalog("testcat"),
+          Identifier.of(Array(), "tbl"),
+          tableId = None,
+          CaseInsensitiveStringMap.empty(),
+          spark.sessionState.conf.resolver).isEmpty)
+        assert(cacheManager.numCachedEntries == 1)
+        assert(CopyCountingNode.numCopies.get() == 0)
+
+        // The entry still refers to the table, so uncaching it with cascade must remove it.
+        cacheManager.uncacheTableOrView(spark, Seq("testcat", "tbl"), cascade = true)
+        assert(cacheManager.numCachedEntries == 0)
+      } finally {
+        spark.experimental.extraStrategies = originalStrategies
+      }
+    }
+  }
+
+  test("cache lookups by table name see through a chain of root aliases") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      // The cache key is rooted at SubqueryAlias(x, SubqueryAlias(testcat.tbl, relation)).
+      val df = spark.table(t).as("x")
+      df.cache()
+      assert(df.queryExecution.analyzed.asInstanceOf[SubqueryAlias].child
+        .isInstanceOf[SubqueryAlias])
+
+      assert(cacheManager.lookupCachedTable(
+        catalog("testcat"),
+        Identifier.of(Array(), "tbl"),
+        tableId = None,
+        CaseInsensitiveStringMap.empty(),
+        spark.sessionState.conf.resolver).isDefined)
+
+      cacheManager.uncacheTableOrView(spark, Seq("testcat", "tbl"), cascade = false)
+      assert(cacheManager.lookupCachedData(df).isEmpty)
     }
   }
 
