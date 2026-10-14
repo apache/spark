@@ -465,7 +465,7 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("infer inequality constraints: chained inequalities within a single relation") {
+  test("SPARK-30768: chained inequalities within a single relation") {
     Seq(($"a" < $"b" && $"b" < 3, $"a" < $"b" && $"b" < 3 && $"a" < 3),
       ($"a" < $"b" && $"b" <= 3, $"a" < $"b" && $"b" <= 3 && $"a" < 3),
       ($"a" < $"b" && $"b" === 3, $"a" < $"b" && $"b" === 3 && $"a" < 3),
@@ -486,7 +486,7 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     }
   }
 
-  test("infer inequality constraints: chained inequality across an equi-join") {
+  test("SPARK-30768: chained inequality across an equi-join") {
     Seq(("left.b".attr < "right.b".attr, $"b" < 1, $"b" < 1),
       ("left.b".attr < "right.b".attr, $"b" === 1, $"b" < 1),
       ("left.b".attr < "right.b".attr, $"b" <= 1, $"b" < 1),
@@ -511,7 +511,7 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     }
   }
 
-  test("infer inequality constraints: chained inequalities through an implicit cast") {
+  test("SPARK-30768: chained inequalities through an implicit cast") {
     Seq(($"a" < $"b" && $"b" < 3L, $"a".cast(LongType) < $"b" && $"b" < 3L &&
         $"a".cast(LongType) < 3L),
       ($"a" < $"b" && $"b" <= 3L, $"a".cast(LongType) < $"b" && $"b" <= 3L &&
@@ -549,7 +549,7 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     }
   }
 
-  test("infer inequality constraints: an attr=literal binding on one join side bounds " +
+  test("SPARK-30768: an attr=literal binding on one join side bounds " +
     "an inequality join key on the other side") {
     val condition = Some("x.a".attr > "y.a".attr)
     val optimizedLeft = testRelation.where(IsNotNull($"a") && $"a" === 1).as("x")
@@ -563,14 +563,14 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     }
   }
 
-  test("infer inequality constraints: a three-attribute chain bounded by a literal") {
+  test("SPARK-30768: a three-attribute chain bounded by a literal") {
     val original = testRelation.where($"a" < $"b" && $"b" < $"c" && $"c" < 5)
     val optimized = testRelation.where(IsNotNull($"a") && IsNotNull($"b") && IsNotNull($"c")
       && $"a" < $"b" && $"b" < $"c" && $"a" < 5 && $"b" < 5 && $"c" < 5)
     comparePlans(Optimize.execute(original.analyze), optimized.analyze)
   }
 
-  test("infer inequality constraints: a range join condition combined with a range filter") {
+  test("SPARK-30768: a range join condition combined with a range filter") {
     val left = testRelation.where($"b" >= 3 && $"b" <= 13).as("x")
     val right = testRelation.as("y")
 
@@ -585,7 +585,7 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     comparePlans(Optimize.execute(original.analyze), optimized.analyze)
   }
 
-  test("infer inequality constraints: chain across a join through an implicit cast") {
+  test("SPARK-30768: chain across a join through an implicit cast") {
     val testRelation1 = LocalRelation($"a".long, $"b".long, $"c".long).as("x")
     val testRelation2 = LocalRelation($"a".int, $"b".int, $"c".int).as("y")
 
@@ -604,7 +604,7 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     comparePlans(Optimize.execute(original.analyze), optimized.analyze)
   }
 
-  test("infer inequality constraints: range predicate in left-outer join ON clause " +
+  test("SPARK-30768: range predicate in left-outer join ON clause " +
     "is pushed to right side when left attr is bounded by inequality") {
     // Left side: a.k >= 5
     // Join condition: b.v >= a.k
@@ -634,20 +634,17 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   }
 
   test("SPARK-30768: do not infer filters from throwable expressions") {
-    val x = testRelation.where($"b" < 10).subquery("x")
-    val y = testRelation.subquery("y")
     val raiseErr = new RaiseError(Literal("neg")).cast(IntegerType)
-    val caseExpr = CaseWhen(Seq(("y.b".attr < 0, raiseErr)), elseValue = Some("y.b".attr))
-    val cond = Some("x.a".attr === "y.a".attr && caseExpr < "x.b".attr)
-    val query = x.join(y, Inner, cond).analyze
+    val caseExpr = CaseWhen(Seq(($"b" < 0, raiseErr)), elseValue = Some($"b"))
+    val query = testRelation.where($"a" < caseExpr && caseExpr < 5).analyze
     val optimized = Optimize.execute(query)
-    var inferredThrowable = false
-    optimized.foreach {
-      case Join(_, Filter(cond, _), _, _, _) =>
-        inferredThrowable = cond.throwable
-      case _ =>
+    val inferredA = splitConjunctivePredicates(optimized.collectFirst {
+      case Filter(cond, _) => cond
+    }.get).exists {
+      case LessThan(a: Attribute, Literal(5, IntegerType)) => a.name == "a"
+      case _ => false
     }
-    assert(!inferredThrowable, s"Unexpected throwable filter condition inferred: $optimized")
+    assert(!inferredA, s"Unexpected filter on a inferred from throwable expression: $optimized")
   }
 
   test("SPARK-30768: equality orientation does not affect inequality chaining") {
@@ -670,16 +667,16 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       val x = testRelation.where(eq).subquery("x")
       val y = testRelation.subquery("y")
 
-      // Upper bound on a + 1 propagates to y.b > 5
-      val optUpper = Optimize.execute(x.join(y, Inner, Some(($"x.a" + 1) < $"y.b")).analyze)
-      assert(hasPushedFilter(optUpper) {
+      // Lower bound on a + 1 propagates to y.b > 5
+      val optLower = Optimize.execute(x.join(y, Inner, Some(($"x.a" + 1) < $"y.b")).analyze)
+      assert(hasPushedFilter(optLower) {
         case GreaterThan(b: Attribute, Literal(5, IntegerType)) => b.name == "b"
         case _ => false
       })
 
-      // Lower bound on a + 1 propagates to y.b < 5
-      val optLower = Optimize.execute(x.join(y, Inner, Some($"y.b" < ($"x.a" + 1))).analyze)
-      assert(hasPushedFilter(optLower) {
+      // Upper bound on a + 1 propagates to y.b < 5
+      val optUpper = Optimize.execute(x.join(y, Inner, Some($"y.b" < ($"x.a" + 1))).analyze)
+      assert(hasPushedFilter(optUpper) {
         case LessThan(b: Attribute, Literal(5, IntegerType)) => b.name == "b"
         case _ => false
       })
@@ -737,7 +734,10 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     assert(!constraints3.contains(LessThanOrEqual(a, Literal(5))))
   }
 
-  test("SPARK-30768: wide sparse inequality chain scales linearly without rescanning") {
+  test("SPARK-30768: infers bounds across a long sparse inequality chain") {
+    // Exercises correctness only. A regression to the O(n^3) fixed-point rescan this worklist
+    // replaced would still pass this assertion (just slower); catching that regression requires
+    // timing or iteration-count instrumentation, which is out of scope for a plan-shape test.
     val numAttrs = 100
     val attrs = (0 until numAttrs).map(i => AttributeReference(s"x$i", IntegerType)())
     val rel = LocalRelation(attrs)
@@ -810,5 +810,23 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
         s.name == "s"
       case _ => false
     })
+  }
+
+  test("SPARK-30768: an unsafe literal bound is excluded without blocking a coexisting " +
+    "safe bound") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      // isSafeBoundLiteral rejects this narrowing cast structurally, so it is never evaluated
+      // (and so never throws, even under ANSI) -- it is simply not treated as a literal bound.
+      val failingFoldable = Cast(Literal("invalid"), IntegerType)
+      val query = testRelation.where($"b" < failingFoldable && $"b" < 5 && $"a" < $"b").analyze
+      val optimized = Optimize.execute(query)
+      val inferredA = splitConjunctivePredicates(optimized.collectFirst {
+        case Filter(cond, _) => cond
+      }.get).exists {
+        case LessThan(a: Attribute, Literal(5, IntegerType)) => a.name == "a"
+        case _ => false
+      }
+      assert(inferredA, s"Expected inferred a < 5; plan was:\n$optimized")
+    }
   }
 }

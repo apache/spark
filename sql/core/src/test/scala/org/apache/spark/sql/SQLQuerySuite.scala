@@ -32,8 +32,7 @@ import scala.collection.mutable
 import org.apache.spark.{AccumulatorSuite, SPARK_DOC_ROOT, SparkArithmeticException, SparkDateTimeException, SparkException, SparkNumberFormatException, SparkRuntimeException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, CodegenObjectFactoryMode,
-  DoubleLiteral, GenericRow, GreaterThan, Hex, IntegerLiteral, LessThan}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, CodegenObjectFactoryMode, DoubleLiteral, GenericRow, GreaterThan, Hex, IntegerLiteral, LessThan}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, EliminateOffsets, NestedColumnAliasingSuite, RewriteWithExpression}
@@ -5461,6 +5460,10 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
         // Left anti join: unmatched right row on y must not evaluate invalid cast
         ("SELECT x.key FROM x ANTI JOIN y ON x.key = y.key AND CAST(y.s AS INT) < x.b " +
           "WHERE x.b < 15",
+          Row(1) :: Nil),
+        // Left outer join: preserved-side ON conjunct substitutes into failing cast
+        ("SELECT x.key FROM (SELECT * FROM x WHERE s = 'abc') x " +
+          "LEFT JOIN y ON x.key = y.key AND y.b < x.b AND x.b < CAST(x.s AS INT)",
           Row(1) :: Nil)
       )
 

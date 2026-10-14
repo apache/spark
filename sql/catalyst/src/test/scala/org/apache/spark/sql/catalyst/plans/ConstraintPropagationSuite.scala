@@ -592,7 +592,7 @@ class ConstraintPropagationSuite extends PlanTest {
     }, s"Should not infer c = 5 from attr-attr EqualTo target; got: $inferred")
   }
 
-  test("infer inequality constraints: transitive inequality chaining") {
+  test("SPARK-30768: transitive inequality chaining") {
     val tr = LocalRelation($"a".int, $"b".int, $"c".int)
     val a = resolveColumn(tr, "a")
     val b = resolveColumn(tr, "b")
@@ -606,7 +606,7 @@ class ConstraintPropagationSuite extends PlanTest {
     assert(constraints.contains(LessThan(a, Literal(5))))
   }
 
-  test("infer inequality constraints: directional lower and upper bounds") {
+  test("SPARK-30768: directional lower and upper bounds") {
     val tr = LocalRelation($"a".int, $"b".int)
     val a = resolveColumn(tr, "a")
     val b = resolveColumn(tr, "b")
@@ -616,5 +616,20 @@ class ConstraintPropagationSuite extends PlanTest {
 
     val plan2 = tr.where(LessThanOrEqual(a, b) && LessThanOrEqual(b, Literal(3)))
     assert(plan2.constraints.contains(LessThanOrEqual(a, Literal(3))))
+  }
+
+  test("SPARK-30768: equality-to-inequality composition") {
+    val tr = LocalRelation($"a".int, $"b".int, $"c".int)
+    val a = resolveColumn(tr, "a")
+    val b = resolveColumn(tr, "b")
+    val c = resolveColumn(tr, "c")
+
+    // a = c AND c < b AND b < 5 yields a < 5 via equality-inferred a < b
+    val plan1 = tr.where(EqualTo(a, c) && LessThan(c, b) && LessThan(b, Literal(5)))
+    assert(plan1.constraints.contains(LessThan(a, Literal(5))))
+
+    // a = 5 AND a = b AND c < b yields c < 5 via equality-inferred b = 5
+    val plan2 = tr.where(EqualTo(a, Literal(5)) && EqualTo(a, b) && LessThan(c, b))
+    assert(plan2.constraints.contains(LessThan(c, Literal(5))))
   }
 }
