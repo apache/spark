@@ -1760,12 +1760,16 @@ case class Unpivot(
 
   def canBeCoercioned: Boolean = values.exists(_.nonEmpty) &&
     values.exists(_.forall(_.forall(_.resolved))) &&
+    // values are coerced by position, so every value group must have one value per value column,
+    // otherwise CheckAnalysis reports UNPIVOT_VALUE_SIZE_MISMATCH
+    values.exists(_.forall(_.length == valueColumnNames.length)) &&
     // when no ids are given, values must be Attributes (column names) to allow detecting ids
     // coercion will add aliases, would disallow detecting ids, so defer coercion after id detection
     ids.exists(_.forall(_.resolved))
 
   def valuesTypeCoercioned: Boolean = canBeCoercioned &&
-    // all inner values at position idx must have the same data type
+    // all inner values at position idx must have the same data type, ignoring nullability;
+    // UnpivotTransformer merges the nullability of the values into the value column
     values.get.head.zipWithIndex.forall { case (v, idx) =>
       values.get.tail.forall(vals => DataTypeUtils.sameType(vals(idx).dataType, v.dataType))
     }
