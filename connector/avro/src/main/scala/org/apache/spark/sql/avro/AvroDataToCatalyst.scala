@@ -151,6 +151,9 @@ case class AvroDataToCatalyst(
 
   override def prettyName: String = "from_avro"
 
+  // Persist flags are not user arguments; omit them from EXPLAIN / Connect goldens.
+  override protected def stringArgs: Iterator[Any] = super.stringArgs.take(3)
+
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val expr = ctx.addReferenceObj("this", this)
     nullSafeCodeGen(ctx, ev, eval => {

@@ -160,6 +160,9 @@ case class FromAvro(
 
   override def prettyName: String =
     getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("from_avro")
+
+  // Persist flags are not user arguments; omit them from EXPLAIN / Connect goldens.
+  override protected def stringArgs: Iterator[Any] = super.stringArgs.take(3)
 }
 
 /**
