@@ -56,9 +56,9 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
 
 /**
  * A {@link VectorizedParquetRecordReader} that reads a row group in phases under a
- * {@code ParquetStorageFilter}, so the projected columns of the rows the filter rejects are never
- * read. The post-scan {@code Filter} still holds the filter, so any phase may stop short and read
- * the rows the way a plain scan would.
+ * {@code ParquetStorageFilter}, to skip reading the other columns of the rows the filter rejects.
+ * The post-scan {@code Filter} still holds the filter, so any phase may stop short and read the
+ * rows the way a plain scan would.
  *
  * <p>Per row group:
  * <ul>
@@ -74,7 +74,7 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
  * <p>Some files and row groups get less:
  * <ul>
  *   <li>a file with none of the key columns has a constant predicate, evaluated once. False skips
- *       the file, and true reads it whole;</li>
+ *       the file, and true reads it plainly;</li>
  *   <li>a file with none of the projected non-key columns is read plainly, since phase 2 would have
  *       nothing to read;</li>
  *   <li>a row group without a page index the read may use can only be skipped whole.</li>
@@ -154,7 +154,7 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
    * be used. That turns off phase 0 and every partial read, which parquet does not check itself.
    * It is the way out of a wrong page index, which would pair a row's key with another row's
    * values, and which the post-scan Filter cannot catch on the rows this reader marks checked.
-   * Read off {@link #readOptions}, so it agrees with {@link #fileReader}.
+   * Read off {@link #readOptions}, so it agrees with the row count {@link #fileReader} reported.
    */
   private boolean pageIndexDisabled;
 
@@ -410,9 +410,9 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
     }
 
     // The non-key columns phase 2 reads. A file with none of them gains nothing from the filter,
-    // so the reader declines it. A struct none of whose requested fields the file has counts as
-    // missing only under the legacy `returnNullStructIfAllFieldsMissing`, since otherwise the
-    // clipped schema reads one of its other fields. The checked column never counts.
+    // so the reader declines it. A struct the file has without any of its requested fields counts
+    // as missing only under the legacy `returnNullStructIfAllFieldsMissing`, since otherwise the
+    // clipped schema reads one of its other fields. The checked column is left out.
     String checkedName = checkedSlot >= 0 ? FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME() : null;
     List<ColumnDescriptor> nonKey = requestedColumns.stream()
         .filter(column -> !keyTopLevelNames.contains(column.getPath()[0]))
@@ -456,8 +456,8 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
   @Override
   protected boolean loadNextRowGroup() throws IOException {
     if (keyColumns == null) return super.loadNextRowGroup();
-    // The previous row group is fully emitted, so its pages and column readers go now rather than
-    // at the next assignment, which a row group the filter empties would delay.
+    // The previous row group is fully emitted, so its pages and column readers go now. The next
+    // assignment comes only after the next row group's phase 1, whose budget does not count them.
     closeDataPages();
     releaseRowGroupReaders();
     StorageFilterMetrics m = storageFilter.metrics();
@@ -601,8 +601,8 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
    */
   private RowRanges pushedFilterRangesFor(int blockIdx, long blockRowCount) {
     if (blockRowCount == 0) {
-      // parquet-mr never writes an empty block, but `RowRanges.createSingle(0)` would fail on
-      // one.
+      // parquet-mr never writes an empty block, but `RowRanges.createSingle(0)` would trip its
+      // `from <= to` assertion on one.
       return RowRanges.EMPTY;
     }
     return pageIndexDisabled
@@ -868,10 +868,10 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
           + "applied";
 
   /**
-   * Gives the filter up on an error, after rethrowing a task kill or a fatal error, see
-   * {@code ParquetStorageFilter.rethrowIfMustPropagate}. Every catch of {@code Throwable} that
-   * gives the filter up goes through here. {@code fromRead} says the error came from decoding the
-   * key pages.
+   * Gives the filter up on an error, after rethrowing a task kill or a fatal error the reader must
+   * not absorb, see {@code ParquetStorageFilter.rethrowIfMustPropagate}. Every catch of
+   * {@code Throwable} that gives the filter up goes through here. {@code fromRead} says the error
+   * came from decoding the key pages.
    */
   private void giveUpOnError(Throwable t, String message, boolean fromRead) {
     ParquetStorageFilter.rethrowIfMustPropagate(t, fromRead);

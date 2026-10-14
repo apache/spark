@@ -1976,13 +1976,15 @@ object SQLConf {
         "outside the table's schema is not supported. The filter also stays in the post-scan " +
         "filter, so the answer does not change, with two exceptions. Under " +
         "spark.sql.files.ignoreCorruptFiles the rows returned from a corrupt file can differ. A " +
-        "file with a wrong Parquet page index can return wrong rows. Setting " +
-        "parquet.filter.columnindex.enabled to false stops relying on the page index, and also " +
-        "turns off page skipping for pushed data filters. Without a page index, as in the files " +
-        "pyarrow's write_table writes by default, or with that conf set to false, the reader can " +
-        "only skip whole row groups, and it reads the key columns twice in the others. It can be " +
-        "slower when the matching rows are spread across most pages. The matching key values of " +
-        "a row group are buffered while it is read, outside Spark's memory manager.")
+        "file with a wrong Parquet page index can return wrong rows, even with no pushed data " +
+        "filter. Setting parquet.filter.columnindex.enabled to false stops relying on the page " +
+        "index, and also turns off page skipping for pushed data filters. Without a page index, " +
+        "as in the files pyarrow's write_table writes by default, or with that conf set to " +
+        "false, the reader can only skip whole row groups, and it reads the key columns twice in " +
+        "the others. With a page index, it can be slower when the matching rows are spread " +
+        "across most pages. The matching key values of a row group are buffered while it is " +
+        s"read, up to ${PARQUET_STORAGE_FILTER_PUSHDOWN_MAX_SPLICED_ROW_GROUP_BYTES.key}, " +
+        "outside Spark's memory manager.")
       .version("5.0.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

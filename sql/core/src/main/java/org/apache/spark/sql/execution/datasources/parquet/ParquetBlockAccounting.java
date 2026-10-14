@@ -83,8 +83,9 @@ final class ParquetBlockAccounting {
    *
    * <p>A whole block is the chunks' sizes from the footer. A strict subset is walked over the
    * offset index, as parquet's read does. That reads the block's {@link ColumnIndexStore}, which
-   * costs no IO only once a read of those ranges has built it, so a new caller has to keep that
-   * order. A column the file does not have contributes nothing.
+   * column-index filtering or a read of those ranges over the same columns builds. A walk before
+   * that would build and keep one over the reader's current columns, which a later read of other
+   * columns fails on. A column the file does not have contributes nothing.
    */
   long compressedBytesForRowRanges(
       int blockIndex,

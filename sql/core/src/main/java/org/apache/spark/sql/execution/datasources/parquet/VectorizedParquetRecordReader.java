@@ -185,7 +185,8 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   /**
    * Implementation of RecordReader API. Super's delegates to the overload below, which runs
    * {@link #initializeInternal()}. Kept although it only calls super, since removing it fails
-   * MiMa.
+   * MiMa with a {@code DirectAbstractMethodProblem} on
+   * {@code org.apache.hadoop.mapreduce.RecordReader.initialize}.
    */
   @Override
   public void initialize(InputSplit inputSplit, TaskAttemptContext taskAttemptContext)

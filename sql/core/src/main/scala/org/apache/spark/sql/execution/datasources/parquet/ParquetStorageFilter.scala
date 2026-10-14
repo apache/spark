@@ -220,8 +220,8 @@ object ParquetStorageFilter {
    * Rethrows an error the reader met while applying a storage filter, unless it may give the filter
    * up on it. `fromRead` says the error came from decoding the key pages. In the executor's order:
    *  - a fatal error goes out as it is;
-   *  - a pending task kill goes out wrapped, see [[throwIfKilled]], since the error may be the
-   *    kill's interrupt surfacing through a UDF;
+   *  - a pending task kill goes out wrapped when the executor would report the error as a kill,
+   *    see [[throwIfKilled]], since the error may be the kill's interrupt surfacing through a UDF;
    *  - a fatal error deeper in the cause chain, as deep as the executor looks, goes out as itself.
    *
    * An `InternalError` among those goes out in an `UnknownError`, another fatal error. A bare one
@@ -229,8 +229,8 @@ object ParquetStorageFilter {
    * let the executor run on under a pending kill.
    *
    * An error from decoding differs in three ways:
-   *  - `FileScanRDD` wraps a `NonFatal` one before the executor looks, so a fatal cause counts one
-   *    level shallower;
+   *  - `FileScanRDD` wraps a `NonFatal` one before the executor looks, so a fatal cause has to
+   *    sit one level shallower to count;
    *  - an `InternalError` is corrupt data, as `DataSourceUtils.shouldIgnoreCorruptFileException`
    *    takes it;
    *  - a key vector that cannot grow is phase 1's own, so giving the extra work up answers it.
