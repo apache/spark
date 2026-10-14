@@ -388,8 +388,10 @@ object VariantPathParser extends RegexParsers {
         ObjectExtraction(unescapeQuotedKey(k, '"'))
       }
 
-  // Match `\uXXXX` or a backslash followed by one character.
-  private val escapeSeq = """\\(u[0-9a-fA-F]{4}|[\s\S])""".r
+  // Match a surrogate pair, `\uXXXX`, or a backslash followed by one character.
+  private val escapeSeq =
+    ("""\\(u[dD][89abAB][0-9a-fA-F]{2}\\u[dD][c-fC-F][0-9a-fA-F]{2}|""" +
+      """u[0-9a-fA-F]{4}|[\s\S])""").r
 
   // Unrecognized escapes remain literal.
   private def unescapeQuotedKey(raw: String, quote: Char): String =
@@ -407,7 +409,13 @@ object VariantPathParser extends RegexParsers {
     case "\\" => "\\"
     case "'" if quote == '\'' => "'"
     case "\"" if quote == '"' => "\""
-    case s if s.length == 5 => Integer.parseInt(s.substring(1), 16).toChar.toString
+    case escape if escape.length == 11 =>
+      val high = Integer.parseInt(escape.substring(1, 5), 16).toChar
+      val low = Integer.parseInt(escape.substring(7), 16).toChar
+      s"$high$low"
+    case escape if escape.length == 5 =>
+      val decoded = Integer.parseInt(escape.substring(1), 16).toChar
+      if (Character.isSurrogate(decoded)) "\\" + escape else decoded.toString
     case other => "\\" + other
   }
 

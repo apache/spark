@@ -759,6 +759,16 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       "$['a\\" + "uD83D\\" + "uDE00b']",
       IntegerType,
       20)
+    testVariantGet(
+      "{\"\\\\" + "uD800\\" + "uD83D\\" + "uDE00\":21}",
+      "$['\\" + "uD800\\" + "uD83D\\" + "uDE00']",
+      IntegerType,
+      21)
+    Seq("uD800", "uDC00").foreach { escape =>
+      val path = "$['\\" + escape + "']"
+      testVariantGet("""{"?":1}""", path, IntegerType, null)
+      testVariantGet("{\"?\":1,\"\\\\" + escape + "\":2}", path, IntegerType, 2)
+    }
 
     Seq("variant_get" -> true, "try_variant_get" -> false).foreach {
       case (name, failOnError) =>
@@ -1665,6 +1675,11 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Special / edge-case keys.
     checkInsert("""{"a": 1}""", "$['']", Literal(2), """{"":2,"a":1}""")
     checkInsert("""{"a": 1}""", "$['?']", Literal(2), """{"?":2,"a":1}""")
+    Seq("uD800", "uDC00").foreach { escape =>
+      checkInsert(
+        """{"?":1}""", "$['\\" + escape + "']", Literal(2),
+        "{\"?\":1,\"\\\\" + escape + "\":2}")
+    }
     checkInsert(
       """{"a": 1}""", "$['key with spaces']", Literal(2), """{"a":1,"key with spaces":2}""")
     checkInsert("""{"a": 1}""", "$.fb:testid", Literal(2), """{"a":1,"fb:testid":2}""")
@@ -1849,6 +1864,11 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkSet("""{"a": 1}""", "$.a", Literal(2), """{"a":2}""")
     checkSet("""{"a": 1}""", "$.b", Literal(3), """{"a":1,"b":3}""")
     checkSet("""{"a": {"b": 1}}""", "$.a.b", Literal(9), """{"a":{"b":9}}""")
+    Seq("uD800", "uDC00").foreach { escape =>
+      checkSet(
+        """{"?":1}""", "$['\\" + escape + "']", Literal(2),
+        "{\"?\":1,\"\\\\" + escape + "\":2}")
+    }
 
     // Missing intermediate keys are created when create_if_missing is true.
     checkSet("{}", "$.a.b", Literal(1), """{"a":{"b":1}}""")
