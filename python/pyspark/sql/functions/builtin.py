@@ -18137,8 +18137,8 @@ def regexp_instr(
     |1a 2b 14m|\d+(a|b|m)|                               1|
     +---------+----------+--------------------------------+
 
-    Example 2: Returns the position of the regex group 1 `(a|b|m)` in the first substring in
-    the `str` column name that matches the regex pattern `\d+(a|b|m)`.
+    Example 2: Returns the 1-based position in the `str` column name of the regex group 1
+    `(a|b|m)` of the first substring that matches the regex pattern `\d+(a|b|m)`.
 
     >>> df.select('*', sf.regexp_instr('str', sf.lit(r'\d+(a|b|m)'), sf.lit(1))).show()
     +---------+----------+--------------------------------+

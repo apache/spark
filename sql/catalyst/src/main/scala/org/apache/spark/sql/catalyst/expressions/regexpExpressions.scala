@@ -1179,14 +1179,27 @@ case class RegExpSubStr(left: Expression, right: Expression)
   since = "3.4.0",
   group = "string_funcs")
 // scalastyle:on line.size.limit
-case class RegExpInStr(subject: Expression, regexp: Expression, idx: Expression)
+case class RegExpInStr(
+    subject: Expression,
+    regexp: Expression,
+    idx: Expression,
+    ignoreGroupIndex: Boolean =
+      SQLConf.get.getConf(SQLConf.LEGACY_REGEXP_INSTR_IGNORE_GROUP_INDEX))
   extends RegExpExtractBase {
-  def this(s: Expression, r: Expression) = this(s, r, Literal(0))
+  def this(s: Expression, r: Expression) =
+    this(s, r, Literal(0), SQLConf.get.getConf(SQLConf.LEGACY_REGEXP_INSTR_IGNORE_GROUP_INDEX))
+
+  def this(s: Expression, r: Expression, i: Expression) =
+    this(s, r, i, SQLConf.get.getConf(SQLConf.LEGACY_REGEXP_INSTR_IGNORE_GROUP_INDEX))
+
+  override def flatArguments: Iterator[Any] = Iterator(subject, regexp, idx)
 
   override def nullSafeEval(s: Any, r: Any, i: Any): Any = {
     try {
       val source = s.toString
-      RegExpExtractBase.instr(getLastMatcher(source, r), source, i.asInstanceOf[Int], prettyName)
+      // In legacy mode, the group 0 gives the position of the entire match.
+      val groupIndex = if (ignoreGroupIndex) 0 else i.asInstanceOf[Int]
+      RegExpExtractBase.instr(getLastMatcher(source, r), source, groupIndex, prettyName)
     } catch {
       case _: IllegalStateException => 0
     }
@@ -1198,6 +1211,7 @@ case class RegExpInStr(subject: Expression, regexp: Expression, idx: Expression)
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val classNameRegExpExtractBase = classOf[RegExpExtractBase].getCanonicalName
     val matcher = ctx.freshName("matcher")
+    val source = ctx.freshName("source")
     val setEvNotNull = if (nullable) {
       s"${ev.isNull} = false;"
     } else {
@@ -1205,13 +1219,16 @@ case class RegExpInStr(subject: Expression, regexp: Expression, idx: Expression)
     }
 
     nullSafeCodeGen(ctx, ev, (subject, regexp, idx) => {
+      // In legacy mode, the group 0 gives the position of the entire match.
+      val groupIndex = if (ignoreGroupIndex) "0" else idx
       s"""
          |try {
          |  $setEvNotNull
-         |  ${RegExpUtils.initLastMatcherCode(ctx, subject, regexp, matcher, prettyName,
+         |  String $source = $subject.toString();
+         |  ${RegExpUtils.initLastMatcherCode(ctx, source, regexp, matcher, prettyName,
         collationId)}
          |  ${ev.value} = $classNameRegExpExtractBase.instr(
-         |    $matcher, $subject.toString(), $idx, "$prettyName");
+         |    $matcher, $source, $groupIndex, "$prettyName");
          |} catch (IllegalStateException e) {
          |  ${ev.value} = 0;
          |}

@@ -700,6 +700,22 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-60125: regexp_instr ignores the group index in legacy mode") {
+    val s = $"s".string.at(0)
+    val p = $"p".string.at(1)
+    val r = $"r".int.at(2)
+    withSQLConf(SQLConf.LEGACY_REGEXP_INSTR_IGNORE_GROUP_INDEX.key -> "true") {
+      val expr = new RegExpInStr(s, p, r)
+      assert(expr.ignoreGroupIndex)
+      checkEvaluation(expr, 1, create_row("abc123", "([a-z]+)([0-9]+)", 2))
+      checkEvaluation(expr, 7, create_row("1a 2b 14m", "\\d{2}(a|b|m)", 1))
+      // An out-of-range group index does not fail.
+      checkEvaluation(expr, 1, create_row("abc123", "([a-z]+)([0-9]+)", 3))
+      checkEvaluation(expr, 2, create_row("abc", "b", 1))
+      checkEvaluation(expr, 0, create_row("abc", "x", 1))
+    }
+  }
+
   test("SPARK-39758: invalid regexp pattern") {
     val s = $"s".string.at(0)
     val p = $"p".string.at(1)
