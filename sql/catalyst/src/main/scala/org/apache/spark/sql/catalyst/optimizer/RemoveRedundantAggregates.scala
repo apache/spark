@@ -34,7 +34,8 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
       val projectList = lower.aggregateExpressions.filter(upper.references.contains(_))
       upper.copy(child = Project(projectList, lower.child))
     case agg @ Aggregate(groupingExps, _, child, _)
-        if agg.groupOnly && child.distinctKeys.exists(_.subsetOf(ExpressionSet(groupingExps))) =>
+        if agg.groupOnly && child.distinctKeys.exists(_.subsetOf(ExpressionSet(groupingExps))) &&
+          !NormalizeFloatingNumbers.readsNormalizedKeys(agg, agg.aggregateExpressions) =>
       Project(agg.aggregateExpressions, child)
   }
 

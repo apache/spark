@@ -18,10 +18,11 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, ArrayTransform, CaseWhen, Coalesce, CreateArray, CreateMap, CreateNamedStruct, EqualTo, ExpectsInputTypes, Expression, GetStructField, If, IsNull, KnownFloatingPointNormalized, LambdaFunction, Literal, NamedLambdaVariable, Or, TransformValues, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, ArrayTransform, CaseWhen, Coalesce, CreateArray, CreateMap, CreateNamedStruct, EqualTo, ExpectsInputTypes, Expression, GetStructField, If, IsNull, KnownFloatingPointNormalized, LambdaFunction, Literal, NamedExpression, NamedLambdaVariable, Or, PythonUDAF, TransformValues, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractSingleColumnNullAwareAntiJoin}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Window}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Window}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.types._
@@ -101,6 +102,39 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
       // here. For now we normalize grouping expressions during planning. See Case 2 in the
       // Scaladoc just above.
     }
+
+  /**
+   * Whether `aggregate` outputs its float/double grouping keys normalized. The planner normalizes
+   * the grouping keys of every Aggregate (see `SparkStrategies.Aggregation`), except one whose
+   * aggregate functions are all grouped-agg pandas UDFs, planned as `ArrowAggregatePythonExec` on
+   * the raw keys. `PushPredicateThroughNonJoin` relies on this when it pushes a filter below an
+   * Aggregate, and rules that replace an Aggregate with a Project check [[readsNormalizedKeys]].
+   */
+  private[sql] def outputsNormalizedKeys(aggregate: Aggregate): Boolean = {
+    val aggregateFunctions = aggregate.aggregateExpressions.flatMap(_.collect {
+      case ae: AggregateExpression => ae.aggregateFunction
+    })
+    aggregateFunctions.isEmpty || !aggregateFunctions.forall(_.isInstanceOf[PythonUDAF])
+  }
+
+  /**
+   * Whether one of `outputs` (a subset of `aggregate.aggregateExpressions`) reads a float/double
+   * grouping key that `aggregate` outputs normalized. A rule must not replace `aggregate` with a
+   * Project of such outputs over its child: the Project would output the raw key, unlike the
+   * Aggregate and unlike what a filter pushed below the Aggregate has read.
+   */
+  private[sql] def readsNormalizedKeys(
+      aggregate: Aggregate,
+      outputs: Seq[NamedExpression]): Boolean = {
+    val keys = aggregate.groupingExpressions
+      .map {
+        case a: Alias => a.child
+        case e => e
+      }
+      .filter(e => needNormalize(e.dataType))
+    keys.nonEmpty && outputsNormalizedKeys(aggregate) &&
+      outputs.exists(_.exists(e => keys.exists(_.semanticEquals(e))))
+  }
 
   /**
    * Short circuit if the underlying expression is already normalized

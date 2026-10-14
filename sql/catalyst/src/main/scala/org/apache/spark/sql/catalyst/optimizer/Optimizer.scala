@@ -1005,11 +1005,14 @@ object LimitPushDown extends Rule[LogicalPlan] {
     // There is a Project between LocalLimit and Join if they do not have the same output.
     case LocalLimit(exp, project @ Project(_, join: Join)) =>
       LocalLimit(exp, project.copy(child = pushLocalLimitThroughJoin(exp, join)))
-    // Push down limit 1 through Aggregate and turn Aggregate into Project if it is group only.
-    case Limit(le @ IntegerLiteral(1), a: Aggregate) if a.groupOnly =>
+    // Push down limit 1 through Aggregate and turn Aggregate into Project if it is group only,
+    // unless the Project would read float/double keys that the Aggregate normalizes.
+    case Limit(le @ IntegerLiteral(1), a: Aggregate) if a.groupOnly &&
+        !NormalizeFloatingNumbers.readsNormalizedKeys(a, a.aggregateExpressions) =>
       val newAgg = EliminateSorts(a.copy(child = LocalLimit(le, a.child))).asInstanceOf[Aggregate]
       Limit(le, Project(newAgg.aggregateExpressions, newAgg.child))
-    case Limit(le @ IntegerLiteral(1), p @ Project(_, a: Aggregate)) if a.groupOnly =>
+    case Limit(le @ IntegerLiteral(1), p @ Project(_, a: Aggregate)) if a.groupOnly &&
+        !NormalizeFloatingNumbers.readsNormalizedKeys(a, a.aggregateExpressions) =>
       val newAgg = EliminateSorts(a.copy(child = LocalLimit(le, a.child))).asInstanceOf[Aggregate]
       Limit(le, p.copy(child = Project(newAgg.aggregateExpressions, newAgg.child)))
     // Merge offset value and limit value into LocalLimit and pushes down LocalLimit through Offset.
@@ -2806,20 +2809,20 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
   // Expressions above the aggregate see its float/double grouping keys normalized (see
   // NormalizeFloatingNumbers: -0.0 becomes 0.0 and every NaN becomes one canonical NaN), so the
   // pushed conjuncts read them normalized too, wherever the raw value could change the result.
-  // The exception is an aggregate whose functions are all grouped-agg pandas UDFs: it is planned
-  // as ArrowAggregatePythonExec, which outputs the raw keys (see SparkStrategies.Aggregation).
+  // NormalizeFloatingNumbers.outputsNormalizedKeys says when the keys come out normalized, whether
+  // the aggregate is planned or a later rule replaces it with a Project. Aggregates of grouped-agg
+  // pandas UDFs output the raw keys, so conjuncts pushed below them read the raw keys.
   private[optimizer] def pushBelowAggregate(
       conds: Seq[Expression],
       aggregate: Aggregate): Expression = {
     val aliasMap = getAliasMap(aggregate)
-    val aggregateFunctions = aggregate.aggregateExpressions.flatMap(_.collect {
-      case ae: AggregateExpression => ae.aggregateFunction
-    })
-    val outputsRawKeys =
-      aggregateFunctions.nonEmpty && aggregateFunctions.forall(_.isInstanceOf[PythonUDAF])
-    val normalizedGrouping = if (outputsRawKeys) Nil else aggregate.groupingExpressions
-      .filter(e => NormalizeFloatingNumbers.needNormalize(e.dataType))
-      .map(trimAliases)
+    val normalizedGrouping = if (NormalizeFloatingNumbers.outputsNormalizedKeys(aggregate)) {
+      aggregate.groupingExpressions
+        .filter(e => NormalizeFloatingNumbers.needNormalize(e.dataType))
+        .map(trimAliases)
+    } else {
+      Nil
+    }
     conds.map { cond =>
       val replaced = replaceAlias(cond, aliasMap)
       if (normalizedGrouping.isEmpty) {
