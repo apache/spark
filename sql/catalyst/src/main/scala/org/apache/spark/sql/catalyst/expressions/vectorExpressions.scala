@@ -385,7 +385,8 @@ private[expressions] sealed abstract class VectorElementAccessor(val size: Int) 
 
   def getInput(array: ArrayData, i: Int): Double
 
-  def toArrayData(bytes: Array[Byte], dim: Int): ArrayData
+  def toArrayData(bytes: Array[Byte], dim: Int): ArrayData =
+    UnsafeArrayData.fromPrimitiveArray(bytes, Platform.BYTE_ARRAY_OFFSET, dim, size)
 }
 
 private[expressions] object VectorElementAccessor {
@@ -397,16 +398,6 @@ private[expressions] object VectorElementAccessor {
       Platform.putFloat(bytes, offset(i), value.toFloat)
 
     override def getInput(array: ArrayData, i: Int): Double = array.getFloat(i)
-
-    override def toArrayData(bytes: Array[Byte], dim: Int): ArrayData = {
-      val result = new Array[Float](dim)
-      var i = 0
-      while (i < dim) {
-        result(i) = Platform.getFloat(bytes, offset(i))
-        i += 1
-      }
-      ArrayData.toArrayData(result)
-    }
   }
 
   private object DoubleAccessor extends VectorElementAccessor(8) {
@@ -416,16 +407,6 @@ private[expressions] object VectorElementAccessor {
       Platform.putDouble(bytes, offset(i), value)
 
     override def getInput(array: ArrayData, i: Int): Double = array.getDouble(i)
-
-    override def toArrayData(bytes: Array[Byte], dim: Int): ArrayData = {
-      val result = new Array[Double](dim)
-      var i = 0
-      while (i < dim) {
-        result(i) = Platform.getDouble(bytes, offset(i))
-        i += 1
-      }
-      ArrayData.toArrayData(result)
-    }
   }
 
   val elementTypeToAccessorMap: Map[DataType, VectorElementAccessor] =
@@ -750,8 +731,8 @@ case class VectorAvg(
   group = "vector_funcs"
 )
 // scalastyle:on line.size.limit
-// Note: For ARRAY<FLOAT> input this implementation uses single-precision floating-point
-// arithmetic (Float); ARRAY<DOUBLE> input is summed in double precision.
+// Note: Additions use Double operands. For ARRAY<FLOAT> input, each update or merge sum
+// is cast to Float before storage. ARRAY<DOUBLE> input retains double precision.
 // Precision loss is expected for very large aggregates due to:
 // 1. Accumulated rounding errors when summing many values
 // 2. Loss of significance when adding small values to large accumulated sums

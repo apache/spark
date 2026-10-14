@@ -150,6 +150,16 @@ class VectorAggSuite extends SparkFunSuite {
     assert(result === Array(1.0f, 2.0f, 3.0f))
   }
 
+  test("VectorSum - result is independent of later buffer updates") {
+    val (agg, buffer, _) = createVectorSum()
+    agg.update(buffer, createInputRow(Array(1.0f, 2.0f, 3.0f)))
+    val result = agg.eval(buffer).asInstanceOf[ArrayData]
+
+    agg.update(buffer, createInputRow(Array(4.0f, 5.0f, 6.0f)))
+    assert(evalAsFloatArray(agg, buffer) === Array(5.0f, 7.0f, 9.0f))
+    assert(result.toFloatArray() === Array(1.0f, 2.0f, 3.0f))
+  }
+
   test("VectorSum - multiple vectors") {
     val (agg, buffer, _) = createVectorSum()
     agg.update(buffer, createInputRow(Array(1.0f, 2.0f)))
@@ -577,6 +587,16 @@ class VectorAggSuite extends SparkFunSuite {
     agg.update(buffer, createDoubleInputRow(Array(3.0, 4.0)))
     agg.update(buffer, createDoubleInputRow(Array(5.0, 6.0)))
     assert(evalAsDoubleArray(agg, buffer) === Array(9.0, 12.0))
+  }
+
+  test("VectorSum - double: result is independent of later buffer updates") {
+    val (agg, buffer) = createDoubleVectorSum()
+    agg.update(buffer, createDoubleInputRow(Array(1.0, 2.0, 3.0)))
+    val result = agg.eval(buffer).asInstanceOf[ArrayData]
+
+    agg.update(buffer, createDoubleInputRow(Array(4.0, 5.0, 6.0)))
+    assert(evalAsDoubleArray(agg, buffer) === Array(5.0, 7.0, 9.0))
+    assert(result.toDoubleArray() === Array(1.0, 2.0, 3.0))
   }
 
   test("VectorSum - double: keeps precision lost by float") {
