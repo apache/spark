@@ -2153,8 +2153,10 @@ class FilterPushdownSuite extends PlanTest {
     val y = $"y".float
     val relation = LocalRelation(x, y, $"b".int)
 
-    // Comparisons treat -0.0/0.0 and all NaNs as equal, so they need no normalization.
-    val comparisons = x > 1.0 || (y === 0.0f && !IsNaN(x)) || x.in(2.0, 3.0) || x.isNull
+    // Comparisons treat -0.0/0.0 and all NaNs as equal, so they need no normalization. That
+    // includes a FLOAT key widened to DOUBLE to be compared with a DOUBLE value.
+    val comparisons = x > 1.0 || (y === 0.0f && !IsNaN(x)) || x.in(2.0, 3.0) || x.isNull ||
+      y > 1.5 || y.in(1.5, 2.5)
     val originalQuery = relation
       .groupBy(x, y)(x, y, count($"b").as("c"))
       .where(comparisons)
@@ -2231,6 +2233,12 @@ class FilterPushdownSuite extends PlanTest {
     assert(normalize(x.cast(StringType) === "-0.0") == (normX.cast(StringType) === "-0.0"))
     assert(normalize(Length(x.cast(StringType)) === 4) == (Length(normX.cast(StringType)) === 4))
     assert(normalize((x + 0.0) > 5.0) == ((normX + 0.0) > 5.0))
+
+    // A float key widened to double is left as is too, but other casts of it are normalized.
+    unchanged(f.cast(DoubleType) > 1.5)
+    unchanged(f.cast(DoubleType).in(1.5, 2.5))
+    assert(normalize(f.cast(StringType) === "-0.0") ==
+      (NormalizeFloatingNumbers.normalize(f).cast(StringType) === "-0.0"))
 
     // Only float/double attributes are left as is, so a struct key is normalized.
     assert(normalize(s.isNull) == normS.isNull)

@@ -2826,11 +2826,13 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
   // Rewrites `e` so that it gives the same result on the raw values of `grouping` as `e` gives on
   // their normalized values (see NormalizeFloatingNumbers). Each occurrence of a grouping
   // expression is wrapped in its normalized form, with one exception: a float/double attribute
-  // that is a direct operand of one of the comparisons matched below is left as is. Those
-  // comparisons already treat -0.0 and 0.0 as equal and all NaNs as equal (see
-  // SQLOrderingUtil.compareDoubles and CodegenContext.genEqual), and IsNull, IsNotNull and IsNaN
-  // cannot tell normalized values apart either, so wrapping would not change the result. Leaving
-  // them as is keeps plain comparisons usable by data sources and partition pruning.
+  // that is a direct operand of one of the comparisons matched below is left as is, and so is a
+  // float attribute widened to double (as when a FLOAT column is compared with a DOUBLE or
+  // DECIMAL value), since widening keeps -0.0 and NaN. Those comparisons already treat -0.0 and
+  // 0.0 as equal and all NaNs as equal (see SQLOrderingUtil.compareDoubles and
+  // CodegenContext.genEqual), and IsNull, IsNotNull and IsNaN cannot tell normalized values apart
+  // either, so wrapping would not change the result. Leaving them as is keeps plain comparisons
+  // usable by data sources and partition pruning.
   private[optimizer] def normalizeGroupingExpressions(
       e: Expression,
       grouping: Seq[Expression]): Expression = e match {
@@ -2839,6 +2841,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
          _: GreaterThanOrEqual | _: In | _: IsNull | _: IsNotNull | _: IsNaN =>
       e.mapChildren {
         case a: Attribute if a.dataType == FloatType || a.dataType == DoubleType => a
+        case c @ Cast(a: Attribute, DoubleType, _, _) if a.dataType == FloatType => c
         case c => normalizeGroupingExpressions(c, grouping)
       }
     case _ if grouping.exists(_.semanticEquals(e)) => NormalizeFloatingNumbers.normalize(e)

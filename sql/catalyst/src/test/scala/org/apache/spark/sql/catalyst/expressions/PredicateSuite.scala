@@ -601,12 +601,24 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     val otherDoubleNaN = java.lang.Double.longBitsToDouble(0x7ff8000000000001L)
     assert(java.lang.Double.doubleToRawLongBits(otherDoubleNaN) !=
       java.lang.Double.doubleToRawLongBits(Double.NaN))
-    check(DoubleType, Seq(-0.0d, 0.0d, Double.NaN, otherDoubleNaN, 1.0d, null))
+    val doubles = Seq(-0.0d, 0.0d, Double.NaN, otherDoubleNaN, 1.0d, null)
+    check(DoubleType, doubles)
 
     val otherFloatNaN = java.lang.Float.intBitsToFloat(0x7fc00001)
     assert(java.lang.Float.floatToRawIntBits(otherFloatNaN) !=
       java.lang.Float.floatToRawIntBits(Float.NaN))
-    check(FloatType, Seq(-0.0f, 0.0f, Float.NaN, otherFloatNaN, 1.0f, null))
+    val floats = Seq(-0.0f, 0.0f, Float.NaN, otherFloatNaN, 1.0f, null)
+    check(FloatType, floats)
+
+    // A FLOAT key compared with a DOUBLE or DECIMAL value is widened to DOUBLE, and the widened
+    // key is not normalized either.
+    val widened = Cast(BoundReference(0, FloatType, nullable = true), DoubleType)
+    val value = BoundReference(1, DoubleType, nullable = true)
+    def normFloat(v: Any): Any = NormalizeNaNAndZero(Literal.create(v, FloatType)).eval()
+    for (v <- floats; w <- doubles; op <- binary) {
+      val e = op(widened, value)
+      checkEvaluation(e, e.eval(InternalRow(normFloat(v), w)), InternalRow(v, w))
+    }
   }
 
   test("SPARK-32110: compare special double/float values in array") {
