@@ -137,6 +137,24 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
     }
   }
 
+  test("a channel shuffle runs through job submission with no output tracker") {
+    // The channel manager needs no output tracker (usesStreamingShuffleOutputTracker = false), so
+    // the job's preflight and its stage construction must accept the shuffle without a tracker
+    // and register it with none: it stays out of the MapOutputTracker, and no
+    // StreamingShuffleOutputTracker exists.
+    withPipelinedSparkContext(cores = 4) { sc =>
+      val keyed: RDD[(Int, Int)] = sc.parallelize(0 until 100, 2).map(v => (v, v))
+      val rdd = new PipelinedShuffledRDD[Int, Int, Int](keyed, new HashPartitioner(2))
+      val shuffleId = rdd.dependencies.head
+        .asInstanceOf[org.apache.spark.ShuffleDependency[_, _, _]].shuffleId
+      assert(rdd.collect().map(_._2).toSet === (0 until 100).toSet)
+      assert(sc.env.streamingShuffleOutputTracker.isEmpty)
+      assert(!sc.env.mapOutputTracker.asInstanceOf[org.apache.spark.MapOutputTrackerMaster]
+        .containsShuffle(shuffleId),
+        "a channel shuffle must not be registered with the MapOutputTracker")
+    }
+  }
+
   test("unregisterShuffle drops the shuffle's rendezvous queues across all epochs") {
     // Test the manager's cleanup contract directly rather than relying on the async
     // ContextCleaner + GC to fire (which would be flaky). Populate queues for a shuffle id under
