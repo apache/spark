@@ -1329,6 +1329,25 @@ class DataFrameAggregateSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-60150: filter above a group only aggregate over at most one row or under LIMIT 1") {
+    withTempView("t") {
+      Seq(-0.0d).toDF("x").createOrReplaceTempView("t")
+      // The child has at most one row (OptimizeOneRowPlan). The aggregate outputs 0.0.
+      val oneRow =
+        "SELECT cast(x AS STRING) FROM (SELECT DISTINCT x FROM (SELECT x FROM t LIMIT 1))"
+      checkAnswer(sql(s"$oneRow WHERE cast(x AS STRING) = '0.0'"), Row("0.0"))
+      checkAnswer(sql(s"$oneRow WHERE cast(x AS STRING) = '-0.0'"), Nil)
+    }
+
+    // LIMIT 1 above the aggregate (LimitPushDown).
+    val distinct = Seq(-0.0d, -0.0d).toDF("x").distinct()
+    val isZero = col("x").cast("string") === "0.0"
+    checkAnswer(distinct.where(isZero).limit(1).select(col("x").cast("string")), Row("0.0"))
+    assert(distinct.where(col("x").cast("string") === "-0.0").limit(1).collect().isEmpty)
+    val first = distinct.where(isZero).first().getDouble(0)
+    assert(first == 0.0d && 1.0d / first > 0, s"$first is not 0.0")
+  }
+
   test("SPARK-60150: filter pushed through two aggregates whose upper key is computed") {
     withTempView("t") {
       Seq(-0.0d, -0.0d).toDF("x").createOrReplaceTempView("t")
