@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.internal
 
-import java.util.function.{BiFunction, Function => JFunction}
+import java.util.function.{BiConsumer, BiFunction, Function => JFunction}
 
+import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
+
+import org.scalatest.concurrent.Eventually.{eventually, timeout}
 
 import org.apache.spark.SparkFunSuite
 
@@ -91,6 +94,54 @@ class ModificationCountingMapSuite extends SparkFunSuite {
     assert(count == 1)
     assert(entries.asScala == Map("a" -> "av"))
     assert(map.modificationCount == 2)
+  }
+
+  test("every method except the views locks the map itself") {
+    // Callers such as SQLConf.getAllConfs and RuntimeConfig.set hold this map's monitor to make a
+    // sequence of calls atomic, which works only if every method takes that same monitor.
+    val appendNew: BiFunction[String, String, String] = (_, value) => s"$value-new"
+    val valueFromKey: JFunction[String, String] = key => s"$key-value"
+    val ignoreEntry: BiConsumer[String, String] = (_, _) => ()
+    val operations: Seq[(String, ModificationCountingMap => Any)] = Seq(
+      ("put", _.put("p", "w")),
+      ("remove", _.remove("p")),
+      ("putAll", _.putAll(Map("q" -> "w").asJava)),
+      ("clear", _.clear()),
+      ("putIfAbsent", _.putIfAbsent("q", "w")),
+      ("remove if equal", _.remove("p", "v")),
+      ("replace", _.replace("p", "w")),
+      ("replace if equal", _.replace("p", "v", "w")),
+      ("compute", _.compute("p", appendNew)),
+      ("computeIfAbsent", _.computeIfAbsent("q", valueFromKey)),
+      ("computeIfPresent", _.computeIfPresent("p", appendNew)),
+      ("merge", _.merge("p", "w", appendNew)),
+      ("replaceAll", _.replaceAll(appendNew)),
+      ("snapshotWithModificationCount", _.snapshotWithModificationCount),
+      ("size", _.size),
+      ("isEmpty", _.isEmpty),
+      ("containsKey", _.containsKey("p")),
+      ("containsValue", _.containsValue("v")),
+      ("get", _.get("p")),
+      ("getOrDefault", _.getOrDefault("q", "w")),
+      ("forEach", _.forEach(ignoreEntry)),
+      ("equals", _.equals(new java.util.HashMap[String, String])),
+      ("hashCode", _.hashCode),
+      ("toString", _.toString))
+
+    operations.foreach { case (name, operation) =>
+      val map = new ModificationCountingMap
+      map.put("p", "v")
+      val caller = new Thread(() => { operation(map); () }, s"ModificationCountingMap-$name")
+      map.synchronized {
+        caller.start()
+        // A caller that takes the map's monitor cannot proceed while this thread holds it.
+        eventually(timeout(10.seconds)) {
+          assert(caller.getState == Thread.State.BLOCKED, name)
+        }
+      }
+      caller.join(10000)
+      assert(!caller.isAlive, name)
+    }
   }
 
   test("key, value, and entry views are read-only") {
