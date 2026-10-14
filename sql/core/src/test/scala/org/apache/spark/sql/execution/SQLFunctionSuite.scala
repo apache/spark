@@ -80,8 +80,9 @@ class SQLFunctionSuite extends SharedSparkSession {
     withUserDefinedFunction("ident_temp_fn" -> true, "ident_perm_fn" -> false) {
       sql("DECLARE OR REPLACE VARIABLE ident_col STRING DEFAULT 'a'")
       try {
-        // A temporary function records the variable, like a direct reference, so the stored body
-        // still resolves the IDENTIFIER clause when it is re-analyzed.
+        // A temporary function records the variable in its properties, as it does a direct
+        // reference. The property is informational and is not consulted when the body is
+        // re-analyzed: a function body resolves variables from the caller's context.
         sql("CREATE TEMPORARY FUNCTION ident_temp_fn(x INT) RETURNS INT " +
           "RETURN (SELECT IDENTIFIER(ident_col) FROM VALUES (1) AS T(a))")
         // Temporary functions are registered under the qualified `system.session` namespace.
