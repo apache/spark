@@ -19,6 +19,8 @@ package org.apache.spark.sql.connect
 import java.sql.Timestamp
 import java.util.Arrays
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.sql.{AnalysisException, Encoder, Encoders, Row}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Append
 import org.apache.spark.sql.connect.test.{QueryTest, RemoteSparkSession}
@@ -49,6 +51,33 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with RemoteSparkSessi
       .mapGroups((_, it) => it.toSeq.size)
       .collectAsList()
     assert(values == Arrays.asList[Int](5, 5))
+  }
+
+  test("SPARK-60247: typed groupByKey origin points to the user call site") {
+    // The Connect client encodes `groupByKey`'s grouping key as a Scala UDF applied to
+    // `col("*")`, built inside `KeyValueGroupedDatasetImpl`. The DataFrame query context
+    // captured for that column must skip the `UserDefinedFunction.apply` and
+    // `KeyValueGroupedDatasetImpl` frames so the call site lands on the user code that called
+    // `groupByKey` (this suite), not on those internal helpers. Assert on the serialized origin
+    // of the grouping expression to guard the frame filter in `CurrentOrigin`.
+    val ds = spark
+      .range(10)
+      .groupByKey(v => v % 2)
+      .count()
+
+    val groupingUdf = ds.plan.getRoot.getAggregate.getGroupingExpressions(0)
+    val stackTrace = groupingUdf.getCommon.getOrigin.getJvmOrigin.getStackTraceList.asScala
+    assert(stackTrace.nonEmpty, "expected a captured stack trace on the grouping expression")
+    // The leading frame is the Spark API (`groupByKey`); the rest is the user call site.
+    val callSite = stackTrace.tail.map(_.getDeclaringClass)
+    assert(callSite.nonEmpty, s"expected a user call site, but got: $callSite")
+    assert(
+      callSite.head.contains("KeyValueGroupedDatasetE2ETestSuite"),
+      s"call site should point at the test, but was: $callSite")
+    assert(
+      !callSite.head.contains("KeyValueGroupedDatasetImpl") &&
+        !callSite.head.contains("UserDefinedFunction"),
+      s"call site should skip the internal UDF helpers, but was: $callSite")
   }
 
   test("flatGroupMap") {
