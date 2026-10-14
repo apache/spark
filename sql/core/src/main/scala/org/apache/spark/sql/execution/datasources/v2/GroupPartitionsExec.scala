@@ -268,9 +268,11 @@ case class GroupPartitionsExec(
    */
   def enableSortedMerge: Boolean = sortedMergeOrdering.isDefined
 
+  /** Whether this node was planned to k-way merge partitions it coalesces. */
+  @transient private lazy val mergeIsPlanned: Boolean = enableSortedMerge && hasCoalescing
+
   /** Whether this node performs the k-way merge. No config term, see `sortedMergeOrdering`. */
-  @transient private lazy val usesSortedMerge: Boolean =
-    enableSortedMerge && hasCoalescing && childIsSafeForKWayMerge
+  @transient private lazy val usesSortedMerge: Boolean = mergeIsPlanned && childIsSafeForKWayMerge
 
   /**
    * Returns a copy of this node with k-way merge enabled, when the config is on, this node
@@ -280,14 +282,15 @@ case class GroupPartitionsExec(
    * once.
    */
   def tryEnableSortedMerge(): Option[GroupPartitionsExec] = {
-    // Read once, so that the ordering frozen is the one checked.
-    lazy val ordering = child.outputOrdering
+    // The ordering is read once, so the ordering frozen is the one checked.
     Option.when(!enableSortedMerge && conf.v2BucketingPreserveOrderingOnCoalesceEnabled &&
-        hasCoalescing && ordering.nonEmpty && childIsSafeForKWayMerge) {
-      val newGroupPartitions = copy(sortedMergeOrdering = Some(ordering))
-      newGroupPartitions.copyTagsFrom(this)
-      newGroupPartitions
-    }
+        hasCoalescing && childIsSafeForKWayMerge)(child.outputOrdering)
+      .filter(_.nonEmpty)
+      .map { ordering =>
+        val newGroupPartitions = copy(sortedMergeOrdering = Some(ordering))
+        newGroupPartitions.copyTagsFrom(this)
+        newGroupPartitions
+      }
   }
 
   /**
@@ -360,9 +363,11 @@ case class GroupPartitionsExec(
    * Like `checkChildStillMatches`, this makes the failure explicit if one starts.
    */
   private def checkPlannedMergeRuns(): Unit = {
-    if (enableSortedMerge && hasCoalescing && !childIsSafeForKWayMerge) {
+    if (mergeIsPlanned && !childIsSafeForKWayMerge) {
+      val blocker = child.find(!_.isInstanceOf[SafeForKWayMerge]).map(_.nodeName)
       throw SparkException.internalError(
-        "GroupPartitionsExec was planned with a k-way merge that its child no longer allows")
+        "GroupPartitionsExec was planned with a k-way merge, but its child holds " +
+          s"${blocker.getOrElse("a node")}, which does not mix in SafeForKWayMerge")
     }
   }
 
@@ -386,11 +391,17 @@ case class GroupPartitionsExec(
     }
   }
 
-  override def supportsColumnar: Boolean = child.supportsColumnar && !usesSortedMerge
+  // The columnar path never merges, so a planned merge stays row-based. That is decided by the plan
+  // rather than by the live child, so the columnar transition lands below the node, and `doExecute`
+  // either merges or fails in `checkPlannedMergeRuns`.
+  override def supportsColumnar: Boolean = child.supportsColumnar && !mergeIsPlanned
 
   override protected def doExecuteColumnar(): RDD[ColumnarBatch] = {
     checkChildStillMatches()
-    checkPlannedMergeRuns()
+    if (mergeIsPlanned) {
+      throw SparkException.internalError(
+        "GroupPartitionsExec was planned with a k-way merge, which the columnar path cannot run")
+    }
     sendDriverMetrics()
     if (groupedPartitions.isEmpty) {
       sparkContext.emptyRDD

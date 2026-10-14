@@ -165,6 +165,11 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     val merging =
       GroupPartitionsExec(leaf, sortedMergeOrdering = Some(Seq(SortOrder(exprA, Ascending))))
     assert(merging.withKeyPositionsFor(leaf).isEmpty)
+    // `InputAdapter` reports the same partitioning, so a node that does not merge is rebuilt over
+    // it, while a merging node is not.
+    assert(GroupPartitionsExec(leaf).withKeyPositionsFor(InputAdapter(leaf)).isDefined,
+      "test setup")
+    assert(merging.withKeyPositionsFor(InputAdapter(leaf)).isEmpty)
   }
 
   test("SPARK-60044: a planned merge keeps the ordering it was planned with") {
@@ -496,20 +501,27 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
       val ordering = merging.outputOrdering
       assert(ordering.length === 1)
       assert(ordering.head.child === exprA)
-      // A planned merge that cannot run fails rather than concatenating (SPARK-60044). Both
-      // execute paths have their own check.
-      Seq(() => merging.execute(), () => merging.executeColumnar()).foreach { run =>
-        val error = intercept[SparkException](run())
-        assert(error.getMessage.contains("planned with a k-way merge"))
-      }
+      // A planned merge that cannot run fails rather than concatenating (SPARK-60044). The error
+      // names the node outside the whitelist. The columnar path never merges, so it always fails.
+      val error = intercept[SparkException](merging.execute())
+      assert(error.getMessage.contains("holds DummySparkPlan"))
+      val columnarError = intercept[SparkException](merging.executeColumnar())
+      assert(columnarError.getMessage.contains("the columnar path cannot run"))
+
+      // The columnar side follows the plan rather than the live child, so a columnar child
+      // outside the whitelist does not make a planned merge columnar.
+      val columnarChild = UnsafeColumnarLeaf(KeyedPartitioning(Seq(exprA), partitionKeys))
+      assert(GroupPartitionsExec(columnarChild).supportsColumnar, "test setup")
+      assert(!GroupPartitionsExec(columnarChild, sortedMergeOrdering = Some(childOrdering))
+        .supportsColumnar)
     }
   }
 
   test("SPARK-55715: coalescing with a planned merge returns full child ordering") {
-    // Key 1 appears on partitions 0 and 2, causing coalescing. The child is a LeafExecNode so
-    // childIsSafeForKWayMerge = true. With a planned merge ordering the node performs the k-way
-    // merge, so the full child ordering (including the non-key exprC) must be returned, not just
-    // the subset of key-expression orders.
+    // Key 1 appears on partitions 0 and 2, causing coalescing. The child, DummyLeafSparkPlan,
+    // mixes in SafeForKWayMerge, so childIsSafeForKWayMerge = true. With a planned merge ordering
+    // the node performs the k-way merge, so the full child ordering (including the non-key exprC)
+    // must be returned, not just the subset of key-expression orders.
     val partitionKeys = Seq(row(1), row(2), row(1))
     val childOrdering = Seq(SortOrder(exprA, Ascending), SortOrder(exprC, Ascending))
     val child = DummyLeafSparkPlan(
@@ -863,6 +875,14 @@ private case class DummyLeafSparkPlan(
     throw new UnsupportedOperationException
   override protected def doExecuteColumnar(): RDD[ColumnarBatch] =
     throw new UnsupportedOperationException
+  override def output: Seq[Attribute] = Seq.empty
+}
+
+/** A columnar leaf that does not mix in `SafeForKWayMerge`. */
+private case class UnsafeColumnarLeaf(override val outputPartitioning: Partitioning)
+    extends LeafExecNode {
+  override def supportsColumnar: Boolean = true
+  override protected def doExecute(): RDD[InternalRow] = throw new UnsupportedOperationException
   override def output: Seq[Attribute] = Seq.empty
 }
 

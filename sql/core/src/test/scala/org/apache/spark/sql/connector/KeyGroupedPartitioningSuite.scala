@@ -19,20 +19,17 @@ package org.apache.spark.sql.connector
 import java.sql.Timestamp
 import java.util.Collections
 
-import scala.collection.mutable
-
 import org.apache.logging.log4j.Level
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.rdd.SortedMergeCoalescedRDD
-import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, ExprId, Literal, TransformExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Complete
 import org.apache.spark.sql.catalyst.plans.{Cross, ExistenceJoin, Inner, JoinType, LeftAnti, LeftSemi, LeftSingle}
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.{KeyedPartitioning, PartitioningCollection, REPLICATED_FOR_JOIN, SPLIT_FOR_JOIN}
-import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryBaseTable, InMemoryCatalystRuntimeFilterCatalog, InMemoryTable, InMemoryTableCatalog}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.functions._
@@ -6642,7 +6639,7 @@ class KeyGroupedPartitioningSuite
     assert(merging.length == 1, "expected one k-way merge")
     assert(merging.head.child.output.exists(_.name == "arrive_time"),
       "test setup: arrive_time stays in the scan output")
-    assert(merging.head.child.outputOrdering.map(_.child.sql) == expectedOrdering)
+    assert(merging.head.outputOrdering.map(_.child.sql) == expectedOrdering)
     assert(merging.head.execute().isInstanceOf[SortedMergeCoalescedRDD[_]])
   }
 
@@ -6781,7 +6778,8 @@ class KeyGroupedPartitioningSuite
 
         // Flip only the ordering config. The plan above is already committed.
         withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "false") {
-          checkAnswer(df, orderedIdJoinRows)
+          // Without `checkToRDD`, so only the committed plan runs, not a newly planned one.
+          QueryTest.checkAnswer(df, orderedIdJoinRows, checkToRDD = false)
           // Re-collected, because under AQE `executedPlan` only reaches the final plan's nodes
           // once the query has run.
           val executed =
@@ -6850,7 +6848,8 @@ class KeyGroupedPartitioningSuite
         withSQLConf(SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "false") {
           assert(merging.head.child.outputOrdering.isEmpty,
             "test setup: the scan no longer derives an ordering from its keys")
-          checkAnswer(df, kWayMergeWindowRows)
+          // Without `checkToRDD`, so only the committed plan runs, not a newly planned one.
+          QueryTest.checkAnswer(df, kWayMergeWindowRows, checkToRDD = false)
           // Re-collected, because under AQE `executedPlan` only reaches the final plan's nodes
           // once the query has run.
           val executed = collectAllGroupPartitions(df.queryExecution.executedPlan)
@@ -6874,18 +6873,10 @@ class KeyGroupedPartitioningSuite
         "test setup: the plan has a k-way merge")
       df.debug()
 
-      // `debug()` returns nothing, so its wrapping is rebuilt here, the same way, to check that
-      // the merge runs.
-      val visited = mutable.HashSet.empty[TreeNodeRef]
-      val debugPlan = plan.transform {
-        case p if !visited.contains(new TreeNodeRef(p)) =>
-          visited += new TreeNodeRef(p)
-          DebugExec(p)
-      }
-      val merging = collectAllGroupPartitions(debugPlan).filter(_.enableSortedMerge)
-      assert(merging.length == 1 && merging.head.child.isInstanceOf[DebugExec],
-        "test setup: the merge's child is wrapped")
-      assert(merging.head.execute().isInstanceOf[SortedMergeCoalescedRDD[_]])
+      // `debug()` returns nothing, so the merge is also checked under a `DebugExec` child.
+      val planned = collectAllGroupPartitions(plan).filter(_.enableSortedMerge).head
+      val wrapped = planned.withNewChildren(Seq(DebugExec(planned.child)))
+      assert(wrapped.execute().isInstanceOf[SortedMergeCoalescedRDD[_]])
     }
   }
 
