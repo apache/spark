@@ -443,9 +443,10 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   }
 
   // Builds a typed Scala UDF expression whose payload cannot be deserialized, optionally carrying
-  // a JVM origin whose head frame reports `fragment` as the API call site. `numArgs` controls how
-  // many `UnresolvedStar` arguments the UDF carries, matching the client encoding of each operation
-  // (1 for groupByKey/filter, 2 for Dataset.reduce's `udf(col("*"), col("*"))`).
+  // a JVM origin whose head frame reports `fragment` as the API method name and whose next frame
+  // becomes the call site. `numArgs` controls how many `UnresolvedStar` arguments the UDF carries,
+  // matching the client encoding of each operation (1 for groupByKey/filter, 2 for Dataset.reduce's
+  // `udf(col("*"), col("*"))`).
   private def malformedTypedScalaUdf(
       includeOrigin: Boolean,
       fragment: String,
