@@ -430,6 +430,30 @@ class MathFunctionsSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-60202: scaled floor/ceil preserves direction in numeric comparisons") {
+    val cases = Seq(
+      (1, Seq("0.1", "0.9", "1.1", "12345.1")),
+      (5, Seq("128.00002")))
+    for (ansi <- Seq(false, true); codegen <- Seq("CODEGEN_ONLY", "NO_CODEGEN")) {
+      withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> ansi.toString,
+          SQLConf.CODEGEN_FACTORY_MODE.key -> codegen,
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> (codegen == "CODEGEN_ONLY").toString) {
+        cases.foreach { case (scale, positiveValues) =>
+          val values = positiveValues.flatMap(value => Seq(value, s"-$value")).map(lit)
+          val input = spark.range(values.size).select(
+            element_at(array(values: _*), ($"id" + 1).cast("int"))
+              .cast(FloatType).as("value"))
+          // Comparisons promote Decimal and Float to Double. Float.toString before rounding
+          // can make floor exceed its input, e.g. 12345.1f is stored below decimal 12345.1.
+          val result = input.selectExpr(
+            s"floor(value, $scale) <= value", s"ceil(value, $scale) >= value")
+          checkAnswer(result, Seq.fill(values.size)(Row(true, true)))
+        }
+      }
+    }
+  }
+
   test("SPARK-60202: scaled floor/ceil result overflow respects ANSI mode in runtime SQL") {
     val inputTypes = Seq(FloatType, DoubleType, DecimalType(38, 20))
     val zero = BigDecimal(0)

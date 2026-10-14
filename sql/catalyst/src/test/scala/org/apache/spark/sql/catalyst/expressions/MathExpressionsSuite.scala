@@ -793,6 +793,38 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-60202: scaled floor/ceil accepts inputs just inside the magnitude limit") {
+    for (ansi <- Seq(false, true)) {
+      val doubleInput = BoundReference(0, DoubleType, nullable = false)
+      val doubleValue = java.lang.Math.nextDown(1e15)
+      val floatInput = BoundReference(0, FloatType, nullable = false)
+      val floatValue = 9999999.0f
+      val cases = Seq(
+        (doubleInput, doubleValue, 0, "999999999999999", "1000000000000000"),
+        (doubleInput, doubleValue, 1, "999999999999999.9", "999999999999999.9"),
+        (floatInput, floatValue.toDouble, 0, "9999999", "9999999"),
+        (floatInput, floatValue.toDouble, 1, "9999999.0", "9999999.0"),
+        (floatInput, floatValue.toDouble, -1, "9999990", "10000000"))
+      cases.foreach { case (input, value, scale, down, up) =>
+        def row(negative: Boolean): InternalRow = {
+          val signed = if (negative) -value else value
+          if (input.dataType == FloatType) InternalRow(signed.toFloat) else InternalRow(signed)
+        }
+        val floor = RoundFloor(input, Literal(scale), ansiEnabled = ansi)
+        val ceil = RoundCeil(input, Literal(scale), ansiEnabled = ansi)
+        // Carry may exceed the input limit while fitting the result's extra integral digit.
+        val integralDigits = if (input.dataType == FloatType) 8 else 16
+        val resultScale = math.max(scale, 0)
+        assert(floor.dataType == DecimalType(integralDigits + resultScale, resultScale))
+        assert(ceil.dataType == floor.dataType)
+        checkEvaluation(floor, Decimal(down), row(negative = false))
+        checkEvaluation(ceil, Decimal(up), row(negative = false))
+        checkEvaluation(floor, Decimal(-BigDecimal(up)), row(negative = true))
+        checkEvaluation(ceil, Decimal(-BigDecimal(down)), row(negative = true))
+      }
+    }
+  }
+
   test("SPARK-60202: scaled floor/ceil preserves result types and explicit decimal casts") {
     Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType).foreach { dt =>
       Seq(-3, 0, 1, 15, 20).foreach { scale =>
