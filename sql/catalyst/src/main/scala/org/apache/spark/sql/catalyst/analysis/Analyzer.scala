@@ -1783,15 +1783,18 @@ class Analyzer(
           expanded
         }
       // If the pivot aggregate function argument contains Stars, expand it, e.g. count(*) to
-      // count(1), as for Aggregate. A bare top-level Star cannot be expanded here and would keep
-      // this case matching, leaving the rest of the Pivot unresolved, so reject it up front.
+      // count(1), as for Aggregate. A Star that survives expansion, such as a bare top-level `*`
+      // or the value of a top-level IN, would keep this case matching and leave the rest of the
+      // Pivot unresolved, so reject it here.
       case p: Pivot if containsStar(p.aggregates) =>
-        p.aggregates.collectFirst { case s: Star => s }.foreach { s =>
-          withPosition(s) {
-            throw QueryCompilationErrors.invalidStarUsageError(p.nodeName, Seq(s))
+        val expanded = p.aggregates.map(expandStarExpression(_, p.child))
+        if (containsStar(expanded)) {
+          val stars = extractStar(expanded)
+          withPosition(stars.head) {
+            throw QueryCompilationErrors.invalidStarUsageError(p.nodeName, stars)
           }
         }
-        p.copy(aggregates = p.aggregates.map(expandStarExpression(_, p.child)))
+        p.copy(aggregates = expanded)
       case c: CollectMetrics if containsStar(c.metrics) =>
         c.copy(metrics = buildExpandedProjectList(c.metrics, c.child))
       case g: Generate if containsStar(g.generator.children) =>

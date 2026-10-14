@@ -198,6 +198,21 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       expectedMessageParameters = Map("elem" -> "'*'", "prettyName" -> "Pivot"))
   }
 
+  test("SPARK-60072: reject a star left unexpanded in pivot aggregates") {
+    // Star expansion only expands the list of a top-level IN, so its star value survives
+    // expansion and must be rejected like a bare star.
+    val pivot = Pivot(
+      Some(UnresolvedAttribute("a") :: Nil),
+      UnresolvedAttribute("b"),
+      Literal("x") :: Literal("y") :: Nil,
+      In(UnresolvedStar(None), Literal(1) :: Literal(2) :: Nil) :: Nil,
+      testRelation2)
+    assertAnalysisErrorCondition(
+      pivot,
+      expectedErrorCondition = "INVALID_USAGE_OF_STAR_OR_REGEX",
+      expectedMessageParameters = Map("elem" -> "'*'", "prettyName" -> "Pivot"))
+  }
+
   test("resolve sort references - filter/limit") {
     val a = testRelation2.output(0)
     val b = testRelation2.output(1)
