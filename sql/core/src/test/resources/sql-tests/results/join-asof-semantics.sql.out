@@ -605,3 +605,14 @@ struct<dk:int,rts:int>
 -- !query output
 1	5
 2	12
+
+
+-- !query
+FROM using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.lts >= d.k)
+-- !query schema
+struct<k:int,lts:int,k:int,rts:int>
+-- !query output
+1	10	2	12
+2	20	2	12
+8	30	2	12

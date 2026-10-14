@@ -307,3 +307,7 @@ SELECT d.k AS dk, r.rts
 FROM using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
   MATCH_CONDITION (l.lts >= r.rts)
   ON l.k = d.k;
+
+-- FVT-ASOF-2-040: a bare FROM query does not output the hidden MATCH_CONDITION column
+FROM using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.lts >= d.k);
