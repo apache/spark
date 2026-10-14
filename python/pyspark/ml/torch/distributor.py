@@ -702,7 +702,7 @@ class TorchDistributor(Distributor):
             CUDA_VISIBLE_DEVICES = "CUDA_VISIBLE_DEVICES"
 
             # Sockets reserving MASTER_PORT, held until training finishes.
-            reserved_port_sockets: List[socket.socket] = []
+            reserved_port_sockets = []
 
             def get_free_port(address: str, context: "BarrierTaskContext") -> int:
                 port = ""
