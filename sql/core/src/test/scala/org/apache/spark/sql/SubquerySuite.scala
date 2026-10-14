@@ -102,14 +102,12 @@ class SubquerySuite extends SharedSparkSession
           checkAnswer(
             sql(s"""$cte
                    |SELECT name, (SELECT count(*) FROM k WHERE k.a = s.id) AS c
-                   |FROM s
-                   |ORDER BY name""".stripMargin),
+                   |FROM s""".stripMargin).orderBy("name"),
             counts)
           checkAnswer(
             sql(s"""$cte
                    |SELECT name, EXISTS(SELECT 1 FROM k WHERE k.a = s.id) AS e
-                   |FROM s
-                   |ORDER BY name""".stripMargin),
+                   |FROM s""".stripMargin).orderBy("name"),
             exists)
         }
       }
