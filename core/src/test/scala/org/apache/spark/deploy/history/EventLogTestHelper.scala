@@ -83,14 +83,24 @@ object EventLogTestHelper {
       sparkConf: SparkConf,
       hadoopConf: Configuration,
       eventsFiles: Seq[SparkListenerEvent]*): Seq[FileStatus] = {
+    writeLinesToRollingWriter(fs, appId, dir, sparkConf, hadoopConf,
+      eventsFiles.map(_.map(convertEvent)): _*)
+  }
+
+  /** Writes each sequence of lines to its own rolled event log file, as they are. */
+  def writeLinesToRollingWriter(
+      fs: FileSystem,
+      appId: String,
+      dir: File,
+      sparkConf: SparkConf,
+      hadoopConf: Configuration,
+      linesFiles: Seq[String]*): Seq[FileStatus] = {
     val writer = new RollingEventLogFilesWriter(appId, None, dir.toURI, sparkConf, hadoopConf)
     writer.start()
 
-    eventsFiles.dropRight(1).foreach { events =>
-      writeEventsToRollingWriter(writer, events, rollFile = true)
-    }
-    eventsFiles.lastOption.foreach { events =>
-      writeEventsToRollingWriter(writer, events, rollFile = false)
+    linesFiles.zipWithIndex.foreach { case (lines, index) =>
+      lines.foreach(writer.writeEvent(_, flushLogger = true))
+      if (index < linesFiles.length - 1) writer.rollEventLogFile()
     }
 
     writer.stop()
