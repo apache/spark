@@ -18712,7 +18712,7 @@ object functions {
    * @group vector_funcs
    * @since 4.3.0
    * @return
-   *   Returns a column that evaluates to an array.
+   *   Returns a column that evaluates to an array with the same element type as the input.
    */
   def vector_sum(col: Column): Column = Column.fn("vector_sum", col)
 

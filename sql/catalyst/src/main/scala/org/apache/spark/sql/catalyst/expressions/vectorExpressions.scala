@@ -379,8 +379,6 @@ private[expressions] sealed abstract class VectorElementAccessor(val size: Int) 
 
   protected def offset(i: Int): Long = Platform.BYTE_ARRAY_OFFSET + i.toLong * size
 
-  def get(bytes: Array[Byte], i: Int): Double
-
   def put(bytes: Array[Byte], i: Int, value: Double): Unit
 
   def getInput(array: ArrayData, i: Int): Double
@@ -392,8 +390,6 @@ private[expressions] sealed abstract class VectorElementAccessor(val size: Int) 
 private[expressions] object VectorElementAccessor {
 
   private object FloatAccessor extends VectorElementAccessor(4) {
-    override def get(bytes: Array[Byte], i: Int): Double = Platform.getFloat(bytes, offset(i))
-
     override def put(bytes: Array[Byte], i: Int, value: Double): Unit =
       Platform.putFloat(bytes, offset(i), value.toFloat)
 
@@ -401,8 +397,6 @@ private[expressions] object VectorElementAccessor {
   }
 
   private object DoubleAccessor extends VectorElementAccessor(8) {
-    override def get(bytes: Array[Byte], i: Int): Double = Platform.getDouble(bytes, offset(i))
-
     override def put(bytes: Array[Byte], i: Int, value: Double): Unit =
       Platform.putDouble(bytes, offset(i), value)
 
@@ -434,7 +428,7 @@ trait VectorAggregateBase extends ImperativeAggregate
     case _ => FloatType
   }
 
-  private[expressions] lazy val elementAccessor: VectorElementAccessor =
+  @transient private[expressions] lazy val elementAccessor: VectorElementAccessor =
     VectorElementAccessor.elementTypeToAccessorMap(elementType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -731,8 +725,8 @@ case class VectorAvg(
   group = "vector_funcs"
 )
 // scalastyle:on line.size.limit
-// Note: Additions use Double operands. For ARRAY<FLOAT> input, each update or merge sum
-// is cast to Float before storage. ARRAY<DOUBLE> input retains double precision.
+// Note: Each update or merge uses the input element type's precision:
+// single precision for ARRAY<FLOAT> and double precision for ARRAY<DOUBLE>.
 // Precision loss is expected for very large aggregates due to:
 // 1. Accumulated rounding errors when summing many values
 // 2. Loss of significance when adding small values to large accumulated sums
@@ -765,10 +759,19 @@ case class VectorSum(
       newCount: Long): Unit = {
     // Update sum: new_sum = old_sum + new_value
     var i = 0
-    while (i < dim) {
-      elementAccessor.put(accBytes, i,
-        elementAccessor.get(accBytes, i) + elementAccessor.getInput(inputArray, i))
-      i += 1
+    if (elementType == FloatType) {
+      while (i < dim) {
+        val off = Platform.BYTE_ARRAY_OFFSET + i.toLong * 4
+        Platform.putFloat(accBytes, off, Platform.getFloat(accBytes, off) + inputArray.getFloat(i))
+        i += 1
+      }
+    } else {
+      while (i < dim) {
+        val off = Platform.BYTE_ARRAY_OFFSET + i.toLong * 8
+        Platform.putDouble(accBytes, off,
+          Platform.getDouble(accBytes, off) + inputArray.getDouble(i))
+        i += 1
+      }
     }
   }
 
@@ -781,10 +784,20 @@ case class VectorSum(
       newCount: Long): Unit = {
     // Merge sums: combined_sum = left_sum + right_sum
     var i = 0
-    while (i < dim) {
-      elementAccessor.put(accBytes, i,
-        elementAccessor.get(accBytes, i) + elementAccessor.get(inputBytes, i))
-      i += 1
+    if (elementType == FloatType) {
+      while (i < dim) {
+        val off = Platform.BYTE_ARRAY_OFFSET + i.toLong * 4
+        Platform.putFloat(accBytes, off,
+          Platform.getFloat(accBytes, off) + Platform.getFloat(inputBytes, off))
+        i += 1
+      }
+    } else {
+      while (i < dim) {
+        val off = Platform.BYTE_ARRAY_OFFSET + i.toLong * 8
+        Platform.putDouble(accBytes, off,
+          Platform.getDouble(accBytes, off) + Platform.getDouble(inputBytes, off))
+        i += 1
+      }
     }
   }
 
