@@ -75,10 +75,25 @@ class FailureSafeParser[IN](
               // SPARK-42298 we recreate the exception here to make sure the error message
               // have the record content.
               throw QueryExecutionErrors.cannotParseJsonArraysAsStructsError(e.record().toString)
-            case _ => throw QueryExecutionErrors.malformedRecordsDetectedInRecordParsingError(
-              toResultRow(e.partialResults().headOption, e.record).toString, e)
+            case causeWrapper: LazyBadRecordCauseWrapper =>
+              // Realise the deferred cause so the user-facing error still carries
+              // the concrete reason rather than this stackless control-flow wrapper.
+              throwMalformedRecordsDetectedInRecordParsingError(e, causeWrapper.cause())
+            case _ =>
+              // Keep passing `e` for every other cause, preserving the exception
+              // chain shape that 3.5.x already had. Unwrapping here would drop the
+              // BadRecordException link, which existing tests assert on -- e.g.
+              // QueryExecutionErrorsSuite's CANNOT_PARSE_DECIMAL and JsonSuite's
+              // SPARK-25040 empty-string cases both walk a fixed number of causes.
+              throwMalformedRecordsDetectedInRecordParsingError(e, e)
           }
       }
     }
+  }
+
+  private def throwMalformedRecordsDetectedInRecordParsingError(
+      e: BadRecordException, cause: Throwable): Nothing = {
+    throw QueryExecutionErrors.malformedRecordsDetectedInRecordParsingError(
+      toResultRow(e.partialResults().headOption, e.record).toString, cause)
   }
 }
