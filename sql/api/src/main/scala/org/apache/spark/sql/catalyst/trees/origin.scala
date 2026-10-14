@@ -152,8 +152,13 @@ object CurrentOrigin {
     "(org\\.apache\\.spark\\.sql\\." +
       "(?:(classic|connect)\\.)?" +
       "(?:functions|Column|ColumnName|SQLImplicits|Dataset|DataFrameStatFunctions|DatasetHolder" +
-      "|SparkSession|ColumnNodeToProtoConverter)" +
+      "|SparkSession|ColumnNodeToProtoConverter" +
+      // Typed APIs build their UDF column inside these helpers (e.g. the Connect client encodes
+      // groupByKey/filter/reduce as `udf.apply(col("*"))`), so they must count as Spark frames or
+      // the captured call site stops at the helper instead of the user code that invoked the API.
+      "|KeyValueGroupedDataset|KeyValueGroupedDatasetImpl)" +
       "(?:|\\..*|\\$.*))" +
+      "|(org\\.apache\\.spark\\.sql\\.expressions\\.UserDefinedFunction(?:|\\..*|\\$.*))" +
       "|(scala\\.collection\\..*)")
 
   private def sparkCode(ste: StackTraceElement): Boolean = {
