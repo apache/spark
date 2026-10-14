@@ -21,10 +21,11 @@ import org.apache.spark.sql.Column
 import org.apache.spark.sql.types.DataType
 
 /**
- * The reconciled value and sequencing clock of one [[Scd1FieldToReconcile]].
+ * The reconciled value and sequencing clock of one [[Scd1FieldToReconcile]]. This is the final
+ * state of the field lifecycle described in [[Scd1LeafLevelReconciliation]].
  *
- * Callers decide which authorship wins. The companion then builds version maps independently of
- * how the winning value was selected.
+ * Callers decide authorship within a microbatch. The companion then builds version maps
+ * independently of how the winning value was selected.
  *
  * Deletes and upserts can both author null, so a null value may be authored. An unauthored field,
  * whose sequence is null, must have a null value. Initializers are expected to respect this

@@ -383,13 +383,13 @@ private[pipelines] object Scd1LeafLevelReconciliation {
     // Per field, read the latest microbatch authorship from the key's aggregated row.
     val collapsedFields = fieldsToReconcile.zip(latestAuthorshipColNames).map {
       case (fieldToReconcile, authorshipColName) =>
-        CollapsedField(
+        reconcileCollapsedField(
           fieldToReconcile = fieldToReconcile,
           microbatchAuthorship =
             aggregatedPerKeyDf.col(QuotingUtils.quoteIdentifier(authorshipColName))
         )
     }
-    val collapsedFieldsByTopLevelName = collapsedFields.groupBy(_.path.head)
+    val collapsedFieldsByTopLevelName = collapsedFields.groupBy(_.fieldToReconcile.path.head)
 
     // Whether each collapsed row represents the key's net delete rather than its net upsert. A
     // delete wins only when it is sequenced strictly after the upsert, so upserts win ties.
@@ -401,9 +401,9 @@ private[pipelines] object Scd1LeafLevelReconciliation {
 
     // A net delete's user data is never stored, but must still satisfy the schema, so it carries
     // the values of the key's latest delete event rather than the nulls that delete authored.
-    def collapsedValueOf(collapsedField: CollapsedField): Column = F.when(
+    def collapsedValueOf(collapsedField: Scd1ReconciledField): Column = F.when(
       collapsedRowRepresentsDelete,
-      collapsedField.path.foldLeft(latestDeleteUserData)(_.getField(_))
+      collapsedField.fieldToReconcile.path.foldLeft(latestDeleteUserData)(_.getField(_))
     ).otherwise(collapsedField.reconciledValue)
 
     // Reconstruct the `microbatchDf` but using the aggregated results per key. The resulting
@@ -427,7 +427,7 @@ private[pipelines] object Scd1LeafLevelReconciliation {
             upsertSequence = F.when(!collapsedRowRepresentsDelete, aggregatedUpsertSequence),
             versionMap = F.when(
               !collapsedRowRepresentsDelete,
-              versionMapFrom(collapsedFields, resolvedSequencingType)
+              Scd1ReconciledField.versionMapFrom(collapsedFields, resolvedSequencingType)
             ),
             sequencingType = resolvedSequencingType
           ).as(field.name, field.metadata)
@@ -447,7 +447,8 @@ private[pipelines] object Scd1LeafLevelReconciliation {
               IgnoreNullColumnReconstruction.reconstructColumn(
                 path = Seq(field.name),
                 field = field,
-                leafValues = leaves.map(leaf => leaf.path -> collapsedValueOf(leaf)))
+                leafValues =
+                  leaves.map(leaf => leaf.fieldToReconcile.path -> collapsedValueOf(leaf)))
           }
         }
       }: _*
@@ -494,53 +495,22 @@ private[pipelines] object Scd1LeafLevelReconciliation {
     )
   }
 
-  /** Builds a version map containing one entry for every user-data leaf. */
-  private def versionMapFrom(
-      collapsedFields: Seq[CollapsedField],
-      sequencingType: DataType): Column = {
-    val entries = collapsedFields.flatMap { collapsedField =>
-      collapsedField.leafPaths.flatMap { leafPath =>
-        Seq(F.lit(Scd1VersionMap.serializeKey(leafPath)), collapsedField.valueAuthoredAtSequence)
-      }
-    }
-    F.map(entries: _*).cast(Scd1VersionMap.mapType(sequencingType))
-  }
-
   /**
-   * One field of a key's row collapsed by [[collapseMicrobatchRowsPerKey]], holding the
+   * Reconciles one field of a key's row collapsed by [[collapseMicrobatchRowsPerKey]] from the
    * microbatch's latest authorship of the field.
    *
-   * The reconciled value may be null, since deletes and upserts can both author null. A non-null
-   * [[reconciledValue]] has a non-null [[valueAuthoredAtSequence]], and an unauthored field, whose
-   * sequence is null, has a null value.
-   *
-   * @param fieldToReconcile The field this reconciles.
+   * @param fieldToReconcile The field to reconcile.
    * @param microbatchAuthorship A struct column with fields `value` (the latest value the
    *                             microbatch authored) and `sequence` (the sequence it was authored
    *                             at). The struct is null when no event authored the field, which
    *                             reads the same as a null value and a null sequence.
+   * @return The microbatch's latest authored value and the sequence it was authored at.
    */
-  private case class CollapsedField(
-      private val fieldToReconcile: Scd1FieldToReconcile,
-      private val microbatchAuthorship: Column) {
-
-    /** The field's name parts within the user-data schema, where [[reconciledValue]] belongs. */
-    def path: Seq[String] = fieldToReconcile.path
-
-    /**
-     * The name parts of every user-data leaf at or beneath [[path]]. The version map records each
-     * of them as authored at [[valueAuthoredAtSequence]].
-     */
-    def leafPaths: Seq[Seq[String]] = fieldToReconcile.leafPaths
-
-    /** Whether this field is a leaf of a column selected for ignore-null. */
-    def isIgnoreNullLeaf: Boolean = fieldToReconcile.isIgnoreNullLeaf
-
-    /** The reconciled value selected for this field. */
-    val reconciledValue: Column = microbatchAuthorship.getField(aggregatedValueFieldName)
-
-    /** The sequence at which [[reconciledValue]] was authored, or null if it remains unauthored. */
-    val valueAuthoredAtSequence: Column =
-      microbatchAuthorship.getField(aggregatedSequenceFieldName)
-  }
+  private def reconcileCollapsedField(
+      fieldToReconcile: Scd1FieldToReconcile,
+      microbatchAuthorship: Column): Scd1ReconciledField =
+    Scd1ReconciledField(
+      fieldToReconcile = fieldToReconcile,
+      reconciledValue = microbatchAuthorship.getField(aggregatedValueFieldName),
+      valueAuthoredAtSequence = microbatchAuthorship.getField(aggregatedSequenceFieldName))
 }
