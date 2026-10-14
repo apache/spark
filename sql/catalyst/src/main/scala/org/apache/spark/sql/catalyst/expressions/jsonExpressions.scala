@@ -1873,7 +1873,14 @@ case class JsonToStructs(
     options: Map[String, String],
     child: Expression,
     timeZoneId: Option[String] = None,
-    variantAllowDuplicateKeys: Boolean = SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS))
+    variantAllowDuplicateKeys: Boolean = SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS),
+    // `spark.sql.charVarchar.standardSemantics.enabled` has PERSISTED binding, so it is captured
+    // here at analysis time (as the default arg, like `variantAllowDuplicateKeys`) and then
+    // threaded all the way into the parser via `charVarcharStandardSemanticsOverride`. This keeps
+    // a view's CHAR/VARCHAR map-key semantics tied to its creation-time flag rather than the
+    // caller's session setting. (`variantAllowDuplicateKeys` is only captured, not threaded: the
+    // parser still reads that one live from `SQLConf.get`.)
+    charVarcharStandardSemantics: Boolean = SQLConf.get.charVarcharStandardSemantics)
   extends UnaryExpression
   with TimeZoneAwareExpression
   with CodegenFallback
@@ -1886,10 +1893,9 @@ case class JsonToStructs(
   private val nullableSchema: DataType = schema.asNullable
 
   override def nullable: Boolean = true
+  override def nullIntolerant: Boolean = true
 
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(JSON_TO_STRUCT)
-
-  override def nullIntolerant: Boolean = true
 
   // Used in `FunctionRegistry`
   def this(child: Expression, schema: Expression, options: Map[String, String]) =
@@ -1904,7 +1910,7 @@ case class JsonToStructs(
   def this(child: Expression, schema: Expression, options: Expression) =
     this(
       schema = ExprUtils.evalTypeExpr(schema),
-      options = ExprUtils.convertToMapData(options),
+      options = ExprUtils.convertToMapData(options, "from_json"),
       child = child,
       timeZoneId = None)
 
@@ -1936,10 +1942,13 @@ case class JsonToStructs(
 
   @transient
   private lazy val evaluator = new JsonToStructsEvaluator(
-    options, nullableSchema, nameOfCorruptRecord, timeZoneId, variantAllowDuplicateKeys)
+    options, nullableSchema, nameOfCorruptRecord, timeZoneId, variantAllowDuplicateKeys,
+    charVarcharStandardSemantics)
   override def stateful: Boolean = true
 
-  override def nullSafeEval(json: Any): Any = evaluator.evaluate(json.asInstanceOf[UTF8String])
+  override def nullSafeEval(json: Any): Any = {
+    evaluator.evaluate(json.asInstanceOf[UTF8String])
+  }
 
   override def inputTypes: Seq[AbstractDataType] =
     StringTypeWithCollation(supportsTrimCollation = true) :: Nil
@@ -2017,7 +2026,7 @@ case class StructsToJson(
   def this(child: Expression) = this(Map.empty, child, None)
   def this(child: Expression, options: Expression) =
     this(
-      options = ExprUtils.convertToMapData(options),
+      options = ExprUtils.convertToMapData(options, "to_json"),
       child = child,
       timeZoneId = None)
 
@@ -2087,7 +2096,7 @@ case class SchemaOfJson(
 
   def this(child: Expression, options: Expression) = this(
       child = child,
-      options = ExprUtils.convertToMapData(options))
+      options = ExprUtils.convertToMapData(options, "schema_of_json"))
 
   override def nullable: Boolean = false
 
@@ -2103,7 +2112,7 @@ case class SchemaOfJson(
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_NULL",
         messageParameters = Map("exprName" -> "json"))
-    } else if (child.dataType != StringType) {
+    } else if (!child.dataType.isInstanceOf[StringType]) {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(

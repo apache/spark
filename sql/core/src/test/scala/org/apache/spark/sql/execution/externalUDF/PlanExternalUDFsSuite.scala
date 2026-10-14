@@ -731,8 +731,10 @@ class PlanExternalUDFsSuite extends QueryTest with SharedSparkSession {
     val exception = intercept[SparkException] {
       execution.execute().collect()
     }
-    assert(Utils.exceptionString(exception).contains(
-      "No UDF dispatcher factory configured. Set up a concrete factory for SPARK-55278."))
+    val message = Utils.exceptionString(exception)
+    assert(message.contains("built-in dispatcher implementation"))
+    assert(message.contains("DIRECT"))
+    assert(message.contains("spark-udf-worker-grpc"))
   }
 
   test("map partitions external UDF execution reports unimplemented before worker startup") {

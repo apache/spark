@@ -18,7 +18,6 @@
 package org.apache.spark.util
 
 import java.{lang => jl}
-import java.io.ObjectInputStream
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
@@ -197,9 +196,16 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
     }
   }
 
-  // Called by Java when deserializing an object
-  private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
-    in.defaultReadObject()
+  // Called by Java once this object is fully deserialized -- after every class in the hierarchy has
+  // had its fields read, including a subclass's. This must not move to `readObject`, which runs at
+  // this class's slot while a subclass's fields are still unset: `registerAccumulator` publishes
+  // `this` where other threads can reach it, and the executor heartbeater calls `isZero` on every
+  // registered accumulator. Each subclass would then have to tolerate its own state being null,
+  // which is the hazard SPARK-20977 worked around in `CollectionAccumulator`.
+  // `final` for the same reason as `writeReplace` above: unlike `readObject`, which is private and
+  // therefore invoked once per class in the hierarchy, `readResolve` is inherited, so a subclass
+  // defining one would silently replace this and stop registering the accumulator entirely.
+  final protected def readResolve(): Any = Utils.tryOrIOException {
     if (atDriverSide) {
       atDriverSide = false
 
@@ -213,6 +219,7 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
     } else {
       atDriverSide = true
     }
+    this
   }
 
   override def toString: String = {

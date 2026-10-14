@@ -37,7 +37,6 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
 
   /**
    * [[Project]] introduces a new scope to resolve its subtree and project list expressions.
-   * It also introduces a new [[WindowResolutionContext]] for potential window resolution.
    * During the resolution we determine whether the output operator will be [[Aggregate]] or
    * [[Project]] (based on the `hasAggregateExpressionsOutsideWindow` flag) and delegate the
    * operator building process to an appropriate method in the following way:

@@ -1251,7 +1251,7 @@ package object config {
   private[spark] val DRIVER_TIMEOUT = ConfigBuilder("spark.driver.timeout")
     .doc("A timeout for Spark driver in minutes. 0 means infinite. For the positive time value, " +
       "terminate the driver with the exit code 124 if it runs after timeout duration. To use, " +
-      "it's required to set `spark.plugins=org.apache.spark.deploy.DriverTimeoutPlugin`.")
+      "it's required to set `spark.plugins=DriverTimeoutPlugin`.")
     .version("4.0.0")
     .timeConf(TimeUnit.MINUTES)
     .checkValue(v => v >= 0, "The value should be a non-negative time value.")
@@ -1745,6 +1745,17 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(_ > 0, "The minimum renewal interval must be a positive time value.")
       .createWithDefaultString("30s")
+
+  private[spark] val SECURITY_OIDC_REQUIRE_RPC_ENCRYPTION =
+    ConfigBuilder("spark.security.oidc.requireRpcEncryption")
+      .doc("When OIDC credential propagation is enabled, whether to require RPC channel " +
+        "encryption. When true, Spark refuses to start if RPC encryption is not configured, " +
+        "instead of only logging a warning. Defaults to false to preserve the warn-by-default " +
+        "behavior described in the SPIP.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val DIRECT_CREDENTIAL_PROVIDERS_ENABLED =
     ConfigBuilder("spark.security.directCredentialProviders.enabled")
@@ -3325,7 +3336,7 @@ package object config {
     ConfigBuilder("spark.driver.log.redirectConsoleOutputs")
       .doc("Comma-separated list of the console output kind for driver that needs to redirect " +
         "to logging system. Supported values are `stdout`, `stderr`. It only takes affect when " +
-        s"`${PLUGINS.key}` is configured with `org.apache.spark.deploy.RedirectConsolePlugin`.")
+        s"`${PLUGINS.key}` is configured with `RedirectConsolePlugin`.")
       .version("4.1.0")
       .stringConf
       .transform(_.toLowerCase(Locale.ROOT))
@@ -3338,7 +3349,7 @@ package object config {
     ConfigBuilder("spark.executor.logs.redirectConsoleOutputs")
       .doc("Comma-separated list of the console output kind for executor that needs to redirect " +
         "to logging system. Supported values are `stdout`, `stderr`. It only takes affect when " +
-        s"`${PLUGINS.key}` is configured with `org.apache.spark.deploy.RedirectConsolePlugin`.")
+        s"`${PLUGINS.key}` is configured with `RedirectConsolePlugin`.")
       .version("4.1.0")
       .stringConf
       .transform(_.toLowerCase(Locale.ROOT))

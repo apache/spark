@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonAggregate, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, PythonUDTFSelectedExpression, SortOrder, TranspiledPythonUDF, TranspiledUDFParameter, UnresolvedPolymorphicPythonUDTF, UnresolvedTableArgPlanId}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, NamedParametersSupport, OneRowRelation}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.classic.ColumnConversions
@@ -63,6 +64,14 @@ case class UserDefinedPythonFunction(
     bufferType: DataType = null) {
 
   def builder(e: Seq[Expression]): Expression = {
+    if (CharVarcharUtils.hasCharVarcharIncludingUDT(dataType)) {
+      throw QueryCompilationErrors.charVarcharNotSupportedInPython(
+        "Python UDF return types", dataType.catalogString)
+    }
+    if (bufferType != null && CharVarcharUtils.hasCharVarcharIncludingUDT(bufferType)) {
+      throw QueryCompilationErrors.charVarcharNotSupportedInPython(
+        "Python UDAF buffer schemas", bufferType.catalogString)
+    }
     if (pythonEvalType == PythonEvalType.SQL_BATCHED_UDF
         || pythonEvalType ==PythonEvalType.SQL_ARROW_BATCHED_UDF
         || pythonEvalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF
@@ -236,6 +245,13 @@ case class UserDefinedPythonTableFunction(
      */
     NamedParametersSupport.splitAndCheckNamedArguments(exprs, name, SQLConf.get.resolver)
 
+    returnType.foreach { rt =>
+      if (CharVarcharUtils.hasCharVarcharIncludingUDT(rt)) {
+        throw QueryCompilationErrors.charVarcharNotSupportedInPython(
+          "Python UDTF return types", rt.catalogString)
+      }
+    }
+
     // Check which argument is a table argument here since it will be replaced with
     // `UnresolvedAttribute` to construct lateral join.
     val tableArgs = exprs.map {
@@ -375,6 +391,10 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
 
     val schema = DataType.fromJson(
       PythonWorkerUtils.readUTF(length, dataIn)).asInstanceOf[StructType]
+    if (CharVarcharUtils.hasCharVarcharIncludingUDT(schema)) {
+      throw QueryCompilationErrors.charVarcharNotSupportedInPython(
+        "Python UDTF return types", schema.catalogString)
+    }
 
     // Receive the pickled AnalyzeResult buffer, if any.
     val pickledAnalyzeResult: Array[Byte] = PythonWorkerUtils.readBytes(dataIn)

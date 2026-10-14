@@ -26,12 +26,25 @@ import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 
 object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
 
   // visible for testing
   private[sql] val CHAR_VARCHAR_TYPE_STRING_METADATA_KEY = "__CHAR_VARCHAR_TYPE_STRING"
+
+  /**
+   * Like [[hasCharVarchar]], but also inspects [[UserDefinedType]] storage types.
+   * Python/Arrow host checks must match PySpark `_has_type`, which unwraps UDTs.
+   */
+  def hasCharVarcharIncludingUDT(dt: DataType): Boolean = {
+    dt.existsRecursively {
+      case _: CharType | _: VarcharType => true
+      case u: UserDefinedType[_] => hasCharVarcharIncludingUDT(u.sqlType)
+      case _ => false
+    }
+  }
 
   /**
    * Creates a StringRPad expression with the pad literal inheriting the collation from the
@@ -50,11 +63,27 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
    * re-construct the original data type with CharType/VarcharType later when needed.
    */
   def replaceCharVarcharWithStringInSchema(st: StructType): StructType = {
+    replaceCharVarcharWithStringInSchema(st, replaceCharVarcharWithString)
+  }
+
+  /**
+   * Like [[replaceCharVarcharWithStringInSchema]], but always rewrites the physical type to
+   * unbounded STRING even when first-class CHAR/VARCHAR is enabled. Hive TRANSFORM script I/O
+   * is STRING-on-the-wire; callers apply [[stringLengthCheck]] in a Project when first-class
+   * CHAR/VARCHAR types are enabled.
+   */
+  def replaceCharVarcharWithStringInSchemaAlways(st: StructType): StructType = {
+    replaceCharVarcharWithStringInSchema(st, replaceCharVarcharWithStringAlways)
+  }
+
+  private def replaceCharVarcharWithStringInSchema(
+      st: StructType,
+      replace: DataType => DataType): StructType = {
     StructType(st.map { field =>
       if (hasCharVarchar(field.dataType)) {
         val metadata = new MetadataBuilder().withMetadata(field.metadata)
           .putString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, field.dataType.catalogString).build()
-        field.copy(dataType = replaceCharVarcharWithString(field.dataType), metadata = metadata)
+        field.copy(dataType = replace(field.dataType), metadata = metadata)
       } else {
         field
       }
@@ -157,6 +186,29 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
   }
 
   /**
+   * Applies assignment semantics when parsing text into a typed schema. CHAR values are padded,
+   * and excess trailing spaces are trimmed when the remaining value fits. Non-space overflow
+   * raises EXCEED_LIMIT_LENGTH. Null stays null, and unbounded STRING is unchanged.
+   *
+   * With first-class CHAR/VARCHAR semantics enabled, for example,
+   * `from_json('{"c":"ab"}', 'c CHAR(4)')` produces `"ab  "`, while parsing `{"v":"abcd"}`
+   * as `v VARCHAR(3)` in FAILFAST mode raises EXCEED_LIMIT_LENGTH.
+   */
+  def applyTextParseSemantics(value: UTF8String, dt: DataType): UTF8String = {
+    if (value == null) {
+      null
+    } else {
+      dt match {
+        case c: CharType =>
+          CharVarcharCodegenUtils.charTypeWriteSideCheck(value, c.length)
+        case v: VarcharType =>
+          CharVarcharCodegenUtils.varcharTypeWriteSideCheck(value, v.length)
+        case _ => value
+      }
+    }
+  }
+
+  /**
    * Returns an expression to apply write-side string length check for the given expression. A
    * string value can not exceed N characters if it's written into a CHAR(N)/VARCHAR(N)
    * column/field.
@@ -222,10 +274,8 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
         if (struct.valExprs.forall(_.isInstanceOf[GetStructField])) {
           // No field needs char/varchar processing, just return the original expression.
           expr
-        } else if (expr.nullable) {
-          If(IsNull(expr), Literal(null, struct.dataType), struct)
         } else {
-          struct
+          nullSafeRebuiltStruct(expr, struct)
         }
 
       case ArrayType(et, containsNull) =>
@@ -246,6 +296,19 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
         }
 
       case _ => expr
+    }
+  }
+
+  /**
+   * Guard a rebuilt named_struct so a NULL input stays NULL. Use CaseWhen rather than If:
+   * CollationTypeCoercion rewrites If (no same-type skip) and can widen VARCHAR collations
+   * inside the struct to unbounded STRING. CaseWhen skips that when the branches already match.
+   */
+  private def nullSafeRebuiltStruct(expr: Expression, struct: CreateNamedStruct): Expression = {
+    if (expr.nullable) {
+      CaseWhen(Seq((IsNull(expr), Literal(null, struct.dataType))), Some(struct))
+    } else {
+      struct
     }
   }
 
@@ -355,11 +418,7 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
           // GetStructField on a NULL struct yields NULL fields, which CreateNamedStruct would
           // turn into a non-NULL struct of NULLs. Guard it the same way the scan-side rewrite
           // in processStringForCharVarchar does.
-          Some(if (expr.nullable) {
-            If(IsNull(expr), Literal(null, struct.dataType), struct)
-          } else {
-            struct
-          })
+          Some(nullSafeRebuiltStruct(expr, struct))
         } else {
           None
         }

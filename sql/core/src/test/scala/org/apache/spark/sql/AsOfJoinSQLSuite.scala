@@ -105,6 +105,18 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
     assert(asOfJoin.matchLeftOperand.isEmpty)
   }
 
+  test("INNER ASOF JOIN keeps NOT NULL right columns; LEFT ASOF JOIN makes them nullable") {
+    def rightValueNullable(joinType: String): Boolean =
+      sql(
+        s"""
+           |SELECT l.k, r.v
+           |FROM VALUES (2) AS l(k) $joinType ASOF JOIN VALUES (1, 'a') AS r(k, v)
+           |  MATCH_CONDITION (l.k >= r.k)
+           |""".stripMargin).schema("v").nullable
+    assert(!rightValueNullable(""))
+    assert(rightValueNullable("LEFT"))
+  }
+
   test("SQL ASOF JOIN uses sort-merge without DataFrame sort-merge conf") {
     setupTradeQuoteViews()
     val sqlText =
@@ -134,8 +146,8 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
       condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
       sqlState = Some("42K0E"),
       parameters = Map(
-        "operand1" -> "\"(trade_time + quote_time)\"",
-        "operand2" -> "\"quote_time\""),
+        "refs1" -> "\"(trade_time + quote_time)\"",
+        "refs2" -> "\"quote_time\""),
       queryContext = Array(
         ExpectedContext(
           fragment = """ASOF JOIN quotes q
@@ -159,8 +171,8 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
       condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
       sqlState = Some("42K0E"),
       parameters = Map(
-        "operand1" -> "\"symbol\"",
-        "operand2" -> "\"symbol\""))
+        "refs1" -> "\"symbol\"",
+        "refs2" -> "\"symbol\""))
   }
 
   test("MATCH_CONDITION rejects a literal even when a same-side column is present") {
@@ -177,7 +189,7 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException](sql(sqlText)),
       condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
       sqlState = Some("42K0E"),
-      parameters = Map("operand1" -> "\"symbol\"", "operand2" -> "\"AAPL\""))
+      parameters = Map("refs1" -> "\"symbol\"", "refs2" -> "\"AAPL\""))
   }
 
   test("MATCH_CONDITION rejects non-deterministic expressions") {
@@ -290,8 +302,8 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
       condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
       sqlState = Some("42K0E"),
       parameters = Map(
-        "operand1" -> "\"current_timestamp()\"",
-        "operand2" -> "\"quote_time\""))
+        "refs1" -> "\"current_timestamp()\"",
+        "refs2" -> "\"quote_time\""))
   }
 
   test("MATCH_CONDITION rejects a literal constant operand (no join input reference)") {
@@ -308,8 +320,8 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
       condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
       sqlState = Some("42K0E"),
       parameters = Map(
-        "operand1" -> "\"trade_time\"",
-        "operand2" -> "\"TIMESTAMP '2026-06-29 10:00:00'\""))
+        "refs1" -> "\"trade_time\"",
+        "refs2" -> "\"TIMESTAMP '2026-06-29 10:00:00'\""))
   }
 
   test("MATCH_CONDITION rejects two literal operands (neither references a join input)") {
@@ -327,8 +339,8 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
       condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
       sqlState = Some("42K0E"),
       parameters = Map(
-        "operand1" -> "\"TIMESTAMP '2026-06-29 10:00:00'\"",
-        "operand2" -> "\"TIMESTAMP '2026-06-29 09:00:00'\""))
+        "refs1" -> "\"TIMESTAMP '2026-06-29 10:00:00'\"",
+        "refs2" -> "\"TIMESTAMP '2026-06-29 09:00:00'\""))
   }
 
   test("MATCH_CONDITION rejects a constant operand under the single-pass analyzer") {
@@ -346,8 +358,8 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
         condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
         sqlState = Some("42K0E"),
         parameters = Map(
-          "operand1" -> "\"trade_time\"",
-          "operand2" -> "\"TIMESTAMP '2026-06-29 10:00:00'\""))
+          "refs1" -> "\"trade_time\"",
+          "refs2" -> "\"TIMESTAMP '2026-06-29 10:00:00'\""))
     }
   }
 
@@ -511,11 +523,11 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
     assert(asOfJoin.asOfCondition.resolved)
   }
 
-  test("MATCH_CONDITION rejects empty STRUCT operands") {
+  test("MATCH_CONDITION rejects an empty STRUCT paired with a non-empty STRUCT") {
     val sqlText =
       """
         |SELECT *
-        |FROM VALUES (named_struct()) AS t(s) ASOF JOIN VALUES (named_struct()) AS r(s)
+        |FROM VALUES (named_struct()) AS t(s) ASOF JOIN VALUES (named_struct('a', 1)) AS r(s)
         |  MATCH_CONDITION (t.s >= r.s)
         |""".stripMargin
     checkError(
@@ -524,12 +536,12 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
       sqlState = Some("42K09"),
       parameters = Map(
         "type1" -> "\"STRUCT<>\"",
-        "type2" -> "\"STRUCT<>\""),
+        "type2" -> "\"STRUCT<a: INT NOT NULL>\""),
       queryContext = Array(
         ExpectedContext(
-          fragment = """ASOF JOIN VALUES (named_struct()) AS r(s)
+          fragment = """ASOF JOIN VALUES (named_struct('a', 1)) AS r(s)
                        |  MATCH_CONDITION (t.s >= r.s)""".stripMargin,
           start = 47,
-          stop = 118)))
+          stop = 124)))
   }
 }
