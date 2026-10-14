@@ -31,7 +31,7 @@ from unittest.mock import patch
 
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.eval_handlers._base import get_eval_type_handler
-from pyspark.sql.types import LongType, StringType, StructField, StructType
+from pyspark.sql.types import BinaryType, LongType, StringType, StructField, StructType
 from pyspark.testing.utils import (
     PySparkBaseTestCase,
     have_pandas,
@@ -42,13 +42,14 @@ from pyspark.testing.utils import (
 from pyspark.util import PythonEvalType
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
-    from pyspark.worker_util import RunnerConf
+    from pyspark.worker_util import EvalConf, RunnerConf
 
 if have_pandas and have_pyarrow:
     import pandas as pd
     import pyarrow as pa
 
     from pyspark.eval_handlers._pandas import (
+        ArrowBatchedUDFLegacyPandasHandler,
         PandasCoGroupedMapUDFHandler,
         PandasGroupedAggIterUDFHandler,
         PandasGroupedAggUDFHandler,
@@ -140,6 +141,77 @@ class PandasEvalTypeHandlerRegistrationTests(PySparkBaseTestCase):
             (PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF, PandasWindowAggUDFHandler),
         ):
             self.assertIs(get_eval_type_handler(eval_type, RunnerConf({})), handler_cls)
+
+    def test_arrow_batched_udf_legacy_pandas_variant_is_registered(self):
+        # SQL_ARROW_BATCHED_UDF picks its variant by the legacy pandas conversion conf.
+        conf = RunnerConf(
+            {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": "true"}
+        )
+        self.assertIs(
+            get_eval_type_handler(PythonEvalType.SQL_ARROW_BATCHED_UDF, conf),
+            ArrowBatchedUDFLegacyPandasHandler,
+        )
+
+
+@unittest.skipIf(not (have_pandas and have_pyarrow), _missing_message)
+class ArrowBatchedUDFLegacyPandasHandlerTests(PandasEvalTypeHandlerTestCase):
+    _INPUT_TYPE = StructType([StructField("a", LongType()), StructField("b", LongType())])
+
+    def _handler(self, *udfs, runner_conf=None, input_type=None):
+        """Build the handler from one or more ``_udf`` tuples."""
+        return ArrowBatchedUDFLegacyPandasHandler(
+            udfs=list(udfs),
+            runner_conf=runner_conf or RunnerConf({}),
+            eval_conf=EvalConf({"input_type": (input_type or self._INPUT_TYPE).json()}),
+        )
+
+    def test_invokes_udf_per_row(self):
+        handler = self._handler(
+            self._udf(lambda a: a + 1),
+            self._udf(lambda a, b: a * b, args=(0, 1)),
+        )
+        out = list(
+            handler.run(0, iter([self._batch(a=[1, 2], b=[10, 20]), self._batch(a=[3], b=[4])]))
+        )
+        self.assertEqual(
+            [b.to_pydict() for b in out],
+            [{"_0": [2, 3], "_1": [10, 40]}, {"_0": [4], "_1": [12]}],
+        )
+
+    def test_passes_arg_by_keyword_offset(self):
+        handler = self._handler(self._udf(lambda x, y: x - y, args=(0,), kwargs={"y": 1}))
+        out = list(handler.run(0, iter([self._batch(a=[10, 20], b=[3, 5])])))
+        self.assertEqual(out[0].column(0).to_pylist(), [7, 15])
+
+    def test_zero_arg_udf(self):
+        handler = self._handler(self._udf(lambda: 7, args=()), input_type=StructType())
+        empty = pa.RecordBatch.from_pydict({"a": [1, 2, 3]}).select([])
+        out = list(handler.run(0, iter([empty])))
+        self.assertEqual(out[0].column(0).to_pylist(), [7, 7, 7])
+
+    def test_coerces_string_and_binary_results(self):
+        # The legacy conversion coerces results with str() / bytes() for String / Binary.
+        handler = self._handler(
+            self._udf(lambda a: a, return_type=StringType()),
+            self._udf(lambda a: None if a == 2 else bytearray(b"x"), return_type=BinaryType()),
+        )
+        out = list(handler.run(0, iter([self._batch(a=[1, 2], b=[0, 0])])))
+        self.assertEqual(out[0].column(0).to_pylist(), ["1", "2"])
+        self.assertEqual(out[0].column(1).to_pylist(), [b"x", None])
+
+    def test_concurrency_level(self):
+        conf = RunnerConf({"spark.sql.execution.pythonUDF.arrow.concurrency.level": "4"})
+        handler = self._handler(self._udf(lambda a: a * 2), runner_conf=conf)
+        out = list(handler.run(0, iter([self._batch(a=list(range(10)), b=[0] * 10)])))
+        self.assertEqual(out[0].column(0).to_pylist(), [v * 2 for v in range(10)])
+
+    def test_stop_iteration_raises_runtime_error(self):
+        def stop(a):
+            raise StopIteration()
+
+        handler = self._handler(self._udf(stop))
+        with self.assertRaises(PySparkRuntimeError):
+            list(handler.run(0, iter([self._batch(a=[1], b=[0])])))
 
 
 @unittest.skipIf(not (have_pandas and have_pyarrow), _missing_message)
