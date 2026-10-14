@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, DoubleType, FloatType}
+import org.apache.spark.sql.types.{DataType, DecimalType, DoubleType, FloatType}
 import org.apache.spark.util.Utils
 
 /**
@@ -858,8 +858,11 @@ private[optimizer] object RuntimeFilterSourceAnalysis {
    * aggregate functions whose result is exact whatever the accumulation order qualify: floating
    * point sums are not associative, so a sum over a floating point input, an average with a
    * floating point accumulator (every non-decimal, non-interval input) and the central moments
-   * are order-dependent. A Bloom filter aggregate, which [[InjectRuntimeFilter]] injects for an
-   * inner join, merges commutatively.
+   * are order-dependent. An exact sum is order-dependent too when an overflow of a partial sum
+   * turns it into null for good, as a decimal sum does outside ANSI mode and `try_sum` /
+   * `try_avg` do for any input, since whether a partial sum overflows depends on how the rows
+   * are split. A Bloom filter aggregate, which [[InjectRuntimeFilter]] injects for an inner
+   * join, merges commutatively.
    */
   private def isOrderIrrelevant(e: Expression): Boolean = e match {
     case _: AttributeReference => true
@@ -870,15 +873,17 @@ private[optimizer] object RuntimeFilterSourceAnalysis {
 
   private def isOrderIrrelevantFunction(f: AggregateFunction): Boolean = f match {
     case _: Min | _: Max | _: Count | _: BitAggregate | _: BloomFilterAggregate => true
-    case s: Sum => !isFloatingPoint(s.child.dataType)
-    case a: Average => !isFloatingPoint(a.sumDataType)
+    case s: Sum => isExactSum(s.child.dataType, s.evalContext.evalMode)
+    case a: Average => isExactSum(a.sumDataType, a.evalMode)
     case _ => false
   }
 
-  private def isFloatingPoint(dataType: DataType): Boolean = dataType match {
-    case FloatType | DoubleType => true
-    case _ => false
-  }
+  private def isExactSum(sumDataType: DataType, evalMode: EvalMode.Value): Boolean =
+    sumDataType match {
+      case FloatType | DoubleType => false
+      case _: DecimalType => evalMode == EvalMode.ANSI
+      case _ => evalMode != EvalMode.TRY
+    }
 
   /**
    * A window function's value depends on the row order within its frame, unless the frame is

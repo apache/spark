@@ -1545,6 +1545,9 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
           "LATERAL VIEW OUTER explode(bf_nondeterministic_array(a2)) x AS v",
         // An average of integers accumulates in floating point, which is not associative.
         "SELECT avg(c2) AS c2 FROM bf2 GROUP BY b2",
+        // An overflow of a partial sum turns the sum into null for good, and whether a partial
+        // sum overflows depends on how the rows are split.
+        "SELECT try_sum(c2) AS c2 FROM bf2 GROUP BY b2",
         // Grouping on an unstable value varies how many groups share the stable grouping values,
         // so a count of them is unstable, and so is whether distinct rows collapse.
         "SELECT count(*) AS c2 FROM (SELECT b2 FROM " +
@@ -1554,6 +1557,16 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       ).foreach { source =>
         assertNoBloomFilters(query(source))
         assertHintNotApplied(query(source), reason)
+      }
+      // So does a decimal sum outside ANSI mode, while ANSI mode fails the query on an overflow.
+      val decimalSum =
+        "SELECT CAST(sum(CAST(c2 AS DECIMAL(38, 0))) AS INT) AS c2 FROM bf2 GROUP BY b2"
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+        assertNoBloomFilters(query(decimalSum))
+        assertHintNotApplied(query(decimalSum), reason)
+      }
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        assertRewroteWithBloomFilter(query(decimalSum))
       }
     }
   }
