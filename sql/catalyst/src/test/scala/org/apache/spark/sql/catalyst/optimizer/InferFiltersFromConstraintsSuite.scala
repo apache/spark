@@ -647,6 +647,23 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     assert(!inferredA, s"Unexpected filter on a inferred from throwable expression: $optimized")
   }
 
+  test("SPARK-30768: do not infer filters from non-deterministic expressions") {
+    val randExpr = Rand(Literal(0L))
+    val query = testRelation.where($"a" < randExpr && randExpr < 0.5).analyze
+    val optimized = Optimize.execute(query)
+    val inferredA = splitConjunctivePredicates(optimized.collectFirst {
+      case Filter(cond, _) => cond
+    }.get).exists {
+      case LessThan(Cast(a: Attribute, DoubleType, _, _), Literal(0.5, DoubleType)) =>
+        a.name == "a"
+      case LessThan(a: Attribute, Literal(0.5, DoubleType)) =>
+        a.name == "a"
+      case _ => false
+    }
+    assert(!inferredA,
+      s"Unexpected filter on a inferred from non-deterministic expression: $optimized")
+  }
+
   test("SPARK-30768: equality orientation does not affect inequality chaining") {
     Seq($"a" + 1 === 5, Literal(5) === ($"a" + 1)).foreach { eq =>
       val original = testRelation.where(eq && ($"a" + 1) < $"b")

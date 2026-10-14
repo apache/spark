@@ -129,13 +129,16 @@ trait ConstraintHelper {
   }
 
   /**
-   * Infers the full additional constraint set for a given set of constraints by combining the
-   * equality-based inferences above ([[inferAdditionalConstraints]],
-   * [[inferConstraintsFromLiteralBindings]]) with transitive inequality chaining
-   * ([[inferInequalityConstraints]]). The inequality pass must see the equality passes' output
-   * to chain through equality-derived edges and bounds. Because the inequality pass emits only
-   * inequalities, the equality-based passes gain nothing from re-running on its result, so a
-   * single downstream call to [[inferInequalityConstraints]] suffices without interleaving.
+   * Infers additional constraints for a given set of constraints by combining the equality-based
+   * inferences above ([[inferAdditionalConstraints]], [[inferConstraintsFromLiteralBindings]])
+   * with transitive inequality chaining ([[inferInequalityConstraints]]).
+   *
+   * One round of the equality passes is followed by one inequality pass so the latter can chain
+   * through equality-derived edges and bounds. Non-literal equalities are deliberately not used
+   * as chaining edges in [[inferInequalityConstraints]] and the equality passes are not re-run on
+   * the inferred inequalities, so multi-hop equality chains (e.g.
+   * `a = c AND c = d AND d < b AND b < 5`) may leave a bound on `a` uninferred without further
+   * optimization rounds.
    */
   def inferAllAdditionalConstraints(constraints: ExpressionSet): ExpressionSet = {
     val equalityInferred =
@@ -234,10 +237,10 @@ trait ConstraintHelper {
     // inferConstraintsFromLiteralBindings does, it only reuses an operand under the same
     // collation-aware comparison, so a non-binary-stable collation could in principle still order
     // consistently with its binary form here. EqualTo is admitted only when at least one side is
-    // a safe literal bound; every other EqualTo -- attribute-to-attribute (handled by
-    // inferAdditionalConstraints's transitivity), as well as any other shape without a safe
-    // literal bound such as `a + 1 = b` -- is excluded, since no inference path below handles a
-    // non-literal equality operand.
+    // a safe literal bound (acting as a directional upper and lower bound). Non-literal equalities
+    // -- attribute-to-attribute (handled by inferAdditionalConstraints's transitivity), as well as
+    // any other shape without a safe literal bound such as `a + 1 = b` -- are deliberately
+    // excluded from serving as chaining edges to keep the graph focused on literal bounds.
     val validComparisons = constraints.toSeq.filter {
       case b: BinaryComparison =>
         b.deterministic && !b.throwable && !b.isInstanceOf[EqualNullSafe] &&
