@@ -412,6 +412,8 @@ class XmlExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       val schema = new StructType().add("d", DateType)
       Seq(
         ("dd/MM/yyyy", "en-US", "04/03/2024", "2024-03-04"),
+        ("yyyyMMdd", "en-US", "20240304", "2024-03-04"),
+        ("dd.MM.yyyy", "en-US", "04.03.2024", "2024-03-04"),
         ("dd MMM yyyy", "fr-FR", "04 mars 2024", "2024-03-04"),
         ("MMM yyyy", "en-US", "Mar 2024", "2024-03-01")
       ).foreach { case (format, locale, input, expected) =>
@@ -419,6 +421,18 @@ class XmlExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         checkEvaluation(
           XmlToStructs(schema, options, Literal(s"<ROW><d>$input</d></ROW>"), UTC_OPT),
           InternalRow(DateTimeUtils.localDateToDays(LocalDate.parse(expected))))
+      }
+    }
+  }
+
+  test("SPARK-60201: LEGACY XML ISO-shaped dates preserve the locale calendar") {
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "LEGACY") {
+      val schema = new StructType().add("d", DateType)
+      for (mode <- Seq("PERMISSIVE", "FAILFAST")) {
+        val options = Map("dateFormat" -> "yyyy-MM-dd", "locale" -> "th-TH", "mode" -> mode)
+        checkEvaluation(
+          XmlToStructs(schema, options, Literal("<ROW><d>2567-03-04</d></ROW>"), UTC_OPT),
+          InternalRow(DateTimeUtils.localDateToDays(LocalDate.of(2024, 3, 4))))
       }
     }
   }

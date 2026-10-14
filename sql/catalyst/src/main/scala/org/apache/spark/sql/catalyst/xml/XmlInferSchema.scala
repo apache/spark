@@ -73,9 +73,6 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
 
-  private lazy val legacyIsoDateFirst = options.dateFormatOption.isDefined &&
-    SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY
-
   private lazy val timeFormatter = TimeFormatter(options.timeFormatInRead, isParsing = true)
 
   private val isTimeTypeEnabled = SQLConf.get.isTimeTypeEnabled
@@ -722,11 +719,7 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
   }
 
   private def tryParseDate(field: String): DataType = {
-    val date = allCatch opt {
-      val isoDate = if (legacyIsoDateFirst) StaxXmlParser.parseIsoDate(field) else None
-      isoDate.getOrElse(dateFormatter.parse(field))
-    }
-    if (date.isDefined) {
+    if ((allCatch opt dateFormatter.parse(field)).isDefined) {
       DateType
     } else {
       tryParseTimestampNTZ(field)

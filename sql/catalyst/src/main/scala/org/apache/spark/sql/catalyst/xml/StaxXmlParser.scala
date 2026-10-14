@@ -19,11 +19,11 @@ package org.apache.spark.sql.catalyst.xml
 import java.io.{BufferedReader, CharConversionException, FileNotFoundException, InputStream, InputStreamReader, IOException, StringReader}
 import java.nio.charset.{Charset, MalformedInputException}
 import java.sql.Date
-import java.text.NumberFormat
+import java.text.{NumberFormat, ParsePosition}
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util
-import java.util.Locale
+import java.util.{Calendar, Locale}
 import javax.xml.stream.{XMLEventReader, XMLStreamException}
 import javax.xml.stream.events._
 import javax.xml.transform.stream.StreamSource
@@ -81,7 +81,8 @@ class StaxXmlParser(
     isParsing = true)
 
   private lazy val legacyIsoDateFirst = options.dateFormatOption.isDefined &&
-    SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY
+    SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY &&
+    Calendar.getInstance(options.locale).getCalendarType == "gregory"
 
   private lazy val timeFormatter = TimeFormatter(options.timeFormatInRead, isParsing = true)
 
@@ -1181,9 +1182,15 @@ class XmlTokenizer(
 object StaxXmlParser {
   private[xml] def parseIsoDate(value: String): Option[Int] = {
     if (value.nonEmpty && Character.isDigit(value.head)) {
-      Try(LocalDate.parse(value, DateTimeFormatter.ISO_DATE)).toOption.map { date =>
-        // Match spark-xml's java.sql.Date conversion for historical dates.
-        DateTimeUtils.fromJavaDate(Date.valueOf(date))
+      val position = new ParsePosition(0)
+      val parsed = DateTimeFormatter.ISO_DATE.parseUnresolved(value, position)
+      if (parsed != null && position.getIndex == value.length) {
+        Try(LocalDate.parse(value, DateTimeFormatter.ISO_DATE)).toOption.map { date =>
+          // Match spark-xml's java.sql.Date conversion for historical dates.
+          DateTimeUtils.fromJavaDate(Date.valueOf(date))
+        }
+      } else {
+        None
       }
     } else {
       None
