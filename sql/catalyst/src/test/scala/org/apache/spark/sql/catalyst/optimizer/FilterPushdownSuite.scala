@@ -2200,6 +2200,21 @@ class FilterPushdownSuite extends PlanTest {
       Optimize.execute(
         relation.groupBy(x)(x).groupBy(x)(x).where(x.cast(StringType) === "-0.0").analyze),
       relation.where(normX.cast(StringType) === "-0.0").groupBy(x)(x).groupBy(x)(x).analyze)
+
+    // The upper key is computed from the lower key, so the lower key inside the normalized upper
+    // key is normalized too.
+    val k = Pow(x, Literal(-1.0)).as("k")
+    val lower = relation.groupBy(x)(k)
+    val upperKey = k.toAttribute
+    comparePlans(
+      Optimize.execute(
+        lower.groupBy(upperKey)(upperKey).where(upperKey.cast(StringType) === "Infinity").analyze),
+      relation
+        .where(NormalizeFloatingNumbers.normalize(Pow(normX, Literal(-1.0))).cast(StringType) ===
+          "Infinity")
+        .groupBy(x)(k)
+        .groupBy(upperKey)(upperKey)
+        .analyze)
   }
 
   test("SPARK-60150: normalizeGroupingExpressions") {
@@ -2252,8 +2267,11 @@ class FilterPushdownSuite extends PlanTest {
     assert(normalize(y === 1 && !(x.cast(StringType) === "-0.0")) ==
       (y === 1 && !(normX.cast(StringType) === "-0.0")))
 
-    // An already normalized key is not normalized again.
+    // An already normalized key is not normalized again, but a key inside another normalized
+    // expression is.
     unchanged(normX.cast(StringType) === "-0.0")
+    assert(normalize(NormalizeFloatingNumbers.normalize(Pow(x, Literal(-1.0))) > 0.0) ==
+      (NormalizeFloatingNumbers.normalize(Pow(normX, Literal(-1.0))) > 0.0))
 
     // Only the given grouping expressions count, matched semantically rather than by name.
     assert(PushPredicateThroughNonJoin.normalizeGroupingExpressions(
