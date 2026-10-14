@@ -218,6 +218,32 @@ class Scd1VersionMapSuite extends QueryTest with SharedSparkSession {
     checkAnswer(result, Row(leafPathsAndExpectedKeys.map { case (_, key) => key -> null }.toMap))
   }
 
+  test("buildVersionMap reads a dotted column and the nested leaf it resembles separately") {
+    val userDataSchema = new StructType()
+      .add("a.b", StringType)
+      .add("a", new StructType().add("b", StringType))
+    val inputSchema = StructType(userDataSchema.fields :+ StructField("seq", LongType))
+    val input = dataFrameOf(inputSchema)(
+      Row(null, Row("nested"), 10L),
+      Row("dotted", Row(null), 20L)
+    )
+
+    val result = input.select(
+      Scd1VersionMap.buildVersionMap(
+        schema = userDataSchema,
+        ignoreNullSelection = ColumnSelection.ExcludeColumns(Seq.empty),
+        upsertSequence = F.col("seq"),
+        sequencingType = LongType,
+        resolver = caseSensitiveResolution
+      )
+    )
+
+    checkAnswer(result, Seq(
+      Row(Map[String, Any](encodedPath("a.b") -> null, encodedPath("a", "b") -> 10L)),
+      Row(Map[String, Any](encodedPath("a.b") -> 20L, encodedPath("a", "b") -> null))
+    ))
+  }
+
   test("buildVersionMap keys round-trip and resolve special-character leaf names") {
     val specialNames =
       Seq("a.b", "has space", "back`tick", "quote\"", "back\\slash", "null" + 0.toChar + "byte")
