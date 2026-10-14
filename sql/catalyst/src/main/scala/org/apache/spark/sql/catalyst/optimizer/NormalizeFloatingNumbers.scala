@@ -78,9 +78,11 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
       // join keys, assuming Joins with join keys are always planned as hash join or sort merge
       // join. It's very unlikely that we will break this assumption in the near future.
       case j @ ExtractEquiJoinKeys(_, leftKeys, rightKeys, condition, _, _, _, _)
-          // The analyzer guarantees left and right joins keys are of the same data type. Here we
-          // only need to check join keys of one side.
-          if leftKeys.exists(k => needNormalize(k)) =>
+          // The analyzer guarantees left and right join keys are of the same data type, but a key
+          // can already be normalized on one side only (e.g. a filter pushed below an Aggregate
+          // reads the normalized grouping key, and a subquery rewrite turns it into a join key),
+          // so check both sides.
+          if leftKeys.exists(needNormalize) || rightKeys.exists(needNormalize) =>
         val newLeftJoinKeys = leftKeys.map(normalize)
         val newRightJoinKeys = rightKeys.map(normalize)
         val newConditions = newLeftJoinKeys.zip(newRightJoinKeys).map {
@@ -90,7 +92,7 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
 
       // The specialized NAAJ is a hash join, but its OR condition is not an equi-join shape.
       case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys)
-          if leftKeys.exists(needNormalize) =>
+          if leftKeys.exists(needNormalize) || rightKeys.exists(needNormalize) =>
         val equality = EqualTo(normalize(leftKeys.head), normalize(rightKeys.head))
         j.copy(condition = Some(Or(equality, IsNull(equality))))
 
