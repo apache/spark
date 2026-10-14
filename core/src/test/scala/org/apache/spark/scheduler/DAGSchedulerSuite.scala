@@ -8946,6 +8946,72 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
+  test("pipelined preflight: warm a cold regular prefix chain parents first") {
+    val evaluated = new ArrayBuffer[Int]
+    def recording(
+        numPartitions: Int,
+        deps: List[Dependency[_]],
+        indeterminate: Boolean = false): MyRDD =
+      new MyRDD(sc, numPartitions, deps, indeterminate = indeterminate) {
+        override protected def getOutputDeterministicLevel = {
+          evaluated += id
+          super.getOutputDeterministicLevel
+        }
+      }
+    // A zero-map regular stage counts as materialized, but its narrow chain is still cold.
+    val root = recording(0, Nil, indeterminate = true)
+    val chain = (1 to 3).scanLeft(root) { (parent, _) =>
+      recording(0, List(new OneToOneDependency(parent)))
+    }
+    val regular = new ShuffleDependency(chain.last, new HashPartitioner(1))
+    val producer = recording(1, List(regular))
+    val pipelined = new PipelinedShuffleDependency(producer, new HashPartitioner(1))
+    val result = new MyRDD(sc, 1, List(pipelined))
+    assert(evaluated.isEmpty)
+    assertPipelinedUnsupported(submitAndCaptureFailure(result, Array(0)), "indeterminate")
+    // Each regular-stage RDD is evaluated after its parent, so the warm-up does not recurse
+    // through the cold chain.
+    assert(evaluated.toSeq === (chain :+ producer).map(_.id))
+    assertNoPipelinedStageRegistration(Seq(regular.shuffleId, pipelined.shuffleId))
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined preflight: warm shared regular prefix lineage parents first") {
+    val evaluated = new ArrayBuffer[Int]
+    def recording(
+        numPartitions: Int,
+        deps: List[Dependency[_]],
+        indeterminate: Boolean = false): MyRDD =
+      new MyRDD(sc, numPartitions, deps, indeterminate = indeterminate) {
+        override protected def getOutputDeterministicLevel = {
+          evaluated += id
+          super.getOutputDeterministicLevel
+        }
+      }
+    // Two zero-map regular stages share `root` and `left`, and `joined` closes a narrow diamond,
+    // so a warm-up reaches some RDDs more than once whichever stage is checked first.
+    val root = recording(0, Nil, indeterminate = true)
+    val left = recording(0, List(new OneToOneDependency(root)))
+    val right = recording(0, List(new OneToOneDependency(root)))
+    val joined = recording(0, List(new OneToOneDependency(left), new OneToOneDependency(right)))
+    val first = new ShuffleDependency(joined, new HashPartitioner(1))
+    val second = new ShuffleDependency(left, new HashPartitioner(1))
+    val producer = recording(1, List(first, second))
+    val pipelined = new PipelinedShuffleDependency(producer, new HashPartitioner(1))
+    val result = new MyRDD(sc, 1, List(pipelined))
+    assertPipelinedUnsupported(submitAndCaptureFailure(result, Array(0)), "indeterminate")
+    val position = evaluated.zipWithIndex.toMap
+    assert(position.size === evaluated.size)
+    for (rdd <- Seq(root, left, right, joined, producer)) {
+      assert(position.contains(rdd.id))
+      rdd.dependencies.foreach { dep =>
+        assert(position(dep.rdd.id) < position(rdd.id))
+      }
+    }
+    assertNoPipelinedStageRegistration(Seq(first.shuffleId, second.shuffleId, pipelined.shuffleId))
+    assertDataStructuresEmpty()
+  }
+
   test("pipelined preflight: direct stage construction retains producer validation") {
     val producer = new MyRDD(sc, 2, Nil, indeterminate = true)
     val dependency = new PipelinedShuffleDependency(producer, new HashPartitioner(2))

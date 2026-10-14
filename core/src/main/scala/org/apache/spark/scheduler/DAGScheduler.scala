@@ -1494,6 +1494,9 @@ private[spark] class DAGScheduler(
       finalRDD: RDD[_], partitions: Array[Int], jobId: Int): Unit = {
     val checkedShuffleIds = new HashSet[Int]
     val pending = new ListBuffer[() => Unit]
+    // RDDs a determinism warm-up has visited, each evaluated by the time it returns (a throw
+    // aborts the whole preflight). A later warm-up of a stage sharing lineage stops at them.
+    val warmedRDDs = new HashSet[RDD[_]]
 
     def isRegistered(shuffleId: Int): Boolean =
       checkedShuffleIds.contains(shuffleId) || shuffleIdToMapStage.contains(shuffleId)
@@ -1511,14 +1514,38 @@ private[spark] class DAGScheduler(
       }
     }
 
+    // Evaluate lazy determinism within one stage, parents first, without recursion. Shuffle
+    // parents are skipped: a registered parent stage was warmed by its StageInfo, and a new
+    // one by its own callback, which runs before this one.
+    def warmOutputDeterministicLevels(root: RDD[_]): Unit = {
+      // Entries are (rdd, parentsWarm): an RDD is evaluated the second time it is popped.
+      val stack = new ListBuffer[(RDD[_], Boolean)]
+      stack.prepend((root, false))
+      while (stack.nonEmpty) {
+        val entry = stack.remove(0)
+        val rdd = entry._1
+        val parentsWarm = entry._2
+        if (parentsWarm) {
+          rdd.outputDeterministicLevel
+        } else if (warmedRDDs.add(rdd)) {
+          stack.prepend((rdd, true))
+          rdd.dependencies.foreach {
+            case _: ShuffleDependency[_, _, _] =>
+            case other => stack.prepend((other.rdd, false))
+          }
+        }
+      }
+    }
+
     def checkNewStage(dep: ShuffleDependency[_, _, _]): Unit = {
       val parents = checkStage(dep.rdd, dep.rdd.getNumPartitions)
       checkPipelinedProducerSupported(dep)
       outputTrackerMaster(dep)
       pending.prepend(() => {
-        // Warm regular ancestors too, so native determinism does not recurse through a cold
-        // materialized prefix. This must happen after the parents have been checked.
-        dep.rdd.outputDeterministicLevel
+        // Warm the determinism of this stage's RDDs, parents first, so neither this warm-up nor
+        // a later pipelined producer check recurses through a cold materialized prefix. This must
+        // happen after the parents have been checked, which leaves every shuffle parent warm.
+        warmOutputDeterministicLevels(dep.rdd)
         checkedShuffleIds += dep.shuffleId
         ()
       })
