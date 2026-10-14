@@ -585,6 +585,25 @@ class PlanParserSuite extends AnalysisTest {
     }
   }
 
+  test("pipe AGGREGATE accepts aliased ordinals as constants under the legacy config") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_ALIASED_PIPE_AGGREGATE_ORDINALS.key -> "true") {
+      Seq("AS grp", "grp").foreach { alias =>
+        val query = s"TABLE t |> AGGREGATE sum(x) AS s GROUP BY 2 $alias"
+        val aggregate = parsePlan(query).asInstanceOf[Aggregate]
+        val groupingAlias = aggregate.groupingExpressions.head.asInstanceOf[Alias]
+        assert(groupingAlias.child == Literal(2))
+        assert(groupingAlias.name == "grp")
+        assert(aggregate.aggregateExpressions.head == groupingAlias)
+
+        checkError(
+          exception = parseException(s"SELECT x, sum(x) FROM t GROUP BY 2 $alias"),
+          condition = "PARSE_SYNTAX_ERROR",
+          sqlState = Some("42601"),
+          parameters = Map("error" -> "'grp'", "hint" -> ": extra input 'grp'"))
+      }
+    }
+  }
+
   test("limit") {
     val sql = "select * from t"
     val plan = table("t").select(star())

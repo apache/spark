@@ -2230,7 +2230,8 @@ class AstBuilder extends DataTypeAstBuilder
         ctx.groupingExpressions.asScala.map { n: NamedExpressionContext =>
           lazy val groupingExpression = visitNamedExpression(n)
           val allowAlias = allowNamedGroupingExpressions && (groupingExpression match {
-            case Alias(Literal(_: Int, IntegerType), _) => false
+            case Alias(Literal(_: Int, IntegerType), _) =>
+              conf.getConf(SQLConf.LEGACY_ALLOW_ALIASED_PIPE_AGGREGATE_ORDINALS)
             case _ => true
           })
           if (!allowAlias && (n.name != null || n.identifierList != null)) {
