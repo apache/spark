@@ -81,6 +81,7 @@ class SparkConnectPipelineEventHandlerTests(unittest.TestCase):
 
         self.assertIn("received an unexpected result: {}", str(error.exception))
 
+
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class SparkConnectPipelinesTest(ReusedConnectTestCase):
     def test_dry_run(self):
