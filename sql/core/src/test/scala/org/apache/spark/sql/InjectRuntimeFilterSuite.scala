@@ -1549,6 +1549,13 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
         // An overflow of a partial sum turns the sum into null for good, and whether a partial
         // sum overflows depends on how the rows are split.
         "SELECT try_sum(c2) AS c2 FROM bf2 GROUP BY b2",
+        // Among values that are equal but not identical, a group, a distinct row, a minimum or a
+        // maximum keeps whichever arrives first, which a key telling them apart exposes.
+        "SELECT CAST(s COLLATE UTF8_BINARY AS INT) AS c2 FROM " +
+          "(SELECT CAST(c2 AS STRING) COLLATE UTF8_LCASE AS s FROM bf2) GROUP BY s",
+        "SELECT CAST(s COLLATE UTF8_BINARY AS INT) AS c2 FROM " +
+          "(SELECT DISTINCT CAST(c2 AS STRING) COLLATE UTF8_LCASE AS s FROM bf2)",
+        "SELECT max(CAST(c2 AS DOUBLE)) AS c2 FROM bf2 GROUP BY b2",
         // Grouping on an unstable value varies how many groups share the stable grouping values,
         // so a count of them is unstable, and so is whether distinct rows collapse.
         "SELECT count(*) AS c2 FROM (SELECT b2 FROM " +

@@ -775,8 +775,13 @@ private[optimizer] object RuntimeFilterSourceAnalysis {
       // groups occur once each, whatever the input multiplicity; with unstable grouping, the
       // number of groups that share the stable grouping values varies.
       val stableGroups = a.groupingExpressions.forall(isStable(_, t.unstable))
+      // A group of values that are equal but not identical, e.g. under a case-insensitive
+      // collation, outputs whichever of them arrives first.
+      val representatives = AttributeSet(a.groupingExpressions
+        .filterNot(e => UnsafeRowUtils.isBinaryStable(e.dataType)).flatMap(_.references))
       val unstable = a.aggregateExpressions.filter { e =>
         !isStable(e, t.unstable) ||
+          referencesOutsideAggregates(e).intersect(representatives).nonEmpty ||
           (e.exists(_.isInstanceOf[AggregateExpression]) &&
             (!stableGroups || t.unstableMultiplicity || !isOrderIrrelevant(e)))
       }
@@ -845,9 +850,13 @@ private[optimizer] object RuntimeFilterSourceAnalysis {
     case _: Sample => Left(NotRepeatable)
 
     // Each distinct row occurs once, whatever the input multiplicity, but rows that differ only
-    // in unstable values may or may not collapse.
+    // in unstable values may or may not collapse. Rows that are equal but not identical, e.g.
+    // under a case-insensitive collation, collapse into whichever of them arrives first.
     case d: Distinct => analyze(d.child).map { t =>
-      Taint(t.unstable, unstableMultiplicity = d.outputSet.intersect(t.unstable).nonEmpty)
+      val representatives =
+        d.output.filterNot(attr => UnsafeRowUtils.isBinaryStable(attr.dataType))
+      Taint(t.unstable ++ AttributeSet(representatives),
+        unstableMultiplicity = d.outputSet.intersect(t.unstable).nonEmpty)
     }
 
     // The rows and their values are unchanged; a shuffle loses the order.
@@ -883,7 +892,11 @@ private[optimizer] object RuntimeFilterSourceAnalysis {
   }
 
   private def isOrderIrrelevantFunction(f: AggregateFunction): Boolean = f match {
-    case _: Min | _: Max | _: Count | _: BitAggregate | _: BloomFilterAggregate => true
+    // Among values that compare equal but are not identical (case-insensitive strings, 0.0 and
+    // -0.0), the minimum or maximum is whichever arrives first.
+    case m @ (_: Min | _: Max) =>
+      UnsafeRowUtils.isBinaryStable(m.dataType) && !isFloatingPoint(m.dataType)
+    case _: Count | _: BitAggregate | _: BloomFilterAggregate => true
     case s: Sum => isExactSum(s.child.dataType, s.evalContext.evalMode)
     case a: Average => isExactSum(a.sumDataType, a.evalMode)
     case _ => false
@@ -895,6 +908,18 @@ private[optimizer] object RuntimeFilterSourceAnalysis {
       case _: DecimalType => evalMode == EvalMode.ANSI
       case _ => evalMode != EvalMode.TRY
     }
+
+  private def isFloatingPoint(dataType: DataType): Boolean = dataType.existsRecursively {
+    case FloatType | DoubleType => true
+    case _ => false
+  }
+
+  /** The attributes `e` reads per group, i.e. outside of any aggregate function. */
+  private def referencesOutsideAggregates(e: Expression): AttributeSet = e match {
+    case _: AggregateExpression => AttributeSet.empty
+    case a: Attribute => AttributeSet(a)
+    case _ => e.children.map(referencesOutsideAggregates).foldLeft(AttributeSet.empty)(_ ++ _)
+  }
 
   /**
    * A window function's value depends on the row order within its frame, unless the frame is
