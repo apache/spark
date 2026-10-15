@@ -290,13 +290,24 @@ public final class BidKTest {
   }
 
   private static void sqlAdapters() {
-    FormatParams format = FormatParams.DECIMAL96;
-    BidK n0 = BidK.parse(format, "-0");
-    BidK p0 = BidK.parse(format, "0");
-    expect(n0.sqlEquals(p0), "sql zeros");
-    BidK nan = BidK.naN(format, false, false);
-    expect(nan.sqlCompare(p0) > 0, "sql nan greatest");
-    expect(nan.sqlEquals(BidK.naN(format, true, true)), "sql nan equal");
+    FormatParams[] formats = {
+      FormatParams.DECIMAL96,
+      FormatParams.DECIMAL160,
+      FormatParams.DECIMAL256
+    };
+    for (FormatParams format : formats) {
+      BidK n0 = BidK.parse(format, "-0");
+      BidK p0 = BidK.parse(format, "0");
+      expect(n0.sqlEquals(p0), "sql zeros " + format);
+      BidK nan = BidK.naN(format, false, false);
+      expect(nan.sqlCompare(p0) > 0, "sql nan greatest " + format);
+      expect(nan.sqlEquals(BidK.naN(format, true, true)), "sql nan equal " + format);
+      BidK a = BidK.parse(format, "1.25e10");
+      BidK b = BidK.parse(format, "2.5e9");
+      expect(a.sqlCompare(b) > 0, "sql order " + format);
+      BidK c = BidK.parse(format, "125e8");
+      expect(a.sqlEquals(c), "sql cohort " + format);
+    }
   }
 
   private static void expectClose(BidK got, BigDecimal expected, FormatParams format, String op) {

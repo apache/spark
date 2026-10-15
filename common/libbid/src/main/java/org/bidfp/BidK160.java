@@ -268,6 +268,10 @@ final class BidK160 {
       pack(format, an, ae, left, mode, flags, frame, out);
       return;
     }
+    if (ae == be) {
+      packAligned(format, an, ae, left, bn, right, mode, flags, out, frame);
+      return;
+    }
     Wide6 a = left;
     Wide6 b = right;
     boolean aNeg = an;
@@ -319,6 +323,39 @@ final class BidK160 {
       }
     }
     pack(format, negative, aExp, frame.xr, mode, flags, frame, out);
+  }
+
+  private static void packAligned(
+      FormatParams format,
+      boolean an,
+      int ae,
+      Wide6 left,
+      boolean bn,
+      Wide6 right,
+      RoundingMode mode,
+      StatusFlags flags,
+      long[] out,
+      BidKScratch.Frame frame) {
+    boolean negative;
+    if (an == bn) {
+      frame.xr.add(left, right);
+      negative = an;
+    } else {
+      int cmp = left.compare(right);
+      if (cmp == 0) {
+        frame.xr.clear();
+        pack(format, false, ae, frame.xr, mode, flags, frame, out);
+        return;
+      }
+      if (cmp > 0) {
+        frame.xr.subtract(left, right);
+        negative = an;
+      } else {
+        frame.xr.subtract(right, left);
+        negative = bn;
+      }
+    }
+    pack(format, negative, ae, frame.xr, mode, flags, frame, out);
   }
 
   private static int compareAbsolute(

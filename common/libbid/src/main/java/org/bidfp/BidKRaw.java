@@ -17,9 +17,9 @@
 package org.bidfp;
 
 /**
- * Generic BID-k arithmetic. Finite add/mul/div/sqrt/fma use the shared
- * Knuth limb engine; parse, quantize, and string conversion still use
- * {@link DecNum}.
+ * Generic BID-k arithmetic. Finite add/mul/div/sqrt/fma, compare, and
+ * toString use Knuth limbs (Decimal160 add/mul/FMA/compare use
+ * {@link BidK160}). Parse still uses {@link DecNum}.
  *
  * <p>{@link Bid64} and {@link Bid128} remain the specialized hot paths. This
  * kernel covers Decimal96 (k=3) through Decimal256 (k=8).
@@ -35,10 +35,34 @@ final class BidKRaw {
       RoundingMode mode,
       StatusFlags flags,
       long[] out) {
+    addOrSub(format, x, y, mode, flags, out, false);
+  }
+
+  static void sub(
+      FormatParams format,
+      long[] x,
+      long[] y,
+      RoundingMode mode,
+      StatusFlags flags,
+      long[] out) {
+    addOrSub(format, x, y, mode, flags, out, true);
+  }
+
+  private static void addOrSub(
+      FormatParams format,
+      long[] x,
+      long[] y,
+      RoundingMode mode,
+      StatusFlags flags,
+      long[] out,
+      boolean negateY) {
     BidKScratch.Frame frame = BidKScratch.acquire();
     try {
       Kind kx = BidKKnuth.unpackLeft(format, x, frame, flags);
       Kind ky = BidKKnuth.unpackRight(format, y, frame, flags);
+      if (negateY && ky != Kind.NAN && ky != Kind.SNAN) {
+        frame.bn = !frame.bn;
+      }
       if (propagateSpecial(
           format, kx, ky, frame.an, frame.bn, true, flags, out)) {
         return;
@@ -59,22 +83,6 @@ final class BidKRaw {
     } finally {
       BidKScratch.release(frame);
     }
-  }
-
-  static void sub(
-      FormatParams format,
-      long[] x,
-      long[] y,
-      RoundingMode mode,
-      StatusFlags flags,
-      long[] out) {
-    long[] negated = BidCodec.cloneWords(format, y);
-    if (BidCodec.isSigned(format, negated)) {
-      BidCodec.clearBit(negated, format.signBit());
-    } else {
-      BidCodec.setBit(negated, format.signBit());
-    }
-    add(format, x, negated, mode, flags, out);
   }
 
   static void mul(
@@ -360,16 +368,7 @@ final class BidKRaw {
       if (BidK160.matches(format)) {
         return BidK160.toString(format, words, frame);
       }
-      if (BidCodec.isNaN(format, words)) {
-        String sign = BidCodec.isSigned(format, words) ? "-" : "+";
-        return sign + (BidCodec.isSignalingNaN(format, words) ? "SNaN" : "NaN");
-      }
-      if (BidCodec.isInfinite(format, words)) {
-        return (BidCodec.isSigned(format, words) ? "-" : "+") + "Inf";
-      }
-      unpack(format, words, frame.a, frame.coeff, new StatusFlags());
-      String digits = frame.a.isZero() ? "0" : frame.a.toDigits();
-      return (frame.a.isNegative() ? "-" : "+") + digits + "E" + frame.a.exp();
+      return BidKKnuth.toString(format, words, frame);
     } finally {
       BidKScratch.release(frame);
     }
@@ -387,18 +386,7 @@ final class BidKRaw {
       if (BidK160.matches(format)) {
         return BidK160.sqlCompare(format, x, y, frame);
       }
-      unpack(format, x, frame.a, frame.coeff, new StatusFlags());
-      unpack(format, y, frame.b, frame.coeff, new StatusFlags());
-      if (frame.a.isZero() && frame.b.isZero()) {
-        return 0;
-      }
-      boolean an = frame.a.isNegative();
-      boolean bn = frame.b.isNegative();
-      if (an != bn) {
-        return an ? -1 : 1;
-      }
-      int cmp = frame.a.compareAbsolute(frame.b);
-      return an ? -cmp : cmp;
+      return BidKKnuth.sqlCompare(format, x, y, frame);
     } finally {
       BidKScratch.release(frame);
     }

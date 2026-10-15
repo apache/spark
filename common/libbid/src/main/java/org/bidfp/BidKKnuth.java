@@ -122,6 +122,19 @@ final class BidKKnuth {
       pack(format, an, ae, frame.w0, mode, flags, frame, out);
       return;
     }
+    if (ae == be) {
+      addAligned(an, frame.w0, bn, frame.w1, frame.w2, frame.w3);
+      pack(
+          format,
+          resultNegative(an, frame.w0, bn, frame.w1, frame),
+          ae,
+          frame.w2,
+          mode,
+          flags,
+          frame,
+          out);
+      return;
+    }
     boolean aNeg = an;
     int aExp = ae;
     long[] a = frame.w0;
@@ -525,5 +538,62 @@ final class BidKKnuth {
       }
     }
     return extra;
+  }
+
+  static int sqlCompare(
+      FormatParams format, long[] x, long[] y, BidKScratch.Frame frame) {
+    unpackLeft(format, x, frame, new StatusFlags());
+    unpackRight(format, y, frame, new StatusFlags());
+    if (frame.ac.isZero() && frame.bc.isZero()) {
+      return 0;
+    }
+    if (frame.an != frame.bn) {
+      return frame.an ? -1 : 1;
+    }
+    LimbMath.copyLimbs(frame.w0, frame.ac);
+    LimbMath.copyLimbs(frame.w1, frame.bc);
+    int cmp = compareAbsolute(frame.w0, frame.ae, frame.w1, frame.be, frame);
+    return frame.an ? -cmp : cmp;
+  }
+
+  static String toString(FormatParams format, long[] words, BidKScratch.Frame frame) {
+    if (BidCodec.isNaN(format, words)) {
+      String sign = BidCodec.isSigned(format, words) ? "-" : "+";
+      return sign + (BidCodec.isSignalingNaN(format, words) ? "SNaN" : "NaN");
+    }
+    if (BidCodec.isInfinite(format, words)) {
+      return (BidCodec.isSigned(format, words) ? "-" : "+") + "Inf";
+    }
+    unpackLeft(format, words, frame, new StatusFlags());
+    LimbMath.copyLimbs(frame.w0, frame.ac);
+    String digits = LimbMath.toDecimalString(frame.w0);
+    return (frame.an ? "-" : "+") + digits + "E" + frame.ae;
+  }
+
+  private static int compareAbsolute(
+      long[] a, int ae, long[] b, int be, BidKScratch.Frame frame) {
+    if (LimbMath.isZero(a)) {
+      return LimbMath.isZero(b) ? 0 : -1;
+    }
+    if (LimbMath.isZero(b)) {
+      return 1;
+    }
+    int orderA = ae + LimbMath.decimalDigits(a);
+    int orderB = be + LimbMath.decimalDigits(b);
+    if (orderA != orderB) {
+      return orderA > orderB ? 1 : -1;
+    }
+    if (ae == be) {
+      return LimbMath.compare(a, b);
+    }
+    int difference = Math.abs(ae - be);
+    if (ae > be) {
+      LimbMath.copy(frame.w4, a);
+      LimbMath.multiplyPow10(frame.w4, difference, frame.w5);
+      return LimbMath.compare(frame.w4, b);
+    }
+    LimbMath.copy(frame.w4, b);
+    LimbMath.multiplyPow10(frame.w4, difference, frame.w5);
+    return LimbMath.compare(a, frame.w4);
   }
 }

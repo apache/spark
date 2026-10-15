@@ -286,6 +286,21 @@ final class LimbMath {
     return rem;
   }
 
+  static String toDecimalString(long[] a) {
+    if (isZero(a)) {
+      return "0";
+    }
+    long[] tmp = new long[a.length];
+    copy(tmp, a);
+    char[] buf = new char[a.length * 20];
+    int pos = buf.length;
+    while (!isZero(tmp)) {
+      int digit = (int) divideSmall32(tmp, 10L);
+      buf[--pos] = (char) ('0' + digit);
+    }
+    return new String(buf, pos, buf.length - pos);
+  }
+
   /**
    * Knuth Algorithm D: {@code quot = floor(u / v)}, {@code rem = u % v}.
    * {@code u} and {@code v} are little-endian unsigned. The four {@code int[]}
