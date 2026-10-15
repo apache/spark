@@ -26,8 +26,7 @@ import os
 import sys
 import time
 import warnings
-from collections.abc import Iterator
-from typing import Any, BinaryIO
+from typing import BinaryIO
 
 from pyspark import shuffle
 from pyspark.accumulators import (
@@ -45,8 +44,6 @@ from pyspark.messages import (
     SparkSocketMessageReceiver,
 )
 from pyspark.serializers import (
-    BatchedSerializer,
-    CPickleSerializer,
     SpecialLengths,
     write_int,
     write_with_length,
@@ -386,38 +383,6 @@ def read_single_udtf(pickleSer, udtf_info, partition_wrapper):
     return udtf, udtf_info.args, udtf_info.kwargs, return_type
 
 
-def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
-    batch_size = int(os.environ.get("PYTHON_UDF_BATCH_SIZE", "100"))
-    ser = BatchedSerializer(CPickleSerializer(), batch_size)
-
-    udfs = [
-        read_single_udf(pickleSer, udf_info, eval_type, runner_conf, udf_index=udf_index)
-        for udf_index, udf_info in enumerate(udf_info_list)
-    ]
-
-    num_udfs = len(udfs)
-
-    if eval_type == PythonEvalType.SQL_BATCHED_UDF:
-        # Plain Python (pickle) UDFs, the only eval type reaching this branch. read_single_udf
-        # prepared each UDF as an (arg_offsets, eval_func) pair. Apply every one to each input
-        # row: a single UDF yields its bare result, multiple UDFs yield a tuple of results,
-        # which is the shape the JVM side expects. num_udfs is fixed, so the single-result
-        # case is handled once here rather than by unwrapping a one-element tuple per row.
-        def func(split_index: int, data: Iterator[Any]) -> Iterator[Any]:
-            if num_udfs == 1:
-                arg_offsets, f = udfs[0]
-                return (f(*[row[offset] for offset in arg_offsets]) for row in data)
-            return (
-                tuple(f(*[row[offset] for offset in arg_offsets]) for arg_offsets, f in udfs)
-                for row in data
-            )
-
-        return func, ser
-
-    else:
-        raise ValueError("Unknown eval type: {}".format(eval_type))
-
-
 def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
     """
     This function is the main processing function for worker.py.
@@ -462,32 +427,26 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
             assert isinstance(init_info.udf_info, (bytes, memoryview))
             func, profiler, deserializer, serializer = read_command(pickleSer, init_info.udf_info)
         else:
-            # UDF and UDTF runners read input and write output through a single serializer.
-            # If an eval type has a registered handler, dispatch through it: the handler
-            # provides both the function and the serializer.
+            # UDF and UDTF runners dispatch through the eval type's registered handler, which
+            # provides both the function and the single serializer for input and output.
             handler_cls = get_eval_type_handler(eval_type, runner_conf)
-            if handler_cls is not None:
-                if isinstance(init_info.udf_info, UDTFInfo):
-                    assert issubclass(handler_cls, (UDTFEvalTypeHandler, TableUDTFHandler))
-                    udfs = [
-                        read_single_udtf(
-                            pickleSer, init_info.udf_info, handler_cls.partition_wrapper
-                        )
-                    ]
-                else:
-                    assert isinstance(init_info.udf_info, list)
-                    udfs = [
-                        read_single_udf(
-                            pickleSer, udf_info, eval_type, runner_conf, udf_index=udf_index
-                        )
-                        for udf_index, udf_info in enumerate(init_info.udf_info)
-                    ]
-                handler = handler_cls(udfs=udfs, runner_conf=runner_conf, eval_conf=eval_conf)
-                func, serializer = handler.run, handler.serializer
+            if handler_cls is None:
+                raise ValueError("Unknown eval type: {}".format(eval_type))
+            if isinstance(init_info.udf_info, UDTFInfo):
+                assert issubclass(handler_cls, (UDTFEvalTypeHandler, TableUDTFHandler))
+                udfs = [
+                    read_single_udtf(pickleSer, init_info.udf_info, handler_cls.partition_wrapper)
+                ]
             else:
-                func, serializer = read_udfs(
-                    pickleSer, init_info.udf_info, eval_type, runner_conf, eval_conf
-                )
+                assert isinstance(init_info.udf_info, list)
+                udfs = [
+                    read_single_udf(
+                        pickleSer, udf_info, eval_type, runner_conf, udf_index=udf_index
+                    )
+                    for udf_index, udf_info in enumerate(init_info.udf_info)
+                ]
+            handler = handler_cls(udfs=udfs, runner_conf=runner_conf, eval_conf=eval_conf)
+            func, serializer = handler.run, handler.serializer
             deserializer = serializer
 
         split_index = init_info.split_index

@@ -122,13 +122,14 @@ class _EvalTypeHandlerMeta(ABCMeta):
 
 
 class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandlerMeta):
-    """Base class for the Arrow/Pandas UDF execution model.
+    """Base class for the UDF execution model.
 
     A handler declares the ``serializer`` for the input/output streams and
     implements ``run``, which consumes the input stream and yields the output
-    stream. Concrete handlers subclass a typed category base
+    stream. Arrow handlers subclass a typed category base
     (``BatchEvalTypeHandler``, ``GroupedEvalTypeHandler``,
-    ``CoGroupedEvalTypeHandler``), which fixes the input type and serializer.
+    ``CoGroupedEvalTypeHandler``), which fixes the input type and serializer;
+    the pickled-row handlers subclass this class directly.
     """
 
     # PythonEvalType this handler serves; None on the abstract bases.
@@ -152,8 +153,8 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
 
     @abstractmethod
     def run(self, split_index: int, data: Iterator[InputBatch]) -> Iterator[OutputBatch]:
-        """Consume the input stream and yield the output stream, matching the
-        ``func(split_index, data)`` shape ``read_udfs`` returns."""
+        """Consume the input stream and yield the output stream; the worker calls it as
+        ``func(split_index, data)``."""
 
 
 class BatchEvalTypeHandler(EvalTypeHandler["pa.RecordBatch", OutputBatch]):
