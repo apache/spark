@@ -311,3 +311,8 @@ FROM using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
 -- FVT-ASOF-2-040: a bare FROM query does not output the hidden MATCH_CONDITION column
 FROM using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
   MATCH_CONDITION (l.lts >= d.k);
+
+-- FVT-ASOF-2-041: a LEFT ASOF JOIN with a hidden MATCH_CONDITION column keeps unmatched left rows
+SELECT l.lts, r.rts
+FROM using_left l LEFT ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.k <= d.k);
