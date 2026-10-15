@@ -17,8 +17,8 @@
 package org.bidfp;
 
 /**
- * BidK finite arithmetic for {@code k=2,3,4}: Decimal64/128 specialists, and
- * Decimal96 via Bid128 then round back to {@code p=25}.
+ * BidK finite arithmetic for {@code k=2} and {@code k=4}: Decimal64 and
+ * Decimal128 specialists. Decimal96 ({@code k=3}) uses {@link BidK160}.
  */
 final class BidKSpecial {
   private static final ThreadLocal<Scratch> LOCAL =
@@ -29,7 +29,7 @@ final class BidKSpecial {
 
   static boolean narrow(FormatParams format) {
     int k = format.units();
-    return k >= 2 && k <= 4;
+    return k == 2 || k == 4;
   }
 
   static void add(
@@ -94,16 +94,8 @@ final class BidKSpecial {
       return;
     }
     Scratch s = LOCAL.get();
-    if (k == 4) {
-      Bid128Raw.sqrt(x[1], x[0], mode, flags, s.r);
-      copyFromBid128(s.r, out);
-      return;
-    }
-    widen(format, x, s.x, mode, flags);
-    Bid128Raw.sqrt(s.x[1], s.x[0], mode, flags, s.r);
-    copyFromBid128(s.r, s.y);
-    BidKRaw.convert(
-        FormatParams.DECIMAL128, s.y, format, mode, flags, out);
+    Bid128Raw.sqrt(x[1], x[0], mode, flags, s.r);
+    copyFromBid128(s.r, out);
   }
 
   static void fma(
@@ -120,20 +112,9 @@ final class BidKSpecial {
       return;
     }
     Scratch s = LOCAL.get();
-    if (k == 4) {
-      Bid128Raw.fma(
-          x[1], x[0], y[1], y[0], z[1], z[0], mode, flags, s.r);
-      copyFromBid128(s.r, out);
-      return;
-    }
-    widen(format, x, s.x, mode, flags);
-    widen(format, y, s.y, mode, flags);
-    widen(format, z, s.z, mode, flags);
     Bid128Raw.fma(
-        s.x[1], s.x[0], s.y[1], s.y[0], s.z[1], s.z[0], mode, flags, s.r);
-    copyFromBid128(s.r, s.x);
-    BidKRaw.convert(
-        FormatParams.DECIMAL128, s.x, format, mode, flags, out);
+        x[1], x[0], y[1], y[0], z[1], z[0], mode, flags, s.r);
+    copyFromBid128(s.r, out);
   }
 
   static void addUnpacked(
@@ -227,47 +208,15 @@ final class BidKSpecial {
       return;
     }
     Scratch s = LOCAL.get();
-    long xh;
-    long xl;
-    long yh;
-    long yl;
-    if (k == 4) {
-      xh = x[1];
-      xl = x[0];
-      yh = y[1];
-      yl = y[0];
-    } else {
-      widen(format, x, s.x, mode, flags);
-      widen(format, y, s.y, mode, flags);
-      xh = s.x[1];
-      xl = s.x[0];
-      yh = s.y[1];
-      yl = s.y[0];
-    }
     switch (op) {
-      case ADD -> Bid128Raw.add(xh, xl, yh, yl, mode, flags, s.r);
-      case SUB -> Bid128Raw.sub(xh, xl, yh, yl, mode, flags, s.r);
-      case MUL -> Bid128Raw.mul(xh, xl, yh, yl, mode, flags, s.r);
-      case DIV -> Bid128Raw.div(xh, xl, yh, yl, mode, flags, s.r);
-      case QUANTIZE -> Bid128Raw.quantize(xh, xl, yh, yl, mode, flags, s.r);
+      case ADD -> Bid128Raw.add(x[1], x[0], y[1], y[0], mode, flags, s.r);
+      case SUB -> Bid128Raw.sub(x[1], x[0], y[1], y[0], mode, flags, s.r);
+      case MUL -> Bid128Raw.mul(x[1], x[0], y[1], y[0], mode, flags, s.r);
+      case DIV -> Bid128Raw.div(x[1], x[0], y[1], y[0], mode, flags, s.r);
+      case QUANTIZE ->
+          Bid128Raw.quantize(x[1], x[0], y[1], y[0], mode, flags, s.r);
     }
-    if (k == 4) {
-      copyFromBid128(s.r, out);
-      return;
-    }
-    copyFromBid128(s.r, s.z);
-    BidKRaw.convert(
-        FormatParams.DECIMAL128, s.z, format, mode, flags, out);
-  }
-
-  private static void widen(
-      FormatParams src,
-      long[] words,
-      long[] dest128,
-      RoundingMode mode,
-      StatusFlags flags) {
-    BidKRaw.convert(
-        src, words, FormatParams.DECIMAL128, mode, flags, dest128);
+    copyFromBid128(s.r, out);
   }
 
   /** Bid128 kernels store {@code [high, low]}; BidK stores {@code [low, high]}. */
@@ -285,9 +234,6 @@ final class BidKSpecial {
   }
 
   private static final class Scratch {
-    final long[] x = new long[2];
-    final long[] y = new long[2];
-    final long[] z = new long[2];
     final long[] r = new long[2];
     final long[] px = new long[2];
     final long[] py = new long[2];

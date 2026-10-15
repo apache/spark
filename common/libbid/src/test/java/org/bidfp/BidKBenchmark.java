@@ -24,8 +24,9 @@ import java.util.Locale;
 import java.util.Random;
 
 /**
- * BidK vs {@link BigDecimal} timings for Decimal160 ({@code k=5}) and
- * Decimal256 ({@code k=8}). Pass {@code kscan} to sweep {@code k=3..8}.
+ * BidK vs {@link BigDecimal} timings. Default tables are Decimal160
+ * ({@code k=5}) and Decimal256 ({@code k=8}). Pass {@code kscan} to sweep
+ * {@code k=2..8} on the unpacked path.
  *
  * <p>Operand construction matches {@code BidJmhBenchmark}: sameQuantum,
  * mixedQuantum, and fullPrecision for add/mul/div; positive full-precision
@@ -45,6 +46,7 @@ public final class BidKBenchmark {
     FormatParams.DECIMAL256
   };
   private static final FormatParams[] FORMATS_KSCAN = {
+    FormatParams.DECIMAL64,
     FormatParams.DECIMAL96,
     FormatParams.DECIMAL128,
     FormatParams.DECIMAL160,
@@ -75,7 +77,9 @@ public final class BidKBenchmark {
         + (kscan ? " kscan" : ""));
     System.out.println();
     if (kscan) {
-      printTable("BidUnpacked reused operands and result (k=3..8)", Mode.UNPACKED);
+      printTable("BidKRaw into reused out[] (k=2..8)", Mode.RAW);
+      System.out.println();
+      printTable("BidUnpacked reused operands and result (k=2..8)", Mode.UNPACKED);
       return;
     }
     printTable("BidK object API", Mode.OBJECT);
