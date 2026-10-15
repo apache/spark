@@ -221,7 +221,8 @@ object ParquetStorageFilter {
    * up on it. `fromRead` says the error came from decoding the key pages. In the executor's order:
    *  - a fatal error goes out as it is;
    *  - a pending task kill goes out wrapped when the executor would report the error as a kill,
-   *    see [[throwIfKilled]], since the error may be the kill's interrupt surfacing through a UDF;
+   *    and as it is otherwise, see [[throwIfKilled]], since the error may be the kill's interrupt
+   *    surfacing through a UDF;
    *  - a fatal error deeper in the cause chain, as deep as the executor looks, goes out as itself.
    *
    * An `InternalError` among those goes out in an `UnknownError`, another fatal error. A bare one

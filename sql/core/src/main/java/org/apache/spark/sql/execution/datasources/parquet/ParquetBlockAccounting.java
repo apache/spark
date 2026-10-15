@@ -38,8 +38,9 @@ import org.apache.spark.internal.SparkLoggerFactory;
 
 /**
  * What a partial read of a Parquet file transfers, and whether one is possible at all, answered
- * from the metadata the {@link ParquetFileReader} already holds, with no IO of its own. One
- * instance per reader, since the warning below is reported once per instance.
+ * from the metadata the {@link ParquetFileReader} already holds, with no IO of its own once the
+ * block's store is built, see {@link #compressedBytesForRowRanges}. One instance per reader, since
+ * the warning below is reported once per instance.
  */
 final class ParquetBlockAccounting {
   private static final SparkLogger LOG =
