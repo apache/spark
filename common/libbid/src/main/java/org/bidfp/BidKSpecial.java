@@ -18,7 +18,7 @@ package org.bidfp;
 
 /**
  * BidK finite arithmetic for {@code k=2} and {@code k=4}: Decimal64 and
- * Decimal128 specialists. Decimal96 ({@code k=3}) uses {@link BidK160}.
+ * Decimal128 specialists. Decimal96 ({@code k=3}) uses {@link BidK96}.
  */
 final class BidKSpecial {
   private static final ThreadLocal<Scratch> LOCAL =

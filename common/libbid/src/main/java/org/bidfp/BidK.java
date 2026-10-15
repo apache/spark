@@ -23,8 +23,8 @@ import java.util.Arrays;
  * (packed width {@code 32*k} bits).
  *
  * <p>{@code k=2} and {@code k=4} dispatch to {@link Bid64} and {@link Bid128}.
- * {@code k=3} uses the Wide6 kernel (same family as Decimal160). Wider
- * {@code k} uses Knuth or Wide8. Repeated arithmetic should use
+ * {@code k=3} has a dedicated Decimal96 entry kernel, {@code k=5} uses Wide6,
+ * and {@code k=6..8} use Wide8. Repeated arithmetic should use
  * {@link BidUnpacked} and pack only at I/O.
  *
  * <p>Transcendental functions are provided only for {@code k<=4} (packed

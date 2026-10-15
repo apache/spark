@@ -17,10 +17,9 @@
 package org.bidfp;
 
 /**
- * Generic BID-k arithmetic. {@code k=2,3,4} dispatch to {@link BidKSpecial}
- * (Bid64, Bid128, Decimal96 via Bid128). Wider finite add/mul/div/sqrt/fma
- * use Knuth limbs (Decimal160 Wide6, Decimal256 Wide8). Parse uses
- * {@link DecNum}.
+ * Generic BID-k arithmetic. {@code k=2,4} dispatch to {@link BidKSpecial},
+ * {@code k=3} uses {@link BidK96}, {@code k=5} uses Wide6, and
+ * {@code k=6..8} use Wide8. Parse uses {@link DecNum}.
  *
  * <p>{@link BidUnpacked} is the compute form: kernels write
  * {@link BidKScratch.Frame#unpackedOut} through {@link BidEmit} and skip
@@ -303,7 +302,7 @@ final class BidKRaw {
     BidKScratch.Frame frame = BidKScratch.acquire();
     try {
       boolean wide160 = BidK160.matches(format);
-      boolean wide256 = BidK256.matches(format);
+      boolean wide256 = format.units() == 8;
       Kind kx;
       Kind ky;
       boolean aZero;

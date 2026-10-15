@@ -40,6 +40,7 @@ public final class BidKTest {
     arithmeticVsBigDecimal(FormatParams.DECIMAL224);
     arithmeticVsBigDecimal(FormatParams.DECIMAL256);
     decimal160Cases();
+    productDominantFma();
     convertWideTo128();
     decimal96Dpml();
     wideLibmUnsupported();
@@ -283,6 +284,31 @@ public final class BidKTest {
       StatusFlags st = new StatusFlags();
       BidK r = two.divide(three, rm, st);
       expect(r.isFinite(), "d160 2/3 " + rm);
+    }
+  }
+
+  private static void productDominantFma() {
+    FormatParams[] formats = {
+      FormatParams.DECIMAL160,
+      FormatParams.DECIMAL192,
+      FormatParams.DECIMAL224,
+      FormatParams.DECIMAL256
+    };
+    for (FormatParams format : formats) {
+      int precision = format.precision();
+      String coefficient = "9".repeat(precision);
+      String addend = "1e-" + (precision + 2);
+      BigDecimal x = new BigDecimal(coefficient);
+      BigDecimal z = new BigDecimal(addend);
+      MathContext mc = new MathContext(
+          precision, java.math.RoundingMode.HALF_EVEN);
+      BidK bx = BidK.parse(format, coefficient);
+      BidK bz = BidK.parse(format, addend);
+      BidK result = bx.fma(
+          bx, bz, RoundingMode.TIES_TO_EVEN, new StatusFlags());
+      expectClose(
+          result, x.multiply(x).add(z, mc), format,
+          "product-dominant fma " + format + " x=" + bx + " z=" + bz);
     }
   }
 

@@ -218,6 +218,17 @@ final class BidK160 {
       long[] out,
       BidKScratch.Frame frame) {
     boolean pNeg = an ^ bn;
+    int productExp = ae + be;
+    int difference = productExp - ce;
+    if (format.units() == 5
+        && difference > 0 && difference <= format.precision() + 2) {
+      frame.xa.store(frame.w0);
+      frame.xb.store(frame.w1);
+      frame.xt.store(frame.w4);
+      BidKKnuth.fmaFromWork(
+          format, an, ae, bn, be, cn, ce, mode, flags, out, frame);
+      return;
+    }
     if (format.units() == 3) {
       frame.xr.multiply2(frame.xa, frame.xb);
     } else {
@@ -225,7 +236,7 @@ final class BidK160 {
     }
     frame.xa.copyFrom(frame.xr);
     addWide(
-        format, pNeg, ae + be, frame.xa, cn, ce, frame.xt, mode, flags, out,
+        format, pNeg, productExp, frame.xa, cn, ce, frame.xt, mode, flags, out,
         frame, false);
   }
 

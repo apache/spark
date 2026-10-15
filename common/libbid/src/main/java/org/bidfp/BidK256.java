@@ -17,15 +17,16 @@
 package org.bidfp;
 
 /**
- * Unrolled 4-limb kernels for Decimal256 ({@code k=8}, p=70). Bid64/Bid128
- * stay specialized; other k values keep {@link BidKKnuth}.
+ * Unrolled Wide8 kernels for Decimal192 through Decimal256 ({@code k=6..8}).
+ * Bid64/Bid128 stay specialized; other k values keep narrower kernels or
+ * {@link BidKKnuth}.
  */
 final class BidK256 {
   private BidK256() {
   }
 
   static boolean matches(FormatParams format) {
-    return format.units() == 8;
+    return format.units() >= 6;
   }
 
   static void add(
@@ -85,6 +86,13 @@ final class BidK256 {
       StatusFlags flags,
       long[] out,
       BidKScratch.Frame frame) {
+    if (format.units() < 8) {
+      frame.ya.store(frame.w0);
+      frame.yb.store(frame.w1);
+      BidKKnuth.mulFromWork(
+          format, an, ae, bn, be, mode, flags, out, frame);
+      return;
+    }
     boolean negative = an ^ bn;
     if (frame.ya.isZero() || frame.yb.isZero()) {
       frame.yr.clear();
@@ -210,9 +218,21 @@ final class BidK256 {
       long[] out,
       BidKScratch.Frame frame) {
     boolean pNeg = an ^ bn;
+    int productExp = ae + be;
+    int difference = productExp - ce;
+    if (format.units() < 8
+        || (difference > 0 && difference <= format.precision() + 2)) {
+      frame.ya.store(frame.w0);
+      frame.yb.store(frame.w1);
+      frame.yt.store(frame.w4);
+      BidKKnuth.fmaFromWork(
+          format, an, ae, bn, be, cn, ce, mode, flags, out, frame);
+      return;
+    }
     frame.yr.multiply4(frame.ya, frame.yb);
     frame.ya.copyFrom(frame.yr);
-    addWide(format, pNeg, ae + be, frame.ya, cn, ce, frame.yt, mode, flags, out,
+    addWide(
+        format, pNeg, productExp, frame.ya, cn, ce, frame.yt, mode, flags, out,
         frame);
   }
 

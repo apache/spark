@@ -29,7 +29,7 @@ package org.bidfp;
 final class LimbMath {
   static final int WORK = 16;
   static final int DIGITS32 = WORK * 2 + 2;
-  static final int POW10_MAX = 180;
+  static final int POW10_MAX = 300;
   private static final long MASK32 = 0xffff_ffffL;
   private static final long[][] POW10 = buildPow10();
 
