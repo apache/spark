@@ -23,6 +23,11 @@ CREATE TEMPORARY VIEW drop_table_v1 AS SELECT 1 AS c;
 DROP TABLE drop_table_v1;
 DROP TABLE IF EXISTS drop_table_v1;
 
+-- DROP TABLE on a global temporary view.
+CREATE GLOBAL TEMPORARY VIEW drop_table_gv1 AS SELECT 1 AS c;
+DROP TABLE global_temp.drop_table_gv1;
+DROP TABLE IF EXISTS global_temp.drop_table_gv1;
+
 -- DROP TABLE with an IDENTIFIER clause.
 CREATE TABLE drop_table_t6 (c INT) USING parquet;
 DROP TABLE IDENTIFIER('drop_table_t6');
@@ -32,6 +37,9 @@ SET spark.sql.legacy.useV1Command=true;
 CREATE TABLE drop_table_t7 (c INT) USING parquet;
 DROP TABLE drop_table_t7;
 DROP TABLE IF EXISTS drop_table_missing;
+CREATE TABLE drop_table_t9 (c INT) USING parquet;
+DROP TABLE IF EXISTS drop_table_t9;
+SHOW TABLES LIKE 'drop_table_t9';
 CREATE TABLE drop_table_t8 (c INT) USING parquet;
 DROP TABLE drop_table_t8 PURGE;
 SET spark.sql.legacy.useV1Command=false;

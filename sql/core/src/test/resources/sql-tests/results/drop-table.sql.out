@@ -112,6 +112,30 @@ struct<>
 
 
 -- !query
+CREATE GLOBAL TEMPORARY VIEW drop_table_gv1 AS SELECT 1 AS c
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE global_temp.drop_table_gv1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE IF EXISTS global_temp.drop_table_gv1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 CREATE TABLE drop_table_t6 (c INT) USING parquet
 -- !query schema
 struct<>
@@ -155,6 +179,30 @@ struct<>
 DROP TABLE IF EXISTS drop_table_missing
 -- !query schema
 struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TABLE drop_table_t9 (c INT) USING parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE IF EXISTS drop_table_t9
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SHOW TABLES LIKE 'drop_table_t9'
+-- !query schema
+struct<namespace:string,tableName:string,isTemporary:boolean>
 -- !query output
 
 

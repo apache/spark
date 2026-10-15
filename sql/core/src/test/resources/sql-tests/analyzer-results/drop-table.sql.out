@@ -94,6 +94,27 @@ DropTable true, false
 
 
 -- !query
+CREATE GLOBAL TEMPORARY VIEW drop_table_gv1 AS SELECT 1 AS c
+-- !query analysis
+CreateViewCommand `drop_table_gv1`, SELECT 1 AS c, false, false, GlobalTempView, UNSUPPORTED, true
+   +- Project [1 AS c#x]
+      +- OneRowRelation
+
+
+-- !query
+DROP TABLE global_temp.drop_table_gv1
+-- !query analysis
+DropTempViewCommand global_temp.drop_table_gv1, false
+
+
+-- !query
+DROP TABLE IF EXISTS global_temp.drop_table_gv1
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), global_temp.drop_table_gv1
+
+
+-- !query
 CREATE TABLE drop_table_t6 (c INT) USING parquet
 -- !query analysis
 CreateDataSourceTableCommand `spark_catalog`.`default`.`drop_table_t6`, false
@@ -128,6 +149,24 @@ DropTableCommand `spark_catalog`.`default`.`drop_table_t7`, false, false, false
 DROP TABLE IF EXISTS drop_table_missing
 -- !query analysis
 DropTableCommand `spark_catalog`.`default`.`drop_table_missing`, true, false, false
+
+
+-- !query
+CREATE TABLE drop_table_t9 (c INT) USING parquet
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`drop_table_t9`, false
+
+
+-- !query
+DROP TABLE IF EXISTS drop_table_t9
+-- !query analysis
+DropTableCommand `spark_catalog`.`default`.`drop_table_t9`, true, false, false
+
+
+-- !query
+SHOW TABLES LIKE 'drop_table_t9'
+-- !query analysis
+ShowTablesCommand default, drop_table_t9, [namespace#x, tableName#x, isTemporary#x], false
 
 
 -- !query
