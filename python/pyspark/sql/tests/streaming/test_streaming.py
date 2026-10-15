@@ -565,7 +565,22 @@ class StreamingTestsMixin:
                 finally:
                     query.stop()
 
+                with self.assertRaises(AnalysisException) as context:
+                    self.spark.readStream.table(table_name).schema
+                self.check_error(
+                    context.exception,
+                    errorClass=(
+                        "STREAMING_QUERY_EVOLUTION_ERROR.UNNAMED_STREAMING_SOURCES_WITH_ENFORCEMENT"
+                    ),
+                    messageParameters={"sourceInfo": "Leaf position 0 - .*"},
+                    matchPVals=True,
+                )
+
             with self.sql_conf({config: "false"}):
+                self.assertEqual(
+                    self.spark.readStream.table(table_name).schema,
+                    self.spark.table(table_name).schema,
+                )
                 with self.assertRaises(AnalysisException) as context:
                     self.spark.readStream.name("orders_source").table(table_name).schema
                 self.check_error(
