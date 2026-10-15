@@ -57,7 +57,9 @@ final class BidK160 {
       StatusFlags flags,
       long[] out,
       BidKScratch.Frame frame) {
-    addWide(format, an, ae, frame.xa, bn, be, frame.xb, mode, flags, out, frame);
+    addWide(
+        format, an, ae, frame.xa, bn, be, frame.xb, mode, flags, out, frame,
+        format.units() == 3);
   }
 
   static void mul(
@@ -93,7 +95,11 @@ final class BidK160 {
       pack(format, negative, ae + be, frame.xr, mode, flags, frame, out);
       return;
     }
-    frame.xr.multiply3(frame.xa, frame.xb);
+    if (format.units() == 3) {
+      frame.xr.multiply2(frame.xa, frame.xb);
+    } else {
+      frame.xr.multiply3(frame.xa, frame.xb);
+    }
     pack(format, negative, ae + be, frame.xr, mode, flags, frame, out);
   }
 
@@ -212,10 +218,15 @@ final class BidK160 {
       long[] out,
       BidKScratch.Frame frame) {
     boolean pNeg = an ^ bn;
-    frame.xr.multiply3(frame.xa, frame.xb);
+    if (format.units() == 3) {
+      frame.xr.multiply2(frame.xa, frame.xb);
+    } else {
+      frame.xr.multiply3(frame.xa, frame.xb);
+    }
     frame.xa.copyFrom(frame.xr);
-    addWide(format, pNeg, ae + be, frame.xa, cn, ce, frame.xt, mode, flags, out,
-        frame);
+    addWide(
+        format, pNeg, ae + be, frame.xa, cn, ce, frame.xt, mode, flags, out,
+        frame, false);
   }
 
   static void quantize(
@@ -336,7 +347,8 @@ final class BidK160 {
       RoundingMode mode,
       StatusFlags flags,
       long[] out,
-      BidKScratch.Frame frame) {
+      BidKScratch.Frame frame,
+      boolean twoLimb) {
     if (left.isZero() && right.isZero()) {
       frame.xr.clear();
       pack(format, an && bn, Math.min(ae, be), frame.xr, mode, flags, frame, out);
@@ -351,7 +363,8 @@ final class BidK160 {
       return;
     }
     if (ae == be) {
-      packAligned(format, an, ae, left, bn, right, mode, flags, out, frame);
+      packAligned(
+          format, an, ae, left, bn, right, mode, flags, out, frame, twoLimb);
       return;
     }
     Wide6 a = left;
@@ -384,10 +397,15 @@ final class BidK160 {
     if (difference > 0) {
       a.multiplyPow10(difference);
       aExp -= difference;
+      twoLimb = false;
     }
     boolean negative;
     if (aNeg == bNeg) {
-      frame.xr.add(a, b);
+      if (twoLimb) {
+        frame.xr.add2(a, b);
+      } else {
+        frame.xr.add(a, b);
+      }
       negative = aNeg;
     } else {
       int cmp = a.compare(b);
@@ -397,10 +415,18 @@ final class BidK160 {
         return;
       }
       if (cmp > 0) {
-        frame.xr.subtract(a, b);
+        if (twoLimb) {
+          frame.xr.subtract2(a, b);
+        } else {
+          frame.xr.subtract(a, b);
+        }
         negative = aNeg;
       } else {
-        frame.xr.subtract(b, a);
+        if (twoLimb) {
+          frame.xr.subtract2(b, a);
+        } else {
+          frame.xr.subtract(b, a);
+        }
         negative = bNeg;
       }
     }
@@ -417,10 +443,15 @@ final class BidK160 {
       RoundingMode mode,
       StatusFlags flags,
       long[] out,
-      BidKScratch.Frame frame) {
+      BidKScratch.Frame frame,
+      boolean twoLimb) {
     boolean negative;
     if (an == bn) {
-      frame.xr.add(left, right);
+      if (twoLimb) {
+        frame.xr.add2(left, right);
+      } else {
+        frame.xr.add(left, right);
+      }
       negative = an;
     } else {
       int cmp = left.compare(right);
@@ -430,14 +461,27 @@ final class BidK160 {
         return;
       }
       if (cmp > 0) {
-        frame.xr.subtract(left, right);
+        if (twoLimb) {
+          frame.xr.subtract2(left, right);
+        } else {
+          frame.xr.subtract(left, right);
+        }
         negative = an;
       } else {
-        frame.xr.subtract(right, left);
+        if (twoLimb) {
+          frame.xr.subtract2(right, left);
+        } else {
+          frame.xr.subtract(right, left);
+        }
         negative = bn;
       }
     }
-    pack(format, negative, ae, frame.xr, mode, flags, frame, out);
+    if (format.coefficientAllowed(frame.xr)) {
+      BidEmit.finite(
+          format, negative, ae + format.bias(), frame.xr, out, frame);
+    } else {
+      pack(format, negative, ae, frame.xr, mode, flags, frame, out);
+    }
   }
 
   static int compareAbsolute(

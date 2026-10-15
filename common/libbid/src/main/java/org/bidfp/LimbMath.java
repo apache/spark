@@ -176,8 +176,9 @@ final class LimbMath {
       clear(a);
       return;
     }
+    int n = usedLimbs(a);
     long carry = 0L;
-    for (int i = 0; i < a.length; i++) {
+    for (int i = 0; i < n; i++) {
       long lo = a[i] * m;
       long hi = UInt128.unsignedMultiplyHigh(a[i], m);
       long sum = lo + carry;
@@ -186,7 +187,10 @@ final class LimbMath {
       carry = hi + c2;
     }
     if (carry != 0L) {
-      throw new ArithmeticException("limb multiply overflow");
+      if (n >= a.length) {
+        throw new ArithmeticException("limb multiply overflow");
+      }
+      a[n] = carry;
     }
   }
 
@@ -284,7 +288,7 @@ final class LimbMath {
       throw new IllegalArgumentException("divisor must fit in 32 bits");
     }
     long rem = 0L;
-    for (int i = a.length - 1; i >= 0; i--) {
+    for (int i = usedLimbs(a) - 1; i >= 0; i--) {
       long high = a[i] >>> 32;
       long low = a[i] & MASK32;
       long cur = (rem << 32) | high;

@@ -260,15 +260,13 @@ final class BidKKnuth {
     }
     if (ae == be) {
       addAligned(an, frame.w0, bn, frame.w1, frame.w2, frame.w3);
-      pack(
-          format,
-          resultNegative(an, frame.w0, bn, frame.w1, frame),
-          ae,
-          frame.w2,
-          mode,
-          flags,
-          frame,
-          out);
+      boolean negative = resultNegative(an, frame.w0, bn, frame.w1, frame);
+      if (format.coefficientAllowed(frame.w2)) {
+        BidEmit.finite(
+            format, negative, ae + format.bias(), frame.w2, out, frame);
+      } else {
+        pack(format, negative, ae, frame.w2, mode, flags, frame, out);
+      }
       return;
     }
     boolean aNeg = an;
@@ -296,8 +294,13 @@ final class BidKKnuth {
     }
     if (difference == 0) {
       addAligned(aNeg, a, bNeg, b, frame.w2, frame.w3);
-      pack(format, resultNegative(aNeg, a, bNeg, b, frame), aExp, frame.w2,
-          mode, flags, frame, out);
+      boolean negative = resultNegative(aNeg, a, bNeg, b, frame);
+      if (format.coefficientAllowed(frame.w2)) {
+        BidEmit.finite(
+            format, negative, aExp + format.bias(), frame.w2, out, frame);
+      } else {
+        pack(format, negative, aExp, frame.w2, mode, flags, frame, out);
+      }
       return;
     }
     if (difference > p + 2) {

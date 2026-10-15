@@ -409,7 +409,12 @@ public final class BidKTest {
   private static void expectBits(BidK packed, BidUnpacked unpacked, String label) {
     long[] words = new long[packed.format().wordCount()];
     unpacked.storePacked(words);
-    expect(Arrays.equals(packed.toRawBits(), words), label);
+    long[] packedWords = packed.toRawBits();
+    if (!Arrays.equals(packedWords, words)) {
+      throw new IllegalStateException(
+          label + ": packed=" + Arrays.toString(packedWords)
+              + ", unpacked=" + Arrays.toString(words));
+    }
   }
 
   private static void expectClose(BidK got, BigDecimal expected, FormatParams format, String op) {

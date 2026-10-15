@@ -171,6 +171,21 @@ final class Wide6 {
     l5 = a.l5 + b.l5 + c;
   }
 
+  /** Two-limb add for Decimal96 coefficients and aligned addends. */
+  void add2(Wide6 a, Wide6 b) {
+    long s = a.l0 + b.l0;
+    long c = carry(a.l0, s);
+    l0 = s;
+    s = a.l1 + b.l1;
+    long c2 = carry(a.l1, s);
+    long t = s + c;
+    l1 = t;
+    l2 = c2 + carry(s, t);
+    l3 = 0L;
+    l4 = 0L;
+    l5 = 0L;
+  }
+
   void subtract(Wide6 a, Wide6 b) {
     long d = a.l0 - b.l0;
     long br = Long.compareUnsigned(a.l0, b.l0) < 0 ? 1L : 0L;
@@ -196,6 +211,45 @@ final class Wide6 {
     br = b1 | (Long.compareUnsigned(d, br) < 0 ? 1L : 0L);
     l4 = t;
     l5 = a.l5 - b.l5 - br;
+  }
+
+  /** Two-limb subtract for Decimal96 coefficients and aligned addends. */
+  void subtract2(Wide6 a, Wide6 b) {
+    long d = a.l0 - b.l0;
+    long br = Long.compareUnsigned(a.l0, b.l0) < 0 ? 1L : 0L;
+    l0 = d;
+    d = a.l1 - b.l1;
+    long b1 = Long.compareUnsigned(a.l1, b.l1) < 0 ? 1L : 0L;
+    long t = d - br;
+    br = b1 | (Long.compareUnsigned(d, br) < 0 ? 1L : 0L);
+    l1 = t;
+    l2 = a.l2 - b.l2 - br;
+    l3 = 0L;
+    l4 = 0L;
+    l5 = 0L;
+  }
+
+  /** Two-limb x two-limb schoolbook product for Decimal96. */
+  void multiply2(Wide6 a, Wide6 b) {
+    long a0 = a.l0;
+    long a1 = a.l1;
+    long b0 = b.l0;
+    long b1 = b.l1;
+    l0 = a0 * b0;
+    long c = umulh(a0, b0);
+    long t = a0 * b1;
+    long s = t + c;
+    c = umulh(a0, b1) + carry(t, s);
+    t = a1 * b0;
+    long s2 = s + t;
+    c += umulh(a1, b0) + carry(s, s2);
+    l1 = s2;
+    t = a1 * b1;
+    s = t + c;
+    l2 = s;
+    l3 = umulh(a1, b1) + carry(t, s);
+    l4 = 0L;
+    l5 = 0L;
   }
 
   /** 3-limb x 3-limb schoolbook into six limbs. High limbs of inputs ignored. */
@@ -239,30 +293,21 @@ final class Wide6 {
   }
 
   void multiplySmall(long m) {
-    long h = umulh(l0, m);
-    l0 *= m;
-    long t = l1 * m;
-    long s = t + h;
-    h = umulh(l1, m) + carry(t, s);
-    l1 = s;
-    t = l2 * m;
-    s = t + h;
-    h = umulh(l2, m) + carry(t, s);
-    l2 = s;
-    t = l3 * m;
-    s = t + h;
-    h = umulh(l3, m) + carry(t, s);
-    l3 = s;
-    t = l4 * m;
-    s = t + h;
-    h = umulh(l4, m) + carry(t, s);
-    l4 = s;
-    t = l5 * m;
-    s = t + h;
-    if (umulh(l5, m) != 0L || carry(t, s) != 0L) {
-      throw new ArithmeticException("Wide6 overflow");
+    int n = usedLimbs();
+    long carry = 0L;
+    for (int i = 0; i < n; i++) {
+      long value = limb(i);
+      long product = value * m;
+      long sum = product + carry;
+      carry = umulh(value, m) + carry(product, sum);
+      setLimb(i, sum);
     }
-    l5 = s;
+    if (carry != 0L) {
+      if (n >= 6) {
+        throw new ArithmeticException("Wide6 overflow");
+      }
+      setLimb(n, carry);
+    }
   }
 
   void addSmall(long addend) {
@@ -341,12 +386,10 @@ final class Wide6 {
 
   long divideSmall32(long divisor) {
     long rem = 0L;
-    rem = step32(5, divisor, rem);
-    rem = step32(4, divisor, rem);
-    rem = step32(3, divisor, rem);
-    rem = step32(2, divisor, rem);
-    rem = step32(1, divisor, rem);
-    return step32(0, divisor, rem);
+    for (int i = usedLimbs() - 1; i >= 0; i--) {
+      rem = step32(i, divisor, rem);
+    }
+    return rem;
   }
 
   int decimalDigits() {
@@ -477,7 +520,7 @@ final class Wide6 {
   private void divideSingle(Wide6 u, long divisor) {
     clear();
     long rem = 0L;
-    for (int i = 5; i >= 0; i--) {
+    for (int i = u.usedLimbs() - 1; i >= 0; i--) {
       long lo = u.limb(i);
       long q;
       if (rem == 0L) {

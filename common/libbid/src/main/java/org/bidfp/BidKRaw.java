@@ -61,6 +61,10 @@ final class BidKRaw {
       StatusFlags flags,
       long[] out,
       boolean negateY) {
+    if (BidK96.matches(format)
+        && BidK96.add(format, x, y, negateY, mode, flags, out)) {
+      return;
+    }
     if (BidKSpecial.narrow(format)) {
       if (negateY) {
         BidKSpecial.sub(format, x, y, mode, flags, out);
@@ -117,6 +121,10 @@ final class BidKRaw {
       RoundingMode mode,
       StatusFlags flags,
       long[] out) {
+    if (BidK96.matches(format)
+        && BidK96.mul(format, x, y, mode, flags, out)) {
+      return;
+    }
     if (BidKSpecial.narrow(format)) {
       BidKSpecial.mul(format, x, y, mode, flags, out);
       return;
@@ -175,6 +183,10 @@ final class BidKRaw {
       RoundingMode mode,
       StatusFlags flags,
       long[] out) {
+    if (BidK96.matches(format)
+        && BidK96.div(format, x, y, mode, flags, out)) {
+      return;
+    }
     if (BidKSpecial.narrow(format)) {
       BidKSpecial.div(format, x, y, mode, flags, out);
       return;
@@ -232,6 +244,10 @@ final class BidKRaw {
       RoundingMode mode,
       StatusFlags flags,
       long[] out) {
+    if (BidK96.matches(format)
+        && BidK96.sqrt(format, x, mode, flags, out)) {
+      return;
+    }
     if (BidKSpecial.narrow(format)) {
       BidKSpecial.sqrt(format, x, mode, flags, out);
       return;
@@ -276,6 +292,10 @@ final class BidKRaw {
       RoundingMode mode,
       StatusFlags flags,
       long[] out) {
+    if (BidK96.matches(format)
+        && BidK96.fma(format, x, y, z, mode, flags, out)) {
+      return;
+    }
     if (BidKSpecial.narrow(format)) {
       BidKSpecial.fma(format, x, y, z, mode, flags, out);
       return;
@@ -839,6 +859,9 @@ final class BidKRaw {
     }
     if (k == 4) {
       return DecFloatAdapters.sqlCompare128(x[1], x[0], y[1], y[0]);
+    }
+    if (k == 3 && BidCodec.isFinite(format, x) && BidCodec.isFinite(format, y)) {
+      return BidK96.sqlCompare(format, x, y);
     }
     if (BidCodec.isNaN(format, x)) {
       return BidCodec.isNaN(format, y) ? 0 : 1;

@@ -62,9 +62,12 @@ public final class BidKBenchmark {
   public static void main(String[] args) {
     String profileName = "quick";
     boolean kscan = false;
+    int selectedK = 0;
     for (String arg : args) {
       if ("kscan".equals(arg)) {
         kscan = true;
+      } else if (arg.startsWith("k=")) {
+        selectedK = Integer.parseInt(arg.substring(2));
       } else if ("iter".equals(arg) || "quick".equals(arg) || "full".equals(arg)) {
         profileName = arg;
       }
@@ -72,6 +75,8 @@ public final class BidKBenchmark {
     Profile profile = Profile.from(profileName);
     if (kscan) {
       formats = FORMATS_KSCAN;
+    } else if (selectedK != 0) {
+      formats = new FormatParams[] {FormatParams.ofUnits(selectedK)};
     }
     System.out.println("BidKBenchmark profile=" + profile.name
         + (kscan ? " kscan" : ""));
