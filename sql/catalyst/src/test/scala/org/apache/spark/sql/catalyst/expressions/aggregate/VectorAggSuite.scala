@@ -156,8 +156,8 @@ class VectorAggSuite extends SparkFunSuite {
     val result = agg.eval(buffer).asInstanceOf[ArrayData]
 
     agg.update(buffer, createInputRow(Array(4.0f, 5.0f, 6.0f)))
-    assert(evalAsFloatArray(agg, buffer) === Array(5.0f, 7.0f, 9.0f))
-    assert(result.toFloatArray() === Array(1.0f, 2.0f, 3.0f))
+    assertResult(Array(5.0f, 7.0f, 9.0f))(evalAsFloatArray(agg, buffer))
+    assertResult(Array(1.0f, 2.0f, 3.0f))(result.toFloatArray())
   }
 
   test("VectorSum - multiple vectors") {
@@ -545,21 +545,21 @@ class VectorAggSuite extends SparkFunSuite {
 
   test("VectorSum - result type follows input element type") {
     val (doubleAgg, _) = createDoubleVectorSum()
-    assert(doubleAgg.checkInputDataTypes() === TypeCheckResult.TypeCheckSuccess)
-    assert(doubleAgg.dataType === ArrayType(DoubleType, containsNull = false))
+    assertResult(TypeCheckResult.TypeCheckSuccess)(doubleAgg.checkInputDataTypes())
+    assertResult(ArrayType(DoubleType, containsNull = false))(doubleAgg.dataType)
 
     val (floatAgg, _, _) = createVectorSum()
-    assert(floatAgg.checkInputDataTypes() === TypeCheckResult.TypeCheckSuccess)
-    assert(floatAgg.dataType === ArrayType(FloatType, containsNull = false))
+    assertResult(TypeCheckResult.TypeCheckSuccess)(floatAgg.checkInputDataTypes())
+    assertResult(ArrayType(FloatType, containsNull = false))(floatAgg.dataType)
   }
 
   test("VectorSum - rejects unsupported element type") {
     val input = new BoundReference(0, ArrayType(IntegerType), nullable = true)
     new VectorSum(input).checkInputDataTypes() match {
       case DataTypeMismatch(errorSubClass, params) =>
-        assert(errorSubClass === "UNEXPECTED_INPUT_TYPE")
-        assert(params("requiredType") === "\"ARRAY<FLOAT>\" or \"ARRAY<DOUBLE>\"")
-        assert(params("inputType") === "\"ARRAY<INT>\"")
+        assertResult("UNEXPECTED_INPUT_TYPE")(errorSubClass)
+        assertResult("\"ARRAY<FLOAT>\" or \"ARRAY<DOUBLE>\"")(params("requiredType"))
+        assertResult("\"ARRAY<INT>\"")(params("inputType"))
       case other => fail(s"Expected DataTypeMismatch but got $other")
     }
   }
@@ -569,16 +569,16 @@ class VectorAggSuite extends SparkFunSuite {
     val input = new BoundReference(0, ArrayType(DoubleType), nullable = true)
     floatOnlyVectorFunctions(name)(input).checkInputDataTypes() match {
       case DataTypeMismatch(errorSubClass, params) =>
-        assert(errorSubClass === "UNEXPECTED_INPUT_TYPE")
-        assert(params("requiredType") === "\"ARRAY<FLOAT>\"")
-        assert(params("inputType") === "\"ARRAY<DOUBLE>\"")
+        assertResult("UNEXPECTED_INPUT_TYPE")(errorSubClass)
+        assertResult("\"ARRAY<FLOAT>\"")(params("requiredType"))
+        assertResult("\"ARRAY<DOUBLE>\"")(params("inputType"))
       case other => fail(s"Expected DataTypeMismatch but got $other")
     }
   }
 
   test("VectorSum - double: empty buffer returns null") {
     val (agg, buffer) = createDoubleVectorSum()
-    assert(agg.eval(buffer) === null)
+    assertResult(null)(agg.eval(buffer))
   }
 
   test("VectorSum - double: multiple vectors") {
@@ -586,7 +586,7 @@ class VectorAggSuite extends SparkFunSuite {
     agg.update(buffer, createDoubleInputRow(Array(1.0, 2.0)))
     agg.update(buffer, createDoubleInputRow(Array(3.0, 4.0)))
     agg.update(buffer, createDoubleInputRow(Array(5.0, 6.0)))
-    assert(evalAsDoubleArray(agg, buffer) === Array(9.0, 12.0))
+    assertResult(Array(9.0, 12.0))(evalAsDoubleArray(agg, buffer))
   }
 
   test("VectorSum - double: result is independent of later buffer updates") {
@@ -595,15 +595,15 @@ class VectorAggSuite extends SparkFunSuite {
     val result = agg.eval(buffer).asInstanceOf[ArrayData]
 
     agg.update(buffer, createDoubleInputRow(Array(4.0, 5.0, 6.0)))
-    assert(evalAsDoubleArray(agg, buffer) === Array(5.0, 7.0, 9.0))
-    assert(result.toDoubleArray() === Array(1.0, 2.0, 3.0))
+    assertResult(Array(5.0, 7.0, 9.0))(evalAsDoubleArray(agg, buffer))
+    assertResult(Array(1.0, 2.0, 3.0))(result.toDoubleArray())
   }
 
   test("VectorSum - double: keeps precision lost by float") {
     val (agg, buffer) = createDoubleVectorSum()
     agg.update(buffer, createDoubleInputRow(Array(16777216.0, 0.1, 1.0e300)))
     agg.update(buffer, createDoubleInputRow(Array(1.0, 0.2, 1.0e300)))
-    assert(evalAsDoubleArray(agg, buffer) === Array(16777217.0, 0.1 + 0.2, 2.0e300))
+    assertResult(Array(16777217.0, 0.1 + 0.2, 2.0e300))(evalAsDoubleArray(agg, buffer))
   }
 
   test("VectorSum - double: merge two buffers") {
@@ -614,19 +614,20 @@ class VectorAggSuite extends SparkFunSuite {
     agg.update(buffer2, createDoubleInputRow(Array(1.0e10, 6.0)))
     agg.update(buffer2, createDoubleInputRow(Array(7.0, 8.0)))
     agg.merge(buffer1, buffer2)
-    assert(evalAsDoubleArray(agg, buffer1) ===
-      Array((1.0e-10 + 3.0) + (1.0e10 + 7.0), 20.0))
+    assertResult(Array((1.0e-10 + 3.0) + (1.0e10 + 7.0), 20.0)) {
+      evalAsDoubleArray(agg, buffer1)
+    }
   }
 
   test("VectorSum - double: merge with empty buffers") {
     val (agg, buffer1) = createDoubleVectorSum()
     val (_, buffer2) = createDoubleVectorSum()
     agg.merge(buffer1, buffer2)
-    assert(agg.eval(buffer1) === null)
+    assertResult(null)(agg.eval(buffer1))
 
     agg.update(buffer2, createDoubleInputRow(Array(1.5, 2.5)))
     agg.merge(buffer1, buffer2)
-    assert(evalAsDoubleArray(agg, buffer1) === Array(1.5, 2.5))
+    assertResult(Array(1.5, 2.5))(evalAsDoubleArray(agg, buffer1))
   }
 
   test("VectorSum - double: null vectors and vectors with null elements are skipped") {
@@ -635,14 +636,14 @@ class VectorAggSuite extends SparkFunSuite {
     agg.update(buffer, createNullInputRow())
     agg.update(buffer, createDoubleInputRowWithNullElement(Array(null, 10.0)))
     agg.update(buffer, createDoubleInputRow(Array(3.0, 4.0)))
-    assert(evalAsDoubleArray(agg, buffer) === Array(4.0, 6.0))
+    assertResult(Array(4.0, 6.0))(evalAsDoubleArray(agg, buffer))
   }
 
   test("VectorSum - double: empty vectors") {
     val (agg, buffer) = createDoubleVectorSum()
     agg.update(buffer, createDoubleInputRow(Array.empty[Double]))
     agg.update(buffer, createDoubleInputRow(Array.empty[Double]))
-    assert(evalAsDoubleArray(agg, buffer) === Array.empty[Double])
+    assertResult(Array.empty[Double])(evalAsDoubleArray(agg, buffer))
   }
 
   test("VectorSum - double: special values") {
@@ -651,8 +652,8 @@ class VectorAggSuite extends SparkFunSuite {
     agg.update(buffer, createDoubleInputRow(Array(Double.NaN, Double.NegativeInfinity, 1.0)))
     val result = evalAsDoubleArray(agg, buffer)
     assert(result(0).isNaN)
-    assert(result(1) === Double.NegativeInfinity)
-    assert(result(2) === Double.MaxValue)
+    assertResult(Double.NegativeInfinity)(result(1))
+    assertResult(Double.MaxValue)(result(2))
   }
 
   test("VectorSum - double: dimension mismatch") {
