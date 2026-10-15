@@ -251,8 +251,10 @@ class PipelinedShuffleRoutingSuite extends SparkFunSuite with LocalSparkContext 
     // channel manager) registers its shuffle with NEITHER tracker: SparkEnv creates no
     // StreamingShuffleOutputTracker, and createShuffleMapStage takes outputTrackerMaster's None
     // arm so the shuffle never enters the MapOutputTracker either -- its availability lives on
-    // the stage. This pins that routing (the relaxed successor to the old "fails loud when no
-    // tracker" invariant, which no longer holds now that a tracker-less manager is legitimate).
+    // the stage. This test pins the SparkEnv half of that routing (the relaxed successor to the
+    // old "fails loud when no tracker" invariant, which no longer holds now that a tracker-less
+    // manager is legitimate). It creates no stage; PipelinedChannelShuffleSuite runs such a
+    // shuffle through job submission and checks that the scheduler registers it with no tracker.
     val env = startEnv()
     val dep = pipelinedDep(sc)
     assert(env.shuffleManagerFor(dep).isInstanceOf[IncrementalRecordingManager],
