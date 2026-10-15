@@ -5821,6 +5821,118 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  test("opt-in scan grouping reduces tasks below a downstream shuffle") {
+    createTable(items, itemsColumns, Array(identity("id")))
+    val values = (1 to 2).flatMap { id =>
+      (1 to 24).map { split =>
+        s"($id, 'split$split', 1.0, cast('2020-01-01' as timestamp))"
+      }
+    }.mkString(", ")
+    sql(s"INSERT INTO testcat.ns.$items VALUES $values")
+
+    for (groupScan <- Seq(false, true); adaptive <- Seq(false, true)) {
+      withSQLConf(
+        SQLConf.V2_BUCKETING_GROUP_SCAN_PARTITIONS_ENABLED.key -> groupScan.toString,
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString) {
+        // Group by a non-partition column so the downstream shuffle is still required.
+        val df = sql(s"SELECT name, count(*), max(id) FROM testcat.ns.$items GROUP BY name")
+        checkAnswer(df, (1 to 24).map(split => Row(s"split$split", 2L, 2L)))
+        val plan = df.queryExecution.executedPlan
+        val scans = collectScans(plan)
+        assert(scans.size === 1)
+        assert(scans.head.inputRDD.partitions.length === 48)
+        assert(collect(plan) { case s: ShuffleExchangeExec => s }.nonEmpty)
+        val groups = collect(plan) { case g: GroupPartitionsExec => g }
+        assert(groups.size === (if (groupScan) 1 else 0))
+        val scanStage = if (groupScan) groups.head.execute() else scans.head.execute()
+        // Execute the scan stage itself: one count per task proves the coalesced RDD ran.
+        val rowsPerTask = scanStage.mapPartitions(rows => Iterator.single(rows.size)).collect()
+        assert(rowsPerTask.length === (if (groupScan) 2 else 48))
+        assert(rowsPerTask.sum === 48)
+        assert(rowsPerTask.forall(_ == (if (groupScan) 24 else 1)))
+      }
+    }
+  }
+
+  test("opt-in scan grouping keeps bucket splits grouped when a join needs a shuffle") {
+    createTable(items, itemsColumns, Array(identity("id")))
+    createTable(purchases, purchasesColumns, Array(years("time")))
+    val values = Seq(1, 4).flatMap { id =>
+      (1 to 24).map { split =>
+        s"($id, 'split$split', 1.0, cast('2020-01-01' as timestamp))"
+      }
+    }.mkString(", ")
+    sql(s"INSERT INTO testcat.ns.$items VALUES $values")
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      "(3, 19.5, cast('2020-02-01' as timestamp))")
+
+    for (groupScan <- Seq(false, true); bucketingShuffle <- Seq(false, true)) {
+      withSQLConf(
+        SQLConf.V2_BUCKETING_GROUP_SCAN_PARTITIONS_ENABLED.key -> groupScan.toString,
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> bucketingShuffle.toString,
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        val df = createJoinTestDF(Seq("id" -> "item_id"))
+        checkAnswer(df, (1 to 24).map(split => Row(1, s"split$split", 1.0, 42.0)))
+        val plan = df.queryExecution.executedPlan
+        assert(collectShuffles(plan).size === (if (bucketingShuffle) 1 else 2))
+        val groups = collect(plan) { case g: GroupPartitionsExec => g }
+        val scanGroups = groups.filter(_.preserveScanGrouping)
+        assert(scanGroups.size === (if (groupScan) 1 else 0))
+        if (!groupScan && !bucketingShuffle) {
+          assert(groups.isEmpty, "grouping is omitted when both join sides shuffle")
+        }
+        if (groupScan) {
+          val itemGrouping = scanGroups.find { g =>
+            collectScans(g).exists(_.table.name().endsWith(items))
+          }.get
+          val rowsPerTask = itemGrouping.execute()
+              .mapPartitions(rows => Iterator.single(rows.size)).collect()
+          assert(rowsPerTask.sorted.toSeq === Seq(24, 24))
+        }
+        assert(collectScans(plan).find(_.table.name().endsWith(items)).get
+          .inputRDD.partitions.length === 48)
+      }
+    }
+  }
+
+  test("opt-in scan grouping leaves unique and unpartitioned scans alone") {
+    createTable(items, itemsColumns, Array(identity("id")))
+    createTable(purchases, purchasesColumns, Array.empty)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 1.0, cast('2020-01-01' as timestamp)), " +
+      "(2, 'bb', 2.0, cast('2020-01-01' as timestamp))")
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(1, 1.0, cast('2020-01-01' as timestamp)), " +
+      "(1, 2.0, cast('2020-01-01' as timestamp))")
+
+    withSQLConf(SQLConf.V2_BUCKETING_GROUP_SCAN_PARTITIONS_ENABLED.key -> "true") {
+      Seq(items, purchases).foreach { table =>
+        val df = sql(s"SELECT * FROM testcat.ns.$table")
+        assert(df.collect().length === 2)
+        assert(collect(df.queryExecution.executedPlan) {
+          case g: GroupPartitionsExec => g
+        }.isEmpty)
+        assert(collectScans(df.queryExecution.executedPlan).head.inputRDD.partitions.length === 2)
+      }
+    }
+  }
+
+  test("opt-in scan grouping requires V2 bucketing") {
+    createTable(items, itemsColumns, Array(identity("id")))
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 1.0, cast('2020-01-01' as timestamp)), " +
+      "(1, 'bb', 2.0, cast('2020-01-01' as timestamp))")
+    withSQLConf(
+      SQLConf.V2_BUCKETING_GROUP_SCAN_PARTITIONS_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_ENABLED.key -> "false") {
+      val df = sql(s"SELECT * FROM testcat.ns.$items")
+      assert(df.collect().length === 2)
+      assert(collect(df.queryExecution.executedPlan) { case g: GroupPartitionsExec => g }.isEmpty)
+      assert(collectScans(df.queryExecution.executedPlan).head.inputRDD.partitions.length === 2)
+    }
+  }
+
   test("SPARK-55535: Multi table join granular partition grouping") {
     withSQLConf(
       SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",

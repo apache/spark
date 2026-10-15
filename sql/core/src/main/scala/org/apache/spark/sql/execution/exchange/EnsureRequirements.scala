@@ -1043,8 +1043,8 @@ case class EnsureRequirements(
    * A local sort that is peeled off is re-added by the ordering step at the end of
    * `ensureDistributionAndOrdering`, which is what put it there in the first place.
    *
-   * The two callers are `checkKeyGroupCompatible` and the shuffle step, both on the co-partitioned
-   * path, so every `GroupPartitionsExec` this reaches is one the rule put there itself. A
+   * Explicit scan grouping is retained: it sizes scan tasks even when a shuffle is needed.
+   * The remaining nodes on this path are groupings the rule put there itself. A
    * single-child operator genuinely needs its non-grouped input grouped and keeps the wrap
    * `resolveChild` gave it. `withJoinKeyPositions`, which other multi-child operators reach, does
    * not descend at all.
@@ -1054,7 +1054,8 @@ case class EnsureRequirements(
     // rule's to drop when it sits over one, otherwise it is the user's `sortWithinPartitions` and
     // peeling it would lose an ordering nothing puts back.
     def peel(p: SparkPlan): Option[SparkPlan] = p match {
-      case g: GroupPartitionsExec => Some(peel(g.child).getOrElse(g.child))
+      case g: GroupPartitionsExec if !g.preserveScanGrouping =>
+        Some(peel(g.child).getOrElse(g.child))
       case s: SortExec if !s.global => peel(s.child)
       case _ => None
     }
@@ -1073,7 +1074,8 @@ case class EnsureRequirements(
       // Only a plain grouping is rebuilt. An aligned one carries a merged key count, a reducer or
       // a replication, none of which this rebuild reproduces, so it is wrapped below instead.
       case g: GroupPartitionsExec
-          if g.expectedKeyCount.isEmpty && g.reducers.isEmpty && !g.distributePartitions =>
+          if !g.preserveScanGrouping && g.expectedKeyCount.isEmpty &&
+            g.reducers.isEmpty && !g.distributePartitions =>
         // Rebuilt rather than copied: the positions are an input to the node's grouping, and a
         // `copy` would keep the grouping derived from the old ones.
         //

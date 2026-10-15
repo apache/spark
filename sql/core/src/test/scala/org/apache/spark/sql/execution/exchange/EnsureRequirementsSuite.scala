@@ -1070,10 +1070,10 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         case SortMergeJoinExec(_, _, _, _,
             SortExec(_, _,
               GroupPartitionsExec(DummySparkPlan(_, _, left: KeyedPartitioning, _, _),
-                _, _, _, _, _, _, _, _), _),
+                _, _, _, _, _, _, _, _, false), _),
             SortExec(_, _,
               GroupPartitionsExec(DummySparkPlan(_, _, right: KeyedPartitioning, _, _),
-                _, _, _, _, _, _, _, _), _),
+                _, _, _, _, _, _, _, _, false), _),
             _) =>
           assert(left.expressions === Seq(bucket(4, exprB), bucket(8, exprC)))
           assert(right.expressions === Seq(bucket(4, exprC), bucket(8, exprB)))
@@ -1094,10 +1094,10 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         case SortMergeJoinExec(_, _, _, _,
             SortExec(_, _,
               GroupPartitionsExec(DummySparkPlan(_, _, left: PartitioningCollection, _, _),
-                _, _, _, _, _, _, _, _), _),
+                _, _, _, _, _, _, _, _, false), _),
             SortExec(_, _,
               GroupPartitionsExec(DummySparkPlan(_, _, right: KeyedPartitioning, _, _),
-                _, _, _, _, _, _, _, _), _),
+                _, _, _, _, _, _, _, _, false), _),
             _) =>
           assert(left.partitionings.length == 2)
           assert(left.partitionings.head.isInstanceOf[KeyedPartitioning])
@@ -1129,10 +1129,10 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         case SortMergeJoinExec(_, _, _, _,
             SortExec(_, _,
               GroupPartitionsExec(DummySparkPlan(_, _, left: PartitioningCollection, _, _),
-                _, _, _, _, _, _, _, _), _),
+                _, _, _, _, _, _, _, _, false), _),
             SortExec(_, _,
               GroupPartitionsExec(DummySparkPlan(_, _, right: PartitioningCollection, _, _),
-                _, _, _, _, _, _, _, _), _),
+                _, _, _, _, _, _, _, _, false), _),
             _) =>
           assert(left.partitionings.length == 2)
           assert(left.partitionings.head.isInstanceOf[KeyedPartitioning])
@@ -2447,6 +2447,25 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     val globalSort = SortExec(ordering, global = true, gpe)
     assert(EnsureRequirements.peelGroupPartitions(globalSort) === globalSort,
       "a GroupPartitionsExec below a global sort must never be peeled off")
+  }
+
+  test("explicit scan grouping survives peeling and join key projection") {
+    val leaf = DummySparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(exprA),
+        Seq(InternalRow(1), InternalRow(1), InternalRow(2))))
+    val scanGrouping = GroupPartitionsExec(leaf, preserveScanGrouping = true)
+    val localSort = SortExec(Seq(SortOrder(exprA, Ascending)), global = false, scanGrouping)
+
+    assert(scanGrouping.copy().preserveScanGrouping)
+    assert(scanGrouping.canonicalized.asInstanceOf[GroupPartitionsExec].preserveScanGrouping)
+    assert(EnsureRequirements.peelGroupPartitions(scanGrouping) === scanGrouping)
+    assert(EnsureRequirements.peelGroupPartitions(localSort) === localSort)
+    assert(EnsureRequirements.peelGroupPartitions(GroupPartitionsExec(localSort)) === localSort)
+    val projected = EnsureRequirements.withJoinKeyPositions(scanGrouping, Seq(0))
+      .asInstanceOf[GroupPartitionsExec]
+    assert(projected.child === scanGrouping,
+      "a join projection must retain the scan's explicitly requested grouping")
+    assert(EnsureRequirements.peelGroupPartitions(projected) === scanGrouping)
   }
 
   test("SPARK-58996: withJoinKeyPositions reuses only a topmost GroupPartitionsExec") {

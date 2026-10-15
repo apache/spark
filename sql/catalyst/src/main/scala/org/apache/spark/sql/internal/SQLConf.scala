@@ -2611,6 +2611,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val V2_BUCKETING_GROUP_SCAN_PARTITIONS_ENABLED =
+    buildConf("spark.sql.sources.v2.bucketing.groupScanPartitions.enabled")
+      .doc("When enabled, coalesce scan splits with the same reported partition key into one " +
+        "task, even when a downstream shuffle makes grouping unnecessary for correctness. " +
+        "This can reduce scheduling overhead for sources with many small splits per key, " +
+        "but can reduce parallelism for large or skewed keys. Requires " +
+        s"${V2_BUCKETING_ENABLED.key} to be enabled.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val V2_BUCKETING_PUSH_PART_VALUES_ENABLED =
     buildConf("spark.sql.sources.v2.bucketing.pushPartValues.enabled")
       .doc(s"Whether to pushdown common partition values when ${V2_BUCKETING_ENABLED.key} is " +

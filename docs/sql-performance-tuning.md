@@ -641,6 +641,19 @@ The following SQL properties enable Storage Partition Join in different join que
       <td>3.3.0</td>
     </tr>
     <tr>
+      <td><code>spark.sql.sources.v2.bucketing.groupScanPartitions.enabled</code></td>
+      <td>false</td>
+      <td>
+        When enabled, coalesce scan splits sharing a reported partition key into one task,
+        even when a downstream shuffle makes grouping unnecessary for correctness.
+        This can reduce scheduling overhead for sources with many small splits per key,
+        but can reduce parallelism for large or skewed keys. It applies when partition keys
+        survive scan column pruning and requires
+        <code>spark.sql.sources.v2.bucketing.enabled</code> to be true.
+      </td>
+      <td>4.4.0</td>
+    </tr>
+    <tr>
       <td><code>spark.sql.sources.v2.bucketing.pushPartValues.enabled</code></td>
       <td>true</td>
       <td>
