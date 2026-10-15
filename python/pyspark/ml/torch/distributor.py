@@ -459,9 +459,10 @@ class TorchDistributor(Distributor):
         sets SO_REUSEADDR, so TCPStore, which also sets SO_REUSEADDR, can still listen on
         the port while the socket keeps it reserved.
 
-        The reservation only blocks binds on the same address or the wildcard address, and
-        outgoing connections picking the port. A socket bound to another local address,
-        such as loopback, can still take the port.
+        The reservation only blocks binds that do not set SO_REUSEADDR on the same address
+        or the wildcard address, and outgoing connections picking the port. A socket that
+        sets SO_REUSEADDR, or one bound to another local address such as loopback, can
+        still take the port.
         """
         sock = socket.socket()
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)

@@ -309,7 +309,7 @@ class TorchDistributorBaselineUnitTestsMixin:
         sock = TorchDistributor._reserve_free_port("127.0.0.1")
         try:
             port = sock.getsockname()[1]
-            # Binds on the same address cannot take the reserved port.
+            # Plain binds on the same address cannot take the reserved port.
             other = socket.socket()
             try:
                 with self.assertRaises(OSError):
@@ -364,13 +364,21 @@ class TorchDistributorBaselineUnitTestsMixin:
                 ),
             ):
                 task_fn = dist._get_spark_task_function(None, MagicMock(), None, None)
+                gen = task_fn(iter([]))
+                # The reservation is released explicitly, while the generator or the
+                # exception still keeps the reserving socket alive.
                 if train_fn is train_check_reserved_and_raise:
                     with self.assertRaisesRegex(RuntimeError, "training failed"):
-                        list(task_fn(iter([])))
+                        try:
+                            next(gen)
+                        except RuntimeError:
+                            bind_master_port()
+                            raise
                 else:
-                    self.assertEqual(len(list(task_fn(iter([])))), 1)
-                # The reservation is released once the task function finishes.
-                bind_master_port()
+                    # Partition 0's output batch, yielded after the finally.
+                    next(gen)
+                    bind_master_port()
+                    self.assertEqual(list(gen), [])
 
     def test_create_torchrun_command(self) -> None:
         train_path = "train.py"
