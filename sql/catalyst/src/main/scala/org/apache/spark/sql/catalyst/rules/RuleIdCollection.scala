@@ -185,6 +185,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.ReplaceNullWithFalseInPredicate" ::
       "org.apache.spark.sql.catalyst.optimizer.RewriteAsOfJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.RewriteNearestByJoin" ::
+      "org.apache.spark.sql.catalyst.optimizer.RewriteSlidingFramesAsPrefixDifferences" ::
       "org.apache.spark.sql.catalyst.optimizer.RewriteExceptAll" ::
       "org.apache.spark.sql.catalyst.optimizer.RewriteIntersectAll" ::
       "org.apache.spark.sql.catalyst.optimizer.SimplifyBinaryComparison" ::
