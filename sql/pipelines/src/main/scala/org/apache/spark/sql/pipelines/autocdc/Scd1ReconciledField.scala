@@ -27,10 +27,11 @@ import org.apache.spark.sql.types.DataType
  * Callers decide authorship within a microbatch. The companion then builds version maps
  * independently of how the winning value was selected.
  *
- * Deletes and upserts can both author null, so a null value may be authored. An unauthored field,
- * whose sequence is null, must have a null value. Initializers are expected to respect this
- * relationship by construction to avoid the readers/dataclass paying a runtime cost to assert this
- * consistency, which can otherwise be expensive across all fields in all rows being reconciled.
+ * Deletes, tombstones, and upserts can all author null, so a null value may be authored. An
+ * unauthored field, whose sequence is null, must have a null value. Initializers are expected to
+ * respect this relationship by construction to avoid the readers/dataclass paying a runtime cost
+ * to assert this consistency, which can otherwise be expensive across all fields in all rows
+ * being reconciled.
  *
  * @param fieldToReconcile The field this reconciles.
  * @param reconciledValue The value selected for the field.

@@ -53,13 +53,19 @@ class Scd1LeafLevelReconciliationSuite extends QueryTest with SharedSparkSession
       input: DataFrame,
       sequencingType: DataType = LongType,
       keys: Seq[UnqualifiedColumnName] = Seq(UnqualifiedColumnName("id")),
+      auxiliaryTable: Option[DataFrame] = None,
       ignoreNullSelection: Option[ColumnSelection] =
-        Some(ColumnSelection.ExcludeColumns(Seq.empty))): DataFrame =
+        Some(ColumnSelection.ExcludeColumns(Seq.empty))): DataFrame = {
+    val emptyAuxiliaryTable = input.select(
+      (keys.map(key => F.col(key.quoted)) :+ F.col(metadataColName)): _*
+    ).limit(0)
     Scd1LeafLevelReconciliation.collapseMicrobatchRowsPerKey(
       changeArgs = changeArgs(ignoreNullSelection = ignoreNullSelection, keys = keys),
       resolvedSequencingType = sequencingType,
-      microbatchDf = input
+      microbatchDf = input,
+      auxiliaryTableDf = auxiliaryTable.getOrElse(emptyAuxiliaryTable)
     )
+  }
 
   private def metadataSchema: StructType =
     metadataSchema(LongType)
@@ -381,6 +387,9 @@ class Scd1LeafLevelReconciliationSuite extends QueryTest with SharedSparkSession
       .add("profile", profileType)
       .add("nickname", StringType)
       .add(metadataColName, metadataSchema)
+    val auxiliarySchema = new StructType()
+      .add("id", IntegerType)
+      .add(metadataColName, metadataSchema)
     val city = encodedPath("profile", "location", "city")
     val zip = encodedPath("profile", "location", "zip")
     val name = encodedPath("profile", "name")
@@ -399,11 +408,17 @@ class Scd1LeafLevelReconciliationSuite extends QueryTest with SharedSparkSession
       // An upsert after a delete authors the whole profile, but not its null nickname.
       Row(4, Row(Row("SF", null), "Ada"), null, Row(null, 1L, versionMap(1L, null))),
       Row(4, null, null, Row(2L, null, null)),
-      Row(4, Row(null, null), null, Row(null, 3L, versionMap(3L, null)))
+      Row(4, Row(null, null), null, Row(null, 3L, versionMap(3L, null))),
+      // A tombstone at 5 authors the nickname last authored before it, but never the profile,
+      // which the key's winning upsert always authors.
+      Row(5, Row(Row("LA", null), null), "Cy", Row(null, 4L, versionMap(4L, 4L))),
+      Row(5, Row(Row("NY", null), null), null, Row(null, 6L, versionMap(6L, null)))
     )
+    val auxiliary = dataFrameOf(auxiliarySchema)(Row(5, Row(5L, null, null)))
 
     val result = collapseMicrobatchRowsPerKey(
       input,
+      auxiliaryTable = Some(auxiliary),
       ignoreNullSelection =
         Some(ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("nickname")))))
 
@@ -413,7 +428,8 @@ class Scd1LeafLevelReconciliationSuite extends QueryTest with SharedSparkSession
         Row(1, Row(Row(null, null), null), "Al", Row(null, 1L, versionMap(1L, 1L))),
         Row(2, null, "Bo", Row(null, 2L, versionMap(2L, 1L))),
         Row(3, Row(Row(null, "94107"), null), null, Row(null, 2L, versionMap(2L, null))),
-        Row(4, Row(null, null), null, Row(null, 3L, versionMap(3L, 2L))))
+        Row(4, Row(null, null), null, Row(null, 3L, versionMap(3L, 2L))),
+        Row(5, Row(Row("NY", null), null), null, Row(null, 6L, versionMap(6L, 5L))))
     )
   }
 
@@ -548,6 +564,42 @@ class Scd1LeafLevelReconciliationSuite extends QueryTest with SharedSparkSession
     checkAnswer(result, Row(1, "second", Row(null, secondSequence, Map(value -> secondSequence))))
   }
 
+  test("collapseMicrobatchRowsPerKey applies composite-sequence tombstones to older leaves") {
+    val sequencingType = new StructType()
+      .add("timestamp", LongType, nullable = false)
+      .add("tieBreaker", IntegerType, nullable = false)
+    val schema = new StructType()
+      .add("id", IntegerType)
+      .add("left", StringType)
+      .add("right", StringType)
+      .add(metadataColName, metadataSchema(sequencingType))
+    val auxiliarySchema = new StructType()
+      .add("id", IntegerType)
+      .add(metadataColName, metadataSchema(sequencingType))
+    val left = encodedPath("left")
+    val right = encodedPath("right")
+    val firstSequence = Row(10L, 1)
+    val tombstoneSequence = Row(10L, 2)
+    val secondSequence = Row(10L, 3)
+    val input = dataFrameOf(schema)(
+      Row(1, "left", null,
+        Row(null, firstSequence, Map[String, Any](left -> firstSequence, right -> null))),
+      Row(1, null, "right",
+        Row(null, secondSequence, Map[String, Any](left -> null, right -> secondSequence)))
+    )
+    val auxiliary = dataFrameOf(auxiliarySchema)(
+      Row(1, Row(tombstoneSequence, null, null)))
+
+    val result = collapseMicrobatchRowsPerKey(
+      input, sequencingType = sequencingType, auxiliaryTable = Some(auxiliary))
+
+    val expectedVersionMap = Map(left -> tombstoneSequence, right -> secondSequence)
+    checkAnswer(
+      result,
+      Row(1, null, "right", Row(null, secondSequence, expectedVersionMap))
+    )
+  }
+
   test("collapseMicrobatchRowsPerKey uses the session resolver to identify key columns") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       val schema = new StructType()
@@ -606,5 +658,229 @@ class Scd1LeafLevelReconciliationSuite extends QueryTest with SharedSparkSession
 
     assert(result.schema.fieldNames.sameElements(schema.fieldNames))
     assert(result.isEmpty)
+  }
+
+  test("collapseMicrobatchRowsPerKey drops upserts older than tombstones and keeps ties, newer " +
+    "upserts, and unmatched keys") {
+    val schema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType)
+      .add(metadataColName, metadataSchema)
+    val auxiliarySchema = new StructType()
+      .add("id", IntegerType)
+      .add(metadataColName, metadataSchema)
+    val value = encodedPath("value")
+    val input = dataFrameOf(schema)(
+      Row(1, "stale", Row(null, 4L, Map(value -> 4L))),
+      Row(2, "tie", Row(null, 5L, Map(value -> 5L))),
+      Row(3, "unchanged", Row(null, 3L, Map(value -> 3L))),
+      Row(4, "newer", Row(null, 6L, Map(value -> 6L)))
+    )
+    val auxiliary = dataFrameOf(auxiliarySchema)(
+      Row(1, Row(5L, null, null)),
+      Row(2, Row(5L, null, null)),
+      Row(4, Row(5L, null, null))
+    )
+
+    val result = collapseMicrobatchRowsPerKey(input, auxiliaryTable = Some(auxiliary))
+
+    checkAnswer(
+      result.orderBy(F.col("id")),
+      Seq(
+        Row(2, "tie", Row(null, 5L, Map(value -> 5L))),
+        Row(3, "unchanged", Row(null, 3L, Map(value -> 3L))),
+        Row(4, "newer", Row(null, 6L, Map(value -> 6L)))
+      )
+    )
+  }
+
+  test("collapseMicrobatchRowsPerKey keeps net deletes after tombstones and drops keys whose " +
+    "events are all older") {
+    val schema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType)
+      .add(metadataColName, metadataSchema)
+    val auxiliarySchema = new StructType()
+      .add("id", IntegerType)
+      .add(metadataColName, metadataSchema)
+    val value = encodedPath("value")
+    val input = dataFrameOf(schema)(
+      Row(1, "newer delete", Row(6L, null, null)),
+      Row(2, "older upsert", Row(null, 3L, Map(value -> 3L))),
+      Row(2, "older delete", Row(4L, null, null))
+    )
+    val auxiliary = dataFrameOf(auxiliarySchema)(
+      Row(1, Row(5L, null, null)),
+      Row(2, Row(5L, null, null))
+    )
+
+    val result = collapseMicrobatchRowsPerKey(input, auxiliaryTable = Some(auxiliary))
+
+    checkAnswer(result, Row(1, "newer delete", Row(6L, null, null)))
+  }
+
+  test("collapseMicrobatchRowsPerKey lets a microbatch delete win against a persisted " +
+    "tombstone") {
+    val schema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType)
+      .add(metadataColName, metadataSchema)
+    val auxiliarySchema = new StructType()
+      .add("id", IntegerType)
+      .add(metadataColName, metadataSchema)
+    val value = encodedPath("value")
+    val input = dataFrameOf(schema)(
+      Row(1, null, Row(6L, null, null)),
+      Row(1, null, Row(null, 7L, Map(value -> null)))
+    )
+    val auxiliary = dataFrameOf(auxiliarySchema)(Row(1, Row(5L, null, null)))
+
+    val result = collapseMicrobatchRowsPerKey(input, auxiliaryTable = Some(auxiliary))
+
+    checkAnswer(result, Row(1, null, Row(null, 7L, Map(value -> 6L))))
+  }
+
+  test("collapseMicrobatchRowsPerKey matches row-level tombstone filtering when ignore-null is " +
+    "disabled") {
+    val schema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType)
+      .add(metadataColName, metadataSchema)
+    val auxiliarySchema = new StructType()
+      .add("id", IntegerType)
+      .add(metadataColName, metadataSchema)
+    val input = dataFrameOf(schema)(
+      Row(1, "stale", Row(null, 4L, null)),
+      Row(2, "tie", Row(null, 5L, null)),
+      Row(3, "newer delete", Row(6L, null, null)),
+      Row(4, "no tombstone", Row(null, 1L, null))
+    )
+    val auxiliary = dataFrameOf(auxiliarySchema)(
+      Row(1, Row(5L, null, null)),
+      Row(2, Row(5L, null, null)),
+      Row(3, Row(5L, null, null))
+    )
+
+    val rowLevelResult = Scd1RowLevelReconciliation.applyTombstonesToMicrobatch(
+      changeArgs = changeArgs(ignoreNullSelection = None),
+      microbatchDf = input,
+      auxiliaryTableDf = auxiliary
+    )
+    val leafLevelResult = collapseMicrobatchRowsPerKey(
+      input,
+      auxiliaryTable = Some(auxiliary),
+      ignoreNullSelection = None
+    )
+
+    checkAnswer(
+      leafLevelResult.select("id", "value"),
+      rowLevelResult.select("id", "value").collect().toSeq
+    )
+  }
+
+  test("collapseMicrobatchRowsPerKey matches composite and quoted tombstone keys") {
+    val keys = Seq(UnqualifiedColumnName("region"), UnqualifiedColumnName("`user.id`"))
+    val schema = new StructType()
+      .add("region", StringType)
+      .add("user.id", IntegerType)
+      .add("value", StringType)
+      .add(metadataColName, metadataSchema)
+    val auxiliarySchema = new StructType()
+      .add("region", StringType)
+      .add("user.id", IntegerType)
+      .add(metadataColName, metadataSchema)
+    val value = encodedPath("value")
+    val input = dataFrameOf(schema)(
+      Row("US", 1, "stale", Row(null, 4L, Map(value -> 4L))),
+      Row("US", 2, "newer", Row(null, 6L, Map(value -> 6L)))
+    )
+    val auxiliary = dataFrameOf(auxiliarySchema)(
+      Row("US", 1, Row(5L, null, null)),
+      Row("US", 2, Row(5L, null, null))
+    )
+
+    val result = collapseMicrobatchRowsPerKey(
+      input, keys = keys, auxiliaryTable = Some(auxiliary))
+
+    checkAnswer(result, Row("US", 2, "newer", Row(null, 6L, Map(value -> 6L))))
+  }
+
+  test("collapseMicrobatchRowsPerKey sets leaves not written after a tombstone to null at its " +
+    "sequence") {
+    val schema = new StructType()
+      .add("id", IntegerType)
+      .add("before", StringType)
+      .add("after", StringType)
+      .add("neverAuthored", StringType)
+      .add(metadataColName, metadataSchema)
+    val auxiliarySchema = new StructType()
+      .add("id", IntegerType)
+      .add(metadataColName, metadataSchema)
+    val before = encodedPath("before")
+    val after = encodedPath("after")
+    val neverAuthored = encodedPath("neverAuthored")
+    val input = dataFrameOf(schema)(
+      Row(1, null, null, null, Row(4L, null, null)),
+      Row(
+        1, null, "after", null,
+        Row(null, 6L, Map(before -> null, after -> 6L, neverAuthored -> null)))
+    )
+    val auxiliary = dataFrameOf(auxiliarySchema)(Row(1, Row(5L, null, null)))
+
+    val result = collapseMicrobatchRowsPerKey(input, auxiliaryTable = Some(auxiliary))
+
+    checkAnswer(
+      result,
+      Row(
+        1, null, "after", null,
+        Row(null, 6L, Map(before -> 5L, after -> 6L, neverAuthored -> 5L)))
+    )
+  }
+
+  test("collapseMicrobatchRowsPerKey applies tombstones to all leaf types") {
+    val profileType = new StructType()
+      .add("city", StringType)
+      .add("zip", StringType)
+    val schema = new StructType()
+      .add("id", IntegerType)
+      .add("profile", profileType)
+      .add("profile.city", StringType)
+      .add("tags", ArrayType(StringType))
+      .add(metadataColName, metadataSchema)
+    val auxiliarySchema = new StructType()
+      .add("id", IntegerType)
+      .add(metadataColName, metadataSchema)
+    val city = encodedPath("profile", "city")
+    val zip = encodedPath("profile", "zip")
+    val dottedCity = encodedPath("profile.city")
+    val tags = encodedPath("tags")
+    val input = dataFrameOf(schema)(
+      Row(
+        1, Row("old city", null), "old dotted city", null,
+        Row(null, 4L, Map(city -> 4L, zip -> null, dottedCity -> 4L, tags -> null))),
+      Row(
+        1, Row(null, "new zip"), null, Seq("new tag"),
+        Row(null, 6L, Map(city -> null, zip -> 6L, dottedCity -> null, tags -> 6L))),
+      Row(
+        2, null, null, null,
+        Row(null, 6L, Map(city -> null, zip -> null, dottedCity -> null, tags -> null)))
+    )
+    val auxiliary = dataFrameOf(auxiliarySchema)(
+      Row(1, Row(5L, null, null)),
+      Row(2, Row(5L, null, null))
+    )
+
+    val result = collapseMicrobatchRowsPerKey(input, auxiliaryTable = Some(auxiliary))
+    val tombstoneOnlyMap = Map(city -> 5L, zip -> 5L, dottedCity -> 5L, tags -> 5L)
+
+    checkAnswer(
+      result.orderBy(F.col("id")),
+      Seq(
+        Row(
+          1, Row(null, "new zip"), null, Seq("new tag"),
+          Row(null, 6L, Map(city -> 5L, zip -> 6L, dottedCity -> 5L, tags -> 6L))),
+        Row(2, Row(null, null), null, null, Row(null, 6L, tombstoneOnlyMap))
+      )
+    )
   }
 }
