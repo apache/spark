@@ -108,53 +108,54 @@ The following results compare the generic `BidK` path with `BigDecimal` under
 a `MathContext` of 43 digits (Decimal160) and 70 digits (Decimal256). Values
 are nanoseconds per operation. The ratio is `BigDecimal / BID`, so a value
 greater than 1 means BID was faster. Decimal160 add/mul/FMA/compare use the
-unrolled 3-limb `Wide6` kernel; Decimal160 div/sqrt and all Decimal256
-arithmetic use Knuth limbs. Combo-field unpack/pack uses Bid64-style masks on
-the last packed word (sign, NaN/Inf, Form1/Form2, exponent). In-range results
-that already fit in `p` digits skip `decimalDigits`. Parse is still `DecNum`.
+unrolled 3-limb `Wide6` kernel; Decimal256 add/mul/FMA/compare use the
+unrolled 4-limb `Wide8` kernel. Div/sqrt still use Knuth limbs. Combo-field
+unpack/pack uses Bid64-style masks on the last packed word. In-range results
+that already fit in `p` digits skip `decimalDigits`. Compare aligns by
+exponent instead of counting digits. Parse is still `DecNum`.
 These numbers are not comparable to the specialized 64/128 table above.
 
 Object `BidK` API (each call allocates a result encoding):
 
 | Function / workload | BID160 | BD160 | Ratio | BID256 | BD256 | Ratio |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| add (same quantum) | 39.14 | 21.33 | 0.55x | 154.89 | 24.86 | 0.16x |
-| add (mixed quantum) | 183.42 | 115.39 | 0.63x | 688.76 | 165.56 | 0.24x |
-| add (full precision) | 164.30 | 149.23 | 0.91x | 825.98 | 252.59 | 0.31x |
-| subtract | 49.89 | 31.69 | 0.64x | 184.20 | 35.51 | 0.19x |
-| multiply (same quantum) | 291.30 | 215.13 | 0.74x | 1365.06 | 348.80 | 0.26x |
-| multiply (mixed quantum) | 106.90 | 85.75 | 0.80x | 456.62 | 139.40 | 0.31x |
-| multiply (full precision) | 347.61 | 243.63 | 0.70x | 1499.01 | 368.73 | 0.25x |
-| divide (same quantum) | 490.79 | 205.97 | 0.42x | 952.76 | 338.25 | 0.36x |
-| divide (mixed quantum) | 521.29 | 235.69 | 0.45x | 954.51 | 345.25 | 0.36x |
-| divide (full precision) | 505.03 | 233.66 | 0.46x | 932.44 | 353.55 | 0.38x |
-| square root | 4095.69 | 3096.38 | 0.76x | 6506.81 | 5662.26 | 0.87x |
-| fused multiply-add | 474.28 | 292.61 | 0.62x | 1797.55 | 427.02 | 0.24x |
-| ordered less-than | 40.83 | 9.06 | 0.22x | 130.82 | 9.13 | 0.07x |
-| cohort-equal numeric comparison | 43.95 | 8.71 | 0.20x | 131.18 | 9.03 | 0.07x |
+| add (same quantum) | 38.12 | 22.82 | 0.60x | 43.26 | 25.42 | 0.59x |
+| add (mixed quantum) | 182.72 | 119.35 | 0.65x | 328.33 | 167.52 | 0.51x |
+| add (full precision) | 174.13 | 148.05 | 0.85x | 352.04 | 253.85 | 0.72x |
+| subtract | 45.59 | 35.19 | 0.77x | 42.35 | 37.05 | 0.87x |
+| multiply (same quantum) | 292.18 | 218.14 | 0.75x | 776.20 | 353.26 | 0.46x |
+| multiply (mixed quantum) | 113.28 | 90.40 | 0.80x | 227.09 | 140.95 | 0.62x |
+| multiply (full precision) | 348.38 | 246.63 | 0.71x | 850.47 | 375.09 | 0.44x |
+| divide (same quantum) | 488.51 | 207.81 | 0.43x | 772.19 | 344.30 | 0.45x |
+| divide (mixed quantum) | 518.46 | 237.90 | 0.46x | 789.37 | 349.71 | 0.44x |
+| divide (full precision) | 513.85 | 243.13 | 0.47x | 783.69 | 367.91 | 0.47x |
+| square root | 4078.90 | 3116.92 | 0.76x | 6522.58 | 5726.84 | 0.88x |
+| fused multiply-add | 473.03 | 297.70 | 0.63x | 1114.50 | 441.78 | 0.40x |
+| ordered less-than | 28.90 | 9.24 | 0.32x | 32.13 | 9.49 | 0.30x |
+| cohort-equal numeric comparison | 31.97 | 8.99 | 0.28x | 31.62 | 9.24 | 0.29x |
 
 `BidKRaw` into a reused `out[]` (the Spark SQL shape; no `BidK` wrapper):
 
 | Function / workload | BID160 | BD160 | Ratio | BID256 | BD256 | Ratio |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| add (same quantum) | 41.45 | 25.05 | 0.60x | 158.40 | 27.57 | 0.17x |
-| add (mixed quantum) | 179.04 | 120.73 | 0.67x | 652.93 | 169.74 | 0.26x |
-| add (full precision) | 157.94 | 150.49 | 0.95x | 793.92 | 254.24 | 0.32x |
-| subtract | 47.52 | 32.17 | 0.68x | 165.21 | 37.31 | 0.23x |
-| multiply (same quantum) | 286.94 | 215.88 | 0.75x | 1333.28 | 351.52 | 0.26x |
-| multiply (mixed quantum) | 103.95 | 86.57 | 0.83x | 432.81 | 140.33 | 0.32x |
-| multiply (full precision) | 342.07 | 242.33 | 0.71x | 1465.88 | 368.21 | 0.25x |
-| divide (same quantum) | 490.60 | 201.58 | 0.41x | 931.81 | 339.27 | 0.36x |
-| divide (mixed quantum) | 515.61 | 236.59 | 0.46x | 947.96 | 345.59 | 0.36x |
-| divide (full precision) | 501.79 | 236.11 | 0.47x | 927.79 | 354.49 | 0.38x |
-| square root | 4121.60 | 3119.16 | 0.76x | 6506.57 | 5668.65 | 0.87x |
-| fused multiply-add | 466.93 | 291.84 | 0.63x | 1790.20 | 427.79 | 0.24x |
-| ordered less-than | 38.52 | 9.19 | 0.24x | 124.89 | 9.53 | 0.08x |
-| cohort-equal numeric comparison | 38.63 | 8.86 | 0.23x | 125.14 | 9.20 | 0.07x |
+| add (same quantum) | 41.27 | 24.29 | 0.59x | 39.63 | 29.59 | 0.75x |
+| add (mixed quantum) | 178.18 | 123.98 | 0.70x | 323.34 | 174.98 | 0.54x |
+| add (full precision) | 161.70 | 150.77 | 0.93x | 349.92 | 252.30 | 0.72x |
+| subtract | 43.54 | 33.54 | 0.77x | 40.58 | 38.32 | 0.94x |
+| multiply (same quantum) | 288.30 | 221.22 | 0.77x | 770.51 | 356.89 | 0.46x |
+| multiply (mixed quantum) | 106.95 | 88.35 | 0.83x | 218.96 | 141.57 | 0.65x |
+| multiply (full precision) | 343.59 | 247.68 | 0.72x | 840.70 | 375.31 | 0.45x |
+| divide (same quantum) | 492.75 | 205.58 | 0.42x | 767.70 | 345.49 | 0.45x |
+| divide (mixed quantum) | 515.85 | 237.50 | 0.46x | 781.50 | 349.60 | 0.45x |
+| divide (full precision) | 508.75 | 238.88 | 0.47x | 769.27 | 362.68 | 0.47x |
+| square root | 4086.68 | 3126.48 | 0.77x | 6521.70 | 5740.30 | 0.88x |
+| fused multiply-add | 466.81 | 298.05 | 0.64x | 1104.04 | 445.61 | 0.40x |
+| ordered less-than | 28.74 | 9.21 | 0.32x | 28.51 | 9.49 | 0.33x |
+| cohort-equal numeric comparison | 29.17 | 9.24 | 0.32x | 28.46 | 9.42 | 0.33x |
 
-Decimal160 full-precision add is now within ~10% of `BigDecimal`. Same-quantum
-add is still ~1.8x slower (IEEE unpack/pack vs a `BigInteger` add). Decimal256
-stays Knuth-limb bound.
+Decimal256 same-quantum add dropped to the same band as Decimal160 (~40 ns).
+Raw Decimal256 subtract is within ~6% of `BigDecimal`. Compare improved but
+is still ~3x `BigDecimal` (unpack plus a limb compare vs a compact int[]).
 
 `fmod`, integral power, round-to-integral, and scale-by-power-of-ten are
 omitted because `BidK` does not implement those kernels yet.
