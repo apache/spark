@@ -21,6 +21,7 @@ import org.apache.spark.sql.{functions => F, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.classic.DataFrame
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -172,6 +173,30 @@ class Scd1VersionMapSuite extends QueryTest with SharedSparkSession {
 
     assert(result.schema("versionMap").dataType == Scd1VersionMap.mapType(LongType))
     checkAnswer(result, Row(Map.empty[String, Long]))
+  }
+
+  test("buildVersionMap produces a typed empty map without leaves under legacy collection types") {
+    val sequencingType = new StructType()
+      .add("timestamp", LongType)
+      .add("tieBreaker", IntegerType)
+    val userDataSchema = new StructType().add("empty", new StructType())
+    val inputSchema = StructType(userDataSchema.fields :+ StructField("seq", sequencingType))
+    val input = dataFrameOf(inputSchema)(Row(Row(), Row(10L, 1)))
+
+    withSQLConf(SQLConf.LEGACY_CREATE_EMPTY_COLLECTION_USING_STRING_TYPE.key -> "true") {
+      val result = input.select(
+        Scd1VersionMap.buildVersionMap(
+          schema = userDataSchema,
+          ignoreNullSelection = ColumnSelection.ExcludeColumns(Seq.empty),
+          upsertSequence = F.col("seq"),
+          sequencingType = sequencingType,
+          resolver = caseSensitiveResolution
+        ).as("versionMap")
+      )
+
+      assert(result.schema("versionMap").dataType == Scd1VersionMap.mapType(sequencingType))
+      checkAnswer(result, Row(Map.empty[String, Row]))
+    }
   }
 
   // Version-map keys are persisted in target tables, so their format must not change.
