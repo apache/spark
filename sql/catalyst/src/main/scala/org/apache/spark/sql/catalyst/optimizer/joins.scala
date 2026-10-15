@@ -729,6 +729,10 @@ private[optimizer] object RuntimeFilterSourceAnalysis {
 
   /** Returns the taint of `plan`'s output, or the reason its row set is not repeatable. */
   private def analyze(plan: LogicalPlan): Either[String, Taint] = plan match {
+    // Whether a materialized leaf returns the same rows is known only once it is materialized.
+    case m: MaterializedLeafNode if m.materializedMetadata.isEmpty =>
+      Left(s"the hinted side reads ${m.nodeName}, which is not materialized yet")
+
     case l: LeafNode =>
       if (l.isOutputRepeatable) {
         Right(Taint(AttributeSet.empty))
