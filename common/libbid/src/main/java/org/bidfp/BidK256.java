@@ -162,8 +162,18 @@ final class BidK256 {
       StatusFlags flags,
       long[] out,
       BidKScratch.Frame frame) {
-    // 10^(2*(p+4)) * coeff exceeds 512 bits. Use Knuth workspace.
-    BidKKnuth.sqrt(format, exp, coeff, mode, flags, out, frame);
+    frame.za.copyFrom(coeff);
+    int extra = format.precision() + 4;
+    if ((exp & 1) != 0) {
+      frame.za.multiplySmall(10L);
+      exp--;
+    }
+    frame.za.multiplyPow10(2 * extra);
+    exp -= 2 * extra;
+    boolean remSticky = Wide12.sqrtFloor(
+        frame.za, frame.zb, frame.zr, frame.zt, frame.zw);
+    frame.yr.copyFrom(frame.zb);
+    pack(format, false, exp / 2, frame.yr, remSticky, mode, flags, frame, out);
   }
 
   static void fma(

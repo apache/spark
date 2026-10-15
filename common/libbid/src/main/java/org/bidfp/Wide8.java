@@ -60,6 +60,21 @@ final class Wide8 {
     extra = 0L;
   }
 
+  void copyFrom(Wide12 other) {
+    if (other.highWord() != 0L) {
+      throw new ArithmeticException("Wide12 value exceeds Wide8");
+    }
+    l0 = other.limb(0);
+    l1 = other.limb(1);
+    l2 = other.limb(2);
+    l3 = other.limb(3);
+    l4 = other.limb(4);
+    l5 = other.limb(5);
+    l6 = other.limb(6);
+    l7 = other.limb(7);
+    extra = 0L;
+  }
+
   void copyFrom(UIntLimbs coeff) {
     l0 = coeff.limb(0);
     l1 = coeff.limb(1);
@@ -416,6 +431,51 @@ final class Wide8 {
       setLimb(j, qhat);
     }
     u.shiftRightBits(s);
+  }
+
+  void setBit(int index) {
+    if (index < 0 || index >= 512) {
+      throw new IllegalArgumentException("bit index out of range");
+    }
+    int word = index >>> 6;
+    setLimb(word, limb(word) | (1L << (index & 63)));
+  }
+
+  void shiftRightOne() {
+    l0 = (l0 >>> 1) | (l1 << 63);
+    l1 = (l1 >>> 1) | (l2 << 63);
+    l2 = (l2 >>> 1) | (l3 << 63);
+    l3 = (l3 >>> 1) | (l4 << 63);
+    l4 = (l4 >>> 1) | (l5 << 63);
+    l5 = (l5 >>> 1) | (l6 << 63);
+    l6 = (l6 >>> 1) | (l7 << 63);
+    l7 >>>= 1;
+  }
+
+  /**
+   * Heron iteration: {@code guess} becomes {@code floor(sqrt(n))}. {@code n}
+   * is unchanged. Returns whether {@code n - guess^2} is nonzero.
+   */
+  static boolean sqrtFloor(Wide8 n, Wide8 guess, Wide8 quot, Wide8 tmp, Wide8 vn) {
+    if (n.isZero()) {
+      guess.clear();
+      return false;
+    }
+    int rootBits = (n.bitLength() + 1) >>> 1;
+    guess.clear();
+    guess.setBit(rootBits);
+    while (true) {
+      tmp.copyFrom(n);
+      quot.divide(tmp, guess, vn);
+      vn.add(quot, guess);
+      vn.shiftRightOne();
+      if (vn.compare(guess) >= 0) {
+        tmp.multiply4(guess, guess);
+        vn.subtract(n, tmp);
+        return !vn.isZero();
+      }
+      guess.copyFrom(vn);
+    }
   }
 
   void store(long[] dest) {

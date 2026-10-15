@@ -162,8 +162,18 @@ final class BidK160 {
       StatusFlags flags,
       long[] out,
       BidKScratch.Frame frame) {
-    // 10^(2*(p+4)) * coeff is ~455 bits; Wide6 is 384. Use Knuth workspace.
-    BidKKnuth.sqrt(format, exp, coeff, mode, flags, out, frame);
+    frame.ya.copyFrom(coeff);
+    int extra = format.precision() + 4;
+    if ((exp & 1) != 0) {
+      frame.ya.multiplySmall(10L);
+      exp--;
+    }
+    frame.ya.multiplyPow10(2 * extra);
+    exp -= 2 * extra;
+    boolean remSticky = Wide8.sqrtFloor(
+        frame.ya, frame.yb, frame.yr, frame.yt, frame.yw);
+    frame.xa.copyFrom(frame.yb);
+    pack(format, false, exp / 2, frame.xa, remSticky, mode, flags, frame, out);
   }
 
   static void fma(

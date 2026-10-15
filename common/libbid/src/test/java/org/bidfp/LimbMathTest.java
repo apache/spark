@@ -55,6 +55,7 @@ public final class LimbMathTest {
     threeLimbKnown();
     wide6Multiply();
     wideDivide();
+    wideSqrt();
     for (int n = 0; n < 200; n++) {
       int wa = 1 + rng.nextInt(3);
       int wb = 1 + rng.nextInt(3);
@@ -221,6 +222,63 @@ public final class LimbMathTest {
   }
 
   private static long[] store(Wide8 src, long[] buf) {
+    src.store(buf);
+    return buf;
+  }
+
+  private static void wideSqrt() {
+    Random rng = new Random(0x7371_7274L);
+    long[] buf = new long[LimbMath.WORK];
+    Wide8 n8 = new Wide8();
+    Wide8 g8 = new Wide8();
+    Wide8 q8 = new Wide8();
+    Wide8 t8 = new Wide8();
+    Wide8 v8 = new Wide8();
+    Wide12 n12 = new Wide12();
+    Wide12 g12 = new Wide12();
+    Wide12 q12 = new Wide12();
+    Wide12 t12 = new Wide12();
+    Wide12 v12 = new Wide12();
+    long[] known = {0L, 1L, 3L, 81L, 10_000L, Long.MAX_VALUE};
+    for (long v : known) {
+      n8.clear();
+      n8.l0 = v;
+      Wide8.sqrtFloor(n8, g8, q8, t8, v8);
+      BigInteger bn = unsigned(v);
+      BigInteger br = bn.sqrt();
+      expectEq(store(g8, buf), br, "wide8 sqrt " + v);
+    }
+    for (int n = 0; n < 80; n++) {
+      fillWide8(n8, 1 + rng.nextInt(6), rng);
+      BigInteger bn = toBig(store(n8, buf));
+      boolean sticky = Wide8.sqrtFloor(n8, g8, q8, t8, v8);
+      BigInteger br = bn.sqrt();
+      expectEq(store(g8, buf), br, "wide8 sqrt q");
+      BigInteger rem = bn.subtract(br.multiply(br));
+      if (sticky != (rem.signum() != 0)) {
+        throw new IllegalStateException("wide8 sqrt sticky");
+      }
+      fillWide12(n12, 1 + rng.nextInt(10), rng);
+      bn = toBig(store(n12, buf));
+      sticky = Wide12.sqrtFloor(n12, g12, q12, t12, v12);
+      br = bn.sqrt();
+      expectEq(store(n12, buf), bn, "wide12 n kept");
+      expectEq(store(g12, buf), br, "wide12 sqrt q");
+      rem = bn.subtract(br.multiply(br));
+      if (sticky != (rem.signum() != 0)) {
+        throw new IllegalStateException("wide12 sqrt sticky");
+      }
+    }
+  }
+
+  private static void fillWide12(Wide12 dest, int words, Random rng) {
+    dest.clear();
+    for (int i = 0; i < words; i++) {
+      dest.setLimb(i, rng.nextLong());
+    }
+  }
+
+  private static long[] store(Wide12 src, long[] buf) {
     src.store(buf);
     return buf;
   }
