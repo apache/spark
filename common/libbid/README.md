@@ -119,6 +119,36 @@ Compare aligns by exponent instead of counting digits. Parse is still
 unbiased exponent, four limbs) and pack only at I/O.
 These numbers are not comparable to the specialized 64/128 table above.
 
+`BidK` `k=2` and `k=4` dispatch to those specialists. `k=3` and `k=5` use
+Wide6. `k=8` uses Wide8. `k=6` and `k=7` use Knuth. Libm is Bid128 DPML for
+`k<=4` and unsupported for `k>4`.
+
+The table below is `BidKRaw` vs naked `BigDecimal` (`MathContext` precision
+`p=9k-2`, `HALF_EVEN`), profile `quick`, 15 Oct 2026. Ratio is
+`BigDecimal / BID` (greater than 1 means BID is faster). Units are IEEE k
+(Decimal64 is `k=2`).
+
+| Function / workload | k=2 | k=3 | k=4 | k=5 | k=6 | k=7 | k=8 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| add (same quantum) | 2.26x | 0.55x | 1.59x | 0.70x | 0.28x | 0.31x | 0.93x |
+| add (mixed quantum) | 2.29x | 0.70x | 0.95x | 0.64x | 0.24x | 0.25x | 0.56x |
+| add (full precision) | 2.68x | 0.98x | 1.33x | 0.90x | 0.30x | 0.32x | 0.74x |
+| subtract | 2.30x | 0.92x | 1.95x | 0.94x | 0.39x | 0.42x | 1.05x |
+| multiply (same quantum) | 1.13x | 0.65x | 2.07x | 0.74x | 0.26x | 0.27x | 0.47x |
+| multiply (mixed quantum) | 0.86x | 0.60x | 1.62x | 0.76x | 0.30x | 0.34x | 0.63x |
+| multiply (full precision) | 1.21x | 0.63x | 1.61x | 0.68x | 0.24x | 0.25x | 0.44x |
+| divide (same quantum) | 0.99x | 0.58x | 0.99x | 0.57x | 0.30x | 0.36x | 0.48x |
+| divide (mixed quantum) | 1.75x | 0.50x | 1.09x | 0.64x | 0.33x | 0.37x | 0.54x |
+| divide (full precision) | 1.07x | 0.58x | 0.85x | 0.60x | 0.33x | 0.38x | 0.53x |
+| square root | 7.12x | 0.61x | 2.78x | 0.76x | 0.72x | 0.91x | 0.87x |
+| fused multiply-add | 1.25x | 0.64x | 1.19x | 0.69x | 0.25x | 0.25x | 0.44x |
+| ordered less-than | 0.09x | 0.30x | 0.17x | 0.31x | 0.18x | 0.19x | 0.38x |
+| cohort-equal numeric comparison | 0.10x | 0.28x | 0.15x | 0.28x | 0.17x | 0.18x | 0.35x |
+
+Run `build/sbt "libbid/Test/runMain org.bidfp.BidKBenchmark kscan quick"`
+to refresh. Compare rows for `k=2` and `k=4` now call
+`DecFloatAdapters` (not reflected in the compare ratios above).
+
 Object `BidK` API (each call allocates a result encoding):
 
 | Function / workload | BID160 | BD160 | Ratio | BID256 | BD256 | Ratio |

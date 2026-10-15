@@ -833,6 +833,13 @@ final class BidKRaw {
   }
 
   static int sqlCompare(FormatParams format, long[] x, long[] y) {
+    int k = format.units();
+    if (k == 2) {
+      return DecFloatAdapters.sqlCompare64(x[0], y[0]);
+    }
+    if (k == 4) {
+      return DecFloatAdapters.sqlCompare128(x[1], x[0], y[1], y[0]);
+    }
     if (BidCodec.isNaN(format, x)) {
       return BidCodec.isNaN(format, y) ? 0 : 1;
     }
