@@ -216,6 +216,32 @@ public final class FormatParams {
     return coefficient.compare(maxCoefficient) <= 0;
   }
 
+  boolean coefficientAllowed(long[] coefficient) {
+    return LimbMath.compare(coefficient, maxCoefficient) <= 0;
+  }
+
+  boolean coefficientAllowed(Wide6 coefficient) {
+    if ((coefficient.l4 | coefficient.l5) != 0L) {
+      return false;
+    }
+    long m3 = maxCoefficient.length > 3 ? maxCoefficient[3] : 0L;
+    int cmp = Long.compareUnsigned(coefficient.l3, m3);
+    if (cmp != 0) {
+      return cmp < 0;
+    }
+    cmp = Long.compareUnsigned(
+        coefficient.l2, maxCoefficient.length > 2 ? maxCoefficient[2] : 0L);
+    if (cmp != 0) {
+      return cmp < 0;
+    }
+    cmp = Long.compareUnsigned(
+        coefficient.l1, maxCoefficient.length > 1 ? maxCoefficient[1] : 0L);
+    if (cmp != 0) {
+      return cmp < 0;
+    }
+    return Long.compareUnsigned(coefficient.l0, maxCoefficient[0]) <= 0;
+  }
+
   /** Whether this format's coefficient and exponent fit in BID128. */
   public boolean fitsInDecimal128() {
     return k <= 128;

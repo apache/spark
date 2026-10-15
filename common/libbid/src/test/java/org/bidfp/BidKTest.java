@@ -108,6 +108,11 @@ public final class BidKTest {
       int exp = BidCodec.unpackBiasedExponent(fmt, words);
       BidCodec.unpackCoefficient(fmt, words, coeff);
       expect(exp == Bid64.fromRawBits(bits).biasedExponent(), "exp64");
+      long[] limbs = new long[LimbMath.WORK];
+      BidCodec.unpackCoefficient(fmt, words, limbs);
+      expect(limbs[0] == coeff.limb(0), "limb64");
+      BidCodec.packFinite(fmt, BidCodec.isSigned(fmt, words), exp, limbs, packed);
+      expect(packed[0] == bits, "pack64 limbs " + Long.toHexString(bits));
       BidCodec.packFinite(fmt, BidCodec.isSigned(fmt, words), exp, coeff, packed);
       expect(packed[0] == bits, "pack64 " + Long.toHexString(bits));
     }

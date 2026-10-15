@@ -42,6 +42,19 @@ final class BidK160 {
       BidKScratch.Frame frame) {
     frame.xa.copyFrom(ac);
     frame.xb.copyFrom(bc);
+    addFromWide(format, an, ae, bn, be, mode, flags, out, frame);
+  }
+
+  static void addFromWide(
+      FormatParams format,
+      boolean an,
+      int ae,
+      boolean bn,
+      int be,
+      RoundingMode mode,
+      StatusFlags flags,
+      long[] out,
+      BidKScratch.Frame frame) {
     addWide(format, an, ae, frame.xa, bn, be, frame.xb, mode, flags, out, frame);
   }
 
@@ -57,9 +70,22 @@ final class BidK160 {
       StatusFlags flags,
       long[] out,
       BidKScratch.Frame frame) {
-    boolean negative = an ^ bn;
     frame.xa.copyFrom(ac);
     frame.xb.copyFrom(bc);
+    mulFromWide(format, an, ae, bn, be, mode, flags, out, frame);
+  }
+
+  static void mulFromWide(
+      FormatParams format,
+      boolean an,
+      int ae,
+      boolean bn,
+      int be,
+      RoundingMode mode,
+      StatusFlags flags,
+      long[] out,
+      BidKScratch.Frame frame) {
+    boolean negative = an ^ bn;
     if (frame.xa.isZero() || frame.xb.isZero()) {
       frame.xr.clear();
       pack(format, negative, ae + be, frame.xr, mode, flags, frame, out);
@@ -81,9 +107,22 @@ final class BidK160 {
       StatusFlags flags,
       long[] out,
       BidKScratch.Frame frame) {
-    boolean negative = an ^ bn;
     frame.xa.copyFrom(ac);
     frame.xb.copyFrom(bc);
+    divFromWide(format, an, ae, bn, be, mode, flags, out, frame);
+  }
+
+  static void divFromWide(
+      FormatParams format,
+      boolean an,
+      int ae,
+      boolean bn,
+      int be,
+      RoundingMode mode,
+      StatusFlags flags,
+      long[] out,
+      BidKScratch.Frame frame) {
+    boolean negative = an ^ bn;
     int p = format.precision();
     int nd = frame.xa.decimalDigits();
     int dd = frame.xb.decimalDigits();
@@ -149,11 +188,26 @@ final class BidK160 {
       BidKScratch.Frame frame) {
     frame.xa.copyFrom(ac);
     frame.xb.copyFrom(bc);
+    frame.xt.copyFrom(cc);
+    fmaFromWide(format, an, ae, bn, be, cn, ce, mode, flags, out, frame);
+  }
+
+  static void fmaFromWide(
+      FormatParams format,
+      boolean an,
+      int ae,
+      boolean bn,
+      int be,
+      boolean cn,
+      int ce,
+      RoundingMode mode,
+      StatusFlags flags,
+      long[] out,
+      BidKScratch.Frame frame) {
     boolean pNeg = an ^ bn;
     frame.xr.multiply3(frame.xa, frame.xb);
-    frame.xb.copyFrom(cc);
     frame.xa.copyFrom(frame.xr);
-    addWide(format, pNeg, ae + be, frame.xa, cn, ce, frame.xb, mode, flags, out,
+    addWide(format, pNeg, ae + be, frame.xa, cn, ce, frame.xt, mode, flags, out,
         frame);
   }
 
@@ -168,6 +222,18 @@ final class BidK160 {
       long[] out,
       BidKScratch.Frame frame) {
     frame.xa.copyFrom(ac);
+    quantizeFromWide(format, an, ae, targetExp, mode, flags, out, frame);
+  }
+
+  static void quantizeFromWide(
+      FormatParams format,
+      boolean an,
+      int ae,
+      int targetExp,
+      RoundingMode mode,
+      StatusFlags flags,
+      long[] out,
+      BidKScratch.Frame frame) {
     int p = format.precision();
     if (frame.xa.isZero()) {
       pack(format, an, targetExp, frame.xa, mode, flags, frame, out);
@@ -210,21 +276,30 @@ final class BidK160 {
       long[] out,
       BidKScratch.Frame frame) {
     frame.xa.copyFrom(coeff);
+    convertFromWide(dest, negative, exp, mode, flags, out, frame);
+  }
+
+  static void convertFromWide(
+      FormatParams dest,
+      boolean negative,
+      int exp,
+      RoundingMode mode,
+      StatusFlags flags,
+      long[] out,
+      BidKScratch.Frame frame) {
     pack(dest, negative, exp, frame.xa, mode, flags, frame, out);
   }
 
   static int sqlCompare(
       FormatParams format, long[] x, long[] y, BidKScratch.Frame frame) {
-    BidKKnuth.unpackLeft(format, x, frame, new StatusFlags());
-    BidKKnuth.unpackRight(format, y, frame, new StatusFlags());
-    if (frame.ac.isZero() && frame.bc.isZero()) {
+    BidKKnuth.unpackLeftWide(format, x, frame, new StatusFlags());
+    BidKKnuth.unpackRightWide(format, y, frame, new StatusFlags());
+    if (frame.xa.isZero() && frame.xb.isZero()) {
       return 0;
     }
     if (frame.an != frame.bn) {
       return frame.an ? -1 : 1;
     }
-    frame.xa.copyFrom(frame.ac);
-    frame.xb.copyFrom(frame.bc);
     int cmp = compareAbsolute(frame.xa, frame.ae, frame.xb, frame.be, frame);
     return frame.an ? -cmp : cmp;
   }
@@ -237,8 +312,7 @@ final class BidK160 {
     if (BidCodec.isInfinite(format, words)) {
       return (BidCodec.isSigned(format, words) ? "-" : "+") + "Inf";
     }
-    BidKKnuth.unpackLeft(format, words, frame, new StatusFlags());
-    frame.xa.copyFrom(frame.ac);
+    BidKKnuth.unpackLeftWide(format, words, frame, new StatusFlags());
     String digits = frame.xa.toDecimalString();
     return (frame.an ? "-" : "+") + digits + "E" + frame.ae;
   }
@@ -423,8 +497,7 @@ final class BidK160 {
       if (biased > maxBiased) {
         biased = maxBiased;
       }
-      frame.coeff.clear();
-      BidCodec.packFinite(format, negative, biased, frame.coeff, out);
+      BidCodec.packFinite(format, negative, biased, coeff, out);
       return;
     }
     int biased = exp + bias;
@@ -437,8 +510,7 @@ final class BidK160 {
       if (first != 0 || frame.sticky[0]) {
         flags.raise(StatusFlags.UNDERFLOW | StatusFlags.INEXACT);
       }
-      coeff.toUIntLimbs(frame.coeff);
-      BidCodec.packFinite(format, negative, 0, frame.coeff, out);
+      BidCodec.packFinite(format, negative, 0, coeff, out);
       return;
     }
     while (biased > maxBiased && coeff.decimalDigits() < p) {
@@ -451,15 +523,14 @@ final class BidK160 {
         BidCodec.packInfinity(format, negative, out);
         return;
       }
-      frame.coeff.copyFrom(format.maxCoefficientWords());
-      BidCodec.packFinite(format, negative, maxBiased, frame.coeff, out);
+      BidCodec.packFinite(
+          format, negative, maxBiased, format.maxCoefficientWords(), out);
       return;
     }
     if (biased == 0 && coeff.decimalDigits() < p && frame.inexact[0]) {
       flags.raise(StatusFlags.UNDERFLOW);
     }
-    coeff.toUIntLimbs(frame.coeff);
-    BidCodec.packFinite(format, negative, biased, frame.coeff, out);
+    BidCodec.packFinite(format, negative, biased, coeff, out);
   }
 
   private static int roundToPrecision(

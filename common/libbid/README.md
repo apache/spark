@@ -109,25 +109,52 @@ a `MathContext` of 43 digits (Decimal160) and 70 digits (Decimal256). Values
 are nanoseconds per operation. The ratio is `BigDecimal / BID`, so a value
 greater than 1 means BID was faster. Decimal160 add/mul/FMA/compare use the
 unrolled 3-limb `Wide6` kernel; Decimal160 div/sqrt and all Decimal256
-arithmetic use Knuth limbs. Parse is still `DecNum`. These numbers are not
-comparable to the specialized 64/128 table above.
+arithmetic use Knuth limbs. Combo-field unpack/pack writes the coefficient
+straight into `Wide6` or a `long[]` workspace. Parse is still `DecNum`.
+These numbers are not comparable to the specialized 64/128 table above.
+
+Object `BidK` API (each call allocates a result encoding):
 
 | Function / workload | BID160 | BD160 | Ratio | BID256 | BD256 | Ratio |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| add (same quantum) | 61.82 | 21.31 | 0.34x | 166.13 | 25.07 | 0.15x |
-| add (mixed quantum) | 218.08 | 116.10 | 0.53x | 638.21 | 166.32 | 0.26x |
-| add (full precision) | 201.45 | 150.76 | 0.75x | 763.71 | 254.40 | 0.33x |
-| subtract | 85.87 | 34.09 | 0.40x | 202.94 | 37.46 | 0.18x |
-| multiply (same quantum) | 315.80 | 220.73 | 0.70x | 1341.63 | 354.90 | 0.26x |
-| multiply (mixed quantum) | 143.23 | 87.55 | 0.61x | 415.93 | 141.97 | 0.34x |
-| multiply (full precision) | 385.32 | 246.45 | 0.64x | 1476.95 | 373.12 | 0.25x |
-| divide (same quantum) | 527.17 | 227.45 | 0.43x | 895.81 | 343.13 | 0.38x |
-| divide (mixed quantum) | 567.49 | 233.24 | 0.41x | 924.91 | 345.20 | 0.37x |
-| divide (full precision) | 563.64 | 233.07 | 0.41x | 904.69 | 352.62 | 0.39x |
-| square root | 4038.01 | 3120.20 | 0.77x | 6451.92 | 5733.18 | 0.89x |
-| fused multiply-add | 507.08 | 298.31 | 0.59x | 1748.36 | 440.28 | 0.25x |
-| ordered less-than | 51.18 | 7.29 | 0.14x | 2856.17 | 7.26 | 0.00x |
-| cohort-equal numeric comparison | 53.45 | 7.33 | 0.14x | 2961.70 | 7.34 | 0.00x |
+| add (same quantum) | 54.72 | 22.21 | 0.41x | 192.68 | 25.44 | 0.13x |
+| add (mixed quantum) | 220.08 | 120.11 | 0.55x | 688.28 | 166.11 | 0.24x |
+| add (full precision) | 197.97 | 150.55 | 0.76x | 825.71 | 254.25 | 0.31x |
+| subtract | 74.62 | 31.92 | 0.43x | 207.64 | 36.26 | 0.17x |
+| multiply (same quantum) | 318.87 | 213.42 | 0.67x | 1388.18 | 347.06 | 0.25x |
+| multiply (mixed quantum) | 137.14 | 86.38 | 0.63x | 464.44 | 142.08 | 0.31x |
+| multiply (full precision) | 374.50 | 243.02 | 0.65x | 1529.90 | 362.53 | 0.24x |
+| divide (same quantum) | 529.35 | 211.02 | 0.40x | 970.70 | 336.10 | 0.35x |
+| divide (mixed quantum) | 567.77 | 236.84 | 0.42x | 991.54 | 346.40 | 0.35x |
+| divide (full precision) | 555.11 | 232.22 | 0.42x | 988.46 | 349.88 | 0.35x |
+| square root | 4133.88 | 3123.30 | 0.76x | 6554.41 | 5703.61 | 0.87x |
+| fused multiply-add | 503.85 | 292.24 | 0.58x | 1810.38 | 435.17 | 0.24x |
+| ordered less-than | 54.58 | 7.30 | 0.13x | 150.51 | 7.33 | 0.05x |
+| cohort-equal numeric comparison | 54.04 | 7.32 | 0.14x | 148.76 | 7.22 | 0.05x |
+
+`BidKRaw` into a reused `out[]` (the Spark SQL shape; no `BidK` wrapper):
+
+| Function / workload | BID160 | BD160 | Ratio | BID256 | BD256 | Ratio |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| add (same quantum) | 65.13 | 24.72 | 0.38x | 190.11 | 29.73 | 0.16x |
+| add (mixed quantum) | 216.20 | 126.16 | 0.58x | 686.55 | 169.96 | 0.25x |
+| add (full precision) | 192.19 | 149.98 | 0.78x | 811.56 | 254.77 | 0.31x |
+| subtract | 66.56 | 33.57 | 0.50x | 190.40 | 35.60 | 0.19x |
+| multiply (same quantum) | 309.45 | 214.67 | 0.69x | 1374.86 | 349.69 | 0.25x |
+| multiply (mixed quantum) | 134.78 | 86.26 | 0.64x | 518.73 | 140.64 | 0.27x |
+| multiply (full precision) | 371.34 | 243.89 | 0.66x | 1512.76 | 362.97 | 0.24x |
+| divide (same quantum) | 537.79 | 205.69 | 0.38x | 967.98 | 334.68 | 0.35x |
+| divide (mixed quantum) | 568.10 | 239.31 | 0.42x | 990.20 | 349.39 | 0.35x |
+| divide (full precision) | 564.08 | 234.81 | 0.42x | 977.49 | 355.59 | 0.36x |
+| square root | 4114.05 | 3098.17 | 0.75x | 6548.64 | 5689.21 | 0.87x |
+| fused multiply-add | 500.30 | 296.41 | 0.59x | 1824.90 | 438.80 | 0.24x |
+| ordered less-than | 52.81 | 7.67 | 0.15x | 152.43 | 7.82 | 0.05x |
+| cohort-equal numeric comparison | 52.30 | 7.49 | 0.14x | 150.87 | 7.45 | 0.05x |
+
+Avoiding the object wrapper does not close the gap versus `BigDecimal` on
+same-quantum add. Combo-field decode into limbs still dominates; Bid64-class
+combo decode would be required to beat `BigDecimal` there. Raw subtract is
+the one clear win versus the object API (Decimal160 66.56 ns vs 74.62 ns).
 
 `fmod`, integral power, round-to-integral, and scale-by-power-of-ten are
 omitted because `BidK` does not implement those kernels yet.

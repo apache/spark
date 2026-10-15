@@ -56,6 +56,68 @@ final class BidKKnuth {
     return BidKRaw.Kind.FINITE;
   }
 
+  static BidKRaw.Kind unpack(
+      FormatParams format,
+      long[] words,
+      long[] coeff,
+      boolean[] negative,
+      int[] exp,
+      StatusFlags flags) {
+    boolean signed = BidCodec.isSigned(format, words);
+    negative[0] = signed;
+    if (BidCodec.isNaN(format, words)) {
+      LimbMath.clear(coeff);
+      exp[0] = 0;
+      if (BidCodec.isSignalingNaN(format, words)) {
+        flags.raise(StatusFlags.INVALID);
+        return BidKRaw.Kind.SNAN;
+      }
+      return BidKRaw.Kind.NAN;
+    }
+    if (BidCodec.isInfinite(format, words)) {
+      LimbMath.clear(coeff);
+      exp[0] = 0;
+      return BidKRaw.Kind.INF;
+    }
+    BidCodec.unpackCoefficient(format, words, coeff);
+    if (!format.coefficientAllowed(coeff)) {
+      LimbMath.clear(coeff);
+    }
+    exp[0] = BidCodec.unpackBiasedExponent(format, words) - format.bias();
+    return BidKRaw.Kind.FINITE;
+  }
+
+  static BidKRaw.Kind unpack(
+      FormatParams format,
+      long[] words,
+      Wide6 coeff,
+      boolean[] negative,
+      int[] exp,
+      StatusFlags flags) {
+    boolean signed = BidCodec.isSigned(format, words);
+    negative[0] = signed;
+    if (BidCodec.isNaN(format, words)) {
+      coeff.clear();
+      exp[0] = 0;
+      if (BidCodec.isSignalingNaN(format, words)) {
+        flags.raise(StatusFlags.INVALID);
+        return BidKRaw.Kind.SNAN;
+      }
+      return BidKRaw.Kind.NAN;
+    }
+    if (BidCodec.isInfinite(format, words)) {
+      coeff.clear();
+      exp[0] = 0;
+      return BidKRaw.Kind.INF;
+    }
+    BidCodec.unpackCoefficient(format, words, coeff);
+    if (!format.coefficientAllowed(coeff)) {
+      coeff.clear();
+    }
+    exp[0] = BidCodec.unpackBiasedExponent(format, words) - format.bias();
+    return BidKRaw.Kind.FINITE;
+  }
+
   static BidKRaw.Kind unpackLeft(
       FormatParams format, long[] words, BidKScratch.Frame frame, StatusFlags flags) {
     BidKRaw.Kind kind =
@@ -69,6 +131,42 @@ final class BidKKnuth {
       FormatParams format, long[] words, BidKScratch.Frame frame, StatusFlags flags) {
     BidKRaw.Kind kind =
         unpack(format, words, frame.bc, frame.tmpNeg, frame.tmpExp, flags);
+    frame.bn = frame.tmpNeg[0];
+    frame.be = frame.tmpExp[0];
+    return kind;
+  }
+
+  static BidKRaw.Kind unpackLeftWork(
+      FormatParams format, long[] words, BidKScratch.Frame frame, StatusFlags flags) {
+    BidKRaw.Kind kind =
+        unpack(format, words, frame.w0, frame.tmpNeg, frame.tmpExp, flags);
+    frame.an = frame.tmpNeg[0];
+    frame.ae = frame.tmpExp[0];
+    return kind;
+  }
+
+  static BidKRaw.Kind unpackRightWork(
+      FormatParams format, long[] words, BidKScratch.Frame frame, StatusFlags flags) {
+    BidKRaw.Kind kind =
+        unpack(format, words, frame.w1, frame.tmpNeg, frame.tmpExp, flags);
+    frame.bn = frame.tmpNeg[0];
+    frame.be = frame.tmpExp[0];
+    return kind;
+  }
+
+  static BidKRaw.Kind unpackLeftWide(
+      FormatParams format, long[] words, BidKScratch.Frame frame, StatusFlags flags) {
+    BidKRaw.Kind kind =
+        unpack(format, words, frame.xa, frame.tmpNeg, frame.tmpExp, flags);
+    frame.an = frame.tmpNeg[0];
+    frame.ae = frame.tmpExp[0];
+    return kind;
+  }
+
+  static BidKRaw.Kind unpackRightWide(
+      FormatParams format, long[] words, BidKScratch.Frame frame, StatusFlags flags) {
+    BidKRaw.Kind kind =
+        unpack(format, words, frame.xb, frame.tmpNeg, frame.tmpExp, flags);
     frame.bn = frame.tmpNeg[0];
     frame.be = frame.tmpExp[0];
     return kind;
@@ -88,6 +186,19 @@ final class BidKKnuth {
       BidKScratch.Frame frame) {
     LimbMath.copyLimbs(frame.w0, ac);
     LimbMath.copyLimbs(frame.w1, bc);
+    addFromWork(format, an, ae, bn, be, mode, flags, out, frame);
+  }
+
+  static void addFromWork(
+      FormatParams format,
+      boolean an,
+      int ae,
+      boolean bn,
+      int be,
+      RoundingMode mode,
+      StatusFlags flags,
+      long[] out,
+      BidKScratch.Frame frame) {
     addWide(format, an, ae, frame.w0, bn, be, frame.w1, mode, flags, out, frame);
   }
 
@@ -190,6 +301,19 @@ final class BidKKnuth {
       BidKScratch.Frame frame) {
     LimbMath.copyLimbs(frame.w0, ac);
     LimbMath.copyLimbs(frame.w1, bc);
+    mulFromWork(format, an, ae, bn, be, mode, flags, out, frame);
+  }
+
+  static void mulFromWork(
+      FormatParams format,
+      boolean an,
+      int ae,
+      boolean bn,
+      int be,
+      RoundingMode mode,
+      StatusFlags flags,
+      long[] out,
+      BidKScratch.Frame frame) {
     boolean negative = an ^ bn;
     if (LimbMath.isZero(frame.w0) || LimbMath.isZero(frame.w1)) {
       LimbMath.clear(frame.w2);
@@ -214,6 +338,19 @@ final class BidKKnuth {
       BidKScratch.Frame frame) {
     LimbMath.copyLimbs(frame.w0, ac);
     LimbMath.copyLimbs(frame.w1, bc);
+    divFromWork(format, an, ae, bn, be, mode, flags, out, frame);
+  }
+
+  static void divFromWork(
+      FormatParams format,
+      boolean an,
+      int ae,
+      boolean bn,
+      int be,
+      RoundingMode mode,
+      StatusFlags flags,
+      long[] out,
+      BidKScratch.Frame frame) {
     boolean negative = an ^ bn;
     int p = format.precision();
     int nd = LimbMath.decimalDigits(frame.w0);
@@ -260,6 +397,16 @@ final class BidKKnuth {
       long[] out,
       BidKScratch.Frame frame) {
     LimbMath.copyLimbs(frame.w0, coeff);
+    sqrtFromWork(format, exp, mode, flags, out, frame);
+  }
+
+  static void sqrtFromWork(
+      FormatParams format,
+      int exp,
+      RoundingMode mode,
+      StatusFlags flags,
+      long[] out,
+      BidKScratch.Frame frame) {
     int extra = format.precision() + 4;
     if ((exp & 1) != 0) {
       LimbMath.multiplySmall(frame.w0, 10L);
@@ -296,12 +443,28 @@ final class BidKKnuth {
       BidKScratch.Frame frame) {
     LimbMath.copyLimbs(frame.w0, ac);
     LimbMath.copyLimbs(frame.w1, bc);
+    LimbMath.copyLimbs(frame.w4, cc);
+    fmaFromWork(format, an, ae, bn, be, cn, ce, mode, flags, out, frame);
+  }
+
+  static void fmaFromWork(
+      FormatParams format,
+      boolean an,
+      int ae,
+      boolean bn,
+      int be,
+      boolean cn,
+      int ce,
+      RoundingMode mode,
+      StatusFlags flags,
+      long[] out,
+      BidKScratch.Frame frame) {
     boolean pNeg = an ^ bn;
     LimbMath.multiply(frame.w2, frame.w0, frame.w1);
-    int pExp = ae + be;
-    LimbMath.copyLimbs(frame.w1, cc);
     LimbMath.copy(frame.w0, frame.w2);
-    addWide(format, pNeg, pExp, frame.w0, cn, ce, frame.w1, mode, flags, out, frame);
+    addWide(
+        format, pNeg, ae + be, frame.w0, cn, ce, frame.w4, mode, flags, out,
+        frame);
   }
 
   static void quantize(
@@ -315,6 +478,18 @@ final class BidKKnuth {
       long[] out,
       BidKScratch.Frame frame) {
     LimbMath.copyLimbs(frame.w0, ac);
+    quantizeFromWork(format, an, ae, targetExp, mode, flags, out, frame);
+  }
+
+  static void quantizeFromWork(
+      FormatParams format,
+      boolean an,
+      int ae,
+      int targetExp,
+      RoundingMode mode,
+      StatusFlags flags,
+      long[] out,
+      BidKScratch.Frame frame) {
     int p = format.precision();
     if (LimbMath.isZero(frame.w0)) {
       pack(format, an, targetExp, frame.w0, mode, flags, frame, out);
@@ -357,6 +532,17 @@ final class BidKKnuth {
       long[] out,
       BidKScratch.Frame frame) {
     LimbMath.copyLimbs(frame.w0, coeff);
+    convertFromWork(dest, negative, exp, mode, flags, out, frame);
+  }
+
+  static void convertFromWork(
+      FormatParams dest,
+      boolean negative,
+      int exp,
+      RoundingMode mode,
+      StatusFlags flags,
+      long[] out,
+      BidKScratch.Frame frame) {
     pack(dest, negative, exp, frame.w0, mode, flags, frame, out);
   }
 
@@ -471,8 +657,7 @@ final class BidKKnuth {
       if (biased > maxBiased) {
         biased = maxBiased;
       }
-      frame.coeff.clear();
-      BidCodec.packFinite(format, negative, biased, frame.coeff, out);
+      BidCodec.packFinite(format, negative, biased, coeff, out);
       return;
     }
     int biased = exp + bias;
@@ -486,8 +671,7 @@ final class BidKKnuth {
       if (first != 0 || frame.sticky[0]) {
         flags.raise(StatusFlags.UNDERFLOW | StatusFlags.INEXACT);
       }
-      LimbMath.toUIntLimbs(coeff, frame.coeff);
-      BidCodec.packFinite(format, negative, 0, frame.coeff, out);
+      BidCodec.packFinite(format, negative, 0, coeff, out);
       return;
     }
     while (biased > maxBiased && LimbMath.decimalDigits(coeff) < p) {
@@ -500,15 +684,14 @@ final class BidKKnuth {
         BidCodec.packInfinity(format, negative, out);
         return;
       }
-      frame.coeff.copyFrom(format.maxCoefficientWords());
-      BidCodec.packFinite(format, negative, maxBiased, frame.coeff, out);
+      BidCodec.packFinite(
+          format, negative, maxBiased, format.maxCoefficientWords(), out);
       return;
     }
     if (biased == 0 && LimbMath.decimalDigits(coeff) < p && frame.inexact[0]) {
       flags.raise(StatusFlags.UNDERFLOW);
     }
-    LimbMath.toUIntLimbs(coeff, frame.coeff);
-    BidCodec.packFinite(format, negative, biased, frame.coeff, out);
+    BidCodec.packFinite(format, negative, biased, coeff, out);
   }
 
   /** Rounds {@code coeff} to {@code p} digits. Returns the exponent increase. */
@@ -542,16 +725,14 @@ final class BidKKnuth {
 
   static int sqlCompare(
       FormatParams format, long[] x, long[] y, BidKScratch.Frame frame) {
-    unpackLeft(format, x, frame, new StatusFlags());
-    unpackRight(format, y, frame, new StatusFlags());
-    if (frame.ac.isZero() && frame.bc.isZero()) {
+    unpackLeftWork(format, x, frame, new StatusFlags());
+    unpackRightWork(format, y, frame, new StatusFlags());
+    if (LimbMath.isZero(frame.w0) && LimbMath.isZero(frame.w1)) {
       return 0;
     }
     if (frame.an != frame.bn) {
       return frame.an ? -1 : 1;
     }
-    LimbMath.copyLimbs(frame.w0, frame.ac);
-    LimbMath.copyLimbs(frame.w1, frame.bc);
     int cmp = compareAbsolute(frame.w0, frame.ae, frame.w1, frame.be, frame);
     return frame.an ? -cmp : cmp;
   }
@@ -564,8 +745,7 @@ final class BidKKnuth {
     if (BidCodec.isInfinite(format, words)) {
       return (BidCodec.isSigned(format, words) ? "-" : "+") + "Inf";
     }
-    unpackLeft(format, words, frame, new StatusFlags());
-    LimbMath.copyLimbs(frame.w0, frame.ac);
+    unpackLeftWork(format, words, frame, new StatusFlags());
     String digits = LimbMath.toDecimalString(frame.w0);
     return (frame.an ? "-" : "+") + digits + "E" + frame.ae;
   }

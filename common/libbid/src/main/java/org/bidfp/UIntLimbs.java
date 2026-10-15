@@ -65,6 +65,10 @@ final class UIntLimbs {
     System.arraycopy(w, 0, dest, 0, n);
   }
 
+  long[] limbs() {
+    return w;
+  }
+
   long limb(int index) {
     return w[index];
   }

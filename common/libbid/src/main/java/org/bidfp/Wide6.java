@@ -71,6 +71,40 @@ final class Wide6 {
     return (l0 | l1 | l2 | l3 | l4 | l5) == 0L;
   }
 
+  boolean lessThanPow2(int n) {
+    return bitLength() <= n;
+  }
+
+  void maskLowBits(int width) {
+    if (width <= 0) {
+      clear();
+      return;
+    }
+    if (width >= 384) {
+      return;
+    }
+    int word = width >>> 6;
+    int shift = width & 63;
+    if (shift == 0) {
+      for (int i = word; i < 6; i++) {
+        setLimb(i, 0L);
+      }
+      return;
+    }
+    setLimb(word, limb(word) & ((1L << shift) - 1L));
+    for (int i = word + 1; i < 6; i++) {
+      setLimb(i, 0L);
+    }
+  }
+
+  void setBit(int index) {
+    if (index < 0 || index >= 384) {
+      throw new IllegalArgumentException("bit index out of range");
+    }
+    int word = index >>> 6;
+    setLimb(word, limb(word) | (1L << (index & 63)));
+  }
+
   int compare(Wide6 other) {
     int cmp = Long.compareUnsigned(l5, other.l5);
     if (cmp != 0) {

@@ -41,16 +41,61 @@ final class BidCodec {
       int biasedExponent,
       UIntLimbs coefficient,
       long[] words) {
+    packFinite(format, negative, biasedExponent, coefficient.limbs(), words);
+  }
+
+  static void packFinite(
+      FormatParams format,
+      boolean negative,
+      int biasedExponent,
+      Wide6 coefficient,
+      long[] words) {
     clear(format, words);
-    int tPlus3 = format.form1CoeffBits();
-    if (coefficient.lessThanPow2(tPlus3)) {
-      writeLimbs(words, coefficient);
-      maskToWidth(words, tPlus3);
-      orUInt(words, tPlus3, format.expBits(), biasedExponent);
+    int n = format.wordCount();
+    if (n > 0) {
+      words[0] = coefficient.l0;
+    }
+    if (n > 1) {
+      words[1] = coefficient.l1;
+    }
+    if (n > 2) {
+      words[2] = coefficient.l2;
+    }
+    if (n > 3) {
+      words[3] = coefficient.l3;
+    }
+    finishPackFinite(
+        format, negative, biasedExponent, coefficient.lessThanPow2(
+            format.form1CoeffBits()), words);
+  }
+
+  static void packFinite(
+      FormatParams format,
+      boolean negative,
+      int biasedExponent,
+      long[] coefficient,
+      long[] words) {
+    clear(format, words);
+    int n = Math.min(format.wordCount(), coefficient.length);
+    System.arraycopy(coefficient, 0, words, 0, n);
+    finishPackFinite(
+        format, negative, biasedExponent,
+        lessThanPow2(coefficient, format.form1CoeffBits()), words);
+  }
+
+  private static void finishPackFinite(
+      FormatParams format,
+      boolean negative,
+      int biasedExponent,
+      boolean form1,
+      long[] words) {
+    if (form1) {
+      maskToWidth(words, format.form1CoeffBits());
+      orUInt(words, format.form1CoeffBits(), format.expBits(), biasedExponent);
     } else {
-      writeLimbs(words, coefficient);
       maskToWidth(words, format.form2CoeffBits());
-      orUInt(words, format.form2CoeffBits(), format.expBits(), biasedExponent);
+      orUInt(
+          words, format.form2CoeffBits(), format.expBits(), biasedExponent);
       setBit(words, format.packedBits() - 2);
       setBit(words, format.packedBits() - 3);
     }
@@ -121,12 +166,42 @@ final class BidCodec {
   }
 
   static void unpackCoefficient(FormatParams format, long[] words, UIntLimbs dest) {
+    unpackCoefficient(format, words, dest.limbs());
+  }
+
+  static void unpackCoefficient(FormatParams format, long[] words, Wide6 dest) {
     dest.clear();
+    int n = format.wordCount();
+    if (n > 0) {
+      dest.l0 = words[0];
+    }
+    if (n > 1) {
+      dest.l1 = words[1];
+    }
+    if (n > 2) {
+      dest.l2 = words[2];
+    }
+    if (n > 3) {
+      dest.l3 = words[3];
+    }
     if (steering11(format, words)) {
-      readLimbs(words, format.form2CoeffBits(), dest);
-      dest.orPow2(format.form1CoeffBits());
+      dest.maskLowBits(format.form2CoeffBits());
+      dest.setBit(format.form1CoeffBits());
     } else {
-      readLimbs(words, format.form1CoeffBits(), dest);
+      dest.maskLowBits(format.form1CoeffBits());
+    }
+  }
+
+  static void unpackCoefficient(FormatParams format, long[] words, long[] dest) {
+    for (int i = 0; i < dest.length; i++) {
+      dest[i] = 0L;
+    }
+    System.arraycopy(words, 0, dest, 0, Math.min(words.length, dest.length));
+    if (steering11(format, words)) {
+      maskToWidth(dest, format.form2CoeffBits());
+      setBit(dest, format.form1CoeffBits());
+    } else {
+      maskToWidth(dest, format.form1CoeffBits());
     }
   }
 
@@ -186,16 +261,24 @@ final class BidCodec {
         && bit(words, low + 4);
   }
 
-  private static void writeLimbs(long[] words, UIntLimbs coefficient) {
-    int n = Math.min(words.length, UIntLimbs.MAX_LIMBS);
-    for (int i = 0; i < n; i++) {
-      words[i] = coefficient.limb(i);
+  static boolean lessThanPow2(long[] a, int n) {
+    if (n <= 0) {
+      return LimbMath.isZero(a);
     }
-  }
-
-  private static void readLimbs(long[] words, int width, UIntLimbs dest) {
-    dest.copyFrom(words);
-    dest.maskLowBits(width);
+    int word = n >>> 6;
+    int shift = n & 63;
+    for (int i = word + 1; i < a.length; i++) {
+      if (a[i] != 0L) {
+        return false;
+      }
+    }
+    if (word >= a.length) {
+      return true;
+    }
+    if (shift == 0) {
+      return a[word] == 0L;
+    }
+    return (a[word] >>> shift) == 0L;
   }
 
   static void orUInt(long[] words, int bitOffset, int width, long value) {
