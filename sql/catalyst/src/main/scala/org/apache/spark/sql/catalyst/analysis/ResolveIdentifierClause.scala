@@ -114,8 +114,10 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
         // `CREATE TEMPORARY VIEW IDENTIFIER(v) AS ...`), the evaluated plan is that command and `v`
         // names the object rather than a variable it refers to, so recording it would wrongly
         // persist it as a dependency. The recorded set is consumed by temporary-view create/ALTER
-        // and CACHE TABLE AS SELECT (stored as metadata) and by persisted CREATE/ALTER VIEW
-        // (rejected -- unless the legacy flag makes the persisted paths discard it instead).
+        // and CACHE TABLE AS SELECT (stored as metadata), by persisted CREATE/ALTER VIEW
+        // (rejected -- unless the legacy flag makes the persisted paths discard it instead), and
+        // by CREATE FUNCTION (a persistent function rejects or, under the legacy flag, discards
+        // it; a temporary function stores it as informational metadata).
         if (recordUnderIdentifier && !resolvedPlan.isInstanceOf[Command]) {
           recordTemporaryVariablesUnderIdentifier(p.identifierExpr)
         }

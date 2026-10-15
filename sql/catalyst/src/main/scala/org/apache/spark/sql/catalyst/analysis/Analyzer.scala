@@ -176,7 +176,10 @@ case class AnalysisContext(
     // in a scalar subquery) by persisted-view validation: `verifyTemporaryObjectsNotExists`, which
     // the v1 runnable commands call while executing and the v2 commands reach during analysis via
     // `CheckViewReferences`. When `spark.sql.legacy.allowSessionVariableInPersistedView` is set,
-    // the persisted paths simply discard the set. The single-pass resolver has no IDENTIFIER-clause
+    // the persisted paths simply discard the set. SQL function creation consumes it the same way
+    // (SPARK-59970): a persistent function rejects the names, or discards them under the legacy
+    // flag, and a temporary function stores them as informational metadata in its
+    // `referredTempVariableNames` property. The single-pass resolver has no IDENTIFIER-clause
     // resolution of its own, so there is no second writer to keep in sync. LinkedHashSet keeps
     // insertion order so the recorded names (and any error naming them) are deterministic when more
     // than one variable is read via an IDENTIFIER clause.
