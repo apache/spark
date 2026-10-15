@@ -45,8 +45,8 @@ public interface SupportsSchemaEvolution extends Table {
    * <p>
    * An accepted {@link TableChange.AddColumn} may be assigned a
    * {@link TableChange.ColumnPosition} after this check, before the change is applied through
-   * {@link Table#alterTable}. Implementations that cannot honor positioned adds may reject the
-   * final change there.
+   * {@link TableCatalog#alterTable}. Implementations that cannot honor positioned adds may
+   * reject the final change there.
    */
   boolean supportsColumnChange(ColumnChange change);
 }
