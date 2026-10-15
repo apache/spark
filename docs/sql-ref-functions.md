@@ -51,6 +51,7 @@ This subsection presents the usages and descriptions of these functions.
  * [Aggregate Functions](sql-ref-functions-builtin.html#aggregate-functions)
  * [Window Functions](sql-ref-functions-builtin.html#window-functions)
  * [Sketch-Based Approximate Functions](sql-ref-sketch-aggregates.html)
+ * [Vector Functions](sql-ref-functions-builtin.html#vector-functions)
 
 #### Generator Functions
 * [Generator Functions](sql-ref-functions-builtin.html#generator-functions)
