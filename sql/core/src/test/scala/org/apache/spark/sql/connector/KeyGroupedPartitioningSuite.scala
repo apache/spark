@@ -23,7 +23,7 @@ import org.apache.logging.log4j.Level
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.rdd.SortedMergeCoalescedRDD
-import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, ExprId, Literal, TransformExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Complete
@@ -3921,7 +3921,8 @@ class KeyGroupedPartitioningSuite
       // A k-way merge binds the scan's ordering against the scan output. A row-based scan like this
       // one always gets a `ProjectExec`, which truncates the ordering, but a columnar scan may get
       // nothing between it and the merge that does. So the merge is built right over the scan here.
-      val merged = GroupPartitionsExec(scan, enableSortedMerge = true).execute()
+      val merged =
+        GroupPartitionsExec(scan, sortedMergeOrdering = Some(scan.outputOrdering)).execute()
       assert(merged.isInstanceOf[SortedMergeCoalescedRDD[_]])
       val rows = merged.map(r => (r.getInt(0), r.getString(1))).collect().toSeq
       val expected = Seq((1, "aa"), (1, "bb"), (2, "cc"))
@@ -6651,7 +6652,7 @@ class KeyGroupedPartitioningSuite
     assert(merging.length == 1, "expected one k-way merge")
     assert(merging.head.child.output.exists(_.name == "arrive_time"),
       "test setup: arrive_time stays in the scan output")
-    assert(merging.head.child.outputOrdering.map(_.child.sql) == expectedOrdering)
+    assert(merging.head.outputOrdering.map(_.child.sql) == expectedOrdering)
     assert(merging.head.execute().isInstanceOf[SortedMergeCoalescedRDD[_]])
   }
 
@@ -6790,7 +6791,8 @@ class KeyGroupedPartitioningSuite
 
         // Flip only the ordering config. The plan above is already committed.
         withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "false") {
-          checkAnswer(df, orderedIdJoinRows)
+          // Without `checkToRDD`, so only the committed plan runs, not a newly planned one.
+          QueryTest.checkAnswer(df, orderedIdJoinRows, checkToRDD = false)
           // Re-collected, because under AQE `executedPlan` only reaches the final plan's nodes
           // once the query has run.
           val executed =
@@ -6803,6 +6805,91 @@ class KeyGroupedPartitioningSuite
           }
         }
       }
+    }
+  }
+
+  /**
+   * The setup of the SPARK-60044 tests. Creates `items`, which reports no ordering, so the scan
+   * derives [id, name] from its partition keys and drops the transform between them. The splits
+   * are sorted by the full key, so within id 1 the 'bb' split comes before the 'aa' one. Returns a
+   * window query that groups by id and orders by name. Under `kWayMergeWindowConfs` a k-way merge
+   * delivers that ordering, so EnsureRequirements adds no SortExec. The query selects
+   * `arrive_time`, so the transform's column stays in the scan output.
+   */
+  private def createKWayMergeWindowQuery(): String = {
+    createTable(items, itemsColumns, Array(identity("id"), days("arrive_time"), identity("name")))
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'bb', 10.0, cast('2021-01-01' as timestamp)), " +
+      "(1, 'aa', 20.0, cast('2022-01-01' as timestamp)), " +
+      "(2, 'cc', 30.0, cast('2021-01-01' as timestamp))")
+    s"""SELECT id, name, arrive_time, ROW_NUMBER() OVER (PARTITION BY id ORDER BY name) AS rn
+       |FROM testcat.ns.$items
+       |""".stripMargin
+  }
+
+  private val kWayMergeWindowConfs = Seq(
+    SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+    SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "true",
+    SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true")
+
+  private val kWayMergeWindowRows = Seq(
+    Row(1, "aa", Timestamp.valueOf("2022-01-01 00:00:00"), 1),
+    Row(1, "bb", Timestamp.valueOf("2021-01-01 00:00:00"), 2),
+    Row(2, "cc", Timestamp.valueOf("2021-01-01 00:00:00"), 1))
+
+  test("SPARK-60044: a planned k-way merge keeps its ordering after a later config change") {
+    // Turning partitionKeyOrdering off after planning empties the scan's ordering. The planned
+    // merge must still merge by [id, name]. Otherwise the window numbers the rows of id 1 in split
+    // order.
+    //
+    // Both AQE modes are covered, see the SPARK-59279 test above.
+    val query = createKWayMergeWindowQuery()
+    Seq(true, false).foreach { aqeEnabled =>
+      val confs = (SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled.toString) +:
+        kWayMergeWindowConfs
+      withSQLConf(confs: _*) {
+        val df = sql(query)
+        // Force the plan without executing it, so the k-way merge is decided under this config.
+        val plan = df.queryExecution.executedPlan
+        val merging = collectAllGroupPartitions(plan).filter(_.enableSortedMerge)
+        assert(merging.length == 1, "expected one k-way merge")
+        assert(merging.head.outputOrdering.map(_.child.sql) == Seq("id", "name"))
+        assert(collect(plan) { case s: SortExec => s }.isEmpty,
+          "the k-way merge satisfies the window's ordering, so no SortExec should be added")
+
+        // Flip only the key ordering config. The plan above is already committed.
+        withSQLConf(SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "false") {
+          assert(merging.head.child.outputOrdering.isEmpty,
+            "test setup: the scan no longer derives an ordering from its keys")
+          // Without `checkToRDD`, so only the committed plan runs, not a newly planned one.
+          QueryTest.checkAnswer(df, kWayMergeWindowRows, checkToRDD = false)
+          // Re-collected, because under AQE `executedPlan` only reaches the final plan's nodes
+          // once the query has run.
+          val executed = collectAllGroupPartitions(df.queryExecution.executedPlan)
+          assert(executed.map(_.outputOrdering.map(_.child.sql)) == Seq(Seq("id", "name")),
+            "the planned k-way merge must keep the ordering it was planned with")
+        }
+      }
+    }
+  }
+
+  test("SPARK-60044: the debug() helper runs a planned k-way merge") {
+    // Without AQE, `debug()` wraps every node of the executed plan in a `DebugExec`, including the
+    // nodes under a merging `GroupPartitionsExec`. That wrapper must not stop the planned merge.
+    import org.apache.spark.sql.execution.debug._
+    val query = createKWayMergeWindowQuery()
+    val confs = (SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") +: kWayMergeWindowConfs
+    withSQLConf(confs: _*) {
+      val df = sql(query)
+      val plan = df.queryExecution.executedPlan
+      assert(collectAllGroupPartitions(plan).exists(_.enableSortedMerge),
+        "test setup: the plan has a k-way merge")
+      df.debug()
+
+      // `debug()` returns nothing, so the merge is also checked under a `DebugExec` child.
+      val planned = collectAllGroupPartitions(plan).filter(_.enableSortedMerge).head
+      val wrapped = planned.withNewChildren(Seq(DebugExec(planned.child)))
+      assert(wrapped.execute().isInstanceOf[SortedMergeCoalescedRDD[_]])
     }
   }
 
