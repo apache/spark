@@ -2063,13 +2063,15 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       assert(hints.head.rightHint.exists(_.strategy.contains(SHUFFLE_MERGE)))
       assert(hints.head.rightHint.exists(_.runtimeFilterSource))
       assert(!hints.head.leftHint.exists(_.runtimeFilterSource))
+      // The plan names the hint as it is written.
+      assert(plan.toString.contains("rightHint=(strategy=merge, runtime_filter)"), plan.toString)
       // A warning about one hint does not name the other: overriding the strategy leaves the
       // runtime filter hint in effect, and rejecting the runtime filter hint leaves the strategy.
       val warnings = hintWarnings("select /*+ BROADCAST(bf2), MERGE(bf2), RUNTIME_FILTER(bf2) */ " +
         "* from bf4 left outer join bf2 on bf4.c4 = bf2.c2")
       assert(warnings.exists(_.contains("Hint (strategy=merge) is overridden")))
-      assert(warnings.exists(_.contains("Hint (runtime_filter_source) is not supported")))
-      assert(!warnings.exists(_.contains("(strategy=merge, runtime_filter_source)")))
+      assert(warnings.exists(_.contains("Hint (runtime_filter) is not supported")))
+      assert(!warnings.exists(_.contains("(strategy=merge, runtime_filter)")))
     }
   }
 
@@ -2122,7 +2124,7 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       sql("select /*+ RUNTIME_FILTER(bf4) */ * from bf4").queryExecution.optimizedPlan
     }
     assert(logAppender.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(
-      "runtime_filter_source) is specified but it is not part of a join relation")))
+      "A join hint (runtime_filter) is specified but it is not part of a join relation")))
   }
 
   test("RUNTIME_FILTER hint on a join without equi-join keys is reported") {
