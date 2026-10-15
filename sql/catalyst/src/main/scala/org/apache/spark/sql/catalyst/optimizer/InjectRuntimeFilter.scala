@@ -531,7 +531,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
         // 2. The application side is not the hinted source, which is never itself filtered
         // 3. The join is a shuffle join, or a broadcast join with a shuffle below it -- an
         //    estimate of whether the filter pays off, so a hint waives it
-        // 4. There is no Bloom filter on the application side's key yet
+        // 4. There is no Bloom filter on the application side's key yet, or, from a hinted
+        //    creation side, none built from that side
         def tryInject(
             applicationSide: LogicalPlan,
             currentApplicationSide: LogicalPlan,
@@ -552,16 +553,16 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           } else if (creationHinted ||
             !(applicationHinted || hasShuffle || probablyHasShuffle(applicationSide))) {
             None
-          } else if (hasBloomFilter(currentApplicationSide, applicationSideKey)) {
-            if (applicationHinted &&
-              hasBloomFilter(currentApplicationSide, applicationSideKey, Some(creationSideKey))) {
-              // Built from the hinted side in an earlier pass, before a rule rebuilt the join and
-              // dropped its HINT_DECIDED tag.
-              appliedHint = true
-              None
-            } else {
-              blocked("a runtime filter on the join key already exists")
-            }
+          } else if (applicationHinted &&
+            hasBloomFilter(currentApplicationSide, applicationSideKey, Some(creationSideKey))) {
+            // Built from the hinted side in an earlier pass, before a rule rebuilt the join and
+            // dropped its HINT_DECIDED tag.
+            appliedHint = true
+            None
+          } else if (!applicationHinted &&
+            hasBloomFilter(currentApplicationSide, applicationSideKey)) {
+            // The heuristics add one filter per key; a hinted side adds its own even then.
+            None
           } else {
             extractBeneficialFilterCreatePlan(applicationSide, creationSide,
               applicationSideKey, creationSideKey, applicationHinted)
