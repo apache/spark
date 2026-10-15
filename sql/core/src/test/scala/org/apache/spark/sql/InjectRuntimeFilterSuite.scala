@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, BloomFilterMightContain
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, BloomFilterAggregate}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan, SHUFFLE_MERGE}
 import org.apache.spark.sql.columnar.CachedBatch
-import org.apache.spark.sql.execution.{ReusedSubqueryExec, SubqueryExec}
+import org.apache.spark.sql.execution.{LogicalRDD, ReusedSubqueryExec, SubqueryExec}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEPropagateEmptyRelation}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -1508,6 +1508,35 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       assertReturnsRows(reaching)
       assert(hasDynamicPruning(reaching))
       assert(hintWarnings(reaching).isEmpty)
+    }
+  }
+
+  test("RUNTIME_FILTER hint honored by DPP stays honored after a DPP filter is pushed into it") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTempView("rdd_side") {
+        val rdd = spark.sparkContext.parallelize(Seq(Row(51), Row(20), Row(0)))
+        spark.createDataFrame(rdd, new StructType().add("k", IntegerType))
+          .createOrReplaceTempView("rdd_side")
+        // The hinted `d` honors the hint with a DPP filter on `f`. The upper join then prunes `d`
+        // with a DPP filter built from an RDD, which is pushed into `d` and is not repeatable.
+        // The hint was honored before that, and its DPP filter still runs.
+        val query = "SELECT /*+ RUNTIME_FILTER(d) */ f.c5, d.f5 FROM bf5part f " +
+          "JOIN bf5filtered d ON f.f5 = d.f5 " +
+          "JOIN (SELECT k FROM rdd_side WHERE k > 1) r ON d.f5 = r.k"
+        val plan = sql(query).queryExecution.optimizedPlan
+        val buildsFromRdd = plan.exists {
+          case Filter(condition, _) => condition.exists {
+            case d: DynamicPruningSubquery => d.buildQuery.exists(_.isInstanceOf[LogicalRDD])
+            case _ => false
+          }
+          case _ => false
+        }
+        assert(buildsFromRdd, plan.treeString)
+        assertDidNotRewriteWithBloomFilter(query)
+        assertReturnsRows(query)
+        assert(hintWarnings(query).isEmpty)
+      }
     }
   }
 

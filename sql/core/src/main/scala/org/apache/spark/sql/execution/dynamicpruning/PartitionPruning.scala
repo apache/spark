@@ -126,14 +126,14 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
       val onlyInBroadcast = !hinted &&
         (conf.dynamicPartitionPruningReuseBroadcastOnly || !hasBenefit)
       // insert a DynamicPruning wrapper to identify the subquery during query planning
-      Filter(
-        DynamicPruningSubquery(
-          pruningKey,
-          filteringPlan,
-          joinKeys,
-          indices,
-          onlyInBroadcast)(broadcastValueProjection),
-        pruningPlan)
+      val pruning = DynamicPruningSubquery(
+        pruningKey,
+        filteringPlan,
+        joinKeys,
+        indices,
+        onlyInBroadcast)(broadcastValueProjection)
+      if (hinted) pruning.setTagValue(DynamicPruning.HONORS_RUNTIME_FILTER_HINT, ())
+      Filter(pruning, pruningPlan)
     } else {
       // abort dynamic partition pruning
       pruningPlan

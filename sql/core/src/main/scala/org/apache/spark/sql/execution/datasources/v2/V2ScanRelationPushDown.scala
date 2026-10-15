@@ -884,9 +884,10 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
    *
    * Reproducible (re-applied by the merge), so NOT blocking: `output` (column pruning, via
    * `SupportsPushDownRequiredColumns`) and `pushedPredicates` / `pushedFilterExpressions`
-   * (deterministic filters, re-pushed via `SupportsPushDownV2Filters`). A pushed aggregate, join or
-   * variant never reaches here -- their build rules run first. When a new pushdown capability adds
-   * plain-scan state to [[ScanBuilderHolder]], list it above so it keeps the scan not-mergeable.
+   * (deterministic filters, re-pushed via `SupportsPushDownV2Filters`). A scan with a pushed join
+   * or variant also consults this, but only for `repeatableScan`; it is never mergeable. When a new
+   * pushdown capability adds plain-scan state to [[ScanBuilderHolder]], list it above so it keeps
+   * the scan not-mergeable.
    */
   private def hasBlockingPushdown(holder: ScanBuilderHolder): Boolean =
     holder.pushedLimit.isDefined ||

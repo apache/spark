@@ -366,9 +366,9 @@ class PlanMerger(
    *   Project arms, which propagate `dsv2DeferredScan` unchanged) -> the enclosing `(Filter,
    *   Filter)` arm, which builds it once (via `tryBuildFilterDSv2ScanChild`) and returns
    *   `dsv2DeferredScan = None`.
-   * - A `(Filter, Filter)`'s children CAN themselves be Filters: `PartitionPruning` and
-   *   `InjectRuntimeFilter` insert a Filter above an existing one after `CombineFilters` has run,
-   *   and the `PushDownPredicates` pass that would re-combine them runs only in a later batch. The
+   * - A `(Filter, Filter)`'s children CAN themselves be Filters: `InjectRuntimeFilter` inserts a
+   *   Filter above an existing one after `CombineFilters` has run, and the `PushDownPredicates`
+   *   pass that would re-combine them runs only in a later batch. The
    *   deferral is consumed at the INNERMOST `(Filter, Filter)` pair (which builds the scan); an
    *   enclosing pair sees `dsv2DeferredScan = None`, but `dsv2Merged` still marks the merge below
    *   it, so it can apply the DSv2-symmetric exemption too. This is sound because

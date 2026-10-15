@@ -3215,7 +3215,7 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     checkAnswer(df, Seq(Row("keep", 1), Row(null, 2)))
   }
 
-  test("RUNTIME_FILTER hint rejects a scan that absorbed a LIMIT") {
+  test("RUNTIME_FILTER hint rejects a scan that absorbed a LIMIT or an aggregate") {
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "0",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       withTable("dpp_fact") {
@@ -3247,9 +3247,17 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
               val limited = "SELECT /*+ RUNTIME_FILTER(d) */ * FROM " +
                 join.format("(SELECT dept FROM h2.test.employee LIMIT 2)")
               checkLimitRemoved(sql(limited))
-              assert(!hasRuntimeFilter(limited))
-              assert(warnings(limited).exists(_.contains("is not supported in the query: the " +
-                "hinted side reads DataSourceV2ScanRelation, which may return different rows")))
+              // The database computes the aggregate, which is not trusted to return the same
+              // rows again.
+              val aggregated = "SELECT /*+ RUNTIME_FILTER(d) */ * FROM " +
+                join.format("(SELECT dept, max(salary) m FROM h2.test.employee GROUP BY dept)")
+              checkAggregateRemoved(sql(aggregated))
+              Seq(limited, aggregated).foreach { query =>
+                assert(!hasRuntimeFilter(query))
+                assert(warnings(query).exists(_.contains("is not supported in the query: the " +
+                  "hinted side reads h2.test.employee with an aggregate, limit, offset, top-N or " +
+                  "sample pushed into the source")))
+              }
               // A scan that absorbed only a filter returns the same rows again.
               val filtered = "SELECT /*+ RUNTIME_FILTER(d) */ * FROM " +
                 join.format("(SELECT dept FROM h2.test.employee WHERE dept > 1)")

@@ -189,7 +189,8 @@ case class DataSourceV2Relation(
  * @param repeatableScan whether every execution of the scan returns the same rows, see
  *                       [[LeafNode.isOutputRepeatable]]. Default false: `V2ScanRelationPushDown`
  *                       sets it true unless the source absorbed an operator whose rows depend on
- *                       order or chance (limit, offset, top-N, sample) or an aggregate.
+ *                       order or chance (limit, offset, top-N, sample) or an aggregate, on the
+ *                       scan or on a side of a join pushed into it.
  */
 case class DataSourceV2ScanRelation(
     relation: DataSourceV2Relation,
