@@ -2527,6 +2527,22 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     }
   }
 
+  test("RUNTIME_FILTER hint inside a subquery counts a merged filter as applied") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+      SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "") {
+      // The two filters built from `bf3` inside the subquery are merged into one plan before the
+      // rebuilt join is visited again in the main plan.
+      val query = "select * from bf4 where bf4.a4 = 10 and bf4.c4 in " +
+        "(select /*+ RUNTIME_FILTER(bf3) */ p.f5 from bf5part p join bf3 " +
+        "on p.c5 = bf3.c3 and p.b5 = bf3.b3)"
+      assert(hasDynamicPruning(query))
+      assert(bloomFilterApplicationSideKeys(query) == Set("c5", "b5"))
+      assert(!hintWarnings(query).exists(_.contains("is not supported")))
+    }
+  }
+
   test("RUNTIME_FILTER hint rejects a join key that may take different values") {
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
@@ -2641,8 +2657,7 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
         assertHintedRewrite(query("materialized_side"))
         assertNoBloomFilters(query("lazy_side"))
         assertHintNotApplied(query("lazy_side"),
-          "the hinted side reads InMemoryRelation, which may return different rows when " +
-            "evaluated again")
+          "the hinted side reads InMemoryRelation, which is not materialized yet")
       }
     }
   }
