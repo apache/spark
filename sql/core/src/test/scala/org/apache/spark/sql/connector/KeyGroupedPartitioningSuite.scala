@@ -2967,7 +2967,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
         assert(kgp.originalPartitionValues.nonEmpty)
         assert(kgp.originalPartitionValues.forall(_.numFields == kgp.expressions.length),
           "originalPartitionValues should be projected to the join keys")
-        // Each split's `bucket(32, id)` value, the second field of its raw partition key.
+        // Each split's `bucket(32, id)` value, the second field of its raw partition key
         val expectedOriginals = projectedScan.inputPartitions.map(
           _.asInstanceOf[HasPartitionKey].partitionKey().getInt(1))
         assert(kgp.originalPartitionValues.size == expectedOriginals.size)
