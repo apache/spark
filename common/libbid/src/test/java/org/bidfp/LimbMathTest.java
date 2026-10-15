@@ -54,6 +54,7 @@ public final class LimbMathTest {
     int[] d3 = new int[LimbMath.DIGITS32];
     threeLimbKnown();
     wide6Multiply();
+    wideDivide();
     for (int n = 0; n < 200; n++) {
       int wa = 1 + rng.nextInt(3);
       int wb = 1 + rng.nextInt(3);
@@ -128,6 +129,100 @@ public final class LimbMathTest {
     r.store(dest);
     expectEq(dest, toBig(new long[] {a.l0, a.l1, a.l2}).multiply(
         toBig(new long[] {b.l0, b.l1, b.l2})), "wide6 mul3");
+  }
+
+  private static void wideDivide() {
+    Random rng = new Random(0x6469_7636L);
+    Wide6 ua = new Wide6();
+    Wide6 va = new Wide6();
+    Wide6 qa = new Wide6();
+    Wide6 na = new Wide6();
+    Wide8 ub = new Wide8();
+    Wide8 vb = new Wide8();
+    Wide8 qb = new Wide8();
+    Wide8 nb = new Wide8();
+    long[] buf = new long[LimbMath.WORK];
+    for (int n = 0; n < 400; n++) {
+      fillWide6(ua, 1 + rng.nextInt(6), rng);
+      fillWide6(va, 1 + rng.nextInt(3), rng);
+      if (va.isZero()) {
+        va.l0 = 1L;
+      }
+      BigInteger bu = toBig(store(ua, buf));
+      BigInteger bv = toBig(store(va, buf));
+      qa.divide(ua, va, na);
+      BigInteger[] qr = bu.divideAndRemainder(bv);
+      expectEq(store(qa, buf), qr[0], "wide6 div q");
+      expectEq(store(ua, buf), qr[1], "wide6 div r");
+
+      fillWide8(ub, 1 + rng.nextInt(8), rng);
+      fillWide8(vb, 1 + rng.nextInt(4), rng);
+      if (vb.isZero()) {
+        vb.l0 = 1L;
+      }
+      bu = toBig(store(ub, buf));
+      bv = toBig(store(vb, buf));
+      qb.divide(ub, vb, nb);
+      qr = bu.divideAndRemainder(bv);
+      expectEq(store(qb, buf), qr[0], "wide8 div q");
+      expectEq(store(ub, buf), qr[1], "wide8 div r");
+    }
+  }
+
+  private static void fillWide6(Wide6 dest, int words, Random rng) {
+    dest.clear();
+    dest.l0 = rng.nextLong();
+    if (words > 1) {
+      dest.l1 = rng.nextLong();
+    }
+    if (words > 2) {
+      dest.l2 = rng.nextLong();
+    }
+    if (words > 3) {
+      dest.l3 = rng.nextLong();
+    }
+    if (words > 4) {
+      dest.l4 = rng.nextLong();
+    }
+    if (words > 5) {
+      dest.l5 = rng.nextLong();
+    }
+  }
+
+  private static void fillWide8(Wide8 dest, int words, Random rng) {
+    dest.clear();
+    dest.l0 = rng.nextLong();
+    if (words > 1) {
+      dest.l1 = rng.nextLong();
+    }
+    if (words > 2) {
+      dest.l2 = rng.nextLong();
+    }
+    if (words > 3) {
+      dest.l3 = rng.nextLong();
+    }
+    if (words > 4) {
+      dest.l4 = rng.nextLong();
+    }
+    if (words > 5) {
+      dest.l5 = rng.nextLong();
+    }
+    if (words > 6) {
+      dest.l6 = rng.nextLong();
+    }
+    if (words > 7) {
+      dest.l7 = rng.nextLong();
+    }
+  }
+
+  private static long[] store(Wide6 src, long[] buf) {
+    src.store(buf);
+    return buf;
+  }
+
+  private static long[] store(Wide8 src, long[] buf) {
+    src.store(buf);
+    return buf;
   }
 
   private static void sqrtCases() {

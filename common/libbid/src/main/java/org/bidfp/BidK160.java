@@ -147,13 +147,8 @@ final class BidK160 {
     if (scale > 0) {
       frame.xa.multiplyPow10(scale);
     }
-    frame.xa.store(frame.w0);
-    frame.xb.store(frame.w1);
-    LimbMath.divide(
-        frame.w2, frame.w3, frame.w0, frame.w1,
-        frame.d0, frame.d1, frame.d2, frame.d3);
-    frame.xr.load(frame.w2);
-    boolean remSticky = !LimbMath.isZero(frame.w3);
+    frame.xr.divide(frame.xa, frame.xb, frame.xt);
+    boolean remSticky = !frame.xa.isZero();
     pack(
         format, negative, ae - be - scale, frame.xr, remSticky, mode, flags,
         frame, out);

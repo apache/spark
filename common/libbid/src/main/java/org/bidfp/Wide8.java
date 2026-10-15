@@ -33,6 +33,8 @@ final class Wide8 {
   long l5;
   long l6;
   long l7;
+  /** Ninth limb used as Knuth D overflow; zero outside {@link #divide}. */
+  private long extra;
 
   void clear() {
     l0 = 0L;
@@ -43,6 +45,7 @@ final class Wide8 {
     l5 = 0L;
     l6 = 0L;
     l7 = 0L;
+    extra = 0L;
   }
 
   void copyFrom(Wide8 other) {
@@ -54,6 +57,7 @@ final class Wide8 {
     l5 = other.l5;
     l6 = other.l6;
     l7 = other.l7;
+    extra = 0L;
   }
 
   void copyFrom(UIntLimbs coeff) {
@@ -65,6 +69,7 @@ final class Wide8 {
     l5 = 0L;
     l6 = 0L;
     l7 = 0L;
+    extra = 0L;
   }
 
   boolean isZero() {
@@ -356,6 +361,63 @@ final class Wide8 {
     return 64 - Long.numberOfLeadingZeros(l0);
   }
 
+  /**
+   * {@code this = floor(u / v)}, {@code u = u % v}. {@code v} is unchanged.
+   * {@code vn} holds the normalized divisor.
+   */
+  void divide(Wide8 u, Wide8 v, Wide8 vn) {
+    extra = 0L;
+    if (v.isZero()) {
+      throw new ArithmeticException("division by zero");
+    }
+    if (u.isZero() || u.compare(v) < 0) {
+      clear();
+      return;
+    }
+    int n = v.usedLimbs();
+    int m = u.usedLimbs();
+    if (n == 1) {
+      divideSingle(u, v.l0);
+      return;
+    }
+    int s = Long.numberOfLeadingZeros(v.limb(n - 1));
+    vn.copyFrom(v);
+    vn.shiftLeftBits(s);
+    u.shiftLeftBits(s);
+    clear();
+    for (int j = m - n; j >= 0; j--) {
+      long ujn = u.limb(j + n);
+      long ujn1 = u.limb(j + n - 1);
+      long ujn2 = j + n >= 2 ? u.limb(j + n - 2) : 0L;
+      long vn1 = vn.limb(n - 1);
+      long vn2 = vn.limb(n - 2);
+      long qhat;
+      long rhat;
+      boolean rhatOverflow;
+      if (ujn == vn1) {
+        qhat = -1L;
+        rhat = ujn + ujn1;
+        rhatOverflow = Long.compareUnsigned(rhat, ujn) < 0;
+      } else {
+        qhat = Bid64Divide.divide128By64(ujn, ujn1, vn1);
+        rhat = ujn1 - qhat * vn1;
+        rhatOverflow = false;
+      }
+      while (!rhatOverflow && productGreater(qhat, vn2, rhat, ujn2)) {
+        qhat--;
+        long prev = rhat;
+        rhat += vn1;
+        rhatOverflow = Long.compareUnsigned(rhat, prev) < 0;
+      }
+      if (subtractMul(u, j, vn, n, qhat) != 0L) {
+        qhat--;
+        addAt(u, j, vn, n);
+      }
+      setLimb(j, qhat);
+    }
+    u.shiftRightBits(s);
+  }
+
   void store(long[] dest) {
     LimbMath.clear(dest);
     dest[0] = l0;
@@ -392,6 +454,126 @@ final class Wide8 {
       buf[--pos] = (char) ('0' + digit);
     }
     return new String(buf, pos, buf.length - pos);
+  }
+
+  private void divideSingle(Wide8 u, long divisor) {
+    clear();
+    long rem = 0L;
+    for (int i = 7; i >= 0; i--) {
+      long lo = u.limb(i);
+      long q;
+      if (rem == 0L) {
+        q = Long.divideUnsigned(lo, divisor);
+        rem = Long.remainderUnsigned(lo, divisor);
+      } else {
+        q = Bid64Divide.divide128By64(rem, lo, divisor);
+        rem = lo - q * divisor;
+      }
+      setLimb(i, q);
+    }
+    u.clear();
+    u.l0 = rem;
+  }
+
+  private int usedLimbs() {
+    if (l7 != 0L) {
+      return 8;
+    }
+    if (l6 != 0L) {
+      return 7;
+    }
+    if (l5 != 0L) {
+      return 6;
+    }
+    if (l4 != 0L) {
+      return 5;
+    }
+    if (l3 != 0L) {
+      return 4;
+    }
+    if (l2 != 0L) {
+      return 3;
+    }
+    if (l1 != 0L) {
+      return 2;
+    }
+    return 1;
+  }
+
+  private void shiftLeftBits(int s) {
+    if (s == 0) {
+      extra = 0L;
+      return;
+    }
+    int t = 64 - s;
+    extra = l7 >>> t;
+    l7 = (l7 << s) | (l6 >>> t);
+    l6 = (l6 << s) | (l5 >>> t);
+    l5 = (l5 << s) | (l4 >>> t);
+    l4 = (l4 << s) | (l3 >>> t);
+    l3 = (l3 << s) | (l2 >>> t);
+    l2 = (l2 << s) | (l1 >>> t);
+    l1 = (l1 << s) | (l0 >>> t);
+    l0 <<= s;
+  }
+
+  private void shiftRightBits(int s) {
+    if (s == 0) {
+      extra = 0L;
+      return;
+    }
+    int t = 64 - s;
+    l0 = (l0 >>> s) | (l1 << t);
+    l1 = (l1 >>> s) | (l2 << t);
+    l2 = (l2 >>> s) | (l3 << t);
+    l3 = (l3 >>> s) | (l4 << t);
+    l4 = (l4 >>> s) | (l5 << t);
+    l5 = (l5 >>> s) | (l6 << t);
+    l6 = (l6 >>> s) | (l7 << t);
+    l7 = (l7 >>> s) | (extra << t);
+    extra = 0L;
+  }
+
+  private static long subtractMul(Wide8 u, int j, Wide8 v, int n, long qhat) {
+    long k = 0L;
+    for (int i = 0; i < n; i++) {
+      long pLo = qhat * v.limb(i);
+      long pHi = umulh(qhat, v.limb(i));
+      long ui = u.limb(j + i);
+      long t = ui - k;
+      long br = Long.compareUnsigned(ui, k) < 0 ? 1L : 0L;
+      long t2 = t - pLo;
+      br += Long.compareUnsigned(t, pLo) < 0 ? 1L : 0L;
+      u.setLimb(j + i, t2);
+      k = pHi + br;
+    }
+    long ui = u.limb(j + n);
+    long t = ui - k;
+    long br = Long.compareUnsigned(ui, k) < 0 ? 1L : 0L;
+    u.setLimb(j + n, t);
+    return br;
+  }
+
+  private static void addAt(Wide8 u, int j, Wide8 v, int n) {
+    long carry = 0L;
+    for (int i = 0; i < n; i++) {
+      long ui = u.limb(j + i);
+      long s = ui + v.limb(i);
+      long c = carry(ui, s);
+      long t = s + carry;
+      c += carry(s, t);
+      u.setLimb(j + i, t);
+      carry = c;
+    }
+    long ui = u.limb(j + n);
+    u.setLimb(j + n, ui + carry);
+  }
+
+  private static boolean productGreater(long a, long b, long hi, long lo) {
+    long pHi = umulh(a, b);
+    long pLo = a * b;
+    int cmp = Long.compareUnsigned(pHi, hi);
+    return cmp > 0 || cmp == 0 && Long.compareUnsigned(pLo, lo) > 0;
   }
 
   private void mac(long m, Wide8 b, int shift) {
@@ -448,6 +630,7 @@ final class Wide8 {
       case 5 -> l5;
       case 6 -> l6;
       case 7 -> l7;
+      case 8 -> extra;
       default -> 0L;
     };
   }
@@ -462,6 +645,7 @@ final class Wide8 {
       case 5 -> l5 = value;
       case 6 -> l6 = value;
       case 7 -> l7 = value;
+      case 8 -> extra = value;
       default -> throw new ArithmeticException("Wide8 overflow");
     }
   }
