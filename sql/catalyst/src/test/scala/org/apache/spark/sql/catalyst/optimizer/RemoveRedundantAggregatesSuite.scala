@@ -294,7 +294,6 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
       doubles.select(a).groupBy(a)(a).analyze)
   }
 
-
   test("SPARK-60150: Streaming aggregates on a float key are removed as before") {
     val d = $"d".double
     val a = $"a".int

@@ -126,19 +126,19 @@ class PythonUDFSuite extends SharedSparkSession {
     assert(grouped.where(col("x").cast("string") === "-0.0").collect().length == 1)
     assert(grouped.where(col("x").cast("string") === "0.0").collect().isEmpty)
 
-    // Column pruning removes an aggregate function after the filter is pushed. With count(*)
-    // pruned, the aggregate still outputs the raw key -0.0, which the filter keeps.
+    // Column pruning removes an aggregate function after the filter push-down, which keeps the
+    // filter above the aggregate. With count(*) pruned, the aggregate outputs the raw key -0.0,
+    // which the filter keeps.
     val df = Seq((-0.0d, 1.0d), (-0.0d, 2.0d)).toDF("x", "v")
     val mixed = df.groupBy("x").agg(pandasTestUDF(col("v")).as("p"), count("*").as("c"))
       .where(col("x").cast("string") === "-0.0").select("x", "p")
     assert(mixed.collect().length == 1)
-    // With the pandas UDF pruned, the aggregate is group-only and outputs the normalized key.
-    // Either way, the rows returned must satisfy the filter.
-    for (key <- Seq("-0.0", "0.0")) {
-      val keys = df.groupBy("x").agg(pandasTestUDF(col("v")).as("p"))
-        .where(col("x").cast("string") === key).select(col("x").cast("string"))
-      assert(keys.collect().forall(_.getString(0) == key), s"rows for $key: ${keys.collect()}")
-    }
+    // With the pandas UDF pruned, the aggregate is group-only and outputs the normalized key 0.0,
+    // which the filter then reads, pushed below it in normalized form.
+    def keys(key: String): Array[String] = df.groupBy("x").agg(pandasTestUDF(col("v")).as("p"))
+      .where(col("x").cast("string") === key).select(col("x").cast("string")).as[String].collect()
+    assert(keys("0.0").toSeq == Seq("0.0"))
+    assert(keys("-0.0").isEmpty)
   }
 
   test("SPARK-27052: Python UDF in a higher order function lambda") {

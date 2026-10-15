@@ -347,7 +347,6 @@ class LimitPushdownSuite extends PlanTest {
       LocalLimit(1, relation).select(i).limit(1).analyze)
   }
 
-
   test("Push down limit 1 through Offset") {
     comparePlans(
       Optimize.execute(testRelation.offset(2).limit(1).analyze),

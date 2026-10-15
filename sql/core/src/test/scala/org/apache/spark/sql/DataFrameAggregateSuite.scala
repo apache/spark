@@ -1373,10 +1373,16 @@ class DataFrameAggregateSuite extends SharedSparkSession
       val grouped = sql(s"SELECT cast(d AS STRING), max(a) FROM $distinct GROUP BY d")
       checkAnswer(grouped, Row("0.0", 2))
       assert(grouped.queryExecution.optimizedPlan.collect { case a: Aggregate => a }.size == 1)
+      // The filter reads the DISTINCT's normalized 0.0, so it keeps both rows for '0.0' and none
+      // for '-0.0'.
       checkAnswer(
         sql(s"SELECT cast(d AS STRING), max(a) FROM $distinct " +
           "WHERE cast(d AS STRING) = '0.0' GROUP BY d"),
         Row("0.0", 2))
+      checkAnswer(
+        sql(s"SELECT cast(d AS STRING), max(a) FROM $distinct " +
+          "WHERE cast(d AS STRING) = '-0.0' GROUP BY d"),
+        Nil)
     }
   }
 
