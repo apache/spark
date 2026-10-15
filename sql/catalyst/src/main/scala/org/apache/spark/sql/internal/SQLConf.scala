@@ -2615,8 +2615,8 @@ object SQLConf {
     buildConf("spark.sql.sources.v2.bucketing.groupScanPartitions.enabled")
       .doc("When enabled, coalesce scan splits with the same reported partition key into one " +
         "task, even when a downstream shuffle makes grouping unnecessary for correctness. " +
-        "This can reduce scheduling overhead for sources with many small splits per key, " +
-        "but can reduce parallelism for large or skewed keys. Requires " +
+        "This can reduce scan-stage execution time by amortizing per-task costs across small " +
+        "splits, but can reduce parallelism for large or skewed keys. Requires " +
         s"${V2_BUCKETING_ENABLED.key} to be enabled.")
       .version("4.4.0")
       .booleanConf
