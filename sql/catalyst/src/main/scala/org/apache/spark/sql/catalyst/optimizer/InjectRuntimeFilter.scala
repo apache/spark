@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
-import org.apache.spark.sql.catalyst.trees.TreePattern.{INVOKE, JSON_TO_STRUCT, LIKE_FAMLIY, PYTHON_UDF, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, SCALA_UDF}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{DYNAMIC_PRUNING_SUBQUERY, INVOKE, JSON_TO_STRUCT, LIKE_FAMLIY, PYTHON_UDF, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, SCALA_UDF}
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.internal.SQLConf
 
@@ -456,17 +456,18 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       plan: LogicalPlan,
       applicationKey: Expression,
       creationKey: Expression): Boolean = {
-    findExpressionAndTrackLineageDown(applicationKey, plan).exists { case (trackedKey, _) =>
-      plan.exists {
-        case Filter(condition, _) => condition.exists {
-          case d: DynamicPruningSubquery =>
-            d.pruningKey.semanticEquals(trackedKey) &&
-              d.broadcastKeyIndices.exists(i => d.buildKeys(i).semanticEquals(creationKey))
+    plan.containsPattern(DYNAMIC_PRUNING_SUBQUERY) &&
+      findExpressionAndTrackLineageDown(applicationKey, plan).exists { case (trackedKey, _) =>
+        plan.exists {
+          case Filter(condition, _) => condition.exists {
+            case d: DynamicPruningSubquery =>
+              d.pruningKey.semanticEquals(trackedKey) &&
+                d.broadcastKeyIndices.exists(i => d.buildKeys(i).semanticEquals(creationKey))
+            case _ => false
+          }
           case _ => false
         }
-        case _ => false
       }
-    }
   }
 
   /**
@@ -503,6 +504,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     val bloomFilterEnabled = conf.runtimeFilterBloomFilterEnabled
     plan transformUp {
       case join: Join if join.getTagValue(HINT_DECIDED).isDefined => join
+      // Only a hinted join has anything to do with Bloom filters disabled.
+      case join: Join if !bloomFilterEnabled && !hasRuntimeFilterHint(join.hint) => join
       case join @ ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, hint) =>
         var newLeft = left
         var newRight = right
