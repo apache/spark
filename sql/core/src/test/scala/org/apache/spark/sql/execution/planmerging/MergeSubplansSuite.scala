@@ -2655,10 +2655,12 @@ class MergeSubplansSuite extends PlanTest {
 
   test("SPARK-60106: A merged DSv2 filter on a join child counts as the cached plans' filter") {
     // sub1 and sub2 filter the DSv2 scan differently and merge under the DSv2 exemption into a
-    // merged Filter. sub3 filters only the other join child. Merging it would drop the merged
-    // Filter and join both children unfiltered, so without symmetric filter propagation it stays
-    // apart. The DSv2 scan is tried as both the left and the right join child.
-    Seq(true, false).foreach { v2OnLeft =>
+    // merged Filter. sub3 filters the other join child, so merging it would join a child that the
+    // cached plans filter with a child that sub3 filters. Without symmetric filter propagation it
+    // stays apart. sub3 either leaves the DSv2 scan unfiltered, so the merged Filter is dropped,
+    // or filters it too, so the merged Filter gets sub3's side. The DSv2 scan is tried as both the
+    // left and the right join child.
+    for (v2OnLeft <- Seq(true, false); filterV2In3 <- Seq(false, true)) {
       def join(v2: LogicalPlan, other: LogicalPlan): LogicalPlan = if (v2OnLeft) {
         v2.join(other, Inner, Some($"a" === $"d"))
       } else {
@@ -2670,8 +2672,13 @@ class MergeSubplansSuite extends PlanTest {
       val sub2 = ScalarSubquery(
         join(v2ScanReading("a", "b").where($"b" > 2), testRelation2)
           .groupBy()(max($"a").as("max_a")))
+      val v2In3 = if (filterV2In3) {
+        v2ScanReading("a", "b").where($"a" < 0)
+      } else {
+        v2ScanReading("a", "b")
+      }
       val sub3 = ScalarSubquery(
-        join(v2ScanReading("a", "b"), testRelation2.where($"e" > 3))
+        join(v2In3, testRelation2.where($"e" > 3))
           .groupBy()(min($"a").as("min_a")))
       val originalQuery = testRelation.select(sub1, sub2, sub3)
 
