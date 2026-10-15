@@ -23,7 +23,7 @@ import java.util.{Calendar, Locale, TimeZone}
 
 import org.scalatest.exceptions.TestFailedException
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.{SparkException, SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -1100,6 +1100,26 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Seq((Literal("a"), Literal(1))), Seq(false), Seq(false))
     assert(jsonObject.stateful)
     assert(jsonObject.freshCopyIfContainsStatefulExpression() ne jsonObject)
+  }
+
+  test("JSON_OBJECT raises JSON_OBJECT_NULL_KEY before the value in interpreted and codegen") {
+    // Covers the interpreted key-guard branch, which the end-to-end suites do not reach (they run
+    // codegen, or use a non-null key). The guard runs while the carrier struct is evaluated left to
+    // right, so the null-key error must win over a paired value that would itself throw.
+    checkErrorInExpression[SparkRuntimeException](
+      JsonObjectExpr(Seq((Literal(null, StringType), Literal(1))), Seq(false), Seq(false)),
+      "JSON_OBJECT_NULL_KEY")
+    checkErrorInExpression[SparkRuntimeException](
+      JsonObjectExpr(
+        Seq((BoundReference(0, StringType, nullable = true), Literal(1))), Seq(false), Seq(false)),
+      InternalRow(null),
+      "JSON_OBJECT_NULL_KEY")
+    // The value is an ANSI cast that always throws; the null-key error must still win.
+    checkErrorInExpression[SparkRuntimeException](
+      JsonObjectExpr(
+        Seq((Literal(null, StringType), Cast(Literal("x"), IntegerType, None, EvalMode.ANSI))),
+        Seq(false), Seq(false)),
+      "JSON_OBJECT_NULL_KEY")
   }
 
 }

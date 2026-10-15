@@ -144,8 +144,9 @@ class JsonObjectSuite extends QueryTest with SharedSparkSession {
   test("a simple CASE over a named-parameter operand is a valid colon key") {
     // `CASE :p WHEN ... END : value`: the `:p` operand must parse as a named-parameter marker, not
     // be read as the member separator. `CASE :` is ambiguous with a `case` column before the
-    // separator (`case : value`), so the separator check decides it by looking ahead for the
-    // CASE's WHEN -- present here, so `CASE` is the keyword and `:p` stays its operand.
+    // separator (`case : value`), so the separator check decides it by looking ahead for a complete
+    // CASE body -- a top-level WHEN closed by its END. It is present here, so `CASE` is the keyword
+    // and `:p` stays its operand.
     val from = "FROM (SELECT parse_json('{\"x\":1}') AS v)"
     checkAnswer(
       spark.sql(
@@ -1100,6 +1101,8 @@ world'))"""))
     // malformed row that a `try_*` wrapper swallows must leave the generator clean: later rows
     // reusing the same evaluator must render exactly as they would on their own. `decode(..utf-8)`
     // round-trips the bytes back to the JSON string so the per-row result is checkable.
+    // Force one task so the valid rows after `'{bad'` share its evaluator -- otherwise the rows
+    // split across tasks and `'{bad'` is the last row its evaluator sees, hiding the corruption.
     val query =
       "SELECT decode(try_to_binary(json_object('a' VALUE s FORMAT JSON), 'utf-8'), 'utf-8') " +
         "FROM VALUES ('1'), ('{bad'), ('2'), ('3') AS t(s)"
@@ -1107,6 +1110,7 @@ world'))"""))
     val modes = Seq(CodegenObjectFactoryMode.NO_CODEGEN, CodegenObjectFactoryMode.CODEGEN_ONLY)
     modes.foreach { mode =>
       withSQLConf(
+        SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key -> "1",
         SQLConf.CODEGEN_FACTORY_MODE.key -> mode.toString,
         SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key ->
           (mode == CodegenObjectFactoryMode.CODEGEN_ONLY).toString) {
@@ -1119,10 +1123,13 @@ world'))"""))
     // Two constant FORMAT JSON members at different positions share the validated-text cache. A
     // column-valued member keeps the object from being constant-folded, so rows after the first
     // read the cache: a fill or read at the wrong index would splice the other member's text.
-    checkAnswer(
-      sql("SELECT json_object('a' VALUE '[1]' FORMAT JSON, 'b' VALUE x, " +
-        "'c' VALUE '{\"d\":2}' FORMAT JSON) FROM VALUES (1), (2) t(x)"),
-      Seq(Row("""{"a":[1],"b":1,"c":{"d":2}}"""), Row("""{"a":[1],"b":2,"c":{"d":2}}""")))
+    // Force one task so a single evaluator sees both rows and the second takes the cache-read path.
+    withSQLConf(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key -> "1") {
+      checkAnswer(
+        sql("SELECT json_object('a' VALUE '[1]' FORMAT JSON, 'b' VALUE x, " +
+          "'c' VALUE '{\"d\":2}' FORMAT JSON) FROM VALUES (1), (2) t(x)"),
+        Seq(Row("""{"a":[1],"b":1,"c":{"d":2}}"""), Row("""{"a":[1],"b":2,"c":{"d":2}}""")))
+    }
   }
 
   test("a constant-folded raw nested value round-trips through .sql as raw") {
