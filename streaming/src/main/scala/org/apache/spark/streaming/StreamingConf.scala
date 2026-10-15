@@ -48,7 +48,7 @@ object StreamingConf {
         "receivers. The receiver allocates a buffer of exactly the size announced in " +
         "the frame header before reading the frame body; frames announcing a negative " +
         "length or one larger than this limit are rejected with an error.")
-      .version("4.4.0")
+      .version("3.5.10")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("1g")
 
