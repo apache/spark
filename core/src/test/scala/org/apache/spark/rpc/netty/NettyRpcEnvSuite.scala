@@ -17,17 +17,24 @@
 
 package org.apache.spark.rpc.netty
 
+import java.io.{File, IOException}
+import java.nio.channels.Channels
+import java.nio.charset.StandardCharsets.UTF_8
+import java.nio.file.Files
+import java.util.UUID
 import java.util.concurrent.ExecutionException
 
 import scala.concurrent.duration._
 
+import org.mockito.Mockito.when
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.network.client.TransportClient
 import org.apache.spark.rpc._
-import org.apache.spark.util.{SslTestUtils, ThreadUtils}
+import org.apache.spark.util.{SslTestUtils, ThreadUtils, Utils}
 
 class NettyRpcEnvSuite extends RpcEnvSuite with MockitoSugar with TimeLimits {
 
@@ -177,6 +184,97 @@ class NettyRpcEnvSuite extends RpcEnvSuite with MockitoSugar with TimeLimits {
     } finally {
       anotherEnv.shutdown()
       anotherEnv.awaitTermination()
+    }
+  }
+
+  /** Files served by a dedicated RpcEnv for the file download tests below. */
+  private case class FileDownloadFixture(
+      env: RpcEnv,
+      conf: SparkConf,
+      bigUri: String,
+      smallJar: File,
+      smallUri: String,
+      destDir: File) {
+
+    def fetch(uri: String, targetDir: File): File = {
+      Utils.fetchFile(uri, targetDir, conf, SparkHadoopUtil.get.conf, 0L, useCache = false)
+    }
+
+    /** Fetches the small jar, failing if the download does not complete in time. */
+    def fetchSmallJar(targetDir: File): Unit = {
+      failAfter(60.seconds) {
+        fetch(smallUri, targetDir)
+      }
+      assert(Utils.contentEquals(smallJar, new File(targetDir, smallJar.getName)))
+    }
+  }
+
+  /**
+   * Runs `f` against a dedicated RpcEnv that serves a big jar, much larger than an OS pipe buffer
+   * so the file-download thread blocks writing it if nothing reads or closes the receiving end,
+   * and a small jar. A dedicated RpcEnv is used because if a download channel leaks, its single
+   * file-download thread stays blocked and would break the other file server tests here.
+   */
+  private def withFileDownloadEnv(f: FileDownloadFixture => Unit): Unit = {
+    withTempDir { tempDir =>
+      withTempDir { destDir =>
+        val conf = createSparkConf()
+        val downloadEnv = createRpcEnv(conf, "file-download", 0)
+        val sparkEnv = SparkEnv.get
+        when(sparkEnv.rpcEnv).thenReturn(downloadEnv)
+        try {
+          val bigJar = new File(tempDir, "big.jar")
+          Files.write(bigJar.toPath, new Array[Byte](16 * 1024 * 1024))
+          val smallJar = new File(tempDir, "small.jar")
+          Files.writeString(smallJar.toPath, UUID.randomUUID().toString)
+          f(FileDownloadFixture(downloadEnv, conf, downloadEnv.fileServer.addJar(bigJar),
+            smallJar, downloadEnv.fileServer.addJar(smallJar), destDir))
+        } finally {
+          when(sparkEnv.rpcEnv).thenReturn(env)
+          downloadEnv.shutdown()
+        }
+      }
+    }
+  }
+
+  test("a failed file fetch must not leave its download channel open") {
+    withFileDownloadEnv { d =>
+      // The target directory is missing, e.g. because it was deleted concurrently, so the
+      // fetch fails creating its temp file after the download channel was already opened.
+      intercept[IOException] {
+        d.fetch(d.bigUri, new File(d.destDir, "deleted"))
+      }
+      // Later downloads through the same RpcEnv must still complete.
+      d.fetchSmallJar(d.destDir)
+    }
+  }
+
+  test("a download reader closing early must not fail other downloads on the connection") {
+    withFileDownloadEnv { d =>
+      // Open both downloads before the first reader goes away, so the second one is already in
+      // flight on the same connection when the file-download thread finds the first reader gone.
+      val big = d.env.openChannel(d.bigUri)
+      val small = d.env.openChannel(d.smallUri)
+      big.close()
+      val bytes = failAfter(60.seconds) {
+        Utils.tryWithResource(Channels.newInputStream(small))(_.readAllBytes())
+      }
+      assert(new String(bytes, UTF_8) === Files.readString(d.smallJar.toPath))
+    }
+  }
+
+  test("a file fetch failing after the download keeps its error and the connection usable") {
+    withFileDownloadEnv { d =>
+      withTempDir { conflictDir =>
+        // A different file with the same name already exists and spark.files.overwrite is off,
+        // so the fetch fails after the download has been read fully.
+        Files.writeString(new File(conflictDir, d.smallJar.getName).toPath, "different contents")
+        val e = intercept[SparkException] {
+          d.fetch(d.smallUri, conflictDir)
+        }
+        assert(e.getMessage.contains("exists and does not match contents"))
+      }
+      d.fetchSmallJar(d.destDir)
     }
   }
 }

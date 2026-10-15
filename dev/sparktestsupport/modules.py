@@ -676,7 +676,9 @@ pyspark_sql = Module(
         # unittests
         "pyspark.eval_handlers.tests.test_arrow_eval_type_handlers",
         "pyspark.eval_handlers.tests.test_base_eval_type_handlers",
+        "pyspark.eval_handlers.tests.test_elementwise_eval_type_handlers",
         "pyspark.eval_handlers.tests.test_pandas_eval_type_handlers",
+        "pyspark.eval_handlers.tests.test_udtf_eval_type_handlers",
         "pyspark.sql.tests.test_artifact",
         "pyspark.sql.tests.test_catalog",
         "pyspark.sql.tests.test_column",
