@@ -178,13 +178,26 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
   }
 
   test("Remove non-redundant aggregate - upper references non-deterministic non-grouping") {
+    // An integer c: an upper aggregate on a float/double key c would be kept.
+    val c = (($"a" + rand(0)) * 10).cast(IntegerType)
+    val query = relation
+      .groupBy($"a")($"a", c as "c")
+      .groupBy($"a", $"c")($"a", $"c")
+      .analyze
+    val expected = relation
+      .groupBy($"a")($"a", c as "c")
+      .analyze
+    val optimized = Optimize.execute(query)
+    comparePlans(optimized, expected)
+  }
+
+  test("SPARK-60150: Keep upper aggregate on a non-deterministic double key") {
+    // The upper aggregate normalizes the double key c, which a project would not.
     val query = relation
       .groupBy($"a")($"a", ($"a" + rand(0)) as "c")
       .groupBy($"a", $"c")($"a", $"c")
       .analyze
-    // The upper aggregate is not removed either, since it normalizes the double key c.
-    val optimized = Optimize.execute(query)
-    comparePlans(optimized, query)
+    comparePlans(Optimize.execute(query), query)
   }
 
   test("SPARK-36194: Remove aggregation from left semi/anti join if aggregation the same") {
@@ -278,7 +291,6 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
     // Removed when the float key is not output.
     comparePlans(Optimize.execute(lower.groupBy(d, cnt)(cnt).analyze), lower.select(cnt).analyze)
   }
-
 
   test("SPARK-36194: Child distinct keys are subsets and aggregateExpressions are foldable") {
     val originalQuery = x.groupBy($"a", $"b")($"a", $"b")

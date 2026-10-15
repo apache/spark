@@ -77,6 +77,7 @@ class OptimizeOneRowPlanSuite extends PlanTest {
     val plan5 = t1.groupBy()(sum($"a")).analyze
     comparePlans(Optimize.execute(plan5), plan5)
   }
+
   test("SPARK-60150: Keep group only aggregate that normalizes a float key") {
     val d = $"d".double
     val i = $"i".int
@@ -89,8 +90,6 @@ class OptimizeOneRowPlanSuite extends PlanTest {
     // Converted when the float key is not output.
     comparePlans(Optimize.execute(oneRow.groupBy(d, i)(i).analyze), oneRow.select(i).analyze)
   }
-
-
 
   test("Remove distinct in aggregate expression") {
     val plan1 = t1.groupBy($"a")(sumDistinct($"a").as("s")).analyze

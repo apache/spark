@@ -328,6 +328,7 @@ class LimitPushdownSuite extends PlanTest {
       Optimize.execute(x.groupBy("x.a".attr)("x.a".attr, count("x.a".attr)).limit(1).analyze),
       x.groupBy("x.a".attr)("x.a".attr, count("x.a".attr)).limit(1).analyze)
   }
+
   test("SPARK-60150: No limit 1 push down through a group only Aggregate on a float key") {
     val d = $"d".double
     val i = $"i".int
@@ -342,8 +343,6 @@ class LimitPushdownSuite extends PlanTest {
       Optimize.execute(relation.groupBy(d, i)(i).limit(1).analyze),
       LocalLimit(1, relation).select(i).limit(1).analyze)
   }
-
-
 
   test("Push down limit 1 through Offset") {
     comparePlans(
