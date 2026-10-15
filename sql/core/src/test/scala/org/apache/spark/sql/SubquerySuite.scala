@@ -3227,4 +3227,150 @@ class SubquerySuite extends SharedSparkSession
       }
     }
   }
+
+  test("SPARK-59438: correlated scalar subquery over sorted LIMIT with SMJ") {
+    // Core repro from SPARK-59438. The bug: PushProjectionThroughLimitAndOffset pushes a
+    // Project containing a correlated scalar subquery below a Limit. The subquery-to-join
+    // rewrite inserts a join below the Limit, destroying the sort order.
+    //
+    // Data is inserted in id-ascending order, which differs from the requested sort
+    // (age DESC). The join key (id) also does not correlate with the sort key (age).
+    // With broadcast disabled, SMJ repartitions by the join key and destroys the sort
+    // order, so the Limit takes wrong rows without the fix.
+    withTempView("p", "k") {
+      sql(
+        """CREATE TEMPORARY VIEW p AS
+          |SELECT * FROM VALUES
+          |  (1, 'Alice', 30), (2, 'Bob', 25), (3, 'Carol', 35),
+          |  (4, 'Dave', 28), (5, 'Eve', 22), (6, 'Frank', 40),
+          |  (7, 'Grace', 33), (8, 'Heidi', 27), (9, 'Ivan', 31),
+          |  (10, 'Judy', 29)
+          |AS t(id, name, age)
+        """.stripMargin)
+      sql(
+        """CREATE TEMPORARY VIEW k AS
+          |SELECT * FROM VALUES (1, 10), (2, 20), (3, 30), (5, 50), (7, 70)
+          |AS t(a, b)
+        """.stripMargin)
+
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        // Top 3 by age DESC => Frank(40,id=6), Carol(35,id=3), Grace(33,id=7)
+        val result = sql(
+          """WITH s AS (SELECT id, name FROM p ORDER BY age DESC LIMIT 3)
+            |SELECT name, (SELECT count(*) FROM k WHERE k.a = s.id) AS cnt
+            |FROM s ORDER BY name
+          """.stripMargin)
+
+        checkAnswer(result, Seq(
+          Row("Carol", 1),
+          Row("Frank", 0),
+          Row("Grace", 1)
+        ))
+      }
+    }
+  }
+
+  test("SPARK-59438: correlated scalar subquery over OFFSET with SMJ") {
+    // OFFSET variant. Data is inserted in score-descending order, which is the
+    // reverse of the requested sort (score ASC). Without the fix, the join below
+    // OFFSET reorders rows and the wrong 3 are returned after skipping.
+    withTempView("p2", "k2") {
+      sql(
+        """CREATE TEMPORARY VIEW p2 AS
+          |SELECT * FROM VALUES
+          |  (5, 'E', 50), (4, 'D', 40), (3, 'C', 30), (2, 'B', 20), (1, 'A', 10)
+          |AS t(id, name, score)
+        """.stripMargin)
+      sql(
+        """CREATE TEMPORARY VIEW k2 AS
+          |SELECT * FROM VALUES (3, 100), (4, 200), (5, 300)
+          |AS t(a, b)
+        """.stripMargin)
+
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        // ORDER BY score ASC LIMIT 5 OFFSET 2 => skip A(10),B(20), take C(30),D(40),E(50)
+        val result = sql(
+          """WITH s AS (SELECT id, name FROM p2 ORDER BY score ASC LIMIT 5 OFFSET 2)
+            |SELECT name, (SELECT sum(b) FROM k2 WHERE k2.a = s.id) AS total
+            |FROM s ORDER BY name
+          """.stripMargin)
+
+        checkAnswer(result, Seq(
+          Row("C", 100),
+          Row("D", 200),
+          Row("E", 300)
+        ))
+      }
+    }
+  }
+
+  test("SPARK-59438: correlated EXISTS over sorted LIMIT with SMJ") {
+    // EXISTS is a subquery that gets rewritten to a join. Data inserted in
+    // score-ascending order, sorted by score DESC. With SMJ the join destroys
+    // the sort, so the Limit takes wrong rows without the fix.
+    withTempView("p3", "k3") {
+      sql(
+        """CREATE TEMPORARY VIEW p3 AS
+          |SELECT * FROM VALUES
+          |  (1, 'A', 10), (2, 'B', 20), (3, 'C', 30), (4, 'D', 40), (5, 'E', 50)
+          |AS t(id, name, score)
+        """.stripMargin)
+      sql(
+        """CREATE TEMPORARY VIEW k3 AS
+          |SELECT * FROM VALUES (1), (3), (5) AS t(a)
+        """.stripMargin)
+
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        // Top 3 by score DESC => E(50), D(40), C(30)
+        val result = sql(
+          """WITH s AS (SELECT id, name FROM p3 ORDER BY score DESC LIMIT 3)
+            |SELECT name, EXISTS(SELECT 1 FROM k3 WHERE k3.a = s.id) AS has_match
+            |FROM s ORDER BY name
+          """.stripMargin)
+
+        checkAnswer(result, Seq(
+          Row("C", true),
+          Row("D", false),
+          Row("E", true)
+        ))
+      }
+    }
+  }
+
+  test("SPARK-59438: IN subquery in SELECT list over sorted LIMIT with SMJ") {
+    // IN (ListQuery) in the SELECT list is rewritten to an ExistenceJoin by
+    // handleUnaryNode -> rewriteExistentialExprWithAttrs. The join sits below the Limit
+    // and repartitions by the join key, destroying the sort order.
+    // NOTE: IN in a WHERE clause goes through RewritePredicateSubquery (Filter path),
+    // which is a different code path that PushProjectionThroughLimitAndOffset does not
+    // interact with. The IN must be in the projectList (SELECT) to exercise our guard.
+    withTempView("p5", "k5") {
+      sql(
+        """CREATE TEMPORARY VIEW p5 AS
+          |SELECT * FROM VALUES
+          |  (1, 'A', 10), (2, 'B', 20), (3, 'C', 30), (4, 'D', 40), (5, 'E', 50)
+          |AS t(id, name, score)
+        """.stripMargin)
+      sql(
+        """CREATE TEMPORARY VIEW k5 AS
+          |SELECT * FROM VALUES (1), (3), (5) AS t(a)
+        """.stripMargin)
+
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        // Top 3 by score DESC => E(50,id=5), D(40,id=4), C(30,id=3)
+        // IN subquery in SELECT: E(5 in k5->true), D(4 not in k5->false), C(3 in k5->true)
+        val result = sql(
+          """WITH s AS (SELECT id, name FROM p5 ORDER BY score DESC LIMIT 3)
+            |SELECT name, (id IN (SELECT a FROM k5)) AS is_matched
+            |FROM s ORDER BY name
+          """.stripMargin)
+
+        checkAnswer(result, Seq(
+          Row("C", true),
+          Row("D", false),
+          Row("E", true)
+        ))
+      }
+    }
+  }
 }

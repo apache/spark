@@ -17,27 +17,51 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{GlobalLimit, LocalLimit, LogicalPlan, Offset, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LIMIT, OFFSET, PROJECT}
 
 /**
- * Pushes Project operator through Limit operator.
+ * Pushes Project operator through Limit/Offset when it is safe to do so.
+ *
+ * The projection must be deterministic and must not contain subquery expressions
+ * that later optimizer rules rewrite into joins (correlated scalar subqueries,
+ * IN/ListQuery, and correlated EXISTS). A join placed below a Limit/Offset can
+ * destroy the sort order that the Limit depends on (SPARK-59438).
+ *
+ * Uncorrelated subqueries are safe because they are evaluated once and never
+ * become joins, so the push-down preserves the limit-at-root plan shape
+ * (SPARK-40501).
  */
 object PushProjectionThroughLimitAndOffset extends Rule[LogicalPlan] {
+
+  /**
+   * Returns true when every expression in the project list is deterministic and
+   * free of subqueries that later rewrites turn into joins.
+   */
+  private def canPushThrough(
+      projectList: Seq[org.apache.spark.sql.catalyst.expressions.NamedExpression]): Boolean = {
+    projectList.forall { e =>
+      e.deterministic &&
+        !SubqueryExpression.hasCorrelatedSubquery(e) &&
+        !SubqueryExpression.hasInOrCorrelatedExistsSubquery(e)
+    }
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(treeBits =>
     treeBits.containsPattern(PROJECT) && treeBits.containsAnyPattern(OFFSET, LIMIT)) {
 
     case p @ Project(projectList, limit @ LocalLimit(_, child))
-        if projectList.forall(_.deterministic) =>
+        if canPushThrough(projectList) =>
       limit.copy(child = p.copy(projectList, child))
 
     case p @ Project(projectList, g @ GlobalLimit(_, limit @ LocalLimit(_, child)))
-        if projectList.forall(_.deterministic) =>
+        if canPushThrough(projectList) =>
       g.copy(child = limit.copy(child = p.copy(projectList, child)))
 
     case p @ Project(projectList, offset @ Offset(_, child))
-      if projectList.forall(_.deterministic) =>
+      if canPushThrough(projectList) =>
       offset.copy(child = p.copy(projectList, child))
   }
 }
