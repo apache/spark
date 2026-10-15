@@ -189,6 +189,9 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
    * reads the same columns for the same rows either way, since the reader has to read a key column
    * to evaluate the filter on it, so offering it could only add the cost of evaluating the
    * predicate outside the generated code. Nothing is offered in that case.
+   *
+   * Once some conjuncts are offered, every other conjunct that references only their key columns
+   * is offered too, where [[FileFormat.supportsStorageFilterOnKeys]] accepts it.
    */
   private def storageFiltersFor(
       normalizedFilters: Seq[Expression],
@@ -206,13 +209,22 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
 
     val dataAttrs = AttributeSet(readDataColumns)
     // Deduplicated through an `ExpressionSet`, as `afterScanFilters` is, once a scan can take any.
-    val offered = ExpressionSet(normalizedFilters).toSeq.filter { expr =>
+    val candidates = ExpressionSet(normalizedFilters).toSeq
+    val offered = candidates.filter { expr =>
       val refs = expr.references
       refs.nonEmpty && refs.subsetOf(dataAttrs) && fsRelation.fileFormat.supportsStorageFilter(expr)
     }
     if (offered.isEmpty) return Nil
     val storageKeyAttrs = AttributeSet.fromAttributeSets(offered.map(_.references))
-    if (dataAttrs.subsetOf(storageKeyAttrs)) Nil else offered
+    if (dataAttrs.subsetOf(storageKeyAttrs)) return Nil
+    // A conjunct over the key columns alone adds no column to the read, so it is offered too. It
+    // goes last, so the reader evaluates it only on the rows the filters above keep.
+    val onKeys = candidates.filter { expr =>
+      val refs = expr.references
+      refs.nonEmpty && refs.subsetOf(storageKeyAttrs) && !offered.contains(expr) &&
+        fsRelation.fileFormat.supportsStorageFilterOnKeys(expr)
+    }
+    offered ++ onKeys
   }
 
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {

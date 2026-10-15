@@ -52,7 +52,7 @@ import org.apache.spark.internal.config.KILL_ON_FATAL_ERROR_DEPTH
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.{classic, sources, DataFrame, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, BloomFilterMightContain, BoundReference, Cast, Coalesce, CodegenObjectFactoryMode, EqualTo, Expression, GreaterThanOrEqual, If, In, IsNotNull, IsNull, LessThan, LessThanOrEqual, Literal, Or, Predicate, Rand, Remainder, SecondsToTimestamp, Substring, UnaryExpression, XxHash64}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, BloomFilterMightContain, BoundReference, Cast, Coalesce, CodegenObjectFactoryMode, EqualTo, Expression, GreaterThanOrEqual, If, In, IsNotNull, IsNull, LessThan, LessThanOrEqual, Literal, Or, Predicate, Rand, Remainder, ScalarSubquery, SecondsToTimestamp, Substring, UnaryExpression, XxHash64}
 import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
@@ -2246,6 +2246,54 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
         assert(!physical.output.exists(_.name == checkedName),
           s"the column must not leave the scan's Filter; got ${physical.output}")
       }
+    }
+  }
+
+  test("FileSourceStrategy offers a conjunct over the bloom's key columns along with the bloom") {
+    // It adds no column to the read, so it goes to the reader after the bloom. A conjunct over
+    // another column does not, and neither does a conjunct over the key with no bloom to go with.
+    withTempDir { dir =>
+      val path = writeKeyParquetFile(dir, 0L until 50L, rowGroupSize = 64 * 1024L)
+      withSQLConf(SQLConf.PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+        val relation = spark.read.parquet(path).queryExecution.optimizedPlan
+        val k = columnOf(relation, "k")
+        val bloom = bloomOn(k)
+        val onKey = EqualTo(Remainder(k, Literal(4L)), Literal(0L))
+        val onValue = EqualTo(columnOf(relation, "v"), Literal("42"))
+        def offered(condition: Expression): Seq[Expression] =
+          scanOf(planned(LogicalFilter(condition, relation))).storageFilters
+        val withBloom = offered(And(And(onKey, bloom), onValue))
+        assert(withBloom.length == 2 && withBloom.head.semanticEquals(bloom) &&
+          withBloom(1).semanticEquals(onKey), s"expected the bloom, then $onKey; got $withBloom")
+        assert(offered(And(onKey, onValue)).isEmpty, "nothing is offered without a bloom")
+        assert(!ParquetStorageFilter.isSupportedFilterOnKeys(
+          EqualTo(k, ScalarSubquery(spark.range(1).queryExecution.analyzed))),
+          "a conjunct holding a subquery is not offered")
+      }
+    }
+  }
+
+  test("a conjunct over the key columns narrows the rows the reader keeps") {
+    // With it the reader keeps exactly the rows the query returns, where the bloom alone would also
+    // keep 42, which the conjunct rejects.
+    withTempDir { dir =>
+      val path = writeKeyParquetFile(dir, 0L until 1000L, rowGroupSize = 1024L)
+      val relation = spark.read.parquet(path).queryExecution.analyzed
+      val k = columnOf(relation, "k")
+      val odd = EqualTo(Remainder(k, Literal(2L)), Literal(1L))
+      val filtered = LogicalFilter(And(bloomOn(k), odd), relation)
+      def run(pushdown: Boolean): (SparkPlan, Seq[Row]) = withSQLConf(
+          SQLConf.PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED.key -> pushdown.toString) {
+        val df = classic.Dataset.ofRows(spark, filtered)
+        (df.queryExecution.executedPlan, df.collect().toSeq.sortBy(_.getLong(0)))
+      }
+      val (_, plain) = run(pushdown = false)
+      val (plan, rows) = run(pushdown = true)
+      assert(rows == plain && !rows.exists(_.getLong(0) == 42L), s"got $rows, expected $plain")
+      assert(scanOf(plan).storageFilters.exists(_.semanticEquals(odd)),
+        s"the conjunct must be offered.\nPlan:\n$plan")
+      assert(rowsExcludedByStorageFilters(plan) == 1000L - rows.size,
+        "the reader must keep exactly the rows the query returns")
     }
   }
 

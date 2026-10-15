@@ -1981,7 +1981,8 @@ object SQLConf {
         "storage filter, such as a bloom filter from join runtime filtering, while it reads. " +
         "It reads the columns the " +
         "filter needs first, evaluates the filter per row, and then reads the remaining columns " +
-        "only for the rows that survived. This is a planning-time decision. " +
+        "only for the rows that survived. Other filter conjuncts that reference only the " +
+        "columns the filter needs are applied with it. This is a planning-time decision. " +
         "A filter that is attached also stays in the post-scan filter, the way a pushed data " +
         "filter does, so the reader is free to stop applying it wherever doing so would cost " +
         "more than it saves, and the answer does not change. In a scan that returns columnar " +

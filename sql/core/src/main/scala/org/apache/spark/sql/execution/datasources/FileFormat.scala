@@ -258,6 +258,14 @@ trait FileFormat {
   def supportsStorageFilter(expr: Expression): Boolean = false
 
   /**
+   * Whether this format's reader can evaluate `expr` together with the storage filters
+   * [[supportsStorageFilter]] accepted. The planner asks it only about a conjunct that references
+   * nothing but their key columns, which the reader reads to evaluate them anyway, so offering it
+   * narrows the surviving rows without adding a column to the read.
+   */
+  def supportsStorageFilterOnKeys(expr: Expression): Boolean = false
+
+  /**
    * Create a file metadata struct column containing fields supported by the given file format.
    */
   def createFileMetadataCol(): AttributeReference = {
