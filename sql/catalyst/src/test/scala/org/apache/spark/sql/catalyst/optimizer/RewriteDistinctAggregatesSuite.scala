@@ -18,7 +18,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, CaseWhen, Cast, Coalesce, Expression, GetMapValue, GetStructField, If, Literal, Lower, Or, Rand, Round}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, CaseWhen, Cast, Coalesce, Exists, Expression, GetMapValue, GetStructField, If, InSubquery, ListQuery, Literal, Lower, Not, Or, Rand, Round}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, CollectSet, Count, Sum}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LocalRelation, LogicalPlan}
@@ -210,6 +210,12 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
     case other => Seq(other)
   }
 
+  /** EXISTS / IN / NOT IN nodes in Expand projections. The guard must not copy these. */
+  private def subqueryExprCount(plan: LogicalPlan): Int = {
+    val exprs = plan.collect { case e: Expand => e }.flatMap(_.projections.flatten)
+    exprs.map(_.collect { case _: Exists | _: InSubquery => () }.size).sum
+  }
+
   test("conditional: disabled when config is false") {
     withSQLConf(SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "false") {
       val input = conditionalTestRelation
@@ -386,6 +392,91 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
     // guarded; the Expand key stays the raw attribute.
     assert(expand.projections.head.exists(_.semanticEquals(base)),
       "raw base attribute expected with a non-deterministic filter")
+  }
+
+  test("conditional: EXISTS, IN, and NOT IN filters keep the raw key") {
+    // RewritePredicateSubquery has not run. Copying a predicate subquery into the
+    // Expand key builds a second ExistenceJoin later, so the key stays raw and each
+    // predicate appears once, as its flag column.
+    val dim = LocalRelation(Symbol("x").int)
+    val existsPred = Exists(dim)
+    val inPred = InSubquery(Seq(Symbol("b")), ListQuery(dim, numCols = 1))
+    val notInPred = Not(InSubquery(Seq(Symbol("c")), ListQuery(dim, numCols = 1)))
+    val b = conditionalTestRelation.output.find(_.name == "b").get
+    val c = conditionalTestRelation.output.find(_.name == "c").get
+    val d = conditionalTestRelation.output.find(_.name == "d").get
+    val input = conditionalTestRelation
+      .groupBy(Symbol("a"))(
+        Count(b).toAggregateExpression(isDistinct = true, filter = Some(existsPred)).as("cnt1"),
+        Count(c).toAggregateExpression(isDistinct = true, filter = Some(inPred)).as("cnt2"),
+        Count(d).toAggregateExpression(isDistinct = true, filter = Some(notInPred)).as("cnt3"))
+      .analyze
+    val optimized = RewriteDistinctAggregates(input)
+    val expand = optimized.collectFirst { case e: Expand => e }.get
+    assert(expand.projections.size == 3)
+    Seq(b, c, d).foreach { base =>
+      val nullOfBase = Literal.create(null, base.dataType)
+      assert(expand.projections.exists(_.exists(_.semanticEquals(base))),
+        s"raw key expected for $base")
+      assert(!expand.projections.exists(_.exists {
+        case If(_, trueValue, falseValue) =>
+          falseValue.semanticEquals(nullOfBase) && trueValue.semanticEquals(base)
+        case _ => false
+      }), s"subquery filter must not guard $base")
+    }
+    assert(subqueryExprCount(optimized) == 3,
+      "each predicate subquery should appear once in the Expand")
+  }
+
+  test("conditional: do not canonicalize counts whose condition is a predicate subquery") {
+    // Normalizing would merge these into one group that cannot be guarded, and Expand
+    // would project the raw base. Leave each IF/CASE in its own group.
+    val dim = LocalRelation(Symbol("x").int)
+    val x = dim.output.head
+    val input = conditionalTestRelation
+      .groupBy(Symbol("a"))(
+        countDistinctIf(Exists(dim.where(x > 0)), Symbol("c")).as("cnt1"),
+        countDistinctCaseWhen(Exists(dim.where(x > 1)), Symbol("c")).as("cnt2"),
+        countDistinctCaseWhenElseNull(Exists(dim.where(x > 2)), Symbol("c")).as("cnt3"))
+      .analyze
+    val optimized = RewriteDistinctAggregates(input)
+    val expand = optimized.collectFirst { case e: Expand => e }.get
+    assert(expand.projections.size == 3,
+      "subquery conditions should stay 3 distinct groups")
+    val hasUserConditionFilter = collectAggregateExpressions(optimized)
+      .flatMap(_.filter)
+      .exists(_.references.exists(_.name != "gid"))
+    assert(!hasUserConditionFilter,
+      "subquery condition should not become a user-condition FILTER clause")
+    assert(subqueryExprCount(optimized) == 3,
+      "each predicate subquery should appear once in the Expand")
+  }
+
+  test("conditional: subquery-free filters stay guarded beside a subquery condition") {
+    val bAttr = conditionalTestRelation.output.find(_.name == "b").get
+    val base = conditionalTestRelation.output.find(_.name == "c").get
+    val dim = LocalRelation(Symbol("x").int)
+    val input = conditionalTestRelation
+      .groupBy(Symbol("a"))(
+        countDistinctIf(Symbol("b") > 1, Symbol("c")).as("cnt1"),
+        countDistinctIf(Symbol("b") > 2, Symbol("c")).as("cnt2"),
+        countDistinctIf(Exists(dim), Symbol("c")).as("cnt3"))
+      .analyze
+    val optimized = RewriteDistinctAggregates(input)
+    val expand = optimized.collectFirst { case e: Expand => e }.get
+    // The two plain predicates share one guarded group. The EXISTS count stays separate.
+    assert(expand.projections.size == 2)
+    val guard = expand.projections.flatten.collectFirst {
+      case i @ If(_, trueValue, falseValue)
+          if falseValue == nullInt && trueValue.semanticEquals(base) => i
+    }.getOrElse(fail(s"no union guard over c:\n$optimized"))
+    val leaves = orLeaves(guard.predicate)
+    assert(leaves.size == 2, s"guard should cover only the plain predicates: ${guard.predicate}")
+    Seq(bAttr > 1, bAttr > 2).foreach { cond =>
+      assert(leaves.exists(_.semanticEquals(cond)), s"guard misses $cond: ${guard.predicate}")
+    }
+    assert(subqueryExprCount(optimized) == 1,
+      "the EXISTS condition should appear once, in its own group")
   }
 
   test("conditional: throwable distinct child keeps the raw key") {

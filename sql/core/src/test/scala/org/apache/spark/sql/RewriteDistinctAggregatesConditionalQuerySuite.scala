@@ -19,7 +19,8 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.expressions.{Expression, If, Or}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.ExistenceJoin
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, Join, LogicalPlan}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -58,6 +59,41 @@ class RewriteDistinctAggregatesConditionalQuerySuite extends QueryTest with Shar
   private def orLeaves(expr: Expression): Seq[Expression] = expr match {
     case Or(left, right) => orLeaves(left) ++ orLeaves(right)
     case other => Seq(other)
+  }
+
+  private def existenceJoinCount(plan: LogicalPlan): Int = {
+    plan.collect { case Join(_, _, _: ExistenceJoin, _, _) => () }.size
+  }
+
+  /**
+   * Conf on must keep the conf-off ExistenceJoin count. The union guard copies each
+   * filter into the Expand key, and RewritePredicateSubquery builds one join per copy.
+   * When `stayUnnormalized` is set, the IF/CASE condition must not become a FILTER.
+   */
+  private def assertSameExistenceJoinCount(
+      sqlText: String,
+      expectedJoins: Int,
+      stayUnnormalized: Boolean = false): Unit = {
+    val (expectedRows, joinsOff) = withSQLConf(
+      SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "false") {
+      val df = spark.sql(sqlText)
+      (df.collect(), existenceJoinCount(df.queryExecution.optimizedPlan))
+    }
+    assert(joinsOff == expectedJoins,
+      s"conf off produced $joinsOff existence joins, expected $expectedJoins")
+    withSQLConf(
+      SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "true") {
+      val df = spark.sql(sqlText)
+      checkAnswer(df, expectedRows)
+      val plan = df.queryExecution.optimizedPlan
+      val joinsOn = existenceJoinCount(plan)
+      assert(joinsOn == expectedJoins,
+        s"conf on produced $joinsOn existence joins, expected $expectedJoins:\n$plan")
+      if (stayUnnormalized) {
+        assert(!hasUserConditionFilter(plan),
+          "predicate-subquery condition should not become a FILTER clause")
+      }
+    }
   }
 
   test("rewrite COUNT(DISTINCT IF(cond, col, NULL)) correctness") {
@@ -437,6 +473,61 @@ class RewriteDistinctAggregatesConditionalQuerySuite extends QueryTest with Shar
       }
 
       assert(hasFilter, "Optimized plan should contain user-condition FILTER clause")
+    }
+  }
+
+  private def servingLogFixture(f: => Unit): Unit = {
+    withTempView("serving_log", "models") {
+      spark.range(20).selectExpr(
+        "id % 3 as key",
+        "id as request_id",
+        "case when id % 11 = 0 then null else id % 5 end as user_id",
+        "id % 4 as model",
+        "id % 3 as tier",
+        "id % 7 as priority",
+        "id * 10 as tokens").createOrReplaceTempView("serving_log")
+      spark.range(2).selectExpr(
+        "id as model",
+        "id % 2 as tier").createOrReplaceTempView("models")
+      f
+    }
+  }
+
+  test("guard: EXISTS, IN, and NOT IN filters are not joined twice") {
+    servingLogFixture {
+      // Another distinct aggregate forces the Expand path. Each predicate subquery
+      // is its own filtered group; guarding it would join the dimension table twice.
+      val sqlText =
+        """SELECT key,
+          |  SUM(DISTINCT tokens),
+          |  COUNT(DISTINCT request_id) FILTER (WHERE EXISTS (
+          |    SELECT 1 FROM models WHERE serving_log.model = models.model)),
+          |  COUNT(DISTINCT user_id) FILTER (WHERE tier IN (
+          |    SELECT tier FROM models WHERE models.model = serving_log.model)),
+          |  COUNT(DISTINCT priority) FILTER (WHERE user_id NOT IN (
+          |    SELECT tier FROM models WHERE models.model = serving_log.model))
+          |FROM serving_log GROUP BY key""".stripMargin
+      assertSameExistenceJoinCount(sqlText, expectedJoins = 3)
+    }
+  }
+
+  test("guard: IF and CASE conditions with predicate subqueries stay un-normalized") {
+    servingLogFixture {
+      // Same base, so a subquery-blind normalize would collapse these into one group.
+      // That group cannot be guarded, and Expand would project the raw request_id.
+      val sqlText =
+        """SELECT key,
+          |  COUNT(DISTINCT IF(EXISTS (
+          |    SELECT 1 FROM models WHERE serving_log.model = models.model),
+          |    request_id, NULL)),
+          |  COUNT(DISTINCT CASE WHEN tier IN (
+          |    SELECT tier FROM models WHERE models.model = serving_log.model)
+          |    THEN request_id END),
+          |  COUNT(DISTINCT CASE WHEN user_id NOT IN (
+          |    SELECT tier FROM models WHERE models.model = serving_log.model)
+          |    THEN request_id ELSE NULL END)
+          |FROM serving_log GROUP BY key""".stripMargin
+      assertSameExistenceJoinCount(sqlText, expectedJoins = 3, stayUnnormalized = true)
     }
   }
 }
