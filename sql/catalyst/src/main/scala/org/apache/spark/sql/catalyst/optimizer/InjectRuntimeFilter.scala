@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
-import org.apache.spark.sql.catalyst.trees.TreePattern.{DYNAMIC_PRUNING_SUBQUERY, INVOKE, JSON_TO_STRUCT, LIKE_FAMLIY, PYTHON_UDF, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, SCALA_UDF}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{BLOOM_FILTER_MIGHT_CONTAIN, DYNAMIC_PRUNING_SUBQUERY, INVOKE, JSON_TO_STRUCT, LIKE_FAMLIY, PYTHON_UDF, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, SCALA_UDF}
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.internal.SQLConf
 
@@ -666,4 +666,13 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     case _ => tryInjectRuntimeFilter(plan)
   }
 
+}
+
+/**
+ * Pushes down the Bloom filters [[InjectRuntimeFilter]] adds on top of a join side. A no-op on a
+ * plan without a Bloom filter, so a query without a runtime filter pays no extra pushdown pass.
+ */
+object PushDownRuntimeFilters extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan =
+    if (plan.containsPattern(BLOOM_FILTER_MIGHT_CONTAIN)) PushDownPredicates(plan) else plan
 }
