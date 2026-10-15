@@ -18,21 +18,25 @@
 package org.apache.spark.rpc.netty
 
 import java.io.{File, IOException}
+import java.nio.ByteBuffer
 import java.nio.channels.Channels
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.Files
 import java.util.UUID
 import java.util.concurrent.ExecutionException
 
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 
-import org.mockito.Mockito.when
+import org.mockito.ArgumentCaptor
+import org.mockito.ArgumentMatchers.{any, anyInt, eq => meq}
+import org.mockito.Mockito.{verify, when}
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.network.client.TransportClient
+import org.apache.spark.network.client.{StreamCallback, TransportClient, TransportClientFactory}
 import org.apache.spark.rpc._
 import org.apache.spark.util.{SslTestUtils, ThreadUtils, Utils}
 
@@ -218,7 +222,9 @@ class NettyRpcEnvSuite extends RpcEnvSuite with MockitoSugar with TimeLimits {
   private def withFileDownloadEnv(f: FileDownloadFixture => Unit): Unit = {
     withTempDir { tempDir =>
       withTempDir { destDir =>
-        val conf = createSparkConf()
+        // Use a single file-download connection, so the downloads in a test share one connection
+        // even if the JVM sets a higher connection count.
+        val conf = createSparkConf().set("spark.files.io.numConnectionsPerPeer", "1")
         val downloadEnv = createRpcEnv(conf, "file-download", 0)
         val sparkEnv = SparkEnv.get
         when(sparkEnv.rpcEnv).thenReturn(downloadEnv)
@@ -275,6 +281,53 @@ class NettyRpcEnvSuite extends RpcEnvSuite with MockitoSugar with TimeLimits {
         assert(e.getMessage.contains("exists and does not match contents"))
       }
       d.fetchSmallJar(d.destDir)
+    }
+  }
+
+  test("a download reader closing while the callback is writing must not fail the callback") {
+    val downloadEnv = createRpcEnv(createSparkConf(), "file-download-callback", 0)
+    try {
+      // Capture the real FileDownloadCallback without a server, so the test controls exactly when
+      // data arrives. The client and its factory are mocked because the callback can only be
+      // obtained from the `stream` call that openChannel makes on the download client.
+      val client = mock[TransportClient]
+      val factory = mock[TransportClientFactory]
+      when(factory.createClient(any[String](), anyInt())).thenReturn(client)
+      val factoryField = classOf[NettyRpcEnv].getDeclaredField("fileDownloadFactory")
+      factoryField.setAccessible(true)
+      factoryField.set(downloadEnv, factory)
+
+      val source = downloadEnv.openChannel("spark://localhost:12345/jars/big.jar")
+      val callbackCaptor = ArgumentCaptor.forClass(classOf[StreamCallback])
+      verify(client).stream(meq("/jars/big.jar"), callbackCaptor.capture())
+      val callback = callbackCaptor.getValue
+
+      // Much larger than an OS pipe buffer, so onData blocks in the pipe write until the reader
+      // reads or closes its end.
+      val buf = ByteBuffer.allocate(4 * 1024 * 1024)
+      val writer = Future(callback.onData("big", buf))(ExecutionContext.global)
+
+      // Reading a byte proves onData is writing. It cannot have written the whole buffer into the
+      // pipe, so it is still blocked writing when the reader closes its end below.
+      val firstByte = ByteBuffer.allocate(1)
+      failAfter(60.seconds) {
+        while (firstByte.hasRemaining) {
+          assert(source.read(firstByte) >= 0)
+        }
+      }
+      assert(buf.hasRemaining)
+      source.close()
+
+      // The callback must discard the rest of the buffer instead of throwing, since throwing
+      // would close the connection shared with other downloads.
+      ThreadUtils.awaitResult(writer, 60.seconds)
+      assert(!buf.hasRemaining)
+      // Later data for the same stream is dropped too.
+      val more = ByteBuffer.allocate(1024)
+      callback.onData("big", more)
+      callback.onComplete("big")
+    } finally {
+      downloadEnv.shutdown()
     }
   }
 }
