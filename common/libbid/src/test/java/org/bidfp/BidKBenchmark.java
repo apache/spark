@@ -31,8 +31,9 @@ import java.util.Random;
  * values in {@code [1, 10)} for subtract, sqrt, FMA, and comparisons.
  *
  * <p>Run: {@code build/sbt "libbid/Test/runMain org.bidfp.BidKBenchmark full"}
- * Prints an object-API table then a {@link BidKRaw} table that writes into a
- * reused {@code out[]} buffer.
+ * Prints an object-API table, a {@link BidKRaw} table that writes into a
+ * reused {@code out[]} buffer, then a {@link BidUnpacked} table over
+ * pre-unpacked operands.
  */
 public final class BidKBenchmark {
   private static final RoundingMode BID_ROUNDING = RoundingMode.TIES_TO_EVEN;
@@ -50,42 +51,44 @@ public final class BidKBenchmark {
     Profile profile = Profile.from(args.length == 0 ? "quick" : args[0]);
     System.out.println("BidKBenchmark profile=" + profile.name);
     System.out.println();
-    printTable("BidK object API", false);
+    printTable("BidK object API", Mode.OBJECT);
     System.out.println();
-    printTable("BidKRaw into reused out[]", true);
+    printTable("BidKRaw into reused out[]", Mode.RAW);
+    System.out.println();
+    printTable("BidUnpacked reused operands and result", Mode.UNPACKED);
   }
 
-  private static void printTable(String title, boolean raw) {
+  private static void printTable(String title, Mode mode) {
     System.out.println(title);
     System.out.println(
         "| Function / workload | BID160 | BD160 | Ratio | BID256 | BD256 | Ratio |");
     System.out.println(
         "| --- | ---: | ---: | ---: | ---: | ---: | ---: |");
     List<Row> rows = new ArrayList<>();
-    rows.add(measurePair("add (same quantum)", "sameQuantum", Op.ADD, raw));
-    rows.add(measurePair("add (mixed quantum)", "mixedQuantum", Op.ADD, raw));
-    rows.add(measurePair("add (full precision)", "fullPrecision", Op.ADD, raw));
-    rows.add(measurePair("subtract", "unit", Op.SUB, raw));
-    rows.add(measurePair("multiply (same quantum)", "sameQuantum", Op.MUL, raw));
-    rows.add(measurePair("multiply (mixed quantum)", "mixedQuantum", Op.MUL, raw));
-    rows.add(measurePair("multiply (full precision)", "fullPrecision", Op.MUL, raw));
-    rows.add(measurePair("divide (same quantum)", "sameQuantum", Op.DIV, raw));
-    rows.add(measurePair("divide (mixed quantum)", "mixedQuantum", Op.DIV, raw));
-    rows.add(measurePair("divide (full precision)", "fullPrecision", Op.DIV, raw));
-    rows.add(measurePair("square root", "unit", Op.SQRT, raw));
-    rows.add(measurePair("fused multiply-add", "unit", Op.FMA, raw));
-    rows.add(measurePair("ordered less-than", "unit", Op.LT, raw));
-    rows.add(measurePair("cohort-equal numeric comparison", "unit", Op.EQ, raw));
+    rows.add(measurePair("add (same quantum)", "sameQuantum", Op.ADD, mode));
+    rows.add(measurePair("add (mixed quantum)", "mixedQuantum", Op.ADD, mode));
+    rows.add(measurePair("add (full precision)", "fullPrecision", Op.ADD, mode));
+    rows.add(measurePair("subtract", "unit", Op.SUB, mode));
+    rows.add(measurePair("multiply (same quantum)", "sameQuantum", Op.MUL, mode));
+    rows.add(measurePair("multiply (mixed quantum)", "mixedQuantum", Op.MUL, mode));
+    rows.add(measurePair("multiply (full precision)", "fullPrecision", Op.MUL, mode));
+    rows.add(measurePair("divide (same quantum)", "sameQuantum", Op.DIV, mode));
+    rows.add(measurePair("divide (mixed quantum)", "mixedQuantum", Op.DIV, mode));
+    rows.add(measurePair("divide (full precision)", "fullPrecision", Op.DIV, mode));
+    rows.add(measurePair("square root", "unit", Op.SQRT, mode));
+    rows.add(measurePair("fused multiply-add", "unit", Op.FMA, mode));
+    rows.add(measurePair("ordered less-than", "unit", Op.LT, mode));
+    rows.add(measurePair("cohort-equal numeric comparison", "unit", Op.EQ, mode));
     for (Row row : rows) {
       System.out.println(row.format());
     }
   }
 
   private static Row measurePair(
-      String name, String workload, Op op, boolean raw) {
+      String name, String workload, Op op, Mode mode) {
     Sample[] samples = new Sample[FORMATS.length];
     for (int i = 0; i < FORMATS.length; i++) {
-      samples[i] = measure(FORMATS[i], workload, op, Profile.current, raw);
+      samples[i] = measure(FORMATS[i], workload, op, Profile.current, mode);
     }
     return new Row(name, samples);
   }
@@ -95,15 +98,15 @@ public final class BidKBenchmark {
       String workload,
       Op op,
       Profile profile,
-      boolean raw) {
+      Mode mode) {
     State state = new State(format, workload);
     MathContext context = new MathContext(
         format.precision(), java.math.RoundingMode.HALF_EVEN);
     double bidNs = time(profile, () -> {
-      if (raw) {
-        op.runRaw(state);
-      } else {
-        op.runBid(state);
+      switch (mode) {
+        case RAW -> op.runRaw(state);
+        case UNPACKED -> op.runUnpacked(state);
+        default -> op.runBid(state);
       }
     });
     double bdNs = time(profile, () -> op.runDecimal(state, context));
@@ -154,6 +157,14 @@ public final class BidKBenchmark {
       }
 
       @Override
+      void runUnpacked(State state) {
+        int i = state.next();
+        state.leftU[i].add(
+            state.rightU[i], BID_ROUNDING, state.flags, state.outU);
+        xorOutUnpacked(state);
+      }
+
+      @Override
       void runDecimal(State state, MathContext context) {
         int i = state.next();
         state.sink ^= state.leftBd[i].add(state.rightBd[i], context).hashCode();
@@ -174,6 +185,14 @@ public final class BidKBenchmark {
             state.format, state.leftBits[i], state.rightBits[i],
             BID_ROUNDING, state.flags, state.out);
         xorOut(state);
+      }
+
+      @Override
+      void runUnpacked(State state) {
+        int i = state.next();
+        state.leftU[i].subtract(
+            state.rightU[i], BID_ROUNDING, state.flags, state.outU);
+        xorOutUnpacked(state);
       }
 
       @Override
@@ -200,6 +219,14 @@ public final class BidKBenchmark {
       }
 
       @Override
+      void runUnpacked(State state) {
+        int i = state.next();
+        state.leftU[i].multiply(
+            state.rightU[i], BID_ROUNDING, state.flags, state.outU);
+        xorOutUnpacked(state);
+      }
+
+      @Override
       void runDecimal(State state, MathContext context) {
         int i = state.next();
         state.sink ^= state.leftBd[i].multiply(state.rightBd[i], context).hashCode();
@@ -223,6 +250,14 @@ public final class BidKBenchmark {
       }
 
       @Override
+      void runUnpacked(State state) {
+        int i = state.next();
+        state.leftU[i].divide(
+            state.rightU[i], BID_ROUNDING, state.flags, state.outU);
+        xorOutUnpacked(state);
+      }
+
+      @Override
       void runDecimal(State state, MathContext context) {
         int i = state.next();
         state.sink ^= state.leftBd[i].divide(state.rightBd[i], context).hashCode();
@@ -241,6 +276,13 @@ public final class BidKBenchmark {
         BidKRaw.sqrt(
             state.format, state.leftBits[i], BID_ROUNDING, state.flags, state.out);
         xorOut(state);
+      }
+
+      @Override
+      void runUnpacked(State state) {
+        int i = state.next();
+        state.leftU[i].sqrt(BID_ROUNDING, state.flags, state.outU);
+        xorOutUnpacked(state);
       }
 
       @Override
@@ -267,6 +309,15 @@ public final class BidKBenchmark {
       }
 
       @Override
+      void runUnpacked(State state) {
+        int i = state.next();
+        state.leftU[i].fma(
+            state.rightU[i], state.addendU[i], BID_ROUNDING, state.flags,
+            state.outU);
+        xorOutUnpacked(state);
+      }
+
+      @Override
       void runDecimal(State state, MathContext context) {
         int i = state.next();
         state.sink ^= state.leftBd[i].multiply(state.rightBd[i])
@@ -285,6 +336,12 @@ public final class BidKBenchmark {
         int i = state.next();
         state.sink ^= BidKRaw.sqlCompare(
             state.format, state.leftBits[i], state.rightBits[i]);
+      }
+
+      @Override
+      void runUnpacked(State state) {
+        int i = state.next();
+        state.sink ^= state.leftU[i].sqlCompare(state.rightU[i]);
       }
 
       @Override
@@ -309,6 +366,12 @@ public final class BidKBenchmark {
       }
 
       @Override
+      void runUnpacked(State state) {
+        int i = state.next();
+        state.sink ^= Boolean.hashCode(state.leftU[i].sqlEquals(state.rightU[i]));
+      }
+
+      @Override
       void runDecimal(State state, MathContext context) {
         int i = state.next();
         state.sink ^= Boolean.hashCode(state.leftBd[i].compareTo(state.rightBd[i]) == 0);
@@ -319,6 +382,8 @@ public final class BidKBenchmark {
 
     abstract void runRaw(State state);
 
+    abstract void runUnpacked(State state);
+
     abstract void runDecimal(State state, MathContext context);
 
     static void xorOut(State state) {
@@ -327,6 +392,19 @@ public final class BidKBenchmark {
         state.sink ^= out[i];
       }
     }
+
+    static void xorOutUnpacked(State state) {
+      BidUnpacked out = state.outU;
+      state.sink ^= out.c0() ^ out.c1() ^ out.c2() ^ out.c3();
+      state.sink ^= out.exponent();
+      state.sink ^= out.kind().ordinal();
+    }
+  }
+
+  private enum Mode {
+    OBJECT,
+    RAW,
+    UNPACKED
   }
 
   private static final class State {
@@ -338,6 +416,10 @@ public final class BidKBenchmark {
     final long[][] rightBits;
     final long[][] addendBits;
     final long[] out;
+    final BidUnpacked[] leftU;
+    final BidUnpacked[] rightU;
+    final BidUnpacked[] addendU;
+    final BidUnpacked outU;
     final BigDecimal[] leftBd;
     final BigDecimal[] rightBd;
     final BigDecimal[] addendBd;
@@ -354,6 +436,10 @@ public final class BidKBenchmark {
       rightBits = new long[SIZE][];
       addendBits = new long[SIZE][];
       out = new long[format.wordCount()];
+      leftU = new BidUnpacked[SIZE];
+      rightU = new BidUnpacked[SIZE];
+      addendU = new BidUnpacked[SIZE];
+      outU = new BidUnpacked(format);
       leftBd = new BigDecimal[SIZE];
       rightBd = new BigDecimal[SIZE];
       addendBd = new BigDecimal[SIZE];
@@ -379,6 +465,12 @@ public final class BidKBenchmark {
         leftBits[i] = left[i].toRawBits();
         rightBits[i] = right[i].toRawBits();
         addendBits[i] = addend[i].toRawBits();
+        leftU[i] = new BidUnpacked(format);
+        leftU[i].loadPacked(leftBits[i]);
+        rightU[i] = new BidUnpacked(format);
+        rightU[i].loadPacked(rightBits[i]);
+        addendU[i] = new BidUnpacked(format);
+        addendU[i].loadPacked(addendBits[i]);
         leftBd[i] = new BigDecimal(leftText);
         rightBd[i] = new BigDecimal(rightText);
         addendBd[i] = new BigDecimal(addendText);
