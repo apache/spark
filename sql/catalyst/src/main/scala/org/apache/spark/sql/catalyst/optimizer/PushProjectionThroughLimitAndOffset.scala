@@ -27,7 +27,9 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{LIMIT, OFFSET, PROJECT}
  */
 object PushProjectionThroughLimitAndOffset extends Rule[LogicalPlan] {
   private def canPush(projectList: Seq[NamedExpression]): Boolean = {
-    projectList.forall(e => e.deterministic && !e.exists(_.isInstanceOf[SubqueryExpression]))
+    projectList.forall(e => e.deterministic &&
+      !SubqueryExpression.hasCorrelatedSubquery(e) &&
+      !SubqueryExpression.hasInOrCorrelatedExistsSubquery(e))
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(treeBits =>
