@@ -45,7 +45,7 @@ import org.apache.spark.unsafe.Platform
 object UnsafeSorterSpillMergerBenchmark extends BenchmarkBase {
 
   private val numRecords = 1 << 22 // ~4.19M records merged per run, held constant across k
-  // Points on both sides of LINEAR_MERGE_MAX_RUNS = 8 (9, 12) show the linear/loser-tree crossover.
+  // Up to LINEAR_MERGE_MAX_RUNS (8) runs merge with the linear scan; 9 and above, the loser tree.
   private val runCounts = Seq(2, 4, 8, 9, 12, 16, 64)
 
   // Compares two records as signed 8-byte longs; used to break prefix ties.

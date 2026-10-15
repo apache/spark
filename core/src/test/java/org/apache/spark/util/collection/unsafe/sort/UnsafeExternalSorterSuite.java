@@ -764,22 +764,30 @@ public class UnsafeExternalSorterSuite {
   }
 
   @Test
-  public void testSingleRoundLoserTreeMergeWithNineSpills() throws Exception {
-    // 9 real spills with merge factor -1 (single round): 9 > LINEAR_MERGE_MAX_RUNS (8) selects
-    // the loser-tree merger over real UnsafeSorterSpillReaders, not just synthetic unit tests.
+  public void testSingleRoundLoserTreeMergeWithInMemoryRecords() throws Exception {
+    // More spills than LINEAR_MERGE_MAX_RUNS, merged in a single round (merge factor -1) together
+    // with the records still in memory, so the loser tree runs over real UnsafeSorterSpillReaders
+    // and the SpillableIterator. Run r holds r, r + numRuns, r + 2 * numRuns, ..., so the runs
+    // interleave and the winner changes on every record.
     final UnsafeExternalSorter sorter = newSorter();
     sorter.setSpillMergeFactor(-1);
+    final int numSpills = UnsafeSorterSpillMerger.LINEAR_MERGE_MAX_RUNS + 1;
+    final int numRuns = numSpills + 1;
+    final int recordsPerRun = 10;
 
-    for (int spill = 0; spill < 9; spill++) {
-      for (int i = spill * 10; i < (spill + 1) * 10; i++) {
-        insertNumber(sorter, i);
+    for (int run = 0; run < numRuns; run++) {
+      for (int i = 0; i < recordsPerRun; i++) {
+        insertNumber(sorter, i * numRuns + run);
       }
-      sorter.spill();
+      if (run < numSpills) {
+        sorter.spill();
+      }
     }
+    assertEquals(numSpills, spillFilesCreated.size());
 
     UnsafeSorterIterator iter = sorter.getSortedIterator();
     assertEquals(0, sorter.getSpillMergeRounds()); // single round: the loser-tree path
-    verifyIntIterator(iter, 0, 90);
+    verifyIntIterator(iter, 0, numRuns * recordsPerRun);
     assertFalse(iter.hasNext());
 
     sorter.cleanupResources();

@@ -27,28 +27,23 @@ import java.util.NoSuchElementException;
  * sorted stream. Runs are ordered by the 8-byte key prefix, falling back to the
  * {@link RecordComparator} on a prefix tie.
  *
- * <p>The merge structure is chosen by the number of runs {@code k}. For a small {@code k} a linear
- * min-scan (O(k) per record) is used; above {@link #LINEAR_MERGE_MAX_RUNS} a loser (tournament)
- * tree is used, which does about log2(k) comparisons and a single replace-top adjustment per
- * record. Both replace the previous {@code PriorityQueue} heap, whose poll+add pattern does two
- * sift passes per record; a microbenchmark of the prefix-only merge showed the loser tree about
- * 1.9x faster than the heap across k, and the linear scan faster still for small k (crossover
- * around a dozen runs). That is merge CPU only -- on a real forced-spill merge, per-record I/O and
- * record decoding dominate, so the end-to-end effect is smaller and should be measured directly.
+ * <p>The merge structure is chosen by the number of runs {@code k}. Up to
+ * {@link #LINEAR_MERGE_MAX_RUNS} runs, a linear min-scan compares the run heads directly (k - 1
+ * comparisons per record). Above that, a loser (tournament) tree replays only the path from the
+ * emitted run to the root, about log2(k) comparisons per record. Both cache each run's current key
+ * prefix, so a comparison reads the runs' records only on a prefix tie.
  */
 public final class UnsafeSorterSpillMerger {
 
   /**
-   * At or below this many runs use a linear min-scan; above it, a loser tree. With cached-prefix
-   * comparisons the linear scan beats the tree's per-record bookkeeping up to about a dozen runs
-   * (measured), so 8 stays on the faster side while covering common spill counts.
+   * At or below this many runs use a linear min-scan; above it, a loser tree. For a handful of
+   * runs, scanning the cached prefixes is cheaper than the tree's per-level bookkeeping.
    */
-  private static final int LINEAR_MERGE_MAX_RUNS = 8;
+  static final int LINEAR_MERGE_MAX_RUNS = 8;
 
-  // Total records across all runs. A long (not int) so a merge of more than Integer.MAX_VALUE
-  // records terminates correctly rather than overflowing to a negative count that stops the merge
-  // immediately. getNumRecords() still returns an int per the UnsafeSorterIterator contract; that
-  // value is informational only (never used to size a buffer), so its truncation is harmless.
+  // Total records across the runs, reported by getNumRecords(). A long so the sum cannot overflow.
+  // The merge does not stop after this many records but when its runs are exhausted, since a run's
+  // getNumRecords() also counts any records it was advanced past before it was added.
   private long numRecords = 0L;
   private final RecordComparator recordComparator;
   private final PrefixComparator prefixComparator;
@@ -101,25 +96,56 @@ public final class UnsafeSorterSpillMerger {
       throw new IllegalStateException("getSortedIterator() may only be called once");
     }
     built = true;
-    if (readers.isEmpty()) {
+    UnsafeSorterIterator[] runs = readers.toArray(new UnsafeSorterIterator[0]);
+    // From here on the merge holds the only references, so it can release exhausted runs.
+    readers.clear();
+    if (runs.length == 0) {
       return new EmptyMerger();
-    } else if (readers.size() <= LINEAR_MERGE_MAX_RUNS) {
-      return new LinearMerger();
+    } else if (runs.length <= LINEAR_MERGE_MAX_RUNS) {
+      return new LinearMerger(runs);
     } else {
-      return new LoserTreeMerger();
+      return new LoserTreeMerger(runs);
     }
+  }
+
+  /** {@link #numRecords} as an int, capped at Integer.MAX_VALUE rather than wrapping. */
+  private int totalRecords() {
+    return (int) Math.min(numRecords, Integer.MAX_VALUE);
   }
 
   /** No runs: an empty stream. */
   private final class EmptyMerger extends UnsafeSorterIterator {
-    @Override public int getNumRecords() { return 0; }
-    @Override public long getCurrentPageNumber() { throw new UnsupportedOperationException(); }
-    @Override public boolean hasNext() { return false; }
-    @Override public void loadNext() { throw new NoSuchElementException(); }
-    @Override public Object getBaseObject() { throw new IllegalStateException(); }
-    @Override public long getBaseOffset() { throw new IllegalStateException(); }
-    @Override public int getRecordLength() { throw new IllegalStateException(); }
-    @Override public long getKeyPrefix() { throw new IllegalStateException(); }
+    @Override
+    public int getNumRecords() {
+      return 0;
+    }
+
+    @Override
+    public long getCurrentPageNumber() {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public boolean hasNext() {
+      return false;
+    }
+
+    @Override
+    public void loadNext() {
+      throw new NoSuchElementException();
+    }
+
+    @Override
+    public Object getBaseObject() { throw new IllegalStateException(); }
+
+    @Override
+    public long getBaseOffset() { throw new IllegalStateException(); }
+
+    @Override
+    public int getRecordLength() { throw new IllegalStateException(); }
+
+    @Override
+    public long getKeyPrefix() { throw new IllegalStateException(); }
   }
 
   /**
@@ -131,12 +157,11 @@ public final class UnsafeSorterSpillMerger {
     private final UnsafeSorterIterator[] runs;
     private final long[] prefixes;
     private int numLive;
-    private long emitted = 0L;
     private int winnerIdx = -1;
     private UnsafeSorterIterator current;
 
-    LinearMerger() {
-      runs = readers.toArray(new UnsafeSorterIterator[0]);
+    LinearMerger(UnsafeSorterIterator[] runs) {
+      this.runs = runs;
       prefixes = new long[runs.length];
       for (int i = 0; i < runs.length; i++) {
         prefixes[i] = runs[i].getKeyPrefix();
@@ -144,9 +169,22 @@ public final class UnsafeSorterSpillMerger {
       numLive = runs.length;
     }
 
-    @Override public int getNumRecords() { return (int) numRecords; }
-    @Override public long getCurrentPageNumber() { throw new UnsupportedOperationException(); }
-    @Override public boolean hasNext() { return emitted < numRecords; }
+    @Override
+    public int getNumRecords() {
+      return totalRecords();
+    }
+
+    @Override
+    public long getCurrentPageNumber() {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public boolean hasNext() {
+      // Every live run except the last winner holds a record not yet emitted. Before the first
+      // loadNext() there is no winner, and the merger is never built over zero runs.
+      return winnerIdx == -1 || numLive > 1 || runs[winnerIdx].hasNext();
+    }
 
     @Override
     public void loadNext() throws IOException {
@@ -160,6 +198,9 @@ public final class UnsafeSorterSpillMerger {
           runs[winnerIdx] = runs[--numLive];
           prefixes[winnerIdx] = prefixes[numLive];
           runs[numLive] = null;
+          if (numLive == 0) {
+            throw new NoSuchElementException();
+          }
         }
       }
       int minIdx = 0;
@@ -170,13 +211,19 @@ public final class UnsafeSorterSpillMerger {
       }
       winnerIdx = minIdx;
       current = runs[minIdx];
-      emitted++;
     }
 
-    @Override public Object getBaseObject() { return current.getBaseObject(); }
-    @Override public long getBaseOffset() { return current.getBaseOffset(); }
-    @Override public int getRecordLength() { return current.getRecordLength(); }
-    @Override public long getKeyPrefix() { return current.getKeyPrefix(); }
+    @Override
+    public Object getBaseObject() { return current.getBaseObject(); }
+
+    @Override
+    public long getBaseOffset() { return current.getBaseOffset(); }
+
+    @Override
+    public int getRecordLength() { return current.getRecordLength(); }
+
+    @Override
+    public long getKeyPrefix() { return current.getKeyPrefix(); }
   }
 
   /**
@@ -192,13 +239,14 @@ public final class UnsafeSorterSpillMerger {
     private final int k;
     private final int[] tree;
     private final boolean[] exhausted;
-    private long emitted = 0L;
+    private int numLive;
     private boolean started = false;
     private UnsafeSorterIterator current;
 
-    LoserTreeMerger() {
-      runs = readers.toArray(new UnsafeSorterIterator[0]);
+    LoserTreeMerger(UnsafeSorterIterator[] runs) {
+      this.runs = runs;
       k = runs.length;
+      numLive = k;
       prefixes = new long[k];
       tree = new int[k];
       exhausted = new boolean[k];
@@ -256,9 +304,22 @@ public final class UnsafeSorterSpillMerger {
       tree[0] = s;
     }
 
-    @Override public int getNumRecords() { return (int) numRecords; }
-    @Override public long getCurrentPageNumber() { throw new UnsupportedOperationException(); }
-    @Override public boolean hasNext() { return emitted < numRecords; }
+    @Override
+    public int getNumRecords() {
+      return totalRecords();
+    }
+
+    @Override
+    public long getCurrentPageNumber() {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public boolean hasNext() {
+      // As in LinearMerger: every live run except the current winner holds a record not yet
+      // emitted.
+      return !started || numLive > 1 || runs[tree[0]].hasNext();
+    }
 
     @Override
     public void loadNext() throws IOException {
@@ -268,18 +329,29 @@ public final class UnsafeSorterSpillMerger {
           runs[winner].loadNext();
           prefixes[winner] = runs[winner].getKeyPrefix();
         } else {
+          // loses() never reads an exhausted leaf's run, so it can be released.
           exhausted[winner] = true;
+          runs[winner] = null;
+          if (--numLive == 0) {
+            throw new NoSuchElementException();
+          }
         }
         replayWinner();
       }
       started = true;
       current = runs[tree[0]];
-      emitted++;
     }
 
-    @Override public Object getBaseObject() { return current.getBaseObject(); }
-    @Override public long getBaseOffset() { return current.getBaseOffset(); }
-    @Override public int getRecordLength() { return current.getRecordLength(); }
-    @Override public long getKeyPrefix() { return current.getKeyPrefix(); }
+    @Override
+    public Object getBaseObject() { return current.getBaseObject(); }
+
+    @Override
+    public long getBaseOffset() { return current.getBaseOffset(); }
+
+    @Override
+    public int getRecordLength() { return current.getRecordLength(); }
+
+    @Override
+    public long getKeyPrefix() { return current.getKeyPrefix(); }
   }
 }

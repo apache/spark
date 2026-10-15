@@ -35,9 +35,12 @@ import org.apache.spark.unsafe.Platform
  */
 class UnsafeSorterSpillMergerSuite extends SparkFunSuite {
 
-  // Run counts spanning the linear (<= 8) and loser-tree (> 8) boundary. Kept in sync with
-  // UnsafeSorterSpillMerger.LINEAR_MERGE_MAX_RUNS (8), which is not visible from the test.
-  private val runCounts = Seq(1, 2, 7, 8, 9, 16, 64)
+  // The most runs the linear scan merges; one more switches to the loser tree.
+  private val maxLinearRuns = UnsafeSorterSpillMerger.LINEAR_MERGE_MAX_RUNS
+
+  // Run counts spanning the linear/loser-tree boundary.
+  private val runCounts =
+    (Seq(1, 2, 16, 64) ++ Seq(maxLinearRuns - 1, maxLinearRuns, maxLinearRuns + 1)).distinct.sorted
 
   // Orders records as signed 8-byte longs; the merger uses this to break prefix ties.
   private val recordComparator = new RecordComparator {
@@ -68,9 +71,13 @@ class UnsafeSorterSpillMergerSuite extends SparkFunSuite {
   }
 
   /** Merges the runs and returns the emitted (prefix, record) pairs in emission order. */
-  private def merge(runs: Seq[Seq[(Long, Long)]]): Seq[(Long, Long)] = {
+  private def merge(runs: Seq[Seq[(Long, Long)]]): Seq[(Long, Long)] =
+    mergeIterators(runs.map(new ArrayRun(_)))
+
+  /** Merges the given run iterators and returns the emitted pairs in emission order. */
+  private def mergeIterators(runs: Seq[UnsafeSorterIterator]): Seq[(Long, Long)] = {
     val merger = new UnsafeSorterSpillMerger(recordComparator, PrefixComparators.LONG, runs.size)
-    runs.foreach(r => merger.addSpillIfNotEmpty(new ArrayRun(r)))
+    runs.foreach(merger.addSpillIfNotEmpty)
     val it = merger.getSortedIterator()
     val out = ArrayBuffer.empty[(Long, Long)]
     while (it.hasNext) {
@@ -103,6 +110,11 @@ class UnsafeSorterSpillMergerSuite extends SparkFunSuite {
       Seq.fill(hi - lo)(rand.nextLong()).map(r => (prefixOf(r), r)).sortBy(e => (e._1, e._2))
     }.toSeq
   }
+
+  // k non-empty runs of n records each. Run j holds j, j + k, j + 2k, ..., so the runs interleave
+  // and the merge switches runs on every record.
+  private def interleavedRuns(k: Int, n: Int): Seq[Seq[(Long, Long)]] =
+    (0 until k).map { j => (0 until n).map { i => val v = (i * k + j).toLong; (v, v) } }
 
   test("empty merger: no runs yields an empty, zero-length stream") {
     val merger = new UnsafeSorterSpillMerger(recordComparator, PrefixComparators.LONG, 0)
@@ -165,18 +177,47 @@ class UnsafeSorterSpillMergerSuite extends SparkFunSuite {
     }
   }
 
-  // Pin the linear/loser-tree boundary (LINEAR_MERGE_MAX_RUNS = 8). buildRuns can drop empty runs
-  // and pull k=9 below the boundary, so here all k runs are non-empty and the intended structure
-  // (linear at k=8, loser tree at k=9) actually runs.
-  for (k <- Seq(8, 9)) {
+  // Pin the linear/loser-tree boundary. buildRuns can produce empty runs, which the merger drops,
+  // and so pull a count just above the boundary below it. Here all k runs are non-empty, so the
+  // intended structure (linear at maxLinearRuns, loser tree one above) actually runs.
+  for (k <- Seq(maxLinearRuns, maxLinearRuns + 1)) {
     test(s"boundary: exactly $k non-empty runs merge in global order") {
-      val runs = (0 until k).map { j =>
-        // Ascending band per run; the bands interleave globally so the merge must combine all k.
-        (0 until 20).map { i => val v = (i * k + j).toLong; (v, v) }
-      }
+      val runs = interleavedRuns(k, 20)
       assert(runs.forall(_.nonEmpty) && runs.size == k)
       checkMerge(runs)
     }
+  }
+
+  test("a run advanced before it is added contributes only its remaining records") {
+    // getNumRecords() is the total a run was created over, including records it was advanced
+    // past, so the merge must stop when its runs are exhausted rather than after that many.
+    for (k <- Seq(2, maxLinearRuns + 1)) {
+      val runs = interleavedRuns(k, 5)
+      val first = new ArrayRun(runs.head)
+      first.loadNext()
+      val expected = (runs.head.tail +: runs.tail).flatten.sorted(expectedOrder)
+      assert(mergeIterators(first +: runs.tail.map(new ArrayRun(_))) === expected)
+    }
+  }
+
+  test("loadNext past the end throws NoSuchElementException") {
+    for (k <- Seq(2, maxLinearRuns + 1)) {
+      val merger = new UnsafeSorterSpillMerger(recordComparator, PrefixComparators.LONG, k)
+      interleavedRuns(k, 3).foreach(r => merger.addSpillIfNotEmpty(new ArrayRun(r)))
+      val it = merger.getSortedIterator()
+      while (it.hasNext) {
+        it.loadNext()
+      }
+      intercept[NoSuchElementException](it.loadNext())
+    }
+  }
+
+  test("getSortedIterator can only be called once") {
+    val merger = new UnsafeSorterSpillMerger(recordComparator, PrefixComparators.LONG, 1)
+    merger.addSpillIfNotEmpty(new ArrayRun(Seq((1L, 1L))))
+    merger.getSortedIterator()
+    val e = intercept[IllegalStateException](merger.getSortedIterator())
+    assert(e.getMessage.contains("only be called once"))
   }
 
   test("getNumRecords returns the total across runs for both merge structures") {
