@@ -8304,8 +8304,8 @@ object SQLConf {
       .internal()
       .doc("When true (legacy behavior), an aliased integer literal in the GROUP BY clause of " +
         "the pipe AGGREGATE operator, such as 'GROUP BY 2 AS grp', is accepted and grouped as " +
-        "a constant. When false (the default), it fails with a syntax error, as in a regular " +
-        "GROUP BY clause, because a bare integer literal there is an ordinal.")
+        "a constant. When false (the default) and spark.sql.groupByOrdinal is true, it fails " +
+        "with an error, because a bare integer literal there is an ordinal.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf

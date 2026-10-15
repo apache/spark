@@ -2228,13 +2228,7 @@ class AstBuilder extends DataTypeAstBuilder
     if (ctx.groupingExpressionsWithGroupingAnalytics.isEmpty) {
       val groupByExpressions: Seq[Expression] =
         ctx.groupingExpressions.asScala.map { n: NamedExpressionContext =>
-          lazy val groupingExpression = visitNamedExpression(n)
-          val allowAlias = allowNamedGroupingExpressions && (groupingExpression match {
-            case Alias(Literal(_: Int, IntegerType), _) =>
-              conf.getConf(SQLConf.LEGACY_ALLOW_ALIASED_PIPE_AGGREGATE_ORDINALS)
-            case _ => true
-          })
-          if (!allowAlias && (n.name != null || n.identifierList != null)) {
+          if (!allowNamedGroupingExpressions && (n.name != null || n.identifierList != null)) {
             // If we do not allow grouping expressions to have aliases in this context, we throw a
             // syntax error here accordingly.
             val error: String = (if (n.name != null) n.name else n.identifierList).getText
@@ -2247,7 +2241,7 @@ class AstBuilder extends DataTypeAstBuilder
                 "hint" -> s": extra input '$error'"),
               queryContext = Array.empty)
           }
-          groupingExpression
+          visitNamedExpression(n)
         }.toSeq
       val groupByExpressionsWithOrdinals =
         replaceOrdinalsInGroupingExpressions(groupByExpressions)
@@ -8321,6 +8315,17 @@ class AstBuilder extends DataTypeAstBuilder
             case Seq(key: UnresolvedAttribute) if key.equalsIgnoreCase("ALL") =>
               error("GROUP BY ALL")
             case _ =>
+          }
+          // With `spark.sql.groupByOrdinal` enabled, an integer literal is a GROUP BY ordinal, so
+          // an alias on it is ambiguous with grouping by the constant. Point the error at the
+          // aliased grouping expression rather than the whole clause.
+          if (conf.groupByOrdinal &&
+              !conf.getConf(SQLConf.LEGACY_ALLOW_ALIASED_PIPE_AGGREGATE_ORDINALS)) {
+            a.groupingExpressions.foreach {
+              case alias @ Alias(Literal(_: Int, IntegerType), _) =>
+                CurrentOrigin.withOrigin(alias.origin) { error("aliases on GROUP BY ordinals") }
+              case _ =>
+            }
           }
           def visit(e: Expression): Unit = {
             e match {

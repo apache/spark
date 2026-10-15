@@ -548,17 +548,28 @@ class PlanParserSuite extends AnalysisTest {
       parameters = Map("error" -> "'b'", "hint" -> ": extra input 'b'"))
   }
 
-  test("pipe AGGREGATE rejects aliased ordinals with the regular GROUP BY syntax error") {
+  test("pipe AGGREGATE rejects aliases on GROUP BY ordinals") {
     for {
       ordinal <- Seq("0", "1", "2", "3", "-1", "(2)")
       alias <- Seq("AS grp", "grp")
       prefix <- Seq("", "g, ")
-      query <- Seq(
-        s"TABLE t |> AGGREGATE sum(x) AS s GROUP BY $prefix$ordinal $alias",
-        s"SELECT x, sum(x) FROM t GROUP BY $prefix$ordinal $alias")
     } {
+      val groupingExpression = s"$ordinal $alias"
+      val query = s"TABLE t |> AGGREGATE sum(x) AS s GROUP BY $prefix$groupingExpression"
+      val start = query.lastIndexOf(groupingExpression)
       checkError(
         exception = parseException(query),
+        condition = "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+        sqlState = Some("0A000"),
+        parameters = Map("case" -> "aliases on GROUP BY ordinals"),
+        context = ExpectedContext(
+          fragment = groupingExpression,
+          start = start,
+          stop = start + groupingExpression.length - 1))
+
+      // Regular GROUP BY rejects every alias with a syntax error.
+      checkError(
+        exception = parseException(s"SELECT x, sum(x) FROM t GROUP BY $prefix$groupingExpression"),
         condition = "PARSE_SYNTAX_ERROR",
         sqlState = Some("42601"),
         parameters = Map("error" -> "'grp'", "hint" -> ": extra input 'grp'"))
@@ -585,21 +596,26 @@ class PlanParserSuite extends AnalysisTest {
     }
   }
 
-  test("pipe AGGREGATE accepts aliased ordinals as constants under the legacy config") {
-    withSQLConf(SQLConf.LEGACY_ALLOW_ALIASED_PIPE_AGGREGATE_ORDINALS.key -> "true") {
-      Seq("AS grp", "grp").foreach { alias =>
-        val query = s"TABLE t |> AGGREGATE sum(x) AS s GROUP BY 2 $alias"
-        val aggregate = parsePlan(query).asInstanceOf[Aggregate]
-        val groupingAlias = aggregate.groupingExpressions.head.asInstanceOf[Alias]
-        assert(groupingAlias.child == Literal(2))
-        assert(groupingAlias.name == "grp")
-        assert(aggregate.aggregateExpressions.head == groupingAlias)
+  test("pipe AGGREGATE groups by aliased integer literals as constants with the legacy config " +
+    "or without GROUP BY ordinals") {
+    Seq(
+      SQLConf.LEGACY_ALLOW_ALIASED_PIPE_AGGREGATE_ORDINALS.key -> "true",
+      SQLConf.GROUP_BY_ORDINAL.key -> "false").foreach { sqlConf =>
+      withSQLConf(sqlConf) {
+        Seq("AS grp", "grp").foreach { alias =>
+          val query = s"TABLE t |> AGGREGATE sum(x) AS s GROUP BY 2 $alias"
+          val aggregate = parsePlan(query).asInstanceOf[Aggregate]
+          val groupingAlias = aggregate.groupingExpressions.head.asInstanceOf[Alias]
+          assert(groupingAlias.child == Literal(2))
+          assert(groupingAlias.name == "grp")
+          assert(aggregate.aggregateExpressions.head == groupingAlias)
 
-        checkError(
-          exception = parseException(s"SELECT x, sum(x) FROM t GROUP BY 2 $alias"),
-          condition = "PARSE_SYNTAX_ERROR",
-          sqlState = Some("42601"),
-          parameters = Map("error" -> "'grp'", "hint" -> ": extra input 'grp'"))
+          checkError(
+            exception = parseException(s"SELECT x, sum(x) FROM t GROUP BY 2 $alias"),
+            condition = "PARSE_SYNTAX_ERROR",
+            sqlState = Some("42601"),
+            parameters = Map("error" -> "'grp'", "hint" -> ": extra input 'grp'"))
+        }
       }
     }
   }
