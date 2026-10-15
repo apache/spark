@@ -19,7 +19,8 @@ package org.bidfp;
 /**
  * Generic BID-k arithmetic. Finite add/mul/div/sqrt/fma, compare, and
  * toString use Knuth limbs (Decimal160 add/mul/FMA/compare use
- * {@link BidK160}). Parse still uses {@link DecNum}.
+ * {@link BidK160}; Decimal256 add/mul/FMA/compare use {@link BidK256}).
+ * Parse still uses {@link DecNum}.
  *
  * <p>{@link Bid64} and {@link Bid128} remain the specialized hot paths. This
  * kernel covers Decimal96 (k=3) through Decimal256 (k=8).
@@ -63,6 +64,9 @@ final class BidKRaw {
       if (BidK160.matches(format)) {
         kx = BidKKnuth.unpackLeftWide(format, x, frame, flags);
         ky = BidKKnuth.unpackRightWide(format, y, frame, flags);
+      } else if (BidK256.matches(format)) {
+        kx = BidKKnuth.unpackLeftWide8(format, x, frame, flags);
+        ky = BidKKnuth.unpackRightWide8(format, y, frame, flags);
       } else {
         kx = BidKKnuth.unpackLeftWork(format, x, frame, flags);
         ky = BidKKnuth.unpackRightWork(format, y, frame, flags);
@@ -76,6 +80,12 @@ final class BidKRaw {
       }
       if (BidK160.matches(format)) {
         BidK160.addFromWide(
+            format, frame.an, frame.ae, frame.bn, frame.be, mode, flags, out,
+            frame);
+        return;
+      }
+      if (BidK256.matches(format)) {
+        BidK256.addFromWide(
             format, frame.an, frame.ae, frame.bn, frame.be, mode, flags, out,
             frame);
         return;
@@ -106,6 +116,11 @@ final class BidKRaw {
         ky = BidKKnuth.unpackRightWide(format, y, frame, flags);
         aZero = frame.xa.isZero();
         bZero = frame.xb.isZero();
+      } else if (BidK256.matches(format)) {
+        kx = BidKKnuth.unpackLeftWide8(format, x, frame, flags);
+        ky = BidKKnuth.unpackRightWide8(format, y, frame, flags);
+        aZero = frame.ya.isZero();
+        bZero = frame.yb.isZero();
       } else {
         kx = BidKKnuth.unpackLeftWork(format, x, frame, flags);
         ky = BidKKnuth.unpackRightWork(format, y, frame, flags);
@@ -119,6 +134,12 @@ final class BidKRaw {
       }
       if (BidK160.matches(format)) {
         BidK160.mulFromWide(
+            format, frame.an, frame.ae, frame.bn, frame.be, mode, flags, out,
+            frame);
+        return;
+      }
+      if (BidK256.matches(format)) {
+        BidK256.mulFromWide(
             format, frame.an, frame.ae, frame.bn, frame.be, mode, flags, out,
             frame);
         return;
@@ -149,6 +170,11 @@ final class BidKRaw {
         ky = BidKKnuth.unpackRightWide(format, y, frame, flags);
         aZero = frame.xa.isZero();
         bZero = frame.xb.isZero();
+      } else if (BidK256.matches(format)) {
+        kx = BidKKnuth.unpackLeftWide8(format, x, frame, flags);
+        ky = BidKKnuth.unpackRightWide8(format, y, frame, flags);
+        aZero = frame.ya.isZero();
+        bZero = frame.yb.isZero();
       } else {
         kx = BidKKnuth.unpackLeftWork(format, x, frame, flags);
         ky = BidKKnuth.unpackRightWork(format, y, frame, flags);
@@ -162,6 +188,12 @@ final class BidKRaw {
       }
       if (BidK160.matches(format)) {
         BidK160.divFromWide(
+            format, frame.an, frame.ae, frame.bn, frame.be, mode, flags, out,
+            frame);
+        return;
+      }
+      if (BidK256.matches(format)) {
+        BidK256.divFromWide(
             format, frame.an, frame.ae, frame.bn, frame.be, mode, flags, out,
             frame);
         return;
@@ -222,16 +254,22 @@ final class BidKRaw {
       long[] out) {
     BidKScratch.Frame frame = BidKScratch.acquire();
     try {
-      boolean wide = BidK160.matches(format);
+      boolean wide160 = BidK160.matches(format);
+      boolean wide256 = BidK256.matches(format);
       Kind kx;
       Kind ky;
       boolean aZero;
       boolean bZero;
-      if (wide) {
+      if (wide160) {
         kx = BidKKnuth.unpackLeftWide(format, x, frame, flags);
         ky = BidKKnuth.unpackRightWide(format, y, frame, flags);
         aZero = frame.xa.isZero();
         bZero = frame.xb.isZero();
+      } else if (wide256) {
+        kx = BidKKnuth.unpackLeftWide8(format, x, frame, flags);
+        ky = BidKKnuth.unpackRightWide8(format, y, frame, flags);
+        aZero = frame.ya.isZero();
+        bZero = frame.yb.isZero();
       } else {
         kx = BidKKnuth.unpackLeftWork(format, x, frame, flags);
         ky = BidKKnuth.unpackRightWork(format, y, frame, flags);
@@ -248,7 +286,7 @@ final class BidKRaw {
           BidCodec.packNaN(format, false, false, out);
           return;
         }
-        Kind kz = unpackAddend(format, z, wide, frame, flags);
+        Kind kz = unpackAddend(format, z, frame, flags);
         boolean productNeg = frame.an ^ frame.bn;
         if (kz == Kind.INF && frame.tmpNeg[0] != productNeg) {
           flags.raise(StatusFlags.INVALID);
@@ -258,7 +296,7 @@ final class BidKRaw {
         BidCodec.packInfinity(format, productNeg, out);
         return;
       }
-      Kind kz = unpackAddend(format, z, wide, frame, flags);
+      Kind kz = unpackAddend(format, z, frame, flags);
       if (kz == Kind.NAN || kz == Kind.SNAN) {
         BidCodec.packNaN(format, false, false, out);
         return;
@@ -267,8 +305,14 @@ final class BidKRaw {
         BidCodec.packInfinity(format, frame.tmpNeg[0], out);
         return;
       }
-      if (wide) {
+      if (wide160) {
         BidK160.fmaFromWide(
+            format, frame.an, frame.ae, frame.bn, frame.be,
+            frame.tmpNeg[0], frame.tmpExp[0], mode, flags, out, frame);
+        return;
+      }
+      if (wide256) {
+        BidK256.fmaFromWide(
             format, frame.an, frame.ae, frame.bn, frame.be,
             frame.tmpNeg[0], frame.tmpExp[0], mode, flags, out, frame);
         return;
@@ -295,6 +339,9 @@ final class BidKRaw {
       if (BidK160.matches(format)) {
         kx = BidKKnuth.unpackLeftWide(format, x, frame, flags);
         ky = BidKKnuth.unpackRightWide(format, y, frame, flags);
+      } else if (BidK256.matches(format)) {
+        kx = BidKKnuth.unpackLeftWide8(format, x, frame, flags);
+        ky = BidKKnuth.unpackRightWide8(format, y, frame, flags);
       } else {
         kx = BidKKnuth.unpackLeftWork(format, x, frame, flags);
         ky = BidKKnuth.unpackRightWork(format, y, frame, flags);
@@ -317,6 +364,11 @@ final class BidKRaw {
             format, frame.an, frame.ae, frame.be, mode, flags, out, frame);
         return;
       }
+      if (BidK256.matches(format)) {
+        BidK256.quantizeFromWide(
+            format, frame.an, frame.ae, frame.be, mode, flags, out, frame);
+        return;
+      }
       BidKKnuth.quantizeFromWork(
           format, frame.an, frame.ae, frame.be, mode, flags, out, frame);
     } finally {
@@ -336,6 +388,8 @@ final class BidKRaw {
       Kind kx;
       if (BidK160.matches(src)) {
         kx = BidKKnuth.unpackLeftWide(src, x, frame, flags);
+      } else if (BidK256.matches(src)) {
+        kx = BidKKnuth.unpackLeftWide8(src, x, frame, flags);
       } else {
         kx = BidKKnuth.unpackLeftWork(src, x, frame, flags);
       }
@@ -352,6 +406,11 @@ final class BidKRaw {
       }
       if (BidK160.matches(src)) {
         BidK160.convertFromWide(
+            dest, frame.an, frame.ae, mode, flags, out, frame);
+        return;
+      }
+      if (BidK256.matches(src)) {
+        BidK256.convertFromWide(
             dest, frame.an, frame.ae, mode, flags, out, frame);
         return;
       }
@@ -401,6 +460,9 @@ final class BidKRaw {
       if (BidK160.matches(format)) {
         return BidK160.toString(format, words, frame);
       }
+      if (BidK256.matches(format)) {
+        return BidK256.toString(format, words, frame);
+      }
       return BidKKnuth.toString(format, words, frame);
     } finally {
       BidKScratch.release(frame);
@@ -418,6 +480,9 @@ final class BidKRaw {
     try {
       if (BidK160.matches(format)) {
         return BidK160.sqlCompare(format, x, y, frame);
+      }
+      if (BidK256.matches(format)) {
+        return BidK256.sqlCompare(format, x, y, frame);
       }
       return BidKKnuth.sqlCompare(format, x, y, frame);
     } finally {
@@ -442,12 +507,15 @@ final class BidKRaw {
   private static Kind unpackAddend(
       FormatParams format,
       long[] z,
-      boolean wide,
       BidKScratch.Frame frame,
       StatusFlags flags) {
-    if (wide) {
+    if (BidK160.matches(format)) {
       return BidKKnuth.unpack(
           format, z, frame.xt, frame.tmpNeg, frame.tmpExp, flags);
+    }
+    if (BidK256.matches(format)) {
+      return BidKKnuth.unpack(
+          format, z, frame.yt, frame.tmpNeg, frame.tmpExp, flags);
     }
     return BidKKnuth.unpack(
         format, z, frame.w4, frame.tmpNeg, frame.tmpExp, flags);

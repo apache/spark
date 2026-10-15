@@ -300,7 +300,8 @@ final class BidK160 {
     if (frame.an != frame.bn) {
       return frame.an ? -1 : 1;
     }
-    int cmp = compareAbsolute(frame.xa, frame.ae, frame.xb, frame.be, frame);
+    int cmp = compareAbsolute(
+        frame.xa, frame.ae, frame.xb, frame.be, format.precision(), frame);
     return frame.an ? -cmp : cmp;
   }
 
@@ -433,29 +434,30 @@ final class BidK160 {
   }
 
   private static int compareAbsolute(
-      Wide6 a, int ae, Wide6 b, int be, BidKScratch.Frame frame) {
+      Wide6 a, int ae, Wide6 b, int be, int precision, BidKScratch.Frame frame) {
     if (a.isZero()) {
       return b.isZero() ? 0 : -1;
     }
     if (b.isZero()) {
       return 1;
     }
-    int orderA = ae + a.decimalDigits();
-    int orderB = be + b.decimalDigits();
-    if (orderA != orderB) {
-      return orderA > orderB ? 1 : -1;
-    }
     if (ae == be) {
       return a.compare(b);
     }
-    int difference = Math.abs(ae - be);
-    if (ae > be) {
+    int diff = ae - be;
+    if (diff >= precision) {
+      return 1;
+    }
+    if (diff <= -precision) {
+      return -1;
+    }
+    if (diff > 0) {
       frame.xt.copyFrom(a);
-      frame.xt.multiplyPow10(difference);
+      frame.xt.multiplyPow10(diff);
       return frame.xt.compare(b);
     }
     frame.xt.copyFrom(b);
-    frame.xt.multiplyPow10(difference);
+    frame.xt.multiplyPow10(-diff);
     return a.compare(frame.xt);
   }
 

@@ -142,6 +142,25 @@ final class BidKKnuth {
     return kind;
   }
 
+  static BidKRaw.Kind unpack(
+      FormatParams format,
+      long[] words,
+      Wide8 coeff,
+      boolean[] negative,
+      int[] exp,
+      StatusFlags flags) {
+    BidKRaw.Kind kind = classify(format, words, negative, exp, flags);
+    if (kind != BidKRaw.Kind.FINITE) {
+      coeff.clear();
+      return kind;
+    }
+    BidCodec.unpackCoefficient(format, words, coeff);
+    if (!format.coefficientAllowed(coeff)) {
+      coeff.clear();
+    }
+    return BidKRaw.Kind.FINITE;
+  }
+
   static BidKRaw.Kind unpackLeftWide(
       FormatParams format, long[] words, BidKScratch.Frame frame, StatusFlags flags) {
     BidKRaw.Kind kind =
@@ -155,6 +174,24 @@ final class BidKKnuth {
       FormatParams format, long[] words, BidKScratch.Frame frame, StatusFlags flags) {
     BidKRaw.Kind kind =
         unpack(format, words, frame.xb, frame.tmpNeg, frame.tmpExp, flags);
+    frame.bn = frame.tmpNeg[0];
+    frame.be = frame.tmpExp[0];
+    return kind;
+  }
+
+  static BidKRaw.Kind unpackLeftWide8(
+      FormatParams format, long[] words, BidKScratch.Frame frame, StatusFlags flags) {
+    BidKRaw.Kind kind =
+        unpack(format, words, frame.ya, frame.tmpNeg, frame.tmpExp, flags);
+    frame.an = frame.tmpNeg[0];
+    frame.ae = frame.tmpExp[0];
+    return kind;
+  }
+
+  static BidKRaw.Kind unpackRightWide8(
+      FormatParams format, long[] words, BidKScratch.Frame frame, StatusFlags flags) {
+    BidKRaw.Kind kind =
+        unpack(format, words, frame.yb, frame.tmpNeg, frame.tmpExp, flags);
     frame.bn = frame.tmpNeg[0];
     frame.be = frame.tmpExp[0];
     return kind;
@@ -741,7 +778,8 @@ final class BidKKnuth {
     if (frame.an != frame.bn) {
       return frame.an ? -1 : 1;
     }
-    int cmp = compareAbsolute(frame.w0, frame.ae, frame.w1, frame.be, frame);
+    int cmp = compareAbsolute(
+        frame.w0, frame.ae, frame.w1, frame.be, format.precision(), frame);
     return frame.an ? -cmp : cmp;
   }
 
@@ -759,29 +797,35 @@ final class BidKKnuth {
   }
 
   private static int compareAbsolute(
-      long[] a, int ae, long[] b, int be, BidKScratch.Frame frame) {
+      long[] a,
+      int ae,
+      long[] b,
+      int be,
+      int precision,
+      BidKScratch.Frame frame) {
     if (LimbMath.isZero(a)) {
       return LimbMath.isZero(b) ? 0 : -1;
     }
     if (LimbMath.isZero(b)) {
       return 1;
     }
-    int orderA = ae + LimbMath.decimalDigits(a);
-    int orderB = be + LimbMath.decimalDigits(b);
-    if (orderA != orderB) {
-      return orderA > orderB ? 1 : -1;
-    }
     if (ae == be) {
       return LimbMath.compare(a, b);
     }
-    int difference = Math.abs(ae - be);
-    if (ae > be) {
+    int diff = ae - be;
+    if (diff >= precision) {
+      return 1;
+    }
+    if (diff <= -precision) {
+      return -1;
+    }
+    if (diff > 0) {
       LimbMath.copy(frame.w4, a);
-      LimbMath.multiplyPow10(frame.w4, difference, frame.w5);
+      LimbMath.multiplyPow10(frame.w4, diff, frame.w5);
       return LimbMath.compare(frame.w4, b);
     }
     LimbMath.copy(frame.w4, b);
-    LimbMath.multiplyPow10(frame.w4, difference, frame.w5);
+    LimbMath.multiplyPow10(frame.w4, -diff, frame.w5);
     return LimbMath.compare(a, frame.w4);
   }
 }

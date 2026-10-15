@@ -80,6 +80,10 @@ final class BidKScratch {
     final Wide6 xb = new Wide6();
     final Wide6 xr = new Wide6();
     final Wide6 xt = new Wide6();
+    final Wide8 ya = new Wide8();
+    final Wide8 yb = new Wide8();
+    final Wide8 yr = new Wide8();
+    final Wide8 yt = new Wide8();
     final int[] d0 = new int[LimbMath.DIGITS32];
     final int[] d1 = new int[LimbMath.DIGITS32];
     final int[] d2 = new int[LimbMath.DIGITS32];
