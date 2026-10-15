@@ -189,10 +189,11 @@ class RewriteSubquerySuite extends PlanTest {
       outer)
 
     // The shared attribute is attributed to the subquery plan, so the nested subquery is routed
-    // there rather than reported as referencing both plans. What then reports this state is the
-    // conflict check that dedupSubqueryOnSelfJoin has always run over the semi join condition,
-    // which names the duplicated attribute: an attribute shared between the two plans that the
-    // hoisted condition mentions cannot be turned into a semi join whatever the routing does.
+    // there rather than declined and left in the semi join condition. What then reports this
+    // state is the conflict check that dedupSubqueryOnSelfJoin has always run over that
+    // condition, which names the duplicated attribute: an attribute shared between the two plans
+    // that the hoisted condition mentions cannot be turned into a semi join whatever the routing
+    // does, so this fixture pins the shape rather than the outcome of the attribution.
     val e = intercept[AnalysisException](Optimize.execute(query))
     assert(e.getCondition == "_LEGACY_ERROR_TEMP_1212",
       s"expected the pre-existing conflict check to report this, got ${e.getCondition}")
