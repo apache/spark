@@ -1314,18 +1314,20 @@ class DataFrameAggregateSuite extends SharedSparkSession
       Seq(Some(0.0d), Some(0.0d)).toDF("x").createOrReplaceTempView("t")
       Seq(Some(-0.0d)).toDF("y").createOrReplaceTempView("u")
 
-      // The subquery becomes a join on the pushed, normalized key. The subquery side of the join
-      // must be normalized too, so that 0.0 matches -0.0.
+      // A float/double key is pushed unnormalized, and the join normalizes both sides.
       checkAnswer(
         sql("SELECT * FROM (SELECT DISTINCT x FROM t) WHERE x IN (SELECT y FROM u)"),
         Row(0.0d))
       checkAnswer(
         sql("SELECT * FROM (SELECT DISTINCT x FROM t) WHERE x NOT IN (SELECT y FROM u)"),
         Nil)
-      checkAnswer(
-        sql("SELECT * FROM (SELECT x * 1.0 AS k FROM t GROUP BY x * 1.0) " +
-          "WHERE k IN (SELECT y FROM u)"),
-        Row(0.0d))
+      // A struct key is pushed normalized, so the subquery side of the join must be normalized too,
+      // so that 0.0 matches -0.0. The structs are nullable, like the columns above.
+      def struct(c: String): String = s"IF($c IS NULL, NULL, named_struct('a', $c))"
+      val structs = s"SELECT * FROM (SELECT DISTINCT ${struct("x")} AS s FROM t)"
+      val structY = s"(SELECT ${struct("y")} FROM u)"
+      checkAnswer(sql(s"$structs WHERE s IN $structY"), Row(Row(0.0d)))
+      checkAnswer(sql(s"$structs WHERE s NOT IN $structY"), Nil)
     }
   }
 

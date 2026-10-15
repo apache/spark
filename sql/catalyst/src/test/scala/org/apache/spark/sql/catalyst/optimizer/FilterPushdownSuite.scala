@@ -2154,9 +2154,9 @@ class FilterPushdownSuite extends PlanTest {
     val relation = LocalRelation(x, y, $"b".int)
 
     // Comparisons treat -0.0/0.0 and all NaNs as equal, so they need no normalization. That
-    // includes a FLOAT key widened to DOUBLE to be compared with a DOUBLE value.
+    // includes a FLOAT key widened to DOUBLE to be compared with a DOUBLE value, and InSet.
     val comparisons = x > 1.0 || (y === 0.0f && !IsNaN(x)) || x.in(2.0, 3.0) || x.isNull ||
-      y > 1.5 || y.in(1.5, 2.5)
+      y > 1.5 || y.in(1.5, 2.5) || InSet(x, Set(4.0, 5.0))
     val originalQuery = relation
       .groupBy(x, y)(x, y, count($"b").as("c"))
       .where(comparisons)
@@ -2270,6 +2270,8 @@ class FilterPushdownSuite extends PlanTest {
     unchanged(f >= 1.0f)
     unchanged(x === x)
     unchanged(x.in(1.0, 2.0))
+    unchanged(InSet(x, Set(1.0, 2.0)))
+    unchanged(InSubquery(Seq(x), ListQuery(LocalRelation($"y".double))))
     unchanged(x.isNull)
     unchanged(x.isNotNull)
     unchanged(IsNaN(x))

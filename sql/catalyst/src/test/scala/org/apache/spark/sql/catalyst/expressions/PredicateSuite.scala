@@ -596,6 +596,13 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
         val e = op(left)
         checkEvaluation(e, e.eval(InternalRow(norm(v))), InternalRow(v))
       }
+      // InSet, with the HashSet that OptimizeIn builds from an IN list of literals. A null in the
+      // list is left out: interpreted and generated code differ on NaN INSET (null), for raw and
+      // normalized NaNs alike.
+      for (v <- values; w <- values if w != null) {
+        val e = InSet(left, HashSet[Any](w))
+        checkEvaluation(e, e.eval(InternalRow(norm(v))), InternalRow(v))
+      }
     }
 
     val otherDoubleNaN = java.lang.Double.longBitsToDouble(0x7ff8000000000001L)

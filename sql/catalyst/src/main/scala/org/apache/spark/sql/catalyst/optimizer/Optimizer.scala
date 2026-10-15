@@ -2861,9 +2861,11 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
   // float attribute widened to double (as when a FLOAT column is compared with a DOUBLE or
   // DECIMAL value), since widening keeps -0.0 and NaN. Those comparisons already treat -0.0 and
   // 0.0 as equal and all NaNs as equal (see SQLOrderingUtil.compareDoubles and
-  // CodegenContext.genEqual), and IsNull, IsNotNull and IsNaN cannot tell normalized values apart
-  // either, so wrapping would not change the result. Leaving them as is keeps plain comparisons
-  // usable by data sources and partition pruning.
+  // CodegenContext.genEqual), and so does InSet, an IN list that OptimizeIn converted. IsNull,
+  // IsNotNull and IsNaN cannot tell normalized values apart either, nor can an IN subquery, which
+  // becomes a join on EqualTo conditions (whose keys NormalizeFloatingNumbers normalizes on both
+  // sides when it is an equi-join). So wrapping would not change the result, and leaving them as
+  // is keeps plain comparisons usable by data sources and partition pruning.
   private[optimizer] def normalizeGroupingExpressions(
       e: Expression,
       grouping: Seq[Expression]): Expression = e match {
@@ -2875,7 +2877,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case _: KnownFloatingPointNormalized
         if grouping.exists(g => NormalizeFloatingNumbers.normalize(g).semanticEquals(e)) => e
     case _: EqualTo | _: EqualNullSafe | _: LessThan | _: LessThanOrEqual | _: GreaterThan |
-         _: GreaterThanOrEqual | _: In | _: IsNull | _: IsNotNull | _: IsNaN =>
+         _: GreaterThanOrEqual | _: In | _: InSet | _: InSubquery | _: IsNull | _: IsNotNull |
+         _: IsNaN =>
       e.mapChildren {
         case a: Attribute if a.dataType == FloatType || a.dataType == DoubleType => a
         case c @ Cast(a: Attribute, DoubleType, _, _) if a.dataType == FloatType => c
