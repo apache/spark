@@ -52,7 +52,7 @@ import org.apache.spark.internal.config.KILL_ON_FATAL_ERROR_DEPTH
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.{classic, sources, DataFrame, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, BloomFilterMightContain, BoundReference, Cast, Coalesce, CodegenObjectFactoryMode, EqualTo, Expression, GreaterThanOrEqual, If, In, IsNotNull, IsNull, LessThan, LessThanOrEqual, Literal, Or, Predicate, Rand, Remainder, SecondsToTimestamp, Substring, UnaryExpression, XxHash64}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, BloomFilterMightContain, BoundReference, Cast, Coalesce, CodegenObjectFactoryMode, EqualTo, Expression, GreaterThanOrEqual, If, In, IsNotNull, IsNull, LessThan, LessThanOrEqual, Literal, Or, Predicate, Rand, Remainder, ScalarSubquery, SecondsToTimestamp, Substring, UnaryExpression, XxHash64}
 import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
@@ -558,9 +558,11 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
 
   // A runtime bloom's `Literal` holding one long key, built the way the planner builds one. It is
   // serialized as `BloomFilterAggregate` serializes it, and the key is hashed with the same seed.
-  private def bloomLiteralOf(key: Long): Literal = {
+  private def bloomLiteralOf(keys: Long*): Literal = {
     val bf = BloomFilter.create(10, 128)
-    bf.putLong(new XxHash64(Seq(Literal(key))).eval(InternalRow.empty).asInstanceOf[Long])
+    keys.foreach { key =>
+      bf.putLong(new XxHash64(Seq(Literal(key))).eval(InternalRow.empty).asInstanceOf[Long])
+    }
     Literal(BloomFilterAggregate.serialize(bf), BinaryType)
   }
 
@@ -1063,6 +1065,37 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
         assert(df.collect().map(_.getLong(0)).toSeq == Seq(5L),
           "and the query must still return the joined key")
       }
+    }
+  }
+
+  test("a join's runtime bloom takes a condition over its key on the fact side with it") {
+    // The fact side of a LEFT OUTER JOIN filters on its join key in a derived table. The
+    // optimizer does not infer that condition onto the side the bloom is built from, so the bloom
+    // keeps keys 0 until 20 while the condition keeps only every fourth of them. With both in the
+    // reader, it excludes more rows than the bloom alone can.
+    withBloomFilterTables {
+      val query =
+        """SELECT bf2.k, f.v
+          |FROM bf2 LEFT JOIN (SELECT * FROM bf1 WHERE k % 4 = 0) f ON f.k = bf2.k
+          |WHERE bf2.v < 20
+          |""".stripMargin
+      def run(pushdown: Boolean): (SparkPlan, Seq[Row]) = withSQLConf(
+          SQLConf.PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED.key -> pushdown.toString,
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        val df = spark.sql(query)
+        (df.queryExecution.executedPlan, df.collect().toSeq.sortBy(_.getLong(0)))
+      }
+      val (_, plain) = run(pushdown = false)
+      val (plan, rows) = run(pushdown = true)
+      assert(rows == plain && rows.size == 20, s"got $rows, a plain read got $plain")
+      val offered = collect(plan) { case s: FileSourceScanExec => s.storageFilters }.flatten
+      assert(offered.exists(_.isInstanceOf[BloomFilterMightContain]) &&
+        offered.exists(_.exists(_.isInstanceOf[Remainder])) &&
+        !offered.exists(_.isInstanceOf[IsNotNull]),
+        s"expected the bloom and k % 4 = 0, and no IsNotNull; got $offered.\nPlan:\n$plan")
+      val excluded = rowsExcludedByStorageFilters(plan)
+      assert(excluded > 600 - 20,
+        s"the bloom alone keeps at least keys 0 until 20 of 600; the reader excluded $excluded")
     }
   }
 
@@ -2245,6 +2278,80 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
           s"a conjunct not offered must stay as it is; got $conjuncts")
         assert(!physical.output.exists(_.name == checkedName),
           s"the column must not leave the scan's Filter; got ${physical.output}")
+      }
+    }
+  }
+
+  test("FileSourceStrategy offers a conjunct over the bloom's key columns along with the bloom") {
+    // It adds no column to the read, so it goes to the reader after the bloom. A conjunct over
+    // another column does not, nor an `IsNotNull`, which the Filter needs bare, nor a conjunct over
+    // the key with no bloom to go with.
+    withTempDir { dir =>
+      val path = writeKeyParquetFile(dir, 0L until 50L, rowGroupSize = 64 * 1024L)
+      withSQLConf(SQLConf.PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+        val relation = spark.read.parquet(path).queryExecution.optimizedPlan
+        val k = columnOf(relation, "k")
+        val bloom = bloomOn(k)
+        val onKey = EqualTo(Remainder(k, Literal(4L)), Literal(0L))
+        val onValue = EqualTo(columnOf(relation, "v"), Literal("42"))
+        def offered(condition: Expression): Seq[Expression] =
+          scanOf(planned(LogicalFilter(condition, relation))).storageFilters
+        val withBloom = offered(And(And(And(IsNotNull(k), onKey), bloom), onValue))
+        assert(withBloom.length == 2 && withBloom.head.semanticEquals(bloom) &&
+          withBloom(1).semanticEquals(onKey), s"expected the bloom, then $onKey; got $withBloom")
+        assert(offered(And(onKey, onValue)).isEmpty, "nothing is offered without a bloom")
+        assert(!ParquetStorageFilter.isSupportedFilterOnKeys(
+          EqualTo(k, ScalarSubquery(spark.range(1).queryExecution.analyzed))),
+          "a conjunct holding a subquery is not offered")
+      }
+    }
+  }
+
+  // Reads keys 0 until 1000 under `condition` with the feature off and on, and hands `check` the
+  // rows of each and the rows the reader excluded.
+  private def readKeysUnder(condition: Attribute => Expression)(
+      check: (Seq[Long], Seq[Long], Long) => Unit): Unit = withTempDir { dir =>
+    val path = writeKeyParquetFile(dir, 0L until 1000L, rowGroupSize = 1024L)
+    val relation = spark.read.parquet(path).queryExecution.analyzed
+    val filtered = LogicalFilter(condition(columnOf(relation, "k")), relation)
+    def run(pushdown: Boolean): (SparkPlan, Seq[Long]) = withSQLConf(
+        SQLConf.PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED.key -> pushdown.toString) {
+      val df = classic.Dataset.ofRows(spark, filtered)
+      (df.queryExecution.executedPlan, df.collect().toSeq.map(_.getLong(0)).sorted)
+    }
+    val (_, plain) = run(pushdown = false)
+    val (plan, rows) = run(pushdown = true)
+    assert(scanOf(plan).storageFilters.length > 1,
+      s"the key conjuncts must be offered with the bloom.\nPlan:\n$plan")
+    check(plain, rows, rowsExcludedByStorageFilters(plan))
+  }
+
+  test("a conjunct over the key columns narrows the rows the reader keeps") {
+    // The reader keeps exactly the rows the query returns, where the bloom alone would also keep
+    // the even keys. The small bloom has false positives too, which the conjunct keeps if odd.
+    readKeysUnder { k =>
+      And(BloomFilterMightContain(bloomLiteralOf(41L, 42L, 43L, 501L), new XxHash64(Seq(k))),
+        EqualTo(Remainder(k, Literal(2L)), Literal(1L)))
+    } { (plain, rows, excluded) =>
+      assert(rows == plain, s"got $rows, a plain read got $plain")
+      assert(Seq(41L, 43L, 501L).forall(rows.contains) && rows.forall(_ % 2 == 1),
+        s"expected the odd keys the bloom holds; got $rows")
+      assert(excluded == 1000L - rows.size, "the reader must keep exactly the rows it returns")
+    }
+  }
+
+  test("a conjunct over the key columns is evaluated only on the rows the bloom keeps") {
+    // The two conjuncts share `100 % k`, which throws on k = 0 under ANSI. In one `And` with the
+    // bloom it would be computed on every row, k = 0 included, and the reader would give up that
+    // row group. Under an `If` on the bloom it is computed only on the rows the bloom keeps.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      readKeysUnder { k =>
+        val mod = Remainder(Literal(100L), k)
+        And(And(bloomOn(k), GreaterThanOrEqual(mod, Literal(0L))),
+          LessThanOrEqual(mod, Literal(99L)))
+      } { (plain, rows, excluded) =>
+        assert(rows == Seq(42L) && rows == plain, s"got $rows, a plain read got $plain")
+        assert(excluded == 999L, s"the reader must not give a row group up; it excluded $excluded")
       }
     }
   }

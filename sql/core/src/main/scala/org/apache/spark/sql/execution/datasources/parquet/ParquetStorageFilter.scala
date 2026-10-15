@@ -22,7 +22,8 @@ import scala.util.control.NonFatal
 import org.apache.spark.{SparkContext, SparkEnv, SparkException, TaskContext, TaskKilledException}
 import org.apache.spark.executor.Executor
 import org.apache.spark.internal.config.KILL_ON_FATAL_ERROR_DEPTH
-import org.apache.spark.sql.catalyst.expressions.{And, BasePredicate, BloomFilterMightContain, BoundReference, Expression, Predicate}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, BasePredicate, BloomFilterMightContain, BoundReference, Expression, If, Literal, Predicate, Unevaluable}
+import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.types.{BooleanType, DataType, StructType}
@@ -178,7 +179,16 @@ object ParquetStorageFilter {
       maxSplicedRowGroupBytes: Long): ParquetStorageFilter = {
     require(boundExpressions.nonEmpty,
       "storage filters must be non-empty; callers with nothing to push must not call create")
-    val expr = boundExpressions.reduce(And)
+    // The conjuncts over the blooms' key columns go under an `If` on the blooms rather than in
+    // one `And` with them, so they are evaluated only on the rows the blooms keep. Subexpression
+    // elimination computes what the conjuncts of an `And` share ahead of all of them, but leaves
+    // a branch alone. A null bloom drops the row either way.
+    val (blooms, onKeys) = boundExpressions.partition(_.isInstanceOf[BloomFilterMightContain])
+    val expr = if (blooms.isEmpty || onKeys.isEmpty) {
+      boundExpressions.reduce(And)
+    } else {
+      If(blooms.reduce(And), onKeys.reduce(And), Literal.FalseLiteral)
+    }
 
     // The requested-schema ordinals this predicate reads, deduplicated (a column referenced twice
     // is still one key column) and sorted. Sorting only makes the key row's layout deterministic:
@@ -262,6 +272,18 @@ object ParquetStorageFilter {
         !bloom.references.exists(a => a.name == ParquetFileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME)
     case _ => false
   }
+
+  /**
+   * Whether the reader can evaluate `expr`, a conjunct over the key columns of the storage filters
+   * [[isSupportedStorageFilter]] accepted, together with them. Those key columns already pass the
+   * checks above, so this only rules out an unevaluable expression other than the column
+   * references the reader binds, and, to keep to expressions it evaluates as they are, a subquery.
+   */
+  def isSupportedFilterOnKeys(expr: Expression): Boolean =
+    !expr.containsPattern(PLAN_EXPRESSION) && !expr.exists {
+      case _: Attribute => false
+      case e => e.isInstanceOf[Unevaluable]
+    }
 
   /**
    * Rethrows an error the reader met while applying a storage filter, if it must not fall back on

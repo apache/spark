@@ -219,6 +219,9 @@ class ParquetFileFormat
   override def supportsStorageFilter(expr: Expression): Boolean =
     ParquetStorageFilter.isSupportedStorageFilter(expr)
 
+  override def supportsStorageFilterOnKeys(expr: Expression): Boolean =
+    ParquetStorageFilter.isSupportedFilterOnKeys(expr)
+
   /** See `StorageFilterMetrics` for what each of these counts. */
   override def storageFilterMetrics(sparkContext: SparkContext): Map[String, SQLMetric] =
     StorageFilterMetrics.create(sparkContext)
