@@ -1997,7 +1997,8 @@ private[spark] class DAGScheduler(
   }
 
   /**
-   * Kill a given task. It will be retried.
+   * Kill a given task. It will be retried, unless it is a task of a pipelined group, whose job
+   * fails instead.
    *
    * @return Whether the task was successfully killed.
    */
