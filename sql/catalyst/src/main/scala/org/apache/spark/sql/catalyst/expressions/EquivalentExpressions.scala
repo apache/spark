@@ -175,23 +175,35 @@ class EquivalentExpressions(
   private def alwaysEvaluatedDefinitions(withExpr: With): Seq[Expression] = {
     val definitions = withExpr.defs.map(definition => definition.id -> definition).toMap
     val required = mutable.HashSet.empty[CommonExpressionId]
-    def collect(expression: Expression, shadowed: Set[CommonExpressionId]): Unit = {
+    def collectReference(ref: CommonExpressionRef): Unit = {
+      definitions.get(ref.id).foreach { definition =>
+        if (required.add(ref.id)) collect(definition.child, collectReference)
+      }
+    }
+    def collect(expression: Expression, resolve: CommonExpressionRef => Unit): Unit = {
       val alwaysEvaluated = skipForShortcut(expression)
       if (alwaysEvaluated.containsPattern(COMMON_EXPR_REF)) {
         alwaysEvaluated match {
-          case ref: CommonExpressionRef if !shadowed.contains(ref.id) =>
-            definitions.get(ref.id).foreach { definition =>
-              if (required.add(ref.id)) collect(definition.child, Set.empty)
-            }
+          case ref: CommonExpressionRef => resolve(ref)
           case nested: With =>
-            val innerIds = shadowed ++ nested.defs.map(_.id)
-            childrenToRecurse(nested).foreach(collect(_, innerIds))
+            if (!nested.refUnderCodegenFallback) {
+              val innerDefs = nested.defs.map(definition => definition.id -> definition).toMap
+              val visited = mutable.HashSet.empty[CommonExpressionId]
+              def collectInnerReference(ref: CommonExpressionRef): Unit = {
+                innerDefs.get(ref.id) match {
+                  case Some(definition) =>
+                    if (visited.add(ref.id)) collect(definition.child, resolve)
+                  case None => resolve(ref)
+                }
+              }
+              collect(nested.child, collectInnerReference)
+            }
           case other =>
-            childrenToRecurse(other).foreach(collect(_, shadowed))
+            childrenToRecurse(other).foreach(collect(_, resolve))
         }
       }
     }
-    collect(withExpr.child, Set.empty)
+    collect(withExpr.child, collectReference)
     withExpr.defs.filter(definition => required.contains(definition.id)).map(_.child)
   }
 

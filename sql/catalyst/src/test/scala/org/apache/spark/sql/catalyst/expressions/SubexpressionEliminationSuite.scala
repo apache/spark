@@ -564,6 +564,34 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     }
   }
 
+  test("With definition traversal is bounded for deeply nested scopes") {
+    val input = AttributeReference("input", IntegerType, nullable = false)()
+    val shared = Add(input, Literal(1))
+    Seq(10, 30).foreach { depth =>
+      var visits = 0
+      def nested(value: Expression, remaining: Int): Expression = {
+        With(value) { case Seq(ref) =>
+          if (remaining == 0) {
+            new If(GreaterThan(ref, Literal(0)), shared, Literal(0)) {
+              override def alwaysEvaluatedInputs: Seq[Expression] = {
+                visits += 1
+                assert(visits <= 4 * depth * depth, s"depth=$depth visits=$visits")
+                super.alwaysEvaluatedInputs
+              }
+            }
+          } else {
+            Add(nested(Add(ref, Literal(1)), remaining - 1), shared)
+          }
+        }
+      }
+      val equivalence = new EquivalentExpressions
+      equivalence.addExprTree(nested(shared, depth))
+      equivalence.addExprTree(Multiply(shared, input))
+      assert(visits > 0)
+      assert(equivalence.getCommonSubexpressions == Seq(shared))
+    }
+  }
+
   test("With definitions stay lazy behind guards, fallback and shadowing") {
     val input = AttributeReference("input", IntegerType)()
     val shared = Add(input, Literal(1))
