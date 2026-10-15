@@ -17,10 +17,10 @@
 package org.bidfp;
 
 /**
- * Generic BID-k arithmetic. Finite add/mul/div/sqrt/fma, compare, and
- * toString use Knuth limbs (Decimal160 add/mul/FMA/compare use
- * {@link BidK160}; Decimal256 add/mul/FMA/compare use {@link BidK256}).
- * Parse still uses {@link DecNum}.
+ * Generic BID-k arithmetic. {@code k=2,3,4} dispatch to {@link BidKSpecial}
+ * (Bid64, Bid128, Decimal96 via Bid128). Wider finite add/mul/div/sqrt/fma
+ * use Knuth limbs (Decimal160 Wide6, Decimal256 Wide8). Parse uses
+ * {@link DecNum}.
  *
  * <p>{@link BidUnpacked} is the compute form: kernels write
  * {@link BidKScratch.Frame#unpackedOut} through {@link BidEmit} and skip
@@ -61,6 +61,14 @@ final class BidKRaw {
       StatusFlags flags,
       long[] out,
       boolean negateY) {
+    if (BidKSpecial.narrow(format)) {
+      if (negateY) {
+        BidKSpecial.sub(format, x, y, mode, flags, out);
+      } else {
+        BidKSpecial.add(format, x, y, mode, flags, out);
+      }
+      return;
+    }
     BidKScratch.Frame frame = BidKScratch.acquire();
     try {
       Kind kx;
@@ -109,6 +117,10 @@ final class BidKRaw {
       RoundingMode mode,
       StatusFlags flags,
       long[] out) {
+    if (BidKSpecial.narrow(format)) {
+      BidKSpecial.mul(format, x, y, mode, flags, out);
+      return;
+    }
     BidKScratch.Frame frame = BidKScratch.acquire();
     try {
       Kind kx;
@@ -163,6 +175,10 @@ final class BidKRaw {
       RoundingMode mode,
       StatusFlags flags,
       long[] out) {
+    if (BidKSpecial.narrow(format)) {
+      BidKSpecial.div(format, x, y, mode, flags, out);
+      return;
+    }
     BidKScratch.Frame frame = BidKScratch.acquire();
     try {
       Kind kx;
@@ -216,6 +232,10 @@ final class BidKRaw {
       RoundingMode mode,
       StatusFlags flags,
       long[] out) {
+    if (BidKSpecial.narrow(format)) {
+      BidKSpecial.sqrt(format, x, mode, flags, out);
+      return;
+    }
     BidKScratch.Frame frame = BidKScratch.acquire();
     try {
       Kind kx = BidKKnuth.unpackLeftWork(format, x, frame, flags);
@@ -256,6 +276,10 @@ final class BidKRaw {
       RoundingMode mode,
       StatusFlags flags,
       long[] out) {
+    if (BidKSpecial.narrow(format)) {
+      BidKSpecial.fma(format, x, y, z, mode, flags, out);
+      return;
+    }
     BidKScratch.Frame frame = BidKScratch.acquire();
     try {
       boolean wide160 = BidK160.matches(format);
@@ -336,6 +360,10 @@ final class BidKRaw {
       RoundingMode mode,
       StatusFlags flags,
       long[] out) {
+    if (BidKSpecial.narrow(format)) {
+      BidKSpecial.quantize(format, x, y, mode, flags, out);
+      return;
+    }
     BidKScratch.Frame frame = BidKScratch.acquire();
     try {
       Kind kx;
@@ -481,6 +509,10 @@ final class BidKRaw {
       StatusFlags flags,
       BidUnpacked out) {
     FormatParams format = requireSameFormat(x, y, out);
+    if (BidKSpecial.narrow(format)) {
+      BidKSpecial.addUnpacked(x, y, negateY, mode, flags, out);
+      return;
+    }
     BidKScratch.Frame frame = BidKScratch.acquire();
     frame.unpackedOut = out;
     try {
@@ -522,6 +554,10 @@ final class BidKRaw {
       StatusFlags flags,
       BidUnpacked out) {
     FormatParams format = requireSameFormat(x, y, out);
+    if (BidKSpecial.narrow(format)) {
+      BidKSpecial.mulUnpacked(x, y, mode, flags, out);
+      return;
+    }
     BidKScratch.Frame frame = BidKScratch.acquire();
     frame.unpackedOut = out;
     try {
@@ -565,6 +601,10 @@ final class BidKRaw {
       StatusFlags flags,
       BidUnpacked out) {
     FormatParams format = requireSameFormat(x, y, out);
+    if (BidKSpecial.narrow(format)) {
+      BidKSpecial.divUnpacked(x, y, mode, flags, out);
+      return;
+    }
     BidKScratch.Frame frame = BidKScratch.acquire();
     frame.unpackedOut = out;
     try {
@@ -604,6 +644,10 @@ final class BidKRaw {
   static void sqrtUnpacked(
       BidUnpacked x, RoundingMode mode, StatusFlags flags, BidUnpacked out) {
     FormatParams format = requireSameFormat(x, out);
+    if (BidKSpecial.narrow(format)) {
+      BidKSpecial.sqrtUnpacked(x, mode, flags, out);
+      return;
+    }
     BidKScratch.Frame frame = BidKScratch.acquire();
     frame.unpackedOut = out;
     try {
@@ -663,6 +707,10 @@ final class BidKRaw {
     FormatParams format = requireSameFormat(x, y, out);
     if (z.format() != format) {
       throw new IllegalArgumentException("format mismatch");
+    }
+    if (BidKSpecial.narrow(format)) {
+      BidKSpecial.fmaUnpacked(x, y, z, mode, flags, out);
+      return;
     }
     BidKScratch.Frame frame = BidKScratch.acquire();
     frame.unpackedOut = out;

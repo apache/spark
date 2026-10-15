@@ -22,10 +22,10 @@ import java.util.Arrays;
  * IEEE 754 decimal interchange value of {@code k} 32-bit storage units
  * (packed width {@code 32*k} bits).
  *
- * <p>{@link Bid64} and {@link Bid128} remain the specialized kernels for the
- * 64- and 128-bit formats. {@code BidK} is the generic packed path, including
- * Decimal96 ({@code k=3}) through Decimal256 ({@code k=8}). Repeated
- * arithmetic should use {@link BidUnpacked} and pack only at I/O.
+ * <p>{@code k=2} and {@code k=4} dispatch to {@link Bid64} and {@link Bid128}.
+ * {@code k=3} (Decimal96) uses Bid128 then rounds to 25 digits. Wider {@code k}
+ * uses the generic Knuth/Wide path. Repeated arithmetic should use
+ * {@link BidUnpacked} and pack only at I/O.
  *
  * <p>Transcendental functions are provided only for {@code k<=4} (packed
  * width 128) by converting through {@link Bid128} and the binary128 DPML

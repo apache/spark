@@ -30,8 +30,11 @@ public final class BidKTest {
     LimbMathTest.main(new String[0]);
     codecMatchesBid64();
     codecMatchesBid128();
+    dispatchMatchesBid64AndBid128();
     decimal96RoundtripAndConvert();
+    arithmeticVsBigDecimal(FormatParams.DECIMAL64);
     arithmeticVsBigDecimal(FormatParams.DECIMAL96);
+    arithmeticVsBigDecimal(FormatParams.DECIMAL128);
     arithmeticVsBigDecimal(FormatParams.DECIMAL160);
     arithmeticVsBigDecimal(FormatParams.DECIMAL192);
     arithmeticVsBigDecimal(FormatParams.DECIMAL224);
@@ -151,6 +154,31 @@ public final class BidKTest {
       BidCodec.packFinite(fmt, value.isSigned(), exp, coeff, packed);
       expect(packed[0] == value.lowBits() && packed[1] == value.highBits(), "pack128");
     }
+  }
+
+  private static void dispatchMatchesBid64AndBid128() {
+    RoundingMode mode = RoundingMode.TIES_TO_EVEN;
+    StatusFlags flags = new StatusFlags();
+    Bid64 a64 = Bid64.parse("1.25", mode, flags);
+    Bid64 b64 = Bid64.parse("2.5", mode, flags);
+    BidK x64 = BidK.fromBid64(a64, FormatParams.DECIMAL64, mode, flags);
+    BidK y64 = BidK.fromBid64(b64, FormatParams.DECIMAL64, mode, flags);
+    expect(x64.add(y64, mode, flags).toRawBits()[0]
+        == a64.add(b64, mode, flags).toRawBits(), "k=2 add");
+    expect(x64.multiply(y64, mode, flags).toRawBits()[0]
+        == a64.multiply(b64, mode, flags).toRawBits(), "k=2 mul");
+    expect(x64.divide(y64, mode, flags).toRawBits()[0]
+        == a64.divide(b64, mode, flags).toRawBits(), "k=2 div");
+    expect(x64.sqrt(mode, flags).toRawBits()[0]
+        == a64.sqrt(mode, flags).toRawBits(), "k=2 sqrt");
+    Bid128 a128 = Bid128.parse("1.25", mode, flags);
+    Bid128 b128 = Bid128.parse("2.5", mode, flags);
+    BidK x128 = BidK.fromBid128(a128, FormatParams.DECIMAL128, mode, flags);
+    BidK y128 = BidK.fromBid128(b128, FormatParams.DECIMAL128, mode, flags);
+    BidK sum = x128.add(y128, mode, flags);
+    Bid128 expect128 = a128.add(b128, mode, flags);
+    expect(sum.toRawBits()[0] == expect128.lowBits()
+        && sum.toRawBits()[1] == expect128.highBits(), "k=4 add");
   }
 
   private static void decimal96RoundtripAndConvert() {
@@ -325,7 +353,9 @@ public final class BidKTest {
 
   private static void unpackedMatchesPacked() {
     FormatParams[] formats = {
+      FormatParams.DECIMAL64,
       FormatParams.DECIMAL96,
+      FormatParams.DECIMAL128,
       FormatParams.DECIMAL160,
       FormatParams.DECIMAL192,
       FormatParams.DECIMAL256

@@ -68,19 +68,17 @@ final class LimbMath {
   }
 
   static boolean isZero(long[] a) {
-    long acc = 0L;
-    for (int i = 0; i < a.length; i++) {
-      acc |= a[i];
-    }
-    return acc == 0L;
+    return usedLimbs(a) == 0;
   }
 
   static int compare(long[] a, long[] b) {
-    int n = Math.max(a.length, b.length);
-    for (int i = n - 1; i >= 0; i--) {
-      long left = i < a.length ? a[i] : 0L;
-      long right = i < b.length ? b[i] : 0L;
-      int cmp = Long.compareUnsigned(left, right);
+    int na = usedLimbs(a);
+    int nb = usedLimbs(b);
+    if (na != nb) {
+      return Integer.compare(na, nb);
+    }
+    for (int i = na - 1; i >= 0; i--) {
+      int cmp = Long.compareUnsigned(a[i], b[i]);
       if (cmp != 0) {
         return cmp;
       }
@@ -114,8 +112,8 @@ final class LimbMath {
 
   /** {@code dest = a + b}. Returns carry (0 or 1). */
   static long add(long[] dest, long[] a, long[] b) {
+    int n = Math.max(usedLimbs(a), usedLimbs(b));
     long carry = 0L;
-    int n = dest.length;
     for (int i = 0; i < n; i++) {
       long av = i < a.length ? a[i] : 0L;
       long bv = i < b.length ? b[i] : 0L;
@@ -126,13 +124,24 @@ final class LimbMath {
       dest[i] = tot;
       carry = c1 + c2;
     }
+    if (carry != 0L) {
+      if (n >= dest.length) {
+        throw new ArithmeticException("limb add overflow");
+      }
+      dest[n] = carry;
+      n++;
+      carry = 0L;
+    }
+    for (int i = n; i < dest.length; i++) {
+      dest[i] = 0L;
+    }
     return carry;
   }
 
   /** {@code dest = a - b}. Requires {@code a >= b}. Returns borrow. */
   static long subtract(long[] dest, long[] a, long[] b) {
+    int n = Math.max(usedLimbs(a), usedLimbs(b));
     long borrow = 0L;
-    int n = dest.length;
     for (int i = 0; i < n; i++) {
       long av = i < a.length ? a[i] : 0L;
       long bv = i < b.length ? b[i] : 0L;
@@ -142,6 +151,9 @@ final class LimbMath {
       long b2 = Long.compareUnsigned(sub, borrow) < 0 ? 1L : 0L;
       dest[i] = tot;
       borrow = b1 | b2;
+    }
+    for (int i = n; i < dest.length; i++) {
+      dest[i] = 0L;
     }
     return borrow;
   }
