@@ -28,6 +28,7 @@ import org.apache.spark.sql.columnar.CachedBatch
 import org.apache.spark.sql.execution.{ReusedSubqueryExec, SubqueryExec}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEPropagateEmptyRelation}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.planmerging.MergeSubplans
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions.{count, lit, udf}
@@ -1722,6 +1723,33 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       assert(hasDynamicPruning(query))
       assert(bloomFilterApplicationSideKeys(query) == Set("c5", "b5"))
       assert(!hintWarnings(query).exists(_.contains("is not supported")))
+    }
+  }
+
+  test("Bloom filter pushdown leaves a DPP filter on the scan") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // The Bloom filter on `p` is added after the DPP filter from `bf4` is pushed down and
+      // cleaned up, and its own pushdown combines the two above the scan.
+      val query = "select * from bf4 where bf4.a4 = 10 and bf4.c4 in " +
+        "(select /*+ RUNTIME_FILTER(bf3) */ p.f5 from bf5part p join bf3 on p.c5 = bf3.c3)"
+      val plan = sql(query).queryExecution.optimizedPlan
+      val scanFilters = plan.collect {
+        case Filter(condition, _: LogicalRelation) => condition
+      }
+      assert(scanFilters.exists { condition =>
+        condition.exists(_.isInstanceOf[DynamicPruningSubquery]) &&
+          condition.exists(_.isInstanceOf[BloomFilterMightContain])
+      }, plan.treeString)
+      assert(!plan.exists {
+        case Filter(_, _: LogicalRelation) => false
+        case Filter(condition, _) => condition.exists(_.isInstanceOf[DynamicPruningSubquery])
+        case _ => false
+      }, plan.treeString)
+      assert(!plan.exists {
+        case Filter(condition, _) => condition.exists(_ == Literal.TrueLiteral)
+        case _ => false
+      }, plan.treeString)
     }
   }
 

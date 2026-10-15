@@ -88,7 +88,7 @@ class SparkOptimizer(
       CombineApproximatePercentiles,
       RewriteDistinctAggregates),
     Batch("Pushdown Runtime Filters", fixedPoint,
-      PushDownPredicates),
+      PushDownRuntimeFilters),
     postHocOptimizationBatches,
     Batch("Extract UDFs", Once,
       ExtractPythonUDFFromJoinCondition,
