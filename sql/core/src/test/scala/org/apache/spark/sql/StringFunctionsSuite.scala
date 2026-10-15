@@ -285,6 +285,28 @@ class StringFunctionsSuite extends SharedSparkSession {
       Row(1, 1, 2) :: Row(7, 7, 9) :: Nil)
   }
 
+  test("SPARK-60125: regexp_instr in a persisted view follows the session legacy flag") {
+    val legacyKey = SQLConf.LEGACY_REGEXP_INSTR_IGNORE_GROUP_INDEX.key
+    val createView =
+      """CREATE VIEW v AS SELECT regexp_instr('1a 2b 14m', r'\d+(a|b|m)', 1) AS p"""
+    withView("v") {
+      sql(createView)
+      checkAnswer(spark.table("v"), Row(2))
+      withSQLConf(legacyKey -> "true") {
+        checkAnswer(spark.table("v"), Row(1))
+      }
+    }
+    // The session value also overrides the value captured when the view was created.
+    withView("v") {
+      withSQLConf(legacyKey -> "true") {
+        sql(createView)
+      }
+      withSQLConf(legacyKey -> "false") {
+        checkAnswer(spark.table("v"), Row(2))
+      }
+    }
+  }
+
   test("string ascii function") {
     val df = Seq(("abc", "")).toDF("a", "b")
     checkAnswer(
