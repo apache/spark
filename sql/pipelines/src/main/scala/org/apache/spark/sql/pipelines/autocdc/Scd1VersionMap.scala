@@ -19,7 +19,9 @@ package org.apache.spark.sql.pipelines.autocdc
 
 import org.apache.spark.sql.{functions => F, Column}
 import org.apache.spark.sql.catalyst.analysis.Resolver
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.util.QuotingUtils
+import org.apache.spark.sql.classic.ExpressionUtils
 import org.apache.spark.sql.types.{DataType, MapType, StringType, StructType}
 
 /**
@@ -57,6 +59,27 @@ private[pipelines] object Scd1VersionMap {
   def serializeKey(path: Seq[String]): String = QuotingUtils.quoteNameParts(path)
 
   /**
+   * Builds a version map of type `mapType(sequencingType)` with one entry per leaf.
+   *
+   * @param entries Each leaf's raw, unquoted name parts, paired with its authorship sequence. Keys
+   *                are serialized with [[serializeKey]].
+   * @param sequencingType The data type the sequences are cast to.
+   */
+  private def fromEntries(entries: Seq[(Seq[String], Column)], sequencingType: DataType): Column = {
+    if (entries.isEmpty) {
+      // Without arguments, `map()` is `map<string, string>` under
+      // spark.sql.legacy.createEmptyCollectionUsingStringType, which cannot be cast to struct or
+      // array sequence types.
+      ExpressionUtils.column(Literal.create(Map.empty, mapType(sequencingType)))
+    } else {
+      val keyValueColumns = entries.flatMap { case (leafPath, leafSequence) =>
+        Seq(F.lit(serializeKey(leafPath)), leafSequence)
+      }
+      F.map(keyValueColumns: _*).cast(mapType(sequencingType))
+    }
+  }
+
+  /**
    * Builds a column that computes the version map of an upsert row from that row's column values.
    *
    * The map has an entry for every leaf in `schema`. A leaf selected by `ignoreNullSelection` is
@@ -89,17 +112,16 @@ private[pipelines] object Scd1VersionMap {
     val ignoreNullLeafPaths =
       AutoCdcSchemaUtils.flattenStructFieldPaths(ignoreNullSchema).toSet
 
-    val keyValueColumns = AutoCdcSchemaUtils.flattenStructFieldPaths(schema).flatMap { path =>
-      val versionMapKey = serializeKey(path)
+    val entries = AutoCdcSchemaUtils.flattenStructFieldPaths(schema).map { path =>
       val leafSequence =
         if (ignoreNullLeafPaths.contains(path)) {
-          F.when(F.col(versionMapKey).isNotNull, upsertSequence)
+          F.when(F.col(serializeKey(path)).isNotNull, upsertSequence)
         } else {
           upsertSequence
         }
-      Seq(F.lit(versionMapKey), leafSequence)
+      path -> leafSequence
     }
 
-    F.map(keyValueColumns: _*).cast(mapType(sequencingType))
+    fromEntries(entries, sequencingType)
   }
 }
