@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
-import org.apache.spark.sql.{functions => F, Column}
+import org.apache.spark.sql.Column
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -27,7 +27,9 @@ import org.apache.spark.sql.types.DataType
  * how the winning value was selected.
  *
  * Deletes and upserts can both author null, so a null value may be authored. An unauthored field,
- * whose sequence is null, must have a null value. Creators are expected to respect this relationship by construction to avoid the readers/dataclass paying a runtime cost to assert this consistency, which can otherwise be expensive across all fields in all rows being reconciled.
+ * whose sequence is null, must have a null value. Initializers are expected to respect this
+ * relationship by construction to avoid the readers/dataclass paying a runtime cost to assert this
+ * consistency, which can otherwise be expensive across all fields in all rows being reconciled.
  *
  * @param fieldToReconcile The field this reconciles.
  * @param reconciledValue The value selected for the field.
@@ -46,15 +48,18 @@ private[autocdc] final case class Scd1ReconciledField(
 
 private[autocdc] object Scd1ReconciledField {
 
-  /** Builds a version map containing one entry for every user-data leaf. */
+  /**
+   * Builds a version map with one entry for each leaf of `reconciledFields`, recording the
+   * sequence of the field it belongs to. The map covers only the leaves of the fields given, so
+   * no two of them may share a leaf, and a map covering every user-data leaf needs a field
+   * covering each.
+   */
   def versionMapFrom(
       reconciledFields: Seq[Scd1ReconciledField],
       sequencingType: DataType): Column = {
     val entries = reconciledFields.flatMap { reconciledField =>
-      reconciledField.fieldToReconcile.leafPaths.flatMap { leafPath =>
-        Seq(F.lit(Scd1VersionMap.serializeKey(leafPath)), reconciledField.valueAuthoredAtSequence)
-      }
+      reconciledField.fieldToReconcile.leafPaths.map(_ -> reconciledField.valueAuthoredAtSequence)
     }
-    F.map(entries: _*).cast(Scd1VersionMap.mapType(sequencingType))
+    Scd1VersionMap.fromEntries(entries, sequencingType)
   }
 }
