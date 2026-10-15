@@ -1730,10 +1730,15 @@ class SparkConnectPlanner(
           temporalIdent.nameParts,
           new CaseInsensitiveStringMap(rel.getNamedTable.getOptionsMap),
           isStreaming = rel.getIsStreaming)
-        if (rel.getIsStreaming && rel.getNamedTable.hasSourceName) {
-          val sourceName = rel.getNamedTable.getSourceName
-          session.readStream.validateSourceName(sourceName)
-          NamedStreamingRelation.withUserProvidedName(relation, Some(sourceName))
+        if (rel.getIsStreaming) {
+          val sourceName = if (rel.getNamedTable.hasSourceName) {
+            val name = rel.getNamedTable.getSourceName
+            session.readStream.validateSourceName(name)
+            Some(name)
+          } else {
+            None
+          }
+          NamedStreamingRelation.withUserProvidedName(relation, sourceName)
         } else {
           temporalIdent.wrapTimeTravel(relation)
         }

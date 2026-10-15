@@ -26,14 +26,15 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression.{Alias, ExpressionString, UnresolvedStar}
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{NamedStreamingRelation, RelationTimeTravel, UnresolvedAlias, UnresolvedFunction, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{NamedStreamingRelation, NameStreamingSources, RelationTimeTravel, UnresolvedAlias, UnresolvedFunction, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
-import org.apache.spark.sql.catalyst.streaming.UserProvided
+import org.apache.spark.sql.catalyst.streaming.{Unassigned, UserProvided}
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.classic.Dataset
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.connect.SparkConnectTestUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
@@ -176,14 +177,33 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
         case NamedStreamingRelation(child: UnresolvedRelation, UserProvided(name)) =>
           assert(isStreaming && sourceName.contains(name))
           child
+        case NamedStreamingRelation(child: UnresolvedRelation, Unassigned) =>
+          assert(isStreaming && sourceName.isEmpty)
+          child
         case child: UnresolvedRelation =>
-          assert(!isStreaming || sourceName.isEmpty)
+          assert(!isStreaming)
           child
         case other => fail(s"Unexpected table read: $other")
       }
       assert(relation.multipartIdentifier == Seq("db", "orders"))
       assert(relation.options.get("maxFilesPerTrigger") == "1")
       assert(relation.isStreaming == isStreaming)
+    }
+  }
+
+  test("unnamed streaming table sources obey source naming enforcement") {
+    val read = proto.Read
+      .newBuilder()
+      .setNamedTable(proto.Read.NamedTable.newBuilder().setUnparsedIdentifier("db.orders"))
+      .setIsStreaming(true)
+    val plan = transform(proto.Relation.newBuilder().setRead(read).build())
+    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          NameStreamingSources(plan)
+        },
+        condition = "STREAMING_QUERY_EVOLUTION_ERROR.UNNAMED_STREAMING_SOURCES_WITH_ENFORCEMENT",
+        parameters = Map("sourceInfo" -> "Leaf position 0 - UnresolvedRelation"))
     }
   }
 
