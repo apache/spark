@@ -53,6 +53,7 @@ public final class LimbMathTest {
     int[] d2 = new int[LimbMath.DIGITS32];
     int[] d3 = new int[LimbMath.DIGITS32];
     threeLimbKnown();
+    wide6Multiply();
     for (int n = 0; n < 200; n++) {
       int wa = 1 + rng.nextInt(3);
       int wb = 1 + rng.nextInt(3);
@@ -110,6 +111,23 @@ public final class LimbMathTest {
     BigInteger[] qr = ba.divideAndRemainder(bb);
     expectEq(quot, qr[0], "3-limb div q");
     expectEq(rem, qr[1], "3-limb div r");
+  }
+
+  private static void wide6Multiply() {
+    Wide6 a = new Wide6();
+    Wide6 b = new Wide6();
+    Wide6 r = new Wide6();
+    a.l0 = 0x0123_4567_89ab_cdefL;
+    a.l1 = 0xfedc_ba98_7654_3210L;
+    a.l2 = 0x0000_0000_0000_00ffL;
+    b.l0 = 0x1111_1111_1111_1111L;
+    b.l1 = 0x2222_2222_2222_2222L;
+    b.l2 = 0x0000_0000_0000_0003L;
+    r.multiply3(a, b);
+    long[] dest = new long[LimbMath.WORK];
+    r.store(dest);
+    expectEq(dest, toBig(new long[] {a.l0, a.l1, a.l2}).multiply(
+        toBig(new long[] {b.l0, b.l1, b.l2})), "wide6 mul3");
   }
 
   private static void sqrtCases() {

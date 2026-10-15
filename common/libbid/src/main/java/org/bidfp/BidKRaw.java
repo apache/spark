@@ -43,6 +43,14 @@ final class BidKRaw {
           format, kx, ky, frame.an, frame.bn, true, flags, out)) {
         return;
       }
+      if (BidK160.matches(format)) {
+        BidK160.add(
+            format,
+            frame.an, frame.ae, frame.ac,
+            frame.bn, frame.be, frame.bc,
+            mode, flags, out, frame);
+        return;
+      }
       BidKKnuth.add(
           format,
           frame.an, frame.ae, frame.ac,
@@ -85,6 +93,14 @@ final class BidKRaw {
           frame.ac.isZero(), frame.bc.isZero(), false, flags, out, frame)) {
         return;
       }
+      if (BidK160.matches(format)) {
+        BidK160.mul(
+            format,
+            frame.an, frame.ae, frame.ac,
+            frame.bn, frame.be, frame.bc,
+            mode, flags, out, frame);
+        return;
+      }
       BidKKnuth.mul(
           format,
           frame.an, frame.ae, frame.ac,
@@ -109,6 +125,14 @@ final class BidKRaw {
       if (mulDivSpecial(
           format, kx, ky, frame.an, frame.bn,
           frame.ac.isZero(), frame.bc.isZero(), true, flags, out, frame)) {
+        return;
+      }
+      if (BidK160.matches(format)) {
+        BidK160.div(
+            format,
+            frame.an, frame.ae, frame.ac,
+            frame.bn, frame.be, frame.bc,
+            mode, flags, out, frame);
         return;
       }
       BidKKnuth.div(
@@ -152,6 +176,10 @@ final class BidKRaw {
         LimbMath.clear(frame.w0);
         BidKKnuth.pack(
             format, frame.an, frame.ae, frame.w0, mode, flags, frame, out);
+        return;
+      }
+      if (BidK160.matches(format)) {
+        BidK160.sqrt(format, frame.ae, frame.ac, mode, flags, out, frame);
         return;
       }
       BidKKnuth.sqrt(format, frame.ae, frame.ac, mode, flags, out, frame);
@@ -204,6 +232,15 @@ final class BidKRaw {
         BidCodec.packInfinity(format, frame.tmpNeg[0], out);
         return;
       }
+      if (BidK160.matches(format)) {
+        BidK160.fma(
+            format,
+            frame.an, frame.ae, frame.ac,
+            frame.bn, frame.be, frame.bc,
+            frame.tmpNeg[0], frame.tmpExp[0], frame.rc,
+            mode, flags, out, frame);
+        return;
+      }
       BidKKnuth.fma(
           format,
           frame.an, frame.ae, frame.ac,
@@ -239,6 +276,11 @@ final class BidKRaw {
         }
         return;
       }
+      if (BidK160.matches(format)) {
+        BidK160.quantize(
+            format, frame.an, frame.ae, frame.ac, frame.be, mode, flags, out, frame);
+        return;
+      }
       BidKKnuth.quantize(
           format, frame.an, frame.ae, frame.ac, frame.be, mode, flags, out, frame);
     } finally {
@@ -265,6 +307,11 @@ final class BidKRaw {
       }
       if (kx == Kind.INF) {
         BidCodec.packInfinity(dest, frame.an, out);
+        return;
+      }
+      if (BidK160.matches(src)) {
+        BidK160.convert(
+            dest, frame.an, frame.ae, frame.ac, mode, flags, out, frame);
         return;
       }
       BidKKnuth.convert(
@@ -308,15 +355,18 @@ final class BidKRaw {
   }
 
   static String toString(FormatParams format, long[] words) {
-    if (BidCodec.isNaN(format, words)) {
-      String sign = BidCodec.isSigned(format, words) ? "-" : "+";
-      return sign + (BidCodec.isSignalingNaN(format, words) ? "SNaN" : "NaN");
-    }
-    if (BidCodec.isInfinite(format, words)) {
-      return (BidCodec.isSigned(format, words) ? "-" : "+") + "Inf";
-    }
     BidKScratch.Frame frame = BidKScratch.acquire();
     try {
+      if (BidK160.matches(format)) {
+        return BidK160.toString(format, words, frame);
+      }
+      if (BidCodec.isNaN(format, words)) {
+        String sign = BidCodec.isSigned(format, words) ? "-" : "+";
+        return sign + (BidCodec.isSignalingNaN(format, words) ? "SNaN" : "NaN");
+      }
+      if (BidCodec.isInfinite(format, words)) {
+        return (BidCodec.isSigned(format, words) ? "-" : "+") + "Inf";
+      }
       unpack(format, words, frame.a, frame.coeff, new StatusFlags());
       String digits = frame.a.isZero() ? "0" : frame.a.toDigits();
       return (frame.a.isNegative() ? "-" : "+") + digits + "E" + frame.a.exp();
@@ -334,6 +384,9 @@ final class BidKRaw {
     }
     BidKScratch.Frame frame = BidKScratch.acquire();
     try {
+      if (BidK160.matches(format)) {
+        return BidK160.sqlCompare(format, x, y, frame);
+      }
       unpack(format, x, frame.a, frame.coeff, new StatusFlags());
       unpack(format, y, frame.b, frame.coeff, new StatusFlags());
       if (frame.a.isZero() && frame.b.isZero()) {

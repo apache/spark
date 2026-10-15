@@ -21,12 +21,13 @@ package org.bidfp;
  *
  * <p>A coefficient of Decimal256 is 70 digits (233 bits), so four {@code long}
  * limbs hold a packed significand. Products, aligned addends, and
- * {@code 10^s} scaled dividends use a 10-limb workspace (640 bits), which
- * covers {@code 10^192}. Schoolbook multiply and Knuth Algorithm D (base
- * 2^32) are the kernels; {@link DecNum} stays the parse/quantize path.
+ * {@code 10^s} scaled dividends use a 16-limb workspace (1024 bits), which
+ * covers Decimal256 sqrt's {@code 10^(2*(p+4))} scale-up (~218 digits).
+ * Schoolbook multiply and Knuth Algorithm D (base 2^32) are the kernels;
+ * {@link DecNum} stays the parse path.
  */
 final class LimbMath {
-  static final int WORK = 10;
+  static final int WORK = 16;
   static final int DIGITS32 = WORK * 2 + 2;
   static final int POW10_MAX = 180;
   private static final long MASK32 = 0xffff_ffffL;

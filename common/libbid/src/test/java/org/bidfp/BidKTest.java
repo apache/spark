@@ -250,6 +250,15 @@ public final class BidKTest {
     BidK wide = BidK.parse(FormatParams.DECIMAL256, "123456789012345678901234567890");
     Bid128 d128 = wide.toBid128(RoundingMode.TIES_TO_EVEN, flags);
     expect(d128.isFinite(), "d256 to d128");
+    FormatParams d256 = FormatParams.DECIMAL256;
+    MathContext mc = new MathContext(70, java.math.RoundingMode.HALF_EVEN);
+    String full = "1234567890123456789012345678901234567890123456789012345678901234567890";
+    BidK x = BidK.parse(d256, full);
+    expectClose(
+        x.sqrt(RoundingMode.TIES_TO_EVEN, flags),
+        new BigDecimal(full).sqrt(mc),
+        d256,
+        "d256 sqrt 70-digit");
   }
 
   private static void decimal96Dpml() {
