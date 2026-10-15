@@ -3415,9 +3415,11 @@ class SubquerySuite extends SharedSparkSession
       //
       // NOT IN is the outer predicate on purpose: its rewrite returns a bare Join, which
       // RewritePredicateSubquery does not offer to its own handling of predicate subqueries in
-      // join conditions, so this rejection is the only one that can fire. With EXISTS the rewrite
-      // returns a Project over the join, which that handling then rejects on its own under the
-      // default configuration, and the assertion would hold either way.
+      // join conditions, so this rejection is the only one that can fire and the assertion below
+      // pins it. With EXISTS the rewrite returns a Project over the join, which that handling
+      // reaches under the default configuration and rejects with
+      // UNSUPPORTED_CORRELATED_EXPRESSION_IN_JOIN_CONDITION instead, so the query would still
+      // fail but on a different condition than the one asserted here.
       val correlated =
         """
           |SELECT *
@@ -3516,6 +3518,87 @@ class SubquerySuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-59351: existential subquery carried by a rewritten nested subquery") {
+    // The nested IN over t4 is owned by the subquery plan, so it is rewritten into an existence
+    // join and the condition PullupCorrelatedPredicates hoisted into it is grafted onto that
+    // join. That condition carries a third-level IN correlated to t4, which references neither
+    // the outer nor the subquery plan and so is routed by neither of the guards above. It has to
+    // be rewritten against the inputs of the join just built: left in place, PlanSubqueries plans
+    // it as an in-subquery filter and drops its own correlated predicate col1 = k, which returns
+    // every row of t1 instead of the one row where the correlation holds.
+    withTempView("t1", "t2", "t4", "t5") {
+      Seq(1, 2, 3).toDF("a").persist().createOrReplaceTempView("t1")
+      Seq(1, 8, 9).toDF("c1").persist().createOrReplaceTempView("t2")
+      // No k equals any c1, so only the third-level IN can satisfy the hoisted disjunction, and
+      // its correlated predicate col1 = k is false for every row of t4: dropping it makes the
+      // level-2 IN hold for c1 = 1 and returns 1, 2 and 3.
+      Seq((1, 100), (9, 7)).toDF("col1", "k").persist().createOrReplaceTempView("t4")
+      Seq(1).toDF("col1").persist().createOrReplaceTempView("t5")
+      val query =
+        """SELECT * FROM t1 WHERE EXISTS (
+          |  SELECT 1 FROM t2
+          |  WHERE a = c1
+          |  OR c1 IN (SELECT col1 FROM t4
+          |            WHERE k = c1 OR col1 IN (SELECT col1 FROM t5 WHERE col1 = k)))""".stripMargin
+      // The routing must not depend on the rewrite of predicate subqueries in join conditions,
+      // which is what used to make these two configurations disagree: it reached the grafted
+      // condition only when enabled.
+      Seq("true", "false").foreach { decorrelateInJoinCondition =>
+        withSQLConf(SQLConf.DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION.key ->
+          decorrelateInJoinCondition) {
+          checkAnswerAndPlan(query, Row(1) :: Nil)
+        }
+      }
+    }
+  }
+
+  test("SPARK-59351: NOT IN keeps an uncorrelated three-valued residual") {
+    // The NOT IN rewrite returns a bare Join, which this rule does not offer to its own handling
+    // of predicate subqueries in join conditions, so an uncorrelated nested IN left in the
+    // anti-join condition stays there and InSubqueryExec evaluates it three-valued. No existence
+    // join is built for it and it has no hoisted condition to lose, so it must not be rejected:
+    // these queries returned the standard SQL answer before SPARK-59351 and must keep doing so.
+    withTempView("t1", "t2", "t3n", "t4n") {
+      Seq(1, 2, 3).toDF("a").persist().createOrReplaceTempView("t1")
+      Seq(1, 8, 9).toDF("c1").persist().createOrReplaceTempView("t2")
+      // The NULL matches no c1, so c1 IN (SELECT col1 FROM t3n) is unknown for every row of t2.
+      Seq(Some(3), None).toDF("col1").persist().createOrReplaceTempView("t3n")
+      // Nullable col1 again, but correlated through k = c1.
+      Seq((Some(3), 1), (None, 8)).toDF("col1", "k").persist().createOrReplaceTempView("t4n")
+
+      Seq(
+        "(c1 IN (SELECT col1 FROM t3n)) <=> false",
+        "(c1 IN (SELECT col1 FROM t3n)) IS NULL",
+        "COALESCE(c1 IN (SELECT col1 FROM t3n), true)",
+        "(c1 NOT IN (SELECT col1 FROM t3n)) <=> false").foreach { predicate =>
+        // Every such predicate is FALSE for every row of t2, so the subquery reduces to a = c1
+        // and only 2 and 3 survive the NOT IN. Rejecting instead, or rewriting the nested IN into
+        // a two-valued exists, would change this.
+        checkAnswer(
+          sql(s"SELECT * FROM t1 WHERE a NOT IN (SELECT c1 FROM t2 WHERE a = c1 OR $predicate)"),
+          Row(2) :: Row(3) :: Nil)
+      }
+
+      // A correlated one is still rejected, under this arm as under the others: its hoisted
+      // condition is what planning it as an in-subquery filter would drop.
+      Seq(
+        s"SELECT * FROM t1 WHERE a NOT IN (SELECT c1 FROM t2 WHERE a = c1" +
+          " OR ((c1 IN (SELECT col1 FROM t4n WHERE k = c1)) <=> false))",
+        s"SELECT * FROM t1 WHERE EXISTS (SELECT 1 FROM t2 WHERE a = c1" +
+          " OR ((c1 IN (SELECT col1 FROM t4n WHERE k = c1)) <=> false))").foreach { query =>
+        val e = intercept[AnalysisException](sql(query).collect())
+        assert(e.getCondition == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+          "NESTED_IN_SUBQUERY_WITH_UNKNOWN_RESULT", query)
+      }
+
+      // And a truth-only nested IN under an outer NOT IN is still rewritten, not kept.
+      checkAnswer(
+        sql("""SELECT * FROM t1 WHERE a NOT IN (
+              |  SELECT c1 FROM t2 WHERE a = c1 OR c1 IN (SELECT col1 FROM t3n))""".stripMargin),
+        Row(2) :: Row(3) :: Nil)
+    }
+  }
+
   test("SPARK-59351: nested IN subquery whose result can be unknown") {
     withTempView("t1", "t2", "t2n", "t3n", "t3", "t4", "tb", "t2r", "t2rn", "t6", "t7") {
       Seq((1), (2), (3)).toDF("a").persist().createOrReplaceTempView("t1")
@@ -3585,8 +3668,10 @@ class SubquerySuite extends SharedSparkSession
       // the latter two into the first, so ordinary SQL reaches this position.
       //
       // The result branches of a conditional are consumed wherever the conditional is, so
-      // under a filter predicate they are truth-only as well. The last two cases do not
-      // fold, so they exercise that inheritance rather than the rewrites above.
+      // under a filter predicate they are truth-only as well. The three cases whose nested IN
+      // sits in a result branch exercise that inheritance rather than the rewrites above:
+      // SimplifyConditionals folds an IF or CASE WHEN only when its branches are TRUE/FALSE
+      // literals, or null literals with a non-nullable condition, so none of the three folds.
       Seq(
         "(c1 IN (SELECT col1 FROM t3n)) <=> true",
         "IF(c1 IN (SELECT col1 FROM t3n), true, false)",

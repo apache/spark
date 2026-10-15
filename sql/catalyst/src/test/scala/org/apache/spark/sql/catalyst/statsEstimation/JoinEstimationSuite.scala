@@ -487,24 +487,30 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
     assert(join.stats == expectedStats)
   }
 
-  test("existence join with an empty or unestimated right child") {
-    // Only the left child's row count enters the estimate, so a right child with no row count,
-    // or with none, must not stop it. `table3` has statistics; `emptyRight` has a row count of
-    // zero, and `noStatsRight` has no column statistics at all.
+  test("existence join with a right child that has no row count or no statistics") {
+    // Only the left child's row count enters the estimate, so a right child that reports no row
+    // count at all must not stop it: that is the left-only precondition
+    // `estimateExistenceJoin` documents, and `rowCountsExist(join.left, join.right)` would break
+    // it. `StatsTestPlan` always reports a row count, so the no-row-count case needs a plan whose
+    // `computeStats` omits it.
+    case class NoRowCountPlan(outputList: Seq[Attribute]) extends LeafNode {
+      override def output: Seq[Attribute] = outputList
+      override def computeStats(): Statistics = Statistics(sizeInBytes = 1000)
+    }
     val exists = AttributeReference("exists", BooleanType, nullable = false)()
+    val rightAttrs = Seq("key-1-2", "key-2-3").map(nameToAttr)
+    // No row count at all.
+    val noRowCountRight = NoRowCountPlan(rightAttrs)
+    // A row count of zero, and no column statistics.
     val emptyRight = StatsTestPlan(
-      outputList = table3.output,
+      outputList = rightAttrs,
       rowCount = 0,
-      attributeStats = AttributeMap(Nil))
-    val noStatsRight = StatsTestPlan(
-      outputList = table3.output,
-      rowCount = 2,
       attributeStats = AttributeMap(Nil))
     val expectedStats = Statistics(
       sizeInBytes = 3 * (8 + 4 * 2 + 1),
       rowCount = Some(3),
       attributeStats = AttributeMap(Seq(nameToColInfo("key-1-2"), nameToColInfo("key-2-4"))))
-    Seq(table3, emptyRight, noStatsRight).foreach { right =>
+    Seq(table3, noRowCountRight, emptyRight).foreach { right =>
       val join = Join(table2, right, ExistenceJoin(exists),
         Some(EqualTo(nameToAttr("key-2-4"), nameToAttr("key-2-3"))), JoinHint.NONE)
       assert(join.stats == expectedStats, s"unexpected stats with right child\n$right")
