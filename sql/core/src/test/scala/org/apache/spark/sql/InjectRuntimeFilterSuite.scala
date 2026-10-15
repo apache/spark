@@ -1753,6 +1753,22 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     }
   }
 
+  test("RUNTIME_FILTER hint that is not applied leaves DPP to its own estimates") {
+    // The selective `bf3` side broadcasts, so DPP reuses the broadcast without the hint. With the
+    // hint on that side, which is not repeatable, DPP still does, and the hint is reported as not
+    // applied rather than credited to that DPP filter.
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
+      def query(hint: String): String = s"select $hint * from bf5part p join " +
+        "(select c3 from bf3 tablesample (50 percent) where a3 = 10) t on p.f5 = t.c3"
+      assert(hasDynamicPruning(query("")))
+      val hinted = query("/*+ RUNTIME_FILTER(t) */")
+      assert(hasDynamicPruning(hinted))
+      assertNoBloomFilters(hinted)
+      assertHintNotApplied(hinted,
+        "the hinted side may produce different rows or join keys when evaluated again")
+    }
+  }
+
   test("RUNTIME_FILTER hint rejects a join key that may take different values") {
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {

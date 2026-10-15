@@ -41,7 +41,7 @@ import org.apache.spark.sql.internal.SQLConf
  * A [[RuntimeFilterHint]] on a join side ("RUNTIME_FILTER(dim)") requests that side be used as
  * the creation side, whatever its shape, and waives the checks that only estimate whether a filter
  * pays off, since the user asserts it does. It waives no correctness requirement (see
- * `JoinSelectionHelper.isRepeatableRuntimeFilterSource`) and does not lift the limits on the
+ * `JoinSelectionHelper.runtimeFilterHintRejection`) and does not lift the limits on the
  * number of filters and on a Bloom filter's size, nor the requirement that the join keys be
  * simple expressions. A hinted side is never itself filtered, and a hint takes effect through one
  * mechanism: when a DPP filter honors it on any join key, no Bloom filter is added for that join.
@@ -363,17 +363,13 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterCreationSideKey: Expression,
       hinted: Boolean): Either[String, FilterCreationSide] = {
     if (hinted) {
-      // The filter evaluates the application side's key separately from the join too.
-      if (!isRepeatableJoinKey(filterApplicationSideKey)) {
-        Left("the join key may take different values when evaluated again")
-      } else {
-        runtimeFilterSourceRejection(filterCreationSide, filterCreationSideKey).toLeft(
-          FilterCreationSide(
-            filterCreationSideKey,
-            filterCreationSide,
-            useMaterializedThreshold = false,
-            hinted = true))
-      }
+      runtimeFilterHintRejection(
+        filterApplicationSideKey, filterCreationSide, filterCreationSideKey).toLeft(
+        FilterCreationSide(
+          filterCreationSideKey,
+          filterCreationSide,
+          useMaterializedThreshold = false,
+          hinted = true))
     } else if (findExpressionAndTrackLineageDown(
       filterApplicationSideKey, filterApplicationSide).isDefined &&
       satisfyByteSizeRequirement(filterApplicationSide)) {
@@ -575,7 +571,12 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
         }
         // A DPP filter prunes by whole partitions rather than by rows, so it is preferred. The
         // hint is honored by one that prunes the application side, and then takes effect through
-        // that mechanism alone: no Bloom filter is added on any key of the join.
+        // that mechanism alone: no Bloom filter is added on any key of the join. A hinted side
+        // that cannot honor the hint on a key gets DPP from its own estimates, as without the
+        // hint, so such a DPP filter does not count as the hint applied.
+        def hintRejection(l: Expression, r: Expression): Option[String] =
+          if (injectLeftHinted) runtimeFilterHintRejection(l, right, r)
+          else runtimeFilterHintRejection(r, left, l)
         val prunedKeys = leftKeys.lazyZip(rightKeys).map { (l, r) =>
           val pruned = if (hinted) {
             if (injectLeftHinted) hasDynamicPruning(left, l, r) else hasDynamicPruning(right, r, l)
@@ -584,11 +585,14 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           }
           (l, r, pruned)
         }
-        val dppHonorsHint = hinted && prunedKeys.exists(_._3)
+        val dppHonorsHint = hinted && prunedKeys.exists { case (l, r, pruned) =>
+          pruned && hintRejection(l, r).isEmpty
+        }
         appliedHint = dppHonorsHint
         prunedKeys.foreach { case (l, r, prunedByDppOnKey) =>
-          if (dppHonorsHint || (!hinted && prunedByDppOnKey)) {
+          if (dppHonorsHint || prunedByDppOnKey) {
             // Already pruned by partition pruning: no Bloom filter for the key.
+            if (hinted && !dppHonorsHint) hintRejection(l, r).foreach(hintBlocked(_))
           } else if (!bloomFilterEnabled) {
             hintBlocked(s"${SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key} is false")
           } else if (filterCounter >= numFilterThreshold) {

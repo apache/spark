@@ -565,13 +565,20 @@ trait JoinSelectionHelper extends Logging {
     RuntimeFilterSourceAnalysis.rejection(plan, key)
   }
 
-  def isRepeatableRuntimeFilterSource(plan: LogicalPlan, key: Expression): Boolean = {
-    runtimeFilterSourceRejection(plan, key).isEmpty
-  }
-
-  /** Whether a join key expression yields the same value on every evaluation. */
-  def isRepeatableJoinKey(key: Expression): Boolean = {
-    RuntimeFilterSourceAnalysis.isRepeatableExpression(key)
+  /**
+   * Why a hinted runtime filter built from `creationSide` on `creationKey` cannot prune on
+   * `applicationKey`, or None when it can. The filter evaluates the creation side and both keys
+   * separately from the join, so all of them have to be repeatable.
+   */
+  def runtimeFilterHintRejection(
+      applicationKey: Expression,
+      creationSide: LogicalPlan,
+      creationKey: Expression): Option[String] = {
+    if (!RuntimeFilterSourceAnalysis.isRepeatableExpression(applicationKey)) {
+      Some("the join key may take different values when evaluated again")
+    } else {
+      runtimeFilterSourceRejection(creationSide, creationKey)
+    }
   }
 
   /**
