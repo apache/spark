@@ -349,6 +349,53 @@ trait KeyGroupedPartitioningRuntimeFilterTests extends KeyGroupedPartitioningSui
     }
   }
 
+  test("opt-in scan grouping preserves runtime-filtered and empty buckets below a shuffle") {
+    createTable(items, itemsColumns, Array(identity("id")))
+    createTable(purchases, purchasesColumns, Array.empty)
+    val values = (1 to 2).flatMap { id =>
+      (1 to 24).map { split =>
+        s"($id, 'split$split', 1.0, cast('2020-01-01' as timestamp))"
+      }
+    }.mkString(", ")
+    sql(s"INSERT INTO testcat.ns.$items VALUES $values")
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      "(2, 10.0, cast('2020-01-01' as timestamp))")
+
+    withSQLConf(
+      SQLConf.V2_BUCKETING_GROUP_SCAN_PARTITIONS_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "false",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "10") {
+      Seq(40, 100).foreach { price =>
+        val df = sql(s"SELECT i.id, i.name, p.price " +
+          s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
+          s"ON i.id = p.item_id WHERE p.price > $price")
+        val expected = if (price == 40) {
+          (1 to 24).map(split => Row(1, s"split$split", 42.0))
+        } else {
+          Seq.empty
+        }
+        checkAnswer(df, expected)
+        val plan = df.queryExecution.executedPlan
+        assert(collectShuffles(plan).size === 2)
+        val scan = collectScans(plan).find(_.table.name().endsWith(items)).get
+        assert(scan.runtimeFilters.nonEmpty, "the test must reach runtime partition filtering")
+        assert(scan.filteredPartitions.count(_.isEmpty) === (if (price == 40) 24 else 48))
+        val grouping = collect(plan) {
+          case g: GroupPartitionsExec if g.preserveScanGrouping => g
+        }.head
+        val rowsPerTask = grouping.execute()
+          .mapPartitions(rows => Iterator.single(rows.size)).collect()
+        assert(rowsPerTask.sorted.toSeq === (if (price == 40) Seq(0, 24) else Seq(0, 0)))
+      }
+    }
+  }
+
   test("SPARK-59248: runtime filtering with a pruned partition key keeps the full key rows") {
     withSQLConf(
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
@@ -5822,7 +5869,7 @@ class KeyGroupedPartitioningSuite
   }
 
   test("opt-in scan grouping reduces tasks below a downstream shuffle") {
-    createTable(items, itemsColumns, Array(identity("id")))
+    createTable(items, itemsColumns, Array(bucket(2, "id")))
     val values = (1 to 2).flatMap { id =>
       (1 to 24).map { split =>
         s"($id, 'split$split', 1.0, cast('2020-01-01' as timestamp))"
@@ -5867,11 +5914,15 @@ class KeyGroupedPartitioningSuite
       "(1, 42.0, cast('2020-01-01' as timestamp)), " +
       "(3, 19.5, cast('2020-02-01' as timestamp))")
 
-    for (groupScan <- Seq(false, true); bucketingShuffle <- Seq(false, true)) {
+    for {
+      groupScan <- Seq(false, true)
+      bucketingShuffle <- Seq(false, true)
+      adaptive <- Seq(false, true)
+    } {
       withSQLConf(
         SQLConf.V2_BUCKETING_GROUP_SCAN_PARTITIONS_ENABLED.key -> groupScan.toString,
         SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> bucketingShuffle.toString,
-        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString) {
         val df = createJoinTestDF(Seq("id" -> "item_id"))
         checkAnswer(df, (1 to 24).map(split => Row(1, s"split$split", 1.0, 42.0)))
         val plan = df.queryExecution.executedPlan
