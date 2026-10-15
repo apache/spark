@@ -16,7 +16,6 @@
  */
 
 val isCI = sys.env.contains("GITHUB_ACTIONS")
-val hasAccessKey = sys.env.get("DEVELOCITY_ACCESS_KEY").exists(_.nonEmpty)
 
 // Build Scans only: the sbt plugin cannot exclude test tasks from the build cache, and Spark
 // tests read inputs the cache key does not track, so caching stays off rather than risk
@@ -29,7 +28,7 @@ ThisBuild / develocityConfiguration ~= { previous =>
         .withUrl(url("https://develocity.apache.org")))
     .withBuildScan(
       previous.buildScan
-        .withPublishing(Publishing.onlyIf(_ => hasAccessKey))
+        .withPublishing(Publishing.onlyIf(_.authenticated))
         .withBackgroundUpload(!isCI))
     .withBuildCache(
       previous.buildCache
