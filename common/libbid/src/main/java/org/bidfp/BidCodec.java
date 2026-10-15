@@ -296,6 +296,62 @@ final class BidCodec {
     }
   }
 
+  static void loadUnpacked(
+      FormatParams format, long[] words, BidUnpacked dest) {
+    boolean negative = isSigned(format, words);
+    if (isNaN(format, words)) {
+      dest.setNaN(format, negative, isSignalingNaN(format, words));
+      return;
+    }
+    if (isInfinite(format, words)) {
+      dest.setInfinity(format, negative);
+      return;
+    }
+    int n = format.wordCount();
+    long c0 = n > 0 ? words[0] : 0L;
+    long c1 = n > 1 ? words[1] : 0L;
+    long c2 = n > 2 ? words[2] : 0L;
+    long c3 = n > 3 ? words[3] : 0L;
+    long hi = words[format.lastWord()];
+    long masked;
+    if ((hi & format.steeringMask()) == format.steeringMask()) {
+      masked = (hi & format.form2CoeffLastMask()) | format.form2ImplicitMask();
+    } else {
+      masked = hi & format.form1CoeffLastMask();
+    }
+    int last = format.lastWord();
+    if (last == 0) {
+      c0 = masked;
+    } else if (last == 1) {
+      c1 = masked;
+    } else if (last == 2) {
+      c2 = masked;
+    } else {
+      c3 = masked;
+    }
+    int exp = unpackBiasedExponent(format, hi) - format.bias();
+    dest.setFinite(format, negative, exp, c0, c1, c2, c3);
+  }
+
+  static void storeUnpacked(BidUnpacked value, long[] words) {
+    FormatParams format = value.format();
+    if (value.kind() == BidUnpacked.Kind.NAN
+        || value.kind() == BidUnpacked.Kind.SNAN) {
+      packNaN(
+          format, value.negative(), value.kind() == BidUnpacked.Kind.SNAN, words);
+      return;
+    }
+    if (value.kind() == BidUnpacked.Kind.INF) {
+      packInfinity(format, value.negative(), words);
+      return;
+    }
+    long[] coeff = {
+      value.c0(), value.c1(), value.c2(), value.c3()
+    };
+    packFinite(
+        format, value.negative(), value.exponent() + format.bias(), coeff, words);
+  }
+
   static void copyWords(FormatParams format, long[] src, long[] dest) {
     int n = format.wordCount();
     System.arraycopy(src, 0, dest, 0, n);

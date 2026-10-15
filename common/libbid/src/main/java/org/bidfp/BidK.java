@@ -23,8 +23,9 @@ import java.util.Arrays;
  * (packed width {@code 32*k} bits).
  *
  * <p>{@link Bid64} and {@link Bid128} remain the specialized kernels for the
- * 64- and 128-bit formats. {@code BidK} is the generic path, including
- * Decimal96 ({@code k=3}) through Decimal256 ({@code k=8}).
+ * 64- and 128-bit formats. {@code BidK} is the generic packed path, including
+ * Decimal96 ({@code k=3}) through Decimal256 ({@code k=8}). Repeated
+ * arithmetic should use {@link BidUnpacked} and pack only at I/O.
  *
  * <p>Transcendental functions are provided only for packed width
  * {@code <= 128} ({@code k <= 4}) by converting through {@link Bid128} and

@@ -249,7 +249,7 @@ final class BidK160 {
       int digits = frame.xa.decimalDigits();
       if (delta > Wide6.POW10_MAX || digits + delta > p) {
         flags.raise(StatusFlags.INVALID);
-        BidCodec.packNaN(format, false, false, out);
+        BidEmit.nan(format, false, false, out, frame);
         return;
       }
       frame.xa.multiplyPow10(delta);
@@ -438,7 +438,7 @@ final class BidK160 {
     pack(format, negative, ae, frame.xr, mode, flags, frame, out);
   }
 
-  private static int compareAbsolute(
+  static int compareAbsolute(
       Wide6 a, int ae, Wide6 b, int be, int precision, BidKScratch.Frame frame) {
     if (a.isZero()) {
       return b.isZero() ? 0 : -1;
@@ -483,7 +483,8 @@ final class BidK160 {
       boolean negative,
       int exp,
       Wide6 coeff,
-      long[] out) {
+      long[] out,
+      BidKScratch.Frame frame) {
     int biased = exp + format.bias();
     if (biased < 0 || biased > format.maxBiasedExponent()) {
       return false;
@@ -491,7 +492,7 @@ final class BidK160 {
     if (!format.coefficientAllowed(coeff)) {
       return false;
     }
-    BidCodec.packFinite(format, negative, biased, coeff, out);
+    BidEmit.finite(format, negative, biased, coeff, out, frame);
     return true;
   }
 
@@ -505,7 +506,7 @@ final class BidK160 {
       StatusFlags flags,
       BidKScratch.Frame frame,
       long[] out) {
-    if (!extraSticky && tryPackExact(format, negative, exp, coeff, out)) {
+    if (!extraSticky && tryPackExact(format, negative, exp, coeff, out, frame)) {
       return;
     }
     int p = format.precision();
@@ -524,7 +525,7 @@ final class BidK160 {
       if (biased > maxBiased) {
         biased = maxBiased;
       }
-      BidCodec.packFinite(format, negative, biased, coeff, out);
+      BidEmit.finite(format, negative, biased, coeff, out, frame);
       return;
     }
     int biased = exp + bias;
@@ -537,7 +538,7 @@ final class BidK160 {
       if (first != 0 || frame.sticky[0]) {
         flags.raise(StatusFlags.UNDERFLOW | StatusFlags.INEXACT);
       }
-      BidCodec.packFinite(format, negative, 0, coeff, out);
+      BidEmit.finite(format, negative, 0, coeff, out, frame);
       return;
     }
     while (biased > maxBiased && coeff.decimalDigits() < p) {
@@ -547,17 +548,17 @@ final class BidK160 {
     if (biased > maxBiased) {
       flags.raise(StatusFlags.OVERFLOW | StatusFlags.INEXACT);
       if (BidRound.overflowToInfinity(negative, mode)) {
-        BidCodec.packInfinity(format, negative, out);
+        BidEmit.infinity(format, negative, out, frame);
         return;
       }
-      BidCodec.packFinite(
-          format, negative, maxBiased, format.maxCoefficientWords(), out);
+      BidEmit.finite(
+          format, negative, maxBiased, format.maxCoefficientWords(), out, frame);
       return;
     }
     if (biased == 0 && coeff.decimalDigits() < p && frame.inexact[0]) {
       flags.raise(StatusFlags.UNDERFLOW);
     }
-    BidCodec.packFinite(format, negative, biased, coeff, out);
+    BidEmit.finite(format, negative, biased, coeff, out, frame);
   }
 
   private static int roundToPrecision(

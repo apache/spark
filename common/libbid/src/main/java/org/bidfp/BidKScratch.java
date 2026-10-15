@@ -90,6 +90,7 @@ final class BidKScratch {
     final Wide12 zr = new Wide12();
     final Wide12 zt = new Wide12();
     final Wide12 zw = new Wide12();
+    BidUnpacked unpackedOut;
     final int[] d0 = new int[LimbMath.DIGITS32];
     final int[] d1 = new int[LimbMath.DIGITS32];
     final int[] d2 = new int[LimbMath.DIGITS32];

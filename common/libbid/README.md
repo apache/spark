@@ -215,7 +215,9 @@ the fixed-size IEEE 754 decimal floating-point model, including:
 
 The library exposes immutable `Bid64` and `Bid128` objects as well as
 allocation-conscious `Bid64Raw` and `Bid128Raw` kernels over encoded bits.
-Generic encodings use `FormatParams` plus `BidK`. Transcendental functions
+Generic encodings use `FormatParams` plus packed `BidK`. Repeated arithmetic
+can stay in reusable `BidUnpacked` values (kind, sign, unbiased exponent,
+four coefficient limbs) and pack to IEEE words only at I/O. Transcendental functions
 for `k <= 128` convert through decimal128 and the binary128 DPML engine.
 `k > 128` libm is out of scope unless a binary256 engine is funded.
 

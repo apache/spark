@@ -18,6 +18,7 @@ package org.bidfp;
 
 import java.math.BigDecimal;
 import java.math.MathContext;
+import java.util.Arrays;
 
 /** Format table, codec, Decimal96, and wide BID-k arithmetic checks. */
 public final class BidKTest {
@@ -41,6 +42,7 @@ public final class BidKTest {
     wideLibmUnsupported();
     roundingModes();
     sqlAdapters();
+    unpackedMatchesPacked();
     System.out.println("BidKTest passed");
   }
 
@@ -319,6 +321,65 @@ public final class BidKTest {
       BidK c = BidK.parse(format, "125e8");
       expect(a.sqlEquals(c), "sql cohort " + format);
     }
+  }
+
+  private static void unpackedMatchesPacked() {
+    FormatParams[] formats = {
+      FormatParams.DECIMAL96,
+      FormatParams.DECIMAL160,
+      FormatParams.DECIMAL192,
+      FormatParams.DECIMAL256
+    };
+    RoundingMode mode = RoundingMode.TIES_TO_EVEN;
+    for (FormatParams format : formats) {
+      StatusFlags packedFlags = new StatusFlags();
+      StatusFlags unpackedFlags = new StatusFlags();
+      BidK x = BidK.parse(format, "1.25e10");
+      BidK y = BidK.parse(format, "2.5e9");
+      BidK z = BidK.parse(format, "3");
+      BidUnpacked ux = load(format, x);
+      BidUnpacked uy = load(format, y);
+      BidUnpacked uz = load(format, z);
+      BidUnpacked ur = new BidUnpacked(format);
+      ux.add(uy, mode, unpackedFlags, ur);
+      expectBits(x.add(y, mode, packedFlags), ur, "unpacked add " + format);
+      ux.subtract(uy, mode, unpackedFlags, ur);
+      expectBits(x.subtract(y, mode, packedFlags), ur, "unpacked sub " + format);
+      ux.multiply(uy, mode, unpackedFlags, ur);
+      expectBits(x.multiply(y, mode, packedFlags), ur, "unpacked mul " + format);
+      ux.divide(uy, mode, unpackedFlags, ur);
+      expectBits(x.divide(y, mode, packedFlags), ur, "unpacked div " + format);
+      ux.sqrt(mode, unpackedFlags, ur);
+      expectBits(x.sqrt(mode, packedFlags), ur, "unpacked sqrt " + format);
+      ux.fma(uy, uz, mode, unpackedFlags, ur);
+      expectBits(x.fma(y, z, mode, packedFlags), ur, "unpacked fma " + format);
+      expect(ux.sqlEquals(load(format, BidK.parse(format, "125e8"))),
+          "unpacked cohort " + format);
+      expect(ux.sqlCompare(uy) == x.sqlCompare(y), "unpacked cmp " + format);
+      BidUnpacked inf = load(format, BidK.infinity(format, false));
+      inf.add(ux, mode, unpackedFlags, ur);
+      expect(ur.isInfinite() && !ur.negative(), "unpacked inf " + format);
+      BidUnpacked zero = load(format, BidK.parse(format, "0"));
+      ux.divide(zero, mode, unpackedFlags, ur);
+      expect(ur.isInfinite(), "unpacked div0 " + format);
+      BidUnpacked neg = load(format, BidK.parse(format, "-4"));
+      neg.sqrt(mode, unpackedFlags, ur);
+      expect(ur.isNaN(), "unpacked sqrt neg " + format);
+      ux.add(uy, mode, unpackedFlags, ux);
+      expectBits(x.add(y, mode, packedFlags), ux, "unpacked alias " + format);
+    }
+  }
+
+  private static BidUnpacked load(FormatParams format, BidK value) {
+    BidUnpacked unpacked = new BidUnpacked(format);
+    unpacked.loadPacked(value.toRawBits());
+    return unpacked;
+  }
+
+  private static void expectBits(BidK packed, BidUnpacked unpacked, String label) {
+    long[] words = new long[packed.format().wordCount()];
+    unpacked.storePacked(words);
+    expect(Arrays.equals(packed.toRawBits(), words), label);
   }
 
   private static void expectClose(BidK got, BigDecimal expected, FormatParams format, String op) {

@@ -47,6 +47,13 @@ final class UIntLimbs {
     w[3] = 0L;
   }
 
+  void set4(long l0, long l1, long l2, long l3) {
+    w[0] = l0;
+    w[1] = l1;
+    w[2] = l2;
+    w[3] = l3;
+  }
+
   void copyFrom(UIntLimbs other) {
     w[0] = other.w[0];
     w[1] = other.w[1];

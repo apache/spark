@@ -22,6 +22,10 @@ package org.bidfp;
  * {@link BidK160}; Decimal256 add/mul/FMA/compare use {@link BidK256}).
  * Parse still uses {@link DecNum}.
  *
+ * <p>{@link BidUnpacked} is the compute form: kernels write
+ * {@link BidKScratch.Frame#unpackedOut} through {@link BidEmit} and skip
+ * IEEE pack. Packed words remain the interchange encoding.
+ *
  * <p>{@link Bid64} and {@link Bid128} remain the specialized hot paths. This
  * kernel covers Decimal96 (k=3) through Decimal256 (k=8).
  */
@@ -75,7 +79,7 @@ final class BidKRaw {
         frame.bn = !frame.bn;
       }
       if (propagateSpecial(
-          format, kx, ky, frame.an, frame.bn, true, flags, out)) {
+          format, kx, ky, frame.an, frame.bn, true, flags, out, frame)) {
         return;
       }
       if (BidK160.matches(format)) {
@@ -469,6 +473,317 @@ final class BidKRaw {
     }
   }
 
+  static void addUnpacked(
+      BidUnpacked x,
+      BidUnpacked y,
+      boolean negateY,
+      RoundingMode mode,
+      StatusFlags flags,
+      BidUnpacked out) {
+    FormatParams format = requireSameFormat(x, y, out);
+    BidKScratch.Frame frame = BidKScratch.acquire();
+    frame.unpackedOut = out;
+    try {
+      Kind kx = x.rawKind();
+      Kind ky = y.rawKind();
+      loadBinary(x, y, frame);
+      if (negateY && ky != Kind.NAN && ky != Kind.SNAN) {
+        frame.bn = !frame.bn;
+      }
+      if (propagateSpecial(
+          format, kx, ky, frame.an, frame.bn, true, flags, frame.words, frame)) {
+        return;
+      }
+      if (BidK160.matches(format)) {
+        BidK160.addFromWide(
+            format, frame.an, frame.ae, frame.bn, frame.be, mode, flags,
+            frame.words, frame);
+        return;
+      }
+      if (BidK256.matches(format)) {
+        BidK256.addFromWide(
+            format, frame.an, frame.ae, frame.bn, frame.be, mode, flags,
+            frame.words, frame);
+        return;
+      }
+      BidKKnuth.addFromWork(
+          format, frame.an, frame.ae, frame.bn, frame.be, mode, flags,
+          frame.words, frame);
+    } finally {
+      frame.unpackedOut = null;
+      BidKScratch.release(frame);
+    }
+  }
+
+  static void mulUnpacked(
+      BidUnpacked x,
+      BidUnpacked y,
+      RoundingMode mode,
+      StatusFlags flags,
+      BidUnpacked out) {
+    FormatParams format = requireSameFormat(x, y, out);
+    BidKScratch.Frame frame = BidKScratch.acquire();
+    frame.unpackedOut = out;
+    try {
+      Kind kx = x.rawKind();
+      Kind ky = y.rawKind();
+      loadBinary(x, y, frame);
+      boolean aZero = x.isFinite() && x.c0() == 0L && x.c1() == 0L
+          && x.c2() == 0L && x.c3() == 0L;
+      boolean bZero = y.isFinite() && y.c0() == 0L && y.c1() == 0L
+          && y.c2() == 0L && y.c3() == 0L;
+      if (mulDivSpecial(
+          format, kx, ky, frame.an, frame.bn, aZero, bZero, false, flags,
+          frame.words, frame)) {
+        return;
+      }
+      if (BidK160.matches(format)) {
+        BidK160.mulFromWide(
+            format, frame.an, frame.ae, frame.bn, frame.be, mode, flags,
+            frame.words, frame);
+        return;
+      }
+      if (BidK256.matches(format)) {
+        BidK256.mulFromWide(
+            format, frame.an, frame.ae, frame.bn, frame.be, mode, flags,
+            frame.words, frame);
+        return;
+      }
+      BidKKnuth.mulFromWork(
+          format, frame.an, frame.ae, frame.bn, frame.be, mode, flags,
+          frame.words, frame);
+    } finally {
+      frame.unpackedOut = null;
+      BidKScratch.release(frame);
+    }
+  }
+
+  static void divUnpacked(
+      BidUnpacked x,
+      BidUnpacked y,
+      RoundingMode mode,
+      StatusFlags flags,
+      BidUnpacked out) {
+    FormatParams format = requireSameFormat(x, y, out);
+    BidKScratch.Frame frame = BidKScratch.acquire();
+    frame.unpackedOut = out;
+    try {
+      Kind kx = x.rawKind();
+      Kind ky = y.rawKind();
+      loadBinary(x, y, frame);
+      boolean aZero = x.isFinite() && x.c0() == 0L && x.c1() == 0L
+          && x.c2() == 0L && x.c3() == 0L;
+      boolean bZero = y.isFinite() && y.c0() == 0L && y.c1() == 0L
+          && y.c2() == 0L && y.c3() == 0L;
+      if (mulDivSpecial(
+          format, kx, ky, frame.an, frame.bn, aZero, bZero, true, flags,
+          frame.words, frame)) {
+        return;
+      }
+      if (BidK160.matches(format)) {
+        BidK160.divFromWide(
+            format, frame.an, frame.ae, frame.bn, frame.be, mode, flags,
+            frame.words, frame);
+        return;
+      }
+      if (BidK256.matches(format)) {
+        BidK256.divFromWide(
+            format, frame.an, frame.ae, frame.bn, frame.be, mode, flags,
+            frame.words, frame);
+        return;
+      }
+      BidKKnuth.divFromWork(
+          format, frame.an, frame.ae, frame.bn, frame.be, mode, flags,
+          frame.words, frame);
+    } finally {
+      frame.unpackedOut = null;
+      BidKScratch.release(frame);
+    }
+  }
+
+  static void sqrtUnpacked(
+      BidUnpacked x, RoundingMode mode, StatusFlags flags, BidUnpacked out) {
+    FormatParams format = requireSameFormat(x, out);
+    BidKScratch.Frame frame = BidKScratch.acquire();
+    frame.unpackedOut = out;
+    try {
+      Kind kx = x.rawKind();
+      frame.an = x.negative();
+      frame.ae = x.exponent();
+      loadWork(frame.w0, x);
+      if (kx == Kind.NAN || kx == Kind.SNAN) {
+        BidEmit.nan(format, false, false, frame.words, frame);
+        return;
+      }
+      if (kx == Kind.INF) {
+        if (frame.an) {
+          flags.raise(StatusFlags.INVALID);
+          BidEmit.nan(format, false, false, frame.words, frame);
+        } else {
+          BidEmit.infinity(format, false, frame.words, frame);
+        }
+        return;
+      }
+      if (frame.an && !LimbMath.isZero(frame.w0)) {
+        flags.raise(StatusFlags.INVALID);
+        BidEmit.nan(format, false, false, frame.words, frame);
+        return;
+      }
+      if (LimbMath.isZero(frame.w0)) {
+        BidKKnuth.pack(
+            format, frame.an, frame.ae, frame.w0, mode, flags, frame,
+            frame.words);
+        return;
+      }
+      frame.coeff.set4(x.c0(), x.c1(), x.c2(), x.c3());
+      if (BidK160.matches(format)) {
+        BidK160.sqrt(
+            format, frame.ae, frame.coeff, mode, flags, frame.words, frame);
+        return;
+      }
+      if (BidK256.matches(format)) {
+        BidK256.sqrt(
+            format, frame.ae, frame.coeff, mode, flags, frame.words, frame);
+        return;
+      }
+      BidKKnuth.sqrtFromWork(format, frame.ae, mode, flags, frame.words, frame);
+    } finally {
+      frame.unpackedOut = null;
+      BidKScratch.release(frame);
+    }
+  }
+
+  static void fmaUnpacked(
+      BidUnpacked x,
+      BidUnpacked y,
+      BidUnpacked z,
+      RoundingMode mode,
+      StatusFlags flags,
+      BidUnpacked out) {
+    FormatParams format = requireSameFormat(x, y, out);
+    if (z.format() != format) {
+      throw new IllegalArgumentException("format mismatch");
+    }
+    BidKScratch.Frame frame = BidKScratch.acquire();
+    frame.unpackedOut = out;
+    try {
+      Kind kx = x.rawKind();
+      Kind ky = y.rawKind();
+      loadBinary(x, y, frame);
+      boolean aZero = x.isFinite() && coeffZero(x);
+      boolean bZero = y.isFinite() && coeffZero(y);
+      if (kx == Kind.NAN || ky == Kind.NAN || kx == Kind.SNAN || ky == Kind.SNAN) {
+        BidEmit.nan(format, false, false, frame.words, frame);
+        return;
+      }
+      if (kx == Kind.INF || ky == Kind.INF) {
+        if ((kx == Kind.INF && bZero) || (ky == Kind.INF && aZero)) {
+          flags.raise(StatusFlags.INVALID);
+          BidEmit.nan(format, false, false, frame.words, frame);
+          return;
+        }
+        boolean productNeg = frame.an ^ frame.bn;
+        if (z.kind() == BidUnpacked.Kind.INF && z.negative() != productNeg) {
+          flags.raise(StatusFlags.INVALID);
+          BidEmit.nan(format, false, false, frame.words, frame);
+          return;
+        }
+        BidEmit.infinity(format, productNeg, frame.words, frame);
+        return;
+      }
+      if (z.isNaN()) {
+        BidEmit.nan(format, false, false, frame.words, frame);
+        return;
+      }
+      if (z.kind() == BidUnpacked.Kind.INF) {
+        BidEmit.infinity(format, z.negative(), frame.words, frame);
+        return;
+      }
+      frame.tmpNeg[0] = z.negative();
+      frame.tmpExp[0] = z.exponent();
+      if (BidK160.matches(format)) {
+        loadWide6(frame.xt, z);
+        BidK160.fmaFromWide(
+            format, frame.an, frame.ae, frame.bn, frame.be,
+            z.negative(), z.exponent(), mode, flags, frame.words, frame);
+        return;
+      }
+      if (BidK256.matches(format)) {
+        loadWide8(frame.yt, z);
+        BidK256.fmaFromWide(
+            format, frame.an, frame.ae, frame.bn, frame.be,
+            z.negative(), z.exponent(), mode, flags, frame.words, frame);
+        return;
+      }
+      loadWork(frame.w4, z);
+      BidKKnuth.fmaFromWork(
+          format, frame.an, frame.ae, frame.bn, frame.be,
+          z.negative(), z.exponent(), mode, flags, frame.words, frame);
+    } finally {
+      frame.unpackedOut = null;
+      BidKScratch.release(frame);
+    }
+  }
+
+  static int sqlCompareUnpacked(BidUnpacked x, BidUnpacked y) {
+    FormatParams format = requireSameFormat(x, y);
+    if (x.isNaN()) {
+      return y.isNaN() ? 0 : 1;
+    }
+    if (y.isNaN()) {
+      return -1;
+    }
+    if (x.kind() == BidUnpacked.Kind.INF || y.kind() == BidUnpacked.Kind.INF) {
+      if (x.kind() == BidUnpacked.Kind.INF && y.kind() == BidUnpacked.Kind.INF) {
+        if (x.negative() == y.negative()) {
+          return 0;
+        }
+        return x.negative() ? -1 : 1;
+      }
+      if (x.kind() == BidUnpacked.Kind.INF) {
+        return x.negative() ? -1 : 1;
+      }
+      return y.negative() ? 1 : -1;
+    }
+    BidKScratch.Frame frame = BidKScratch.acquire();
+    try {
+      loadBinary(x, y, frame);
+      if (BidK160.matches(format)) {
+        if (frame.xa.isZero() && frame.xb.isZero()) {
+          return 0;
+        }
+        if (frame.an != frame.bn) {
+          return frame.an ? -1 : 1;
+        }
+        int cmp = BidK160.compareAbsolute(
+            frame.xa, frame.ae, frame.xb, frame.be, format.precision(), frame);
+        return frame.an ? -cmp : cmp;
+      }
+      if (BidK256.matches(format)) {
+        if (frame.ya.isZero() && frame.yb.isZero()) {
+          return 0;
+        }
+        if (frame.an != frame.bn) {
+          return frame.an ? -1 : 1;
+        }
+        int cmp = BidK256.compareAbsolute(
+            frame.ya, frame.ae, frame.yb, frame.be, format.precision(), frame);
+        return frame.an ? -cmp : cmp;
+      }
+      if (LimbMath.isZero(frame.w0) && LimbMath.isZero(frame.w1)) {
+        return 0;
+      }
+      if (frame.an != frame.bn) {
+        return frame.an ? -1 : 1;
+      }
+      int cmp = BidKKnuth.compareAbsolute(
+          frame.w0, frame.ae, frame.w1, frame.be, format.precision(), frame);
+      return frame.an ? -cmp : cmp;
+    } finally {
+      BidKScratch.release(frame);
+    }
+  }
+
   static int sqlCompare(FormatParams format, long[] x, long[] y) {
     if (BidCodec.isNaN(format, x)) {
       return BidCodec.isNaN(format, y) ? 0 : 1;
@@ -670,26 +985,27 @@ final class BidKRaw {
       boolean yn,
       boolean adding,
       StatusFlags flags,
-      long[] out) {
+      long[] out,
+      BidKScratch.Frame frame) {
     if (kx == Kind.NAN || ky == Kind.NAN || kx == Kind.SNAN || ky == Kind.SNAN) {
-      BidCodec.packNaN(format, false, false, out);
+      BidEmit.nan(format, false, false, out, frame);
       return true;
     }
     if (kx == Kind.INF && ky == Kind.INF) {
       if (adding && xn != yn) {
         flags.raise(StatusFlags.INVALID);
-        BidCodec.packNaN(format, false, false, out);
+        BidEmit.nan(format, false, false, out, frame);
       } else {
-        BidCodec.packInfinity(format, xn, out);
+        BidEmit.infinity(format, xn, out, frame);
       }
       return true;
     }
     if (kx == Kind.INF) {
-      BidCodec.packInfinity(format, xn, out);
+      BidEmit.infinity(format, xn, out, frame);
       return true;
     }
     if (ky == Kind.INF) {
-      BidCodec.packInfinity(format, yn, out);
+      BidEmit.infinity(format, yn, out, frame);
       return true;
     }
     return false;
@@ -708,7 +1024,7 @@ final class BidKRaw {
       long[] out,
       BidKScratch.Frame frame) {
     if (kx == Kind.NAN || ky == Kind.NAN || kx == Kind.SNAN || ky == Kind.SNAN) {
-      BidCodec.packNaN(format, false, false, out);
+      BidEmit.nan(format, false, false, out, frame);
       return true;
     }
     boolean negative = xn ^ yn;
@@ -716,7 +1032,7 @@ final class BidKRaw {
       if (ky == Kind.INF) {
         if (kx == Kind.INF) {
           flags.raise(StatusFlags.INVALID);
-          BidCodec.packNaN(format, false, false, out);
+          BidEmit.nan(format, false, false, out, frame);
         } else {
           LimbMath.clear(frame.w0);
           BidKKnuth.pack(
@@ -729,18 +1045,18 @@ final class BidKRaw {
         if (xZero || kx == Kind.INF) {
           if (xZero) {
             flags.raise(StatusFlags.INVALID);
-            BidCodec.packNaN(format, false, false, out);
+            BidEmit.nan(format, false, false, out, frame);
           } else {
-            BidCodec.packInfinity(format, negative, out);
+            BidEmit.infinity(format, negative, out, frame);
           }
         } else {
           flags.raise(StatusFlags.DIVIDE_BY_ZERO);
-          BidCodec.packInfinity(format, negative, out);
+          BidEmit.infinity(format, negative, out, frame);
         }
         return true;
       }
       if (kx == Kind.INF) {
-        BidCodec.packInfinity(format, negative, out);
+        BidEmit.infinity(format, negative, out, frame);
         return true;
       }
       return false;
@@ -748,13 +1064,75 @@ final class BidKRaw {
     if (kx == Kind.INF || ky == Kind.INF) {
       if ((kx == Kind.INF && yZero) || (ky == Kind.INF && xZero)) {
         flags.raise(StatusFlags.INVALID);
-        BidCodec.packNaN(format, false, false, out);
+        BidEmit.nan(format, false, false, out, frame);
       } else {
-        BidCodec.packInfinity(format, negative, out);
+        BidEmit.infinity(format, negative, out, frame);
       }
       return true;
     }
     return false;
+  }
+
+  private static FormatParams requireSameFormat(BidUnpacked x, BidUnpacked y) {
+    if (x.format() != y.format()) {
+      throw new IllegalArgumentException("format mismatch");
+    }
+    return x.format();
+  }
+
+  private static FormatParams requireSameFormat(
+      BidUnpacked x, BidUnpacked y, BidUnpacked out) {
+    FormatParams format = requireSameFormat(x, y);
+    if (out.format() != format) {
+      throw new IllegalArgumentException("format mismatch");
+    }
+    return format;
+  }
+
+  private static boolean coeffZero(BidUnpacked value) {
+    return (value.c0() | value.c1() | value.c2() | value.c3()) == 0L;
+  }
+
+  private static void loadBinary(
+      BidUnpacked x, BidUnpacked y, BidKScratch.Frame frame) {
+    frame.an = x.negative();
+    frame.ae = x.exponent();
+    frame.bn = y.negative();
+    frame.be = y.exponent();
+    FormatParams format = x.format();
+    if (BidK160.matches(format)) {
+      loadWide6(frame.xa, x);
+      loadWide6(frame.xb, y);
+    } else if (BidK256.matches(format)) {
+      loadWide8(frame.ya, x);
+      loadWide8(frame.yb, y);
+    } else {
+      loadWork(frame.w0, x);
+      loadWork(frame.w1, y);
+    }
+  }
+
+  private static void loadWide6(Wide6 dest, BidUnpacked value) {
+    dest.clear();
+    dest.l0 = value.c0();
+    dest.l1 = value.c1();
+    dest.l2 = value.c2();
+  }
+
+  private static void loadWide8(Wide8 dest, BidUnpacked value) {
+    dest.clear();
+    dest.l0 = value.c0();
+    dest.l1 = value.c1();
+    dest.l2 = value.c2();
+    dest.l3 = value.c3();
+  }
+
+  private static void loadWork(long[] dest, BidUnpacked value) {
+    LimbMath.clear(dest);
+    dest[0] = value.c0();
+    dest[1] = value.c1();
+    dest[2] = value.c2();
+    dest[3] = value.c3();
   }
 
   private static void parseFinite(String value, boolean negative, DecNum dest) {

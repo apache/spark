@@ -525,7 +525,7 @@ final class BidKKnuth {
       int digits = LimbMath.decimalDigits(frame.w0);
       if (delta > LimbMath.POW10_MAX || digits + delta > p) {
         flags.raise(StatusFlags.INVALID);
-        BidCodec.packNaN(format, false, false, out);
+        BidEmit.nan(format, false, false, out, frame);
         return;
       }
       LimbMath.multiplyPow10(frame.w0, delta, frame.w4);
@@ -653,7 +653,7 @@ final class BidKKnuth {
       StatusFlags flags,
       BidKScratch.Frame frame,
       long[] out) {
-    if (tryPackExact(format, negative, exp, coeff, out)) {
+    if (tryPackExact(format, negative, exp, coeff, out, frame)) {
       return;
     }
     int p = format.precision();
@@ -685,7 +685,7 @@ final class BidKKnuth {
       if (biased > maxBiased) {
         biased = maxBiased;
       }
-      BidCodec.packFinite(format, negative, biased, coeff, out);
+      BidEmit.finite(format, negative, biased, coeff, out, frame);
       return;
     }
     int biased = exp + bias;
@@ -699,7 +699,7 @@ final class BidKKnuth {
       if (first != 0 || frame.sticky[0]) {
         flags.raise(StatusFlags.UNDERFLOW | StatusFlags.INEXACT);
       }
-      BidCodec.packFinite(format, negative, 0, coeff, out);
+      BidEmit.finite(format, negative, 0, coeff, out, frame);
       return;
     }
     while (biased > maxBiased && LimbMath.decimalDigits(coeff) < p) {
@@ -709,17 +709,17 @@ final class BidKKnuth {
     if (biased > maxBiased) {
       flags.raise(StatusFlags.OVERFLOW | StatusFlags.INEXACT);
       if (BidRound.overflowToInfinity(negative, mode)) {
-        BidCodec.packInfinity(format, negative, out);
+        BidEmit.infinity(format, negative, out, frame);
         return;
       }
-      BidCodec.packFinite(
-          format, negative, maxBiased, format.maxCoefficientWords(), out);
+      BidEmit.finite(
+          format, negative, maxBiased, format.maxCoefficientWords(), out, frame);
       return;
     }
     if (biased == 0 && LimbMath.decimalDigits(coeff) < p && frame.inexact[0]) {
       flags.raise(StatusFlags.UNDERFLOW);
     }
-    BidCodec.packFinite(format, negative, biased, coeff, out);
+    BidEmit.finite(format, negative, biased, coeff, out, frame);
   }
 
   private static boolean tryPackExact(
@@ -727,7 +727,8 @@ final class BidKKnuth {
       boolean negative,
       int exp,
       long[] coeff,
-      long[] out) {
+      long[] out,
+      BidKScratch.Frame frame) {
     int biased = exp + format.bias();
     if (biased < 0 || biased > format.maxBiasedExponent()) {
       return false;
@@ -735,7 +736,7 @@ final class BidKKnuth {
     if (!format.coefficientAllowed(coeff)) {
       return false;
     }
-    BidCodec.packFinite(format, negative, biased, coeff, out);
+    BidEmit.finite(format, negative, biased, coeff, out, frame);
     return true;
   }
 
@@ -796,7 +797,7 @@ final class BidKKnuth {
     return (frame.an ? "-" : "+") + digits + "E" + frame.ae;
   }
 
-  private static int compareAbsolute(
+  static int compareAbsolute(
       long[] a,
       int ae,
       long[] b,
