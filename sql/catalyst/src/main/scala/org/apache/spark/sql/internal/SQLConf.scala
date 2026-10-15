@@ -4419,6 +4419,7 @@ object SQLConf {
         "position of the regex group `idx`, and fails if `idx` is negative or greater than " +
         "the number of groups.")
       .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
