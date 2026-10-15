@@ -1000,6 +1000,15 @@ class AvroFunctionsSuite extends SharedSparkSession {
         from_avro(to_avro(lit("abcdef"), stringSchema), charSchema).as("c"))
       assert(df.schema.head.dataType === StringType)
       checkAnswer(df, Row("abcdef"))
+
+      withTempView("avro_cv_string_view") {
+        df.createOrReplaceTempView("avro_cv_string_view")
+        withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+          val fromView = spark.sql("SELECT * FROM avro_cv_string_view")
+          assert(fromView.schema.head.dataType === StringType)
+          checkAnswer(fromView, Row("abcdef"))
+        }
+      }
     }
   }
 

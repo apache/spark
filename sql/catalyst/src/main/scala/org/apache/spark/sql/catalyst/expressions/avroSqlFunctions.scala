@@ -69,8 +69,7 @@ case class FromAvro(
     options: Expression,
     // PERSISTED: copy()/views keep analysis-time CHAR/VARCHAR flags. FromAvro is
     // RuntimeReplaceable, so a new replacement would otherwise re-read SQLConf.
-    // No default args: copy() must keep these, and FunctionRegistry must still
-    // see only the 2-arg and 3-arg Expression constructors.
+    // FunctionRegistry matches Expression-only ctors; keep 2-arg and 3-arg.
     charVarcharStandardSemantics: Boolean,
     charVarcharFirstClassTypes: Boolean)
   extends TernaryExpression with RuntimeReplaceable {

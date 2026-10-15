@@ -591,7 +591,7 @@ private[sql] class AvroDeserializer(
       keyType match {
         case _: CharType | _: VarcharType =>
           Some { key =>
-            if (CharVarcharUtils.charVarcharMapKeyExceedsLimit(key, keyType)) {
+            if (CharVarcharUtils.charVarcharMapKeyViolatesLength(key, keyType)) {
               throw QueryExecutionErrors.unsupportedAvroCharVarcharMapKey(key, keyType)
             }
           }

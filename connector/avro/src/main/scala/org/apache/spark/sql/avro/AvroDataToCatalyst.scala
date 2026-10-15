@@ -36,7 +36,6 @@ case class AvroDataToCatalyst(
     options: Map[String, String],
     // PERSISTED: capture at analysis (like JsonToStructs) so copy()/views keep
     // creation-time CHAR/VARCHAR map-key checks, not the caller's session setting.
-    // No default args: TreeNode.makeCopy would otherwise re-read live SQLConf.
     charVarcharStandardSemantics: Boolean,
     charVarcharFirstClassTypes: Boolean)
   extends UnaryExpression with ExpectsInputTypes {
@@ -63,7 +62,9 @@ case class AvroDataToCatalyst(
     val dt = if (charVarcharFirstClassTypes) {
       converted
     } else {
-      CharVarcharUtils.replaceCharVarcharWithString(converted)
+      // Conf-independent: replaceCharVarcharWithString would keep CHAR/VARCHAR if the
+      // live session has first-class types on.
+      CharVarcharUtils.replaceCharVarcharWithStringAlways(converted)
     }
     parseMode match {
       // With PermissiveMode, the output Catalyst row might contain columns of null values for
