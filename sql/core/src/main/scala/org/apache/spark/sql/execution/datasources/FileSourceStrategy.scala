@@ -191,7 +191,8 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
    * predicate outside the generated code. Nothing is offered in that case.
    *
    * Once some conjuncts are offered, every other conjunct that references only their key columns
-   * is offered too, where [[FileFormat.supportsStorageFilterOnKeys]] accepts it.
+   * is offered too, other than an `IsNotNull`, where [[FileFormat.supportsStorageFilterOnKeys]]
+   * accepts it.
    */
   private def storageFiltersFor(
       normalizedFilters: Seq[Expression],
@@ -217,12 +218,13 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
     if (offered.isEmpty) return Nil
     val storageKeyAttrs = AttributeSet.fromAttributeSets(offered.map(_.references))
     if (dataAttrs.subsetOf(storageKeyAttrs)) return Nil
-    // A conjunct over the key columns alone adds no column to the read, so it is offered too. It
-    // goes last, so the reader evaluates it only on the rows the filters above keep.
+    // A conjunct over the key columns alone adds no column to the read, so it is offered too,
+    // after the filters above. An `IsNotNull` is not, since the post-scan Filter marks its column
+    // not nullable only while it stays bare there, and the inferred one comes with every join key.
     val onKeys = candidates.filter { expr =>
       val refs = expr.references
       refs.nonEmpty && refs.subsetOf(storageKeyAttrs) && !offered.contains(expr) &&
-        fsRelation.fileFormat.supportsStorageFilterOnKeys(expr)
+        !expr.isInstanceOf[IsNotNull] && fsRelation.fileFormat.supportsStorageFilterOnKeys(expr)
     }
     offered ++ onKeys
   }
