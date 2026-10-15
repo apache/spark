@@ -246,6 +246,11 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
         "CREATE SYNONYM func_synonym FOR broken_func"),
       objectName = "FUNC_SYNONYM",
       teardown = Seq("DROP SYNONYM func_synonym", "DROP FUNCTION broken_func")),
+    "synonym -> missing target (ORA-00980)" -> NonSelectableObjectCase(
+      // Oracle does not validate the target on CREATE SYNONYM; SELECT raises ORA-00980.
+      setup = Seq("CREATE SYNONYM broken_synonym FOR non_existent_table_xyz"),
+      objectName = "BROKEN_SYNONYM",
+      teardown = Seq("DROP SYNONYM broken_synonym")),
     "invalid view (ORA-04063)" -> NonSelectableObjectCase(
       // FORCE-create a view over a missing table -> view is INVALID; SELECT raises ORA-04063.
       setup = Seq("CREATE FORCE VIEW invalid_view AS SELECT * FROM non_existent_table_xyz"),
