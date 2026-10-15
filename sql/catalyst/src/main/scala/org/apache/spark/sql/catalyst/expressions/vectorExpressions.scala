@@ -752,6 +752,10 @@ case class VectorSum(
   ): ImperativeAggregate =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
+  // Branch on element type outside the update and merge loops to keep primitive arithmetic.
+  // A generic get[T]/put[T] API would box primitive values unless specialized or optimized by
+  // the JIT, and would still need per-element calls to be inlined. These loops avoid relying
+  // on those optimizations.
   override protected def updateElements(
       accBytes: Array[Byte],
       inputArray: ArrayData,
