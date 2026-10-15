@@ -27,10 +27,10 @@ import java.util.Arrays;
  * Decimal96 ({@code k=3}) through Decimal256 ({@code k=8}). Repeated
  * arithmetic should use {@link BidUnpacked} and pack only at I/O.
  *
- * <p>Transcendental functions are provided only for packed width
- * {@code <= 128} ({@code k <= 4}) by converting through {@link Bid128} and
- * the binary128 DPML engine. Wider formats throw
- * {@link UnsupportedOperationException} until a binary256 engine is funded.
+ * <p>Transcendental functions are provided only for {@code k<=4} (packed
+ * width 128) by converting through {@link Bid128} and the binary128 DPML
+ * engine. Wider formats throw {@link UnsupportedOperationException} until a
+ * binary256 engine is funded.
  */
 public final class BidK {
   private final FormatParams format;
@@ -43,7 +43,7 @@ public final class BidK {
 
   public static BidK fromRawBits(FormatParams format, long[] words) {
     if (words.length < format.wordCount()) {
-      throw new IllegalArgumentException("packed encoding is shorter than k bits");
+      throw new IllegalArgumentException("packed encoding is shorter than 32*k bits");
     }
     return new BidK(format, BidCodec.cloneWords(format, words));
   }

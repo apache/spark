@@ -17,9 +17,10 @@
 package org.bidfp;
 
 /**
- * Compute form of a BID-k value: kind, sign, unbiased exponent, and up to
- * four coefficient limbs. Packed IEEE words stay the interchange encoding;
- * this type is the Spark execution shape.
+ * Compute form of a BID-k value (IEEE {@code k} 32-bit units; packed width
+ * {@code 32*k}): kind, sign, unbiased exponent, and up to four coefficient
+ * limbs. Packed IEEE words stay the interchange encoding; this type is the
+ * Spark execution shape.
  *
  * <p>Instances are mutable and meant to be reused. {@code out} may alias
  * {@code this} on arithmetic methods.

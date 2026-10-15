@@ -27,7 +27,7 @@ package org.bidfp;
  * IEEE pack. Packed words remain the interchange encoding.
  *
  * <p>{@link Bid64} and {@link Bid128} remain the specialized hot paths. This
- * kernel covers Decimal96 (k=3) through Decimal256 (k=8).
+ * kernel covers Decimal96 ({@code k=3}) through Decimal256 ({@code k=8}).
  */
 final class BidKRaw {
   private BidKRaw() {
@@ -808,7 +808,7 @@ final class BidKRaw {
   static void requireLibm(FormatParams format) {
     if (format.units() > 4) {
       throw new UnsupportedOperationException(
-          "k>128 libm is out of scope unless a binary256 engine is funded");
+          "k>4 libm is out of scope unless a binary256 engine is funded");
     }
   }
 

@@ -24,7 +24,8 @@ import java.util.Locale;
 import java.util.Random;
 
 /**
- * BidK vs {@link BigDecimal} timings for Decimal160 and Decimal256.
+ * BidK vs {@link BigDecimal} timings for Decimal160 ({@code k=5}) and
+ * Decimal256 ({@code k=8}). Pass {@code kscan} to sweep {@code k=3..8}.
  *
  * <p>Operand construction matches {@code BidJmhBenchmark}: sameQuantum,
  * mixedQuantum, and fullPrecision for add/mul/div; positive full-precision
@@ -39,18 +40,44 @@ public final class BidKBenchmark {
   private static final RoundingMode BID_ROUNDING = RoundingMode.TIES_TO_EVEN;
   private static final int SIZE = 1024;
   private static final int MASK = SIZE - 1;
-  private static final FormatParams[] FORMATS = {
+  private static final FormatParams[] FORMATS_WIDE = {
     FormatParams.DECIMAL160,
     FormatParams.DECIMAL256
   };
+  private static final FormatParams[] FORMATS_KSCAN = {
+    FormatParams.DECIMAL96,
+    FormatParams.DECIMAL128,
+    FormatParams.DECIMAL160,
+    FormatParams.DECIMAL192,
+    FormatParams.DECIMAL224,
+    FormatParams.DECIMAL256
+  };
+  private static FormatParams[] formats = FORMATS_WIDE;
 
   private BidKBenchmark() {
   }
 
   public static void main(String[] args) {
-    Profile profile = Profile.from(args.length == 0 ? "quick" : args[0]);
-    System.out.println("BidKBenchmark profile=" + profile.name);
+    String profileName = "quick";
+    boolean kscan = false;
+    for (String arg : args) {
+      if ("kscan".equals(arg)) {
+        kscan = true;
+      } else if ("iter".equals(arg) || "quick".equals(arg) || "full".equals(arg)) {
+        profileName = arg;
+      }
+    }
+    Profile profile = Profile.from(profileName);
+    if (kscan) {
+      formats = FORMATS_KSCAN;
+    }
+    System.out.println("BidKBenchmark profile=" + profile.name
+        + (kscan ? " kscan" : ""));
     System.out.println();
+    if (kscan) {
+      printTable("BidUnpacked reused operands and result (k=3..8)", Mode.UNPACKED);
+      return;
+    }
     printTable("BidK object API", Mode.OBJECT);
     System.out.println();
     printTable("BidKRaw into reused out[]", Mode.RAW);
@@ -60,10 +87,19 @@ public final class BidKBenchmark {
 
   private static void printTable(String title, Mode mode) {
     System.out.println(title);
-    System.out.println(
-        "| Function / workload | BID160 | BD160 | Ratio | BID256 | BD256 | Ratio |");
-    System.out.println(
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |");
+    StringBuilder header = new StringBuilder("| Function / workload");
+    StringBuilder rule = new StringBuilder("| ---");
+    for (FormatParams format : formats) {
+      int bits = format.packedBits();
+      header.append(" | BID").append(bits)
+          .append(" | BD").append(bits)
+          .append(" | Ratio");
+      rule.append(" | ---: | ---: | ---:");
+    }
+    header.append(" |");
+    rule.append(" |");
+    System.out.println(header);
+    System.out.println(rule);
     List<Row> rows = new ArrayList<>();
     rows.add(measurePair("add (same quantum)", "sameQuantum", Op.ADD, mode));
     rows.add(measurePair("add (mixed quantum)", "mixedQuantum", Op.ADD, mode));
@@ -86,9 +122,9 @@ public final class BidKBenchmark {
 
   private static Row measurePair(
       String name, String workload, Op op, Mode mode) {
-    Sample[] samples = new Sample[FORMATS.length];
-    for (int i = 0; i < FORMATS.length; i++) {
-      samples[i] = measure(FORMATS[i], workload, op, Profile.current, mode);
+    Sample[] samples = new Sample[formats.length];
+    for (int i = 0; i < formats.length; i++) {
+      samples[i] = measure(formats[i], workload, op, Profile.current, mode);
     }
     return new Row(name, samples);
   }

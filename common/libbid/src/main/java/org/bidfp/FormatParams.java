@@ -41,13 +41,13 @@ public final class FormatParams {
 
   private static FormatParams[] build() {
     FormatParams[] byK = new FormatParams[9];
-    for (int k = 32; k <= 256; k += 32) {
-      byK[k / 32] = compute(k);
+    for (int units = 1; units <= 8; units++) {
+      byK[units] = compute(32 * units);
     }
     return byK;
   }
 
-  private final int k;
+  private final int packedBits;
   private final int precision;
   private final int w;
   private final int t;
@@ -75,7 +75,7 @@ public final class FormatParams {
   private final long[] maxCoefficient;
 
   private FormatParams(
-      int k,
+      int packedBits,
       int precision,
       int w,
       int t,
@@ -89,7 +89,7 @@ public final class FormatParams {
       int wordCount,
       int signBit,
       long[] maxCoefficient) {
-    this.k = k;
+    this.packedBits = packedBits;
     this.precision = precision;
     this.w = w;
     this.t = t;
@@ -104,7 +104,7 @@ public final class FormatParams {
     this.signBit = signBit;
     this.maxCoefficient = maxCoefficient;
     this.lastWord = wordCount - 1;
-    int lastBits = k & 63;
+    int lastBits = packedBits & 63;
     if (lastBits == 0) {
       lastBits = 64;
     }
@@ -130,7 +130,7 @@ public final class FormatParams {
     return BY_K[packedBits / 32];
   }
 
-  /** Returns the descriptor for k 32-bit units (Decimal32 is 1). */
+  /** Returns the descriptor for IEEE k (Decimal64 is {@code k=2}). */
   public static FormatParams ofUnits(int units) {
     if (units < 1 || units > 8) {
       throw new IllegalArgumentException("k must be in [1, 8] 32-bit units");
@@ -138,22 +138,23 @@ public final class FormatParams {
     return BY_K[units];
   }
 
-  private static FormatParams compute(int k) {
-    int precision = 9 * (k / 32) - 2;
-    int w = k / 16 + 4;
-    int t = k - w - 6;
-    int emax = 3 << (k / 16 + 3);
+  private static FormatParams compute(int packedBits) {
+    int k = packedBits / 32;
+    int precision = 9 * k - 2;
+    int w = 2 * k + 4;
+    int t = packedBits - w - 6;
+    int emax = 3 << (2 * k + 3);
     int emin = 1 - emax;
     int bias = emax + precision - 2;
     int maxBiasedExponent = 2 * emax - 1;
     int expBits = w + 2;
     int form1CoeffBits = t + 3;
     int form2CoeffBits = t + 1;
-    int wordCount = (k + 63) / 64;
-    int signBit = k - 1;
+    int wordCount = (packedBits + 63) / 64;
+    int signBit = packedBits - 1;
     long[] maxCoefficient = UIntLimbs.pow10MinusOne(precision);
     return new FormatParams(
-        k,
+        packedBits,
         precision,
         w,
         t,
@@ -171,12 +172,14 @@ public final class FormatParams {
 
   /** Packed encoding width in bits ({@code 32 * units()}). */
   public int packedBits() {
-    return k;
+    return packedBits;
   }
 
-  /** k: number of 32-bit storage units. Decimal160 is 5. */
+  /**
+   * IEEE k: number of 32-bit storage units. Decimal64 is 2; Decimal160 is 5.
+   */
   public int units() {
-    return k / 32;
+    return packedBits / 32;
   }
 
   public int precision() {
@@ -342,11 +345,11 @@ public final class FormatParams {
 
   /** Whether this format's coefficient and exponent fit in BID128. */
   public boolean fitsInDecimal128() {
-    return k <= 128;
+    return packedBits <= 128;
   }
 
   @Override
   public String toString() {
-    return "decimal" + k;
+    return "decimal" + packedBits;
   }
 }

@@ -18,10 +18,11 @@
 # LibBID
 
 LibBID implements IEEE 754 decimal floating-point arithmetic using the
-Binary Integer Decimal (BID) encoding. Specialized kernels cover decimal64
-and decimal128. A generic BID-k path covers every packed width
-`k = 32, 64, ..., 256`, including Decimal96 and Decimal160 through
-Decimal256.
+Binary Integer Decimal (BID) encoding. IEEE names each interchange format
+by `k` 32-bit storage units; packed width is `32 * k` bits. Decimal32 is
+`k=1`, Decimal64 is `k=2`, Decimal96 is `k=3`, Decimal128 is `k=4`,
+Decimal160 is `k=5`, through Decimal256 at `k=8`. Specialized kernels cover
+Decimal64 and Decimal128. A generic BID-k path covers `k=1` through `k=8`.
 
 The module is an internal Spark foundation. No Spark execution path depends on
 it yet, and its Maven and SBT publication tasks are disabled until a consumer
@@ -239,9 +240,10 @@ The library exposes immutable `Bid64` and `Bid128` objects as well as
 allocation-conscious `Bid64Raw` and `Bid128Raw` kernels over encoded bits.
 Generic encodings use `FormatParams` plus packed `BidK`. Repeated arithmetic
 can stay in reusable `BidUnpacked` values (kind, sign, unbiased exponent,
-four coefficient limbs) and pack to IEEE words only at I/O. Transcendental functions
-for `k <= 128` convert through decimal128 and the binary128 DPML engine.
-`k > 128` libm is out of scope unless a binary256 engine is funded.
+four coefficient limbs) and pack to IEEE words only at I/O. Transcendental
+functions for `k<=4` (packed width 128) convert through decimal128 and the
+binary128 DPML engine. `k>4` libm is out of scope unless a binary256 engine
+is funded.
 
 Arithmetic and conversion operations report the full IEEE status flags.
 Transcendental compatibility specifies invalid-operation and division-by-zero

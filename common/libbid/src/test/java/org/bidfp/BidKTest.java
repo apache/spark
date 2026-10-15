@@ -287,7 +287,7 @@ public final class BidKTest {
       x.exp(RoundingMode.TIES_TO_EVEN, new StatusFlags());
       throw new IllegalStateException("expected unsupported libm");
     } catch (UnsupportedOperationException expected) {
-      expect(expected.getMessage().contains("k>128"), "libm message");
+      expect(expected.getMessage().contains("k>4"), "libm message");
     }
   }
 
