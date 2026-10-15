@@ -8302,6 +8302,17 @@ class AstBuilder extends DataTypeAstBuilder
               error("GROUP BY ALL")
             case _ =>
           }
+          // With `spark.sql.groupByOrdinal` enabled, an integer literal is a GROUP BY ordinal, so
+          // an alias on it is ambiguous with grouping by the constant. Point the error at the
+          // aliased grouping expression rather than the whole clause.
+          if (conf.groupByOrdinal &&
+              !conf.getConf(SQLConf.LEGACY_ALLOW_ALIASED_PIPE_AGGREGATE_ORDINALS)) {
+            a.groupingExpressions.foreach {
+              case alias @ Alias(Literal(_: Int, IntegerType), _) =>
+                CurrentOrigin.withOrigin(alias.origin) { error("aliases on GROUP BY ordinals") }
+              case _ =>
+            }
+          }
           def visit(e: Expression): Unit = {
             e match {
               case _: Cube => error("GROUP BY CUBE")
