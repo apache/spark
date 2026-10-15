@@ -20,19 +20,25 @@ package org.apache.spark.sql
 import java.time.{Duration, LocalDateTime, LocalTime, Period}
 import java.util.Locale
 
+import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
+import org.apache.datasketches.memory.Memory
+import org.apache.datasketches.tuple.{Sketches => TupleSketches}
+import org.apache.datasketches.tuple.adouble.{DoubleSummary, DoubleSummaryDeserializer}
+import org.apache.datasketches.tuple.aninteger.{IntegerSummary, IntegerSummaryDeserializer}
 import org.scalacheck.Gen
 import org.scalatest.matchers.must.Matchers.the
 import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
 
 import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Final, Partial}
 import org.apache.spark.sql.catalyst.plans.logical.Expand
 import org.apache.spark.sql.catalyst.util.AUTO_GENERATED_ALIAS
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
+import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
@@ -5282,6 +5288,124 @@ class DataFrameAggregateSuite extends SharedSparkSession
       .collect()(0)(0)
     assert(estimate != null)
     assert(estimate.asInstanceOf[Double] == 2.0)
+  }
+
+  // The (theta, (hash, summary) entries sorted by hash) of a serialized tuple sketch.
+  private def tupleSketchContent(
+      flavor: String,
+      bytes: Array[Byte]): (Long, Seq[(Long, Double)]) = {
+    val mem = Memory.wrap(bytes)
+    val sketch = flavor match {
+      case "double" => TupleSketches.heapifySketch(mem, new DoubleSummaryDeserializer())
+      case "integer" => TupleSketches.heapifySketch(mem, new IntegerSummaryDeserializer())
+    }
+    val entries = ArrayBuffer.empty[(Long, Double)]
+    val it = sketch.iterator()
+    while (it.next()) {
+      val value = it.getSummary match {
+        case s: DoubleSummary => s.getValue
+        case s: IntegerSummary => s.getValue.toDouble
+      }
+      entries += ((it.getHash, value))
+    }
+    (sketch.getThetaLong, entries.sortBy(_._1).toSeq)
+  }
+
+  // A Complete-mode aggregate serializes the update sketch directly, while Partial + Final merges
+  // the partial sketches into a union, which trims to k entries. Both must return that sketch.
+  for ((flavor, summType) <- Seq("double" -> "double", "integer" -> "int"); lg <- Seq(5, 10);
+       completeConf <- Seq(
+         SQLConf.BYPASS_PARTIAL_AGGREGATION.key,
+         SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key)) {
+    test(s"SPARK-60240: tuple_sketch_agg_$flavor with $completeConf returns the trimmed " +
+        s"sketch of Partial + Final mode [lg=$lg]") {
+      val k = 1 << lg
+      val keysPerGroup = 3 * k
+      // Each of the 3 groups gets keys 0 until keysPerGroup, each key twice. One input partition,
+      // so that combineAdjacentAggregation needs no shuffle to collapse Partial and Final.
+      val data = spark.range(0, 6L * keysPerGroup, 1, 1).toDF("id")
+        .withColumn("pk", $"id" % 3)
+        .withColumn("key", ($"id" / 3).cast("long") % keysPerGroup)
+        .withColumn("summ", ($"id" % 100 + 1).cast(summType))
+
+      def sketches(complete: Boolean): Map[Long, (Long, Seq[(Long, Double)])] = {
+        val confs = Map(
+          SQLConf.BYPASS_PARTIAL_AGGREGATION.key -> "false",
+          SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "false") +
+          (completeConf -> complete.toString)
+        withSQLConf(confs.toSeq: _*) {
+          val df = data.groupBy("pk").agg(expr(s"tuple_sketch_agg_$flavor(key, summ, $lg)"))
+          val rows = df.collect()
+          val modes = collect(df.queryExecution.executedPlan) {
+            case a: BaseAggregateExec => a.aggregateExpressions.map(_.mode)
+          }.flatten
+          val expectedModes = if (complete) Set(Complete) else Set(Partial, Final)
+          assert(modes.toSet == expectedModes,
+            s"expected modes $expectedModes:\n${df.queryExecution.executedPlan}")
+          rows.map(r => r.getLong(0) -> tupleSketchContent(flavor, r.getAs[Array[Byte]](1))).toMap
+        }
+      }
+
+      val expected = sketches(complete = false)
+      val actual = sketches(complete = true)
+      assert(expected.size == 3)
+      (expected.toSeq ++ actual.toSeq).foreach { case (pk, (theta, entries)) =>
+        val retained = entries.size
+        assert(theta < Long.MaxValue && retained == k,
+          s"pk=$pk: expected an estimation-mode sketch with k=$k entries, got theta=$theta " +
+            s"and $retained entries")
+      }
+      val same = actual == expected
+      assert(same, "Complete mode must return the sketch of Partial + Final mode")
+    }
+  }
+
+  // A window over the whole partition builds the same sketch as a GROUP BY of that partition.
+  // Key `keyv % 100` leaves 90 distinct keys per partition, each seen twice, so at lg=5
+  // distinct > 2 * 2^5 and both builds sample. The 3 partitions hold the same keys in different
+  // orders.
+  for ((flavor, summType) <- Seq("double" -> "double", "integer" -> "int");
+       mode <- Seq("sum", "min", "max", "alwaysone")) {
+    test(s"SPARK-60240: tuple_sketch_agg_$flavor window equals GROUP BY [estimation] mode=$mode") {
+      val lg = 5
+      withTempView("tuple_build_data") {
+        spark.range(600).toDF("id")
+          .withColumn("pk", $"id" % 3)
+          .withColumn("keyv",
+            when($"id" % 10 === 0, lit(null).cast("long")).otherwise($"id" % 400))
+          .withColumn("summ",
+            when($"id" % 7 === 0, lit(null).cast(summType))
+              .otherwise(($"id" % 100 + 1).cast(summType)))
+          .createOrReplaceTempView("tuple_build_data")
+
+        val agg = s"tuple_sketch_agg_$flavor(keyv % 100, summ, $lg, '$mode')"
+        val readBack =
+          s"tuple_sketch_estimate_$flavor(sk), tuple_sketch_theta_$flavor(sk), " +
+            s"CAST(tuple_sketch_summary_$flavor(sk, '$mode') AS DOUBLE)"
+        def byPk(query: String): Map[Long, Seq[(Double, Double, Double)]] =
+          sql(query).collect().toSeq
+            .map(r => (r.getLong(0), (r.getDouble(1), r.getDouble(2), r.getDouble(3))))
+            .groupBy(_._1).map { case (pk, rows) => pk -> rows.map(_._2).distinct }
+
+        val distinctPerPk = sql(
+          "SELECT pk, COUNT(DISTINCT keyv % 100) FROM tuple_build_data " +
+            "WHERE keyv IS NOT NULL AND summ IS NOT NULL GROUP BY pk").collect()
+        assert(
+          distinctPerPk.length == 3 && distinctPerPk.forall(_.getLong(1) > 2 * (1 << lg)),
+          s"expected > ${2 * (1 << lg)} distinct keys per pk, got ${distinctPerPk.mkString}")
+
+        val window = byPk(s"SELECT pk, $readBack FROM " +
+          s"(SELECT pk, $agg OVER (PARTITION BY pk) AS sk FROM tuple_build_data)")
+        val groupBy = byPk(s"SELECT pk, $readBack FROM " +
+          s"(SELECT pk, $agg AS sk FROM tuple_build_data GROUP BY pk)")
+        assert(window.size == 3 && window.values.forall(_.size == 1),
+          s"every row of a window partition must see the same sketch: $window")
+        assert((window.values ++ groupBy.values).forall(_.forall(_._2 < 1.0)),
+          "expected theta < 1 (estimation mode) for every sketch")
+        // (estimate, theta, summary) per pk.
+        assert(window == groupBy, s"window $window vs GROUP BY $groupBy")
+      }
+    }
   }
 
   // Numerical-equivalence property (sql-core layer).
