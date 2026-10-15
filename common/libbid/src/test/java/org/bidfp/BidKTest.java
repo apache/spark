@@ -193,6 +193,24 @@ public final class BidKTest {
     expect(value.sqlEquals(back), "d96 via bid128");
     Bid64 narrow = value.toBid64(RoundingMode.TIES_TO_EVEN, flags);
     expect(narrow.isFinite(), "d96 to d64 finite");
+    RoundingMode mode = RoundingMode.TIES_TO_EVEN;
+    expect(
+        BidK.parse(d96, "4").sqrt(mode, flags).sqlEquals(BidK.parse(d96, "2")),
+        "d96 sqrt 4");
+    expect(
+        BidK.parse(d96, "1e10").sqrt(mode, flags)
+            .sqlEquals(BidK.parse(d96, "1e5")),
+        "d96 sqrt 1e10");
+    expect(
+        BidK.parse(d96, "100").sqrt(mode, flags)
+            .sqlEquals(BidK.parse(d96, "10")),
+        "d96 sqrt 100");
+    MathContext p25 = new MathContext(25, java.math.RoundingMode.HALF_EVEN);
+    expectClose(
+        BidK.parse(d96, "2").sqrt(mode, flags),
+        new BigDecimal("2").sqrt(p25),
+        d96,
+        "d96 sqrt 2");
   }
 
   private static void arithmeticVsBigDecimal(FormatParams format) {

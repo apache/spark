@@ -18,8 +18,8 @@ package org.bidfp;
 
 /**
  * Decimal96 specialist ({@code k=3}, p=25): two-limb coefficients, three-limb
- * products, and a private scratch. NaN/Inf are handled here; there is no
- * fallback to {@link BidK160} or {@link BidKScratch}.
+ * products, digit-pair square root, and a private scratch. NaN/Inf are handled
+ * here; there is no fallback to {@link BidK160} or {@link BidKScratch}.
  */
 final class BidK96 {
   private static final ThreadLocal<Scratch> LOCAL =
@@ -27,6 +27,8 @@ final class BidK96 {
   private static final int PRECISION = 25;
   private static final int BIAS = 1559;
   private static final int MAX_BIASED = 3071;
+  private static final long TEN_25_HIGH = 0x84595L;
+  private static final long TEN_25_LOW = 0x1614_0148_4a00_0000L;
 
   private BidK96() {
   }
@@ -166,16 +168,18 @@ final class BidK96 {
       pack(format, s.an, s.ae, s.xa, mode, flags, s, out);
       return;
     }
+    long coefficientLow = s.xa.l0;
+    long coefficientHigh = s.xa.l1;
     int exp = s.ae;
-    int extra = PRECISION + 4;
     if ((exp & 1) != 0) {
-      s.xa.multiplySmall(10L);
+      long scaledLow = coefficientLow * 10L;
+      coefficientHigh =
+          coefficientHigh * 10L + unsignedMultiplyHigh(coefficientLow, 10L);
+      coefficientLow = scaledLow;
       exp--;
     }
-    s.xa.multiplyPow10(2 * extra);
-    exp -= 2 * extra;
-    boolean remSticky = Wide6.sqrtFloor(s.xa, s.xb, s.xr, s.xt, s.xn);
-    pack(format, false, exp / 2, s.xb, remSticky, mode, flags, s, out);
+    sqrtFinite(
+        format, coefficientHigh, coefficientLow, exp, mode, flags, s, out);
   }
 
   static void fma(
@@ -782,6 +786,201 @@ final class BidK96 {
     if (negative) {
       out[1] |= format.signMask();
     }
+  }
+
+  private static void sqrtFinite(
+      FormatParams format,
+      long coefficientHigh,
+      long coefficientLow,
+      int exp,
+      RoundingMode mode,
+      StatusFlags flags,
+      Scratch s,
+      long[] out) {
+    long pairsHigh = 0L;
+    long pairsLow = 0L;
+    int pairCount = 0;
+    long workHigh = coefficientHigh;
+    long workLow = coefficientLow;
+    while ((workHigh | workLow) != 0L) {
+      long quotientHigh = 0L;
+      long quotientLow = 0L;
+      long remainder = 0L;
+      for (int limb = 3; limb >= 0; limb--) {
+        long digit = limb >= 2
+            ? (workHigh >>> ((limb - 2) * 32)) & 0xffff_ffffL
+            : (workLow >>> (limb * 32)) & 0xffff_ffffL;
+        long dividend = (remainder << 32) | digit;
+        long quotientDigit = dividend / 100L;
+        remainder = dividend - quotientDigit * 100L;
+        if (limb >= 2) {
+          quotientHigh |= quotientDigit << ((limb - 2) * 32);
+        } else {
+          quotientLow |= quotientDigit << (limb * 32);
+        }
+      }
+      int shift = pairCount * 7;
+      if (shift < 64) {
+        pairsLow |= remainder << shift;
+        if (shift > 57) {
+          pairsHigh |= remainder >>> (64 - shift);
+        }
+      } else {
+        pairsHigh |= remainder << (shift - 64);
+      }
+      workHigh = quotientHigh;
+      workLow = quotientLow;
+      pairCount++;
+    }
+
+    long rootHigh = 0L;
+    long rootLow = 0L;
+    long remainderHigh = 0L;
+    long remainderLow = 0L;
+    for (int position = 0; position < PRECISION; position++) {
+      int pairIndex = pairCount - position - 1;
+      long pair = pairIndex >= 0 ? pair128(pairsHigh, pairsLow, pairIndex) : 0L;
+      remainderHigh =
+          remainderHigh * 100L + unsignedMultiplyHigh(remainderLow, 100L);
+      remainderLow = remainderLow * 100L + pair;
+      if (Long.compareUnsigned(remainderLow, pair) < 0) {
+        remainderHigh++;
+      }
+      int digit = 9;
+      for (; digit > 0; digit--) {
+        long baseLow = rootLow * 20L + digit;
+        long baseHigh = rootHigh * 20L + unsignedMultiplyHigh(rootLow, 20L);
+        if (Long.compareUnsigned(baseLow, digit) < 0) {
+          baseHigh++;
+        }
+        long candidateLow = baseLow * digit;
+        long candidateHigh =
+            baseHigh * digit + unsignedMultiplyHigh(baseLow, digit);
+        if (compare128(
+            candidateHigh, candidateLow, remainderHigh, remainderLow) <= 0) {
+          long oldRemainderLow = remainderLow;
+          remainderLow -= candidateLow;
+          remainderHigh -= candidateHigh;
+          if (Long.compareUnsigned(oldRemainderLow, candidateLow) < 0) {
+            remainderHigh--;
+          }
+          break;
+        }
+      }
+      long oldRootLow = rootLow;
+      rootLow = rootLow * 10L + digit;
+      rootHigh = rootHigh * 10L + unsignedMultiplyHigh(oldRootLow, 10L);
+      if (Long.compareUnsigned(rootLow, digit) < 0) {
+        rootHigh++;
+      }
+    }
+
+    boolean exact = (remainderHigh | remainderLow) == 0L;
+    if (!exact) {
+      if (incrementSqrt(rootHigh, rootLow, remainderHigh, remainderLow, mode)) {
+        rootLow++;
+        if (rootLow == 0L) {
+          rootHigh++;
+        }
+      }
+      flags.raise(StatusFlags.INEXACT);
+    }
+    int resultExp = exp / 2 - (PRECISION - pairCount);
+    if (rootHigh == TEN_25_HIGH && rootLow == TEN_25_LOW) {
+      rootHigh = 0xd3c2L;
+      rootLow = 0x1bce_cced_a100_0000L;
+      resultExp++;
+    }
+    if (exact) {
+      int maximumExp = exp / 2;
+      while (resultExp < maximumExp) {
+        long quotientHigh = 0L;
+        long quotientLow = 0L;
+        long remainder = 0L;
+        for (int limb = 3; limb >= 0; limb--) {
+          long source = limb >= 2
+              ? (rootHigh >>> ((limb - 2) * 32)) & 0xffff_ffffL
+              : (rootLow >>> (limb * 32)) & 0xffff_ffffL;
+          long dividend = (remainder << 32) | source;
+          long quotientDigit = dividend / 10L;
+          remainder = dividend - quotientDigit * 10L;
+          if (limb >= 2) {
+            quotientHigh |= quotientDigit << ((limb - 2) * 32);
+          } else {
+            quotientLow |= quotientDigit << (limb * 32);
+          }
+        }
+        if (remainder != 0L) {
+          break;
+        }
+        rootHigh = quotientHigh;
+        rootLow = quotientLow;
+        resultExp++;
+      }
+    }
+    int biased = resultExp + BIAS;
+    long[] max = format.maxCoefficientWords();
+    if (biased >= 0 && biased <= MAX_BIASED && allowed(rootLow, rootHigh, max)) {
+      packWords(format, false, biased, rootLow, rootHigh, out);
+      return;
+    }
+    s.xb.clear();
+    s.xb.l0 = rootLow;
+    s.xb.l1 = rootHigh;
+    pack(format, false, resultExp, s.xb, false, mode, flags, s, out);
+  }
+
+  private static long pair128(long high, long low, int index) {
+    int shift = index * 7;
+    if (shift < 58) {
+      return (low >>> shift) & 0x7fL;
+    }
+    if (shift < 64) {
+      return ((low >>> shift) | (high << (64 - shift))) & 0x7fL;
+    }
+    return (high >>> (shift - 64)) & 0x7fL;
+  }
+
+  private static boolean incrementSqrt(
+      long rootHigh,
+      long rootLow,
+      long remainderHigh,
+      long remainderLow,
+      RoundingMode mode) {
+    if (mode == RoundingMode.TOWARD_POSITIVE) {
+      return true;
+    }
+    if (mode == RoundingMode.TOWARD_NEGATIVE
+        || mode == RoundingMode.TOWARD_ZERO) {
+      return false;
+    }
+    long leftHigh = (remainderHigh << 2) | (remainderLow >>> 62);
+    long leftLow = remainderLow << 2;
+    long rightHigh = (rootHigh << 2) | (rootLow >>> 62);
+    long rightLow = (rootLow << 2) + 1L;
+    if (rightLow == 0L) {
+      rightHigh++;
+    }
+    return compare128(leftHigh, leftLow, rightHigh, rightLow) > 0;
+  }
+
+  private static int compare128(
+      long leftHigh, long leftLow, long rightHigh, long rightLow) {
+    int highComparison = Long.compareUnsigned(leftHigh, rightHigh);
+    return highComparison != 0
+        ? highComparison
+        : Long.compareUnsigned(leftLow, rightLow);
+  }
+
+  private static long unsignedMultiplyHigh(long left, long right) {
+    long high = Math.multiplyHigh(left, right);
+    if (left < 0L) {
+      high += right;
+    }
+    if (right < 0L) {
+      high += left;
+    }
+    return high;
   }
 
   private enum Kind {
