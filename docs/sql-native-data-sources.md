@@ -26,7 +26,8 @@ license: |
 
 A native data source is a data source implemented in native code, such as Rust or C++, without
 any JVM code. It is a shared library that implements the C interface declared in the header
-[`spark_datasource.h`]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/sql/core/src/main/resources/org/apache/spark/sql/datasource/spark_datasource.h). Spark finds the library
+[`spark_datasource.h`]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/sql/core/src/main/resources/org/apache/spark/sql/datasource/spark_datasource.h), with the
+messages of `spark_datasource.proto`. Spark finds the library
 automatically when it is installed like other native libraries, or when a session adds it in a
 package, and loads it when a query uses the data source. Spark adapts it to
 [Data Source V2](sql-v2-data-sources.html), so it supports:
@@ -62,98 +63,100 @@ library with the Arrow C stream interface.
 
 ## How It Works
 
-A native data source library exports a single C function, `spark_ds_init`, which returns a table
-of function pointers, a `SparkDsLibrary`, that implements the data source: it needs no JVM headers
-or bindings. Each library has its own table, so any number of native data sources can be loaded
-side by side. When Spark loads a library, it calls `spark_ds_init` with a `SparkDsHost`, which
-gives the library the version of Spark and a function to log messages to the log of Spark.
+A native data source library exports the six C functions of `spark_datasource.h`, which never
+change: it needs no JVM headers or bindings. Everything else is in the messages of
+[`spark_datasource.proto`]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/sql/core/src/main/protobuf/org/apache/spark/sql/datasource/spark_datasource.proto),
+which Spark and the library exchange as [Protocol Buffers](https://protobuf.dev) bytes: the
+library generates their code with a Protocol Buffers compiler, such as `protoc` or `prost`. The
+data itself is exchanged without copying it, as Arrow C streams. Spark looks the functions up in
+each library separately, so any number of native data sources can be loaded side by side.
 
-A Spark distribution contains the header in its `include` directory, as
-`$SPARK_HOME/include/spark_datasource.h`, and the `spark-sql` JAR contains it as
-`org/apache/spark/sql/datasource/spark_datasource.h`. The header only depends on the C standard
-library, so a library can also copy it into its source tree, to build without Spark, for example
-from the source of a release:
+| Function | What it does |
+|----------|--------------|
+| `spark_ds_open` | Opens an object, with an `OpenRequest` that says which object and carries everything that it needs, and replies with an `OpenReply` |
+| `spark_ds_call` | Runs a control operation on an object, with a `CallRequest`, and replies with a `CallReply` |
+| `spark_ds_stream` | Exchanges the data of an object, as Arrow C streams, with a `StreamRequest` |
+| `spark_ds_close` | Releases an object |
+| `spark_ds_abi_version` | Returns the version of the interface, `SPARK_DS_ABI_VERSION` |
+| `spark_ds_last_error` | Returns the message of the last error on the calling thread |
+
+A Spark distribution contains the header and the messages in its `include` directory, as
+`$SPARK_HOME/include/spark_datasource.h` and `$SPARK_HOME/include/spark_datasource.proto`, and the
+`spark-sql` JAR contains the header as `org/apache/spark/sql/datasource/spark_datasource.h`. They
+only depend on the C standard library and on Protocol Buffers, so a library can also copy them
+into its source tree, to build without Spark, for example from the source of a release:
 
 ```bash
 curl -LO {{site.SPARK_GITHUB_URL}}/raw/v{{site.SPARK_VERSION_SHORT}}/sql/core/src/main/resources/org/apache/spark/sql/datasource/spark_datasource.h
+curl -LO {{site.SPARK_GITHUB_URL}}/raw/v{{site.SPARK_VERSION_SHORT}}/sql/core/src/main/protobuf/org/apache/spark/sql/datasource/spark_datasource.proto
 ```
 
-A library built against the header works with all the releases of Spark that support its version,
+A library built against them works with all the releases of Spark that support its version,
 `SPARK_DS_ABI_VERSION`: see [Compatibility](#compatibility).
 
-Spark calls the functions of the table as follows:
+Spark opens and uses the objects of a library as follows:
 
-- **Data sources**: for each schema inference, scan and write, Spark creates a data source on the
-  driver with `create`, which receives the name of the data source and the options of the user in
-  a `SparkDsCreateInfo`, and returns the capabilities of the data source, such as
-  `SPARK_DS_BATCH_READ` or `SPARK_DS_STREAMING_WRITE`, and closes it right after with `close`.
-  Spark reports the operations that a data source does not declare as unsupported. When the user
-  does not specify a schema, Spark asks for it with `schema`.
-- **Batch reads**: on the driver, Spark creates a reader with `create_reader`, pushes operations
-  down with `push_predicates`, `push_limit` and `prune_columns`, plans the partitions with
-  `partitions`, and serializes the state of the reader with `serialize_reader`. Then it calls
-  `read` on the executors, in one task for each partition, and `read` exports an
-  `ArrowArrayStream`.
-- **Streaming reads**: on the driver, Spark creates a stream reader with `create_stream_reader`.
-  For each micro-batch, it asks for the `latest_offset`, plans the partitions with
-  `stream_partitions`, and calls `read` on the executors. Offsets are defined by the library, as
-  compact JSON on a single line: Spark stores each offset as a line of the offset log of the
-  checkpoint, and rejects an offset that is not valid JSON or contains a line break, such as
-  pretty-printed JSON.
+- **Data sources**: for each schema inference, scan and write, Spark opens a data source on the
+  driver, with the name of the data source and the options of the user. Its `OpenReply` declares
+  the capabilities of the data source, such as `CAPABILITY_BATCH_READ` or
+  `CAPABILITY_STREAMING_WRITE`, and Spark reports the operations that a data source does not
+  declare as unsupported. When the user does not specify a schema, Spark asks for it with
+  `InferSchema`. Spark closes the data source right after.
+- **Batch reads**: on the driver, Spark opens a batch reader, with the schema to read, pushes
+  operations down with `PushPredicates`, `PushLimit` and `PruneColumns`, plans the partitions with
+  `PlanPartitions`, and serializes the state of the reader with `Serialize`. Then, on the
+  executors, it opens a partition reader for each partition, in a task, and `Read` initializes an
+  `ArrowArrayStream` with the batches of the partition.
+- **Streaming reads**: on the driver, Spark opens a stream reader. For each micro-batch, it asks
+  for the `LatestOffset`, plans the partitions with `PlanStreamPartitions`, and reads them on the
+  executors. Offsets are defined by the library, as compact JSON on a single line: Spark stores
+  each offset as a line of the offset log of the checkpoint, and rejects an offset that is not
+  valid JSON or contains a line break, such as pretty-printed JSON.
 - **Writes**: on the driver, right before the tasks of the write (or of a micro-batch) start, Spark
-  creates a writer with `create_writer`, which gets a `SparkDsWriteInfo` with the mode of the write,
-  `SPARK_DS_WRITE_APPEND` or `SPARK_DS_WRITE_TRUNCATE`, and the ID of the query of a streaming
-  write. With adaptive query execution, it first runs the shuffle stages of the data to write, and
-  creates no writer if they fail, but the last stage runs in the tasks of the write, so a writer can
-  still be aborted because computing the data failed: do irreversible work, such as removing the
-  existing data for an overwrite, in `commit`. On the executors, each task creates a data writer
-  with `create_data_writer`, writes the batches of its data with `write`, and calls
-  `commit_data_writer`, or `abort_data_writer` if the task or the commit fails. Then the driver
-  calls `commit` with the messages of the tasks, or `abort` if the write failed. A streaming write
+  opens a writer, with the mode of the write, `WRITE_MODE_APPEND` or `WRITE_MODE_TRUNCATE`, and the
+  ID of the query of a streaming write. With adaptive query execution, it first runs the shuffle
+  stages of the data to write, and opens no writer if they fail, but the last stage runs in the
+  tasks of the write, so a writer can still be aborted because computing the data failed: do
+  irreversible work, such as removing the existing data for an overwrite, in `Commit`. On the
+  executors, each task opens a data writer, and `Write` passes it an `ArrowArrayStream` with the
+  data of the task, which the library reads during the call. Then the task calls
+  `CommitDataWriter`, or `AbortDataWriter` if the task or the commit fails, and the driver calls
+  `Commit` with the messages of the tasks, or `Abort` if the write failed. A streaming write
   commits each micro-batch with its epoch ID, and the ID of the query stays the same when the query
   restarts from its checkpoint: together, they identify the output of a micro-batch, so that a
-  library can skip an epoch that it already committed. A micro-batch streaming query creates a new
-  stream writer for each micro-batch, and Spark closes the previous one when it creates the next
-  one. Because Spark is not told when a streaming query stops, the last stream writer of a query is
-  closed once it is no longer referenced, or when the query is restarted.
+  library can skip an epoch that it already committed. A micro-batch streaming query opens a new
+  writer for each micro-batch, and Spark closes the previous one when it opens the next one.
+  Because Spark is not told when a streaming query stops, the last writer of a query is closed once
+  it is no longer referenced, or when the query is restarted.
 
 The library defines the format of the partitions, of the state of its readers and writers, and of
-the commit messages, which Spark sends to the executors and back as byte arrays. The library
-returns them, and the offsets, by passing them to a `SparkDsSink` callback, which copies them. A
-function reports an error by returning a non-zero value, with the message returned by
-`last_error`, and Spark reports it as a `NATIVE_DATA_SOURCE_ERROR`. A C++ exception or a Rust panic
-must not cross the interface. Each handle that a `create` function returns is released exactly
-once, by the `close` function of its kind. The close functions cannot fail, and they can run after
-the query, so do the work that can fail, such as flushing data, in `commit`. Strings are UTF-8, and
-the JSON of the predicates is ASCII, with the other characters escaped.
+the commit messages, which Spark sends to the executors and back as bytes. A library replies to a
+function by passing the encoded reply to a `SparkDsSink` callback, which copies it, or not at all
+for an empty reply, which is valid for every request: for example, a reader that does not support
+pushdown replies to `PushPredicates` with nothing, and Spark pushes nothing down. A function reports
+an error by returning a non-zero value, with the message returned by `spark_ds_last_error`, and
+Spark reports it as a `NATIVE_DATA_SOURCE_ERROR`. A C++ exception or a Rust panic must not cross the
+interface. Each object is released exactly once, with `spark_ds_close`, which cannot fail and can
+run after the query, so do the work that can fail, such as flushing data, in a commit. Strings are
+UTF-8, and the JSON of the predicates is ASCII, with the other characters escaped.
 
-A library only sets the functions of the operations it supports, and leaves the others `NULL`. A
-data source must not declare a capability whose functions are `NULL`:
-
-| Capability | Required functions | Optional functions |
-|-----------|--------------------|--------------------|
-| All | `create`, `close` | `last_error`, `schema` |
-| `SPARK_DS_BATCH_READ` | `create_reader`, `partitions`, `read`, `close_reader` | `push_predicates`, `push_limit`, `prune_columns`, `serialize_reader` |
-| `SPARK_DS_MICRO_BATCH_READ` | `create_stream_reader`, `initial_offset`, `latest_offset`, `stream_partitions`, `read`, `close_stream_reader` | `serialize_stream_reader`, `commit_offset` |
-| `SPARK_DS_BATCH_WRITE`, `SPARK_DS_STREAMING_WRITE` | `create_writer`, `commit`, `abort`, `close_writer`, `create_data_writer`, `write`, `commit_data_writer`, `abort_data_writer`, `close_data_writer` | `serialize_writer` |
-
-`SPARK_DS_TRUNCATE` declares that a writer supports `SPARK_DS_WRITE_TRUNCATE`: the save mode
+`CAPABILITY_TRUNCATE` declares that a writer supports `WRITE_MODE_TRUNCATE`: the save mode
 `overwrite` of a batch write, and the output mode `complete` of a streaming write.
 
 The comments of [`spark_datasource.h`]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/sql/core/src/main/resources/org/apache/spark/sql/datasource/spark_datasource.h)
-specify each function, including the ownership of the Arrow structs and the JSON format of the
-pushed predicates. `push_predicates` tells Spark how the reader uses each predicate: not at all,
-only to skip data (`SPARK_DS_PREDICATE_PARTIAL`), or to only return the rows for which it is true
-(`SPARK_DS_PREDICATE_COMPLETE`). Spark shows the predicates that the reader uses as pushed in the
-plan of the query, and evaluates all the pushed predicates again after reading either way, so a
-library can use them to skip data, for example files or row groups whose statistics show that no
-row matches, but it must never skip a row for which the predicates are true under the semantics of
-Spark SQL: NaN values are equal to each other and greater than any other value, `-0.0` is equal to
-`0.0`, comparisons with null are null, and strings compare by their UTF-8 bytes. The comparisons of
-IEEE 754 and the total orders of Arrow libraries, such as the comparison kernels of arrow-rs,
-differ for some of these values. The jar of Spark SQL contains test cases for a library,
-`org/apache/spark/sql/datasource/predicate-cases.json`: predicates as Spark pushes them, with the
-rows of a table for which they are true:
+and `spark_datasource.proto` specify each function and message, including the ownership of the
+Arrow structs and the JSON format of the pushed predicates. `PushPredicatesReply` tells Spark how
+the reader uses each predicate: not at all, only to skip data (`PREDICATE_USE_PARTIAL`), or to
+only return the rows for which it is true (`PREDICATE_USE_COMPLETE`). Spark shows the predicates
+that the reader uses as pushed in the plan of the query, and evaluates all the pushed predicates
+again after reading either way, so a library can use them to skip data, for example files or row
+groups whose statistics show that no row matches, but it must never skip a row for which the
+predicates are true under the semantics of Spark SQL: NaN values are equal to each other and
+greater than any other value, `-0.0` is equal to `0.0`, comparisons with null are null, and strings
+compare by their UTF-8 bytes. The comparisons of IEEE 754 and the total orders of Arrow libraries,
+such as the comparison kernels of arrow-rs, differ for some of these values. The jar of Spark SQL
+contains test cases for a library, `org/apache/spark/sql/datasource/predicate-cases.json`:
+predicates as Spark pushes them, with the rows of a table for which they are true:
 
 ```bash
 unzip -p "$SPARK_HOME"/jars/spark-sql_*.jar org/apache/spark/sql/datasource/predicate-cases.json
@@ -165,39 +168,40 @@ has at least as many values as its parent refers to, but it cannot check that th
 arrays hold those values, because the C data interface does not carry the sizes of buffers: a
 library that exports a buffer that is too short makes Spark read past its end.
 
-`read` and `create_data_writer` get a `SparkDsTaskContext`, with the IDs of the task, and its
-partition and attempt, and an `is_interrupted` function that returns whether the task was killed,
-for example because its query was canceled. Spark cannot interrupt native code: when a task is
-killed, Spark stops reading only once the `get_next` function of the stream returns. So a read or
-a write that runs for long, or blocks, for example on network I/O, should check `is_interrupted`
-regularly and use timeouts. The task reaper, `spark.task.reaper.enabled` and
-`spark.task.reaper.killTimeout`, kills an executor whose killed task does not end.
+Partition readers and data writers get the `TaskContext` of their task, with its IDs, and the
+`is_interrupted` function of `SparkDsHost` returns whether a task was killed, for example because
+its query was canceled. Spark cannot interrupt native code: when a task is killed, Spark stops
+reading only once the `get_next` function of the stream returns. So a read or a write that runs
+for long, or blocks, for example on network I/O, should check `is_interrupted` regularly and use
+timeouts. The task reaper, `spark.task.reaper.enabled` and `spark.task.reaper.killTimeout`, kills
+an executor whose killed task does not end. `SparkDsHost` also has a `log` function, which writes
+to the log of the driver or of the executor.
 
 ### Compatibility
 
-The function table, `SparkDsLibrary`, and the structs that Spark passes to the library,
-`SparkDsHost`, `SparkDsCreateInfo`, `SparkDsTaskContext` and `SparkDsWriteInfo`, start with their
-size, so that they can grow. The version of the interface, 1, is `SPARK_DS_ABI_VERSION`, which the
-table and the manifest of a package declare. Within a version:
+The six functions of `spark_datasource.h` never change, nor do the existing fields of
+`SparkDsHost`, which starts with its size and only gets fields appended: a library must only read
+the fields that fit in the size of the struct that Spark passes. Everything else grows in the
+messages, as Protocol Buffers messages do:
 
-- fields are only appended to these structs, and the existing fields and the semantics of the
-  existing functions never change;
-- Spark only reads the functions that fit in the size of the table of a library, so a library built
-  against an earlier header keeps working with later releases of Spark, with the functions that it
-  does not know as `NULL`. A library must only read the fields that fit in the size of a struct
-  that Spark passes, so that it also runs on earlier releases of Spark that support its version;
-- new values may appear where the header says so: for example, later releases may push down
-  predicates with other names, which a library must ignore if it does not know them. Spark only
-  uses a new capability or write mode with a data source that declares it.
+- a later release of Spark may add fields, messages and values of enums, but never changes or
+  reuses the number of a field. Both sides ignore the fields that they do not know, so a library
+  built against an earlier version of the messages keeps working with later releases of Spark, and
+  a library built against a later version works with earlier releases, without the features that
+  they do not know;
+- Spark only sends a new kind of request to an object whose `OpenReply` declares that it supports
+  it, so a new request never reaches an older library;
+- new values may appear where the messages say so: for example, later releases may push down
+  predicates with other names, which a library must ignore if it does not know them.
 
-An incompatible change comes with a new version: `spark_ds_init` gets the newest version that Spark
-supports, in `SparkDsHost`, and returns a table of a version that the library implements. Spark
-supports version 1 at least in all the releases of Spark 4 from 4.4.0.
+The version of the interface, 1, is `SPARK_DS_ABI_VERSION`, which `spark_ds_abi_version` returns
+and the manifest of a package declares. Spark supports version 1 at least in all the releases of
+Spark 4 from 4.4.0.
 
 ### Limitations
 
 Version 1 of the interface does not cover these features of Data Source V2 yet. They can be added
-later as functions or fields appended to the structs of the interface:
+later as fields and messages of `spark_datasource.proto`:
 
 - statistics: Spark estimates the size of a native scan with `spark.sql.defaultSizeInBytes`, so it
   does not plan a native scan as the broadcast side of a join, unless the query has a broadcast
@@ -243,7 +247,7 @@ like other native libraries is found automatically, without any configuration. T
 named after the data source, in lower case, with the prefix `spark_datasource_`: the library of
 `rust_range` is `libspark_datasource_rust_range.so` on Linux,
 `libspark_datasource_rust_range.dylib` on macOS and `spark_datasource_rust_range.dll` on Windows.
-Spark passes the name of the data source to the `create` function of the library. A library that
+Spark passes the name of the data source in the requests of the library. A library that
 implements several data sources is installed under each of their names, for example with symbolic
 links.
 
@@ -302,7 +306,7 @@ is a zip file with the extension `.sparkpkg`, which contains a manifest named
 
 - `abiVersion` is the version of `spark_datasource.h` that the library implements, currently 1.
 - `dataSources` lists the names of the data sources that the library implements. The names are
-  case-insensitive, and Spark passes the name to `create`.
+  case-insensitive, and Spark passes the name in the requests of the library.
 - `libraries` maps each platform, `<os>-<arch>` with an `os` of `linux`, `osx` or `windows` and an
   `arch` of `x86_64` or `aarch64`, to the path of the library in the package.
 
@@ -328,14 +332,13 @@ installed library provides it.
 
 ## Example in Rust
 
-This data source reads the numbers `[0, end)` as a column `id`, in two partitions. It only depends
-on the `arrow-array` and `arrow-schema` crates of [arrow-rs](https://github.com/apache/arrow-rs),
-which export schemas and streams with `FFI_ArrowSchema` and `FFI_ArrowArrayStream`. It declares
-`SparkDsLibrary` as a `#[repr(C)]` struct up to `read`, the last function that it implements, since
-Spark only reads the functions that fit in the size of the table, and leaves the functions that it
-does not implement `None`. The fields must follow the order of `spark_datasource.h`, which
-[bindgen](https://github.com/rust-lang/rust-bindgen) can also generate from the header.
-`Cargo.toml`, where the name of the library is the name that Spark finds when it is installed:
+This data source reads the numbers `[0, end)` as a column `id`, in two partitions. It depends on
+the `arrow-array` and `arrow-schema` crates of [arrow-rs](https://github.com/apache/arrow-rs),
+which export streams with `FFI_ArrowArrayStream`, and on [prost](https://github.com/tokio-rs/prost),
+whose `prost-build` generates the code of the messages from `spark_datasource.proto` when the
+library is built, with `protoc`. It only opens data sources, batch readers and partition readers,
+and replies to the requests that it does not support with empty replies. `Cargo.toml`, where the
+name of the library is the name that Spark finds when it is installed:
 
 ```toml
 [package]
@@ -350,6 +353,21 @@ crate-type = ["cdylib"]
 [dependencies]
 arrow-array = { version = "58", features = ["ffi"] }
 arrow-schema = { version = "58", features = ["ffi"] }
+prost = "0.14"
+
+[build-dependencies]
+prost-build = "0.14"
+```
+
+`build.rs`, which generates the messages from the `include` directory of a Spark distribution:
+
+```rust
+// Generates the code of the messages from spark_datasource.proto, in the include directory of a
+// Spark distribution. prost-build runs protoc, which must be installed.
+fn main() -> std::io::Result<()> {
+    let include = format!("{}/include", std::env::var("SPARK_HOME").expect("SPARK_HOME"));
+    prost_build::compile_protos(&[format!("{include}/spark_datasource.proto")], &[include])
+}
 ```
 
 `src/lib.rs`:
@@ -360,119 +378,32 @@ arrow-schema = { version = "58", features = ["ffi"] }
 //! column `id`, in two partitions. The option `end` defaults to 10.
 
 use std::cell::RefCell;
-use std::ffi::{c_char, c_int, c_void, CStr, CString};
+use std::ffi::{c_char, c_int, c_void, CString};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
 
 use arrow_array::ffi_stream::FFI_ArrowArrayStream;
 use arrow_array::{Int64Array, RecordBatch, RecordBatchIterator};
-use arrow_schema::ffi::FFI_ArrowSchema;
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
+use prost::Message;
+
+/// The messages of `spark_datasource.proto`.
+mod proto {
+    include!(concat!(env!("OUT_DIR"), "/spark.datasource.rs"));
+}
+
+use proto::{call_reply, call_request, data_type, open_request, stream_request};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-/// `SparkDsSink`: receives a byte array returned to Spark, and copies it.
+/// `SparkDsSink`: receives the reply of a function, and copies it.
 type Sink = unsafe extern "C" fn(sink: *mut c_void, data: *const u8, length: i64);
 
-/// A function of `SparkDsLibrary` that this data source does not implement, left NULL.
-type Unused = Option<unsafe extern "C" fn()>;
-
-/// `SparkDsCreateInfo` of `spark_datasource.h`: the name and the options of a data source.
-#[repr(C)]
-pub struct SparkDsCreateInfo {
-    size: i64,
-    name: *const c_char,
-    option_keys: *const *const c_char,
-    option_values: *const *const c_char,
-    num_options: i64,
-}
-
-/// `SparkDsLibrary` of `spark_datasource.h`, up to `read`, the last function that this data
-/// source implements: Spark only reads the functions that fit in `size`.
-#[repr(C)]
-pub struct SparkDsLibrary {
-    size: i64,
-    abi_version: i32,
-    last_error: unsafe extern "C" fn() -> *const c_char,
-    create: unsafe extern "C" fn(
-        info: *const SparkDsCreateInfo,
-        capabilities: *mut u64,
-        source: *mut *mut c_void,
-    ) -> c_int,
-    schema: unsafe extern "C" fn(source: *mut c_void, out: *mut FFI_ArrowSchema) -> c_int,
-    create_reader: unsafe extern "C" fn(
-        source: *mut c_void,
-        schema: *mut FFI_ArrowSchema,
-        reader: *mut *mut c_void,
-    ) -> c_int,
-    create_stream_reader: Unused,
-    create_writer: Unused,
-    close: unsafe extern "C" fn(source: *mut c_void),
-    push_predicates: Unused,
-    push_limit: Unused,
-    prune_columns: Unused,
-    partitions: unsafe extern "C" fn(reader: *mut c_void, add: Sink, sink: *mut c_void) -> c_int,
-    serialize_reader: Unused,
-    close_reader: unsafe extern "C" fn(reader: *mut c_void),
-    initial_offset: Unused,
-    latest_offset: Unused,
-    stream_partitions: Unused,
-    serialize_stream_reader: Unused,
-    commit_offset: Unused,
-    close_stream_reader: Unused,
-    read: unsafe extern "C" fn(
-        task: *const c_void,
-        reader_state: *const u8,
-        reader_state_length: i64,
-        partition: *const u8,
-        partition_length: i64,
-        out: *mut FFI_ArrowArrayStream,
-    ) -> c_int,
-}
-
-const SPARK_DS_BATCH_READ: u64 = 1;
-
-static LIBRARY: SparkDsLibrary = SparkDsLibrary {
-    size: std::mem::size_of::<SparkDsLibrary>() as i64,
-    abi_version: 1,
-    last_error,
-    create,
-    schema,
-    create_reader,
-    create_stream_reader: None,
-    create_writer: None,
-    close,
-    push_predicates: None,
-    push_limit: None,
-    prune_columns: None,
-    partitions,
-    serialize_reader: None,
-    close_reader,
-    initial_offset: None,
-    latest_offset: None,
-    stream_partitions: None,
-    serialize_stream_reader: None,
-    commit_offset: None,
-    close_stream_reader: None,
-    read,
-};
-
-/// The function that Spark calls when it loads the library.
-#[no_mangle]
-pub unsafe extern "C" fn spark_ds_init(
-    _host: *const c_void,
-    library: *mut *const SparkDsLibrary,
-) -> c_int {
-    *library = &LIBRARY;
-    0
-}
-
-struct RangeSource {
-    end: i64,
-}
-
-struct RangeReader {
-    end: i64,
+/// What a handle refers to.
+enum Object {
+    DataSource,
+    Reader { end: i64 },
+    Partition { start: i64, end: i64 },
 }
 
 thread_local! {
@@ -481,6 +412,18 @@ thread_local! {
 
 fn arrow_schema() -> SchemaRef {
     Arc::new(Schema::new(vec![Field::new("id", DataType::Int64, false)]))
+}
+
+/// The schema of the data, as the Spark SQL types of the messages.
+fn spark_schema() -> proto::StructType {
+    let long = data_type::Kind::Long(data_type::Long {});
+    proto::StructType {
+        fields: vec![proto::StructField {
+            name: "id".to_string(),
+            data_type: Some(proto::DataType { kind: Some(long) }),
+            nullable: false,
+        }],
+    }
 }
 
 /// Runs `f`, and reports its error or panic to Spark: neither may cross into the JVM.
@@ -494,85 +437,116 @@ fn call(f: impl FnOnce() -> Result<()>) -> c_int {
     1
 }
 
-unsafe extern "C" fn last_error() -> *const c_char {
+unsafe fn decode<M: Message + Default>(request: *const u8, length: i64) -> Result<M> {
+    Ok(M::decode(std::slice::from_raw_parts(request, length as usize))?)
+}
+
+unsafe fn reply(reply: Sink, sink: *mut c_void, message: &impl Message) {
+    let bytes = message.encode_to_vec();
+    reply(sink, bytes.as_ptr(), bytes.len() as i64);
+}
+
+#[no_mangle]
+pub extern "C" fn spark_ds_abi_version() -> i32 {
+    1
+}
+
+#[no_mangle]
+pub extern "C" fn spark_ds_last_error() -> *const c_char {
     LAST_ERROR.with(|error| error.borrow().as_ptr())
 }
 
-unsafe extern "C" fn create(
-    info: *const SparkDsCreateInfo,
-    capabilities: *mut u64,
-    source: *mut *mut c_void,
+#[no_mangle]
+pub unsafe extern "C" fn spark_ds_open(
+    _host: *const c_void,
+    request: *const u8,
+    length: i64,
+    sink_function: Sink,
+    sink: *mut c_void,
+    handle: *mut *mut c_void,
 ) -> c_int {
     call(|| {
-        let info = &*info;
-        let mut range = RangeSource { end: 10 };
-        for i in 0..info.num_options as usize {
-            if CStr::from_ptr(*info.option_keys.add(i)).to_str()? == "end" {
-                range.end = CStr::from_ptr(*info.option_values.add(i)).to_str()?.parse()?;
+        let object = match decode::<proto::OpenRequest>(request, length)?.object {
+            Some(open_request::Object::DataSource(_)) => {
+                let capabilities = vec![proto::Capability::BatchRead as i32];
+                reply(sink_function, sink, &proto::OpenReply { capabilities });
+                Object::DataSource
             }
-        }
-        *capabilities = SPARK_DS_BATCH_READ;
-        *source = Box::into_raw(Box::new(range)) as *mut c_void;
+            Some(open_request::Object::BatchReader(reader)) => {
+                let options = reader.data_source.unwrap_or_default().options;
+                let end = options.get("end").map(|end| end.parse()).transpose()?;
+                Object::Reader { end: end.unwrap_or(10) }
+            }
+            Some(open_request::Object::PartitionReader(reader)) => {
+                let bytes = reader.partition;
+                let start = i64::from_le_bytes(bytes[0..8].try_into()?);
+                let end = i64::from_le_bytes(bytes[8..16].try_into()?);
+                Object::Partition { start, end }
+            }
+            _ => return Err("this data source only supports batch reads".into()),
+        };
+        *handle = Box::into_raw(Box::new(object)) as *mut c_void;
         Ok(())
     })
 }
 
-unsafe extern "C" fn schema(_source: *mut c_void, out: *mut FFI_ArrowSchema) -> c_int {
-    call(|| {
-        std::ptr::write(out, FFI_ArrowSchema::try_from(arrow_schema().as_ref())?);
-        Ok(())
-    })
-}
-
-unsafe extern "C" fn create_reader(
-    source: *mut c_void,
-    _schema: *mut FFI_ArrowSchema,
-    reader: *mut *mut c_void,
+#[no_mangle]
+pub unsafe extern "C" fn spark_ds_call(
+    handle: *mut c_void,
+    request: *const u8,
+    length: i64,
+    sink_function: Sink,
+    sink: *mut c_void,
 ) -> c_int {
     call(|| {
-        let end = (*(source as *const RangeSource)).end;
-        *reader = Box::into_raw(Box::new(RangeReader { end })) as *mut c_void;
+        let object = &*(handle as *const Object);
+        let result = match (decode::<proto::CallRequest>(request, length)?.call, object) {
+            (Some(call_request::Call::InferSchema(_)), _) => {
+                let schema = Some(spark_schema());
+                call_reply::Reply::InferSchema(proto::InferSchemaReply { schema })
+            }
+            (Some(call_request::Call::PlanPartitions(_)), Object::Reader { end }) => {
+                let partitions = [(0, end / 2), (end / 2, *end)]
+                    .iter()
+                    .map(|(start, end)| [start.to_le_bytes(), end.to_le_bytes()].concat())
+                    .collect();
+                call_reply::Reply::PlanPartitions(proto::PlanPartitionsReply { partitions })
+            }
+            // The other requests, such as the pushdown, have empty replies.
+            _ => return Ok(()),
+        };
+        reply(sink_function, sink, &proto::CallReply { reply: Some(result) });
         Ok(())
     })
 }
 
-unsafe extern "C" fn close(source: *mut c_void) {
-    drop(Box::from_raw(source as *mut RangeSource));
-}
-
-unsafe extern "C" fn partitions(reader: *mut c_void, add: Sink, sink: *mut c_void) -> c_int {
-    call(|| {
-        let end = (*(reader as *const RangeReader)).end;
-        for (start, end) in [(0, end / 2), (end / 2, end)] {
-            let bytes = [start.to_le_bytes(), end.to_le_bytes()].concat();
-            add(sink, bytes.as_ptr(), bytes.len() as i64);
-        }
-        Ok(())
-    })
-}
-
-unsafe extern "C" fn close_reader(reader: *mut c_void) {
-    drop(Box::from_raw(reader as *mut RangeReader));
-}
-
-unsafe extern "C" fn read(
-    _task: *const c_void,
-    _reader_state: *const u8,
-    _reader_state_length: i64,
-    partition: *const u8,
-    partition_length: i64,
-    out: *mut FFI_ArrowArrayStream,
+#[no_mangle]
+pub unsafe extern "C" fn spark_ds_stream(
+    handle: *mut c_void,
+    request: *const u8,
+    length: i64,
+    _input: *mut FFI_ArrowArrayStream,
+    output: *mut FFI_ArrowArrayStream,
 ) -> c_int {
     call(|| {
-        let bytes = std::slice::from_raw_parts(partition, partition_length as usize);
-        let start = i64::from_le_bytes(bytes[0..8].try_into()?);
-        let end = i64::from_le_bytes(bytes[8..16].try_into()?);
-        let ids = Int64Array::from_iter_values(start..end);
+        let Object::Partition { start, end } = &*(handle as *const Object) else {
+            return Err("not a partition reader".into());
+        };
+        let stream = decode::<proto::StreamRequest>(request, length)?.stream;
+        let Some(stream_request::Stream::Read(_)) = stream else {
+            return Err("this data source only supports reads".into());
+        };
+        let ids = Int64Array::from_iter_values(*start..*end);
         let batch = RecordBatch::try_new(arrow_schema(), vec![Arc::new(ids)])?;
         let batches = RecordBatchIterator::new(vec![Ok(batch)], arrow_schema());
-        std::ptr::write(out, FFI_ArrowArrayStream::new(Box::new(batches)));
+        std::ptr::write(output, FFI_ArrowArrayStream::new(Box::new(batches)));
         Ok(())
     })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn spark_ds_close(handle: *mut c_void) {
+    drop(Box::from_raw(handle as *mut Object));
 }
 ```
 {% endraw %}
@@ -608,37 +582,44 @@ EOF
 ## Example in C++
 
 The same data source in C++, with [Arrow C++](https://arrow.apache.org/docs/cpp/), which exports
-schemas and streams with `arrow::ExportSchema` and `arrow::ExportRecordBatchReader`. It includes
-`spark_datasource.h`, here from the `include` directory of a Spark distribution, and fills
-`SparkDsLibrary` with designated initializers, which leave the other functions `NULL`.
+streams with `arrow::ExportRecordBatchReader`, and with the code that `protoc` generates from
+`spark_datasource.proto`. It includes `spark_datasource.h` and the generated messages, here from
+the `include` directory of a Spark distribution.
 
 `cpp_range.cc`:
 
 {% raw %}
 ```cpp
-// A native data source for Apache Spark, written in C++ with Arrow C++. It reads the numbers
-// [0, end) as a column `id`, in two partitions. The option `end` defaults to 10.
+// A native data source for Apache Spark, written in C++ with Arrow C++ and Protocol Buffers. It
+// reads the numbers [0, end) as a column `id`, in two partitions. The option `end` defaults to 10.
 
 #include <cstdint>
 #include <cstring>
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <variant>
 
 #include <arrow/api.h>
 #include <arrow/c/bridge.h>
 
 #include "spark_datasource.h"
+#include "spark_datasource.pb.h"
 
 namespace {
 
-struct RangeSource {
-  int64_t end = 10;
-};
+namespace sds = spark::datasource;
 
-struct RangeReader {
+// What a handle refers to.
+struct DataSource {};
+struct Reader {
   int64_t end;
 };
+struct Partition {
+  int64_t start;
+  int64_t end;
+};
+using Object = std::variant<DataSource, Reader, Partition>;
 
 thread_local std::string last_error;
 
@@ -665,50 +646,86 @@ void Check(const arrow::Status& status) {
   if (!status.ok()) throw std::runtime_error(status.ToString());
 }
 
-const char* LastError() { return last_error.c_str(); }
+template <typename M>
+M Decode(const uint8_t* request, int64_t length) {
+  M message;
+  if (!message.ParseFromArray(request, static_cast<int>(length))) {
+    throw std::runtime_error("invalid request");
+  }
+  return message;
+}
 
-int Create(const SparkDsCreateInfo* info, uint64_t* capabilities, void** source) {
+void Reply(SparkDsSink reply, void* sink, const google::protobuf::MessageLite& message) {
+  std::string bytes = message.SerializeAsString();
+  reply(sink, reinterpret_cast<const uint8_t*>(bytes.data()), static_cast<int64_t>(bytes.size()));
+}
+
+}  // namespace
+
+extern "C" {
+
+int32_t spark_ds_abi_version(void) { return SPARK_DS_ABI_VERSION; }
+
+const char* spark_ds_last_error(void) { return last_error.c_str(); }
+
+int spark_ds_open(const SparkDsHost*, const uint8_t* request, int64_t length, SparkDsSink reply,
+                  void* sink, void** handle) {
   return Call([&] {
-    auto range = std::make_unique<RangeSource>();
-    for (int64_t i = 0; i < info->num_options; i++) {
-      if (std::string(info->option_keys[i]) == "end") {
-        range->end = std::stoll(info->option_values[i]);
+    auto open = Decode<sds::OpenRequest>(request, length);
+    std::unique_ptr<Object> object;
+    if (open.has_data_source()) {
+      sds::OpenReply capabilities;
+      capabilities.add_capabilities(sds::CAPABILITY_BATCH_READ);
+      Reply(reply, sink, capabilities);
+      object = std::make_unique<Object>(DataSource{});
+    } else if (open.has_batch_reader()) {
+      const auto& options = open.batch_reader().data_source().options();
+      auto end = options.find("end");
+      object = std::make_unique<Object>(
+          Reader{end == options.end() ? 10 : std::stoll(end->second)});
+    } else if (open.has_partition_reader()) {
+      int64_t bounds[2];
+      std::memcpy(bounds, open.partition_reader().partition().data(), sizeof(bounds));
+      object = std::make_unique<Object>(Partition{bounds[0], bounds[1]});
+    } else {
+      throw std::runtime_error("this data source only supports batch reads");
+    }
+    *handle = object.release();
+  });
+}
+
+int spark_ds_call(void* handle, const uint8_t* request, int64_t length, SparkDsSink reply,
+                  void* sink) {
+  return Call([&] {
+    auto call = Decode<sds::CallRequest>(request, length);
+    sds::CallReply result;
+    if (call.has_infer_schema()) {
+      auto* field = result.mutable_infer_schema()->mutable_schema()->add_fields();
+      field->set_name("id");
+      field->mutable_data_type()->mutable_long_();
+      field->set_nullable(false);
+    } else if (call.has_plan_partitions()) {
+      int64_t end = std::get<Reader>(*static_cast<Object*>(handle)).end;
+      int64_t bounds[2][2] = {{0, end / 2}, {end / 2, end}};
+      for (const auto& partition : bounds) {
+        result.mutable_plan_partitions()->add_partitions(partition, sizeof(partition));
       }
+    } else {
+      return;  // The other requests, such as the pushdown, have empty replies.
     }
-    *capabilities = SPARK_DS_BATCH_READ;
-    *source = range.release();
+    Reply(reply, sink, result);
   });
 }
 
-int GetSchema(void*, struct ArrowSchema* out) {
-  return Call([&] { Check(arrow::ExportSchema(*Schema(), out)); });
-}
-
-int CreateReader(void* source, struct ArrowSchema*, void** reader) {
-  return Call([&] { *reader = new RangeReader{static_cast<RangeSource*>(source)->end}; });
-}
-
-void Close(void* source) { delete static_cast<RangeSource*>(source); }
-
-int Partitions(void* reader, SparkDsSink add_partition, void* sink) {
+int spark_ds_stream(void* handle, const uint8_t* request, int64_t length, struct ArrowArrayStream*,
+                    struct ArrowArrayStream* out) {
   return Call([&] {
-    int64_t end = static_cast<RangeReader*>(reader)->end;
-    int64_t bounds[2][2] = {{0, end / 2}, {end / 2, end}};
-    for (const auto& partition : bounds) {
-      add_partition(sink, reinterpret_cast<const uint8_t*>(partition), sizeof(partition));
+    if (!Decode<sds::StreamRequest>(request, length).has_read()) {
+      throw std::runtime_error("this data source only supports reads");
     }
-  });
-}
-
-void CloseReader(void* reader) { delete static_cast<RangeReader*>(reader); }
-
-int Read(const SparkDsTaskContext*, const uint8_t*, int64_t, const uint8_t* partition, int64_t,
-         struct ArrowArrayStream* out) {
-  return Call([&] {
-    int64_t bounds[2];
-    std::memcpy(bounds, partition, sizeof(bounds));
+    const auto& partition = std::get<Partition>(*static_cast<Object*>(handle));
     arrow::Int64Builder ids;
-    for (int64_t id = bounds[0]; id < bounds[1]; id++) Check(ids.Append(id));
+    for (int64_t id = partition.start; id < partition.end; id++) Check(ids.Append(id));
     std::shared_ptr<arrow::Array> array;
     Check(ids.Finish(&array));
     auto batch = arrow::RecordBatch::Make(Schema(), array->length(), {array});
@@ -717,40 +734,30 @@ int Read(const SparkDsTaskContext*, const uint8_t*, int64_t, const uint8_t* part
   });
 }
 
-// The functions of the data source. The ones that it does not implement are NULL.
-const SparkDsLibrary kLibrary = {
-    .size = sizeof(SparkDsLibrary),
-    .abi_version = SPARK_DS_ABI_VERSION,
-    .last_error = LastError,
-    .create = Create,
-    .schema = GetSchema,
-    .create_reader = CreateReader,
-    .close = Close,
-    .partitions = Partitions,
-    .close_reader = CloseReader,
-    .read = Read,
-};
+void spark_ds_close(void* handle) { delete static_cast<Object*>(handle); }
 
-}  // namespace
-
-extern "C" SPARK_DS_EXPORT int spark_ds_init(const SparkDsHost*, const SparkDsLibrary** library) {
-  *library = &kLibrary;
-  return 0;
-}
+}  // extern "C"
 ```
 {% endraw %}
 
-Build the library, here on macOS with Arrow C++ 24, which requires C++20, and install it, or
-package it as above:
+Generate the messages and build the library, here on macOS with Arrow C++ 24, which requires
+C++20, and install it, or package it as above:
 
 ```bash
-c++ -std=c++20 -O2 -shared -fPIC -I"$SPARK_HOME/include" -I"$ARROW_HOME/include" \
-  -L"$ARROW_HOME/lib" -larrow -o libspark_datasource_cpp_range.dylib cpp_range.cc
+protoc --cpp_out=. -I"$SPARK_HOME/include" "$SPARK_HOME/include/spark_datasource.proto"
+c++ -std=c++20 -O2 -shared -fPIC -I. -I"$SPARK_HOME/include" -I"$ARROW_HOME/include" \
+  cpp_range.cc spark_datasource.pb.cc $(pkg-config --cflags --libs protobuf-lite) \
+  -L"$ARROW_HOME/lib" -larrow -o libspark_datasource_cpp_range.dylib
 cp libspark_datasource_cpp_range.dylib /usr/local/lib/
 ```
 
-A library loaded by Spark must find its dependencies, such as `libarrow`, on every node: link them
-statically, or install them on the nodes.
+A library loaded by Spark must find its dependencies, such as `libarrow` and `libprotobuf-lite`, on
+every node: link them statically, or install them on the nodes. Several native data source
+libraries, or several copies of one, such as an installed library and the library of a package, can
+share a process. The messages use the lite runtime of Protocol Buffers, which, unlike the full one,
+does not register them in a pool of the process, where a second copy would abort the process. But
+libraries built against different versions of Protocol Buffers conflict if they link it
+dynamically, so link it statically, with hidden symbols.
 
 ## Configuration
 

@@ -73,7 +73,8 @@ object NativeDataSourceTestUtils {
       Utils.tryWithResource(in)(Files.copy(_, source.toPath))
     }
     val library = new File(buildDir, System.mapLibraryName(name))
-    // The symbols are hidden, as libraries are often built, so only spark_ds_init is exported.
+    // The symbols are hidden, as libraries are often built, so only the functions of the header
+    // are exported.
     run(Seq(compiler, "-std=c++17", "-O1", "-shared", "-fPIC", "-fvisibility=hidden") ++
       includes.map("-I" + _) ++ defines ++ Seq("-o", library.getPath, source.getPath))
     library

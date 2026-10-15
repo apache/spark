@@ -18,7 +18,10 @@ package org.apache.spark.sql.execution.datasources.v2.columnar
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.VectorSchemaRoot
+import org.apache.arrow.vector.ipc.ArrowReader
+import org.apache.arrow.vector.types.pojo.Schema
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.metric.CustomTaskMetric
@@ -185,6 +188,15 @@ class ArrowBatchingDataWriter(delegate: DataWriter[ColumnarBatch], options: Arro
   private var arrowWriter: ArrowWriter = _
   private var numRows = 0
 
+  override def writeAll(records: java.util.Iterator[InternalRow]): Unit = delegate match {
+    case streaming: ArrowStreamDataWriter =>
+      // The rows that `write` got before, if any, are written first.
+      flush()
+      streaming.writeStream(new ArrowRowReader(records.asScala, arrowSchema, allocator, options))
+    case _ =>
+      super.writeAll(records)
+  }
+
   override def write(record: InternalRow): Unit = {
     if (root == null) {
       root = VectorSchemaRoot.create(arrowSchema, allocator)
@@ -240,4 +252,78 @@ class ArrowBatchingDataWriter(delegate: DataWriter[ColumnarBatch], options: Arro
   }
 
   override def currentMetricsValues(): Array[CustomTaskMetric] = delegate.currentMetricsValues()
+}
+
+/**
+ * A data writer of a [[ColumnarDataSource]] that can also write all the data of a task from an
+ * Arrow reader, which it reads on the calling thread, during the call.
+ */
+trait ArrowStreamDataWriter extends DataWriter[ColumnarBatch] {
+  /** Writes all the batches of `reader`. */
+  def writeStream(reader: ArrowReader): Unit
+}
+
+/**
+ * Reads rows as Arrow batches, which end with the limits of [[ArrowBatchingOptions]]. Each batch
+ * is written to new buffers, so a native writer that took ownership of the arrays of a batch can
+ * keep them after the next batch. The first error of the rows is kept, see
+ * [[ArrowRowReader.failure]].
+ */
+class ArrowRowReader(
+    rows: Iterator[InternalRow],
+    schema: Schema,
+    allocator: BufferAllocator,
+    options: ArrowBatchingOptions)
+  extends ArrowReader(allocator) {
+
+  @volatile private var error: Throwable = _
+
+  override def loadNextBatch(): Boolean = {
+    try {
+      val root = getVectorSchemaRoot
+      // Releases the buffers of the previous batch, which its exported arrays may still hold.
+      root.clear()
+      if (!rows.hasNext) {
+        false
+      } else {
+        val writer = ArrowWriter.create(root)
+        var numRows = 0
+        var full = false
+        while (!full && rows.hasNext) {
+          writer.write(rows.next())
+          numRows += 1
+          // The size is not computed when the limit is the largest possible one, as in Python
+          // UDFs.
+          full = numRows >= options.maxRecordsPerBatch ||
+            (options.maxBytesPerBatch < Int.MaxValue &&
+              writer.sizeInBytes() >= options.maxBytesPerBatch)
+        }
+        writer.finish()
+        true
+      }
+    } catch {
+      case e: Throwable =>
+        if (error == null) {
+          error = e
+        }
+        throw e
+    }
+  }
+
+  override def bytesRead(): Long = 0L
+
+  override protected def closeReadSource(): Unit = {}
+
+  override protected def readSchema(): Schema = schema
+}
+
+object ArrowRowReader {
+  /**
+   * The error of the rows of `reader`, if it is an [[ArrowRowReader]] that failed. An Arrow C
+   * stream that exports the reader only reports the message of the error.
+   */
+  def failure(reader: ArrowReader): Option[Throwable] = reader match {
+    case rows: ArrowRowReader => Option(rows.error)
+    case _ => None
+  }
 }

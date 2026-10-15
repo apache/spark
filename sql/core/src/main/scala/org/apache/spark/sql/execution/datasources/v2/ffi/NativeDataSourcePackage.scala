@@ -31,7 +31,6 @@ import scala.util.{Failure, Try}
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import com.google.common.cache.{Cache, CacheBuilder}
 
-import org.apache.spark.SPARK_VERSION
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{PATH, VERSION_NUM}
 import org.apache.spark.sql.Artifact
@@ -387,7 +386,7 @@ object NativeLibraries extends Logging {
   /**
    * Loads a library, and checks the version of the interface that it implements. Throws the error
    * if the library cannot be loaded, and returns it if the library is loaded but rejected, so that
-   * it is kept: the library stays loaded, and Spark only initializes it once.
+   * it is kept: the library stays loaded, and gets the same error when it is used again.
    *
    * @param invalidLibrary returns the error for an invalid library, with the reason
    * @param unsupportedAbiVersion returns the error for an unsupported version of the interface,
@@ -399,9 +398,9 @@ object NativeLibraries extends Logging {
       unsupportedAbiVersion: Map[String, String] => Throwable): Try[NativeLibrary] = {
     logInfo(log"Loading the native data source library ${MDC(PATH, file)}.")
     val library = try {
-      NativeLibrary.load(file.getPath, SPARK_VERSION)
+      NativeLibrary.load(file.getPath)
     } catch {
-      // A library that was loaded stays loaded, and Spark must not initialize it again.
+      // A library that was loaded stays loaded, and gets the same error when it is used again.
       case e: NativeLibrary.LoadException if e.loaded =>
         return Failure(invalidLibrary(e.getMessage, e))
       case e: NativeLibrary.LoadException => throw invalidLibrary(e.getMessage, e)

@@ -1,5 +1,5 @@
 {
-  "description": "Predicates as Spark passes them to push_predicates of spark_datasource.h, with the ids of the rows of the table for which they are true. A case lists the predicates that Spark pushes for the filter in its SQL, which are combined with AND. A row has a value for each column of the schema; NaN and infinite doubles are strings.",
+  "description": "Predicates as Spark passes them in PushPredicates of spark_datasource.proto, with the ids of the rows of the table for which they are true. A case lists the predicates that Spark pushes for the filter in its SQL, which are combined with AND. A row has a value for each column of the schema; NaN and infinite doubles are strings.",
   "schema": "id INT,i INT,d DOUBLE,s STRING",
   "rows": [
     [0, 1, 0.0, "a"],

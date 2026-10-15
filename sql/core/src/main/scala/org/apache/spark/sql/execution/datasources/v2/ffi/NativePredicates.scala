@@ -28,7 +28,7 @@ import org.apache.spark.sql.types._
 
 /**
  * Encodes Data Source V2 predicates as the JSON expression trees passed to
- * `push_predicates` of `spark_datasource.h`.
+ * `PushPredicates` of `spark_datasource.proto`.
  */
 object NativePredicates {
   // Writes ASCII only, escaping the other characters, which any JSON parser decodes.
@@ -36,7 +36,7 @@ object NativePredicates {
 
   /**
    * The names of the predicates that are passed to the libraries, as listed in
-   * `push_predicates`. They are part of the interface, so a predicate with any other
+   * `PushPredicates`. They are part of the interface, so a predicate with any other
    * name, such as an arithmetic function, is not passed: its semantics, for example on overflow,
    * would be part of the interface too, and the names of Data Source V2 grow with new releases.
    */

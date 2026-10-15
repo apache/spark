@@ -223,9 +223,11 @@ if [ -f "$DISTDIR"/jars/datasketches-memory-3.0.2.jar ]; then
   zip -d "$DISTDIR"/jars/datasketches-memory-3.0.2.jar org/apache/datasketches/memory/internal/ResourceImpl.class
 fi
 
-# Copy the C header that the libraries of native data sources implement
+# Copy the C header that the libraries of native data sources implement, and its messages
 mkdir -p "$DISTDIR/include"
 cp "$SPARK_HOME/sql/core/src/main/resources/org/apache/spark/sql/datasource/spark_datasource.h" \
+  "$DISTDIR/include/"
+cp "$SPARK_HOME/sql/core/src/main/protobuf/org/apache/spark/sql/datasource/spark_datasource.proto" \
   "$DISTDIR/include/"
 
 # Only create the yarn directory if the yarn artifacts were built.
