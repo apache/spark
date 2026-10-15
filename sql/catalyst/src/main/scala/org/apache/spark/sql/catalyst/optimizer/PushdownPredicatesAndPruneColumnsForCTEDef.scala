@@ -241,13 +241,17 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] with
         }
         if (removedAny) (u.withNewChildren(newChildren), true) else (u, false)
       case agg: Aggregate =>
-        // Mirror PushPredicateThroughNonJoin: translate the target with the same helper it uses
-        // to move grouping-key filters below the aggregate (filters referencing aggregate
-        // expressions stay up, so they are always found above this node).
-        val translated =
+        // Mirror PushPredicateThroughNonJoin: split and translate the target with the same helper
+        // it uses to move filters below the aggregate. A filter it keeps entirely above this node
+        // has been found above already, and one it splits is not entirely below it.
+        val (pushDown, stayUp) =
           PushPredicateThroughNonJoin.pushBelowAggregate(splitConjunctivePredicates(target), agg)
-        val (newChild, removed) = remove(agg.child, translated)
-        if (removed) (agg.withNewChildren(Seq(newChild)), true) else (agg, false)
+        if (pushDown.isEmpty || stayUp.nonEmpty) {
+          (agg, false)
+        } else {
+          val (newChild, removed) = remove(agg.child, pushDown.reduce(And))
+          if (removed) (agg.withNewChildren(Seq(newChild)), true) else (agg, false)
+        }
       case w: Window =>
         // PushDownPredicates pushes filters referencing only partition columns below the
         // window unchanged (partition columns are input attributes, so no translation).

@@ -2217,18 +2217,23 @@ class FilterPushdownSuite extends PlanTest {
         .analyze)
   }
 
-  test("SPARK-60150: push a filter below a grouped-agg pandas UDF aggregate unchanged") {
+  test("SPARK-60150: keep a normalization-sensitive filter above a pandas UDF aggregate") {
     val x = $"x".double
-    val relation = LocalRelation(x)
-    // Such an aggregate is planned as ArrowAggregatePythonExec, which outputs the raw keys, so the
-    // pushed filter reads them raw too.
-    val pandasAgg = PythonUDAF("pandasAgg", null, IntegerType, Seq(x), udfDeterministic = true)
+    val relation = LocalRelation(x, $"v".int)
+    // Whether such an aggregate outputs normalized keys depends on which of its aggregate
+    // functions column pruning keeps later, so a conjunct that normalizing would change stays
+    // above it, while a plain comparison is still pushed below it.
+    val pandasAgg = PythonUDAF("pandasAgg", null, IntegerType, Seq($"v"), udfDeterministic = true)
       .toAggregateExpression().as("p")
-    comparePlans(
-      Optimize.execute(
-        relation.groupBy(x)(x, pandasAgg).where(x.cast(StringType) === "-0.0").analyze),
-      relation.where(x.cast(StringType) === "-0.0").groupBy(x)(x, pandasAgg).analyze)
+    val sensitive = x.cast(StringType) === "-0.0"
+    for (aggregates <- Seq(Seq(pandasAgg), Seq(pandasAgg, count($"v").as("c")))) {
+      comparePlans(
+        Optimize.execute(
+          relation.groupBy(x)(x +: aggregates: _*).where(sensitive && x > 1.0).analyze),
+        relation.where(x > 1.0).groupBy(x)(x +: aggregates: _*).where(sensitive).analyze)
+    }
   }
+
 
   test("SPARK-60150: normalizeGroupingExpressions") {
     val x = $"x".double

@@ -2698,19 +2698,10 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case filter @ Filter(condition, aggregate: Aggregate)
       if aggregate.aggregateExpressions.forall(_.deterministic)
         && aggregate.groupingExpressions.nonEmpty =>
-      val aliasMap = getAliasMap(aggregate)
-
-      // For each filter, expand the alias and check if the filter can be evaluated using
-      // attributes produced by the aggregate operator's child operator.
-      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
-        val replaced = replaceAlias(cond, aliasMap)
-        cond.deterministic && cond.references.nonEmpty &&
-          replaced.references.subsetOf(aggregate.child.outputSet)
-      }
+      val (pushDown, stayUp) = pushBelowAggregate(splitConjunctivePredicates(condition), aggregate)
 
       if (pushDown.nonEmpty) {
-        val replaced = pushBelowAggregate(pushDown, aggregate)
-        val newAggregate = aggregate.copy(child = Filter(replaced, aggregate.child))
+        val newAggregate = aggregate.copy(child = Filter(pushDown.reduce(And), aggregate.child))
         // If there is no more filter to stay up, just eliminate the filter.
         // Otherwise, create "Filter(stayUp) <- Aggregate <- Filter(pushDownPredicate)".
         if (stayUp.isEmpty) newAggregate else Filter(stayUp.reduce(And), newAggregate)
@@ -2817,32 +2808,42 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case _ => false
   }
 
-  // Rewrites conjuncts pushed below `aggregate` in terms of the aggregate's child and ANDs them.
-  // Expressions above the aggregate see its float/double grouping keys normalized (see
-  // NormalizeFloatingNumbers: -0.0 becomes 0.0 and every NaN becomes one canonical NaN), so the
-  // pushed conjuncts read them normalized too, wherever the raw value could change the result.
-  // NormalizeFloatingNumbers.outputsNormalizedKeys says when the keys come out normalized, whether
-  // the aggregate is planned or a later rule replaces it with a Project. Aggregates of grouped-agg
-  // pandas UDFs output the raw keys, so conjuncts pushed below them read the raw keys.
+  // Splits `conds`, the conjuncts of a filter on top of `aggregate`, into the ones to push below
+  // it, rewritten in terms of the aggregate's child, and the ones that stay above it. A conjunct
+  // can be pushed if it is deterministic and, after alias expansion, only reads the aggregate's
+  // child (that is, grouping keys and constants). Expressions above the aggregate see its
+  // float/double grouping keys normalized (see NormalizeFloatingNumbers: -0.0 becomes 0.0 and every
+  // NaN becomes one canonical NaN), so a pushed conjunct reads them normalized too, wherever the
+  // raw value could change its result. For an aggregate with grouped-agg pandas UDFs, whether its
+  // keys come out normalized is only settled later (see NormalizeFloatingNumbers.hasPythonUDAF), so
+  // a conjunct that normalizing would change stays above it. The CTE rule
+  // PushdownPredicatesAndPruneColumnsForCTEDef uses this too, to find the filters it pushed.
   private[optimizer] def pushBelowAggregate(
       conds: Seq[Expression],
-      aggregate: Aggregate): Expression = {
+      aggregate: Aggregate): (Seq[Expression], Seq[Expression]) = {
     val aliasMap = getAliasMap(aggregate)
-    val normalizedGrouping = if (NormalizeFloatingNumbers.outputsNormalizedKeys(aggregate)) {
-      aggregate.groupingExpressions
-        .filter(e => NormalizeFloatingNumbers.needNormalize(e.dataType))
-        .map(trimAliases)
-    } else {
-      Nil
-    }
-    conds.map { cond =>
+    val keys = aggregate.groupingExpressions
+      .filter(e => NormalizeFloatingNumbers.needNormalize(e.dataType))
+      .map(trimAliases)
+    val hasPythonUDAF = NormalizeFloatingNumbers.hasPythonUDAF(aggregate)
+    val pushDown = Seq.newBuilder[Expression]
+    val stayUp = Seq.newBuilder[Expression]
+    conds.foreach { cond =>
       val replaced = replaceAlias(cond, aliasMap)
-      if (normalizedGrouping.isEmpty) {
-        replaced
+      val pushable = cond.deterministic && cond.references.nonEmpty &&
+        replaced.references.subsetOf(aggregate.child.outputSet)
+      val normalized = if (pushable && keys.nonEmpty) {
+        normalizeGroupingExpressions(replaced, keys)
       } else {
-        normalizeGroupingExpressions(replaced, normalizedGrouping)
+        replaced
       }
-    }.reduce(And)
+      if (pushable && (!hasPythonUDAF || normalized.fastEquals(replaced))) {
+        pushDown += normalized
+      } else {
+        stayUp += cond
+      }
+    }
+    (pushDown.result(), stayUp.result())
   }
 
   // Rewrites `e` so that it gives the same result on the raw values of `grouping` as `e` gives on

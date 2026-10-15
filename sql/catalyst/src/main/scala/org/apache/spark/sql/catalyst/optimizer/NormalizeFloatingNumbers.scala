@@ -107,14 +107,28 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
    * Whether `aggregate` outputs its float/double grouping keys normalized. The planner normalizes
    * the grouping keys of every Aggregate (see `SparkStrategies.Aggregation`), except one whose
    * aggregate functions are all grouped-agg pandas UDFs, planned as `ArrowAggregatePythonExec` on
-   * the raw keys. `PushPredicateThroughNonJoin` relies on this when it pushes a filter below an
-   * Aggregate, and rules that replace an Aggregate with a Project check [[readsNormalizedKeys]].
+   * the raw keys. Rules that replace an Aggregate with a Project check [[readsNormalizedKeys]].
+   * For an Aggregate with any grouped-agg pandas UDF the answer can still change, see
+   * [[hasPythonUDAF]].
    */
   private[sql] def outputsNormalizedKeys(aggregate: Aggregate): Boolean = {
     val aggregateFunctions = aggregate.aggregateExpressions.flatMap(_.collect {
       case ae: AggregateExpression => ae.aggregateFunction
     })
     aggregateFunctions.isEmpty || !aggregateFunctions.forall(_.isInstanceOf[PythonUDAF])
+  }
+
+  /**
+   * Whether the aggregate functions of `aggregate` include a grouped-agg pandas UDF. Whether such
+   * an Aggregate outputs normalized keys is only settled after optimization: `ColumnPruning` can
+   * remove its other aggregate functions, so that it outputs the raw keys, or all of them, so that
+   * it becomes group-only and outputs normalized keys. Rules must not rely on either form for it.
+   */
+  private[sql] def hasPythonUDAF(aggregate: Aggregate): Boolean = {
+    aggregate.aggregateExpressions.exists(_.exists {
+      case ae: AggregateExpression => ae.aggregateFunction.isInstanceOf[PythonUDAF]
+      case _ => false
+    })
   }
 
   /**
