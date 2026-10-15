@@ -738,23 +738,24 @@ private object PipelinedChannelShuffleSuite {
   // Lets a test kill a task mid-stream. The first task to call awaitKill after armKill, which
   // runs in this JVM in local mode, publishes its attempt ID and waits until it is killed. Each
   // armKill starts from fresh state, so a task left over from an earlier arming cannot affect it.
-  private class KillTarget {
-    val armed = new AtomicBoolean(true)
+  private class KillTarget(armedAtStart: Boolean) {
+    val armed = new AtomicBoolean(armedAtStart)
     val waiting = new CountDownLatch(1)
     val released = new CountDownLatch(1)
     @volatile var taskId = -1L
   }
 
-  @volatile private var killTarget: KillTarget = null
+  // Disarmed until the first armKill, so the helpers below are safe to call in any order.
+  @volatile private var killTarget = new KillTarget(armedAtStart = false)
 
   def armKill(): Unit = {
-    killTarget = new KillTarget
+    killTarget = new KillTarget(armedAtStart = true)
   }
 
   /** Run by the task to kill: publish its attempt ID, then wait to be killed or released. */
   def awaitKill(): Unit = {
     val target = killTarget
-    if (target != null && target.armed.compareAndSet(true, false)) {
+    if (target.armed.compareAndSet(true, false)) {
       val context = TaskContext.get()
       target.taskId = context.taskAttemptId()
       target.waiting.countDown()
