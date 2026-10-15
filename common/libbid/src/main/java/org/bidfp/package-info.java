@@ -17,7 +17,8 @@
 
 /**
  * Pure-Java IEEE 754 Binary Integer Decimal (BID) decimal64, decimal128, and
- * parameterized BID-k encodings (Decimal96 through Decimal256).
+ * parameterized BID-k encodings (k 32-bit units: Decimal96 is 3 through
+ * Decimal256 is 8).
  *
  * <p>The package provides immutable object APIs, allocation-conscious raw
  * kernels, Spark SQL adapters, and the binary128 DPML engine used by decimal

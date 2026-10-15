@@ -17,11 +17,15 @@
 package org.bidfp;
 
 /**
- * IEEE 754-2008 decimal interchange format parameters for packed width
- * {@code k} bits, where {@code k} is a multiple of 32 in {@code [32, 256]}.
+ * IEEE 754-2008 decimal interchange format parameters.
  *
- * <p>{@code p = 9*(k/32)-2}, {@code w = k/16+4}, {@code t = k-w-6},
- * {@code emax = 3*2^(k/16+3)}, {@code bias = emax+p-2}.
+ * <p>{@link #units()} is k, the number of 32-bit storage units: Decimal32 is
+ * 1, Decimal64 is 2, Decimal96 is 3, Decimal128 is 4, Decimal160 is 5, up to
+ * Decimal256 at 8. Packed width is {@code 32 * units()} bits.
+ *
+ * <p>With packed width {@code b = 32*k}: {@code p = 9*k-2},
+ * {@code w = 2*k+4}, {@code t = b-w-6}, {@code emax = 3*2^(2*k+3)},
+ * {@code bias = emax+p-2}.
  */
 public final class FormatParams {
   private static final FormatParams[] BY_K = build();
@@ -89,12 +93,21 @@ public final class FormatParams {
     this.maxCoefficient = maxCoefficient;
   }
 
-  /** Returns the descriptor for packed width {@code k} bits. */
-  public static FormatParams of(int k) {
-    if (k < 32 || k > 256 || (k & 31) != 0) {
-      throw new IllegalArgumentException("k must be a multiple of 32 in [32, 256]");
+  /** Returns the descriptor for packed width {@code packedBits} (32, 64, ...). */
+  public static FormatParams of(int packedBits) {
+    if (packedBits < 32 || packedBits > 256 || (packedBits & 31) != 0) {
+      throw new IllegalArgumentException(
+          "packed width must be a multiple of 32 in [32, 256]");
     }
-    return BY_K[k / 32];
+    return BY_K[packedBits / 32];
+  }
+
+  /** Returns the descriptor for k 32-bit units (Decimal32 is 1). */
+  public static FormatParams ofUnits(int units) {
+    if (units < 1 || units > 8) {
+      throw new IllegalArgumentException("k must be in [1, 8] 32-bit units");
+    }
+    return BY_K[units];
   }
 
   private static FormatParams compute(int k) {
@@ -128,8 +141,14 @@ public final class FormatParams {
         maxCoefficient);
   }
 
+  /** Packed encoding width in bits ({@code 32 * units()}). */
   public int packedBits() {
     return k;
+  }
+
+  /** k: number of 32-bit storage units. Decimal160 is 5. */
+  public int units() {
+    return k / 32;
   }
 
   public int precision() {

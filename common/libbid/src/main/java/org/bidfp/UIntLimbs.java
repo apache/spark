@@ -18,8 +18,8 @@ package org.bidfp;
 
 /**
  * Mutable unsigned integer of at most 256 bits, stored little-endian in four
- * {@code long} limbs. Used by generic BID-k pack/unpack; the first arithmetic
- * backend is {@link DecNum}.
+ * {@code long} limbs. Packed BID-k coefficients live here; wide add/mul/div
+ * uses {@link LimbMath} workspaces of {@link LimbMath#WORK} limbs.
  */
 final class UIntLimbs {
   static final int MAX_LIMBS = 4;

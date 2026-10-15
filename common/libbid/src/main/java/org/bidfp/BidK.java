@@ -19,16 +19,17 @@ package org.bidfp;
 import java.util.Arrays;
 
 /**
- * IEEE 754 decimal interchange value of packed width {@code k} bits.
+ * IEEE 754 decimal interchange value of {@code k} 32-bit storage units
+ * (packed width {@code 32*k} bits).
  *
  * <p>{@link Bid64} and {@link Bid128} remain the specialized kernels for the
  * 64- and 128-bit formats. {@code BidK} is the generic path, including
- * Decimal96 and Decimal160 through Decimal256.
+ * Decimal96 ({@code k=3}) through Decimal256 ({@code k=8}).
  *
- * <p>Transcendental functions are provided only for {@code k <= 128} by
- * converting through {@link Bid128} and the binary128 DPML engine. Formats
- * wider than 128 bits throw {@link UnsupportedOperationException} until a
- * binary256 engine is funded.
+ * <p>Transcendental functions are provided only for packed width
+ * {@code <= 128} ({@code k <= 4}) by converting through {@link Bid128} and
+ * the binary128 DPML engine. Wider formats throw
+ * {@link UnsupportedOperationException} until a binary256 engine is funded.
  */
 public final class BidK {
   private final FormatParams format;

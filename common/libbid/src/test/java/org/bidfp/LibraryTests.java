@@ -163,6 +163,11 @@ class LibraryTests {
   }
 
   @Test
+  void limbMath() {
+    LimbMathTest.main(new String[0]);
+  }
+
+  @Test
   void bidK() {
     BidKTest.main(new String[0]);
   }

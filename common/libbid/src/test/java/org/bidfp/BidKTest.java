@@ -26,6 +26,7 @@ public final class BidKTest {
 
   public static void main(String[] args) {
     formatTable();
+    LimbMathTest.main(new String[0]);
     codecMatchesBid64();
     codecMatchesBid128();
     decimal96RoundtripAndConvert();
@@ -34,6 +35,7 @@ public final class BidKTest {
     arithmeticVsBigDecimal(FormatParams.DECIMAL192);
     arithmeticVsBigDecimal(FormatParams.DECIMAL224);
     arithmeticVsBigDecimal(FormatParams.DECIMAL256);
+    decimal160Cases();
     convertWideTo128();
     decimal96Dpml();
     wideLibmUnsupported();
@@ -64,9 +66,17 @@ public final class BidKTest {
     expect(FormatParams.DECIMAL256.precision() == 70, "d256 p");
     expect(FormatParams.DECIMAL256.emax() == 1572864, "d256 emax");
     expect(FormatParams.DECIMAL256.bias() == 1572932, "d256 bias");
+    expect(FormatParams.DECIMAL32.units() == 1, "k=1");
+    expect(FormatParams.DECIMAL64.units() == 2, "k=2");
+    expect(FormatParams.DECIMAL96.units() == 3, "k=3");
+    expect(FormatParams.DECIMAL128.units() == 4, "k=4");
+    expect(FormatParams.DECIMAL160.units() == 5, "k=5");
+    expect(FormatParams.DECIMAL256.units() == 8, "k=8");
+    expect(FormatParams.ofUnits(5) == FormatParams.DECIMAL160, "ofUnits 5");
     expect(FormatParams.DECIMAL96.wordCount() == 2, "d96 words");
     expect(FormatParams.DECIMAL160.wordCount() == 3, "d160 words");
     expect(FormatParams.DECIMAL256.wordCount() == 4, "d256 words");
+    expect(FormatParams.DECIMAL160.packedBits() == 160, "d160 bits");
   }
 
   private static void codecMatchesBid64() {
@@ -175,6 +185,44 @@ public final class BidKTest {
         expectClose(x.sqrt(mode, flags), bx.sqrt(mc), format, "sqrt");
       }
     }
+  }
+
+  private static void decimal160Cases() {
+    FormatParams d160 = FormatParams.DECIMAL160;
+    RoundingMode mode = RoundingMode.TIES_TO_EVEN;
+    StatusFlags flags = new StatusFlags();
+    MathContext mc = new MathContext(43, java.math.RoundingMode.HALF_EVEN);
+    String[] extra = {
+      "9999999999999999999999999999999999999999999",
+      "1.000000000000000000000000000000000000000001",
+      "2.5e20",
+      "1e-20",
+      "1234567890123456789012345678901234567890123"
+    };
+    for (String left : extra) {
+      for (String right : extra) {
+        BidK x = BidK.parse(d160, left);
+        BidK y = BidK.parse(d160, right);
+        BigDecimal bx = new BigDecimal(left);
+        BigDecimal by = new BigDecimal(right);
+        expectClose(x.add(y, mode, flags), bx.add(by, mc), d160, "d160 add");
+        expectClose(x.multiply(y, mode, flags), bx.multiply(by, mc), d160, "d160 mul");
+        if (by.compareTo(BigDecimal.ZERO) != 0) {
+          expectClose(x.divide(y, mode, flags), bx.divide(by, mc), d160, "d160 div");
+        }
+      }
+    }
+    BidK two = BidK.parse(d160, "2");
+    BidK three = BidK.parse(d160, "3");
+    BidK q = two.divide(three, mode, flags);
+    expectClose(q, new BigDecimal("2").divide(new BigDecimal("3"), mc), d160, "2/3");
+    BidK max = BidK.parse(d160, extra[0]);
+    BidK one = BidK.parse(d160, "1");
+    expectClose(
+        max.add(one, mode, flags),
+        new BigDecimal(extra[0]).add(BigDecimal.ONE, mc),
+        d160,
+        "max+1");
   }
 
   private static void convertWideTo128() {

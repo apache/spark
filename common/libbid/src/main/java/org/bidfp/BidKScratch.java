@@ -20,7 +20,7 @@ package org.bidfp;
  * Per-thread reusable storage for generic BID-k arithmetic.
  *
  * <p>Frames are acquired in LIFO order so nested kernels use distinct
- * {@link DecNum} and {@link UIntLimbs} instances.
+ * {@link DecNum}, {@link UIntLimbs}, and Knuth workspace instances.
  */
 final class BidKScratch {
   private static final ThreadLocal<Pool> LOCAL = ThreadLocal.withInitial(Pool::new);
@@ -58,8 +58,28 @@ final class BidKScratch {
     final DecNum b = new DecNum();
     final DecNum r = new DecNum();
     final UIntLimbs coeff = new UIntLimbs();
+    final UIntLimbs ac = new UIntLimbs();
+    final UIntLimbs bc = new UIntLimbs();
+    final UIntLimbs rc = new UIntLimbs();
+    boolean an;
+    boolean bn;
+    int ae;
+    int be;
     final boolean[] sticky = {false};
+    final boolean[] inexact = {false};
+    final boolean[] tmpNeg = {false};
+    final int[] tmpExp = {0};
     final long[] words = new long[UIntLimbs.MAX_LIMBS];
+    final long[] w0 = new long[LimbMath.WORK];
+    final long[] w1 = new long[LimbMath.WORK];
+    final long[] w2 = new long[LimbMath.WORK];
+    final long[] w3 = new long[LimbMath.WORK];
+    final long[] w4 = new long[LimbMath.WORK];
+    final long[] w5 = new long[LimbMath.WORK];
+    final int[] d0 = new int[LimbMath.DIGITS32];
+    final int[] d1 = new int[LimbMath.DIGITS32];
+    final int[] d2 = new int[LimbMath.DIGITS32];
+    final int[] d3 = new int[LimbMath.DIGITS32];
     private final Pool pool;
     private int index;
 

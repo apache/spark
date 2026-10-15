@@ -16,13 +16,13 @@
  */
 package org.bidfp;
 
-import java.math.BigInteger;
-
 /**
- * Generic BID-k arithmetic using {@link DecNum} as the coefficient backend.
+ * Generic BID-k arithmetic. Finite add/mul/div/sqrt/fma use the shared
+ * Knuth limb engine; parse, quantize, and string conversion still use
+ * {@link DecNum}.
  *
  * <p>{@link Bid64} and {@link Bid128} remain the specialized hot paths. This
- * kernel covers Decimal96 and Decimal160 through Decimal256.
+ * kernel covers Decimal96 (k=3) through Decimal256 (k=8).
  */
 final class BidKRaw {
   private BidKRaw() {
@@ -37,13 +37,17 @@ final class BidKRaw {
       long[] out) {
     BidKScratch.Frame frame = BidKScratch.acquire();
     try {
-      Kind kx = unpack(format, x, frame.a, frame.coeff, flags);
-      Kind ky = unpack(format, y, frame.b, frame.coeff, flags);
-      if (propagateSpecial(format, kx, ky, frame.a, frame.b, true, flags, out)) {
+      Kind kx = BidKKnuth.unpackLeft(format, x, frame, flags);
+      Kind ky = BidKKnuth.unpackRight(format, y, frame, flags);
+      if (propagateSpecial(
+          format, kx, ky, frame.an, frame.bn, true, flags, out)) {
         return;
       }
-      addFinite(frame.a, frame.b, frame.r);
-      pack(format, frame.r, mode, flags, frame.coeff, out);
+      BidKKnuth.add(
+          format,
+          frame.an, frame.ae, frame.ac,
+          frame.bn, frame.be, frame.bc,
+          mode, flags, out, frame);
     } finally {
       BidKScratch.release(frame);
     }
@@ -74,14 +78,18 @@ final class BidKRaw {
       long[] out) {
     BidKScratch.Frame frame = BidKScratch.acquire();
     try {
-      Kind kx = unpack(format, x, frame.a, frame.coeff, flags);
-      Kind ky = unpack(format, y, frame.b, frame.coeff, flags);
-      if (mulDivSpecial(format, kx, ky, frame.a, frame.b, false, flags, out)) {
+      Kind kx = BidKKnuth.unpackLeft(format, x, frame, flags);
+      Kind ky = BidKKnuth.unpackRight(format, y, frame, flags);
+      if (mulDivSpecial(
+          format, kx, ky, frame.an, frame.bn,
+          frame.ac.isZero(), frame.bc.isZero(), false, flags, out, frame)) {
         return;
       }
-      frame.r.copyFrom(frame.a);
-      frame.r.multiply(frame.b);
-      pack(format, frame.r, mode, flags, frame.coeff, out);
+      BidKKnuth.mul(
+          format,
+          frame.an, frame.ae, frame.ac,
+          frame.bn, frame.be, frame.bc,
+          mode, flags, out, frame);
     } finally {
       BidKScratch.release(frame);
     }
@@ -96,13 +104,18 @@ final class BidKRaw {
       long[] out) {
     BidKScratch.Frame frame = BidKScratch.acquire();
     try {
-      Kind kx = unpack(format, x, frame.a, frame.coeff, flags);
-      Kind ky = unpack(format, y, frame.b, frame.coeff, flags);
-      if (mulDivSpecial(format, kx, ky, frame.a, frame.b, true, flags, out)) {
+      Kind kx = BidKKnuth.unpackLeft(format, x, frame, flags);
+      Kind ky = BidKKnuth.unpackRight(format, y, frame, flags);
+      if (mulDivSpecial(
+          format, kx, ky, frame.an, frame.bn,
+          frame.ac.isZero(), frame.bc.isZero(), true, flags, out, frame)) {
         return;
       }
-      divideFinite(format, frame.a, frame.b, frame.r);
-      pack(format, frame.r, mode, flags, frame.coeff, out);
+      BidKKnuth.div(
+          format,
+          frame.an, frame.ae, frame.ac,
+          frame.bn, frame.be, frame.bc,
+          mode, flags, out, frame);
     } finally {
       BidKScratch.release(frame);
     }
@@ -116,13 +129,13 @@ final class BidKRaw {
       long[] out) {
     BidKScratch.Frame frame = BidKScratch.acquire();
     try {
-      Kind kx = unpack(format, x, frame.a, frame.coeff, flags);
+      Kind kx = BidKKnuth.unpackLeft(format, x, frame, flags);
       if (kx == Kind.NAN || kx == Kind.SNAN) {
         BidCodec.packNaN(format, false, false, out);
         return;
       }
       if (kx == Kind.INF) {
-        if (frame.a.isNegative()) {
+        if (frame.an) {
           flags.raise(StatusFlags.INVALID);
           BidCodec.packNaN(format, false, false, out);
         } else {
@@ -130,17 +143,18 @@ final class BidKRaw {
         }
         return;
       }
-      if (frame.a.isNegative() && !frame.a.isZero()) {
+      if (frame.an && !frame.ac.isZero()) {
         flags.raise(StatusFlags.INVALID);
         BidCodec.packNaN(format, false, false, out);
         return;
       }
-      if (frame.a.isZero()) {
-        pack(format, frame.a, mode, flags, frame.coeff, out);
+      if (frame.ac.isZero()) {
+        LimbMath.clear(frame.w0);
+        BidKKnuth.pack(
+            format, frame.an, frame.ae, frame.w0, mode, flags, frame, out);
         return;
       }
-      sqrtFinite(format, frame.a, frame.r);
-      pack(format, frame.r, mode, flags, frame.coeff, out);
+      BidKKnuth.sqrt(format, frame.ae, frame.ac, mode, flags, out, frame);
     } finally {
       BidKScratch.release(frame);
     }
@@ -156,22 +170,23 @@ final class BidKRaw {
       long[] out) {
     BidKScratch.Frame frame = BidKScratch.acquire();
     try {
-      Kind kx = unpack(format, x, frame.a, frame.coeff, flags);
-      Kind ky = unpack(format, y, frame.b, frame.coeff, flags);
+      Kind kx = BidKKnuth.unpackLeft(format, x, frame, flags);
+      Kind ky = BidKKnuth.unpackRight(format, y, frame, flags);
       if (kx == Kind.NAN || ky == Kind.NAN || kx == Kind.SNAN || ky == Kind.SNAN) {
         BidCodec.packNaN(format, false, false, out);
         return;
       }
       if (kx == Kind.INF || ky == Kind.INF) {
-        if ((kx == Kind.INF && frame.b.isZero())
-            || (ky == Kind.INF && frame.a.isZero())) {
+        if ((kx == Kind.INF && frame.bc.isZero())
+            || (ky == Kind.INF && frame.ac.isZero())) {
           flags.raise(StatusFlags.INVALID);
           BidCodec.packNaN(format, false, false, out);
           return;
         }
-        Kind kz = unpack(format, z, frame.r, frame.coeff, flags);
-        boolean productNeg = frame.a.isNegative() ^ frame.b.isNegative();
-        if (kz == Kind.INF && frame.r.isNegative() != productNeg) {
+        Kind kz = BidKKnuth.unpack(
+            format, z, frame.rc, frame.tmpNeg, frame.tmpExp, flags);
+        boolean productNeg = frame.an ^ frame.bn;
+        if (kz == Kind.INF && frame.tmpNeg[0] != productNeg) {
           flags.raise(StatusFlags.INVALID);
           BidCodec.packNaN(format, false, false, out);
           return;
@@ -179,19 +194,22 @@ final class BidKRaw {
         BidCodec.packInfinity(format, productNeg, out);
         return;
       }
-      frame.r.copyFrom(frame.a);
-      frame.r.multiply(frame.b);
-      Kind kz = unpack(format, z, frame.b, frame.coeff, flags);
+      Kind kz = BidKKnuth.unpack(
+          format, z, frame.rc, frame.tmpNeg, frame.tmpExp, flags);
       if (kz == Kind.NAN || kz == Kind.SNAN) {
         BidCodec.packNaN(format, false, false, out);
         return;
       }
       if (kz == Kind.INF) {
-        BidCodec.packInfinity(format, frame.b.isNegative(), out);
+        BidCodec.packInfinity(format, frame.tmpNeg[0], out);
         return;
       }
-      addFinite(frame.r, frame.b, frame.a);
-      pack(format, frame.a, mode, flags, frame.coeff, out);
+      BidKKnuth.fma(
+          format,
+          frame.an, frame.ae, frame.ac,
+          frame.bn, frame.be, frame.bc,
+          frame.tmpNeg[0], frame.tmpExp[0], frame.rc,
+          mode, flags, out, frame);
     } finally {
       BidKScratch.release(frame);
     }
@@ -505,85 +523,12 @@ final class BidKRaw {
     return inexact;
   }
 
-  private static void addFinite(DecNum x, DecNum y, DecNum out) {
-    if (x.isZero()) {
-      out.copyFrom(y);
-      return;
-    }
-    if (y.isZero()) {
-      out.copyFrom(x);
-      return;
-    }
-    out.copyFrom(x);
-    if (x.isNegative() == y.isNegative()) {
-      out.addAbsolute(y);
-      out.setNegative(x.isNegative());
-      return;
-    }
-    int cmp = out.compareAbsolute(y);
-    if (cmp == 0) {
-      boolean negative = x.isNegative() && y.isNegative();
-      out.clear();
-      out.setNegative(negative);
-      return;
-    }
-    if (cmp < 0) {
-      DecNum tmp = new DecNum();
-      tmp.copyFrom(y);
-      tmp.subtractAbsolute(out);
-      tmp.setNegative(y.isNegative());
-      out.copyFrom(tmp);
-    } else {
-      out.subtractAbsolute(y);
-      out.setNegative(x.isNegative());
-    }
-  }
-
-  private static void divideFinite(FormatParams format, DecNum num, DecNum den, DecNum out) {
-    int extra = format.precision() + 8
-        + Math.max(0, den.digitCount() - num.digitCount());
-    BigInteger numerator = num.toBigIntegerAbsolute().multiply(BigInteger.TEN.pow(extra));
-    BigInteger denominator = den.toBigIntegerAbsolute();
-    BigInteger[] qr = numerator.divideAndRemainder(denominator);
-    out.clear();
-    out.setFromBigIntegerAbsolute(qr[0]);
-    out.setNegative(num.isNegative() ^ den.isNegative());
-    if (qr[1].signum() != 0) {
-      out.multiplyBy10();
-      out.addOne();
-    }
-    int adj = qr[1].signum() != 0 ? extra + 1 : extra;
-    out.shiftExp(num.exp() - den.exp() - adj);
-  }
-
-  private static void sqrtFinite(FormatParams format, DecNum input, DecNum out) {
-    DecNum work = new DecNum();
-    work.copyFrom(input);
-    work.setNegative(false);
-    int extra = format.precision() + 4;
-    if ((work.exp() & 1) != 0) {
-      work.multiplyBy10();
-      work.shiftExp(-1);
-    }
-    work.multiplyPow10(2 * extra);
-    work.shiftExp(-2 * extra);
-    DecNum.Sqrt sqrt = DecNum.sqrtFloor(work);
-    out.copyFrom(sqrt.root());
-    int expAdj = 0;
-    if (!sqrt.remainder().isZero()) {
-      out.multiplyBy10();
-      out.addOne();
-      expAdj = -1;
-    }
-    out.shiftExp(work.exp() / 2 + expAdj);
-  }
-
   private static boolean propagateSpecial(
       FormatParams format,
       Kind kx,
       Kind ky,
-      DecNum x,
-      DecNum y,
+      boolean xn,
+      boolean yn,
       boolean adding,
       StatusFlags flags,
       long[] out) {
@@ -592,20 +537,20 @@ final class BidKRaw {
       return true;
     }
     if (kx == Kind.INF && ky == Kind.INF) {
-      if (adding && x.isNegative() != y.isNegative()) {
+      if (adding && xn != yn) {
         flags.raise(StatusFlags.INVALID);
         BidCodec.packNaN(format, false, false, out);
       } else {
-        BidCodec.packInfinity(format, x.isNegative(), out);
+        BidCodec.packInfinity(format, xn, out);
       }
       return true;
     }
     if (kx == Kind.INF) {
-      BidCodec.packInfinity(format, x.isNegative(), out);
+      BidCodec.packInfinity(format, xn, out);
       return true;
     }
     if (ky == Kind.INF) {
-      BidCodec.packInfinity(format, y.isNegative(), out);
+      BidCodec.packInfinity(format, yn, out);
       return true;
     }
     return false;
@@ -615,36 +560,35 @@ final class BidKRaw {
       FormatParams format,
       Kind kx,
       Kind ky,
-      DecNum x,
-      DecNum y,
+      boolean xn,
+      boolean yn,
+      boolean xZero,
+      boolean yZero,
       boolean dividing,
       StatusFlags flags,
-      long[] out) {
+      long[] out,
+      BidKScratch.Frame frame) {
     if (kx == Kind.NAN || ky == Kind.NAN || kx == Kind.SNAN || ky == Kind.SNAN) {
       BidCodec.packNaN(format, false, false, out);
       return true;
     }
-    boolean negative = x.isNegative() ^ y.isNegative();
+    boolean negative = xn ^ yn;
     if (dividing) {
       if (ky == Kind.INF) {
         if (kx == Kind.INF) {
           flags.raise(StatusFlags.INVALID);
           BidCodec.packNaN(format, false, false, out);
         } else {
-          DecNum zero = new DecNum();
-          zero.setNegative(negative);
-          BidKScratch.Frame frame = BidKScratch.acquire();
-          try {
-            pack(format, zero, RoundingMode.TIES_TO_EVEN, flags, frame.coeff, out);
-          } finally {
-            BidKScratch.release(frame);
-          }
+          LimbMath.clear(frame.w0);
+          BidKKnuth.pack(
+              format, negative, 0, frame.w0, RoundingMode.TIES_TO_EVEN, flags,
+              frame, out);
         }
         return true;
       }
-      if (y.isZero()) {
-        if (x.isZero() || kx == Kind.INF) {
-          if (x.isZero()) {
+      if (yZero) {
+        if (xZero || kx == Kind.INF) {
+          if (xZero) {
             flags.raise(StatusFlags.INVALID);
             BidCodec.packNaN(format, false, false, out);
           } else {
@@ -663,7 +607,7 @@ final class BidKRaw {
       return false;
     }
     if (kx == Kind.INF || ky == Kind.INF) {
-      if ((kx == Kind.INF && y.isZero()) || (ky == Kind.INF && x.isZero())) {
+      if ((kx == Kind.INF && yZero) || (ky == Kind.INF && xZero)) {
         flags.raise(StatusFlags.INVALID);
         BidCodec.packNaN(format, false, false, out);
       } else {
