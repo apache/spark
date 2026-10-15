@@ -249,14 +249,16 @@ final class BidCodec {
     applyCoeffMask(format, dest, words[format.lastWord()]);
   }
 
+  static long coefficientHigh(FormatParams format, long hi) {
+    if ((hi & format.steeringMask()) == format.steeringMask()) {
+      return (hi & format.form2CoeffLastMask()) | format.form2ImplicitMask();
+    }
+    return hi & format.form1CoeffLastMask();
+  }
+
   static void applyCoeffMask(FormatParams format, Wide6 dest, long hi) {
     int last = format.lastWord();
-    long masked;
-    if ((hi & format.steeringMask()) == format.steeringMask()) {
-      masked = (hi & format.form2CoeffLastMask()) | format.form2ImplicitMask();
-    } else {
-      masked = hi & format.form1CoeffLastMask();
-    }
+    long masked = coefficientHigh(format, hi);
     if (last == 0) {
       dest.l0 = masked;
     } else if (last == 1) {
@@ -270,12 +272,7 @@ final class BidCodec {
 
   static void applyCoeffMask(FormatParams format, Wide8 dest, long hi) {
     int last = format.lastWord();
-    long masked;
-    if ((hi & format.steeringMask()) == format.steeringMask()) {
-      masked = (hi & format.form2CoeffLastMask()) | format.form2ImplicitMask();
-    } else {
-      masked = hi & format.form1CoeffLastMask();
-    }
+    long masked = coefficientHigh(format, hi);
     if (last == 0) {
       dest.l0 = masked;
     } else if (last == 1) {
@@ -288,12 +285,7 @@ final class BidCodec {
   }
 
   static void applyCoeffMask(FormatParams format, long[] dest, long hi) {
-    int last = format.lastWord();
-    if ((hi & format.steeringMask()) == format.steeringMask()) {
-      dest[last] = (hi & format.form2CoeffLastMask()) | format.form2ImplicitMask();
-    } else {
-      dest[last] = hi & format.form1CoeffLastMask();
-    }
+    dest[format.lastWord()] = coefficientHigh(format, hi);
   }
 
   static void loadUnpacked(
@@ -313,12 +305,7 @@ final class BidCodec {
     long c2 = n > 2 ? words[2] : 0L;
     long c3 = n > 3 ? words[3] : 0L;
     long hi = words[format.lastWord()];
-    long masked;
-    if ((hi & format.steeringMask()) == format.steeringMask()) {
-      masked = (hi & format.form2CoeffLastMask()) | format.form2ImplicitMask();
-    } else {
-      masked = hi & format.form1CoeffLastMask();
-    }
+    long masked = coefficientHigh(format, hi);
     int last = format.lastWord();
     if (last == 0) {
       c0 = masked;
@@ -330,6 +317,13 @@ final class BidCodec {
       c3 = masked;
     }
     int exp = unpackBiasedExponent(format, hi) - format.bias();
+    long[] coeff = {c0, c1, c2, c3};
+    if (!format.coefficientAllowed(coeff)) {
+      c0 = 0L;
+      c1 = 0L;
+      c2 = 0L;
+      c3 = 0L;
+    }
     dest.setFinite(format, negative, exp, c0, c1, c2, c3);
   }
 

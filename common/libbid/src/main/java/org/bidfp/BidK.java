@@ -23,9 +23,9 @@ import java.util.Arrays;
  * (packed width {@code 32*k} bits).
  *
  * <p>{@code k=2} and {@code k=4} dispatch to {@link Bid64} and {@link Bid128}.
- * {@code k=3} is a Decimal96 specialist (digit-pair sqrt). {@code k=5} uses
- * Wide6, and {@code k=6..8} use Wide8. Repeated arithmetic should use
- * {@link BidUnpacked} and pack only at I/O.
+ * {@code k=3} is a Decimal96 specialist (digit-pair sqrt). {@code k=5} and
+ * {@code k=6} use Wide6, and {@code k=7..8} use Wide8. Repeated arithmetic
+ * should use {@link BidUnpacked} and pack only at I/O.
  *
  * <p>Transcendental functions are provided only for {@code k<=4} (packed
  * width 128) by converting through {@link Bid128} and the binary128 DPML
@@ -204,6 +204,11 @@ public final class BidK {
 
   public boolean sqlEquals(BidK other) {
     return sqlCompare(other) == 0;
+  }
+
+  /** Hash consistent with {@link #sqlEquals(BidK)}, not {@link #equals}. */
+  public int sqlHash() {
+    return BidKRaw.sqlHash(format, words);
   }
 
   @Override

@@ -25,7 +25,8 @@ package org.bidfp;
  *
  * <p>With packed width {@code b = 32*k}: {@code p = 9*k-2},
  * {@code w = 2*k+4}, {@code t = b-w-6}, {@code emax = 3*2^(2*k+3)},
- * {@code bias = emax+p-2}.
+ * {@code bias = emax+p-2}. {@code p} is never 38, so no BID-k format is
+ * Spark {@code DecimalType} precision 38.
  */
 public final class FormatParams {
   private static final FormatParams[] BY_K = build();

@@ -18,8 +18,8 @@ package org.bidfp;
 
 /**
  * Unrolled unsigned 384-bit value (six little-endian {@code long}s). Decimal160
- * coefficients fit in three limbs (143 bits); products and aligned addends
- * need up to five. This is the Bid128 {@code UInt256} analog for {@code k=5}.
+ * and Decimal192 coefficients fit in three limbs; products and aligned addends
+ * need up to five. This is the Bid128 {@code UInt256} analog for {@code k=5..6}.
  */
 final class Wide6 {
   static final int POW10_MAX = 110;

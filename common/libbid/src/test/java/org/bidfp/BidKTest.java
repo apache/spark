@@ -410,20 +410,72 @@ public final class BidKTest {
     FormatParams[] formats = {
       FormatParams.DECIMAL96,
       FormatParams.DECIMAL160,
+      FormatParams.DECIMAL192,
+      FormatParams.DECIMAL224,
       FormatParams.DECIMAL256
     };
     for (FormatParams format : formats) {
       BidK n0 = BidK.parse(format, "-0");
       BidK p0 = BidK.parse(format, "0");
       expect(n0.sqlEquals(p0), "sql zeros " + format);
+      expect(n0.sqlHash() == p0.sqlHash(), "sql hash zeros " + format);
       BidK nan = BidK.naN(format, false, false);
+      BidK snan = BidK.naN(format, true, true);
       expect(nan.sqlCompare(p0) > 0, "sql nan greatest " + format);
-      expect(nan.sqlEquals(BidK.naN(format, true, true)), "sql nan equal " + format);
+      expect(nan.sqlEquals(snan), "sql nan equal " + format);
+      expect(nan.sqlHash() == snan.sqlHash(), "sql hash nan " + format);
       BidK a = BidK.parse(format, "1.25e10");
       BidK b = BidK.parse(format, "2.5e9");
       expect(a.sqlCompare(b) > 0, "sql order " + format);
       BidK c = BidK.parse(format, "125e8");
       expect(a.sqlEquals(c), "sql cohort " + format);
+      expect(a.sqlHash() == c.sqlHash(), "sql hash cohort " + format);
+      BidK two = BidK.parse(format, "2");
+      BidK three = BidK.parse(format, "3");
+      expect(two.sqlCompare(three) < 0, "sql aligned " + format);
+      expectPackedUnpacked(two, three, "aligned " + format);
+      BidK inf = BidK.infinity(format, false);
+      BidK ninf = BidK.infinity(format, true);
+      expect(inf.sqlCompare(p0) > 0, "sql +inf > 0 " + format);
+      expect(ninf.sqlCompare(p0) < 0, "sql -inf < 0 " + format);
+      expect(inf.sqlCompare(ninf) > 0, "sql +inf > -inf " + format);
+      expect(inf.sqlEquals(BidK.infinity(format, false)), "sql +inf eq " + format);
+      expect(inf.sqlHash() == BidK.infinity(format, false).sqlHash(),
+          "sql hash +inf " + format);
+      expectPackedUnpacked(inf, p0, "inf zero " + format);
+      expectPackedUnpacked(inf, ninf, "infs " + format);
+      expectPackedUnpacked(inf, two, "inf finite " + format);
+      expectPackedUnpacked(n0, p0, "signed zero " + format);
+      BidK overMax = noncanonical(format);
+      expect(overMax.sqlEquals(p0), "sql noncanonical vs 0 " + format);
+      expect(overMax.sqlCompare(two) < 0, "sql noncanonical vs 1 " + format);
+      expectPackedUnpacked(overMax, p0, "noncanonical zero " + format);
+      expectPackedUnpacked(overMax, two, "noncanonical finite " + format);
+      expect(load(format, a).sqlHash() == a.sqlHash(), "unpacked hash " + format);
+    }
+  }
+
+  private static BidK noncanonical(FormatParams format) {
+    long[] max = format.maxCoefficientWords();
+    long[] coeff = new long[LimbMath.WORK];
+    long[] one = new long[LimbMath.WORK];
+    System.arraycopy(max, 0, coeff, 0, max.length);
+    one[0] = 1L;
+    LimbMath.add(coeff, coeff, one);
+    long[] words = BidK.parse(format, "2").toRawBits().clone();
+    int biased = BidCodec.unpackBiasedExponent(format, words);
+    BidCodec.packFinite(format, false, biased, coeff, words);
+    return BidK.fromRawBits(format, words);
+  }
+
+  private static void expectPackedUnpacked(BidK x, BidK y, String label) {
+    BidUnpacked ux = load(x.format(), x);
+    BidUnpacked uy = load(y.format(), y);
+    int packed = x.sqlCompare(y);
+    int unpacked = ux.sqlCompare(uy);
+    if (packed != unpacked) {
+      throw new IllegalStateException(
+          label + " packed=" + packed + " unpacked=" + unpacked);
     }
   }
 

@@ -150,6 +150,13 @@ public final class BidUnpacked {
     return sqlCompare(other) == 0;
   }
 
+  /** Hash consistent with {@link #sqlEquals(BidUnpacked)}. */
+  public int sqlHash() {
+    long[] words = new long[format.wordCount()];
+    storePacked(words);
+    return BidKRaw.sqlHash(format, words);
+  }
+
   void setFinite(
       FormatParams format,
       boolean negative,

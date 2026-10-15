@@ -41,7 +41,16 @@ orders NaNs by their IEEE representation.
 `DecFloatAdapters` exposes the SQL-facing contract: negative and positive zero
 compare equal, all NaNs compare equal, and NaN sorts after finite values.
 SQL grouping, joins, sorting, and hashing must use these adapters rather than
-the object types' natural ordering.
+the object types' natural ordering. `BidK.sqlCompare` / `sqlEquals` /
+`sqlHash` follow the same contract for BID-k; `BidK.hashCode` is payload
+identity and is not SQL equality.
+
+IEEE BID-k precision is `p = 9k-2` (16, 25, 34, 43, ...). Spark
+`DecimalType` allows precision 1 through 38. No IEEE k equals 38.
+Decimal128 cannot store DECIMAL(38). Decimal160 (`p=43`) is the smallest
+IEEE format that can hold 38 digits; a SQL binding would still need to
+quantize to scale, clamp to 38 digits, and reject Inf/NaN. This module
+does not define that mapping.
 
 ## Performance compared with `BigDecimal`
 

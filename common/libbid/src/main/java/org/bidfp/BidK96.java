@@ -235,8 +235,8 @@ final class BidK96 {
     long yh = y[1];
     if (BidCodec.unpackBiasedExponent(format, xh)
         == BidCodec.unpackBiasedExponent(format, yh)) {
-      long x1 = coefficientHigh(format, xh);
-      long y1 = coefficientHigh(format, yh);
+      long x1 = BidCodec.coefficientHigh(format, xh);
+      long y1 = BidCodec.coefficientHigh(format, yh);
       long[] max = format.maxCoefficientWords();
       long x0 = x[0];
       long y0 = y[0];
@@ -273,7 +273,7 @@ final class BidK96 {
     if (an != s.an) {
       return an ? -1 : 1;
     }
-    int cmp = compareAbsolute(s.xa, ae, s.xb, s.ae, s);
+    int cmp = compareAbsolute(s.xa, ae, s.xb, s.ae, s.xt);
     return an ? -cmp : cmp;
   }
 
@@ -437,8 +437,8 @@ final class BidK96 {
     pack(format, negative, aExp, s.xr, mode, flags, s, out);
   }
 
-  private static int compareAbsolute(
-      Wide6 a, int ae, Wide6 b, int be, Scratch s) {
+  static int compareAbsolute(
+      Wide6 a, int ae, Wide6 b, int be, Wide6 tmp) {
     if (a.isZero()) {
       return b.isZero() ? 0 : -1;
     }
@@ -456,13 +456,13 @@ final class BidK96 {
       return -1;
     }
     if (diff > 0) {
-      s.xt.copyFrom(a);
-      s.xt.multiplyPow10(diff);
-      return s.xt.compare(b);
+      tmp.copyFrom(a);
+      tmp.multiplyPow10(diff);
+      return tmp.compare(b);
     }
-    s.xt.copyFrom(b);
-    s.xt.multiplyPow10(-diff);
-    return a.compare(s.xt);
+    tmp.copyFrom(b);
+    tmp.multiplyPow10(-diff);
+    return a.compare(tmp);
   }
 
   private static void pack(
@@ -652,7 +652,7 @@ final class BidK96 {
     }
     long hi = words[1];
     coefficient.l0 = words[0];
-    coefficient.l1 = coefficientHigh(format, hi);
+    coefficient.l1 = BidCodec.coefficientHigh(format, hi);
     coefficient.l2 = 0L;
     coefficient.l3 = 0L;
     coefficient.l4 = 0L;
@@ -752,13 +752,6 @@ final class BidK96 {
       return true;
     }
     return false;
-  }
-
-  private static long coefficientHigh(FormatParams format, long hi) {
-    if ((hi & format.steeringMask()) == format.steeringMask()) {
-      return (hi & format.form2CoeffLastMask()) | format.form2ImplicitMask();
-    }
-    return hi & format.form1CoeffLastMask();
   }
 
   private static boolean allowed(long low, long high, long[] max) {

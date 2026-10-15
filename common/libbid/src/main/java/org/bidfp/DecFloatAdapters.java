@@ -342,6 +342,11 @@ public final class DecFloatAdapters {
     return targetScale;
   }
 
+  /**
+   * Spark {@code DecimalType} bounds (precision 1..38). This is not IEEE
+   * BID-k precision: Decimal64 holds 16 digits and Decimal128 holds 34, so a
+   * DECIMAL(38) value may still be rejected by {@code toDecimal64/128}.
+   */
   private static boolean validDecimalType(int precision, int scale) {
     return precision >= 1 && precision <= 38 && scale <= 38 && scale <= precision;
   }

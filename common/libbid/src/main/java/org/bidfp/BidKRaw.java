@@ -16,10 +16,12 @@
  */
 package org.bidfp;
 
+import java.util.Arrays;
+
 /**
  * Generic BID-k arithmetic. {@code k=2,4} dispatch to {@link BidKSpecial},
- * {@code k=3} is the {@link BidK96} specialist, {@code k=5} uses Wide6, and
- * {@code k=6..8} use Wide8. Parse uses {@link DecNum}.
+ * {@code k=3} is the {@link BidK96} specialist, {@code k=5} and {@code k=6}
+ * use Wide6, and {@code k=7..8} use Wide8. Parse uses {@link DecNum}.
  *
  * <p>{@link BidUnpacked} is the compute form: kernels write
  * {@link BidKScratch.Frame#unpackedOut} through {@link BidEmit} and skip
@@ -826,27 +828,27 @@ final class BidKRaw {
 
   static int sqlCompareUnpacked(BidUnpacked x, BidUnpacked y) {
     FormatParams format = requireSameFormat(x, y);
-    if (x.isNaN()) {
-      return y.isNaN() ? 0 : 1;
-    }
-    if (y.isNaN()) {
-      return -1;
-    }
-    if (x.kind() == BidUnpacked.Kind.INF || y.kind() == BidUnpacked.Kind.INF) {
-      if (x.kind() == BidUnpacked.Kind.INF && y.kind() == BidUnpacked.Kind.INF) {
-        if (x.negative() == y.negative()) {
-          return 0;
-        }
-        return x.negative() ? -1 : 1;
-      }
-      if (x.kind() == BidUnpacked.Kind.INF) {
-        return x.negative() ? -1 : 1;
-      }
-      return y.negative() ? 1 : -1;
+    int special = sqlCompareSpecial(
+        x.isNaN(), y.isNaN(),
+        x.kind() == BidUnpacked.Kind.INF, y.kind() == BidUnpacked.Kind.INF,
+        x.negative(), y.negative());
+    if (special != Integer.MIN_VALUE) {
+      return special;
     }
     BidKScratch.Frame frame = BidKScratch.acquire();
     try {
       loadBinary(x, y, frame);
+      if (BidK96.matches(format)) {
+        if (frame.xa.isZero() && frame.xb.isZero()) {
+          return 0;
+        }
+        if (frame.an != frame.bn) {
+          return frame.an ? -1 : 1;
+        }
+        int cmp = BidK96.compareAbsolute(
+            frame.xa, frame.ae, frame.xb, frame.be, frame.xt);
+        return frame.an ? -cmp : cmp;
+      }
       if (BidK160.matches(format)) {
         if (frame.xa.isZero() && frame.xb.isZero()) {
           return 0;
@@ -891,21 +893,20 @@ final class BidKRaw {
     if (k == 4) {
       return DecFloatAdapters.sqlCompare128(x[1], x[0], y[1], y[0]);
     }
-    if (k == 3 && BidCodec.isFinite(format, x) && BidCodec.isFinite(format, y)) {
+    int special = sqlCompareSpecial(
+        BidCodec.isNaN(format, x), BidCodec.isNaN(format, y),
+        BidCodec.isInfinite(format, x), BidCodec.isInfinite(format, y),
+        BidCodec.isSigned(format, x), BidCodec.isSigned(format, y));
+    if (special != Integer.MIN_VALUE) {
+      return special;
+    }
+    if (k == 3) {
       return BidK96.sqlCompare(format, x, y);
     }
     if (k >= 5
-        && BidCodec.isFinite(format, x)
-        && BidCodec.isFinite(format, y)
         && BidCodec.unpackBiasedExponent(format, x[format.lastWord()])
             == BidCodec.unpackBiasedExponent(format, y[format.lastWord()])) {
       return compareAlignedFinite(format, x, y);
-    }
-    if (BidCodec.isNaN(format, x)) {
-      return BidCodec.isNaN(format, y) ? 0 : 1;
-    }
-    if (BidCodec.isNaN(format, y)) {
-      return -1;
     }
     BidKScratch.Frame frame = BidKScratch.acquire();
     try {
@@ -919,6 +920,19 @@ final class BidKRaw {
     } finally {
       BidKScratch.release(frame);
     }
+  }
+
+  static int sqlHash(FormatParams format, long[] words) {
+    int k = format.units();
+    if (k == 2) {
+      return DecFloatAdapters.sqlHash64(words[0]);
+    }
+    if (k == 4) {
+      return DecFloatAdapters.sqlHash128(words[1], words[0]);
+    }
+    long[] canonical = new long[format.wordCount()];
+    canonicalize(format, words, canonical);
+    return Arrays.hashCode(canonical);
   }
 
   static void requireLibm(FormatParams format) {
@@ -935,57 +949,94 @@ final class BidKRaw {
     SNAN
   }
 
-  private static int compareAlignedFinite(
-      FormatParams format, long[] x, long[] y) {
-    int last = format.lastWord();
-    long xHigh = packedCoefficientHigh(format, x[last]);
-    long yHigh = packedCoefficientHigh(format, y[last]);
-    boolean xAllowed = packedCoefficientAllowed(format, x, xHigh);
-    boolean yAllowed = packedCoefficientAllowed(format, y, yHigh);
-    boolean xZero = !xAllowed || packedCoefficientZero(x, xHigh, last);
-    boolean yZero = !yAllowed || packedCoefficientZero(y, yHigh, last);
-    if (xZero && yZero) {
-      return 0;
+  private static int sqlCompareSpecial(
+      boolean xNaN,
+      boolean yNaN,
+      boolean xInf,
+      boolean yInf,
+      boolean xNegative,
+      boolean yNegative) {
+    if (xNaN) {
+      return yNaN ? 0 : 1;
     }
-    boolean xNegative = BidCodec.isSigned(format, x);
-    boolean yNegative = BidCodec.isSigned(format, y);
-    if (xNegative != yNegative) {
+    if (yNaN) {
+      return -1;
+    }
+    if (!xInf && !yInf) {
+      return Integer.MIN_VALUE;
+    }
+    if (xInf && yInf) {
+      if (xNegative == yNegative) {
+        return 0;
+      }
       return xNegative ? -1 : 1;
     }
-    int cmp = Long.compareUnsigned(xHigh, yHigh);
-    for (int i = last - 1; cmp == 0 && i >= 0; i--) {
-      long xWord = xAllowed ? x[i] : 0L;
-      long yWord = yAllowed ? y[i] : 0L;
-      cmp = Long.compareUnsigned(xWord, yWord);
+    if (xInf) {
+      return xNegative ? -1 : 1;
     }
-    return xNegative ? -cmp : cmp;
+    return yNegative ? 1 : -1;
   }
 
-  private static long packedCoefficientHigh(FormatParams format, long high) {
-    if ((high & format.steeringMask()) == format.steeringMask()) {
-      return (high & format.form2CoeffLastMask()) | format.form2ImplicitMask();
+  private static int compareAlignedFinite(
+      FormatParams format, long[] x, long[] y) {
+    BidKScratch.Frame frame = BidKScratch.acquire();
+    try {
+      BidCodec.unpackCoefficient(format, x, frame.w0);
+      BidCodec.unpackCoefficient(format, y, frame.w1);
+      if (!format.coefficientAllowed(frame.w0)) {
+        LimbMath.clear(frame.w0);
+      }
+      if (!format.coefficientAllowed(frame.w1)) {
+        LimbMath.clear(frame.w1);
+      }
+      if (LimbMath.isZero(frame.w0) && LimbMath.isZero(frame.w1)) {
+        return 0;
+      }
+      boolean xNegative = BidCodec.isSigned(format, x);
+      boolean yNegative = BidCodec.isSigned(format, y);
+      if (xNegative != yNegative) {
+        return xNegative ? -1 : 1;
+      }
+      int cmp = LimbMath.compare(frame.w0, frame.w1);
+      return xNegative ? -cmp : cmp;
+    } finally {
+      BidKScratch.release(frame);
     }
-    return high & format.form1CoeffLastMask();
   }
 
-  private static boolean packedCoefficientAllowed(
-      FormatParams format, long[] words, long high) {
-    int last = format.lastWord();
-    long[] max = format.maxCoefficientWords();
-    int cmp = Long.compareUnsigned(high, max[last]);
-    for (int i = last - 1; cmp == 0 && i >= 0; i--) {
-      cmp = Long.compareUnsigned(words[i], max[i]);
+  private static void canonicalize(
+      FormatParams format, long[] words, long[] out) {
+    if (BidCodec.isNaN(format, words)) {
+      BidCodec.packNaN(format, false, false, out);
+      return;
     }
-    return cmp <= 0;
-  }
-
-  private static boolean packedCoefficientZero(
-      long[] words, long high, int last) {
-    long bits = high;
-    for (int i = 0; i < last; i++) {
-      bits |= words[i];
+    if (BidCodec.isInfinite(format, words)) {
+      BidCodec.packInfinity(format, BidCodec.isSigned(format, words), out);
+      return;
     }
-    return bits == 0L;
+    BidKScratch.Frame frame = BidKScratch.acquire();
+    try {
+      BidCodec.unpackCoefficient(format, words, frame.w0);
+      if (!format.coefficientAllowed(frame.w0) || LimbMath.isZero(frame.w0)) {
+        LimbMath.clear(frame.w0);
+        BidCodec.packFinite(format, false, format.bias(), frame.w0, out);
+        return;
+      }
+      int biased = BidCodec.unpackBiasedExponent(format, words);
+      int maxBiased = format.maxBiasedExponent();
+      while (biased < maxBiased) {
+        LimbMath.copy(frame.w1, frame.w0);
+        if (LimbMath.divideSmall32(frame.w1, 10L) != 0L) {
+          break;
+        }
+        LimbMath.copy(frame.w0, frame.w1);
+        biased++;
+      }
+      BidCodec.packFinite(
+          format, BidCodec.isSigned(format, words), biased, frame.w0, out);
+    } finally {
+      BidKScratch.release(frame);
+    }
   }
 
   private static Kind unpackAddend(
@@ -1269,7 +1320,7 @@ final class BidKRaw {
     frame.bn = y.negative();
     frame.be = y.exponent();
     FormatParams format = x.format();
-    if (BidK160.matches(format)) {
+    if (BidK96.matches(format) || BidK160.matches(format)) {
       loadWide6(frame.xa, x);
       loadWide6(frame.xb, y);
     } else if (BidK256.matches(format)) {

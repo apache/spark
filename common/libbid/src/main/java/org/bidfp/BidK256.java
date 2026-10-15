@@ -398,18 +398,13 @@ final class BidK256 {
       pack(format, aNeg, aExp, a, !b.isZero(), mode, flags, frame, out);
       return;
     }
-    boolean narrow = difference == 0;
     if (difference > 0) {
       a.multiplyPow10(difference);
       aExp -= difference;
     }
     boolean negative;
     if (aNeg == bNeg) {
-      if (narrow) {
-        frame.yr.add4(a, b);
-      } else {
-        frame.yr.add(a, b);
-      }
+      frame.yr.add(a, b);
       negative = aNeg;
     } else {
       int cmp = a.compare(b);
@@ -419,18 +414,10 @@ final class BidK256 {
         return;
       }
       if (cmp > 0) {
-        if (narrow) {
-          frame.yr.subtract4(a, b);
-        } else {
-          frame.yr.subtract(a, b);
-        }
+        frame.yr.subtract(a, b);
         negative = aNeg;
       } else {
-        if (narrow) {
-          frame.yr.subtract4(b, a);
-        } else {
-          frame.yr.subtract(b, a);
-        }
+        frame.yr.subtract(b, a);
         negative = bNeg;
       }
     }
