@@ -18,6 +18,7 @@
 package org.apache.spark.shuffle.local.pipelined
 
 import java.util.concurrent.{Callable, ConcurrentLinkedQueue, CountDownLatch, ExecutionException, Executors, TimeUnit}
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
@@ -117,16 +118,18 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
       val failure = intercept[ExecutionException](job.get(1, TimeUnit.MINUTES)).getCause
       assert(failure.isInstanceOf[SparkException])
       assert(failure.getMessage.contains("failed 1 times"), failure.getMessage)
+      assert(failure.getMessage.contains(s"(TID $target)"), failure.getMessage)
       assert(failure.getMessage.contains("manual kill"), failure.getMessage)
       target
     } finally {
       PipelinedChannelShuffleSuite.releaseKill()
       pool.shutdownNow()
     }
-    // The group's other running tasks are killed with it; those reports can arrive after the job
-    // has failed.
+    // Every started task ends: the group's other running tasks are killed with it, and those
+    // reports can arrive after the job has failed.
     eventually(timeout(1.minute)) {
-      assert(events.taskEnds.size === events.taskStarts.size)
+      assert(events.taskEnds.asScala.map(_.taskInfo.taskId).toSet ===
+        events.taskStarts.asScala.map(_.taskInfo.taskId).toSet)
     }
     sc.listenerBus.waitUntilEmpty()
     // The job failed once, and nothing was retried: every task ran once, in the first attempt of
@@ -733,41 +736,45 @@ private object PipelinedChannelShuffleSuite {
   def countRows(it: Iterator[_]): Long = it.size.toLong
 
   // Lets a test kill a task mid-stream. The first task to call awaitKill after armKill, which
-  // runs in this JVM in local mode, publishes its attempt ID and waits until it is killed.
-  @volatile private var killArmed = false
-  @volatile private var killReleased = false
-  @volatile private var taskToKillId = -1L
-  @volatile private var taskWaiting = new CountDownLatch(1)
+  // runs in this JVM in local mode, publishes its attempt ID and waits until it is killed. Each
+  // armKill starts from fresh state, so a task left over from an earlier arming cannot affect it.
+  private class KillTarget {
+    val armed = new AtomicBoolean(true)
+    val waiting = new CountDownLatch(1)
+    val released = new CountDownLatch(1)
+    @volatile var taskId = -1L
+  }
+
+  @volatile private var killTarget: KillTarget = null
 
   def armKill(): Unit = {
-    taskToKillId = -1L
-    taskWaiting = new CountDownLatch(1)
-    killReleased = false
-    killArmed = true
+    killTarget = new KillTarget
   }
 
   /** Run by the task to kill: publish its attempt ID, then wait to be killed or released. */
-  def awaitKill(): Unit = if (killArmed) {
-    killArmed = false
-    val context = TaskContext.get()
-    taskToKillId = context.taskAttemptId()
-    taskWaiting.countDown()
-    // Give up after a minute, so that a kill that never comes fails the test instead of hanging.
-    val deadline = System.nanoTime() + TimeUnit.MINUTES.toNanos(1)
-    while (!killReleased && System.nanoTime() < deadline) {
-      context.killTaskIfInterrupted()
-      Thread.sleep(10)
+  def awaitKill(): Unit = {
+    val target = killTarget
+    if (target != null && target.armed.compareAndSet(true, false)) {
+      val context = TaskContext.get()
+      target.taskId = context.taskAttemptId()
+      target.waiting.countDown()
+      // Give up after a minute, so that a kill that never comes fails the test instead of hanging.
+      val deadline = System.nanoTime() + TimeUnit.MINUTES.toNanos(1)
+      while (!target.released.await(10, TimeUnit.MILLISECONDS) && System.nanoTime() < deadline) {
+        context.killTaskIfInterrupted()
+      }
     }
   }
 
   /** The attempt ID of the armed task, once it is waiting to be killed. */
   def taskToKill(): Long = {
-    assert(taskWaiting.await(1, TimeUnit.MINUTES), "no task started waiting to be killed")
-    taskToKillId
+    val target = killTarget
+    assert(target.waiting.await(1, TimeUnit.MINUTES), "no task started waiting to be killed")
+    target.taskId
   }
 
   /** Let a waiting task continue if it was never killed, e.g. after a failed assertion. */
   def releaseKill(): Unit = {
-    killReleased = true
+    killTarget.released.countDown()
   }
 }
