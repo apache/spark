@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.streaming
 import java.util.concurrent.TimeUnit
 
 import scala.concurrent.duration.{Duration, MINUTES}
+import scala.util.control.NonFatal
 
 import org.json4s.DefaultFormats
 import org.json4s.jackson.JsonMethods.parse
@@ -47,14 +48,18 @@ private[spark] object Triggers {
   }
 
   def fromJson(json: String): Trigger = {
-    val value = parse(json)
-    (value \ "type").extract[String] match {
-      case "ProcessingTime" => ProcessingTimeTrigger((value \ "intervalMs").extract[Long])
-      case "Continuous" => ContinuousTrigger((value \ "intervalMs").extract[Long])
-      case "RealTime" => RealTimeTrigger((value \ "batchDurationMs").extract[Long])
-      case "AvailableNow" => AvailableNowTrigger
-      case "Once" => OneTimeTrigger
-      case other => throw new IllegalStateException(s"Unknown type of trigger: $other")
+    try {
+      val value = parse(json)
+      (value \ "type").extract[String] match {
+        case "ProcessingTime" => ProcessingTimeTrigger((value \ "intervalMs").extract[Long])
+        case "Continuous" => ContinuousTrigger((value \ "intervalMs").extract[Long])
+        case "RealTime" => RealTimeTrigger((value \ "batchDurationMs").extract[Long])
+        case "AvailableNow" => AvailableNowTrigger
+        case "Once" => OneTimeTrigger
+        case _ => null
+      }
+    } catch {
+      case NonFatal(_) => null
     }
   }
 

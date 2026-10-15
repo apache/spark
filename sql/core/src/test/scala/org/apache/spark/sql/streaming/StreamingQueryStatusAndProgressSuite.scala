@@ -72,15 +72,14 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
 
     val input = MemoryStream[Int]
     val trigger = new Trigger {}
-    val query = input.toDS().writeStream
-      .format("memory")
-      .queryName("unsupported_trigger")
-      .trigger(trigger)
-      .start()
-    val exception = intercept[StreamingQueryException] {
-      query.processAllAvailable()
+    val exception = intercept[IllegalStateException] {
+      input.toDS().writeStream
+        .format("memory")
+        .queryName("unsupported_trigger")
+        .trigger(trigger)
+        .start()
     }
-    assert(exception.getCause.getMessage === s"Unknown type of trigger: $trigger")
+    assert(exception.getMessage === s"Unknown type of trigger: $trigger")
   }
 
   test("SPARK-59986: trigger metadata has a public read-only JVM accessor") {
@@ -106,6 +105,19 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
         assert(parse(json) \ "trigger" === parse(progress.trigger))
       }
     assert(StreamingQueryProgress.fromJson(progress.json).trigger === progress.trigger)
+  }
+
+  test("SPARK-59986: unsupported trigger metadata does not fail progress decoding") {
+    val progress = progressWithTrigger(Trigger.ProcessingTime(1000))
+    Seq(
+      """{"type":"FutureTrigger"}""",
+      """{"type":"ProcessingTime"}""",
+      """{"type":"ProcessingTime","intervalMs":"invalid"}""").foreach { triggerJson =>
+      val json = progress.json.replace(progress.trigger, triggerJson)
+      val result = StreamingQueryProgress.fromJson(json)
+      assert(result.trigger == null)
+      assert(result.batchId === progress.batchId)
+    }
   }
 
   test("SPARK-59986: micro-batch progress reports the configured trigger") {

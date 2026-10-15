@@ -37,6 +37,21 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
 
   private val serializer = new KVStoreProtobufSerializer()
 
+  test("unsupported trigger metadata does not fail progress store decoding") {
+    Seq(
+      """{"type":"FutureTrigger"}""",
+      """{"type":"ProcessingTime"}""",
+      """{"type":"ProcessingTime","intervalMs":"invalid"}""").foreach { triggerJson =>
+      val storedProgress = StoreTypes.StreamingQueryProgress.newBuilder()
+        .setSink(StoreTypes.SinkProgress.newBuilder())
+        .setTrigger(triggerJson)
+        .build()
+      val result = StreamingQueryProgressSerializer.deserialize(storedProgress)
+      assert(result.trigger == null)
+      assert(result.batchId === storedProgress.getBatchId)
+    }
+  }
+
   test("SQLExecutionUIData") {
     val normal = SqlResourceSuite.sqlExecutionUIData
     val withNull = new SQLExecutionUIData(
