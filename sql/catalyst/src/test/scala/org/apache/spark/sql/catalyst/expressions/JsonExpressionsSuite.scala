@@ -1094,8 +1094,8 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(jsonValue.stateful)
     assert(jsonValue.freshCopyIfContainsStatefulExpression() ne jsonValue)
 
-    // JsonObjectExpr owns mutable scratch (reused rows, cached evaluators/validated texts), so it
-    // must be stateful and hand out a fresh copy.
+    // JsonObjectExpr's evaluator owns mutable scratch (a per-task generator, writer, and
+    // validated-text cache), so it must be stateful and hand out a fresh copy.
     val jsonObject = JsonObjectExpr(
       Seq((Literal("a"), Literal(1))), Seq(false), Seq(false))
     assert(jsonObject.stateful)

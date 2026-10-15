@@ -1271,13 +1271,15 @@ object JsonQuery {
 }
 
 /**
- * Behavior of `JSON_ARRAY`'s `ON NULL` clause: what to do with NULL elements in the array.
+ * Behavior of a JSON constructor's `ON NULL` clause: what to do with a NULL element (`JSON_ARRAY`)
+ * or NULL-valued member (`JSON_OBJECT`). The default differs by constructor: `ABSENT ON NULL` for
+ * `JSON_ARRAY`, `NULL ON NULL` for `JSON_OBJECT`.
  */
 sealed trait JsonConstructorNullBehavior
 object JsonConstructorNullBehavior {
-  /** Include NULL elements as JSON `null` values. */
+  /** Include a NULL element/member as a JSON `null` value. */
   case object Null extends JsonConstructorNullBehavior
-  /** Omit NULL elements from the array. */
+  /** Omit a NULL element/member. */
   case object Absent extends JsonConstructorNullBehavior
 }
 
@@ -2334,36 +2336,6 @@ case class JsonTypeof(child: Expression)
 }
 
 /**
- * The SQL:2016 `JSON_OBJECT` constructor function (feature T811): constructs a JSON object from
- * key-value pairs, written `key VALUE value`, `KEY key VALUE value`, `key : value`, or the
- * MySQL-style `key, value`.
- *
- * Keys must be non-null strings; a null key is an error. The `ON NULL` clause controls whether
- * null-valued pairs are included (NULL ON NULL, the standard default) or omitted (ABSENT ON NULL).
- *
- * A value is spliced in raw (unquoted) when it carries `FORMAT JSON` (tracked per member by
- * `rawJson`): the explicit clause (e.g. `JSON_OBJECT('a' VALUE '{"b":1}' FORMAT JSON)`), or the
- * implicit form carried by a nested JSON constructor / `JSON_QUERY` under KEEP QUOTES (see
- * `rawJsonValue`). Explicit `FORMAT JSON` on a non-constructor is arbitrary user text, so
- * `needsValidation` marks it for JSON validation at eval; a nested constructor is trusted.
- *
- * Examples:
- *   JSON_OBJECT('id' VALUE 7, 'name' VALUE 'Ada')      -> '{"id":7,"name":"Ada"}'
- *   JSON_OBJECT('id': 7, 'v': NULL)                    -> '{"id":7,"v":null}'
- *   JSON_OBJECT('id': 7, 'v': NULL ABSENT ON NULL)     -> '{"id":7}'
- *   JSON_OBJECT()                                       -> '{}'
- *
- * A clause-free call that is not itself lexically nested in an enclosing constructor's *value*
- * position routes through function resolution and is rebuilt by `JsonObjectExpressionBuilder`, so a
- * same-named routine can shadow the built-in `json_object`: always for the comma form (a nested
- * producer value routes too, carrying its raw-splice eligibility via `JsonImplicitFormatCarrier`),
- * but for the `VALUE` / `:` forms only when no member carries a raw value (`rawJson.contains(true)`
- * -- an explicit `FORMAT JSON` or a nested producer in *value* position -- keeps it direct).
- * Otherwise it is built directly from the grammar (clause-bearing, or value-nested); a nested
- * *key*-position call stays routable (see `AstBuilder.visitJsonObject`).
- * The user-facing reference lives in `docs/sql-ref-syntax-qry-select-json-object.md`.
- */
-/**
  * Guards a JSON_OBJECT key: returns the key, or raises JSON_OBJECT_NULL_KEY when it is null. Wraps
  * each key inside `JsonObjectExpr.replacement` so that, as the carrier struct is evaluated left to
  * right, a null key fails before its member's value is evaluated (the key-before-value error
@@ -2398,6 +2370,36 @@ case class JsonObjectKeyGuard(child: Expression) extends UnaryExpression with No
     copy(child = newChild)
 }
 
+/**
+ * The SQL:2016 `JSON_OBJECT` constructor function (feature T811): constructs a JSON object from
+ * key-value pairs, written `key VALUE value`, `KEY key VALUE value`, `key : value`, or the
+ * MySQL-style `key, value`.
+ *
+ * Keys must be non-null strings; a null key is an error. The `ON NULL` clause controls whether
+ * null-valued pairs are included (NULL ON NULL, the standard default) or omitted (ABSENT ON NULL).
+ *
+ * A value is spliced in raw (unquoted) when it carries `FORMAT JSON` (tracked per member by
+ * `rawJson`): the explicit clause (e.g. `JSON_OBJECT('a' VALUE '{"b":1}' FORMAT JSON)`), or the
+ * implicit form carried by a nested JSON constructor / `JSON_QUERY` under KEEP QUOTES (see
+ * `rawJsonValue`). Explicit `FORMAT JSON` on a non-constructor is arbitrary user text, so
+ * `needsValidation` marks it for JSON validation at eval; a nested constructor is trusted.
+ *
+ * Examples:
+ *   JSON_OBJECT('id' VALUE 7, 'name' VALUE 'Ada')      -> '{"id":7,"name":"Ada"}'
+ *   JSON_OBJECT('id': 7, 'v': NULL)                    -> '{"id":7,"v":null}'
+ *   JSON_OBJECT('id': 7, 'v': NULL ABSENT ON NULL)     -> '{"id":7}'
+ *   JSON_OBJECT()                                       -> '{}'
+ *
+ * A clause-free call that is not itself lexically nested in an enclosing constructor's *value*
+ * position routes through function resolution and is rebuilt by `JsonObjectExpressionBuilder`, so a
+ * same-named routine can shadow the built-in `json_object`: always for the comma form (a nested
+ * producer value routes too, carrying its raw-splice eligibility via `JsonImplicitFormatCarrier`),
+ * but for the `VALUE` / `:` forms only when no member carries a raw value (`rawJson.contains(true)`
+ * -- an explicit `FORMAT JSON` or a nested producer in *value* position -- keeps it direct).
+ * Otherwise it is built directly from the grammar (clause-bearing, or value-nested); a nested
+ * *key*-position call stays routable (see `AstBuilder.visitJsonObject`).
+ * The user-facing reference lives in `docs/sql-ref-syntax-qry-select-json-object.md`.
+ */
 case class JsonObjectExpr(
     members: Seq[(Expression, Expression)],
     rawJson: Seq[Boolean],
@@ -2602,10 +2604,10 @@ case class JsonObjectExpr(
       case JsonConstructorNullBehavior.Absent => " ABSENT ON NULL"
       case JsonConstructorNullBehavior.Null => if (forceBuiltinOwnership) " NULL ON NULL" else ""
     }
-    // Reference identity, not value equality: an explicit `RETURNING STRING COLLATE ...` is a
-    // distinct StringType instance that `==` the default companion, so `==` would drop it. `eq`
-    // renders nothing for the companion (omitted or plain `RETURNING STRING`) and only the collated
-    // instance otherwise.
+    // Reference identity, not value equality: an explicitly collated `RETURNING STRING COLLATE
+    // UTF8_BINARY` is a distinct instance that compares `==` to the companion, so `==` would drop
+    // it. Only the companion (by reference) renders nothing -- reached by omission and by a plain
+    // `RETURNING STRING`. Matches `JsonArray.sql`.
     val returningSQL = if (returning.eq(StringType)) "" else s" RETURNING ${returning.sql}"
     // `trim` drops the leading space of the clauses in the no-member case (`JSON_OBJECT()`).
     s"JSON_OBJECT(${s"$membersSQL$nullSQL$returningSQL".trim})"

@@ -23,7 +23,7 @@ import org.antlr.v4.runtime.atn.PredictionMode
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.analysis.Star
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.{Cast, Collate, Expression, JsonConstructorNullBehavior, JsonImplicitFormatCarrier, JsonObjectExpr, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Cast, CodegenObjectFactoryMode, Collate, Expression, JsonConstructorNullBehavior, JsonImplicitFormatCarrier, JsonObjectExpr, Literal}
 import org.apache.spark.sql.catalyst.parser.{ParseException, SparkParserBailErrorStrategy, SqlBaseLexer, SqlBaseParser}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join}
 import org.apache.spark.sql.execution.{ProjectExec, WholeStageCodegenExec}
@@ -799,14 +799,13 @@ world'))"""))
     assert(e.getSqlState == "22004")
   }
 
-  test("a foldable literal key is rendered once and reused across rows") {
-    // JSON_OBJECT caches the rendered name of a foldable non-null key; the same key must still be
-    // emitted for every row.
+  test("a foldable literal key is emitted on every row") {
+    // A foldable non-null key must be written for every row, not dropped after the first.
     checkAnswer(
       sql("SELECT json_object('id' VALUE a) FROM VALUES (1), (2) t(a)"),
       Seq(Row("""{"id":1}"""), Row("""{"id":2}""")))
-    // A foldable key that evaluates to null is not cached: it must still raise JSON_OBJECT_NULL_KEY
-    // per row rather than being silently skipped.
+    // A foldable key that evaluates to null must still raise JSON_OBJECT_NULL_KEY per row rather
+    // than being silently skipped.
     Seq("NULL", "CAST(NULL AS STRING)").foreach { k =>
       val e = intercept[SparkRuntimeException] {
         sql(s"SELECT json_object($k VALUE 1)").collect()
@@ -1094,6 +1093,36 @@ world'))"""))
       Seq("bad").toDF("j").selectExpr("json_object('a' VALUE j FORMAT JSON)").collect()
     }
     assert(e.getCondition == "INVALID_JSON_FORMAT_JSON_VALUE")
+  }
+
+  test("a caught FORMAT JSON error does not corrupt later rows in the same task") {
+    // The evaluator validates every raw value before writing to its per-task generator, so a
+    // malformed row that a `try_*` wrapper swallows must leave the generator clean: later rows
+    // reusing the same evaluator must render exactly as they would on their own. `decode(..utf-8)`
+    // round-trips the bytes back to the JSON string so the per-row result is checkable.
+    val query =
+      "SELECT decode(try_to_binary(json_object('a' VALUE s FORMAT JSON), 'utf-8'), 'utf-8') " +
+        "FROM VALUES ('1'), ('{bad'), ('2'), ('3') AS t(s)"
+    val expected = Seq(Row("""{"a":1}"""), Row(null), Row("""{"a":2}"""), Row("""{"a":3}"""))
+    val modes = Seq(CodegenObjectFactoryMode.NO_CODEGEN, CodegenObjectFactoryMode.CODEGEN_ONLY)
+    modes.foreach { mode =>
+      withSQLConf(
+        SQLConf.CODEGEN_FACTORY_MODE.key -> mode.toString,
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key ->
+          (mode == CodegenObjectFactoryMode.CODEGEN_ONLY).toString) {
+        checkAnswer(sql(query), expected)
+      }
+    }
+  }
+
+  test("each foldable FORMAT JSON member splices its own validated text across rows") {
+    // Two constant FORMAT JSON members at different positions share the validated-text cache. A
+    // column-valued member keeps the object from being constant-folded, so rows after the first
+    // read the cache: a fill or read at the wrong index would splice the other member's text.
+    checkAnswer(
+      sql("SELECT json_object('a' VALUE '[1]' FORMAT JSON, 'b' VALUE x, " +
+        "'c' VALUE '{\"d\":2}' FORMAT JSON) FROM VALUES (1), (2) t(x)"),
+      Seq(Row("""{"a":[1],"b":1,"c":{"d":2}}"""), Row("""{"a":[1],"b":2,"c":{"d":2}}""")))
   }
 
   test("a constant-folded raw nested value round-trips through .sql as raw") {

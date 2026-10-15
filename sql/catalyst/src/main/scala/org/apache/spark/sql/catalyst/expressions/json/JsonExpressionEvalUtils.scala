@@ -261,17 +261,30 @@ case class JsonObjectEvaluator(
   @transient private lazy val valueWriters: Array[(SpecializedGetters, Int) => Unit] =
     valueTypes.map(gen.makeValueWriter).toArray
 
+  @transient private lazy val numMembers: Int = valueTypes.length
+
+  // Flags are indexed per member on every row, so back them with arrays: the caller may pass
+  // `List`s (from `visitJsonObject` / the builder), whose per-index lookup is linear.
+  @transient private lazy val rawJsonArr: Array[Boolean] = rawJson.toArray
+  @transient private lazy val needsValidationArr: Array[Boolean] = needsValidation.toArray
+  @transient private lazy val valueFoldableArr: Array[Boolean] = valueFoldable.toArray
+
   @transient private lazy val formatJsonFactory = new JsonFactory()
 
   @transient private lazy val cachedValidatedTexts: Array[String] =
-    new Array[String](valueTypes.length)
+    new Array[String](numMembers)
+
+  // Resolved raw text per member, filled by the pre-validation pass in `evaluate` and consumed by
+  // the write pass. Reused across rows (one evaluator per task, single-threaded).
+  @transient private lazy val rawTexts: Array[String] =
+    new Array[String](numMembers)
 
   // Raw text to splice for member `idx`: a trusted nested constructor as-is; an explicit
   // `FORMAT JSON` string validated once (cached) when foldable, else per row.
   private def rawText(idx: Int, value: UTF8String): String = {
-    if (!needsValidation(idx)) {
+    if (!needsValidationArr(idx)) {
       value.toString
-    } else if (valueFoldable(idx)) {
+    } else if (valueFoldableArr(idx)) {
       val cached = cachedValidatedTexts(idx)
       if (cached != null) {
         cached
@@ -310,17 +323,28 @@ case class JsonObjectEvaluator(
   }
 
   final def evaluate(row: InternalRow): Any = {
-    gen.writeStartObject()
+    // Resolve and validate every FORMAT JSON value before touching the generator: a malformed
+    // value must raise before any member is written. Otherwise a caught error (e.g. a `try_*`
+    // wrapper) would leave the generator mid-object and corrupt the next row that reuses it.
     var i = 0
-    while (i < valueTypes.length) {
+    while (i < numMembers) {
+      val valOrd = i * 2 + 1
+      if (rawJsonArr(i) && !row.isNullAt(valOrd)) {
+        rawTexts(i) = rawText(i, row.getUTF8String(valOrd))
+      }
+      i += 1
+    }
+    gen.writeStartObject()
+    i = 0
+    while (i < numMembers) {
       val valOrd = i * 2 + 1
       val isNull = row.isNullAt(valOrd)
       if (!isNull || keepNullMembers) {
         gen.writeFieldName(row.getUTF8String(i * 2).toString)
         if (isNull) {
           gen.writeNull()
-        } else if (rawJson(i)) {
-          gen.writeRawValue(rawText(i, row.getUTF8String(valOrd)))
+        } else if (rawJsonArr(i)) {
+          gen.writeRawValue(rawTexts(i))
         } else {
           valueWriters(i).apply(row, valOrd)
         }
