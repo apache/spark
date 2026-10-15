@@ -225,9 +225,9 @@ object ParquetStorageFilter {
    *    surfacing through a UDF;
    *  - a fatal error deeper in the cause chain, as deep as the executor looks, goes out as itself.
    *
-   * An `InternalError` among those goes out in an `UnknownError`, another fatal error. A bare one
-   * would be taken for a corrupt file under `ignoreCorruptFiles`, and a `NonFatal` wrapper would
-   * let the executor run on under a pending kill.
+   * An `InternalError` from the first or the last case goes out in an `UnknownError`, another fatal
+   * error. A bare one would be taken for a corrupt file under `ignoreCorruptFiles`, and a
+   * `NonFatal` wrapper would let the executor run on under a pending kill.
    *
    * An error from decoding differs in three ways:
    *  - `FileScanRDD` wraps a `NonFatal` one before the executor looks, so a fatal cause has to
