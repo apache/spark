@@ -1718,7 +1718,7 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
     assert(FileType.external.sql === "FILE EXTERNAL")
     assert(FileType().sql === "FILE")
     assert(FileType.external.json === "\"file external\"")
-    assert(FileType().json === "\"file\"")
+    assert(FileType().json === "\"file unknown\"")
     assert(DataType.fromJson("\"file external\"") === FileType.external)
     // A bare "file" has no mode on its own, and is an external file inside a struct field.
     assert(DataType.fromJson("\"file\"") === FileType())
@@ -1747,15 +1747,19 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
     assert(nested.toDDL === "s STRUCT<f: FILE EXTERNAL>")
     assert(DataType.fromDDL(nested.toDDL) === nested)
 
-    // In JSON a field is the plain "file" with empty metadata, which reads back as external.
+    // In JSON the type always carries its mode, also inside a field.
     assert(DataType.fromJson(schema.json) === schema)
     assert(JsonMethods.compact(JsonMethods.render(schema("f").jsonValue)) ===
-      """{"name":"f","type":"file","nullable":false,"metadata":{}}""")
+      """{"name":"f","type":"file external","nullable":false,"metadata":{}}""")
     assert(JsonMethods.compact(JsonMethods.render(schema("fs").jsonValue)) ===
-      "{\"name\":\"fs\",\"type\":{\"type\":\"array\",\"elementType\":\"file\"," +
+      "{\"name\":\"fs\",\"type\":{\"type\":\"array\",\"elementType\":\"file external\"," +
         "\"containsNull\":true},\"nullable\":true,\"metadata\":{}}")
-    val bare = new StructType().add("u", FileType())
-    assert(DataType.fromJson(bare.json) === new StructType().add("u", FileType.external))
+    // An unknown file stays unknown when it is nested, as in the result type of a UDF.
+    val unknown = new StructType()
+      .add("u", FileType())
+      .add("a", ArrayType(FileType()))
+      .add("s", new StructType().add("g", FileType()))
+    assert(DataType.fromJson(unknown.json) === unknown)
     assert(schema.asNullable("f").nullable)
   }
 
@@ -1765,6 +1769,16 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
     assert(DataType.fromJson(MapType(StringType, FileType()).json) ===
       MapType(StringType, FileType()))
     assert(DataType.fromJson(ArrayType(FileType.external).json) === ArrayType(FileType.external))
+
+    // A bare "file" outside a struct field has no mode, and a mode name that is not known fails.
+    assert(DataType.fromJson("\"file\"") === FileType())
+    assert(DataType.fromJson("\"file unknown\"") === FileType())
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        DataType.fromJson("\"file managed\"")
+      },
+      condition = "INVALID_JSON_DATA_TYPE",
+      parameters = Map("invalidType" -> "file managed"))
 
     // Field shapes without metadata or nullable are still fields, so a bare "file" is external.
     val noMetadata = "{\"type\":\"struct\",\"fields\":[" +
@@ -1786,6 +1800,16 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("FileType: an explicit UTF8_BINARY collation next to a file survives the JSON form") {
+    val key = StringType("UTF8_BINARY")
+    val schema = new StructType().add("m", MapType(key, FileType.external))
+    assert(DataType.fromJson(schema.json) === schema)
+    assert(JsonMethods.compact(JsonMethods.render(schema("m").dataTypeJsonValue)).contains(
+      "\"keyType\":\"string collate UTF8_BINARY\""))
+    assert(JsonMethods.compact(JsonMethods.render(schema("m").dataTypeJsonValue)).contains(
+      "\"valueType\":\"file external\""))
+  }
+
   test("FileType: metadata that describes the file in a field is kept as it is") {
     // The metadata of a field is opaque to OSS, so it is neither interpreted nor dropped.
     val json = "{\"type\":\"struct\",\"fields\":[{\"name\":\"f\",\"type\":\"file\"," +
@@ -1795,7 +1819,7 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
     assert(schema("f").metadata.contains("k"))
     assert(DataType.fromJson(schema.json) === schema)
     assert(JsonMethods.compact(JsonMethods.render(schema("f").jsonValue)) ===
-      "{\"name\":\"f\",\"type\":\"file\",\"nullable\":true," +
+      "{\"name\":\"f\",\"type\":\"file external\",\"nullable\":true," +
         "\"metadata\":{\"k\":{\"f\":\"v\"}}}")
   }
 

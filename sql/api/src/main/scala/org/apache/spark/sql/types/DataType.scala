@@ -133,7 +133,7 @@ object DataType {
   private val STRING_WITH_COLLATION = """string\s+collate\s+(\w+)""".r
   private val TIMESTAMP_LTZ_NANOS_TYPE = """timestamp_ltz\(\s*(\d+)\s*\)""".r
   private val TIMESTAMP_NTZ_NANOS_TYPE = """timestamp_ntz\(\s*(\d+)\s*\)""".r
-  private val FILE_TYPE = """file(?:\s+(external))?""".r
+  private val FILE_TYPE = """file(?:\s+(external|unknown))?""".r
   private val GEOMETRY_TYPE = """geometry\(\s*([\w]+:-?[\w]+)\s*\)""".r
   private val GEOGRAPHY_TYPE_CRS = """geography\(\s*(\w+:-?\w+)\s*\)""".r
   private val GEOGRAPHY_TYPE_ALG = """geography\(\s*(\w+)\s*\)""".r
@@ -346,12 +346,12 @@ object DataType {
         }
       case "timestamp_ltz" => TimestampType
       case FILE_TYPE(mode) =>
-        // Bare `"file"` resolves differently depending on context: inside a StructField it is
-        // an external file, which is also what a schema written without any metadata means; in a
-        // standalone parse (top-level `fromJson` or recursion outside any StructField) it has no
-        // mode yet, as when a UDF's return type is serialized as a bare `"file"`.
+        // A bare `"file"` has no mode: inside a StructField it is an external file, which is also
+        // what a schema written without any mode means; elsewhere it is an unknown one, as when a
+        // UDF's return type is serialized as a bare `"file"`.
         mode match {
           case "external" => FileType.external
+          case "unknown" => FileType()
           case _ if inStructField => FileType.external
           case _ => FileType()
         }

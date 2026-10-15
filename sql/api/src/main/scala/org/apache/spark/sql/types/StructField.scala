@@ -77,8 +77,7 @@ case class StructField(
   }
 
   private[sql] def dataTypeJsonValue: JValue = {
-    if (stringCollationMetadata.isEmpty && charVarcharCollationMetadata.isEmpty &&
-      !dataType.existsRecursively(_.isInstanceOf[FileType])) {
+    if (stringCollationMetadata.isEmpty && charVarcharCollationMetadata.isEmpty) {
       return dataType.jsonValue
     }
 
@@ -90,9 +89,6 @@ case class StructField(
       case MapType(kt, vt, nullable) =>
         MapType(removeCollations(kt), removeCollations(vt), nullable)
       case st: StringType => StringHelper.removeCollation(st)
-      // The mode of a file is not part of its JSON form inside a field, where a bare "file"
-      // reads back as an external file.
-      case _: FileType => FileType()
       case _ => dt
     }
 
