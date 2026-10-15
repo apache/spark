@@ -891,11 +891,12 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
    *
    * Reproducible (re-applied by the merge), so NOT blocking: `output` (column pruning, via
    * `SupportsPushDownRequiredColumns`) and `pushedPredicates` / `pushedFilterExpressions`
-   * (deterministic filters, re-pushed via `SupportsPushDownV2Filters`). A pushed aggregate, join or
-   * variant never reaches here -- their build rules run first. When a new pushdown capability adds
-   * plain-scan state to [[ScanBuilderHolder]], list it in [[hasRowSelectingPushdown]] when it
-   * decides which rows the scan returns, which keeps the scan not-mergeable too. List it here when
-   * a merge cannot reproduce it but it works on each row by itself.
+   * (deterministic filters, re-pushed via `SupportsPushDownV2Filters`). A pushed aggregate never
+   * reaches here; a scan with a pushed join or variant consults this only for `repeatableScan`, as
+   * it is never mergeable. When a new pushdown capability adds plain-scan state to
+   * [[ScanBuilderHolder]], list it in [[hasRowSelectingPushdown]] when it decides which rows the
+   * scan returns, which keeps the scan not-mergeable too. List it here when a merge cannot
+   * reproduce it but it works on each row by itself.
    */
   private def hasBlockingPushdown(holder: ScanBuilderHolder): Boolean =
     hasRowSelectingPushdown(holder)

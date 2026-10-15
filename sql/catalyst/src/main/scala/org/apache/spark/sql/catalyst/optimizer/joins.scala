@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, DecimalType, DoubleType, FloatType}
 import org.apache.spark.util.Utils
@@ -739,6 +740,12 @@ private[optimizer] object RuntimeFilterSourceAnalysis {
     // Whether a materialized leaf returns the same rows is known only once it is materialized.
     case m: MaterializedLeafNode if m.materializedMetadata.isEmpty =>
       Left(s"the hinted side reads ${m.nodeName}, which is not materialized yet")
+
+    // The source may have absorbed an operator from the hinted side, so name that rather than the
+    // scan the user did not write.
+    case s: DataSourceV2ScanRelation if !s.isOutputRepeatable =>
+      Left(s"the hinted side reads ${s.name} with an aggregate, limit, offset, top-N or sample " +
+        "pushed into the source, which may return different rows when evaluated again")
 
     case l: LeafNode =>
       if (l.isOutputRepeatable) {
