@@ -154,6 +154,13 @@
       <classifier>tests</classifier>
       <scope>test</scope>
     </dependency>
+    <!-- Upload the Kafka connector to the remote session in ClientE2ETestSuite. -->
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-sql-kafka-0-10_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
     <!-- Use mima to perform the compatibility check -->
     <dependency>
       <groupId>com.typesafe</groupId>
