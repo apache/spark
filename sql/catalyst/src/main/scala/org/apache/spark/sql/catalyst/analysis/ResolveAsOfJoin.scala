@@ -74,10 +74,12 @@ object ResolveAsOfJoin extends Rule[LogicalPlan] with SQLConfHelper {
       }
       val resolvedJoin = (matchLeft, matchOp, matchRight) match {
         case (Some(leftExpr), Some(operator), Some(rightExpr)) =>
+          val leftQualifiedAccessOnlyColumns = left.metadataOutput.filter(_.qualifiedAccessOnly)
+          val rightQualifiedAccessOnlyColumns = right.metadataOutput.filter(_.qualifiedAccessOnly)
           AsOfJoinMatchConditionResolution.materialize(
             join = joinBase,
-            leftSet = AttributeSet(left.output ++ left.metadataOutput),
-            rightSet = AttributeSet(right.output ++ right.metadataOutput),
+            leftSet = AttributeSet(left.output ++ leftQualifiedAccessOnlyColumns),
+            rightSet = AttributeSet(right.output ++ rightQualifiedAccessOnlyColumns),
             leftOperand = leftExpr,
             operator = operator,
             rightOperand = rightExpr) match {

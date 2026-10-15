@@ -273,10 +273,14 @@ class AsOfJoinResolver(
       case (Some(unresolvedLeftOperand), Some(operator), Some(unresolvedRightOperand)) =>
         val leftOperand = resolveExpressionInJoin(unresolvedAsOfJoin, unresolvedLeftOperand)
         val rightOperand = resolveExpressionInJoin(unresolvedAsOfJoin, unresolvedRightOperand)
+        val leftQualifiedAccessOnlyColumns =
+          leftNameScope.hiddenOutput.filter(_.qualifiedAccessOnly)
+        val rightQualifiedAccessOnlyColumns =
+          rightNameScope.hiddenOutput.filter(_.qualifiedAccessOnly)
         AsOfJoinMatchConditionResolution.materialize(
           join = partiallyResolved,
-          leftSet = AttributeSet(leftNameScope.output ++ leftNameScope.hiddenOutput),
-          rightSet = AttributeSet(rightNameScope.output ++ rightNameScope.hiddenOutput),
+          leftSet = AttributeSet(leftNameScope.output ++ leftQualifiedAccessOnlyColumns),
+          rightSet = AttributeSet(rightNameScope.output ++ rightQualifiedAccessOnlyColumns),
           leftOperand = leftOperand,
           operator = operator,
           rightOperand = rightOperand
