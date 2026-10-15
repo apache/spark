@@ -90,7 +90,7 @@ final class NativeLibrary {
   /** The functions of the table {@code SparkDsLibrary}, in their order in the table. */
   enum Function {
     LAST_ERROR("last_error", C.PTR),
-    CREATE("create", C.I32, C.PTR, C.PTR, C.PTR, C.I64, C.PTR, C.PTR),
+    CREATE("create", C.I32, C.PTR, C.PTR, C.PTR),
     SCHEMA("schema", C.I32, C.PTR, C.PTR),
     CREATE_READER("create_reader", C.I32, C.PTR, C.PTR, C.PTR),
     CREATE_STREAM_READER("create_stream_reader", C.I32, C.PTR, C.PTR, C.PTR),
@@ -144,6 +144,11 @@ final class NativeLibrary {
   private static final long HOST_ABI_VERSION = 8;
   private static final long HOST_SPARK_VERSION = 16;
   private static final long HOST_LOG = 24;
+  private static final long CREATE_INFO_SIZE = 40;
+  private static final long CREATE_INFO_NAME = 8;
+  private static final long CREATE_INFO_OPTION_KEYS = 16;
+  private static final long CREATE_INFO_OPTION_VALUES = 24;
+  private static final long CREATE_INFO_NUM_OPTIONS = 32;
   private static final long TASK_SIZE = 40;
   private static final long TASK_STAGE_ID = 8;
   private static final long TASK_STAGE_ATTEMPT_NUMBER = 12;
@@ -172,6 +177,12 @@ final class NativeLibrary {
     layout.put("SparkDsHost.abi_version", HOST_ABI_VERSION);
     layout.put("SparkDsHost.spark_version", HOST_SPARK_VERSION);
     layout.put("SparkDsHost.log", HOST_LOG);
+    layout.put("SparkDsCreateInfo", CREATE_INFO_SIZE);
+    layout.put("SparkDsCreateInfo.size", 0L);
+    layout.put("SparkDsCreateInfo.name", CREATE_INFO_NAME);
+    layout.put("SparkDsCreateInfo.option_keys", CREATE_INFO_OPTION_KEYS);
+    layout.put("SparkDsCreateInfo.option_values", CREATE_INFO_OPTION_VALUES);
+    layout.put("SparkDsCreateInfo.num_options", CREATE_INFO_NUM_OPTIONS);
     layout.put("SparkDsTaskContext", TASK_SIZE);
     layout.put("SparkDsTaskContext.size", 0L);
     layout.put("SparkDsTaskContext.stage_id", TASK_STAGE_ID);
@@ -542,11 +553,15 @@ final class NativeLibrary {
       throws Throwable {
     MethodHandle f = function(Function.CREATE);
     try (Memory memory = new Memory()) {
+      long info = memory.zeroed(CREATE_INFO_SIZE);
+      Platform.putLong(null, info, CREATE_INFO_SIZE);
+      Platform.putLong(null, info + CREATE_INFO_NAME, memory.string(name));
+      Platform.putLong(null, info + CREATE_INFO_OPTION_KEYS, memory.strings(optionKeys));
+      Platform.putLong(null, info + CREATE_INFO_OPTION_VALUES, memory.strings(optionValues));
+      Platform.putLong(null, info + CREATE_INFO_NUM_OPTIONS, optionKeys.length);
       long capabilities = memory.zeroed(8);
       long out = memory.zeroed(8);
-      check((int) f.invokeExact(memory.string(name), memory.strings(optionKeys),
-        memory.strings(optionValues), (long) optionKeys.length, capabilities, out),
-        Function.CREATE);
+      check((int) f.invokeExact(info, capabilities, out), Function.CREATE);
       return new DataSourceHandle(
         readHandle(out, Function.CREATE), Platform.getLong(null, capabilities));
     }
