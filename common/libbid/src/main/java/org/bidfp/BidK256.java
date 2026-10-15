@@ -398,13 +398,18 @@ final class BidK256 {
       pack(format, aNeg, aExp, a, !b.isZero(), mode, flags, frame, out);
       return;
     }
+    boolean narrow = difference == 0;
     if (difference > 0) {
       a.multiplyPow10(difference);
       aExp -= difference;
     }
     boolean negative;
     if (aNeg == bNeg) {
-      frame.yr.add(a, b);
+      if (narrow) {
+        frame.yr.add4(a, b);
+      } else {
+        frame.yr.add(a, b);
+      }
       negative = aNeg;
     } else {
       int cmp = a.compare(b);
@@ -414,10 +419,18 @@ final class BidK256 {
         return;
       }
       if (cmp > 0) {
-        frame.yr.subtract(a, b);
+        if (narrow) {
+          frame.yr.subtract4(a, b);
+        } else {
+          frame.yr.subtract(a, b);
+        }
         negative = aNeg;
       } else {
-        frame.yr.subtract(b, a);
+        if (narrow) {
+          frame.yr.subtract4(b, a);
+        } else {
+          frame.yr.subtract(b, a);
+        }
         negative = bNeg;
       }
     }
@@ -437,7 +450,7 @@ final class BidK256 {
       BidKScratch.Frame frame) {
     boolean negative;
     if (an == bn) {
-      frame.yr.add(left, right);
+      frame.yr.add4(left, right);
       negative = an;
     } else {
       int cmp = left.compare(right);
@@ -447,10 +460,10 @@ final class BidK256 {
         return;
       }
       if (cmp > 0) {
-        frame.yr.subtract(left, right);
+        frame.yr.subtract4(left, right);
         negative = an;
       } else {
-        frame.yr.subtract(right, left);
+        frame.yr.subtract4(right, left);
         negative = bn;
       }
     }

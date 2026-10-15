@@ -236,6 +236,25 @@ final class Wide6 {
     l5 = 0L;
   }
 
+  /** Three-limb add for Decimal160/192 coefficients and aligned addends. */
+  void add3(Wide6 a, Wide6 b) {
+    long s = a.l0 + b.l0;
+    long c = carry(a.l0, s);
+    l0 = s;
+    s = a.l1 + b.l1;
+    long c2 = carry(a.l1, s);
+    long t = s + c;
+    c = c2 + carry(s, t);
+    l1 = t;
+    s = a.l2 + b.l2;
+    c2 = carry(a.l2, s);
+    t = s + c;
+    l2 = t;
+    l3 = c2 + carry(s, t);
+    l4 = 0L;
+    l5 = 0L;
+  }
+
   void subtract(Wide6 a, Wide6 b) {
     long d = a.l0 - b.l0;
     long br = Long.compareUnsigned(a.l0, b.l0) < 0 ? 1L : 0L;
@@ -265,6 +284,22 @@ final class Wide6 {
 
   /** Two-limb subtract for Decimal96 coefficients and aligned addends. */
   void subtract2(Wide6 a, Wide6 b) {
+    long d = a.l0 - b.l0;
+    long br = Long.compareUnsigned(a.l0, b.l0) < 0 ? 1L : 0L;
+    l0 = d;
+    d = a.l1 - b.l1;
+    long b1 = Long.compareUnsigned(a.l1, b.l1) < 0 ? 1L : 0L;
+    long t = d - br;
+    br = b1 | (Long.compareUnsigned(d, br) < 0 ? 1L : 0L);
+    l1 = t;
+    l2 = a.l2 - b.l2 - br;
+    l3 = 0L;
+    l4 = 0L;
+    l5 = 0L;
+  }
+
+  /** Three-limb subtract for Decimal160/192 coefficients and aligned addends. */
+  void subtract3(Wide6 a, Wide6 b) {
     long d = a.l0 - b.l0;
     long br = Long.compareUnsigned(a.l0, b.l0) < 0 ? 1L : 0L;
     l0 = d;

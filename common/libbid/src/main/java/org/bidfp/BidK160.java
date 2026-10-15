@@ -406,13 +406,18 @@ final class BidK160 {
       pack(format, aNeg, aExp, a, !b.isZero(), mode, flags, frame, out);
       return;
     }
+    boolean narrow = difference == 0;
     if (difference > 0) {
       a.multiplyPow10(difference);
       aExp -= difference;
     }
     boolean negative;
     if (aNeg == bNeg) {
-      frame.xr.add(a, b);
+      if (narrow) {
+        frame.xr.add3(a, b);
+      } else {
+        frame.xr.add(a, b);
+      }
       negative = aNeg;
     } else {
       int cmp = a.compare(b);
@@ -422,10 +427,18 @@ final class BidK160 {
         return;
       }
       if (cmp > 0) {
-        frame.xr.subtract(a, b);
+        if (narrow) {
+          frame.xr.subtract3(a, b);
+        } else {
+          frame.xr.subtract(a, b);
+        }
         negative = aNeg;
       } else {
-        frame.xr.subtract(b, a);
+        if (narrow) {
+          frame.xr.subtract3(b, a);
+        } else {
+          frame.xr.subtract(b, a);
+        }
         negative = bNeg;
       }
     }
@@ -445,7 +458,7 @@ final class BidK160 {
       BidKScratch.Frame frame) {
     boolean negative;
     if (an == bn) {
-      frame.xr.add(left, right);
+      frame.xr.add3(left, right);
       negative = an;
     } else {
       int cmp = left.compare(right);
@@ -455,10 +468,10 @@ final class BidK160 {
         return;
       }
       if (cmp > 0) {
-        frame.xr.subtract(left, right);
+        frame.xr.subtract3(left, right);
         negative = an;
       } else {
-        frame.xr.subtract(right, left);
+        frame.xr.subtract3(right, left);
         negative = bn;
       }
     }

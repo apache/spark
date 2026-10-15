@@ -894,6 +894,13 @@ final class BidKRaw {
     if (k == 3 && BidCodec.isFinite(format, x) && BidCodec.isFinite(format, y)) {
       return BidK96.sqlCompare(format, x, y);
     }
+    if (k >= 5
+        && BidCodec.isFinite(format, x)
+        && BidCodec.isFinite(format, y)
+        && BidCodec.unpackBiasedExponent(format, x[format.lastWord()])
+            == BidCodec.unpackBiasedExponent(format, y[format.lastWord()])) {
+      return compareAlignedFinite(format, x, y);
+    }
     if (BidCodec.isNaN(format, x)) {
       return BidCodec.isNaN(format, y) ? 0 : 1;
     }
@@ -926,6 +933,59 @@ final class BidKRaw {
     INF,
     NAN,
     SNAN
+  }
+
+  private static int compareAlignedFinite(
+      FormatParams format, long[] x, long[] y) {
+    int last = format.lastWord();
+    long xHigh = packedCoefficientHigh(format, x[last]);
+    long yHigh = packedCoefficientHigh(format, y[last]);
+    boolean xAllowed = packedCoefficientAllowed(format, x, xHigh);
+    boolean yAllowed = packedCoefficientAllowed(format, y, yHigh);
+    boolean xZero = !xAllowed || packedCoefficientZero(x, xHigh, last);
+    boolean yZero = !yAllowed || packedCoefficientZero(y, yHigh, last);
+    if (xZero && yZero) {
+      return 0;
+    }
+    boolean xNegative = BidCodec.isSigned(format, x);
+    boolean yNegative = BidCodec.isSigned(format, y);
+    if (xNegative != yNegative) {
+      return xNegative ? -1 : 1;
+    }
+    int cmp = Long.compareUnsigned(xHigh, yHigh);
+    for (int i = last - 1; cmp == 0 && i >= 0; i--) {
+      long xWord = xAllowed ? x[i] : 0L;
+      long yWord = yAllowed ? y[i] : 0L;
+      cmp = Long.compareUnsigned(xWord, yWord);
+    }
+    return xNegative ? -cmp : cmp;
+  }
+
+  private static long packedCoefficientHigh(FormatParams format, long high) {
+    if ((high & format.steeringMask()) == format.steeringMask()) {
+      return (high & format.form2CoeffLastMask()) | format.form2ImplicitMask();
+    }
+    return high & format.form1CoeffLastMask();
+  }
+
+  private static boolean packedCoefficientAllowed(
+      FormatParams format, long[] words, long high) {
+    int last = format.lastWord();
+    long[] max = format.maxCoefficientWords();
+    int cmp = Long.compareUnsigned(high, max[last]);
+    for (int i = last - 1; cmp == 0 && i >= 0; i--) {
+      cmp = Long.compareUnsigned(words[i], max[i]);
+    }
+    return cmp <= 0;
+  }
+
+  private static boolean packedCoefficientZero(
+      long[] words, long high, int last) {
+    long bits = high;
+    for (int i = 0; i < last; i++) {
+      bits |= words[i];
+    }
+    return bits == 0L;
   }
 
   private static Kind unpackAddend(

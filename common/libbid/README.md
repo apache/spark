@@ -136,10 +136,10 @@ The table below is `BidKRaw` vs naked `BigDecimal` (`MathContext` precision
 
 | Function / workload | k=2 | k=3 | k=4 | k=5 | k=6 | k=7 | k=8 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| add (same quantum) | 2.24x | 1.12x | 1.53x | 0.69x | 0.74x | 0.80x | 0.92x |
+| add (same quantum) | 2.24x | 1.12x | 1.53x | 0.83x | 0.87x | 0.90x | 0.94x |
 | add (mixed quantum) | 2.48x | 1.07x | 1.01x | 0.66x | 0.60x | 0.50x | 0.51x |
 | add (full precision) | 2.86x | 1.52x | 1.29x | 0.97x | 0.94x | 0.70x | 0.70x |
-| subtract | 2.23x | 1.74x | 1.85x | 0.96x | 1.00x | 1.08x | 1.06x |
+| subtract | 2.23x | 1.74x | 1.85x | 0.99x | 1.05x | 1.10x | 1.08x |
 | multiply (same quantum) | 1.13x | 1.48x | 2.07x | 1.09x | 1.02x | 0.69x | 0.42x |
 | multiply (mixed quantum) | 0.81x | 1.02x | 1.47x | 0.96x | 1.00x | 0.65x | 0.57x |
 | multiply (full precision) | 1.13x | 1.24x | 1.55x | 0.98x | 0.88x | 0.67x | 0.41x |
@@ -148,8 +148,8 @@ The table below is `BidKRaw` vs naked `BigDecimal` (`MathContext` precision
 | divide (full precision) | 1.04x | 0.70x | 0.86x | 0.54x | 0.49x | 0.49x | 0.48x |
 | square root | 7.39x | 2.45x | 2.88x | 0.89x | 1.03x | 1.26x | 1.09x |
 | fused multiply-add | 1.21x | 1.06x | 0.62x | 0.76x | 0.66x | 0.38x | 0.38x |
-| ordered less-than | 0.46x | 0.81x | 0.44x | 0.33x | 0.33x | 0.35x | 0.38x |
-| cohort-equal numeric comparison | 0.45x | 0.84x | 0.49x | 0.28x | 0.30x | 0.33x | 0.35x |
+| ordered less-than | 0.46x | 0.81x | 0.44x | 0.66x | 0.64x | 0.65x | 0.75x |
+| cohort-equal numeric comparison | 0.45x | 0.84x | 0.49x | 0.59x | 0.58x | 0.57x | 0.58x |
 
 Run `build/sbt "libbid/Test/runMain org.bidfp.BidKBenchmark kscan quick"`
 to refresh. Compare rows for `k=2` and `k=4` now call
@@ -159,10 +159,10 @@ Object `BidK` API (each call allocates a result encoding):
 
 | Function / workload | BID160 | BD160 | Ratio | BID256 | BD256 | Ratio |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| add (same quantum) | 41.07 | 22.26 | 0.54x | 42.06 | 25.43 | 0.60x |
+| add (same quantum) | 48.04 | 36.18 | 0.75x | 52.75 | 38.54 | 0.73x |
 | add (mixed quantum) | 187.28 | 119.56 | 0.64x | 366.43 | 166.98 | 0.46x |
 | add (full precision) | 175.23 | 147.08 | 0.84x | 363.82 | 249.88 | 0.69x |
-| subtract | 52.34 | 34.49 | 0.66x | 50.10 | 38.07 | 0.76x |
+| subtract | 47.78 | 37.25 | 0.78x | 50.46 | 38.43 | 0.76x |
 | multiply (same quantum) | 294.80 | 213.79 | 0.73x | 787.23 | 351.39 | 0.45x |
 | multiply (mixed quantum) | 109.26 | 87.21 | 0.80x | 224.77 | 141.48 | 0.63x |
 | multiply (full precision) | 338.43 | 244.53 | 0.72x | 850.25 | 370.06 | 0.44x |
@@ -171,17 +171,17 @@ Object `BidK` API (each call allocates a result encoding):
 | divide (full precision) | 394.45 | 229.84 | 0.58x | 753.79 | 349.81 | 0.46x |
 | square root | 3918.49 | 3102.12 | 0.79x | 5867.63 | 5670.91 | 0.97x |
 | fused multiply-add | 451.70 | 292.41 | 0.65x | 1105.27 | 433.36 | 0.39x |
-| ordered less-than | 29.24 | 9.29 | 0.32x | 32.62 | 9.50 | 0.29x |
-| cohort-equal numeric comparison | 32.91 | 9.03 | 0.27x | 32.53 | 9.26 | 0.28x |
+| ordered less-than | 21.43 | 10.03 | 0.47x | 23.98 | 10.36 | 0.43x |
+| cohort-equal numeric comparison | 20.82 | 9.59 | 0.46x | 24.11 | 10.09 | 0.42x |
 
 `BidKRaw` into a reused `out[]` (packed Spark SQL shape; no `BidK` wrapper):
 
 | Function / workload | BID160 | BD160 | Ratio | BID256 | BD256 | Ratio |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| add (same quantum) | 41.94 | 24.86 | 0.59x | 43.24 | 29.34 | 0.68x |
+| add (same quantum) | 38.51 | 29.00 | 0.75x | 39.62 | 30.42 | 0.77x |
 | add (mixed quantum) | 181.03 | 122.63 | 0.68x | 331.86 | 168.61 | 0.51x |
 | add (full precision) | 162.98 | 150.77 | 0.93x | 354.74 | 253.32 | 0.71x |
-| subtract | 44.70 | 33.63 | 0.75x | 45.78 | 38.35 | 0.84x |
+| subtract | 39.27 | 35.88 | 0.91x | 42.42 | 39.42 | 0.93x |
 | multiply (same quantum) | 285.41 | 216.71 | 0.76x | 769.42 | 356.01 | 0.46x |
 | multiply (mixed quantum) | 105.93 | 87.61 | 0.83x | 219.57 | 141.24 | 0.64x |
 | multiply (full precision) | 331.05 | 244.94 | 0.74x | 838.08 | 370.21 | 0.44x |
@@ -190,17 +190,17 @@ Object `BidK` API (each call allocates a result encoding):
 | divide (full precision) | 385.73 | 230.22 | 0.60x | 741.01 | 350.66 | 0.47x |
 | square root | 3853.61 | 3105.21 | 0.81x | 5865.70 | 5667.70 | 0.97x |
 | fused multiply-add | 434.41 | 295.82 | 0.68x | 1095.54 | 433.79 | 0.40x |
-| ordered less-than | 29.26 | 9.27 | 0.32x | 27.32 | 9.54 | 0.35x |
-| cohort-equal numeric comparison | 28.83 | 9.21 | 0.32x | 26.75 | 9.38 | 0.35x |
+| ordered less-than | 15.44 | 10.10 | 0.65x | 15.63 | 10.43 | 0.67x |
+| cohort-equal numeric comparison | 14.92 | 9.61 | 0.64x | 16.92 | 10.80 | 0.64x |
 
 `BidUnpacked` reused operands and result (unpack once; no IEEE pack per op):
 
 | Function / workload | BID160 | BD160 | Ratio | BID256 | BD256 | Ratio |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| add (same quantum) | 34.46 | 24.66 | 0.72x | 38.09 | 29.49 | 0.77x |
+| add (same quantum) | 33.40 | 27.81 | 0.83x | 35.02 | 29.56 | 0.84x |
 | add (mixed quantum) | 169.42 | 121.87 | 0.72x | 325.60 | 168.86 | 0.52x |
 | add (full precision) | 153.02 | 150.27 | 0.98x | 346.94 | 252.36 | 0.73x |
-| subtract | 41.11 | 33.50 | 0.81x | 41.67 | 38.29 | 0.92x |
+| subtract | 33.48 | 36.37 | 1.09x | 39.10 | 39.70 | 1.02x |
 | multiply (same quantum) | 274.88 | 216.26 | 0.79x | 781.61 | 355.48 | 0.45x |
 | multiply (mixed quantum) | 94.81 | 86.84 | 0.92x | 211.48 | 140.80 | 0.67x |
 | multiply (full precision) | 322.05 | 244.26 | 0.76x | 853.63 | 369.74 | 0.43x |
@@ -209,11 +209,11 @@ Object `BidK` API (each call allocates a result encoding):
 | divide (full precision) | 374.32 | 229.78 | 0.61x | 727.26 | 349.75 | 0.48x |
 | square root | 3569.06 | 3107.42 | 0.87x | 5286.85 | 5659.92 | 1.07x |
 | fused multiply-add | 418.55 | 295.36 | 0.71x | 1113.92 | 433.35 | 0.39x |
-| ordered less-than | 19.71 | 9.32 | 0.47x | 24.39 | 9.42 | 0.39x |
-| cohort-equal numeric comparison | 20.52 | 9.15 | 0.45x | 24.45 | 9.87 | 0.40x |
+| ordered less-than | 17.96 | 10.07 | 0.56x | 21.59 | 10.57 | 0.49x |
+| cohort-equal numeric comparison | 17.67 | 9.61 | 0.54x | 22.07 | 10.05 | 0.46x |
 
-Unpacked same-quantum add is 34 / 38 ns (0.72x / 0.77x). Compare drops to
-~20 / ~24 ns, still about 2x `BigDecimal`. Decimal160 divide is ~370 ns
+Unpacked same-quantum add is 33 / 35 ns (0.83x / 0.84x). Compare is
+~18 / ~22 ns, still about 2x `BigDecimal`. Decimal160 divide is ~370 ns
 (~0.56x). Decimal256 divide is ~0.46x. Unpacked Decimal256 sqrt is the
 first BID-k row faster than `BigDecimal` (5287 vs 5660 ns, 1.07x); Heron
 is still divide-bound.

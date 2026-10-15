@@ -129,8 +129,13 @@ public final class LimbMathTest {
     r.multiply3(a, b);
     long[] dest = new long[LimbMath.WORK];
     r.store(dest);
-    expectEq(dest, toBig(new long[] {a.l0, a.l1, a.l2}).multiply(
-        toBig(new long[] {b.l0, b.l1, b.l2})), "wide6 mul3");
+    BigInteger ba = toBig(new long[] {a.l0, a.l1, a.l2});
+    BigInteger bb = toBig(new long[] {b.l0, b.l1, b.l2});
+    expectEq(dest, ba.multiply(bb), "wide6 mul3");
+    r.add3(a, b);
+    expectEq(store(r, dest), ba.add(bb), "wide6 add3");
+    r.subtract3(a, b);
+    expectEq(store(r, dest), ba.subtract(bb), "wide6 subtract3");
   }
 
   private static void wide8Multiply() {
@@ -148,8 +153,13 @@ public final class LimbMathTest {
     r.multiply4(a, b);
     long[] dest = new long[LimbMath.WORK];
     r.store(dest);
-    expectEq(dest, toBig(new long[] {a.l0, a.l1, a.l2, a.l3}).multiply(
-        toBig(new long[] {b.l0, b.l1, b.l2, b.l3})), "wide8 mul4");
+    BigInteger ba = toBig(new long[] {a.l0, a.l1, a.l2, a.l3});
+    BigInteger bb = toBig(new long[] {b.l0, b.l1, b.l2, b.l3});
+    expectEq(dest, ba.multiply(bb), "wide8 mul4");
+    r.add4(a, b);
+    expectEq(store(r, dest), ba.add(bb), "wide8 add4");
+    r.subtract4(b, a);
+    expectEq(store(r, dest), bb.subtract(ba), "wide8 subtract4");
   }
 
   private static void wideDivide() {

@@ -157,6 +157,31 @@ final class Wide8 {
     l7 = a.l7 + b.l7 + c;
   }
 
+  /** Four-limb add for Decimal224/256 coefficients and aligned addends. */
+  void add4(Wide8 a, Wide8 b) {
+    long s = a.l0 + b.l0;
+    long c = carry(a.l0, s);
+    l0 = s;
+    s = a.l1 + b.l1;
+    long c2 = carry(a.l1, s);
+    long t = s + c;
+    c = c2 + carry(s, t);
+    l1 = t;
+    s = a.l2 + b.l2;
+    c2 = carry(a.l2, s);
+    t = s + c;
+    c = c2 + carry(s, t);
+    l2 = t;
+    s = a.l3 + b.l3;
+    c2 = carry(a.l3, s);
+    t = s + c;
+    l3 = t;
+    l4 = c2 + carry(s, t);
+    l5 = 0L;
+    l6 = 0L;
+    l7 = 0L;
+  }
+
   void subtract(Wide8 a, Wide8 b) {
     long d = a.l0 - b.l0;
     long br = Long.compareUnsigned(a.l0, b.l0) < 0 ? 1L : 0L;
@@ -192,6 +217,28 @@ final class Wide8 {
     br = b1 | (Long.compareUnsigned(d, br) < 0 ? 1L : 0L);
     l6 = t;
     l7 = a.l7 - b.l7 - br;
+  }
+
+  /** Four-limb subtract for Decimal224/256 coefficients and aligned addends. */
+  void subtract4(Wide8 a, Wide8 b) {
+    long d = a.l0 - b.l0;
+    long br = Long.compareUnsigned(a.l0, b.l0) < 0 ? 1L : 0L;
+    l0 = d;
+    d = a.l1 - b.l1;
+    long b1 = Long.compareUnsigned(a.l1, b.l1) < 0 ? 1L : 0L;
+    long t = d - br;
+    br = b1 | (Long.compareUnsigned(d, br) < 0 ? 1L : 0L);
+    l1 = t;
+    d = a.l2 - b.l2;
+    b1 = Long.compareUnsigned(a.l2, b.l2) < 0 ? 1L : 0L;
+    t = d - br;
+    br = b1 | (Long.compareUnsigned(d, br) < 0 ? 1L : 0L);
+    l2 = t;
+    l3 = a.l3 - b.l3 - br;
+    l4 = 0L;
+    l5 = 0L;
+    l6 = 0L;
+    l7 = 0L;
   }
 
   /** 4-limb x 4-limb schoolbook into eight limbs. High limbs ignored. */
