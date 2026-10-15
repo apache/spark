@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.expressions.{Expression, If, Or}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LogicalPlan}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -52,6 +53,11 @@ class RewriteDistinctAggregatesConditionalQuerySuite extends QueryTest with Shar
     // The Expand rewrite adds gid-routing filters to every distinct aggregate; we only
     // care about user-condition filters introduced by the IF/CASE canonicalization.
     aggregateExprs.flatMap(_.filter).exists(_.references.exists(_.name != "gid"))
+  }
+
+  private def orLeaves(expr: Expression): Seq[Expression] = expr match {
+    case Or(left, right) => orLeaves(left) ++ orLeaves(right)
+    case other => Seq(other)
   }
 
   test("rewrite COUNT(DISTINCT IF(cond, col, NULL)) correctness") {
@@ -186,7 +192,7 @@ class RewriteDistinctAggregatesConditionalQuerySuite extends QueryTest with Shar
     }
   }
 
-  test("multiple conditional distinct counts collapse and produce correct results") {
+  test("different bases skip the conditional rewrite and keep correct results") {
     withTempView("t") {
       spark.range(5)
         .selectExpr(
@@ -209,6 +215,14 @@ class RewriteDistinctAggregatesConditionalQuerySuite extends QueryTest with Shar
           |FROM t GROUP BY key""".stripMargin
 
       checkRewriteAndResult(conditionalSql, filterSql)
+
+      // col2 and col3 are different distinct children, so normalization does not
+      // reduce the group count and the gate keeps the original IFs.
+      withSQLConf(SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "true") {
+        val plan = spark.sql(conditionalSql).queryExecution.optimizedPlan
+        assert(!hasUserConditionFilter(plan),
+          "different bases should not produce a user-condition FILTER clause")
+      }
     }
   }
 
@@ -333,22 +347,22 @@ class RewriteDistinctAggregatesConditionalQuerySuite extends QueryTest with Shar
     }
   }
 
-  test("guard: NULL condition keeps the count empty") {
+  test("guard: nullable condition that is NULL for some rows") {
     withTempView("t") {
+      // Literal IF(NULL, ...) is folded to CAST(NULL AS ...) by SimplifyConditionals
+      // before Distinct Aggregate Rewrite, so it never reaches the union guard. A
+      // predicate over a nullable column that is NULL for some rows does.
       spark.range(50)
         .selectExpr(
           "cast(id % 7 as int) as key",
           "cast(id as bigint) as ord",
-          "cast(id % 100 as int) as bucket")
+          "cast(id % 100 as int) as bucket",
+          "case when id % 3 = 0 then cast(null as int) else cast(id % 5 as int) end as flag")
         .createOrReplaceTempView("t")
 
-      // A NULL condition is never true; with the union guard its rows may share the
-      // Expand key of the other count, but must never be counted. The FILTER syntax
-      // cannot express a NULL condition (non-boolean type is rejected), so compare
-      // the rewritten plan against the conf-off result as the semantic baseline.
       val sqlText =
         """SELECT key,
-          |  COUNT(DISTINCT IF(NULL, ord, NULL)),
+          |  COUNT(DISTINCT IF(flag > 0, ord, NULL)),
           |  COUNT(DISTINCT IF(bucket = 0, ord, NULL))
           |FROM t GROUP BY key""".stripMargin
       val withoutRewriteRows = withSQLConf(
@@ -358,6 +372,22 @@ class RewriteDistinctAggregatesConditionalQuerySuite extends QueryTest with Shar
       withSQLConf(
         SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "true") {
         checkAnswer(spark.sql(sqlText), withoutRewriteRows)
+
+        val plan = spark.sql(sqlText).queryExecution.optimizedPlan
+        val expand = plan.collectFirst { case e: Expand => e }.getOrElse(
+          fail(s"expected Expand in optimized plan:\n$plan"))
+        assert(expand.projections.size == 1,
+          s"expected 1 distinct group, got ${expand.projections.size}")
+        val guard = expand.projections.head.collectFirst {
+          case i @ If(_, trueValue, falseValue)
+              if falseValue.foldable && falseValue.eval() == null &&
+                trueValue.references.exists(_.name == "ord") => i
+        }.getOrElse(fail(s"no union guard over ord in Expand:\n$plan"))
+        val leaves = orLeaves(guard.predicate)
+        assert(leaves.exists(_.references.exists(_.name == "flag")),
+          s"guard misses flag predicate: ${guard.predicate}")
+        assert(leaves.exists(_.references.exists(_.name == "bucket")),
+          s"guard misses bucket predicate: ${guard.predicate}")
       }
     }
   }

@@ -167,8 +167,13 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
       optimized: LogicalPlan,
       baseColName: String,
       conds: Seq[Expression]): Unit = {
-    assert(collectAggregateExpressions(optimized).exists(_.filter.isDefined),
-      "expected at least one AggregateExpression with a FILTER clause")
+    // rewrite() adds EqualTo(gid, id) to every distinct aggregate, so filter.isDefined
+    // alone always passes. Require a user-condition reference (same as assertCanonicalized).
+    val hasUserConditionFilter = collectAggregateExpressions(optimized)
+      .flatMap(_.filter)
+      .exists(_.references.exists(_.name != "gid"))
+    assert(hasUserConditionFilter,
+      "expected at least one AggregateExpression with a user-condition FILTER clause")
     val baseAttr = conditionalTestRelation.output.find(_.name == baseColName).get
     assertGuardedExpandKey(optimized, baseAttr, conds)
   }
@@ -319,6 +324,35 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
     assertGuardedExpandKey(optimized, base, Seq(bAttr > 1, bAttr > 2))
   }
 
+  test("conditional: config false disables union guard for user-written FILTER") {
+    // The config is the kill switch for both IF/CASE normalize and the union-of-filters
+    // guard. With it off, user-written FILTER distincts still Expand (mustRewrite) but
+    // keep the raw base as the Expand key.
+    withSQLConf(SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "false") {
+      val bAttr = conditionalTestRelation.output.find(_.name == "b").get
+      val base = conditionalTestRelation.output.find(_.name == "c").get
+      val input = conditionalTestRelation
+        .groupBy(Symbol("a"))(
+          Count(base).toAggregateExpression(isDistinct = true, filter = Some(bAttr > 1))
+            .as("cnt1"),
+          Count(base).toAggregateExpression(isDistinct = true, filter = Some(bAttr > 2))
+            .as("cnt2"))
+        .analyze
+      val optimized = RewriteDistinctAggregates(input)
+      val expand = optimized.collectFirst { case e: Expand => e }.get
+      assert(expand.projections.size == 1)
+      assert(expand.projections.head.exists(_.semanticEquals(base)),
+        "raw base expected when rewriteCountDistinctConditional is disabled")
+      assert(
+        !expand.projections.head.exists {
+          case If(_, trueValue, falseValue) =>
+            falseValue == nullInt && trueValue.semanticEquals(base)
+          case _ => false
+        },
+        "union guard should be off when rewriteCountDistinctConditional is disabled")
+    }
+  }
+
   test("conditional: unfiltered count in the group keeps the raw base key") {
     val base = conditionalTestRelation.output.find(_.name == "c").get
     val input = conditionalTestRelation
@@ -354,6 +388,27 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
       "raw base attribute expected with a non-deterministic filter")
   }
 
+  test("conditional: throwable distinct child keeps the raw key") {
+    // Division can throw under ANSI on rows the filter rejects. Wrapping it in
+    // the guard would skip those evaluations, so the Expand key stays raw.
+    val input = conditionalTestRelation
+      .groupBy(Symbol("a"))(
+        Count(Symbol("c") / Symbol("b")).toAggregateExpression(
+          isDistinct = true, filter = Some(Symbol("a") > 0)).as("cnt"))
+      .analyze
+    val child = input.collectFirst {
+      case a: Aggregate =>
+        a.aggregateExpressions.flatMap(_.collect {
+          case ae: AggregateExpression if ae.isDistinct =>
+            ae.aggregateFunction.children.headOption
+        }).flatten.head
+    }.get
+    val optimized = RewriteDistinctAggregates(input)
+    val expand = optimized.collectFirst { case e: Expand => e }.get
+    assert(expand.projections.head.exists(_.semanticEquals(child)),
+      s"raw distinct child expected, projections:\n${expand.projections.head}")
+  }
+
   test("conditional: single conditional distinct count is gated out by mayNeedtoRewrite") {
     // A lone COUNT(DISTINCT IF(...)) must NOT be pushed onto the Expand path.
     // The canonicalization runs inside rewrite(), which is only called when
@@ -367,6 +422,36 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
     val optimized = RewriteDistinctAggregates(input)
     val expands = optimized.collect { case e: Expand => e }
     assert(expands.isEmpty, "single conditional distinct count should not produce an Expand")
+  }
+
+  test("conditional: COUNT+SUM sharing IF keeps single-distinct path") {
+    // Both share one unfiltered distinct child. Normalizing only the COUNT would
+    // split the group into {c} and {IF(b>1,c,NULL)} and force a 2-projection Expand.
+    // Keep the original aggregate so AggregationStrategy handles it without Expand.
+    // Use the same null literal as countDistinctIf so the IF children are one
+    // ExpressionSet key after analysis (as in SQL COUNT/SUM over the same IF).
+    val sharedIf = If(Symbol("b") > 1, Symbol("c"), Literal(null))
+    val input = conditionalTestRelation
+      .groupBy(Symbol("a"))(
+        Count(sharedIf).toAggregateExpression(isDistinct = true).as("cnt"),
+        Sum(sharedIf).toAggregateExpression(isDistinct = true).as("sum"))
+      .analyze
+    val optimized = RewriteDistinctAggregates(input)
+    comparePlans(optimized, input)
+  }
+
+  test("conditional: repeated COUNT(DISTINCT IF) with COUNT(*) keeps single-distinct path") {
+    // Two identical conditional counts form one unfiltered distinct group. Normalizing
+    // them to FILTER form would make mustRewrite true and introduce an Expand
+    // (regular branch + distinct branch) with no fan-out reduction.
+    val input = conditionalTestRelation
+      .groupBy(Symbol("a"))(
+        countDistinctIf(Symbol("b") > 1, Symbol("c")).as("cnt"),
+        countDistinctIf(Symbol("b") > 1, Symbol("c")).as("cnt2"),
+        Count(Literal(1)).toAggregateExpression().as("n"))
+      .analyze
+    val optimized = RewriteDistinctAggregates(input)
+    comparePlans(optimized, input)
   }
 
   test("conditional: do not rewrite IF with non-null else branch") {

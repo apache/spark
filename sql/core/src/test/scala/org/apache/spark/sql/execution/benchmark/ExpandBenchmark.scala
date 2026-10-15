@@ -33,9 +33,10 @@ import org.apache.spark.sql.internal.SQLConf
  * OptimizeExpand rule that pre-aggregates data before the Expand. Controlled by
  * spark.sql.optimizer.optimizeExpandRatio (default -1 = disabled).
  *
- * It also measures subexpression elimination in Expand: conditional-aggregate
- * queries whose conditions all share the same expensive subexpression, which
- * ends up in every branch of the Expand. Controlled by
+ * It also measures subexpression elimination in Expand. With the conditional
+ * distinct rewrite on (the default), the shared datetime expression is repeated
+ * in both Expand branches: the distinct branch for the counts and the regular
+ * branch for the sums. Controlled by
  * spark.sql.subexpressionElimination.enabled (default true).
  *
  * To run this benchmark:
@@ -129,12 +130,15 @@ object ExpandBenchmark extends SqlBasedBenchmark {
   /**
    * Prepares a traffic-like fact table: one row per page view, with a user id,
    * a date-string partition column `pt` (format `yyyyMMdd`), and a metric value.
+   * `pt` starts at 2023-06-02 and spans 730 days, so against the 2025-06-01
+   * anchor in [[conditionalAggsQuery]] `daysSince` is 1 through 730 and the
+   * widest window matches every row.
    */
   private def prepareTrafficTable(name: String, N: Long, userMod: Int): Unit = {
     spark.range(N)
       .selectExpr(
         s"cast(id % $userMod as bigint) as user_id",
-        "date_format(date_add(date '2023-06-01', cast(id % 730 as int)), 'yyyyMMdd') as pt",
+        "date_format(date_add(date '2023-06-02', cast(id % 730 as int)), 'yyyyMMdd') as pt",
         "cast(id % 3600 as bigint) as value")
       .createOrReplaceTempView(name)
   }
@@ -144,9 +148,10 @@ object ExpandBenchmark extends SqlBasedBenchmark {
    * given day windows, one conditional COUNT(DISTINCT) and one conditional SUM
    * whose conditions all share the same expensive datetime subexpression
    * (parse `pt`, format it back, then `datediff` against a fixed date).
-   * `RewriteDistinctAggregates` places those conditions in the branches of an
-   * Expand, so the shared subexpression is codegen'd once per branch without
-   * subexpression elimination.
+   * With the conditional distinct rewrite on, the counts share one distinct
+   * Expand branch and the sums stay on the regular branch, so the shared
+   * subexpression is repeated in both. With the rewrite off, each count keeps
+   * its own distinct branch.
    */
   private def conditionalAggsQuery(table: String, windows: Seq[Int]): String = {
     val daysSince = "datediff(" +
@@ -194,7 +199,7 @@ object ExpandBenchmark extends SqlBasedBenchmark {
     val benchmark = new Benchmark(title, N, output = output)
     val sql = conditionalAggsQuery(table, Seq(1, 7, 14, 30, 60, 90, 180, 365, 730))
 
-    benchmark.addCase("CSE disabled (re-evaluate per branch)", numIters = 3) { _ =>
+    benchmark.addCase("CSE disabled (re-evaluate each use)", numIters = 3) { _ =>
       withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "false") {
         spark.sql(sql).noop()
       }
