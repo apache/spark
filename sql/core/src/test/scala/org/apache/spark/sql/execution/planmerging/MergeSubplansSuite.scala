@@ -2653,10 +2653,10 @@ class MergeSubplansSuite extends PlanTest {
     }
   }
 
-  gridTest("SPARK-60106: A merged DSv2 filter on a join child counts as the cached plans' filter")(
+  gridTest("SPARK-60106: Merge over a merged DSv2 filter on a join child")(
       for {
         v2OnLeft <- Seq(true, false)
-        shape <- Seq("dropped", "extended", "firstMerge")
+        shape <- Seq("dropped", "extended", "reused", "firstMerge")
       } yield (v2OnLeft, shape)) { case (v2OnLeft, shape) =>
     // sub1 and sub2 filter the DSv2 scan differently and merge under the DSv2 exemption into a
     // merged Filter. A subplan that also filters the other join child would join a child that the
@@ -2664,6 +2664,8 @@ class MergeSubplansSuite extends PlanTest {
     // it stays apart. The shapes:
     // - dropped: sub3 filters only the other child, so its merge drops the merged Filter.
     // - extended: sub3 filters the DSv2 scan too, so its merge extends the merged Filter.
+    // - reused: sub3 repeats sub1's filter on the DSv2 scan, so sub1 covers sub3's rows there and
+    //   the merge builds no extra pairs. It merges without symmetric filter propagation.
     // - firstMerge: sub2 itself filters the other child too, so the first merge declines.
     // The DSv2 scan is tried as both the left and the right join child.
     def join(v2: LogicalPlan, other: LogicalPlan): LogicalPlan = if (v2OnLeft) {
@@ -2678,10 +2680,10 @@ class MergeSubplansSuite extends PlanTest {
     val sub2 = ScalarSubquery(
       join(v2ScanReading("a", "b").where($"b" > 2), other2)
         .groupBy()(max($"a").as("max_a")))
-    val v2In3 = if (shape == "extended") {
-      v2ScanReading("a", "b").where($"a" < 0)
-    } else {
-      v2ScanReading("a", "b")
+    val v2In3 = shape match {
+      case "extended" => v2ScanReading("a", "b").where($"a" < 0)
+      case "reused" => v2ScanReading("a", "b").where($"a" > 1)
+      case _ => v2ScanReading("a", "b")
     }
     val sub3 = ScalarSubquery(
       join(v2In3, testRelation2.where($"e" > 3))
@@ -2702,12 +2704,16 @@ class MergeSubplansSuite extends PlanTest {
       }.flatten
     }
 
-    if (shape == "firstMerge") {
-      assert(mergedAggregates(symmetric = false).isEmpty)
-      assert(mergedAggregates(symmetric = true) == Seq(Seq("sum_a", "max_a")))
-    } else {
-      assert(mergedAggregates(symmetric = false) == Seq(Seq("sum_a", "max_a")))
-      assert(mergedAggregates(symmetric = true) == Seq(Seq("sum_a", "max_a", "min_a")))
+    shape match {
+      case "firstMerge" =>
+        assert(mergedAggregates(symmetric = false).isEmpty)
+        assert(mergedAggregates(symmetric = true) == Seq(Seq("sum_a", "max_a")))
+      case "reused" =>
+        assert(mergedAggregates(symmetric = false) == Seq(Seq("sum_a", "max_a", "min_a")))
+        assert(mergedAggregates(symmetric = true) == Seq(Seq("sum_a", "max_a", "min_a")))
+      case _ =>
+        assert(mergedAggregates(symmetric = false) == Seq(Seq("sum_a", "max_a")))
+        assert(mergedAggregates(symmetric = true) == Seq(Seq("sum_a", "max_a", "min_a")))
     }
   }
 

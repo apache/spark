@@ -328,7 +328,8 @@ class PlanMerger(
    * @param cachedSideFiltered Whether every plan merged into the cached plan filters this subtree
    *                           with a filter that the new plan doesn't share. It is set whenever
    *                           `cachedPlanFilter` is. It is also set when a merged Filter from an
-   *                           earlier round filters the subtree. That Filter's condition is not in
+   *                           earlier round filters the subtree, unless the new plan reuses one of
+   *                           its sides. That Filter's condition is not in
    *                           `cachedPlanFilter`, because the cached aggregates already carry it.
    *                           The fact goes up to the nearest Aggregate, which consumes the filters
    *                           below it, so a Join arm can tell which of its children the cached
@@ -596,9 +597,12 @@ class PlanMerger(
                             projectList = newProjectList, child = prunedChild)
                           val newFilter = Filter(newCondition, newProject)
                           newFilter.copyTagsFrom(cp)
-                          // The cached plans' side of the OR stays hidden in cp's aggregates.
+                          // The cached plans' side of the OR stays hidden in cp's aggregates. A
+                          // reused np filter is one of the OR's sides, so one cached plan shares
+                          // it, and the cached plans don't filter this subtree against np.
                           TryMergeResult(newFilter, npMapping, Some(newNPFilterOut), None,
-                            dsv2Merged = dsv2Merged, cachedSideFiltered = true)
+                            dsv2Merged = dsv2Merged,
+                            cachedSideFiltered = existingNPFilter.isEmpty || cpSideFiltered)
                         }
                     case _ =>
                       None

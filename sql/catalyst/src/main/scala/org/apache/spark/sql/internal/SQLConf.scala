@@ -7988,10 +7988,11 @@ object SQLConf {
       "Merging two filtered scans broadens the combined filter to OR(f1, f2), which may " +
       "reduce IO pruning (e.g. partition or file skipping) compared to the individual " +
       "filters. Through a join, two subplans that filter different join children also count " +
-      "as symmetric. The merged join then also builds join pairs that neither subplan needs, " +
-      "which can multiply the join's work or make a formerly broadcastable input too large to " +
-      "broadcast. Disabled by default; enable once the behaviour has been validated in your " +
-      "workload, particularly on heavily partitioned or file-pruned tables. " +
+      "as symmetric. In that case, and when both subplans filter both join children with " +
+      "different conditions, the merged join also builds join pairs that neither subplan " +
+      "needs, which can multiply the join's work or make a formerly broadcastable input too " +
+      "large to broadcast. Disabled by default; enable once the behaviour has been validated " +
+      "in your workload, particularly on heavily partitioned or file-pruned tables. " +
       s"Has no effect when ${MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key} is false.")
     .version("4.2.0")
     .withBindingPolicy(ConfigBindingPolicy.SESSION)
@@ -8052,7 +8053,9 @@ object SQLConf {
         "of LeftOuter/LeftSemi/LeftAnti, the right side of RightOuter, or either side of " +
         "Inner/Cross. FullOuter joins are never eligible. When the two subplans filter " +
         "different children of the join, the merge also needs " +
-        s"${MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key}. " +
+        s"${MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key}, even when " +
+        s"${MERGE_SUBPLANS_DSV2_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key} lets their scans " +
+        "merge. " +
         s"Has no effect when ${MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key} is false.")
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
