@@ -54,10 +54,17 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
   }
 
   test("lastAuthoredIn is the greatest sequence among the leaves it reads") {
-    val versionMap = versionMapOf(Seq("a") -> Some(3L), Seq("b") -> Some(7L), Seq("c") -> Some(9L))
+    val versionMap = versionMapOf(
+      Seq("a") -> Some(3L),
+      Seq("b") -> Some(7L),
+      Seq("c") -> Some(5L),
+      Seq("d") -> Some(9L))
 
     checkAnswer(
-      lastAuthoredIn(Seq(Seq("a"), Seq("b")), upsertSequence = F.lit(9L), versionMap = versionMap),
+      lastAuthoredIn(
+        Seq(Seq("a"), Seq("b"), Seq("c")),
+        upsertSequence = F.lit(9L),
+        versionMap = versionMap),
       Row(7L))
   }
 

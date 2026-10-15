@@ -65,7 +65,7 @@ private[pipelines] object Scd1VersionMap {
    *                are serialized with [[serializeKey]].
    * @param sequencingType The data type the sequences are cast to.
    */
-  private def fromEntries(entries: Seq[(Seq[String], Column)], sequencingType: DataType): Column = {
+  def fromEntries(entries: Seq[(Seq[String], Column)], sequencingType: DataType): Column = {
     if (entries.isEmpty) {
       // Without arguments, `map()` is `map<string, string>` under
       // spark.sql.legacy.createEmptyCollectionUsingStringType, which cannot be cast to struct or
