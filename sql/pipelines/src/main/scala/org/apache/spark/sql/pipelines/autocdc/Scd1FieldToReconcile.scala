@@ -30,8 +30,8 @@ import org.apache.spark.util.ArrayImplicits._
  * @param leafPaths The name parts of every user-data leaf at or beneath `path`.
  * @param isIgnoreNullLeaf Whether the field is a leaf of a column selected for ignore-null, which
  *                         an upsert with a version map authors only when the map records the
- *                         leaf as authored. If not, the field is a whole column outside the selection,
- *                         which every upsert authors in full, nulls included.
+ *                         leaf as authored. If not, the field is a whole column outside the
+ *                         selection, which every upsert authors in full, nulls included.
  */
 private[autocdc] case class Scd1FieldToReconcile(
     path: Seq[String],
