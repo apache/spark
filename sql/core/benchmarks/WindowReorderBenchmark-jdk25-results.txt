@@ -1,0 +1,12 @@
+================================================================================================
+WindowReorder: stack reordering of the window chain
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.4.1+1-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 9V74 80-Core Processor
+window batch over two user key groups:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+baseline (window reorder off)                     20326          20467         107          0.8        1211.5       1.0X
+optimized (window reorder on)                     15992          16148         128          1.0         953.2       1.3X
+
+
