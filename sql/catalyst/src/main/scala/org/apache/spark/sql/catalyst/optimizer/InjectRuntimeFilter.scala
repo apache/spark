@@ -43,8 +43,8 @@ import org.apache.spark.sql.internal.SQLConf
  * pays off, since the user asserts it does. It waives no correctness requirement (see
  * `JoinSelectionHelper.runtimeFilterHintRejection`) and does not lift the limits on the
  * number of filters and on a Bloom filter's size, nor the requirement that the join keys be
- * simple expressions. A hinted side is never itself filtered, and a hint takes effect through one
- * mechanism: when a DPP filter honors it on any join key, no Bloom filter is added for that join.
+ * simple expressions. A hinted side is never itself filtered. On a join key that a DPP filter
+ * already prunes, no Bloom filter is added; the other join keys still get one.
  * The rule runs after the DPP filters are pushed down and cleaned up, so it sees only the ones
  * that survive. When the hint is not applied, the reason is reported through the hint error
  * handler, and no filter is built in the opposite direction instead.
@@ -570,11 +570,11 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
               .fold(reason => blocked(reason), Some(_))
           }
         }
-        // A DPP filter prunes by whole partitions rather than by rows, so it is preferred. The
-        // hint is honored by one that prunes the application side, and then takes effect through
-        // that mechanism alone: no Bloom filter is added on any key of the join. A hinted side
-        // that cannot honor the hint on a key gets DPP from its own estimates, as without the
-        // hint, so such a DPP filter does not count as the hint applied.
+        // A DPP filter prunes by whole partitions rather than by rows, so it is preferred: a key
+        // it prunes gets no Bloom filter, while the other keys still may. The hint is honored by
+        // a DPP filter that prunes the application side. A hinted side that cannot honor the hint
+        // on a key gets DPP from its own estimates, as without the hint, so such a DPP filter
+        // does not count as the hint applied.
         def hintRejection(l: Expression, r: Expression): Option[String] =
           if (injectLeftHinted) runtimeFilterHintRejection(l, right, r)
           else runtimeFilterHintRejection(r, left, l)
@@ -591,9 +591,9 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
         }
         appliedHint = dppHonorsHint
         prunedKeys.foreach { case (l, r, prunedByDppOnKey) =>
-          if (dppHonorsHint || prunedByDppOnKey) {
+          if (prunedByDppOnKey) {
             // Already pruned by partition pruning: no Bloom filter for the key.
-            if (hinted && !dppHonorsHint) hintRejection(l, r).foreach(hintBlocked(_))
+            if (hinted) hintRejection(l, r).foreach(hintBlocked(_))
           } else if (!bloomFilterEnabled) {
             hintBlocked(s"${SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key} is false")
           } else if (filterCounter >= numFilterThreshold) {
