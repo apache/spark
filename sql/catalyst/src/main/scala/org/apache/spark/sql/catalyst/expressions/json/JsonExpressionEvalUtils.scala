@@ -26,10 +26,10 @@ import com.fasterxml.jackson.core.json.JsonReadFeature
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow, GetJsonObject}
+import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow, GetJsonObject, SpecializedGetters}
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonGenerator, JacksonParser, JsonInferSchema, JSONOptions}
 import org.apache.spark.sql.catalyst.util.{ArrayData, FailFastMode, FailureSafeParser, MapData, PermissiveMode}
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType, StructField, StructType, VariantType}
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 import org.apache.spark.util.Utils
@@ -215,6 +215,123 @@ case class StructsToJsonEvaluator(
   // the `UTF8String` round trip that `evaluate` performs.
   final def evaluateString(value: Any): String = {
     converter(value)
+  }
+}
+
+/**
+ * Renders a JSON_OBJECT value by writing every member into one [[JacksonGenerator]] lifecycle,
+ * rather than serializing each member separately and splicing the fragments. Shared by the
+ * interpreted and codegen paths of `JsonObjectExpr`.
+ *
+ * `evaluate` takes a carrier row of the already-evaluated members flattened as
+ * `[key0, value0, key1, value1, ...]`. Keys are non-null strings: the caller guards them so a null
+ * key raises JSON_OBJECT_NULL_KEY before its value is evaluated. Per member it writes the field
+ * name then the value -- a raw (`FORMAT JSON`) value spliced verbatim (validated first when it is
+ * arbitrary user text), a null written as JSON `null` or dropped under ABSENT ON NULL, any other
+ * value rendered through the shared generator's type writer.
+ */
+case class JsonObjectEvaluator(
+    valueTypes: Seq[DataType],
+    rawJson: Seq[Boolean],
+    needsValidation: Seq[Boolean],
+    valueFoldable: Seq[Boolean],
+    keepNullMembers: Boolean,
+    timeZoneId: String,
+    funcName: String) {
+
+  @transient private lazy val writer = new CharArrayWriter()
+
+  // Schema the generator is initialized with: alternating non-null string keys and the members'
+  // value types. Only the per-type value writers and the member-write primitives are used; the
+  // whole-row `write` path is never taken.
+  @transient private lazy val carrierSchema: StructType = {
+    val fields = Array.newBuilder[StructField]
+    var i = 0
+    while (i < valueTypes.length) {
+      fields += StructField(s"k$i", StringType)
+      fields += StructField(s"v$i", valueTypes(i))
+      i += 1
+    }
+    StructType(fields.result())
+  }
+
+  @transient private lazy val gen =
+    new JacksonGenerator(carrierSchema, writer, new JSONOptions(Map.empty, timeZoneId))
+
+  @transient private lazy val valueWriters: Array[(SpecializedGetters, Int) => Unit] =
+    valueTypes.map(gen.makeValueWriter).toArray
+
+  @transient private lazy val formatJsonFactory = new JsonFactory()
+
+  @transient private lazy val cachedValidatedTexts: Array[String] =
+    new Array[String](valueTypes.length)
+
+  // Raw text to splice for member `idx`: a trusted nested constructor as-is; an explicit
+  // `FORMAT JSON` string validated once (cached) when foldable, else per row.
+  private def rawText(idx: Int, value: UTF8String): String = {
+    if (!needsValidation(idx)) {
+      value.toString
+    } else if (valueFoldable(idx)) {
+      val cached = cachedValidatedTexts(idx)
+      if (cached != null) {
+        cached
+      } else {
+        val text = value.toString
+        validate(idx, text)
+        cachedValidatedTexts(idx) = text
+        text
+      }
+    } else {
+      val text = value.toString
+      validate(idx, text)
+      text
+    }
+  }
+
+  // A spliced value must be exactly one well-formed JSON value: parse one, reject trailing text.
+  private def validate(idx: Int, text: String): Unit = {
+    val valid =
+      try {
+        Utils.tryWithResource(formatJsonFactory.createParser(text)) { parser =>
+          if (parser.nextToken() == null) {
+            false
+          } else {
+            parser.skipChildren()
+            parser.nextToken() == null
+          }
+        }
+      } catch {
+        case _: JsonProcessingException => false
+      }
+    if (!valid) {
+      // Flattened 1-based value-arg position (member `idx` is arg `2*idx+2`).
+      throw QueryExecutionErrors.invalidJsonFormatJsonValueError(funcName, idx * 2 + 2, text)
+    }
+  }
+
+  final def evaluate(row: InternalRow): Any = {
+    gen.writeStartObject()
+    var i = 0
+    while (i < valueTypes.length) {
+      val valOrd = i * 2 + 1
+      val isNull = row.isNullAt(valOrd)
+      if (!isNull || keepNullMembers) {
+        gen.writeFieldName(row.getUTF8String(i * 2).toString)
+        if (isNull) {
+          gen.writeNull()
+        } else if (rawJson(i)) {
+          gen.writeRawValue(rawText(i, row.getUTF8String(valOrd)))
+        } else {
+          valueWriters(i).apply(row, valOrd)
+        }
+      }
+      i += 1
+    }
+    gen.writeEndObject()
+    gen.flush()
+    val json = writer.toString
+    writer.reset()
+    UTF8String.fromString(json)
   }
 }
 

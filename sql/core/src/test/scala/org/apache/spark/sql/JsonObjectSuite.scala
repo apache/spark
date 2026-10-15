@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.{Cast, Collate, Expression, JsonConstructorNullBehavior, JsonImplicitFormatCarrier, JsonObjectExpr, Literal}
 import org.apache.spark.sql.catalyst.parser.{ParseException, SparkParserBailErrorStrategy, SqlBaseLexer, SqlBaseParser}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join}
+import org.apache.spark.sql.execution.{ProjectExec, WholeStageCodegenExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, CharType, GeographyType, GeometryType, IntegerType, MapType, StringType, StructType, VarcharType}
@@ -166,6 +167,36 @@ class JsonObjectSuite extends QueryTest with SharedSparkSession {
       sql("""SELECT json_object(case : CASE WHEN v:x::int = 1 THEN 'y' ELSE 'z' END)
             |FROM (SELECT 'c' AS `case`, parse_json('{"x":1}') AS v)""".stripMargin),
       Row("""{"c":"y"}"""))
+  }
+
+  test("a `case` column inside a simple-CASE colon key is a column, not a nested CASE") {
+    // The simple-CASE key's own body references a column named `case` (the THEN result). The
+    // key-colon lookahead must not count that `case` as a nested CASE...END, or it would consume
+    // the real END and misread the `:p` operand marker as the member separator.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      val from = "FROM (SELECT 'c' AS `case`, 'v' AS value)"
+      checkAnswer(
+        spark.sql(s"SELECT json_object(CASE :p WHEN 1 THEN case ELSE 'x' END : value) $from",
+          Map("p" -> 1)),
+        Row("""{"c":"v"}"""))
+      checkAnswer(
+        spark.sql(s"SELECT json_object(CASE :p WHEN 1 THEN case ELSE 'x' END : value) $from",
+          Map("p" -> 2)),
+        Row("""{"x":"v"}"""))
+      // A postfix operator on the body `case` column is the case most likely to be miscounted as a
+      // nested CASE...END by the key-colon lookahead.
+      val q = s"SELECT json_object(CASE :p WHEN 1 THEN case::string ELSE 'x' END : value) $from"
+      checkAnswer(spark.sql(q, Map("p" -> 1)), Row("""{"c":"v"}"""))
+    }
+  }
+
+  test("a non-foldable key with escapable characters is JSON-escaped") {
+    // A dynamic (non-foldable) key is written through the generator's field-name path, which must
+    // escape quotes and backslashes exactly as a quoted key would.
+    val df = Seq(("key\"with\\chars", "v")).toDF("k", "v")
+    checkAnswer(
+      df.selectExpr("json_object(k VALUE v)"),
+      Row("""{"key\"with\\chars":"v"}"""))
   }
 
   test("a bare `when` column value does not flip a `case` colon key to the CASE keyword") {
@@ -729,6 +760,22 @@ world'))"""))
       sql("CREATE TABLE t (id INT, c STRING DEFAULT json_object('a' VALUE 1)) USING parquet")
       sql("INSERT INTO t (id) VALUES (1)")
       checkAnswer(sql("SELECT c FROM t"), Row("""{"a":1}"""))
+    }
+  }
+
+  test("a non-foldable JSON_OBJECT projection participates in whole-stage codegen") {
+    // Rendering through an Invoke of the object evaluator (not CodegenFallback) keeps the enclosing
+    // Project eligible for whole-stage codegen; a CodegenFallback expression would exclude it. A
+    // column-valued member keeps the constructor from being constant-folded away.
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val df = sql("SELECT json_object('id' VALUE id) FROM range(5)")
+      val fusedProjects = df.queryExecution.executedPlan.collect {
+        case w: WholeStageCodegenExec => w
+      }.flatMap(_.collect { case p: ProjectExec => p })
+      assert(fusedProjects.nonEmpty,
+        s"expected the JSON_OBJECT Project to be fused into whole-stage codegen, but got:\n" +
+          df.queryExecution.executedPlan)
+      checkAnswer(df, (0 until 5).map(i => Row(s"""{"id":$i}""")))
     }
   }
 

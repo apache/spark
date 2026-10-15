@@ -1712,7 +1712,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("functionName" -> toSQLId(functionName), "path" -> toSQLValue(path)))
   }
 
-  def jsonObjectNullKeyError(): Throwable = {
+  // Returns the concrete `SparkRuntimeException` (not `Throwable`) so generated code can `throw` it
+  // without a checked-exception declaration (see `JsonObjectKeyGuard.doGenCode`).
+  def jsonObjectNullKeyError(): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "JSON_OBJECT_NULL_KEY",
       messageParameters = Map.empty)

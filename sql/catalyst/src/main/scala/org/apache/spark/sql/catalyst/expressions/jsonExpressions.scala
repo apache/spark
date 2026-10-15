@@ -23,12 +23,12 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode, FalseLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.expressions.json.{GetJsonObjectEvaluator, JsonExpressionUtils,
   JsonPathParser, JsonPathResult, JsonQueryLookup, JsonTableEvaluator, JsonTablePathTrie,
-  JsonToStructsEvaluator, JsonTupleEvaluator, JsonValueLookup, MultiGetJsonObjectEvaluator,
-  PathInstruction, SchemaOfJsonEvaluator, StructsToJsonEvaluator}
+  JsonObjectEvaluator, JsonToStructsEvaluator, JsonTupleEvaluator, JsonValueLookup,
+  MultiGetJsonObjectEvaluator, PathInstruction, SchemaOfJsonEvaluator, StructsToJsonEvaluator}
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{GET_JSON_OBJECT, JSON_TO_STRUCT,
@@ -2363,6 +2363,41 @@ case class JsonTypeof(child: Expression)
  * *key*-position call stays routable (see `AstBuilder.visitJsonObject`).
  * The user-facing reference lives in `docs/sql-ref-syntax-qry-select-json-object.md`.
  */
+/**
+ * Guards a JSON_OBJECT key: returns the key, or raises JSON_OBJECT_NULL_KEY when it is null. Wraps
+ * each key inside `JsonObjectExpr.replacement` so that, as the carrier struct is evaluated left to
+ * right, a null key fails before its member's value is evaluated (the key-before-value error
+ * order). Internal, so it is `NonSQLExpression`; it never appears in `JsonObjectExpr.sql`.
+ */
+case class JsonObjectKeyGuard(child: Expression) extends UnaryExpression with NonSQLExpression {
+  override def dataType: DataType = child.dataType
+  // Can throw, so it is not foldable (mirrors AssertNotNull).
+  override def foldable: Boolean = false
+  // Raises on a null key, so the result is never null.
+  override def nullable: Boolean = false
+
+  override def eval(input: InternalRow): Any = {
+    val value = child.eval(input)
+    if (value == null) {
+      throw QueryExecutionErrors.jsonObjectNullKeyError()
+    }
+    value
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val childGen = child.genCode(ctx)
+    val code = childGen.code + code"""
+      if (${childGen.isNull}) {
+        throw QueryExecutionErrors.jsonObjectNullKeyError();
+      }
+     """
+    ev.copy(code = code, isNull = FalseLiteral, value = childGen.value)
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): JsonObjectKeyGuard =
+    copy(child = newChild)
+}
+
 case class JsonObjectExpr(
     members: Seq[(Expression, Expression)],
     rawJson: Seq[Boolean],
@@ -2372,7 +2407,6 @@ case class JsonObjectExpr(
     timeZoneId: Option[String] = None)
   extends Expression
   with TimeZoneAwareExpression
-  with CodegenFallback
   with QueryErrorsBase
   // Default RETURNING is a plain STRING, so `DefaultStringProducingExpression` lets
   // `ApplyDefaultCollation` cast the result to a non-default collation; the `dataType` override
@@ -2395,9 +2429,6 @@ case class JsonObjectExpr(
 
   @transient private lazy val rawJsonArray: Array[Boolean] =
     rawJson.toArray
-
-  @transient private lazy val needsValidationArray: Array[Boolean] =
-    needsValidation.toArray
 
   // Throwable only when eval can throw: a key that may be null (JSON_OBJECT_NULL_KEY), an explicit
   // `FORMAT JSON` value to validate, or a throwable child. This keeps such shapes from being pushed
@@ -2491,171 +2522,48 @@ case class JsonObjectExpr(
     }
   }
 
+  // The object evaluator holds a mutable JacksonGenerator, so each copy must be task-local: report
+  // stateful so projections fresh-copy it (codegen embeds the evaluator per task via its `Invoke`).
   override def stateful: Boolean = true
 
   @transient private lazy val resolvedZoneId: String =
     timeZoneId.getOrElse(SQLConf.get.sessionLocalTimeZone)
 
-  // JacksonGenerator (shared with `to_json`, so rendering matches) can only serialize a container,
-  // not a bare scalar, so each key/value is wrapped in a one-element array whose brackets are
-  // stripped in renderKey/appendRenderedValue below.
-  @transient private lazy val keyEvaluator: StructsToJsonEvaluator =
-    StructsToJsonEvaluator(Map.empty, ArrayType(StringType), Some(resolvedZoneId))
+  // Writes the whole object through one JacksonGenerator lifecycle (see [[JsonObjectEvaluator]]).
+  @transient private lazy val objectEvaluator: JsonObjectEvaluator = JsonObjectEvaluator(
+    memberArray.map(_._2.dataType).toImmutableArraySeq,
+    rawJson,
+    needsValidation,
+    memberArray.map(_._2.foldable).toImmutableArraySeq,
+    nullBehavior == JsonConstructorNullBehavior.Null,
+    resolvedZoneId,
+    prettyName)
 
-  @transient private lazy val valueEvaluators: Array[StructsToJsonEvaluator] =
-    new Array[StructsToJsonEvaluator](memberArray.length)
-
-  @transient private lazy val singleElem: Array[Any] = new Array[Any](1)
-
-  @transient private lazy val singleElemData: GenericArrayData =
-    new GenericArrayData(singleElem)
-
-  @transient private lazy val castInput: GenericInternalRow =
-    new GenericInternalRow(1)
-
-  @transient private lazy val returningCast: Expression =
-    Cast(BoundReference(0, StringType, nullable = true), returning, timeZoneId,
-      EvalMode.ANSI)
-
-  // `evaluateString` returns the Java String directly, skipping `evaluate`'s UTF8String round trip.
-  // The key is cached or appended whole, so it still materializes the interior substring.
-  private def renderKey(key: Any): String = {
-    singleElem(0) = key
-    val arrJson = keyEvaluator.evaluateString(singleElemData)
-    arrJson.substring(1, arrJson.length - 1)
+  // Render through an `Invoke` of the object evaluator (like `to_json`) rather than mixing in
+  // `CodegenFallback`, which would drop the enclosing Project from whole-stage codegen. The members
+  // are carried as a struct `[key0, value0, ...]`; evaluating it left to right runs each child once
+  // in order, with a `JsonObjectKeyGuard` on each key raising JSON_OBJECT_NULL_KEY before that
+  // member's value. The node stays in the plan (not `RuntimeReplaceable`) so its `foldable` and
+  // `throwable` overrides still gate constant-folding and predicate pushdown.
+  @transient private lazy val replacement: Expression = {
+    val carrierFields = memberArray.iterator.zipWithIndex.flatMap { case ((k, v), i) =>
+      Seq(Literal(s"k$i"), JsonObjectKeyGuard(k), Literal(s"v$i"), v)
+    }.toSeq
+    val carrier = CreateNamedStruct(carrierFields)
+    val render = Invoke(
+      Literal.create(objectEvaluator, ObjectType(classOf[JsonObjectEvaluator])),
+      "evaluate",
+      StringType,
+      Seq(carrier),
+      Seq(carrier.dataType))
+    if (returning.eq(StringType)) render else Cast(render, returning, timeZoneId, EvalMode.ANSI)
   }
 
-  // Append the interior of the "[<frag>]" wrapper straight into the builder (no per-value
-  // substring), mirroring `JsonArray.appendRenderedElement`.
-  private def appendRenderedValue(sb: java.lang.StringBuilder, idx: Int, value: Any): Unit = {
-    singleElem(0) = value
-    var evaluator = valueEvaluators(idx)
-    if (evaluator == null) {
-      evaluator = StructsToJsonEvaluator(
-        Map.empty, ArrayType(memberArray(idx)._2.dataType), Some(resolvedZoneId))
-      valueEvaluators(idx) = evaluator
-    }
-    val arrJson = evaluator.evaluateString(singleElemData)
-    sb.append(arrJson, 1, arrJson.length - 1)
-  }
+  override def eval(input: InternalRow): Any = replacement.eval(input)
 
-  @transient private lazy val formatJsonFactory: JsonFactory = new JsonFactory()
-
-  @transient private lazy val cachedValidatedTexts: Array[String] =
-    new Array[String](memberArray.length)
-
-  // Cache each value's foldability so the per-row FORMAT JSON path below never re-walks a composite
-  // child's expression tree.
-  @transient private lazy val valueFoldable: Array[Boolean] =
-    memberArray.map(_._2.foldable)
-
-  // A `FORMAT JSON` value is spliced verbatim, so it must be exactly one well-formed JSON value
-  // (a string like `1,2` or `{bad` would corrupt the object). Parse one value; reject anything
-  // trailing. Mirrors `JsonArray.validateJsonText`.
-  private def validateJsonText(idx: Int, text: String): Unit = {
-    val valid =
-      try {
-        Utils.tryWithResource(formatJsonFactory.createParser(text)) { parser =>
-          if (parser.nextToken() == null) {
-            false
-          } else {
-            parser.skipChildren()
-            parser.nextToken() == null
-          }
-        }
-      } catch {
-        case _: JsonProcessingException => false
-      }
-    if (!valid) {
-      // Flattened 1-based value-arg position (member `idx` is arg `2*idx+2`), matching the
-      // analysis-time INVALID_JSON_FORMAT_JSON_INPUT check.
-      throw QueryExecutionErrors.invalidJsonFormatJsonValueError(prettyName, idx * 2 + 2, text)
-    }
-  }
-
-  // Raw text to splice for member `idx`: a trusted nested constructor splices as-is; an explicit
-  // `FORMAT JSON` string is validated once (cached) when foldable, else per row.
-  private def rawJsonText(idx: Int, value: Any): String = {
-    if (!needsValidationArray(idx)) {
-      value.asInstanceOf[UTF8String].toString
-    } else if (valueFoldable(idx)) {
-      val cached = cachedValidatedTexts(idx)
-      if (cached != null) {
-        cached
-      } else {
-        val text = value.asInstanceOf[UTF8String].toString
-        validateJsonText(idx, text)
-        cachedValidatedTexts(idx) = text
-        text
-      }
-    } else {
-      val text = value.asInstanceOf[UTF8String].toString
-      validateJsonText(idx, text)
-      text
-    }
-  }
-
-  // A foldable, non-null key (the common literal-key case, e.g. `JSON_OBJECT('id' VALUE col)`)
-  // renders to the same JSON member name on every row, so render it once here instead of re-running
-  // the Jackson writer per row. `renderedKeys(i)` holds that cached name, or `null` when the key
-  // must be evaluated and rendered per row -- a non-foldable key, or a foldable key that evaluates
-  // to `null` (still reported as JSON_OBJECT_NULL_KEY at eval).
-  @transient private lazy val renderedKeys: Array[String] = memberArray.map { case (k, _) =>
-    if (k.foldable) {
-      val key = k.eval(EmptyRow)
-      if (key == null) null else renderKey(key)
-    } else {
-      null
-    }
-  }
-
-  override def eval(input: InternalRow): Any = {
-    val sb = new java.lang.StringBuilder("{")
-    var first = true
-    var i = 0
-    val localMembers = memberArray
-    val localRawJson = rawJsonArray
-    while (i < localMembers.length) {
-      val (keyExpr, valueExpr) = localMembers(i)
-      // Resolve the member's key. A foldable non-null key is already rendered and cached. Otherwise
-      // evaluate the key before the value so a null key deterministically raises
-      // JSON_OBJECT_NULL_KEY, independent of whether the value expression happens to throw.
-      // Delay rendering dynamic keys until we know the member will be emitted, avoiding work for
-      // null values under ABSENT ON NULL.
-      val cachedKey = renderedKeys(i)
-      val key = if (cachedKey == null) {
-        val key = keyExpr.eval(input)
-        if (key == null) {
-          throw QueryExecutionErrors.jsonObjectNullKeyError()
-        }
-        key
-      } else {
-        null
-      }
-      val value = valueExpr.eval(input)
-      if (value != null || nullBehavior == JsonConstructorNullBehavior.Null) {
-        if (!first) sb.append(",")
-        first = false
-        val keyName = if (cachedKey != null) cachedKey else renderKey(key)
-        sb.append(keyName).append(":")
-        if (value == null) {
-          sb.append("null")
-        } else if (localRawJson(i)) {
-          sb.append(rawJsonText(i, value))
-        } else {
-          appendRenderedValue(sb, i, value)
-        }
-      }
-      i += 1
-    }
-    sb.append("}")
-    val jsonStr = UTF8String.fromString(sb.toString)
-    if (returning == StringType) {
-      jsonStr
-    } else {
-      castInput.update(0, jsonStr)
-      returningCast.eval(castInput)
-    }
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val gen = replacement.genCode(ctx)
+    ev.copy(code = gen.code, isNull = gen.isNull, value = gen.value)
   }
 
   override def prettyName: String = "json_object"
