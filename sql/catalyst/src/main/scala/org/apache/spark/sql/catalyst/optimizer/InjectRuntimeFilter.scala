@@ -531,13 +531,17 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     (dpp.buildQuery +: dpp.usableBroadcastValueProjection.filter(_ => dpp.onlyInBroadcast)
       .map(_.sourcePlan).toSeq).map(withoutDppFilters(_))
 
-  // The DPP filters on `applicationKey` built from `creationKey` that prune `plan`. This rule runs
-  // after the DPP filters are pushed down and cleaned up, so they sit wherever the pushdown left
-  // them, on the key as the lineage tracking rewrites it on the way down.
-  private def dynamicPruningSubqueries(
+  /**
+   * The DPP filters on `applicationKey` built from `creationKey` that prune `plan`. This rule runs
+   * after the DPP filters are pushed down and cleaned up, so only a surviving one is found,
+   * wherever the pushdown left it; it is the one [[PartitionPruning]] inserted for the same join
+   * key pair, whose pruning key it rewrote on the way down as the lineage tracking does.
+   */
+  private def dynamicPruningFilters(
       plan: LogicalPlan,
       applicationKey: Expression,
       creationKey: Expression): Seq[DynamicPruningSubquery] = {
+    if (!plan.containsPattern(DYNAMIC_PRUNING_SUBQUERY)) return Nil
     findExpressionAndTrackLineageDown(applicationKey, plan).toSeq.flatMap { case (trackedKey, _) =>
       plan.flatMap {
         case Filter(condition, _) => condition.collect {
@@ -547,30 +551,6 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
         case _ => Nil
       }
     }
-  }
-
-  /**
-   * Whether a DPP filter on `applicationKey` built from `creationKey` prunes `plan`. This rule
-   * runs after the DPP filters are pushed down and cleaned up, so only a surviving one is found,
-   * wherever the pushdown left it; it is the one [[PartitionPruning]] inserted for the same join
-   * key pair, whose pruning key it rewrote on the way down as the lineage tracking does.
-   */
-  private def hasDynamicPruning(
-      plan: LogicalPlan,
-      applicationKey: Expression,
-      creationKey: Expression): Boolean = {
-    plan.containsPattern(DYNAMIC_PRUNING_SUBQUERY) &&
-      findExpressionAndTrackLineageDown(applicationKey, plan).exists { case (trackedKey, _) =>
-        plan.exists {
-          case Filter(condition, _) => condition.exists {
-            case d: DynamicPruningSubquery =>
-              d.pruningKey.semanticEquals(trackedKey) &&
-                d.broadcastKeyIndices.exists(i => d.buildKeys(i).semanticEquals(creationKey))
-            case _ => false
-          }
-          case _ => false
-        }
-      }
   }
 
   /**
@@ -746,35 +726,30 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
         }
         // A DPP filter prunes by whole partitions rather than by rows, so it is preferred: a key
         // it prunes gets no Bloom filter, while the other keys still may. The hint is honored by
-        // a DPP filter that prunes the application side. A hinted side that cannot honor the hint
-        // on a key gets DPP from its own estimates, as without the hint, so such a DPP filter
-        // does not count as the hint applied.
-        def hintRejection(l: Expression, r: Expression): Option[String] =
-          if (injectLeftHinted) runtimeFilterHintRejection(l, right, r)
-          else runtimeFilterHintRejection(r, left, l)
+        // a DPP filter that [[PartitionPruning]] marked as honoring it. A hinted side that cannot
+        // honor the hint on a key gets DPP from its own estimates, as without the hint, so such a
+        // DPP filter does not count as the hint applied.
         val prunedKeys = leftKeys.lazyZip(rightKeys).map { (l, r) =>
-          val pruned = if (hinted) {
-            if (injectLeftHinted) hasDynamicPruning(left, l, r) else hasDynamicPruning(right, r, l)
+          val filters = if (hinted) {
+            if (injectLeftHinted) dynamicPruningFilters(left, l, r)
+            else dynamicPruningFilters(right, r, l)
           } else {
-            hasDynamicPruning(left, l, r) || hasDynamicPruning(right, r, l)
+            dynamicPruningFilters(left, l, r) ++ dynamicPruningFilters(right, r, l)
           }
-          (l, r, pruned)
+          val honorsHint = hinted &&
+            filters.exists(_.getTagValue(DynamicPruning.HONORS_RUNTIME_FILTER_HINT).isDefined)
+          (l, r, filters, honorsHint)
         }
-        val dppHonorsHint = hinted && prunedKeys.exists { case (l, r, pruned) =>
-          pruned && hintRejection(l, r).isEmpty
-        }
-        appliedHint = dppHonorsHint
-        prunedKeys.foreach { case (l, r, prunedByDppOnKey) =>
-          // The key's DPP filters. Physical planning can still drop them, and a key whose DPP
-          // filters are all dropped can get a Bloom filter.
-          lazy val keyDpps = if (prunedByDppOnKey) {
-            dynamicPruningSubqueries(left, l, r) ++ dynamicPruningSubqueries(right, r, l)
-          } else {
-            Nil
-          }
+        appliedHint = prunedKeys.exists(_._4)
+        prunedKeys.foreach { case (l, r, keyDpps, honorsHint) =>
+          // Physical planning can still drop the key's DPP filters, and a key whose DPP filters
+          // are all dropped can get a Bloom filter.
           if (keyDpps.exists(isKept)) {
             // Already pruned by partition pruning: no Bloom filter for the key.
-            if (hinted) hintRejection(l, r).foreach(hintBlocked(_))
+            if (hinted && !honorsHint) {
+              (if (injectLeftHinted) runtimeFilterHintRejection(l, right, r)
+              else runtimeFilterHintRejection(r, left, l)).foreach(hintBlocked(_))
+            }
           } else if (!bloomFilterEnabled) {
             hintBlocked(s"${SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key} is false")
           } else if (filterCounter >= numFilterThreshold) {
