@@ -107,26 +107,27 @@ same JVM, host, benchmark inputs, and JMH settings.
 The following results compare the generic `BidK` path with `BigDecimal` under
 a `MathContext` of 43 digits (Decimal160) and 70 digits (Decimal256). Values
 are nanoseconds per operation. The ratio is `BigDecimal / BID`, so a value
-greater than 1 means BID was faster. `BidK` uses `DecNum` rather than the
-specialized 64/128 kernels, so these numbers are not comparable to the table
-above.
+greater than 1 means BID was faster. Decimal160 add/mul/FMA/compare use the
+unrolled 3-limb `Wide6` kernel; Decimal160 div/sqrt and all Decimal256
+arithmetic use Knuth limbs. Parse is still `DecNum`. These numbers are not
+comparable to the specialized 64/128 table above.
 
 | Function / workload | BID160 | BD160 | Ratio | BID256 | BD256 | Ratio |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| add (same quantum) | 938.73 | 21.50 | 0.02x | 2872.80 | 25.52 | 0.01x |
-| add (mixed quantum) | 1333.53 | 114.20 | 0.09x | 2068.60 | 169.61 | 0.08x |
-| add (full precision) | 3297.25 | 149.68 | 0.05x | 5044.22 | 255.13 | 0.05x |
-| subtract | 1671.09 | 32.26 | 0.02x | 3000.92 | 36.25 | 0.01x |
-| multiply (same quantum) | 1404.66 | 219.52 | 0.16x | 4235.36 | 356.00 | 0.08x |
-| multiply (mixed quantum) | 683.02 | 100.08 | 0.15x | 1506.37 | 141.10 | 0.09x |
-| multiply (full precision) | 2301.05 | 246.28 | 0.11x | 4813.63 | 369.12 | 0.08x |
-| divide (same quantum) | 2309.08 | 206.70 | 0.09x | 4877.70 | 342.93 | 0.07x |
-| divide (mixed quantum) | 1918.64 | 240.28 | 0.13x | 3391.05 | 354.74 | 0.10x |
-| divide (full precision) | 3099.40 | 247.78 | 0.08x | 5147.74 | 365.35 | 0.07x |
-| square root | 28540.13 | 3131.56 | 0.11x | 57281.72 | 5686.89 | 0.10x |
-| fused multiply-add | 3141.46 | 296.66 | 0.09x | 6416.65 | 438.44 | 0.07x |
-| ordered less-than | 1595.68 | 7.49 | 0.00x | 2867.78 | 7.39 | 0.00x |
-| cohort-equal numeric comparison | 1584.33 | 7.17 | 0.00x | 2866.87 | 7.24 | 0.00x |
+| add (same quantum) | 61.82 | 21.31 | 0.34x | 166.13 | 25.07 | 0.15x |
+| add (mixed quantum) | 218.08 | 116.10 | 0.53x | 638.21 | 166.32 | 0.26x |
+| add (full precision) | 201.45 | 150.76 | 0.75x | 763.71 | 254.40 | 0.33x |
+| subtract | 85.87 | 34.09 | 0.40x | 202.94 | 37.46 | 0.18x |
+| multiply (same quantum) | 315.80 | 220.73 | 0.70x | 1341.63 | 354.90 | 0.26x |
+| multiply (mixed quantum) | 143.23 | 87.55 | 0.61x | 415.93 | 141.97 | 0.34x |
+| multiply (full precision) | 385.32 | 246.45 | 0.64x | 1476.95 | 373.12 | 0.25x |
+| divide (same quantum) | 527.17 | 227.45 | 0.43x | 895.81 | 343.13 | 0.38x |
+| divide (mixed quantum) | 567.49 | 233.24 | 0.41x | 924.91 | 345.20 | 0.37x |
+| divide (full precision) | 563.64 | 233.07 | 0.41x | 904.69 | 352.62 | 0.39x |
+| square root | 4038.01 | 3120.20 | 0.77x | 6451.92 | 5733.18 | 0.89x |
+| fused multiply-add | 507.08 | 298.31 | 0.59x | 1748.36 | 440.28 | 0.25x |
+| ordered less-than | 51.18 | 7.29 | 0.14x | 2856.17 | 7.26 | 0.00x |
+| cohort-equal numeric comparison | 53.45 | 7.33 | 0.14x | 2961.70 | 7.34 | 0.00x |
 
 `fmod`, integral power, round-to-integral, and scale-by-power-of-ten are
 omitted because `BidK` does not implement those kernels yet.
