@@ -51,7 +51,6 @@ import org.apache.spark.sql.execution.streaming.runtime.{StreamingExecutionRelat
 import org.apache.spark.sql.execution.streaming.sources.MemoryPlan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.StringType
 
 /**
  * Converts a logical plan into zero or more SparkPlans.  This API is exposed for experimenting
@@ -545,10 +544,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               r.references.subsetOf(leftAttrs) =>
           Some((r, l))
         // Nearest: If(GT(left, right), Sub(left, right), Sub(right, left))
-        // The GT compares two STRING keys as text, but the Sub casts them to numbers.
-        case If(GreaterThan(l, r), _, _)
-            if l.dataType.isInstanceOf[StringType] && r.dataType.isInstanceOf[StringType] =>
-          None
         case If(_, thenExpr, _) =>
           findFromOrder(thenExpr, leftAttrs, rightAttrs).filter { case (l, r) =>
             joins.SortMergeAsOfJoinScanner.supportsNearestKeys(l.dataType, r.dataType)

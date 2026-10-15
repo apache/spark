@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{
   Cast,
   Expression,
+  GreaterThan,
   If,
   SubqueryExpression,
   SubtractTimestamps,
@@ -35,7 +36,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AS_OF_JOIN, GENERATOR}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryErrorsBase
-import org.apache.spark.sql.types.{DataType, TimestampFamily}
+import org.apache.spark.sql.types.{DataType, StringType, TimestampFamily}
 
 /**
  * Resolves SQL [[AsOfJoin]] operators: materializes `MATCH_CONDITION` into the fields of
@@ -176,7 +177,7 @@ private[analysis] object AsOfJoinMatchConditionResolution {
   }
 }
 
-private[analysis] object AsOfJoinValidation extends QueryErrorsBase with SQLConfHelper {
+private[catalyst] object AsOfJoinValidation extends QueryErrorsBase with SQLConfHelper {
 
   def validateMatchConditionTableReferences(
       join: AsOfJoin,
@@ -223,25 +224,47 @@ private[analysis] object AsOfJoinValidation extends QueryErrorsBase with SQLConf
     }
   }
 
-  /** Rejects mixed LTZ/NTZ keys before constant folding can erase the coercion cast. */
-  def validateTimestampKeyTypes(join: AsOfJoin): Unit = {
-    if (conf.sortMergeAsOfJoinEnabled && !join.requiresSortMergeAsOfJoin) {
-      def validate(expr: Expression): Unit = expr match {
-        case SubtractTimestamps(l, r, _, _) if mixesTimeZoneFamilies(l, r) =>
-          join.failAnalysis(
-            errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
-            messageParameters = Map(
-              "sqlExpr" -> toSQLExpr(join.orderExpression),
-              "msg" -> ("Sort-merge as-of joins do not support mixing " +
-                "TIMESTAMP_LTZ and TIMESTAMP_NTZ keys"),
-              "hint" -> "")
-          )
-        case If(_, thenExpr, _) => validate(thenExpr)
-        case _ =>
+  /** Rejects unsupported DataFrame sort-merge keys before constant folding erases their types. */
+  def validateKeyTypes(join: AsOfJoin): Unit = {
+    if (conf.sortMergeAsOfJoinEnabled) {
+      if (hasMixedTimestampKeyTypes(join)) {
+        join.failAnalysis(
+          errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+          messageParameters = Map(
+            "sqlExpr" -> toSQLExpr(join.orderExpression),
+            "msg" -> ("Sort-merge as-of joins do not support mixing " +
+              "TIMESTAMP_LTZ and TIMESTAMP_NTZ keys"),
+            "hint" -> "")
+        )
       }
 
-      validate(join.orderExpression)
+      if (hasNearestStringKeys(join)) {
+        join.failAnalysis(
+          errorClass = "AS_OF_JOIN.UNSUPPORTED_NEAREST_KEY_TYPE",
+          messageParameters = Map("dataType" -> toSQLType(StringType))
+        )
+      }
     }
+  }
+
+  /** Whether DataFrame timestamp keys mix LTZ and NTZ before implicit coercion. */
+  def hasMixedTimestampKeyTypes(join: AsOfJoin): Boolean = {
+    def hasMixedKeys(expr: Expression): Boolean = expr match {
+      case SubtractTimestamps(l, r, _, _) => mixesTimeZoneFamilies(l, r)
+      case If(_, thenExpr, _) => hasMixedKeys(thenExpr)
+      case _ => false
+    }
+
+    !join.requiresSortMergeAsOfJoin && hasMixedKeys(join.orderExpression)
+  }
+
+  /** Whether a DataFrame nearest join compares STRING keys before numeric subtraction. */
+  def hasNearestStringKeys(join: AsOfJoin): Boolean = {
+    !join.requiresSortMergeAsOfJoin && (join.orderExpression match {
+      case If(GreaterThan(l, r), _, _) =>
+        l.dataType.isInstanceOf[StringType] && r.dataType.isInstanceOf[StringType]
+      case _ => false
+    })
   }
 
   private def findInvalidMatchConditionExpression(expr: Expression): Option[Expression] = {
@@ -255,10 +278,11 @@ private[analysis] object AsOfJoinValidation extends QueryErrorsBase with SQLConf
   }
 
   private def mixesTimeZoneFamilies(l: Expression, r: Expression): Boolean = {
-    // Type coercion casts the LTZ operand to NTZ, so read the key type under the cast.
+    // Read through implicit coercion, but preserve the target type of an explicit user cast.
     def keyType(e: Expression): DataType = e match {
-      case Cast(child, _, _, _)
-          if TimestampFamily.isLtz(child.dataType) || TimestampFamily.isNtz(child.dataType) =>
+      case cast @ Cast(child, _, _, _)
+          if !cast.containsTag(Cast.USER_SPECIFIED_CAST) &&
+            (TimestampFamily.isLtz(child.dataType) || TimestampFamily.isNtz(child.dataType)) =>
         child.dataType
       case _ => e.dataType
     }

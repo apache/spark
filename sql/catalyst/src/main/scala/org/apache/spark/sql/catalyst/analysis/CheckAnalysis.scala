@@ -784,7 +784,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               }
             }
 
-            AsOfJoinValidation.validateTimestampKeyTypes(j)
+            AsOfJoinValidation.validateKeyTypes(j)
 
           // Reject streaming inputs early. The optimizer rewrite is built around an
           // unconditioned cross-product fed into a global `Aggregate` keyed by a per-row

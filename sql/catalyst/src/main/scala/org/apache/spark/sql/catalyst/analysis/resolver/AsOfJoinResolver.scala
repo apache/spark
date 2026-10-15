@@ -108,7 +108,7 @@ class AsOfJoinResolver(
       rightNameScope = rightNameScope
     )
 
-    AsOfJoinValidation.validateTimestampKeyTypes(resolvedJoin)
+    AsOfJoinValidation.validateKeyTypes(resolvedJoin)
 
     usingOutput match {
       case Some((outputList, hiddenList)) =>

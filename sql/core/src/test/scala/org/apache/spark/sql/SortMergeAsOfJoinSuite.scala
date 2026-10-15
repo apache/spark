@@ -105,6 +105,16 @@ class SortMergeAsOfJoinSuite extends QueryTest
     try f finally spark.experimental.extraOptimizations = saved
   }
 
+  private def withAsOfJoinAnalyzer(singlePass: Boolean)(f: => Unit): Unit = {
+    withSQLConf(
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_ASOF_JOIN_RESOLUTION.key -> "true") {
+      f
+    }
+  }
+
   // Checks the "value" of the right row that a nearest join on DOUBLE keys matches.
   private def checkNearestDoubleTag(
       leftKey: Double,
@@ -331,9 +341,10 @@ class SortMergeAsOfJoinSuite extends QueryTest
       val leftSchema = StructType(StructField("ts", TimestampType) :: Nil)
       val rightSchema = StructType(
         StructField("ts", TimestampType) :: StructField("value", StringType) :: Nil)
-      val leftTime = Timestamp.from(Instant.parse("2024-11-03T08:50:00Z"))
-      val beforeTime = Timestamp.from(Instant.parse("2024-11-03T08:45:00Z"))
-      val afterTime = Timestamp.from(Instant.parse("2024-11-03T09:05:00Z"))
+      // The predecessor is closer in elapsed time (7 vs 10 minutes), but farther by wall clock.
+      val leftTime = Timestamp.from(Instant.parse("2024-11-03T09:05:00Z"))
+      val beforeTime = Timestamp.from(Instant.parse("2024-11-03T08:58:00Z"))
+      val afterTime = Timestamp.from(Instant.parse("2024-11-03T09:15:00Z"))
       val left = spark.createDataFrame(List(Row(leftTime)).asJava, leftSchema)
       val right = spark.createDataFrame(
         List(Row(beforeTime, "near"), Row(afterTime, "far")).asJava,
@@ -375,6 +386,156 @@ class SortMergeAsOfJoinSuite extends QueryTest
             "TIMESTAMP_LTZ and TIMESTAMP_NTZ keys"),
           "hint" -> "")
       )
+    }
+  }
+
+  gridTest("timestamp keys respect explicit user casts")(Seq(false, true)) { singlePass =>
+    withAsOfJoinAnalyzer(singlePass) {
+      withSQLConf(
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles",
+          SQLConf.LEGACY_INTERVAL_ENABLED.key -> "false") {
+        val schema = new StructType().add("ltz", TimestampType).add("ntz", TimestampNTZType)
+        val left = spark.createDataFrame(
+          List(Row(
+            Timestamp.from(Instant.parse("2024-11-03T08:30:00Z")),
+            LocalDateTime.parse("2024-11-03T01:30:00"))).asJava,
+          schema)
+        val right = spark.createDataFrame(
+          List(
+            Row(Timestamp.from(Instant.parse("2024-11-03T08:28:00Z")),
+              LocalDateTime.parse("2024-11-03T01:28:00"), "before"),
+            Row(Timestamp.from(Instant.parse("2024-11-03T08:35:00Z")),
+              LocalDateTime.parse("2024-11-03T01:35:00"), "after")).asJava,
+          schema.add("value", StringType))
+
+        for {
+          direction <- Seq("backward", "forward", "nearest")
+          (source, target, targetType) <- Seq(
+            ("ltz", "ntz", TimestampNTZType), ("ntz", "ltz", TimestampType))
+        } {
+          def join(): classic.DataFrame = left.joinAsOf(
+            other = right, leftAsOf = left.col(source).cast(targetType),
+            rightAsOf = right.col(target), usingColumns = Seq.empty, joinType = "inner",
+            tolerance = null, allowExactMatches = true, direction = direction
+          ).select("value")
+
+          val fallback = withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "false") {
+            join().collect().toSeq
+          }
+          val joined = join()
+          QueryTest.checkAnswer(df = joined, expectedAnswer = fallback, checkToRDD = false)
+          assert(collectFirst(joined.queryExecution.executedPlan) {
+            case s: SortMergeAsOfJoinExec => s
+          }.isDefined)
+
+          checkErrorMatchPVals(
+            exception = intercept[AnalysisException] {
+              left.joinAsOf(
+                other = right, leftAsOf = left.col(source).cast(targetType),
+                rightAsOf = right.col(source), usingColumns = Seq.empty, joinType = "inner",
+                tolerance = null, allowExactMatches = true, direction = direction
+              ).queryExecution.analyzed
+            },
+            condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+            parameters = Map(
+              "sqlExpr" -> ".+",
+              "msg" -> ("Sort-merge as-of joins do not support mixing " +
+                "TIMESTAMP_LTZ and TIMESTAMP_NTZ keys"),
+              "hint" -> "")
+          )
+        }
+      }
+    }
+  }
+
+  gridTest("mixed timestamp joins use fallback after enabling sort-merge")(Seq(false, true)) {
+      singlePass =>
+    withAsOfJoinAnalyzer(singlePass) {
+      withSQLConf(
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles",
+          SQLConf.LEGACY_INTERVAL_ENABLED.key -> "false") {
+        val leftTime = LocalDateTime.parse("2024-11-03T01:30:00")
+        val left = spark.createDataFrame(
+          List(Row(leftTime, Timestamp.from(Instant.parse("2024-11-03T08:30:00Z")))).asJava,
+          new StructType().add("ntz", TimestampNTZType).add("ltz", TimestampType))
+        val right = spark.createDataFrame(
+          List(
+            Row(Timestamp.from(Instant.parse("2024-11-03T08:10:00Z")), "far"),
+            Row(Timestamp.from(Instant.parse("2024-11-03T09:20:00Z")), "ineligible"),
+            Row(Timestamp.from(Instant.parse("2024-11-03T08:25:00Z")), "near")).asJava,
+          new StructType().add("ts", TimestampType).add("value", StringType))
+
+        withTempView("asof_before_config_change") {
+          for {
+            (leftKey, rightKey) <- Seq(
+              (left.col("ntz"), right.col("ts")),
+              (left.col("ltz").cast(TimestampNTZType), right.col("ts")),
+              (functions.lit(leftTime), right.col("ts")),
+              (functions.lit(Timestamp.from(Instant.parse("2024-11-03T08:30:00Z"))),
+                right.col("ts").cast(TimestampNTZType)))
+            throughView <- Seq(false, true)
+          } {
+            def join(): classic.DataFrame = left.joinAsOf(
+              other = right, leftAsOf = leftKey, rightAsOf = rightKey,
+              usingColumns = Seq.empty, joinType = "inner", tolerance = null,
+              allowExactMatches = true, direction = "backward"
+            ).select("value")
+
+            val (analyzed, expected) =
+              withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "false") {
+                val expected = join().collect().toSeq
+                assert(expected == Seq(Row("near")))
+                val joined = join()
+                val analyzed = if (throughView) {
+                  // Single-pass analysis does not support the view registration command.
+                  withAsOfJoinAnalyzer(singlePass = false) {
+                    joined.createOrReplaceTempView("asof_before_config_change")
+                  }
+                  spark.table("asof_before_config_change")
+                } else {
+                  joined
+                }
+                assert(analyzed.queryExecution.analyzed.resolved)
+                (analyzed, expected)
+              }
+
+            QueryTest.checkAnswer(df = analyzed, expectedAnswer = expected, checkToRDD = false)
+            assert(collectFirst(analyzed.queryExecution.executedPlan) {
+              case s: SortMergeAsOfJoinExec => s
+            }.isEmpty)
+          }
+        }
+      }
+    }
+  }
+
+  gridTest("supported keys use sort-merge after enabling the config")(Seq(false, true)) {
+      singlePass =>
+    withAsOfJoinAnalyzer(singlePass) {
+      val schema = new StructType().add("id", IntegerType)
+        .add("ltz", TimestampType).add("ntz", TimestampNTZType)
+      val left = spark.createDataFrame(
+        List(Row(10, Timestamp.from(Instant.parse("2024-01-01T10:00:00Z")),
+          LocalDateTime.parse("2024-01-01T10:00:00"))).asJava,
+        schema)
+      val right = spark.createDataFrame(
+        List(Row(9, Timestamp.from(Instant.parse("2024-01-01T09:00:00Z")),
+          LocalDateTime.parse("2024-01-01T09:00:00"), "match")).asJava,
+        schema.add("value", StringType))
+
+      Seq("id", "ltz", "ntz").foreach { key =>
+        val joined = withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "false") {
+          left.joinAsOf(
+            other = right, leftAsOf = left.col(key), rightAsOf = right.col(key),
+            usingColumns = Seq.empty, joinType = "inner", tolerance = null,
+            allowExactMatches = true, direction = "nearest"
+          ).select("value")
+        }
+        QueryTest.checkAnswer(df = joined, expectedAnswer = Seq(Row("match")), checkToRDD = false)
+        assert(collectFirst(joined.queryExecution.executedPlan) {
+          case s: SortMergeAsOfJoinExec => s
+        }.isDefined)
+      }
     }
   }
 
@@ -485,9 +646,9 @@ class SortMergeAsOfJoinSuite extends QueryTest
   Seq("backward", "forward", "nearest").foreach { direction =>
     test(s"$direction join compares nanosecond gaps") {
       withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
-        val leftTime = Instant.parse("2020-01-01T00:00:00.000000500Z")
+        val leftTime = Instant.parse("2020-01-01T00:00:00.000001000Z")
         val beforeTime = Instant.parse("2020-01-01T00:00:00.000000100Z")
-        val afterTime = Instant.parse("2020-01-01T00:00:00.000000600Z")
+        val afterTime = Instant.parse("2020-01-01T00:00:00.000001800Z")
         val left = spark.createDataFrame(
           spark.sparkContext.parallelize(Seq(Row(leftTime))),
           new StructType().add("ts", TimestampLTZNanosType(9)))
@@ -516,9 +677,9 @@ class SortMergeAsOfJoinSuite extends QueryTest
   Seq("backward", "forward", "nearest").foreach { direction =>
     test(s"$direction join compares timestamp without time zone nanoseconds") {
       withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
-        val leftTime = LocalDateTime.parse("2020-01-01T00:00:00.000000500")
+        val leftTime = LocalDateTime.parse("2020-01-01T00:00:00.000001000")
         val beforeTime = LocalDateTime.parse("2020-01-01T00:00:00.000000100")
-        val afterTime = LocalDateTime.parse("2020-01-01T00:00:00.000000600")
+        val afterTime = LocalDateTime.parse("2020-01-01T00:00:00.000001800")
         val left = spark.createDataFrame(
           spark.sparkContext.parallelize(Seq(Row(leftTime))),
           new StructType().add("ts", TimestampNTZNanosType(9)))
@@ -1041,7 +1202,6 @@ class SortMergeAsOfJoinSuite extends QueryTest
     val df2 = spark.createDataFrame(
       List(Row(8, "x"), Row(12, "y")).asJava, schema2)
     // Both are distance 2 from left.ts=10. On an equal gap, the row before the left key wins.
-    // A backward scan would keep ts=12.
     checkAnswer(
       df1.joinAsOf(
         df2, df1.col("ts"), df2.col("ts"), usingColumns = Seq.empty,
@@ -1083,20 +1243,38 @@ class SortMergeAsOfJoinSuite extends QueryTest
     checkNearestDoubleTag(nan, Seq(Row(-inf, "near")), "near")
   }
 
-  test("nearest join rejects STRING keys") {
+  gridTest("nearest join rejects STRING keys during analysis")(Seq(false, true)) { singlePass =>
     // With ANSI on, analysis already rejects the subtraction of two strings.
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
-      val left = spark.sql("SELECT '50' AS k")
-      val right = spark.sql("SELECT '10' AS k, 'ten' AS tag")
+    withAsOfJoinAnalyzer(singlePass) {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+        val left = spark.sql("SELECT '50' AS k")
+        val right = spark.sql("SELECT '10' AS k, 'ten' AS tag")
 
-      val e = intercept[IllegalStateException] {
-        left.joinAsOf(
+        def join(): classic.DataFrame = left.joinAsOf(
           other = right, leftAsOf = left.col("k"), rightAsOf = right.col("k"),
           usingColumns = Seq.empty, joinType = "inner", tolerance = null,
           allowExactMatches = true, direction = "nearest"
-        ).collect()
+        )
+
+        checkError(
+          exception = intercept[AnalysisException] {
+            join().queryExecution.analyzed
+          },
+          condition = "AS_OF_JOIN.UNSUPPORTED_NEAREST_KEY_TYPE",
+          parameters = Map("dataType" -> "\"STRING\"")
+        )
+
+        val analyzed = withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "false") {
+          QueryTest.checkAnswer(
+            df = join(), expectedAnswer = Seq(Row("50", "10", "ten")), checkToRDD = false)
+          join()
+        }
+        QueryTest.checkAnswer(
+          df = analyzed, expectedAnswer = Seq(Row("50", "10", "ten")), checkToRDD = false)
+        assert(collectFirst(analyzed.queryExecution.executedPlan) {
+          case s: SortMergeAsOfJoinExec => s
+        }.isEmpty)
       }
-      assert(e.getMessage.contains("Cannot extract as-of keys"))
     }
   }
 
