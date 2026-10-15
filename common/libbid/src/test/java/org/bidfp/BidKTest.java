@@ -77,6 +77,12 @@ public final class BidKTest {
     expect(FormatParams.DECIMAL160.wordCount() == 3, "d160 words");
     expect(FormatParams.DECIMAL256.wordCount() == 4, "d256 words");
     expect(FormatParams.DECIMAL160.packedBits() == 160, "d160 bits");
+    expect(FormatParams.DECIMAL64.signMask() == Bid64.MASK_SIGN, "d64 sign");
+    expect(FormatParams.DECIMAL64.nanBits() == Bid64.MASK_NAN, "d64 nan G");
+    expect(FormatParams.DECIMAL64.infGBits() == Bid64.MASK_INFINITY, "d64 inf");
+    expect(
+        FormatParams.DECIMAL64.steeringMask() == Bid64.MASK_STEERING_BITS,
+        "d64 steer");
   }
 
   private static void codecMatchesBid64() {

@@ -60,6 +60,18 @@ public final class FormatParams {
   private final int form2CoeffBits;
   private final int wordCount;
   private final int signBit;
+  private final int lastWord;
+  private final long signMask;
+  private final long nanBits;
+  private final long infGBits;
+  private final long steeringMask;
+  private final long snanMask;
+  private final int form1ExpShift;
+  private final int form2ExpShift;
+  private final long expMask;
+  private final long form1CoeffLastMask;
+  private final long form2CoeffLastMask;
+  private final long form2ImplicitMask;
   private final long[] maxCoefficient;
 
   private FormatParams(
@@ -91,6 +103,22 @@ public final class FormatParams {
     this.wordCount = wordCount;
     this.signBit = signBit;
     this.maxCoefficient = maxCoefficient;
+    this.lastWord = wordCount - 1;
+    int lastBits = k & 63;
+    if (lastBits == 0) {
+      lastBits = 64;
+    }
+    this.signMask = 1L << (lastBits - 1);
+    this.nanBits = 0x1FL << (lastBits - 6);
+    this.infGBits = 0x1EL << (lastBits - 6);
+    this.steeringMask = 3L << (lastBits - 3);
+    this.snanMask = 1L << (lastBits - 7);
+    this.form1ExpShift = form1CoeffBits & 63;
+    this.form2ExpShift = form2CoeffBits & 63;
+    this.expMask = (1L << expBits) - 1L;
+    this.form1CoeffLastMask = (1L << (form1CoeffBits & 63)) - 1L;
+    this.form2CoeffLastMask = (1L << (form2CoeffBits & 63)) - 1L;
+    this.form2ImplicitMask = 1L << (form1CoeffBits & 63);
   }
 
   /** Returns the descriptor for packed width {@code packedBits} (32, 64, ...). */
@@ -206,6 +234,54 @@ public final class FormatParams {
 
   int signBit() {
     return signBit;
+  }
+
+  int lastWord() {
+    return lastWord;
+  }
+
+  long signMask() {
+    return signMask;
+  }
+
+  long nanBits() {
+    return nanBits;
+  }
+
+  long infGBits() {
+    return infGBits;
+  }
+
+  long steeringMask() {
+    return steeringMask;
+  }
+
+  long snanMask() {
+    return snanMask;
+  }
+
+  int form1ExpShift() {
+    return form1ExpShift;
+  }
+
+  int form2ExpShift() {
+    return form2ExpShift;
+  }
+
+  long expMask() {
+    return expMask;
+  }
+
+  long form1CoeffLastMask() {
+    return form1CoeffLastMask;
+  }
+
+  long form2CoeffLastMask() {
+    return form2CoeffLastMask;
+  }
+
+  long form2ImplicitMask() {
+    return form2ImplicitMask;
   }
 
   long[] maxCoefficientWords() {

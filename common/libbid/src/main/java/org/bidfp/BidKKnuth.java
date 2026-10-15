@@ -32,27 +32,15 @@ final class BidKKnuth {
       boolean[] negative,
       int[] exp,
       StatusFlags flags) {
-    boolean signed = BidCodec.isSigned(format, words);
-    negative[0] = signed;
-    if (BidCodec.isNaN(format, words)) {
+    BidKRaw.Kind kind = classify(format, words, negative, exp, flags);
+    if (kind != BidKRaw.Kind.FINITE) {
       coeff.clear();
-      exp[0] = 0;
-      if (BidCodec.isSignalingNaN(format, words)) {
-        flags.raise(StatusFlags.INVALID);
-        return BidKRaw.Kind.SNAN;
-      }
-      return BidKRaw.Kind.NAN;
-    }
-    if (BidCodec.isInfinite(format, words)) {
-      coeff.clear();
-      exp[0] = 0;
-      return BidKRaw.Kind.INF;
+      return kind;
     }
     BidCodec.unpackCoefficient(format, words, coeff);
     if (!format.coefficientAllowed(coeff)) {
       coeff.clear();
     }
-    exp[0] = BidCodec.unpackBiasedExponent(format, words) - format.bias();
     return BidKRaw.Kind.FINITE;
   }
 
@@ -63,27 +51,15 @@ final class BidKKnuth {
       boolean[] negative,
       int[] exp,
       StatusFlags flags) {
-    boolean signed = BidCodec.isSigned(format, words);
-    negative[0] = signed;
-    if (BidCodec.isNaN(format, words)) {
+    BidKRaw.Kind kind = classify(format, words, negative, exp, flags);
+    if (kind != BidKRaw.Kind.FINITE) {
       LimbMath.clear(coeff);
-      exp[0] = 0;
-      if (BidCodec.isSignalingNaN(format, words)) {
-        flags.raise(StatusFlags.INVALID);
-        return BidKRaw.Kind.SNAN;
-      }
-      return BidKRaw.Kind.NAN;
-    }
-    if (BidCodec.isInfinite(format, words)) {
-      LimbMath.clear(coeff);
-      exp[0] = 0;
-      return BidKRaw.Kind.INF;
+      return kind;
     }
     BidCodec.unpackCoefficient(format, words, coeff);
     if (!format.coefficientAllowed(coeff)) {
       LimbMath.clear(coeff);
     }
-    exp[0] = BidCodec.unpackBiasedExponent(format, words) - format.bias();
     return BidKRaw.Kind.FINITE;
   }
 
@@ -94,27 +70,39 @@ final class BidKKnuth {
       boolean[] negative,
       int[] exp,
       StatusFlags flags) {
-    boolean signed = BidCodec.isSigned(format, words);
-    negative[0] = signed;
-    if (BidCodec.isNaN(format, words)) {
+    BidKRaw.Kind kind = classify(format, words, negative, exp, flags);
+    if (kind != BidKRaw.Kind.FINITE) {
       coeff.clear();
-      exp[0] = 0;
-      if (BidCodec.isSignalingNaN(format, words)) {
-        flags.raise(StatusFlags.INVALID);
-        return BidKRaw.Kind.SNAN;
-      }
-      return BidKRaw.Kind.NAN;
-    }
-    if (BidCodec.isInfinite(format, words)) {
-      coeff.clear();
-      exp[0] = 0;
-      return BidKRaw.Kind.INF;
+      return kind;
     }
     BidCodec.unpackCoefficient(format, words, coeff);
     if (!format.coefficientAllowed(coeff)) {
       coeff.clear();
     }
-    exp[0] = BidCodec.unpackBiasedExponent(format, words) - format.bias();
+    return BidKRaw.Kind.FINITE;
+  }
+
+  private static BidKRaw.Kind classify(
+      FormatParams format,
+      long[] words,
+      boolean[] negative,
+      int[] exp,
+      StatusFlags flags) {
+    long hi = words[format.lastWord()];
+    negative[0] = BidCodec.isSigned(format, hi);
+    if (BidCodec.isNaN(format, hi)) {
+      exp[0] = 0;
+      if (BidCodec.isSignalingNaN(format, hi)) {
+        flags.raise(StatusFlags.INVALID);
+        return BidKRaw.Kind.SNAN;
+      }
+      return BidKRaw.Kind.NAN;
+    }
+    if (BidCodec.isInfinite(format, hi)) {
+      exp[0] = 0;
+      return BidKRaw.Kind.INF;
+    }
+    exp[0] = BidCodec.unpackBiasedExponent(format, hi) - format.bias();
     return BidKRaw.Kind.FINITE;
   }
 
@@ -628,6 +616,9 @@ final class BidKKnuth {
       StatusFlags flags,
       BidKScratch.Frame frame,
       long[] out) {
+    if (tryPackExact(format, negative, exp, coeff, out)) {
+      return;
+    }
     int p = format.precision();
     int extra = roundToPrecision(coeff, p, negative, mode, frame);
     exp += extra;
@@ -692,6 +683,23 @@ final class BidKKnuth {
       flags.raise(StatusFlags.UNDERFLOW);
     }
     BidCodec.packFinite(format, negative, biased, coeff, out);
+  }
+
+  private static boolean tryPackExact(
+      FormatParams format,
+      boolean negative,
+      int exp,
+      long[] coeff,
+      long[] out) {
+    int biased = exp + format.bias();
+    if (biased < 0 || biased > format.maxBiasedExponent()) {
+      return false;
+    }
+    if (!format.coefficientAllowed(coeff)) {
+      return false;
+    }
+    BidCodec.packFinite(format, negative, biased, coeff, out);
+    return true;
   }
 
   /** Rounds {@code coeff} to {@code p} digits. Returns the exponent increase. */

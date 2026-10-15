@@ -471,6 +471,23 @@ final class BidK160 {
     pack(format, negative, exp, coeff, false, mode, flags, frame, out);
   }
 
+  private static boolean tryPackExact(
+      FormatParams format,
+      boolean negative,
+      int exp,
+      Wide6 coeff,
+      long[] out) {
+    int biased = exp + format.bias();
+    if (biased < 0 || biased > format.maxBiasedExponent()) {
+      return false;
+    }
+    if (!format.coefficientAllowed(coeff)) {
+      return false;
+    }
+    BidCodec.packFinite(format, negative, biased, coeff, out);
+    return true;
+  }
+
   private static void pack(
       FormatParams format,
       boolean negative,
@@ -481,6 +498,9 @@ final class BidK160 {
       StatusFlags flags,
       BidKScratch.Frame frame,
       long[] out) {
+    if (!extraSticky && tryPackExact(format, negative, exp, coeff, out)) {
+      return;
+    }
     int p = format.precision();
     int extra = roundToPrecision(coeff, p, negative, extraSticky, mode, frame);
     exp += extra;
