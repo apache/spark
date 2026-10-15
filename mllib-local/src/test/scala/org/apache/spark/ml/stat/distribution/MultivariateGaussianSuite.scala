@@ -27,7 +27,7 @@ import org.apache.spark.ml.util.TestingUtils._
 class MultivariateGaussianSuite extends SparkMLFunSuite {
 
   test("SPARK-59618: multivariate Gaussian can be initialized concurrently") {
-    val numThreads = 16
+    val numThreads = 64
     val ready = new CountDownLatch(numThreads)
     val start = new CountDownLatch(1)
     val executor = Executors.newFixedThreadPool(numThreads, (runnable: Runnable) => {
