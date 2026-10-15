@@ -43,7 +43,7 @@ fn c_abi_arrow_round_trip() -> Result<(), Box<dyn Error>> {
     let compiler = std::env::var_os("CC").unwrap_or_else(|| "cc".into());
     let mut command = Command::new(compiler);
     command
-        .args(["-std=c11", "-Wall", "-Wextra", "-Werror"])
+        .args(["-std=c11", "-Wall", "-Wextra", "-Werror", "-pthread"])
         .arg("-I")
         .arg(header)
         .arg(manifest.join("tests/c_abi_smoke.c"))

@@ -50,6 +50,10 @@
  * creates a data source with create on the driver for each schema inference, scan and write, and
  * closes it right after. create also returns the capabilities of the data source: Spark reports
  * the operations that a data source does not declare as unsupported, without calling the library.
+ * Spark also creates a data source while it analyzes a query, to reject a batch write that the
+ * data source does not support before it computes the data to write. That data source has the
+ * options of the table, those of CREATE TABLE for a table in a catalog, which the options of a
+ * write can override, so Spark checks the capabilities of each operation again.
  *
  * - Batch reads. On the driver, Spark creates a reader with create_reader, pushes operations down
  *   by calling, each at most once and in this order, push_predicates, push_limit and
@@ -149,8 +153,9 @@
  *   from a thread other than the threads that used it, such as a JVM Cleaner thread when Spark
  *   releases a handle once it is no longer referenced, for example the last stream writer of a
  *   streaming query. A SparkDsSink must be called on the thread of the call that it was passed
- *   to, during that call. The functions of SparkDsHost and SparkDsTaskContext can be called from
- *   any thread.
+ *   to, during that call. The functions of SparkDsHost and SparkDsTaskContext, and the callbacks
+ *   of the stream that read initializes, can be called from any thread. The callbacks of the
+ *   stream never run concurrently.
  *
  * Compatibility
  * -------------
@@ -575,11 +580,11 @@ typedef struct SparkDsLibrary {
    *               there is none
    * partition: a partition returned by partitions or stream_partitions
    * out: the stream to initialize. Each array of the stream is a struct array whose fields are the
-   *      columns to read: the columns of the schema to read, or the pruned columns. Spark calls the
-   *      stream from the thread of the task that reads the partition. get_next may block, for
-   *      example on network I/O, but Spark cannot interrupt native code: when the task is killed,
-   *      Spark only stops reading once get_next returns, and then releases the stream. So a
-   *      get_next that blocks forever keeps the task running, unless the task reaper
+   *      columns to read: the columns of the schema to read, or the pruned columns. The
+   *      callbacks of the stream can be called from any thread, but never concurrently. get_next
+   *      may block, for example on network I/O, but Spark cannot interrupt native code: when the
+   *      task is killed, Spark only stops reading once get_next returns, and then releases the
+   *      stream. So a get_next that blocks forever keeps the task running, unless the task reaper
    *      (spark.task.reaper.enabled and spark.task.reaper.killTimeout) kills the executor. Use
    *      timeouts for blocking operations, and check task->is_interrupted.
    */

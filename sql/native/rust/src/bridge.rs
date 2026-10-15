@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Transport-independent driver handles and executor plan restoration.
+//! Driver-only handles and planners, with stateless executor plan restoration.
 
 use std::any::Any;
 use std::collections::HashMap;
@@ -42,7 +42,7 @@ type HandleMap<T> = Mutex<HashMap<i64, Arc<Mutex<T>>>>;
 pub struct Bridge<S: BatchSource> {
     next_handle: AtomicI64,
     sources: HandleMap<S>,
-    readers: HandleMap<Reader<S::Scan>>,
+    planners: HandleMap<Planner<S::Scan>>,
 }
 
 impl<S: BatchSource> Default for Bridge<S> {
@@ -50,7 +50,7 @@ impl<S: BatchSource> Default for Bridge<S> {
         Self {
             next_handle: AtomicI64::new(1),
             sources: Mutex::new(HashMap::new()),
-            readers: Mutex::new(HashMap::new()),
+            planners: Mutex::new(HashMap::new()),
         }
     }
 }
@@ -80,7 +80,7 @@ impl<S: BatchSource> Bridge<S> {
         stream::validate_schema(&schema)?;
         let source = get(&self.sources, handle)?;
         let builder = lock(&source).scan(schema.clone())?;
-        self.insert(&self.readers, Reader::new(builder, schema))
+        self.insert(&self.planners, Planner::new(builder, schema))
     }
 
     pub fn push_predicates(
@@ -88,7 +88,7 @@ impl<S: BatchSource> Bridge<S> {
         handle: i64,
         predicates: &[Predicate],
     ) -> Result<Vec<FilterSupport>> {
-        let reader = get(&self.readers, handle)?;
+        let reader = get(&self.planners, handle)?;
         let mut reader = lock(&reader);
         let support = reader.negotiate(|builder| {
             let support = builder.push_filters(predicates)?;
@@ -102,7 +102,7 @@ impl<S: BatchSource> Bridge<S> {
     }
 
     pub fn push_limit(&self, handle: i64, limit: usize) -> Result<bool> {
-        let reader = get(&self.readers, handle)?;
+        let reader = get(&self.planners, handle)?;
         let mut reader = lock(&reader);
         let has_residual = reader.has_residual;
         reader.negotiate(|builder| {
@@ -115,7 +115,7 @@ impl<S: BatchSource> Bridge<S> {
     }
 
     pub fn prune_columns(&self, handle: i64, columns: &[String]) -> Result<bool> {
-        let reader = get(&self.readers, handle)?;
+        let reader = get(&self.planners, handle)?;
         let mut reader = lock(&reader);
         let indices: Vec<_> = columns
             .iter()
@@ -130,7 +130,7 @@ impl<S: BatchSource> Bridge<S> {
     }
 
     pub fn planned(&self, handle: i64) -> Result<Arc<EncodedPlan>> {
-        let reader = get(&self.readers, handle)?;
+        let reader = get(&self.planners, handle)?;
         let result = lock(&reader).plan();
         result
     }
@@ -141,27 +141,27 @@ impl<S: BatchSource> Bridge<S> {
     }
 
     pub fn close_reader(&self, handle: i64) -> Result<()> {
-        remove(&self.readers, handle);
+        remove(&self.planners, handle);
         Ok(())
     }
+}
 
-    /// Restores only serialized values; no driver-side handle is needed.
-    ///
-    /// # Safety
-    /// `task` must satisfy TaskContext::from_raw and remain valid until the
-    /// returned stream is released. The stream's consumer must follow the
-    /// Arrow C Stream ownership protocol and keep the plugin loaded.
-    pub unsafe fn open_reader(
-        &self,
-        task: *const crate::abi::SparkDsTaskContext,
-        state: &[u8],
-        partition: &[u8],
-    ) -> Result<FFI_ArrowArrayStream> {
-        let state: ReaderState<<S::Scan as ScanBuilder>::Factory> = decode(state)?;
-        let task = unsafe { TaskContext::from_raw(task)? };
-        let reader = state.factory.open(decode(partition)?, task)?;
-        unsafe { stream::export(reader, &Arc::new(state.schema)) }
-    }
+/// Restores an executor reader using only its factory type and serialized values.
+/// No source, planner, or driver handle registry is created or consulted.
+///
+/// # Safety
+/// `task` must satisfy TaskContext::from_raw and remain valid until the
+/// returned stream is released. The stream's consumer must follow the
+/// Arrow C Stream ownership protocol and keep the plugin loaded.
+pub unsafe fn open_reader<F: BatchReaderFactory>(
+    task: *const crate::abi::SparkDsTaskContext,
+    state: &[u8],
+    partition: &[u8],
+) -> Result<FFI_ArrowArrayStream> {
+    let state: ReaderState<F> = decode(state)?;
+    let task = unsafe { TaskContext::from_raw(task)? };
+    let reader = state.factory.open(decode(partition)?, task)?;
+    unsafe { stream::export(reader, &Arc::new(state.schema)) }
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -184,7 +184,7 @@ fn remove<T>(handles: &HandleMap<T>, handle: i64) {
     drop(value);
 }
 
-struct Reader<B: ScanBuilder> {
+struct Planner<B: ScanBuilder> {
     phase: Phase<B>,
     schema: SchemaRef,
     has_residual: bool,
@@ -207,7 +207,7 @@ struct ReaderState<F> {
     schema: Schema,
 }
 
-impl<B: ScanBuilder> Reader<B> {
+impl<B: ScanBuilder> Planner<B> {
     fn new(builder: B, schema: SchemaRef) -> Self {
         Self {
             phase: Phase::Negotiating(builder),
@@ -326,6 +326,7 @@ pub fn parse_predicates(predicates: &[String]) -> Result<Vec<Predicate>> {
 mod tests {
     use std::sync::atomic::AtomicUsize;
 
+    use arrow_array::ffi_stream::ArrowArrayStreamReader;
     use arrow_array::{Int64Array, RecordBatch, RecordBatchIterator};
     use arrow_schema::{DataType, Field};
 
@@ -641,6 +642,54 @@ mod tests {
     }
 
     #[test]
+    fn executor_retries_use_only_serialized_values_after_the_driver_is_dropped() {
+        let bridge = Bridge::<Source>::default();
+        let source = Source::new(Options::new()).unwrap();
+        let builds = source.builds.clone();
+        let source_drops = source.drops.clone();
+        let builder_drops = source.builder_drops.clone();
+        let handle = bridge.insert(&bridge.sources, source).unwrap();
+        let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int64, false)]));
+        let planner = bridge.create_reader(handle, schema).unwrap();
+        bridge.close_source(handle).unwrap();
+        let plan = bridge.planned(planner).unwrap();
+        // Model Spark copying the factory and partition descriptors out of the plugin.
+        let state = plan.state.clone();
+        let partitions = plan.partitions.clone();
+        drop(plan);
+        bridge.close_reader(planner).unwrap();
+        drop(bridge);
+        assert_eq!(builds.load(Ordering::SeqCst), 1);
+        assert_eq!(source_drops.load(Ordering::SeqCst), 1);
+        assert_eq!(builder_drops.load(Ordering::SeqCst), 1);
+
+        for attempt in 0..2 {
+            for (index, partition) in partitions.iter().enumerate() {
+                let task = crate::abi::SparkDsTaskContext {
+                    size: std::mem::size_of::<crate::abi::SparkDsTaskContext>() as i64,
+                    stage_id: 1,
+                    stage_attempt_number: 0,
+                    partition_id: index as i32,
+                    attempt_number: attempt,
+                    task_attempt_id: i64::from(attempt) * 2 + index as i64,
+                    is_interrupted: None,
+                };
+                // The executor entry point depends only on Factory, not Source or Builder.
+                let stream = unsafe { open_reader::<Factory>(&task, &state, partition) }.unwrap();
+                let mut reader = ArrowArrayStreamReader::try_new(stream).unwrap();
+                let batch = reader.next().unwrap().unwrap();
+                let ids = batch
+                    .column(0)
+                    .as_any()
+                    .downcast_ref::<Int64Array>()
+                    .unwrap();
+                assert_eq!(ids.values(), &[42 + [2, 7][index]]);
+                assert!(reader.next().is_none());
+            }
+        }
+    }
+
+    #[test]
     fn executor_rejects_a_factory_schema_different_from_the_negotiated_schema() {
         let bridge = Bridge::<Source>::default();
         let handle = bridge.create(Options::new()).unwrap();
@@ -662,8 +711,10 @@ mod tests {
         };
         // The factory returns one id column, but the driver negotiated an empty schema.
         // The expected schema must survive serialization and the removal of driver handles.
-        let error =
-            error_message(unsafe { bridge.open_reader(&task, &plan.state, &plan.partitions[0]) });
+        drop(bridge);
+        let error = error_message(unsafe {
+            open_reader::<Factory>(&task, &plan.state, &plan.partitions[0])
+        });
         assert!(error.contains("schema"), "{error}");
     }
 

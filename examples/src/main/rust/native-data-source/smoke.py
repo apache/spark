@@ -19,6 +19,7 @@
 import argparse
 from pathlib import Path
 
+from pyspark.errors import AnalysisException
 from pyspark.sql import SparkSession, functions as F
 
 
@@ -28,7 +29,11 @@ def main():
     args = parser.parse_args()
     package = args.package.resolve(strict=True)
 
-    spark = SparkSession.builder.appName("Rust native data source smoke").getOrCreate()
+    spark = (
+        SparkSession.builder.appName("Rust native data source smoke")
+        .config("spark.sql.adaptive.enabled", "true")
+        .getOrCreate()
+    )
     try:
         spark.addArtifact(str(package))
         df = (
@@ -68,6 +73,26 @@ def main():
         assert [row.id for row in labels] == [3, 13, 23]
         residual_limit = df.where(F.col("label") == "row-21").limit(1).select("id").collect()
         assert [row.id for row in residual_limit] == [21]
+
+        # Analysis must reject both modes before AQE can run the input shuffle.
+        failing_input = (
+            spark.range(10)
+            .selectExpr(
+                "if(id >= 0, raise_error('input was evaluated'), id) AS id", "'row' AS label"
+            )
+            .repartition(2)
+        )
+        for mode in ("append", "overwrite"):
+            try:
+                failing_input.write.format("rust_sdk_range").mode(mode).save()
+            except AnalysisException as error:
+                assert error.getCondition() == "UNSUPPORTED_FEATURE.TABLE_OPERATION", str(error)
+                assert error.getMessageParameters() == {
+                    "tableName": "`rust_sdk_range`",
+                    "operation": "batch write",
+                }, str(error)
+            else:
+                raise AssertionError(f"{mode} should reject this batch-read-only source")
         print("Rust native data source Spark smoke checks passed")
     finally:
         spark.stop()

@@ -24,7 +24,9 @@ macro_rules! export_data_source {
             use super::*;
             use std::ffi::{c_char, c_int, c_void};
             use $crate::abi::{self, ArrowArrayStream, ArrowSchema, SparkDsLibrary, SparkDsSink};
-            use $crate::bridge::Bridge;
+            use $crate::bridge::{open_reader, Bridge};
+
+            type Factory = <<$source as $crate::BatchSource>::Scan as $crate::ScanBuilder>::Factory;
 
             fn bridge() -> &'static Bridge<$source> {
                 static BRIDGE: std::sync::OnceLock<Bridge<$source>> = std::sync::OnceLock::new();
@@ -207,7 +209,7 @@ macro_rules! export_data_source {
                     abi::require_output(output)?;
                     let state = unsafe { abi::slice(state, state_length)? };
                     let partition = unsafe { abi::slice(partition, partition_length)? };
-                    let stream = unsafe { bridge().open_reader(task, state, partition)? };
+                    let stream = unsafe { open_reader::<Factory>(task, state, partition)? };
                     unsafe { output.write(stream) };
                     Ok(())
                 })

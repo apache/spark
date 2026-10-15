@@ -20,6 +20,7 @@
 
 #include <dlfcn.h>
 #include <inttypes.h>
+#include <pthread.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -142,16 +143,17 @@ static void* create_source(const char* const* keys, const char* const* values, i
   return source;
 }
 
-static Plan plan_scan(
+static void check_capability_discovery(
+    const char* const* keys, const char* const* values, int64_t count) {
+  /* Analysis may create a source only to inspect its capabilities, then immediately close it. */
+  void* source = create_source(keys, values, count);
+  library->close(source);
+}
+
+static void* create_planner(
     const char* const* keys,
     const char* const* values,
-    int64_t option_count,
-    const char* const* predicates,
-    const int32_t* expected_uses,
-    int64_t predicate_count,
-    int32_t limit,
-    const char* const* projection,
-    int64_t projection_count) {
+    int64_t option_count) {
   void* source = create_source(keys, values, option_count);
   struct ArrowSchema schema = {0};
   check_status(library->schema(source, &schema));
@@ -169,6 +171,43 @@ static Plan plan_scan(
     schema.release(&schema);
   }
   library->close(source);
+  return reader;
+}
+
+static Plan finish_plan(void* reader) {
+  Plan plan = {0};
+  check_status(library->partitions(reader, add_bytes, &plan.partitions));
+  ByteList repeated = {0};
+  check_status(library->partitions(reader, add_bytes, &repeated));
+  CHECK(repeated.length == plan.partitions.length, "Repeated planning changed partition count");
+  for (size_t i = 0; i < repeated.length; i++) {
+    check_bytes(&plan.partitions.values[i], &repeated.values[i]);
+  }
+  free_list(&repeated);
+
+  ByteList state = {0};
+  check_status(library->serialize_reader(reader, add_bytes, &state));
+  check_status(library->serialize_reader(reader, add_bytes, &state));
+  CHECK(state.length == 2, "Each serialization must emit exactly one state value");
+  check_bytes(&state.values[0], &state.values[1]);
+  plan.state = state.values[0];
+  free(state.values[1].data);
+  free(state.values);
+  library->close_reader(reader);
+  return plan;
+}
+
+static Plan plan_scan(
+    const char* const* keys,
+    const char* const* values,
+    int64_t option_count,
+    const char* const* predicates,
+    const int32_t* expected_uses,
+    int64_t predicate_count,
+    int32_t limit,
+    const char* const* projection,
+    int64_t projection_count) {
+  void* reader = create_planner(keys, values, option_count);
 
   if (predicate_count != 0) {
     int32_t* uses = calloc((size_t) predicate_count, sizeof(int32_t));
@@ -191,26 +230,7 @@ static Plan plan_scan(
     CHECK(pruned, "The Range source must apply its projection");
   }
 
-  Plan plan = {0};
-  check_status(library->partitions(reader, add_bytes, &plan.partitions));
-  ByteList repeated = {0};
-  check_status(library->partitions(reader, add_bytes, &repeated));
-  CHECK(repeated.length == plan.partitions.length, "Repeated planning changed partition count");
-  for (size_t i = 0; i < repeated.length; i++) {
-    check_bytes(&plan.partitions.values[i], &repeated.values[i]);
-  }
-  free_list(&repeated);
-
-  ByteList state = {0};
-  check_status(library->serialize_reader(reader, add_bytes, &state));
-  check_status(library->serialize_reader(reader, add_bytes, &state));
-  CHECK(state.length == 2, "Each serialization must emit exactly one state value");
-  check_bytes(&state.values[0], &state.values[1]);
-  plan.state = state.values[0];
-  free(state.values[1].data);
-  free(state.values);
-  library->close_reader(reader);
-  return plan;
+  return finish_plan(reader);
 }
 
 static void free_plan(Plan* plan) {
@@ -316,6 +336,40 @@ static void consume_plan(
   CHECK(rows == expected_rows, "Unexpected total row count");
 }
 
+static void check_independent_planners(
+    const char* const* keys,
+    const char* const* values,
+    int64_t count,
+    const char* lower,
+    const char* upper) {
+  void* first = create_planner(keys, values, count);
+  void* second = create_planner(keys, values, count);
+  int32_t use = SPARK_DS_PREDICATE_UNUSED;
+  check_status(library->push_predicates(first, &upper, 1, &use));
+  CHECK(use == SPARK_DS_PREDICATE_COMPLETE, "The first planner did not accept its filter");
+  const char* label_only[] = {"label"};
+  bool pruned = false;
+  check_status(library->prune_columns(first, label_only, 1, &pruned));
+  CHECK(pruned, "The first planner did not accept its projection");
+  Plan first_plan = finish_plan(first);
+
+  /* The second planner must neither inherit the first filter nor change its serialized plan. */
+  use = SPARK_DS_PREDICATE_UNUSED;
+  check_status(library->push_predicates(second, &lower, 1, &use));
+  CHECK(use == SPARK_DS_PREDICATE_COMPLETE, "The second planner did not accept its filter");
+  const char* id_only[] = {"id"};
+  pruned = false;
+  check_status(library->prune_columns(second, id_only, 1, &pruned));
+  CHECK(pruned, "The second planner did not accept its projection");
+  Plan second_plan = finish_plan(second);
+
+  /* Both driver planners are already closed; executor reads only get the copied bytes. */
+  consume_plan(&second_plan, 13, 12, id_only, 1, false);
+  consume_plan(&first_plan, 10, 12, label_only, 1, false);
+  free_plan(&second_plan);
+  free_plan(&first_plan);
+}
+
 static void check_cancellation(const Plan* plan) {
   CHECK(plan->partitions.length == 1, "Cancellation test requires one partition");
   SparkDsTaskContext task = task_context(false);
@@ -347,6 +401,88 @@ static void check_cancellation(const Plan* plan) {
   interrupted = false;
 }
 
+enum StreamOperation {
+  STREAM_SCHEMA,
+  STREAM_NEXT,
+  STREAM_ERROR,
+  STREAM_RELEASE
+};
+
+typedef struct StreamCall {
+  struct ArrowArrayStream* stream;
+  enum StreamOperation operation;
+  struct ArrowSchema schema;
+  struct ArrowArray batch;
+  int status;
+  char error[256];
+} StreamCall;
+
+static void* run_stream_call(void* argument) {
+  StreamCall* call = argument;
+  switch (call->operation) {
+    case STREAM_SCHEMA:
+      call->status = call->stream->get_schema(call->stream, &call->schema);
+      break;
+    case STREAM_NEXT:
+      call->status = call->stream->get_next(call->stream, &call->batch);
+      break;
+    case STREAM_ERROR: {
+      const char* error = call->stream->get_last_error(call->stream);
+      CHECK(error != NULL, "A stream error must remain available on another thread");
+      snprintf(call->error, sizeof(call->error), "%s", error);
+      break;
+    }
+    case STREAM_RELEASE:
+      call->stream->release(call->stream);
+      break;
+  }
+  return NULL;
+}
+
+static void stream_call_on_thread(StreamCall* call) {
+  pthread_t thread;
+  CHECK(pthread_create(&thread, NULL, run_stream_call, call) == 0,
+      "Cannot create a stream callback thread");
+  CHECK(pthread_join(thread, NULL) == 0, "Cannot join a stream callback thread");
+}
+
+static void check_cross_thread_stream(const Plan* plan) {
+  SparkDsTaskContext task = task_context(false);
+  expected_task = &task;
+  interrupted = false;
+  interruption_checks = 0;
+  struct ArrowArrayStream stream = open_stream(plan, 0, &task);
+
+  /* Callbacks do not overlap, but each worker has a different lifetime and thread-local state. */
+  StreamCall schema = {.stream = &stream, .operation = STREAM_SCHEMA};
+  stream_call_on_thread(&schema);
+  CHECK(schema.status == 0 && schema.schema.release != NULL, "Cannot get schema on a new thread");
+
+  StreamCall first = {.stream = &stream, .operation = STREAM_NEXT};
+  stream_call_on_thread(&first);
+  CHECK(first.status == 0 && first.batch.release != NULL, "Cannot read a batch on a new thread");
+  CHECK(interruption_checks > 0, "The worker did not call the task cancellation callback");
+
+  interrupted = true;
+  StreamCall next = {.stream = &stream, .operation = STREAM_NEXT};
+  stream_call_on_thread(&next);
+  CHECK(next.status != 0, "The worker must observe live task cancellation");
+  StreamCall error = {.stream = &stream, .operation = STREAM_ERROR};
+  stream_call_on_thread(&error);
+  CHECK(strstr(error.error, "cancel") != NULL, "The stream error changed across threads");
+  if (next.batch.release != NULL) {
+    next.batch.release(&next.batch);
+  }
+
+  StreamCall release = {.stream = &stream, .operation = STREAM_RELEASE};
+  stream_call_on_thread(&release);
+  CHECK(stream.release == NULL, "Cross-thread release must clear the stream callback");
+  check_batch(&schema.schema, &first.batch, 0, 2);
+  first.batch.release(&first.batch);
+  schema.schema.release(&schema.schema);
+  interrupted = false;
+}
+
 static void check_error_message(void) {
   const char* keys[] = {"batchsize"};
   const char* values[] = {"0"};
@@ -359,7 +495,8 @@ static void check_error_message(void) {
   };
   uint64_t capabilities = 0;
   void* source = NULL;
-  CHECK(library->create(&info, &capabilities, &source) != 0, "Invalid options must return an error");
+  CHECK(library->create(&info, &capabilities, &source) != 0,
+      "Invalid options must return an error");
   const char* error = library->last_error();
   CHECK(error != NULL && strstr(error, "batchSize must be positive") != NULL,
       "The C error channel did not preserve the provider's message");
@@ -428,6 +565,10 @@ int main(int argc, char** argv) {
   const char* id_only[] = {"id"};
   const char* original[] = {"id", "label"};
 
+  check_capability_discovery(keys, values, 4);
+  check_capability_discovery(NULL, NULL, 0);
+  check_independent_planners(keys, values, 4, lower, upper);
+
   Plan filtered = plan_scan(keys, values, 4, predicates, uses, 2, -1, reordered, 2);
   consume_plan(&filtered, 13, 9, reordered, 2, false);
   free_plan(&filtered);
@@ -450,6 +591,7 @@ int main(int argc, char** argv) {
   Plan cancellable = plan_scan(short_keys, one_partition, 3, NULL, NULL, 0, -1, NULL, -1);
   consume_plan(&cancellable, 0, 20, original, 2, true);
   check_cancellation(&cancellable);
+  check_cross_thread_stream(&cancellable);
   free_plan(&cancellable);
   check_error_message();
 

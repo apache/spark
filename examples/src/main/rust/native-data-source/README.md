@@ -23,13 +23,19 @@ The connector in [src/lib.rs](src/lib.rs) exports `rust_sdk_range` through the S
 does not use JNI, raw pointers, or unsafe code.
 
 The example targets C ABI version 1 from [Spark PR #59424][native-source-pr], pinned to commit
-`51af65c63a9369d793aab1a198ddde4c90c8f85b`. The SDK and example build without Spark or a JVM.
+`534dfca15723c7208061b1e9e4d80c5757360a2a`. The SDK and example build without Spark or a JVM.
 Running the Spark smoke script requires a distribution built with that native data source
 framework and Java 22 or later on the driver and executors. The JNI SDK prototype in PR #59442
 targets a different interface.
 
-The source advertises only batch reads. It does not implement writes or Structured Streaming;
-the framework rejects those operations from its declared capabilities.
+The source's native capability mask is fixed to `SPARK_DS_BATCH_READ` (`1`). It does not implement
+writes or Structured Streaming. During analysis, Spark creates and closes a source with the table
+options to inspect its capabilities. It exposes `BATCH_WRITE` and `TRUNCATE` to Data Source V2 only
+when declared, so this example rejects batch append and overwrite before evaluating their input.
+The framework still reports the Data Source V2 flags `BATCH_READ`, `MICRO_BATCH_READ`, and
+`STREAMING_WRITE` to keep operations on the V2 path instead of falling back to V1. These routing
+flags do not add native capabilities: each operation checks the native mask again with its own
+options. A source created just for capability discovery is closed without creating a scan.
 
 ## Data and options
 
@@ -64,6 +70,13 @@ zero-column batches for operations such as `COUNT(*)`.
 
 - a serializable `RangeReaderFactory` with output columns and batch size;
 - disjoint `RangePartition` values with inclusive starts and exclusive ends.
+
+This API matches the framework's separation of driver planning and executor reading. Spark's
+`NativeBatchPlanner` owns the native handle; its `NativePartitionReaderFactory` carries the
+serialized Rust factory and schema to executors. Java `ScanBuilder.build()` caches a scan but
+does not call Rust `plan()`. The first request for batch partitions or a reader factory triggers
+native `partitions` and then `serialize_reader`, which share the SDK's cached plan. Spark then
+closes the native driver handle. The Rust API and C ABI layout remain unchanged.
 
 The SDK serializes this data for the executors. Each factory opens a lazy Arrow reader using a
 partition and a lifetime-bound `TaskContext`. The example checks task cancellation before
@@ -117,8 +130,9 @@ df.where("id >= 10 AND id < 20").select("label", "id").show()
 ```
 
 [smoke.py](smoke.py) checks rows, projection, unfiltered and filtered limits, zero-column counts,
-and residual predicates against Spark. Run it against the pinned framework before relying on
-end-to-end compatibility.
+and residual predicates against Spark. It also checks that batch append and overwrite fail during
+analysis before evaluating an input containing `raise_error` and a shuffle. Run it against the
+pinned framework before relying on end-to-end compatibility.
 
 [sdk]: ../../../../../sql/native/rust/README.md
 [native-source-pr]: https://github.com/apache/spark/pull/59424

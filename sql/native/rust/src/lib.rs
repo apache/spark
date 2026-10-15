@@ -79,11 +79,15 @@ pub struct ScanPlan<F: BatchReaderFactory> {
 /// Driver-side source configuration and schema discovery.
 ///
 /// Registering this trait declares only the batch-read capability. Writes and
-/// streaming remain absent from the native function table.
+/// streaming remain absent from the native function table. Spark also creates
+/// sources to discover table capabilities during query analysis; such a source
+/// can be dropped without calling `schema` or `scan`.
 pub trait BatchSource: Send + Sized + 'static {
     type Scan: ScanBuilder;
 
-    /// Spark passes option keys in lower case.
+    /// Spark passes option keys in lower case. Keep construction lightweight:
+    /// a capability probe uses only table options, while a scan may override
+    /// them with query options. Open executor resources in the factory.
     fn new(options: Options) -> Result<Self>;
 
     fn schema(&self) -> Result<SchemaRef>;
@@ -104,6 +108,8 @@ pub trait BatchReaderFactory: Serialize + DeserializeOwned + Send + 'static {
     /// Return lazy batches with a fixed schema and bounded memory. The reader
     /// may retain `task` until the stream is released. Check cancellation during
     /// long operations and use timeouts for blocking I/O.
+    /// Spark may call stream callbacks on different threads, never concurrently;
+    /// the reader must be `Send` but does not need to be `Sync`.
     ///
     /// The SDK checks Spark-compatible Arrow types, the negotiated schema, and
     /// zero array offsets recursively. It reports incompatible layouts instead
@@ -122,6 +128,8 @@ pub trait BatchReaderFactory: Serialize + DeserializeOwned + Send + 'static {
 /// `serialize_reader` call and caches the result, including a planning failure.
 /// This is later than Java DSv2 `ScanBuilder.build()`. Only serialized factory
 /// and partition descriptors travel to executors; driver handles stay local.
+/// It corresponds to Spark's driver-only `ColumnarBatchPlanner`: the native
+/// planner calls `partitions`, then `serialize_reader`, then closes the handle.
 pub trait ScanBuilder: Send + Sized + 'static {
     type Factory: BatchReaderFactory;
 
