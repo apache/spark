@@ -1937,8 +1937,9 @@ class WindowAggPandasUDFPeakmemBench(_WindowAggPandasBenchMixin, _PeakmemBenchBa
 # Stateful streaming with Pandas. UDF signature is
 # ``(api_client, mode, key, pdfs)`` and returns ``Iterator[pandas.DataFrame]``.
 # The input wire stream is a single plain Arrow stream pre-sorted by the
-# grouping key column at offset 0; ``read_udfs`` in worker.py chunks rows into
-# one ``(mode, key, pdfs)`` tuple per group, then emits a phantom
+# grouping key column at offset 0; ``PandasTransformWithStateUDFHandler.run``
+# in ``pyspark/eval_handlers/_stateful.py`` chunks rows into one
+# ``(mode, key, pdfs)`` tuple per group, then emits a phantom
 # ``PROCESS_TIMER`` and ``COMPLETE`` call with an empty pdf iterator.
 # ``StatefulProcessorApiClient.__init__`` opens a real TCP socket to the JVM
 # state server; the stub listener below satisfies that connect. The benchmark
@@ -2463,9 +2464,11 @@ class TransformWithStateRowUDFPeakmemBench(_TransformWithStateRowBenchMixin, _Pe
 # Each batch carries either inputData or initState rows -- never both -- with the
 # inactive column written as an all-null struct. Matching the JVM ``initData ++
 # data`` ordering, all initial-state batches are emitted first, then all data
-# batches. ``read_udfs`` walks each batch row by row, materializing every column
-# (key included) into a ``Row`` via ``.as_py()``, then regroups consecutive rows
-# by the leading key column so each key surfaces as one
+# batches. ``RowTransformWithStateInitStateUDFHandler.run`` in
+# ``pyspark/eval_handlers/_stateful.py`` walks each batch row by row,
+# materializing every column (key included) into a ``Row`` via ``.as_py()``,
+# then regroups consecutive rows by the leading key column so each key
+# surfaces as one
 # ``(mode, key, (input_rows, init_rows))`` call. This is the
 # per-row Python object round trip the Row variant is built around, layered on
 # top of the nested-struct init-state deserialization, in contrast to the
