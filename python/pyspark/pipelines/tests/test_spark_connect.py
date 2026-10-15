@@ -75,6 +75,11 @@ class SparkConnectPipelineEventHandlerTests(unittest.TestCase):
 
         self.assertIn("received an unexpected result", str(error.exception))
 
+    def test_rejects_response_without_pipeline_result(self):
+        with self.assertRaises(PySparkValueError) as error:
+            handle_pipeline_events(iter([{}]))
+
+        self.assertIn("received an unexpected result: {}", str(error.exception))
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class SparkConnectPipelinesTest(ReusedConnectTestCase):
