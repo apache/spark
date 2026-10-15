@@ -118,6 +118,22 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
   }
 
   /**
+   * The float/double grouping expressions that `aggregate` outputs normalized, without aliases.
+   */
+  private[sql] def normalizedKeys(aggregate: Aggregate): Seq[Expression] = {
+    if (outputsNormalizedKeys(aggregate)) {
+      aggregate.groupingExpressions
+        .map {
+          case a: Alias => a.child
+          case e => e
+        }
+        .filter(e => needNormalize(e.dataType))
+    } else {
+      Nil
+    }
+  }
+
+  /**
    * Whether one of `outputs` (a subset of `aggregate.aggregateExpressions`) reads a float/double
    * grouping key that `aggregate` outputs normalized. A rule must not replace `aggregate` with a
    * Project of such outputs over its child: the Project would output the raw key, unlike the
@@ -126,14 +142,8 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
   private[sql] def readsNormalizedKeys(
       aggregate: Aggregate,
       outputs: Seq[NamedExpression]): Boolean = {
-    val keys = aggregate.groupingExpressions
-      .map {
-        case a: Alias => a.child
-        case e => e
-      }
-      .filter(e => needNormalize(e.dataType))
-    keys.nonEmpty && outputsNormalizedKeys(aggregate) &&
-      outputs.exists(_.exists(e => keys.exists(_.semanticEquals(e))))
+    val keys = normalizedKeys(aggregate)
+    keys.nonEmpty && outputs.exists(_.exists(e => keys.exists(_.semanticEquals(e))))
   }
 
   /**

@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Distinct, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{IntegerType, StringType}
 
 class RemoveRedundantAggregatesSuite extends PlanTest {
 
@@ -269,23 +269,38 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("SPARK-60150: Keep lower aggregate that normalizes a float key the upper one reads") {
+  test("SPARK-60150: Lower aggregate on a float key is kept only if the upper one reads it raw") {
     val d = $"d".double
-    val doubles = LocalRelation(d, $"a".int)
-    // The lower aggregate outputs d normalized, which the upper aggregate would read raw.
-    val query = doubles.groupBy(d, $"a")(d, $"a").groupBy(d)(d, max($"a").as("m")).analyze
-    comparePlans(Optimize.execute(query), query)
+    val a = $"a".int
+    val doubles = LocalRelation(d, a)
+    val lower = doubles.groupBy(d, a)(d, a)
+    // Grouped by directly, the key is normalized by the upper aggregate itself.
+    comparePlans(
+      Optimize.execute(lower.groupBy(d)(d, max(a).as("m")).analyze),
+      doubles.groupBy(d)(d, max(a).as("m")).analyze)
+    // Inside an aggregate function or a computed grouping expression, the upper aggregate would
+    // read the raw key without the lower one.
+    val inFunction = lower.groupBy(a)(a, max(d).as("m")).analyze
+    comparePlans(Optimize.execute(inFunction), inFunction)
+    val inGrouping = lower.groupBy(d.cast(StringType))(d.cast(StringType).as("s")).analyze
+    comparePlans(Optimize.execute(inGrouping), inGrouping)
+    // So would an output of the lower aggregate computed from the key.
+    val computed = doubles.groupBy(d)(d.cast(StringType).as("s"))
+    val readsComputed = computed.groupBy($"s")($"s").analyze
+    comparePlans(Optimize.execute(readsComputed), readsComputed)
     // Removed when the upper aggregate does not read the float key.
     comparePlans(
-      Optimize.execute(doubles.groupBy(d, $"a")(d, $"a").groupBy($"a")($"a").analyze),
-      doubles.select($"a").groupBy($"a")($"a").analyze)
+      Optimize.execute(lower.groupBy(a)(a).analyze),
+      doubles.select(a).groupBy(a)(a).analyze)
   }
+
 
   test("SPARK-60150: Keep group only aggregate that normalizes a float key") {
     val d = $"d".double
     val lower = LocalRelation(d, $"b".int).groupBy(d)(d, count($"b").as("cnt"))
     val cnt = lower.analyze.output(1)
-    // The upper aggregate outputs the float key normalized, and a project would output it raw.
+    // The rule only sees that the upper aggregate outputs the float key normalized. It does not
+    // check whether the child already does, so it keeps the upper aggregate.
     val originalQuery = lower.groupBy(d, cnt)(d, cnt).analyze
     comparePlans(Optimize.execute(originalQuery), originalQuery)
     // Removed when the float key is not output.

@@ -27,7 +27,7 @@ import org.scalatest.matchers.must.Matchers.the
 import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
 
 import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
-import org.apache.spark.sql.catalyst.plans.logical.Expand
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand}
 import org.apache.spark.sql.catalyst.util.AUTO_GENERATED_ALIAS
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.execution.{FileSourceScanExec, WholeStageCodegenExec}
@@ -1361,6 +1361,20 @@ class DataFrameAggregateSuite extends SharedSparkSession
         sql("SELECT cast(x AS STRING) AS k, max(x) AS m FROM " +
           "(SELECT DISTINCT x FROM VALUES (-0.0D), (0.0D) t(x)) GROUP BY 1"),
         Row("0.0", 0.0d))
+    }
+
+    withTempView("u") {
+      Seq((-0.0d, 1), (0.0d, 2)).toDF("d", "a").createOrReplaceTempView("u")
+      // The upper aggregate groups by the key directly and normalizes it itself, so the DISTINCT
+      // is removed, with and without a filter pushed below it.
+      val distinct = "(SELECT DISTINCT d, a FROM u)"
+      val grouped = sql(s"SELECT cast(d AS STRING), max(a) FROM $distinct GROUP BY d")
+      checkAnswer(grouped, Row("0.0", 2))
+      assert(grouped.queryExecution.optimizedPlan.collect { case a: Aggregate => a }.size == 1)
+      checkAnswer(
+        sql(s"SELECT cast(d AS STRING), max(a) FROM $distinct " +
+          "WHERE cast(d AS STRING) = '0.0' GROUP BY d"),
+        Row("0.0", 2))
     }
   }
 
