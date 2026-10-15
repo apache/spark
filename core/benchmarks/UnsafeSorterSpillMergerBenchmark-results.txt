@@ -1,0 +1,43 @@
+================================================================================================
+UnsafeSorterSpillMerger k-way merge
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+distinct prefixes, 4194304 records:       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+PriorityQueue k=2                                    60             60           0         70.1          14.3       1.0X
+merge k=2                                            58             58           1         72.9          13.7       1.0X
+PriorityQueue k=4                                   143            144           2         29.4          34.0       0.4X
+merge k=4                                            74             74           0         56.9          17.6       0.8X
+PriorityQueue k=8                                   224            225           3         18.7          53.3       0.3X
+merge k=8                                            94             94           0         44.7          22.4       0.6X
+PriorityQueue k=9                                   245            245           1         17.2          58.3       0.2X
+merge k=9                                           138            138           0         30.4          32.9       0.4X
+PriorityQueue k=12                                  276            277           3         15.2          65.7       0.2X
+merge k=12                                          144            144           1         29.2          34.2       0.4X
+PriorityQueue k=16                                  316            317           1         13.3          75.4       0.2X
+merge k=16                                          157            157           1         26.8          37.4       0.4X
+PriorityQueue k=64                                  501            502           0          8.4         119.5       0.1X
+merge k=64                                          237            237           1         17.7          56.5       0.3X
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+duplicate prefixes, 4194304 records:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+PriorityQueue k=2                                    67             68           1         62.4          16.0       1.0X
+merge k=2                                            72             73           0         57.9          17.3       0.9X
+PriorityQueue k=4                                   153            154           2         27.4          36.5       0.4X
+merge k=4                                           107            108           0         39.1          25.6       0.6X
+PriorityQueue k=8                                   234            236           2         17.9          55.9       0.3X
+merge k=8                                           162            163           1         26.0          38.5       0.4X
+PriorityQueue k=9                                   259            260           1         16.2          61.8       0.3X
+merge k=9                                           187            188           0         22.4          44.6       0.4X
+PriorityQueue k=12                                  285            286           1         14.7          67.9       0.2X
+merge k=12                                          199            200           2         21.0          47.5       0.3X
+PriorityQueue k=16                                  317            318           1         13.2          75.5       0.2X
+merge k=16                                          235            237           2         17.9          55.9       0.3X
+PriorityQueue k=64                                  515            517           1          8.1         122.9       0.1X
+merge k=64                                          337            338           1         12.5          80.3       0.2X
+
+

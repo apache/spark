@@ -764,6 +764,37 @@ public class UnsafeExternalSorterSuite {
   }
 
   @Test
+  public void testSingleRoundLoserTreeMergeWithInMemoryRecords() throws Exception {
+    // More spills than LINEAR_MERGE_MAX_RUNS, merged in a single round (merge factor -1) together
+    // with the records still in memory, so the loser tree runs over real UnsafeSorterSpillReaders
+    // and the SpillableIterator. Run r holds r, r + numRuns, r + 2 * numRuns, ..., so the runs
+    // interleave and the winner changes on every record.
+    final UnsafeExternalSorter sorter = newSorter();
+    sorter.setSpillMergeFactor(-1);
+    final int numSpills = UnsafeSorterSpillMerger.LINEAR_MERGE_MAX_RUNS + 1;
+    final int numRuns = numSpills + 1;
+    final int recordsPerRun = 10;
+
+    for (int run = 0; run < numRuns; run++) {
+      for (int i = 0; i < recordsPerRun; i++) {
+        insertNumber(sorter, i * numRuns + run);
+      }
+      if (run < numSpills) {
+        sorter.spill();
+      }
+    }
+    assertEquals(numSpills, spillFilesCreated.size());
+
+    UnsafeSorterIterator iter = sorter.getSortedIterator();
+    assertEquals(0, sorter.getSpillMergeRounds()); // single round: the loser-tree path
+    verifyIntIterator(iter, 0, numRuns * recordsPerRun);
+    assertFalse(iter.hasNext());
+
+    sorter.cleanupResources();
+    assertSpillFilesWereCleanedUp();
+  }
+
+  @Test
   public void testBoundedMergeWithInMemoryData() throws Exception {
     // Set merge factor to 2 to force multi-round merge
     final UnsafeExternalSorter sorter = newSorter();
