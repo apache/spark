@@ -325,11 +325,16 @@ class PlanMerger(
    *                   pair that is NOT the innermost one still recognize the merge below it and
    *                   apply the DSv2-symmetric exemption. It only ever gates behaviour when
    *                   `dsv2SymmetricFilterPropagationEnabled` is on.
-   * @param cachedPlanFiltered Whether a merged Filter from an earlier round filters this subtree
-   *                           for every plan merged into the cached plan. Its condition is not in
+   * @param cachedSideFiltered Whether every plan merged into the cached plan filters this subtree
+   *                           with a filter that the new plan doesn't share. It is set whenever
+   *                           `cachedPlanFilter` is. It is also set when a merged Filter from an
+   *                           earlier round filters the subtree. That Filter's condition is not in
    *                           `cachedPlanFilter`, because the cached aggregates already carry it.
-   *                           Like `dsv2Merged` it is propagated all the way up, so a Join arm can
-   *                           tell that the cached plans filter one of its children.
+   *                           The fact goes up to the nearest Aggregate, which consumes the filters
+   *                           below it, so a Join arm can tell which of its children the cached
+   *                           plans filter. The merged Filter case only matters without
+   *                           `symmetricFilterPropagationEnabled`, where such a Filter can only
+   *                           come from the DSv2-symmetric exemption.
    */
   case class TryMergeResult(
       mergedPlan: LogicalPlan,
@@ -338,7 +343,7 @@ class PlanMerger(
       cachedPlanFilter: Option[Attribute] = None,
       dsv2DeferredScan: Option[DSv2DeferredScan] = None,
       dsv2Merged: Boolean = false,
-      cachedPlanFiltered: Boolean = false)
+      cachedSideFiltered: Boolean = false)
 
   /**
    * Carries a DSv2 scan whose build has been deferred from the leaf up to the enclosing [[Filter]],
@@ -443,29 +448,29 @@ class PlanMerger(
         case (np: Project, cp: Project) =>
           tryMergePlans(np.child, cp.child, context).map {
             case TryMergeResult(mergedChild, npMapping, npFilter, cpFilter, deferred, dsv2Merged,
-                cpFiltered) =>
+                cpSideFiltered) =>
               val (mergedProjectList, newNPMapping) =
                 mergeNamedExpressions(np.projectList, cp.projectList, npMapping, npFilter, cpFilter)
               TryMergeResult(Project(mergedProjectList, mergedChild), newNPMapping, npFilter,
-                cpFilter, deferred, dsv2Merged, cpFiltered)
+                cpFilter, deferred, dsv2Merged, cpSideFiltered)
           }
         case (np, cp: Project) =>
           tryMergePlans(np, cp.child, context).map {
             case TryMergeResult(mergedChild, npMapping, npFilter, cpFilter, deferred, dsv2Merged,
-                cpFiltered) =>
+                cpSideFiltered) =>
               val (mergedProjectList, newNPMapping) =
                 mergeNamedExpressions(np.output, cp.projectList, npMapping, npFilter, cpFilter)
               TryMergeResult(Project(mergedProjectList, mergedChild), newNPMapping, npFilter,
-                cpFilter, deferred, dsv2Merged, cpFiltered)
+                cpFilter, deferred, dsv2Merged, cpSideFiltered)
           }
         case (np: Project, cp) =>
           tryMergePlans(np.child, cp, context).map {
             case TryMergeResult(mergedChild, npMapping, npFilter, cpFilter, deferred, dsv2Merged,
-                cpFiltered) =>
+                cpSideFiltered) =>
               val (mergedProjectList, newNPMapping) =
                 mergeNamedExpressions(np.projectList, cp.output, npMapping, npFilter, cpFilter)
               TryMergeResult(Project(mergedProjectList, mergedChild), newNPMapping, npFilter,
-                cpFilter, deferred, dsv2Merged, cpFiltered)
+                cpFilter, deferred, dsv2Merged, cpSideFiltered)
           }
 
         case (np: Aggregate, cp: Aggregate) if supportedAggregateMerge(np, cp) =>
@@ -515,7 +520,7 @@ class PlanMerger(
         case (np: Filter, cp: Filter) =>
           tryMergePlans(np.child, cp.child, context.copy(filterAboveScan = true)).flatMap {
             case TryMergeResult(mergedChild, npMapping, npFilter, cpFilter, deferred, dsv2Merged,
-                cpFiltered) =>
+                cpSideFiltered) =>
               val mappedNPCondition = mapAttributes(np.condition, npMapping)
               // Comparing the canonicalized form is required to ignore different forms of the same
               // expression.
@@ -531,7 +536,7 @@ class PlanMerger(
                   .map { prunedChild =>
                     val mergedPlan = Filter(cp.condition, prunedChild)
                     TryMergeResult(mergedPlan, npMapping, npFilter, cpFilter,
-                      dsv2Merged = dsv2Merged, cachedPlanFiltered = cpFiltered)
+                      dsv2Merged = dsv2Merged, cachedSideFiltered = cpSideFiltered)
                   }
               // Symmetric propagation broadens the merged scan to OR(f1, f2); it is off by default
               // because the two sides may read disjoint data. A DSv2 scan merge is exempt under its
@@ -593,7 +598,7 @@ class PlanMerger(
                           newFilter.copyTagsFrom(cp)
                           // The cached plans' side of the OR stays hidden in cp's aggregates.
                           TryMergeResult(newFilter, npMapping, Some(newNPFilterOut), None,
-                            dsv2Merged = dsv2Merged, cachedPlanFiltered = true)
+                            dsv2Merged = dsv2Merged, cachedSideFiltered = true)
                         }
                     case _ =>
                       None
@@ -628,7 +633,7 @@ class PlanMerger(
                       newFilter.copyTagsFrom(cp)
                       newFilter.setTagValue(PlanMerger.MERGED_FILTER_TAG, ())
                       TryMergeResult(newFilter, npMapping, Some(newNPFilter),
-                        Some(newCPFilter), dsv2Merged = dsv2Merged, cachedPlanFiltered = cpFiltered)
+                        Some(newCPFilter), dsv2Merged = dsv2Merged, cachedSideFiltered = true)
                     }
                 }
               } else {
@@ -641,7 +646,7 @@ class PlanMerger(
             // effectively symmetric (both sides have a filter condition). Abort unless
             // symmetricFilterPropagationEnabled.
             case TryMergeResult(mergedChild, npMapping, npFilter, cpFilter, _, dsv2Merged,
-                cpFiltered) if cpFilter.isEmpty || symmetricFilterPropagationEnabled =>
+                cpSideFiltered) if cpFilter.isEmpty || symmetricFilterPropagationEnabled =>
               val mappedNPCondition = mapAttributes(np.condition, npMapping)
               val newNPCondition = npFilter.fold(mappedNPCondition)(And(_, mappedNPCondition))
               val newNPFilterAlias =
@@ -651,7 +656,7 @@ class PlanMerger(
                 mergedChild.output.toList :+ newNPFilterAlias,
                 mergedChild)
               TryMergeResult(project, npMapping, Some(newNPFilter), cpFilter,
-                dsv2Merged = dsv2Merged, cachedPlanFiltered = cpFiltered)
+                dsv2Merged = dsv2Merged, cachedSideFiltered = cpSideFiltered)
           }
         case (np, cp: Filter) if context.filterPropagationSupported =>
           tryMergePlans(np, cp.child, context.copy(filterAboveScan = false)).collect {
@@ -659,7 +664,7 @@ class PlanMerger(
             // effectively symmetric (both sides have a filter condition). Abort unless
             // symmetricFilterPropagationEnabled.
             case TryMergeResult(mergedChild, npMapping, npFilter, cpFilter, _, dsv2Merged,
-                cpFiltered) if npFilter.isEmpty || symmetricFilterPropagationEnabled =>
+                cpSideFiltered) if npFilter.isEmpty || symmetricFilterPropagationEnabled =>
               if (cp.getTagValue(PlanMerger.MERGED_FILTER_TAG).isDefined) {
                 // cp is a previously-merged Filter: its condition is `OR(pf_0, pf_1, ...)` and cp's
                 // aggregate expressions already carry individual `FILTER (WHERE pf_i)` clauses that
@@ -669,7 +674,7 @@ class PlanMerger(
                 // Drop cp's Filter and let the recursion's result flow up with cpFilter = None so
                 // cp's aggregates are left untouched, but mark that the cached plans filter here.
                 TryMergeResult(mergedChild, npMapping, npFilter, None, dsv2Merged = dsv2Merged,
-                  cachedPlanFiltered = true)
+                  cachedSideFiltered = true)
               } else {
                 val newCPCondition = cpFilter.fold(cp.condition)(And(_, cp.condition))
                 val newCPFilterAlias =
@@ -679,26 +684,22 @@ class PlanMerger(
                   mergedChild.output.toList :+ newCPFilterAlias,
                   mergedChild)
                 TryMergeResult(project, npMapping, npFilter, Some(newCPFilter),
-                  dsv2Merged = dsv2Merged, cachedPlanFiltered = cpFiltered)
+                  dsv2Merged = dsv2Merged, cachedSideFiltered = true)
               }
           }
 
         case (np: Join, cp: Join) if np.joinType == cp.joinType && np.hint == cp.hint =>
           tryMergePlans(np.left, cp.left, context.copy(filterAboveScan = false)).flatMap {
             case TryMergeResult(mergedLeft, leftNPMapping, leftNPFilter, leftCPFilter, _,
-                leftDsv2Merged, leftCPFiltered) =>
+                leftDsv2Merged, leftCPSideFiltered) =>
               tryMergePlans(np.right, cp.right, context.copy(filterAboveScan = false)).flatMap {
                 case TryMergeResult(mergedRight, rightNPMapping, rightNPFilter, rightCPFilter, _,
-                    rightDsv2Merged, rightCPFiltered)
+                    rightDsv2Merged, rightCPSideFiltered)
                     if // When the two plans filter different children, the merge is symmetric
-                       // filter propagation and needs its config, see the class doc. The cached
-                       // plans filter a child when it brings up a cp filter, or when a merged
-                       // Filter below already filters it for them (`cachedPlanFiltered`).
+                       // filter propagation and needs its config, see the class doc.
                        (symmetricFilterPropagationEnabled ||
-                         !(leftNPFilter.isDefined &&
-                             (rightCPFilter.isDefined || rightCPFiltered) ||
-                           rightNPFilter.isDefined &&
-                             (leftCPFilter.isDefined || leftCPFiltered))) &&
+                         !(leftNPFilter.isDefined && rightCPSideFiltered ||
+                           rightNPFilter.isDefined && leftCPSideFiltered)) &&
                        // Gate join-crossing filter propagation behind its own config flag.
                        // When no filter attributes are in play the merge is unconditionally safe.
                        (leftNPFilter.isEmpty && leftCPFilter.isEmpty &&
@@ -746,7 +747,7 @@ class PlanMerger(
                     }
                     Some(TryMergeResult(mergedPlan, npMapping, npFilter, cpFilter,
                       dsv2Merged = leftDsv2Merged || rightDsv2Merged,
-                      cachedPlanFiltered = leftCPFiltered || rightCPFiltered))
+                      cachedSideFiltered = leftCPSideFiltered || rightCPSideFiltered))
                   } else {
                     None
                   }

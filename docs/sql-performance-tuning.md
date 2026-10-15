@@ -370,7 +370,7 @@ In TPC-DS benchmark runs, enabling symmetric filter propagation made `q9` and `q
     <td><code>spark.sql.optimizer.mergeSubplans.filterPropagation.symmetricFilterPropagation.enabled</code></td>
     <td>false</td>
     <td>
-      When true, two non-grouping aggregate subplans that both have a filter condition can also be merged. Disabled by default because the merged filter is widened to <code>OR(f1, f2)</code>, which may read more data than the two original filters, especially on heavily partitioned or file-pruned tables. Through a join, two subplans that filter different join children also count as symmetric. The merged join then also builds join pairs that neither subplan needs, which can multiply the join's work.
+      When true, two non-grouping aggregate subplans that both have a filter condition can also be merged. Disabled by default because the merged filter is widened to <code>OR(f1, f2)</code>, which may read more data than the two original filters, especially on heavily partitioned or file-pruned tables. Through a join, two subplans that filter different join children also count as symmetric. The merged join then also builds join pairs that neither subplan needs, which can multiply the join's work or make a formerly broadcastable input too large to broadcast.
     </td>
     <td>4.2.0</td>
   </tr>
