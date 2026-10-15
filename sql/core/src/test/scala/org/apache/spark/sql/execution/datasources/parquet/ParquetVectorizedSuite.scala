@@ -22,10 +22,12 @@ import java.util.{Optional, PrimitiveIterator}
 import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 
-import org.apache.parquet.column.{ColumnDescriptor, ParquetProperties}
+import org.apache.parquet.bytes.BytesInput
+import org.apache.parquet.column.{ColumnDescriptor, Encoding, ParquetProperties}
 import org.apache.parquet.column.impl.ColumnWriteStoreV1
 import org.apache.parquet.column.page._
 import org.apache.parquet.column.page.mem.MemPageStore
+import org.apache.parquet.column.statistics.Statistics
 import org.apache.parquet.io.ParquetDecodingException
 import org.apache.parquet.io.api.Binary
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
@@ -477,6 +479,33 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
           (0 to 15),
           batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
       }
+    }
+  }
+
+  test("SPARK-59832: a corrupted dictionary page reports the column") {
+    // A PLAIN INT32 dictionary page that declares 3 entries but holds only 2.
+    val parquetSchema = MessageTypeParser.parseMessageType("message root { optional int32 a; }")
+    val ty = parquetSchema.asGroupType().getType("a").asPrimitiveType()
+    val cd = new ColumnDescriptor(Array("a"), ty, 0, 1)
+    val memPageStore = new MemPageStore(1)
+    val pageWriter = memPageStore.getPageWriter(cd)
+    pageWriter.writeDictionaryPage(new DictionaryPage(
+      BytesInput.from(Array[Byte](1, 0, 0, 0, 2, 0, 0, 0)), 3, Encoding.PLAIN_DICTIONARY))
+    // One non-null value: the definition levels (length 2, an RLE run of 1 x 1), then the
+    // dictionary ids (bit width 2, an RLE run of 1 x 0).
+    pageWriter.writePage(BytesInput.from(Array[Byte](2, 0, 0, 0, 2, 1, 2, 2, 0)), 1, 1,
+      Statistics.createStats(ty), Encoding.RLE, Encoding.RLE, Encoding.RLE_DICTIONARY)
+    val recordReader = new VectorizedParquetRecordReader(
+      DateTimeUtils.getZoneId("EST"), "CORRECTED", "UTC", "CORRECTED", "UTC", true, 1)
+    try {
+      recordReader.initialize(parquetSchema, parquetSchema,
+        TestParquetRowGroupReader(Seq(TestPageReadStore(memPageStore, Seq(0L)))), 1)
+      val e = intercept[ParquetDecodingException](recordReader.nextKeyValue())
+      assert(e.getMessage.contains("could not decode the dictionary for [a]"), e.getMessage)
+      assert(e.getMessage.contains(e.getCause.getMessage), e.getMessage)
+      assert(e.getCause.isInstanceOf[ParquetDecodingException], e)
+    } finally {
+      recordReader.close()
     }
   }
 
