@@ -1068,6 +1068,37 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     }
   }
 
+  test("a join's runtime bloom takes a condition over its key on the fact side with it") {
+    // The fact side of a LEFT OUTER JOIN filters on its join key in a derived table. The
+    // optimizer does not infer that condition onto the side the bloom is built from, so the bloom
+    // keeps keys 0 until 20 while the condition keeps only every fourth of them. With both in the
+    // reader, it excludes more rows than the bloom alone can.
+    withBloomFilterTables {
+      val query =
+        """SELECT bf2.k, f.v
+          |FROM bf2 LEFT JOIN (SELECT * FROM bf1 WHERE k % 4 = 0) f ON f.k = bf2.k
+          |WHERE bf2.v < 20
+          |""".stripMargin
+      def run(pushdown: Boolean): (SparkPlan, Seq[Row]) = withSQLConf(
+          SQLConf.PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED.key -> pushdown.toString,
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        val df = spark.sql(query)
+        (df.queryExecution.executedPlan, df.collect().toSeq.sortBy(_.getLong(0)))
+      }
+      val (_, plain) = run(pushdown = false)
+      val (plan, rows) = run(pushdown = true)
+      assert(rows == plain && rows.size == 20, s"got $rows, a plain read got $plain")
+      val offered = collect(plan) { case s: FileSourceScanExec => s.storageFilters }.flatten
+      assert(offered.exists(_.isInstanceOf[BloomFilterMightContain]) &&
+        offered.exists(_.exists(_.isInstanceOf[Remainder])) &&
+        !offered.exists(_.isInstanceOf[IsNotNull]),
+        s"expected the bloom and k % 4 = 0, and no IsNotNull; got $offered.\nPlan:\n$plan")
+      val excluded = rowsExcludedByStorageFilters(plan)
+      assert(excluded > 600 - 20,
+        s"the bloom alone keeps at least keys 0 until 20 of 600; the reader excluded $excluded")
+    }
+  }
+
   test("a row group over the splice cap reads its key columns again: same rows, more bytes, " +
     "less avoided") {
     // Past the cap a row group gives splicing up. Phase 2 takes every projected column, key
