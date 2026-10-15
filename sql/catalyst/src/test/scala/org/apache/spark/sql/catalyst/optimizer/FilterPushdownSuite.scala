@@ -2237,8 +2237,9 @@ class FilterPushdownSuite extends PlanTest {
     val s = $"s".struct(StructType(Seq(StructField("d", DoubleType))))
     val normX = NormalizeFloatingNumbers.normalize(x)
     val normS = NormalizeFloatingNumbers.normalize(s)
+    val arr = $"arr".array(DoubleType)
     def normalize(e: Expression): Expression =
-      PushPredicateThroughNonJoin.normalizeGroupingExpressions(e, Seq(x, f, s))
+      PushPredicateThroughNonJoin.normalizeGroupingExpressions(e, Seq(x, f, s, arr))
     def unchanged(e: Expression): Unit = assert(normalize(e) == e)
 
     // A grouping key on its own is normalized; other columns and literals are not.
@@ -2280,9 +2281,10 @@ class FilterPushdownSuite extends PlanTest {
     assert(normalize(y === 1 && !(x.cast(StringType) === "-0.0")) ==
       (y === 1 && !(normX.cast(StringType) === "-0.0")))
 
-    // An already normalized key is not normalized again, but a key inside another normalized
-    // expression is.
+    // An already normalized key, including an array key, is not normalized again, but a key
+    // inside another normalized expression is.
     unchanged(normX.cast(StringType) === "-0.0")
+    unchanged(NormalizeFloatingNumbers.normalize(arr).cast(StringType) === "[0.0]")
     assert(normalize(NormalizeFloatingNumbers.normalize(Pow(x, Literal(-1.0))) > 0.0) ==
       (NormalizeFloatingNumbers.normalize(Pow(normX, Literal(-1.0))) > 0.0))
 
