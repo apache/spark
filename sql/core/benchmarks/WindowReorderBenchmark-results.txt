@@ -2,11 +2,11 @@
 WindowReorder: stack reordering of the window chain
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Mac OS X 26.4.1
-Apple M4 Pro
+OpenJDK 64-Bit Server VM 17.0.20.1+1-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
 window batch over two user key groups:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-baseline (window reorder off)                      8575           8629          61          2.0         511.1       1.0X
-optimized (window reorder on)                      6466           6537          65          2.6         385.4       1.3X
+baseline (window reorder off)                     24874          25160         348          0.7        1482.6       1.0X
+optimized (window reorder on)                     19455          19543         112          0.9        1159.6       1.3X
 
 
