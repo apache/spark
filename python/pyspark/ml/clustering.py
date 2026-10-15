@@ -923,7 +923,7 @@ class KMeans(JavaEstimator[KMeansModel], _KMeansParams, JavaMLWritable, JavaMLRe
         """
         return self._set(maxBlockSizeInMB=value)
 
-    @since("5.0.0")
+    @since("4.3.0")
     def setIntermediateStorageLevel(self, value: str) -> "KMeans":
         """
         Sets the value of :py:attr:`intermediateStorageLevel`.

@@ -442,7 +442,7 @@ class KMeans @Since("1.5.0") (
   def setMaxBlockSizeInMB(value: Double): this.type = set(maxBlockSizeInMB, value)
 
   /** @group expertSetParam */
-  @Since("5.0.0")
+  @Since("4.3.0")
   def setIntermediateStorageLevel(value: String): this.type = set(intermediateStorageLevel, value)
 
   @Since("2.0.0")
