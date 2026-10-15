@@ -55,6 +55,7 @@ if should_test_connect:
         WriteOperation,
     )
     from pyspark.sql.connect.readwriter import DataFrameReader
+    from pyspark.sql.connect.streaming.readwriter import DataStreamReader
     from pyspark.sql.connect.types import (
         proto_schema_to_pyspark_data_type,
         pyspark_types_to_proto_types,
@@ -868,6 +869,26 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertEqual(data_source.options.get("op2"), "opv2")
         self.assertEqual(len(data_source.paths), 1)
         self.assertEqual(data_source.paths[0], "test_path")
+
+    def test_streaming_table_source_name(self):
+        for source_name in (None, "orders_source"):
+            with self.subTest(source_name=source_name):
+                reader = DataStreamReader(self.connect).option("maxFilesPerTrigger", "1")
+                if source_name is not None:
+                    reader.name(source_name)
+                plan = reader.table("db.orders")._plan.to_proto(self.connect)
+                self.assertTrue(plan.root.read.is_streaming)
+                named_table = plan.root.read.named_table
+                self.assertEqual(named_table.unparsed_identifier, "db.orders")
+                self.assertEqual(dict(named_table.options), {"maxFilesPerTrigger": "1"})
+                self.assertEqual(named_table.HasField("source_name"), source_name is not None)
+                if source_name is not None:
+                    self.assertEqual(named_table.source_name, source_name)
+                self.assertEqual(proto.Plan.FromString(plan.SerializeToString()), plan)
+
+        batch_plan = DataFrameReader(self.connect).table("db.orders")._plan.to_proto(self.connect)
+        self.assertFalse(batch_plan.root.read.is_streaming)
+        self.assertFalse(batch_plan.root.read.named_table.HasField("source_name"))
 
     def test_reader_options_case_insensitive(self):
         reader = DataFrameReader(self.connect)
