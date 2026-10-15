@@ -229,6 +229,11 @@ public final class LimbMathTest {
   private static void wideSqrt() {
     Random rng = new Random(0x7371_7274L);
     long[] buf = new long[LimbMath.WORK];
+    Wide6 n6 = new Wide6();
+    Wide6 g6 = new Wide6();
+    Wide6 q6 = new Wide6();
+    Wide6 t6 = new Wide6();
+    Wide6 v6 = new Wide6();
     Wide8 n8 = new Wide8();
     Wide8 g8 = new Wide8();
     Wide8 q8 = new Wide8();
@@ -241,14 +246,27 @@ public final class LimbMathTest {
     Wide12 v12 = new Wide12();
     long[] known = {0L, 1L, 3L, 81L, 10_000L, Long.MAX_VALUE};
     for (long v : known) {
+      n6.clear();
+      n6.l0 = v;
+      Wide6.sqrtFloor(n6, g6, q6, t6, v6);
       n8.clear();
       n8.l0 = v;
       Wide8.sqrtFloor(n8, g8, q8, t8, v8);
       BigInteger bn = unsigned(v);
       BigInteger br = bn.sqrt();
+      expectEq(store(g6, buf), br, "wide6 sqrt " + v);
       expectEq(store(g8, buf), br, "wide8 sqrt " + v);
     }
     for (int n = 0; n < 80; n++) {
+      fillWide6(n6, 1 + rng.nextInt(5), rng);
+      BigInteger bn6 = toBig(store(n6, buf));
+      boolean sticky6 = Wide6.sqrtFloor(n6, g6, q6, t6, v6);
+      BigInteger br6 = bn6.sqrt();
+      expectEq(store(g6, buf), br6, "wide6 sqrt q");
+      BigInteger rem6 = bn6.subtract(br6.multiply(br6));
+      if (sticky6 != (rem6.signum() != 0)) {
+        throw new IllegalStateException("wide6 sqrt sticky");
+      }
       fillWide8(n8, 1 + rng.nextInt(6), rng);
       BigInteger bn = toBig(store(n8, buf));
       boolean sticky = Wide8.sqrtFloor(n8, g8, q8, t8, v8);

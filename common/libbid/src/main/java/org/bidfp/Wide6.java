@@ -123,6 +123,41 @@ final class Wide6 {
     setLimb(word, limb(word) | (1L << (index & 63)));
   }
 
+  void shiftRightOne() {
+    l0 = (l0 >>> 1) | (l1 << 63);
+    l1 = (l1 >>> 1) | (l2 << 63);
+    l2 = (l2 >>> 1) | (l3 << 63);
+    l3 = (l3 >>> 1) | (l4 << 63);
+    l4 = (l4 >>> 1) | (l5 << 63);
+    l5 >>>= 1;
+  }
+
+  /**
+   * Heron iteration: {@code guess} becomes {@code floor(sqrt(n))}. {@code n}
+   * is unchanged. Returns whether {@code n - guess^2} is nonzero.
+   */
+  static boolean sqrtFloor(Wide6 n, Wide6 guess, Wide6 quot, Wide6 tmp, Wide6 vn) {
+    if (n.isZero()) {
+      guess.clear();
+      return false;
+    }
+    int rootBits = (n.bitLength() + 1) >>> 1;
+    guess.clear();
+    guess.setBit(rootBits);
+    while (true) {
+      tmp.copyFrom(n);
+      quot.divide(tmp, guess, vn);
+      vn.add(quot, guess);
+      vn.shiftRightOne();
+      if (vn.compare(guess) >= 0) {
+        tmp.multiply3(guess, guess);
+        vn.subtract(n, tmp);
+        return !vn.isZero();
+      }
+      guess.copyFrom(vn);
+    }
+  }
+
   int compare(Wide6 other) {
     int cmp = Long.compareUnsigned(l5, other.l5);
     if (cmp != 0) {

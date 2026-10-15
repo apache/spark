@@ -119,10 +119,11 @@ Compare aligns by exponent instead of counting digits. Parse is still
 unbiased exponent, four limbs) and pack only at I/O.
 These numbers are not comparable to the specialized 64/128 table above.
 
-`BidK` `k=2` and `k=4` dispatch to those specialists. `k=3` has a dedicated
-two-limb Decimal96 entry kernel backed by Wide6, and `k=5` uses Wide6 directly.
-`k=6` through `k=8` use Wide8, with generic Knuth multiply/FMA retained for
-`k=6` and `k=7`. Libm is Bid128 DPML for `k<=4` and unsupported for `k>4`.
+`BidK` `k=2` and `k=4` dispatch to those specialists. `k=3` is a Decimal96
+specialist (private scratch, two-limb coefficients, three-limb products,
+Wide6 sqrt). `k=5` uses Wide6. `k=6` through `k=8` use Wide8, with generic
+Knuth multiply/FMA retained for `k=6` and `k=7`. Libm is Bid128 DPML for
+`k<=4` and unsupported for `k>4`.
 
 The table below is `BidKRaw` vs naked `BigDecimal` (`MathContext` precision
 `p=9k-2`, `HALF_EVEN`), profile `quick`, 15 Oct 2026. Ratio is

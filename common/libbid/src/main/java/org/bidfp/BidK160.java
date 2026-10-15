@@ -17,17 +17,15 @@
 package org.bidfp;
 
 /**
- * Unrolled Wide6 kernels for Decimal96 ({@code k=3}, p=25) and Decimal160
- * ({@code k=5}, p=43). Bid64/Bid128 stay specialized; other k values keep
- * {@link BidKKnuth}.
+ * Unrolled Wide6 kernels for Decimal160 ({@code k=5}, p=43). Decimal96 uses
+ * {@link BidK96}; Bid64/Bid128 stay specialized.
  */
 final class BidK160 {
   private BidK160() {
   }
 
   static boolean matches(FormatParams format) {
-    int k = format.units();
-    return k == 3 || k == 5;
+    return format.units() == 5;
   }
 
   static void add(

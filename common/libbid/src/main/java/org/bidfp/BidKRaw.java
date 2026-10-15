@@ -18,7 +18,7 @@ package org.bidfp;
 
 /**
  * Generic BID-k arithmetic. {@code k=2,4} dispatch to {@link BidKSpecial},
- * {@code k=3} uses {@link BidK96}, {@code k=5} uses Wide6, and
+ * {@code k=3} is the {@link BidK96} specialist, {@code k=5} uses Wide6, and
  * {@code k=6..8} use Wide8. Parse uses {@link DecNum}.
  *
  * <p>{@link BidUnpacked} is the compute form: kernels write
@@ -60,8 +60,8 @@ final class BidKRaw {
       StatusFlags flags,
       long[] out,
       boolean negateY) {
-    if (BidK96.matches(format)
-        && BidK96.add(format, x, y, negateY, mode, flags, out)) {
+    if (BidK96.matches(format)) {
+      BidK96.add(format, x, y, negateY, mode, flags, out);
       return;
     }
     if (BidKSpecial.narrow(format)) {
@@ -120,8 +120,8 @@ final class BidKRaw {
       RoundingMode mode,
       StatusFlags flags,
       long[] out) {
-    if (BidK96.matches(format)
-        && BidK96.mul(format, x, y, mode, flags, out)) {
+    if (BidK96.matches(format)) {
+      BidK96.mul(format, x, y, mode, flags, out);
       return;
     }
     if (BidKSpecial.narrow(format)) {
@@ -182,8 +182,8 @@ final class BidKRaw {
       RoundingMode mode,
       StatusFlags flags,
       long[] out) {
-    if (BidK96.matches(format)
-        && BidK96.div(format, x, y, mode, flags, out)) {
+    if (BidK96.matches(format)) {
+      BidK96.div(format, x, y, mode, flags, out);
       return;
     }
     if (BidKSpecial.narrow(format)) {
@@ -243,8 +243,8 @@ final class BidKRaw {
       RoundingMode mode,
       StatusFlags flags,
       long[] out) {
-    if (BidK96.matches(format)
-        && BidK96.sqrt(format, x, mode, flags, out)) {
+    if (BidK96.matches(format)) {
+      BidK96.sqrt(format, x, mode, flags, out);
       return;
     }
     if (BidKSpecial.narrow(format)) {
@@ -291,8 +291,8 @@ final class BidKRaw {
       RoundingMode mode,
       StatusFlags flags,
       long[] out) {
-    if (BidK96.matches(format)
-        && BidK96.fma(format, x, y, z, mode, flags, out)) {
+    if (BidK96.matches(format)) {
+      BidK96.fma(format, x, y, z, mode, flags, out);
       return;
     }
     if (BidKSpecial.narrow(format)) {
@@ -528,6 +528,10 @@ final class BidKRaw {
       StatusFlags flags,
       BidUnpacked out) {
     FormatParams format = requireSameFormat(x, y, out);
+    if (BidK96.matches(format)) {
+      BidK96.addUnpacked(x, y, negateY, mode, flags, out);
+      return;
+    }
     if (BidKSpecial.narrow(format)) {
       BidKSpecial.addUnpacked(x, y, negateY, mode, flags, out);
       return;
@@ -573,6 +577,10 @@ final class BidKRaw {
       StatusFlags flags,
       BidUnpacked out) {
     FormatParams format = requireSameFormat(x, y, out);
+    if (BidK96.matches(format)) {
+      BidK96.mulUnpacked(x, y, mode, flags, out);
+      return;
+    }
     if (BidKSpecial.narrow(format)) {
       BidKSpecial.mulUnpacked(x, y, mode, flags, out);
       return;
@@ -620,6 +628,10 @@ final class BidKRaw {
       StatusFlags flags,
       BidUnpacked out) {
     FormatParams format = requireSameFormat(x, y, out);
+    if (BidK96.matches(format)) {
+      BidK96.divUnpacked(x, y, mode, flags, out);
+      return;
+    }
     if (BidKSpecial.narrow(format)) {
       BidKSpecial.divUnpacked(x, y, mode, flags, out);
       return;
@@ -663,6 +675,10 @@ final class BidKRaw {
   static void sqrtUnpacked(
       BidUnpacked x, RoundingMode mode, StatusFlags flags, BidUnpacked out) {
     FormatParams format = requireSameFormat(x, out);
+    if (BidK96.matches(format)) {
+      BidK96.sqrtUnpacked(x, mode, flags, out);
+      return;
+    }
     if (BidKSpecial.narrow(format)) {
       BidKSpecial.sqrtUnpacked(x, mode, flags, out);
       return;
@@ -726,6 +742,10 @@ final class BidKRaw {
     FormatParams format = requireSameFormat(x, y, out);
     if (z.format() != format) {
       throw new IllegalArgumentException("format mismatch");
+    }
+    if (BidK96.matches(format)) {
+      BidK96.fmaUnpacked(x, y, z, mode, flags, out);
+      return;
     }
     if (BidKSpecial.narrow(format)) {
       BidKSpecial.fmaUnpacked(x, y, z, mode, flags, out);
