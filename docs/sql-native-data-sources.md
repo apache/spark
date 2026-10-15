@@ -45,6 +45,21 @@ Spark calls native data sources with the
 Java, a query that uses a native data source fails with
 `NATIVE_DATA_SOURCE_UNSUPPORTED_JAVA_VERSION`.
 
+### When to Use a Native Data Source
+
+A native data source fits a source whose client exists only in native code, such as an in-house
+storage system written in C++ or the C SDK of a vendor, and that Spark needs to read and write.
+Such a source then needs no JVM connector: the same library works with all the releases of Spark
+that support its version of the interface, and with every Spark API, including Spark Connect
+clients in any language.
+
+A native data source provides what Data Source V2 offers to data sources, except for the features
+that version 1 of the interface does not cover yet, such as row-level operations: see
+[Limitations](#limitations). Extensions of Spark outside of Data Source V2, such as table
+functions, SQL commands and optimizer rules, are out of the scope of this interface. A source that
+needs them is better served by a JVM connector, which can still read and write through a native
+library with the Arrow C stream interface.
+
 ## How It Works
 
 A native data source library exports a single C function, `spark_ds_init`, which returns a table
@@ -191,8 +206,15 @@ later as functions or fields appended to the structs of the interface:
 - custom metrics, shown in the Spark UI;
 - admission control for streaming reads, such as a maximum number of rows for each micro-batch,
   and continuous streaming;
-- the pushdown of aggregates, of the sort order and of the partitioning of the data;
+- the pushdown of aggregates and of top-N queries (`ORDER BY` with `LIMIT`), and reporting the
+  partitioning and the sort order of the data, with which Spark avoids shuffles and sorts, as in
+  storage-partitioned joins;
+- row-level operations, `UPDATE`, `DELETE` and `MERGE INTO`, and metadata columns;
 - memory accounting: see below.
+
+Extensions of Spark outside of Data Source V2, such as table functions, SQL commands and optimizer
+rules, are out of the scope of this interface: see
+[When to Use a Native Data Source](#when-to-use-a-native-data-source).
 
 ### Memory
 
