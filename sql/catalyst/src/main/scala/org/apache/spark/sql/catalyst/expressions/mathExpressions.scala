@@ -1941,7 +1941,8 @@ abstract class RoundToDecimal(
         context = getContextOrNull())
     } else {
       // Apply the result precision after rounding so ANSI mode also governs carry overflow.
-      val rounded = Decimal(decimal.toBigDecimal.setScale(_scale, mode))
+      // Normalize the integral result to avoid Decimal's negative-scale configuration lookup.
+      val rounded = Decimal(decimal.toBigDecimal.setScale(_scale, mode).setScale(0))
       if (ansiEnabled) {
         CastUtils.changePrecisionExact(rounded, p, s, getContextOrNull())
       } else {

@@ -458,8 +458,13 @@ class MathFunctionsSuite extends SharedSparkSession {
     val inputTypes = Seq(FloatType, DoubleType, DecimalType(38, 20))
     val zero = BigDecimal(0)
     val unit = BigDecimal("1e37")
-    for (ansi <- Seq(false, true); codegen <- Seq("CODEGEN_ONLY", "NO_CODEGEN")) {
+    for {
+      legacy <- Seq(false, true)
+      ansi <- Seq(false, true)
+      codegen <- Seq("CODEGEN_ONLY", "NO_CODEGEN")
+    } {
       withSQLConf(
+          SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> legacy.toString,
           SQLConf.ANSI_ENABLED.key -> ansi.toString,
           SQLConf.CODEGEN_FACTORY_MODE.key -> codegen,
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> (codegen == "CODEGEN_ONLY").toString) {

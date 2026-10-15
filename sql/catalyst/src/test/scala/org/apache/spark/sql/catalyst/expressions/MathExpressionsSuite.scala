@@ -927,26 +927,31 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val input = BoundReference(0, DecimalType(38, 0), nullable = true)
     val positive = Decimal("99999999999999999999999999999999999999")
     val negative = Decimal("-99999999999999999999999999999999999999")
-    for (ansi <- Seq(false, true)) {
-      val up = RoundCeil(input, Literal(-1), ansiEnabled = ansi)
-      val down = RoundFloor(input, Literal(-1), ansiEnabled = ansi)
-      if (ansi) {
-        checkExceptionInExpression[SparkArithmeticException](
-          up, InternalRow(positive), "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION")
-        checkExceptionInExpression[SparkArithmeticException](
-          down, InternalRow(negative), "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION")
-      } else {
-        checkEvaluation(up, null, InternalRow(positive))
-        checkEvaluation(down, null, InternalRow(negative))
+    for (allowNegativeScale <- Seq(false, true); ansi <- Seq(false, true)) {
+      withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key ->
+          allowNegativeScale.toString) {
+        val up = RoundCeil(input, Literal(-1), ansiEnabled = ansi)
+        val down = RoundFloor(input, Literal(-1), ansiEnabled = ansi)
+        assert(up.dataType == DecimalType(38, 0))
+        assert(down.dataType == DecimalType(38, 0))
+        if (ansi) {
+          checkExceptionInExpression[SparkArithmeticException](
+            up, InternalRow(positive), "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION")
+          checkExceptionInExpression[SparkArithmeticException](
+            down, InternalRow(negative), "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION")
+        } else {
+          checkEvaluation(up, null, InternalRow(positive))
+          checkEvaluation(down, null, InternalRow(negative))
+        }
+        checkEvaluation(down, Decimal("99999999999999999999999999999999999990"),
+          InternalRow(positive))
+        checkEvaluation(up, Decimal("-99999999999999999999999999999999999990"),
+          InternalRow(negative))
+        // The carry still fits when reducing the scale of a precision-38 fractional value.
+        val fractional = BoundReference(0, DecimalType(38, 1), nullable = false)
+        checkEvaluation(RoundCeil(fractional, Literal(0), ansiEnabled = ansi), Decimal("1e37"),
+          InternalRow(Decimal("9999999999999999999999999999999999999.9")))
       }
-      checkEvaluation(down, Decimal("99999999999999999999999999999999999990"),
-        InternalRow(positive))
-      checkEvaluation(up, Decimal("-99999999999999999999999999999999999990"),
-        InternalRow(negative))
-      // The carry still fits when reducing the scale of a precision-38 fractional value.
-      val fractional = BoundReference(0, DecimalType(38, 1), nullable = false)
-      checkEvaluation(RoundCeil(fractional, Literal(0), ansiEnabled = ansi), Decimal("1e37"),
-        InternalRow(Decimal("9999999999999999999999999999999999999.9")))
     }
   }
 
