@@ -8127,6 +8127,12 @@
     ],
     "sqlState" : "XXKST"
   },
+  "STREAM_STREAM_JOIN_INCOMPATIBLE_STATE_STORE_CONFIGS" : {
+    "message" : [
+      "The configuration values `<stateFormatVersionConfig>=<stateFormatVersion>` and `<mergeOperatorVersionConfig>=<mergeOperatorVersion>` are incompatible. Stream-stream join state format version <stateFormatVersion> requires RocksDB merge operator version <requiredMergeOperatorVersion>. Start a new query with `<mergeOperatorVersionConfig>` set to <requiredMergeOperatorVersion> and a new checkpoint."
+    ],
+    "sqlState" : "42K06"
+  },
   "STREAM_STREAM_JOIN_INCONSISTENT_STATE" : {
     "message" : [
       "Detected inconsistency in stream-stream join state."
@@ -9605,6 +9611,13 @@
     ],
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_JSON_CHAR_VARCHAR_MAP_KEY" : {
+    "message" : [
+      "The JSON object name <key> is not a valid key for the map key type <dataType>.",
+      "A CHAR key must match the declared length exactly and a VARCHAR key must not exceed it; keys are never padded or trimmed. Use a STRING map key to accept any name."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_MERGE_CONDITION" : {
     "message" : [
       "MERGE operation contains unsupported <condName> condition."
@@ -9661,6 +9674,12 @@
   "UNSUPPORTED_PIPELINE_SPARK_SQL_COMMAND" : {
     "message" : [
       "'<command>' is not supported in spark.sql(\"...\") API in Spark Declarative Pipeline."
+    ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_RESOURCE_TYPE_FOR_FUNCTION" : {
+    "message" : [
+      "Unsupported resource type '<resourceType>' for a function."
     ],
     "sqlState" : "0A000"
   },
@@ -9887,6 +9906,13 @@
   "UNSUPPORTED_TYPED_LITERAL" : {
     "message" : [
       "Literals of the type <unsupportedType> are not supported. Supported types are <supportedTypes>."
+    ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_XML_CHAR_VARCHAR_MAP_KEY" : {
+    "message" : [
+      "XML map keys of CHAR or VARCHAR cannot be padded or trimmed.",
+      "The key <key> is not valid for type <dataType>."
     ],
     "sqlState" : "0A000"
   },
@@ -10415,11 +10441,6 @@
   "_LEGACY_ERROR_TEMP_1072" : {
     "message" : [
       "Only the tables/views belong to the same database can be retrieved. Querying tables/views are <qualifiedTableNames>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1079" : {
-    "message" : [
-      "Resource Type '<resourceType>' is not supported."
     ]
   },
   "_LEGACY_ERROR_TEMP_1080" : {
@@ -11041,11 +11062,6 @@
   "_LEGACY_ERROR_TEMP_1338" : {
     "message" : [
       "Sinks cannot request distribution and ordering in continuous execution mode."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2017" : {
-    "message" : [
-      "not resolved."
     ]
   },
   "_LEGACY_ERROR_TEMP_2026" : {

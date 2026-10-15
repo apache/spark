@@ -171,19 +171,3 @@ private[sql] trait MetricViewBase {
     )
   }
 }
-
-private[sql] object MetricViewBase {
-  /**
-   * Factory method to create the appropriate version-specific MetricView from canonical form.
-   * @param canonical The canonical MetricView to convert from
-   * @return The appropriate version-specific MetricView
-   */
-  def fromCanonical(canonical: MetricView): MetricViewBase = {
-    canonical.version match {
-      case "0.1" =>
-        MetricViewV01.fromCanonical(canonical)
-      case _ =>
-        throw new IllegalArgumentException(s"Unsupported version: ${canonical.version}")
-    }
-  }
-}
