@@ -1328,6 +1328,32 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  test("SPARK-59234 repro: partial clustering reducer overflow") {
+    // self_reduce(id) is an identity transform that reduces itself, merging its four keys to two
+    // (x -> x % 2) on both sides. Partial clustering spreads one side; without the fix its expected
+    // count is read from the four un-reduced keys (one each) while the node groups two reduced
+    // splits under each merged key, so the aligner over-emits (a planning error with the guard, a
+    // silent shuffle on master). Reducing the expected count into the node's space keeps the join,
+    // which this asserts: correct rows and no shuffle.
+    withFunction(SelfReduceFunction) {
+      val cols = Array(Column.create("id", LongType), Column.create("data", StringType))
+      createTable("t1", cols, Array(Expressions.apply("self_reduce", Expressions.column("id"))))
+      sql("INSERT INTO testcat.ns.t1 VALUES (0, 'a'), (1, 'b'), (2, 'c'), (3, 'd')")
+      createTable("t2", cols, Array(Expressions.apply("self_reduce", Expressions.column("id"))))
+      sql("INSERT INTO testcat.ns.t2 VALUES (0, 'w'), (1, 'x'), (2, 'y'), (3, 'z')")
+      val df = sql(
+        "SELECT t1.id FROM testcat.ns.t1 JOIN testcat.ns.t2 ON t1.id = t2.id")
+      withSQLConf(
+          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        checkAnswer(df, Seq(Row(0L), Row(1L), Row(2L), Row(3L)))
+        assert(collectShuffles(df.queryExecution.executedPlan).isEmpty,
+          "storage-partitioned join should be kept, not shuffled")
+      }
+    }
+  }
+
   test("SPARK-59045: reduced expression is retargeted per KeyedPartitioning") {
     // A chained SPJ's output partitioning reports one `KeyedPartitioning` per join side, but the
     // reduced expression is derived from the one member `checkKeyGroupCompatible` paired this side

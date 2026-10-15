@@ -668,10 +668,11 @@ private[sql] object GroupPartitionsExec {
       numMatchedPartitions += splits.size
       if (distributePartitions) {
         // `padTo` only pads, never truncates, so a key holding more splits than its expected
-        // count would be emitted more times than the count says, while `isGrouped` can still read
-        // as grouped. A join split would then fail the `committed` gate in `EnsureRequirements`
-        // and silently fall back to a shuffle, and an ordering split would report duplicate keys
-        // as grouped. Fail fast here, where the alignment is owned, instead of either.
+        // count would be emitted more times than the count says while `isGrouped` still reads as
+        // grouped. No producer does this today: the join split reduces its keys into this node's
+        // space before counting them (`EnsureRequirements`), and the ordering split counts the same
+        // keys it groups, so every count matches its splits. The assert localises any future
+        // miscount here rather than a committed-gate shuffle fallback or a bad grouped layout.
         assert(splits.size <= numSplits,
           s"a distributed partition key holds more splits (${splits.size}) than its expected " +
             s"count ($numSplits)")
@@ -679,8 +680,9 @@ private[sql] object GroupPartitionsExec {
         val paddedSplits = splits.map(Seq(_)).padTo(numSplits, Seq.empty)
         paddedSplits.map((key, _))
       } else {
-        // The slots beyond the first re-read the whole group. A key this side does not hold
-        // has no splits to re-read, so the product is 0 and no explicit guard is needed.
+        // `Seq.fill(numSplits)` emits exactly `numSplits` entries whatever the split count, so this
+        // branch cannot over-emit and needs no size guard. The slots beyond the first re-read the
+        // whole group; a key this side does not hold has no splits to re-read, so the product is 0.
         numReplicatedPartitionReads += (numSplits - 1) * splits.size
         // Replicate all splits to each expected partition
         Seq.fill(numSplits)((key, splits))

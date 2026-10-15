@@ -91,6 +91,20 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     assert(e.getMessage.contains("more splits"))
   }
 
+  test("SPARK-59234: the replicate branch emits numSplits entries and does not overflow") {
+    // The same over-count input as the distribute case, but ungrouped for a replicate rather than a
+    // split. REPLICATED_FOR_JOIN takes the else branch, which emits exactly numSplits entries per
+    // key whatever the split count, so it cannot overflow and builds without the guard firing.
+    val childKp = KeyedPartitioning(Seq(exprA, exprB), Seq(row(1, 1), row(1, 2)))
+    def keyOf(a: Int): InternalRowComparableWrapper =
+      InternalRowComparableWrapper(row(a), Seq(exprA))
+    val gpe = GroupPartitionsExec(DummySparkPlan(outputPartitioning = childKp),
+      joinKeyPositions = Some(Seq(0)),
+      expectedPartitionKeys = Some(Seq(keyOf(1) -> 1)),
+      ungroupingOrigin = Some(REPLICATED_FOR_JOIN))
+    assert(gpe.groupedPartitions.size === 1, "the one expected partition replicates both splits")
+  }
+
   test("SPARK-59121: a node with no reducers keeps the child's reduced key marker") {
     // This node re-reports the child's expressions, projected to `joinKeyPositions`. A reduce that
     // happened below it has to survive that, or a further join above reads the reported transform
