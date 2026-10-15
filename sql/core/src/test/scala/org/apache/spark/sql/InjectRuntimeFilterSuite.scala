@@ -1452,24 +1452,26 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     }
   }
 
-  test("RUNTIME_FILTER hint takes effect through one mechanism") {
+  test("RUNTIME_FILTER hint adds no Bloom filter on a key a DPP filter prunes") {
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
       // `bf5part` is partitioned by `f5`, and the selective `bf2.a2 = 10` makes DPP prune it on
-      // that key. The hint is honored by that DPP filter, so no Bloom filter is added: not on the
-      // key DPP already prunes, matching the unhinted behavior asserted above, and not on the
-      // other join key either, where the heuristics would add one ("add bloom filter if dpp
-      // filter exists on a different column" above).
+      // that key. The hint is honored by that DPP filter, so no Bloom filter is added on that key,
+      // matching the unhinted behavior asserted above.
       val oneKey = "select /*+ RUNTIME_FILTER(bf2) */ * from bf5part join bf2 " +
         "on bf5part.f5 = bf2.f2 where bf2.a2 = 10"
       assertDidNotRewriteWithBloomFilter(oneKey)
       assertReturnsRows(oneKey)
       assert(hasDynamicPruning(oneKey))
+      assert(hintWarnings(oneKey).isEmpty)
+      // The other join key still gets a Bloom filter, as without the hint ("add bloom filter if
+      // dpp filter exists on a different column" above).
       val twoKeys = "select /*+ RUNTIME_FILTER(bf2) */ * from bf5part join bf2 " +
         "on bf5part.c5 = bf2.c2 and bf5part.f5 = bf2.f2 where bf2.a2 = 10"
-      assertDidNotRewriteWithBloomFilter(twoKeys)
-      assertReturnsRows(twoKeys)
+      assertHintedRewrite(twoKeys)
+      assert(bloomFilterApplicationSideKeys(twoKeys) == Set("c5"))
       assert(hasDynamicPruning(twoKeys))
+      assert(hintWarnings(twoKeys).isEmpty)
     }
   }
 
@@ -1505,6 +1507,7 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       assertDidNotRewriteWithBloomFilter(reaching)
       assertReturnsRows(reaching)
       assert(hasDynamicPruning(reaching))
+      assert(hintWarnings(reaching).isEmpty)
     }
   }
 
