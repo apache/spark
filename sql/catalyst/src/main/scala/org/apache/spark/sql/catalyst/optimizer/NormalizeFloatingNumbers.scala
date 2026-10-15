@@ -108,8 +108,7 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
    * the grouping keys of every Aggregate (see `SparkStrategies.Aggregation`), except one whose
    * aggregate functions are all grouped-agg pandas UDFs, planned as `ArrowAggregatePythonExec` on
    * the raw keys. Rules that replace an Aggregate with a Project check [[readsNormalizedKeys]].
-   * For an Aggregate with any grouped-agg pandas UDF the answer can still change, see
-   * [[hasPythonUDAF]].
+   * The answer can still change during optimization, see [[mayChangeKeyForm]].
    */
   private[sql] def outputsNormalizedKeys(aggregate: Aggregate): Boolean = {
     val aggregateFunctions = aggregate.aggregateExpressions.flatMap(_.collect {
@@ -119,12 +118,13 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
   }
 
   /**
-   * Whether the aggregate functions of `aggregate` include a grouped-agg pandas UDF. Whether such
-   * an Aggregate outputs normalized keys is only settled after optimization: `ColumnPruning` can
-   * remove its other aggregate functions, so that it outputs the raw keys, or all of them, so that
-   * it becomes group-only and outputs normalized keys. Rules must not rely on either form for it.
+   * Whether the form of the keys `aggregate` outputs may still change during optimization, so that
+   * a filter pushed below it must not depend on it. This is the case for an Aggregate with a
+   * grouped-agg pandas UDF: `ColumnPruning` can remove its other aggregate functions, so that it
+   * outputs the raw keys, or all of them, so that it becomes group-only and outputs normalized
+   * keys.
    */
-  private[sql] def hasPythonUDAF(aggregate: Aggregate): Boolean = {
+  private[sql] def mayChangeKeyForm(aggregate: Aggregate): Boolean = {
     aggregate.aggregateExpressions.exists(_.exists {
       case ae: AggregateExpression => ae.aggregateFunction.isInstanceOf[PythonUDAF]
       case _ => false
@@ -148,16 +148,21 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
   }
 
   /**
-   * Whether one of `outputs` (a subset of `aggregate.aggregateExpressions`) reads a float/double
-   * grouping key that `aggregate` outputs normalized. A rule must not replace `aggregate` with a
-   * Project of such outputs over its child: the Project would output the raw key, unlike the
-   * Aggregate and unlike what a filter pushed below the Aggregate has read.
+   * Whether a rule must not replace `aggregate` with a Project of `outputs` (a subset of
+   * `aggregate.aggregateExpressions`) over its child, because one of them reads a float/double
+   * grouping key that `aggregate` outputs normalized: the Project would output the raw key,
+   * unlike the Aggregate and unlike what a filter pushed below the Aggregate has read. Streaming
+   * Aggregates are exempt and keep the previous behavior: keeping one that such a rule used to
+   * remove would add a stateful operator, which a query restarted from an existing checkpoint
+   * rejects. Filters are not normalized below streaming Aggregates either (see
+   * `PushPredicateThroughNonJoin.pushBelowAggregate`).
    */
   private[sql] def readsNormalizedKeys(
       aggregate: Aggregate,
       outputs: Seq[NamedExpression]): Boolean = {
     val keys = normalizedKeys(aggregate)
-    keys.nonEmpty && outputs.exists(_.exists(e => keys.exists(_.semanticEquals(e))))
+    !aggregate.isStreaming && keys.nonEmpty &&
+      outputs.exists(_.exists(e => keys.exists(_.semanticEquals(e))))
   }
 
   /**

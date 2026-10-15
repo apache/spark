@@ -65,8 +65,9 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
     // redundant if the upper aggregation would read them raw without it: through an output computed
     // from a key, inside an aggregate function or a computed grouping expression, or as a grouping
     // key of an upper aggregation with grouped-agg pandas UDFs, which may not normalize its keys.
-    // Otherwise a key the upper aggregation groups by directly is normalized by it.
-    lazy val upperReadsNormalizedKeys = {
+    // Otherwise a key the upper aggregation groups by directly is normalized by it. Streaming plans
+    // keep the previous behavior, see NormalizeFloatingNumbers.readsNormalizedKeys.
+    lazy val upperReadsNormalizedKeys = !lower.isStreaming && {
       val keys = NormalizeFloatingNumbers.normalizedKeys(lower)
       val (keyOutputs, otherOutputs) = lower.aggregateExpressions
         .filter(upper.references.contains(_))
@@ -75,7 +76,7 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
       def readsKey(e: Expression): Boolean = e.references.intersect(keyAttributes).nonEmpty
       NormalizeFloatingNumbers.readsNormalizedKeys(lower, otherOutputs) ||
         keyAttributes.nonEmpty && (
-          NormalizeFloatingNumbers.hasPythonUDAF(upper) ||
+          NormalizeFloatingNumbers.mayChangeKeyForm(upper) ||
           upper.groupingExpressions.exists(g => !g.isInstanceOf[Attribute] && readsKey(g)) ||
           upper.aggregateExpressions.exists(_.exists {
             case ae: AggregateExpression => readsKey(ae)

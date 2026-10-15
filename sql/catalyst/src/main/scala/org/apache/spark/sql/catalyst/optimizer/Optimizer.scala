@@ -2814,18 +2814,26 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
   // child (that is, grouping keys and constants). Expressions above the aggregate see its
   // float/double grouping keys normalized (see NormalizeFloatingNumbers: -0.0 becomes 0.0 and every
   // NaN becomes one canonical NaN), so a pushed conjunct reads them normalized too, wherever the
-  // raw value could change its result. For an aggregate with grouped-agg pandas UDFs, whether its
-  // keys come out normalized is only settled later (see NormalizeFloatingNumbers.hasPythonUDAF), so
-  // a conjunct that normalizing would change stays above it. The CTE rule
-  // PushdownPredicatesAndPruneColumnsForCTEDef uses this too, to find the filters it pushed.
+  // raw value could change its result. If the form of the keys the aggregate outputs may still
+  // change (with grouped-agg pandas UDFs, see NormalizeFloatingNumbers.mayChangeKeyForm), a
+  // conjunct that normalizing would change stays above it instead, where it reads whatever the
+  // final plan outputs. Streaming aggregates keep the previous behavior, with conjuncts pushed
+  // below them unnormalized: rules can still replace them with a Project of the raw keys (see
+  // NormalizeFloatingNumbers.readsNormalizedKeys), and keeping a conjunct above one could separate
+  // two aggregates that RemoveRedundantAggregates would merge, adding a stateful operator. The CTE
+  // rule PushdownPredicatesAndPruneColumnsForCTEDef uses this too, to find the filters it pushed.
   private[optimizer] def pushBelowAggregate(
       conds: Seq[Expression],
       aggregate: Aggregate): (Seq[Expression], Seq[Expression]) = {
     val aliasMap = getAliasMap(aggregate)
-    val keys = aggregate.groupingExpressions
-      .filter(e => NormalizeFloatingNumbers.needNormalize(e.dataType))
-      .map(trimAliases)
-    val hasPythonUDAF = NormalizeFloatingNumbers.hasPythonUDAF(aggregate)
+    val keys = if (aggregate.isStreaming) {
+      Nil
+    } else {
+      aggregate.groupingExpressions
+        .filter(e => NormalizeFloatingNumbers.needNormalize(e.dataType))
+        .map(trimAliases)
+    }
+    val mayChangeKeyForm = NormalizeFloatingNumbers.mayChangeKeyForm(aggregate)
     val pushDown = Seq.newBuilder[Expression]
     val stayUp = Seq.newBuilder[Expression]
     conds.foreach { cond =>
@@ -2837,7 +2845,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       } else {
         replaced
       }
-      if (pushable && (!hasPythonUDAF || normalized.fastEquals(replaced))) {
+      if (pushable && (!mayChangeKeyForm || normalized.fastEquals(replaced))) {
         pushDown += normalized
       } else {
         stayUp += cond

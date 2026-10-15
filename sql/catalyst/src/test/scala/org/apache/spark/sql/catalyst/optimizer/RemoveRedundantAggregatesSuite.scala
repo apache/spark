@@ -295,6 +295,19 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
   }
 
 
+  test("SPARK-60150: Streaming aggregates on a float key are removed as before") {
+    val d = $"d".double
+    val a = $"a".int
+    val streaming = LocalRelation(Seq(d, a), isStreaming = true)
+    // Keeping them would add stateful operators, which existing checkpoints cannot restore.
+    comparePlans(
+      Optimize.execute(streaming.groupBy(d, a)(d, a).groupBy(a)(a, max(d).as("m")).analyze),
+      streaming.groupBy(a)(a, max(d).as("m")).analyze)
+    val lower = streaming.groupBy(d)(d, count(a).as("cnt"))
+    val cnt = lower.analyze.output(1)
+    comparePlans(Optimize.execute(lower.groupBy(d, cnt)(d, cnt).analyze), lower.analyze)
+  }
+
   test("SPARK-60150: Keep group only aggregate that normalizes a float key") {
     val d = $"d".double
     val lower = LocalRelation(d, $"b".int).groupBy(d)(d, count($"b").as("cnt"))

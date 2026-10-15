@@ -2219,14 +2219,15 @@ class FilterPushdownSuite extends PlanTest {
 
   test("SPARK-60150: keep a normalization-sensitive filter above a pandas UDF aggregate") {
     val x = $"x".double
-    val relation = LocalRelation(x, $"v".int)
+    val v = $"v".int
+    val relation = LocalRelation(x, v)
     // Whether such an aggregate outputs normalized keys depends on which of its aggregate
     // functions column pruning keeps later, so a conjunct that normalizing would change stays
     // above it, while a plain comparison is still pushed below it.
-    val pandasAgg = PythonUDAF("pandasAgg", null, IntegerType, Seq($"v"), udfDeterministic = true)
+    val pandasAgg = PythonUDAF("pandasAgg", null, IntegerType, Seq(v), udfDeterministic = true)
       .toAggregateExpression().as("p")
     val sensitive = x.cast(StringType) === "-0.0"
-    for (aggregates <- Seq(Seq(pandasAgg), Seq(pandasAgg, count($"v").as("c")))) {
+    for (aggregates <- Seq(Seq(pandasAgg), Seq(pandasAgg, count(v).as("c")))) {
       comparePlans(
         Optimize.execute(
           relation.groupBy(x)(x +: aggregates: _*).where(sensitive && x > 1.0).analyze),
@@ -2234,6 +2235,16 @@ class FilterPushdownSuite extends PlanTest {
     }
   }
 
+  test("SPARK-60150: push a filter below a streaming aggregate unnormalized, as before") {
+    val x = $"x".double
+    val streaming = LocalRelation(Seq(x, $"v".int), isStreaming = true)
+    // A streaming aggregate can still be replaced with a Project of the raw keys, and a filter kept
+    // above it could add a stateful operator.
+    val condition = x.cast(StringType) === "-0.0" && x > 1.0
+    comparePlans(
+      Optimize.execute(streaming.groupBy(x)(x, count($"v").as("c")).where(condition).analyze),
+      streaming.where(condition).groupBy(x)(x, count($"v").as("c")).analyze)
+  }
 
   test("SPARK-60150: normalizeGroupingExpressions") {
     val x = $"x".double
