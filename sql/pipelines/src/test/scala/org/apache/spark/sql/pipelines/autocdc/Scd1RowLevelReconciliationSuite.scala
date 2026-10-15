@@ -19,9 +19,9 @@ package org.apache.spark.sql.pipelines.autocdc
 
 import Scd1RowLevelReconciliation.{
   applyTombstonesToMicrobatch,
-  deduplicateMicrobatch,
-  projectTargetColumnsOntoMicrobatch
+  deduplicateMicrobatch
 }
+import Scd1ReconciliationSupport.projectTargetColumnsOntoMicrobatch
 
 import org.apache.spark.sql.{functions => F, AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.classic.DataFrame
@@ -68,7 +68,7 @@ class Scd1RowLevelReconciliationSuite extends QueryTest with SharedSparkSession 
   private def extendMicrobatchRowsWithCdcMetadata(
       changeArgs: ChangeArgs,
       batch: DataFrame): DataFrame =
-    Scd1RowLevelReconciliation.extendMicrobatchRowsWithCdcMetadata(
+    Scd1ReconciliationSupport.extendMicrobatchRowsWithCdcMetadata(
       changeArgs = changeArgs,
       resolvedSequencingType = LongType,
       validatedMicrobatch = batch

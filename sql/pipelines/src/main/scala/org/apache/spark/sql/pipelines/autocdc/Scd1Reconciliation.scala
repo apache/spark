@@ -24,27 +24,18 @@ import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.ArrayImplicits._
 
-/** Strategy for reconciling an SCD1 microbatch. */
-private[pipelines] trait Scd1ReconciliationStrategy {
+/**
+ * Shared transformations used by SCD1 microbatch reconciliation implementations.
+ *
+ * Reconciliation requires an orderable sequencing expression and non-null sequencing and key
+ * values in every row. The validated microbatch must contain the key columns and every column
+ * needed to evaluate the sequencing, delete, and column-selection expressions. The auxiliary
+ * table must contain at most one row per key and at least the key columns and CDC metadata.
+ */
+private[pipelines] object Scd1ReconciliationSupport {
 
-  /**
-   * Resolves the CDC events for each key and removes events superseded by recorded tombstones.
-   *
-   * The sequencing expression must have an orderable data type, and every row must have non-null
-   * sequencing and key values. These invariants are required for per-key ordering and matching.
-   *
-   * @param validatedBatchDf A CDC microbatch satisfying the invariants above and containing the key
-   *                         columns and every column needed to evaluate the sequencing, delete, and
-   *                         column-selection expressions.
-   * @param auxiliaryTableDf A snapshot of the auxiliary table containing at least the key columns
-   *                         and the CDC metadata column.
-   * @return A dataframe containing the selected user columns followed by the CDC metadata column.
-   */
-  def reconcileMicrobatch(
-      changeArgs: ChangeArgs,
-      resolvedSequencingType: DataType,
-      validatedBatchDf: DataFrame,
-      auxiliaryTableDf: DataFrame): DataFrame
+  private[autocdc] val persistedTombstoneSequenceColName: String =
+    s"${AutoCdcReservedNames.prefix}persisted_tombstone_sequence"
 
   /**
    * Appends CDC metadata to each microbatch row.
@@ -53,7 +44,7 @@ private[pipelines] trait Scd1ReconciliationStrategy {
    * reference columns that selection removes. A row is a delete only when the delete condition
    * evaluates to true; a false or null result makes it an upsert.
    */
-  protected[autocdc] final def extendMicrobatchRowsWithCdcMetadata(
+  private[autocdc] def extendMicrobatchRowsWithCdcMetadata(
       changeArgs: ChangeArgs,
       resolvedSequencingType: DataType,
       validatedMicrobatch: DataFrame): DataFrame = {
@@ -85,7 +76,7 @@ private[pipelines] trait Scd1ReconciliationStrategy {
    *
    * Requires CDC metadata to be present because selection may remove columns used to construct it.
    */
-  protected[autocdc] final def projectTargetColumnsOntoMicrobatch(
+  private[autocdc] def projectTargetColumnsOntoMicrobatch(
       changeArgs: ChangeArgs,
       microbatchWithCdcMetadataDf: DataFrame): DataFrame = {
     val resolver = microbatchWithCdcMetadataDf.sparkSession.sessionState.conf.resolver
@@ -114,18 +105,6 @@ private[pipelines] trait Scd1ReconciliationStrategy {
       finalColumnsInMicrobatchToSelect.toImmutableArraySeq: _*
     )
   }
-}
-
-/**
- * Shared transformations for applying persisted tombstones during SCD1 reconciliation.
- *
- * The auxiliary table must contain at most one row per key and at least the key columns and CDC
- * metadata.
- */
-private[pipelines] object Scd1ReconciliationSupport {
-
-  private[autocdc] val persistedTombstoneSequenceColName: String =
-    s"${AutoCdcReservedNames.prefix}persisted_tombstone_sequence"
 
   /**
    * Projects an auxiliary table to its keys and each key's persisted tombstone sequence.
@@ -167,16 +146,21 @@ private[pipelines] object Scd1ReconciliationSupport {
 }
 
 /** Row-level SCD1 reconciliation. */
-private[pipelines] object Scd1RowLevelReconciliation extends Scd1ReconciliationStrategy {
+private[pipelines] object Scd1RowLevelReconciliation {
 
   private[autocdc] val winningRowColName: String = s"${AutoCdcReservedNames.prefix}winning_row"
 
   /**
-   * Keeps the event with the greatest sequencing value for each key, adds its CDC metadata,
-   * applies the configured column selection, and removes events superseded by auxiliary-table
-   * tombstones.
+   * Resolves the CDC events for each key using row-level authorship.
+   *
+   * Inputs must satisfy the contract documented by [[Scd1ReconciliationSupport]].
+   * The event with the greatest sequencing value for each key is retained, its CDC metadata and
+   * configured column selection are projected, and events superseded by auxiliary-table tombstones
+   * are removed.
+   *
+   * @return A dataframe containing the selected user columns followed by the CDC metadata column.
    */
-  override def reconcileMicrobatch(
+  def reconcileMicrobatch(
       changeArgs: ChangeArgs,
       resolvedSequencingType: DataType,
       validatedBatchDf: DataFrame,
@@ -185,12 +169,12 @@ private[pipelines] object Scd1RowLevelReconciliation extends Scd1ReconciliationS
       changeArgs = changeArgs,
       validatedMicrobatch = validatedBatchDf
     )
-    val withCdcMetadata = extendMicrobatchRowsWithCdcMetadata(
+    val withCdcMetadata = Scd1ReconciliationSupport.extendMicrobatchRowsWithCdcMetadata(
       changeArgs = changeArgs,
       resolvedSequencingType = resolvedSequencingType,
       validatedMicrobatch = deduplicated
     )
-    val projected = projectTargetColumnsOntoMicrobatch(
+    val projected = Scd1ReconciliationSupport.projectTargetColumnsOntoMicrobatch(
       changeArgs = changeArgs,
       microbatchWithCdcMetadataDf = withCdcMetadata
     )
@@ -298,6 +282,50 @@ private[pipelines] object Scd1LeafLevelReconciliation {
     s"${AutoCdcReservedNames.prefix}latest_delete_user_data"
   private def latestAuthorshipColName(index: Int): String =
     s"${AutoCdcReservedNames.prefix}aggregated_field_$index"
+
+  /**
+   * Resolves the CDC events for each key using per-leaf authorship.
+   *
+   * Inputs must satisfy the contract documented by [[Scd1ReconciliationSupport]].
+   * The selected microbatch columns are aligned to the target schema, stamped with per-leaf
+   * authorship, collapsed into one synthetic row per key, and reconciled with persisted tombstones.
+   *
+   * @param targetTableDf A snapshot of the target table whose schema defines the target-aligned
+   *                      leaves; its rows are ignored.
+   * @return A dataframe containing the target-aligned user columns followed by the CDC metadata
+   *         column.
+   */
+  def reconcileMicrobatch(
+      changeArgs: ChangeArgs,
+      resolvedSequencingType: DataType,
+      validatedBatchDf: DataFrame,
+      targetTableDf: DataFrame,
+      auxiliaryTableDf: DataFrame): DataFrame = {
+    val withCdcMetadata = Scd1ReconciliationSupport.extendMicrobatchRowsWithCdcMetadata(
+      changeArgs = changeArgs,
+      resolvedSequencingType = resolvedSequencingType,
+      validatedMicrobatch = validatedBatchDf
+    )
+    val projected = Scd1ReconciliationSupport.projectTargetColumnsOntoMicrobatch(
+      changeArgs = changeArgs,
+      microbatchWithCdcMetadataDf = withCdcMetadata
+    )
+    val aligned = alignMicrobatchToTargetSchema(
+      microbatchDf = projected,
+      targetTableDf = targetTableDf
+    )
+    val withVersionMap = extendMicrobatchRowsWithVersionMap(
+      changeArgs = changeArgs,
+      resolvedSequencingType = resolvedSequencingType,
+      alignedDf = aligned
+    )
+    collapseMicrobatchRowsPerKey(
+      changeArgs = changeArgs,
+      resolvedSequencingType = resolvedSequencingType,
+      microbatchDf = withVersionMap,
+      auxiliaryTableDf = auxiliaryTableDf
+    )
+  }
 
   /**
    * Aligns microbatch rows with the persisted target schema without adding target rows.
