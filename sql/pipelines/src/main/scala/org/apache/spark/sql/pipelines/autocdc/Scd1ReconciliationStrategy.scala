@@ -116,6 +116,56 @@ private[pipelines] trait Scd1ReconciliationStrategy {
   }
 }
 
+/**
+ * Shared transformations for applying persisted tombstones during SCD1 reconciliation.
+ *
+ * The auxiliary table must contain at most one row per key and at least the key columns and CDC
+ * metadata.
+ */
+private[pipelines] object Scd1ReconciliationSupport {
+
+  private[autocdc] val persistedTombstoneSequenceColName: String =
+    s"${AutoCdcReservedNames.prefix}persisted_tombstone_sequence"
+
+  /**
+   * Projects an auxiliary table to its keys and each key's persisted tombstone sequence.
+   */
+  private[autocdc] def tombstoneSequenceByKey(
+      changeArgs: ChangeArgs,
+      auxiliaryTableDf: DataFrame): DataFrame = {
+    val cdcMetadata = auxiliaryTableDf.col(AutoCdcReservedNames.cdcMetadataColName)
+    val tombstoneSequence = Scd1BatchProcessor.deleteSequenceOf(cdcMetadata)
+      .as(persistedTombstoneSequenceColName)
+
+    auxiliaryTableDf.select(
+      (changeArgs.keys.map(key => F.col(key.quoted)) :+ tombstoneSequence): _*)
+  }
+
+  /** Builds the equality condition for key columns on two aliased DataFrames. */
+  private[autocdc] def keyColumnsMatch(
+      changeArgs: ChangeArgs,
+      leftAlias: String,
+      rightAlias: String): Column =
+    changeArgs.keys
+      .map { key =>
+        F.col(QuotingUtils.quoteNameParts(Seq(leftAlias, key.name))) ===
+          F.col(QuotingUtils.quoteNameParts(Seq(rightAlias, key.name)))
+      }
+      .reduce(_ && _)
+
+  /**
+   * Whether a persisted tombstone is strictly newer than every event for a microbatch key.
+   *
+   * A microbatch event wins a sequencing tie with a tombstone.
+   */
+  private[autocdc] def tombstoneSupersedesMicrobatch(
+      microbatchDeleteSequence: Column,
+      microbatchUpsertSequence: Column,
+      tombstoneSequence: Column): Column =
+    tombstoneSequence.isNotNull &&
+      F.greatest(microbatchDeleteSequence, microbatchUpsertSequence) < tombstoneSequence
+}
+
 /** Row-level SCD1 reconciliation. */
 private[pipelines] object Scd1RowLevelReconciliation extends Scd1ReconciliationStrategy {
 
@@ -181,28 +231,34 @@ private[pipelines] object Scd1RowLevelReconciliation extends Scd1ReconciliationS
       changeArgs: ChangeArgs,
       microbatchDf: DataFrame,
       auxiliaryTableDf: DataFrame): DataFrame = {
-    val aliasedMicrobatchDf = microbatchDf.alias("microbatch")
-    val aliasedAuxiliaryTableDf = auxiliaryTableDf.alias("auxiliaryTable")
+    val microbatchAlias = "microbatch"
+    val tombstoneAlias = "tombstone"
+    val aliasedMicrobatchDf = microbatchDf.alias(microbatchAlias)
+    val tombstoneSequenceByKey =
+      Scd1ReconciliationSupport.tombstoneSequenceByKey(changeArgs, auxiliaryTableDf)
+        .alias(tombstoneAlias)
 
     val cdcMetadata = AutoCdcReservedNames.cdcMetadataColName
-    val microbatchCdcMetadata = F.col(s"microbatch.$cdcMetadata")
-    val effectiveSeq = F.greatest(
-      Scd1BatchProcessor.deleteSequenceOf(microbatchCdcMetadata),
+    val microbatchCdcMetadata =
+      F.col(QuotingUtils.quoteNameParts(Seq(microbatchAlias, cdcMetadata)))
+    val microbatchDeleteSequence =
+      Scd1BatchProcessor.deleteSequenceOf(microbatchCdcMetadata)
+    val microbatchUpsertSequence =
       Scd1BatchProcessor.upsertSequenceOf(microbatchCdcMetadata)
-    )
-    val tombstoneDeleteSeq =
-      Scd1BatchProcessor.deleteSequenceOf(F.col(s"auxiliaryTable.$cdcMetadata"))
+    val tombstoneSequence = F.col(QuotingUtils.quoteNameParts(
+      Seq(tombstoneAlias, Scd1ReconciliationSupport.persistedTombstoneSequenceColName)))
 
-    val keysMatch = changeArgs.keys
-      .map { key =>
-        F.col(s"microbatch.${key.quoted}") === F.col(s"auxiliaryTable.${key.quoted}")
-      }
-      .reduce(_ && _)
+    val keysMatch =
+      Scd1ReconciliationSupport.keyColumnsMatch(changeArgs, microbatchAlias, tombstoneAlias)
 
-    val microbatchRowDeletedByTombstone = effectiveSeq < tombstoneDeleteSeq
+    val microbatchRowDeletedByTombstone =
+      Scd1ReconciliationSupport.tombstoneSupersedesMicrobatch(
+        microbatchDeleteSequence,
+        microbatchUpsertSequence,
+        tombstoneSequence)
 
     aliasedMicrobatchDf.join(
-      right = aliasedAuxiliaryTableDf,
+      right = tombstoneSequenceByKey,
       joinExprs = keysMatch && microbatchRowDeletedByTombstone,
       joinType = "left_anti"
     )
@@ -222,10 +278,14 @@ private[pipelines] object Scd1RowLevelReconciliation extends Scd1ReconciliationS
  *     authors a whole column unless the microbatch omits all of its leaves, and a selected leaf
  *     only when it provides the leaf.
  *  3. Latest microbatch authorship: the candidate with the greatest sequence, or none if no event
- *     authored the field. This is the field's reconciled value.
- *  4. Output: the reconciled fields are reassembled into the key's columns, rebuilding each
+ *     authored the field.
+ *  4. Reconciled field: the newer of the latest microbatch authorship and the key's persisted
+ *     tombstone, if any, which authored null for every field at its sequence. The microbatch wins
+ *     a tie.
+ *  5. Output: the reconciled fields are reassembled into the key's columns, rebuilding each
  *     selected struct from the leaves beneath it. Each field also records its authoring sequence
- *     for every leaf it covers in the key's version map.
+ *     for every leaf it covers in the key's version map. When a tombstone wins, this sequence
+ *     comes from the auxiliary table rather than from a microbatch event.
  */
 private[pipelines] object Scd1LeafLevelReconciliation {
 
@@ -317,32 +377,38 @@ private[pipelines] object Scd1LeafLevelReconciliation {
     }
 
   /**
-   * For every key, combines all rows into a synthetic row representing that key's winning leaf
-   * authorships from the microbatch.
+   * For every key, combines all microbatch rows into a synthetic row representing that key's
+   * winning leaf authorships, reconciled with any persisted tombstone for the key.
    *
    * Columns selected for ignore-null are reconciled leaf by leaf: upsert events refer to their
    * version map to determine which leaves they author, and a null version map means every leaf is
    * authored by the upsert. Every other column is reconciled as a whole value, which an upsert
    * authors if its version map records any of the column's leaves as authored. Delete events
-   * always author null values for every leaf. Selection between events
-   * with equal sequencing values is undefined.
+   * always author null values for every leaf. A persisted tombstone authors
+   * null for leaves whose winning microbatch authorship predates it. Selection between microbatch
+   * events with equal sequencing values is undefined, while microbatch authorship wins a tie with
+   * a persisted tombstone.
    *
    * @param changeArgs The CDC configuration providing the key columns and the ignore-null
    *                   selection.
    * @param resolvedSequencingType The resolved type of CDC sequencing values.
    * @param microbatchDf Microbatch rows whose CDC metadata and version maps have already been
    *                     populated. Version-map keys must match the DataFrame's column names.
-   * @return One row per key, representing a delete if the key's greatest delete sequence is
-   *         greater than its greatest upsert sequence, and an upsert otherwise. An upsert row
-   *         carries its greatest upsert sequence and an entry for every user-data leaf in the
-   *         aggregated version map, with a null delete sequence. A delete row carries its greatest
-   *         delete sequence, with a null upsert sequence and version map, and the user data of the
-   *         delete event at that sequence.
+   * @param auxiliaryTableDf Auxiliary-table rows containing the key columns and CDC metadata for
+   *                         persisted tombstones.
+   * @return At most one surviving row per key. Keys whose events all predate a matching tombstone
+   *         are omitted. A surviving row represents a delete if the key's greatest microbatch
+   *         delete sequence is greater than its greatest microbatch upsert sequence, and an
+   *         upsert otherwise. An upsert row carries its greatest upsert sequence and an entry for
+   *         every user-data leaf in the aggregated version map, with a null delete sequence. A
+   *         delete row carries its greatest delete sequence, with a null upsert sequence and
+   *         version map, and the user data of the delete event at that sequence.
    */
   private[autocdc] def collapseMicrobatchRowsPerKey(
       changeArgs: ChangeArgs,
       resolvedSequencingType: DataType,
-      microbatchDf: DataFrame): DataFrame = {
+      microbatchDf: DataFrame,
+      auxiliaryTableDf: DataFrame): DataFrame = {
     val resolver = microbatchDf.sparkSession.sessionState.conf.resolver
     val userDataSchema = AutoCdcSchemaUtils.excludeColumns(
       schema = microbatchDf.schema,
@@ -350,9 +416,9 @@ private[pipelines] object Scd1LeafLevelReconciliation {
         changeArgs.keys.map(_.name) :+ AutoCdcReservedNames.cdcMetadataColName,
       resolver = resolver
     )
-    val cdcMetadata = microbatchDf.col(AutoCdcReservedNames.cdcMetadataColName)
-    val deleteSequence = Scd1BatchProcessor.deleteSequenceOf(cdcMetadata)
-    val upsertSequence = Scd1BatchProcessor.upsertSequenceOf(cdcMetadata)
+    val microbatchCdcMetadata = microbatchDf.col(AutoCdcReservedNames.cdcMetadataColName)
+    val deleteSequence = Scd1BatchProcessor.deleteSequenceOf(microbatchCdcMetadata)
+    val upsertSequence = Scd1BatchProcessor.upsertSequenceOf(microbatchCdcMetadata)
 
     val fieldsToReconcile = Scd1FieldToReconcile.fromSchema(
       schema = userDataSchema,
@@ -382,13 +448,23 @@ private[pipelines] object Scd1LeafLevelReconciliation {
       .groupBy(changeArgs.keys.map(key => F.col(key.quoted)): _*)
       .agg(aggregateColumns.head, aggregateColumns.tail: _*)
 
-    // Per field, read the latest microbatch authorship from the key's aggregated row.
+    val aggregatedWithTombstoneDf = joinAndFilterOnTombstones(
+      changeArgs = changeArgs,
+      aggregatedPerKeyDf = aggregatedPerKeyDf,
+      auxiliaryTableDf = auxiliaryTableDf
+    )
+
+    // Per field, reconcile the latest microbatch authorship with the key's persisted tombstone.
+    val persistedTombstoneSequence =
+      aggregatedWithTombstoneDf.col(
+        Scd1ReconciliationSupport.persistedTombstoneSequenceColName)
     val collapsedFields = fieldsToReconcile.zip(latestAuthorshipColNames).map {
       case (fieldToReconcile, authorshipColName) =>
         reconcileCollapsedField(
           fieldToReconcile = fieldToReconcile,
           microbatchAuthorship =
-            aggregatedPerKeyDf.col(QuotingUtils.quoteIdentifier(authorshipColName))
+            aggregatedWithTombstoneDf.col(QuotingUtils.quoteIdentifier(authorshipColName)),
+          persistedTombstoneSequence = persistedTombstoneSequence
         )
     }
     val collapsedFieldsByTopLevelName = collapsedFields.groupBy(_.fieldToReconcile.path.head)
@@ -410,8 +486,9 @@ private[pipelines] object Scd1LeafLevelReconciliation {
 
     // Reconstruct the `microbatchDf` but using the aggregated results per key. The resulting
     // dataframe has the same shape as the `microbatchDf`, but a single row per key, representing
-    // the latest authored values per column in the microbatch.
-    aggregatedPerKeyDf.select(
+    // the latest authored values per column in the microbatch. This implicitly drops all temporary
+    // projected columns, such as `persistedTombstoneSequenceColName`.
+    aggregatedWithTombstoneDf.select(
       microbatchDf.schema.fields.toImmutableArraySeq.map { field =>
         val isCdcMetadataField = resolver(AutoCdcReservedNames.cdcMetadataColName, field.name)
         lazy val isKeyField = changeArgs.keys.exists(key => resolver(key.name, field.name))
@@ -498,21 +575,91 @@ private[pipelines] object Scd1LeafLevelReconciliation {
   }
 
   /**
-   * Reconciles one field of a key's row collapsed by [[collapseMicrobatchRowsPerKey]] from the
-   * microbatch's latest authorship of the field.
+   * Joins rows already aggregated per key with persisted tombstones for those keys.
+   *
+   * Aggregated rows whose greatest row-wide microbatch sequence predates the persisted tombstone
+   * are removed. Surviving rows retain their existing columns and gain
+   * [[Scd1ReconciliationSupport.persistedTombstoneSequenceColName]], which downstream field
+   * reconciliation uses as an authorship baseline.
+   *
+   * @param changeArgs The CDC configuration providing the key columns.
+   * @param aggregatedPerKeyDf One row per key, containing
+   *                           [[aggregatedDeleteSequenceColName]] and
+   *                           [[aggregatedUpsertSequenceColName]].
+   * @param auxiliaryTableDf Auxiliary-table rows containing the key columns and CDC metadata for
+   *                         persisted tombstones.
+   * @return Surviving aggregated rows with the tombstone sequence appended, null for keys without
+   *         one.
+   */
+  private def joinAndFilterOnTombstones(
+      changeArgs: ChangeArgs,
+      aggregatedPerKeyDf: DataFrame,
+      auxiliaryTableDf: DataFrame): DataFrame = {
+    val aggregatedAlias = "aggregatedMicrobatch"
+    val tombstoneAlias = "tombstone"
+    val tombstoneSequenceByKey =
+      Scd1ReconciliationSupport.tombstoneSequenceByKey(changeArgs, auxiliaryTableDf)
+    val tombstoneSequence = F.col(QuotingUtils.quoteNameParts(
+      Seq(tombstoneAlias, Scd1ReconciliationSupport.persistedTombstoneSequenceColName)))
+    val keysMatch =
+      Scd1ReconciliationSupport.keyColumnsMatch(changeArgs, aggregatedAlias, tombstoneAlias)
+    val aggregatedDeleteSequence = F.col(
+      QuotingUtils.quoteNameParts(Seq(aggregatedAlias, aggregatedDeleteSequenceColName)))
+    val aggregatedUpsertSequence = F.col(
+      QuotingUtils.quoteNameParts(Seq(aggregatedAlias, aggregatedUpsertSequenceColName)))
+
+    // Keep keys with no tombstone or at least one microbatch event at or after the tombstone.
+    // Earlier-only rows remain deleted by the tombstone and are dropped.
+    aggregatedPerKeyDf
+      .alias(aggregatedAlias)
+      .join(
+        right = tombstoneSequenceByKey.alias(tombstoneAlias),
+        joinExprs = keysMatch,
+        joinType = "left_outer"
+      )
+      .where(!Scd1ReconciliationSupport.tombstoneSupersedesMicrobatch(
+        aggregatedDeleteSequence,
+        aggregatedUpsertSequence,
+        tombstoneSequence))
+      .select(
+        (aggregatedPerKeyDf.schema.fields.toImmutableArraySeq.map { field =>
+          F.col(QuotingUtils.quoteNameParts(Seq(aggregatedAlias, field.name)))
+            .as(field.name, field.metadata)
+        } :+ tombstoneSequence.as(
+          Scd1ReconciliationSupport.persistedTombstoneSequenceColName)): _*
+      )
+  }
+
+  /**
+   * Reconciles one field of a key's row collapsed by [[collapseMicrobatchRowsPerKey]] from two
+   * authorship candidates: the microbatch's latest authorship of the field, and the key's
+   * persisted tombstone, which authored null for every field at its sequence. The newer candidate
+   * wins, and the microbatch wins a tie.
    *
    * @param fieldToReconcile The field to reconcile.
    * @param microbatchAuthorship A struct column with fields `value` (the latest value the
    *                             microbatch authored) and `sequence` (the sequence it was authored
    *                             at). The struct is null when no event authored the field, which
    *                             reads the same as a null value and a null sequence.
-   * @return The microbatch's latest authored value and the sequence it was authored at.
+   * @param persistedTombstoneSequence The sequence of the key's persisted tombstone, which
+   *                                   authored null for every field, or null if the key has none.
+   * @return The winning candidate's value and the sequence it was authored at.
    */
   private def reconcileCollapsedField(
       fieldToReconcile: Scd1FieldToReconcile,
-      microbatchAuthorship: Column): Scd1ReconciledField =
+      microbatchAuthorship: Column,
+      persistedTombstoneSequence: Column): Scd1ReconciledField = {
+    val microbatchAuthoredValue = microbatchAuthorship.getField(aggregatedValueFieldName)
+    val microbatchAuthorshipSequence = microbatchAuthorship.getField(aggregatedSequenceFieldName)
+
+    val tombstoneWins = persistedTombstoneSequence.isNotNull &&
+      (microbatchAuthorshipSequence.isNull ||
+        microbatchAuthorshipSequence < persistedTombstoneSequence)
+
     Scd1ReconciledField(
       fieldToReconcile = fieldToReconcile,
-      reconciledValue = microbatchAuthorship.getField(aggregatedValueFieldName),
-      valueAuthoredAtSequence = microbatchAuthorship.getField(aggregatedSequenceFieldName))
+      reconciledValue = F.when(tombstoneWins, F.lit(null)).otherwise(microbatchAuthoredValue),
+      valueAuthoredAtSequence =
+        F.when(tombstoneWins, persistedTombstoneSequence).otherwise(microbatchAuthorshipSequence))
+  }
 }
