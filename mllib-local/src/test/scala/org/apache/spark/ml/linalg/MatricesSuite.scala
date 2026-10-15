@@ -1016,8 +1016,9 @@ class MatricesSuite extends SparkMLFunSuite {
     val sparse = new SparseMatrix(3, 4, Array(0, 2, 2, 4, 5),
       Array(0, 2, 0, 1, 2), Array(-0.0, 1.0, Double.NaN, 0.0, Double.PositiveInfinity))
     val tall = new DenseMatrix(85, 1, Array.tabulate(85)(_.toDouble))
+    val wide = DenseMatrix.ones(2, 30)
     val matrices = Seq(dense, sparse, dense.transpose, sparse.transpose,
-      tall, tall.toSparse, DenseMatrix.zeros(0, 0), DenseMatrix.zeros(0, 3),
+      tall, tall.toSparse, wide, DenseMatrix.zeros(0, 0), DenseMatrix.zeros(0, 3),
       DenseMatrix.zeros(3, 0), SparseMatrix.fromCOO(0, 3, Seq.empty),
       SparseMatrix.fromCOO(3, 0, Seq.empty))
     val limits = Seq((-1, -5), (0, 0), (1, 1), (2, 15), (3, 25), (5, 50),
@@ -1030,6 +1031,8 @@ class MatricesSuite extends SparkMLFunSuite {
         }
       }
     }
+    val expectedWideRow = "1.0  " * 13
+    assert(wide.toString == s"$expectedWideRow... (30 total)\n$expectedWideRow...")
     assert(new DenseMatrix(2, 2, Array(1.0, 20.0, 3.0, 4.0)).toString(10, 80) ==
       "1.0   3.0  \n20.0  4.0  ")
     assert(new SparseMatrix(2, 2, Array(0, 1, 2), Array(1, 0), Array(2.0, 3.0))

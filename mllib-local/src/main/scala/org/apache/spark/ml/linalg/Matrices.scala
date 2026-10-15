@@ -15,6 +15,15 @@
  * limitations under the License.
  */
 
+/*
+ * Portions of the matrix equality and sparse hashing implementations are adapted from Breeze
+ * 2.1.0 (Matrix.scala, CSCMatrix.scala, and Tensor.scala).
+ *
+ * Copyright 2012 David Hall
+ *
+ * These portions are licensed under the Apache License, Version 2.0 (see above).
+ */
+
 package org.apache.spark.ml.linalg
 
 import java.util.{Arrays, Random}

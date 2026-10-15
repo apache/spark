@@ -1051,9 +1051,6 @@ http://hadoop.apache.org
 
 Breeze is distributed under an Apache License V2.0 (See LICENSE)
 
-This product includes matrix equality, hashing, and formatting code adapted from Breeze.
-Copyright 2012 David Hall.
-
 ===============================================================================
 
 Proximal algorithms outlined in Proximal.scala (package breeze.optimize.proximal)
