@@ -32,6 +32,7 @@ import org.apache.parquet.column.Encoding;
 import org.apache.parquet.column.page.*;
 import org.apache.parquet.column.values.RequiresPreviousReader;
 import org.apache.parquet.column.values.ValuesReader;
+import org.apache.parquet.io.ParquetDecodingException;
 import org.apache.parquet.schema.LogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.DateLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.DecimalLogicalTypeAnnotation;
@@ -131,6 +132,9 @@ public class VectorizedColumnReader {
         this.isCurrentPageDictionaryEncoded = true;
       } catch (IOException e) {
         throw new IOException("could not decode the dictionary for " + descriptor, e);
+      } catch (ParquetDecodingException e) {
+        throw new ParquetDecodingException(
+          "could not decode the dictionary for " + descriptor + ": " + e.getMessage(), e);
       }
     } else {
       this.dictionary = null;
@@ -335,9 +339,7 @@ public class VectorizedColumnReader {
     if (dataEncoding.usesDictionary()) {
       this.dataColumn = null;
       if (dictionary == null) {
-        throw new IOException(
-            "could not read page in col " + descriptor +
-                " as the dictionary was missing for encoding " + dataEncoding);
+        throw new IOException("the dictionary was missing for encoding " + dataEncoding);
       }
       @SuppressWarnings("deprecation")
       Encoding plainDict = Encoding.PLAIN_DICTIONARY; // var to allow warning suppression
@@ -352,11 +354,9 @@ public class VectorizedColumnReader {
       this.isCurrentPageDictionaryEncoded = false;
     }
 
-    try {
-      dataColumn.initFromPage(pageValueCount, in);
-    } catch (IOException e) {
-      throw new IOException("could not read page in col " + descriptor, e);
-    }
+    // readPageV1 and readPageV2 add the page and the column to an IOException or a
+    // ParquetDecodingException thrown here.
+    dataColumn.initFromPage(pageValueCount, in);
     // for PARQUET-246 (See VectorizedDeltaByteArrayReader.setPreviousValues)
     if (CorruptDeltaByteArrays.requiresSequentialReads(writerVersion, dataEncoding) &&
         previousReader instanceof RequiresPreviousReader) {
@@ -413,6 +413,9 @@ public class VectorizedColumnReader {
       return pageValueCount;
     } catch (IOException e) {
       throw new IOException("could not read page " + page + " in col " + descriptor, e);
+    } catch (ParquetDecodingException e) {
+      throw new ParquetDecodingException(
+        "could not read page " + page + " in col " + descriptor + ": " + e.getMessage(), e);
     }
   }
 
@@ -433,6 +436,9 @@ public class VectorizedColumnReader {
       return pageValueCount;
     } catch (IOException e) {
       throw new IOException("could not read page " + page + " in col " + descriptor, e);
+    } catch (ParquetDecodingException e) {
+      throw new ParquetDecodingException(
+        "could not read page " + page + " in col " + descriptor + ": " + e.getMessage(), e);
     }
   }
 }
