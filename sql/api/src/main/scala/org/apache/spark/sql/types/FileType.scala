@@ -28,8 +28,9 @@ import org.apache.spark.annotation.Unstable
  * In SQL the type is named `FILE`, and the `EXTERNAL` keyword is planned to be required when
  * declaring a table column, as in `CREATE TABLE t (f FILE EXTERNAL)`; until then a bare `FILE` is
  * accepted wherever a type is. Its JSON representation is `"file external"` for
- * `FileType.external` and `"file unknown"` for `FileType()`; a bare `"file"` is read as external
- * inside a struct field and as unknown elsewhere.
+ * `FileType.external` and `"file unknown"` for `FileType()`, except that an external file in a
+ * struct field is the plain `"file"`. A bare `"file"` is read as external inside a struct field
+ * and as unknown elsewhere.
  *
  * FileType is planned to be physically stored as a struct with the following fields (see
  * `FileType.FIELDS`), but it deliberately does not extend [[StructType]]:
@@ -63,7 +64,8 @@ case class FileType(mode: FileTypeMode = FileTypeMode.UNKNOWN) extends DataType 
     case _ => "file"
   }
 
-  // The JSON form always carries the mode, as `"file external"` or `"file unknown"`.
+  // The JSON form carries the mode, as `"file external"` or `"file unknown"`. `StructField` writes
+  // an external file as the plain `"file"`.
   override private[sql] def jsonValue: JValue =
     JString(s"file ${mode.name.toLowerCase(Locale.ROOT)}")
 

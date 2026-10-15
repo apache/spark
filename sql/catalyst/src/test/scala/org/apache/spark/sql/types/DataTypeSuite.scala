@@ -1747,19 +1747,24 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
     assert(nested.toDDL === "s STRUCT<f: FILE EXTERNAL>")
     assert(DataType.fromDDL(nested.toDDL) === nested)
 
-    // In JSON the type always carries its mode, also inside a field.
+    // In JSON the type carries its mode, except for an external file in a field, which is the
+    // plain "file".
     assert(DataType.fromJson(schema.json) === schema)
     assert(JsonMethods.compact(JsonMethods.render(schema("f").jsonValue)) ===
-      """{"name":"f","type":"file external","nullable":false,"metadata":{}}""")
+      """{"name":"f","type":"file","nullable":false,"metadata":{}}""")
     assert(JsonMethods.compact(JsonMethods.render(schema("fs").jsonValue)) ===
-      "{\"name\":\"fs\",\"type\":{\"type\":\"array\",\"elementType\":\"file external\"," +
+      "{\"name\":\"fs\",\"type\":{\"type\":\"array\",\"elementType\":\"file\"," +
         "\"containsNull\":true},\"nullable\":true,\"metadata\":{}}")
+    assert(JsonMethods.compact(JsonMethods.render(schema("m").jsonValue)).contains(
+      "\"valueType\":\"file\""))
+    assert(FileType.external.json === "\"file external\"")
     // An unknown file stays unknown when it is nested, as in the result type of a UDF.
     val unknown = new StructType()
       .add("u", FileType())
       .add("a", ArrayType(FileType()))
       .add("s", new StructType().add("g", FileType()))
     assert(DataType.fromJson(unknown.json) === unknown)
+    assert(unknown.json.contains("\"file unknown\""))
     assert(schema.asNullable("f").nullable)
   }
 
@@ -1768,6 +1773,19 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
     assert(DataType.fromJson(ArrayType(FileType()).json) === ArrayType(FileType()))
     assert(DataType.fromJson(MapType(StringType, FileType()).json) ===
       MapType(StringType, FileType()))
+    val bareArray = "{\"type\":\"array\",\"elementType\":\"file\",\"containsNull\":true}"
+    val bareMap = "{\"type\":\"map\",\"keyType\":\"string\",\"valueType\":\"file\"," +
+      "\"valueContainsNull\":true}"
+    assert(DataType.fromJson(bareArray) === ArrayType(FileType()))
+    assert(DataType.fromJson(bareMap) === MapType(StringType, FileType()))
+    // A bare "file" nested in the type of a struct field is external.
+    def field(tpe: String): String =
+      "{\"type\":\"struct\",\"fields\":[{\"name\":\"f\",\"type\":" + tpe +
+        ",\"nullable\":true,\"metadata\":{}}]}"
+    assert(DataType.fromJson(field(bareArray)) ===
+      new StructType().add("f", ArrayType(FileType.external)))
+    assert(DataType.fromJson(field(bareMap)) ===
+      new StructType().add("f", MapType(StringType, FileType.external)))
     assert(DataType.fromJson(ArrayType(FileType.external).json) === ArrayType(FileType.external))
 
     // A bare "file" outside a struct field has no mode, and a mode name that is not known fails.
@@ -1807,7 +1825,12 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
     assert(JsonMethods.compact(JsonMethods.render(schema("m").dataTypeJsonValue)).contains(
       "\"keyType\":\"string collate UTF8_BINARY\""))
     assert(JsonMethods.compact(JsonMethods.render(schema("m").dataTypeJsonValue)).contains(
-      "\"valueType\":\"file external\""))
+      "\"valueType\":\"file\""))
+    // The same holds when the field also has collation metadata.
+    val collated = new StructType().add("m", MapType(StringType("UNICODE"), FileType.external))
+    assert(DataType.fromJson(collated.json) === collated)
+    assert(JsonMethods.compact(JsonMethods.render(collated("m").dataTypeJsonValue)).contains(
+      "\"valueType\":\"file\""))
   }
 
   test("FileType: metadata that describes the file in a field is kept as it is") {
@@ -1819,7 +1842,7 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
     assert(schema("f").metadata.contains("k"))
     assert(DataType.fromJson(schema.json) === schema)
     assert(JsonMethods.compact(JsonMethods.render(schema("f").jsonValue)) ===
-      "{\"name\":\"f\",\"type\":\"file external\",\"nullable\":true," +
+      "{\"name\":\"f\",\"type\":\"file\",\"nullable\":true," +
         "\"metadata\":{\"k\":{\"f\":\"v\"}}}")
   }
 
