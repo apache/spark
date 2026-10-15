@@ -125,11 +125,16 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
       PipelinedChannelShuffleSuite.releaseKill()
       pool.shutdownNow()
     }
-    // Every started task ends: the group's other running tasks are killed with it, and those
-    // reports can arrive after the job has failed.
+    // Every started task ends. Drain the bus first, so that `started` holds every start: each task
+    // started before the kill, and the scheduler posts a start before it fails the job. The
+    // group's other running tasks are killed with it, and their ends, like the job's end, can be
+    // posted after collect has thrown.
+    sc.listenerBus.waitUntilEmpty()
+    val started = events.taskStarts.asScala.map(_.taskInfo.taskId).toSet
+    assert(started.contains(killed))
     eventually(timeout(1.minute)) {
-      assert(events.taskEnds.asScala.map(_.taskInfo.taskId).toSet ===
-        events.taskStarts.asScala.map(_.taskInfo.taskId).toSet)
+      assert(events.taskEnds.asScala.map(_.taskInfo.taskId).toSet === started)
+      assert(!events.jobEnds.isEmpty)
     }
     sc.listenerBus.waitUntilEmpty()
     // The job failed once, and nothing was retried: every task ran once, in the first attempt of
