@@ -17,6 +17,7 @@
 package org.apache.spark.sql.execution.datasources.v2.ffi
 
 import java.lang.ref.{Cleaner, WeakReference}
+import java.util
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
@@ -33,11 +34,13 @@ import org.apache.arrow.vector.types.pojo.{ArrowType, Field, Schema}
 
 import org.apache.spark.{SparkException, SparkThrowable, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.connector.catalog.TableCapability
+import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, BATCH_WRITE, MICRO_BATCH_READ, STREAMING_WRITE, TRUNCATE}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarDataSource, ColumnarReader, ColumnarStreamReader, ColumnarStreamWriter, ColumnarWriter}
+import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchPlanner, ColumnarDataSource, ColumnarOnlyPartitionReaderFactory, ColumnarPlannedBatch, ColumnarStreamReader, ColumnarStreamWriter, ColumnarWriter}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.sql.util.{ArrowUtils, CaseInsensitiveStringMap}
@@ -70,7 +73,26 @@ class NativeDataSource(
     }
   }
 
-  override def reader(schema: StructType): ColumnarReader = {
+  /**
+   * Returns the batch writes that the data source declares, and always the reads and the
+   * streaming writes: Data Source V2 handles a table without those as a Data Source V1 source,
+   * which then fails with errors that do not say why. A scan or a streaming write that the data
+   * source does not declare fails when Spark plans it instead, on the driver.
+   */
+  override def capabilities(): util.Set[TableCapability] = {
+    val library = NativeLibraries.get(location)
+    val declared = withDataSource(library, "check the capabilities of")(_.capabilities)
+    val capabilities = util.EnumSet.of(BATCH_READ, MICRO_BATCH_READ, STREAMING_WRITE)
+    if ((declared & NativeLibrary.BATCH_WRITE) != 0) {
+      capabilities.add(BATCH_WRITE)
+    }
+    if ((declared & NativeLibrary.TRUNCATE) != 0) {
+      capabilities.add(TRUNCATE)
+    }
+    capabilities
+  }
+
+  override def batchPlanner(schema: StructType): ColumnarBatchPlanner = {
     val executorLocation = NativeDataSourceRegistry.distribute(location)
     val library = NativeLibraries.get(location)
     val handle = create(library, "plan a scan of", NativeLibrary.BATCH_READ,
@@ -80,8 +102,8 @@ class NativeDataSource(
           library.createReader(dataSource.handle, address)
         }
     }
-    new NativeDataSourceReader(
-      executorLocation, name, schema, new NativeHandle(handle, library.closeReader))
+    new NativeBatchPlanner(
+      library, executorLocation, name, schema, new NativeHandle(handle, library.closeReader))
   }
 
   override def streamReader(schema: StructType): ColumnarStreamReader = {
@@ -213,24 +235,23 @@ object NativeDataSource {
     WRITE, COMMIT_DATA_WRITER, ABORT_DATA_WRITER, CLOSE_DATA_WRITER)
 }
 
-/** Reads a native data source for a batch scan. */
-class NativeDataSourceReader(
-    location: NativeLibraryLocation,
+/**
+ * Plans a batch scan of a native data source, on the driver, with a reader of the library. The
+ * reader is released once the scan is planned, or when the planner becomes unreachable if the
+ * scan is never planned: the executors read the partitions with the state that it serialized.
+ *
+ * @param executorLocation where the executors find the library
+ */
+class NativeBatchPlanner(
+    library: NativeLibrary,
+    executorLocation: NativeLibraryLocation,
     name: String,
     schema: StructType,
-    @transient private val handle: NativeHandle)
-  extends ColumnarReader {
+    handle: NativeHandle)
+  extends ColumnarBatchPlanner {
   import NativeCalls._
 
-  // Set on the driver when the partitions are planned, and serialized to the executors.
-  private var readerState: Array[Byte] = Array.emptyByteArray
   private var readSchema: StructType = schema
-  @transient private var plannedPartitions: Array[InputPartition] = _
-  // Why planning the partitions failed. The handle is released after the first try, but the
-  // scan can be planned again, for example by the lazy values of the physical plan that call it.
-  @transient private var planningError: Throwable = _
-
-  @transient private lazy val library = NativeLibraries.get(location)
 
   override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
     // Only the predicates that can be expressed in JSON are passed to the library.
@@ -267,29 +288,29 @@ class NativeDataSourceReader(
     pruned
   }
 
-  override def partitions(): Array[InputPartition] = synchronized {
-    if (plannedPartitions == null) {
-      if (planningError != null) {
-        throw planningError
-      }
-      try {
-        val partitions = call(name, "plan a scan of")(library.partitions(handle.get))
-        readerState = bytesOrEmpty(
-          call(name, "plan a scan of")(optional(library.serializeReader(handle.get))))
-        plannedPartitions = NativeInputPartition.from(partitions)
-      } catch {
-        case e: Throwable =>
-          planningError = e
-          throw e
-      } finally {
-        // The executors only need the serialized state.
-        handle.close()
-      }
+  override def plan(): ColumnarPlannedBatch = {
+    try {
+      val partitions = call(name, "plan a scan of")(library.partitions(handle.get))
+      val readerState = bytesOrEmpty(
+        call(name, "plan a scan of")(optional(library.serializeReader(handle.get))))
+      ColumnarPlannedBatch(
+        NativeInputPartition.from(partitions),
+        new NativePartitionReaderFactory(executorLocation, name, readerState, readSchema))
+    } finally {
+      // The executors only need the serialized state.
+      handle.close()
     }
-    plannedPartitions
   }
+}
 
-  override def read(partition: InputPartition): PartitionReader[ColumnarBatch] = {
+/** Reads the partitions of a planned batch scan of a native data source, on the executors. */
+class NativePartitionReaderFactory(
+    location: NativeLibraryLocation,
+    name: String,
+    readerState: Array[Byte],
+    readSchema: StructType)
+  extends ColumnarOnlyPartitionReaderFactory {
+  override def createColumnarReader(partition: InputPartition): PartitionReader[ColumnarBatch] = {
     new NativePartitionReader(
       location, name, readerState, partition.asInstanceOf[NativeInputPartition].bytes, readSchema)
   }

@@ -46,8 +46,9 @@ import org.apache.spark.sql.connector.expressions.filter.{And, Predicate}
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, DataSourceV2Strategy}
-import org.apache.spark.sql.execution.datasources.v2.columnar.ColumnarScan
+import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchScan, ColumnarScan}
 import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, UserDefinedPythonDataSource}
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.test.SharedSparkSession
@@ -959,11 +960,11 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     val (name, location) =
       NativeDataSourceRegistry.lookup("native_range", session.sessionState.conf).get
     val options = new CaseInsensitiveStringMap(Map("fail" -> "plan").asJava)
-    val reader =
-      new NativeDataSource(location, name, options).reader(StructType.fromDDL("id BIGINT"))
+    val batch = new ColumnarBatchScan(
+      new NativeDataSource(location, name, options).batchPlanner(StructType.fromDDL("id BIGINT")))
     (1 to 2).foreach { _ =>
       checkError(
-        exception = intercept[SparkRuntimeException](reader.partitions()),
+        exception = intercept[SparkRuntimeException](batch.planInputPartitions()),
         condition = "NATIVE_DATA_SOURCE_ERROR",
         parameters = Map(
           "action" -> "plan a scan of",
@@ -1039,9 +1040,13 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     }
     // A data source declares the operations that it supports with its capabilities. Spark
     // reports the others as unsupported, without calling the library, which here does not
-    // implement them either.
-    check("DATA_SOURCE_BATCH_WRITE_NOT_SUPPORTED", Map("description" -> "ro_native_sink")) {
-      session.range(1).write.format("ro_native_sink").mode("append").save()
+    // implement them either. The table reports the batch writes to Data Source V2, which rejects
+    // them while it analyzes the query, before it computes the data to write: here, in a shuffle
+    // stage that adaptive query execution would run before the write.
+    check("UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        Map("tableName" -> "`ro_native_sink`", "operation" -> "batch write")) {
+      session.range(10).selectExpr("if(id >= 0, raise_error('boom'), id) AS id").repartition(2)
+        .write.format("ro_native_sink").mode("append").save()
     }
     check("DATA_SOURCE_MICRO_BATCH_SCAN_NOT_SUPPORTED", Map("description" -> "ro_native_counter")) {
       runStream {
@@ -1068,10 +1073,29 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     // Replacing the existing data requires the capability SPARK_DS_TRUNCATE.
     val dir = Utils.createTempDir()
     val noTruncate = (NativeLibrary.BATCH_WRITE | NativeLibrary.STREAMING_WRITE).toString
-    check("NATIVE_DATA_SOURCE_ERROR", Map("action" -> "plan a write to", "name" -> "native_sink",
-        "msg" -> "The data source does not support the save mode overwrite.")) {
+    check("UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        Map("tableName" -> "`native_sink`", "operation" -> "truncate in batch mode")) {
       session.range(1).write.format("native_sink").option("path", dir.getPath)
         .option("capabilities", noTruncate).mode("overwrite").save()
+    }
+    // The table has the capabilities that the data source declares with the options of the table,
+    // which the options of a write to a table in a catalog can override: the write checks them
+    // again.
+    try {
+      session.sql("CREATE TABLE native_sink_table (id BIGINT) USING native_sink " +
+        s"OPTIONS (path '${dir.getPath}')")
+      check("DATA_SOURCE_BATCH_WRITE_NOT_SUPPORTED", Map("description" -> "native_sink")) {
+        session.range(1).writeTo("native_sink_table")
+          .option("capabilities", NativeLibrary.BATCH_READ.toString).append()
+      }
+      check("NATIVE_DATA_SOURCE_ERROR", Map("action" -> "plan a write to",
+          "name" -> "native_sink",
+          "msg" -> "The data source does not support the save mode overwrite.")) {
+        session.range(1).writeTo("native_sink_table").option("capabilities", noTruncate)
+          .overwrite(lit(true))
+      }
+    } finally {
+      session.sql("DROP TABLE IF EXISTS native_sink_table")
     }
     check("NATIVE_DATA_SOURCE_ERROR", Map("action" -> "plan a write to", "name" -> "native_sink",
         "msg" -> "The data source does not support the output mode complete.")) {

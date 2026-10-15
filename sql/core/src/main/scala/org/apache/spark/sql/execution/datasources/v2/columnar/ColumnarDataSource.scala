@@ -16,8 +16,12 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.columnar
 
+import java.util
+
+import org.apache.spark.sql.connector.catalog.TableCapability
+import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, BATCH_WRITE, MICRO_BATCH_READ, STREAMING_WRITE, TRUNCATE}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
+import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -34,8 +38,15 @@ trait ColumnarDataSource {
   /** Returns the schema of the data, when the user does not specify it. */
   def schema(): StructType
 
-  /** Returns a reader for a batch scan of the given schema. */
-  def reader(schema: StructType): ColumnarReader
+  /**
+   * Returns the capabilities that [[ColumnarTable]] reports to Data Source V2, which checks some
+   * of them while it analyzes a query: by default, all the operations that this trait has.
+   */
+  def capabilities(): util.Set[TableCapability] =
+    util.EnumSet.of(BATCH_READ, BATCH_WRITE, MICRO_BATCH_READ, STREAMING_WRITE, TRUNCATE)
+
+  /** Returns the planner of a batch scan of the given schema. */
+  def batchPlanner(schema: StructType): ColumnarBatchPlanner
 
   /** Returns a reader for a micro-batch streaming scan of the given schema. */
   def streamReader(schema: StructType): ColumnarStreamReader
@@ -60,12 +71,12 @@ trait ColumnarDataSource {
 }
 
 /**
- * Reads the data of a [[ColumnarDataSource]] for a batch scan. Spark pushes operations down by
+ * Plans a batch scan of a [[ColumnarDataSource]], on the driver. Spark pushes operations down by
  * calling, each at most once and in this order, `pushPredicates`, `pushLimit` and `pruneColumns`,
- * and plans the scan with `partitions`, on the driver. Then it serializes the reader to the
- * executors, where `read` is called for each partition.
+ * then plans the scan with `plan`, at most once. Only the [[PartitionReaderFactory]] of the
+ * planned scan is serialized to the executors.
  */
-trait ColumnarReader extends Serializable {
+trait ColumnarBatchPlanner {
 
   /**
    * Returns the predicates that the reader uses, to skip data or to only return the rows for which
@@ -78,17 +89,23 @@ trait ColumnarReader extends Serializable {
   def pushLimit(limit: Int): Boolean = false
 
   /**
-   * Returns whether `read` returns exactly the columns of `requiredSchema`, the top-level columns
-   * that the query needs, including the columns of the pushed predicates, instead of all the
-   * columns of the read schema.
+   * Returns whether the partitions return exactly the columns of `requiredSchema`, the top-level
+   * columns that the query needs, including the columns of the pushed predicates, instead of all
+   * the columns of the read schema.
    */
   def pruneColumns(requiredSchema: StructType): Boolean = false
 
-  def partitions(): Array[InputPartition]
-
-  /** Reads a partition on an executor. A batch only needs to be valid until the next one. */
-  def read(partition: InputPartition): PartitionReader[ColumnarBatch]
+  /**
+   * Plans the partitions of the scan, after the pushdown. The reader factory reads them on the
+   * executors, with columnar readers whose batches only need to be valid until the next one.
+   */
+  def plan(): ColumnarPlannedBatch
 }
+
+/** The partitions of a planned batch scan, and the factory that reads them on the executors. */
+case class ColumnarPlannedBatch(
+    partitions: Array[InputPartition],
+    readerFactory: PartitionReaderFactory)
 
 /**
  * Reads the data of a [[ColumnarDataSource]] for a micro-batch streaming scan, with offsets in
