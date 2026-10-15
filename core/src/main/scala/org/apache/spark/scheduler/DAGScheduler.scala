@@ -45,7 +45,7 @@ import org.apache.spark.network.shuffle.{BlockStoreClient, MergeFinalizerListene
 import org.apache.spark.network.shuffle.protocol.MergeStatuses
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
-import org.apache.spark.rdd.{DeterministicLevel, RDD, RDDCheckpointData, ReliableRDDCheckpointData, ShuffleReducePartitionMapping}
+import org.apache.spark.rdd.{DeterministicLevel, LocalRDDCheckpointData, RDD, RDDCheckpointData, ReliableRDDCheckpointData, ShuffleReducePartitionMapping}
 import org.apache.spark.resource.{CpuAmount, ResourceProfile, TaskResourceProfile}
 import org.apache.spark.resource.ResourceProfile.{CPUS, DEFAULT_RESOURCE_PROFILE_ID, EXECUTOR_CORES_LOCAL_PROPERTY, MAX_TASKS_PER_EXECUTOR_LOCAL_PROPERTY, PYSPARK_MEMORY_LOCAL_PROPERTY}
 import org.apache.spark.rpc.RpcTimeout
@@ -1460,9 +1460,9 @@ private[spark] class DAGScheduler(
     }
     // Reject a reliable checkpoint anywhere in a pipelined-group MEMBER's within-stage chain.
     // Keyed on checkpointData being ReliableRDDCheckpointData, not isCheckpointed, since the
-    // write has not happened yet. Cache / .persist() / local checkpoint are whole-partition and
-    // ephemeral and are not rejected. A reliably-checkpointed RDD `cp` is inside a member stage
-    // iff:
+    // write has not happened yet. Persistence is checked separately before gang admission;
+    // cached producer inputs are supported. A reliably-checkpointed RDD `cp` is inside a member
+    // stage iff:
     //  - PRODUCER side: cp is within some producer root's own within-stage chain (walk parents from
     //    the producer root, stopping at shuffle boundaries), OR
     //  - CONSUMER side: cp's OWN within-stage chain reads a pipelined shuffle (walk parents from
@@ -1487,6 +1487,28 @@ private[spark] class DAGScheduler(
         "a reliable RDD checkpoint in a pipelined-group member's within-stage chain")
     }
     checkPipelinedStageCreation(finalRDD, partitions, jobId)
+  }
+
+  /** Reject persistence that could bypass a native pipelined shuffle reader. */
+  private def checkPipelinedCacheSupported(finalRDD: RDD[_]): Unit = {
+    val persisted = new HashSet[RDD[_]]
+    traverseRDDGraph(finalRDD) { (rdd, enqueue) =>
+      if (rdd.getStorageLevel != StorageLevel.NONE ||
+          rdd.checkpointData.exists(_.isInstanceOf[LocalRDDCheckpointData[_]])) {
+        persisted += rdd
+      }
+      rdd.dependencies.foreach(dep => enqueue(dep.rdd))
+    }
+    // Cache locations cannot establish a stable cut: eviction can revive an upstream producer,
+    // and a partial cache hit skips a reader whose producer still needs its termination ACK.
+    // Check storage intent instead, including pending local checkpoints and narrow descendants.
+    val visited = new HashSet[RDD[_]]
+    if (persisted.exists(rdd => rddChainReadsPipelinedShuffle(rdd, visited))) {
+      throw pipelinedUnsupportedError(
+        "cache/persist/localCheckpoint in a pipelined consumer's within-stage chain; " +
+          "unpersist cached RDDs or rebuild locally checkpointed consumers without " +
+          "localCheckpoint before submitting the job; persist producer inputs instead")
+    }
   }
 
   /** Validate the stages a pipelined result job would create, without registering them. */
@@ -2576,19 +2598,17 @@ private[spark] class DAGScheduler(
       return
     }
 
-    // Gang admission for a pipelined job: the runnable stage graph is one pipelined group (a
-    // materialized prefix's stages never run), so check up front (before any stage is created)
-    // that the cluster can run the entire group concurrently. If it cannot fit, fail the job now
-    // -- no partial scheduler state, and no member ever left running while a sibling waits on
-    // slots (true all-or-nothing gang admission). Inert for a regular job (no pipelined
-    // dependency).
-    if (hasPipelined && rejectUnadmittablePipelinedGroup(jobId, finalRDD, partitions, listener)) {
-      // Clear the slot-check retry count an earlier deferral may have left.
-      barrierJobIdToNumTasksCheckFailures.remove(jobId)
-      return
-    }
     var finalStage: ResultStage = null
     try {
+      if (hasPipelined) {
+        checkPipelinedCacheSupported(finalRDD)
+        // Validate cache semantics before counting tasks: a cached consumer could suppress
+        // producers included in the demand, or skip readers needed by a running producer.
+        if (rejectUnadmittablePipelinedGroup(jobId, finalRDD, partitions, listener)) {
+          barrierJobIdToNumTasksCheckFailures.remove(jobId)
+          return
+        }
+      }
       // Reject unsupported pipelined idioms and cross-job reuse from the RDD graph, before
       // any stage is created, so a rejection leaves no partial scheduler state. Gated on
       // hasPipelined: every idiom this checks concerns a pipelined group, so it must not run for a
