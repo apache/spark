@@ -108,22 +108,26 @@ same JVM, host, benchmark inputs, and JMH settings.
 The following results compare the generic `BidK` path with `BigDecimal` under
 a `MathContext` of 43 digits (Decimal160) and 70 digits (Decimal256). Values
 are nanoseconds per operation. The ratio is `BigDecimal / BID`, so a value
-greater than 1 means BID was faster. Decimal160 add/mul/div/FMA/compare use
-the unrolled `Wide6` kernel; Decimal256 add/mul/div/FMA/compare use `Wide8`.
+greater than 1 means BID was faster. Decimal160 and Decimal192 use the
+unrolled `Wide6` kernel; Decimal224 and Decimal256 use `Wide8`. Multiply uses
+three coefficient limbs through Decimal192 and four for Decimal224/256. FMA
+stays fixed-width unless product alignment can overflow.
 Divide is 64-bit Knuth D on those limbs. Sqrt is Heron iteration on `Wide8`
-(Decimal160) or 12-limb `Wide12` (Decimal256), not the generic 16-limb
-workspace. Combo-field unpack/pack uses Bid64-style masks on the last packed
-word. In-range results that already fit in `p` digits skip `decimalDigits`.
-Compare aligns by exponent instead of counting digits. Parse is still
-`DecNum`. Repeated arithmetic can stay in `BidUnpacked` (kind, sign,
-unbiased exponent, four limbs) and pack only at I/O.
+(Decimal160) or 12-limb `Wide12` (Decimal192/224/256), not the
+generic 16-limb workspace. Packed and unpacked calls use the same kernels.
+Combo-field unpack/pack uses Bid64-style masks on the last packed word.
+In-range results that already fit in `p` digits skip `decimalDigits`. Compare
+aligns by exponent instead of counting digits. Parse is still `DecNum`.
+Repeated arithmetic can stay in `BidUnpacked` (kind, sign, unbiased exponent,
+four limbs) and pack only at I/O.
 These numbers are not comparable to the specialized 64/128 table above.
 
 `BidK` `k=2` and `k=4` dispatch to those specialists. `k=3` is a Decimal96
 specialist (private scratch, two-limb coefficients, three-limb products,
-digit-pair sqrt). `k=5` uses Wide6. `k=6` through `k=8` use Wide8, with generic
-Knuth multiply/FMA retained for `k=6` and `k=7`. Libm is Bid128 DPML for
-`k<=4` and unsupported for `k>4`.
+digit-pair sqrt). `k=5` and `k=6` use Wide6; `k=7` and `k=8` use Wide8.
+Knuth is retained where it is faster for k=7 multiply and as the
+overflow-safe FMA fallback. Libm is Bid128 DPML for `k<=4` and unsupported
+for `k>4`.
 
 The table below is `BidKRaw` vs naked `BigDecimal` (`MathContext` precision
 `p=9k-2`, `HALF_EVEN`), profile `quick`, 15 Oct 2026. Ratio is
@@ -132,20 +136,20 @@ The table below is `BidKRaw` vs naked `BigDecimal` (`MathContext` precision
 
 | Function / workload | k=2 | k=3 | k=4 | k=5 | k=6 | k=7 | k=8 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| add (same quantum) | 2.40x | 1.11x | 1.50x | 0.71x | 0.73x | 0.73x | 0.82x |
-| add (mixed quantum) | 2.19x | 1.06x | 0.95x | 0.63x | 0.47x | 0.49x | 0.49x |
-| add (full precision) | 2.69x | 1.48x | 1.28x | 0.95x | 0.71x | 0.66x | 0.69x |
-| subtract | 2.12x | 1.66x | 1.82x | 0.93x | 0.87x | 0.98x | 0.99x |
-| multiply (same quantum) | 1.14x | 1.33x | 2.11x | 1.15x | 0.77x | 0.71x | 0.44x |
-| multiply (mixed quantum) | 0.84x | 0.96x | 1.51x | 0.96x | 0.59x | 0.67x | 0.60x |
-| multiply (full precision) | 1.18x | 1.28x | 1.60x | 1.04x | 0.73x | 0.70x | 0.44x |
-| divide (same quantum) | 0.97x | 0.78x | 0.87x | 0.52x | 0.45x | 0.46x | 0.45x |
-| divide (mixed quantum) | 1.35x | 0.66x | 1.06x | 0.59x | 0.49x | 0.50x | 0.49x |
-| divide (full precision) | 0.97x | 0.69x | 0.85x | 0.54x | 0.47x | 0.48x | 0.47x |
-| square root | 7.16x | 2.41x | 2.86x | 0.89x | 0.89x | 1.11x | 1.07x |
-| fused multiply-add | 1.10x | 0.99x | 0.62x | 0.72x | 0.15x | 0.17x | 0.39x |
-| ordered less-than | 0.43x | 0.97x | 0.47x | 0.33x | 0.30x | 0.33x | 0.34x |
-| cohort-equal numeric comparison | 0.45x | 0.84x | 0.47x | 0.29x | 0.27x | 0.29x | 0.30x |
+| add (same quantum) | 2.24x | 1.12x | 1.53x | 0.69x | 0.74x | 0.80x | 0.92x |
+| add (mixed quantum) | 2.48x | 1.07x | 1.01x | 0.66x | 0.60x | 0.50x | 0.51x |
+| add (full precision) | 2.86x | 1.52x | 1.29x | 0.97x | 0.94x | 0.70x | 0.70x |
+| subtract | 2.23x | 1.74x | 1.85x | 0.96x | 1.00x | 1.08x | 1.06x |
+| multiply (same quantum) | 1.13x | 1.48x | 2.07x | 1.09x | 1.02x | 0.69x | 0.42x |
+| multiply (mixed quantum) | 0.81x | 1.02x | 1.47x | 0.96x | 1.00x | 0.65x | 0.57x |
+| multiply (full precision) | 1.13x | 1.24x | 1.55x | 0.98x | 0.88x | 0.67x | 0.41x |
+| divide (same quantum) | 0.98x | 0.77x | 0.86x | 0.54x | 0.48x | 0.46x | 0.45x |
+| divide (mixed quantum) | 1.40x | 0.63x | 1.03x | 0.58x | 0.55x | 0.48x | 0.48x |
+| divide (full precision) | 1.04x | 0.70x | 0.86x | 0.54x | 0.49x | 0.49x | 0.48x |
+| square root | 7.39x | 2.45x | 2.88x | 0.89x | 1.03x | 1.26x | 1.09x |
+| fused multiply-add | 1.21x | 1.06x | 0.62x | 0.76x | 0.66x | 0.38x | 0.38x |
+| ordered less-than | 0.46x | 0.81x | 0.44x | 0.33x | 0.33x | 0.35x | 0.38x |
+| cohort-equal numeric comparison | 0.45x | 0.84x | 0.49x | 0.28x | 0.30x | 0.33x | 0.35x |
 
 Run `build/sbt "libbid/Test/runMain org.bidfp.BidKBenchmark kscan quick"`
 to refresh. Compare rows for `k=2` and `k=4` now call

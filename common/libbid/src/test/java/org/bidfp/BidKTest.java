@@ -41,6 +41,7 @@ public final class BidKTest {
     arithmeticVsBigDecimal(FormatParams.DECIMAL256);
     decimal160Cases();
     productDominantFma();
+    intermediateWideCases();
     convertWideTo128();
     decimal96Dpml();
     wideLibmUnsupported();
@@ -327,6 +328,37 @@ public final class BidKTest {
       expectClose(
           result, x.multiply(x).add(z, mc), format,
           "product-dominant fma " + format + " x=" + bx + " z=" + bz);
+    }
+  }
+
+  private static void intermediateWideCases() {
+    FormatParams[] formats = {
+      FormatParams.DECIMAL192,
+      FormatParams.DECIMAL224
+    };
+    for (FormatParams format : formats) {
+      int precision = format.precision();
+      String nines = "9".repeat(precision);
+      MathContext mc = new MathContext(
+          precision, java.math.RoundingMode.HALF_EVEN);
+      BigDecimal value = new BigDecimal(nines);
+      BidK bid = BidK.parse(format, nines);
+      expectClose(
+          bid.multiply(bid, RoundingMode.TIES_TO_EVEN, new StatusFlags()),
+          value.multiply(value, mc),
+          format,
+          "fixed-width multiply " + format);
+
+      String scaled = nines + "e-" + precision;
+      BigDecimal x = new BigDecimal(scaled);
+      BigDecimal one = BigDecimal.ONE;
+      BidK bx = BidK.parse(format, scaled);
+      BidK bone = BidK.parse(format, "1");
+      expectClose(
+          bx.fma(bx, bone, RoundingMode.TIES_TO_EVEN, new StatusFlags()),
+          x.multiply(x).add(one, mc),
+          format,
+          "addend-dominant fma " + format);
     }
   }
 

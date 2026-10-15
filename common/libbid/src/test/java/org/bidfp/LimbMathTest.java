@@ -54,6 +54,7 @@ public final class LimbMathTest {
     int[] d3 = new int[LimbMath.DIGITS32];
     threeLimbKnown();
     wide6Multiply();
+    wide8Multiply();
     wideDivide();
     wideSqrt();
     for (int n = 0; n < 200; n++) {
@@ -130,6 +131,25 @@ public final class LimbMathTest {
     r.store(dest);
     expectEq(dest, toBig(new long[] {a.l0, a.l1, a.l2}).multiply(
         toBig(new long[] {b.l0, b.l1, b.l2})), "wide6 mul3");
+  }
+
+  private static void wide8Multiply() {
+    Wide8 a = new Wide8();
+    Wide8 b = new Wide8();
+    Wide8 r = new Wide8();
+    a.l0 = 0x0123_4567_89ab_cdefL;
+    a.l1 = 0xfedc_ba98_7654_3210L;
+    a.l2 = 0x0000_0000_0000_00ffL;
+    a.l3 = 0x123L;
+    b.l0 = 0x1111_1111_1111_1111L;
+    b.l1 = 0x2222_2222_2222_2222L;
+    b.l2 = 0x0000_0000_0000_0003L;
+    b.l3 = 0x456L;
+    r.multiply4(a, b);
+    long[] dest = new long[LimbMath.WORK];
+    r.store(dest);
+    expectEq(dest, toBig(new long[] {a.l0, a.l1, a.l2, a.l3}).multiply(
+        toBig(new long[] {b.l0, b.l1, b.l2, b.l3})), "wide8 mul4");
   }
 
   private static void wideDivide() {

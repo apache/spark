@@ -17,7 +17,7 @@
 package org.bidfp;
 
 /**
- * Unrolled Wide8 kernels for Decimal192 through Decimal256 ({@code k=6..8}).
+ * Unrolled Wide8 kernels for Decimal224 and Decimal256 ({@code k=7..8}).
  * Bid64/Bid128 stay specialized; other k values keep narrower kernels or
  * {@link BidKKnuth}.
  */
@@ -26,7 +26,7 @@ final class BidK256 {
   }
 
   static boolean matches(FormatParams format) {
-    return format.units() >= 6;
+    return format.units() >= 7;
   }
 
   static void add(
@@ -86,7 +86,7 @@ final class BidK256 {
       StatusFlags flags,
       long[] out,
       BidKScratch.Frame frame) {
-    if (format.units() < 8) {
+    if (format.units() == 7) {
       frame.ya.store(frame.w0);
       frame.yb.store(frame.w1);
       BidKKnuth.mulFromWork(
@@ -220,8 +220,7 @@ final class BidK256 {
     boolean pNeg = an ^ bn;
     int productExp = ae + be;
     int difference = productExp - ce;
-    if (format.units() < 8
-        || (difference > 0 && difference <= format.precision() + 2)) {
+    if (difference > 0 && difference <= format.precision() + 2) {
       frame.ya.store(frame.w0);
       frame.yb.store(frame.w1);
       frame.yt.store(frame.w4);
@@ -455,7 +454,12 @@ final class BidK256 {
         negative = bn;
       }
     }
-    pack(format, negative, ae, frame.yr, mode, flags, frame, out);
+    if (format.coefficientAllowed(frame.yr)) {
+      BidEmit.finite(
+          format, negative, ae + format.bias(), frame.yr, out, frame);
+    } else {
+      pack(format, negative, ae, frame.yr, mode, flags, frame, out);
+    }
   }
 
   static int compareAbsolute(

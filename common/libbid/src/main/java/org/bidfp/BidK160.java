@@ -17,15 +17,15 @@
 package org.bidfp;
 
 /**
- * Unrolled Wide6 kernels for Decimal160 ({@code k=5}, p=43). Decimal96 uses
- * {@link BidK96}; Bid64/Bid128 stay specialized.
+ * Unrolled Wide6 kernels for Decimal160 and Decimal192 ({@code k=5..6}).
+ * Decimal96 uses {@link BidK96}; Bid64/Bid128 stay specialized.
  */
 final class BidK160 {
   private BidK160() {
   }
 
   static boolean matches(FormatParams format) {
-    return format.units() == 5;
+    return format.units() == 5 || format.units() == 6;
   }
 
   static void add(
@@ -56,8 +56,7 @@ final class BidK160 {
       long[] out,
       BidKScratch.Frame frame) {
     addWide(
-        format, an, ae, frame.xa, bn, be, frame.xb, mode, flags, out, frame,
-        format.units() == 3);
+        format, an, ae, frame.xa, bn, be, frame.xb, mode, flags, out, frame);
   }
 
   static void mul(
@@ -93,11 +92,7 @@ final class BidK160 {
       pack(format, negative, ae + be, frame.xr, mode, flags, frame, out);
       return;
     }
-    if (format.units() == 3) {
-      frame.xr.multiply2(frame.xa, frame.xb);
-    } else {
-      frame.xr.multiply3(frame.xa, frame.xb);
-    }
+    frame.xr.multiply3(frame.xa, frame.xb);
     pack(format, negative, ae + be, frame.xr, mode, flags, frame, out);
   }
 
@@ -168,8 +163,22 @@ final class BidK160 {
       StatusFlags flags,
       long[] out,
       BidKScratch.Frame frame) {
-    frame.ya.copyFrom(coeff);
     int extra = format.precision() + 4;
+    if (format.units() == 6) {
+      frame.za.copyFrom(coeff);
+      if ((exp & 1) != 0) {
+        frame.za.multiplySmall(10L);
+        exp--;
+      }
+      frame.za.multiplyPow10(2 * extra);
+      exp -= 2 * extra;
+      boolean remSticky = Wide12.sqrtFloor(
+          frame.za, frame.zb, frame.zr, frame.zt, frame.zw);
+      frame.xr.copyFrom(frame.zb);
+      pack(format, false, exp / 2, frame.xr, remSticky, mode, flags, frame, out);
+      return;
+    }
+    frame.ya.copyFrom(coeff);
     if ((exp & 1) != 0) {
       frame.ya.multiplySmall(10L);
       exp--;
@@ -218,8 +227,7 @@ final class BidK160 {
     boolean pNeg = an ^ bn;
     int productExp = ae + be;
     int difference = productExp - ce;
-    if (format.units() == 5
-        && difference > 0 && difference <= format.precision() + 2) {
+    if (difference > 0 && difference <= format.precision() + 2) {
       frame.xa.store(frame.w0);
       frame.xb.store(frame.w1);
       frame.xt.store(frame.w4);
@@ -227,15 +235,11 @@ final class BidK160 {
           format, an, ae, bn, be, cn, ce, mode, flags, out, frame);
       return;
     }
-    if (format.units() == 3) {
-      frame.xr.multiply2(frame.xa, frame.xb);
-    } else {
-      frame.xr.multiply3(frame.xa, frame.xb);
-    }
+    frame.xr.multiply3(frame.xa, frame.xb);
     frame.xa.copyFrom(frame.xr);
     addWide(
         format, pNeg, productExp, frame.xa, cn, ce, frame.xt, mode, flags, out,
-        frame, false);
+        frame);
   }
 
   static void quantize(
@@ -356,8 +360,7 @@ final class BidK160 {
       RoundingMode mode,
       StatusFlags flags,
       long[] out,
-      BidKScratch.Frame frame,
-      boolean twoLimb) {
+      BidKScratch.Frame frame) {
     if (left.isZero() && right.isZero()) {
       frame.xr.clear();
       pack(format, an && bn, Math.min(ae, be), frame.xr, mode, flags, frame, out);
@@ -373,7 +376,7 @@ final class BidK160 {
     }
     if (ae == be) {
       packAligned(
-          format, an, ae, left, bn, right, mode, flags, out, frame, twoLimb);
+          format, an, ae, left, bn, right, mode, flags, out, frame);
       return;
     }
     Wide6 a = left;
@@ -406,15 +409,10 @@ final class BidK160 {
     if (difference > 0) {
       a.multiplyPow10(difference);
       aExp -= difference;
-      twoLimb = false;
     }
     boolean negative;
     if (aNeg == bNeg) {
-      if (twoLimb) {
-        frame.xr.add2(a, b);
-      } else {
-        frame.xr.add(a, b);
-      }
+      frame.xr.add(a, b);
       negative = aNeg;
     } else {
       int cmp = a.compare(b);
@@ -424,18 +422,10 @@ final class BidK160 {
         return;
       }
       if (cmp > 0) {
-        if (twoLimb) {
-          frame.xr.subtract2(a, b);
-        } else {
-          frame.xr.subtract(a, b);
-        }
+        frame.xr.subtract(a, b);
         negative = aNeg;
       } else {
-        if (twoLimb) {
-          frame.xr.subtract2(b, a);
-        } else {
-          frame.xr.subtract(b, a);
-        }
+        frame.xr.subtract(b, a);
         negative = bNeg;
       }
     }
@@ -452,15 +442,10 @@ final class BidK160 {
       RoundingMode mode,
       StatusFlags flags,
       long[] out,
-      BidKScratch.Frame frame,
-      boolean twoLimb) {
+      BidKScratch.Frame frame) {
     boolean negative;
     if (an == bn) {
-      if (twoLimb) {
-        frame.xr.add2(left, right);
-      } else {
-        frame.xr.add(left, right);
-      }
+      frame.xr.add(left, right);
       negative = an;
     } else {
       int cmp = left.compare(right);
@@ -470,18 +455,10 @@ final class BidK160 {
         return;
       }
       if (cmp > 0) {
-        if (twoLimb) {
-          frame.xr.subtract2(left, right);
-        } else {
-          frame.xr.subtract(left, right);
-        }
+        frame.xr.subtract(left, right);
         negative = an;
       } else {
-        if (twoLimb) {
-          frame.xr.subtract2(right, left);
-        } else {
-          frame.xr.subtract(right, left);
-        }
+        frame.xr.subtract(right, left);
         negative = bn;
       }
     }

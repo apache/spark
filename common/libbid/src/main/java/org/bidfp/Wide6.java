@@ -68,6 +68,21 @@ final class Wide6 {
     extra = 0L;
   }
 
+  void copyFrom(Wide12 other) {
+    for (int i = 6; i < 12; i++) {
+      if (other.limb(i) != 0L) {
+        throw new ArithmeticException("Wide12 value exceeds Wide6");
+      }
+    }
+    l0 = other.limb(0);
+    l1 = other.limb(1);
+    l2 = other.limb(2);
+    l3 = other.limb(3);
+    l4 = other.limb(4);
+    l5 = other.limb(5);
+    extra = 0L;
+  }
+
   void copyFrom(UIntLimbs coeff) {
     l0 = coeff.limb(0);
     l1 = coeff.limb(1);

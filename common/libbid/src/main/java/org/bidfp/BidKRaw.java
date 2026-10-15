@@ -253,7 +253,7 @@ final class BidKRaw {
     }
     BidKScratch.Frame frame = BidKScratch.acquire();
     try {
-      Kind kx = BidKKnuth.unpackLeftWork(format, x, frame, flags);
+      Kind kx = BidKKnuth.unpackLeft(format, x, frame, flags);
       if (kx == Kind.NAN || kx == Kind.SNAN) {
         BidCodec.packNaN(format, false, false, out);
         return;
@@ -267,16 +267,28 @@ final class BidKRaw {
         }
         return;
       }
-      if (frame.an && !LimbMath.isZero(frame.w0)) {
+      if (frame.an && !frame.ac.isZero()) {
         flags.raise(StatusFlags.INVALID);
         BidCodec.packNaN(format, false, false, out);
         return;
       }
-      if (LimbMath.isZero(frame.w0)) {
+      if (frame.ac.isZero()) {
+        LimbMath.copyLimbs(frame.w0, frame.ac);
         BidKKnuth.pack(
             format, frame.an, frame.ae, frame.w0, mode, flags, frame, out);
         return;
       }
+      if (BidK160.matches(format)) {
+        BidK160.sqrt(
+            format, frame.ae, frame.ac, mode, flags, out, frame);
+        return;
+      }
+      if (BidK256.matches(format)) {
+        BidK256.sqrt(
+            format, frame.ae, frame.ac, mode, flags, out, frame);
+        return;
+      }
+      LimbMath.copyLimbs(frame.w0, frame.ac);
       BidKKnuth.sqrtFromWork(format, frame.ae, mode, flags, out, frame);
     } finally {
       BidKScratch.release(frame);
@@ -302,7 +314,7 @@ final class BidKRaw {
     BidKScratch.Frame frame = BidKScratch.acquire();
     try {
       boolean wide160 = BidK160.matches(format);
-      boolean wide256 = format.units() == 8;
+      boolean wide256 = BidK256.matches(format);
       Kind kx;
       Kind ky;
       boolean aZero;
