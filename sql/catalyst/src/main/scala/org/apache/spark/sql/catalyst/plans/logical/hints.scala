@@ -118,7 +118,7 @@ case class HintInfo(
 
   override def toString: String = {
     val fields = strategy.map(s => s"strategy=$s").toSeq ++
-      Option.when(runtimeFilterSource)("runtime_filter_source")
+      Option.when(runtimeFilterSource)(RuntimeFilterHint.hintName.toLowerCase(Locale.ROOT))
     if (fields.isEmpty) "none" else fields.mkString("(", ", ", ")")
   }
 }
