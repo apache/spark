@@ -18,6 +18,7 @@
 package org.apache.spark.sql.pipelines.autocdc
 
 import org.apache.spark.sql.{functions => F, Column, QueryTest, Row}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -81,6 +82,24 @@ class Scd1ReconciledFieldSuite extends QueryTest with SharedSparkSession {
       Scd1ReconciledField.versionMapFrom(Seq(emptyStructField, nameField), LongType))
 
     checkAnswer(result, Row(Map(encodedPath("name") -> 7L)))
+  }
+
+  test("versionMapFrom builds a typed empty map without leaves under legacy collection types") {
+    val sequencingType = new StructType()
+      .add("timestamp", LongType)
+      .add("tieBreaker", IntegerType)
+    val emptyStructField = reconciledColumn(
+      name = "empty",
+      leafPaths = Seq.empty,
+      valueAuthoredAtSequence = F.struct(F.lit(10L).as("timestamp"), F.lit(1).as("tieBreaker")))
+
+    withSQLConf(SQLConf.LEGACY_CREATE_EMPTY_COLLECTION_USING_STRING_TYPE.key -> "true") {
+      val result = spark.range(1).select(
+        Scd1ReconciledField.versionMapFrom(Seq(emptyStructField), sequencingType).as("versionMap"))
+
+      assert(result.schema("versionMap").dataType == Scd1VersionMap.mapType(sequencingType))
+      checkAnswer(result, Row(Map.empty[String, Row]))
+    }
   }
 
   test("versionMapFrom casts sequences to the sequencing type") {

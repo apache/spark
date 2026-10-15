@@ -18,7 +18,7 @@
 package org.apache.spark.sql.pipelines.autocdc
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
+import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution, Resolver}
 import org.apache.spark.sql.types._
 
 class Scd1FieldToReconcileSuite extends SparkFunSuite {
@@ -29,11 +29,16 @@ class Scd1FieldToReconcileSuite extends SparkFunSuite {
 
   private def fieldsOf(
       schema: StructType,
-      ignoreNullSelection: Option[ColumnSelection]): Set[Scd1FieldToReconcile] =
-    Scd1FieldToReconcile.fromSchema(
+      ignoreNullSelection: Option[ColumnSelection],
+      resolver: Resolver = caseSensitiveResolution): Set[Scd1FieldToReconcile] = {
+    val fields = Scd1FieldToReconcile.fromSchema(
       schema = schema,
       ignoreNullSelection = ignoreNullSelection,
-      resolver = caseSensitiveResolution).toSet
+      resolver = resolver)
+    // Compare as a set, since the order is unspecified, without letting it hide duplicates.
+    assert(fields.distinct.size == fields.size, s"Duplicate fields to reconcile: $fields")
+    fields.toSet
+  }
 
   private def includeColumns(names: String*): Option[ColumnSelection] =
     Some(ColumnSelection.IncludeColumns(names.map(UnqualifiedColumnName(_))))
@@ -116,11 +121,8 @@ class Scd1FieldToReconcileSuite extends SparkFunSuite {
       .add("Profile", new StructType().add("City", StringType))
       .add("Name", StringType)
 
-    val fields = Scd1FieldToReconcile.fromSchema(
-      schema = schema,
-      ignoreNullSelection = includeColumns("profile"),
-      resolver = caseInsensitiveResolution)
-
-    assert(fields.toSet == Set(ignoreNullLeaf("Profile", "City"), wholeColumn("Name", Seq("Name"))))
+    assert(fieldsOf(schema, includeColumns("profile"), caseInsensitiveResolution) == Set(
+      ignoreNullLeaf("Profile", "City"),
+      wholeColumn("Name", Seq("Name"))))
   }
 }
