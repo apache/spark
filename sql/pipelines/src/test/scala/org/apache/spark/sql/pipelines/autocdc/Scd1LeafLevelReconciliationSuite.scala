@@ -32,23 +32,25 @@ class Scd1LeafLevelReconciliationSuite extends QueryTest with SharedSparkSession
 
   private def changeArgs(
       ignoreNullSelection: Option[ColumnSelection],
-      keys: Seq[UnqualifiedColumnName] = Seq(UnqualifiedColumnName("id"))): ChangeArgs =
+      keys: Seq[UnqualifiedColumnName] = Seq(UnqualifiedColumnName("id")),
+      columnSelection: Option[ColumnSelection] = None): ChangeArgs =
     ChangeArgs(
       keys = keys,
       sequencing = F.col("seq"),
       storedAsScdType = ScdType.Type1,
+      columnSelection = columnSelection,
       ignoreNullSelection = ignoreNullSelection
     )
 
   private def extendMicrobatchRowsWithVersionMap(
       input: DataFrame,
       ignoreNullSelection: Option[ColumnSelection],
-      unalignedSchema: Option[StructType] = None): DataFrame =
+      unalignedMicrobatchSchema: Option[StructType] = None): DataFrame =
     Scd1LeafLevelReconciliation.extendMicrobatchRowsWithVersionMap(
       changeArgs = changeArgs(ignoreNullSelection),
       resolvedSequencingType = LongType,
-      alignedDf = input,
-      unalignedSchema = unalignedSchema.getOrElse(input.schema)
+      alignedMicrobatchDf = input,
+      unalignedMicrobatchSchema = unalignedMicrobatchSchema.getOrElse(input.schema)
     )
 
   private def collapseMicrobatchRowsPerKey(
@@ -76,6 +78,57 @@ class Scd1LeafLevelReconciliationSuite extends QueryTest with SharedSparkSession
     Scd1BatchProcessor.cdcMetadataColSchema(sequencingType)
 
   private def encodedPath(parts: String*): String = Scd1VersionMap.serializeKey(parts)
+
+  test("reconcileMicrobatch returns selected target-aligned rows after applying tombstones") {
+    val inputSchema = new StructType()
+      .add("id", IntegerType)
+      .add("name", StringType)
+      .add("city", StringType)
+      .add("seq", LongType)
+      .add("sourceOnly", StringType)
+    val targetSchema = new StructType()
+      .add("id", IntegerType)
+      .add("name", StringType)
+      .add("city", StringType)
+      .add("targetOnly", StringType)
+      .add(metadataColName, metadataSchema)
+    val auxiliarySchema = new StructType()
+      .add("id", IntegerType)
+      .add(metadataColName, metadataSchema)
+    val input = dataFrameOf(inputSchema)(
+      Row(1, "Alice", null, 1L, "excluded"),
+      Row(1, null, "San Francisco", 3L, "excluded"),
+      Row(2, "Stale", null, 1L, "excluded")
+    )
+    val target = dataFrameOf(targetSchema)()
+    val auxiliary = dataFrameOf(auxiliarySchema)(
+      Row(1, Row(2L, null, null)),
+      Row(2, Row(2L, null, null))
+    )
+    val name = encodedPath("name")
+    val city = encodedPath("city")
+    val targetOnly = encodedPath("targetOnly")
+    val args = changeArgs(
+      ignoreNullSelection = Some(ColumnSelection.IncludeColumns(Seq(
+        UnqualifiedColumnName("name"), UnqualifiedColumnName("city"),
+        UnqualifiedColumnName("targetOnly")
+      ))),
+      columnSelection = Some(ColumnSelection.ExcludeColumns(
+        Seq(UnqualifiedColumnName("seq"), UnqualifiedColumnName("sourceOnly"))))
+    )
+
+    val result = Scd1LeafLevelReconciliation.reconcileMicrobatch(
+      changeArgs = args,
+      resolvedSequencingType = LongType,
+      validatedBatchDf = input,
+      targetTableDf = target,
+      auxiliaryTableDf = auxiliary
+    )
+
+    assert(result.schema.fieldNames.sameElements(targetSchema.fieldNames))
+    val expectedVersionMap = Map(name -> 2L, city -> 3L, targetOnly -> 2L)
+    checkAnswer(result, Row(1, null, "San Francisco", null, Row(null, 3L, expectedVersionMap)))
+  }
 
   test("extendMicrobatchRowsWithVersionMap is a no-op when ignore-null is disabled") {
     val schema = new StructType()
@@ -159,7 +212,7 @@ class Scd1LeafLevelReconciliationSuite extends QueryTest with SharedSparkSession
           .add("city", StringType)
           .add("zip", StringType))
         .add(metadataColName, metadataSchema)
-      val unalignedSchema = new StructType()
+      val unalignedMicrobatchSchema = new StructType()
         .add("ID", IntegerType)
         .add("Selected", StringType)
         .add("Carried", StringType)
@@ -174,7 +227,7 @@ class Scd1LeafLevelReconciliationSuite extends QueryTest with SharedSparkSession
         input = input,
         ignoreNullSelection =
           Some(ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("selected")))),
-        unalignedSchema = Some(unalignedSchema)
+        unalignedMicrobatchSchema = Some(unalignedMicrobatchSchema)
       )
 
       val expectedVersionMap = Map[String, Any](

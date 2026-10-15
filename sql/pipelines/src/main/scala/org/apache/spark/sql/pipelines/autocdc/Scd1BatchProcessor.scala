@@ -33,22 +33,16 @@ import org.apache.spark.util.ArrayImplicits._
  * @param changeArgs The CDC flow configuration.
  * @param resolvedSequencingType The post-analysis [[DataType]] of the sequencing column, derived
  *                               from the flow's resolved DataFrame at flow setup time.
- * @param reconciliationStrategy Strategy used to reconcile the microbatch. In the default AutoCDC
- *                               execution mode an event wins wholesale and all columns share its
- *                               row-level version. Modes such as ignore-null can reconcile leaves
- *                               independently because different events may author them, and
- *                               therefore require a different reconciliation strategy.
  */
 case class Scd1BatchProcessor(
     changeArgs: ChangeArgs,
-    resolvedSequencingType: DataType,
-    reconciliationStrategy: Scd1ReconciliationStrategy = Scd1RowLevelReconciliation) {
+    resolvedSequencingType: DataType) {
 
   /** Reconciles a validated CDC microbatch into the form consumed by the table merges. */
   private[autocdc] def reconcileMicrobatch(
       validatedBatchDf: DataFrame,
       auxiliaryTableDf: DataFrame): DataFrame =
-    reconciliationStrategy.reconcileMicrobatch(
+    Scd1RowLevelReconciliation.reconcileMicrobatch(
       changeArgs = changeArgs,
       resolvedSequencingType = resolvedSequencingType,
       validatedBatchDf = validatedBatchDf,
