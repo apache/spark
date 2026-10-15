@@ -329,20 +329,24 @@ class LimitPushdownSuite extends PlanTest {
       x.groupBy("x.a".attr)("x.a".attr, count("x.a".attr)).limit(1).analyze)
   }
 
-  test("SPARK-60150: No limit 1 push down through a group only Aggregate on a float key") {
+  test("SPARK-60150: Push down limit 1 below a group only Aggregate on a float key") {
     val d = $"d".double
     val i = $"i".int
     val relation = LocalRelation.fromExternalRows(Seq(d, i), Seq(Row(-0.0d, 1), Row(0.0d, 2)))
-    // The aggregate outputs the float key normalized, and a project would output it raw.
-    val plan1 = relation.groupBy(d)(d).limit(1).analyze
-    comparePlans(Optimize.execute(plan1), plan1)
-    val plan2 = relation.groupBy(d)(d).select(d).limit(1).analyze
-    comparePlans(Optimize.execute(plan2), plan2)
-    // Pushed down when the float key is not output.
+    // The aggregate outputs the float key normalized, and a project would output it raw, so the
+    // aggregate is kept and only the limit is pushed below it.
+    comparePlans(
+      Optimize.execute(relation.groupBy(d)(d).limit(1).analyze),
+      LocalLimit(1, relation).groupBy(d)(d).limit(1).analyze)
+    comparePlans(
+      Optimize.execute(relation.groupBy(d)(d).select(d).limit(1).analyze),
+      LocalLimit(1, relation).groupBy(d)(d).select(d).limit(1).analyze)
+    // Replaced by a project when the float key is not output.
     comparePlans(
       Optimize.execute(relation.groupBy(d, i)(i).limit(1).analyze),
       LocalLimit(1, relation).select(i).limit(1).analyze)
   }
+
 
   test("Push down limit 1 through Offset") {
     comparePlans(
