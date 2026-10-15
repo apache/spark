@@ -24,7 +24,7 @@ import java.util.Locale
 import scala.util.Using
 
 import org.apache.spark.{SparkConf, SparkRuntimeException}
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
@@ -225,7 +225,11 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
 
   // An object that Oracle's table listing surfaces but that cannot be read as a table.
   // `setup`/`teardown` are the DDL to create/drop it; `objectName` is its name in SYSTEM.
-  case class NonSelectableObjectCase(setup: Seq[String], objectName: String, teardown: Seq[String])
+  case class NonSelectableObjectCase(
+      setup: Seq[String],
+      objectName: String,
+      teardown: Seq[String],
+      objectType: String)
 
   private val nonSelectableObjectCases = Map(
     "synonym to a procedure (ORA-04044)" -> NonSelectableObjectCase(
@@ -233,7 +237,8 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
         "CREATE PROCEDURE test_proc AS BEGIN NULL; END;",
         "CREATE SYNONYM proc_synonym FOR test_proc"),
       objectName = "PROC_SYNONYM",
-      teardown = Seq("DROP SYNONYM proc_synonym", "DROP PROCEDURE test_proc")),
+      teardown = Seq("DROP SYNONYM proc_synonym", "DROP PROCEDURE test_proc"),
+      objectType = "SYNONYM"),
     "synonym to a broken function (ORA-04044)" -> NonSelectableObjectCase(
       // Function referencing a missing object -> created INVALID.
       setup = Seq(
@@ -245,17 +250,20 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
           |END;""".stripMargin,
         "CREATE SYNONYM func_synonym FOR broken_func"),
       objectName = "FUNC_SYNONYM",
-      teardown = Seq("DROP SYNONYM func_synonym", "DROP FUNCTION broken_func")),
+      teardown = Seq("DROP SYNONYM func_synonym", "DROP FUNCTION broken_func"),
+      objectType = "SYNONYM"),
     "synonym -> missing target (ORA-00980)" -> NonSelectableObjectCase(
       // Oracle does not validate the target on CREATE SYNONYM; SELECT raises ORA-00980.
       setup = Seq("CREATE SYNONYM broken_synonym FOR non_existent_table_xyz"),
       objectName = "BROKEN_SYNONYM",
-      teardown = Seq("DROP SYNONYM broken_synonym")),
+      teardown = Seq("DROP SYNONYM broken_synonym"),
+      objectType = "SYNONYM"),
     "invalid view (ORA-04063)" -> NonSelectableObjectCase(
       // FORCE-create a view over a missing table -> view is INVALID; SELECT raises ORA-04063.
       setup = Seq("CREATE FORCE VIEW invalid_view AS SELECT * FROM non_existent_table_xyz"),
       objectName = "INVALID_VIEW",
-      teardown = Seq("DROP VIEW invalid_view")))
+      teardown = Seq("DROP VIEW invalid_view"),
+      objectType = "VIEW"))
 
   namedGridTest("SPARK-57778: non-selectable object is handled gracefully")(
       nonSelectableObjectCases) { testCase =>
@@ -275,6 +283,27 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
       }
       assert(e.getCondition == "JDBC_OBJECT_NOT_SELECTABLE")
       assert(e.getMessageParameters.get("objectName").contains(testCase.objectName))
+
+      val writeEx = intercept[AnalysisException] {
+        spark.range(1).toDF("id").write.mode(SaveMode.Append)
+          .jdbc(jdbcUrl, s"SYSTEM.${testCase.objectName}", db.getJdbcProperties())
+      }
+      assert(writeEx.getCondition == "JDBC_OBJECT_NOT_SELECTABLE")
+      assert(writeEx.getMessageParameters.get("objectName")
+        .contains(s"SYSTEM.${testCase.objectName}"))
+
+      Using.resource(getConnection()) { conn =>
+        val rs = conn.prepareStatement(
+          "SELECT OBJECT_TYPE FROM ALL_OBJECTS " +
+            s"WHERE OWNER = 'SYSTEM' AND OBJECT_NAME = '${testCase.objectName}'")
+          .executeQuery()
+        try {
+          assert(rs.next())
+          assert(rs.getString(1) === testCase.objectType)
+        } finally {
+          rs.close()
+        }
+      }
     } finally {
       Using.resource(getConnection()) { conn =>
         testCase.teardown.foreach(conn.prepareStatement(_).executeUpdate())

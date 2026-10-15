@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Date, DriverManager, Timestamp}
+import java.sql.{Date, DriverManager, SQLException, Timestamp}
 import java.time.{Instant, LocalDate}
 import java.util.Properties
 
@@ -30,10 +30,13 @@ import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
@@ -110,6 +113,86 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
   private lazy val schema4 = StructType(
       StructField("NAME", StringType) ::
       StructField("ID", IntegerType) :: Nil)
+
+  private def notSelectableH2Dialect(tableName: String): JdbcDialect = new JdbcDialect {
+    private def isNotSelectableTable(table: String): Boolean = {
+      table.replace("\"", "").equalsIgnoreCase(tableName)
+    }
+
+    override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
+
+    override def getTableExistsQuery(table: String): String = {
+      if (isNotSelectableTable(table)) {
+        "SELECT CAST('not-selectable' AS INTEGER)"
+      } else {
+        super.getTableExistsQuery(table)
+      }
+    }
+
+    override def isNotSelectableObjectException(e: SQLException): Boolean = {
+      Option(e.getMessage).exists(_.contains("not-selectable"))
+    }
+  }
+
+  private def h2TableExists(schema: String, table: String): Boolean = {
+    val rs = conn.getMetaData.getTables(null, schema, table, null)
+    try {
+      rs.next()
+    } finally {
+      rs.close()
+    }
+  }
+
+  test("SPARK-60259: V1 JDBC writes fail on not-selectable objects for every SaveMode") {
+    val table = "TEST.NOT_SELECTABLE"
+    val dialect = notSelectableH2Dialect(table)
+    JdbcDialects.unregisterDialect(H2Dialect())
+    JdbcDialects.registerDialect(dialect)
+    try {
+      val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+      Seq(SaveMode.Append, SaveMode.Overwrite, SaveMode.ErrorIfExists, SaveMode.Ignore)
+        .foreach { mode =>
+          val e = intercept[AnalysisException] {
+            df.write.mode(mode).jdbc(url, table, new Properties())
+          }
+          checkError(
+            exception = e,
+            condition = "JDBC_OBJECT_NOT_SELECTABLE",
+            parameters = Map("objectName" -> table))
+          assert(e.getCause.isInstanceOf[SQLException], e.getCause)
+          assert(!h2TableExists("TEST", "NOT_SELECTABLE"), mode.toString)
+        }
+    } finally {
+      JdbcDialects.unregisterDialect(dialect)
+      JdbcDialects.registerDialect(H2Dialect())
+    }
+  }
+
+  test("SPARK-60259: missing JDBC table is still created by append and overwrite") {
+    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+    df.write.mode(SaveMode.Append).jdbc(url, "TEST.CREATED_FROM_MISSING_APPEND", new Properties())
+    assert(2 === spark.read.jdbc(url, "TEST.CREATED_FROM_MISSING_APPEND", new Properties()).count())
+    df.write.mode(SaveMode.Overwrite)
+      .jdbc(url, "TEST.CREATED_FROM_MISSING_OVERWRITE", new Properties())
+    assert(
+      2 === spark.read.jdbc(url, "TEST.CREATED_FROM_MISSING_OVERWRITE", new Properties()).count())
+  }
+
+  test("SPARK-60259: JDBCTableCatalog.tableExists still returns false for not-selectable objects") {
+    val table = "TEST.NOT_SELECTABLE"
+    val dialect = notSelectableH2Dialect(table)
+    JdbcDialects.unregisterDialect(H2Dialect())
+    JdbcDialects.registerDialect(dialect)
+    try {
+      val catalog = new JDBCTableCatalog()
+      catalog.initialize("h2", new CaseInsensitiveStringMap(
+        Map("url" -> url, "driver" -> "org.h2.Driver").asJava))
+      assert(!catalog.tableExists(Identifier.of(Array("TEST"), "NOT_SELECTABLE")))
+    } finally {
+      JdbcDialects.unregisterDialect(dialect)
+      JdbcDialects.registerDialect(H2Dialect())
+    }
+  }
 
   test("Basic CREATE") {
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)

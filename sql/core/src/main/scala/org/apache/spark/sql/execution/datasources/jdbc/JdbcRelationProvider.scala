@@ -59,7 +59,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
     val dialect = JdbcDialects.get(options.url)
     val conn = dialect.createConnectionFactory(options)(-1)
     val (shouldSave, tableSchema) = try {
-      val tableExists = JdbcUtils.tableExists(conn, options)
+      val tableExists = JdbcUtils.tableExistsForWrite(conn, options)
       if (tableExists) {
         mode match {
           case SaveMode.Overwrite =>
