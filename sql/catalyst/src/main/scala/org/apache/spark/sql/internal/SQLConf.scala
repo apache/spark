@@ -2619,6 +2619,7 @@ object SQLConf {
         "splits, but can reduce parallelism for large or skewed keys. Requires " +
         s"${V2_BUCKETING_ENABLED.key} to be enabled.")
       .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 
