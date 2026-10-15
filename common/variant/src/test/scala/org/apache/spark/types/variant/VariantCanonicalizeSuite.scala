@@ -63,6 +63,15 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
     b.result()
   }
 
+  // Copy a variant through the public `appendVariant` (the non-canonical copy path) into a fresh
+  // builder, like `buildDouble`/`buildFloat` above. This is the method under test; `canon` is its
+  // canonical-mode counterpart.
+  private def appendCopy(v: Variant): Variant = {
+    val b = new VariantBuilder(false)
+    b.appendVariant(v)
+    b.result()
+  }
+
   // offset-list integer width stored in an object/array value header at position 0
   private def valueOffsetWidth(v: Variant): Int =
     ((v.getValue()(0) >> VariantUtil.BASIC_TYPE_BITS) & 0x3) + 1
@@ -878,6 +887,191 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
           VariantUtil.encodeKey(VariantUtil.getMetadataKey(meta, id))),
         s"getMetadataKeyBytes must equal encodeKey(getMetadataKey) at id $id")
     }
+  }
+
+  // ----- appendVariant (copy mode) byte-preservation -----
+  //
+  // `appendVariant` shares its re-emit walk with `canonicalize` (appendVariantImpl, gated by
+  // `needCanonicalization`). These tests pin that the copy path leaves bytes untouched -- the
+  // guarantee schema_of_variant, shredding, and stored-value byte-equality rely on -- so a future
+  // slip in the shared walk cannot silently canonicalize copied bytes. The fixtures reuse the
+  // non-canonical encodings from the isCanonical tests above but assert a DIFFERENT property (that
+  // copy preserves them); non-canonicalness is guarded with `!bytesEqual(canon(v), v)` so the copy
+  // assertion can never pass vacuously, without re-treading the `isCanonical rejects ...` tests.
+
+  test("appendVariant copy mode never canonicalizes a scalar, at any depth or builder state") {
+    def prim(t: Int): Byte = ((t << VariantUtil.BASIC_TYPE_BITS) | VariantUtil.PRIMITIVE).toByte
+    val emptyMeta = parse("1").getMetadata
+    val int8One = new Variant(
+      Array[Byte](prim(VariantUtil.INT8), 1, 0, 0, 0, 0, 0, 0, 0), emptyMeta) // INT8 holding 1
+    val hi = "hi".getBytes(java.nio.charset.StandardCharsets.UTF_8)
+    val longStrHi = new Variant(
+      java.nio.ByteBuffer.allocate(1 + 4 + hi.length).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        .put(prim(VariantUtil.LONG_STR)).putInt(hi.length).put(hi).array(), emptyMeta)
+    val nonCanonicalNaN = new Variant(
+      java.nio.ByteBuffer.allocate(9).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        .put(prim(VariantUtil.DOUBLE)).putLong(0x7ff8000000000001L).array(), emptyMeta)
+    val nonCanonicalFloatNaN = new Variant(
+      java.nio.ByteBuffer.allocate(5).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        .put(prim(VariantUtil.FLOAT)).putInt(0x7fc00001).array(), emptyMeta)
+
+    // Top-level scalars.
+    val scalars = Seq(
+      "INT8(1)"         -> int8One,
+      "decimal 1.50"    -> parse("1.50"),
+      "float -0.0"      -> buildFloat(-0.0f),
+      "double -0.0"     -> buildDouble(-0.0d),
+      "double NaN"      -> nonCanonicalNaN,
+      "float NaN"       -> nonCanonicalFloatNaN,
+      "long_str \"hi\"" -> longStrHi)
+    for ((label, v) <- scalars) {
+      assert(!bytesEqual(canon(v), v), s"$label fixture must be non-canonical")
+      assert(bytesEqual(appendCopy(v), v), s"copy must preserve $label verbatim")
+    }
+
+    // Nested one and two levels deep: pins that the copy flag is carried through the recursive
+    // descent into object fields and array elements, not just applied at the root.
+    val int8 = int8One.getValue
+    val arrInt8 = new Variant(
+      java.nio.ByteBuffer.allocate(1 + 1 + 2 + int8.length)
+        .order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        .put(VariantUtil.arrayHeader(false, 1))
+        .put(1.toByte)                         // size = 1
+        .put(0.toByte).put(int8.length.toByte) // offsets [0, 9]
+        .put(int8).array(),
+      emptyMeta)
+    val objInt8 = new Variant(
+      java.nio.ByteBuffer.allocate(1 + 1 + 1 + 2 + int8.length)
+        .order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        .put(VariantUtil.objectHeader(false, 1, 1))
+        .put(1.toByte)                         // size = 1
+        .put(0.toByte)                         // id list [0] -> key "a"
+        .put(0.toByte).put(int8.length.toByte) // offsets [0, 9]
+        .put(int8).array(),
+      parse("""{"a":1}""").getMetadata)
+    val arrInner = arrInt8.getValue
+    val arrArrInt8 = new Variant(
+      java.nio.ByteBuffer.allocate(1 + 1 + 2 + arrInner.length)
+        .order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        .put(VariantUtil.arrayHeader(false, 1))
+        .put(1.toByte)                             // size = 1
+        .put(0.toByte).put(arrInner.length.toByte) // offsets [0, len]
+        .put(arrInner).array(),
+      emptyMeta)
+    val nested = Seq(
+      "[INT8(1)]"       -> arrInt8,
+      "{\"a\":INT8(1)}" -> objInt8,
+      "[[INT8(1)]]"     -> arrArrInt8)
+    for ((label, v) <- nested) {
+      assert(!bytesEqual(canon(v), v), s"$label fixture must be non-canonical")
+      assert(bytesEqual(appendCopy(v), v), s"copy must preserve the nested scalar in $label")
+    }
+
+    // Real callers (CAST AS VARIANT, to_variant, shredding) append into a NON-EMPTY builder. A
+    // scalar never references the dictionary, so its value bytes must stay verbatim even when the
+    // builder already holds a key.
+    val seeded = {
+      val b = new VariantBuilder(false)
+      b.addKey("preexisting")
+      b.appendVariant(int8One)
+      b.result()
+    }
+    assert(Arrays.equals(seeded.getValue, int8One.getValue),
+      "appending a scalar into a non-empty builder must preserve its value bytes verbatim")
+  }
+
+  test("appendVariant copy mode reproduces canonical and pass-through values byte-for-byte") {
+    def build(f: VariantBuilder => Unit): Variant = {
+      val b = new VariantBuilder(false); f(b); b.result()
+    }
+    val wideArray = "[" + (0 until 200).mkString(",") + "]" // data > 255 B -> 2-byte offset width
+    val byteStable = Seq(
+      "1"                -> parse("1"),
+      "-1"               -> parse("-1"),
+      "1.5"              -> parse("1.5"),
+      "\"hi\""           -> parse("\"hi\""),
+      "70-char long_str" -> parse("\"" + ("x" * 70) + "\""),
+      "true"             -> parse("true"),
+      "null"             -> parse("null"),
+      "date"             -> build(_.appendDate(19000)),
+      "timestamp"        -> build(_.appendTimestamp(1234567890123L)),
+      "timestamp_ntz"    -> build(_.appendTimestampNtz(1234567890123L)),
+      "binary"           -> build(_.appendBinary(Array[Byte](1, 2, 3, 4))),
+      "uuid"             -> build(_.appendUuid(new java.util.UUID(1L, 2L))),
+      "empty array"      -> parse("[]"),
+      "empty object"     -> parse("{}"),
+      "scalar array"     -> parse("[1,2,3]"),
+      "nested array"     -> parse("[1,[2,[3]]]"),
+      "mixed array"      -> parse("[true,null,\"hi\"]"),
+      "wide array"       -> parse(wideArray))
+    for ((label, v) <- byteStable) {
+      assert(bytesEqual(appendCopy(v), v), s"copy of $label must be byte-identical")
+    }
+  }
+
+  test("appendVariant copy mode keeps stored object field order (canonical sort gated)") {
+    // appendVariant renumbers the dictionary into walk order, so a raw round-trip is NOT byte
+    // identity for keyed objects. Pin the gating against the Issue #1 legacy fixture instead: an
+    // object whose field DATA is physically stored in UTF-16 order while the canonical layout is
+    // UTF-8 order. The canon-convergence line below deliberately echoes the legacy-order test -- it
+    // is the contrast anchor: canon() must converge legacy and modern, while copy() must NOT.
+    val k1 = new String(Character.toChars(0xE000))
+    val k2 = new String(Character.toChars(0x1F600))
+    val modern = parse(s"""{"$k1":1,"$k2":2}""") // parse stores fields UTF-8-sorted: [k1, k2]
+    val meta = modern.getMetadata
+    val idk1 = if (VariantUtil.getMetadataKey(meta, 0) == k1) 0 else 1
+    val idk2 = 1 - idk1
+    val v1 = parse("1").getValue // INT1(1)
+    val v2 = parse("2").getValue // INT1(2)
+    val header = VariantUtil.objectHeader(false, 1, 1) // 1-byte size, idSize 1, offsetSize 1
+    val legacyValue = java.nio.ByteBuffer.allocate(1 + 1 + 2 + 3 + v1.length + v2.length)
+      .order(java.nio.ByteOrder.LITTLE_ENDIAN)
+      .put(header)
+      .put(2.toByte) // size = 2 fields
+      .put(idk2.toByte).put(idk1.toByte) // id list in UTF-16 order [k2, k1]
+      .put(0.toByte).put(v2.length.toByte).put((v2.length + v1.length).toByte) // offsets [0, 2, 4]
+      .put(v2).put(v1) // data stored as [k2's value, k1's value]
+      .array()
+    val legacy = new Variant(legacyValue, meta)
+    assert(!isCanon(legacy), "sanity: legacy object is not canonical")
+    assert(bytesEqual(canon(legacy), canon(modern)), "contrast anchor: canon converges the two")
+    // The gate: copy must NOT apply the canonical field sort, so the two stay byte-distinct.
+    assert(!bytesEqual(appendCopy(legacy), appendCopy(modern)),
+      "copy must preserve stored field-data order")
+    // A canonical, flat object round-trips through copy unchanged (walk order == dict order here).
+    assert(bytesEqual(appendCopy(modern), modern),
+      "a canonical flat object copies to identical bytes")
+    // copy preserves the key -> value mapping even though it does not re-sort the data.
+    assert(appendCopy(legacy).getFieldByKey(k1).getLong == 1, "k1 -> 1 preserved by copy")
+    assert(appendCopy(legacy).getFieldByKey(k2).getLong == 2, "k2 -> 2 preserved by copy")
+  }
+
+  test("appendVariant copy mode preserves meaning and validity for arbitrary shapes") {
+    // Whole-function net, independent of the two gated differences above: for ANY input shape --
+    // nested, keyed, unsorted, wide objects/arrays -- copy() must emit a VALID variant that is
+    // semantically equal to the input. Equality is canon's contract (byte-equal canonical forms),
+    // so canon serves here only as a semantic-equality oracle.
+    val wide = "{\"a\":[" + (0 until 200).mkString(",") + "]}" // forces 2-byte offset widths
+    val corpus = Seq(
+      "1", "1.50", "\"hi\"", "true", "null", "[1,2,3]", "[1,[2,[3]]]", "{}", "[]",
+      """{"a":1,"b":2}""", """{"b":2,"a":1}""",
+      """{"z":{"b":1,"a":2},"m":[1,2,3]}""",
+      """{"a":[{"y":1,"x":2}],"b":{"d":4,"c":5}}""",
+      wide)
+    for (json <- corpus) {
+      val v = parse(json)
+      val c = appendCopy(v)
+      assert(VariantUtil.isValidVariant(c.getValue, c.getMetadata), s"copy must be valid: $json")
+      assert(bytesEqual(canon(c), canon(v)), s"copy must preserve meaning: $json")
+    }
+
+    // A sub-variant (pos != 0) views a parent's bytes; copy must emit a standalone value.
+    val sub = parse("""{"outer":{"b":2,"a":1},"z":3}""").getFieldByKey("outer")
+    val subCopy = appendCopy(sub)
+    assert(VariantUtil.isValidVariant(subCopy.getValue, subCopy.getMetadata),
+      "copy of a sub-variant must be a valid standalone variant")
+    assert(bytesEqual(canon(subCopy), canon(sub)),
+      "copy of a sub-variant must preserve its meaning")
   }
 
   // ----- canonicalize: malformed metadata (robustness) -----
