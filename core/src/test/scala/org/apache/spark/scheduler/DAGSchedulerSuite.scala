@@ -44,7 +44,7 @@ import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.{LEGACY_ABORT_STAGE_AFTER_KILL_TASKS, Tests}
 import org.apache.spark.network.shuffle.ExternalBlockStoreClient
-import org.apache.spark.rdd.{DeterministicLevel, RDD, ReliableRDDCheckpointData}
+import org.apache.spark.rdd.{DeterministicLevel, PartitionPruningRDD, RDD, ReliableRDDCheckpointData, ShuffleReducePartitionMapping}
 import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, ResourceProfileBuilder, TaskResourceProfile, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
 import org.apache.spark.rpc.RpcTimeoutException
@@ -9431,6 +9431,210 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
+  for (storage <- Seq("uncached", "persisted", "local checkpoint")) {
+    test(s"pipelined repeated consumption: self zip is rejected ($storage)") {
+      val dependency = new PipelinedShuffleDependency(
+        new MyRDD(sc, 2, Nil), new HashPartitioner(2))
+      val consumer = new MyRDD(sc, 2, List(dependency))
+      storage match {
+        case "persisted" => consumer.persist()
+        case "local checkpoint" => consumer.localCheckpoint()
+        case _ =>
+      }
+      // Both zip inputs evaluate the same consumer partition. Persistence cannot guarantee
+      // that its block survives, and a pending local checkpoint has not replaced its lineage.
+      val result = consumer.zipPartitions(consumer)((left, right) => left ++ right)
+      assertRepeatedPipelinedConsumptionRejected(result, Seq(dependency.shuffleId))
+    }
+  }
+
+  test("pipelined repeated consumption: a wrapped narrow diamond is rejected") {
+    val dependency = new PipelinedShuffleDependency(
+      new MyRDD(sc, 2, Nil), new HashPartitioner(2))
+    val consumer = new MyRDD(sc, 2, List(dependency))
+    val left = consumer.mapPartitions(iter => iter)
+    val right = consumer.mapPartitions(iter => iter).mapPartitions(iter => iter)
+    val result = left.zipPartitions(right)((a, b) => a ++ b)
+    assertRepeatedPipelinedConsumptionRejected(result, Seq(dependency.shuffleId))
+  }
+
+  test("pipelined repeated consumption: duplicate native dependency edges are rejected") {
+    val dependency = new PipelinedShuffleDependency(
+      new MyRDD(sc, 2, Nil), new HashPartitioner(2))
+    val result = new MyRDD(sc, 2, List(dependency, dependency))
+    assertRepeatedPipelinedConsumptionRejected(result, Seq(dependency.shuffleId))
+  }
+
+  test("pipelined repeated consumption: separate producer stages cannot reread a consumer") {
+    val upstream = new PipelinedShuffleDependency(
+      new MyRDD(sc, 2, Nil), new HashPartitioner(2))
+    val consumer = new MyRDD(sc, 2, List(upstream))
+    // Distinct shuffle IDs create distinct map stages even though both stages have the same
+    // root RDD. Each stage would evaluate the consumer and reread the upstream stream.
+    val first = new PipelinedShuffleDependency(consumer, new HashPartitioner(2))
+    val second = new PipelinedShuffleDependency(consumer, new HashPartitioner(2))
+    assert(first.shuffleId != second.shuffleId)
+    val result = new MyRDD(sc, 2, List(first, second))
+    assertRepeatedPipelinedConsumptionRejected(
+      result, Seq(upstream.shuffleId, first.shuffleId, second.shuffleId))
+  }
+
+  test("pipelined repeated consumption: overlapping pruned inputs are rejected") {
+    val dependency = new PipelinedShuffleDependency(
+      new MyRDD(sc, 2, Nil), new HashPartitioner(2))
+    val consumer = new MyRDD(sc, 2, List(dependency))
+    val left = PartitionPruningRDD.create(consumer, _ == 0)
+    val right = PartitionPruningRDD.create(consumer, _ == 0)
+    // The union sends distinct result tasks to the same consumer partition, so checking only
+    // duplicates within one task misses this second read of reduce partition zero.
+    assertRepeatedPipelinedConsumptionRejected(left.union(right), Seq(dependency.shuffleId))
+  }
+
+  test("pipelined repeated consumption: disjoint pruned inputs share one producer stage") {
+    val producer = new MyRDD(sc, 2, Nil)
+    val dependency = new PipelinedShuffleDependency(producer, new HashPartitioner(2))
+    val consumer = new MyRDD(sc, 2, List(dependency))
+    val left = PartitionPruningRDD.create(consumer, _ == 0)
+    val right = PartitionPruningRDD.create(consumer, _ == 1)
+    val result = left.union(right)
+
+    submit(result, Array(0, 1))
+    assert(failure === null)
+    assert(taskSets.size === 2)
+    assert(scheduler.shuffleIdToMapStage.keySet.toSet === Set(dependency.shuffleId))
+    verify(scheduler, times(1)).createShuffleMapStage(
+      any[ShuffleDependency[Int, Int, Int]](), any[Int]())
+    assert(scheduler.waitingStages.isEmpty)
+    assert(taskSets.forall(_.isPipelined))
+    completeShuffleMapStageSuccessfully(taskSets.head.stageId, 0, 2)
+    complete(taskSets.last, Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined repeated consumption: reader partitions aliasing one reducer are rejected") {
+    val dependency = new PipelinedShuffleDependency(
+      new MyRDD(sc, 2, Nil), new HashPartitioner(2))
+    val consumer = new MyRDD(sc, 2, List(dependency)) with ShuffleReducePartitionMapping {
+      override def reducePartitionIndex(partitionIndex: Int): Option[Int] = Some(0)
+    }
+    assertRepeatedPipelinedConsumptionRejected(consumer, Seq(dependency.shuffleId))
+  }
+
+  test("pipelined repeated consumption: a permuted reducer mapping remains schedulable") {
+    val dependency = new PipelinedShuffleDependency(
+      new MyRDD(sc, 2, Nil), new HashPartitioner(2))
+    val consumer = new MyRDD(sc, 2, List(dependency)) with ShuffleReducePartitionMapping {
+      override def reducePartitionIndex(partitionIndex: Int): Option[Int] =
+        Some(1 - partitionIndex)
+    }
+    submit(consumer, Array(0, 1))
+    assert(failure === null)
+    assert(taskSets.size === 2)
+    completeShuffleMapStageSuccessfully(taskSets.head.stageId, 0, 2)
+    complete(taskSets.last, Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined repeated consumption: a partial action ignores an unscheduled duplicate") {
+    val dependency = new PipelinedShuffleDependency(
+      new MyRDD(sc, 2, Nil), new HashPartitioner(2))
+    val consumer = new MyRDD(sc, 2, List(dependency)) with ShuffleReducePartitionMapping {
+      override def reducePartitionIndex(partitionIndex: Int): Option[Int] = Some(partitionIndex)
+    }
+    val left = PartitionPruningRDD.create(consumer, _ == 0)
+    val right = PartitionPruningRDD.create(consumer, _ == 0)
+    val result = left.union(right)
+
+    submit(result, Array(0))
+    assert(failure === null)
+    assert(taskSets.size === 2)
+    assert(taskSets.last.tasks.map(_.partitionId).toSeq === Seq(0))
+    completeShuffleMapStageSuccessfully(taskSets.head.stageId, 0, 2)
+    complete(taskSets.last, Seq((Success, 42)))
+    assert(results === Map(0 -> 42))
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined repeated consumption: a deep diamond bounds partition dependency expansion") {
+    val dependency = new PipelinedShuffleDependency(
+      new MyRDD(sc, 1, Nil), new HashPartitioner(1))
+    var result: RDD[(Int, Int)] = new MyRDD(sc, 1, List(dependency))
+    val parentCalls = Seq.fill(24)(new AtomicInteger)
+    parentCalls.foreach { counter =>
+      val edge = new OneToOneDependency(result) {
+        override def getParents(partitionId: Int): List[Int] = {
+          counter.incrementAndGet()
+          super.getParents(partitionId)
+        }
+      }
+      result = new MyRDD(sc, 1, List(edge, edge))
+    }
+
+    assertRepeatedPipelinedConsumptionRejected(result, Seq(dependency.shuffleId))
+    // There are 2^24 paths but only 24 dependency objects. Two submissions each propagate an
+    // RDD partition at most twice and inspect its two edges, so every counter is bounded by 8.
+    assert(parentCalls.forall(counter => counter.get() > 0 && counter.get() <= 8))
+  }
+
+  test("pipelined repeated consumption: separate producers can share ordinary narrow ancestry") {
+    val source = new MyRDD(sc, 2, Nil)
+    val firstProducer = source.mapPartitions(iter => iter)
+    val secondProducer = source.mapPartitions(iter => iter)
+    val first = new PipelinedShuffleDependency(firstProducer, new HashPartitioner(2))
+    val second = new PipelinedShuffleDependency(secondProducer, new HashPartitioner(2))
+    val result = new MyRDD(sc, 2, List(first, second))
+
+    submit(result, Array(0, 1))
+    assert(failure === null)
+    assert(taskSets.size === 3)
+    assert(scheduler.shuffleIdToMapStage.keySet.toSet === Set(first.shuffleId, second.shuffleId))
+    assert(scheduler.waitingStages.isEmpty)
+    val firstStage = scheduler.shuffleIdToMapStage(first.shuffleId)
+    val secondStage = scheduler.shuffleIdToMapStage(second.shuffleId)
+    assert(firstStage.id != secondStage.id)
+    completeShuffleMapStageSuccessfully(firstStage.id, 0, 2)
+    completeShuffleMapStageSuccessfully(secondStage.id, 0, 2)
+    complete(taskSets.last, Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined repeated consumption: a materialized prefix can be read twice by a producer") {
+    val regular = new ShuffleDependency(new MyRDD(sc, 2, Nil), new HashPartitioner(2))
+    val prefix = new MyRDD(sc, 2, List(regular), tracker = mapOutputTracker)
+    submit(prefix, Array(0, 1))
+    completeShuffleMapStageSuccessfully(taskSets.head.stageId, 0, 2)
+    complete(taskSets.last, Seq((Success, 1), (Success, 2)))
+    assertDataStructuresEmpty()
+    results.clear()
+    val taskSetsBefore = taskSets.size
+
+    val producer = prefix.zipPartitions(prefix)((left, right) => left ++ right)
+    val dependency = new PipelinedShuffleDependency(producer, new HashPartitioner(2))
+    val consumer = new MyRDD(sc, 2, List(dependency))
+    submit(consumer, Array(0, 1))
+    assert(failure === null)
+    assert(taskSets.size === taskSetsBefore + 2)
+    completeShuffleMapStageSuccessfully(taskSets(taskSetsBefore).stageId, 0, 2)
+    complete(taskSets.last, Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined repeated consumption: ordinary self zip remains schedulable") {
+    val consumer = new MyRDD(sc, 2, Nil)
+    val result = consumer.zipPartitions(consumer)((left, right) => left ++ right)
+    submit(result, Array(0, 1))
+    assert(failure === null)
+    assert(taskSets.size === 1)
+    assert(!taskSets.head.isPipelined)
+    complete(taskSets.head, Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+  }
+
   // Resource-profile rejection. The gang slot check measures capacity against the DEFAULT
   // resource profile, so the whole group must run on the default profile; any member with an
   // explicit non-default profile is rejected. The three shapes below must all be rejected; the
@@ -9531,6 +9735,27 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     shuffleIds.foreach { shuffleId =>
       assert(tracker.getShuffleInfo(shuffleId).isEmpty)
       assert(!mapOutputTracker.containsShuffle(shuffleId))
+    }
+  }
+
+  private def assertRepeatedPipelinedConsumptionRejected(
+      result: RDD[_], shuffleIds: Seq[Int]): Unit = {
+    for (_ <- 0 until 2) {
+      clearInvocations(scheduler, mapOutputTracker)
+      val failure = submitAndCaptureFailure(result, result.partitions.indices.toArray)
+      assertPipelinedUnsupported(failure, "more than one consumer")
+      checkError(
+        exception = failure.asInstanceOf[PipelinedShuffleUnsupportedException],
+        condition = "PIPELINED_SHUFFLE_UNSUPPORTED",
+        sqlState = Some("0A000"),
+        parameters = immutable.Map("reason" -> ".*more than one consumer.*"),
+        matchPVals = true)
+      assertNoPipelinedStageRegistration(shuffleIds)
+      assert(taskSets.isEmpty)
+      assert(results.isEmpty)
+      assert(sparkListener.submittedStageInfos.isEmpty)
+      assertDataStructuresEmpty()
+      assert(!sc.isStopped)
     }
   }
 
