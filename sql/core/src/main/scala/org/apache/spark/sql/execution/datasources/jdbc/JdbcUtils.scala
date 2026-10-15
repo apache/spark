@@ -57,27 +57,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
   /**
    * Returns true if the table already exists in the JDBC database.
-   *
-   * Objects that exist but cannot be read as a table or view (see
-   * [[JdbcDialect.isNotSelectableObjectException]]) are treated as absent. Catalog listing and
-   * refresh rely on that behavior; V1 writes should use [[tableExistsForWrite]] instead.
    */
   def tableExists(conn: Connection, options: JdbcOptionsInWrite): Boolean = {
-    tableExists(conn, options, failOnNotSelectable = false)
-  }
-
-  /**
-   * Like [[tableExists]], but fails when the name is occupied by an object that cannot be read
-   * as a table or view. Used by V1 JDBC writes so SaveMode does not CREATE TABLE over that name.
-   */
-  def tableExistsForWrite(conn: Connection, options: JdbcOptionsInWrite): Boolean = {
-    tableExists(conn, options, failOnNotSelectable = true)
-  }
-
-  private def tableExists(
-      conn: Connection,
-      options: JdbcOptionsInWrite,
-      failOnNotSelectable: Boolean): Boolean = {
     val dialect = JdbcDialects.get(options.url)
 
     val executionResult = Try {
@@ -92,14 +73,9 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
     executionResult match {
       case Success(_) => true
-      case Failure(e: SQLException) if dialect.isObjectNotFoundException(e) =>
+      case Failure(e: SQLException)
+        if dialect.isObjectNotFoundException(e) || dialect.isNotSelectableObjectException(e) =>
         false
-      case Failure(e: SQLException) if dialect.isNotSelectableObjectException(e) =>
-        if (failOnNotSelectable) {
-          throw QueryCompilationErrors.objectNotSelectableError(options.table, e)
-        } else {
-          false
-        }
       case Failure(e) => throw e  // Re-throw unexpected exceptions
     }
   }

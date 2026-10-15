@@ -1753,13 +1753,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       cause = Some(cause))
   }
 
-  def objectNotSelectableError(tableName: String, cause: Throwable): Throwable = {
-    new AnalysisException(
-      errorClass = "JDBC_OBJECT_NOT_SELECTABLE",
-      messageParameters = Map("objectName" -> tableName),
-      cause = Some(cause))
-  }
-
   /**
    * Table or view not found (TABLE_OR_VIEW_NOT_FOUND). The `searchPath` segment uses
    * `nameParts.dropRight(1)` when `nameParts` has more than one part (catalog plus namespace);
