@@ -43,7 +43,7 @@ import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.analysis.{HintErrorLogger, Resolver}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, HintErrorLogger, Resolver}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -69,6 +69,11 @@ object SQLConf {
   @volatile
   private[this] var sqlConfEntries: util.Map[String, ConfigEntry[_]] = util.Collections.emptyMap()
 
+  // Advanced after every `sqlConfEntries` update, so a reader that sees a version also sees the
+  // entries it counts.
+  @volatile
+  private[this] var sqlConfEntriesVersion: Long = 0L
+
   private[this] val staticConfKeysUpdateLock = new Object
 
   @volatile
@@ -83,6 +88,7 @@ object SQLConf {
     val updatedMap = new java.util.HashMap[String, ConfigEntry[_]](sqlConfEntries)
     updatedMap.put(entry.key, entry)
     sqlConfEntries = updatedMap
+    sqlConfEntriesVersion += 1
   }
 
   // For testing only
@@ -90,6 +96,42 @@ object SQLConf {
     val updatedMap = new java.util.HashMap[String, ConfigEntry[_]](sqlConfEntries)
     updatedMap.remove(entry.key)
     sqlConfEntries = updatedMap
+    sqlConfEntriesVersion += 1
+  }
+
+  private def configEntriesVersion: Long = sqlConfEntriesVersion
+
+  /**
+   * The subset of `allConfs` that follows the active session into view and SQL function body
+   * confs, as decided by `Analyzer.bodyFollowsCaller`.
+   *
+   * Depends on the registered SQL config entries, so a config from a lazily-loaded module (e.g.
+   * sql/hive) is retained only after its holding object is initialized. Proto-defined entries are
+   * all registered when `ConfigEntry` loads, and a replacement entry (e.g. from `checkValue`)
+   * takes its binding policy from the same proto.
+   *
+   * `Analyzer.retainResolutionConfigsForAnalysis` applies the same predicate directly while
+   * `ANALYZER_MEMOIZE_RETAINED_RESOLUTION_CONFIGS` is off.
+   */
+  private def filterRetainedResolutionConfigs(
+      allConfs: scala.collection.Map[String, String]): util.Map[String, String] = {
+    val retained = new util.HashMap[String, String]()
+    allConfs.foreach { case (key, value) =>
+      if (Analyzer.bodyFollowsCaller(key)) {
+        retained.put(key, value)
+      }
+    }
+    util.Collections.unmodifiableMap[String, String](retained)
+  }
+
+  /** A `filterRetainedResolutionConfigs` result and the versions of its inputs. */
+  private case class RetainedResolutionConfigsMemo(
+      settingsVersion: Long,
+      entriesVersion: Long,
+      retained: util.Map[String, String]) {
+    // Retained values can include catalog credentials (`spark.sql.catalog.*`).
+    override def toString: String = s"RetainedResolutionConfigsMemo(settingsVersion=" +
+      s"$settingsVersion, entriesVersion=$entriesVersion, keys=${retained.size})"
   }
 
   private[internal] def getConfigEntry(key: String): ConfigEntry[_] = {
@@ -2836,6 +2878,19 @@ object SQLConf {
       .version("4.0.1")
       .doc("When true, applies the conf overrides for certain feature flags during the " +
         "resolution of user-defined sql table valued functions, consistent with view resolution.")
+      .booleanConf
+      .createWithDefault(true)
+
+  val ANALYZER_MEMOIZE_RETAINED_RESOLUTION_CONFIGS =
+    buildConf("spark.sql.analyzer.memoizeRetainedResolutionConfigs.enabled")
+      .internal()
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .doc("When true, each SQL conf memoizes the session-following configs that are copied " +
+        "from it into the confs that resolve view and SQL function bodies, including nested " +
+        "ones, and reuses them until that conf's settings or the registered SQL configs " +
+        "change. When false, body confs are built as before this memo existed, recomputing " +
+        "these configs on every build. The resulting confs are the same either way.")
       .booleanConf
       .createWithDefault(true)
 
@@ -8925,8 +8980,13 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   import SQLConf._
 
   /** Only low degree of contention is expected for conf, thus NOT using ConcurrentHashMap. */
-  @transient protected[spark] val settings = java.util.Collections.synchronizedMap(
-    new java.util.HashMap[String, String]())
+  @transient protected[spark] val settings: java.util.Map[String, String] =
+    new ModificationCountingMap
+
+  // The `retainedResolutionConfigs` memo. Null until first computed; also null after
+  // deserialization and in a clone.
+  @transient @volatile
+  private var retainedResolutionConfigsMemo: RetainedResolutionConfigsMemo = _
 
   @transient protected val reader = new ConfigReader(settings)
 
@@ -10362,6 +10422,33 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
    */
   def getAllConfs: immutable.Map[String, String] =
     settings.synchronized { settings.asScala.toMap }
+
+  /**
+   * The settings of this conf that `SQLConf.filterRetainedResolutionConfigs` retains for body
+   * confs built while this conf is active. One query can rebuild many body confs from the same
+   * conf, so the result is memoized and reused only while neither these settings nor the
+   * registered SQL config entries changed since it was computed.
+   * `Analyzer.retainResolutionConfigsForAnalysis` uses it only while
+   * `ANALYZER_MEMOIZE_RETAINED_RESOLUTION_CONFIGS` is on.
+   */
+  private[sql] def retainedResolutionConfigs: util.Map[String, String] = settings match {
+    case trackedSettings: ModificationCountingMap =>
+      // Read before the entries it versions are consulted, so a concurrent registration leaves a
+      // memo that is already stale rather than one that is silently missing the new entry.
+      val entriesVersion = SQLConf.configEntriesVersion
+      val memo = retainedResolutionConfigsMemo
+      if (memo != null && memo.entriesVersion == entriesVersion &&
+          memo.settingsVersion == trackedSettings.modificationCount) {
+        memo.retained
+      } else {
+        val (settingsVersion, allConfs) = trackedSettings.snapshotWithModificationCount
+        val retained = SQLConf.filterRetainedResolutionConfigs(allConfs.asScala)
+        retainedResolutionConfigsMemo =
+          SQLConf.RetainedResolutionConfigsMemo(settingsVersion, entriesVersion, retained)
+        retained
+      }
+    case _ => SQLConf.filterRetainedResolutionConfigs(getAllConfs)
+  }
 
   /**
    * Return all the configuration definitions that have been defined in [[SQLConf]]. Each
