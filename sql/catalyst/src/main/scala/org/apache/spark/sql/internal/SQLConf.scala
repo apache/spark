@@ -7325,6 +7325,7 @@ object SQLConf {
 
   val LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL =
     buildConf("spark.sql.legacy.variantPathBackslashAsLiteral")
+      .internal()
       .doc("When true, backslashes in quoted Variant path keys are treated as literal " +
         "characters, restoring the behavior before Spark 4.4. When false, quoted keys decode " +
         "recognized JSONPath escape sequences.")
