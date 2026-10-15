@@ -317,20 +317,24 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
    *   (2) it needs to contain a selective predicate or a cheaply-recomputable materialized input
    *
    * (2) is evidence that pruning pays off, which a [[RuntimeFilterHint]] on the filtering side
-   * (`hinted`) supplies directly. A hinted side only has to be a repeatable source of the
-   * filtering key, see `JoinSelectionHelper.isRepeatableRuntimeFilterSource`, since DPP
-   * re-evaluates it.
+   * supplies directly once honored (`hinted`), see [[honorsHint]].
    */
-  private def hasPartitionPruningFilter(
-      plan: LogicalPlan,
-      hinted: Boolean,
+  private def hasPartitionPruningFilter(plan: LogicalPlan, hinted: Boolean): Boolean = {
+    hinted || (!plan.isStreaming &&
+      (hasSelectivePredicate(plan) || isCheaplyRecomputableMaterializedPlan(plan)))
+  }
+
+  /**
+   * Whether a hinted filtering side honors the hint for pruning on `pruningKey`: DPP re-evaluates
+   * the side and both keys, so they have to be repeatable, see
+   * `JoinSelectionHelper.runtimeFilterHintRejection`. Otherwise DPP decides from its own
+   * estimates, as without the hint.
+   */
+  private def honorsHint(
+      pruningKey: Expression,
+      filteringSide: LogicalPlan,
       filteringKey: Expression): Boolean = {
-    if (hinted) {
-      isRepeatableRuntimeFilterSource(plan, filteringKey)
-    } else {
-      !plan.isStreaming &&
-        (hasSelectivePredicate(plan) || isCheaplyRecomputableMaterializedPlan(plan))
-    }
+    runtimeFilterHintRejection(pruningKey, filteringSide, filteringKey).isEmpty
   }
 
   private def prune(plan: LogicalPlan): LogicalPlan = {
@@ -376,18 +380,18 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
             // there should be a partitioned table and a filter on the dimension table,
             // otherwise the pruning will not trigger
             var filterableScan = getFilterableTableScan(l, left)
+            lazy val leftHinted = pruneLeftHinted && honorsHint(l, right, r)
             if (filterableScan.isDefined && canPruneLeft(joinType) && !pruneRightHinted &&
-                (!pruneLeftHinted || isRepeatableJoinKey(l)) &&
-                hasPartitionPruningFilter(right, pruneLeftHinted, r)) {
+                hasPartitionPruningFilter(right, leftHinted)) {
               newLeft = insertPredicate(
-                l, newLeft, Seq(r), right, rightKeys, filterableScan.get, pruneLeftHinted)
+                l, newLeft, Seq(r), right, rightKeys, filterableScan.get, leftHinted)
             } else {
               filterableScan = getFilterableTableScan(r, right)
+              lazy val rightHinted = pruneRightHinted && honorsHint(r, left, l)
               if (filterableScan.isDefined && canPruneRight(joinType) && !pruneLeftHinted &&
-                  (!pruneRightHinted || isRepeatableJoinKey(r)) &&
-                  hasPartitionPruningFilter(left, pruneRightHinted, l)) {
+                  hasPartitionPruningFilter(left, rightHinted)) {
                 newRight = insertPredicate(
-                  r, newRight, Seq(l), left, leftKeys, filterableScan.get, pruneRightHinted)
+                  r, newRight, Seq(l), left, leftKeys, filterableScan.get, rightHinted)
               }
             }
           case _ =>
