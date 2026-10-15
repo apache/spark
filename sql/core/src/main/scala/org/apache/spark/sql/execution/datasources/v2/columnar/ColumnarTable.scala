@@ -19,10 +19,11 @@ package org.apache.spark.sql.execution.datasources.v2.columnar
 import java.util
 import java.util.Locale
 
+import scala.util.Try
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
-import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, BATCH_WRITE, MICRO_BATCH_READ, STREAMING_WRITE, TRUNCATE}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset}
@@ -34,7 +35,9 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
 
 /**
  * The Data Source V2 [[Table]] of a [[ColumnarDataSource]]. It creates a new data source for each
- * scan and each write, with their options on top of the options of the table.
+ * scan and each write, with their options on top of the options of the table. Its capabilities
+ * are those that the data source reports with the options of the table, while a scan or a write
+ * may have other options: the data source checks them again with those.
  *
  * @param tableOptions the options of the table, given to `TableProvider.getTable`. They are the
  *                     options of `CREATE TABLE ... USING ... OPTIONS (...)` for a table in a
@@ -52,8 +55,10 @@ class ColumnarTable(
 
   override def schema(): StructType = tableSchema
 
-  override def capabilities(): util.Set[TableCapability] =
-    util.EnumSet.of(BATCH_READ, BATCH_WRITE, MICRO_BATCH_READ, STREAMING_WRITE, TRUNCATE)
+  private lazy val tableCapabilities =
+    createDataSource(withTableOptions(CaseInsensitiveStringMap.empty())).capabilities()
+
+  override def capabilities(): util.Set[TableCapability] = tableCapabilities
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     new ColumnarScanBuilder(
@@ -87,7 +92,7 @@ class ColumnarScanBuilder(
 
   // Created on first use, because a streaming scan neither pushes anything down nor reads in
   // batch, and its data source may not support batch scans at all.
-  private var reader: ColumnarReader = _
+  private var planner: ColumnarBatchPlanner = _
 
   private var pushed: Array[Predicate] = Array.empty
   private var pushedLimit: Option[Int] = None
@@ -95,15 +100,15 @@ class ColumnarScanBuilder(
   private var limitResult: Option[(Int, Boolean)] = None
   private var readSchema: StructType = schema
 
-  private def batchReader: ColumnarReader = {
-    if (reader == null) {
-      reader = dataSource.reader(schema)
+  private def batchPlanner: ColumnarBatchPlanner = {
+    if (planner == null) {
+      planner = dataSource.batchPlanner(schema)
     }
-    reader
+    planner
   }
 
   override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
-    pushed = batchReader.pushPredicates(predicates)
+    pushed = batchPlanner.pushPredicates(predicates)
     // Spark evaluates all the predicates again after reading, even the ones that the reader
     // evaluates completely: Spark SQL compares values in ways that a data source can easily get
     // wrong, such as NaN with other values. The pushed predicates are shown in the plan.
@@ -118,7 +123,7 @@ class ColumnarScanBuilder(
     case Some((firstLimit, isPushed)) =>
       isPushed && limit >= firstLimit
     case None =>
-      val isPushed = batchReader.pushLimit(limit)
+      val isPushed = batchPlanner.pushLimit(limit)
       limitResult = Some(limit -> isPushed)
       if (isPushed) {
         pushedLimit = Some(limit)
@@ -134,29 +139,35 @@ class ColumnarScanBuilder(
     // columns it reads.
     val required =
       StructType(requiredSchema.fieldNames.flatMap(name => schema.find(_.name == name)))
-    if (required.length < schema.length && batchReader.pruneColumns(required)) {
+    if (required.length < schema.length && batchPlanner.pruneColumns(required)) {
       readSchema = required
     }
   }
 
-  override def build(): Scan = {
-    new ColumnarScan(
-      shortName, schema, readSchema, () => batchReader, () => dataSource, pushed, pushedLimit)
-  }
+  // The scan takes over the planner, so it is built once.
+  private lazy val scan = new ColumnarScan(
+    shortName, schema, readSchema, dataSource, Option(planner), pushed, pushedLimit)
+
+  override def build(): Scan = scan
 }
 
+/**
+ * @param pushedDownPlanner the planner that the operations were pushed down to, if any. Otherwise,
+ *                          the scan creates one when its batch is planned.
+ */
 class ColumnarScan(
     shortName: String,
     fullSchema: StructType,
     prunedSchema: StructType,
-    batchReader: () => ColumnarReader,
-    dataSource: () => ColumnarDataSource,
+    dataSource: ColumnarDataSource,
+    pushedDownPlanner: Option[ColumnarBatchPlanner],
     pushedPredicates: Array[Predicate],
     pushedLimit: Option[Int])
   extends Scan with SupportsMetadata {
 
   // Spark may call `toBatch` more than once for the same scan; the partitions are planned once.
-  private lazy val batch = new ColumnarBatchScan(batchReader())
+  private lazy val batch = new ColumnarBatchScan(
+    pushedDownPlanner.getOrElse(dataSource.batchPlanner(fullSchema)))
 
   override def readSchema(): StructType = prunedSchema
 
@@ -168,7 +179,7 @@ class ColumnarScan(
   override def toBatch: Batch = batch
 
   override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
-    new ColumnarMicroBatchStream(dataSource().streamReader(fullSchema))
+    new ColumnarMicroBatchStream(dataSource.streamReader(fullSchema))
   }
 
   override def getMetaData(): Map[String, String] = {
@@ -179,16 +190,17 @@ class ColumnarScan(
   }
 }
 
-class ColumnarBatchScan(reader: ColumnarReader) extends Batch {
-  private lazy val partitions: Array[InputPartition] = reader.partitions()
+/**
+ * The batch of a scan, which plans it once, when Spark first asks for its partitions or its reader
+ * factory. A failure is planned once too: the physical plan can ask again, for example from a lazy
+ * value, and gets the same error.
+ */
+class ColumnarBatchScan(planner: ColumnarBatchPlanner) extends Batch {
+  private lazy val planned: Try[ColumnarPlannedBatch] = Try(planner.plan())
 
-  override def planInputPartitions(): Array[InputPartition] = partitions
+  override def planInputPartitions(): Array[InputPartition] = planned.get.partitions
 
-  override def createReaderFactory(): PartitionReaderFactory = {
-    // The reader is serialized to the executors, so it has to be planned first.
-    partitions
-    new ColumnarPartitionReaderFactory(reader)
-  }
+  override def createReaderFactory(): PartitionReaderFactory = planned.get.readerFactory
 }
 
 case class ColumnarStreamOffset(json: String) extends Offset
@@ -224,13 +236,6 @@ abstract class ColumnarOnlyPartitionReaderFactory extends PartitionReaderFactory
   }
 
   override def supportColumnarReads(partition: InputPartition): Boolean = true
-}
-
-class ColumnarPartitionReaderFactory(reader: ColumnarReader)
-  extends ColumnarOnlyPartitionReaderFactory {
-  override def createColumnarReader(partition: InputPartition): PartitionReader[ColumnarBatch] = {
-    reader.read(partition)
-  }
 }
 
 class ColumnarStreamPartitionReaderFactory(reader: ColumnarStreamReader)

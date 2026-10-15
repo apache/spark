@@ -87,13 +87,15 @@ Spark calls the functions of the table as follows:
   driver with `create`, which receives the name of the data source and the options of the user in
   a `SparkDsCreateInfo`, and returns the capabilities of the data source, such as
   `SPARK_DS_BATCH_READ` or `SPARK_DS_STREAMING_WRITE`, and closes it right after with `close`.
-  Spark reports the operations that a data source does not declare as unsupported. When the user
-  does not specify a schema, Spark asks for it with `schema`.
+  Spark reports the operations that a data source does not declare as unsupported. It also creates
+  a data source with the options of the table while it analyzes a query, to reject a batch write
+  that the data source does not support before it computes the data to write. When the user does
+  not specify a schema, Spark asks for it with `schema`.
 - **Batch reads**: on the driver, Spark creates a reader with `create_reader`, pushes operations
   down with `push_predicates`, `push_limit` and `prune_columns`, plans the partitions with
   `partitions`, and serializes the state of the reader with `serialize_reader`. Then it calls
   `read` on the executors, in one task for each partition, and `read` exports an
-  `ArrowArrayStream`.
+  `ArrowArrayStream`. Its callbacks can be called from any thread, but never concurrently.
 - **Streaming reads**: on the driver, Spark creates a stream reader with `create_stream_reader`.
   For each micro-batch, it asks for the `latest_offset`, plans the partitions with
   `stream_partitions`, and calls `read` on the executors. Offsets are defined by the library, as

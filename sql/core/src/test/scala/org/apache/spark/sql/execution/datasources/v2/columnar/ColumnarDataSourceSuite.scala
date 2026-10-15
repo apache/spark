@@ -19,12 +19,14 @@ package org.apache.spark.sql.execution.datasources.v2.columnar
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.connector.catalog.{Table, TableProvider}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.connector.catalog.{Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.expressions.{Literal, NamedReference, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
@@ -53,6 +55,10 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession {
     df.queryExecution.optimizedPlan.collectFirst {
       case relation: DataSourceV2ScanRelation => relation.scan.asInstanceOf[ColumnarScan]
     }.get
+  }
+
+  private def options(pairs: (String, String)*): CaseInsensitiveStringMap = {
+    new CaseInsensitiveStringMap(pairs.toMap.asJava)
   }
 
   test("batch read") {
@@ -141,6 +147,52 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(!TestColumnarSink.aborted.contains(table))
   }
 
+  test("the table reports the capabilities of the data source") {
+    val table = "unsupported_write"
+    // Computing the data would fail, in a shuffle stage that adaptive query execution runs before
+    // the write: Data Source V2 rejects the write while it analyzes the query, before that.
+    val df = spark.range(10).selectExpr("id", "if(id >= 0, raise_error('boom'), 'x') AS name")
+      .repartition(2)
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.write.format(format).option("table", table).option("capabilities", "BATCH_READ")
+          .mode("append").save()
+      },
+      condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      parameters = Map("tableName" -> s"`$format`", "operation" -> "batch write"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.write.format(format).option("table", table)
+          .option("capabilities", "BATCH_READ, BATCH_WRITE").mode("overwrite").save()
+      },
+      condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      parameters = Map("tableName" -> s"`$format`", "operation" -> "truncate in batch mode"))
+    assert(!TestColumnarSink.writers.contains(table))
+  }
+
+  test("build and plan a batch scan once") {
+    val dataSource = new TestRangeDataSource(options("end" -> "4"))
+    val builder = new ColumnarScanBuilder(format, dataSource.schema(), () => dataSource)
+    val scan = builder.build()
+    assert(builder.build() eq scan)
+    val batch = scan.toBatch
+    assert(scan.toBatch eq batch)
+    val partitions = batch.planInputPartitions()
+    assert(partitions.length == 2)
+    assert(batch.planInputPartitions() eq partitions)
+    assert(batch.createReaderFactory() eq batch.createReaderFactory())
+    assert(dataSource.plans.get() == 1)
+
+    // A failure is planned once too, and Spark gets the same error each time it asks.
+    val failing = new TestRangeDataSource(options("failPlanning" -> "true"))
+    val failingBatch =
+      new ColumnarScanBuilder(format, failing.schema(), () => failing).build().toBatch
+    val e = intercept[IllegalStateException](failingBatch.planInputPartitions())
+    assert(e.getMessage == "injected planning failure")
+    assert(intercept[IllegalStateException](failingBatch.createReaderFactory()) eq e)
+    assert(failing.plans.get() == 1)
+  }
+
   test("abort a failed write") {
     val table = "failed_write"
     val e = intercept[SparkException] {
@@ -215,10 +267,23 @@ class TestRangeProvider extends TableProvider with DataSourceRegister {
 class TestRangeDataSource(options: CaseInsensitiveStringMap) extends ColumnarDataSource {
   private val end = options.getLong("end", 10)
   private val table = options.getOrDefault("table", "default")
+  // The number of batch scans that the planners of this data source planned.
+  val plans = new AtomicInteger()
 
   override def schema(): StructType = StructType.fromDDL("id BIGINT, name STRING")
 
-  override def reader(schema: StructType): ColumnarReader = new TestRangeReader(end, schema)
+  // The names of the capabilities, such as "BATCH_READ, BATCH_WRITE", or all of them by default.
+  override def capabilities(): util.Set[TableCapability] = {
+    Option(options.get("capabilities")).map { names =>
+      val capabilities = util.EnumSet.noneOf(classOf[TableCapability])
+      names.split(",").map(_.trim).foreach(name => capabilities.add(TableCapability.valueOf(name)))
+      capabilities
+    }.getOrElse(super.capabilities())
+  }
+
+  override def batchPlanner(schema: StructType): ColumnarBatchPlanner = {
+    new TestRangePlanner(end, schema, options.getBoolean("failPlanning", false), plans)
+  }
 
   override def streamReader(schema: StructType): ColumnarStreamReader = {
     new TestRangeStreamReader(end, schema)
@@ -242,7 +307,8 @@ class TestRangeDataSource(options: CaseInsensitiveStringMap) extends ColumnarDat
 case class TestRangePartition(lo: Long, hi: Long) extends InputPartition
 
 /** Accepts the predicates `id > <literal>`. */
-class TestRangeReader(end: Long, schema: StructType) extends ColumnarReader {
+class TestRangePlanner(end: Long, schema: StructType, fail: Boolean, plans: AtomicInteger)
+  extends ColumnarBatchPlanner {
   private var lo = 0L
   private var limit = Long.MaxValue
   private var readSchema = schema
@@ -269,13 +335,21 @@ class TestRangeReader(end: Long, schema: StructType) extends ColumnarReader {
     true
   }
 
-  override def partitions(): Array[InputPartition] = {
+  override def plan(): ColumnarPlannedBatch = {
+    plans.incrementAndGet()
+    if (fail) {
+      throw new IllegalStateException("injected planning failure")
+    }
     val hi = if (limit == Long.MaxValue) end else math.min(end, lo + limit)
     val mid = (lo + hi) / 2
-    Array(TestRangePartition(lo, mid), TestRangePartition(mid, hi))
+    ColumnarPlannedBatch(
+      Array(TestRangePartition(lo, mid), TestRangePartition(mid, hi)),
+      new TestRangeReaderFactory(readSchema))
   }
+}
 
-  override def read(partition: InputPartition): PartitionReader[ColumnarBatch] = {
+class TestRangeReaderFactory(readSchema: StructType) extends ColumnarOnlyPartitionReaderFactory {
+  override def createColumnarReader(partition: InputPartition): PartitionReader[ColumnarBatch] = {
     val range = partition.asInstanceOf[TestRangePartition]
     new TestBatchReader(range.lo, range.hi, readSchema)
   }
