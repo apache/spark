@@ -8,7 +8,7 @@
   </server>
   <buildScan>
     <publishing>
-      <onlyIf><![CDATA[env['DEVELOCITY_ACCESS_KEY'] != null and env['DEVELOCITY_ACCESS_KEY'] != '']]></onlyIf>
+      <onlyIf><![CDATA[authenticated]]></onlyIf>
     </publishing>
     <backgroundBuildScanUpload>#{env['GITHUB_ACTIONS'] == null}</backgroundBuildScanUpload>
   </buildScan>
