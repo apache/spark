@@ -3179,6 +3179,17 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         key = "abcd",
         dataTypeSql = "VARCHAR(3)")
 
+      // A name longer than the 128-character echo cap is truncated with a trailing "..." in the
+      // error, as for JSON object names.
+      val longName = "a" * 200
+      assertUnsupportedXmlMapKey(
+        s"""SELECT from_xml(
+          |  '<ROW><m><$longName>1</$longName></m></ROW>',
+          |  'm MAP<CHAR(2), INT>',
+          |  map('mode', 'FAILFAST'))""".stripMargin,
+        key = "a" * 128 + "...",
+        dataTypeSql = "CHAR(2)")
+
       checkAnswer(
         sql("""SELECT from_xml(
           |  '<ROW><m a="1"><bc>2</bc></m></ROW>',

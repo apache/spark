@@ -9935,8 +9935,8 @@
   },
   "UNSUPPORTED_XML_CHAR_VARCHAR_MAP_KEY" : {
     "message" : [
-      "XML map keys of CHAR or VARCHAR cannot be padded or trimmed.",
-      "The key <key> is not valid for type <dataType>."
+      "The XML name <key> is not a valid key for the map key type <dataType>.",
+      "A CHAR key must match the declared length exactly and a VARCHAR key must not exceed it; keys are never padded or trimmed. Use a STRING map key to accept any name."
     ],
     "sqlState" : "0A000"
   },
