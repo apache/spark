@@ -2733,18 +2733,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   // surfaces it).
   def unsupportedJsonCharVarcharMapKey(
       key: UTF8String, dataType: DataType): SparkRuntimeException = {
-    // The key is a raw JSON object name, which in map-shaped data is often user data (ids,
-    // emails) and can run up to Jackson's 50,000-character name limit, so cap what we echo.
-    val maxKeyChars = 128
-    val displayKey = if (key.numChars() > maxKeyChars) {
-      UTF8String.concat(key.substring(0, maxKeyChars), UTF8String.fromString("..."))
-    } else {
-      key
-    }
     new SparkRuntimeException(
       errorClass = "UNSUPPORTED_JSON_CHAR_VARCHAR_MAP_KEY",
       messageParameters = Map(
-        "key" -> toSQLValue(displayKey, StringType),
+        "key" -> toSQLCharVarcharMapKey(key),
         "dataType" -> toSQLType(dataType)))
   }
 
@@ -2758,8 +2750,20 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkRuntimeException(
       errorClass = "UNSUPPORTED_XML_CHAR_VARCHAR_MAP_KEY",
       messageParameters = Map(
-        "key" -> toSQLValue(key, StringType),
+        "key" -> toSQLCharVarcharMapKey(key),
         "dataType" -> toSQLType(dataType)))
+  }
+
+  // A JSON object name or XML name used as a map key is often user data (ids, emails) and can
+  // be very long (Jackson allows names of up to 50,000 characters), so cap what we echo.
+  private def toSQLCharVarcharMapKey(key: UTF8String): String = {
+    val maxKeyChars = 128
+    val displayKey = if (key.numChars() > maxKeyChars) {
+      UTF8String.concat(key.substring(0, maxKeyChars), UTF8String.fromString("..."))
+    } else {
+      key
+    }
+    toSQLValue(displayKey, StringType)
   }
 
   def timestampAddOverflowError(micros: Long, amount: Long, unit: String): ArithmeticException = {
