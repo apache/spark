@@ -346,9 +346,9 @@ object DataType {
         }
       case "timestamp_ltz" => TimestampType
       case FILE_TYPE(mode) =>
-        // A bare `"file"` has no mode: inside a StructField it is an external file, which is also
-        // what a schema written without any mode means; elsewhere it is an unknown one, as when a
-        // UDF's return type is serialized as a bare `"file"`.
+        // A bare `"file"` has no mode, as in a schema written without one, for example by
+        // another engine: inside a StructField it is an external file, elsewhere an unknown
+        // one. Spark itself writes a bare `"file"` only for an external file in a field.
         mode match {
           case "external" => FileType.external
           case "unknown" => FileType()
