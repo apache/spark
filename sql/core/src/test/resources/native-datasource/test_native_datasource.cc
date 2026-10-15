@@ -883,13 +883,17 @@ uint64_t capabilitiesOf(const DataSource& source) {
   return 0;
 }
 
-int createSource(const char* name_value, const char* const* option_keys,
-                 const char* const* option_values, int64_t num_options, uint64_t* capabilities,
-                 void** handle) {
+int createSource(const SparkDsCreateInfo* info, uint64_t* capabilities, void** handle) {
   return guarded([&] {
-    auto source = std::make_unique<DataSource>(DataSource{name_value, {}});
-    auto keys = toStrings(option_keys, num_options);
-    auto values = toStrings(option_values, num_options);
+    // Like the host, the struct may be of another version of the header: only the fields that fit
+    // in its size are read.
+    if (info->size < static_cast<int64_t>(offsetof(SparkDsCreateInfo, num_options) +
+                                          sizeof(info->num_options))) {
+      throw std::runtime_error("SparkDsCreateInfo has a size of " + std::to_string(info->size));
+    }
+    auto source = std::make_unique<DataSource>(DataSource{info->name, {}});
+    auto keys = toStrings(info->option_keys, info->num_options);
+    auto values = toStrings(info->option_values, info->num_options);
     for (size_t i = 0; i < keys.size(); i++) source->options[keys[i]] = values[i];
     maybeFail(source->options, "create");
     if (source->name != name("native_range") && source->name != name("native_sink") &&

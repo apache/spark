@@ -69,10 +69,11 @@ A library built against the header works with all the releases of Spark that sup
 Spark calls the functions of the table as follows:
 
 - **Data sources**: for each schema inference, scan and write, Spark creates a data source on the
-  driver with `create`, which receives the options of the user and returns the capabilities of the
-  data source, such as `SPARK_DS_BATCH_READ` or `SPARK_DS_STREAMING_WRITE`, and closes it right
-  after with `close`. Spark reports the operations that a data source does not declare as
-  unsupported. When the user does not specify a schema, Spark asks for it with `schema`.
+  driver with `create`, which receives the name of the data source and the options of the user in
+  a `SparkDsCreateInfo`, and returns the capabilities of the data source, such as
+  `SPARK_DS_BATCH_READ` or `SPARK_DS_STREAMING_WRITE`, and closes it right after with `close`.
+  Spark reports the operations that a data source does not declare as unsupported. When the user
+  does not specify a schema, Spark asks for it with `schema`.
 - **Batch reads**: on the driver, Spark creates a reader with `create_reader`, pushes operations
   down with `push_predicates`, `push_limit` and `prune_columns`, plans the partitions with
   `partitions`, and serializes the state of the reader with `serialize_reader`. Then it calls
@@ -160,9 +161,9 @@ regularly and use timeouts. The task reaper, `spark.task.reaper.enabled` and
 ### Compatibility
 
 The function table, `SparkDsLibrary`, and the structs that Spark passes to the library,
-`SparkDsHost`, `SparkDsTaskContext` and `SparkDsWriteInfo`, start with their size, so that they can
-grow. The version of the interface, 1, is `SPARK_DS_ABI_VERSION`, which the table and the manifest
-of a package declare. Within a version:
+`SparkDsHost`, `SparkDsCreateInfo`, `SparkDsTaskContext` and `SparkDsWriteInfo`, start with their
+size, so that they can grow. The version of the interface, 1, is `SPARK_DS_ABI_VERSION`, which the
+table and the manifest of a package declare. Within a version:
 
 - fields are only appended to these structs, and the existing fields and the semantics of the
   existing functions never change;
@@ -354,6 +355,16 @@ type Sink = unsafe extern "C" fn(sink: *mut c_void, data: *const u8, length: i64
 /// A function of `SparkDsLibrary` that this data source does not implement, left NULL.
 type Unused = Option<unsafe extern "C" fn()>;
 
+/// `SparkDsCreateInfo` of `spark_datasource.h`: the name and the options of a data source.
+#[repr(C)]
+pub struct SparkDsCreateInfo {
+    size: i64,
+    name: *const c_char,
+    option_keys: *const *const c_char,
+    option_values: *const *const c_char,
+    num_options: i64,
+}
+
 /// `SparkDsLibrary` of `spark_datasource.h`, up to `read`, the last function that this data
 /// source implements: Spark only reads the functions that fit in `size`.
 #[repr(C)]
@@ -362,10 +373,7 @@ pub struct SparkDsLibrary {
     abi_version: i32,
     last_error: unsafe extern "C" fn() -> *const c_char,
     create: unsafe extern "C" fn(
-        name: *const c_char,
-        option_keys: *const *const c_char,
-        option_values: *const *const c_char,
-        num_options: i64,
+        info: *const SparkDsCreateInfo,
         capabilities: *mut u64,
         source: *mut *mut c_void,
     ) -> c_int,
@@ -469,18 +477,16 @@ unsafe extern "C" fn last_error() -> *const c_char {
 }
 
 unsafe extern "C" fn create(
-    _name: *const c_char,
-    option_keys: *const *const c_char,
-    option_values: *const *const c_char,
-    num_options: i64,
+    info: *const SparkDsCreateInfo,
     capabilities: *mut u64,
     source: *mut *mut c_void,
 ) -> c_int {
     call(|| {
+        let info = &*info;
         let mut range = RangeSource { end: 10 };
-        for i in 0..num_options as usize {
-            if CStr::from_ptr(*option_keys.add(i)).to_str()? == "end" {
-                range.end = CStr::from_ptr(*option_values.add(i)).to_str()?.parse()?;
+        for i in 0..info.num_options as usize {
+            if CStr::from_ptr(*info.option_keys.add(i)).to_str()? == "end" {
+                range.end = CStr::from_ptr(*info.option_values.add(i)).to_str()?.parse()?;
             }
         }
         *capabilities = SPARK_DS_BATCH_READ;
@@ -639,12 +645,13 @@ void Check(const arrow::Status& status) {
 
 const char* LastError() { return last_error.c_str(); }
 
-int Create(const char*, const char* const* option_keys, const char* const* option_values,
-           int64_t num_options, uint64_t* capabilities, void** source) {
+int Create(const SparkDsCreateInfo* info, uint64_t* capabilities, void** source) {
   return Call([&] {
     auto range = std::make_unique<RangeSource>();
-    for (int64_t i = 0; i < num_options; i++) {
-      if (std::string(option_keys[i]) == "end") range->end = std::stoll(option_values[i]);
+    for (int64_t i = 0; i < info->num_options; i++) {
+      if (std::string(info->option_keys[i]) == "end") {
+        range->end = std::stoll(info->option_values[i]);
+      }
     }
     *capabilities = SPARK_DS_BATCH_READ;
     *source = range.release();

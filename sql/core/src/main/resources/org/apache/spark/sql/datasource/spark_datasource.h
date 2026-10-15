@@ -111,11 +111,12 @@
  *   released once they are no longer referenced (see Lifecycle above). A reader or writer handle
  *   must not depend on the data source handle it was created from, because Spark closes the data
  *   source handle right after creating it.
- * - Memory. What Spark passes to a function, such as strings, byte arrays and SparkDsWriteInfo, is
- *   only valid during the call, except for SparkDsHost and SparkDsTaskContext, which document how
- *   long they live. Strings are UTF-8 and NUL-terminated. The JSON of the predicates is ASCII: it
- *   escapes the other characters, which any JSON parser decodes. The library returns strings and
- *   byte arrays by passing them to a SparkDsSink, which copies them.
+ * - Memory. What Spark passes to a function, such as strings, byte arrays, SparkDsCreateInfo and
+ *   SparkDsWriteInfo, is only valid during the call, except for SparkDsHost and
+ *   SparkDsTaskContext, which document how long they live. Strings are UTF-8 and NUL-terminated.
+ *   The JSON of the predicates is ASCII: it escapes the other characters, which any JSON parser
+ *   decodes. The library returns strings and byte arrays by passing them to a SparkDsSink, which
+ *   copies them.
  * - State. Partitions, the state of readers and writers, and commit messages are byte arrays in a
  *   format defined by the library. Spark sends them to the executors and back.
  * - Arrow data. Schemas and data are exchanged with the Arrow C data interface
@@ -271,6 +272,24 @@ typedef struct SparkDsHost {
   void (*log)(int32_t level, const char* message);
 } SparkDsHost;
 
+/* A data source, as create gets it. */
+typedef struct SparkDsCreateInfo {
+  /* The size of this struct in the header that Spark was built with, as in SparkDsHost. */
+  int64_t size;
+  /*
+   * The name of the data source, as listed in the package manifest, or in lower case for an
+   * installed library. A library can implement several data sources.
+   */
+  const char* name;
+  /*
+   * The num_options options given by the user, such as spark.read.option("key", "value"), with
+   * the keys in lower case.
+   */
+  const char* const* option_keys;
+  const char* const* option_values;
+  int64_t num_options;
+} SparkDsCreateInfo;
+
 /*
  * The task that calls read or create_data_writer, on an executor. It stays valid until the stream
  * that read returns is released, or until the data writer is closed.
@@ -360,19 +379,14 @@ typedef struct SparkDsLibrary {
    * ------------------------------------------------------------------------------------------- */
 
   /*
-   * Creates a data source with the options given by the user, such as
-   * spark.read.option("key", "value").
+   * Creates a data source.
    *
-   * name: the name of the data source, as listed in the package manifest, or in lower case for an
-   *       installed library. A library can implement several data sources.
-   * option_keys, option_values: the num_options options, with the keys in lower case
+   * info: the name of the data source, and the options given by the user
    * capabilities: set to the capabilities of the data source, SPARK_DS_* flags combined with |,
    *               which may depend on its name and its options. It is 0 when create is called.
    * source: set to the data source handle
    */
-  int (*create)(const char* name, const char* const* option_keys,
-                const char* const* option_values, int64_t num_options, uint64_t* capabilities,
-                void** source);
+  int (*create)(const SparkDsCreateInfo* info, uint64_t* capabilities, void** source);
 
   /*
    * Exports the schema of the data. Spark calls it only when the user does not specify a schema.
