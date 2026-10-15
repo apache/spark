@@ -291,6 +291,62 @@ final class BidKKnuth {
     addWide(format, pNeg, pExp, frame.w0, cn, ce, frame.w1, mode, flags, out, frame);
   }
 
+  static void quantize(
+      FormatParams format,
+      boolean an,
+      int ae,
+      UIntLimbs ac,
+      int targetExp,
+      RoundingMode mode,
+      StatusFlags flags,
+      long[] out,
+      BidKScratch.Frame frame) {
+    LimbMath.copyLimbs(frame.w0, ac);
+    int p = format.precision();
+    if (LimbMath.isZero(frame.w0)) {
+      pack(format, an, targetExp, frame.w0, mode, flags, frame, out);
+      return;
+    }
+    int delta = ae - targetExp;
+    if (delta > 0) {
+      int digits = LimbMath.decimalDigits(frame.w0);
+      if (delta > LimbMath.POW10_MAX || digits + delta > p) {
+        flags.raise(StatusFlags.INVALID);
+        BidCodec.packNaN(format, false, false, out);
+        return;
+      }
+      LimbMath.multiplyPow10(frame.w0, delta, frame.w4);
+      pack(format, an, targetExp, frame.w0, mode, flags, frame, out);
+      return;
+    }
+    if (delta < 0) {
+      int first = LimbMath.dividePow10(frame.w0, -delta, frame.sticky);
+      if (BidRound.shouldIncrement(
+          an, frame.w0[0], first, frame.sticky[0], mode)) {
+        LimbMath.addSmall(frame.w0, 1L);
+      }
+      if (first != 0 || frame.sticky[0]) {
+        flags.raise(StatusFlags.INEXACT);
+      }
+      pack(format, an, targetExp, frame.w0, mode, flags, frame, out);
+      return;
+    }
+    pack(format, an, ae, frame.w0, mode, flags, frame, out);
+  }
+
+  static void convert(
+      FormatParams dest,
+      boolean negative,
+      int exp,
+      UIntLimbs coeff,
+      RoundingMode mode,
+      StatusFlags flags,
+      long[] out,
+      BidKScratch.Frame frame) {
+    LimbMath.copyLimbs(frame.w0, coeff);
+    pack(dest, negative, exp, frame.w0, mode, flags, frame, out);
+  }
+
   private static void addAligned(
       boolean aNeg, long[] a, boolean bNeg, long[] b, long[] dest, long[] tmp) {
     if (aNeg == bNeg) {

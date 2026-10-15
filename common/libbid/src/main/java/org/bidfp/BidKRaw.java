@@ -224,8 +224,8 @@ final class BidKRaw {
       long[] out) {
     BidKScratch.Frame frame = BidKScratch.acquire();
     try {
-      Kind kx = unpack(format, x, frame.a, frame.coeff, flags);
-      Kind ky = unpack(format, y, frame.b, frame.coeff, flags);
+      Kind kx = BidKKnuth.unpackLeft(format, x, frame, flags);
+      Kind ky = BidKKnuth.unpackRight(format, y, frame, flags);
       if (kx == Kind.NAN || ky == Kind.NAN || kx == Kind.SNAN || ky == Kind.SNAN) {
         BidCodec.packNaN(format, false, false, out);
         return;
@@ -239,26 +239,8 @@ final class BidKRaw {
         }
         return;
       }
-      int targetExp = frame.b.exp();
-      int delta = frame.a.exp() - targetExp;
-      if (delta > 0) {
-        frame.a.multiplyPow10(delta);
-        frame.a.shiftExp(-delta);
-      } else if (delta < 0) {
-        int first = frame.a.dividePow10(-delta, frame.sticky);
-        if (BidRound.shouldIncrement(
-            frame.a.isNegative(),
-            frame.a.leastDigitParity(),
-            first,
-            frame.sticky[0],
-            mode)) {
-          frame.a.addOne();
-        }
-        if (first != 0 || frame.sticky[0]) {
-          flags.raise(StatusFlags.INEXACT);
-        }
-      }
-      pack(format, frame.a, mode, flags, frame.coeff, out);
+      BidKKnuth.quantize(
+          format, frame.an, frame.ae, frame.ac, frame.be, mode, flags, out, frame);
     } finally {
       BidKScratch.release(frame);
     }
@@ -273,19 +255,20 @@ final class BidKRaw {
       long[] out) {
     BidKScratch.Frame frame = BidKScratch.acquire();
     try {
-      Kind kx = unpack(src, x, frame.a, frame.coeff, flags);
+      Kind kx = BidKKnuth.unpackLeft(src, x, frame, flags);
       if (kx == Kind.NAN || kx == Kind.SNAN) {
-        BidCodec.packNaN(dest, frame.a.isNegative(), false, out);
+        BidCodec.packNaN(dest, frame.an, false, out);
         if (kx == Kind.SNAN) {
           flags.raise(StatusFlags.INVALID);
         }
         return;
       }
       if (kx == Kind.INF) {
-        BidCodec.packInfinity(dest, frame.a.isNegative(), out);
+        BidCodec.packInfinity(dest, frame.an, out);
         return;
       }
-      pack(dest, frame.a, mode, flags, frame.coeff, out);
+      BidKKnuth.convert(
+          dest, frame.an, frame.ae, frame.ac, mode, flags, out, frame);
     } finally {
       BidKScratch.release(frame);
     }
@@ -369,7 +352,7 @@ final class BidKRaw {
   }
 
   static void requireLibm(FormatParams format) {
-    if (format.packedBits() > 128) {
+    if (format.units() > 4) {
       throw new UnsupportedOperationException(
           "k>128 libm is out of scope unless a binary256 engine is funded");
     }

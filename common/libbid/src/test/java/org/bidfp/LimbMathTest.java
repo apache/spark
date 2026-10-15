@@ -52,6 +52,7 @@ public final class LimbMathTest {
     int[] d1 = new int[LimbMath.DIGITS32];
     int[] d2 = new int[LimbMath.DIGITS32];
     int[] d3 = new int[LimbMath.DIGITS32];
+    threeLimbKnown();
     for (int n = 0; n < 200; n++) {
       int wa = 1 + rng.nextInt(3);
       int wb = 1 + rng.nextInt(3);
@@ -83,6 +84,32 @@ public final class LimbMathTest {
       expectEq(quot, qr[0], "div q");
       expectEq(rem, qr[1], "div r");
     }
+  }
+
+  private static void threeLimbKnown() {
+    long[] a = new long[LimbMath.WORK];
+    long[] b = new long[LimbMath.WORK];
+    long[] dest = new long[LimbMath.WORK];
+    long[] quot = new long[LimbMath.WORK];
+    long[] rem = new long[LimbMath.WORK];
+    int[] d0 = new int[LimbMath.DIGITS32];
+    int[] d1 = new int[LimbMath.DIGITS32];
+    int[] d2 = new int[LimbMath.DIGITS32];
+    int[] d3 = new int[LimbMath.DIGITS32];
+    a[0] = 0x0123_4567_89ab_cdefL;
+    a[1] = 0xfedc_ba98_7654_3210L;
+    a[2] = 0x0000_0000_0000_00ffL;
+    b[0] = 0x1111_1111_1111_1111L;
+    b[1] = 0x2222_2222_2222_2222L;
+    b[2] = 0x0000_0000_0000_0003L;
+    BigInteger ba = toBig(a);
+    BigInteger bb = toBig(b);
+    LimbMath.multiply(dest, a, b);
+    expectEq(dest, ba.multiply(bb), "3-limb mul");
+    LimbMath.divide(quot, rem, a, b, d0, d1, d2, d3);
+    BigInteger[] qr = ba.divideAndRemainder(bb);
+    expectEq(quot, qr[0], "3-limb div q");
+    expectEq(rem, qr[1], "3-limb div r");
   }
 
   private static void sqrtCases() {

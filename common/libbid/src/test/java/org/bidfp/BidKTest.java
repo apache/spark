@@ -223,6 +223,26 @@ public final class BidKTest {
         new BigDecimal(extra[0]).add(BigDecimal.ONE, mc),
         d160,
         "max+1");
+    BidK x = BidK.parse(d160, "1.25");
+    BidK y = BidK.parse(d160, "1.00");
+    BidK qz = x.quantize(y, mode, flags);
+    expectClose(qz, new BigDecimal("1.25"), d160, "d160 quantize");
+    BidK a = BidK.parse(d160, "1.5");
+    BidK b = BidK.parse(d160, "2");
+    BidK c = BidK.parse(d160, "0.25");
+    expectClose(
+        a.fma(b, c, mode, flags),
+        new BigDecimal("1.5").multiply(new BigDecimal("2")).add(new BigDecimal("0.25"), mc),
+        d160,
+        "d160 fma");
+    Bid128 d128 = x.toBid128(mode, flags);
+    BidK back = BidK.fromBid128(d128, d160, mode, flags);
+    expect(x.sqlEquals(back), "d160 via d128");
+    for (RoundingMode rm : RoundingMode.values()) {
+      StatusFlags st = new StatusFlags();
+      BidK r = two.divide(three, rm, st);
+      expect(r.isFinite(), "d160 2/3 " + rm);
+    }
   }
 
   private static void convertWideTo128() {
