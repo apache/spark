@@ -1086,8 +1086,8 @@ case class EnsureRequirements(
         // reads an expression's reference. And a re-run reads the positions off a report an
         // earlier pass already projected.
         val composed = g.joinKeyPositions.fold(positions)(old => positions.map(old))
-        val newGroupPartitions =
-          GroupPartitionsExec(g.child, Some(composed), enableSortedMerge = g.enableSortedMerge)
+        val newGroupPartitions = GroupPartitionsExec(
+          g.child, Some(composed), sortedMergeOrdering = g.sortedMergeOrdering)
         newGroupPartitions.copyTagsFrom(g)
         newGroupPartitions
       // Everything else is wrapped, an aligned grouping included. `positions` index what `plan`
