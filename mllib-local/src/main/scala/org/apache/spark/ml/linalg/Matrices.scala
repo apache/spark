@@ -21,6 +21,7 @@ import java.util.{Arrays, Random}
 
 import scala.collection.immutable
 import scala.collection.mutable.{ArrayBuffer, ArrayBuilder => MArrayBuilder, HashSet => MHashSet}
+import scala.util.hashing.MurmurHash3
 
 import breeze.linalg.{CSCMatrix => BSM, DenseMatrix => BDM, Matrix => BM}
 
@@ -126,11 +127,12 @@ sealed trait Matrix extends Serializable {
   }
 
   /** A human readable representation of the matrix */
-  override def toString: String = asBreeze.toString()
+  override def toString: String = MatrixFormatter.format(this)
 
   /** A human readable representation of the matrix with maximum lines and width */
   @Since("2.0.0")
-  def toString(maxLines: Int, maxLineWidth: Int): String = asBreeze.toString(maxLines, maxLineWidth)
+  def toString(maxLines: Int, maxLineWidth: Int): String =
+    MatrixFormatter.format(this, maxLines, maxLineWidth)
 
   /**
    * Map the values of this matrix using a function. Generates a new matrix. Performs the
@@ -327,7 +329,7 @@ class DenseMatrix @Since("2.0.0") (
     this(numRows, numCols, values, false)
 
   override def equals(o: Any): Boolean = o match {
-    case m: Matrix => asBreeze == m.asBreeze
+    case m: Matrix => Matrices.equals(this, m)
     case _ => false
   }
 
@@ -655,10 +657,23 @@ class SparseMatrix @Since("2.0.0") (
       rowIndices: Array[Int],
       values: Array[Double]) = this(numRows, numCols, colPtrs, rowIndices, values, false)
 
-  override def hashCode(): Int = asBreeze.hashCode()
+  override def hashCode(): Int = {
+    // Adapted from Breeze's QuasiTensor.hashCode; preserve column-major value ordering.
+    val data = if (isTransposed) toSparseColMajor.values else values
+    var hash = 43
+    var i = 0
+    while (i < data.length) {
+      val valueHash = data(i).##
+      if (valueHash != 0) {
+        hash = MurmurHash3.mix(hash, valueHash)
+      }
+      i += 1
+    }
+    hash
+  }
 
   override def equals(o: Any): Boolean = o match {
-    case m: Matrix => asBreeze == m.asBreeze
+    case m: Matrix => Matrices.equals(this, m)
     case _ => false
   }
 
@@ -755,14 +770,45 @@ class SparseMatrix @Since("2.0.0") (
    *                    order.
    */
   private[ml] override def toSparseMatrix(colMajor: Boolean): SparseMatrix = {
-    if (isColMajor && !colMajor) {
-      // it is col major and we want row major, use breeze to remove explicit zeros
-      val breezeTransposed = asBreeze.asInstanceOf[BSM[Double]].t
-      Matrices.fromBreeze(breezeTransposed).transpose.asInstanceOf[SparseMatrix]
-    } else if (isRowMajor && colMajor) {
-      // it is row major and we want col major, use breeze to remove explicit zeros
-      val breezeTransposed = asBreeze.asInstanceOf[BSM[Double]]
-      Matrices.fromBreeze(breezeTransposed).asInstanceOf[SparseMatrix]
+    if (isColMajor != colMajor) {
+      val numPtrs = if (colMajor) numCols else numRows
+      val newColPtrs = new Array[Int](numPtrs + 1)
+      var i = 0
+      while (i < values.length) {
+        if (values(i) != 0.0) {
+          newColPtrs(rowIndices(i) + 1) += 1
+        }
+        i += 1
+      }
+      i = 0
+      while (i < numPtrs) {
+        newColPtrs(i + 1) += newColPtrs(i)
+        i += 1
+      }
+
+      val nnz = newColPtrs(numPtrs)
+      val newRowIndices = new Array[Int](nnz)
+      val newValues = new Array[Double](nnz)
+      val next = newColPtrs.clone()
+      var j = 0
+      // Visiting the original rows or columns in order keeps the new indices sorted.
+      while (j < colPtrs.length - 1) {
+        var idx = colPtrs(j)
+        val idxEnd = colPtrs(j + 1)
+        while (idx < idxEnd) {
+          if (values(idx) != 0.0) {
+            val newCol = rowIndices(idx)
+            val newIdx = next(newCol)
+            newRowIndices(newIdx) = j
+            newValues(newIdx) = values(idx)
+            next(newCol) += 1
+          }
+          idx += 1
+        }
+        j += 1
+      }
+      new SparseMatrix(numRows, numCols, newColPtrs, newRowIndices, newValues,
+        isTransposed = !colMajor)
     } else {
       val nnz = numNonzeros
       if (nnz != numActives) {
@@ -1326,6 +1372,57 @@ object Matrices {
         }
       }
       SparseMatrix.fromCOO(numRows, numCols, entries)
+    }
+  }
+
+  private[ml] def equals(left: Matrix, right: Matrix): Boolean = {
+    if (left.numRows != right.numRows || left.numCols != right.numCols) {
+      return false
+    }
+    (left, right) match {
+      case (leftSparse: SparseMatrix, rightSparse: SparseMatrix) =>
+        // Adapted from Breeze's CSCMatrix.equals. Retain its treatment of explicit zeros:
+        // the last active entry is compared by coordinate even when its value is zero.
+        val leftEntries = sparseEntries(leftSparse)
+        val rightEntries = sparseEntries(rightSparse)
+        while (leftEntries.hasNext && rightEntries.hasNext) {
+          var leftEntry = leftEntries.next()
+          var rightEntry = rightEntries.next()
+          while (leftEntry._3 == 0.0 && leftEntries.hasNext) {
+            leftEntry = leftEntries.next()
+          }
+          while (rightEntry._3 == 0.0 && rightEntries.hasNext) {
+            rightEntry = rightEntries.next()
+          }
+          if (leftEntry._1 != rightEntry._1 || leftEntry._2 != rightEntry._2 ||
+              leftEntry._3 != rightEntry._3) {
+            return false
+          }
+        }
+        leftEntries.forall(_._3 == 0.0) && rightEntries.forall(_._3 == 0.0)
+      case _ =>
+        var j = 0
+        while (j < left.numCols) {
+          var i = 0
+          while (i < left.numRows) {
+            if (left(i, j) != right(i, j)) {
+              return false
+            }
+            i += 1
+          }
+          j += 1
+        }
+        true
+    }
+  }
+
+  private def sparseEntries(matrix: SparseMatrix): Iterator[(Int, Int, Double)] = {
+    // Breeze's sparse transpose removes explicit zeros, unlike an ordinary CSC wrapper.
+    val columnMajor = if (matrix.isTransposed) matrix.toSparseColMajor else matrix
+    Iterator.range(0, columnMajor.numCols).flatMap { j =>
+      Iterator.range(columnMajor.colPtrs(j), columnMajor.colPtrs(j + 1)).map { idx =>
+        (columnMajor.rowIndices(idx), j, columnMajor.values(idx))
+      }
     }
   }
 
