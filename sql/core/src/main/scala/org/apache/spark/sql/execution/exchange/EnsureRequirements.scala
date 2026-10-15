@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.datasources.v2.GroupPartitionsExec
+import org.apache.spark.sql.execution.datasources.v2.{ExpectedKeySpec, GroupPartitionsExec}
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -153,11 +153,11 @@ case class EnsureRequirements(
                 val sortedGroupedKeys = satisfyingKeyedPartitioning.partitionKeys
                   .groupBy(identity).view.mapValues(_.size)
                   .toSeq.sortBy(_._1)(satisfyingKeyedPartitioning.keyOrderingFor(o))
+                  .map { case (key, numSplits) =>
+                    key -> ExpectedKeySpec(numSplits, Some(SPLIT_FOR_ORDERING))
+                  }
                 GroupPartitionsExec(child,
-                  expectedPartitionKeys = Some(sortedGroupedKeys),
-                  // The keys stay ungrouped so that the ordering the operator reads is the one
-                  // derived from them, which is no side of a pairing.
-                  ungroupingOrigin = Some(SPLIT_FOR_ORDERING)
+                  expectedPartitionKeys = Some(sortedGroupedKeys)
                 )
               }
 
@@ -923,16 +923,20 @@ case class EnsureRequirements(
       // `ValidateRequirements` cannot tell such a pair from two sides that split the key between
       // them. Each side stamps why it is left ungrouped (`UngroupingOrigin`), so a reader of the
       // finished plan judges the pair on the layouts it holds; the stamp also decides the node's
-      // routing (`GroupPartitionsExec.distributePartitions`).
+      // routing through the per-key modes (`GroupPartitionsExec.distributePartitions`).
+      def expectedKeys(replicate: Boolean):
+          Seq[(InternalRowComparableWrapper, ExpectedKeySpec)] = {
+        val origin = Option.when(applyPartialClustering)(
+          if (replicate) REPLICATED_FOR_JOIN else SPLIT_FOR_JOIN)
+        mergedPartitionKeys.map { case (key, numSplits) =>
+          key -> ExpectedKeySpec(numSplits, origin)
+        }
+      }
       (
         GroupPartitionsExec(rawLeft, leftSpec.joinKeyPositions,
-          Some(mergedPartitionKeys), leftReducers,
-          ungroupingOrigin = Option.when(applyPartialClustering)(
-            if (replicateLeftSide) REPLICATED_FOR_JOIN else SPLIT_FOR_JOIN)),
+          Some(expectedKeys(replicateLeftSide)), leftReducers),
         GroupPartitionsExec(rawRight, rightSpec.joinKeyPositions,
-          Some(mergedPartitionKeys), rightReducers,
-          ungroupingOrigin = Option.when(applyPartialClustering)(
-            if (replicateRightSide) REPLICATED_FOR_JOIN else SPLIT_FOR_JOIN)))
+          Some(expectedKeys(replicateRightSide)), rightReducers))
     }
 
     // The pairing is only worth committing to if both children still declare the same aligned key
@@ -1073,7 +1077,7 @@ case class EnsureRequirements(
       // Only a plain grouping is rebuilt. An aligned one carries a merged key count, a reducer or
       // a replication, none of which this rebuild reproduces, so it is wrapped below instead.
       case g: GroupPartitionsExec
-          if g.expectedKeyCount.isEmpty && g.reducers.isEmpty && !g.distributePartitions =>
+          if g.expectedKeySpecs.isEmpty && g.reducers.isEmpty =>
         // Rebuilt rather than copied: the positions are an input to the node's grouping, and a
         // `copy` would keep the grouping derived from the old ones.
         //

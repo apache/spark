@@ -113,6 +113,18 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     assert(specs.head.isInstanceOf[HashShuffleSpec], s"and it is the hash one, got $specs")
   }
 
+  test("SPARK-59436: plan strings truncate the per-partition origins as one argument") {
+    val a = AttributeReference("a", IntegerType)()
+    val keys = Seq.fill(8)(InternalRow(1))
+    val partitioning = KeyedPartitioning(Seq(a), keys).withLayout(
+      _.copy(ungroupingOrigins = Some(Seq.fill(keys.size)(SPLIT_FOR_JOIN))))
+    val complete = partitioning.toString
+    val truncated = partitioning.argString(2)
+    assert(complete.sliding("SPLIT_FOR_JOIN".length).count(_ == "SPLIT_FOR_JOIN") == 8)
+    assert(truncated.sliding("SPLIT_FOR_JOIN".length).count(_ == "SPLIT_FOR_JOIN") == 2)
+    assert(truncated.contains("more fields"), truncated)
+  }
+
   test("SPARK-59671: the specs a side offers are the layouts it reports") {
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()
@@ -121,7 +133,8 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     // side of an alignment keeps its splits and spreads them. A finished plan is judged on the
     // layouts it holds, so the reason is read off them rather than off a configuration.
     val spread = KeyedPartitioning(Seq(a), Seq(InternalRow(1), InternalRow(1), InternalRow(2)))
-      .withLayout(_.copy(ungroupingOrigin = Some(SPLIT_FOR_JOIN)))
+      .withLayout(_.copy(ungroupingOrigins =
+        Some(Seq(SPLIT_FOR_JOIN, SPLIT_FOR_JOIN, SPLIT_FOR_JOIN))))
     val specs = PartitioningCollection.specsForPairing(spread, cd)
     assert(specs.size == 1, s"one member, one spec, got $specs")
     val spec = specs.head.asInstanceOf[KeyedShuffleSpec]
@@ -130,25 +143,27 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
 
     // A member that does not say why it is ungrouped is waiting for the node that would settle it,
     // and a finished plan has none left to insert.
-    val unsettled = spread.withLayout(_.copy(ungroupingOrigin = None))
+    val unsettled = spread.withLayout(_.copy(ungroupingOrigins = None))
     assert(PartitioningCollection.specsForPairing(unsettled, cd).isEmpty,
       "an ungrouped member is a plan only where a producer built one")
 
     // An origin is read for the distribution it is good for. A spread an ordering requirement is
     // read through is no side of a clustering, and a clustering is what asks here.
-    val forOrdering = spread.withLayout(_.copy(ungroupingOrigin = Some(SPLIT_FOR_ORDERING)))
+    val forOrdering = spread.withLayout(_.copy(ungroupingOrigins =
+      Some(Seq.fill(3)(SPLIT_FOR_ORDERING))))
     assert(PartitioningCollection.specsForPairing(forOrdering, cd).isEmpty,
       "an origin a clustering does not read is not offered to it")
 
     // The side that repeats a key's whole group is the other half of that alignment, and it is
     // offered the same way.
-    val repeat = spread.withLayout(_.copy(ungroupingOrigin = Some(REPLICATED_FOR_JOIN)))
+    val repeat = spread.withLayout(_.copy(ungroupingOrigins =
+      Some(Seq.fill(3)(REPLICATED_FOR_JOIN))))
     assert(PartitioningCollection.specsForPairing(repeat, cd).size == 1)
 
     // A count the operation pinned is asked as it stands, which `satisfies` asks for every member,
     // the ones whose layout says why they are ungrouped included.
     val four = KeyedPartitioning(Seq(a), (1 to 4).map(InternalRow(_)))
-      .withLayout(_.copy(ungroupingOrigin = Some(SPLIT_FOR_JOIN)))
+      .withLayout(_.copy(ungroupingOrigins = Some(Seq.fill(4)(SPLIT_FOR_JOIN))))
     assert(PartitioningCollection
       .specsForPairing(four, ClusteredDistribution(Seq(a), requiredNumPartitions = Some(4)))
       .size == 1, "the size the operation asks for is the one the member reports")
@@ -190,20 +205,30 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     val b = AttributeReference("b", IntegerType)()
     val keys = Seq(InternalRow(1), InternalRow(1), InternalRow(2))
     def stamped(attr: AttributeReference, role: UngroupingOrigin): KeyedPartitioning =
-      KeyedPartitioning(Seq(attr), keys).withLayout(_.copy(ungroupingOrigin = Some(role)))
+      KeyedPartitioning(Seq(attr), keys).withLayout(
+        _.copy(ungroupingOrigins = Some(Seq.fill(keys.size)(role))))
     val spread = stamped(a, SPLIT_FOR_JOIN)
     val repeat = stamped(a, REPLICATED_FOR_JOIN)
 
     // Grouping spends the claim: the keys are unique afterwards, so there are no splits left to
     // spread and no group left to repeat, and a kept stamp would turn a sound pair of grouped
     // sides away in `isCompatibleWith`, which reads a stamp as one side of an ungrouped pair.
-    assert(spread.toGrouped.isGrouped && spread.toGrouped.ungroupingOrigin.isEmpty)
+    assert(spread.toGrouped.isGrouped && spread.toGrouped.ungroupingOrigins.isEmpty)
 
     // A concatenation stands for the claim all of its members make: one role survives it, and
     // two roles stand for nothing.
-    assert(KeyedPartitioning.concat(Seq(spread, spread)).ungroupingOrigin
-      .contains(SPLIT_FOR_JOIN))
-    assert(KeyedPartitioning.concat(Seq(spread, repeat)).ungroupingOrigin.isEmpty)
+    assert(KeyedPartitioning.concat(Seq(spread, spread)).ungroupingOrigins ===
+      Some(Seq.fill(2 * keys.size)(SPLIT_FOR_JOIN)))
+    assert(KeyedPartitioning.concat(Seq(spread, repeat)).ungroupingOrigins.isEmpty)
+
+    // Members holding one role each agree however many partitions each holds it over, so the
+    // concatenation of a side and a smaller side of it carries the role over the merged keys.
+    val twoKeys = keys.take(2)
+    val smaller = KeyedPartitioning(Seq(a), twoKeys).withLayout(
+      l => l.copy(ungroupingOrigins = Some(Seq.fill(twoKeys.size)(SPLIT_FOR_JOIN))))
+    assert(KeyedPartitioning.concat(Seq(spread, smaller)).ungroupingOrigins ===
+      Some(Seq.fill(keys.size + twoKeys.size)(SPLIT_FOR_JOIN)),
+      "the role every member holds throughout carries over the whole concatenation")
 
     // A collection holds one canonical layout its members share, and it agrees the same way. An
     // aligned pair's joined output is the disagreeing case: the zip of a spread side and a
@@ -211,17 +236,57 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     val agreed = PartitioningCollection.fromPartitionings(
       Seq(spread, stamped(b, SPLIT_FOR_JOIN)))
     assert(agreed.partitionings.forall(p => p.asInstanceOf[KeyedPartitioning]
-      .ungroupingOrigin.contains(SPLIT_FOR_JOIN)), "one role, one canonical layout")
+      .ungroupingOrigins === Some(Seq.fill(keys.size)(SPLIT_FOR_JOIN))),
+      "one role, one canonical layout")
     val joined = PartitioningCollection.fromPartitionings(Seq(spread, repeat))
     assert(joined.partitionings.forall(_.asInstanceOf[KeyedPartitioning]
-      .ungroupingOrigin.isEmpty), "two roles agree on nothing")
+      .ungroupingOrigins.isEmpty), "two roles agree on nothing")
+  }
+
+  test("SPARK-59671: roles are held per partition, and a merge keeps them as they agree") {
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    // Key 1 in two slots and key 2 in one: the runs a key's roles cover.
+    val keys = Seq(InternalRow(1), InternalRow(1), InternalRow(2))
+    val spreadKey1 = Seq(SPLIT_FOR_JOIN, SPLIT_FOR_JOIN, REPLICATED_FOR_JOIN)
+    def mixed(attr: AttributeReference, roles: Seq[UngroupingOrigin]): KeyedPartitioning =
+      KeyedPartitioning(Seq(attr), keys)
+        .withLayout(_.copy(ungroupingOrigins = Some(roles)))
+
+    // One node's own roles: it spreads key 1 and repeats key 2, so it takes no single role, and
+    // the pairing reads the sequence rather than one value per layout.
+    assert(mixed(a, spreadKey1).ungroupingOrigins.contains(spreadKey1))
+    // A collection's members are alternatives describing the same partitions, so the claim
+    // survives where they agree on it, key by key.
+    val agreed = PartitioningCollection.fromPartitionings(
+      Seq(mixed(a, spreadKey1), mixed(b, spreadKey1)))
+    assert(agreed.partitionings.forall(
+      _.asInstanceOf[KeyedPartitioning].ungroupingOrigins.contains(spreadKey1)),
+      "the members agree on every key, so they keep the claim")
+    val disagreed = PartitioningCollection.fromPartitionings(
+      Seq(mixed(a, spreadKey1), mixed(b, spreadKey1.reverse)))
+    assert(disagreed.partitionings.forall(
+      _.asInstanceOf[KeyedPartitioning].ungroupingOrigins.isEmpty),
+      "two role sequences agree on nothing")
+
+    // A concatenation merges layouts that describe different partitions, so a varying claim has
+    // no one role to carry over it and goes; a uniform one every member makes survives.
+    assert(KeyedPartitioning.concat(Seq(mixed(a, spreadKey1), mixed(b, spreadKey1)))
+      .ungroupingOrigins.isEmpty)
+    val uniform = mixed(a, spreadKey1).withLayout(l => l.copy(ungroupingOrigins =
+        Some(Seq.fill(keys.size)(SPLIT_FOR_JOIN))))
+    assert(KeyedPartitioning.concat(Seq(uniform, uniform)).ungroupingOrigins ===
+      Some(Seq.fill(2 * keys.size)(SPLIT_FOR_JOIN)),
+      "one role every member makes survives the concatenation")
   }
 
   test("SPARK-59671: an ordering reads sorted keys, a clustering reads the pairing") {
     val a = AttributeReference("a", IntegerType)()
     def layout(keys: Seq[Int], role: Option[UngroupingOrigin]): KeyedPartitioning =
-      KeyedPartitioning(Seq(a), keys.map(InternalRow(_)))
-        .withLayout(_.copy(ungroupingOrigin = role))
+      KeyedPartitioning(Seq(a), keys.map(InternalRow(_))).withLayout { l =>
+        role.fold(l.copy(ungroupingOrigins = None))(r =>
+          l.copy(ungroupingOrigins = Some(Seq.fill(keys.size)(r))))
+      }
     val sorted = Seq(1, 1, 2)
     val ordering = OrderedDistribution(Seq(SortOrder(a, Ascending)))
     val clustered = ClusteredDistribution(Seq(a))

@@ -176,7 +176,8 @@ class ValidateRequirementsSuite extends SharedSparkSession {
         role: UngroupingOrigin,
         keys: Seq[InternalRow]): DummySparkPlan =
       DummySparkPlan(outputPartitioning =
-        KeyedPartitioning(Seq(attr), keys).withLayout(_.copy(ungroupingOrigin = Some(role))))
+        KeyedPartitioning(Seq(attr), keys).withLayout(l =>
+        l.copy(ungroupingOrigins = Some(Seq.fill(keys.size)(role)))))
     val left = side(a, SPLIT_FOR_JOIN, rows)
     val right = side(b, REPLICATED_FOR_JOIN, rows)
     val join = ShuffledHashJoinExec(Seq(a), Seq(b), Inner, BuildLeft, None, left, right)
@@ -219,6 +220,35 @@ class ValidateRequirementsSuite extends SharedSparkSession {
       "the sides do not line up, and nothing else the operator reads says otherwise")
   }
 
+  test("SPARK-59671: the pairing reads one role per key, not one per node") {
+    // Which side spreads a key is the alignment's per-key decision, so a side can spread one key
+    // and repeat another. The pairing asks, index by index, that one side of each key spreads it
+    // and the other repeats it: a role per node could not describe such a pair, and reading one
+    // would refuse it as two sides spreading the same keys.
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    // Key 1 in two slots and key 2 in one, which is the run of partitions a key's roles cover.
+    val rows = Seq(InternalRow(1), InternalRow(1), InternalRow(2))
+    def side(attr: AttributeReference, roles: Seq[UngroupingOrigin]): DummySparkPlan =
+      DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(attr), rows)
+        .withLayout(_.copy(ungroupingOrigins = Some(roles))))
+    def join(left: SparkPlan, right: SparkPlan): SparkPlan =
+      ShuffledHashJoinExec(Seq(a), Seq(b), Inner, BuildLeft, None, left, right)
+
+    // The left spreads key 1 and the right key 2.
+    assert(ValidateRequirements.validate(join(
+      side(a, Seq(SPLIT_FOR_JOIN, SPLIT_FOR_JOIN, REPLICATED_FOR_JOIN)),
+      side(b, Seq(REPLICATED_FOR_JOIN, REPLICATED_FOR_JOIN, SPLIT_FOR_JOIN)))),
+      "each key is spread by one side and repeated by the other, whichever side it is")
+
+    // Key 2 is spread on both sides, and the slot they do it at is what refuses the pair: key 1
+    // still pairs, so nothing else in the layouts tells the two sides apart.
+    assert(!ValidateRequirements.validate(join(
+      side(a, Seq(SPLIT_FOR_JOIN, SPLIT_FOR_JOIN, REPLICATED_FOR_JOIN)),
+      side(b, Seq(SPLIT_FOR_JOIN, SPLIT_FOR_JOIN, SPLIT_FOR_JOIN)))),
+      "two sides spreading the same key lose the matches that cross them")
+  }
+
   test("SPARK-59671: a keyed pair is judged on the layouts the plan holds") {
     // Neither side's keys are deduped or re-sorted to make the pair line up: reading it through
     // `createShuffleSpec` would do both, so two sides whose layouts disagree as they stand would
@@ -229,7 +259,8 @@ class ValidateRequirementsSuite extends SharedSparkSession {
     def side(attr: AttributeReference, role: UngroupingOrigin,
         keys: Seq[InternalRow]): DummySparkPlan =
       DummySparkPlan(outputPartitioning =
-        KeyedPartitioning(Seq(attr), keys).withLayout(_.copy(ungroupingOrigin = Some(role))))
+        KeyedPartitioning(Seq(attr), keys).withLayout(l =>
+        l.copy(ungroupingOrigins = Some(Seq.fill(keys.size)(role)))))
     val left = side(a, SPLIT_FOR_JOIN, rows)
     // The same keys in another order, which a projection onto distinct sorted keys would
     // normalize away.
@@ -347,7 +378,8 @@ class ValidateRequirementsSuite extends SharedSparkSession {
     val b = AttributeReference("b", IntegerType)()
     val rows = Seq(InternalRow(1), InternalRow(1), InternalRow(2))
     def keyed(attr: AttributeReference, role: UngroupingOrigin): KeyedPartitioning =
-      KeyedPartitioning(Seq(attr), rows).withLayout(_.copy(ungroupingOrigin = Some(role)))
+      KeyedPartitioning(Seq(attr), rows).withLayout(l =>
+        l.copy(ungroupingOrigins = Some(Seq.fill(rows.size)(role))))
     def side(partitioning: Partitioning): DummySparkPlan =
       DummySparkPlan(outputPartitioning = partitioning)
     val bothAlternatives = side(PartitioningCollection.fromPartitionings(
@@ -409,7 +441,8 @@ class ValidateRequirementsSuite extends SharedSparkSession {
     val b = AttributeReference("b", IntegerType)()
     val rows = Seq(InternalRow(1), InternalRow(1), InternalRow(2))
     def keyed(attr: AttributeReference, role: UngroupingOrigin): KeyedPartitioning =
-      KeyedPartitioning(Seq(attr), rows).withLayout(_.copy(ungroupingOrigin = Some(role)))
+      KeyedPartitioning(Seq(attr), rows).withLayout(l =>
+        l.copy(ungroupingOrigins = Some(Seq.fill(rows.size)(role))))
     val left = DummySparkPlan(outputPartitioning =
       PartitioningCollection.fromPartitionings(
         Seq(keyed(b, REPLICATED_FOR_JOIN), keyed(a, REPLICATED_FOR_JOIN))))
@@ -428,7 +461,8 @@ class ValidateRequirementsSuite extends SharedSparkSession {
     val rows = Seq(InternalRow(1), InternalRow(1), InternalRow(2))
     def side(attr: AttributeReference, role: UngroupingOrigin): DummySparkPlan =
       DummySparkPlan(outputPartitioning =
-        KeyedPartitioning(Seq(attr), rows).withLayout(_.copy(ungroupingOrigin = Some(role))))
+        KeyedPartitioning(Seq(attr), rows).withLayout(l =>
+        l.copy(ungroupingOrigins = Some(Seq.fill(rows.size)(role)))))
     val left = side(a, SPLIT_FOR_JOIN)
     val right = side(b, REPLICATED_FOR_JOIN)
     assert(left.outputOrdering.isEmpty && right.outputOrdering.isEmpty,

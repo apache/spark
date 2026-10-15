@@ -991,8 +991,8 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     // from the outside by the extension-driven cases in `SparkSessionExtensionSuite`, which need a
     // session of their own.
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-      // Pins the property the standard pipeline has to keep: a stamping pass runs immediately after
-      // `EnsureRequirements`, so the decision is taken from the plan the exchanges were placed in
+      // Pins the property the standard pipeline has to keep: a stamping pass follows
+      // `EnsureRequirements` and its skew optimization, so the decision is taken from the plan
       // and no rule in between can change a partitioning the parent already planned against. A
       // count would break on a sixth legitimate pass and say nothing about the order.
       // `AdaptiveQueryExecSuite` asserts the same adjacency for the list AQE builds.
@@ -1001,7 +1001,9 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       val ensureRequirements = rules.indexWhere(_.isInstanceOf[EnsureRequirements])
       val columnarRules =
         rules.indexWhere(_.isInstanceOf[ApplyColumnarRulesAndInsertTransitions])
-      assert(ensureRequirements >= 0 && firstStamp == ensureRequirements + 1 &&
+      val skew = rules.indexWhere(
+        _.isInstanceOf[org.apache.spark.sql.execution.OptimizeSkewedKeyGroups])
+      assert(ensureRequirements >= 0 && skew == ensureRequirements + 1 && firstStamp == skew + 1 &&
           firstStamp < columnarRules,
         "expected a stamping pass right behind EnsureRequirements and before the columnar " +
           s"rules, got $ensureRequirements/$firstStamp/$columnarRules")

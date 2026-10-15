@@ -61,20 +61,15 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
  *                         keys of a storage-partitioned join or the `PARTITION BY` and grouping
  *                         keys of a single-child operator. The name is historical, the projection
  *                         is not join-specific.
- * @param expectedKeyCount How many partition keys the planner expected, when it aligned this node
- *                         to a merged key set. The keys themselves live in `grouping`, so this
- *                         carries no second copy of them.
+ * @param expectedKeySpecs The alignment's per-key reservation, one entry per expected key in the
+ *                         order the planner listed them. The keys themselves live in `grouping`,
+ *                         so this carries no second copy of them, and the roles are what the layout
+ *                         this node reports is stamped with, one per partition. See
+ *                         [[ExpectedKeySpec]].
  * @param reducers Optional reducers to apply to partition keys for grouping compatibility. Kept as
  *                 reducers rather than as their display names. A name embeds the exprId of the
  *                 attribute it transforms, so it would break canonical equality the same way the
  *                 reducers do. See `doCanonicalize`.
- * @param ungroupingOrigin Why this node's output is left ungrouped on purpose, stamped into
- *                         the layout it reports. It also decides the routing:
- *                         `SPLIT_FOR_JOIN` and `SPLIT_FOR_ORDERING` distribute each key's
- *                         splits across the expected slots (padding with empty partitions),
- *                         [[REPLICATED_FOR_JOIN]] groups the splits first and repeats each group
- *                         into its expected slots, and `None` groups them, one partition per key.
- *                         See [[UngroupingOrigin]].
  * @param enableSortedMerge When true, uses [[SortedMergeCoalescedRDD]] to perform a k-way merge
  *                          of the coalesced partitions, preserving the child's output ordering
  *                          end-to-end. Set by [[EnsureRequirements]] when a parent operator
@@ -90,17 +85,19 @@ case class GroupPartitionsExec(
     plannedPartitioning: Partitioning,
     childPartitioning: Partitioning,
     @transient joinKeyPositions: Option[Seq[Int]],
-    @transient expectedKeyCount: Option[Int],
+    @transient expectedKeySpecs: Option[Seq[ExpectedKeySpec]],
     @transient reducers: Option[Seq[Option[KeyReducer]]],
-    @transient ungroupingOrigin: Option[UngroupingOrigin],
     @transient enableSortedMerge: Boolean
   ) extends UnaryExecNode {
 
   /**
    * Whether each key's splits are distributed across its expected slots, or grouped into one
-   * partition per key first. Derived from the origin; see `@param ungroupingOrigin`.
+   * partition per key first. Derived from the roles of the per-key reservations; see
+   * `ExpectedKeySpec`.
    */
-  def distributePartitions: Boolean = ungroupingOrigin.exists(_ != REPLICATED_FOR_JOIN)
+  def distributePartitions: Boolean = expectedKeySpecs.exists(_.exists(_.distribute))
+
+  def isSkew: Boolean = expectedKeySpecs.exists(_.exists(_.skewed))
 
   /**
    * The layout this node was planned to produce, but only while its child still reports the one it
@@ -166,11 +163,12 @@ case class GroupPartitionsExec(
 
   // All values are computed on the driver by `grouping`, so they are reported through
   // `sendDriverMetrics` rather than task-side accumulators. Registration reads constructor
-  // parameters only: replication needs an expected key with several slots, and the grouping's
-  // `isGrouped` is false exactly then. Pruning is registered over the whole alignment path; the
-  // ordering producer expects the child's own keys and so never prunes, but no constructor
-  // parameter separates it from the join producers that can. Coalescing can happen in any mode
-  // and reports 0 when nothing merged.
+  // parameters only: replication needs an expected key with several slots in the replicate
+  // mode, and the skewed count needs a key the skew-split decision marked, which the stored
+  // specs show. Pruning is registered over the whole alignment path; the ordering
+  // producer expects the child's own keys and so never prunes, but no constructor parameter
+  // separates it from the join producers that can. Coalescing can happen in any mode and
+  // reports 0 when nothing merged.
   @transient override lazy val metrics: Map[String, SQLMetric] = Map(
     "numInputPartitions" -> SQLMetrics.createMetric(sparkContext, "number of input partitions"),
     "numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions"),
@@ -179,14 +177,21 @@ case class GroupPartitionsExec(
       SQLMetrics.createMetric(sparkContext, "number of coalesced partitions"),
     "maxPartitionsPerGroup" ->
       SQLMetrics.createMetric(sparkContext, "max partitions per group")) ++ {
-    if (!grouping.isGrouped && !distributePartitions) {
+    if (expectedKeySpecs.exists(_.exists(m => m.numSplits > 1 && !m.distribute))) {
       Map("numReplicatedPartitionReads" -> SQLMetrics.createMetric(sparkContext,
         "number of replicated input partition reads"))
     } else {
       Map.empty[String, SQLMetric]
     }
   } ++ {
-    if (expectedKeyCount.isDefined) {
+    if (isSkew) {
+      Map("numSkewedKeyGroups" ->
+        SQLMetrics.createMetric(sparkContext, "number of key groups reserved by skew alignment"))
+    } else {
+      Map.empty[String, SQLMetric]
+    }
+  } ++ {
+    if (expectedKeySpecs.isDefined) {
       Map("numPrunedPartitions" ->
         SQLMetrics.createMetric(sparkContext, "number of pruned input partitions"))
     } else {
@@ -288,11 +293,13 @@ case class GroupPartitionsExec(
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     val driverAccumUpdates = ArrayBuffer.empty[(Long, Long)]
     // `metrics` is the single source of truth for what this node reports: an unregistered name
-    // is skipped here instead of its registration condition being repeated. `SparkPlan.execute`
-    // memoizes `doExecute` per instance, so this posts at most once.
-    def set(name: String, value: Long): Unit = metrics.get(name).foreach { metric =>
-      metric.set(value)
-      driverAccumUpdates += (metric.id -> value)
+    // is skipped here instead of its registration condition being repeated, and its value is
+    // by-name so a skipped metric costs no computation. `SparkPlan.execute` memoizes `doExecute`
+    // per instance, so this posts at most once.
+    def set(name: String, value: => Long): Unit = metrics.get(name).foreach { metric =>
+      val computed = value
+      metric.set(computed)
+      driverAccumUpdates += (metric.id -> computed)
     }
     // A single pass for the three per-group counts; an empty group and a coalesced one are
     // mutually exclusive.
@@ -317,6 +324,7 @@ case class GroupPartitionsExec(
     set("maxPartitionsPerGroup", maxPartitionsPerGroup)
     set("numReplicatedPartitionReads", grouping.numReplicatedPartitionReads)
     set("numPrunedPartitions", grouping.numPrunedPartitions)
+    set("numSkewedKeyGroups", expectedKeySpecs.getOrElse(Nil).count(_.skewed))
     SQLMetrics.postDriverMetricsUpdatedByValue(
       sparkContext, executionId, driverAccumUpdates.toSeq)
   }
@@ -435,7 +443,7 @@ case class GroupPartitionsExec(
   def withKeyPositionsFor(newChild: SparkPlan): Option[GroupPartitionsExec] = {
     // An aligned node's slot order comes from the parent distribution rather than the child, so the
     // factory cannot re-decide it for `newChild`.
-    if (expectedKeyCount.isDefined) {
+    if (expectedKeySpecs.isDefined) {
       return None
     }
     // `grouping` indexes the partitions of the child this node was decided for, and the positions
@@ -459,14 +467,14 @@ case class GroupPartitionsExec(
         }
         val positions = joinKeyPositions.fold(plannedInNewChild)(_.map(plannedInNewChild))
         // Only a grouping node reaches here today: the one caller (`CombineAdjacentAggregation`)
-        // regroups the node between two aggregates, which is built unstamped, so forwarding the
-        // origin preserves rather than claims. A stamped node would also need its expected slots
-        // re-derived, which this path does not do.
+        // regroups the node between two aggregates. The rebuilt node carries no reservations, so
+        // it claims nothing on its own, which is the answer for the unaligned grouping that path
+        // builds. An aligned node would also need its expected slots re-derived, which this path
+        // does not do.
         val regrouped = GroupPartitionsExec(
           child = newChild,
           joinKeyPositions = Option.when(positions != newChildKp.expressions.indices)(positions),
           reducers = reducers,
-          ungroupingOrigin = ungroupingOrigin,
           enableSortedMerge = enableSortedMerge)
         regrouped.copyTagsFrom(this)
         Some(regrouped)
@@ -484,13 +492,13 @@ case class GroupPartitionsExec(
     val joinKeyStr = joinKeyPositions.map { p =>
       s"JoinKeyPositions: ${truncatedString(p, "[", ", ", "]", joinKeyMaxFields)}"
     }.iterator
-    val expectedStr = expectedKeyCount.map(n => s"ExpectedPartitionKeys: $n")
+    val expectedStr = expectedKeySpecs.map(ks => s"ExpectedPartitionKeys: ${ks.size}")
     val reducersStr = reducers.map { seq =>
       val names = seq.map(_.map(_.reducer.displayName()).getOrElse("identity"))
       s"Reducers: ${truncatedString(names, "[", ", ", "]", joinKeyMaxFields)}"
     }
-    val distributeStr = Iterator(s"DistributePartitions: $distributePartitions")
-    // Rendered from the constructor field, as `DistributePartitions` above is, and not from
+    val distributeStr = Iterator(s"DistributesAnyKey: $distributePartitions")
+    // Rendered from the constructor field, as `DistributesAnyKey` above is, and not from
     // `usesSortedMerge`, which reads the child's ordering. This method feeds `simpleString`, which
     // `treeString` calls on error paths, so it stays on what the node was built with.
     val sortedMergeStr = Iterator(s"SortedMerge: $enableSortedMerge")
@@ -527,15 +535,44 @@ private[sql] case class PartitionGrouping(
   def isGrouped: Boolean = layout.isGrouped
 }
 
+/**
+ * What a [[GroupPartitionsExec]] alignment reserves for one expected key. Both sides of a join
+ * derive their entries from one shared list of keys and split counts, which is what pairs their
+ * output partitions; the specification is per side. The planner hands the factory each key paired
+ * with one of these; the built node keeps just the specs, whose keys are the first occurrences in
+ * `grouping`.
+ *
+ * @param numSplits The number of output partitions reserved for the key, the same on both sides.
+ * @param origin Why this side's partitions for the key are left ungrouped, stamped into the layout
+ *               the node reports, or `None` where no producer aligned the key and the plain
+ *               grouping stands. The two spread roles leave the key's splits apart and the
+ *               repeating one groups them first, so routing follows from the origin rather
+ *               than being carried beside it, which is what keeps a node's routing and its claim
+ *               from disagreeing. A partial clustering sets the side-wide role; a skew split sets
+ *               it per key, which no side-wide role can express once both features spread on one
+ *               side.
+ * @param skewed Whether this key participates in a skew alignment. Both sides carry the mark,
+ *               including the replicated side and an empty side padded for an unmatched key.
+ *               The metric counts these reservations, not only groups split on this side.
+ */
+case class ExpectedKeySpec(
+    numSplits: Int,
+    origin: Option[UngroupingOrigin],
+    skewed: Boolean = false) {
+
+  /** Whether this side spreads the key's splits over its slots, rather than grouping them first. */
+  def distribute: Boolean = origin.exists(_ != REPLICATED_FOR_JOIN)
+}
+
 private[sql] object GroupPartitionsExec {
 
   /**
    * Builds a node over `child`, deriving `grouping` and `plannedPartitioning` from the parameters.
    *
    * **Both are derived, and neither `copy` nor the generated `apply` re-derives them**, so a change
-   * to `child`, `joinKeyPositions`, `expectedPartitionKeys` (stored as `expectedKeyCount`),
-   * `reducers` or `ungroupingOrigin` has to come back through here. `enableSortedMerge` is not
-   * an input to either, which is why `tryEnableSortedMerge` may `copy` it.
+   * to `child`, `joinKeyPositions`, `expectedPartitionKeys` or `reducers` has to come back through
+   * here. `enableSortedMerge` is not an input to either, which is why `tryEnableSortedMerge` may
+   * `copy` it.
    *
    * Two other `copy` calls in this file are deliberate. `withNewChildInternal` carries both fields
    * over a child rewrite, and a child that turns out to report something else is what
@@ -546,9 +583,8 @@ private[sql] object GroupPartitionsExec {
   def apply(
       child: SparkPlan,
       joinKeyPositions: Option[Seq[Int]] = None,
-      expectedPartitionKeys: Option[Seq[(InternalRowComparableWrapper, Int)]] = None,
+      expectedPartitionKeys: Option[Seq[(InternalRowComparableWrapper, ExpectedKeySpec)]] = None,
       reducers: Option[Seq[Option[KeyReducer]]] = None,
-      ungroupingOrigin: Option[UngroupingOrigin] = None,
       enableSortedMerge: Boolean = false): GroupPartitionsExec = {
     // There must be a `KeyedPartitioning` in the child's output partitioning, as a
     // `GroupPartitionsExec` node is added to a plan only in that case.
@@ -559,11 +595,13 @@ private[sql] object GroupPartitionsExec {
     // `representativeOf` found one, so the partitioning is an expression tree.
     val childExpr = childPartitioning.asInstanceOf[Partitioning with Expression]
     val grouping = computeGrouping(
-      childKp, joinKeyPositions, expectedPartitionKeys, reducers, ungroupingOrigin)
+      childKp, joinKeyPositions, expectedPartitionKeys, reducers)
+    // The node persists the reservations without their keys: every consumer of the stored copy
+    // asks a count or a role, and the keys are already in `grouping`.
+    val expectedKeySpecs = expectedPartitionKeys.map(_.map(_._2))
     GroupPartitionsExec(child, grouping,
-      computeOutputPartitioning(childExpr, grouping, joinKeyPositions, reducers),
-      childPartitioning, joinKeyPositions, expectedPartitionKeys.map(_.size), reducers,
-      ungroupingOrigin, enableSortedMerge)
+      computeOutputPartitioning(childExpr, grouping, joinKeyPositions, reducers), childPartitioning,
+      joinKeyPositions, expectedKeySpecs, reducers, enableSortedMerge)
   }
 
   /**
@@ -635,30 +673,39 @@ private[sql] object GroupPartitionsExec {
   }
 
   /**
-   * Aligns partitions based on `expectedPartitionKeys` and clustering mode.
+   * Aligns partitions based on `expectedPartitionKeys` and per-key specifications.
    *
-   * Returns the aligned groups, whether their keys ended up unique, and two counts, both in
-   * input partition reads relative to the baseline of every input being read exactly once.
+   * Returns the aligned groups, the role each of them is held in, whether their keys ended up
+   * unique, and two counts, both in input partition reads relative to the baseline of every input
+   * being read exactly once. The roles are one per group, taken as the groups are emitted, since a
+   * key's role covers exactly the slots emitted for it. They are `None` where any expected key
+   * carries no role, as a layout is one side of an alignment only as a whole.
    * The pruned count is the reads that never happen: inputs of a key the alignment never
    * references. The join proved such keys cannot produce output, e.g. an inner join keeps
    * only the intersection. Which keys are expected is orthogonal to the mode: an
    * `OrderedDistribution` producer expects the child's own keys and so never prunes, while a
    * join producer can prune in either mode. The replicated count is the reads that happen
-   * again: in the replicate mode of partial clustering every expected partition of a held key
-   * re-reads all its splits, counted beyond the first pass (3 splits over 2 slots count 3).
-   * Total input reads = `numInputPartitions` - pruned + replicated.
+   * again: in the replicate mode every expected partition of a held key re-reads all its
+   * splits, counted beyond the first pass (3 splits over 2 slots count 3). Partial clustering
+   * and the per-key skew split both produce that mode. Total input reads =
+   * `numInputPartitions` - pruned + replicated.
    */
   private def alignToExpectedKeys(
       keyMap: Map[InternalRowComparableWrapper, Seq[Int]],
-      expectedPartitionKeys: Seq[(InternalRowComparableWrapper, Int)],
-      distributePartitions: Boolean,
+      expectedPartitionKeys: Seq[(InternalRowComparableWrapper, ExpectedKeySpec)],
       numInputPartitions: Int) = {
     var isGrouped = true
     var numReplicatedPartitionReads = 0
     // Splits the alignment references, accumulated over the expected keys. Every producer of
     // `expectedPartitionKeys` deduplicates the keys, so no split is counted twice here.
     var numMatchedPartitions = 0
-    val alignedPartitions = expectedPartitionKeys.flatMap { case (key, numSplits) =>
+    // The groups and the ungrouping origin each of them is held in come out of one walk: a key's
+    // origin covers exactly the slots emitted for it, so the claim lines up with the partitions
+    // position by position rather than being expanded from the specs a second time. One key the
+    // planner left without an origin leaves the node claiming nothing, since a layout is one side
+    // of an alignment only as a whole.
+    val (alignedPartitions, ungroupingOrigins) = expectedPartitionKeys.flatMap { case (key, spec) =>
+      val numSplits = spec.numSplits
       // Every producer derives the split counts from a `groupBy` size or the literal 1; a
       // non-positive count would emit a different partition count for the key than the other
       // side expects, breaking the pairing this alignment exists for.
@@ -666,10 +713,20 @@ private[sql] object GroupPartitionsExec {
       if (numSplits > 1) isGrouped = false
       val splits = keyMap.getOrElse(key, Seq.empty)
       numMatchedPartitions += splits.size
-      if (distributePartitions) {
-        // Distribute splits across expected partitions, padding with empty sequences
-        val paddedSplits = splits.map(Seq(_)).padTo(numSplits, Seq.empty)
-        paddedSplits.map((key, _))
+      val groups = if (spec.distribute) {
+        if (numSplits == 1) {
+          // A single expected partition leaves nothing to spread over: the splits concatenate
+          // into it, the same shape the replicate mode produces for the key.
+          Seq((key, splits))
+        } else {
+          // Spread the splits over the expected partitions: one split per partition while the
+          // slots suffice, otherwise contiguous chunks of ceil(size / numSplits), the count
+          // counterpart of the AQE skew join's contiguous map ranges. Padding the leftover
+          // slots keeps the emitted count exactly the reserved one, whatever the ratio of
+          // splits to slots.
+          val chunkSize = math.ceil(splits.size.toDouble / numSplits).toInt.max(1)
+          splits.grouped(chunkSize).padTo(numSplits, Seq.empty).map((key, _)).toSeq
+        }
       } else {
         // The slots beyond the first re-read the whole group. A key this side does not hold
         // has no splits to re-read, so the product is 0 and no explicit guard is needed.
@@ -677,11 +734,14 @@ private[sql] object GroupPartitionsExec {
         // Replicate all splits to each expected partition
         Seq.fill(numSplits)((key, splits))
       }
-    }
+      groups.map(group => group -> spec.origin)
+    }.unzip
     // The keyMap's groups partition the input indices between them, so the pruned inputs are the
     // total minus the matched.
     val numPrunedPartitions = numInputPartitions - numMatchedPartitions
-    (alignedPartitions, isGrouped, numPrunedPartitions, numReplicatedPartitionReads)
+    (alignedPartitions,
+      Option.when(ungroupingOrigins.forall(_.isDefined))(ungroupingOrigins.flatten),
+      isGrouped, numPrunedPartitions, numReplicatedPartitionReads)
   }
 
   /**
@@ -689,7 +749,8 @@ private[sql] object GroupPartitionsExec {
    * 1. Projecting partition keys if joinKeyPositions is specified
    * 2. Reducing keys if reducers are specified
    * 3. Grouping input partition indices by their (possibly projected/reduced) keys
-   * 4. Sorting or distributing based on whether partial clustering is enabled
+   * 4. Aligning to the expected keys and their per-key specifications, or sorting the groups
+   *    when no alignment was given
    *
    * `isCollapsed` says whether the output stands for more than one of the child's partition keys.
    * Two things set it: the child's own flag, and a merge this node performs.
@@ -697,11 +758,8 @@ private[sql] object GroupPartitionsExec {
   private def computeGrouping(
       childKp: KeyedPartitioning,
       joinKeyPositions: Option[Seq[Int]],
-      expectedPartitionKeys: Option[Seq[(InternalRowComparableWrapper, Int)]],
-      reducers: Option[Seq[Option[KeyReducer]]],
-      ungroupingOrigin: Option[UngroupingOrigin]): PartitionGrouping = {
-    // The routing follows the origin, the same derivation the node itself reports.
-    val distributePartitions = ungroupingOrigin.exists(_ != REPLICATED_FOR_JOIN)
+      expectedPartitionKeys: Option[Seq[(InternalRowComparableWrapper, ExpectedKeySpec)]],
+      reducers: Option[Seq[Option[KeyReducer]]]): PartitionGrouping = {
     // Project partition keys if join key positions are specified
     val (projectedDataTypes, projectedKeys) =
       joinKeyPositions.fold(
@@ -714,11 +772,10 @@ private[sql] object GroupPartitionsExec {
 
     val keyToPartitionIndices = reducedKeys.zipWithIndex.groupMap(_._1)(_._2)
 
-    val (partitions, isGrouped, numPrunedPartitions, numReplicatedPartitionReads) =
-      expectedPartitionKeys match {
+    val (partitions, ungroupingOrigins, isGrouped, numPrunedPartitions,
+        numReplicatedPartitionReads) = expectedPartitionKeys match {
         case Some(expected) =>
-          alignToExpectedKeys(
-            keyToPartitionIndices, expected, distributePartitions, childKp.numPartitions)
+          alignToExpectedKeys(keyToPartitionIndices, expected, childKp.numPartitions)
         case None =>
           // Ascending by key. The sort must match `KeyedPartitioning.toGrouped`, which is why both
           // go through `KeyedPartitioning.groupedKeyRowOrdering`, whose documentation holds the
@@ -726,7 +783,7 @@ private[sql] object GroupPartitionsExec {
           val keyOrdering = KeyedPartitioning.groupedKeyRowOrdering(reducedDataTypes)
           val sorted = keyToPartitionIndices.toSeq
             .sorted(keyOrdering.on((t: (InternalRowComparableWrapper, _)) => t._1.row))
-          (sorted, true, 0, 0)
+          (sorted, None, true, 0, 0)
       }
 
     // A projection that only reorders the key columns merges no key, but it still re-labels the
@@ -762,12 +819,10 @@ private[sql] object GroupPartitionsExec {
         case _ => false
       }
     // A `copy` of the child's layout rather than a fresh one, so the marker and anything the
-    // layout grows later are carried without this having to name them. The origin is the one
-    // field not carried: the output claims what this node's own producer stamped, never what
-    // the child's claimed, and only while the shape holds the claim -- a grouping that settles
-    // every key leaves nothing repeating, so it spends the claim the way `toGrouped` does.
-    // Built here, where the child is in scope, so `computeOutputPartitioning` has nothing left
-    // to re-apply.
+    // layout grows later are carried without this having to name them. The claim is the one field
+    // not carried: the output claims what this node's own producer stamped, never what the child's
+    // claimed, and only while the shape holds it -- a grouping that settles every key leaves
+    // nothing repeating, so it spends the claim the way `toGrouped` does.
     PartitionGrouping(
       partitions,
       childKp.layout.copy(
@@ -775,7 +830,7 @@ private[sql] object GroupPartitionsExec {
         dataTypes = reducedDataTypes,
         isGrouped = isGrouped,
         isCollapsed = isCollapsed,
-        ungroupingOrigin = if (isGrouped) None else ungroupingOrigin),
+        ungroupingOrigins = if (isGrouped) None else ungroupingOrigins),
       isIdentity, numPrunedPartitions, numReplicatedPartitionReads)
   }
 }

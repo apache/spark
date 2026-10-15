@@ -38,18 +38,7 @@ import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.connector.expressions.Expressions._
 import org.apache.spark.sql.connector.read.{Batch, Scan, ScanBuilder, SupportsReportOrdering, SupportsReportPartitioning}
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning}
-import org.apache.spark.sql.execution.{
-  ExtendedMode,
-  FormattedMode,
-  InputAdapter,
-  LocalTableScanExec,
-  ProjectExec,
-  RDDScanExec,
-  SimpleMode,
-  SortExec,
-  SparkPlan,
-  UnionExec,
-  WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{ExtendedMode, FormattedMode, InputAdapter, LocalTableScanExec, ProjectExec, RDDScanExec, SimpleMode, SortExec, SparkPlan, UnionExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.{AQEShuffleReadExec, ResultQueryStageExec}
 import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, GroupPartitionsExec}
@@ -118,6 +107,31 @@ abstract class KeyGroupedPartitioningSuiteBase extends DistributionAndOrderingSu
 
   protected def collectScans(plan: SparkPlan): Seq[BatchScanExec] = {
     collect(plan) { case s: BatchScanExec => s }
+  }
+
+
+  protected def selectWithMergeJoinHint(t1: String, t2: String): String = {
+    s"SELECT /*+ MERGE($t1, $t2) */ "
+  }
+
+  protected def collectAllShuffles(plan: SparkPlan): Seq[ShuffleExchangeLike] = {
+    collect(plan) {
+      case s: ShuffleExchangeExec => s
+    }
+  }
+
+  protected def collectAllGroupPartitions(plan: SparkPlan): Seq[GroupPartitionsExec] = {
+    collect(plan) {
+      case g: GroupPartitionsExec => g
+    }
+  }
+
+  /** Every `KeyedPartitioning` these nodes report, flattening partitioning collections. */
+  protected def keyedPartitioningsOf(
+      nodes: Seq[SparkPlan]): Seq[physical.KeyedPartitioning] = {
+    nodes.map(_.outputPartitioning)
+      .flatMap(physical.PartitioningCollection.flatten)
+      .collect { case kp: physical.KeyedPartitioning => kp }
   }
 
 }
@@ -615,9 +629,6 @@ class KeyGroupedPartitioningSuite
     Column.create("order_amount", DoubleType),
     Column.create("customer_id", LongType))
 
-  private def selectWithMergeJoinHint(t1: String, t2: String): String = {
-    s"SELECT /*+ MERGE($t1, $t2) */ "
-  }
 
   private def createJoinTestDF(
       keys: Seq[(String, String)],
@@ -726,9 +737,13 @@ class KeyGroupedPartitioningSuite
         assert(collectAllShuffles(joins.head).isEmpty,
           "should not add shuffle for both sides of the join")
         val sides = Seq(joins.head.left, joins.head.right).map(collectAllGroupPartitions)
-        val distributed = sides.map(_.map(_.distributePartitions))
+        val distributed = sides.map(_.map { g =>
+          val modes = g.expectedKeySpecs.getOrElse(Nil).map(_.distribute).distinct
+          assert(modes.size <= 1, s"expected a uniform per-key distribute mode, got $modes")
+          modes.headOption.getOrElse(false)
+        })
         assert(distributed == Seq(Seq(expectedLeftDistributed), Seq(false)),
-          s"left/right distributePartitions with partially clustered $partiallyClustered: " +
+          s"left/right distribute modes with partially clustered $partiallyClustered: " +
             distributed)
         val numPartitions = sides.flatten.map(_.outputPartitioning.numPartitions)
         assert(numPartitions == Seq(expectedNumPartitions, expectedNumPartitions),
@@ -916,17 +931,7 @@ class KeyGroupedPartitioningSuite
         Row("bbb", 20, 250.0), Row("bbb", 20, 350.0), Row("ccc", 30, 400.50)))
   }
 
-  protected def collectAllShuffles(plan: SparkPlan): Seq[ShuffleExchangeLike] = {
-    collect(plan) {
-      case s: ShuffleExchangeExec => s
-    }
-  }
 
-  protected def collectAllGroupPartitions(plan: SparkPlan): Seq[GroupPartitionsExec] = {
-    collect(plan) {
-      case g: GroupPartitionsExec => g
-    }
-  }
 
   /** The first node under `plan` that is not a codegen wrapper or the scan's projection. */
   protected def unwrapWrappers(plan: SparkPlan): SparkPlan = plan match {
@@ -936,13 +941,6 @@ class KeyGroupedPartitioningSuite
     case other => other
   }
 
-  /** Every `KeyedPartitioning` these nodes report, flattening partitioning collections. */
-  protected def keyedPartitioningsOf(
-      nodes: Seq[SparkPlan]): Seq[physical.KeyedPartitioning] = {
-    nodes.map(_.outputPartitioning)
-      .flatMap(physical.PartitioningCollection.flatten)
-      .collect { case kp: physical.KeyedPartitioning => kp }
-  }
 
   /** Reads one metric of a plan-graph node back from the status store values. */
   private def metricValue(
@@ -6105,10 +6103,10 @@ class KeyGroupedPartitioningSuite
              |""".stripMargin)
         val simpleAndExtendedKeyword =
           s"GroupPartitions JoinKeyPositions: [0] ExpectedPartitionKeys: $expectedKeys " +
-          "Reducers: [BucketReducer(2)] DistributePartitions: false SortedMerge: false"
+          "Reducers: [BucketReducer(2)] DistributesAnyKey: false SortedMerge: false"
         val formattedKeyword =
           s"Arguments: JoinKeyPositions: [0], ExpectedPartitionKeys: $expectedKeys, " +
-          "Reducers: [BucketReducer(2)], DistributePartitions: false, SortedMerge: false"
+          "Reducers: [BucketReducer(2)], DistributesAnyKey: false, SortedMerge: false"
         checkKeywordsExistsInExplain(df, SimpleMode, simpleAndExtendedKeyword)
         checkKeywordsExistsInExplain(df, ExtendedMode, simpleAndExtendedKeyword)
         checkKeywordsExistsInExplain(df, FormattedMode, formattedKeyword)
@@ -8703,7 +8701,9 @@ class KeyGroupedPartitioningSuite
         s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p ON p.item_id = i.id")
       val plan = df.queryExecution.executedPlan
 
-      val distributing = collectAllGroupPartitions(plan).filter(_.distributePartitions)
+      val distributing = collectAllGroupPartitions(plan).filter {
+        _.expectedKeySpecs.exists(_.exists(_.distribute))
+      }
       assert(distributing.nonEmpty, "this test needs a distributing GroupPartitionsExec")
       val keyed = keyedPartitioningsOf(distributing)
       assert(keyed.nonEmpty && keyed.forall(_.isCollapsed),
@@ -8712,6 +8712,24 @@ class KeyGroupedPartitioningSuite
         Row(1, "bb", 42.0), Row(1, "bb", 44.0), Row(2, "cc", 11.0)))
     }
   }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   test("SPARK-59057: a collapse confined to keys the other side filters out is not one") {
     // items is partitioned by `identity(id)` with ids 0, 4, 5 and purchases by `bucket(4, item_id)`
@@ -10110,9 +10128,12 @@ class KeyGroupedPartitioningSuite
       // below it hold the two complementary stamps.
       val joins = collect(plan) { case j: ShuffledJoin => j }
       assert(joins.nonEmpty, s"test setup: a storage-partitioned chain:\n$plan")
-      assert(joins.forall(j => keyedPartitioningsOf(Seq(j)).forall(_.ungroupingOrigin.isEmpty)),
+      assert(joins.forall(j => keyedPartitioningsOf(Seq(j)).forall(_.ungroupingOrigins.isEmpty)),
         s"a zipped pair reports no claim of its own:\n$plan")
-      val origins = collectAllGroupPartitions(plan).flatMap(_.ungroupingOrigin).distinct
+      val origins = collectAllGroupPartitions(plan)
+        .flatMap(g => PartitioningCollection.representativeOf(g.outputPartitioning)
+          .flatMap(_.ungroupingOrigins).getOrElse(Nil))
+        .distinct
       assert(origins.contains(SPLIT_FOR_JOIN) && origins.contains(REPLICATED_FOR_JOIN),
         s"one side spreads and the other repeats, got $origins:\n$plan")
       assert(collect(df.queryExecution.executedPlan) { case r: AQEShuffleReadExec => r }
@@ -10286,12 +10307,12 @@ class KeyGroupedPartitioningSuite
       val joins = collect(plan) { case j: ShuffledJoin => j }
       assert(joins.size == 1, s"test setup: one storage-partitioned join:\n$plan")
       assert(keyedPartitioningsOf(Seq(joins.head)).exists(k =>
-        !k.isGrouped && k.ungroupingOrigin.contains(SPLIT_FOR_JOIN)),
+        !k.isGrouped && k.ungroupingOrigins.exists(_.contains(SPLIT_FOR_JOIN))),
         s"test setup: the join reports its spread side verbatim:\n$plan")
       assert(collectAllGroupPartitions(plan).exists(g =>
         g.child.collectFirst { case _: SortMergeJoinExec => () }.isDefined &&
           (g.outputPartitioning match {
-            case k: KeyedPartitioning => k.isGrouped && k.ungroupingOrigin.isEmpty
+            case k: KeyedPartitioning => k.isGrouped && k.ungroupingOrigins.isEmpty
             case _ => false
           })),
         s"the aggregate's side is grouped over the join:\n$plan")

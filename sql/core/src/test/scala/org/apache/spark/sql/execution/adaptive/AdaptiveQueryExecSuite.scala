@@ -5329,7 +5329,7 @@ class AdaptiveQueryExecSuite
     // that answer so every rule below it and the execution read what the exchanges were planned
     // against. `SnapshotUnionPreparationConf` has to run first, or the value the stamp reads
     // is whatever `conf` says by then rather than the one `EnsureRequirements` saw. The two sit
-    // next to `EnsureRequirements` with nothing in between, and nothing at the list itself says the
+    // around `EnsureRequirements` and its skew optimization, and nothing at the list says the
     // three have to stay contiguous: an injected rule cannot land between them, since those are
     // appended at the tail, but an edit to the list can. AQE builds its own list, and
     // `UnionCodegenSuite` covers the one `QueryExecution` builds when AQE is off.
@@ -5356,7 +5356,10 @@ class AdaptiveQueryExecSuite
       assert(snapshot >= 0 && snapshot == ensureRequirements - 1,
         s"expected the conf snapshot right before EnsureRequirements at $ensureRequirements, " +
           s"got $snapshot")
-      assert(stamps.headOption.contains(ensureRequirements + 1),
+      val skew = rules.indexWhere(
+        _.isInstanceOf[org.apache.spark.sql.execution.OptimizeSkewedKeyGroups])
+      assert(skew == ensureRequirements + 1)
+      assert(stamps.headOption.contains(skew + 1),
         s"expected the stamp right behind EnsureRequirements at $ensureRequirements, got $stamps")
       assert(stamps.last == rules.length - 1,
         s"expected the trailing stamp last of ${rules.length} rules, got $stamps")
