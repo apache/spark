@@ -2063,12 +2063,12 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
   test("RUNTIME_FILTER hint warns with the reason when it cannot be applied") {
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
-      // A filter on the key was already injected at the inner join, so the hinted one is not
-      // built; the warning says so rather than blaming the hinted side.
+      // A filter on the key from `bf2` was already injected at the inner join; the hinted side
+      // still adds its own.
       val existing = "select /*+ RUNTIME_FILTER(bf3) */ * from bf4 join bf2 on bf4.c4 = bf2.c2 " +
         "join bf3 on bf3.c3 = bf4.c4 where bf2.a2 = 5"
-      assertHintedRewrite(existing)
-      assertHintNotApplied(existing, "a runtime filter on the join key already exists")
+      assertHintedRewrite(existing, 2)
+      assert(!hintWarnings(existing).exists(_.contains("is not supported")))
       // The filter count limit applies to hinted filters too.
       withSQLConf(SQLConf.RUNTIME_FILTER_NUMBER_THRESHOLD.key -> "1") {
         assertHintedRewrite(existing)
