@@ -104,6 +104,53 @@ libbid-java commit `9936d04`, before the source was incorporated into Spark:
 Microbenchmark results are host- and JVM-specific. Comparisons require the
 same JVM, host, benchmark inputs, and JMH settings.
 
+The following results compare the generic `BidK` path with `BigDecimal` under
+a `MathContext` of 43 digits (Decimal160) and 70 digits (Decimal256). Values
+are nanoseconds per operation. The ratio is `BigDecimal / BID`, so a value
+greater than 1 means BID was faster. `BidK` uses `DecNum` rather than the
+specialized 64/128 kernels, so these numbers are not comparable to the table
+above.
+
+| Function / workload | BID160 | BD160 | Ratio | BID256 | BD256 | Ratio |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| add (same quantum) | 938.73 | 21.50 | 0.02x | 2872.80 | 25.52 | 0.01x |
+| add (mixed quantum) | 1333.53 | 114.20 | 0.09x | 2068.60 | 169.61 | 0.08x |
+| add (full precision) | 3297.25 | 149.68 | 0.05x | 5044.22 | 255.13 | 0.05x |
+| subtract | 1671.09 | 32.26 | 0.02x | 3000.92 | 36.25 | 0.01x |
+| multiply (same quantum) | 1404.66 | 219.52 | 0.16x | 4235.36 | 356.00 | 0.08x |
+| multiply (mixed quantum) | 683.02 | 100.08 | 0.15x | 1506.37 | 141.10 | 0.09x |
+| multiply (full precision) | 2301.05 | 246.28 | 0.11x | 4813.63 | 369.12 | 0.08x |
+| divide (same quantum) | 2309.08 | 206.70 | 0.09x | 4877.70 | 342.93 | 0.07x |
+| divide (mixed quantum) | 1918.64 | 240.28 | 0.13x | 3391.05 | 354.74 | 0.10x |
+| divide (full precision) | 3099.40 | 247.78 | 0.08x | 5147.74 | 365.35 | 0.07x |
+| square root | 28540.13 | 3131.56 | 0.11x | 57281.72 | 5686.89 | 0.10x |
+| fused multiply-add | 3141.46 | 296.66 | 0.09x | 6416.65 | 438.44 | 0.07x |
+| ordered less-than | 1595.68 | 7.49 | 0.00x | 2867.78 | 7.39 | 0.00x |
+| cohort-equal numeric comparison | 1584.33 | 7.17 | 0.00x | 2866.87 | 7.24 | 0.00x |
+
+`fmod`, integral power, round-to-integral, and scale-by-power-of-ten are
+omitted because `BidK` does not implement those kernels yet.
+
+These Decimal160/256 results were collected by `BidKBenchmark` (`full`) on
+October 15, 2026 from this worktree:
+
+- OpenJDK 17.0.15;
+- one benchmark thread;
+- three 1-second warmup iterations and five 1-second measurement iterations
+  per method, same-JVM;
+- 1 GiB fixed heap with `AlwaysPreTouch`; and
+- operands prepared outside the measured region, using the same
+  same/mixed/full and unit-interval generators as the JMH suite.
+
+Run the harness with:
+
+```
+JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 \
+_JAVA_OPTIONS='-Xms1g -Xmx1g -XX:+AlwaysPreTouch' \
+build/sbt -Dsbt.override.build.repos=true \
+  'libbid/Test/runMain org.bidfp.BidKBenchmark full'
+```
+
 ## Capabilities not provided by `BigDecimal`
 
 `BigDecimal` is an arbitrary-precision finite decimal type. LibBID implements
