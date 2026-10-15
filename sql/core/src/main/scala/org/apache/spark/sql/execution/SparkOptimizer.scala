@@ -88,7 +88,7 @@ class SparkOptimizer(
       CombineApproximatePercentiles,
       RewriteDistinctAggregates),
     Batch("Pushdown Runtime Filters", fixedPoint,
-      PushDownPredicates),
+      PushDownRuntimeFilters),
     postHocOptimizationBatches,
     Batch("Extract UDFs", Once,
       // Lift Python UDFs out of higher-order function lambdas first. A UDF in a lambda reads the
