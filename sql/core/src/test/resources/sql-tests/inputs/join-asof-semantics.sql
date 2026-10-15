@@ -316,3 +316,8 @@ FROM using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
 SELECT l.lts, r.rts
 FROM using_left l LEFT ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
   MATCH_CONDITION (l.k <= d.k);
+
+-- FVT-ASOF-2-042: a LEFT ASOF JOIN makes a NOT NULL hidden MATCH_CONDITION column nullable
+SELECT l.lts, d.k
+FROM using_left l LEFT ASOF JOIN (using_right r JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.k <= d.k);
