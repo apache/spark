@@ -2282,7 +2282,7 @@ class CachedRemoteRelation(google.protobuf.message.Message):
 
     RELATION_ID_FIELD_NUMBER: builtins.int
     relation_id: builtins.str
-    """(Required) ID of the remote related (assigned by the service)."""
+    """(Required) Identifier used by the service to look up the cached DataFrame."""
     def __init__(
         self,
         *,

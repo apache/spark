@@ -674,13 +674,14 @@ class GraphFrame:
         :param storage_level: storage level for both intermediate and final dataframes;
                               in Spark Connect, this controls intermediate dataframes only.
 
-        In Spark Connect, the server eagerly checkpoints the result and registers it as a
-        client-named session-local temporary view. The final checkpoint uses reliable
-        checkpointing when a checkpoint directory is configured, otherwise a local checkpoint
-        with ``DISK_ONLY`` storage. ``use_local_checkpoints`` controls intermediate checkpointing.
-        The returned DataFrame reads the view without automatically persisting it. Dropping
-        the view with ``spark.catalog.dropTempView`` removes the view reference.
-        Checkpoint resources follow Spark's normal lifecycle: local checkpoint blocks are
+        In Spark Connect, the client assigns a UUID and the server eagerly checkpoints the
+        result, retaining it under that ID in the session's DataFrame cache. The returned
+        DataFrame uses a cached remote relation without automatically persisting it. The final
+        checkpoint uses reliable checkpointing when a checkpoint directory is configured,
+        otherwise a local checkpoint with ``DISK_ONLY`` storage. ``use_local_checkpoints``
+        controls intermediate checkpointing. The existing cached-relation cleanup removes the
+        server reference when the client plan is garbage-collected. Checkpoint resources
+        follow Spark's normal lifecycle: local checkpoint blocks are
         eligible for garbage collection once no references remain. Reliable checkpoint files
         are retained by default; enable checkpoint cleanup or clean the directory separately.
         The result is valid only in that session.

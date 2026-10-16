@@ -2944,8 +2944,7 @@ class SparkConnectPlanner(
       case proto.Command.CommandTypeCase.REMOVE_CACHED_REMOTE_RELATION_COMMAND =>
         handleRemoveCachedRemoteRelationCommand(command.getRemoveCachedRemoteRelationCommand)
       case proto.Command.CommandTypeCase.GRAPH_FRAMES_COMMAND =>
-        GraphFramesConnectUtils.processCommand(command.getGraphFramesCommand, this)
-        executeHolder.eventsManager.postFinished()
+        handleGraphFramesCommand(command.getGraphFramesCommand)
       case proto.Command.CommandTypeCase.ML_COMMAND =>
         handleMlCommand(command.getMlCommand, responseObserver)
       case proto.Command.CommandTypeCase.PIPELINE_COMMAND =>
@@ -3986,6 +3985,19 @@ class SparkConnectPlanner(
             .setProfileId(profile.id)
             .build())
         .build())
+  }
+
+  private def handleGraphFramesCommand(command: proto.GraphFramesCommand): Unit = {
+    val dfId = command.getDfId
+    require(UUID.fromString(dfId).toString == dfId, "Invalid GraphFrames result ID.")
+    // The client-generated ID is the idempotency key, independent of the optional plan cache.
+    session.synchronized {
+      if (!sessionHolder.dataFrameCache.containsKey(dfId)) {
+        val checkpointed = GraphFramesConnectUtils.processCommand(command, this)
+        sessionHolder.cacheDataFrameById(dfId, checkpointed)
+      }
+    }
+    executeHolder.eventsManager.postFinished()
   }
 
   private def handleCheckpointCommand(

@@ -27,7 +27,7 @@ from pyspark.sql.connect import proto
 from pyspark.sql.connect.client import SparkConnectClient
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.dataframe import DataFrame
-from pyspark.sql.connect.plan import LogicalPlan
+from pyspark.sql.connect.plan import CachedRemoteRelation, LogicalPlan
 from pyspark.sql.connect.proto import graphframes_pb2 as pb
 from pyspark.sql.connect.session import SparkSession
 from pyspark.storagelevel import StorageLevel
@@ -719,7 +719,7 @@ class GraphFrameConnect:
         max_iter: int,
         storage_level: StorageLevel,
     ) -> DataFrame:
-        view_name = f"_graphframes_cc_{uuid.uuid4().hex}"
+        df_id = str(uuid.uuid4())
         api = self._get_pb_api_message(self._vertices, self._edges, self._spark.client)
         api.connected_components.CopyFrom(
             pb.ConnectedComponents(
@@ -732,11 +732,9 @@ class GraphFrameConnect:
                 storage_level=storage_level_to_proto(storage_level),
             )
         )
-        command = proto.Command(
-            graph_frames_command=proto.GraphFramesCommand(api=api, view_name=view_name)
-        )
+        command = proto.Command(graph_frames_command=proto.GraphFramesCommand(api=api, df_id=df_id))
         self._spark.client.execute_command(command)
-        return self._spark.table(view_name)
+        return _dataframe_from_plan(CachedRemoteRelation(df_id, self._spark), self._spark)
 
     def labelPropagation(
         self,

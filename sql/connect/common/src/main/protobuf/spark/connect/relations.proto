@@ -557,7 +557,7 @@ message ChunkedCachedLocalRelation {
 
 // Represents a remote relation that has been cached on server.
 message CachedRemoteRelation {
-  // (Required) ID of the remote related (assigned by the service).
+  // (Required) Identifier used by the service to look up the cached DataFrame.
   string relation_id = 1;
 }
 

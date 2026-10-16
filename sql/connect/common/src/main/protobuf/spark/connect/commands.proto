@@ -63,17 +63,17 @@ message Command {
   }
 }
 
-// Executes an eager graph algorithm and publishes its checkpointed result as a temp view.
+// Executes an eager graph algorithm and retains its checkpointed result in the session.
 message GraphFramesCommand {
   // (Required) The graph inputs and algorithm to execute. Currently supports connected components.
   graphframes.GraphFramesAPI api = 1;
 
-  reserved 2;
-  reserved "output_path";
+  reserved 2, 3;
+  reserved "output_path", "view_name";
 
-  // (Required) Unique client-generated local temp view name for the result.
-  // Repeating the same command reuses the published result in the same session.
-  string view_name = 3;
+  // (Required) Client-generated UUID for the resulting CachedRemoteRelation.
+  // Repeating a command with the same ID reuses the retained result in the same session.
+  string df_id = 4;
 }
 
 // A SQL Command is used to trigger the eager evaluation of SQL commands in Spark.

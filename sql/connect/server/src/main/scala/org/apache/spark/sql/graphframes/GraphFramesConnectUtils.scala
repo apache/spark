@@ -22,7 +22,6 @@ package org.apache.spark.sql.graphframes
 import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.ByteString
-import org.apache.commons.codec.digest.DigestUtils
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.connect.proto.{graphframes => proto, GraphFramesCommand}
@@ -31,11 +30,9 @@ import org.apache.spark.graphframes.GraphFramesUnreachableException
 import org.apache.spark.graphframes.embeddings.RandomWalkEmbeddings
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.execution.LogicalRDD
-import org.apache.spark.sql.execution.command.ViewHelper.createTemporaryViewRelation
 import org.apache.spark.sql.functions.expr
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.storage.StorageLevel
@@ -180,80 +177,52 @@ object GraphFramesConnectUtils {
     }
   }
 
-  // Keep retry identity with the view instead of retaining a separate session result registry.
-  private val RESULT_REQUEST = "spark.graphframes.result.request"
-
-  private[graphframes] def materializeResult(session: SparkSession, command: GraphFramesCommand)(
-      run: => DataFrame): Unit = session.synchronized {
-    val name = command.getViewName
-    require(name.matches("_graphframes_cc_[0-9a-f]{32}"), "Invalid GraphFrames result view name.")
-    val catalog = session.sessionState.catalog
-    val request = DigestUtils.sha256Hex(command.toByteArray)
-    catalog.getRawTempView(name) match {
-      case Some(view) =>
-        require(
-          view.tableMeta.properties.get(RESULT_REQUEST).contains(request),
-          "GraphFrames result name belongs to another request.")
-      case None =>
-        require(!session.catalog.tableExists(name), "GraphFrames result view already exists.")
-        val output = run
-        try {
-          val checkpointed = if (session.sparkContext.getCheckpointDir.isDefined) {
-            output.checkpoint(eager = false)
-          } else {
-            output.localCheckpoint(eager = false, storageLevel = StorageLevel.DISK_ONLY)
-          }
-          val plan = checkpointed.queryExecution.analyzed
-          val rdds = plan.collect { case logical: LogicalRDD => logical.rdd }
-          var published = false
-          try {
-            // Retain the RDDs before materializing so a failed checkpoint can release its blocks.
-            rdds.foreach(_.doCheckpoint())
-            val view = createTemporaryViewRelation(
-              TableIdentifier(name),
-              session,
-              replace = false,
-              catalog.getRawTempView,
-              originalText = None,
-              plan,
-              plan,
-              referredTempFunctions = Seq.empty)
-            val metadata = view.tableMeta.copy(properties =
-              view.tableMeta.properties + (RESULT_REQUEST -> request))
-            catalog.createTempView(
-              name,
-              view.copy(tableMeta = metadata),
-              overrideIfExists = false)
-            published = true
-          } finally {
-            if (!published) {
-              rdds.foreach { rdd =>
-                Utils.tryLogNonFatalError { rdd.unpersist(blocking = true) }
-                Utils.tryLogNonFatalError {
-                  rdd.getCheckpointFile.foreach { file =>
-                    val path = new Path(file)
-                    path.getFileSystem(session.sessionState.newHadoopConf()).delete(path, true)
-                  }
-                }
+  private[graphframes] def materializeResult(session: SparkSession)(
+      run: => DataFrame): DataFrame = {
+    val output = run
+    try {
+      val checkpointed = if (session.sparkContext.getCheckpointDir.isDefined) {
+        output.checkpoint(eager = false)
+      } else {
+        output.localCheckpoint(eager = false, storageLevel = StorageLevel.DISK_ONLY)
+      }
+      val rdds = checkpointed.queryExecution.analyzed.collect { case logical: LogicalRDD =>
+        logical.rdd
+      }
+      var materialized = false
+      try {
+        // Retain the RDDs before materializing so a failed checkpoint can release its blocks.
+        rdds.foreach(_.doCheckpoint())
+        materialized = true
+        checkpointed
+      } finally {
+        if (!materialized) {
+          rdds.foreach { rdd =>
+            Utils.tryLogNonFatalError { rdd.unpersist(blocking = true) }
+            Utils.tryLogNonFatalError {
+              rdd.getCheckpointFile.foreach { file =>
+                val path = new Path(file)
+                path.getFileSystem(session.sessionState.newHadoopConf()).delete(path, true)
               }
             }
           }
-        } finally {
-          output.unpersist(blocking = false)
         }
+      }
+    } finally {
+      output.unpersist(blocking = false)
     }
   }
 
-  /** Runs connected components once and publishes a checkpointed temporary view. */
+  /** Runs connected components and returns an eagerly checkpointed result. */
   private[spark] def processCommand(
       command: GraphFramesCommand,
-      planner: SparkConnectPlanner): Unit = {
+      planner: SparkConnectPlanner): DataFrame = {
     require(
       command.getApi.getMethodCase == proto.GraphFramesAPI.MethodCase.CONNECTED_COMPONENTS,
       "GraphFrames commands currently support only connected components.")
     var graphFrame: Option[GraphFrame] = None
     try {
-      materializeResult(planner.sessionHolder.session, command) {
+      materializeResult(planner.session) {
         val graph = extractGraphFrame(command.getApi, planner)
         graphFrame = Some(graph)
         runConnectedComponents(graph, command.getApi.getConnectedComponents)

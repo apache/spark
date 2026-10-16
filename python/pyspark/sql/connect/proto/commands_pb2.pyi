@@ -326,28 +326,28 @@ class Command(google.protobuf.message.Message):
 global___Command = Command
 
 class GraphFramesCommand(google.protobuf.message.Message):
-    """Executes an eager graph algorithm and publishes its checkpointed result as a temp view."""
+    """Executes an eager graph algorithm and retains its checkpointed result in the session."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     API_FIELD_NUMBER: builtins.int
-    VIEW_NAME_FIELD_NUMBER: builtins.int
+    DF_ID_FIELD_NUMBER: builtins.int
     @property
     def api(self) -> pyspark.sql.connect.proto.graphframes_pb2.GraphFramesAPI:
         """(Required) The graph inputs and algorithm to execute. Currently supports connected components."""
-    view_name: builtins.str
-    """(Required) Unique client-generated local temp view name for the result.
-    Repeating the same command reuses the published result in the same session.
+    df_id: builtins.str
+    """(Required) Client-generated UUID for the resulting CachedRemoteRelation.
+    Repeating a command with the same ID reuses the retained result in the same session.
     """
     def __init__(
         self,
         *,
         api: pyspark.sql.connect.proto.graphframes_pb2.GraphFramesAPI | None = ...,
-        view_name: builtins.str = ...,
+        df_id: builtins.str = ...,
     ) -> None: ...
     def HasField(self, field_name: typing_extensions.Literal["api", b"api"]) -> builtins.bool: ...
     def ClearField(
-        self, field_name: typing_extensions.Literal["api", b"api", "view_name", b"view_name"]
+        self, field_name: typing_extensions.Literal["api", b"api", "df_id", b"df_id"]
     ) -> None: ...
 
 global___GraphFramesCommand = GraphFramesCommand

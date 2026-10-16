@@ -17,37 +17,19 @@
 
 package org.apache.spark.sql.graphframes
 
-import java.util.UUID
-
-import org.apache.hadoop.fs.Path
-
-import org.apache.spark.connect.proto.{graphframes => proto, GraphFramesCommand}
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.storage.StorageLevel
 
 class GraphFramesConnectUtilsSuite extends QueryTest with SharedSparkSession {
-  private def command(local: Boolean): GraphFramesCommand = {
-    GraphFramesCommand
-      .newBuilder()
-      .setViewName("_graphframes_cc_" + UUID.randomUUID().toString.replace("-", ""))
-      .setApi(
-        proto.GraphFramesAPI
-          .newBuilder()
-          .setConnectedComponents(
-            proto.ConnectedComponents.newBuilder().setUseLocalCheckpoints(local)))
-      .build()
-  }
-
-  private def withResult(request: GraphFramesCommand)(f: => Unit): Unit = {
+  private def withCheckpointCleanup(f: => Unit): Unit = {
     val before = spark.sparkContext.getPersistentRDDs.keySet
     val checkpointDir = spark.sparkContext.checkpointDir
     try {
       f
     } finally {
       spark.sparkContext.checkpointDir = checkpointDir
-      spark.catalog.dropTempView(request.getViewName)
       // Production uses Spark's normal checkpoint cleanup; tests release their blocks eagerly.
       spark.sparkContext.getPersistentRDDs.foreach { case (id, rdd) =>
         if (!before.contains(id)) {
@@ -58,97 +40,48 @@ class GraphFramesConnectUtilsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("without a directory the result uses a disk-only local checkpoint") {
-    val request = command(local = false)
-    val name = request.getViewName
-    var runs = 0
-    withResult(request) {
+    withCheckpointCleanup {
       spark.sparkContext.checkpointDir = None
-      for (_ <- 1 to 2) {
-        GraphFramesConnectUtils.materializeResult(spark, request) {
-          runs += 1
-          spark.range(3).toDF().cache()
-        }
-      }
-      assert(runs == 1)
-      val rdds = spark.sessionState.catalog.getRawTempView(name).get.plan.get.collect {
-        case logical: LogicalRDD => logical.rdd
+      val output = spark.range(3).toDF().cache()
+      val result = GraphFramesConnectUtils.materializeResult(spark) { output }
+      val rdds = result.queryExecution.analyzed.collect { case logical: LogicalRDD =>
+        logical.rdd
       }
       assert(rdds.nonEmpty)
       assert(rdds.forall(_.getCheckpointFile.isEmpty))
       assert(rdds.forall(_.getStorageLevel == StorageLevel.DISK_ONLY))
-      val result = spark.table(name)
-      assert(!spark.catalog.isCached(name))
+      assert(spark.sharedState.cacheManager.lookupCachedData(output).isEmpty)
+      assert(result.storageLevel == StorageLevel.NONE)
       assert(result.cache().count() == 3)
       result.unpersist(blocking = true)
       assert(result.count() == 3)
-      assert(spark.catalog.dropTempView(name))
-      assert(!spark.catalog.tableExists(name))
     }
   }
 
-  test("a configured directory uses reliable checkpoints even with local intermediates") {
+  test("a configured directory uses a reliable checkpoint") {
     withTempDir { dir =>
-      val request = command(local = true)
-      withResult(request) {
+      withCheckpointCleanup {
         spark.sparkContext.setCheckpointDir(dir.getAbsolutePath)
-        val root = new Path(spark.sparkContext.getCheckpointDir.get)
-        val fs = root.getFileSystem(spark.sparkContext.hadoopConfiguration)
-        GraphFramesConnectUtils.materializeResult(spark, request) { spark.range(3).toDF() }
-        val rdds = spark.sessionState.catalog
-          .getRawTempView(request.getViewName)
-          .get
-          .plan
-          .get
-          .collect { case logical: LogicalRDD => logical.rdd }
+        val result = GraphFramesConnectUtils.materializeResult(spark) { spark.range(3).toDF() }
+        val rdds = result.queryExecution.analyzed.collect { case logical: LogicalRDD =>
+          logical.rdd
+        }
         assert(rdds.nonEmpty)
         assert(rdds.forall(_.getCheckpointFile.nonEmpty))
-        assert(spark.table(request.getViewName).count() == 3)
-        val checkpoints = fs.listStatus(root).map(_.getPath)
-        assert(checkpoints.nonEmpty)
-        assert(spark.catalog.dropTempView(request.getViewName))
-        assert(checkpoints.forall(fs.exists))
+        assert(result.storageLevel == StorageLevel.NONE)
+        assert(result.count() == 3)
       }
     }
   }
 
-  test("result names cannot overwrite an unrelated view or another request") {
-    val request = command(local = true)
-    val name = request.getViewName
-    withResult(request) {
-      spark.range(1).createTempView(name)
-      intercept[IllegalArgumentException] {
-        GraphFramesConnectUtils.materializeResult(spark, request) {
-          fail("Existing views must not be overwritten")
-        }
-      }
-      assert(spark.catalog.dropTempView(name))
-      GraphFramesConnectUtils.materializeResult(spark, request) { spark.range(3).toDF() }
-      val other = request.toBuilder
-        .setApi(
-          proto.GraphFramesAPI
-            .newBuilder()
-            .setConnectedComponents(
-              proto.ConnectedComponents.newBuilder().setUseLocalCheckpoints(true).setMaxIter(5)))
-        .build()
-      intercept[IllegalArgumentException] {
-        GraphFramesConnectUtils.materializeResult(spark, other) {
-          fail("A different request must not reuse the name")
-        }
-      }
-      assert(spark.table(name).count() == 3)
-    }
-  }
-
-  test("checkpoint failure releases output caches and does not publish a view") {
-    val request = command(local = true)
-    val before = spark.sparkContext.getPersistentRDDs.keySet
-    val output = spark.range(1).selectExpr("raise_error('checkpoint failed') AS id").cache()
-    withResult(request) {
+  test("checkpoint failure releases output caches and checkpoint blocks") {
+    withCheckpointCleanup {
       spark.sparkContext.checkpointDir = None
+      val before = spark.sparkContext.getPersistentRDDs.keySet
+      val output = spark.range(1).selectExpr("raise_error('checkpoint failed') AS id").cache()
       intercept[Exception] {
-        GraphFramesConnectUtils.materializeResult(spark, request) { output }
+        GraphFramesConnectUtils.materializeResult(spark) { output }
       }
-      assert(!spark.catalog.tableExists(request.getViewName))
       assert(spark.sparkContext.getPersistentRDDs.keySet == before)
       assert(spark.sharedState.cacheManager.lookupCachedData(output).isEmpty)
     }
