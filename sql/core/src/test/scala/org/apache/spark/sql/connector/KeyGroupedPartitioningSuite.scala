@@ -5681,26 +5681,32 @@ class KeyGroupedPartitioningSuite
     createTable(keyedPurchases, purchasesColumns, Array(identity("item_id")))
     sql(s"INSERT INTO testcat.ns.$keyedPurchases VALUES $purchaseRows")
 
+    val shuffle = SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key
+    val requireAll = SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key
+    val v2RequireAll = SQLConf.V2_BUCKETING_REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key
     // `items` is partitioned by `id` alone, and the join is on `id` and the time.
     Seq(
       // With the requirement on, the join must not run on `id` alone, so both sides are shuffled.
-      (keyedPurchases, "true", 2),
-      (purchases, "true", 2),
+      (keyedPurchases, Seq(shuffle -> "true", requireAll -> "true"), 2),
+      (purchases, Seq(shuffle -> "true", requireAll -> "true"), 2),
       // With it off, the storage-partitioned join pairs the keyed sides as they stand, and the
       // unpartitioned side is shuffled onto `items`.
-      (keyedPurchases, "false", 0),
-      (purchases, "false", 1)).foreach { case (other, requireAll, expectedShuffles) =>
-      withSQLConf(
-          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
-          SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> requireAll) {
+      (keyedPurchases, Seq(shuffle -> "true", requireAll -> "false"), 0),
+      (purchases, Seq(shuffle -> "true", requireAll -> "false"), 1),
+      // The V2 config lifts it for storage-partitioned layouts alone, both in the one-side
+      // shuffle and in the storage-partitioned join. Without the one-side shuffle, only the
+      // storage-partitioned join can keep the keyed sides as they stand.
+      (purchases, Seq(shuffle -> "true", requireAll -> "true", v2RequireAll -> "false"), 1),
+      (keyedPurchases, Seq(shuffle -> "false", requireAll -> "true", v2RequireAll -> "false"), 0)
+    ).foreach { case (other, confs, expectedShuffles) =>
+      withSQLConf(confs: _*) {
         val df = sql(
           s"""${selectWithMergeJoinHint("i", "p")} id, name, i.price, p.price
              |FROM testcat.ns.$items i
              |JOIN testcat.ns.$other p ON i.id = p.item_id AND i.arrive_time = p.time
              |""".stripMargin)
         val shuffles = collectShuffles(df.queryExecution.executedPlan)
-        assert(shuffles.size == expectedShuffles,
-          s"joining $other with requireAllClusterKeysForCoPartition = $requireAll")
+        assert(shuffles.size == expectedShuffles, s"joining $other with ${confs.mkString(", ")}")
         if (expectedShuffles == 2) {
           // Both sides are shuffled on all the join keys, not on `id` alone.
           val shuffleKeys = shuffles.map(_.outputPartitioning match {

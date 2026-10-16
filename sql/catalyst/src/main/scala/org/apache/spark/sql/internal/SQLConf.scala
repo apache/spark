@@ -1138,7 +1138,9 @@ object SQLConf {
         "does not prevent shuffle elimination; hash partitioning deliberately keeps the " +
         "positional match. The same coverage rule applies when " +
         "spark.sql.sources.v2.bucketing.shuffle.enabled shuffles only one side onto the " +
-        "partition keys of the other.")
+        "partition keys of the other. Both storage-partitioned cases read " +
+        "spark.sql.sources.v2.bucketing.requireAllClusterKeysForCoPartition.enabled, which " +
+        "defaults to this config.")
       .version("3.3.0")
       .booleanConf
       .createWithDefault(true)
@@ -2593,12 +2595,22 @@ object SQLConf {
       .doc("During a storage-partitioned join, whether to allow to shuffle only one side. " +
         "When only one side is KeyedPartitioning, if the conditions are met, spark will " +
         "only shuffle the other side. This optimization will reduce the amount of data that " +
-        s"needs to be shuffle. With ${REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key} on, the " +
-        "partition keys must cover every join key. " +
-        s"This config requires ${V2_BUCKETING_ENABLED.key} to be enabled")
+        s"needs to be shuffle. This config requires ${V2_BUCKETING_ENABLED.key} to be enabled")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
+
+  val V2_BUCKETING_REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION =
+    buildConf("spark.sql.sources.v2.bucketing.requireAllClusterKeysForCoPartition.enabled")
+      .doc("When true, a storage-partitioned join, or the one-side shuffle of " +
+        s"${V2_BUCKETING_SHUFFLE_ENABLED.key}, runs on the partition keys only if they cover " +
+        "every join or MERGE key. Set it to false to also allow partition keys that cover only " +
+        "some of those keys, at the risk of data skew and reduced parallelism from the coarser " +
+        "storage partitioning. Hash partitionings still follow " +
+        s"${REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key}. Defaults to that config.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .fallbackConf(REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION)
 
    val V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS =
     buildConf("spark.sql.sources.v2.bucketing.allowKeysSubsetOfPartitionKeys.enabled")
@@ -9609,6 +9621,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def v2BucketingShuffleEnabled: Boolean =
     getConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED)
+
+  def v2BucketingRequireAllClusterKeysForCoPartition: Boolean =
+    getConf(SQLConf.V2_BUCKETING_REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION)
 
   def v2BucketingAllowKeysSubsetOfPartitionKeys: Boolean =
     getConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS)

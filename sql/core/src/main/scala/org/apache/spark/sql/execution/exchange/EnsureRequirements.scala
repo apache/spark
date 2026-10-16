@@ -982,9 +982,9 @@ case class EnsureRequirements(
    *
    * Close to what `ValidateRequirements` asks of a finished plan, but not the same question, and
    * the difference is deliberate. This goes through `createKeyedShuffleSpecs`, so it also applies
-   * `REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION`, admits a member on `keysMaySatisfy`, and looks at
-   * keyed members only. The per-side half is the validator's: `satisfies`, which is strict, so a
-   * child that still needs a node answers no.
+   * `V2_BUCKETING_REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION`, admits a member on `keysMaySatisfy`,
+   * and looks at keyed members only. The per-side half is the validator's: `satisfies`, which is
+   * strict, so a child that still needs a node answers no.
    *
    * Both sides also have to answer with an unprojected spec. A projected one describes the layout a
    * [[GroupPartitionsExec]] would emit rather than the one the child has, so two sides can agree
@@ -1146,7 +1146,7 @@ case class EnsureRequirements(
       // The coverage requirement is a comparison of expressions, while `keysMaySatisfy` can end in
       // a projection of the partition keys, so the cheap question is asked first. The requirement
       // is on by default and turns most members away.
-      if ((!SQLConf.get.getConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION) ||
+      if ((!SQLConf.get.v2BucketingRequireAllClusterKeysForCoPartition ||
             partitioning.referencesAllClusterKeys(distribution)) &&
           partitioning.keysMaySatisfy(distribution)) {
         // `toGrouped` both dedups and sorts, and only a `GroupPartitionsExec` performs either. A

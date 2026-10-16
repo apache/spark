@@ -1468,7 +1468,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     val unpartitioned = DummySparkPlan(outputPartitioning = UnknownPartitioning(0))
 
     // The coarse member covers only `id`. With the co-partition key requirement on, it cannot
-    // serve at all. With it off, it can, and only the pairing keeps it from being picked. The
+    // serve at all. With it off, it can, and only the ranking keeps it from being picked. The
     // placement is the same either way.
     Seq("true", "false").foreach { requireAll =>
       withSQLConf(
