@@ -9776,6 +9776,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val exception = submitAndCaptureFailure(finalRdd, Array(0, 1))
     assertPipelinedUnsupported(exception, "cache/persist/localCheckpoint in a pipelined consumer")
     assert(exception.getMessage.contains("unpersist"), "the error must explain how to recover")
+    assert(exception.getMessage.contains(
+      "persist only RDDs that do not read a pipelined shuffle within their stage"))
     assert(finalRdd.getStorageLevel === storageLevel)
     assertNoPipelinedStageRegistration(shuffleIds)
     assert(taskSets.isEmpty, "rejected consumers must not leave a producer waiting for readers")

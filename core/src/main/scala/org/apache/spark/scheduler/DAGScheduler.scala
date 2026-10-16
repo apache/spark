@@ -1460,9 +1460,8 @@ private[spark] class DAGScheduler(
     }
     // Reject a reliable checkpoint anywhere in a pipelined-group MEMBER's within-stage chain.
     // Keyed on checkpointData being ReliableRDDCheckpointData, not isCheckpointed, since the
-    // write has not happened yet. Persistence is checked separately before gang admission;
-    // cached producer inputs are supported. A reliably-checkpointed RDD `cp` is inside a member
-    // stage iff:
+    // write has not happened yet. Persistence is checked separately before gang admission.
+    // A reliably-checkpointed RDD `cp` is inside a member stage iff:
     //  - PRODUCER side: cp is within some producer root's own within-stage chain (walk parents from
     //    the producer root, stopping at shuffle boundaries), OR
     //  - CONSUMER side: cp's OWN within-stage chain reads a pipelined shuffle (walk parents from
@@ -1505,9 +1504,10 @@ private[spark] class DAGScheduler(
     val visited = new HashSet[RDD[_]]
     if (persisted.exists(rdd => rddChainReadsPipelinedShuffle(rdd, visited))) {
       throw pipelinedUnsupportedError(
-        "cache/persist/localCheckpoint in a pipelined consumer's within-stage chain; " +
-          "unpersist cached RDDs or rebuild locally checkpointed consumers without " +
-          "localCheckpoint before submitting the job; persist producer inputs instead")
+        "cache/persist/localCheckpoint in a pipelined consumer's within-stage chain " +
+          "(unpersist cached RDDs or rebuild locally checkpointed consumers without " +
+          "localCheckpoint before submitting the job; persist only RDDs that do not read " +
+          "a pipelined shuffle within their stage)")
     }
   }
 
@@ -2660,10 +2660,10 @@ private[spark] class DAGScheduler(
         }
 
       case e: PipelinedShuffleUnsupportedException =>
-        // An up-front idiom rejection (checkPipelinedJobSupported / a producer-side
-        // check in createShuffleMapStage), not a stage-creation failure. Log it as such (the
+        // An up-front idiom rejection (checkPipelinedJobSupported, checkPipelinedCacheSupported,
+        // or a producer-side check in createShuffleMapStage), not a stage-creation failure (the
         // generic "Creating new stage failed" message below would be misleading). Matched by TYPE,
-        // not by the error-condition string, so a rename or a wrapped cause cannot misroute it.
+        // not by the error-condition string, so renaming the condition cannot misroute it.
         logWarning(log"Rejecting job ${MDC(JOB_ID, jobId)}: unsupported pipelined-shuffle idiom", e)
         // Clear the slot-check retry count an earlier deferral may have left.
         barrierJobIdToNumTasksCheckFailures.remove(jobId)
@@ -5431,12 +5431,13 @@ private[spark] object DAGScheduler {
 private[spark] case class CancelledJobInfo(jobId: Int, properties: Properties)
 
 /**
- * Thrown when a job uses a pipelined-shuffle idiom that is not supported (fan-out, a barrier /
- * indeterminate / checksum-retry / push-merge producer, a reliable checkpoint in a member's chain,
+ * Thrown when a job uses a pipelined-shuffle idiom that is not supported (fan-out, dynamic
+ * allocation, a barrier / indeterminate / checksum-retry / push-merge producer, a reliable
+ * checkpoint in a member's chain, cache/persist/localCheckpoint in a consumer's within-stage chain,
  * or a non-default resource profile on a member). `handleJobSubmitted` matches on this
  * TYPE to distinguish an up-front idiom rejection from an ordinary stage-creation failure, not on
- * the error-condition string (which a rename or a wrapped cause would silently break). Carries the
- * `PIPELINED_SHUFFLE_UNSUPPORTED` error class so the user-facing message is unchanged.
+ * the error-condition string, so renaming the condition does not change the routing. Carries the
+ * `PIPELINED_SHUFFLE_UNSUPPORTED` error class.
  */
 private[scheduler] class PipelinedShuffleUnsupportedException(reason: String)
   extends SparkException(
