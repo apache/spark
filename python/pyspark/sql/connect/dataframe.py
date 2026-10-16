@@ -2419,7 +2419,12 @@ class DataFrame(ParentDataFrame):
 
     def checkpoint(self, eager: bool = True) -> ParentDataFrame:
         relation_id = str(uuid.uuid4())
-        cmd = plan.Checkpoint(child=self._plan, local=False, eager=eager, relation_id=relation_id)
+        cmd = plan.Checkpoint(
+            child=self._plan,
+            local=False,
+            eager=eager,
+            relation_id=relation_id,
+        )
         _, properties, self._execution_info = self._session.client.execute_command(
             cmd.command(self._session.client)
         )
