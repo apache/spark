@@ -19,6 +19,7 @@ package org.apache.spark.scheduler
 
 import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
 
+import scala.concurrent.duration.Duration
 import scala.jdk.CollectionConverters._
 
 import com.google.common.util.concurrent.Uninterruptibles
@@ -31,6 +32,7 @@ import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryWrapper
 import org.apache.spark.sql.execution.streaming.sources.LowLatencyMemoryStream
 import org.apache.spark.sql.streaming.{OutputMode, StreamingQuery, StreamingQueryException, StreamRealTimeModeManualClockSuiteBase}
+import org.apache.spark.util.ThreadUtils
 
 class PipelinedRealTimeQuerySuite extends StreamRealTimeModeManualClockSuiteBase {
 
@@ -100,11 +102,11 @@ class PipelinedRealTimeQuerySuite extends StreamRealTimeModeManualClockSuiteBase
       }
     }
     sc.addSparkListener(listener)
-    scheduler.eventProcessLoop.stop()
-    scheduler.setEventProcessLoop(eventLoop)
-    eventLoop.start()
     var query: StreamingQuery = null
     try {
+      scheduler.eventProcessLoop.stop()
+      scheduler.setEventProcessLoop(eventLoop)
+      eventLoop.start()
       withTempDir { checkpoint =>
         val input = LowLatencyMemoryStream.singlePartition[Int]
         val result = input.toDS().mapPartitions { rows =>
@@ -175,10 +177,35 @@ class PipelinedRealTimeQuerySuite extends StreamRealTimeModeManualClockSuiteBase
       }
     } finally {
       PipelinedRealTimeQuerySuite.finishProducer.countDown()
-      if (query != null) {
-        query.stop()
+      try {
+        if (query != null) {
+          query.stop()
+        }
+      } finally {
+        try {
+          eventLoop.stop()
+          val restored = new DAGSchedulerEventProcessLoop(scheduler)
+          scheduler.setEventProcessLoop(restored)
+          restored.start()
+        } finally {
+          sc.removeSparkListener(listener)
+        }
       }
-      sc.removeSparkListener(listener)
+    }
+
+    // The suite shares its SparkContext, so subsequent jobs must use the standard event loop.
+    val nextJob = sc.parallelize(Seq((1, 1), (1, 2), (2, 3)), 2)
+      .reduceByKey(_ + _)
+      .collectAsync()
+    try {
+      val result = ThreadUtils.awaitResult(nextJob, Duration(60, TimeUnit.SECONDS))
+      assert(result.toMap == Map(1 -> 3, 2 -> 3))
+      sc.listenerBus.waitUntilEmpty()
+      assert(errors.isEmpty, errors.asScala.mkString(", "))
+    } finally {
+      if (!nextJob.isCompleted) {
+        nextJob.cancel()
+      }
     }
   }
 }
