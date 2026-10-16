@@ -738,6 +738,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     testVariantGet("[1, 2, 3]", "$[2147483647]", IntegerType, null)
 
     testVariantGet("""{"a'b": 1}""", """$['a\'b']""", IntegerType, 1)
+    testVariantGet("""{"a']b": 1}""", """$['a\']b']""", IntegerType, 1)
+    testVariantGet("""{"a\nb":1,"a\\nb":2}""", """$.a\nb""", IntegerType, 2)
     testVariantGet("""{"a\"b": 2}""", """$['a"b']""", IntegerType, 2)
     testVariantGet("""{"a\\b": 4}""", """$['a\\b']""", IntegerType, 4)
     testVariantGet("""{"a\tb": 5}""", """$['a\tb']""", IntegerType, 5)
@@ -789,6 +791,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkInvalidPath("""$['"]""")
 
     checkInvalidPath("$[\"\"\"]")
+    checkInvalidPath("""$['a\']""")
+    checkInvalidPath("""$["a\"]""")
   }
 
   test("legacy Variant paths treat backslashes literally") {
@@ -814,43 +818,50 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     val conf = SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL.key
     val input = Literal(parseJson("""{"a\nb":[1],"a\\nb":[2]}"""))
     val path = "$['a\\nb']"
-    val dynamicPath = BoundReference(0, StringType, nullable = false)
     withSQLConf(conf -> legacy.toString) {
-      val dynamicGet = VariantGet(input, dynamicPath, ArrayType(IntegerType), failOnError = true)
-      val cases = Seq(
-        VariantDelete(Seq(input, Literal(path))) ->
-          (if (legacy) """{"a\nb":[1]}""" else """{"a\\nb":[2]}"""),
-        VariantPick(Seq(input, Literal(path))) ->
-          (if (legacy) """{"a\\nb":[2]}""" else """{"a\nb":[1]}"""),
-        VariantInsert(input, Literal(path + "[0]"), Literal(3)) ->
-          (if (legacy) """{"a\nb":[1],"a\\nb":[3,2]}""" else """{"a\nb":[3,1],"a\\nb":[2]}"""),
-        VariantSet(input, dynamicPath, Literal(3), Literal(true)) ->
-          (if (legacy) """{"a\nb":[1],"a\\nb":3}""" else """{"a\nb":3,"a\\nb":[2]}"""),
-        VariantArrayAppend(input, Literal(path), Literal(3)) ->
-          (if (legacy) """{"a\nb":[1],"a\\nb":[2,3]}""" else """{"a\nb":[1,3],"a\\nb":[2]}"""))
-      withSQLConf(conf -> (!legacy).toString) {
-        val row = InternalRow(UTF8String.fromString(path))
-        checkEvaluation(dynamicGet, Array(if (legacy) 2 else 1), row)
-        cases.foreach { case (expr, expected) =>
-          checkEvaluation(
-            ResolveTimeZone.resolveTimeZones(Cast(expr, StringType)), expected, row)
+      Seq(Literal(path), BoundReference(0, StringType, nullable = false)).foreach { pathExpr =>
+        val get = VariantGet(input, pathExpr, ArrayType(IntegerType), failOnError = true)
+        val cases = Seq(
+          VariantDelete(Seq(input, pathExpr)) ->
+            (if (legacy) """{"a\nb":[1]}""" else """{"a\\nb":[2]}"""),
+          VariantPick(Seq(input, pathExpr)) ->
+            (if (legacy) """{"a\\nb":[2]}""" else """{"a\nb":[1]}"""),
+          VariantInsert(input, Concat(Seq(pathExpr, Literal("[0]"))), Literal(3)) ->
+            (if (legacy) """{"a\nb":[1],"a\\nb":[3,2]}""" else """{"a\nb":[3,1],"a\\nb":[2]}"""),
+          VariantSet(input, pathExpr, Literal(3), Literal(true)) ->
+            (if (legacy) """{"a\nb":[1],"a\\nb":3}""" else """{"a\nb":3,"a\\nb":[2]}"""),
+          VariantArrayAppend(input, pathExpr, Literal(3)) ->
+            (if (legacy) """{"a\nb":[1],"a\\nb":[2,3]}""" else """{"a\nb":[1,3],"a\\nb":[2]}"""))
+        withSQLConf(conf -> (!legacy).toString) {
+          val row = InternalRow(UTF8String.fromString(path))
+          checkEvaluation(get, Array(if (legacy) 2 else 1), row)
+          cases.foreach { case (expr, expected) =>
+            checkEvaluation(
+              ResolveTimeZone.resolveTimeZones(Cast(expr, StringType)), expected, row)
+          }
         }
       }
     }
   }
 
-  test("legacy Variant diagnostics preserve literal backslashes") {
+  gridTest("Variant diagnostics use the captured parser mode")(Seq(false, true)) { legacy =>
     val conf = SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL.key
     val path = """$['a.\nb'].c"""
-    val insert = withSQLConf(conf -> "true") {
-      VariantInsert(Literal(parseJson("""{"a.\\nb":5}""")), Literal(path), Literal(2))
+    val input = Literal(parseJson("""{"a.\nb":5,"a.\\nb":6}"""))
+    val expressions = withSQLConf(conf -> legacy.toString) {
+      Seq(
+        VariantInsert(input, Literal(path), Literal(2)),
+        VariantSet(input, Literal(path), Literal(2), Literal(true)),
+        VariantArrayAppend(input, Literal(path), Literal(2)))
     }
-    withSQLConf(conf -> "false") {
-      checkErrorInExpression[SparkRuntimeException](
-        insert,
-        "VARIANT_PATH_TYPE_MISMATCH",
-        Map("path" -> path, "failedAt" -> """$['a.\nb']""",
-          "functionName" -> "`variant_insert`"))
+    withSQLConf(conf -> (!legacy).toString) {
+      expressions.foreach { expression =>
+        checkErrorInExpression[SparkRuntimeException](
+          expression,
+          "VARIANT_PATH_TYPE_MISMATCH",
+          Map("path" -> path, "failedAt" -> """$['a.\nb']""",
+            "functionName" -> s"`${expression.prettyName}`"))
+      }
     }
   }
 
@@ -1582,6 +1593,18 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       "INVALID_VARIANT_PATH",
       Map("path" -> ".a", "functionName" -> "`variant_delete`"))
 
+    checkErrorInExpression[SparkRuntimeException](
+      ResolveTimeZone.resolveTimeZones(
+        VariantDelete(Seq(Literal(parseJson("""{"a": 1}""")), Literal("""$['a\']""")))),
+      "INVALID_VARIANT_PATH",
+      Map("path" -> """$['a\']""", "functionName" -> "`variant_delete`"))
+
+    checkErrorInExpression[SparkRuntimeException](
+      ResolveTimeZone.resolveTimeZones(
+        VariantDelete(Seq(Literal(parseJson("""{"a": 1}""")), Literal("""$["a\"]""")))),
+      "INVALID_VARIANT_PATH",
+      Map("path" -> """$["a\"]""", "functionName" -> "`variant_delete`"))
+
     for (path <- Seq("$[2147483648]", "$[4294967296]")) {
       checkErrorInExpression[SparkRuntimeException](
         ResolveTimeZone.resolveTimeZones(
@@ -1756,12 +1779,16 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         "path" -> """$['a.\\nb'].c""",
         "failedAt" -> """$['a.\\nb']""",
         "functionName" -> "`variant_insert`"))
-    checkInsertRecoverableError("""{"a.\nb": 5}""", """$['a.\nb'].c""", Literal(2),
-      "VARIANT_PATH_TYPE_MISMATCH",
-      Map(
-        "path" -> """$['a.\nb'].c""",
-        "failedAt" -> """$['a.\nb']""",
-        "functionName" -> "`variant_insert`"))
+    Seq('\b' -> "\\b", '\f' -> "\\f", '\n' -> "\\n", '\r' -> "\\r", '\t' -> "\\t",
+      1.toChar -> ("\\" + "u0001")).foreach { case (control, escape) =>
+      val prefix = s"$$['a.${escape}b']"
+      checkInsertRecoverableError(s"""{"a.${escape}b":5}""", prefix + ".c", Literal(2),
+        "VARIANT_PATH_TYPE_MISMATCH",
+        Map("path" -> (prefix + ".c"), "failedAt" -> prefix,
+          "functionName" -> "`variant_insert`"))
+      assert(VariantPathParser.parse(prefix, legacyPathBackslashAsLiteral = false).get
+        .sameElements(Array(ObjectExtraction(s"a.${control}b"))))
+    }
 
     // Structs and maps are rejected at analysis.
     Seq(
@@ -1782,6 +1809,12 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkInsertUnrecoverableError("{}", "abc", Literal(1),
       "INVALID_VARIANT_PATH",
       name => Map("path" -> "abc", "functionName" -> s"`$name`"))
+    checkInsertUnrecoverableError("{}", """$['a\']""", Literal(1),
+      "INVALID_VARIANT_PATH",
+      name => Map("path" -> """$['a\']""", "functionName" -> s"`$name`"))
+    checkInsertUnrecoverableError("{}", """$["a\"]""", Literal(1),
+      "INVALID_VARIANT_PATH",
+      name => Map("path" -> """$["a\"]""", "functionName" -> s"`$name`"))
 
     Seq("variant_insert" -> true, "try_variant_insert" -> false).foreach {
       case (name, failOnError) =>
@@ -2009,6 +2042,12 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkSetUnrecoverableError("{}", "$", Literal(1),
       "INVALID_VARIANT_PATH",
       name => Map("path" -> "$", "functionName" -> s"`$name`"))
+    checkSetUnrecoverableError("{}", """$['a\']""", Literal(1),
+      "INVALID_VARIANT_PATH",
+      name => Map("path" -> """$['a\']""", "functionName" -> s"`$name`"))
+    checkSetUnrecoverableError("{}", """$["a\"]""", Literal(1),
+      "INVALID_VARIANT_PATH",
+      name => Map("path" -> """$["a\"]""", "functionName" -> s"`$name`"))
     val tooBig = "x".repeat(16 * 1024 * 1024)
     checkSetUnrecoverableError("{}", "$.a[2000000000]", Literal(1),
       "VARIANT_SIZE_LIMIT",
@@ -2165,6 +2204,12 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkAppendUnrecoverableError("[]", "abc", Literal(1),
       "INVALID_VARIANT_PATH",
       name => Map("path" -> "abc", "functionName" -> s"`$name`"))
+    checkAppendUnrecoverableError("[]", """$['a\']""", Literal(1),
+      "INVALID_VARIANT_PATH",
+      name => Map("path" -> """$['a\']""", "functionName" -> s"`$name`"))
+    checkAppendUnrecoverableError("[]", """$["a\"]""", Literal(1),
+      "INVALID_VARIANT_PATH",
+      name => Map("path" -> """$["a\"]""", "functionName" -> s"`$name`"))
 
     Seq("variant_array_append" -> true, "try_variant_array_append" -> false).foreach {
       case (name, failOnError) =>
@@ -2424,6 +2469,14 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       VariantPick(Seq(Literal(parseJson("""{"a": 1}""")), Literal("garbage"))),
       "INVALID_VARIANT_PATH",
       Map("path" -> "garbage", "functionName" -> "`variant_pick`"))
+    checkErrorInExpression[SparkRuntimeException](
+      VariantPick(Seq(Literal(parseJson("""{"a": 1}""")), Literal("""$['a\']"""))),
+      "INVALID_VARIANT_PATH",
+      Map("path" -> """$['a\']""", "functionName" -> "`variant_pick`"))
+    checkErrorInExpression[SparkRuntimeException](
+      VariantPick(Seq(Literal(parseJson("""{"a": 1}""")), Literal("""$["a\"]"""))),
+      "INVALID_VARIANT_PATH",
+      Map("path" -> """$["a\"]""", "functionName" -> "`variant_pick`"))
 
     // A malformed constant path is rejected in both interpreted and codegen modes even when the
     // input variant is NULL: the path is parsed before the NULL short-circuit.
