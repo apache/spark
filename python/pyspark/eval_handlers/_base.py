@@ -124,9 +124,7 @@ class _EvalTypeHandlerMeta(ABCMeta):
 
     @property
     def is_iter_based(cls) -> bool:
-        """Whether each UDF returns an iterator that the handler consumes lazily, so the worker
-        profiles each step of the iterator rather than the call that creates it. Defined on the
-        metaclass so it can be read from the handler class before the handler is constructed."""
+        """Whether the handler's UDFs return an iterator."""
         return cls._iter_based
 
 
@@ -147,7 +145,7 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
     # the value of it this handler serves; None when the eval type has a single handler.
     variant_conf: ClassVar[Optional[str]] = None
     variant_value: ClassVar[Any] = None
-    # Backs is_iter_based on _EvalTypeHandlerMeta.
+    # Whether the handler's UDFs return an iterator; see is_iter_based.
     _iter_based: ClassVar[bool] = False
 
     def __init__(
