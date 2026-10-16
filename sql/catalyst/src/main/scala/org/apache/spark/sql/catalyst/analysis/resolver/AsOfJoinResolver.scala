@@ -141,7 +141,8 @@ class AsOfJoinResolver(
   }
 
   /**
-   * If the join uses a hidden column, wraps it in a [[Project]] that also keeps the hidden columns.
+   * If the join references a hidden column, wraps it in a [[Project]] that restores its original
+   * output, plus the qualified-access-only columns unless the join is the top-level operator.
    */
   private def retainOriginalOutputIfHiddenColumnIsReferenced(
       unresolvedAsOfJoin: AsOfJoin,
