@@ -1179,8 +1179,9 @@ object SQLConf {
       "an interval index. A single inequality broadcasts a sorted point index. " +
       "Only types the index compares with the join predicate are recognized. " +
       "A non-deterministic expression is not used as a range key. " +
-      "Deeply overlapping intervals can increase candidate evaluation cost during probing. " +
-      "Off by default.")
+      "Measured slower than the nested loop join it replaces when intervals overlap " +
+      "almost completely or when the probed side has only a few rows, because the " +
+      "index is built up front and such probes prune little. Off by default.")
     .version("4.4.0")
     .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .booleanConf
