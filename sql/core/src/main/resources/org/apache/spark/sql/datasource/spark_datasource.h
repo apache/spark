@@ -117,7 +117,8 @@
  *   source handle right after creating it.
  * - Memory. What Spark passes to a function, such as strings, byte arrays, SparkDsCreateInfo and
  *   SparkDsWriteInfo, is only valid during the call, except for SparkDsHost and
- *   SparkDsTaskContext, which document how long they live. Strings are UTF-8 and NUL-terminated.
+ *   SparkDsTaskContext, which document how long they live. Strings are UTF-8 and NUL-terminated:
+ *   Spark fails an operation whose options or column names contain the character U+0000.
  *   The JSON of the predicates is ASCII: it escapes the other characters, which any JSON parser
  *   decodes. The library returns strings and byte arrays by passing them to a SparkDsSink, which
  *   copies them.
@@ -134,12 +135,21 @@
  *   parent refers to, such as a column shorter than its batch. The buffers of an array must hold
  *   all of its values, as the C data interface requires: it does not carry the sizes of the
  *   buffers, so Spark cannot check them, and reads past the end of a buffer that is too short.
- * - Schemas. Spark types map to Arrow types as in spark.sql.execution.arrow: for example, bigint
- *   is int64, string is utf8, timestamp is timestamp[us] with a time zone and timestamp_ntz is
- *   timestamp[us] without one. Data read from a library may also use large_utf8 and utf8_view for
- *   strings, large_binary and binary_view for binary data, and any names for the fields of the
- *   entries of a map. Spark rejects the other Arrow types, such as unsigned integers, decimal256,
- *   large lists, fixed-size lists and list views, and dictionary encoding.
+ * - Schemas. These are the types of version 1, with their Arrow types and the formats of the C
+ *   data interface: boolean is bool (b), tinyint, smallint, int and bigint are int8 (c), int16
+ *   (s), int32 (i) and int64 (l), float and double are float32 (f) and float64 (g), decimal(p, s)
+ *   is decimal128(p, s) (d:p,s), string is utf8 (u), binary is binary (z), date is date32 (tdD),
+ *   timestamp is timestamp[us] with the time zone of the session (tsu:<zone>), timestamp_ntz is
+ *   timestamp[us] without a time zone (tsu:), and array, map and struct are list (+l), map (+m)
+ *   and struct (+s). Spark fails an operation whose schema has another type, such as an
+ *   interval, variant or time, before it passes the schema to the library: a later version may
+ *   support other types, for the data sources that declare a capability for them. Data read from
+ *   a library may also use large_utf8 (U) and utf8_view (vu) for strings, large_binary (Z) and
+ *   binary_view (vz) for binary data, and any names for the fields of the entries of a map.
+ *   Spark rejects the other Arrow types, such as unsigned integers, decimal256, large lists,
+ *   fixed-size lists and list views, and dictionary encoding. The data must agree with the
+ *   nullability of the schema to read: Spark fails a read whose data has a null where the schema
+ *   declares a column, a field, an element or a map value not nullable.
  * - Options. Option keys are passed in lower case, because Spark matches them
  *   case-insensitively.
  * - Optional functions. A library only sets the functions of the operations it supports in its
@@ -443,7 +453,10 @@ typedef struct SparkDsLibrary {
    *   SQL type name such as int, string or decimal(10,2). The value is null, a JSON boolean or
    *   number for boolean and numeric types, a string for string, a base64 string for binary, a
    *   decimal string for decimal, the days since the epoch for date, and the microseconds since
-   *   the epoch for timestamp and timestamp_ntz.
+   *   the epoch for timestamp and timestamp_ntz. Read a literal at the precision of its data type:
+   *   a float literal is the exact value of the float, written as the double of the same value,
+   *   and the values of the integer types, dates and timestamps are exact 64-bit integers, which
+   *   a double does not hold above 2^53. Spark does not pass a string that is not valid UTF-8.
    * - {"type": "function", "name": ">", "children": [...]}: a predicate, with the name it has in
    *   org.apache.spark.sql.connector.expressions.filter.Predicate. The names are =, <>, <=>
    *   (equal, with null equal to null), <, <=, > and >= with two children, IN with the value to
@@ -471,8 +484,11 @@ typedef struct SparkDsLibrary {
    *   example, NOT (i IN (1, NULL)) matches no row.
    * - Strings are compared by their UTF-8 bytes, which order the characters outside the Basic
    *   Multilingual Plane after all the others, unlike comparisons of UTF-16 strings.
-   * - To use only a part of a predicate, a reader may take the parts that it does not support as
-   *   true, but not under a NOT, where that would drop rows.
+   * - To use only a part of a predicate, a reader may take a part that it does not support as
+   *   true, but only when every function between that part and the root of the predicate is AND
+   *   or OR. Under any other function, such as NOT, or = and <=> between two predicates, that
+   *   would drop rows: (id > 3) = (id < 3) is true for the row whose id is 3, but taking id < 3
+   *   as true makes it false.
    * The file org/apache/spark/sql/datasource/predicate-cases.json in the jar of Spark SQL lists
    * predicates as Spark passes them to this function, with the rows of a table for which they are
    * true, to test a reader with.

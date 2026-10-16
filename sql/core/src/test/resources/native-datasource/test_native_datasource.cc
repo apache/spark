@@ -34,7 +34,8 @@
 //                   "short", an array of the batches has one value fewer than its parent refers
 //                   to, although its buffers hold them all: "id" shortens the column id,
 //                   "entries" the entries of the map and their fields, and "values" the values
-//                   of the entries. With the option "wait_for_interrupt", the stream of a
+//                   of the entries. "children" exports the batches without their columns, with
+//                   n_children = 0. With the option "wait_for_interrupt", the stream of a
 //                   partition creates the file <wait_for_interrupt>.waiting, waits until its task
 //                   is killed, and then creates the file <wait_for_interrupt> and fails.
 //   native_sink     Writes the rows as CSV files under the directory in the option "path". With
@@ -440,6 +441,8 @@ void exportBatch(const std::vector<std::string>& columns, int64_t lo, int64_t hi
       column->children[0]->children[1]->length--;
     }
   }
+  // The columns are still released with the batch.
+  if (short_array == "children") out->n_children = 0;
 }
 
 // ---------------------------------------------------------------------------------------------

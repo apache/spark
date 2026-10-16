@@ -37,7 +37,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.{SPARK_VERSION, SparkClassNotFoundException, SparkFiles, SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.api.python.{PythonBroadcast, SimplePythonFunction}
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{Literal => CatalystLiteral}
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
@@ -166,6 +166,11 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       "not json" -> "The manifest is not valid JSON",
       "[1]" -> "The manifest must be a JSON object.",
       """{"dataSources": ["a"], "libraries": {"p": "x"}}""" -> "'abiVersion'",
+      """{"abiVersion": 0, "dataSources": ["a"], "libraries": {"p": "x"}}""" ->
+        "positive integer field 'abiVersion'",
+      // The JSON escape of the character U+0000.
+      ("""{"abiVersion": 1, "dataSources": ["a""" + "\\u0000" +
+        """"], "libraries": {"p": "x"}}""") -> "'dataSources'",
       """{"abiVersion": 1, "dataSources": [], "libraries": {"p": "x"}}""" -> "'dataSources'",
       """{"abiVersion": 1, "dataSources": [1], "libraries": {"p": "x"}}""" -> "'dataSources'",
       """{"abiVersion": 1, "dataSources": ["a"]}""" -> "'libraries'",
@@ -237,6 +242,10 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(literal(1.toByte, ByteType).contains(""""dataType":"tinyint","value":1"""))
     assert(literal(2.toShort, ShortType).contains(""""dataType":"smallint","value":2"""))
     assert(literal(1.5f, FloatType).contains(""""dataType":"float","value":1.5"""))
+    // As the double of the same value, which a reader that parses JSON numbers as doubles gets
+    // exactly: parsing 0.1 as a double gives another value than the float 0.1.
+    assert(literal(0.1f, FloatType)
+      .contains(""""dataType":"float","value":0.10000000149011612"""))
     assert(literal(2.5, DoubleType).contains(""""dataType":"double","value":2.5"""))
     assert(literal(UTF8String.fromString("a\"b"), StringType)
       .contains(""""dataType":"string","value":"a\"b""""))
@@ -257,6 +266,8 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(literal(Double.NaN, DoubleType).isEmpty)
     assert(literal(Float.PositiveInfinity, FloatType).isEmpty)
     assert(literal(UTF8String.fromString("a"), StringType("UTF8_LCASE")).isEmpty)
+    // A JSON string would replace the invalid bytes, which Spark compares.
+    assert(literal(UTF8String.fromBytes(Array(0xFF.toByte)), StringType).isEmpty)
     assert(literal(null, ArrayType(IntegerType)).nonEmpty)
     assert(literal(Array(1), ArrayType(IntegerType)).isEmpty)
 
@@ -284,18 +295,18 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
    * `SPARK_GENERATE_GOLDEN_FILES=1`.
    */
   test("predicate cases") {
-    val schema = StructType.fromDDL("id INT, i INT, d DOUBLE, s STRING")
+    val schema = StructType.fromDDL("id INT, i INT, d DOUBLE, s STRING, f FLOAT")
     def char(codePoint: Int): String = new String(Character.toChars(codePoint))
     val (emoji, eAcute, replacement) = (char(0x1F600), char(0xE9), char(0xFFFD))
     val rows = Seq(
-      Row(0, 1, 0.0, "a"),
-      Row(1, 2, -0.0, ""),
-      Row(2, null, Double.NaN, eAcute),
-      Row(3, 3, Double.PositiveInfinity, emoji),
-      Row(4, 1, Double.NegativeInfinity, null),
-      Row(5, null, 1.5, "ab"),
-      Row(6, 2, null, "b" + eAcute),
-      Row(7, 4, 2.5, replacement))
+      Row(0, 1, 0.0, "a", 0.1f),
+      Row(1, 2, -0.0, "", 1.5f),
+      Row(2, null, Double.NaN, eAcute, null),
+      Row(3, 3, Double.PositiveInfinity, emoji, 0.1f),
+      Row(4, 1, Double.NegativeInfinity, null, 0.5f),
+      Row(5, null, 1.5, "ab", 2.0f),
+      Row(6, 2, null, "b" + eAcute, 0.25f),
+      Row(7, 4, 2.5, replacement, 3.0f))
     val filters = Seq(
       // NaN is equal to NaN and greater than any other value, and -0.0 is equal to 0.0.
       "d = 0.0D", "d = -0.0D", "d < 0.0D", "d > 1.0D", "d >= 2.5D", "d <> 0.0D", "d <=> 0.0D",
@@ -306,12 +317,18 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       "i > 1 AND d IS NOT NULL",
       // Strings are compared by their UTF-8 bytes.
       s"s = '$emoji'", s"s > '$replacement'", "s < 'b'", "startswith(s, 'a')",
-      s"endswith(s, '$eAcute')", s"contains(s, '$emoji')", s"s IN ('', '$eAcute')")
+      s"endswith(s, '$eAcute')", s"contains(s, '$emoji')", s"s IN ('', '$eAcute')",
+      // A float literal is the exact value of the float, which a double holds.
+      "f = CAST(0.1 AS FLOAT)", "f > CAST(0.1 AS FLOAT)",
+      // Taking a part of a predicate under = as true would drop the row whose id is 3.
+      "(id > 3) = (id < 3)")
 
     val mapper = JsonMapper.builder().enable(JsonWriteFeature.ESCAPE_NON_ASCII).build()
     def json(value: Any): String = mapper.writeValueAsString(value)
     def jsonValue(value: Any): String = value match {
       case d: Double if d.isNaN || d.isInfinite => json(d.toString)
+      // The exact value of the float, as the literals of the predicates.
+      case f: Float => json(f.toDouble)
       case other => json(other)
     }
     val df = spark.createDataFrame(rows.asJava, schema)
@@ -339,7 +356,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         "spark_datasource.h, with the ids of the rows of the table for which they are true. A " +
         "case lists the predicates that Spark pushes for the filter in its SQL, which are " +
         "combined with AND. A row has a value for each column of the schema; NaN and infinite " +
-        "doubles are strings.")},
+        "doubles are strings, and floats are written as the doubles of the same values.")},
          |  "schema": ${json(schema.toDDL)},
          |  "rows": [
          |${rows.map(row => row.toSeq.map(jsonValue).mkString("    [", ", ", "]")).mkString(",\n")}
@@ -591,6 +608,80 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(scan(nested).readSchema() == StructType.fromDDL("st STRUCT<a: BIGINT, b: STRING>"))
   }
 
+  nativeTest("reject the data that has nulls where the schema to read has none") {
+    // The column name is null for the ids that are multiples of 5.
+    val session = newSession(defaultPackage)
+    val e = intercept[Exception] {
+      session.read.schema("id BIGINT, name STRING NOT NULL").format("native_range")
+        .option("end", "4").load().collect()
+    }
+    checkError(
+      exception = findError(e, "NATIVE_DATA_SOURCE_ERROR"),
+      condition = "NATIVE_DATA_SOURCE_ERROR",
+      parameters = Map(
+        "action" -> "read",
+        "name" -> "native_range",
+        "msg" -> "The column name has a null, but the schema to read declares it not nullable."))
+    // The fields that are not nullable have no nulls.
+    checkRows(
+      session.read.schema("id BIGINT NOT NULL, st STRUCT<a: BIGINT NOT NULL, b: STRING NOT NULL>")
+        .format("native_range").option("end", "2").option("extra", "struct").load(),
+      Seq(Row(0L, Row(0L, "s0")), Row(1L, Row(1L, "s1"))))
+  }
+
+  nativeTest("reject the types and the strings that a library cannot get") {
+    val session = newSession(defaultPackage)
+    def check(action: String, name: String, msg: String)(f: => Unit): Unit = {
+      val e = intercept[Exception](f)
+      checkError(
+        exception = findError(e, "NATIVE_DATA_SOURCE_ERROR"),
+        condition = "NATIVE_DATA_SOURCE_ERROR",
+        parameters = Map("action" -> action, "name" -> name, "msg" -> msg))
+    }
+    // Spark rejects the types that version 1 does not have before it passes a schema to the
+    // library: here, before create_reader and create_writer.
+    check("plan a scan of", "native_range", "The column id has the type INTERVAL DAY TO " +
+        "SECOND, which native data sources do not support.") {
+      session.read.schema("id INTERVAL DAY TO SECOND").format("native_range").load().collect()
+    }
+    val dir = Utils.createTempDir()
+    check("plan a write to", "native_sink", "The column v.element has the type VARIANT, which " +
+        "native data sources do not support.") {
+      session.sql("SELECT array(parse_json('1')) AS v").write.format("native_sink")
+        .option("path", dir.getPath).mode("append").save()
+    }
+    assert(!new File(dir, "_CREATED").exists())
+    // A NUL-terminated string cannot hold the character U+0000.
+    check("create", "native_range", "The option end contains the character U+0000, which Spark " +
+        "cannot pass to a library.") {
+      range(session, "end" -> "1\u00002")
+    }
+  }
+
+  nativeTest("Arrow UDFs on the columns of a native data source") {
+    assume(IntegratedUDFTestUtils.shouldTestPandasUDFs)
+    // The reader imports every batch into the same vectors, and closes them once its partition
+    // ends, while Spark writes batches to Python before the results of the earlier ones come
+    // back: the UDF must not read the pass-through columns of a batch after that.
+    val session = newSession(defaultPackage)
+    val udf = IntegratedUDFTestUtils.TestScalarPandasUDF(
+      name = "native_str", returnType = Some(StringType))
+    IntegratedUDFTestUtils.registerTestUDF(udf, session)
+    // One batch, two, and many. The test UDF casts its input to string: on the string column
+    // name, the cast is removed, so the batches go to Python as they are.
+    Seq(100, 200, 200000).foreach { end =>
+      val rows = range(session, "end" -> end.toString, "partitions" -> "1", "batch_size" -> "100")
+        .selectExpr("id", "name", "native_str(name) AS udf_name").collect()
+      assert(rows.map(_.getLong(0)).toSeq == (0L until end))
+      rows.foreach { row =>
+        val id = row.getLong(0)
+        val name = if (id % 5 == 0) null else s"n$id"
+        assert(row.getString(1) == name, s"name mismatch for id $id")
+        assert(row.getString(2) == name, s"UDF mismatch for id $id")
+      }
+    }
+  }
+
   nativeTest("reject the Arrow data that Spark cannot read") {
     def check(msg: String, options: (String, String)*): Unit = {
       checkWithSchema(None, msg, options: _*)
@@ -613,6 +704,8 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     // Arrow Java would extend an array with fewer values than its parent refers to with nulls.
     // Each batch has 2 rows.
     check("The column id has a length of 1, but the batch has a length of 2.", "short" -> "id")
+    // Arrow Java would import the missing columns as nulls.
+    check("The batch has 0 child arrays, but the schema has 7 columns.", "short" -> "children")
     Seq("entries", "values").foreach { array =>
       check("The column m contains an array with a length of 1, but its parent refers to 2 " +
         "values.", "extra" -> "map", "short" -> array)

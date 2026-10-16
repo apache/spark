@@ -25,6 +25,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode
 import org.apache.spark.sql.connector.expressions.{Expression, GeneralScalarExpression, Literal, NamedReference}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Encodes Data Source V2 predicates as the JSON expression trees passed to
@@ -120,10 +121,15 @@ object NativePredicates {
         case (n: Short, ShortType) => Some(node.put("value", n))
         case (n: Int, IntegerType | DateType) => Some(node.put("value", n))
         case (n: Long, LongType | TimestampType | TimestampNTZType) => Some(node.put("value", n))
-        case (n: Float, FloatType) if !n.isNaN && !n.isInfinite => Some(node.put("value", n))
+        // As the double of the same value, which a reader that parses the numbers of JSON as
+        // doubles, as most do, gets exactly. The shortest decimal of the float would not be.
+        case (n: Float, FloatType) if !n.isNaN && !n.isInfinite =>
+          Some(node.put("value", n.toDouble))
         case (n: Double, DoubleType) if !n.isNaN && !n.isInfinite => Some(node.put("value", n))
-        // A source compares strings by their bytes, so only push down binary collations.
-        case (s, st: StringType) if st.isUTF8BinaryCollation => Some(node.put("value", s.toString))
+        // A source compares strings by their bytes, so only push down binary collations, and
+        // valid UTF-8: a JSON string would replace the invalid bytes.
+        case (s: UTF8String, st: StringType) if st.isUTF8BinaryCollation && s.isValid =>
+          Some(node.put("value", s.toString))
         case (bytes: Array[Byte], BinaryType) =>
           Some(node.put("value", Base64.getEncoder.encodeToString(bytes)))
         case (d: Decimal, _: DecimalType) =>

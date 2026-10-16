@@ -81,6 +81,11 @@ curl -LO {{site.SPARK_GITHUB_URL}}/raw/v{{site.SPARK_VERSION_SHORT}}/sql/core/sr
 A library built against the header works with all the releases of Spark that support its version,
 `SPARK_DS_ABI_VERSION`: see [Compatibility](#compatibility).
 
+The schemas are Arrow schemas, with the types of version 1 that `spark_datasource.h` lists, such
+as `int64` for `bigint`, `utf8` for `string` and `timestamp[us]` for `timestamp`: Spark fails an
+operation whose schema has another type, such as an interval, before it calls the library. The data
+that a library returns must agree with the nullability of the schema to read.
+
 Spark calls the functions of the table as follows:
 
 - **Data sources**: for each schema inference, scan and write, Spark creates a data source on the
@@ -302,7 +307,11 @@ is a zip file with the extension `.sparkpkg`, which contains a manifest named
 }
 ```
 
-- `abiVersion` is the version of `spark_datasource.h` that the library implements, currently 1.
+- `abiVersion` is the oldest version of `spark_datasource.h` that the library implements,
+  currently 1. Spark uses a package whose `abiVersion` it supports, or is older than the newest
+  version that it supports, and `spark_ds_init` returns a table of a version that both support.
+  Spark ignores the fields of the manifest that it does not know, so that later releases can add
+  fields.
 - `dataSources` lists the names of the data sources that the library implements. The names are
   case-insensitive, and Spark passes the name to `create`.
 - `libraries` maps each platform, `<os>-<arch>` with an `os` of `linux`, `osx` or `windows` and an
