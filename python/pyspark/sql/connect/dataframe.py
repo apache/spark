@@ -2429,12 +2429,13 @@ class DataFrame(ParentDataFrame):
             cmd.command(self._session.client)
         )
         assert "checkpoint_command_result" in properties
-        checkpointed = properties["checkpoint_command_result"]
-        assert isinstance(checkpointed._plan, plan.CachedRemoteRelation)
-        assert checkpointed._plan._relation_id == relation_id, (
+        assert properties["checkpoint_command_result"] == relation_id, (
             "Checkpoint relation ID does not match the requested ID"
         )
-        return checkpointed
+        return DataFrame(
+            plan=plan.CachedRemoteRelation(relation_id, self._session),
+            session=self._session,
+        )
 
     def localCheckpoint(
         self, eager: bool = True, storageLevel: Optional[StorageLevel] = None
@@ -2451,12 +2452,13 @@ class DataFrame(ParentDataFrame):
             cmd.command(self._session.client)
         )
         assert "checkpoint_command_result" in properties
-        checkpointed = properties["checkpoint_command_result"]
-        assert isinstance(checkpointed._plan, plan.CachedRemoteRelation)
-        assert checkpointed._plan._relation_id == relation_id, (
+        assert properties["checkpoint_command_result"] == relation_id, (
             "Checkpoint relation ID does not match the requested ID"
         )
-        return checkpointed
+        return DataFrame(
+            plan=plan.CachedRemoteRelation(relation_id, self._session),
+            session=self._session,
+        )
 
     def toJSON(self) -> ParentDataFrame:
         return self.select(F.to_json(F.struct(F.col("*"))).alias("value"))
