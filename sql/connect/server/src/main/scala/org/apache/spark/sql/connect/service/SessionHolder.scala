@@ -475,9 +475,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    */
   private[connect] def cacheDataFrameById(dfId: String, df: DataFrame): Unit = {
     if (dataFrameCache.putIfAbsent(dfId, df) != null) {
-      throw InvalidPlanInput(
-        "CONNECT_INVALID_PLAN.DATAFRAME_ALREADY_EXISTS",
-        Map("dfId" -> dfId, "sessionId" -> sessionId))
+      throw SparkException.internalError(s"A dataframe is already associated with id $dfId")
     }
   }
 

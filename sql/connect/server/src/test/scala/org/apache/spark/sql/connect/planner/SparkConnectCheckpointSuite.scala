@@ -22,6 +22,7 @@ import scala.collection.mutable
 
 import io.grpc.stub.StreamObserver
 
+import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.classic.Dataset
@@ -134,13 +135,13 @@ class SparkConnectCheckpointSuite extends QueryTest with SharedSparkSession {
     process(sessionHolder, command)
     val original = sessionHolder.getDataFrameOrThrow(relationId)
     checkError(
-      exception = intercept[InvalidPlanInput] {
+      exception = intercept[SparkException] {
         process(
           sessionHolder,
           checkpointCommand(local = true, eager = false, relationId = Some(relationId), end = 5))
       },
-      condition = "CONNECT_INVALID_PLAN.DATAFRAME_ALREADY_EXISTS",
-      parameters = Map("dfId" -> relationId, "sessionId" -> sessionHolder.sessionId))
+      condition = "INTERNAL_ERROR",
+      parameters = Map("message" -> s"A dataframe is already associated with id $relationId"))
     assert(sessionHolder.getDataFrameOrThrow(relationId) eq original)
     checkAnswer(original, Seq(Row(0L), Row(1L), Row(2L)))
   }
