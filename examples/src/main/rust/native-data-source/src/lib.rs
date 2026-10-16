@@ -25,7 +25,7 @@ use arrow_schema::{ArrowError, DataType, Field, Schema, SchemaRef};
 use serde::{Deserialize, Serialize};
 use spark_native_source::{
     BatchReader, BatchReaderFactory, BatchSource, FilterSupport, LimitSupport, Options, Predicate,
-    Result, ScanBuilder, ScanPlan, TaskContext,
+    Result, ScanBuilder, ScanPlan, SourceCapability, TaskContext,
 };
 
 pub struct RangeSource {
@@ -84,6 +84,10 @@ impl BatchSource for RangeSource {
             num_partitions,
             batch_size,
         })
+    }
+
+    fn capabilities(&self) -> Vec<SourceCapability> {
+        vec![SourceCapability::BatchRead]
     }
 
     fn schema(&self) -> Result<SchemaRef> {

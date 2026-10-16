@@ -28,9 +28,12 @@ Running the Spark smoke script requires a distribution built with that native da
 framework and Java 22 or later on the driver and executors. The JNI SDK prototype in PR #59442
 targets a different interface.
 
-The source's native capability mask is fixed to `SPARK_DS_BATCH_READ` (`1`). It does not implement
-writes or Structured Streaming. During analysis, Spark creates and closes a source with the table
-options to inspect its capabilities. It exposes `BATCH_WRITE` and `TRUNCATE` to Data Source V2 only
+The source explicitly implements `BatchSource::capabilities()` to return
+`vec![SourceCapability::BatchRead]`, producing the native mask `SPARK_DS_BATCH_READ` (`1`).
+Connectors can override this method based on their options; the SDK validates the declaration
+against its implemented callbacks. This example does not implement writes or Structured Streaming.
+During analysis, Spark creates and closes a source with the table options to inspect its
+capabilities. It exposes `BATCH_WRITE` and `TRUNCATE` to Data Source V2 only
 when declared, so this example rejects batch append and overwrite before evaluating their input.
 The framework still reports the Data Source V2 flags `BATCH_READ`, `MICRO_BATCH_READ`, and
 `STREAMING_WRITE` to keep operations on the V2 path instead of falling back to V1. These routing

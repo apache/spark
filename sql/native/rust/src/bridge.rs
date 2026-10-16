@@ -27,7 +27,7 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use crate::{
     BatchReaderFactory, BatchSource, FilterSupport, LimitSupport, Options, Predicate, Result,
-    ScanBuilder, TaskContext,
+    ScanBuilder, SourceCapability, TaskContext,
 };
 
 #[path = "stream.rs"]
@@ -41,7 +41,7 @@ type HandleMap<T> = Mutex<HashMap<i64, Arc<Mutex<T>>>>;
 /// so independent sources and scans do not serialize behind a global lock.
 pub struct Bridge<S: BatchSource> {
     next_handle: AtomicI64,
-    sources: HandleMap<S>,
+    sources: HandleMap<SourceState<S>>,
     planners: HandleMap<Planner<S::Scan>>,
 }
 
@@ -65,13 +65,36 @@ impl<S: BatchSource> Bridge<S> {
         Ok(handle)
     }
 
-    pub fn create(&self, options: Options) -> Result<i64> {
-        self.insert(&self.sources, S::new(options)?)
+    pub fn create(&self, options: Options) -> Result<(i64, u64)> {
+        self.register_source(S::new(options)?)
+    }
+
+    fn register_source(&self, source: S) -> Result<(i64, u64)> {
+        let mut capabilities = 0;
+        for capability in source.capabilities() {
+            match capability {
+                SourceCapability::BatchRead => capabilities |= crate::abi::BATCH_READ,
+                _ => {
+                    return Err(format!(
+                        "capability {capability:?} is not supported by this batch-read SDK"
+                    )
+                    .into());
+                }
+            }
+        }
+        let handle = self.insert(
+            &self.sources,
+            SourceState {
+                source,
+                capabilities,
+            },
+        )?;
+        Ok((handle, capabilities))
     }
 
     pub fn schema(&self, handle: i64) -> Result<SchemaRef> {
         let source = get(&self.sources, handle)?;
-        let schema = lock(&source).schema()?;
+        let schema = lock(&source).source.schema()?;
         stream::validate_schema(&schema)?;
         Ok(schema)
     }
@@ -79,7 +102,13 @@ impl<S: BatchSource> Bridge<S> {
     pub fn create_reader(&self, handle: i64, schema: SchemaRef) -> Result<i64> {
         stream::validate_schema(&schema)?;
         let source = get(&self.sources, handle)?;
-        let builder = lock(&source).scan(schema.clone())?;
+        let builder = {
+            let source = lock(&source);
+            if source.capabilities & crate::abi::BATCH_READ == 0 {
+                return Err("source does not support batch reads".into());
+            }
+            source.source.scan(schema.clone())?
+        };
         self.insert(&self.planners, Planner::new(builder, schema))
     }
 
@@ -182,6 +211,11 @@ fn remove<T>(handles: &HandleMap<T>, handle: i64) {
     // Provider destructors run after releasing the registry lock. Repeated
     // closes are harmless, and IDs are never reused.
     drop(value);
+}
+
+struct SourceState<S> {
+    source: S,
+    capabilities: u64,
 }
 
 struct Planner<B: ScanBuilder> {
@@ -466,7 +500,7 @@ mod tests {
         let source = Source::new(Options::new()).unwrap();
         let builds = source.builds.clone();
         let drops = source.drops.clone();
-        let handle = bridge.insert(&bridge.sources, source).unwrap();
+        let (handle, _) = bridge.register_source(source).unwrap();
         let schema = bridge.schema(handle).unwrap();
         let reader = bridge.create_reader(handle, schema).unwrap();
         bridge.close_source(handle).unwrap();
@@ -499,7 +533,7 @@ mod tests {
             source.filter_support = support;
             source.limit_support = LimitSupport::Global;
             let limits = source.limits.clone();
-            let handle = bridge.insert(&bridge.sources, source).unwrap();
+            let (handle, _) = bridge.register_source(source).unwrap();
             let reader = bridge
                 .create_reader(handle, bridge.schema(handle).unwrap())
                 .unwrap();
@@ -521,7 +555,7 @@ mod tests {
             let mut source = Source::new(Options::new()).unwrap();
             source.limit_support = support;
             let limits = source.limits.clone();
-            let handle = bridge.insert(&bridge.sources, source).unwrap();
+            let (handle, _) = bridge.register_source(source).unwrap();
             let reader = bridge
                 .create_reader(handle, bridge.schema(handle).unwrap())
                 .unwrap();
@@ -547,7 +581,7 @@ mod tests {
             source.failure = failure;
             let builds = source.builds.clone();
             let drops = source.builder_drops.clone();
-            let handle = bridge.insert(&bridge.sources, source).unwrap();
+            let (handle, _) = bridge.register_source(source).unwrap();
             let reader = bridge
                 .create_reader(handle, bridge.schema(handle).unwrap())
                 .unwrap();
@@ -578,7 +612,7 @@ mod tests {
             let builds = source.builds.clone();
             let limits = source.limits.clone();
             let drops = source.builder_drops.clone();
-            let handle = bridge.insert(&bridge.sources, source).unwrap();
+            let (handle, _) = bridge.register_source(source).unwrap();
             let reader = bridge
                 .create_reader(handle, bridge.schema(handle).unwrap())
                 .unwrap();
@@ -603,7 +637,7 @@ mod tests {
         source.limit_support = LimitSupport::Global;
         let builds = source.builds.clone();
         let limits = source.limits.clone();
-        let handle = bridge.insert(&bridge.sources, source).unwrap();
+        let (handle, _) = bridge.register_source(source).unwrap();
         let first = bridge
             .create_reader(handle, bridge.schema(handle).unwrap())
             .unwrap();
@@ -648,7 +682,7 @@ mod tests {
         let builds = source.builds.clone();
         let source_drops = source.drops.clone();
         let builder_drops = source.builder_drops.clone();
-        let handle = bridge.insert(&bridge.sources, source).unwrap();
+        let (handle, _) = bridge.register_source(source).unwrap();
         let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int64, false)]));
         let planner = bridge.create_reader(handle, schema).unwrap();
         bridge.close_source(handle).unwrap();
@@ -692,7 +726,7 @@ mod tests {
     #[test]
     fn executor_rejects_a_factory_schema_different_from_the_negotiated_schema() {
         let bridge = Bridge::<Source>::default();
-        let handle = bridge.create(Options::new()).unwrap();
+        let (handle, _) = bridge.create(Options::new()).unwrap();
         let reader = bridge
             .create_reader(handle, bridge.schema(handle).unwrap())
             .unwrap();

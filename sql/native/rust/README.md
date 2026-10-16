@@ -38,8 +38,8 @@ to include the example.
 
 A connector implements three traits from [`src/lib.rs`](src/lib.rs):
 
-* `BatchSource`: parse driver options, discover the schema, and create an
-  independent scan builder. Spark can also create and immediately drop a source
+* `BatchSource`: parse driver options, declare capabilities, discover the schema,
+  and create an independent scan builder. Spark can also create and drop a source
   just to discover its capabilities; schema inference or a scan need not follow.
 * `ScanBuilder`: negotiate predicates, limit, and projection, then consume itself
   in `plan()` to return a typed `ScanPlan<Factory>`.
@@ -103,23 +103,48 @@ state in `bridge.rs`, Arrow ownership in `stream.rs`, and C bindings/adapters in
 
 ## Source capabilities
 
-Every `BatchSource` created by this SDK declares exactly `SPARK_DS_BATCH_READ`.
-Streaming, write, and truncate flags remain absent, and unsupported function
-slots are null. These native flags describe what the source implements;
-query-level predicate, limit, and projection results are separate contracts.
+Connector developers declare native capabilities through
+`BatchSource::capabilities(&self) -> Vec<SourceCapability>`. The default is
+`vec![SourceCapability::BatchRead]`; override it to describe the source instance
+created with its effective options. For example, inside a source implementation:
+
+```rust
+fn capabilities(&self) -> Vec<SourceCapability> {
+    if self.batch_reads_enabled {
+        vec![SourceCapability::BatchRead]
+    } else {
+        vec![]
+    }
+}
+```
+
+The SDK evaluates this method once during `create`, validates the declaration,
+and returns the resulting native flag mask to Spark. Duplicate entries are
+ignored. An empty set still allows schema discovery and closing the source;
+batch scan creation fails before calling the connector's `scan` method. The
+declaration stays fixed for that source instance.
+
+`SourceCapability` names all current native operations: `BatchRead`,
+`MicroBatchRead`, `BatchWrite`, `StreamingWrite`, and `Truncate`. This batch-read
+prototype accepts only `BatchRead`; declaring other variants fails source
+creation with an explicit error because their callbacks are not implemented.
+Unsupported function slots remain null. These native flags describe supported
+operations; query-level predicate, limit, and projection results are separate
+contracts.
 
 Spark also calls `create` and `close` during query analysis to discover table
 capabilities. A probe uses the table's options, while an operation may override
-them with query options and checks capabilities again. Keep `BatchSource::new`
-lightweight and safe to drop immediately; do not assume that `schema` or `scan`
-will follow. Executor resources belong in `BatchReaderFactory::open`.
+them with query options and checks capabilities again on a new source instance.
+Keep `BatchSource::new` and `capabilities` lightweight and safe to drop
+immediately; do not assume that `schema` or `scan` will follow. Executor resources
+belong in `BatchReaderFactory::open`.
 
 The pinned framework propagates native `BATCH_WRITE` and `TRUNCATE` flags to
 `Table.capabilities()`, so a batch-only source rejects batch writes during
 analysis, before Spark computes their input. Its DSv2 read and streaming-write
 flags remain present to avoid V1 fallback; the native flags still reject
 unsupported reads or streaming writes during planning. Thus the DSv2 table's
-flags are not a literal copy of this SDK's batch-read-only native mask.
+flags are not a literal copy of the native mask declared by the Rust source.
 
 ## Arrow contract
 
@@ -206,7 +231,9 @@ cross-thread stream callbacks, and Arrow buffers surviving stream release.
 This checks the C boundary without requiring Java; it does not substitute for
 Spark planner and task-lifecycle testing.
 
-Unit tests additionally cover error and panic containment, terminal planning
+Rust tests additionally exercise the exported function table with option-dependent
+capabilities, empty and duplicate declarations, and unsupported declarations or
+panics during capability discovery. They also cover terminal planning
 failures, retries after the driver registry is dropped, schema/layout validation,
 sized ABI structures, task-context lifetimes, integer boundaries, projections,
 and deterministic partition plans.

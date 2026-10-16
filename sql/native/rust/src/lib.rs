@@ -43,6 +43,23 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub type Options = BTreeMap<String, String>;
 pub type BatchReader<'task> = Box<dyn RecordBatchReader + Send + 'task>;
 
+/// Native operations supported by a source instance with its effective options.
+///
+/// These are native capabilities, not Spark's Data Source V2 routing flags or
+/// per-scan pushdown results. This batch-read SDK currently accepts only
+/// [`BatchRead`](Self::BatchRead); declaring another capability fails source
+/// creation because the corresponding callbacks are not implemented.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum SourceCapability {
+    BatchRead,
+    MicroBatchRead,
+    BatchWrite,
+    StreamingWrite,
+    /// Supports writes that replace the table's existing data.
+    Truncate,
+}
+
 /// How completely a connector evaluates a pushed predicate.
 /// Spark currently rechecks all predicates, including exact ones.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -78,10 +95,11 @@ pub struct ScanPlan<F: BatchReaderFactory> {
 
 /// Driver-side source configuration and schema discovery.
 ///
-/// Registering this trait declares only the batch-read capability. Writes and
-/// streaming remain absent from the native function table. Spark also creates
-/// sources to discover table capabilities during query analysis; such a source
-/// can be dropped without calling `schema` or `scan`.
+/// Override [`capabilities`](Self::capabilities) to declare the operations this
+/// instance supports. Writes and streaming remain absent from the native
+/// function table. Spark also creates sources to discover table capabilities
+/// during query analysis; such a source can be dropped without calling `schema`
+/// or `scan`.
 pub trait BatchSource: Send + Sized + 'static {
     type Scan: ScanBuilder;
 
@@ -89,6 +107,15 @@ pub trait BatchSource: Send + Sized + 'static {
     /// a capability probe uses only table options, while a scan may override
     /// them with query options. Open executor resources in the factory.
     fn new(options: Options) -> Result<Self>;
+
+    /// Declares this instance's capabilities, which may depend on its options.
+    /// The SDK evaluates this once during source creation, validates the set
+    /// against its implemented callbacks, and keeps it fixed for that instance.
+    /// Duplicate entries are ignored. An empty set permits schema discovery but
+    /// rejects batch scan creation without calling `scan`.
+    fn capabilities(&self) -> Vec<SourceCapability> {
+        vec![SourceCapability::BatchRead]
+    }
 
     fn schema(&self) -> Result<SchemaRef>;
 

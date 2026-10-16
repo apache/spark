@@ -86,9 +86,9 @@ macro_rules! export_data_source {
                     abi::require_output(capabilities)?;
                     abi::require_output(source)?;
                     let options = unsafe { abi::options(info)? };
-                    let handle = bridge().create(options)?;
+                    let (handle, declared_capabilities) = bridge().create(options)?;
                     unsafe {
-                        capabilities.write(abi::BATCH_READ);
+                        capabilities.write(declared_capabilities);
                         source.write(handle as usize as *mut c_void);
                     }
                     Ok(())
