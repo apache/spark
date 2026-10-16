@@ -1204,9 +1204,19 @@ class SparkDeclarativePipelinesServerSuite
   // Helper to build a WITH_RELATIONS Relation with the given root SQL and reference SQLs.
   private def withRelationsRelation(
       rootSql: String,
-      refs: Seq[(String, String)]): proto.Relation = {
+      refs: Seq[(String, String)]): proto.Relation =
+    withRelationsRelationOf(
+      rootSql,
+      refs.map { case (alias, refSql) =>
+        alias -> sqlRelation(refSql)
+      })
+
+  // Helper to build a WITH_RELATIONS Relation with the given root SQL and reference inputs.
+  private def withRelationsRelationOf(
+      rootSql: String,
+      refs: Seq[(String, proto.Relation)]): proto.Relation = {
     val withRelationsBuilder = proto.WithRelations.newBuilder().setRoot(sqlRelation(rootSql))
-    refs.foreach { case (alias, refSql) =>
+    refs.foreach { case (alias, input) =>
       withRelationsBuilder.addReferences(
         proto.Relation
           .newBuilder()
@@ -1214,7 +1224,7 @@ class SparkDeclarativePipelinesServerSuite
             proto.SubqueryAlias
               .newBuilder()
               .setAlias(alias)
-              .setInput(sqlRelation(refSql))
+              .setInput(input)
               .build())
           .build())
     }
@@ -1264,6 +1274,34 @@ class SparkDeclarativePipelinesServerSuite
         }
         assert(ex.getMessage.contains("UNSUPPORTED_PIPELINE_SPARK_SQL_COMMAND"))
         // Verify the Command in the reference did not execute as a side effect.
+        assert(!spark.catalog.tableExists(tableName))
+      } finally {
+        sql(s"DROP TABLE IF EXISTS $tableName")
+      }
+    }
+  }
+
+  test(
+    "SPARK-57189: blockUnsupportedSqlCommand catches Command in a WITH_RELATIONS used as a " +
+      "reference input without executing it") {
+    withRawBlockingStub { implicit stub =>
+      val graphId = createDataflowGraph
+      val tableName = "spark_catalog.default.test_with_relations_nested_ref_table"
+      try {
+        sql(s"DROP TABLE IF EXISTS $tableName")
+        // A DataFrame from spark.sql("...", df=...) carries a WITH_RELATIONS relation, and it
+        // becomes a reference input when passed to another spark.sql call.
+        val nested = withRelationsRelation(
+          rootSql = s"CREATE TABLE $tableName (id INT) USING parquet",
+          refs = Seq("inner0" -> "SELECT 1 AS id"))
+        val request = buildSqlCommandRequestWithPipelineContext(
+          graphId,
+          withRelationsRelationOf(rootSql = "SELECT * FROM ref0", refs = Seq("ref0" -> nested)))
+        val ex = intercept[RuntimeException] {
+          stub.executePlan(request).next()
+        }
+        assert(ex.getMessage.contains("UNSUPPORTED_PIPELINE_SPARK_SQL_COMMAND"))
+        // Verify the Command in the nested WITH_RELATIONS did not execute as a side effect.
         assert(!spark.catalog.tableExists(tableName))
       } finally {
         sql(s"DROP TABLE IF EXISTS $tableName")

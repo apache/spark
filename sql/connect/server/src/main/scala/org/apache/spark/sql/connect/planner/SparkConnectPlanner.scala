@@ -3094,11 +3094,11 @@ class SparkConnectPlanner(
     }
 
     // Block unsupported SQL commands if the request comes from Spark Declarative Pipelines.
-    // The guard must inspect every component that the normal handler would execute
-    // (the root SQL plus each reference's input) without itself triggering execution.
     // For a valid SQL-with-references WITH_RELATIONS, transformRelation would route
     // through executeSQLWithRefs and eagerly run the root SQL as a side effect, producing
-    // a CommandResult that bypasses the blocklist.
+    // a CommandResult that bypasses the blocklist. blockUnsupportedSqlCommandIn checks such
+    // a relation at the top level or as a direct reference input without executing it. See
+    // its scaladoc for a known limitation.
     if (PipelineAnalysisContextUtils.hasPipelineAnalysisContext(userContext)) {
       blockUnsupportedSqlCommandIn(relation)
     }
@@ -3204,13 +3204,14 @@ class SparkConnectPlanner(
   }
 
   /**
-   * Walks the relation tree and applies [[PipelinesHandler.blockUnsupportedSqlCommand]] to every
-   * component that would be executed by [[executeSQLWithRefs]] or [[executeSQL]] at the normal
-   * path. For a valid SQL-with-references [[proto.WithRelations]], the root SQL is parsed
-   * (without execution) and each reference's input is inspected recursively so nested
-   * [[proto.WithRelations]] cannot re-trigger the executing transformation chain. For other
-   * relation types, [[transformRelation]] produces an unresolved plan without side effects and is
-   * forwarded directly to the blocklist.
+   * Applies [[PipelinesHandler.blockUnsupportedSqlCommand]] to a relation without executing a
+   * valid SQL-with-references [[proto.WithRelations]] at the top level or as a direct reference
+   * input. For such a relation, the root SQL is parsed (not executed) and each reference input is
+   * checked with this method again. Any other relation is passed to [[transformRelation]].
+   *
+   * Known limitation: [[transformRelation]] still executes a SQL-with-references
+   * [[proto.WithRelations]] that is nested under another relation (for example a `Limit`) or
+   * wrapped in a Dataset-building relation such as `SHOW_STRING`, as it did before this check.
    */
   private def blockUnsupportedSqlCommandIn(rel: proto.Relation): Unit = {
     rel.getRelTypeCase match {
