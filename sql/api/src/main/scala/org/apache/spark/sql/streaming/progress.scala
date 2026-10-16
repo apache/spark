@@ -223,7 +223,7 @@ class StreamingQueryProgress private[spark] (
     val observedMetrics: ju.Map[String, Row],
     @JsonProperty("trigger")
     @JsonDeserialize(using = classOf[ObjectToTriggerDeserializer])
-    triggerConfig: Trigger)
+    private[spark] val triggerConfig: Trigger)
     extends Serializable {
 
   /**

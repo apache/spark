@@ -801,6 +801,20 @@ message SinkProgress {
   map<string, string> metrics = 3;
 }
 
+message Trigger {
+  enum Type {
+    TYPE_UNSPECIFIED = 0;
+    PROCESSING_TIME = 1;
+    CONTINUOUS = 2;
+    REAL_TIME = 3;
+    AVAILABLE_NOW = 4;
+    ONCE = 5;
+  }
+
+  Type type = 1;
+  optional int64 interval_ms = 2;
+}
+
 message StreamingQueryProgress {
   optional string id = 1;
   optional string run_id = 2;
@@ -814,7 +828,7 @@ message StreamingQueryProgress {
   repeated SourceProgress sources = 10;
   SinkProgress sink = 11;
   map<string, string> observed_metrics = 12;
-  optional string trigger = 13;
+  Trigger trigger = 13;
 }
 
 message StreamingQueryProgressWrapper {
