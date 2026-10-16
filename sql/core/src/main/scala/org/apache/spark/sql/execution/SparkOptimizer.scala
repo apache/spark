@@ -117,6 +117,7 @@ class SparkOptimizer(
       EliminateLimits),
     Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*),
     Batch("Replace CTE with Repartition", Once, ReplaceCTERefWithRepartition),
+    Batch("Replace Repartition with CTE Reuse", Once, ReplaceRepartitionWithCTEReuse),
     // Must run last: it inspects the final plan shape to mark scans that can run in a single task,
     // and no subsequent rule should reshape the plan or copy the marked scan nodes.
     Batch("MarkSingleTaskExecution", Once, MarkSingleTaskExecution)))
@@ -136,6 +137,7 @@ class SparkOptimizer(
       V2ScanPartitioningAndOrdering.ruleName,
       V2Writes.ruleName,
       ReplaceCTERefWithRepartition.ruleName,
+      ReplaceRepartitionWithCTEReuse.ruleName,
       // CleanupDynamicPruningFilters finalizes the DPP predicates inserted by PartitionPruning --
       // notably rewriting non-deterministic ones to `true` so they are not re-evaluated. That is
       // correctness behavior, not an optional optimization, so the rule must not be excludable.

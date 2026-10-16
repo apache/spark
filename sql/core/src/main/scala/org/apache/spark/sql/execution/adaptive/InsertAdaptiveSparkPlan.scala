@@ -48,7 +48,8 @@ case class InsertAdaptiveSparkPlan(
 
   override def apply(plan: SparkPlan): SparkPlan = applyInternal(plan, false)
 
-  private def applyInternal(plan: SparkPlan, isSubquery: Boolean): SparkPlan = plan match {
+  // Not private: `PlanCTEReuse` calls this to wrap a `CTEReuseExchange`'s subplan in an inner AQE.
+  def applyInternal(plan: SparkPlan, isSubquery: Boolean): SparkPlan = plan match {
     case _ if !conf.adaptiveExecutionEnabled => plan
     case _: ExecutedCommandExec => plan
     case _: CommandResultExec => plan
@@ -76,7 +77,8 @@ case class InsertAdaptiveSparkPlan(
           val subqueryMap = buildSubqueryMap(plan)
           val planSubqueriesRule = PlanAdaptiveSubqueries(subqueryMap)
           val preprocessingRules = Seq(
-            planSubqueriesRule)
+            planSubqueriesRule,
+            PlanCTEReuse(adaptiveExecutionContext))
           // Run pre-processing rules.
           val newPlan = AdaptiveSparkPlanExec.applyPhysicalRules(
             plan,
@@ -88,6 +90,14 @@ case class InsertAdaptiveSparkPlan(
           case SubqueryAdaptiveNotSupportedException(subquery) =>
             logWarning(log"${MDC(CONFIG, SQLConf.ADAPTIVE_EXECUTION_ENABLED.key)} is enabled " +
               log"but is not supported for sub-query: ${MDC(SUB_QUERY, subquery)}.")
+            plan
+          case CTEAdaptiveNotSupportedException(_) =>
+            // `PlanCTEReuse` could not wrap a `CTEReuseExchange`'s subplan in an inner AQE. Back
+            // the whole query off AQE; the non-AQE path (`UnwrapCTEReuseExchange`) handles the
+            // CTE reuse.
+            logWarning(log"${MDC(CONFIG, SQLConf.ADAPTIVE_EXECUTION_ENABLED.key)} is enabled " +
+              log"but a CTE reuse subplan could not be planned adaptively; " +
+              log"falling back to non-AQE.")
             plan
         }
       } else {
@@ -175,3 +185,10 @@ case class InsertAdaptiveSparkPlan(
 }
 
 private case class SubqueryAdaptiveNotSupportedException(plan: LogicalPlan) extends Exception {}
+
+/**
+ * Thrown by `PlanCTEReuse` when a `CTEReuseExchange`'s subplan cannot be wrapped in an inner AQE.
+ * Caught in `applyInternal` to back the whole query off AQE, so the non-AQE CTE-reuse path handles
+ * it instead of failing at execution time.
+ */
+private case class CTEAdaptiveNotSupportedException(cteSubplan: LogicalPlan) extends Exception {}
