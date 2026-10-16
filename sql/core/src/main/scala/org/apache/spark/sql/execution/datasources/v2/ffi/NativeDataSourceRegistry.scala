@@ -61,7 +61,8 @@ object NativeDataSourceRegistry extends Logging {
       .map(NativeDataSourcePackage.tryRead).partitionMap(identity)
     // A package of a version of the interface that Spark does not support is unusable too.
     val (unsupported, usable) = valid.partitionMap { pkg =>
-      if (pkg.manifest.abiVersion == NativeLibrary.ABI_VERSION) Right(pkg) else Left(pkg)
+      // The version of a package is the oldest that its library implements.
+      if (pkg.manifest.abiVersion <= NativeLibrary.ABI_VERSION) Right(pkg) else Left(pkg)
     }
     lookupPackage(name, usable)
       .orElse(lookupInstalledLibrary(name))

@@ -51,7 +51,10 @@ import org.apache.spark.util.Utils
  *   }
  * }}}
  *
- * @param abiVersion the version of the native data source interface that the libraries implement
+ * @param abiVersion the oldest version of the native data source interface that the libraries
+ *                   implement. Spark uses a package whose version it supports, or that is older
+ *                   than the newest version that it supports, and `spark_ds_init` chooses the
+ *                   version of the table. Spark ignores the fields that it does not know.
  * @param dataSources the names of the data sources that the libraries implement
  * @param libraries the path of the library in the package for each platform, as returned by
  *                  [[NativePlatform.current]]
@@ -148,7 +151,7 @@ object NativeDataSourcePackage extends Logging {
         case Left(invalid) =>
           logWarning(log"Invalid native data source package ${MDC(PATH, canonical)}.",
             invalid.error)
-        case Right(pkg) if pkg.manifest.abiVersion != NativeLibrary.ABI_VERSION =>
+        case Right(pkg) if pkg.manifest.abiVersion > NativeLibrary.ABI_VERSION =>
           logWarning(log"The native data source package ${MDC(PATH, canonical)} implements " +
             log"version ${MDC(VERSION_NUM, pkg.manifest.abiVersion)} of the native data source " +
             log"interface, which this version of Spark does not support, so it is not used.")
@@ -217,12 +220,14 @@ object NativeDataSourcePackage extends Logging {
       return Left("The manifest must be a JSON object.")
     }
     val abiVersion = root.get("abiVersion")
-    if (abiVersion == null || !abiVersion.isInt) {
-      return Left("The manifest must have an integer field 'abiVersion'.")
+    if (abiVersion == null || !abiVersion.isInt || abiVersion.asInt() < 1) {
+      return Left("The manifest must have a positive integer field 'abiVersion'.")
     }
     val dataSources = root.get("dataSources")
     if (dataSources == null || !dataSources.isArray || dataSources.isEmpty ||
-        !dataSources.elements().asScala.forall(n => n.isTextual && n.asText().nonEmpty)) {
+        !dataSources.elements().asScala.forall { n =>
+          n.isTextual && n.asText().nonEmpty && !n.asText().contains('\u0000')
+        }) {
       return Left("The manifest must have a field 'dataSources' with a non-empty array of " +
         "data source names.")
     }

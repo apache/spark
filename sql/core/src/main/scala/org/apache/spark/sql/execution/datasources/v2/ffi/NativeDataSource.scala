@@ -29,7 +29,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.json.JsonMapper
 import org.apache.arrow.c.{ArrowArray, ArrowArrayStream, ArrowSchema, CDataDictionaryProvider, Data}
 import org.apache.arrow.vector.{FieldVector, ValueVector, VectorSchemaRoot}
-import org.apache.arrow.vector.complex.MapVector
+import org.apache.arrow.vector.complex.{ListVector, MapVector, StructVector}
 import org.apache.arrow.vector.types.pojo.{ArrowType, Field, Schema}
 
 import org.apache.spark.{SparkException, SparkThrowable, SparkUnsupportedOperationException, TaskContext}
@@ -42,7 +42,7 @@ import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchPlanner, ColumnarDataSource, ColumnarOnlyPartitionReaderFactory, ColumnarPlannedBatch, ColumnarStreamReader, ColumnarStreamWriter, ColumnarWriter}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, StructField, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.{ArrowUtils, CaseInsensitiveStringMap}
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.unsafe.Platform
@@ -67,9 +67,11 @@ class NativeDataSource(
   override def schema(): StructType = {
     val library = NativeLibraries.get(location)
     withDataSource(library, "infer the schema of") { dataSource =>
-      call(name, "infer the schema of") {
+      val schema = call(name, "infer the schema of") {
         optional(NativeArrow.importSchema(address => library.schema(dataSource.handle, address)))
       }.getOrElse(throw QueryCompilationErrors.dataSchemaNotSpecifiedError(name))
+      NativeArrow.checkSupported(schema, name, "infer the schema of")
+      schema
     }
   }
 
@@ -93,6 +95,7 @@ class NativeDataSource(
   }
 
   override def batchPlanner(schema: StructType): ColumnarBatchPlanner = {
+    NativeArrow.checkSupported(schema, name, "plan a scan of")
     val executorLocation = NativeDataSourceRegistry.distribute(location)
     val library = NativeLibraries.get(location)
     val handle = create(library, "plan a scan of", NativeLibrary.BATCH_READ,
@@ -107,6 +110,7 @@ class NativeDataSource(
   }
 
   override def streamReader(schema: StructType): ColumnarStreamReader = {
+    NativeArrow.checkSupported(schema, name, "plan a scan of")
     val executorLocation = NativeDataSourceRegistry.distribute(location)
     val library = NativeLibraries.get(location)
     val handle = create(library, "plan a scan of", NativeLibrary.MICRO_BATCH_READ,
@@ -149,6 +153,10 @@ class NativeDataSource(
     requireFunctions(library, action, Seq(NativeLibrary.Function.CLOSE))
     // The keys of a case-insensitive map are in lower case.
     val entries = options.entrySet().asScala.toArray
+    entries.find(e => e.getKey.contains('\u0000') || e.getValue.contains('\u0000')).foreach { e =>
+      throw error(name, "create", s"The option ${NativeArrow.printable(e.getKey)} contains the " +
+        "character U+0000, which Spark cannot pass to a library.")
+    }
     val dataSource = call(name, "create") {
       library.createDataSource(name, entries.map(_.getKey), entries.map(_.getValue))
     }
@@ -184,6 +192,7 @@ class NativeDataSource(
       overwrite: Boolean,
       queryId: String): Long = {
     val action = "plan a write to"
+    NativeArrow.checkSupported(schema, name, action)
     val (capability, unsupportedError, overwriteMode) = if (queryId == null) {
       (NativeLibrary.BATCH_WRITE, "DATA_SOURCE_BATCH_WRITE_NOT_SUPPORTED",
         "the save mode overwrite")
@@ -555,6 +564,64 @@ class NativePartitionReader(
     new Field(field.getName, field.getFieldType, renamed.asJava)
   }
 
+  /**
+   * Checks that the data agrees with the nullability of the schema to read: a column, a field,
+   * an element or a map value that it declares not nullable has no null, except where its parent
+   * is null. Spark relies on the nullability, for example to evaluate `isnull` of such a column to
+   * false without reading it.
+   */
+  private def checkNulls(): Unit = {
+    root.getFieldVectors.asScala.zip(schema.fields).foreach { case (vector, field) =>
+      checkNulls(vector, field.dataType, field.nullable, field.name, _ => true)
+    }
+  }
+
+  /** `referenced` tells whether a value belongs to a value of the parent that is not null. */
+  private def checkNulls(
+      vector: ValueVector,
+      dataType: DataType,
+      nullable: Boolean,
+      column: String,
+      referenced: Int => Boolean): Unit = {
+    if (!nullable && vector.getNullCount > 0 &&
+        (0 until vector.getValueCount).exists(i => vector.isNull(i) && referenced(i))) {
+      throw error(name, "read", s"The column $column has a null, but the schema to read " +
+        "declares it not nullable.")
+    }
+    val valid = (i: Int) => !vector.isNull(i) && referenced(i)
+    (dataType, vector) match {
+      case (struct: StructType, structVector: StructVector) =>
+        struct.fields.zipWithIndex.foreach { case (field, i) =>
+          checkNulls(structVector.getChildByOrdinal(i), field.dataType, field.nullable,
+            s"$column.${field.name}", valid)
+        }
+      case (map: MapType, mapVector: MapVector) =>
+        val entries = mapVector.getDataVector.asInstanceOf[StructVector]
+        val inMaps = elements(mapVector, valid)
+        // Spark does not allow null keys.
+        checkNulls(entries.getChildByOrdinal(0), map.keyType, nullable = false, s"$column.key",
+          inMaps)
+        checkNulls(entries.getChildByOrdinal(1), map.valueType, map.valueContainsNull,
+          s"$column.value", inMaps)
+      case (array: ArrayType, list: ListVector) =>
+        checkNulls(list.getDataVector, array.elementType, array.containsNull, s"$column.element",
+          elements(list, valid))
+      case _ =>
+    }
+  }
+
+  /** Whether each element of a list belongs to a list that `valid` accepts. */
+  private def elements(list: ListVector, valid: Int => Boolean): Int => Boolean = {
+    lazy val referenced = {
+      val bits = new java.util.BitSet(list.getDataVector.getValueCount)
+      (0 until list.getValueCount).foreach { i =>
+        if (valid(i)) bits.set(list.getElementStartIndex(i), list.getElementEndIndex(i))
+      }
+      bits
+    }
+    i => referenced.get(i)
+  }
+
   private def checkSchema(): Unit = {
     def isDictionaryEncoded(field: Field): Boolean = {
       field.getDictionary != null || field.getChildren.asScala.exists(isDictionaryEncoded)
@@ -631,6 +698,7 @@ class NativePartitionReader(
             throw e
         }
         call(name, "read")(Data.importIntoVectorSchemaRoot(allocator, array, root, dictionaries))
+        checkNulls()
         batch.setNumRows(root.getRowCount)
         true
       }
@@ -653,9 +721,22 @@ class NativePartitionReader(
    * Java takes them from the lengths, so the library must export buffers that hold every value.
    */
   private def checkArrays(batch: ArrowArray.Snapshot): Unit = {
-    def children(array: ArrowArray.Snapshot): Seq[ArrowArray.Snapshot] = {
-      (0 until array.n_children.toInt).map { i =>
-        ArrowArray.wrap(Platform.getLong(null, array.children + 8L * i)).snapshot()
+    // The arrays of the children, one for each field of the type: Arrow Java only checks their
+    // number when an array has children, and imports the missing columns of a batch as nulls.
+    def children(
+        array: ArrowArray.Snapshot,
+        fields: Int,
+        owner: String,
+        expected: String): Seq[ArrowArray.Snapshot] = {
+      if (array.n_children != fields || (fields > 0 && array.children == 0)) {
+        throw error(name, "read", s"$owner has ${array.n_children} child arrays, but $expected.")
+      }
+      (0 until fields).map { i =>
+        val child = Platform.getLong(null, array.children + 8L * i)
+        if (child == 0) {
+          throw error(name, "read", s"$owner has a NULL child array.")
+        }
+        ArrowArray.wrap(child).snapshot()
       }
     }
     // The last offset of a list or a map, in its second buffer. Arrow Java rejects the array if
@@ -681,7 +762,9 @@ class NativePartitionReader(
           "Spark only reads arrays with an offset of 0. Copy sliced arrays before exporting them.")
       }
       val length = referenced(array, field.getType)
-      children(array).zip(field.getChildren.asScala).foreach { case (child, childField) =>
+      val fields = field.getChildren.size
+      children(array, fields, s"An array of the column $column", s"its type has $fields")
+          .zip(field.getChildren.asScala).foreach { case (child, childField) =>
         if (child.length < length) {
           throw error(name, "read", s"The column $column contains an array with a length of " +
             s"${child.length}, but its parent refers to $length values.")
@@ -693,7 +776,9 @@ class NativePartitionReader(
       throw error(name, "read", s"The batch has an offset of ${batch.offset}, but Spark only " +
         "reads arrays with an offset of 0. Copy sliced arrays before exporting them.")
     }
-    children(batch).zip(root.getSchema.getFields.asScala).foreach { case (column, field) =>
+    val columns = root.getSchema.getFields.size
+    children(batch, columns, "The batch", s"the schema has $columns columns")
+        .zip(root.getSchema.getFields.asScala).foreach { case (column, field) =>
       if (column.length < batch.length) {
         throw error(name, "read", s"The column ${field.getName} has a length of " +
           s"${column.length}, but the batch has a length of ${batch.length}.")
@@ -945,6 +1030,39 @@ object NativeCalls {
 
 /** Exchanges schemas with native libraries through the Arrow C data interface. */
 object NativeArrow {
+  /**
+   * Checks that the schema only has the types of version 1 of the interface, which
+   * `spark_datasource.h` lists with their Arrow types, and no names with the character U+0000,
+   * which a NUL-terminated string cannot hold.
+   */
+  def checkSupported(schema: StructType, name: String, action: String): Unit = {
+    def checkType(dataType: DataType, column: String): Unit = dataType match {
+      case BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType |
+           _: DecimalType | _: StringType | BinaryType | DateType | TimestampType |
+           TimestampNTZType =>
+      case array: ArrayType => checkType(array.elementType, s"$column.element")
+      case map: MapType =>
+        checkType(map.keyType, s"$column.key")
+        checkType(map.valueType, s"$column.value")
+      case struct: StructType => checkFields(struct, s"$column.")
+      case other =>
+        throw NativeCalls.error(name, action, s"The column $column has the type ${other.sql}, " +
+          "which native data sources do not support.")
+    }
+    def checkFields(struct: StructType, prefix: String): Unit = struct.fields.foreach { field =>
+      if (field.name.contains('\u0000')) {
+        throw NativeCalls.error(name, action, s"The name of the column " +
+          s"${printable(prefix + field.name)} contains the character U+0000, which Spark cannot " +
+          "pass to a library.")
+      }
+      checkType(field.dataType, prefix + field.name)
+    }
+    checkFields(schema, "")
+  }
+
+  /** Shows the character U+0000 in a message. */
+  def printable(value: String): String = value.replace("\u0000", "\\u0000")
+
   /** Exports the schema as an `ArrowSchema`, and calls `f` with its address. */
   def exportSchema[T](schema: StructType)(f: Long => T): T = {
     val arrowSchema = ArrowUtils.toArrowSchema(
