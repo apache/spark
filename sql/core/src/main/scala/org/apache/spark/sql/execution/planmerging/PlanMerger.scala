@@ -482,8 +482,10 @@ class PlanMerger(
 
               // Apply each propagated boolean attribute as a FILTER (WHERE ...) clause on the
               // corresponding side's aggregate expressions.
-              // A None filter means the side's aggregate expressions already carry their individual
-              // FILTER attributes from a previous merge round and should be left unchanged.
+              // A None filter leaves the side's aggregate expressions unchanged, e.g. ones that
+              // already carry their individual FILTER attributes from a previous merge round. A
+              // Some filter is ANDed with any FILTER they carry, e.g. a cpFilter from a filter
+              // below a merged Filter, which those attributes don't include.
               // Filter propagation is consumed here and not passed further up.
               val filteredNPAggregateExpressions = npFilterOpt.fold(np.aggregateExpressions)(
                 applyFilterToAggregateExpressions(np.aggregateExpressions, _))
@@ -532,8 +534,6 @@ class PlanMerger(
                   // condition. A tagged filter is always built with a Project child (see the
                   // first-time branch below), so a non-Project child should not happen; decline the
                   // merge rather than fail, keeping the merge best-effort.
-                  // A cpFilter from the child merge still flows up to cp's aggregates: it is a
-                  // filter below this one that np lacks, and the OR's aliases don't include it.
                   mergedChild match {
                     case childProject: Project =>
                       val newNPCondition =
@@ -576,6 +576,8 @@ class PlanMerger(
                             projectList = newProjectList, child = prunedChild)
                           val newFilter = Filter(newCondition, newProject)
                           newFilter.copyTagsFrom(cp)
+                          // The child's cpFilter is a filter below this one that np lacks. The
+                          // OR's aliases don't include it, so pass it up to cp's aggregates.
                           TryMergeResult(newFilter, npMapping, Some(newNPFilterOut), cpFilter,
                             dsv2Merged = dsv2Merged)
                         }

@@ -1830,6 +1830,53 @@ class MergeSubplansSuite extends PlanTest {
     }
   }
 
+  test("SPARK-60304: tagged `(Filter, Filter)` reuse keeps the cpFilter from below it") {
+    // Like the test above, but sq3 filters on `b > 2`, which it also computes, so the Project
+    // leaves `pf_0` unwrapped and sq3 reuses it. A plain `pf_0` is right for sq3, which has no
+    // `c = 'x'` Filter, but cp's aggregates still have to get `pf_2` as a FILTER.
+    val subquery1 = ScalarSubquery(
+      testRelation.where($"c" === "x").where($"a" > 1).groupBy()(sum($"a").as("sum_a")))
+    val subquery2 = ScalarSubquery(
+      testRelation.where($"c" === "x").where($"b" > 2).groupBy()(max($"a").as("max_a")))
+    val subquery3 = ScalarSubquery(
+      testRelation
+        .select($"a", $"b", ($"b" > 2).as("flag"))
+        .where($"b" > 2)
+        .groupBy()(min($"a").as("min_a")))
+    val originalQuery = testRelation.select(subquery1, subquery2, subquery3)
+
+    val f0Alias = Alias($"b" > 2, "propagatedFilter_0")()
+    val f0 = f0Alias.toAttribute
+    val f2Alias = Alias($"c" === "x", "propagatedFilter_2")()
+    val f2 = f2Alias.toAttribute
+    val f1Alias = Alias(If(f2, $"a" > 1, Literal(null, BooleanType)), "propagatedFilter_1")()
+    val f1 = f1Alias.toAttribute
+    val mergedSubquery = testRelation
+      .select(testRelation.output :+ f2Alias: _*)
+      .select(testRelation.output ++ Seq(f0Alias, f1Alias, f2): _*)
+      .where(Or(f0, f1))
+      .groupBy()(
+        sum($"a", Some(And(f2, f1))).as("sum_a"),
+        max($"a", Some(And(f2, f0))).as("max_a"),
+        min($"a", Some(f0)).as("min_a"))
+      .select(CreateNamedStruct(Seq(
+        Literal("sum_a"), $"sum_a",
+        Literal("max_a"), $"max_a",
+        Literal("min_a"), $"min_a"
+      )).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
+      testRelation.select(
+        extractorExpression(0, analyzedMergedSubquery.output, 0),
+        extractorExpression(0, analyzedMergedSubquery.output, 1),
+        extractorExpression(0, analyzedMergedSubquery.output, 2)),
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
+
+    withSQLConf(SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "true") {
+      comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+    }
+  }
+
   test("SPARK-40193: Merge non-grouping subqueries where one aggregate already carries a " +
       "FILTER clause") {
     val subquery1 = ScalarSubquery(testRelation.groupBy()(max($"a").as("max_a")))
