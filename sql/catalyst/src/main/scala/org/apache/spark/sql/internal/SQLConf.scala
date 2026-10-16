@@ -7987,11 +7987,13 @@ object SQLConf {
       "FILTER (WHERE ...) clauses on each aggregate expression. " +
       "Merging two filtered scans broadens the combined filter to OR(f1, f2), which may " +
       "reduce IO pruning (e.g. partition or file skipping) compared to the individual " +
-      "filters. Through a join, two subplans that filter different join children also count " +
-      "as symmetric. In that case, and when both subplans filter both join children with " +
-      "different conditions, the merged join also builds join pairs that neither subplan " +
-      "needs, which can multiply the join's work or make a formerly broadcastable input too " +
-      "large to broadcast. Disabled by default; enable once the behaviour has been validated " +
+      "filters. Through a join, a merge also counts as symmetric when one subplan filters a " +
+      "join child with a condition that the other doesn't share, and the other subplan does " +
+      "so on the other join child. For example, one subplan filters only the left child and " +
+      "the other only the right child, or both filter both children with different " +
+      "conditions. The merged join then also builds join pairs that neither subplan needs, " +
+      "which can multiply the join's work or make a formerly broadcastable input too large to " +
+      "broadcast. Disabled by default; enable once the behaviour has been validated " +
       "in your workload, particularly on heavily partitioned or file-pruned tables. " +
       s"Has no effect when ${MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key} is false.")
     .version("4.2.0")
@@ -8051,8 +8053,9 @@ object SQLConf {
         "common join to be merged into a single scan. A filter attribute is only propagated " +
         "through a join when it originates from the non-nullable (preserved) side: the left side " +
         "of LeftOuter/LeftSemi/LeftAnti, the right side of RightOuter, or either side of " +
-        "Inner/Cross. FullOuter joins are never eligible. When the two subplans filter " +
-        "different children of the join, the merge also needs " +
+        "Inner/Cross. FullOuter joins are never eligible. When one subplan filters a join " +
+        "child with a condition that the other doesn't share, and the other subplan does so on " +
+        "the other join child, the merge also needs " +
         s"${MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key}, even when " +
         s"${MERGE_SUBPLANS_DSV2_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key} lets their scans " +
         "merge. " +
