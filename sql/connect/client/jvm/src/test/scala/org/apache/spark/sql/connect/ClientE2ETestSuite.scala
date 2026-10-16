@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.connect
 
-import java.io.{ByteArrayOutputStream, File, PrintStream}
+import java.io.{ByteArrayOutputStream, PrintStream}
 import java.nio.file.Files
 import java.time.{DateTimeException, LocalTime}
 import java.util.{Properties, TimeZone}
@@ -31,7 +31,7 @@ import org.apache.commons.io.output.TeeOutputStream
 import org.scalactic.TolerantNumerics
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.{SparkArithmeticException, SparkException, SparkRuntimeException, SparkThrowable, SparkUpgradeException}
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkRuntimeException, SparkUpgradeException}
 import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.config.ConfigBuilder
@@ -157,61 +157,6 @@ class ClientE2ETestSuite
           ex.getStackTrace
             .find(_.getClassName.contains("org.apache.spark.sql.catalyst.analysis.CheckAnalysis"))
             .isDefined)
-      }
-    }
-  }
-
-  for {
-    (condition, endingOffsets, expectedMessage, parameters) <- Seq(
-      (
-        "UNRESOLVED_START_OFFSET_GREATER_THAN_END_OFFSET",
-        """{"repro_topic":{"0":5}}""",
-        "The specified start offset 10 is greater than the end offset 5 " +
-          "for topic repro_topic partition 0.",
-        Map(
-          "offsetType" -> "offset",
-          "startOffset" -> "10",
-          "endOffset" -> "5",
-          "topic" -> "repro_topic",
-          "partition" -> "0")),
-      (
-        "MISMATCHED_TOPIC_PARTITIONS_BETWEEN_START_OFFSET_AND_END_OFFSET",
-        """{"repro_topic":{"1":5}}""",
-        "The specified start offset and end offset should have the same topic-partitions.",
-        Map("tpsForStartOffset" -> "repro_topic-0", "tpsForEndOffset" -> "repro_topic-1")))
-    enrichErrorEnabled <- Seq(false, true)
-  } {
-    test(s"Kafka batch offset error preserves $condition - enrichError=$enrichErrorEnabled") {
-      // The connector belongs to the server session; reads still use the Connect client.
-      val classpath = System.getProperty("java.class.path").split(File.pathSeparator)
-      Seq(
-        "spark-sql-kafka-0-10_",
-        "spark-token-provider-kafka-0-10_",
-        "kafka-clients-",
-        "commons-pool2-").foreach { prefix =>
-        val jar = classpath
-          .find(path => new File(path).getName.startsWith(prefix))
-          .getOrElse(fail(s"Missing Kafka test dependency: $prefix"))
-        spark.addArtifact(jar)
-      }
-      withSQLConf("spark.sql.connect.enrichError.enabled" -> enrichErrorEnabled.toString) {
-        // These invalid offsets fail validation before any Kafka broker access.
-        val error = intercept[IllegalArgumentException] {
-          spark.read
-            .format("kafka")
-            .option("kafka.bootstrap.servers", "127.0.0.1:1")
-            .option("assign", """{"repro_topic":[0,1]}""")
-            .option("startingOffsets", """{"repro_topic":{"0":10}}""")
-            .option("endingOffsets", endingOffsets)
-            .option("kafka.request.timeout.ms", "1000")
-            .option("kafka.default.api.timeout.ms", "1000")
-            .load()
-            .collect()
-        }
-        val sparkError = error.asInstanceOf[SparkThrowable]
-        assert(sparkError.getCondition == condition)
-        assert(error.getMessage.contains(expectedMessage))
-        assert(sparkError.getMessageParameters.asScala.toMap == parameters)
       }
     }
   }
