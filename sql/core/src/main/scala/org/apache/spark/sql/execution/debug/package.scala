@@ -229,7 +229,8 @@ package object debug {
     override def value: java.util.Set[T] = _set
   }
 
-  case class DebugExec(child: SparkPlan) extends UnaryExecNode with CodegenSupport {
+  case class DebugExec(child: SparkPlan)
+      extends UnaryExecNode with CodegenSupport with SafeForKWayMerge {
     def output: Seq[Attribute] = child.output
 
     /**
