@@ -851,7 +851,7 @@ class DataFrame(Frame, Generic[T]):
             if len(pdf) <= limit:
                 return Series(pser)
 
-            @pandas_udf(returnType=as_spark_type(pser.dtype.type))  # type: ignore[call-overload]
+            @pandas_udf(returnType=as_spark_type(pser.dtype.type))
             def calculate_columns_axis(*cols: pd.Series) -> pd.Series:
                 return getattr(pd.concat(cols, axis=1), name)(
                     axis=axis, numeric_only=numeric_only, **kwargs
@@ -9503,9 +9503,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
                 overlap = old_col.isNotNull() & new_col.isNotNull()
                 if filter_func is not None:
-                    overlap = overlap & pandas_udf(  # type: ignore[call-overload]
-                        filter_func, BooleanType()
-                    )(old_col)
+                    overlap = overlap & pandas_udf(filter_func, BooleanType())(old_col)
 
                 any_overlap = any_overlap | overlap
 
@@ -9523,7 +9521,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             if filter_func is not None:
                 from pyspark.sql.types import BooleanType
 
-                mask = pandas_udf(filter_func, BooleanType())(old_col)  # type: ignore[call-overload]
+                mask = pandas_udf(filter_func, BooleanType())(old_col)
                 updated_col = (
                     F.when(new_col.isNull() | mask.isNull() | ~mask, old_col).otherwise(new_col)
                     if overwrite
@@ -11907,7 +11905,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 name_like_string(label) for label in psdf._internal.column_labels
             ]
 
-            @pandas_udf(  # type: ignore[call-overload]
+            @pandas_udf(
                 returnType=StructType(
                     [
                         StructField(col_name, DoubleType(), nullable=True)
@@ -12291,7 +12289,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             if level is not None and (level < 0 or level >= num_indices):
                 raise ValueError("level should be an integer between [0, %s)" % num_indices)
 
-            @pandas_udf(returnType=index_mapper_ret_stype)  # type: ignore[call-overload]
+            @pandas_udf(returnType=index_mapper_ret_stype)
             def index_mapper_udf(s: pd.Series) -> pd.Series:
                 return s.map(index_mapper_fn)
 

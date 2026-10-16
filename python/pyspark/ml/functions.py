@@ -828,7 +828,7 @@ def predict_batch_udf(
                 # return transformed predictions to Spark
                 yield _validate_and_transform_prediction_result(preds, num_input_rows, return_type)  # type: ignore
 
-    return pandas_udf(predict, return_type)  # type: ignore[call-overload]
+    return pandas_udf(predict, return_type)
 
 
 def _test() -> None:

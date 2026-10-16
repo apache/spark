@@ -44,7 +44,7 @@ from pyspark.sql.types import (
 # sqrt, convert a FloatType input to DoubleType, so a float32 pandas-on-Spark Series can return
 # float64. This explains only output-type differences. Casting an operand before evaluation can
 # still change values and must be reviewed separately.
-unary_np_spark_mappings = {
+unary_np_spark_mappings: Dict[str, Callable[[Column], Column]] = {
     "abs": F.abs,
     "absolute": F.abs,
     "arccos": F.acos,
