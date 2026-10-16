@@ -5554,9 +5554,9 @@ object SQLConf {
     buildConf("spark.sql.execution.python.udf.rowSizeGuard.enabled")
       .internal()
       .doc("When true, guard pickle-serialized (non-Arrow) Python UDF evaluation against " +
-        "top-level string and binary argument payloads whose combined size exceeds " +
-        "rowSizeGuard.maxRowHeapFraction of executor heap. The guard checks the projected " +
-        "arguments before conversion and pickling. Nested inputs are not estimated.")
+        "top-level string, binary, geometry, and geography argument payloads whose combined " +
+        "size exceeds rowSizeGuard.maxRowHeapFraction of executor heap. The guard checks the " +
+        "projected arguments before conversion and pickling. Nested inputs are not estimated.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
@@ -5565,10 +5565,10 @@ object SQLConf {
   val PYTHON_UDF_ROW_SIZE_GUARD_MAX_ROW_HEAP_FRACTION =
     buildConf("spark.sql.execution.python.udf.rowSizeGuard.maxRowHeapFraction")
       .internal()
-      .doc("Maximum combined byte size of one projected input row's top-level string and " +
-        "binary Python UDF arguments, as a fraction of executor max heap. The default 0.083 " +
-        "is approximately 1/12 of the executor heap; conversion and pickling can require " +
-        "multiple copies of the argument bytes.")
+      .doc("Maximum combined byte size of one projected input row's top-level string, binary, " +
+        "geometry, and geography Python UDF arguments, as a fraction of executor max heap. The " +
+        "default 0.083 is approximately 1/12 of the executor heap; conversion and pickling can " +
+        "require multiple copies of the argument bytes.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .doubleConf
