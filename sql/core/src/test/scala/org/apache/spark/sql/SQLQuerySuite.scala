@@ -3408,6 +3408,23 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     }
   }
 
+  test("SPARK-60178: GROUP BY does not match re-associated floating-point arithmetic") {
+    withTempView("t") {
+      sql("SELECT CAST(id AS DOUBLE) AS a, CAST(id AS DOUBLE) AS b, CAST(id AS DOUBLE) AS c, " +
+        "id AS i, id AS j, id AS k FROM range(0, 2)").createOrReplaceTempView("t")
+
+      val ex = intercept[AnalysisException] {
+        sql("SELECT a + b + c FROM t GROUP BY c + b + a").collect()
+      }
+      assert(ex.getCondition === "MISSING_AGGREGATION")
+
+      // Commuting the operands of a single operator is still semantically equal.
+      checkAnswer(sql("SELECT a + b FROM t GROUP BY b + a"), Seq(Row(0.0), Row(2.0)))
+      // Integral arithmetic keeps re-associating.
+      checkAnswer(sql("SELECT i + j + k FROM t GROUP BY k + j + i"), Seq(Row(0L), Row(3L)))
+    }
+  }
+
   test("SPARK-29213: FilterExec should not throw NPE") {
     // Under ANSI mode, casting string '' as numeric will cause runtime error
     if (!conf.ansiEnabled) {
