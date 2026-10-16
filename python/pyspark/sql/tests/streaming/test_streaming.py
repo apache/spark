@@ -564,6 +564,7 @@ class StreamingTestsMixin:
                     self.assertTrue(any(line.startswith("orders_source:") for line in offset_lines))
                 finally:
                     query.stop()
+                    self.spark.streams.resetTerminated()
 
                 with self.assertRaises(AnalysisException) as context:
                     self.spark.readStream.table(table_name).schema
