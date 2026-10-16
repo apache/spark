@@ -1059,6 +1059,11 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     private[this] var writerIfbhThreadLocalValue: Object = null
     private[this] val temp = new Array[Byte](1)
     private[this] val bufferStream = new DirectByteBufferOutputStream()
+    // The writer gets `bufferStream` only through this stream. Arrow writers write through an
+    // interruptible channel, so a task kill that interrupts this thread closes the stream they
+    // write to on the killing thread; that must not free `bufferStream` under the writer. It is
+    // freed only by `bufferStream.close()` below. See `CloseShieldOutputStream`.
+    private[this] val writerStream = new CloseShieldOutputStream(bufferStream)
     /**
      * Buffers data to be written to the Python worker until the socket is
      * available for write.
@@ -1068,7 +1073,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     private[this] var buffer: ByteBuffer = _
     private[this] var hasInput = true
 
-    writer.open(new DataOutputStream(bufferStream))
+    writer.open(new DataOutputStream(writerStream))
     buffer = bufferStream.toByteBuffer
 
     override def read(): Int = {
@@ -1241,7 +1246,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
           // Set the `buffer` to null to make it eligible for GC
           buffer = null
 
-          val dataOut = new DataOutputStream(bufferStream)
+          val dataOut = new DataOutputStream(writerStream)
           // Try not to grow the buffer much beyond `bufferSize`. This is inevitable for large
           // input rows.
           while (bufferStream.size() < bufferSize && hasInput && !shouldFlush()) {

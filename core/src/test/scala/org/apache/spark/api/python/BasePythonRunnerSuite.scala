@@ -17,13 +17,21 @@
 
 package org.apache.spark.api.python
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream, EOFException}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream,
+  EOFException, FilterOutputStream}
+import java.net.{InetAddress, InetSocketAddress}
+import java.nio.ByteBuffer
+import java.nio.channels.{Channels, ClosedByInterruptException, ServerSocketChannel, SocketChannel}
 import java.nio.charset.StandardCharsets
+import java.util.{ArrayList => JArrayList, HashMap => JHashMap}
 import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.atomic.AtomicBoolean
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.{LocalSparkContext, SparkContext, SparkEnv, SparkException,
+  SparkFunSuite, TaskContext}
+import org.apache.spark.util.DirectByteBufferOutputStream
 
-class BasePythonRunnerSuite extends SparkFunSuite {
+class BasePythonRunnerSuite extends SparkFunSuite with LocalSparkContext {
 
   test("SPARK-58192: pipelined writer pool admits more concurrent writers than processors") {
     // A fractional spark.task.cpus admits more concurrent tasks -- each holding one writer
@@ -210,5 +218,103 @@ class BasePythonRunnerSuite extends SparkFunSuite {
     val stream = framedMetricsStream(json)
     assert(BasePythonRunner.readWorkerMetrics(stream) == expectedMetrics)
     checkEndMarkers(stream)
+  }
+
+  test("SPARK-60305: CloseShieldOutputStream forwards writes and does not close the " +
+      "underlying stream") {
+    val bufferStream = new DirectByteBufferOutputStream()
+    val shielded = new CloseShieldOutputStream(bufferStream)
+    shielded.write(Array[Byte](1, 2, 3), 1, 2)
+    shielded.write(4)
+    shielded.close()
+    assert(bufferStream.size() === 3)
+    val bytes = new Array[Byte](3)
+    bufferStream.toByteBuffer.get(bytes)
+    assert(bytes.toSeq === Seq[Byte](2, 3, 4))
+    bufferStream.close()
+  }
+
+  test("SPARK-60305: interrupting the task thread inside a channel write keeps the input " +
+      "buffer alive") {
+    sc = new SparkContext("local", "test")
+    val func = SimplePythonFunction(Seq.empty[Byte], new JHashMap[String, String](),
+      new JArrayList[String](), "python3", "3", new JArrayList(), null)
+    val inWrite = new CountDownLatch(1)
+    val resume = new AtomicBoolean(false)
+    @volatile var writeError: Throwable = null
+
+    // Writes the way the Arrow inputs do: through `Channels.newChannel(dataOut)`, whose writes
+    // the JVM closes, together with `dataOut`, when the writing thread is interrupted. The
+    // write blocks until the test has interrupted the thread, then forwards to `dataOut`.
+    class TestRunner extends BasePythonRunner[Int, Int](Seq(ChainedPythonFunctions(Seq(func))),
+        PythonEvalType.NON_UDF, Array(Array(0)), None, Map.empty) {
+      override protected def newWriter(env: SparkEnv, worker: PythonWorker,
+          inputIterator: Iterator[Int], partitionIndex: Int, context: TaskContext): Writer = {
+        new Writer(env, worker, inputIterator, partitionIndex, context) {
+          override def open(dataOut: DataOutputStream): Unit = {}
+          override protected def writeCommand(dataOut: DataOutputStream): Unit = {}
+          override def writeNextInputToStream(dataOut: DataOutputStream): Boolean = {
+            val channel = Channels.newChannel(new FilterOutputStream(dataOut) {
+              override def write(b: Array[Byte], off: Int, len: Int): Unit = {
+                inWrite.countDown()
+                while (!resume.get()) Thread.onSpinWait()
+                try {
+                  out.write(b, off, len)
+                } catch {
+                  case t: Throwable =>
+                    writeError = t
+                    throw t
+                }
+              }
+            })
+            channel.write(ByteBuffer.wrap(new Array[Byte](16)))
+            false
+          }
+        }
+      }
+
+      override protected def newReaderIterator(stream: DataInputStream, writer: Writer,
+          startTime: Long, env: SparkEnv, worker: PythonWorker,
+          handle: Option[PythonWorkerHandle], releasedOrClosed: AtomicBoolean,
+          context: TaskContext): Iterator[Int] = throw new UnsupportedOperationException()
+
+      def newReaderInputStream(worker: PythonWorker): ReaderInputStream = new ReaderInputStream(
+        worker, newWriter(SparkEnv.get, worker, Iterator.empty, 0, null), None, 0, false, null)
+    }
+    val runner = new TestRunner
+
+    val server = ServerSocketChannel.open()
+    server.bind(new InetSocketAddress(InetAddress.getLoopbackAddress, 0))
+    val client = SocketChannel.open(server.getLocalAddress)
+    val accepted = server.accept()
+    client.configureBlocking(false)
+    val worker = PythonWorker(client).refresh()
+    try {
+      val input = runner.newReaderInputStream(worker)
+      @volatile var error: Throwable = null
+      val taskThread = new Thread(() => {
+        try {
+          input.read(new Array[Byte](1))
+        } catch {
+          case t: Throwable => error = t
+        }
+      })
+      taskThread.start()
+      assert(inWrite.await(1, TimeUnit.MINUTES))
+      // Like Task.kill(interruptThread = true). This closes the channel and `dataOut` on this
+      // thread while the task thread is still inside the write.
+      taskThread.interrupt()
+      resume.set(true)
+      taskThread.join(TimeUnit.MINUTES.toMillis(1))
+      assert(!taskThread.isAlive)
+      // The write into the buffer still succeeds: the buffer was not freed under the writer.
+      // The interrupt then surfaces as the channel's ClosedByInterruptException.
+      assert(writeError === null)
+      assert(error.isInstanceOf[ClosedByInterruptException], error)
+    } finally {
+      worker.stop()
+      accepted.close()
+      server.close()
+    }
   }
 }
