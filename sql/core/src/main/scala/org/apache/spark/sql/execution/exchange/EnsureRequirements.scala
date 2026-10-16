@@ -938,9 +938,10 @@ case class EnsureRequirements(
 
     // The pairing is only worth committing to if both children still declare the same aligned key
     // sequence once the grouping has been pushed into them. A `GroupPartitionsExec` gives up its
-    // keyed claim when it turns out to regroup a layout that pins undeclared rows to
-    // `hash(key) % numPartitions` (see `KeyLayout.mayContainUnknownPartitionKeys`), and only the
-    // node knows the permutation it performs, so that answer arrives after the pairing was chosen.
+    // keyed claim when the grouping re-labels the keys or replicates them into expected slots,
+    // which a layout holding undeclared rows cannot survive (see `KeyLayout.unknownKeysOrigin`),
+    // and only the node knows the permutation it performs, so that answer arrives after the pairing
+    // was chosen.
     // Asking before returning is what keeps the join from skipping both shuffles for a child that
     // no longer satisfies its distribution, which is a plan `ValidateRequirements` rejects and
     // every AQE rule that needs a valid plan then refuses to touch.

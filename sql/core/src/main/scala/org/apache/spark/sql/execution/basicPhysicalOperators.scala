@@ -1000,13 +1000,9 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     if (partitionings.forall(_.isInstanceOf[KeyedPartitioning])) {
       val kps = partitionings.map(_.asInstanceOf[KeyedPartitioning])
       val headKp = kps.head
-      // To merge, the `KeyedPartitioning`s must agree on the partition expressions and no leg
-      // may carry the marker: the merged set declares the other legs' keys, so an out-of-set row
-      // can sit in the wrong partition for the merged claim (rule (1) of the
-      // `KeyedPartitioning.mayContainUnknownPartitionKeys` doc). Unlike a join, a union keeps
-      // every leg's rows: an unmarked leg does not excuse a marked one.
-      val compatible = kps.forall(kp =>
-        !kp.mayContainUnknownPartitionKeys && comparePartitioning(kp, headKp))
+      // To merge, the `KeyedPartitioning`s must agree on the partition expressions, and a leg
+      // carrying the marker must declare what the others declare.
+      val compatible = kps.forall(kp => comparePartitioning(kp, headKp)) && canMergeMarkedKeys(kps)
       if (compatible) {
         return KeyedPartitioning.concat(kps)
       }
@@ -1037,6 +1033,36 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
       case Seq() => super.outputPartitioning
       case Seq(p) => p
       case ps => PartitioningCollection.fromPartitionings(ps)
+    }
+  }
+
+  /**
+   * Whether the legs' markers let their keys be merged. A marked leg may hold rows of a key it
+   * does not declare, and `KeyGroupedPartitioner` routes those into the partition of some declared
+   * key. Two conditions keep every key's rows in one group, which is what a clustering reads:
+   *
+   *   - a marked leg declares every key the other legs declare, so its rows of such a key do not
+   *     land in a partition the merge names for another key;
+   *   - marked legs declare the same keys in the same order, and when more than one is marked,
+   *     each still routes by the hash. A routed leg is grouped, so its keys are unique and the
+   *     list length is the modulus the hash is taken over: the position in that list is the name a
+   *     key no leg declares reaches, and equal lists agree on both. A leg whose routing is lost
+   *     names such a key by an earlier layout's order, which its list does not show. One marked
+   *     leg needs no agreement, since its undeclared rows reach one group either way.
+   *
+   * The merged layout cannot claim that a partition holds only the key it names, which
+   * [[KeyedPartitioning.concat]] records.
+   */
+  private def canMergeMarkedKeys(kps: Seq[KeyedPartitioning]): Boolean = {
+    val marked = kps.filter(_.mayContainUnknownPartitionKeys)
+    if (marked.isEmpty) {
+      true
+    } else {
+      val declared = marked.head.partitionKeys
+      marked.tail.forall(_.partitionKeys == declared) &&
+        (marked.size == 1 || marked.forall(_.unknownKeysRouted)) &&
+        kps.filterNot(_.mayContainUnknownPartitionKeys)
+          .forall(_.partitionKeys.forall(declared.contains))
     }
   }
 

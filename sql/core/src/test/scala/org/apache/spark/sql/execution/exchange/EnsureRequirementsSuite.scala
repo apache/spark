@@ -2802,7 +2802,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       // behind. `KeyedPartitioning.apply` keeps the order it is given.
       val marked = KeyedPartitioning(Seq(exprA),
         Seq(InternalRow(3), InternalRow(4), InternalRow(1), InternalRow(2)))
-        .withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+        .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
       assert(marked.isGrouped, "test setup: the keys are distinct, so the layout is grouped")
 
       val smj = SortMergeJoinExec(Seq(exprA), Seq(exprB), Inner, None,
@@ -2862,7 +2862,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         marked <- Seq(false, true)
       } yield {
         val kp = KeyedPartitioning(exprs, keys)
-        val p = if (marked) kp.withLayout(_.copy(mayContainUnknownPartitionKeys = true)) else kp
+        val p = if (marked) kp.withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING))) else kp
         (s"$exprName/$keyName${if (marked) "/marked" else ""}", p)
       }
     }
@@ -2922,11 +2922,11 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     // The two join types put the marker on opposite sides on purpose, because that is the side
     // `rank` reads for the one-sided arms.
     val marked = KeyedPartitioning(Seq(exprA), Seq(InternalRow(1), InternalRow(2), InternalRow(3)))
-      .withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+      .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
     val plain = KeyedPartitioning(Seq(exprB), Seq(InternalRow(1), InternalRow(2)))
     val markedRight = KeyedPartitioning(
       Seq(exprB), Seq(InternalRow(1), InternalRow(2), InternalRow(3)))
-      .withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+      .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
     val plainLeft = KeyedPartitioning(Seq(exprA), Seq(InternalRow(1), InternalRow(2)))
 
     Seq(
