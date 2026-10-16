@@ -331,11 +331,11 @@ class GraphFramesCommand(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     API_FIELD_NUMBER: builtins.int
-    DF_ID_FIELD_NUMBER: builtins.int
+    RELATION_ID_FIELD_NUMBER: builtins.int
     @property
     def api(self) -> pyspark.sql.connect.proto.graphframes_pb2.GraphFramesAPI:
         """(Required) The graph inputs and algorithm to execute. Currently supports connected components."""
-    df_id: builtins.str
+    relation_id: builtins.str
     """(Required) Client-generated ID for the resulting CachedRemoteRelation.
     Format: "_graphframes_cc_" followed by the 32-character hexadecimal UUID.
     Repeating a command with the same ID reuses the retained result in the same session.
@@ -344,11 +344,11 @@ class GraphFramesCommand(google.protobuf.message.Message):
         self,
         *,
         api: pyspark.sql.connect.proto.graphframes_pb2.GraphFramesAPI | None = ...,
-        df_id: builtins.str = ...,
+        relation_id: builtins.str = ...,
     ) -> None: ...
     def HasField(self, field_name: typing_extensions.Literal["api", b"api"]) -> builtins.bool: ...
     def ClearField(
-        self, field_name: typing_extensions.Literal["api", b"api", "df_id", b"df_id"]
+        self, field_name: typing_extensions.Literal["api", b"api", "relation_id", b"relation_id"]
     ) -> None: ...
 
 global___GraphFramesCommand = GraphFramesCommand

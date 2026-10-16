@@ -32,7 +32,7 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.utils import eventually
 
 
-def _cached_result(test, session, df_id):
+def _cached_result(test, session, relation_id):
     if test._legacy_sc is None:
         return None
     service = getattr(
@@ -42,7 +42,7 @@ def _cached_result(test, session, df_id):
     holder = service.getOrCreateIsolatedSession(
         session.client._user_id or "", session.client._session_id
     )
-    return holder.dataFrameCache().getOrDefault(df_id, None)
+    return holder.dataFrameCache().getOrDefault(relation_id, None)
 
 
 def _remove_cached_result(result):
@@ -145,15 +145,15 @@ class GraphFramesUpstreamConnectTests(ReusedConnectTestCase):
             )
         command = execute.call_args.args[0]
         self.assertEqual(command.WhichOneof("command_type"), "graph_frames_command")
-        df_id = command.graph_frames_command.df_id
+        relation_id = command.graph_frames_command.relation_id
         try:
-            self.assertRegex(df_id, r"^_graphframes_cc_[0-9a-f]{32}$")
-            self.assertEqual(uuid.UUID(hex=df_id.removeprefix("_graphframes_cc_")).version, 4)
-            self.assertNotIn(df_id, ids)
-            ids.add(df_id)
+            self.assertRegex(relation_id, r"^_graphframes_cc_[0-9a-f]{32}$")
+            self.assertEqual(uuid.UUID(hex=relation_id.removeprefix("_graphframes_cc_")).version, 4)
+            self.assertNotIn(relation_id, ids)
+            ids.add(relation_id)
             root = result._plan.to_proto(client).root
             self.assertEqual(root.WhichOneof("rel_type"), "cached_remote_relation")
-            self.assertEqual(root.cached_remote_relation.relation_id, df_id)
+            self.assertEqual(root.cached_remote_relation.relation_id, relation_id)
             self.assertEqual(result.storageLevel, StorageLevel.NONE)
             if cache_manager is not None:
                 self.assertEqual(cache_manager.cachedData().size(), before)
@@ -177,17 +177,17 @@ class GraphFramesUpstreamConnectTests(ReusedConnectTestCase):
             result.unpersist(blocking=True)
             self.assertEqual(result.orderBy("id").collect(), rows)
             # The client-generated ID makes retries reuse the exact same checkpointed DataFrame.
-            cached = _cached_result(self, self.spark, df_id)
+            cached = _cached_result(self, self.spark, relation_id)
             if self._legacy_sc is not None:
                 self.assertIsNotNone(cached)
             client.execute_command(command)
             if cached is not None:
-                self.assertTrue(cached.equals(_cached_result(self, self.spark, df_id)))
+                self.assertTrue(cached.equals(_cached_result(self, self.spark, relation_id)))
             self.assertEqual(result.orderBy("id").collect(), rows)
         finally:
             _remove_cached_result(result)
         if self._legacy_sc is not None:
-            self.assertIsNone(_cached_result(self, self.spark, df_id))
+            self.assertIsNone(_cached_result(self, self.spark, relation_id))
         if cache_manager is not None:
             self.assertEqual(cache_manager.cachedData().size(), before)
 
@@ -279,7 +279,7 @@ class GraphFramesLocalCheckpointConnectTests(ReusedConnectTestCase):
         try:
             expected = result.orderBy("id").collect()
             for invalid_id in ["", str(uuid.uuid4()), "_graphframes_cc_invalid"]:
-                command.graph_frames_command.df_id = invalid_id
+                command.graph_frames_command.relation_id = invalid_id
                 with self.assertRaisesRegex(Exception, "UUID|result ID"):
                     client.execute_command(command)
             self.assertEqual(result.orderBy("id").collect(), expected)
@@ -292,18 +292,18 @@ class GraphFramesLocalCheckpointConnectTests(ReusedConnectTestCase):
         result = self._graph(self.spark).connectedComponents(
             algorithm="two_phase", checkpointInterval=0, use_local_checkpoints=True
         )
-        df_id = result._plan._relation_id
-        self.assertIsNotNone(_cached_result(self, self.spark, df_id))
+        relation_id = result._plan._relation_id
+        self.assertIsNotNone(_cached_result(self, self.spark, relation_id))
         derived = result.filter("id = 'a'")
         del result
         gc.collect()
-        self.assertIsNotNone(_cached_result(self, self.spark, df_id))
+        self.assertIsNotNone(_cached_result(self, self.spark, relation_id))
         self.assertEqual(derived.count(), 1)
         del derived
         gc.collect()
 
         def removed():
-            self.assertIsNone(_cached_result(self, self.spark, df_id))
+            self.assertIsNone(_cached_result(self, self.spark, relation_id))
 
         eventually(catch_assertions=True)(removed)()
 

@@ -74,7 +74,7 @@ message GraphFramesCommand {
   // (Required) Client-generated ID for the resulting CachedRemoteRelation.
   // Format: "_graphframes_cc_" followed by the 32-character hexadecimal UUID.
   // Repeating a command with the same ID reuses the retained result in the same session.
-  string df_id = 4;
+  string relation_id = 4;
 }
 
 // A SQL Command is used to trigger the eager evaluation of SQL commands in Spark.

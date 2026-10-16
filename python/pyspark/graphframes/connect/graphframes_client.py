@@ -719,7 +719,7 @@ class GraphFrameConnect:
         max_iter: int,
         storage_level: StorageLevel,
     ) -> DataFrame:
-        df_id = f"_graphframes_cc_{uuid.uuid4().hex}"
+        relation_id = f"_graphframes_cc_{uuid.uuid4().hex}"
         api = self._get_pb_api_message(self._vertices, self._edges, self._spark.client)
         api.connected_components.CopyFrom(
             pb.ConnectedComponents(
@@ -732,9 +732,11 @@ class GraphFrameConnect:
                 storage_level=storage_level_to_proto(storage_level),
             )
         )
-        command = proto.Command(graph_frames_command=proto.GraphFramesCommand(api=api, df_id=df_id))
+        command = proto.Command(
+            graph_frames_command=proto.GraphFramesCommand(api=api, relation_id=relation_id)
+        )
         self._spark.client.execute_command(command)
-        return _dataframe_from_plan(CachedRemoteRelation(df_id, self._spark), self._spark)
+        return _dataframe_from_plan(CachedRemoteRelation(relation_id, self._spark), self._spark)
 
     def labelPropagation(
         self,
