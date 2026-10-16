@@ -1340,7 +1340,8 @@ case class UnixNanos(child: Expression)
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimestampNanoType)
 
   // epochMicros * 1000 overflows a 64-bit BIGINT across the full [0001..9999] calendar range, so
-  // the result is a lossless DECIMAL with enough precision to hold every value (~2.5e20 max).
+  // the result is a DECIMAL that holds every value in that range (~2.5e20 max). Values beyond
+  // ~+/-31,000 years from the epoch exceed 21 digits and raise NUMERIC_VALUE_OUT_OF_RANGE.
   override def dataType: DataType = DecimalType(21, 0)
 
   override def nullSafeEval(input: Any): Any = {

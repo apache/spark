@@ -385,6 +385,61 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
+  test("SPARK-57838: Parquet INT64 nanos at the exact int64 epoch-nanos limits") {
+    withNanosEnabled {
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        val min = "1677-09-21 00:12:43.145224192"
+        val max = "2262-04-11 23:47:16.854775807"
+        withAllParquetReaders {
+          withTempPath { dir =>
+            val df = spark.sql(
+              s"""SELECT * FROM VALUES
+                 |  (TIMESTAMP_NTZ '$min', TIMESTAMP_LTZ '$min'),
+                 |  (TIMESTAMP_NTZ '$max', TIMESTAMP_LTZ '$max')
+                 |  AS t(ntz, ltz)""".stripMargin)
+            df.write.parquet(dir.getCanonicalPath)
+            val read = spark.read.parquet(dir.getCanonicalPath)
+            checkAnswer(read, df.collect().toSeq)
+            // Pushed-down filters on the limits encode them exactly.
+            withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+              Seq(min, max).foreach { ts =>
+                checkAnswer(
+                  read.where(s"ntz = TIMESTAMP_NTZ '$ts' AND ltz = TIMESTAMP_LTZ '$ts'"),
+                  df.where(s"ntz = TIMESTAMP_NTZ '$ts'").collect().toSeq)
+              }
+            }
+          }
+        }
+        // One nanosecond past either limit fails to write.
+        Seq(
+          "1677-09-21 00:12:43.145224191" -> "1677-09-21T00:12:43.145224191",
+          "2262-04-11 23:47:16.854775808" -> "2262-04-11T23:47:16.854775808").foreach {
+          case (ts, rendered) =>
+            Seq("TIMESTAMP_NTZ" -> rendered, "TIMESTAMP_LTZ" -> s"${rendered}Z").foreach {
+              case (typeName, renderedValue) =>
+                withTempPath { dir =>
+                  val e = intercept[SparkException] {
+                    spark.sql(s"SELECT $typeName '$ts' AS ts").write.parquet(dir.getCanonicalPath)
+                  }
+                  var cause: Throwable = e
+                  while (cause != null && !cause.isInstanceOf[SparkArithmeticException]) {
+                    cause = cause.getCause
+                  }
+                  assert(cause != null, s"Expected DATETIME_OVERFLOW, but got: ${e.getMessage}")
+                  checkError(
+                    exception = cause.asInstanceOf[SparkArithmeticException],
+                    condition = "DATETIME_OVERFLOW",
+                    parameters = Map("operation" ->
+                      (s"write the timestamp value $renderedValue as Parquet INT64 " +
+                        "epoch-nanoseconds (supported range: 1677-09-21T00:12:43.145224192Z to " +
+                        "2262-04-11T23:47:16.854775807Z)")))
+                }
+            }
+        }
+      }
+    }
+  }
+
   test("SPARK-57102: datetime rebase configs do not affect TIMESTAMP(NANOS) reads") {
     withNanosEnabled {
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
