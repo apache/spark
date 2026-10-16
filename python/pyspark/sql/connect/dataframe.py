@@ -22,6 +22,7 @@ import json
 import os
 import random
 import sys
+import uuid
 import warnings
 from collections.abc import Iterable
 from typing import (
@@ -2417,7 +2418,9 @@ class DataFrame(ParentDataFrame):
         return DataFrame(plan.Offset(child=self._plan, offset=num), session=self._session)
 
     def checkpoint(self, eager: bool = True) -> ParentDataFrame:
-        cmd = plan.Checkpoint(child=self._plan, local=False, eager=eager)
+        cmd = plan.Checkpoint(
+            child=self._plan, local=False, eager=eager, relation_id=str(uuid.uuid4())
+        )
         _, properties, self._execution_info = self._session.client.execute_command(
             cmd.command(self._session.client)
         )
@@ -2429,7 +2432,13 @@ class DataFrame(ParentDataFrame):
     def localCheckpoint(
         self, eager: bool = True, storageLevel: Optional[StorageLevel] = None
     ) -> ParentDataFrame:
-        cmd = plan.Checkpoint(child=self._plan, local=True, eager=eager, storage_level=storageLevel)
+        cmd = plan.Checkpoint(
+            child=self._plan,
+            local=True,
+            eager=eager,
+            storage_level=storageLevel,
+            relation_id=str(uuid.uuid4()),
+        )
         _, properties, self._execution_info = self._session.client.execute_command(
             cmd.command(self._session.client)
         )

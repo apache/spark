@@ -30,6 +30,7 @@ from pyspark.testing.connectutils import (
 
 if should_test_connect:
     import pyspark.sql.connect.proto as proto
+    from pyspark import StorageLevel
     from pyspark.sql.connect.column import Column
     from pyspark.sql.connect.dataframe import DataFrame
     from pyspark.sql.connect.expressions import LiteralExpression
@@ -46,6 +47,7 @@ if should_test_connect:
     )
     from pyspark.sql.connect.observation import Observation
     from pyspark.sql.connect.plan import (
+        CachedRemoteRelation,
         Checkpoint,
         CollectMetrics,
         Join,
@@ -933,36 +935,55 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
     def test_checkpoint_relation_id(self):
         child = self.connect.range(0, 5)._plan
         for local in (False, True):
-            for relation_id in (str(uuid.uuid4()), ""):
+            for relation_id in (None, str(uuid.uuid4()), ""):
                 with self.subTest(local=local, relation_id=relation_id):
                     command = Checkpoint(
                         child=child, local=local, eager=True, relation_id=relation_id
                     ).command(self.connect)
                     checkpoint = command.checkpoint_command
-                    self.assertTrue(checkpoint.HasField("relation_id"))
-                    self.assertEqual(checkpoint.relation_id, relation_id)
+                    self.assertEqual(checkpoint.HasField("relation_id"), relation_id is not None)
+                    if relation_id is not None:
+                        self.assertEqual(checkpoint.relation_id, relation_id)
                     self.assertEqual(checkpoint.local, local)
                     self.assertTrue(checkpoint.eager)
                     self.assertEqual(checkpoint.relation, child.plan(self.connect))
 
     def test_checkpoint_generated_relation_id(self):
+        session = MagicMock()
+        session.client.is_closed = True
         child = self.connect.range(0, 5)._plan
+        df = DataFrame(child, session)
+        checkpointed = DataFrame(CachedRemoteRelation("server-checkpoint-id", session), session)
+        session.client.execute_command.return_value = (
+            None,
+            {"checkpoint_command_result": checkpointed},
+            None,
+        )
+        relation_ids = set()
         for local in (False, True):
-            with self.subTest(local=local):
-                checkpoint = Checkpoint(child=child, local=local, eager=True)
-                command = checkpoint.command(self.connect).checkpoint_command
-                self.assertTrue(command.HasField("relation_id"))
-                relation_id = command.relation_id
-                parsed_id = uuid.UUID(relation_id)
-                self.assertEqual(str(parsed_id), relation_id)
-                self.assertEqual(parsed_id.version, 4)
-                self.assertEqual(
-                    checkpoint.command(self.connect).checkpoint_command.relation_id, relation_id
-                )
-                other = Checkpoint(child=child, local=local, eager=True)
-                self.assertNotEqual(
-                    other.command(self.connect).checkpoint_command.relation_id, relation_id
-                )
+            for _ in range(2):
+                with self.subTest(local=local):
+                    if local:
+                        result = df.localCheckpoint(
+                            eager=False, storageLevel=StorageLevel.DISK_ONLY
+                        )
+                    else:
+                        result = df.checkpoint(eager=False)
+                    self.assertIs(result, checkpointed)
+                    command = session.client.execute_command.call_args.args[0].checkpoint_command
+                    self.assertTrue(command.HasField("relation_id"))
+                    relation_id = command.relation_id
+                    parsed_id = uuid.UUID(relation_id)
+                    self.assertEqual(str(parsed_id), relation_id)
+                    self.assertEqual(parsed_id.version, 4)
+                    self.assertNotIn(relation_id, relation_ids)
+                    relation_ids.add(relation_id)
+                    self.assertEqual(command.local, local)
+                    self.assertFalse(command.eager)
+                    self.assertEqual(command.relation, child.plan(session.client))
+                    if local:
+                        self.assertTrue(command.storage_level.use_disk)
+                        self.assertFalse(command.storage_level.use_memory)
 
     def test_coalesce_and_repartition(self):
         # SPARK-41026: test Coalesce and Repartition API in Python client.
