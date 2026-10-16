@@ -606,6 +606,9 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
       // A PLAIN BINARY dictionary page that declares 3 entries but holds only 1.
       ("binary", new DictionaryPage(BytesInput.from(Array[Byte](1, 0, 0, 0, 'x')), 3,
         Encoding.PLAIN_DICTIONARY), classOf[IndexOutOfBoundsException]),
+      // A dictionary page with a negative dictionary size.
+      ("int32", new DictionaryPage(BytesInput.from(Array[Byte](1, 0, 0, 0)), -1,
+        Encoding.PLAIN_DICTIONARY), classOf[NegativeArraySizeException]),
       // A dictionary page with an encoding that has no dictionary.
       ("int32", new DictionaryPage(BytesInput.from(Array[Byte](1, 0, 0, 0)), 1,
         Encoding.DELTA_BINARY_PACKED), classOf[UnsupportedOperationException])
@@ -626,7 +629,8 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
     val e = readCorruptedPage("message root { optional int32 a; }", None,
       Array[Byte](2, 0, 0, 0, 2, 1, 0x80.toByte, 1, 3, 1, 0), 1, Encoding.DELTA_BINARY_PACKED)
     assert(e.getMessage.contains("in col [a] optional int32 a: Invalid DELTA_BINARY_PACKED " +
-      "mini block size: 42.666666666666664 (must be a multiple of 8)"), e.getMessage)
+      "mini block count: 3 (block size in values: 128, the mini block size must be a multiple " +
+      "of 8)"), e.getMessage)
     assert(e.getCause.isInstanceOf[ParquetDecodingException], e)
 
     val reader = new VectorizedDeltaBinaryPackedReader()

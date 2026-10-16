@@ -169,9 +169,14 @@ public class VectorizedColumnReader {
       } catch (ParquetDecodingException e) {
         throw new ParquetDecodingException(
           "could not decode the dictionary for " + descriptor + ": " + e.getMessage(), e);
-      } catch (RuntimeException e) {
-        // initDictionary only parses the bytes of the page, so a failure here comes from the page
-        // or its metadata, e.g. an IndexOutOfBoundsException for a truncated BINARY dictionary.
+      } catch (IndexOutOfBoundsException | NegativeArraySizeException |
+          UnsupportedOperationException e) {
+        // initDictionary reads the bytes of the page, which also decompresses them for codecs
+        // that decompress lazily, e.g. SNAPPY, and parses them. A corrupted page or page header
+        // makes it throw these:
+        // an IndexOutOfBoundsException for a truncated BINARY dictionary, a
+        // NegativeArraySizeException for a negative dictionary size, and an
+        // UnsupportedOperationException for an encoding that has no dictionary.
         throw new ParquetDecodingException(
           "could not decode the dictionary for " + descriptor + ": " + e, e);
       }
@@ -367,10 +372,10 @@ public class VectorizedColumnReader {
       throw new ParquetDecodingException(
         "could not read the next page in col " + descriptor + ": " + e.getMessage(), e);
     }
+    this.currentPage = page;
     if (page == null) {
       return -1;
     }
-    this.currentPage = page;
     this.pageFirstRowIndex = page.getFirstRowIndex().orElse(0L);
 
     return page.accept(new DataPage.Visitor<Integer>() {

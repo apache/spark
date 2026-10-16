@@ -105,12 +105,13 @@ public class VectorizedDeltaBinaryPackedReader extends VectorizedReaderBase {
       throw new ParquetDecodingException("Invalid DELTA_BINARY_PACKED mini block count: "
           + miniBlockNumInABlock + " (block size in values: " + blockSizeInValues + ")");
     }
-    double miniSize = (double) blockSizeInValues / miniBlockNumInABlock;
-    if (miniSize % 8 != 0) {
-      throw new ParquetDecodingException("Invalid DELTA_BINARY_PACKED mini block size: "
-          + miniSize + " (must be a multiple of 8)");
+    if (blockSizeInValues % miniBlockNumInABlock != 0 ||
+        (blockSizeInValues / miniBlockNumInABlock) % 8 != 0) {
+      throw new ParquetDecodingException("Invalid DELTA_BINARY_PACKED mini block count: "
+          + miniBlockNumInABlock + " (block size in values: " + blockSizeInValues
+          + ", the mini block size must be a multiple of 8)");
     }
-    this.miniBlockSizeInValues = (int) miniSize;
+    this.miniBlockSizeInValues = blockSizeInValues / miniBlockNumInABlock;
     // True value count. May be less than valueCount because of nulls
     this.totalValueCount = BytesUtils.readUnsignedVarInt(in);
     if (totalValueCount < 0) {
