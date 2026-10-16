@@ -440,6 +440,42 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     }
   }
 
+  test("SPARK-60032: Check constraint added by ALTER TABLE reading the current time") {
+    Seq("current_timestamp()", "CAST('now' AS TIMESTAMP)", "to_timestamp('now')").foreach { now =>
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        sql(s"CREATE TABLE $t (id INT, creation_time TIMESTAMP) $defaultUsing")
+        sql(s"ALTER TABLE $t ADD CONSTRAINT valid_time CHECK (creation_time <= $now)")
+
+        // The check compares with the time of the write, not the time of the ALTER TABLE.
+        sql(s"INSERT INTO $t VALUES (1, current_timestamp())")
+        checkAnswer(spark.table(t).select("id"), Seq(Row(1)))
+
+        val tomorrow = "current_timestamp() + INTERVAL 1 DAY"
+        val error = intercept[SparkRuntimeException] {
+          sql(s"INSERT INTO $t VALUES (2, $tomorrow)")
+        }
+        assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION")
+        assert(error.getMessageParameters.get("constraintName") == "valid_time")
+        assert(error.getMessageParameters.get("expression") == s"creation_time <= $now")
+      }
+    }
+  }
+
+  test("SPARK-60032: Check constraint added by ALTER TABLE on a column qualified by the table") {
+    // ALTER TABLE resolves `tbl.id` as the column `id` of the table `tbl`, not as the field `id` of
+    // its struct column `tbl`, and later writes check the same column.
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id BIGINT, tbl STRUCT<id: BIGINT>) $defaultUsing")
+      sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK (nullif(tbl.id, 3) > 0)")
+      sql(s"INSERT INTO $t VALUES (3, named_struct('id', -1L))")
+      val error = intercept[SparkRuntimeException] {
+        sql(s"INSERT INTO $t VALUES (-1, named_struct('id', 3L))")
+      }
+      assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION")
+      checkAnswer(spark.table(t).select("id"), Seq(Row(3)))
+    }
+  }
+
   test("Check constraint with current_timestamp function - update operation") {
     withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { t =>
       // Create table with a constraint using current_timestamp
