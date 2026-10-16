@@ -98,6 +98,11 @@ public class VectorizedColumnReader {
    */
   private long pageFirstRowIndex;
 
+  /**
+   * The data page the values are being decoded from, for error messages.
+   */
+  private DataPage currentPage;
+
   private final PageReader pageReader;
   private final ColumnDescriptor descriptor;
   private final LogicalTypeAnnotation logicalTypeAnnotation;
@@ -147,7 +152,14 @@ public class VectorizedColumnReader {
       int96RebaseMode,
       int96RebaseTz);
 
-    DictionaryPage dictionaryPage = pageReader.readDictionaryPage();
+    DictionaryPage dictionaryPage;
+    try {
+      // This decompresses the page eagerly for some codecs, e.g. ZSTD.
+      dictionaryPage = pageReader.readDictionaryPage();
+    } catch (ParquetDecodingException e) {
+      throw new ParquetDecodingException(
+        "could not read the dictionary page for " + descriptor + ": " + e.getMessage(), e);
+    }
     if (dictionaryPage != null) {
       try {
         this.dictionary = dictionaryPage.getEncoding().initDictionary(descriptor, dictionaryPage);
@@ -157,6 +169,11 @@ public class VectorizedColumnReader {
       } catch (ParquetDecodingException e) {
         throw new ParquetDecodingException(
           "could not decode the dictionary for " + descriptor + ": " + e.getMessage(), e);
+      } catch (RuntimeException e) {
+        // initDictionary only parses the bytes of the page, so a failure here comes from the page
+        // or its metadata, e.g. an IndexOutOfBoundsException for a truncated BINARY dictionary.
+        throw new ParquetDecodingException(
+          "could not decode the dictionary for " + descriptor + ": " + e, e);
       }
     } else {
       this.dictionary = null;
@@ -264,79 +281,96 @@ public class VectorizedColumnReader {
         }
         readState.resetForNewPage(pageValueCount, pageFirstRowIndex);
       }
-      PrimitiveType.PrimitiveTypeName typeName =
-          descriptor.getPrimitiveType().getPrimitiveTypeName();
-      if (isCurrentPageDictionaryEncoded) {
-        // Save starting offset in case we need to decode dictionary IDs.
-        int startOffset = readState.valueOffset;
-        // Save starting row index so we can check if we need to eagerly decode dict ids later
-        long startRowId = readState.rowId;
+      // A corrupted page makes the readers below throw a ParquetDecodingException without the
+      // column. Only that is wrapped, so that other exceptions, e.g. SparkUpgradeException,
+      // keep their types.
+      try {
+        PrimitiveType.PrimitiveTypeName typeName =
+            descriptor.getPrimitiveType().getPrimitiveTypeName();
+        if (isCurrentPageDictionaryEncoded) {
+          // Save starting offset in case we need to decode dictionary IDs.
+          int startOffset = readState.valueOffset;
+          // Save starting row index so we can check if we need to eagerly decode dict ids later
+          long startRowId = readState.rowId;
 
-        // Read and decode dictionary ids.
-        if (readState.maxRepetitionLevel == 0) {
-          defColumn.readIntegers(readState, dictionaryIds, column, definitionLevels,
-            (VectorizedValuesReader) dataColumn);
+          // Read and decode dictionary ids.
+          if (readState.maxRepetitionLevel == 0) {
+            defColumn.readIntegers(readState, dictionaryIds, column, definitionLevels,
+              (VectorizedValuesReader) dataColumn);
+          } else {
+            repColumn.readIntegersRepeated(readState, repetitionLevels, defColumn, definitionLevels,
+              dictionaryIds, column, (VectorizedValuesReader) dataColumn);
+          }
+
+          // TIMESTAMP_MILLIS encoded as INT64 can't be lazily decoded as we need to post process
+          // the values to add microseconds precision.
+          if (column.hasDictionary() || (startRowId == pageFirstRowIndex &&
+              isLazyDecodingSupported(typeName, column.dataType()))) {
+            // Column vector supports lazy decoding of dictionary values so just set the dictionary.
+            // We can't do this if startRowId is not the first row index in the page AND the column
+            // doesn't have a dictionary (i.e. some non-dictionary encoded values have already been
+            // added).
+            PrimitiveType primitiveType = descriptor.getPrimitiveType();
+
+            // We need to make sure that we initialize the right type for the dictionary otherwise
+            // WritableColumnVector will throw an exception when trying to decode to an Int when the
+            // dictionary is in fact initialized as Long
+            LogicalTypeAnnotation typeAnnotation = primitiveType.getLogicalTypeAnnotation();
+            boolean castLongToInt =
+              typeAnnotation instanceof DecimalLogicalTypeAnnotation annotation &&
+              annotation.getPrecision() <= Decimal.MAX_INT_DIGITS() &&
+              primitiveType.getPrimitiveTypeName() == INT64;
+
+            // We require a long value, but we need to use dictionary to decode the original
+            // signed int first
+            boolean isUnsignedInt32 = updaterFactory.isUnsignedIntTypeMatched(32);
+
+            // We require a decimal value, but we need to use dictionary to decode the original
+            // signed long first
+            boolean isUnsignedInt64 = updaterFactory.isUnsignedIntTypeMatched(64);
+
+            boolean needTransform = castLongToInt || isUnsignedInt32 || isUnsignedInt64;
+            column.setDictionary(new ParquetDictionary(dictionary, needTransform));
+          } else {
+            updater.decodeDictionaryIds(readState.valueOffset - startOffset, startOffset, column,
+              dictionaryIds, dictionary);
+          }
         } else {
-          repColumn.readIntegersRepeated(readState, repetitionLevels, defColumn, definitionLevels,
-            dictionaryIds, column, (VectorizedValuesReader) dataColumn);
+          if (column.hasDictionary() && readState.valueOffset != 0) {
+            // This batch already has dictionary encoded values but this new page is not. The batch
+            // does not support a mix of dictionary and not so we will decode the dictionary.
+            updater.decodeDictionaryIds(readState.valueOffset, 0, column, dictionaryIds,
+              dictionary);
+          }
+          column.setDictionary(null);
+          VectorizedValuesReader valuesReader = (VectorizedValuesReader) dataColumn;
+          if (readState.maxRepetitionLevel == 0) {
+            defColumn.readBatch(readState, column, definitionLevels, valuesReader, updater);
+          } else {
+            repColumn.readBatchRepeated(readState, repetitionLevels, defColumn, definitionLevels,
+              column, valuesReader, updater);
+          }
         }
-
-        // TIMESTAMP_MILLIS encoded as INT64 can't be lazily decoded as we need to post process
-        // the values to add microseconds precision.
-        if (column.hasDictionary() || (startRowId == pageFirstRowIndex &&
-            isLazyDecodingSupported(typeName, column.dataType()))) {
-          // Column vector supports lazy decoding of dictionary values so just set the dictionary.
-          // We can't do this if startRowId is not the first row index in the page AND the column
-          // doesn't have a dictionary (i.e. some non-dictionary encoded values have already been
-          // added).
-          PrimitiveType primitiveType = descriptor.getPrimitiveType();
-
-          // We need to make sure that we initialize the right type for the dictionary otherwise
-          // WritableColumnVector will throw an exception when trying to decode to an Int when the
-          // dictionary is in fact initialized as Long
-          LogicalTypeAnnotation typeAnnotation = primitiveType.getLogicalTypeAnnotation();
-          boolean castLongToInt =
-            typeAnnotation instanceof DecimalLogicalTypeAnnotation annotation &&
-            annotation.getPrecision() <= Decimal.MAX_INT_DIGITS() &&
-            primitiveType.getPrimitiveTypeName() == INT64;
-
-          // We require a long value, but we need to use dictionary to decode the original
-          // signed int first
-          boolean isUnsignedInt32 = updaterFactory.isUnsignedIntTypeMatched(32);
-
-          // We require a decimal value, but we need to use dictionary to decode the original
-          // signed long first
-          boolean isUnsignedInt64 = updaterFactory.isUnsignedIntTypeMatched(64);
-
-          boolean needTransform = castLongToInt || isUnsignedInt32 || isUnsignedInt64;
-          column.setDictionary(new ParquetDictionary(dictionary, needTransform));
-        } else {
-          updater.decodeDictionaryIds(readState.valueOffset - startOffset, startOffset, column,
-            dictionaryIds, dictionary);
-        }
-      } else {
-        if (column.hasDictionary() && readState.valueOffset != 0) {
-          // This batch already has dictionary encoded values but this new page is not. The batch
-          // does not support a mix of dictionary and not so we will decode the dictionary.
-          updater.decodeDictionaryIds(readState.valueOffset, 0, column, dictionaryIds, dictionary);
-        }
-        column.setDictionary(null);
-        VectorizedValuesReader valuesReader = (VectorizedValuesReader) dataColumn;
-        if (readState.maxRepetitionLevel == 0) {
-          defColumn.readBatch(readState, column, definitionLevels, valuesReader, updater);
-        } else {
-          repColumn.readBatchRepeated(readState, repetitionLevels, defColumn, definitionLevels,
-            column, valuesReader, updater);
-        }
+      } catch (ParquetDecodingException e) {
+        throw new ParquetDecodingException("could not decode page " + currentPage + " in col " +
+          descriptor + ": " + e.getMessage(), e);
       }
     }
   }
 
   private int readPage() {
-    DataPage page = pageReader.readPage();
+    DataPage page;
+    try {
+      // This decompresses the page eagerly for some codecs, e.g. ZSTD.
+      page = pageReader.readPage();
+    } catch (ParquetDecodingException e) {
+      throw new ParquetDecodingException(
+        "could not read the next page in col " + descriptor + ": " + e.getMessage(), e);
+    }
     if (page == null) {
       return -1;
     }
+    this.currentPage = page;
     this.pageFirstRowIndex = page.getFirstRowIndex().orElse(0L);
 
     return page.accept(new DataPage.Visitor<Integer>() {

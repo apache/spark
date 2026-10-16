@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.io.ByteArrayInputStream
 import java.math.{BigDecimal => JBigDecimal}
 import java.nio.file.Files
 import java.time.{LocalDateTime, LocalTime}
@@ -36,6 +37,7 @@ import org.apache.parquet.column.{Encoding, ParquetProperties}
 import org.apache.parquet.column.ParquetProperties.WriterVersion.PARQUET_1_0
 import org.apache.parquet.example.data.Group
 import org.apache.parquet.example.data.simple.{SimpleGroup, SimpleGroupFactory}
+import org.apache.parquet.format.Util
 import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.example.ExampleParquetWriter
 import org.apache.parquet.io.ParquetDecodingException
@@ -2568,6 +2570,47 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
   test("SPARK-59832: invalid length of RLE booleans in a V2 page reports the column") {
     val e = readCorruptedRleSection("id >= 0 as b", writerVersion = "PARQUET_2_0")(setMaxLength)
     assertInvalidLengthReportsColumn(e, "b")
+  }
+
+  test("SPARK-59854: a ZSTD page that cannot be decompressed reports the column") {
+    // ZSTD pages are decompressed when they are read from the column chunk, not when decoded.
+    Seq(
+      (false, "could not read the next page in col", "could not decompress page"),
+      (true, "could not read the dictionary page for", "Could not decompress dictionary page")
+    ).foreach { case (dictionary, error, cause) =>
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        spark.range(1000).selectExpr("cast(id % 100 as int) as a").coalesce(1)
+          .write
+          .option(ParquetOutputFormat.ENABLE_DICTIONARY, dictionary.toString)
+          .option("compression", "zstd")
+          .parquet(path)
+        val file = dir.listFiles().filter(_.getName.endsWith(".parquet")).head
+        val footer = ParquetFileReader.readFooter(
+          spark.sessionState.newHadoopConf(), new Path(file.getCanonicalPath))
+        val chunk = footer.getBlocks.get(0).getColumns.get(0)
+        assert(chunk.hasDictionaryPage == dictionary)
+        // Invert the first bytes of the first page, the ZSTD frame magic number.
+        val bytes = Files.readAllBytes(file.toPath)
+        val in = new ByteArrayInputStream(bytes, chunk.getStartingPos.toInt, bytes.length)
+        Util.readPageHeader(in)
+        val pageStart = bytes.length - in.available()
+        (pageStart until pageStart + 4).foreach(i => bytes(i) = (~bytes(i)).toByte)
+        Files.write(file.toPath, bytes)
+        dir.listFiles().filter(_.getName.endsWith(".crc")).foreach(_.delete())
+
+        withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+          val e = intercept[SparkException](spark.read.parquet(path).collect())
+          val columnErrors =
+            causes(e).filter(c => Option(c.getMessage).exists(_.contains("optional int32 a")))
+          assert(columnErrors.size == 1, e)
+          assert(columnErrors.head.getMessage ==
+            s"$error [a] optional int32 a: $cause", e)
+          assert(columnErrors.head.isInstanceOf[ParquetDecodingException], e)
+          assert(columnErrors.head.getCause.getMessage == cause, e)
+        }
+      }
+    }
   }
 }
 

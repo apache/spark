@@ -22,7 +22,7 @@ import java.util.{Optional, PrimitiveIterator}
 import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 
-import org.apache.parquet.bytes.BytesInput
+import org.apache.parquet.bytes.{ByteBufferInputStream, BytesInput}
 import org.apache.parquet.column.{ColumnDescriptor, Encoding, ParquetProperties}
 import org.apache.parquet.column.impl.ColumnWriteStoreV1
 import org.apache.parquet.column.page._
@@ -549,6 +549,92 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
     } finally {
       recordReader.close()
     }
+  }
+
+  /**
+   * Reads a row group of one page of `valueCount` values of the column `a` in `schema`, after
+   * an optional dictionary page, and returns the error of reading it.
+   */
+  private def readCorruptedPage(
+      schema: String,
+      dictionaryPage: Option[DictionaryPage],
+      data: Array[Byte],
+      valueCount: Int,
+      valuesEncoding: Encoding): Throwable = {
+    val parquetSchema = MessageTypeParser.parseMessageType(schema)
+    val ty = parquetSchema.asGroupType().getType("a").asPrimitiveType()
+    val cd = new ColumnDescriptor(Array("a"), ty, 0, 1)
+    val memPageStore = new MemPageStore(valueCount)
+    val pageWriter = memPageStore.getPageWriter(cd)
+    dictionaryPage.foreach(pageWriter.writeDictionaryPage)
+    pageWriter.writePage(BytesInput.from(data), valueCount, valueCount,
+      Statistics.createStats(ty), Encoding.RLE, Encoding.RLE, valuesEncoding)
+    val recordReader = new VectorizedParquetRecordReader(
+      DateTimeUtils.getZoneId("EST"), "CORRECTED", "UTC", "CORRECTED", "UTC", true, valueCount)
+    try {
+      recordReader.initialize(parquetSchema, parquetSchema,
+        TestParquetRowGroupReader(Seq(TestPageReadStore(memPageStore, Seq(0L)))), valueCount)
+      intercept[ParquetDecodingException](recordReader.nextKeyValue())
+    } finally {
+      recordReader.close()
+    }
+  }
+
+  // The definition levels of 4 non-null values: the length 2, then an RLE run of 4 x 1.
+  private val fourNonNullValues = Array[Byte](2, 0, 0, 0, 4 << 1, 1)
+
+  test("SPARK-59854: a decoding error in a batch reports the page and the column") {
+    Seq(
+      // Dictionary ids (bit width 1) with an RLE run of only 2 of the 4 values.
+      ("Corrupted RLE data: reading past the end of the encoded values", Some(new DictionaryPage(
+        BytesInput.from(Array[Byte](1, 0, 0, 0, 2, 0, 0, 0)), 2, Encoding.PLAIN_DICTIONARY)),
+        Array[Byte](1, 2 << 1, 0), Encoding.RLE_DICTIONARY),
+      // 2 of the 4 PLAIN values.
+      ("Failed to read 16 bytes", None, Array[Byte](1, 0, 0, 0, 2, 0, 0, 0), Encoding.PLAIN)
+    ).foreach { case (error, dictionaryPage, values, encoding) =>
+      val e = readCorruptedPage("message root { optional int32 a; }", dictionaryPage,
+        fourNonNullValues ++ values, 4, encoding)
+      assert(e.getMessage.startsWith("could not decode page "), e.getMessage)
+      assert(e.getMessage.contains(s"in col [a] optional int32 a: $error"), e.getMessage)
+      assert(e.getCause.isInstanceOf[ParquetDecodingException], e)
+      assert(e.getCause.getMessage == error, e)
+    }
+  }
+
+  test("SPARK-59854: a dictionary that cannot be decoded reports the column") {
+    Seq(
+      // A PLAIN BINARY dictionary page that declares 3 entries but holds only 1.
+      ("binary", new DictionaryPage(BytesInput.from(Array[Byte](1, 0, 0, 0, 'x')), 3,
+        Encoding.PLAIN_DICTIONARY), classOf[IndexOutOfBoundsException]),
+      // A dictionary page with an encoding that has no dictionary.
+      ("int32", new DictionaryPage(BytesInput.from(Array[Byte](1, 0, 0, 0)), 1,
+        Encoding.DELTA_BINARY_PACKED), classOf[UnsupportedOperationException])
+    ).foreach { case (typeName, dictionaryPage, errorClass) =>
+      // One non-null value: the definition levels (length 2, an RLE run of 1 x 1), then the
+      // dictionary ids (bit width 2, an RLE run of 1 x 0).
+      val e = readCorruptedPage(s"message root { optional $typeName a; }", Some(dictionaryPage),
+        Array[Byte](2, 0, 0, 0, 2, 1, 2, 2, 0), 1, Encoding.RLE_DICTIONARY)
+      assert(e.getMessage.startsWith(
+        s"could not decode the dictionary for [a] optional $typeName a: ${errorClass.getName}"),
+        e.getMessage)
+      assert(e.getCause.getClass == errorClass, e)
+    }
+  }
+
+  test("SPARK-59854: an invalid DELTA_BINARY_PACKED header reports the column") {
+    // One non-null value. The header has a block of 128 values in 3 mini blocks.
+    val e = readCorruptedPage("message root { optional int32 a; }", None,
+      Array[Byte](2, 0, 0, 0, 2, 1, 0x80.toByte, 1, 3, 1, 0), 1, Encoding.DELTA_BINARY_PACKED)
+    assert(e.getMessage.contains("in col [a] optional int32 a: Invalid DELTA_BINARY_PACKED " +
+      "mini block size: 42.666666666666664 (must be a multiple of 8)"), e.getMessage)
+    assert(e.getCause.isInstanceOf[ParquetDecodingException], e)
+
+    val reader = new VectorizedDeltaBinaryPackedReader()
+    val e2 = intercept[ParquetDecodingException] {
+      reader.initFromPage(0, ByteBufferInputStream.wrap(java.nio.ByteBuffer.allocate(0)))
+    }
+    assert(e2.getMessage ==
+      "Invalid DELTA_BINARY_PACKED page: it must have at least one value, but it has 0")
   }
 
   truncateTypeTest("primitive type", IntegerType, LongType, IntegerType)
