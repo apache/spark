@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
+import Scd1ReconciliationSupport.projectTargetColumnsOntoMicrobatch
 import Scd1RowLevelReconciliation.{
   applyTombstonesToMicrobatch,
   deduplicateMicrobatch
 }
-import Scd1ReconciliationSupport.projectTargetColumnsOntoMicrobatch
 
 import org.apache.spark.sql.{functions => F, AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.classic.DataFrame
