@@ -759,7 +759,7 @@ case class UpdateNestedField(name: String, fieldOps: Seq[StructFieldsOperation])
  *
  * `outputOrdinals` describes each output position. A nonnegative entry copies that field from
  * `structExpr`; a negative entry evaluates the next expression in `updatedValues`. Storing copied
- * fields as ordinals avoids adding a `GetStructField` child for every copied field. Row construction
+ * fields as ordinals avoids adding a `GetStructField` child for every copied field. Building rows
  * still visits every output field.
  *
  * For example, to transform `(a, b, c)` into `(a, newB, c, newD)`, `outputOrdinals` is
