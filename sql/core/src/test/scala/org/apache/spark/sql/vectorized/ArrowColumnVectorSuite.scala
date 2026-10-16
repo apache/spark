@@ -884,7 +884,7 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
       (123456789L, 123456L, 789),
       (123456712L, 123456L, 712),
       (123456700L, 123456L, 700),
-      // pre-epoch values floor toward -inf, not toward zero
+      // Pre-epoch values floor toward -inf, not toward zero.
       (-1L, -1L, 999),
       (-123456211L, -123457L, 789),
       (Long.MaxValue, 9223372036854775L, 807),
