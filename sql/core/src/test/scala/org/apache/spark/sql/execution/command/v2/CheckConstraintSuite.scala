@@ -170,6 +170,60 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     }
   }
 
+  test("SPARK-60032: Check constraint added by ALTER TABLE reading the current time") {
+    // The check compares with the time of the write, not the time of the ALTER TABLE.
+    Seq(
+      ("TIMESTAMP", "current_timestamp()", "current_timestamp()", "INTERVAL 1 DAY"),
+      ("TIMESTAMP", "CAST('now' AS TIMESTAMP)", "current_timestamp()", "INTERVAL 1 DAY"),
+      ("TIMESTAMP", "to_timestamp('now')", "current_timestamp()", "INTERVAL 1 DAY"),
+      ("TIMESTAMP_NTZ", "CAST('now' AS TIMESTAMP_NTZ)", "localtimestamp()", "INTERVAL 1 DAY"),
+      ("DATE", "current_date()", "current_date()", "1"),
+      ("DATE", "CAST('today' AS DATE)", "current_date()", "1")
+    ).foreach { case (dataType, now, current, step) =>
+      Seq("true", "false").foreach { ansi =>
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+          withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+            sql(s"CREATE TABLE $t (id INT, created $dataType) $defaultUsing")
+            sql(s"ALTER TABLE $t ADD CONSTRAINT valid_time CHECK (created <= $now)")
+
+            sql(s"INSERT INTO $t VALUES (1, $current)")
+            checkAnswer(spark.table(t).select("id"), Seq(Row(1)))
+
+            val error = intercept[SparkRuntimeException] {
+              sql(s"INSERT INTO $t VALUES (2, $current + $step)")
+            }
+            assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION")
+            assert(error.getMessageParameters.get("constraintName") == "valid_time")
+            assert(error.getMessageParameters.get("expression") == s"created <= $now")
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60032: Check constraint added by ALTER TABLE on a column qualified by the table") {
+    // ALTER TABLE resolves `tbl.id` as the column `id` of the table `tbl`, not as the field `id` of
+    // its struct column `tbl`. A write that parses `predicateSql` reads `tbl.id` as the field, so
+    // the test fails if this constraint is stored without a predicate.
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id BIGINT, tbl STRUCT<id: BIGINT>) $defaultUsing")
+      sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK (nullif(tbl.id, 3) > 0)")
+      sql(s"INSERT INTO $t VALUES (3, named_struct('id', -1L))")
+      val error = intercept[SparkRuntimeException] {
+        sql(s"INSERT INTO $t VALUES (-1, named_struct('id', 3L))")
+      }
+      checkError(
+        exception = error,
+        condition = "CHECK_CONSTRAINT_VIOLATION",
+        sqlState = "23001",
+        parameters = Map(
+          "constraintName" -> "c1",
+          "expression" -> "nullif(tbl.id, 3) > 0",
+          "values" -> " - id : -1"))
+      checkAnswer(spark.table(t).select("id"), Seq(Row(3)))
+    }
+  }
+
   def getConstraintCharacteristics(): Seq[(String, String)] = {
     Seq(
       ("", s"ENFORCED NORELY"),
@@ -437,42 +491,6 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
       assert(error.getMessage.contains("CHECK_CONSTRAINT_VIOLATION"))
       assert(error.getMessageParameters.get("constraintName") == "valid_time")
       assert(error.getMessageParameters.get("expression") == "creation_time <= current_timestamp()")
-    }
-  }
-
-  test("SPARK-60032: Check constraint added by ALTER TABLE reading the current time") {
-    Seq("current_timestamp()", "CAST('now' AS TIMESTAMP)", "to_timestamp('now')").foreach { now =>
-      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
-        sql(s"CREATE TABLE $t (id INT, creation_time TIMESTAMP) $defaultUsing")
-        sql(s"ALTER TABLE $t ADD CONSTRAINT valid_time CHECK (creation_time <= $now)")
-
-        // The check compares with the time of the write, not the time of the ALTER TABLE.
-        sql(s"INSERT INTO $t VALUES (1, current_timestamp())")
-        checkAnswer(spark.table(t).select("id"), Seq(Row(1)))
-
-        val tomorrow = "current_timestamp() + INTERVAL 1 DAY"
-        val error = intercept[SparkRuntimeException] {
-          sql(s"INSERT INTO $t VALUES (2, $tomorrow)")
-        }
-        assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION")
-        assert(error.getMessageParameters.get("constraintName") == "valid_time")
-        assert(error.getMessageParameters.get("expression") == s"creation_time <= $now")
-      }
-    }
-  }
-
-  test("SPARK-60032: Check constraint added by ALTER TABLE on a column qualified by the table") {
-    // ALTER TABLE resolves `tbl.id` as the column `id` of the table `tbl`, not as the field `id` of
-    // its struct column `tbl`, and later writes check the same column.
-    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
-      sql(s"CREATE TABLE $t (id BIGINT, tbl STRUCT<id: BIGINT>) $defaultUsing")
-      sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK (nullif(tbl.id, 3) > 0)")
-      sql(s"INSERT INTO $t VALUES (3, named_struct('id', -1L))")
-      val error = intercept[SparkRuntimeException] {
-        sql(s"INSERT INTO $t VALUES (-1, named_struct('id', 3L))")
-      }
-      assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION")
-      checkAnswer(spark.table(t).select("id"), Seq(Row(3)))
     }
   }
 

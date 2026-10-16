@@ -141,10 +141,13 @@ case class CheckConstraint(
 
   // ALTER TABLE builds the constraint from the optimized plan, where the current time, date,
   // catalog, user and the like are replaced by their values at the time of the ALTER TABLE. A
-  // condition that reads one is built from its analyzed form instead, as CREATE TABLE builds it.
+  // condition that reads one is stored without a predicate, so that writes check `predicateSql`.
   def toV2Constraint: Constraint = {
-    val source = analyzedChild.filter(readsCurrentContext).getOrElse(child)
-    val predicate = new V2ExpressionBuilder(source, true).buildPredicate().orNull
+    val predicate = if (analyzedChild.exists(readsCurrentContext)) {
+      null
+    } else {
+      new V2ExpressionBuilder(child, true).buildPredicate().orNull
+    }
     val enforced = userProvidedCharacteristic.enforced.getOrElse(true)
     val rely = userProvidedCharacteristic.rely.getOrElse(false)
     Constraint
