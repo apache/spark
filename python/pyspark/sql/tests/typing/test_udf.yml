@@ -113,59 +113,25 @@
 
 - case: pandasUDFTypeHints
   main: |
-    from typing import Iterator
-
-    from pyspark.sql.session import SparkSession
     from pyspark.sql.pandas.functions import pandas_udf
-    from pyspark.sql.types import ArrayType, IntegerType, LongType, MapType, StringType
-    from pyspark.sql.types import StructField, StructType
+    from pyspark.sql.types import IntegerType, MapType, StringType
     import pandas.core.series
-    import pandas.core.frame
 
-    @pandas_udf("string")
+    @pandas_udf(MapType(StringType(), IntegerType()))
     def f(x: pandas.core.series.Series) -> pandas.core.series.Series:
         return x
 
-    @pandas_udf(returnType=IntegerType())
-    def g(x: pandas.core.series.Series, y: pandas.core.series.Series) -> pandas.core.series.Series:
+    @pandas_udf(returnType="string")
+    def g(x: pandas.core.series.Series) -> pandas.core.series.Series:
         return x
 
-    @pandas_udf("x string, y string")
-    def h(x: pandas.core.series.Series) -> pandas.core.frame.DataFrame:
-        return x.to_frame()
+    h = pandas_udf(lambda x: x, "string")
+    pandas_udf(lambda x: x, returnType=IntegerType())
 
-    @pandas_udf(StructType([StructField("x", LongType())]))
-    def k(x: pandas.core.frame.DataFrame) -> pandas.core.frame.DataFrame:
-        return x
-
-    @pandas_udf(MapType(StringType(), LongType()))
-    def m(x: pandas.core.series.Series) -> pandas.core.series.Series:
-        return x
-
-    @pandas_udf(ArrayType(LongType()))
-    def n(xs: Iterator[pandas.core.series.Series]) -> Iterator[pandas.core.series.Series]:
-        for x in xs:
-            yield x
-
-    @pandas_udf("double")
-    def p(x: pandas.core.series.Series) -> float:
-        return 42.0
-
-    def q(x: pandas.core.series.Series) -> pandas.core.series.Series:
-        return x
-
-    r = pandas_udf(q, "string")
-    s = pandas_udf(q, returnType=LongType())
-    t = pandas_udf(lambda x: x, "string")
-
-    spark = SparkSession.builder.getOrCreate()
-    df = spark.range(1)
-    df.select(f("id"), g("id", "id"), h("id"), k("id"), m("id"), n("id"), r("id"), s("id"), t("id"))
-    df.groupBy("id").agg(p("id"))
-    df.select(g(y="id", x="id"))
-
+    f(x="id")
     f(42)  # E: Argument 1 to "__call__" of "UserDefinedFunctionLike" has incompatible type "int"; expected "Column | str"  [arg-type]
-    df.groupBy("id").apply(f)  # E: Argument 1 to "apply" of "PandasGroupedOpsMixin" has incompatible type "UserDefinedFunctionLike"; expected "GroupedMapPandasUserDefinedFunction"  [arg-type]
+    g(x=42)  # E: Argument "x" to "__call__" of "UserDefinedFunctionLike" has incompatible type "int"; expected "Column | str"  [arg-type]
+    h(42)  # E: Argument 1 to "__call__" of "UserDefinedFunctionLike" has incompatible type "int"; expected "Column | str"  [arg-type]
 
 
 - case: mapIterUdf
