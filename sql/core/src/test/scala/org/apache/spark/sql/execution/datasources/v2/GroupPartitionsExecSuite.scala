@@ -102,7 +102,8 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
       joinKeyPositions = Some(Seq(0)),
       expectedPartitionKeys = Some(Seq(keyOf(1) -> 1)),
       ungroupingOrigin = Some(REPLICATED_FOR_JOIN))
-    assert(gpe.groupedPartitions.size === 1, "the one expected partition replicates both splits")
+    assert(gpe.groupedPartitions.map(_._2) === Seq(Seq(0, 1)),
+      "the one expected partition replicates both splits")
   }
 
   test("SPARK-59121: a node with no reducers keeps the child's reduced key marker") {
