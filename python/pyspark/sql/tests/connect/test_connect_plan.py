@@ -933,18 +933,36 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
     def test_checkpoint_relation_id(self):
         child = self.connect.range(0, 5)._plan
         for local in (False, True):
-            for relation_id in (None, str(uuid.uuid4()), ""):
+            for relation_id in (str(uuid.uuid4()), ""):
                 with self.subTest(local=local, relation_id=relation_id):
                     command = Checkpoint(
                         child=child, local=local, eager=True, relation_id=relation_id
                     ).command(self.connect)
                     checkpoint = command.checkpoint_command
-                    self.assertEqual(checkpoint.HasField("relation_id"), relation_id is not None)
-                    if relation_id is not None:
-                        self.assertEqual(checkpoint.relation_id, relation_id)
+                    self.assertTrue(checkpoint.HasField("relation_id"))
+                    self.assertEqual(checkpoint.relation_id, relation_id)
                     self.assertEqual(checkpoint.local, local)
                     self.assertTrue(checkpoint.eager)
                     self.assertEqual(checkpoint.relation, child.plan(self.connect))
+
+    def test_checkpoint_generated_relation_id(self):
+        child = self.connect.range(0, 5)._plan
+        for local in (False, True):
+            with self.subTest(local=local):
+                checkpoint = Checkpoint(child=child, local=local, eager=True)
+                command = checkpoint.command(self.connect).checkpoint_command
+                self.assertTrue(command.HasField("relation_id"))
+                relation_id = command.relation_id
+                parsed_id = uuid.UUID(relation_id)
+                self.assertEqual(str(parsed_id), relation_id)
+                self.assertEqual(parsed_id.version, 4)
+                self.assertEqual(
+                    checkpoint.command(self.connect).checkpoint_command.relation_id, relation_id
+                )
+                other = Checkpoint(child=child, local=local, eager=True)
+                self.assertNotEqual(
+                    other.command(self.connect).checkpoint_command.relation_id, relation_id
+                )
 
     def test_coalesce_and_repartition(self):
         # SPARK-41026: test Coalesce and Repartition API in Python client.

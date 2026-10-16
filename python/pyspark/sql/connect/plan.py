@@ -20,6 +20,7 @@
 import functools
 import json
 import pickle
+import uuid
 from inspect import isclass, signature
 from threading import Lock
 from typing import (
@@ -2342,7 +2343,7 @@ class Checkpoint(LogicalPlan):
         self._local = local
         self._eager = eager
         self._storage_level = storage_level
-        self._relation_id = relation_id
+        self._relation_id = str(uuid.uuid4()) if relation_id is None else relation_id
 
     def command(self, session: "SparkConnectClient") -> proto.Command:
         cmd = proto.Command()
@@ -2351,11 +2352,10 @@ class Checkpoint(LogicalPlan):
             relation=self._child.plan(session),
             local=self._local,
             eager=self._eager,
+            relation_id=self._relation_id,
         )
         if self._storage_level is not None:
             checkpoint_command.storage_level.CopyFrom(storage_level_to_proto(self._storage_level))
-        if self._relation_id is not None:
-            checkpoint_command.relation_id = self._relation_id
         cmd.checkpoint_command.CopyFrom(checkpoint_command)
         return cmd
 
