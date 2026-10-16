@@ -532,6 +532,8 @@ class PlanMerger(
                   // condition. A tagged filter is always built with a Project child (see the
                   // first-time branch below), so a non-Project child should not happen; decline the
                   // merge rather than fail, keeping the merge best-effort.
+                  // A cpFilter from the child merge still flows up to cp's aggregates: it is a
+                  // filter below this one that np lacks, and the OR's aliases don't include it.
                   mergedChild match {
                     case childProject: Project =>
                       val newNPCondition =
@@ -574,7 +576,7 @@ class PlanMerger(
                             projectList = newProjectList, child = prunedChild)
                           val newFilter = Filter(newCondition, newProject)
                           newFilter.copyTagsFrom(cp)
-                          TryMergeResult(newFilter, npMapping, Some(newNPFilterOut), None,
+                          TryMergeResult(newFilter, npMapping, Some(newNPFilterOut), cpFilter,
                             dsv2Merged = dsv2Merged)
                         }
                     case _ =>
@@ -648,9 +650,10 @@ class PlanMerger(
                 // restrict each aggregation to its originating side. Synthesising a new cpFilter
                 // alias for cp.condition would just produce `FILTER AND(OR(pf_0, pf_1, ...), pf_i)`
                 // upstream, which simplifies to `FILTER pf_i` -- wasted work and plan bloat.
-                // Drop cp's Filter and let the recursion's result flow up with cpFilter = None so
-                // cp's aggregates are left untouched.
-                TryMergeResult(mergedChild, npMapping, npFilter, None, dsv2Merged = dsv2Merged)
+                // Drop cp's Filter and let the recursion's result flow up as is. A cpFilter in it
+                // is a filter below cp's that np lacks, which the pf_i don't include, so cp's
+                // aggregates still need it.
+                TryMergeResult(mergedChild, npMapping, npFilter, cpFilter, dsv2Merged = dsv2Merged)
               } else {
                 val newCPCondition = cpFilter.fold(cp.condition)(And(_, cp.condition))
                 val newCPFilterAlias =
