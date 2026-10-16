@@ -22,7 +22,6 @@ package org.apache.spark.sql.graphframes
 import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.ByteString
-import org.apache.hadoop.fs.Path
 
 import org.apache.spark.connect.proto.{graphframes => proto, GraphFramesCommand}
 import org.apache.spark.graphframes.GraphFrame
@@ -32,11 +31,9 @@ import org.apache.spark.sql.Column
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
-import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.functions.expr
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.Utils
 
 /**
  * Utility object providing helper methods for parsing and transforming data structures related to
@@ -181,32 +178,10 @@ object GraphFramesConnectUtils {
       run: => DataFrame): DataFrame = {
     val output = run
     try {
-      val checkpointed = if (session.sparkContext.getCheckpointDir.isDefined) {
-        output.checkpoint(eager = false)
+      if (session.sparkContext.getCheckpointDir.isDefined) {
+        output.checkpoint(eager = true)
       } else {
-        output.localCheckpoint(eager = false, storageLevel = StorageLevel.DISK_ONLY)
-      }
-      val rdds = checkpointed.queryExecution.analyzed.collect { case logical: LogicalRDD =>
-        logical.rdd
-      }
-      var materialized = false
-      try {
-        // Retain the RDDs before materializing so a failed checkpoint can release its blocks.
-        rdds.foreach(_.doCheckpoint())
-        materialized = true
-        checkpointed
-      } finally {
-        if (!materialized) {
-          rdds.foreach { rdd =>
-            Utils.tryLogNonFatalError { rdd.unpersist(blocking = true) }
-            Utils.tryLogNonFatalError {
-              rdd.getCheckpointFile.foreach { file =>
-                val path = new Path(file)
-                path.getFileSystem(session.sessionState.newHadoopConf()).delete(path, true)
-              }
-            }
-          }
-        }
+        output.localCheckpoint(eager = true, storageLevel = StorageLevel.DISK_ONLY)
       }
     } finally {
       output.unpersist(blocking = false)

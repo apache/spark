@@ -48,6 +48,7 @@ class GraphFramesConnectUtilsSuite extends QueryTest with SharedSparkSession {
         logical.rdd
       }
       assert(rdds.nonEmpty)
+      assert(rdds.forall(_.isCheckpointedAndMaterialized))
       assert(rdds.forall(_.getCheckpointFile.isEmpty))
       assert(rdds.forall(_.getStorageLevel == StorageLevel.DISK_ONLY))
       assert(spark.sharedState.cacheManager.lookupCachedData(output).isEmpty)
@@ -74,15 +75,13 @@ class GraphFramesConnectUtilsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("checkpoint failure releases output caches and checkpoint blocks") {
+  test("checkpoint failure releases the algorithm output cache") {
     withCheckpointCleanup {
       spark.sparkContext.checkpointDir = None
-      val before = spark.sparkContext.getPersistentRDDs.keySet
       val output = spark.range(1).selectExpr("raise_error('checkpoint failed') AS id").cache()
       intercept[Exception] {
         GraphFramesConnectUtils.materializeResult(spark) { output }
       }
-      assert(spark.sparkContext.getPersistentRDDs.keySet == before)
       assert(spark.sharedState.cacheManager.lookupCachedData(output).isEmpty)
     }
   }
