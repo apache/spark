@@ -2846,7 +2846,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           assert(df.schema.head.dataType === VarcharType(5))
           checkAnswer(df, Row("cd"))
         }
-        // Oversize non-blank text values fail on scan, matching parquet/orc/csv/avro.
+        // Oversize non-blank text values fail on scan, matching parquet/orc/avro.
         Seq("CHAR", "VARCHAR").foreach { typ =>
           withTempPath { dir =>
             val path = dir.getCanonicalPath
@@ -3971,23 +3971,31 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
 
   test("SPARK-60243: deep nested CHAR/VARCHAR file round-trips under standardSemantics") {
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val nestedTypes = Seq(
+        ("CHAR(4)", CharType(4), "c", "<ab  >", "<xy  >"),
+        ("VARCHAR(4)", VarcharType(4), "v", "<ab>", "<xy>"))
       Seq("parquet", "orc").foreach { fmt =>
-        withTempPath { dir =>
-          val path = dir.getCanonicalPath
-          sql("SELECT array(array(cast('ab' AS CHAR(4)))) AS a")
-            .write.mode("overwrite").format(fmt).save(path)
-          val df = spark.read.format(fmt).load(path)
-          assert(df.schema.head.dataType === ArrayType(ArrayType(CharType(4))))
-          checkAnswer(df.selectExpr("concat('<', a[0][0], '>')"), Row("<ab  >"))
-        }
-        withTempPath { dir =>
-          val path = dir.getCanonicalPath
-          sql("SELECT array(named_struct('c', cast('xy' AS CHAR(4)))) AS a")
-            .write.mode("overwrite").format(fmt).save(path)
-          val df = spark.read.format(fmt).load(path)
-          assert(df.schema.head.dataType ===
-            ArrayType(StructType(Seq(StructField("c", CharType(4), nullable = true)))))
-          checkAnswer(df.selectExpr("concat('<', a[0].c, '>')"), Row("<xy  >"))
+        nestedTypes.foreach { case (ddl, dt, field, arrExpected, structExpected) =>
+          withTempPath { dir =>
+            val path = dir.getCanonicalPath
+            sql(s"SELECT array(array(cast('ab' AS $ddl))) AS a")
+              .write.mode("overwrite").format(fmt).save(path)
+            val df = spark.read.format(fmt).load(path)
+            assert(df.schema.head.dataType === ArrayType(ArrayType(dt)), s"$fmt $ddl array")
+            checkAnswer(df.selectExpr("concat('<', a[0][0], '>')"), Row(arrExpected))
+          }
+          withTempPath { dir =>
+            val path = dir.getCanonicalPath
+            sql(s"SELECT array(named_struct('$field', cast('xy' AS $ddl))) AS a")
+              .write.mode("overwrite").format(fmt).save(path)
+            val df = spark.read.format(fmt).load(path)
+            assert(df.schema.head.dataType ===
+              ArrayType(StructType(Seq(StructField(field, dt, nullable = true)))),
+              s"$fmt $ddl struct")
+            checkAnswer(
+              df.selectExpr(s"concat('<', a[0].$field, '>')"),
+              Row(structExpected))
+          }
         }
       }
     }
