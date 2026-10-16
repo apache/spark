@@ -148,6 +148,11 @@ case class BatchScanExec(
         }
         k.copy(expressions = projectedExpressions, numPartitions = newPartValues.length,
           partitionValues = newPartValues,
+          originalPartitionValues = spjParams.joinKeyPositions match {
+            case Some(projectionPositions) => k.originalPartitionValues.map(
+              KeyGroupedPartitioning.project(k.expressions, projectionPositions, _))
+            case None => k.originalPartitionValues
+          },
           isPartiallyClustered = spjParams.applyPartialClustering)
       case p => p
     }
