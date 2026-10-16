@@ -145,7 +145,7 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
     # the value of it this handler serves; None when the eval type has a single handler.
     variant_conf: ClassVar[Optional[str]] = None
     variant_value: ClassVar[Any] = None
-    # Whether the handler's UDFs return an iterator; see is_iter_based.
+    # Whether the handler's UDFs return an iterator.
     _iter_based: ClassVar[bool] = False
 
     def __init__(
