@@ -1971,7 +1971,7 @@ case class UnixTimestamp(
 /**
  * Gets a timestamp from a string or a date. For a nanosecond `TIMESTAMP_NTZ(p)` /
  * `TIMESTAMP_LTZ(p)` result `dataType`, a string is parsed with up to 9 fractional digits and a
- * nanosecond input is floored to `p`; other inputs keep their microsecond-path value.
+ * nanosecond input is truncated to `p`; other inputs keep their microsecond-path value.
  */
 case class GetTimestamp(
     left: Expression,
