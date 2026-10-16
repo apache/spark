@@ -37,7 +37,7 @@ groups = {
     "xml_funcs", "lambda_funcs", "collection_funcs",
     "url_funcs", "hash_funcs", "struct_funcs",
     "table_funcs", "variant_funcs", "protobuf_funcs", "sketch_funcs",
-    "st_funcs"
+    "st_funcs", "vector_funcs"
 }
 
 
