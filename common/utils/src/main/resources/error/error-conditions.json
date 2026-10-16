@@ -205,6 +205,11 @@
         "message" : [
           "Unsupported as-of join direction '<direction>'. Supported as-of join direction include: <supported>."
         ]
+      },
+      "UNSUPPORTED_NEAREST_KEY_TYPE" : {
+        "message" : [
+          "Nearest sort-merge as-of joins do not support <dataType> keys. Cast the keys to a numeric or datetime type."
+        ]
       }
     },
     "sqlState" : "42604"
@@ -6725,6 +6730,12 @@
     },
     "sqlState" : "42846"
   },
+  "PARQUET_FIELD_REQUESTED_MORE_THAN_ONCE" : {
+    "message" : [
+      "Requested fields <requestedFields> resolve to the same Parquet field <parquetField>, which can be read only once. When <fieldIdReadConf> is enabled, a requested field with a field ID is resolved by ID and any other requested field by name. Request the Parquet field only once, and refer to the resulting column more than once in the query instead."
+    ],
+    "sqlState" : "KD000"
+  },
   "PARQUET_TYPE_ILLEGAL" : {
     "message" : [
       "Illegal Parquet type: <parquetType>."
@@ -8127,6 +8138,12 @@
     ],
     "sqlState" : "XXKST"
   },
+  "STREAM_STREAM_JOIN_INCOMPATIBLE_STATE_STORE_CONFIGS" : {
+    "message" : [
+      "The configuration values `<stateFormatVersionConfig>=<stateFormatVersion>` and `<mergeOperatorVersionConfig>=<mergeOperatorVersion>` are incompatible. Stream-stream join state format version <stateFormatVersion> requires RocksDB merge operator version <requiredMergeOperatorVersion>. Start a new query with `<mergeOperatorVersionConfig>` set to <requiredMergeOperatorVersion> and a new checkpoint."
+    ],
+    "sqlState" : "42K06"
+  },
   "STREAM_STREAM_JOIN_INCONSISTENT_STATE" : {
     "message" : [
       "Detected inconsistency in stream-stream join state."
@@ -8766,6 +8783,13 @@
       }
     },
     "sqlState" : "42000"
+  },
+  "UNSUPPORTED_AVRO_CHAR_VARCHAR_MAP_KEY" : {
+    "message" : [
+      "The Avro map key <key> is not a valid key for the map key type <dataType>.",
+      "A CHAR key must match the declared length exactly and a VARCHAR key must not exceed it; keys are never padded or trimmed. Use a STRING map key to accept any name."
+    ],
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_BUILT_IN_JDBC_DIALECT" : {
     "message" : [
@@ -9605,6 +9629,13 @@
     ],
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_JSON_CHAR_VARCHAR_MAP_KEY" : {
+    "message" : [
+      "The JSON object name <key> is not a valid key for the map key type <dataType>.",
+      "A CHAR key must match the declared length exactly and a VARCHAR key must not exceed it; keys are never padded or trimmed. Use a STRING map key to accept any name."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_MERGE_CONDITION" : {
     "message" : [
       "MERGE operation contains unsupported <condName> condition."
@@ -9896,6 +9927,13 @@
     ],
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_XML_CHAR_VARCHAR_MAP_KEY" : {
+    "message" : [
+      "XML map keys of CHAR or VARCHAR cannot be padded or trimmed.",
+      "The key <key> is not valid for type <dataType>."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNTYPED_SCALA_UDF" : {
     "message" : [
       "You're using untyped Scala UDF, which does not have the input type information. Spark may blindly pass null to the Scala closure with primitive-type argument, and the closure will see the default value of the Java type for the null argument, e.g. `udf((x: Int) => x, IntegerType)`, the result is 0 for null input. To get rid of this error, you could:",
@@ -10107,7 +10145,7 @@
   },
   "WINDOW_FUNCTION_PARTITION_SIZE_EXCEEDS_LIMIT" : {
     "message" : [
-      "Cannot evaluate the window function because the window partition has <numRows> rows, which exceeds the maximum of 2,147,483,647 (2^31 - 1) rows supported per window partition. Reduce the partition size, for example by adding more expressions to the PARTITION BY clause."
+      "Cannot evaluate the window function because the window partition has <numRows> rows, which exceeds the maximum of 2,147,483,647 (2^31 - 1) rows that at least one of its window functions supports per partition. Reduce the partition size, for example by adding more expressions to the PARTITION BY clause."
     ],
     "sqlState" : "54000"
   },
@@ -11042,11 +11080,6 @@
   "_LEGACY_ERROR_TEMP_1338" : {
     "message" : [
       "Sinks cannot request distribution and ordering in continuous execution mode."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2017" : {
-    "message" : [
-      "not resolved."
     ]
   },
   "_LEGACY_ERROR_TEMP_2026" : {

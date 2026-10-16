@@ -1759,12 +1759,16 @@ case class Unpivot(
 
   def canBeCoercioned: Boolean = values.exists(_.nonEmpty) &&
     values.exists(_.forall(_.forall(_.resolved))) &&
+    // values are coerced by position, so every value group must have one value per value column,
+    // otherwise CheckAnalysis reports UNPIVOT_VALUE_SIZE_MISMATCH
+    values.exists(_.forall(_.length == valueColumnNames.length)) &&
     // when no ids are given, values must be Attributes (column names) to allow detecting ids
     // coercion will add aliases, would disallow detecting ids, so defer coercion after id detection
     ids.exists(_.forall(_.resolved))
 
   def valuesTypeCoercioned: Boolean = canBeCoercioned &&
-    // all inner values at position idx must have the same data type
+    // all inner values at position idx must have the same data type, ignoring nullability;
+    // UnpivotTransformer merges the nullability of the values into the value column
     values.get.head.zipWithIndex.forall { case (v, idx) =>
       values.get.tail.forall(vals => DataTypeUtils.sameType(vals(idx).dataType, v.dataType))
     }
@@ -2628,6 +2632,9 @@ object LateralJoin {
 
 /**
  * A logical plan for as-of join.
+ * @param direction Which matching right row to keep: the last for [[Backward]], the first for
+ *                  [[Forward]], the closest by `orderExpression` for [[Nearest]].
+ *                  `asOfCondition` and `orderExpression` must be built for the same direction.
  */
 case class AsOfJoin(
     left: LogicalPlan,
@@ -2637,6 +2644,7 @@ case class AsOfJoin(
     joinType: JoinType,
     orderExpression: Expression,
     toleranceAssertion: Option[Expression],
+    direction: AsOfJoinDirection,
     usingColumns: Option[Seq[String]] = None,
     matchLeftOperand: Option[Expression] = None,
     matchOperator: Option[MatchComparisonOperator] = None,
@@ -2707,12 +2715,14 @@ object AsOfJoin {
     val asOfCond = makeAsOfCond(leftAsOf, rightAsOf, tolerance, allowExactMatches, direction)
     val orderingExpr = makeOrderingExpr(leftAsOf, rightAsOf, direction)
     AsOfJoin(left, right, asOfCond, condition, joinType,
-      orderingExpr, tolerance.map(t => GreaterThanOrEqual(t, Literal.default(t.dataType))))
+      orderingExpr, tolerance.map(t => GreaterThanOrEqual(t, Literal.default(t.dataType))),
+      direction)
   }
 
   /**
    * Build an [[AsOfJoin]] from a SQL `MATCH_CONDITION (left_expr op right_expr)` clause.
-   * Operand normalization is deferred until analysis when join inputs are resolved.
+   * Operand normalization is deferred until analysis when join inputs are resolved. Analysis
+   * then replaces the placeholder `asOfCondition`, `orderExpression`, and `direction`.
    */
   def fromMatchCondition(
       left: LogicalPlan,
@@ -2731,6 +2741,7 @@ object AsOfJoin {
       joinType = joinType,
       orderExpression = Literal(0),
       toleranceAssertion = None,
+      direction = operator.direction,
       usingColumns = usingColumns,
       matchLeftOperand = Some(leftExpr),
       matchOperator = Some(operator),
