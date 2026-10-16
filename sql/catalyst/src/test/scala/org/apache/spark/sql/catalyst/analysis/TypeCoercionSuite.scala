@@ -393,7 +393,7 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
     shouldCast(TimestampNTZType, TypeCollection(NumericType, DateType), DateType)
   }
 
-  test("implicit type cast - functions without nanos support keep the nanos input") {
+  test("implicit type cast - nanos arguments of functions without nanos support") {
     val nanos = Literal.default(TimestampNTZNanosType(9))
     Seq(
       MonthsBetween(nanos, nanos, Literal(true)),
@@ -401,6 +401,7 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
       new ApproximatePercentile(nanos, Literal(0.5))).foreach { e =>
       ruleTest(implicitTypeCastsRule, e, e)
     }
+    // A date-valued function still takes the nanos input as DATE.
     ruleTest(implicitTypeCastsRule, LastDay(nanos), LastDay(Cast(nanos, DateType)))
   }
 
