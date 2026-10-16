@@ -878,6 +878,50 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
     allocator.close()
   }
 
+  test("timestamp nanos are floored to the column precision") {
+    // (epochNanos, epochMicros, nanosWithinMicro), with more digits than p = 7 / 8 allow.
+    val values = Seq(
+      (123456789L, 123456L, 789),
+      (123456712L, 123456L, 712),
+      (123456700L, 123456L, 700),
+      // pre-epoch values floor toward -inf, not toward zero
+      (-1L, -1L, 999),
+      (-123456211L, -123457L, 789),
+      (Long.MaxValue, 9223372036854775L, 807),
+      (Long.MinValue, -9223372036854776L, 192))
+    Seq(7, 8, 9).foreach { p =>
+      val grid = Map(7 -> 100, 8 -> 10, 9 -> 1)(p)
+      Seq[(DataType, String)](
+        (TimestampNTZNanosType(p), null),
+        (TimestampLTZNanosType(p), "UTC")).foreach { case (dt, timeZoneId) =>
+        val allocator = ArrowUtils.rootAllocator.newChildAllocator(s"$dt", 0, Long.MaxValue)
+        val vector = ArrowUtils.toArrowField("ts", dt, nullable = true, timeZoneId)
+          .createVector(allocator).asInstanceOf[TimeStampVector]
+        vector.allocateNew()
+        values.zipWithIndex.foreach { case ((epochNanos, _, _), i) =>
+          vector.setSafe(i, epochNanos)
+        }
+        vector.setNull(values.length)
+        vector.setValueCount(values.length + 1)
+
+        val columnVector = new ArrowColumnVector(vector)
+        assert(columnVector.dataType === dt)
+        values.zipWithIndex.foreach { case ((_, epochMicros, nanosWithinMicro), i) =>
+          val got = dt match {
+            case _: TimestampNTZNanosType => columnVector.getTimestampNTZNanos(i)
+            case _: TimestampLTZNanosType => columnVector.getTimestampLTZNanos(i)
+          }
+          assert(got.epochMicros === epochMicros)
+          assert(got.nanosWithinMicro === nanosWithinMicro / grid * grid)
+        }
+        assert(columnVector.isNullAt(values.length))
+
+        columnVector.close()
+        allocator.close()
+      }
+    }
+  }
+
   private def withDecimalVector(precision: Int, scale: Int)(f: DecimalVector => Unit): Unit = {
     Using.resource(new RootAllocator()) { allocator =>
       Using.resource(new DecimalVector("decimal", allocator, precision, scale))(f)

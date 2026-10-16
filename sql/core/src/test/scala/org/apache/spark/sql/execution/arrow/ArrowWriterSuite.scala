@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.arrow
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.arrow.vector.{VectorSchemaRoot, ViewVarBinaryVector, ViewVarCharVector}
+import org.apache.arrow.vector.{TimeStampVector, VectorSchemaRoot, ViewVarBinaryVector, ViewVarCharVector}
 import org.apache.arrow.vector.complex.ListViewVector
 import org.apache.arrow.vector.types.pojo.{ArrowType, FieldType}
 
@@ -193,7 +193,7 @@ class ArrowWriterSuite extends SparkFunSuite {
       fromEpochNanos(9000000000000000000L),
       fromEpochNanos(-9000000000000000000L))
 
-    def check(dt: DataType, timeZoneId: String): Unit = {
+    def check(dt: DataType, timeZoneId: String, grid: Int): Unit = {
       val schema = new StructType().add("value", dt, nullable = true)
       val writer = ArrowWriter.create(schema, timeZoneId)
       assert(writer.schema === schema)
@@ -203,26 +203,27 @@ class ArrowWriterSuite extends SparkFunSuite {
       }
       writer.finish()
 
-      val reader = new ArrowColumnVector(writer.root.getFieldVectors().get(0))
+      val vector = writer.root.getFieldVectors().get(0).asInstanceOf[TimeStampVector]
+      val reader = new ArrowColumnVector(vector)
       values.zipWithIndex.foreach { case (v, rowId) =>
+        assert(vector.get(rowId) === v.epochMicros * 1000L + v.nanosWithinMicro)
         val got = dt match {
           case _: TimestampNTZNanosType => reader.getTimestampNTZNanos(rowId)
           case _: TimestampLTZNanosType => reader.getTimestampLTZNanos(rowId)
         }
         assert(got.epochMicros === v.epochMicros)
-        assert(got.nanosWithinMicro === v.nanosWithinMicro)
+        assert(got.nanosWithinMicro === v.nanosWithinMicro / grid * grid)
       }
       assert(reader.isNullAt(values.length))
       writer.root.close()
     }
 
-    check(TimestampNTZNanosType(9), null)
-    check(TimestampLTZNanosType(9), "UTC")
-    // The value path packs the full nanosecond value regardless of the column precision (precision
-    // is carried in the Arrow field metadata, not the value), so p=7 round-trips identically to
-    // p=9; exercising it guards the value path against a future precision-enforcing change.
-    check(TimestampNTZNanosType(7), null)
-    check(TimestampLTZNanosType(7), "UTC")
+    check(TimestampNTZNanosType(9), null, grid = 1)
+    check(TimestampLTZNanosType(9), "UTC", grid = 1)
+    // The writer packs the full nanosecond value regardless of the column precision (precision is
+    // carried in the Arrow field metadata, not the value); the reader floors it to the precision.
+    check(TimestampNTZNanosType(7), null, grid = 100)
+    check(TimestampLTZNanosType(7), "UTC", grid = 100)
   }
 
   test("timestamp nanos out of range raises DATETIME_OVERFLOW") {
