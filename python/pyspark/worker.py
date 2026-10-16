@@ -99,24 +99,7 @@ def chain(f, g):
     return lambda *a: g(f(*a))
 
 
-def _is_iter_based(eval_type: int) -> bool:
-    return eval_type in (
-        PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
-        PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
-        # Iterator UDFs lifted out of a higher-order function lambda keep the iterator contract:
-        # the user function still consumes and produces an iterator of batches; the worker only
-        # feeds it the flattened elements and re-nests the results. See ExtractPythonUDFFromLambda.
-        PythonEvalType.SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF,
-        PythonEvalType.SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF,
-        PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
-        PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
-        PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
-        PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
-        PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
-    )
-
-
-def wrap_perf_profiler(f, eval_type, result_id):
+def wrap_perf_profiler(f, iter_based, result_id):
     from pyspark.sql.profiler import ProfileResultsParam, ProfileResultsParamV2, WorkerPerfProfiler
 
     accumulator = _deserialize_accumulator(
@@ -126,7 +109,7 @@ def wrap_perf_profiler(f, eval_type, result_id):
         SpecialAccumulatorIds.SQL_UDF_PROFIER_V2, {}, ProfileResultsParamV2
     )
 
-    if _is_iter_based(eval_type):
+    if iter_based:
 
         def profiling_func(*args, **kwargs):
             iterator = iter(f(*args, **kwargs))
@@ -148,7 +131,7 @@ def wrap_perf_profiler(f, eval_type, result_id):
     return profiling_func
 
 
-def wrap_memory_profiler(f, eval_type, result_id):
+def wrap_memory_profiler(f, iter_based, result_id):
     import pyspark.memory_profiler_ext
     from pyspark.sql.profiler import (
         ProfileResultsParam,
@@ -167,7 +150,7 @@ def wrap_memory_profiler(f, eval_type, result_id):
         SpecialAccumulatorIds.SQL_UDF_PROFIER_V2, {}, ProfileResultsParamV2
     )
 
-    if _is_iter_based(eval_type):
+    if iter_based:
 
         def profiling_func(*args, **kwargs):
             g = f(*args, **kwargs)
@@ -191,7 +174,8 @@ def wrap_memory_profiler(f, eval_type, result_id):
     return profiling_func
 
 
-def read_single_udf(pickleSer, udf_info, eval_type, runner_conf, udf_index):
+def read_single_udf(pickleSer, udf_info, handler_cls, runner_conf, udf_index):
+    eval_type = handler_cls.eval_type
     chained_func = None
     for udf in udf_info.udfs:
         f, return_type = read_command(pickleSer, udf)
@@ -208,9 +192,13 @@ def read_single_udf(pickleSer, udf_info, eval_type, runner_conf, udf_index):
     else:
         profiler = runner_conf.udf_profiler
     if profiler == "perf":
-        profiling_func = wrap_perf_profiler(chained_func, eval_type, udf_info.result_id)
+        profiling_func = wrap_perf_profiler(
+            chained_func, handler_cls.iter_based_udf, udf_info.result_id
+        )
     elif profiler == "memory":
-        profiling_func = wrap_memory_profiler(chained_func, eval_type, udf_info.result_id)
+        profiling_func = wrap_memory_profiler(
+            chained_func, handler_cls.iter_based_udf, udf_info.result_id
+        )
     else:
         profiling_func = chained_func
 
@@ -441,7 +429,7 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                 assert isinstance(init_info.udf_info, list)
                 udfs = [
                     read_single_udf(
-                        pickleSer, udf_info, eval_type, runner_conf, udf_index=udf_index
+                        pickleSer, udf_info, handler_cls, runner_conf, udf_index=udf_index
                     )
                     for udf_index, udf_info in enumerate(init_info.udf_info)
                 ]

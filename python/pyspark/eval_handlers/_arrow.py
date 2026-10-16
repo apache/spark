@@ -130,6 +130,7 @@ class ArrowGroupedMapIterUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
     to the declared schema."""
 
     eval_type = PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF
+    iter_based_udf = True
 
     def __init__(
         self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
@@ -680,6 +681,7 @@ class ArrowMapUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     columns on the wire and wrapped back into a single struct column."""
 
     eval_type = PythonEvalType.SQL_MAP_ARROW_ITER_UDF
+    iter_based_udf = True
 
     def __init__(
         self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
@@ -723,6 +725,7 @@ class ArrowScalarIterUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     result and verify the total row count matches the input."""
 
     eval_type = PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF
+    iter_based_udf = True
 
     def __init__(
         self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf

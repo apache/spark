@@ -138,6 +138,9 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
     # the value of it this handler serves; None when the eval type has a single handler.
     variant_conf: ClassVar[Optional[str]] = None
     variant_value: ClassVar[Any] = None
+    # Whether each UDF returns an iterator that the handler consumes lazily, so the worker
+    # profiles each step of the iterator rather than the call that creates it.
+    iter_based_udf: ClassVar[bool] = False
 
     def __init__(
         self, udfs: list[tuple[Any, ...]], runner_conf: "RunnerConf", eval_conf: "EvalConf"

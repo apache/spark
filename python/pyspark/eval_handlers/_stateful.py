@@ -77,6 +77,7 @@ class PandasGroupedMapWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]
     into count/data/state RecordBatches."""
 
     eval_type = PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE
+    iter_based_udf = True
 
     # The output RecordBatch has three struct fields, accessed by position
     # (_0/_1/_2, not by name): a count column indicating how many data and
