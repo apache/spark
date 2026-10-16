@@ -23,6 +23,8 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.vector.{FieldVector, ValueVector}
+import org.apache.arrow.vector.complex.{LargeListViewVector, ListViewVector}
 import org.apache.arrow.vector.util.VectorAppender
 
 import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory, SparkEnv, SparkException, TaskContext}
@@ -150,11 +152,16 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
 
       val inputColumnIndices = resolveColumnIndices(allInputs.toSeq)
 
-      // Peek at first batch to check if Arrow-backed.
+      // Peek at first batch to check if Arrow-backed, with vectors that the Arrow columnar path
+      // can copy.
       val peekIter = new PeekableIterator(inputIter)
       val isArrow = peekIter.peek().exists { batch =>
-        batch.numCols() > 0 &&
-          (0 until batch.numCols()).forall(batch.column(_).isInstanceOf[ArrowColumnVector])
+        batch.numCols() > 0 && (0 until batch.numCols()).forall { i =>
+          batch.column(i) match {
+            case arrow: ArrowColumnVector => isCopyable(arrow.getValueVector)
+            case _ => false
+          }
+        }
       }
 
       if (inputColumnIndices.isDefined && isArrow) {
@@ -199,21 +206,59 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
       // batch once it is asked for the next one, as ColumnarBatch allows. So they are copied, and
       // released once the output batch that holds them is no longer used: when the next output
       // batch is produced, or at the end of the task. In pipelined mode, add() runs in the writer
-      // thread and poll() in the task thread.
+      // thread and poll() in the task thread. The copies are not counted by the task memory
+      // manager, and cannot spill: their memory grows with how far the input runs ahead of the
+      // results, as the memory of a producer that allocates new vectors for every batch would.
       val allocator = ArrowUtils.rootAllocator.newChildAllocator(
         s"pass-through columns of Python UDFs in task ${context.taskAttemptId()}",
         0, Long.MaxValue)
       val passThruQueue = new ConcurrentLinkedQueue[(Array[ColumnVector], Int)]()
       var outputPassThruCols = Array.empty[ColumnVector]
+      // This listener must be registered before `compute`, so that it runs after the listener of
+      // the runner, which stops the writer thread in pipelined mode. Until the runner waits for
+      // the writer to exit (SPARK-60113), the task can still complete while the writer copies a
+      // batch: a copy made once the task completed is released right away, and the allocator is
+      // closed by whichever of the two ends last.
+      val lock = new Object
+      var completed = false
+      var copying = false
       context.addTaskCompletionListener[Unit] { _ =>
-        outputPassThruCols.foreach(_.close())
-        passThruQueue.forEach(_._1.foreach(_.close()))
-        passThruQueue.clear()
-        allocator.close()
+        val closeAllocator = lock.synchronized {
+          completed = true
+          outputPassThruCols.foreach(_.close())
+          passThruQueue.forEach(_._1.foreach(_.close()))
+          passThruQueue.clear()
+          !copying
+        }
+        if (closeAllocator) {
+          allocator.close()
+        }
       }
 
       val bufferedIter = inputIter.map { batch =>
-        passThruQueue.add((copyColumns(batch, allocator), batch.numRows()))
+        val copy = lock.synchronized {
+          copying = !completed
+          copying
+        }
+        if (copy) {
+          var copies: Array[ColumnVector] = null
+          try {
+            copies = copyColumns(batch, allocator)
+          } finally {
+            val closeAllocator = lock.synchronized {
+              copying = false
+              if (completed) {
+                Option(copies).foreach(_.foreach(_.close()))
+              } else if (copies != null) {
+                passThruQueue.add((copies, batch.numRows()))
+              }
+              completed
+            }
+            if (closeAllocator) {
+              allocator.close()
+            }
+          }
+        }
         batch
       }
 
@@ -235,7 +280,9 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
         assert(passThruRows == numRows,
           s"Batch size mismatch: pass-through has " +
             s"$passThruRows rows but UDF result has $numRows rows.")
-        // The previous output batch is no longer used once the next one is asked for.
+        // The previous output batch is no longer used once the next one is asked for. A columnar
+        // parent, such as the Arrow cache, may already have closed it with `closeIfFreeable`:
+        // closing the columns again has no effect.
         outputPassThruCols.foreach(_.close())
         outputPassThruCols = passThruCols
         new ColumnarBatch(passThruCols ++ resultCols, numRows)
@@ -249,7 +296,7 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
       val copies = ArrayBuffer.empty[ColumnVector]
       try {
         childOutput.indices.foreach { i =>
-          copies += copyColumn(batch.column(i), allocator)
+          copies += copyColumn(batch.column(i), childOutput(i).name, batch.numRows(), allocator)
         }
         copies.toArray
       } catch {
@@ -259,10 +306,19 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
       }
     }
 
-    private def copyColumn(column: ColumnVector, allocator: BufferAllocator): ColumnVector = {
+    private def copyColumn(
+        column: ColumnVector,
+        name: String,
+        numRows: Int,
+        allocator: BufferAllocator): ColumnVector = {
       column match {
         case arrow: ArrowColumnVector =>
           val source = arrow.getValueVector
+          // The copy has the values of the vector, which must cover the rows of the batch.
+          if (source.getValueCount < numRows) {
+            throw SparkException.internalError(s"The Arrow vector of the column $name has " +
+              s"${source.getValueCount} values, but its batch has $numRows rows.")
+          }
           val copy = source.getField.createVector(allocator)
           try {
             copy.setInitialCapacity(source.getValueCount)
@@ -279,6 +335,13 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
           throw SparkException.internalError(
             s"Expected an Arrow-backed pass-through column, but got ${other.getClass.getName}.")
       }
+    }
+
+    /** Whether `VectorAppender` can copy the vector: it cannot copy list views. */
+    private def isCopyable(vector: ValueVector): Boolean = vector match {
+      case _: ListViewVector | _: LargeListViewVector => false
+      case v: FieldVector => v.getChildrenFromFields.asScala.forall(isCopyable)
+      case _ => true
     }
 
     /**

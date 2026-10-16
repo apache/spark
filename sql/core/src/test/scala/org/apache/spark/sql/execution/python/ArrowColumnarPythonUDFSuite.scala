@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.execution.python
 
-import org.apache.spark.sql.IntegratedUDFTestUtils
+import org.apache.spark.SparkConf
+import org.apache.spark.internal.config.Python.PYTHON_UDF_PIPELINED_EXECUTION
+import org.apache.spark.sql.{DataFrame, IntegratedUDFTestUtils}
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -41,14 +44,23 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
       numRows: Int = 100,
       numPartitions: Int = 1,
       reuseVectors: Boolean = false,
-      batchSize: Int = ArrowBackedDataSourceV2.BATCH_SIZE) = {
+      batchSize: Int = ArrowBackedDataSourceV2.BATCH_SIZE,
+      extraColumn: Option[String] = None) = {
     spark.read
       .format(arrowSource)
       .option("numRows", numRows.toString)
       .option("numPartitions", numPartitions.toString)
       .option("reuseVectors", reuseVectors.toString)
       .option("batchSize", batchSize.toString)
+      .options(extraColumn.map("extraColumn" -> _).toMap)
       .load()
+  }
+
+  /** Checks that the inputs of the UDFs are columns, as the Arrow columnar path requires. */
+  private def assertColumnInputs(df: DataFrame): Unit = {
+    val arrowExec = collectNodes[ArrowEvalPythonExec](df.queryExecution.executedPlan)
+    assert(arrowExec.nonEmpty && arrowExec.head.child.supportsColumnar)
+    assert(arrowExec.head.udfs.flatMap(_.children).forall(_.isInstanceOf[AttributeReference]))
   }
 
   private def collectNodes[T <: SparkPlan](
@@ -124,8 +136,7 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
         // the input is a column, and the batches take the Arrow columnar path.
         val result = readArrowSource(numRows = numRows, reuseVectors = true, batchSize = 100)
           .selectExpr("id", "name", "value", "data", "arrow_reuse_udf(name) as udf_name")
-        val arrowExec = collectNodes[ArrowEvalPythonExec](result.queryExecution.executedPlan)
-        assert(arrowExec.nonEmpty && arrowExec.head.child.supportsColumnar)
+        assertColumnInputs(result)
 
         val rows = result.collect()
         assert(rows.map(_.getInt(0)).toSeq == (0 until numRows))
@@ -134,6 +145,33 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
           assert(row.getString(1) == s"row_$id", s"name mismatch for id $id")
           assert(row.getString(3) == s"data_$id", s"data mismatch for id $id")
           assert(row.getString(4) == s"row_$id", s"UDF result mismatch for id $id")
+        }
+      }
+    }
+  }
+
+  test("Arrow-backed source with columns that the Arrow columnar path does not copy") {
+    assume(shouldTestPandasUDFs)
+    withSQLConf(SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true") {
+      val pandasUDF = TestScalarPandasUDF(
+        name = "arrow_extra_udf", returnType = Some(StringType))
+      registerTestUDF(pandasUDF, spark)
+
+      // A column that is not Arrow-backed, or a list view, which VectorAppender cannot copy:
+      // these batches take the row queue path, which copies the rows.
+      Seq("onHeap", "listView").foreach { extraColumn =>
+        val result = readArrowSource(numRows = 2000, reuseVectors = true, batchSize = 100,
+            extraColumn = Some(extraColumn))
+          .selectExpr("id", "name", "value", "data", "extra", "arrow_extra_udf(name) as udf_name")
+        assertColumnInputs(result)
+
+        val rows = result.collect()
+        assert(rows.map(_.getInt(0)).toSeq == (0 until 2000))
+        rows.foreach { row =>
+          val id = row.getInt(0)
+          val extra = if (extraColumn == "onHeap") row.getInt(4) else row.getSeq[Int](4).head
+          assert(extra == id, s"$extraColumn mismatch for id $id")
+          assert(row.getString(5) == s"row_$id", s"UDF result mismatch for id $id")
         }
       }
     }
@@ -214,4 +252,10 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
       }
     }
   }
+}
+
+/** Runs the tests of [[ArrowColumnarPythonUDFSuite]] with pipelined data transfer. */
+class ArrowColumnarPythonUDFPipelinedSuite extends ArrowColumnarPythonUDFSuite {
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(PYTHON_UDF_PIPELINED_EXECUTION, true)
 }

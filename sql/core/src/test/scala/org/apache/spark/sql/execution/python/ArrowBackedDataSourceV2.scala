@@ -23,11 +23,14 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector._
+import org.apache.arrow.vector.complex.ListViewVector
+import org.apache.arrow.vector.types.pojo.{ArrowType, FieldType}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read._
+import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -55,7 +58,7 @@ import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, Column
 class ArrowBackedDataSourceV2 extends TableProvider {
 
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
-    ArrowBackedDataSourceV2.SCHEMA
+    ArrowBackedDataSourceV2.schema(options)
   }
 
   override def getTable(
@@ -77,6 +80,19 @@ object ArrowBackedDataSourceV2 {
   val DEFAULT_NUM_ROWS: Int = 10000
   val DEFAULT_NUM_PARTITIONS: Int = 2
   val BATCH_SIZE: Int = 1024
+
+  /**
+   * The schema, with the column `extra` of the option `extraColumn` of the reusing reader:
+   * "onHeap" for an int column that is not Arrow-backed, "listView" for an array<int> column in a
+   * list view.
+   */
+  def schema(options: CaseInsensitiveStringMap): StructType = {
+    Option(options.get("extraColumn")) match {
+      case Some("onHeap") => SCHEMA.add("extra", IntegerType)
+      case Some("listView") => SCHEMA.add("extra", ArrayType(IntegerType))
+      case _ => SCHEMA
+    }
+  }
 }
 
 /** Table that supports batch read with columnar output. */
@@ -85,7 +101,7 @@ private class ArrowBackedTable(options: CaseInsensitiveStringMap)
 
   override def name(): String = "ArrowBackedTestTable"
 
-  override def schema(): StructType = ArrowBackedDataSourceV2.SCHEMA
+  override def schema(): StructType = ArrowBackedDataSourceV2.schema(options)
 
   override def capabilities(): util.Set[TableCapability] = {
     util.EnumSet.of(TableCapability.BATCH_READ)
@@ -109,7 +125,7 @@ private class ArrowBackedScanBuilder(options: CaseInsensitiveStringMap)
 
   override def toBatch: Batch = this
 
-  override def readSchema(): StructType = ArrowBackedDataSourceV2.SCHEMA
+  override def readSchema(): StructType = ArrowBackedDataSourceV2.schema(options)
 
   override def planInputPartitions(): Array[InputPartition] = {
     val rowsPerPartition = numRows / numPartitions
@@ -126,9 +142,11 @@ private class ArrowBackedScanBuilder(options: CaseInsensitiveStringMap)
     options.getBoolean("reuseVectors", false)
   private val batchSize =
     options.getInt("batchSize", ArrowBackedDataSourceV2.BATCH_SIZE)
+  private val extraColumn =
+    Option(options.get("extraColumn"))
 
   override def createReaderFactory(): PartitionReaderFactory = {
-    new ArrowBackedReaderFactory(columnar, reuseVectors, batchSize)
+    new ArrowBackedReaderFactory(columnar, reuseVectors, batchSize, extraColumn)
   }
 }
 
@@ -147,7 +165,8 @@ private case class ArrowPartition(start: Int, end: Int)
 private class ArrowBackedReaderFactory(
     columnar: Boolean,
     reuseVectors: Boolean,
-    batchSize: Int)
+    batchSize: Int,
+    extraColumn: Option[String])
   extends PartitionReaderFactory {
 
   override def supportColumnarReads(
@@ -156,7 +175,7 @@ private class ArrowBackedReaderFactory(
   override def createReader(
       partition: InputPartition): PartitionReader[InternalRow] = {
     val ArrowPartition(start, end) = partition
-    val inner = new ArrowBackedPartitionReader(start, end)
+    val inner = new ArrowBackedPartitionReader(start, end, batchSize)
     // Wrap columnar reader as row reader.
     new PartitionReader[InternalRow] {
       private var rowIter: java.util.Iterator[InternalRow] = _
@@ -175,20 +194,25 @@ private class ArrowBackedReaderFactory(
       partition: InputPartition): PartitionReader[ColumnarBatch] = {
     val ArrowPartition(start, end) = partition
     if (reuseVectors) {
-      new ReusingArrowPartitionReader(start, end, batchSize)
+      new ReusingArrowPartitionReader(start, end, batchSize, extraColumn)
     } else {
-      new ArrowBackedPartitionReader(start, end)
+      new ArrowBackedPartitionReader(start, end, batchSize)
     }
   }
 }
 
 /**
- * Reads the same rows as [[ArrowBackedPartitionReader]], with short values in `data` and batches
- * of `batchSize` rows, but refills the same vectors for every batch and closes them once the
- * reader is closed, as columnar readers may: a batch is only valid until the next one.
+ * Reads the same rows as [[ArrowBackedPartitionReader]], with short values in `data`, but refills
+ * the same vectors for every batch and closes them once the reader is closed, as columnar readers
+ * may: a batch is only valid until the next one. The column `extra` has the id of each row, in
+ * the vector that [[ArrowBackedDataSourceV2.schema]] describes.
  */
-private class ReusingArrowPartitionReader(start: Int, end: Int, batchSize: Int)
-    extends PartitionReader[ColumnarBatch] {
+private class ReusingArrowPartitionReader(
+    start: Int,
+    end: Int,
+    batchSize: Int,
+    extraColumn: Option[String])
+  extends PartitionReader[ColumnarBatch] {
   private var current = start
   private val allocator = ArrowUtils.rootAllocator.newChildAllocator(
     s"reusing-arrow-test-reader-$start", 0, Long.MaxValue)
@@ -196,8 +220,15 @@ private class ReusingArrowPartitionReader(start: Int, end: Int, batchSize: Int)
     ArrowUtils.toArrowSchema(ArrowBackedDataSourceV2.SCHEMA, null,
       errorOnDuplicatedFieldNames = true, largeVarTypes = false),
     allocator)
+  private val extra: Option[ColumnVector] = extraColumn.map {
+    case "onHeap" => new OnHeapColumnVector(batchSize, IntegerType)
+    case "listView" =>
+      val vector = ListViewVector.empty("extra", allocator)
+      vector.addOrGetVector[IntVector](FieldType.nullable(new ArrowType.Int(32, true)))
+      new ArrowColumnVector(vector)
+  }
   private val batch = new ColumnarBatch(
-    root.getFieldVectors.asScala.map(new ArrowColumnVector(_): ColumnVector).toArray)
+    (root.getFieldVectors.asScala.map(new ArrowColumnVector(_): ColumnVector) ++ extra).toArray)
 
   override def next(): Boolean = {
     if (current >= end) return false
@@ -216,6 +247,21 @@ private class ReusingArrowPartitionReader(start: Int, end: Int, batchSize: Int)
       data.setSafe(i, s"data_$row".getBytes(UTF_8))
     }
     root.setRowCount(count)
+    extra.foreach {
+      case onHeap: OnHeapColumnVector =>
+        onHeap.reset()
+        (0 until count).foreach(i => onHeap.putInt(i, current + i))
+      case arrow: ArrowColumnVector =>
+        val listView = arrow.getValueVector.asInstanceOf[ListViewVector]
+        val elements = listView.getDataVector.asInstanceOf[IntVector]
+        listView.reset()
+        (0 until count).foreach { i =>
+          elements.setSafe(listView.startNewValue(i), current + i)
+          listView.endValue(i, 1)
+        }
+        elements.setValueCount(count)
+        listView.setValueCount(count)
+    }
     batch.setNumRows(count)
     current += count
     true
@@ -224,6 +270,7 @@ private class ReusingArrowPartitionReader(start: Int, end: Int, batchSize: Int)
   override def get(): ColumnarBatch = batch
 
   override def close(): Unit = {
+    extra.foreach(_.close())
     root.close()
     allocator.close()
   }
@@ -237,10 +284,9 @@ private class ReusingArrowPartitionReader(start: Int, end: Int, batchSize: Int)
  * - name (STRING): "row_<id>"
  * - value (DOUBLE): id * 0.1
  */
-private class ArrowBackedPartitionReader(start: Int, end: Int)
+private class ArrowBackedPartitionReader(start: Int, end: Int, batchSize: Int)
     extends PartitionReader[ColumnarBatch] {
 
-  private val batchSize = ArrowBackedDataSourceV2.BATCH_SIZE
   private var current = start
   private var currentBatch: ColumnarBatch = _
 
