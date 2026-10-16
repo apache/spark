@@ -30,7 +30,6 @@ from pyspark.testing.connectutils import (
 
 if should_test_connect:
     import pyspark.sql.connect.proto as proto
-    from pyspark import StorageLevel
     from pyspark.sql.connect.column import Column
     from pyspark.sql.connect.dataframe import DataFrame
     from pyspark.sql.connect.expressions import LiteralExpression
@@ -47,8 +46,6 @@ if should_test_connect:
     )
     from pyspark.sql.connect.observation import Observation
     from pyspark.sql.connect.plan import (
-        CachedRemoteRelation,
-        Checkpoint,
         CollectMetrics,
         Join,
         LogicalPlan,
@@ -931,80 +928,6 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         plan2 = df1.intersectAll(df2)._plan.to_proto(self.connect)
         self.assertTrue(plan2.root.set_op.is_all)
         self.assertEqual(proto.SetOperation.SET_OP_TYPE_INTERSECT, plan2.root.set_op.set_op_type)
-
-    def test_checkpoint_relation_id(self):
-        child = self.connect.range(0, 5)._plan
-        for local in (False, True):
-            for relation_id in (None, str(uuid.uuid4()), ""):
-                with self.subTest(local=local, relation_id=relation_id):
-                    command = Checkpoint(
-                        child=child, local=local, eager=True, relation_id=relation_id
-                    ).command(self.connect)
-                    checkpoint = command.checkpoint_command
-                    self.assertEqual(checkpoint.HasField("relation_id"), relation_id is not None)
-                    if relation_id is not None:
-                        self.assertEqual(checkpoint.relation_id, relation_id)
-                    self.assertEqual(checkpoint.local, local)
-                    self.assertTrue(checkpoint.eager)
-                    self.assertEqual(checkpoint.relation, child.plan(self.connect))
-
-    def test_checkpoint_generated_relation_id(self):
-        session = MagicMock()
-        session.client.is_closed = True
-        child = self.connect.range(0, 5)._plan
-        df = DataFrame(child, session)
-
-        def execute_command(command):
-            relation_id = command.checkpoint_command.relation_id
-            checkpointed = DataFrame(CachedRemoteRelation(relation_id, session), session)
-            return None, {"checkpoint_command_result": checkpointed}, None
-
-        session.client.execute_command.side_effect = execute_command
-        relation_ids = set()
-        for local in (False, True):
-            for _ in range(2):
-                with self.subTest(local=local):
-                    if local:
-                        result = df.localCheckpoint(
-                            eager=False, storageLevel=StorageLevel.DISK_ONLY
-                        )
-                    else:
-                        result = df.checkpoint(eager=False)
-                    command = session.client.execute_command.call_args.args[0].checkpoint_command
-                    self.assertTrue(command.HasField("relation_id"))
-                    relation_id = command.relation_id
-                    self.assertEqual(result._plan._relation_id, relation_id)
-                    parsed_id = uuid.UUID(relation_id)
-                    self.assertEqual(str(parsed_id), relation_id)
-                    self.assertEqual(parsed_id.version, 4)
-                    self.assertNotIn(relation_id, relation_ids)
-                    relation_ids.add(relation_id)
-                    self.assertEqual(command.local, local)
-                    self.assertFalse(command.eager)
-                    self.assertEqual(command.relation, child.plan(session.client))
-                    if local:
-                        self.assertTrue(command.storage_level.use_disk)
-                        self.assertFalse(command.storage_level.use_memory)
-
-    def test_checkpoint_mismatched_relation_id(self):
-        session = MagicMock()
-        session.client.is_closed = True
-        df = DataFrame(self.connect.range(0, 5)._plan, session)
-        checkpointed = DataFrame(CachedRemoteRelation("server-checkpoint-id", session), session)
-        session.client.execute_command.return_value = (
-            None,
-            {"checkpoint_command_result": checkpointed},
-            None,
-        )
-        for local in (False, True):
-            with self.subTest(local=local):
-                with self.assertRaisesRegex(
-                    AssertionError, "Checkpoint relation ID does not match the requested ID"
-                ):
-                    if local:
-                        df.localCheckpoint()
-                    else:
-                        df.checkpoint()
 
     def test_coalesce_and_repartition(self):
         # SPARK-41026: test Coalesce and Repartition API in Python client.
