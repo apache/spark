@@ -30,13 +30,13 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.Complete
 import org.apache.spark.sql.catalyst.plans.{Cross, ExistenceJoin, Inner, JoinType, LeftAnti, LeftSemi, LeftSingle}
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.{KeyedPartitioning, PartitioningCollection, REPLICATED_FOR_JOIN, SPLIT_FOR_JOIN}
-import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryBaseTable, InMemoryCatalystRuntimeFilterCatalog, InMemoryTable, InMemoryTableCatalog}
+import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryBaseTable, InMemoryCatalystRuntimeFilterCatalog, InMemoryTable, InMemoryTableCatalog, Table}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.connector.expressions.Expressions._
-import org.apache.spark.sql.connector.read.{Batch, Scan, ScanBuilder, SupportsReportOrdering, SupportsReportPartitioning}
+import org.apache.spark.sql.connector.read.{Batch, HasPartitionKey, InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder, SupportsReportOrdering, SupportsReportPartitioning}
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning}
 import org.apache.spark.sql.execution.{
   ExtendedMode,
@@ -57,6 +57,7 @@ import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchan
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
 import org.apache.spark.sql.execution.ui.SparkPlanGraphNode
+import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.execution.window.{Final, Partial, WindowGroupLimitExec, WindowGroupLimitMode}
 import org.apache.spark.sql.functions.{col, max}
 import org.apache.spark.sql.internal.SQLConf
@@ -64,6 +65,7 @@ import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.tags.ExtendedSQLTest
 
 abstract class KeyGroupedPartitioningSuiteBase extends DistributionAndOrderingSuiteBase {
@@ -399,6 +401,49 @@ trait KeyGroupedPartitioningRuntimeFilterTests extends KeyGroupedPartitioningSui
           assert(grouping.outputPartitioning.isInstanceOf[KeyedPartitioning])
           assert(grouping.child.outputPartitioning === grouping.childPartitioning)
         }
+      }
+    }
+  }
+
+  test("opt-in scan grouping preserves broadcast runtime filtering with default AQE rules") {
+    createTable(items, itemsColumns, Array(identity("id")))
+    createTable(purchases, purchasesColumns, Array.empty)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 1.0, cast('2020-01-01' as timestamp)), " +
+      "(1, 'bb', 2.0, cast('2020-01-01' as timestamp)), " +
+      "(2, 'cc', 3.0, cast('2020-01-01' as timestamp))")
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      "(2, 10.0, cast('2020-01-01' as timestamp))")
+
+    for (adaptive <- Seq(false, true); price <- Seq(40, 100)) {
+      withSQLConf(
+        SQLConf.V2_BUCKETING_GROUP_SCAN_PARTITIONS_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString,
+        SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key -> "",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true",
+        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true") {
+        val df = sql(s"SELECT /*+ BROADCAST(p) */ i.id, i.name, p.price " +
+          s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
+          s"ON i.id = p.item_id WHERE p.price > $price")
+        val expected = if (price == 40) Seq(Row(1L, "aa", 42.0), Row(1L, "bb", 42.0)) else Nil
+        val initial = df.queryExecution.executedPlan
+        assert(collectScans(initial).find(_.table.name().endsWith(items)).get
+          .runtimeFilters.nonEmpty)
+        checkAnswer(df, expected)
+        val plan = df.queryExecution.executedPlan
+        if (price == 40) {
+          val scan = collectScans(plan).find(_.table.name().endsWith(items)).get
+          assert(scan.runtimeFilters.nonEmpty)
+          assert(scan.filteredPartitions.count(_.isEmpty) === 1)
+          val group = collect(plan) {
+            case g: GroupPartitionsExec if g.preserveScanGrouping => g
+          }.head
+          assert(group.execute().mapPartitions(rows => Iterator.single(rows.size))
+            .collect().sorted.toSeq === Seq(0, 2))
+        }
+        assert(ValidateRequirements.validate(stripAQEPlan(plan)))
       }
     }
   }
@@ -6007,6 +6052,69 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  test("opt-in scan grouping preserves columnar batches and early termination") {
+    val expected = Seq(Row(1, 20), Row(1, 21), Row(1, 22), Row(1, 10), Row(1, 11),
+      Row(1, 5), Row(1, 6), Row(2, 30), Row(2, 31))
+    for {
+      adaptive <- Seq(false, true)
+      codegen <- Seq(false, true)
+      filter <- Seq(false, true)
+    } {
+      withSQLConf(
+        SQLConf.V2_BUCKETING_GROUP_SCAN_PARTITIONS_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString,
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString) {
+        val source = spark.read.format(classOf[KeyedColumnarScanSource].getName).load()
+          .select("i", "j")
+        val df = if (filter) source.filter("j > 10") else source
+        val answers = if (filter) expected.filter(_.getInt(1) > 10) else expected
+        Seq(df, df.repartition(col("j"))).foreach { query =>
+          checkAnswer(query, answers)
+          val plan = query.queryExecution.executedPlan
+          val group = collect(plan) {
+            case g: GroupPartitionsExec if g.preserveScanGrouping => g
+          }.head
+          assert(group.supportsColumnar)
+          assert(group.executeColumnar().mapPartitions(batches =>
+            Iterator.single(batches.map(_.numRows()).sum)).collect().sorted.toSeq === Seq(2, 2, 5))
+          assert(collect(plan) {
+            case p: ProjectExec if p.projectList.map(_.exprId) == p.child.output.map(_.exprId) &&
+                collect(p.child) { case g: GroupPartitionsExec => g }.nonEmpty => p
+          }.isEmpty, "columnar transitions provide conversion without an identity project")
+        }
+        val first = df.take(1)
+        assert(first.length === 1)
+        assert(answers.contains(first.head))
+        checkAnswer(df, answers)
+      }
+    }
+  }
+
+  test("opt-in scan grouping preserves nested merges over reusable columnar batches") {
+    for (adaptive <- Seq(false, true); codegen <- Seq(false, true)) {
+      withSQLConf(
+        SQLConf.V2_BUCKETING_GROUP_SCAN_PARTITIONS_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString,
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString) {
+        val source = spark.read.format(classOf[KeyedColumnarScanSource].getName).load()
+        val df = source.selectExpr("i", "j",
+          "row_number() OVER (PARTITION BY i ORDER BY j) AS rn")
+        checkAnswer(df, Seq(
+          Row(1, 5, 1), Row(1, 6, 2), Row(1, 10, 3), Row(1, 11, 4),
+          Row(1, 20, 5), Row(1, 21, 6), Row(1, 22, 7), Row(2, 30, 1), Row(2, 31, 2)))
+        val plan = df.queryExecution.executedPlan
+        assert(collect(plan) { case s: SortExec => s }.isEmpty)
+        val groups = collect(plan) { case g: GroupPartitionsExec => g }
+        assert(groups.size === 2)
+        assert(groups.forall(_.enableSortedMerge))
+        assert(groups.count(_.preserveScanGrouping) === 1)
+        assert(ValidateRequirements.validate(stripAQEPlan(plan)))
+      }
+    }
+  }
+
   test("opt-in scan grouping honors the collapsed partition key gate") {
     val columns = Array(
       Column.create("id", LongType), Column.create("dept", StringType),
@@ -6104,6 +6212,96 @@ class KeyGroupedPartitioningSuite
           }) => p
         }
         assert(projectedKeys.nonEmpty, "retain the collapsed layout above the scan grouping")
+        assert(ValidateRequirements.validate(stripAQEPlan(plan)))
+      }
+    }
+  }
+
+  test("opt-in scan grouping preserves ordering across nested key projections") {
+    val ordering = Array(sort(FieldReference("id"), SortDirection.ASCENDING),
+      sort(FieldReference("name"), SortDirection.ASCENDING))
+    createTable("group_left", Array(
+      Column.create("id", LongType), Column.create("dept", StringType),
+      Column.create("name", StringType)), Array(identity("id"), identity("dept")), ordering)
+    createTable("group_right", Array(
+      Column.create("id", LongType), Column.create("name", StringType)),
+      Array(identity("id")), ordering)
+    sql("INSERT INTO testcat.ns.group_left VALUES " +
+      "(1, 'x', 'b'), (1, 'x', 'a'), (1, 'y', 'c'), (2, 'z', 'd')")
+    sql("INSERT INTO testcat.ns.group_right VALUES (1, 'b'), (1, 'a'), (1, 'c'), (2, 'd')")
+
+    for {
+      adaptive <- Seq(false, true)
+      groupScan <- Seq(false, true)
+      preserveOrdering <- Seq(false, true)
+    } {
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString,
+        SQLConf.V2_BUCKETING_GROUP_SCAN_PARTITIONS_ENABLED.key -> groupScan.toString,
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+        SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key ->
+          preserveOrdering.toString) {
+        val df = sql("SELECT /*+ MERGE(l, r) */ l.id, l.name " +
+          "FROM (SELECT id, name FROM testcat.ns.group_left WHERE dept RLIKE 'x|y|z') l " +
+          "JOIN testcat.ns.group_right r ON l.id = r.id AND l.name = r.name")
+        checkAnswer(df, Seq(Row(1L, "a"), Row(1L, "b"), Row(1L, "c"), Row(2L, "d")))
+        val plan = df.queryExecution.executedPlan
+        assert(collectShuffles(plan).isEmpty)
+        assert(collect(plan) {
+          case g: GroupPartitionsExec if g.preserveScanGrouping => g
+        }.size === (if (groupScan) 2 else 0))
+        withClue(s"adaptive=$adaptive, grouping=$groupScan, ordering=$preserveOrdering:\n$plan") {
+          assert(collect(plan) { case s: SortExec => s }.isEmpty === preserveOrdering)
+        }
+        assert(ValidateRequirements.validate(stripAQEPlan(plan)))
+      }
+    }
+  }
+
+  test("opt-in scan grouping survives aggregate, window, and exchange reuse rewrites") {
+    createTable("group_left", Array(
+      Column.create("id", LongType), Column.create("dept", StringType),
+      Column.create("data", StringType)), Array(identity("id"), identity("dept")))
+    sql("INSERT INTO testcat.ns.group_left VALUES " +
+      "(1, 'x', 'lb'), (1, 'x', 'la'), (1, 'y', 'lc'), (2, 'z', 'ld')")
+    val from = "FROM testcat.ns.group_left WHERE dept RLIKE 'x|y|z'"
+    for {
+      adaptive <- Seq(false, true)
+      allowSubset <- Seq(false, true)
+      combine <- Seq(false, true)
+    } {
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString,
+        SQLConf.V2_BUCKETING_GROUP_SCAN_PARTITIONS_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> allowSubset.toString,
+        SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> combine.toString,
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true") {
+        val aggregate = sql(s"SELECT id, max(dept), count(*), min(data) $from GROUP BY id")
+        val window = sql("SELECT id, data FROM " +
+          s"(SELECT id, data, row_number() OVER (PARTITION BY id ORDER BY data) AS rn $from) " +
+          "WHERE rn <= 1")
+        Seq(aggregate -> Seq(Row(1L, "y", 3L, "la"), Row(2L, "z", 1L, "ld")),
+          window -> Seq(Row(1L, "la"), Row(2L, "ld"))).foreach { case (df, expected) =>
+          checkAnswer(df, expected)
+          val plan = df.queryExecution.executedPlan
+          assert(collect(plan) {
+            case g: GroupPartitionsExec if g.preserveScanGrouping => g
+          }.size === 1)
+          withClue(s"adaptive=$adaptive, subset=$allowSubset, combine=$combine:\n$plan") {
+            assert(collect(plan) { case s: ShuffleExchangeExec => s }.isEmpty === allowSubset)
+          }
+          assert(ValidateRequirements.validate(stripAQEPlan(plan)))
+        }
+        val reused = sql("SELECT /*+ MERGE(l, r) */ l.id, r.id " +
+          s"FROM (SELECT id, data $from) l JOIN (SELECT id, data $from) r ON l.data = r.data")
+        checkAnswer(reused, Seq(Row(1L, 1L), Row(1L, 1L), Row(1L, 1L), Row(2L, 2L)))
+        val plan = reused.queryExecution.executedPlan
+        assert(collect(plan) { case r: ReusedExchangeExec => r }.nonEmpty)
+        assert(collect(plan) {
+          case g: GroupPartitionsExec if g.preserveScanGrouping => g
+        }.nonEmpty)
         assert(ValidateRequirements.validate(stripAQEPlan(plan)))
       }
     }
@@ -6240,6 +6438,48 @@ class KeyGroupedPartitioningSuite
         assert(collect(plan) {
           case g: GroupPartitionsExec if g.preserveScanGrouping => g
         }.size === (if (groupScan) 2 else 0))
+        assert(ValidateRequirements.validate(stripAQEPlan(plan)))
+      }
+    }
+  }
+
+  test("opt-in scan grouping preserves reduced-key safety in three-way joins") {
+    Seq(12, 8, 6, 2).foreach(n => createBucketedIdTable(s"bucket$n", n, numIds = 24))
+    for {
+      adaptive <- Seq(false, true)
+      partial <- Seq(false, true)
+      (third, bucketShuffle, expectedShuffles) <- Seq((6, false, 2), (2, true, 1))
+    } {
+      withSQLConf(
+        SQLConf.V2_BUCKETING_GROUP_SCAN_PARTITIONS_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true",
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> bucketShuffle.toString,
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> partial.toString,
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString) {
+        val df = threeWayBucketJoinDF(third)
+        checkAnswer(df, (0 until 24).map(i => Row(i.toLong)))
+        val plan = df.queryExecution.executedPlan
+        val shuffles = collectShuffles(plan)
+        if (!partial) {
+          assert(shuffles.size === expectedShuffles)
+        }
+        assert(shuffles.forall(_.outputPartitioning match {
+          case kp: KeyedPartitioning => kp.expressionsDescribeKeys
+          case _ => true
+        }), "a shuffle must not claim keys that were already reduced by another join")
+        val groups = collect(plan) {
+          case g: GroupPartitionsExec if g.preserveScanGrouping => g
+        }
+        assert(groups.size === 3)
+        Seq(12, 8, third).foreach { buckets =>
+          val side = groups.filter(g => collectScans(g)
+            .exists(_.table.name().endsWith(s"bucket$buckets")))
+          assert(side.size === 1)
+          val counts = side.head.execute().mapPartitions(rows => Iterator.single(rows.size))
+            .collect().toSeq
+          assert(counts === Seq.fill(buckets)(24 / buckets))
+        }
         assert(ValidateRequirements.validate(stripAQEPlan(plan)))
       }
     }
@@ -7223,9 +7463,10 @@ class KeyGroupedPartitioningSuite
     // which is after the flip below.
     createOrderedIdTables()
 
-    Seq(true, false).foreach { aqeEnabled =>
+    for (aqeEnabled <- Seq(true, false); groupScan <- Seq(false, true)) {
       withSQLConf(
           SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled.toString,
+          SQLConf.V2_BUCKETING_GROUP_SCAN_PARTITIONS_ENABLED.key -> groupScan.toString,
           SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
           SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
         val df = sql(
@@ -10909,6 +11150,76 @@ class CustomReportingCatalog extends InMemoryTableCatalog {
           override def build(): Scan =
             CustomReportingScan(super.build(), reportedKeys, reportedOrdering)
         }
+    }
+  }
+}
+
+/** A columnar-only source with duplicate keyed splits and a batch reused within each reader. */
+class KeyedColumnarScanSource extends TestingV2Source {
+  private val sourceSchema = TestingV2Source.schema.add("k", IntegerType)
+
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType = sourceSchema
+
+  override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
+    override def schema(): StructType = sourceSchema
+
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
+      new SimpleScanBuilder with SupportsReportPartitioning with SupportsReportOrdering {
+        override def readSchema(): StructType = sourceSchema
+
+        override def planInputPartitions(): Array[InputPartition] = Array(
+          KeyedColumnarInputPartition(1, 1, Array(20, 21, 22)),
+          KeyedColumnarInputPartition(1, 1, Array(10, 11)),
+          KeyedColumnarInputPartition(1, 2, Array(5, 6)),
+          KeyedColumnarInputPartition(2, 3, Array(30, 31)))
+
+        override def outputPartitioning(): Partitioning =
+          new KeyGroupedPartitioning(Array(FieldReference("i"), FieldReference("k")), 4)
+
+        override def outputOrdering(): Array[SortOrder] = Array(
+          sort(FieldReference("i"), SortDirection.ASCENDING),
+          sort(FieldReference("j"), SortDirection.ASCENDING))
+
+        override def createReaderFactory(): PartitionReaderFactory = KeyedColumnarReaderFactory
+      }
+  }
+}
+
+case class KeyedColumnarInputPartition(i: Int, k: Int, values: Array[Int])
+    extends InputPartition with HasPartitionKey {
+  override def partitionKey(): InternalRow = InternalRow(i, k)
+}
+
+object KeyedColumnarReaderFactory extends PartitionReaderFactory {
+  override def supportColumnarReads(partition: InputPartition): Boolean = true
+
+  override def createReader(partition: InputPartition): PartitionReader[InternalRow] =
+    throw new UnsupportedOperationException("This source supports only columnar readers")
+
+  override def createColumnarReader(partition: InputPartition): PartitionReader[ColumnarBatch] = {
+    val input = partition.asInstanceOf[KeyedColumnarInputPartition]
+    new PartitionReader[ColumnarBatch] {
+      private val vectors = Array(new OnHeapColumnVector(2, IntegerType),
+        new OnHeapColumnVector(2, IntegerType),
+        new OnHeapColumnVector(2, IntegerType))
+      private val batch = new ColumnarBatch(Array(vectors(0), vectors(1), vectors(2)))
+      private var offset = 0
+
+      override def next(): Boolean = {
+        vectors.foreach(_.reset())
+        val count = math.min(2, input.values.length - offset)
+        (0 until count).foreach { index =>
+          vectors(0).putInt(index, input.i)
+          vectors(1).putInt(index, input.values(offset + index))
+          vectors(2).putInt(index, input.k)
+        }
+        offset += count
+        batch.setNumRows(count)
+        count > 0
+      }
+
+      override def get(): ColumnarBatch = batch
+      override def close(): Unit = batch.close()
     }
   }
 }

@@ -102,7 +102,10 @@ case class GroupPartitionsExec(
     @transient ungroupingOrigin: Option[UngroupingOrigin],
     @transient sortedMergeOrdering: Option[Seq[SortOrder]],
     preserveScanGrouping: Boolean
-  ) extends UnaryExecNode {
+  ) extends UnaryExecNode with SafeForKWayMerge {
+
+  // Partition state lives in each CoalescedRDD or SortedMergeCoalescedRDD iterator. This node
+  // only constructs the RDD on the driver, so a nested grouping can safely read it concurrently.
 
   /**
    * Whether each key's splits are distributed across its expected slots, or grouped into one

@@ -2323,6 +2323,38 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
+  test("scan grouping enables nested sorted merges after their child ordering is available") {
+    val id = AttributeReference("id", IntegerType)()
+    val dept = AttributeReference("dept", IntegerType)()
+    val data = AttributeReference("data", IntegerType)()
+    val ordering = Seq(SortOrder(id, Ascending), SortOrder(data, Ascending))
+    val leaf = DummyLeafSafeForKWayMerge(outputOrdering = ordering,
+      outputPartitioning = KeyedPartitioning(Seq(id, dept),
+        Seq(InternalRow(1, 1), InternalRow(1, 1), InternalRow(1, 2), InternalRow(2, 3))))
+    val inner = GroupPartitionsExec(leaf, preserveScanGrouping = true)
+    val outer = GroupPartitionsExec(inner, joinKeyPositions = Some(Seq(0)))
+
+    for (preserveKeys <- Seq(false, true)) {
+      withSQLConf(
+        SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key ->
+          preserveKeys.toString) {
+        val alternatives = EnsureRequirements.tryEnableSortedMerge(outer)
+        assert(alternatives.head.fastEquals(outer), "keep the unmodified plan as the first choice")
+        val merged = alternatives.find(_.outputOrdering == ordering).get
+        val groups = merged.collect { case g: GroupPartitionsExec => g }
+        assert(groups.size === 2)
+        assert(groups.forall(_.sortedMergeOrdering.contains(ordering)))
+        assert(groups.count(_.preserveScanGrouping) === 1)
+
+        val unsafeInner = GroupPartitionsExec(DummyPassthroughUnaryExec(leaf))
+        val unsafeOuter = GroupPartitionsExec(unsafeInner, joinKeyPositions = Some(Seq(0)))
+        assert(!EnsureRequirements.tryEnableSortedMerge(unsafeOuter).exists(anyGpeEnabled),
+          "a safe grouping must not hide an unsafe descendant from the merge guard")
+      }
+    }
+  }
+
   test("SPARK-56549: tryEnableSortedMerge traversal continues through plain unary nodes") {
     withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
       val exprKey = AttributeReference("k", IntegerType)()

@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, MultiTransform}
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
@@ -440,17 +441,25 @@ case class EnsureRequirements(
   // expressions in SortOrder, dropping a prefix invalidates the rest of the ordering too -- so in
   // practice the two are always pruned together.
   //
-  // At each GPE the rule emits [original, sorted-merge-enabled] alternatives (or just [original]
-  // when sorted merge cannot be enabled). multiTransformDownWithPruning then builds the Cartesian
-  // product across all GPEs in the subtree, giving every combination.
-  private[exchange] def tryEnableSortedMerge(plan: SparkPlan): LazyList[SparkPlan] =
-    plan.multiTransformDownWithPruning(
-      p => !p.isInstanceOf[SortExec] &&
-        hasKeyedPartitioning(p.asInstanceOf[SparkPlan].outputPartitioning)) {
-      case gpe: GroupPartitionsExec =>
-        // Include the original so that peer GPEs are still independently considered.
-        gpe +: gpe.tryEnableSortedMerge().toSeq
+  // Consider child alternatives before enabling the parent: a nested grouping can provide the
+  // ordering its parent must capture only after its own merge is enabled. Keep both choices at
+  // each GPE and lazily build their Cartesian product so the caller can stop at a satisfying plan.
+  private[exchange] def tryEnableSortedMerge(plan: SparkPlan): LazyList[SparkPlan] = {
+    if (plan.isInstanceOf[SortExec] || !hasKeyedPartitioning(plan.outputPartitioning)) {
+      LazyList(plan)
+    } else {
+      val childAlternatives = plan.children.map(child => () => tryEnableSortedMerge(child))
+      MultiTransform.generateCartesianProduct(childAlternatives).flatMap { children =>
+        val rewritten = plan.withNewChildren(children)
+        rewritten match {
+          case gpe: GroupPartitionsExec =>
+            val enabled = CurrentOrigin.withOrigin(gpe.origin)(gpe.tryEnableSortedMerge())
+            LazyList(gpe) #::: enabled.to(LazyList)
+          case other => LazyList(other)
+        }
+      }
     }
+  }
 
   private def reorder(
       leftKeys: IndexedSeq[Expression],
