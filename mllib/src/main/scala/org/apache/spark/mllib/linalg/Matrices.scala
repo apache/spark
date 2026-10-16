@@ -342,7 +342,7 @@ class DenseMatrix @Since("1.3.0") (
   }
 
   @Since("1.4.0")
-  override def copy: DenseMatrix = new DenseMatrix(numRows, numCols, values.clone())
+  override def copy: DenseMatrix = new DenseMatrix(numRows, numCols, values.clone(), isTransposed)
 
   private[spark] def map(f: Double => Double) = new DenseMatrix(numRows, numCols, values.map(f),
     isTransposed)
@@ -662,7 +662,7 @@ class SparseMatrix @Since("1.3.0") (
 
   @Since("1.4.0")
   override def copy: SparseMatrix = {
-    new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values.clone())
+    new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values.clone(), isTransposed)
   }
 
   private[spark] def map(f: Double => Double) =
