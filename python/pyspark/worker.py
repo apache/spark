@@ -174,7 +174,7 @@ def wrap_memory_profiler(f, iter_based, result_id):
     return profiling_func
 
 
-def read_single_udf(pickleSer, udf_info, handler_cls, runner_conf, udf_index):
+def read_single_udf(pickleSer, udf_info, handler_cls, runner_conf):
     eval_type = handler_cls.eval_type
     chained_func = None
     for udf in udf_info.udfs:
@@ -193,11 +193,11 @@ def read_single_udf(pickleSer, udf_info, handler_cls, runner_conf, udf_index):
         profiler = runner_conf.udf_profiler
     if profiler == "perf":
         profiling_func = wrap_perf_profiler(
-            chained_func, handler_cls.iter_based_udf, udf_info.result_id
+            chained_func, handler_cls.is_iter_based, udf_info.result_id
         )
     elif profiler == "memory":
         profiling_func = wrap_memory_profiler(
-            chained_func, handler_cls.iter_based_udf, udf_info.result_id
+            chained_func, handler_cls.is_iter_based, udf_info.result_id
         )
     else:
         profiling_func = chained_func
@@ -288,12 +288,12 @@ def read_single_udf(pickleSer, udf_info, handler_cls, runner_conf, udf_index):
 
 
 # Read a serialized user-defined table function (UDTF) and prepare it for evaluation: wrap
-# the constructor to receive the AnalyzeResult, instantiate the UDTF (wrapped in
+# the constructor to receive the AnalyzeResult, instantiate the UDTF (wrapped in the handler's
 # partition_wrapper when its TABLE argument has PARTITION BY expressions), and check the 'eval'
 # signature against the call arguments. Returns the same
 # (func, args_offsets, kwargs_offsets, return_type) shape as read_single_udf, with the UDTF
 # instance in the func slot.
-def read_single_udtf(pickleSer, udtf_info, partition_wrapper):
+def read_single_udtf(pickleSer, udtf_info, handler_cls):
     if udtf_info.pickled_analyze_result is not None:
         pickled_analyze_result = pickleSer.loads(udtf_info.pickled_analyze_result)
     else:
@@ -341,7 +341,7 @@ def read_single_udtf(pickleSer, udtf_info, partition_wrapper):
     # Instantiate the UDTF class.
     try:
         if len(udtf_info.partition_child_indexes) > 0:
-            udtf = partition_wrapper(handler, udtf_info.partition_child_indexes)
+            udtf = handler_cls.partition_wrapper(handler, udtf_info.partition_child_indexes)
         else:
             udtf = handler()
     except Exception as e:
@@ -422,16 +422,12 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                 raise ValueError("Unknown eval type: {}".format(eval_type))
             if isinstance(init_info.udf_info, UDTFInfo):
                 assert issubclass(handler_cls, (UDTFEvalTypeHandler, TableUDTFHandler))
-                udfs = [
-                    read_single_udtf(pickleSer, init_info.udf_info, handler_cls.partition_wrapper)
-                ]
+                udfs = [read_single_udtf(pickleSer, init_info.udf_info, handler_cls)]
             else:
                 assert isinstance(init_info.udf_info, list)
                 udfs = [
-                    read_single_udf(
-                        pickleSer, udf_info, handler_cls, runner_conf, udf_index=udf_index
-                    )
-                    for udf_index, udf_info in enumerate(init_info.udf_info)
+                    read_single_udf(pickleSer, udf_info, handler_cls, runner_conf)
+                    for udf_info in init_info.udf_info
                 ]
             handler = handler_cls(udfs=udfs, runner_conf=runner_conf, eval_conf=eval_conf)
             func, serializer = handler.run, handler.serializer

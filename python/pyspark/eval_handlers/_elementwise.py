@@ -516,7 +516,7 @@ class _ScalarIterElementwiseUDFHandler(_VectorizedElementwiseUDFHandler):
     input ones. Subclasses supply the flavor's conversions and result checks.
     """
 
-    iter_based_udf = True
+    _iter_based = True
 
     def __init__(
         self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
