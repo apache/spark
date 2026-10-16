@@ -162,6 +162,7 @@
     df = spark.range(1)
     df.select(f("id"), g("id", "id"), h("id"), k("id"), m("id"), n("id"), r("id"), s("id"), t("id"))
     df.groupBy("id").agg(p("id"))
+    df.select(g(y="id", x="id"))
 
     f(42)  # E: Argument 1 to "__call__" of "UserDefinedFunctionLike" has incompatible type "int"; expected "Column | str"  [arg-type]
     df.groupBy("id").apply(f)  # E: Argument 1 to "apply" of "PandasGroupedOpsMixin" has incompatible type "UserDefinedFunctionLike"; expected "GroupedMapPandasUserDefinedFunction"  [arg-type]
