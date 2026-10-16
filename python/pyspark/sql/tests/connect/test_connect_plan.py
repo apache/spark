@@ -46,6 +46,7 @@ if should_test_connect:
     )
     from pyspark.sql.connect.observation import Observation
     from pyspark.sql.connect.plan import (
+        Checkpoint,
         CollectMetrics,
         Join,
         LogicalPlan,
@@ -928,6 +929,22 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         plan2 = df1.intersectAll(df2)._plan.to_proto(self.connect)
         self.assertTrue(plan2.root.set_op.is_all)
         self.assertEqual(proto.SetOperation.SET_OP_TYPE_INTERSECT, plan2.root.set_op.set_op_type)
+
+    def test_checkpoint_relation_id(self):
+        child = self.connect.range(0, 5)._plan
+        for local in (False, True):
+            for relation_id in (None, str(uuid.uuid4()), ""):
+                with self.subTest(local=local, relation_id=relation_id):
+                    command = Checkpoint(
+                        child=child, local=local, eager=True, relation_id=relation_id
+                    ).command(self.connect)
+                    checkpoint = command.checkpoint_command
+                    self.assertEqual(checkpoint.HasField("relation_id"), relation_id is not None)
+                    if relation_id is not None:
+                        self.assertEqual(checkpoint.relation_id, relation_id)
+                    self.assertEqual(checkpoint.local, local)
+                    self.assertTrue(checkpoint.eager)
+                    self.assertEqual(checkpoint.relation, child.plan(self.connect))
 
     def test_coalesce_and_repartition(self):
         # SPARK-41026: test Coalesce and Repartition API in Python client.
