@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.types.{ArrayType, IntegerType, LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{
+  ArrayType, DecimalType, DoubleType, IntegerType, LongType, StringType, StructField, StructType}
 
 class ExprUtilsSuite extends SparkFunSuite {
 
@@ -36,6 +37,14 @@ class ExprUtilsSuite extends SparkFunSuite {
     assert(ExprUtils.canEvaluateUnconditionally(In(a, Seq(Literal(1L), Literal(2L)))))
     assert(ExprUtils.canEvaluateUnconditionally(
       Cast(AttributeReference("i", IntegerType)(), LongType)))
+    // Integral -> decimal and decimal -> wider decimal casts are exact, and Long -> Double
+    // can round but never throws: the whitelist relies on the casts being non-throwing,
+    // not on them being lossless.
+    assert(ExprUtils.canEvaluateUnconditionally(Cast(a, DoubleType)))
+    assert(ExprUtils.canEvaluateUnconditionally(
+      Cast(AttributeReference("i", IntegerType)(), DecimalType(10, 0))))
+    assert(ExprUtils.canEvaluateUnconditionally(
+      Cast(AttributeReference("d", DecimalType(5, 2))(), DecimalType(10, 4))))
   }
 
   test("canEvaluateUnconditionally: expressions that can throw are excluded") {
@@ -51,6 +60,16 @@ class ExprUtilsSuite extends SparkFunSuite {
     val s = AttributeReference("s", StringType)()
     assert(!ExprUtils.canEvaluateUnconditionally(Cast(s, IntegerType)))
     assert(!ExprUtils.canEvaluateUnconditionally(Cast(a, StringType)))
+    // canUpCast admits DECIMAL(19,0) -> BIGINT even though a DECIMAL(19,0) value such as
+    // 9999999999999999999 exceeds Long.MaxValue, and the cast then throws CAST_OVERFLOW
+    // under ANSI mode, so a decimal source is only admitted when the target is a decimal
+    // as well.
+    val d = AttributeReference("d", DecimalType(19, 0))()
+    assert(!ExprUtils.canEvaluateUnconditionally(Cast(d, LongType)))
+    // The input of an admitted cast must itself be whitelisted: Add can throw on overflow
+    // in ANSI mode, so a widening cast over it stays excluded.
+    val i = AttributeReference("i", IntegerType)()
+    assert(!ExprUtils.canEvaluateUnconditionally(Cast(Add(i, Literal(1)), LongType)))
     // GetArrayItem/ElementAt can throw on invalid ordinals in ANSI mode.
     val arr = AttributeReference("arr", ArrayType(IntegerType))()
     assert(!ExprUtils.canEvaluateUnconditionally(GetArrayItem(arr, Literal(0))))
