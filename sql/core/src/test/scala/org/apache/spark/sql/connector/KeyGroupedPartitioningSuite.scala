@@ -5686,9 +5686,10 @@ class KeyGroupedPartitioningSuite
       // With the requirement on, the join must not run on `id` alone, so both sides are shuffled.
       (keyedPurchases, "true", 2),
       (purchases, "true", 2),
-      // With it off, the storage-partitioned join pairs the keyed sides as they stand. The
-      // SPARK-54439 test above covers the unpartitioned side.
-      (keyedPurchases, "false", 0)).foreach { case (other, requireAll, expectedShuffles) =>
+      // With it off, the storage-partitioned join pairs the keyed sides as they stand, and the
+      // unpartitioned side is shuffled onto `items`.
+      (keyedPurchases, "false", 0),
+      (purchases, "false", 1)).foreach { case (other, requireAll, expectedShuffles) =>
       withSQLConf(
           SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
           SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> requireAll) {
@@ -5697,8 +5698,18 @@ class KeyGroupedPartitioningSuite
              |FROM testcat.ns.$items i
              |JOIN testcat.ns.$other p ON i.id = p.item_id AND i.arrive_time = p.time
              |""".stripMargin)
-        assert(collectShuffles(df.queryExecution.executedPlan).size == expectedShuffles,
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        assert(shuffles.size == expectedShuffles,
           s"joining $other with requireAllClusterKeysForCoPartition = $requireAll")
+        if (expectedShuffles == 2) {
+          // Both sides are shuffled on all the join keys, not on `id` alone.
+          val shuffleKeys = shuffles.map(_.outputPartitioning match {
+            case h: physical.HashPartitioning => h.expressions.flatMap(_.references.map(_.name))
+            case p => fail(s"joining $other: expected a hash shuffle, got $p")
+          })
+          assert(shuffleKeys.toSet == Set(Seq("id", "arrive_time"), Seq("item_id", "time")),
+            s"joining $other: both sides are shuffled on all the join keys")
+        }
         checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0)))
       }
     }

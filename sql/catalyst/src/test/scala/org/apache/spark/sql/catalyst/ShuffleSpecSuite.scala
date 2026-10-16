@@ -724,8 +724,11 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       Seq(spec(a), spec(bucketA)).foreach { s =>
         assert(!s.canCreatePartitioning, s"${s.partitioning.expressions} does not cover b")
       }
+      // The same specs are accepted without the requirement, so it is what turns them away.
       withSQLConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
-        assert(spec(a).canCreatePartitioning)
+        Seq(spec(a), spec(bucketA)).foreach { s =>
+          assert(s.canCreatePartitioning, s"${s.partitioning.expressions} without the requirement")
+        }
       }
     }
   }
