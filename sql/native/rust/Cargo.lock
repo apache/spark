@@ -459,6 +459,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "spark-native-sink-demo"
+version = "0.1.0"
+dependencies = [
+ "arrow-array",
+ "arrow-schema",
+ "serde",
+ "serde_json",
+ "spark-native-source",
+]
+
+[[package]]
 name = "spark-native-source"
 version = "0.1.0"
 dependencies = [

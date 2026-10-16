@@ -24,8 +24,8 @@ use arrow_array::{ArrayRef, Int64Array, RecordBatch, RecordBatchIterator, Record
 use arrow_schema::{ArrowError, DataType, Field, Schema, SchemaRef};
 use serde::{Deserialize, Serialize};
 use spark_native_source::{
-    BatchReader, BatchReaderFactory, BatchSource, FilterSupport, LimitSupport, Options, Predicate,
-    Result, ScanBuilder, ScanPlan, SourceCapability, TaskContext,
+    BatchReader, BatchReaderFactory, BatchSource, DataSource, FilterSupport, LimitSupport, Options,
+    Predicate, Result, ScanBuilder, ScanPlan, TaskContext,
 };
 
 pub struct RangeSource {
@@ -56,9 +56,7 @@ pub struct RangePartition {
     end: i64,
 }
 
-impl BatchSource for RangeSource {
-    type Scan = RangeScan;
-
+impl DataSource for RangeSource {
     fn new(options: Options) -> Result<Self> {
         for key in options.keys() {
             if !matches!(
@@ -86,13 +84,13 @@ impl BatchSource for RangeSource {
         })
     }
 
-    fn capabilities(&self) -> Vec<SourceCapability> {
-        vec![SourceCapability::BatchRead]
-    }
-
     fn schema(&self) -> Result<SchemaRef> {
         output_schema(&["id".into(), "label".into()])
     }
+}
+
+impl BatchSource for RangeSource {
+    type Scan = RangeScan;
 
     fn scan(&self, schema: SchemaRef) -> Result<Self::Scan> {
         let columns: Vec<String> = schema.fields().iter().map(|f| f.name().clone()).collect();

@@ -160,12 +160,12 @@ unsafe extern "C" fn release(stream: *mut FFI_ArrowArrayStream) {
 // Compare Spark logical types, ignoring Arrow nullability/metadata and the
 // interchangeable physical encodings of strings and binary data. Spark also
 // distinguishes only the presence of a time zone, not its spelling.
-pub(super) fn validate_schema(schema: &SchemaRef) -> Result<()> {
+pub(crate) fn validate_schema(schema: &SchemaRef) -> Result<()> {
     canonical_fields(schema.fields())?;
     Ok(())
 }
 
-fn canonical_fields(fields: &Fields) -> Result<Fields> {
+pub(crate) fn canonical_fields(fields: &Fields) -> Result<Fields> {
     fields
         .iter()
         .map(|field| {

@@ -27,10 +27,12 @@ pub use arrow_schema::ffi::FFI_ArrowSchema as ArrowSchema;
 use arrow_schema::{Schema, SchemaRef};
 
 use crate::bridge::panic_message;
-use crate::{FilterSupport, Options, Result};
+use crate::{FilterSupport, Options, Result, WriteMode};
 
 pub const ABI_VERSION: i32 = 1;
 pub const BATCH_READ: u64 = 1;
+pub const BATCH_WRITE: u64 = 4;
+pub const TRUNCATE: u64 = 16;
 pub const LOG_ERROR: i32 = 1;
 
 pub type SparkDsSink = Option<unsafe extern "C" fn(*mut c_void, *const u8, i64)>;
@@ -294,6 +296,59 @@ pub unsafe fn options(info: *const SparkDsCreateInfo) -> Result<Options> {
         .collect())
 }
 
+/// # Safety
+/// `info` must follow the create_writer contract of the C header.
+pub unsafe fn write_mode(info: *const SparkDsWriteInfo) -> Result<WriteMode> {
+    let size = unsafe { struct_size(info)? };
+    let pointer = info.cast();
+    let mode: i32 = unsafe { field(pointer, size, offset_of!(SparkDsWriteInfo, mode)) }
+        .ok_or("write info does not provide a mode")?;
+    let query_id: *const c_char =
+        unsafe { field(pointer, size, offset_of!(SparkDsWriteInfo, query_id)) }
+            .ok_or("write info does not provide a query ID")?;
+    if !query_id.is_null() {
+        return Err("streaming writes are not supported".into());
+    }
+    match mode {
+        0 => Ok(WriteMode::Append),
+        1 => Ok(WriteMode::Truncate),
+        _ => Err(format!("unsupported native write mode: {mode}").into()),
+    }
+}
+
+pub fn batch_epoch(epoch: i64) -> Result<()> {
+    if epoch != -1 {
+        return Err("batch writes require epoch ID -1".into());
+    }
+    Ok(())
+}
+
+/// # Safety
+/// Both arrays must contain count readable values. Non-null message pointers
+/// must address their lengths of bytes and remain valid for the returned borrow.
+pub unsafe fn messages<'a>(
+    pointers: *const *const u8,
+    lengths: *const i64,
+    count: i64,
+) -> Result<Vec<Option<&'a [u8]>>> {
+    let pointers = unsafe { slice(pointers, count)? };
+    let lengths = unsafe { slice(lengths, count)? };
+    pointers
+        .iter()
+        .zip(lengths)
+        .map(|(&pointer, &length)| {
+            if pointer.is_null() {
+                if length != 0 {
+                    return Err("null commit message must have zero length".into());
+                }
+                Ok(None)
+            } else {
+                Ok(Some(unsafe { slice(pointer, length)? }))
+            }
+        })
+        .collect()
+}
+
 pub fn predicate_use(support: FilterSupport) -> i32 {
     match support {
         FilterSupport::Unsupported => 0,
@@ -358,5 +413,44 @@ mod tests {
         let prefix = size_of::<i64>() as i64;
         let info = (&prefix as *const i64).cast::<SparkDsCreateInfo>();
         assert!(unsafe { options(info) }.is_err());
+    }
+
+    #[test]
+    fn write_info_rejects_truncated_unknown_and_streaming_requests() {
+        let prefix = size_of::<i64>() as i64;
+        let truncated = (&prefix as *const i64).cast::<SparkDsWriteInfo>();
+        assert!(unsafe { write_mode(truncated) }.is_err());
+        let mut info = SparkDsWriteInfo {
+            size: size_of::<SparkDsWriteInfo>() as i64,
+            mode: 0,
+            query_id: std::ptr::null(),
+        };
+        assert_eq!(unsafe { write_mode(&info) }.unwrap(), WriteMode::Append);
+        info.mode = 1;
+        assert_eq!(unsafe { write_mode(&info) }.unwrap(), WriteMode::Truncate);
+        info.mode = 2;
+        assert!(unsafe { write_mode(&info) }.is_err());
+        info.mode = 0;
+        info.query_id = c"stream".as_ptr();
+        assert!(unsafe { write_mode(&info) }.is_err());
+        assert!(batch_epoch(-1).is_ok());
+        assert!(batch_epoch(0).is_err());
+    }
+
+    #[test]
+    fn abort_messages_distinguish_missing_and_empty_messages() {
+        let bytes = [7_u8, 8];
+        let pointers = [std::ptr::null(), bytes.as_ptr(), bytes.as_ptr()];
+        let lengths = [0, 0, 2];
+        let values = unsafe { messages(pointers.as_ptr(), lengths.as_ptr(), 3) }.unwrap();
+        assert_eq!(values, vec![None, Some(&[][..]), Some(&bytes[..])]);
+        assert!(unsafe { messages(std::ptr::null(), std::ptr::null(), 0) }
+            .unwrap()
+            .is_empty());
+        assert!(unsafe { messages(std::ptr::null(), std::ptr::null(), -1) }.is_err());
+        let invalid_lengths = [1, 0, 2];
+        assert!(unsafe { messages(pointers.as_ptr(), invalid_lengths.as_ptr(), 3) }.is_err());
+        let invalid_lengths = [0, -1, 2];
+        assert!(unsafe { messages(pointers.as_ptr(), invalid_lengths.as_ptr(), 3) }.is_err());
     }
 }

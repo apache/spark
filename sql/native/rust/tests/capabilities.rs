@@ -25,8 +25,8 @@ use spark_native_source::abi::{
     ArrowSchema, SparkDsCreateInfo, SparkDsHost, SparkDsLibrary, ABI_VERSION,
 };
 use spark_native_source::{
-    BatchReader, BatchReaderFactory, BatchSource, Options, Result, ScanBuilder, ScanPlan,
-    SourceCapability, TaskContext,
+    BatchReader, BatchReaderFactory, BatchSource, DataSource, Options, Result, ScanBuilder,
+    ScanPlan, SourceCapability, TaskContext,
 };
 
 static DECLARATIONS: AtomicUsize = AtomicUsize::new(0);
@@ -38,16 +38,14 @@ struct Source {
     mode: String,
 }
 
-impl BatchSource for Source {
-    type Scan = Builder;
-
+impl DataSource for Source {
     fn new(options: Options) -> Result<Self> {
         Ok(Self {
             mode: options.get("capabilities").cloned().unwrap(),
         })
     }
 
-    fn capabilities(&self) -> Vec<SourceCapability> {
+    fn capabilities(&self, _: &[SourceCapability]) -> Vec<SourceCapability> {
         DECLARATIONS.fetch_add(1, Ordering::SeqCst);
         match self.mode.as_str() {
             "empty" => vec![],
@@ -67,6 +65,10 @@ impl BatchSource for Source {
         SCHEMAS.fetch_add(1, Ordering::SeqCst);
         Ok(Arc::new(Schema::empty()))
     }
+}
+
+impl BatchSource for Source {
+    type Scan = Builder;
 
     fn scan(&self, _: SchemaRef) -> Result<Builder> {
         SCANS.fetch_add(1, Ordering::SeqCst);
@@ -225,7 +227,7 @@ fn source_capabilities_control_the_exported_abi_and_source_lifecycle() {
         assert_ne!(status, 0, "{mode}");
         assert_eq!(
             error(library),
-            format!("capability {capability} is not supported by this batch-read SDK")
+            format!("capability {capability} is not registered")
         );
         assert_eq!(mask, 0);
         assert!(source.is_null());

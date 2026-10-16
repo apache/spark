@@ -19,10 +19,11 @@ use std::mem::offset_of;
 use crate::abi::{self, Interrupted, SparkDsTaskContext};
 use crate::Result;
 
-/// Task identifiers and cooperative cancellation, borrowed until its Arrow stream is released.
+/// Task identifiers and cooperative cancellation, borrowed until its reader or writer is closed.
 ///
-/// A reader may retain this value and check it during long operations. It cannot retain it
-/// beyond the lifetime of its returned reader. Blocking I/O still needs its own timeouts.
+/// A reader or writer may retain this value and check it during long operations.
+/// It cannot retain it beyond the lifetime of its returned reader or writer.
+/// Blocking I/O still needs its own timeouts.
 ///
 /// ```compile_fail
 /// use spark_native_source::TaskContext;
@@ -49,7 +50,7 @@ unsafe impl Send for TaskContext<'_> {}
 unsafe impl Sync for TaskContext<'_> {}
 
 impl TaskContext<'static> {
-    /// A context without Spark task metadata, for testing a reader directly.
+    /// A context without Spark task metadata, for testing a reader or writer directly.
     pub fn detached() -> Self {
         Self {
             pointer: std::ptr::null(),
@@ -69,7 +70,8 @@ impl<'task> TaskContext<'task> {
     ///
     /// # Safety
     /// The host must keep the context and its callbacks valid for `'task`, including calls from
-    /// other threads. In the Spark ABI this lasts until the exported Arrow stream is released.
+    /// other threads. Spark keeps it alive until the Arrow stream is released or
+    /// data writer closes.
     #[doc(hidden)]
     pub unsafe fn from_raw(pointer: *const SparkDsTaskContext) -> Result<Self> {
         let size = unsafe { abi::struct_size(pointer)? };

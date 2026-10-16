@@ -36,6 +36,7 @@ def current_platform():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--source", default="rust_sdk_range", help="Registered data source name")
     parser.add_argument("--library", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--platform", default=current_platform(), help="Override for cross builds")
@@ -56,7 +57,7 @@ def main():
     library_path = f"{args.platform}/{args.library.name}"
     manifest = {
         "abiVersion": 1,
-        "dataSources": ["rust_sdk_range"],
+        "dataSources": [args.source],
         "libraries": {args.platform: library_path},
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)

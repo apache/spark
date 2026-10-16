@@ -13,19 +13,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Experimental batch-read SDK for the C ABI proposed in Spark PR #59424.
+//! Experimental batch data source SDK for the C ABI proposed in Spark PR #59424.
 //!
-//! Implement [`BatchSource`], [`ScanBuilder`] and [`BatchReaderFactory`], then
-//! invoke [`export_data_source!`] once in a `cdylib` crate. The SDK owns handles,
-//! plan serialization, C ABI adaptation, and Arrow C Stream export. Rust traits
+//! Implement [`DataSource`] and the batch-read or batch-write traits, then invoke
+//! [`export_data_source!`] once in a `cdylib` crate. The SDK owns handles,
+//! plan/message serialization, C ABI adaptation, and Arrow import/export. Rust traits
 //! stay inside the plugin; they are not an ABI between dynamic libraries.
 
 use std::collections::BTreeMap;
 
-use arrow_array::RecordBatchReader;
+use arrow_array::{RecordBatch, RecordBatchReader};
 use arrow_schema::SchemaRef;
 use serde::de::DeserializeOwned;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 #[doc(hidden)]
 pub mod abi;
@@ -33,7 +33,11 @@ pub mod abi;
 pub mod bridge;
 mod export;
 mod predicate;
+#[doc(hidden)]
+pub mod provider;
 mod task;
+#[doc(hidden)]
+pub mod write;
 
 pub use predicate::Predicate;
 pub use task::TaskContext;
@@ -42,13 +46,14 @@ pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub type Result<T> = std::result::Result<T, Error>;
 pub type Options = BTreeMap<String, String>;
 pub type BatchReader<'task> = Box<dyn RecordBatchReader + Send + 'task>;
+pub type TaskWriter<'task, M> = Box<dyn BatchWriter<Message = M> + 'task>;
 
 /// Native operations supported by a source instance with its effective options.
 ///
 /// These are native capabilities, not Spark's Data Source V2 routing flags or
-/// per-scan pushdown results. This batch-read SDK currently accepts only
-/// [`BatchRead`](Self::BatchRead); declaring another capability fails source
-/// creation because the corresponding callbacks are not implemented.
+/// per-scan pushdown results. Registration determines the available operations;
+/// a source instance may disable them but cannot enable unregistered operations.
+/// Streaming operations are not implemented by this SDK yet.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum SourceCapability {
@@ -93,35 +98,112 @@ pub struct ScanPlan<F: BatchReaderFactory> {
     pub partitions: Vec<F::Partition>,
 }
 
-/// Driver-side source configuration and schema discovery.
+/// Driver-side source configuration, schema discovery, and capability restrictions.
 ///
-/// Override [`capabilities`](Self::capabilities) to declare the operations this
-/// instance supports. Writes and streaming remain absent from the native
-/// function table. Spark also creates sources to discover table capabilities
-/// during query analysis; such a source can be dropped without calling `schema`
-/// or `scan`.
-pub trait BatchSource: Send + Sized + 'static {
-    type Scan: ScanBuilder;
-
-    /// Spark passes option keys in lower case. Keep construction lightweight:
-    /// a capability probe uses only table options, while a scan may override
-    /// them with query options. Open executor resources in the factory.
+/// Spark may create a source only to inspect its capabilities, then drop it.
+/// Keep construction lightweight. Readers and writers must outlive their source.
+pub trait DataSource: Send + Sized + 'static {
+    /// Spark passes option keys in lower case. A capability probe uses table
+    /// options; an operation may override them with query options.
     fn new(options: Options) -> Result<Self>;
 
-    /// Declares this instance's capabilities, which may depend on its options.
-    /// The SDK evaluates this once during source creation, validates the set
-    /// against its implemented callbacks, and keeps it fixed for that instance.
-    /// Duplicate entries are ignored. An empty set permits schema discovery but
-    /// rejects batch scan creation without calling `scan`.
-    fn capabilities(&self) -> Vec<SourceCapability> {
-        vec![SourceCapability::BatchRead]
+    /// By default, enable every registered operation. Override this to restrict
+    /// the current instance, for example for a read-only destination. The SDK
+    /// evaluates this once, ignores duplicates, and rejects unregistered flags.
+    /// Truncate requires BatchWrite. An empty set still permits schema discovery.
+    fn capabilities(&self, supported: &[SourceCapability]) -> Vec<SourceCapability> {
+        supported.to_vec()
     }
 
     fn schema(&self) -> Result<SchemaRef>;
+}
+
+/// Driver-side entry point for batch reads.
+///
+/// Register with `export_data_source!(Source, batch_read)` (or its one-argument
+/// shorthand). Metadata and construction belong to [`DataSource`].
+pub trait BatchSource: DataSource {
+    type Scan: ScanBuilder;
 
     /// The schema may be supplied by the user; reject unsupported schemas.
     /// The returned builder must remain valid after this source is dropped.
     fn scan(&self, schema: SchemaRef) -> Result<Self::Scan>;
+}
+
+/// How a batch write changes the destination.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum WriteMode {
+    Append,
+    /// Replace existing data at driver commit, never at writer creation.
+    Truncate,
+}
+
+/// Driver-side entry point for batch writes, independent of read support.
+///
+/// Register `batch_write` and, if implemented, `truncate`. The SDK derives native
+/// capabilities and callbacks from registration, then applies instance restrictions.
+pub trait BatchWriteSource: DataSource {
+    type Write: BatchWrite;
+
+    /// Validate the input schema and create an independent write coordinator.
+    /// Construction may be followed only by Drop, without commit or abort.
+    fn write(&self, schema: SchemaRef, mode: WriteMode) -> Result<Self::Write>;
+}
+
+/// A driver coordinator for one batch write.
+///
+/// Keep irreversible publication, including removing overwritten data, in commit.
+/// Drop releases resources; it must not publish data or perform fallible flushing.
+/// Failed commit is followed by abort on the same coordinator.
+pub trait BatchWrite: Send + 'static {
+    type Factory: BatchWriterFactory;
+
+    /// Return serializable executor configuration. The SDK caches the encoded
+    /// factory and negotiated schema, including serialization failures.
+    /// Include a unique operation ID when needed; Spark supplies no batch query ID.
+    fn factory(&mut self) -> Result<Self::Factory>;
+
+    /// Publish only the winning attempt from each input partition. Task retries
+    /// and speculative attempts can stage other data that must not be published.
+    fn commit(
+        &mut self,
+        messages: Vec<<Self::Factory as BatchWriterFactory>::Message>,
+    ) -> Result<()>;
+
+    /// Abort after input, task, or driver commit failure. None preserves the
+    /// position of a partition whose commit message did not reach the driver.
+    /// Executor loss can leave orphaned staged data; plan for its cleanup.
+    fn abort(
+        &mut self,
+        messages: Vec<Option<<Self::Factory as BatchWriterFactory>::Message>>,
+    ) -> Result<()>;
+}
+
+/// Serializable configuration for independent task-attempt writers.
+///
+/// Open connections and files in open, not in the factory. A returned writer
+/// cannot borrow this temporary factory, but may retain the task context until
+/// close. Callbacks can move between threads sequentially; writers must be Send.
+pub trait BatchWriterFactory: Serialize + DeserializeOwned + Send + 'static {
+    type Message: Serialize + DeserializeOwned + Send + 'static;
+
+    fn open<'task>(&self, task: TaskContext<'task>) -> Result<TaskWriter<'task, Self::Message>>;
+}
+
+/// One task attempt's writer. The SDK closes it after commit or abort.
+pub trait BatchWriter: Send {
+    type Message;
+
+    /// Takes ownership of an imported Arrow batch, which may be retained after
+    /// this call. Process batches incrementally and check task cancellation.
+    fn write(&mut self, batch: RecordBatch) -> Result<()>;
+
+    /// Finish staging and return a typed message for the driver. Do not make the
+    /// whole write visible here. On failure (including message serialization),
+    /// the SDK keeps this writer available for abort.
+    fn commit(&mut self) -> Result<Self::Message>;
+
+    fn abort(&mut self) -> Result<()>;
 }
 
 /// Serializable configuration for creating independent executor readers.

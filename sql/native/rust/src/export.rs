@@ -13,23 +13,53 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/// Exports one batch-read provider through version 1 of Spark's C data source ABI.
+/// Exports a provider through version 1 of Spark's C data source ABI.
 ///
 /// Call this macro once in a cdylib. The only exported symbol is spark_ds_init;
 /// providers implement the safe Rust traits and do not handle C pointers.
+/// Register `batch_read`, `batch_write`, or both (in that order). Append `truncate`
+/// to opt in to overwrite support. The one-argument form registers batch reads.
+/// Registration generates the default capabilities and installs matching callbacks;
+/// unsupported operation families have null callbacks.
 #[macro_export]
 macro_rules! export_data_source {
     ($source:ty) => {
+        $crate::export_data_source!($source, batch_read);
+    };
+    ($source:ty, batch_read) => {
+        $crate::export_data_source!(@provider $crate::provider::ReadOnly<$source>);
+    };
+    ($source:ty, batch_write) => {
+        $crate::export_data_source!(@provider $crate::provider::WriteOnly<$source, false>);
+    };
+    ($source:ty, batch_write, truncate) => {
+        $crate::export_data_source!(@provider $crate::provider::WriteOnly<$source, true>);
+    };
+    ($source:ty, batch_read, batch_write) => {
+        $crate::export_data_source!(@provider $crate::provider::ReadWrite<$source, false>);
+    };
+    ($source:ty, batch_read, batch_write, truncate) => {
+        $crate::export_data_source!(@provider $crate::provider::ReadWrite<$source, true>);
+    };
+    (@provider $provider:ty) => {
         mod __spark_native_datasource_exports {
             use super::*;
             use std::ffi::{c_char, c_int, c_void};
             use $crate::abi::{self, ArrowArrayStream, ArrowSchema, SparkDsLibrary, SparkDsSink};
             use $crate::bridge::{open_reader, Bridge};
 
-            type Factory = <<$source as $crate::BatchSource>::Scan as $crate::ScanBuilder>::Factory;
+            use $crate::provider::Provider as _;
 
-            fn bridge() -> &'static Bridge<$source> {
-                static BRIDGE: std::sync::OnceLock<Bridge<$source>> = std::sync::OnceLock::new();
+            type Registration = $provider;
+            type Factory = <<Registration as $crate::provider::Provider>::Scan
+                as $crate::ScanBuilder>::Factory;
+            type WriterFactory = <<Registration as $crate::provider::Provider>::Write
+                as $crate::BatchWrite>::Factory;
+            type Message = <WriterFactory as $crate::BatchWriterFactory>::Message;
+
+            fn bridge() -> &'static Bridge<Registration> {
+                static BRIDGE: std::sync::OnceLock<Bridge<Registration>> =
+                    std::sync::OnceLock::new();
                 BRIDGE.get_or_init(Bridge::default)
             }
 
@@ -39,32 +69,40 @@ macro_rules! export_data_source {
                 last_error: Some(abi::last_error),
                 create: Some(create),
                 schema: Some(schema),
-                create_reader: Some(create_reader),
+                create_reader: if Registration::READ { Some(create_reader) } else { None },
                 create_stream_reader: None,
-                create_writer: None,
+                create_writer: if Registration::WRITE { Some(create_writer) } else { None },
                 close: Some(close),
-                push_predicates: Some(push_predicates),
-                push_limit: Some(push_limit),
-                prune_columns: Some(prune_columns),
-                partitions: Some(partitions),
-                serialize_reader: Some(serialize_reader),
-                close_reader: Some(close_reader),
+                push_predicates: if Registration::READ { Some(push_predicates) } else { None },
+                push_limit: if Registration::READ { Some(push_limit) } else { None },
+                prune_columns: if Registration::READ { Some(prune_columns) } else { None },
+                partitions: if Registration::READ { Some(partitions) } else { None },
+                serialize_reader: if Registration::READ { Some(serialize_reader) } else { None },
+                close_reader: if Registration::READ { Some(close_reader) } else { None },
                 initial_offset: None,
                 latest_offset: None,
                 stream_partitions: None,
                 serialize_stream_reader: None,
                 commit_offset: None,
                 close_stream_reader: None,
-                read: Some(read),
-                serialize_writer: None,
-                commit: None,
-                abort: None,
-                close_writer: None,
-                create_data_writer: None,
-                write: None,
-                commit_data_writer: None,
-                abort_data_writer: None,
-                close_data_writer: None,
+                read: if Registration::READ { Some(read) } else { None },
+                serialize_writer: if Registration::WRITE { Some(serialize_writer) } else { None },
+                commit: if Registration::WRITE { Some(commit) } else { None },
+                abort: if Registration::WRITE { Some(abort) } else { None },
+                close_writer: if Registration::WRITE { Some(close_writer) } else { None },
+                create_data_writer: if Registration::WRITE {
+                    Some(create_data_writer)
+                } else {
+                    None
+                },
+                write: if Registration::WRITE { Some(write) } else { None },
+                commit_data_writer: if Registration::WRITE {
+                    Some(commit_data_writer)
+                } else {
+                    None
+                },
+                abort_data_writer: if Registration::WRITE { Some(abort_data_writer) } else { None },
+                close_data_writer: if Registration::WRITE { Some(close_data_writer) } else { None },
             };
 
             #[export_name = "spark_ds_init"]
@@ -213,6 +251,112 @@ macro_rules! export_data_source {
                     unsafe { output.write(stream) };
                     Ok(())
                 })
+            }
+
+            unsafe extern "C" fn create_writer(
+                source: *mut c_void,
+                schema: *mut ArrowSchema,
+                info: *const abi::SparkDsWriteInfo,
+                writer: *mut *mut c_void,
+            ) -> c_int {
+                abi::call(|| {
+                    abi::require_output(writer)?;
+                    let mode = unsafe { abi::write_mode(info)? };
+                    let schema = unsafe { abi::import_schema(schema)? };
+                    let handle = bridge().create_writer(source as usize as i64, schema, mode)?;
+                    unsafe { writer.write(handle as usize as *mut c_void) };
+                    Ok(())
+                })
+            }
+
+            unsafe extern "C" fn serialize_writer(
+                writer: *mut c_void,
+                sink: SparkDsSink,
+                data: *mut c_void,
+            ) -> c_int {
+                abi::call(|| {
+                    let state = bridge().serialized_writer(writer as usize as i64)?;
+                    unsafe { abi::emit(sink, data, &state) }
+                })
+            }
+
+            unsafe extern "C" fn commit(
+                writer: *mut c_void,
+                epoch: i64,
+                messages: *const *const u8,
+                lengths: *const i64,
+                count: i64,
+            ) -> c_int {
+                abi::call(|| {
+                    abi::batch_epoch(epoch)?;
+                    let messages = unsafe { abi::messages(messages, lengths, count)? };
+                    bridge().commit(writer as usize as i64, &messages)
+                })
+            }
+
+            unsafe extern "C" fn abort(
+                writer: *mut c_void,
+                epoch: i64,
+                messages: *const *const u8,
+                lengths: *const i64,
+                count: i64,
+            ) -> c_int {
+                abi::call(|| {
+                    abi::batch_epoch(epoch)?;
+                    let messages = unsafe { abi::messages(messages, lengths, count)? };
+                    bridge().abort(writer as usize as i64, &messages)
+                })
+            }
+
+            unsafe extern "C" fn close_writer(writer: *mut c_void) {
+                let _ = abi::call(|| bridge().close_writer(writer as usize as i64));
+            }
+
+            unsafe extern "C" fn create_data_writer(
+                task: *const abi::SparkDsTaskContext,
+                state: *const u8,
+                length: i64,
+                epoch: i64,
+                writer: *mut *mut c_void,
+            ) -> c_int {
+                abi::call(|| {
+                    abi::require_output(writer)?;
+                    abi::batch_epoch(epoch)?;
+                    let state = unsafe { abi::slice(state, length)? };
+                    let handle = unsafe { $crate::write::open::<WriterFactory>(task, state)? };
+                    unsafe { writer.write(handle) };
+                    Ok(())
+                })
+            }
+
+            unsafe extern "C" fn write(
+                writer: *mut c_void,
+                array: *mut abi::ArrowArray,
+                schema: *mut ArrowSchema,
+            ) -> c_int {
+                abi::call(|| unsafe {
+                    $crate::write::write_batch::<Message>(writer, array, schema)
+                })
+            }
+
+            unsafe extern "C" fn commit_data_writer(
+                writer: *mut c_void,
+                sink: SparkDsSink,
+                data: *mut c_void,
+            ) -> c_int {
+                abi::call(|| {
+                    sink.ok_or("null result sink")?;
+                    let message = unsafe { $crate::write::commit_task::<Message>(writer)? };
+                    unsafe { abi::emit(sink, data, &message) }
+                })
+            }
+
+            unsafe extern "C" fn abort_data_writer(writer: *mut c_void) -> c_int {
+                abi::call(|| unsafe { $crate::write::abort_task::<Message>(writer) })
+            }
+
+            unsafe extern "C" fn close_data_writer(writer: *mut c_void) {
+                let _ = abi::call(|| unsafe { $crate::write::close_task::<Message>(writer) });
             }
         }
     };

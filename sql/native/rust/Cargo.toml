@@ -22,7 +22,10 @@ publish.workspace = true
 description = "Experimental Rust batch data source SDK for Apache Spark PR #59424"
 
 [workspace]
-members = ["../../../examples/src/main/rust/native-data-source"]
+members = [
+    "../../../examples/src/main/rust/native-data-source",
+    "../../../examples/src/main/rust/native-data-sink",
+]
 default-members = ["."]
 resolver = "2"
 
