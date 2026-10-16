@@ -35,16 +35,19 @@ class SparkConnectCurrentUserSuite extends SparkConnectServerTest {
   test("SPARK-56891: AnalyzePlan uses the session user for SQL user functions") {
     withRawBlockingStub { stub =>
       Seq("connect-user-a", "connect-user-b", "connect-user-a").foreach { user =>
-        val request = proto.AnalyzePlanRequest.newBuilder()
+        val request = proto.AnalyzePlanRequest
+          .newBuilder()
           .setSessionId(UUID.randomUUID().toString)
           .setUserContext(proto.UserContext.newBuilder().setUserId(user))
-          .setExplain(proto.AnalyzePlanRequest.Explain.newBuilder()
-            .setPlan(buildPlan(
-              "SELECT user() AS u, current_user() AS c, session_user() AS s"))
-            .setExplainMode(proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_EXTENDED))
+          .setExplain(
+            proto.AnalyzePlanRequest.Explain
+              .newBuilder()
+              .setPlan(buildPlan("SELECT user() AS u, current_user() AS c, session_user() AS s"))
+              .setExplainMode(proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_EXTENDED))
           .build()
         val explanation = stub.analyzePlan(request).getExplain.getExplainString
-        val optimized = explanation.split("== Optimized Logical Plan ==")(1)
+        val optimized = explanation
+          .split("== Optimized Logical Plan ==")(1)
           .split("== Physical Plan ==")(0)
         Seq("u", "c", "s").foreach { alias =>
           assert(optimized.contains(s"$user AS $alias#"), explanation)
