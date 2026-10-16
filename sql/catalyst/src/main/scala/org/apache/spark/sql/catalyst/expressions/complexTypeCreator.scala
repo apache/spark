@@ -1036,7 +1036,13 @@ case class UpdateFields(structExpr: Expression, fieldOps: Seq[StructFieldsOperat
           updatedValues += expr
           -1
       }
-      UpdateFieldsExpression(structRef, updatedValues.toSeq, outputOrdinals, newFields)
+      if (!structRef.nullable && outputOrdinals.forall(_ < 0)) {
+        CreateNamedStruct(newFields.zip(updatedValues).flatMap { case (field, value) =>
+          Seq(Literal(field.name), value)
+        })
+      } else {
+        UpdateFieldsExpression(structRef, updatedValues.toSeq, outputOrdinals, newFields)
+      }
     }
     structExpr match {
       case namedStruct: CreateNamedStruct =>

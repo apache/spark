@@ -21,12 +21,15 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, BoundReference,
-  CreateNamedStruct, DropField, Expression, GetStructField, Literal, UnsafeProjection, UpdateFields,
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, BoundReference, Cast,
+  CreateNamedStruct, Divide, DropField, Expression, GetStructField, Literal, UnsafeProjection,
+  UpdateFields,
   With, WithField}
+import org.apache.spark.sql.catalyst.expressions.aggregate.Sum
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.catalyst.planning.PhysicalAggregation
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, toPrettySQL}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
@@ -86,6 +89,57 @@ class ReplaceUpdateFieldsExpressionSuite extends PlanTest {
     assert(!expressions.exists(_.exists(_.isInstanceOf[With])))
     assert(!expressions.exists(_.exists(_ == Literal(100))))
     comparePlans(ReplaceUpdateFieldsExpression(replaced), replaced)
+  }
+
+  test("UpdateFields replacement removes unused sources and nested definitions") {
+    val innerType = StructType(Seq(StructField("a", StringType)))
+    val outerType = StructType(Seq(StructField("nested", innerType, nullable = false)))
+    Seq(false, true).foreach { nested =>
+      val structType = if (nested) outerType else innerType
+      val source = Cast(AttributeReference("source", structType, nullable = false)(), structType)
+      val update = UpdateFields(source, if (nested) "nested.a" else "a", Literal(7))
+      val plan = LocalRelation().select(Alias(update, "result")())
+      val replaced = ReplaceUpdateFieldsExpression(plan)
+      val expressions = replaced.flatMap(_.expressions)
+      assert(!expressions.exists(_.exists(_ == source)))
+      assert(!expressions.exists(_.exists(_.isInstanceOf[With])))
+      assert(!expressions.exists(_.exists(_.isInstanceOf[UpdateFields])))
+      val value = CreateNamedStruct(Seq(Literal("a"), Literal(7)))
+      val expected = if (nested) {
+        CreateNamedStruct(Seq(Literal("nested"), value))
+      } else {
+        value
+      }
+      comparePlans(replaced, LocalRelation().select(Alias(expected, "result")()))
+    }
+  }
+
+  test("UpdateFields replacement removes unused aggregates behind casts") {
+    val x = $"x".int.notNull
+    val z = $"z".int.notNull
+    val source = Cast(CreateNamedStruct(Seq(Literal("a"),
+      Sum(Divide(x, z)).toAggregateExpression())),
+      StructType(Seq(StructField("a", StringType))))
+    val nestedSource = CreateNamedStruct(Seq(Literal("nested"), source))
+    Seq(source -> "a", nestedSource -> "nested.a").foreach { case (input, path) =>
+      val updated = UpdateFields(input, path, Literal(7))
+      val plan = Aggregate(Nil, Seq(Alias(updated, "result")()), LocalRelation(x, z))
+      val PhysicalAggregation(_, aggregates, _, _) = ReplaceUpdateFieldsExpression(plan)
+      assert(aggregates.isEmpty)
+    }
+  }
+
+  test("UpdateFields replacement preserves null inputs when every field is replaced") {
+    val structType = StructType(Seq(StructField("a", IntegerType)))
+    val source = BoundReference(0, structType, nullable = true)
+    val expression = UpdateFields(source, Seq(WithField("a", Literal(7)))).evalExpr
+    assert(expression.nullable)
+    assert(expression.exists(_ == source))
+    assert(expression.eval(InternalRow(null)) == null)
+    assert(expression.eval(InternalRow(InternalRow(1))) == InternalRow(7))
+    val projection = UnsafeProjection.create(Seq(expression))
+    assert(projection(InternalRow(null)).isNullAt(0))
+    assert(projection(InternalRow(InternalRow(1))).getStruct(0, 1).getInt(0) == 7)
   }
 
   test("nested UpdateFields SQL matches expanded operations") {

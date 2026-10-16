@@ -921,6 +921,18 @@ class ColumnExpressionSuite extends SharedSparkSession {
     }
   }
 
+  test("withField should discard unused aggregate inputs behind casts") {
+    onEachEvalPath {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        val df = Seq((1, 0)).toDF("x", "z")
+        val source = struct(sum($"x" / $"z").as("a")).cast("struct<a:string>")
+        checkAnswer(df.agg(source.withField("a", lit(1))), Row(Row(1)))
+        val nested = struct(source.as("nested")).cast("struct<nested:struct<a:string>>")
+        checkAnswer(df.agg(nested.withField("nested.a", lit(1))), Row(Row(Row(1))))
+      }
+    }
+  }
+
   test("SPARK-58902: BETWEEN on a nondeterministic input inside a conditional branch") {
     onEachEvalPath {
       // `BETWEEN` reads its input twice. Inlining the common expression into a branch gave each

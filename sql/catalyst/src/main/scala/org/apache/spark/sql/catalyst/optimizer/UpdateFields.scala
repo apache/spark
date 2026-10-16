@@ -21,10 +21,10 @@ import java.util.Locale
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Expression, StructFieldsOperation, UpdateFields, UpdateNestedField, WithField}
+import org.apache.spark.sql.catalyst.expressions.{CommonExpressionRef, Expression, StructFieldsOperation, UpdateFields, UpdateNestedField, With, WithField}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.UPDATE_FIELDS
+import org.apache.spark.sql.catalyst.trees.TreePattern.{UPDATE_FIELDS, WITH_EXPRESSION}
 
 
 /**
@@ -112,8 +112,17 @@ object OptimizeUpdateFields extends Rule[LogicalPlan] {
  * Replaces [[UpdateFields]] expression with an evaluable expression.
  */
 object ReplaceUpdateFieldsExpression extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
-    _.containsPattern(UPDATE_FIELDS)) {
-    case u: UpdateFields => u.evalExpr
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    val replaced = plan.transformAllExpressionsWithPruning(_.containsPattern(UPDATE_FIELDS)) {
+      case u: UpdateFields => u.evalExpr
+    }
+    // Lowering nested replacements can remove every reference to their struct input.
+    replaced.transformWithPruning(_.containsPattern(WITH_EXPRESSION)) {
+      case p => p.transformExpressionsUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {
+        case w @ With(child, defs) =>
+          val referencedIds = child.collect { case ref: CommonExpressionRef => ref.id }.toSet
+          if (defs.forall(d => !referencedIds.contains(d.id))) child else w
+      }
+    }
   }
 }
