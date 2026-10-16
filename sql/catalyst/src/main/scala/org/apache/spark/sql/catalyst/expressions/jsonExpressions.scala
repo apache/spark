@@ -26,8 +26,8 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode, FalseLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.expressions.json.{GetJsonObjectEvaluator, JsonExpressionUtils,
-  JsonPathParser, JsonPathResult, JsonQueryLookup, JsonTableEvaluator, JsonTablePathTrie,
-  JsonObjectEvaluator, JsonToStructsEvaluator, JsonTupleEvaluator, JsonValueLookup,
+  JsonObjectEvaluator, JsonPathParser, JsonPathResult, JsonQueryLookup, JsonTableEvaluator,
+  JsonTablePathTrie, JsonToStructsEvaluator, JsonTupleEvaluator, JsonValueLookup,
   MultiGetJsonObjectEvaluator, PathInstruction, SchemaOfJsonEvaluator, StructsToJsonEvaluator}
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.json._
