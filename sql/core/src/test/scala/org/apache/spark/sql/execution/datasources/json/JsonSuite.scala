@@ -1480,16 +1480,25 @@ abstract class JsonSuite
   }
 
   gridTest("multiline top level JSON array ends the document at a syntax error in a nested object")(
-      Seq("PERMISSIVE", "DROPMALFORMED")) { mode =>
+      for {
+        field <- Seq("struct", "array of structs")
+        mode <- Seq("PERMISSIVE", "DROPMALFORMED")
+      } yield (field, mode)) { case (field, mode) =>
     withSQLConf(
         SQLConf.JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY.key -> "true",
         SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
       withTempPath { file =>
-        // Resuming inside the second element would return `t`'s object as a row.
-        val document = """[{"a":1},{"s":{"x":1 2},"t":{"a":9}},{"a":2}]"""
+        val (document, fieldSchema) = field match {
+          // Resuming inside the second element would return `t`'s object as a row.
+          case "struct" =>
+            ("""[{"a":1},{"s":{"x":1 2},"t":{"a":9}},{"a":2}]""", "s STRUCT<x: INT>")
+          // Resuming inside `arr` would return its second struct as a row.
+          case "array of structs" =>
+            ("""[{"a":1},{"arr":[{"x":1 2},{"a":5}]},{"a":2}]""", "arr ARRAY<STRUCT<x: INT>>")
+        }
         Files.write(file.toPath, document.getBytes(StandardCharsets.UTF_8))
         val df = spark.read
-          .schema("a INT, s STRUCT<x: INT>, _corrupt_record STRING")
+          .schema(s"a INT, $fieldSchema, _corrupt_record STRING")
           .option("multiLine", true)
           .option("mode", mode)
           .json(file.getCanonicalPath)
