@@ -163,8 +163,7 @@ trait DataSourceV2ScanExecBase
    * this if an ordering over a transform becomes a real requirement.
    */
   override def outputOrdering: Seq[SortOrder] =
-    if (keptOrdering.isEmpty && derivedOrdering.nonEmpty &&
-        conf.v2BucketingPartitionKeyOrderingEnabled) {
+    if (keptOrdering.isEmpty && conf.v2BucketingPartitionKeyOrderingEnabled) {
       derivedOrdering
     } else {
       keptOrdering
