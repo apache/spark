@@ -71,7 +71,8 @@ message GraphFramesCommand {
   reserved 2, 3;
   reserved "output_path", "view_name";
 
-  // (Required) Client-generated UUID for the resulting CachedRemoteRelation.
+  // (Required) Client-generated ID for the resulting CachedRemoteRelation.
+  // Format: "_graphframes_cc_" followed by the 32-character hexadecimal UUID.
   // Repeating a command with the same ID reuses the retained result in the same session.
   string df_id = 4;
 }

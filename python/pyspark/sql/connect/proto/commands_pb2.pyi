@@ -336,7 +336,8 @@ class GraphFramesCommand(google.protobuf.message.Message):
     def api(self) -> pyspark.sql.connect.proto.graphframes_pb2.GraphFramesAPI:
         """(Required) The graph inputs and algorithm to execute. Currently supports connected components."""
     df_id: builtins.str
-    """(Required) Client-generated UUID for the resulting CachedRemoteRelation.
+    """(Required) Client-generated ID for the resulting CachedRemoteRelation.
+    Format: "_graphframes_cc_" followed by the 32-character hexadecimal UUID.
     Repeating a command with the same ID reuses the retained result in the same session.
     """
     def __init__(

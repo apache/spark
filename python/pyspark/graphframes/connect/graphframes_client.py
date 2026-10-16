@@ -719,7 +719,7 @@ class GraphFrameConnect:
         max_iter: int,
         storage_level: StorageLevel,
     ) -> DataFrame:
-        df_id = str(uuid.uuid4())
+        df_id = f"_graphframes_cc_{uuid.uuid4().hex}"
         api = self._get_pb_api_message(self._vertices, self._edges, self._spark.client)
         api.connected_components.CopyFrom(
             pb.ConnectedComponents(

@@ -3989,7 +3989,7 @@ class SparkConnectPlanner(
 
   private def handleGraphFramesCommand(command: proto.GraphFramesCommand): Unit = {
     val dfId = command.getDfId
-    require(UUID.fromString(dfId).toString == dfId, "Invalid GraphFrames result ID.")
+    require(dfId.matches("_graphframes_cc_[0-9a-f]{32}"), "Invalid GraphFrames result ID.")
     // The client-generated ID is the idempotency key, independent of the optional plan cache.
     session.synchronized {
       if (!sessionHolder.dataFrameCache.containsKey(dfId)) {

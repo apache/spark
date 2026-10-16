@@ -147,8 +147,8 @@ class GraphFramesUpstreamConnectTests(ReusedConnectTestCase):
         self.assertEqual(command.WhichOneof("command_type"), "graph_frames_command")
         df_id = command.graph_frames_command.df_id
         try:
-            self.assertEqual(str(uuid.UUID(df_id)), df_id)
-            self.assertEqual(uuid.UUID(df_id).version, 4)
+            self.assertRegex(df_id, r"^_graphframes_cc_[0-9a-f]{32}$")
+            self.assertEqual(uuid.UUID(hex=df_id.removeprefix("_graphframes_cc_")).version, 4)
             self.assertNotIn(df_id, ids)
             ids.add(df_id)
             root = result._plan.to_proto(client).root
@@ -278,7 +278,7 @@ class GraphFramesLocalCheckpointConnectTests(ReusedConnectTestCase):
         command = execute.call_args.args[0]
         try:
             expected = result.orderBy("id").collect()
-            for invalid_id in ["", "not-a-uuid"]:
+            for invalid_id in ["", str(uuid.uuid4()), "_graphframes_cc_invalid"]:
                 command.graph_frames_command.df_id = invalid_id
                 with self.assertRaisesRegex(Exception, "UUID|result ID"):
                     client.execute_command(command)

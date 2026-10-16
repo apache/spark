@@ -674,7 +674,7 @@ class GraphFrame:
         :param storage_level: storage level for both intermediate and final dataframes;
                               in Spark Connect, this controls intermediate dataframes only.
 
-        In Spark Connect, the client assigns a UUID and the server eagerly checkpoints the
+        In Spark Connect, the client assigns a unique ID and the server eagerly checkpoints the
         result, retaining it under that ID in the session's DataFrame cache. The returned
         DataFrame uses a cached remote relation without automatically persisting it. The final
         checkpoint uses reliable checkpointing when a checkpoint directory is configured,
