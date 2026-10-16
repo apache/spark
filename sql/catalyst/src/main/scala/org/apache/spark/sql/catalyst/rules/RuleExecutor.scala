@@ -55,7 +55,7 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
   private val logBatches = SQLConf.get.planChangeBatches.map(Utils.stringToSeq)
 
   def logRule(ruleName: String, oldPlan: TreeType, newPlan: TreeType): Unit = {
-    withLogLevel(logLevel) {
+    if (log.isEnabledForLevel(logLevel)) {
       if ((logRules.isEmpty || logRules.get.contains(ruleName)) &&
           !newPlan.fastEquals(oldPlan)) {
         val oldPlanStringWithOutput = oldPlan.treeString(verbose = false,
