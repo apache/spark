@@ -4108,10 +4108,25 @@ class DSV2CharVarcharTestSuite extends CharVarcharTestSuite
         assert(CharVarcharUtils.getRawType(cAttr.metadata).isEmpty,
           "ApplyCharTypePadding should have cleaned the relation breadcrumb")
         // Direct toOutputAttrs with CHAR readSchema is the regression guard.
-        // The InMemory prune path can still see a stamped relation object,
-        // so the optimized scan output is not a reliable check for this.
+        // Versioned InMemory tables are rebound after padding and arrive
+        // stamped, so the optimized scan output is not a reliable check.
         assert(CharVarcharUtils.getRawType(attrsFromCharReadSchema(rel).head.metadata).isEmpty,
           "toOutputAttrs must not re-stamp CHAR metadata on a padded relation")
+        checkAnswer(df, Row("ab   "))
+      }
+    }
+  }
+
+  test("SPARK-59016: standard-semantics V2 prune still pads with read-side padding off") {
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+      withPrunedV2CharRelation { (df, rel) =>
+        val cAttr = rel.output.find(_.name == "c").get
+        assert(CharVarcharUtils.getRawType(cAttr.metadata).isEmpty,
+          "standard semantics should still pad and clean when read-side padding is off")
+        assert(CharVarcharUtils.getRawType(attrsFromCharReadSchema(rel).head.metadata).isEmpty,
+          "toOutputAttrs must drop the marker on a cleaned standard-semantics relation")
         checkAnswer(df, Row("ab   "))
       }
     }
@@ -4127,6 +4142,7 @@ class DSV2CharVarcharTestSuite extends CharVarcharTestSuite
           "default read-side padding should have cleaned the relation breadcrumb")
         // Direct toOutputAttrs with CHAR readSchema is the regression guard:
         // always-keeping the marker would pass the end-to-end scan check.
+        // Versioned InMemory tables are rebound after padding and arrive stamped.
         assert(CharVarcharUtils.getRawType(attrsFromCharReadSchema(rel).head.metadata).isEmpty,
           "toOutputAttrs must drop the marker on a padded default-mode relation")
         checkAnswer(df, Row("ab   "))
