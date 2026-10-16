@@ -19,9 +19,13 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.parquet.filter2.predicate.{FilterApi, SparkFilterApi}
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
+import org.apache.spark.sql.sources
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -265,5 +269,153 @@ class ParquetFieldIdIOSuite extends ParquetTest with SharedSparkSession  {
         }
       }
     }
+  }
+
+  // Runs `code` for the DSv1 and the DSv2 Parquet source, each with both Parquet readers.
+  private def withAllParquetSources(code: => Unit): Unit = {
+    Seq("parquet", "").foreach { v1SourceList =>
+      withSQLConf(
+          SQLConf.USE_V1_SOURCE_LIST.key -> v1SourceList,
+          SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key -> "true") {
+        withClue(s"v1 source list: '$v1SourceList'") {
+          withAllParquetReaders(code)
+        }
+      }
+    }
+  }
+
+  test("field ids: swapped field names with different types") {
+    withTempDir { dir =>
+      // The file's `s.a` (id 21) is an int and its `s.b` (id 22) a string. The read schema keeps
+      // the ids and swaps the names, so `s.b` is the file's `s.a`.
+      val writeSchema = new StructType()
+        .add("id", IntegerType, true, withId(1))
+        .add("s", new StructType()
+          .add("a", IntegerType, true, withId(21))
+          .add("b", StringType, true, withId(22)), true, withId(2))
+      val readSchema = new StructType()
+        .add("id", IntegerType, true, withId(1))
+        .add("s", new StructType()
+          .add("b", IntegerType, true, withId(21))
+          .add("a", StringType, true, withId(22)), true, withId(2))
+      val data = Seq(Row(1, Row(10, "x")), Row(2, Row(20, "y")), Row(3, null))
+      spark.createDataFrame(data.asJava, writeSchema)
+        .write.mode("overwrite").parquet(dir.getCanonicalPath)
+
+      withAllParquetSources {
+        val df = spark.read.schema(readSchema).parquet(dir.getCanonicalPath)
+        checkAnswer(df, data)
+        checkAnswer(df.select("id", "s.b"), Seq(Row(1, 10), Row(2, 20), Row(3, null)))
+        checkAnswer(df.where("s.b > 15").select("id"), Row(2))
+        checkAnswer(df.where("s.a = 'y'").select("id"), Row(2))
+        checkAnswer(df.where("s.b is not null").select("id"), Seq(Row(1), Row(2)))
+        checkAnswer(df.where("s.a is not null").select("id"), Seq(Row(1), Row(2)))
+      }
+    }
+  }
+
+  test("field ids: swapped field names with the same type") {
+    withTempDir { dir =>
+      // The row group statistics of the file's `s.a` are 10..20, and those of its `s.b` are 1..2.
+      val writeSchema = new StructType()
+        .add("id", IntegerType, true, withId(1))
+        .add("s", new StructType()
+          .add("a", IntegerType, true, withId(21))
+          .add("b", IntegerType, true, withId(22)), true, withId(2))
+      val readSchema = new StructType()
+        .add("id", IntegerType, true, withId(1))
+        .add("s", new StructType()
+          .add("b", IntegerType, true, withId(21))
+          .add("a", IntegerType, true, withId(22)), true, withId(2))
+      val data = Seq(Row(1, Row(10, 1)), Row(2, Row(20, 2)))
+      spark.createDataFrame(data.asJava, writeSchema)
+        .write.mode("overwrite").parquet(dir.getCanonicalPath)
+
+      withAllParquetSources {
+        val df = spark.read.schema(readSchema).parquet(dir.getCanonicalPath)
+        checkAnswer(df, data)
+        checkAnswer(df.where("s.b > 15").select("id"), Row(2))
+        checkAnswer(df.where("s.b < 15").select("id"), Row(1))
+        checkAnswer(df.where("s.a = 2").select("id"), Row(2))
+        checkAnswer(df.where("s.a > 15").select("id"), Seq.empty)
+        checkAnswer(df.where("s.b > 15 and s.a < 2").select("id"), Seq.empty)
+      }
+    }
+  }
+
+  test("field ids: swapped field names at the top level") {
+    withTempDir { dir =>
+      val writeSchema = new StructType()
+        .add("a", IntegerType, true, withId(1))
+        .add("b", StringType, true, withId(2))
+      val readSchema = new StructType()
+        .add("b", IntegerType, true, withId(1))
+        .add("a", StringType, true, withId(2))
+      val data = Seq(Row(10, "x"), Row(20, "y"))
+      spark.createDataFrame(data.asJava, writeSchema)
+        .write.mode("overwrite").parquet(dir.getCanonicalPath)
+
+      withAllParquetSources {
+        val df = spark.read.schema(readSchema).parquet(dir.getCanonicalPath)
+        checkAnswer(df, data)
+        checkAnswer(df.where("b > 15"), Row(20, "y"))
+        checkAnswer(df.where("a = 'x'"), Row(10, "x"))
+        checkAnswer(df.where("b is not null"), data)
+      }
+    }
+  }
+
+  test("field ids: a filter on a field id that the file does not have is not pushed down") {
+    withTempDir { dir =>
+      // The file has an `a` (id 1). The requested `a` has id 5, which the file does not have, so
+      // it reads as null instead of matching the file's `a` by name.
+      val writeSchema = new StructType().add("a", IntegerType, true, withId(1))
+      val readSchema = new StructType().add("a", IntegerType, true, withId(5))
+      spark.createDataFrame(Seq(Row(10), Row(20)).asJava, writeSchema)
+        .write.mode("overwrite").parquet(dir.getCanonicalPath)
+
+      withAllParquetSources {
+        val df = spark.read.schema(readSchema).parquet(dir.getCanonicalPath)
+        checkAnswer(df, Seq(Row(null), Row(null)))
+        checkAnswer(df.where("a > 15"), Seq.empty)
+        checkAnswer(df.where("a is null"), Seq(Row(null), Row(null)))
+      }
+    }
+  }
+
+  test("field ids: ParquetFilters resolves a pushed column by field id") {
+    val fileSchema = new StructType()
+      .add("s", new StructType()
+        .add("a", IntegerType, true, withId(21))
+        .add("b", StringType, true, withId(22)), true, withId(2))
+    val readSchema = new StructType()
+      .add("s", new StructType()
+        .add("b", IntegerType, true, withId(21))
+        .add("a", StringType, true, withId(22))
+        .add("c", IntegerType, true), true, withId(2))
+    val parquetSchema = new SparkToParquetSchemaConverter(conf).convert(fileSchema)
+
+    def createFilters(fieldIdReadSchema: Option[StructType]): ParquetFilters =
+      new ParquetFilters(parquetSchema, conf.parquetFilterPushDownDate,
+        conf.parquetFilterPushDownTimestamp, conf.parquetFilterPushDownDecimal,
+        conf.parquetFilterPushDownStringPredicate, conf.parquetFilterPushDownInFilterThreshold,
+        caseSensitive = true, RebaseSpec(LegacyBehaviorPolicy.CORRECTED),
+        fieldIdReadSchema = fieldIdReadSchema)
+
+    val byId = createFilters(Some(readSchema))
+    assert(byId.createFilter(sources.GreaterThan("s.b", 15)) ===
+      Some(FilterApi.gt(SparkFilterApi.intColumn(Array("s", "a")), 15: Integer)))
+    assert(byId.createFilter(sources.IsNotNull("s.b")) ===
+      Some(FilterApi.notEq(SparkFilterApi.intColumn(Array("s", "a")), null: Integer)))
+    // The file's `s.a` is a string, but the requested `s.a` is the file's `s.b`.
+    assert(byId.createFilter(sources.EqualTo("s.a", "y")).isDefined)
+    // The file has no `s.c`.
+    assert(byId.createFilter(sources.EqualTo("s.c", 1)).isEmpty)
+
+    // Without a read schema, a name is resolved by name, as for any read without field ids.
+    val byName = createFilters(None)
+    assert(byName.createFilter(sources.GreaterThan("s.b", 15)).isEmpty)
+    assert(byName.createFilter(sources.GreaterThan("s.a", 15)) ===
+      Some(FilterApi.gt(SparkFilterApi.intColumn(Array("s", "a")), 15: Integer)))
   }
 }

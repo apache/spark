@@ -51,6 +51,12 @@ import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Some utility function to convert Spark data source filters to Parquet filters.
+ *
+ * `fieldIdReadSchema` is set for a field-id read of a schema that carries field ids. The pushed
+ * column names are then the names in that schema, and each one is resolved to a Parquet column
+ * the way `ParquetReadSupport.clipParquetSchema` selects it for the read: by field id if the
+ * field has one, otherwise by name. A name that the Parquet file uses for another column is not
+ * pushed down against that column.
  */
 class ParquetFilters(
     schema: MessageType,
@@ -61,7 +67,8 @@ class ParquetFilters(
     pushDownInFilterThreshold: Int,
     caseSensitive: Boolean,
     datetimeRebaseSpec: RebaseSpec,
-    variantExtractionSchema: Option[StructType] = None) {
+    variantExtractionSchema: Option[StructType] = None,
+    fieldIdReadSchema: Option[StructType] = None) {
   // Shredded-variant physical field-name constants.
   private val TYPED_VALUE = "typed_value"
   private val VALUE = "value"
@@ -96,23 +103,74 @@ class ParquetFilters(
       }
     }
 
-    val primitiveFields = getPrimitiveFields(schema.getFields.asScala.toSeq).map { field =>
+    // Same traversal as `getPrimitiveFields`, but driven by the read schema, so that the key of
+    // each field is the name of the requested field and `fieldNames` is the path of the Parquet
+    // column that the requested field is read from.
+    def getPrimitiveFieldsByReadSchema(
+        readFields: Seq[StructField],
+        fields: Seq[Type],
+        parentReadNames: Array[String] = Array.empty,
+        parentFieldNames: Array[String] = Array.empty)
+      : Seq[(Array[String], ParquetPrimitiveField)] = {
+      readFields.flatMap { readField =>
+        val readNames = parentReadNames :+ readField.name
+        findParquetField(readField, fields).toSeq.flatMap {
+          case p: PrimitiveType if p.getRepetition != Repetition.REPEATED =>
+            Some((readNames, ParquetPrimitiveField(fieldNames = parentFieldNames :+ p.getName,
+              fieldType = ParquetSchemaType(getNormalizedLogicalType(p),
+                p.getPrimitiveTypeName, p.getTypeLength))))
+          case g: GroupType if g.getOriginalType == null =>
+            readField.dataType match {
+              case st: StructType =>
+                getPrimitiveFieldsByReadSchema(st.fields.toSeq, g.getFields.asScala.toSeq,
+                  readNames, parentFieldNames :+ g.getName)
+              case _ => None
+            }
+          case _ => None
+        }
+      }
+    }
+
+    val primitiveFields = fieldIdReadSchema match {
+      case Some(readSchema) =>
+        getPrimitiveFieldsByReadSchema(readSchema.fields.toSeq, schema.getFields.asScala.toSeq)
+      case None =>
+        getPrimitiveFields(schema.getFields.asScala.toSeq).map(field => (field.fieldNames, field))
+    }
+    val quotedPrimitiveFields = primitiveFields.map { case (names, field) =>
       import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
-      (field.fieldNames.toImmutableArraySeq.quoted, field)
+      (names.toImmutableArraySeq.quoted, field)
     }
     if (caseSensitive) {
-      primitiveFields.toMap
+      quotedPrimitiveFields.toMap
     } else {
       // Don't consider ambiguity here, i.e. more than one field is matched in case insensitive
       // mode, just skip pushdown for these fields, they will trigger Exception when reading,
       // See: SPARK-25132.
       val dedupPrimitiveFields =
-      primitiveFields
+      quotedPrimitiveFields
         .groupBy(_._1.toLowerCase(Locale.ROOT))
         .filter(_._2.size == 1)
         .transform((_, v) => v.head._2)
       CaseInsensitiveMap(dedupPrimitiveFields)
     }
+  }
+
+  // Finds the Parquet field that `readField` is read from, among the `fields` of a group. Mirrors
+  // `ParquetReadSupport.clipParquetGroupFields`: a field with a field id is matched only by id,
+  // any other field by name. A field matched by neither, or by more than one (which fails the
+  // read), is not pushed down.
+  private def findParquetField(readField: StructField, fields: Seq[Type]): Option[Type] = {
+    val matched = if (ParquetUtils.hasFieldId(readField)) {
+      val fieldId = ParquetUtils.getFieldId(readField)
+      fields.filter(f => f.getId != null && f.getId.intValue() == fieldId)
+    } else if (caseSensitive) {
+      fields.filter(_.getName == readField.name)
+    } else {
+      val lowerName = readField.name.toLowerCase(Locale.ROOT)
+      fields.filter(_.getName.toLowerCase(Locale.ROOT) == lowerName)
+    }
+    if (matched.size == 1) matched.headOption else None
   }
 
   /**
