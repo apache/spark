@@ -50,13 +50,14 @@ import org.mockito.invocation.InvocationOnMock
 import org.apache.spark.{SparkEnv, SparkException, TaskContext, TaskKilledException}
 import org.apache.spark.internal.config.KILL_ON_FATAL_ERROR_DEPTH
 import org.apache.spark.paths.SparkPath
-import org.apache.spark.sql.{sources, DataFrame, QueryTest, Row, SparkSession}
+import org.apache.spark.sql.{classic, sources, DataFrame, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, BloomFilterMightContain, BoundReference, Cast, Coalesce, EqualTo, Expression, GreaterThanOrEqual, In, IsNull, LessThan, LessThanOrEqual, Literal, Or, Predicate, Rand, Remainder, SecondsToTimestamp, Substring, UnaryExpression, XxHash64}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, BloomFilterMightContain, BoundReference, Cast, Coalesce, CodegenObjectFactoryMode, EqualTo, Expression, GreaterThanOrEqual, If, In, IsNotNull, IsNull, LessThan, LessThanOrEqual, Literal, Or, Predicate, Rand, Remainder, SecondsToTimestamp, Substring, UnaryExpression, XxHash64}
 import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.plans.logical.{Filter => LogicalFilter}
-import org.apache.spark.sql.execution.{CollapseCodegenStages, ColumnarToRowExec, FileSourceScanExec, FilterExec, LocalLimitExec, SparkPlan, WholeStageCodegenExec}
+import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
+import org.apache.spark.sql.catalyst.plans.logical.{Filter => LogicalFilter, LogicalPlan}
+import org.apache.spark.sql.execution.{CollapseCodegenStages, ColumnarToRowExec, ExecSubqueryExpression, FileSourceScanExec, FilterExec, LocalLimitExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, FileFormat, FileSourceStrategy, OutputWriterFactory, PartitionedFile}
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -65,7 +66,7 @@ import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.vectorized.ColumnarBatch
+import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.sketch.BloomFilter
 
@@ -536,6 +537,23 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
         bloomLiteralOf(42L),
         new XxHash64(Seq(rowIndexAttr)))),
       "a bloom over a column named like the row-index column must not be offered")
+
+    // The column the reader marks the rows it checked in, which the planner adds as a boolean. The
+    // reader looks it up by name and writes booleans into it, so another type fails.
+    val checkedName = FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME
+    assert(ParquetStorageFilter.checkedColumnIndex(requested.add(checkedName, BooleanType)) == 2)
+    assert(ParquetStorageFilter.checkedColumnIndex(requested) == -1)
+    val notBoolean = intercept[SparkException] {
+      ParquetStorageFilter.checkedColumnIndex(requested.add(checkedName, LongType))
+    }
+    assert(notBoolean.getMessage.contains("must be a boolean column"), notBoolean.getMessage)
+    // Nor can a key column have its name, since the reader writes its marks into that slot.
+    val checkedKey = intercept[IllegalArgumentException] {
+      createFilter(Seq(keyAtLeast(0L)), StructType(Seq(
+        StructField(checkedName, LongType, nullable = false),
+        StructField("v", StringType, nullable = false))))
+    }
+    assert(checkedKey.getMessage.contains(checkedName), checkedKey.getMessage)
   }
 
   // A runtime bloom's `Literal` holding one long key, built the way the planner builds one. It is
@@ -945,13 +963,15 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     }.sum
   }
 
-  // The rows the scans with storage filters excluded, by both row metrics. Through `collect(plan)`,
+  // The rows the scans with storage filters excluded, by both row metrics unless `metrics` names
+  // others. Through `collect(plan)`,
   // which finds those scans in a plan AQE wrapped too.
-  private def rowsExcludedByStorageFilters(plan: SparkPlan): Long =
+  private def rowsExcludedByStorageFilters(
+      plan: SparkPlan,
+      metrics: Seq[String] = Seq(StorageFilterMetrics.ROWS_EXCLUDED_BY_ROW_GROUP,
+        StorageFilterMetrics.ROWS_EXCLUDED_WITHIN_ROW_GROUP)): Long =
     collect(plan) {
-      case s: FileSourceScanExec if s.storageFilters.nonEmpty =>
-        s.metrics(StorageFilterMetrics.ROWS_EXCLUDED_BY_ROW_GROUP).value +
-          s.metrics(StorageFilterMetrics.ROWS_EXCLUDED_WITHIN_ROW_GROUP).value
+      case s: FileSourceScanExec if s.storageFilters.nonEmpty => metrics.map(s.metrics(_).value).sum
     }.sum
 
   // Counts BloomFilterMightContain expressions inside FileSourceScanExec.storageFilters.
@@ -1924,9 +1944,184 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     }
   }
 
+  // The `(k, v)` schema with the column the planner adds for the reader to mark the rows it checked
+  // in. A reader built over it fills that column.
+  private def checkedSchema(valueType: DataType = StringType): StructType =
+    kvSchema(valueType = valueType).add(FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME, BooleanType)
+
+  // Reads `path` through the format, the way a scan with `storageFilters` over `schema` does, under
+  // the SQL confs in `conf`. Returns each row's key, as `keyOf` reads it, with what the checked
+  // column says for the row.
+  private def readChecked(
+      path: String,
+      schema: StructType,
+      storageFilters: Seq[Expression],
+      conf: Map[String, String] = Map.empty,
+      keyOf: (ColumnarBatch, Int) => Long = (b, i) => b.column(0).getLong(i))
+      : Seq[(Long, Boolean)] = withSQLConf(conf.toSeq: _*) {
+    val checked = schema.fieldIndex(FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME)
+    val file = PartitionedFile(
+      InternalRow.empty, SparkPath.fromPathString(path), 0, new File(path).length())
+    drain(formatReader(schema, Nil, storageFilters)(file)) { it =>
+      it.flatMap { case batch: ColumnarBatch =>
+        val marks = batch.column(checked)
+        (0 until batch.numRows()).map { i =>
+          assert(!marks.isNullAt(i), "the reader must mark every row")
+          (keyOf(batch, i), marks.getBoolean(i))
+        }
+      }.toSeq
+    }
+  }
+
+  // The keys in `keys`, each with the mark `checked`.
+  private def marked(keys: Seq[Long], checked: Boolean): Seq[(Long, Boolean)] =
+    keys.map(_ -> checked)
+
+  test("the checked column is true exactly for the rows of a row group the filter was applied to") {
+    // The post-scan Filter skips the storage filter on a row marked true, so true must mean the
+    // filter kept that row. A row group the filter was given up on comes back whole and must be
+    // marked false. The two row groups of the fixture show that the mark is per row group, so a
+    // give-up in the first leaves the second its own. Batches of 4 rows split each row group, and
+    // every batch of it must be marked alike.
+    withTempDir { dir =>
+      val rows = (0L until 40L).map(i => (i, i.toString))
+      val path = writeSingleParquetFile(dir, rows.toDF("k", "v"),
+        rowGroupSize = ParquetWriter.DEFAULT_BLOCK_SIZE,
+        options = Map(ParquetOutputFormat.BLOCK_ROW_COUNT_LIMIT -> "20"))
+      assert(footerOf(path).getBlocks.asScala.map(_.getRowCount) == Seq(20L, 20L),
+        "the fixture must be two row groups of 20 rows")
+      val schema = checkedSchema()
+      val k = BoundReference(0, LongType, nullable = true)
+      def filtersOn(key: Expression): Seq[Expression] = Seq(GreaterThanOrEqual(key, Literal(10L)))
+      def read(key: Expression = k, cap: String = "64MB"): Seq[(Long, Boolean)] =
+        readChecked(path, schema, filtersOn(key), conf = Map(
+          SQLConf.PARQUET_STORAGE_FILTER_PUSHDOWN_MAX_SPLICED_ROW_GROUP_BYTES.key -> cap,
+          SQLConf.PARQUET_VECTORIZED_READER_BATCH_SIZE.key -> "4"))
+
+      // Applied to both row groups, whose survivors are spliced.
+      assert(read() == marked(10L until 40L, checked = true),
+        "the survivors of a filtered row group must be marked true")
+      // A cap of 100 bytes gives splicing up in both, since 9 bytes per buffered key and the 40 of
+      // the one range pass it. It keeps the filter, since the range alone fits.
+      assert(read(cap = "100b") == marked(10L until 40L, true),
+        "a row group that gave only splicing up still returns exactly its survivors")
+      // The bytes show it is that case, since giving splicing up reads the key column again.
+      def bytesUnder(cap: String): Long = readUnderCap(path, schema, filtersOn(k), cap, 4)._2
+      assert(bytesUnder("100b") > bytesUnder("64MB"),
+        "a cap of 100 bytes must give splicing up, or the case above proves nothing")
+      // A cap of 39 bytes does not fit the range either, which gives the filter up in both.
+      assert(read(cap = "39b") == marked(0L until 40L, false),
+        "a row group whose ranges pass the cap must be marked false")
+      // An evaluation error on key 5 gives up the first row group alone.
+      assert(read(key = OnKey(k, at = 5L, error = new SparkException(_))) ==
+        marked(0L until 20L, checked = false) ++ marked(20L until 40L, true),
+        "a row group given up on an evaluation error must be marked false, and only that one")
+    }
+  }
+
+  test("the checked column is false for a row group read without its offset index") {
+    // A row group the footer declines, with no offset index, and one whose offset index parquet
+    // then fails to parse both come back whole, the latter through phase 2's retry.
+    withTempDir { dir =>
+      val blocks = (0 until 3).map(b => ((b * 100 + 1L) to (b * 100 + 100L)).map(i => (i, i)))
+      val schema = checkedSchema(valueType = LongType)
+      val evenKeys = Seq(EqualTo(
+        Remainder(BoundReference(0, LongType, nullable = true), Literal(2L)), Literal(0L)))
+      def keys(block: Int): Seq[Long] = blocks(block).map(_._1)
+
+      val noIndex = writeParquetFileByHand(dir, blocks, hasOffsetIndex = (_, _) => false)
+      assert(readChecked(noIndex, schema, evenKeys) == marked((0 until 3).flatMap(keys), false),
+        "every row group of a file with no offset index must come back whole and marked false")
+
+      // The middle row group's value index is damaged. Phase 2 needs it to read that column over
+      // the survivors, and the retry then reads the row group whole.
+      val damaged = writeParquetFileByHand(dir, blocks, (_, _) => true)
+      breakOffsetIndex(damaged, blockIdx = 1, columnIdx = 1)
+      val (result, warnings) = withLogged(partialReadWarning) {
+        readChecked(damaged, schema, evenKeys)
+      }
+      assert(warnings == 1, s"the read must have gone through the retry; got $warnings")
+      val even = (block: Int) => keys(block).filter(_ % 2 == 0)
+      assert(result ==
+        marked(even(0), checked = true) ++ marked(keys(1), false) ++ marked(even(2), true),
+        "the damaged row group must come back whole and marked false, and the others filtered")
+    }
+  }
+
+  test("the checked column for a file the filter is not applied to row by row") {
+    withTempDir { dir =>
+      val schema = checkedSchema()
+      val k = BoundReference(0, LongType, nullable = true)
+      val atLeastTen = Seq(GreaterThanOrEqual(k, Literal(10L)))
+      // A file with none of the projected non-key columns, which the reader declines.
+      val keysOnly = writeSingleParquetFile(dir, spark.range(0, 20).toDF("k"),
+        rowGroupSize = 64 * 1024L)
+      assert(readChecked(keysOnly, schema, atLeastTen) == marked(0L until 20L, checked = false),
+        "a file the reader declines must come back whole and marked false")
+
+      // A file with none of the key columns, whose constant predicate is decided once. Its keys
+      // are null, so it is read through the value column.
+      val valuesOnly = writeSingleParquetFile(dir,
+        spark.range(0, 20).selectExpr("CAST(id AS STRING) AS v"), rowGroupSize = 64 * 1024L)
+      val valueOf: (ColumnarBatch, Int) => Long =
+        (b, i) => b.column(1).getUTF8String(i).toString.toLong
+      assert(readChecked(valuesOnly, schema, Seq(IsNull(k)), keyOf = valueOf) ==
+        marked(0L until 20L, true),
+        "a file whose constant the predicate keeps must be marked true")
+      val throwsOnNull = Seq(GreaterThanOrEqual(AssertNotNull(k), Literal(0L)))
+      assert(readChecked(valuesOnly, schema, throwsOnNull, keyOf = valueOf) ==
+        marked(0L until 20L, false),
+        "a file whose constant the predicate throws on must be marked false")
+    }
+  }
+
+  test("a primitive file column named like the checked column is never decoded") {
+    // A user-given schema, or a case-insensitive match, can pair the checked column with a column
+    // a file holds. The reader marks the rows itself and never decodes that column, here a long
+    // one that a boolean vector could not take. Nor does the column count as a non-key column, so
+    // a file with no other one is still declined.
+    withTempDir { dir =>
+      val schema = checkedSchema()
+      val atLeastTen = Seq(GreaterThanOrEqual(BoundReference(0, LongType, nullable = true),
+        Literal(10L)))
+      val name = FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME.toUpperCase(Locale.ROOT)
+      val withColumn = writeSingleParquetFile(dir,
+        spark.range(0, 20).selectExpr("id AS k", "CAST(id AS STRING) AS v", s"id AS $name"),
+        rowGroupSize = 64 * 1024L)
+      assert(readChecked(withColumn, schema, atLeastTen) == marked(10L until 20L, checked = true),
+        "the file's column must not be read, and the reader must mark the survivors itself")
+      val keysAndColumn = writeSingleParquetFile(dir,
+        spark.range(0, 20).selectExpr("id AS k", s"true AS $name"), rowGroupSize = 64 * 1024L)
+      assert(readChecked(keysAndColumn, schema, atLeastTen) == marked(0L until 20L, false),
+        "a file whose only other column is named like the checked one must still be declined")
+    }
+  }
+
+  test("off heap: the checked column's vector is off heap and is freed with the reader") {
+    // The reader puts a vector of its own in the slot, in its memory mode, like the rest of the
+    // batch. The batch is emitted over that vector, so the reader frees it. That the slot holds
+    // the reader's vector rather than the one built for the missing column, which reads null, is
+    // what `readChecked`'s null check shows.
+    withTempDir { dir =>
+      val path = writeKeyParquetFile(dir, 1L to 20L)
+      var marks: ColumnVector = null
+      // The conf is set outside the task, since a task sees a read-only one.
+      val rows = withSQLConf(SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> "true") {
+        asTask(TaskContext.empty()) {
+          readChecked(path, checkedSchema(), Seq(keyAtLeast(10L)),
+            keyOf = (b, i) => { marks = b.column(2); b.column(0).getLong(i) })
+        }
+      }
+      assert(rows == marked(10L to 20L, checked = true), s"got $rows")
+      assert(marks.isInstanceOf[OffHeapColumnVector],
+        s"the checked column must be off heap; got ${marks.getClass}")
+      assert(address(marks) == 0, "the checked column's vector must be freed by close")
+    }
+  }
+
   test("FileSourceStrategy leaves a non-deterministic bloom in the post-scan Filter") {
-    // The reader drops the rows a storage filter rejects and the post-scan Filter evaluates it
-    // again on the rows the reader keeps, so the two evaluations have to agree, and a
+    // The reader drops the rows a storage filter rejects and the post-scan Filter takes its word on
+    // the rows it checked, so the reader's evaluation has to be the one the Filter would make. A
     // non-deterministic conjunct has to stay behind. No producer builds one today, hence the
     // hand-built plan. `InjectRuntimeFilter`'s blooms hash join keys, which are deterministic.
     withTempDir { dir =>
@@ -2010,6 +2205,228 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     }
   }
 
+  // An attribute of `plan`'s output, by name.
+  private def columnOf(plan: LogicalPlan, name: String): Attribute =
+    plan.output.find(_.name == name).getOrElse(fail(s"no $name in the output of $plan"))
+
+  // A runtime bloom holding the key 42, over `key`, as the planner builds one.
+  private def bloomOn(key: Expression): Expression =
+    BloomFilterMightContain(bloomLiteralOf(42L), new XxHash64(Seq(key)))
+
+  // What `FileSourceStrategy` plans for `logical`.
+  private def planned(logical: LogicalPlan): SparkPlan =
+    FileSourceStrategy(logical).headOption
+      .getOrElse(fail(s"FileSourceStrategy did not plan $logical"))
+
+  test("FileSourceStrategy skips an offered conjunct on the rows the reader marks as checked") {
+    // The scan gets a column for the reader to mark the rows it checked in, and the post-scan
+    // Filter evaluates the offered conjunct as `IF(checked, true, conjunct)`. A conjunct that is
+    // not offered stays as it is, and the column goes no further than the Filter. The bloom names
+    // `K` where the relation says `k`, as the query can spell it, so the Filter's conjunct and the
+    // one offered to the scan differ in name.
+    withTempDir { dir =>
+      val path = writeKeyParquetFile(dir, 0L until 50L, rowGroupSize = 64 * 1024L)
+      withSQLConf(SQLConf.PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+        val relation = spark.read.parquet(path).queryExecution.optimizedPlan
+        val bloom = bloomOn(columnOf(relation, "k").withName("K"))
+        val notOffered = EqualTo(columnOf(relation, "v"), Literal("42"))
+        val physical = planned(LogicalFilter(And(bloom, notOffered), relation))
+        val scan = scanOf(physical)
+        val checkedName = FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME
+        val checked = scan.output.find(_.name == checkedName)
+          .getOrElse(fail(s"the scan must output the checked column; got ${scan.output}"))
+        assert(scan.requiredSchema.fieldNames.toSeq == Seq("k", "v", checkedName),
+          s"the reader must be asked for the column too; got ${scan.requiredSchema}")
+        val conjuncts =
+          physical.collect { case f: FilterExec => splitConjunctivePredicates(f.condition) }.flatten
+        assert(conjuncts.exists(_.semanticEquals(If(checked, Literal.TrueLiteral, bloom))),
+          s"the offered conjunct must be skipped on checked rows; got $conjuncts")
+        assert(conjuncts.exists(_.semanticEquals(notOffered)),
+          s"a conjunct not offered must stay as it is; got $conjuncts")
+        assert(!physical.output.exists(_.name == checkedName),
+          s"the column must not leave the scan's Filter; got ${physical.output}")
+      }
+    }
+  }
+
+  test("a null mark leaves the offered conjunct as it was, an And around it included") {
+    // A reader that does not know the checked column reads it as null. The conjunct after the
+    // bloom must then run only where it ran before, so not on a row the bloom rejects. An `Or`
+    // would not do, since `NULL OR false` is null, and an `And` goes on past a null.
+    val checked = AttributeReference(FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME, BooleanType)()
+    val k = AttributeReference("k", LongType)()
+    val input = Seq(checked, k)
+    val row = InternalRow(null, 7L)
+    val bloom = bloomOn(k)
+    assert(!Predicate.create(bloom, input).eval(row),
+      "the bloom must reject 7, or this proves nothing")
+    val after = IsNotNull(OnKey(k, at = 7L, error = new SparkException(_)))
+    val modes = Seq(CodegenObjectFactoryMode.CODEGEN_ONLY, CodegenObjectFactoryMode.NO_CODEGEN)
+    modes.foreach { mode =>
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> mode.toString) {
+        val skipped = And(If(checked, Literal.TrueLiteral, bloom), after)
+        assert(!Predicate.create(skipped, input).eval(row),
+          s"a null mark must reject the row the bloom rejects, without the conjunct after ($mode)")
+        intercept[SparkException] {
+          Predicate.create(And(Or(checked, bloom), after), input).eval(row)
+        }
+      }
+    }
+  }
+
+  test("FileSourceStrategy offers nothing to a relation with a column named like the checked one") {
+    // The scan adds a column of that name for the reader to fill, so a column of the relation's own
+    // must not be taken for it, in any case. With nothing offered, the scan gets no such column.
+    withTempDir { dir =>
+      val name = FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME.toUpperCase(Locale.ROOT)
+      val path = writeSingleParquetFile(dir,
+        spark.range(0, 50).selectExpr("id AS k", "CAST(id AS STRING) AS v", s"true AS $name"),
+        rowGroupSize = 64 * 1024L)
+      withSQLConf(SQLConf.PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+        val relation = spark.read.parquet(path).queryExecution.optimizedPlan
+        val scan = scanOf(planned(LogicalFilter(bloomOn(columnOf(relation, "k")), relation)))
+        assert(scan.storageFilters.isEmpty, s"nothing must be offered; got ${scan.storageFilters}")
+        assert(!scan.requiredSchema.fieldNames.contains(
+            FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME),
+          s"nor a checked column added; got ${scan.requiredSchema}")
+      }
+    }
+  }
+
+  test("FileSourceStrategy adds the checked column only to a scan that stays columnar with it") {
+    // The Filter and the Project that drops the column are fused into whole-stage codegen only
+    // above a columnar scan. Above any other, that Project would copy every surviving row, so the
+    // scan gets the filter but no column, and the Filter evaluates the bloom on every row. The
+    // field limit counts the whole output, so a partition column counts too.
+    withTempDir { dir =>
+      val path = new File(dir, "parted").getAbsolutePath
+      spark.range(0, 50).selectExpr("id AS k", "CAST(id AS STRING) AS v", "id % 3 AS p")
+        .repartition(1).write.partitionBy("p").parquet(path)
+      withSQLConf(SQLConf.PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+        val relation = spark.read.parquet(path).queryExecution.optimizedPlan
+        val logical = LogicalFilter(bloomOn(columnOf(relation, "k")), relation)
+        // `k`, `v` and the partition column `p` are 3 fields, and 4 with the checked column.
+        Seq(
+          ("4", "true", true, true),
+          ("3", "true", false, true),
+          ("2", "true", false, false),
+          ("100", "false", false, false)
+        ).foreach { case (maxFields, wholeStage, withColumn, columnar) =>
+          withSQLConf(
+              SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> maxFields,
+              SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage) {
+            val scan = scanOf(planned(logical))
+            val setting = s"a field limit of $maxFields and whole-stage codegen $wholeStage"
+            assert(scan.storageFilters.size == 1,
+              s"$setting must still offer the bloom; got ${scan.storageFilters}")
+            assert(scan.requiredSchema.fieldNames.contains(
+                FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME) == withColumn,
+              s"$setting must ${if (withColumn) "add" else "leave out"} the checked column; got " +
+                scan.requiredSchema)
+            assert(scan.supportsColumnar == columnar,
+              s"the checked column must not change whether $setting reads columnar batches")
+          }
+        }
+      }
+    }
+  }
+
+  Seq(false, true).foreach { withMetadata =>
+    test("the post-scan Filter still filters the rows the reader gave up on " +
+        s"(_metadata selected = $withMetadata)") {
+      // A runtime bloom is redundant with its join, which would drop such rows anyway, so this
+      // filters on a bloom alone, against a plain read. The scan's metrics show whether the filter
+      // was applied. A cap of 39 bytes gives the filter up in every row group with a survivor, and
+      // the post-scan Filter must then filter those rows itself. A partition column puts the
+      // checked column between columns of the scan's output, and with `_metadata` selected, the
+      // Project that builds it sits below the Filter and must keep the checked column.
+      withTempDir { dir =>
+        val path = new File(dir, "parted").getAbsolutePath
+        rows400.toDF("k", "v").withColumn("p", col("k") % 3)
+          .repartition(1).write.partitionBy("p")
+          .option(ParquetOutputFormat.BLOCK_SIZE, 256L).parquet(path)
+        val columns = Seq(col("k"), col("v"), col("p")) ++ (if (withMetadata) {
+          Seq(col("_metadata.row_index").as("ri"), col("_metadata.file_name").as("file"))
+        } else {
+          Nil
+        })
+        val relation = spark.read.parquet(path).select(columns: _*).queryExecution.analyzed
+        val filtered = LogicalFilter(bloomOn(columnOf(relation, "k")), relation)
+        // Plans and reads under `confs`, and returns the plan with its rows.
+        def run(confs: (String, String)*): (SparkPlan, Seq[Row]) = withSQLConf(confs: _*) {
+          val df = classic.Dataset.ofRows(spark, filtered)
+          (df.queryExecution.executedPlan, df.collect().toSeq.sortBy(_.getLong(0)))
+        }
+        val pushdown = SQLConf.PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED.key
+        def excludedWithinRowGroups(plan: SparkPlan): Long =
+          rowsExcludedByStorageFilters(
+            plan, Seq(StorageFilterMetrics.ROWS_EXCLUDED_WITHIN_ROW_GROUP))
+
+        val (_, plain) = run(pushdown -> "false")
+        assert(plain.exists(_.getLong(0) == 42L) && plain.size < rows400.size,
+          s"the bloom must keep 42 and drop most rows, or this proves nothing; got $plain")
+
+        val (appliedPlan, applied) = run(pushdown -> "true")
+        assert(countBloomFiltersInStorageFilters(appliedPlan) == 1,
+          s"the bloom must be offered to the scan.\nPlan:\n$appliedPlan")
+        assert(applied == plain, "the filter applied must return what a plain read returns")
+        assert(excludedWithinRowGroups(appliedPlan) > 0,
+          "the filter must have dropped rows inside a row group, or this proves nothing")
+        // The marks the read path wrote, read off the scan below the Filter. A reader that was not
+        // handed the column reads it as null, and every check above would still pass.
+        assert(checkedMarks(scanOf(appliedPlan)).forall(_.contains(true)),
+          "the rows of a row group the filter was applied to must be marked true")
+
+        val (givenUpPlan, givenUp) = run(pushdown -> "true",
+          SQLConf.PARQUET_STORAGE_FILTER_PUSHDOWN_MAX_SPLICED_ROW_GROUP_BYTES.key -> "39b")
+        assert(givenUp == plain, "the filter given up must return what a plain read returns")
+        assert(excludedWithinRowGroups(givenUpPlan) == 0,
+          "a cap of 39 bytes must give the filter up in every row group with a survivor")
+      }
+    }
+  }
+
+  // The marks a scan's read path writes in the checked column, read off the scan itself, one per
+  // row, None for a null. Fails when the scan wrote none.
+  private def checkedMarks(scan: FileSourceScanExec): Seq[Option[Boolean]] = {
+    val ordinal = scan.output.indexWhere(_.name == FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME)
+    assert(ordinal >= 0, s"the scan must have the checked column; got ${scan.output}")
+    val marks = scan.executeColumnar().flatMap { batch =>
+      val column = batch.column(ordinal)
+      (0 until batch.numRows()).map(i => Option.when(!column.isNullAt(i))(column.getBoolean(i)))
+    }.collect().toSeq
+    assert(marks.nonEmpty, "the scan must have returned rows, or this proves nothing")
+    marks
+  }
+
+  test("a runtime bloom from a join is skipped on the rows the reader marks as checked") {
+    // `InjectRuntimeFilter`'s bloom holds a scalar subquery rather than a literal. The post-scan
+    // Filter's conjunct has to match the one offered to the scan for the skip to happen at all.
+    withBloomFilterTables {
+      withSQLConf(
+          SQLConf.PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED.key -> "true",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        val (plan, rows) = runBloomFilterJoin()
+        assert(rows.map(r => (r.getLong(0), r.getLong(1))).toSeq == Seq((5L, 5L)),
+          s"the query must return the joined row; got ${rows.mkString(", ")}")
+        val scan = collect(plan) { case s: FileSourceScanExec if s.storageFilters.nonEmpty => s }
+          .headOption.getOrElse(fail(s"no scan was offered the bloom.\nPlan:\n$plan"))
+        val checked = scan.output.find(_.name == FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME)
+          .getOrElse(fail(s"the scan must output the checked column; got ${scan.output}"))
+        val conjuncts =
+          collect(plan) { case f: FilterExec => splitConjunctivePredicates(f.condition) }.flatten
+        val skipped = conjuncts.collect {
+          case If(mark, Literal.TrueLiteral, bloom: BloomFilterMightContain)
+              if mark.semanticEquals(checked) => bloom
+        }
+        assert(skipped.size == 1 && skipped.head.exists(_.isInstanceOf[ExecSubqueryExpression]),
+          s"the runtime bloom must be skipped on checked rows.\nPlan:\n$plan")
+        assert(checkedMarks(scan).forall(_.contains(true)),
+          "the rows of a row group the filter was applied to must be marked true")
+      }
+    }
+  }
+
   // ----- Generic reader plumbing for the coverage tests below -----
 
   // Writes a single-column (`k`) parquet file from a SQL expression over `id`, avoiding the need
@@ -2051,8 +2468,9 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
       .flatMap(_.getEncodings.asScala).toSet
 
   // Reads every batch, projecting each row through `extract`. `storageFilter` may be null, which
-  // builds the plain vectorized reader rather than the late-materialization one. Every read helper
-  // in this suite goes through here.
+  // builds the plain vectorized reader rather than the late-materialization one. Every helper that
+  // builds a reader by hand goes through here, except `readChecked`. That one needs the Hadoop
+  // initialize, to project a column the file does not have.
   //
   // `tryInitializeResource` closes the reader if anything inside throws and leaves it open
   // otherwise, which is the contract these helpers need. The caller closes it once its assertions
@@ -3311,9 +3729,10 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
   test("column-index filtering off: the filter keeps only the row groups it empties") {
     // `parquet.filter.columnindex.enabled=false` is the escape hatch for a file whose page index is
     // wrong, and it has to cover phase 2 as well as phase 0. Phase 2 reads part of a row group
-    // through the offset index, which parquet consults whatever that conf says, so a wrong index
-    // there would pair a row's key with another row's values. The post-scan Filter cannot catch
-    // that, since the key it sees is the right one.
+    // through the offset index, which parquet consults whatever that conf says. So a wrong index
+    // there would pair a row's key with another row's values, or return rows the filter rejects
+    // once splicing is given up. The post-scan Filter catches neither, since it takes the reader's
+    // mark on those rows.
     //
     // What the filter keeps in that case is the row groups it empties, which needs no index at all.
     // So the two arms differ in granularity, not in correctness. With the conf on the scan returns

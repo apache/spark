@@ -330,6 +330,12 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     assert(cast("abcdef", FloatType).nullable)
   }
 
+  test("SPARK-60118: cast string of zero with a large exponent to decimal") {
+    Seq("0e38", "0e39", "-0E+100", "0e2147483647").foreach { s =>
+      checkEvaluation(cast(s, DecimalType(10, 2)), Decimal("0.00"))
+    }
+  }
+
   test("cast from timestamp") {
     val millis = 15 * 1000 + 3
     val seconds = millis * 1000 + 3
@@ -2142,6 +2148,12 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
               IntervalUtils.supportedFormat(("day-time", dataType.startField, dataType.endField))
                 .map(format => s"`$format`").mkString(", ")))
       }
+  }
+
+  test("SPARK-60119: cast string with a huge negative exponent to decimal") {
+    Seq("1e-2147483647", "-1e-2147483647", "1e-100000000", "0e-2147483647").foreach { str =>
+      checkEvaluation(cast(str, DecimalType(10, 2)), Decimal("0.00"))
+    }
   }
 
   test("cast ANSI intervals to/from decimals") {

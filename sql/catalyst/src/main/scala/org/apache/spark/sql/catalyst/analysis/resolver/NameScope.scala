@@ -1199,9 +1199,7 @@ class NameScopeStack(
   /**
    * Resolve multipart name into a [[NameTarget]]. The order is as follows:
    * - Try current scope. See [[NameScope.resolveMultipartName]] for more details.
-   * - Try the closest outer scope and support only one level of correlation
-   *   if `spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled`
-   *   is false. If the flag is true, Try from the closest outer scope to the root scope.
+   * - Try the closest outer scope. Only one level of correlation is supported.
    * - Try to resolve `multipartName` as a session (temporary or scripting) variable. See
    *   [[VariableResolution.resolveMultipartName]] for more details.
    *
@@ -1222,22 +1220,9 @@ class NameScopeStack(
    * SELECT col1, (SELECT col1 FROM VALUES (2)) AS b FROM VALUES (1)
    * }}}
    *
-   * Correlations beyond one level are supported only when
-   * `spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled` is set to true.
-   *
-   * If the flag is set to false, we only support one level of correlation:
+   * Correlations beyond one level are not supported:
    * {{{
    * -- 3 levels, fails with `UNRESOLVED_COLUMN`.
-   * SELECT (
-   *   SELECT (
-   *     SELECT t1.col1 FROM VALUES (3) AS t3
-   *   ) FROM VALUES (2) AS t2
-   * ) FROM VALUES (1) AS t1;
-   * }}}
-   *
-   * If the flag is set to true, we support correlations beyond one level:
-   * {{{
-   * -- 3 levels, returns [1, 2, 3].
    * SELECT (
    *   SELECT (
    *     SELECT t1.col1 FROM VALUES (3) AS t3
@@ -1438,10 +1423,8 @@ class NameScopeStack(
   }
 
   /**
-   * If `spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled` is set to false, find
-   * the nearest outer scope and return it if we are in a subquery. Otherwise, returns all outer
-   * scopes for the subquery entry point. The first scope is the nearest outer scope and the last
-   * scope is the root scope.
+   * Find the nearest outer scope and return it if we are in a subquery. Only one level of
+   * correlation is supported, so at most one scope is returned.
    */
   private def outerScopes: mutable.ArrayBuffer[NameScope] = {
     val supportNestedCorrelations = false
