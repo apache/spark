@@ -242,6 +242,84 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
     }
   }
 
+  // date_add / date_sub (and the dateadd alias) cast a nanos start to DATE like the micro types,
+  // so the precision, time-of-day and sub-microsecond digits never change the result.
+  private val dateAddSubExprs = Seq(
+    "date_add(c, 1)", "date_sub(c, 1)", "dateadd(c, -31)", "date_add(c, '2')", "date_sub(c, 366)")
+
+  test("SPARK-56822: date_add/date_sub over nanosecond TIMESTAMP_NTZ match the micro path") {
+    val ldts = Seq(
+      "2020-02-28T23:59:59.999999999",
+      "2021-01-01T00:00:00.000000001",
+      "1969-12-31T23:59:59.999999999",
+      "1960-07-15T06:07:08.123456789")
+    Seq(7, 8, 9).foreach { p =>
+      ldts.foreach { s =>
+        val micro = spark.createDataFrame(
+          spark.sparkContext.parallelize(Seq(Row(LocalDateTime.parse(s)))),
+          new StructType().add("c", TimestampNTZType))
+        checkAnswer(
+          ntzNanos(s, p).selectExpr(dateAddSubExprs: _*), micro.selectExpr(dateAddSubExprs: _*))
+      }
+      checkAnswer(
+        ntzNanos("2020-02-28T23:59:59.999999999", p).selectExpr("date_add(c, 1)", "date_sub(c, 1)"),
+        Row(java.sql.Date.valueOf("2020-02-29"), java.sql.Date.valueOf("2020-02-27")))
+    }
+  }
+
+  test("SPARK-56822: date_add/date_sub over nanosecond TIMESTAMP_LTZ match the micro path") {
+    // The second and third instants fall on the previous calendar day in the session zone
+    // (America/Los_Angeles).
+    val instants = Seq(
+      "2020-02-29T12:34:56.123456789Z",
+      "2020-01-01T04:00:00.123456789Z",
+      "2020-03-01T07:59:59.999999999Z",
+      "1960-07-15T06:07:08.123456789Z")
+    Seq("America/Los_Angeles", "UTC").foreach { zone =>
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zone) {
+        Seq(7, 8, 9).foreach { p =>
+          instants.foreach { s =>
+            val micro = spark.createDataFrame(
+              spark.sparkContext.parallelize(Seq(Row(Instant.parse(s)))),
+              new StructType().add("c", TimestampType))
+            checkAnswer(
+              ltzNanos(s, p).selectExpr(dateAddSubExprs: _*),
+              micro.selectExpr(dateAddSubExprs: _*))
+          }
+        }
+      }
+    }
+    // 2020-01-01T04:00Z is 2019-12-31 in America/Los_Angeles but 2020-01-01 in UTC.
+    val df = ltzNanos("2020-01-01T04:00:00.123456789Z", 9)
+    checkAnswer(
+      df.selectExpr("date_add(c, 1)"),
+      Row(java.sql.Date.valueOf("2020-01-01")))
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      checkAnswer(
+        df.selectExpr("date_add(c, 1)"),
+        Row(java.sql.Date.valueOf("2020-01-02")))
+    }
+  }
+
+  test("SPARK-56822: date_add/date_sub match the functions.* Column API over nanos") {
+    val df = ntzNanos("2020-02-29T12:34:56.123456789", 9)
+    checkAnswer(
+      df.selectExpr("date_add(c, 1)", "date_sub(c, 1)", "dateadd(c, 1)"),
+      df.select(date_add(col("c"), 1), date_sub(col("c"), 1), dateadd(col("c"), lit(1))))
+  }
+
+  test("SPARK-56822: date_add/date_sub over NULL nanosecond timestamps") {
+    Seq(7, 8, 9).foreach { p =>
+      val df = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq(Row(null, null))),
+        new StructType().add("ntz", TimestampNTZNanosType(p)).add("ltz", TimestampLTZNanosType(p)))
+      checkAnswer(
+        df.selectExpr(
+          "date_add(ntz, 1)", "date_sub(ntz, 1)", "date_add(ltz, 1)", "date_sub(ltz, 1)"),
+        Row(null, null, null, null))
+    }
+  }
+
   // ===== MIN / MAX aggregates over nanosecond-precision timestamps (SPARK-56822) =====
   // `Min`/`Max` are type-agnostic `DeclarativeAggregate`s gated only on orderability
   // (`TypeUtils.checkForOrderingExpr`); the nanosecond timestamp types became orderable in

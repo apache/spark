@@ -580,6 +580,115 @@ SELECT named_struct('f', DATE '2020-01-01') :: struct<f: timestamp_ltz(9)>
 
 
 -- !query
+SELECT date_add(TIMESTAMP_LTZ '2020-02-28 23:59:59.999999999', 1)
+-- !query analysis
+Project [date_add(cast(2020-02-28 23:59:59.999999999 as date), 1) AS date_add(TIMESTAMP_LTZ '2020-02-28 23:59:59.999999999', 1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_sub(TIMESTAMP_LTZ '2020-03-01 00:00:00.000000001', 1)
+-- !query analysis
+Project [date_sub(cast(2020-03-01 00:00:00.000000001 as date), 1) AS date_sub(TIMESTAMP_LTZ '2020-03-01 00:00:00.000000001', 1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT dateadd('2020-01-31 12:00:00.1234567' :: timestamp_ltz(7), 30)
+-- !query analysis
+Project [date_add(cast(cast(2020-01-31 12:00:00.1234567 as timestamp_ltz(7)) as date), 30) AS date_add(CAST(2020-01-31 12:00:00.1234567 AS TIMESTAMP_LTZ(7)), 30)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_sub('2020-01-01 12:00:00.12345678' :: timestamp_ltz(8), -1)
+-- !query analysis
+Project [date_sub(cast(cast(2020-01-01 12:00:00.12345678 as timestamp_ltz(8)) as date), -1) AS date_sub(CAST(2020-01-01 12:00:00.12345678 AS TIMESTAMP_LTZ(8)), -1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_add(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789', '2')
+-- !query analysis
+Project [date_add(cast(2020-01-01 00:00:00.123456789 as date), cast(2 as int)) AS date_add(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789', 2)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789 UTC', 1),
+       date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456 UTC', 1)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT date_sub(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789 UTC', 1),
+       date_sub(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456 UTC', 1)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SET spark.sql.session.timeZone=UTC
+-- !query analysis
+SetCommand (spark.sql.session.timeZone,Some(UTC))
+
+
+-- !query
+SELECT date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789 UTC', 1),
+       date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456 UTC', 1)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SET spark.sql.session.timeZone=America/Los_Angeles
+-- !query analysis
+SetCommand (spark.sql.session.timeZone,Some(America/Los_Angeles))
+
+
+-- !query
+SELECT date_add(TIMESTAMP_LTZ '1969-12-31 23:59:59.999999999', 1)
+-- !query analysis
+Project [date_add(cast(1969-12-31 23:59:59.999999999 as date), 1) AS date_add(TIMESTAMP_LTZ '1969-12-31 23:59:59.999999999', 1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_add(NULL :: timestamp_ltz(9), 1), date_sub(NULL :: timestamp_ltz(9), 1)
+-- !query analysis
+Project [date_add(cast(cast(null as timestamp_ltz(9)) as date), 1) AS date_add(CAST(NULL AS TIMESTAMP_LTZ(9)), 1)#x, date_sub(cast(cast(null as timestamp_ltz(9)) as date), 1) AS date_sub(CAST(NULL AS TIMESTAMP_LTZ(9)), 1)#x]
++- OneRowRelation
+
+
+-- !query
+SET spark.sql.ansi.enabled=false
+-- !query analysis
+SetCommand (spark.sql.ansi.enabled,Some(false))
+
+
+-- !query
+SELECT date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789 UTC', 1),
+       date_sub(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789 UTC', 1)
+-- !query analysis
+Project [date_add(cast(2019-12-31 20:00:00.123456789 as date), 1) AS date_add(TIMESTAMP_LTZ '2019-12-31 20:00:00.123456789', 1)#x, date_sub(cast(2019-12-31 20:00:00.123456789 as date), 1) AS date_sub(TIMESTAMP_LTZ '2019-12-31 20:00:00.123456789', 1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_add(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789', '2')
+-- !query analysis
+Project [date_add(cast(2020-01-01 00:00:00.123456789 as date), 2) AS date_add(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789', 2)#x]
++- OneRowRelation
+
+
+-- !query
+SET spark.sql.ansi.enabled=true
+-- !query analysis
+SetCommand (spark.sql.ansi.enabled,Some(true))
+
+
+-- !query
 SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' +
   INTERVAL '2 00:03:00.000456' DAY TO SECOND
 -- !query analysis

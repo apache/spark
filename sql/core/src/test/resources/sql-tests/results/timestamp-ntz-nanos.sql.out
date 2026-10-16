@@ -573,6 +573,104 @@ struct<named_struct(f, DATE '2020-01-01'):struct<f:timestamp_ntz(9)>>
 
 
 -- !query
+SELECT date_add(TIMESTAMP_NTZ '2020-02-28 23:59:59.999999999', 1)
+-- !query schema
+struct<date_add(TIMESTAMP_NTZ '2020-02-28 23:59:59.999999999', 1):date>
+-- !query output
+2020-02-29
+
+
+-- !query
+SELECT date_sub(TIMESTAMP_NTZ '2020-03-01 00:00:00.000000001', 1)
+-- !query schema
+struct<date_sub(TIMESTAMP_NTZ '2020-03-01 00:00:00.000000001', 1):date>
+-- !query output
+2020-02-29
+
+
+-- !query
+SELECT dateadd('2020-01-31 12:00:00.1234567' :: timestamp_ntz(7), 30)
+-- !query schema
+struct<date_add(CAST(2020-01-31 12:00:00.1234567 AS TIMESTAMP_NTZ(7)), 30):date>
+-- !query output
+2020-03-01
+
+
+-- !query
+SELECT date_sub('2020-01-01 12:00:00.12345678' :: timestamp_ntz(8), -1)
+-- !query schema
+struct<date_sub(CAST(2020-01-01 12:00:00.12345678 AS TIMESTAMP_NTZ(8)), -1):date>
+-- !query output
+2020-01-02
+
+
+-- !query
+SELECT date_add(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789', '2')
+-- !query schema
+struct<date_add(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789', 2):date>
+-- !query output
+2020-01-03
+
+
+-- !query
+SELECT date_add(TIMESTAMP_NTZ '1969-12-31 23:59:59.999999999', 1)
+-- !query schema
+struct<date_add(TIMESTAMP_NTZ '1969-12-31 23:59:59.999999999', 1):date>
+-- !query output
+1970-01-01
+
+
+-- !query
+SELECT date_add(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789', 1),
+       date_add(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456', 1)
+-- !query schema
+struct<date_add(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789', 1):date,date_add(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456', 1):date>
+-- !query output
+2020-01-02	2020-01-02
+
+
+-- !query
+SELECT date_add(NULL :: timestamp_ntz(9), 1), date_sub(NULL :: timestamp_ntz(9), 1)
+-- !query schema
+struct<date_add(CAST(NULL AS TIMESTAMP_NTZ(9)), 1):date,date_sub(CAST(NULL AS TIMESTAMP_NTZ(9)), 1):date>
+-- !query output
+NULL	NULL
+
+
+-- !query
+SET spark.sql.ansi.enabled=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.ansi.enabled	false
+
+
+-- !query
+SELECT date_add(TIMESTAMP_NTZ '2020-02-28 23:59:59.999999999', 1),
+       date_sub(TIMESTAMP_NTZ '2020-03-01 00:00:00.000000001', 1)
+-- !query schema
+struct<date_add(TIMESTAMP_NTZ '2020-02-28 23:59:59.999999999', 1):date,date_sub(TIMESTAMP_NTZ '2020-03-01 00:00:00.000000001', 1):date>
+-- !query output
+2020-02-29	2020-02-29
+
+
+-- !query
+SELECT date_add(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789', '2')
+-- !query schema
+struct<date_add(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789', 2):date>
+-- !query output
+2020-01-03
+
+
+-- !query
+SET spark.sql.ansi.enabled=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.ansi.enabled	true
+
+
+-- !query
 SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '2 00:03:00.000456' DAY TO SECOND
 -- !query schema
 struct<TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '2 00:03:00.000456' DAY TO SECOND:timestamp_ntz(9)>
