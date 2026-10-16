@@ -724,9 +724,9 @@ object PushDownUtils extends Logging {
       // optimizer with no second padding pass, so re-stamping a cleaned
       // attribute would look unpadded when a V2 scan readSchema() still
       // surfaces CHAR/VARCHAR. File sources usually already substituted
-      // STRING, so the stamp was latent. A versioned table rebound by
-      // QueryExecution refresh after padding arrives stamped again and
-      // keeps the marker. Do not key off the session conf.
+      // STRING, so the stamp was latent. AnalyzedSchemaProjection keeps
+      // cleaned metadata across versioned-table refresh, so a padded
+      // relation still arrives unstamped. Do not key off the session conf.
       val metadata = if (CharVarcharUtils.getRawTypeString(orig.metadata).isEmpty) {
         CharVarcharUtils.cleanMetadata(a.metadata)
       } else {

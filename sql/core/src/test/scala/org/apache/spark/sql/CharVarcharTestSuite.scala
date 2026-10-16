@@ -4101,17 +4101,32 @@ class DSV2CharVarcharTestSuite extends CharVarcharTestSuite
   private def attrsFromCharReadSchema(rel: DataSourceV2Relation) =
     PushDownUtils.toOutputAttrs(new StructType().add("c", CharType(5)), rel)
 
+  private def assertPrunedScanCharMarker(df: DataFrame, expectMarker: Boolean): Unit = {
+    val scans = df.queryExecution.optimizedPlan.collect {
+      case s: DataSourceV2ScanRelation => s
+    }
+    assert(scans.nonEmpty)
+    scans.foreach { s =>
+      s.output.filter(_.name == "c").foreach { a =>
+        val raw = CharVarcharUtils.getRawType(a.metadata)
+        if (expectMarker) {
+          assert(raw.isDefined, s"pruned scan ${a.name} dropped the CHAR breadcrumb")
+        } else {
+          assert(raw.isEmpty, s"pruned scan ${a.name} re-stamped the CHAR breadcrumb")
+        }
+      }
+    }
+  }
+
   test("SPARK-59016: V2 column prune does not re-stamp CHAR padding breadcrumb") {
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
       withPrunedV2CharRelation { (df, rel) =>
         val cAttr = rel.output.find(_.name == "c").get
         assert(CharVarcharUtils.getRawType(cAttr.metadata).isEmpty,
           "ApplyCharTypePadding should have cleaned the relation breadcrumb")
-        // Direct toOutputAttrs with CHAR readSchema is the regression guard.
-        // Versioned InMemory tables are rebound after padding and arrive
-        // stamped, so the optimized scan output is not a reliable check.
         assert(CharVarcharUtils.getRawType(attrsFromCharReadSchema(rel).head.metadata).isEmpty,
           "toOutputAttrs must not re-stamp CHAR metadata on a padded relation")
+        assertPrunedScanCharMarker(df, expectMarker = false)
         checkAnswer(df, Row("ab   "))
       }
     }
@@ -4127,6 +4142,7 @@ class DSV2CharVarcharTestSuite extends CharVarcharTestSuite
           "standard semantics should still pad and clean when read-side padding is off")
         assert(CharVarcharUtils.getRawType(attrsFromCharReadSchema(rel).head.metadata).isEmpty,
           "toOutputAttrs must drop the marker on a cleaned standard-semantics relation")
+        assertPrunedScanCharMarker(df, expectMarker = false)
         checkAnswer(df, Row("ab   "))
       }
     }
@@ -4140,11 +4156,9 @@ class DSV2CharVarcharTestSuite extends CharVarcharTestSuite
         val cAttr = rel.output.find(_.name == "c").get
         assert(CharVarcharUtils.getRawType(cAttr.metadata).isEmpty,
           "default read-side padding should have cleaned the relation breadcrumb")
-        // Direct toOutputAttrs with CHAR readSchema is the regression guard:
-        // always-keeping the marker would pass the end-to-end scan check.
-        // Versioned InMemory tables are rebound after padding and arrive stamped.
         assert(CharVarcharUtils.getRawType(attrsFromCharReadSchema(rel).head.metadata).isEmpty,
           "toOutputAttrs must drop the marker on a padded default-mode relation")
+        assertPrunedScanCharMarker(df, expectMarker = false)
         checkAnswer(df, Row("ab   "))
       }
     }
@@ -4160,18 +4174,7 @@ class DSV2CharVarcharTestSuite extends CharVarcharTestSuite
           "disabled read-side padding should leave the relation stamped")
         assert(CharVarcharUtils.getRawType(attrsFromCharReadSchema(rel).head.metadata).isDefined,
           "toOutputAttrs must keep the marker on a still-stamped relation")
-        val scans = df.queryExecution.optimizedPlan.collect {
-          case s: DataSourceV2ScanRelation => s
-        }
-        assert(scans.nonEmpty)
-        scans.foreach { s =>
-          s.output.foreach { a =>
-            if (a.name == "c") {
-              assert(CharVarcharUtils.getRawType(a.metadata).isDefined,
-                s"pruned scan ${a.name} dropped the CHAR breadcrumb")
-            }
-          }
-        }
+        assertPrunedScanCharMarker(df, expectMarker = true)
       }
     }
   }
