@@ -44,7 +44,7 @@ import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.{LEGACY_ABORT_STAGE_AFTER_KILL_TASKS, Tests}
 import org.apache.spark.network.shuffle.ExternalBlockStoreClient
-import org.apache.spark.rdd.{DeterministicLevel, PartitionPruningRDD, RDD, ReliableRDDCheckpointData, ShuffleReducePartitionMapping}
+import org.apache.spark.rdd.{DeterministicLevel, PartitionCoalescer, PartitionGroup, PartitionPruningRDD, RDD, ReliableRDDCheckpointData, ShuffleReducePartitionMapping}
 import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, ResourceProfileBuilder, TaskResourceProfile, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
 import org.apache.spark.rpc.RpcTimeoutException
@@ -9479,6 +9479,33 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertRepeatedPipelinedConsumptionRejected(result, dependency.shuffleId)
   }
 
+  test("pipelined repeated consumption: duplicate parent indices are rejected") {
+    val dependency = new PipelinedShuffleDependency(
+      new MyRDD(sc, 1, Nil), new HashPartitioner(1))
+    val consumer = new MyRDD(sc, 1, List(dependency))
+    val coalescer = new PartitionCoalescer with Serializable {
+      override def coalesce(maxPartitions: Int, parent: RDD[_]): Array[PartitionGroup] = {
+        val group = new PartitionGroup()
+        group.partitions += parent.partitions.head
+        group.partitions += parent.partitions.head
+        Array(group)
+      }
+    }
+    val result = consumer.coalesce(1, partitionCoalescer = Some(coalescer))
+    assert(result.dependencies.size === 1)
+    assert(result.dependencies.head.asInstanceOf[NarrowDependency[_]]
+      .getParents(0).toSeq === Seq(0, 0))
+    assertRepeatedPipelinedConsumptionRejected(result, dependency.shuffleId)
+  }
+
+  test("pipelined repeated consumption: duplicate selected result partitions are rejected") {
+    val dependency = new PipelinedShuffleDependency(
+      new MyRDD(sc, 1, Nil), new HashPartitioner(1))
+    val consumer = new MyRDD(sc, 1, List(dependency))
+    assertRepeatedPipelinedConsumptionRejected(
+      consumer, dependency.shuffleId, selectedPartitions = Some(Array(0, 0)))
+  }
+
   test("pipelined repeated consumption: separate producer stages cannot reread a consumer") {
     val upstream = new PipelinedShuffleDependency(
       new MyRDD(sc, 2, Nil), new HashPartitioner(2))
@@ -9757,18 +9784,23 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       result: RDD[_],
       expectedShuffleId: Int,
       expectedPartition: Int = 0,
-      otherShuffleIds: Seq[Int] = Nil): Unit = {
+      otherShuffleIds: Seq[Int] = Nil,
+      selectedPartitions: Option[Array[Int]] = None): Unit = {
     val reason = "a pipelined producer with more than one consumer invocation for transient " +
       s"shuffle $expectedShuffleId partition $expectedPartition (repeated consumption)"
     assertPipelinedRejectedBeforeStageRegistration(
-      result, reason, expectedShuffleId +: otherShuffleIds)
+      result, reason, expectedShuffleId +: otherShuffleIds, selectedPartitions)
   }
 
   private def assertPipelinedRejectedBeforeStageRegistration(
-      result: RDD[_], reason: String, shuffleIds: Seq[Int]): Unit = {
+      result: RDD[_],
+      reason: String,
+      shuffleIds: Seq[Int],
+      selectedPartitions: Option[Array[Int]] = None): Unit = {
+    val partitions = selectedPartitions.getOrElse(result.partitions.indices.toArray)
     for (_ <- 0 until 2) {
       clearInvocations(scheduler, mapOutputTracker)
-      val failure = submitAndCaptureFailure(result, result.partitions.indices.toArray)
+      val failure = submitAndCaptureFailure(result, partitions)
       assertPipelinedUnsupported(failure, reason)
       checkError(
         exception = failure.asInstanceOf[PipelinedShuffleUnsupportedException],
