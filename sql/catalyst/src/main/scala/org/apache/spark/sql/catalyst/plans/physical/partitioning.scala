@@ -275,7 +275,15 @@ trait Partitioning {
   }
 }
 
-case class UnknownPartitioning(numPartitions: Int) extends Partitioning
+case class UnknownPartitioning(numPartitions: Int) extends Partitioning {
+  /**
+   * A partitioning that makes no claim answers with a spec that pairs with nothing, the shuffle a
+   * co-partitioning operator gives such a child. Not a planner bug, unlike the default: a
+   * `GroupPartitionsExec` gives a marked layout's keyed claim up.
+   */
+  override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec =
+    UnknownShuffleSpec(numPartitions)
+}
 
 /**
  * Represents a partitioning where rows are distributed evenly across output partitions
@@ -491,8 +499,17 @@ case object SPLIT_FOR_ORDERING extends UngroupingOrigin
  *                                 (1) a node that changes the declared key set must drop the
  *                                 keyed partitioning, whether it coarsens it (a key-dropping
  *                                 projection, a key-changing reduction, a join-key projection)
- *                                 or expands it over a marked leg (a union, where another leg
- *                                 may declare exactly the key that leg holds out-of-set);
+ *                                 or expands it over a marked leg, unless that leg declares
+ *                                 every key the other legs declare *and* marked legs declare
+ *                                 them in one order: where a key is declared by another leg
+ *                                 alone, or the orders differ, the legs' rows of one key reach
+ *                                 different partitions. A union asks both in
+ *                                 `UnionExec.canMergeMarkedKeys`, the full gate, and marks the
+ *                                 concatenation it then builds. Such a concatenation holds a
+ *                                 weaker pin than this one: an undeclared key's rows share a
+ *                                 group rather than sitting at `hash(key) % numPartitions`, so a
+ *                                 consumer reading the index pin has to require `isGrouped`
+ *                                 as well;
  *                                 (2) marker agreement comes free with the layout, since the
  *                                 members of a [[PartitioningCollection]] share it by reference
  *                                 and `fromPartitionings` merges one canonical layout, so
@@ -1189,6 +1206,10 @@ object KeyedPartitioning {
    *
    * Keys repeating across children is not a collapse. Only a child's own collapse carries over,
    * since such a key still stands for several finer-grained ones in the concatenation.
+   *
+   * One marked child marks the result: a partition it contributes may hold rows of a key the
+   * concatenation names elsewhere. Whether marked children may be concatenated at all is the
+   * caller's question, asked by `UnionExec.canMergeMarkedKeys`.
    */
   def concat(kps: Seq[KeyedPartitioning]): KeyedPartitioning = {
     val concatenatedKeys = kps.flatMap(_.partitionKeys)
@@ -1200,7 +1221,8 @@ object KeyedPartitioning {
       // this without walking the keys.
       isGrouped = kps.forall(_.isGrouped) &&
         concatenatedKeys.distinct.length == concatenatedKeys.length,
-      isCollapsed = kps.exists(_.isCollapsed)))
+      isCollapsed = kps.exists(_.isCollapsed),
+      mayContainUnknownPartitionKeys = kps.exists(_.mayContainUnknownPartitionKeys)))
   }
 
   def supportsExpressions(expressions: Seq[Expression]): Boolean = {
@@ -1767,7 +1789,8 @@ sealed trait ShuffleSpec {
    *  - a [[KeyedShuffleSpec]] with a partition expression that `keyPositions` maps to no cluster
    *    key, e.g. `years(ts)` clustered on `years(ts)`, or `bucket(4, b + c)`;
    *  - a [[KeyedShuffleSpec]] with a partition expression that is neither a column nor a transform,
-   *    e.g. `b + 1` or `s.a`.
+   *    e.g. `b + 1` or `s.a`;
+   *  - an [[UnknownShuffleSpec]], which is compatible with nothing, itself included.
    * None of them answers [[canCreatePartitioning]], which keeps the planner from picking one as
    * the layout to shuffle the other children onto.
    */
@@ -1837,6 +1860,12 @@ case object SinglePartitionShuffleSpec extends LeafShuffleSpec {
     SinglePartition
 
   override def numPartitions: Int = 1
+}
+
+/** The spec of a partitioning that makes no claim about its rows: it pairs with nothing. */
+case class UnknownShuffleSpec(numPartitions: Int) extends LeafShuffleSpec {
+  override def isCompatibleWith(other: ShuffleSpec): Boolean = false
+  override def canCreatePartitioning: Boolean = false
 }
 
 case class RangeShuffleSpec(

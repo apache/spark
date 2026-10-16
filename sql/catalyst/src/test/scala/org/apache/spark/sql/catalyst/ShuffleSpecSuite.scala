@@ -646,6 +646,15 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     assert(!RangeShuffleSpec(10, distribution).canCreatePartitioning)
   }
 
+  test("SPARK-60277: a partitioning that makes no claim offers a spec that pairs with nothing") {
+    val distribution = ClusteredDistribution(Seq($"a", $"b"))
+    val spec = UnknownPartitioning(3).createShuffleSpec(distribution)
+    assert(!spec.canCreatePartitioning)
+    assert(!spec.isCompatibleWith(
+      HashShuffleSpec(HashPartitioning(Seq($"a", $"b"), 3), distribution)))
+    assert(spec.flatten.map(_.numPartitions) == Seq(3))
+  }
+
   test("SPARK-59022: canCreatePartitioning: KeyedShuffleSpec requires grouped partition keys") {
     val a = $"a".int
     val distribution = ClusteredDistribution(Seq(a))

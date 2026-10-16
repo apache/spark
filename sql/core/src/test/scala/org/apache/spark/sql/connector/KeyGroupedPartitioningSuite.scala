@@ -8699,10 +8699,10 @@ class KeyGroupedPartitioningSuite
     // `name` away drops a key position but loses no distinct key, so nothing collapsed. purchases
     // reports no partitioning, so with v2BucketingShuffleEnabled its side is shuffled using the
     // projected partitioning as the template, still true under SPARK-59050: the shuffled output
-    // carries the unknown-keys marker, the join's right-outer arm exposes it, and the union drops
-    // the keyed merge, so the final aggregate re-shuffles instead of grouping the union's
-    // partitions. What stays exercised for 58316: the template carries no collapse and needs no
-    // opt-in either way.
+    // carries the unknown-keys marker and the join's right-outer arm exposes it. That leg declares
+    // every key t3 declares, so the union merges the keys and carries the marker onto them, and
+    // the final aggregate groups the union's partitions instead of re-shuffling them. What stays
+    // exercised for 58316: the template carries no collapse and needs no opt-in either way.
     createTable(items, itemsColumns, Array(identity("id"), identity("name")))
     sql(s"INSERT INTO testcat.ns.$items VALUES " +
       s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
@@ -8752,13 +8752,20 @@ class KeyGroupedPartitioningSuite
           "the ids were unique, so dropping `name` collapsed nothing for the template")
         assert(keyed.head.mayContainUnknownPartitionKeys,
           "the re-shuffled output may hold keys outside the declared set (SPARK-59050)")
-        // The marked leg reaches the union through the right-outer arm, so the keyed merge is
-        // dropped and the final aggregate pays its own exchange.
+        // The marked leg reaches the union through the right-outer arm. It declares {1, 2, 3},
+        // which covers t3's {1, 2}, so the keys merge and the marker travels onto them; the
+        // aggregate then groups those partitions rather than paying an exchange.
         val union = collect(plan) { case u: UnionExec => u }.head
-        assert(union.outputPartitioning.isInstanceOf[physical.UnknownPartitioning],
-          s"the unknown-keyed leg drops the keyed merge, got ${union.outputPartitioning}")
-        assert(collectAllShuffles(plan).size == 2,
-          s"allowSubset=$allowSubset: template re-shuffle plus the aggregate's exchange")
+        val merged = union.outputPartitioning match {
+          case kp: physical.KeyedPartitioning => kp
+          case other => fail(s"the union should merge the legs' keys, got $other")
+        }
+        assert(merged.mayContainUnknownPartitionKeys,
+          s"the merged layout must carry the marked leg's marker, got $merged")
+        assert(collectAllGroupPartitions(plan).size == 1,
+          s"allowSubset=$allowSubset: the aggregate groups the union's partitions:\n$plan")
+        assert(collectAllShuffles(plan).size == 1,
+          s"allowSubset=$allowSubset: the template re-shuffle is the only exchange:\n$plan")
       }
     }
   }
@@ -9262,6 +9269,212 @@ class KeyGroupedPartitioningSuite
         assert(collectGroupPartitions(df.queryExecution.executedPlan).isEmpty,
           s"second join must not storage-partition on the merged layout, got: " +
             df.queryExecution.executedPlan)
+      }
+    }
+  }
+
+  test("SPARK-60277: SPJ: a union merges a marked leg that declares what the other legs " +
+      "declare") {
+    // The positive counterpart of the test above. The marked leg is `a RIGHT OUTER JOIN t`: t
+    // reports no partitioning, so its side is shuffled onto a's declared keys {1, 2, 3} and the
+    // right-outer arm exposes that marked layout, holding t's id=4 rows out-of-set. The second
+    // leg `s` declares {1, 2}, a subset of what the marked leg declares, so no leg can claim a
+    // key the marked leg routes by hash: the keys merge, the marker travels onto them, and the
+    // aggregate groups the union's partitions instead of shuffling them. The out-of-set rows
+    // ride one partition of the marked leg, so they stay together in that partition's group,
+    // which is what the counts assert.
+    createTable("a", columns, Array(identity("id")))
+    createTable("s", columns, Array(identity("id")))
+    sql("INSERT INTO testcat.ns.a VALUES (1, 'a1', NULL), (2, 'a2', NULL), (3, 'a3', NULL)")
+    sql("INSERT INTO testcat.ns.s VALUES (1, 's1', NULL), (2, 's2', NULL)")
+
+    withTable("t") {
+      sql("CREATE TABLE t (id INT, data STRING) USING parquet")
+      sql("INSERT INTO t VALUES (1, 't1'), (2, 't2'), (4, 't4'), (4, 't4b')")
+
+      val query =
+        """
+          |SELECT id, count(*) AS cnt
+          |FROM (SELECT t.id AS id FROM testcat.ns.a a RIGHT OUTER JOIN t ON a.id = t.id
+          |      UNION ALL
+          |      SELECT id FROM testcat.ns.s)
+          |GROUP BY id
+          |""".stripMargin
+      val expected = Seq(Row(1, 2), Row(2, 2), Row(4, 2))
+
+      withSQLConf(
+          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+          SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        val df = sql(query)
+        checkAnswer(df, expected)
+        val plan = df.queryExecution.executedPlan
+        val union = collect(plan) { case u: UnionExec => u }.head
+        val merged = union.outputPartitioning match {
+          case kp: physical.KeyedPartitioning => kp
+          case other => fail(s"the union should merge the legs' keys, got $other")
+        }
+        assert(merged.mayContainUnknownPartitionKeys,
+          s"the merged layout must carry the marked leg's marker, got $merged")
+        assert(collectAllGroupPartitions(plan).size == 1,
+          s"the aggregate should group the union's partitions:\n$plan")
+        assert(collectAllShuffles(plan).size == 1,
+          s"the join's one-side shuffle should be the only exchange:\n$plan")
+      }
+
+      // Negative control: `s` declares the very key the marked leg holds out-of-set, so the
+      // merged claim would promise co-location for id=4 that the marked leg cannot honor. The
+      // keys must not merge, and the aggregate pays its own exchange.
+      sql("DROP TABLE IF EXISTS testcat.ns.s")
+      createTable("s", columns, Array(identity("id")))
+      sql("INSERT INTO testcat.ns.s VALUES (4, 's4', NULL)")
+
+      withSQLConf(
+          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+          SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        val df = sql(query)
+        checkAnswer(df, Seq(Row(1, 1), Row(2, 1), Row(4, 3)))
+        val plan = df.queryExecution.executedPlan
+        val union = collect(plan) { case u: UnionExec => u }.head
+        assert(union.outputPartitioning.isInstanceOf[physical.UnknownPartitioning],
+          s"a leg declaring an out-of-set key must stop the merge, got " +
+            union.outputPartitioning)
+        assert(collectAllShuffles(plan).size == 2,
+          s"the one-side shuffle plus the aggregate's own exchange:\n$plan")
+      }
+    }
+  }
+
+  test("SPARK-60277: SPJ: a join above a merged marked union shuffles instead of throwing") {
+    // The merged layout is marked and ungrouped, which `resolveChild` admits and wraps in a
+    // `GroupPartitionsExec`. That node gives a marked layout's keyed claim up for any grouping but
+    // an identity one (SPARK-59289), so the child the join's shuffle step lays out reports
+    // `UnknownPartitioning`: it is no candidate for the layout and takes a shuffle, which peels the
+    // grouping off the plan and leaves the union reporting its merged keys here.
+    createTable("ja", columns, Array(identity("id")))
+    createTable("js", columns, Array(identity("id")))
+    sql("INSERT INTO testcat.ns.ja VALUES (1, 'a1', NULL), (2, 'a2', NULL), (3, 'a3', NULL)")
+    sql("INSERT INTO testcat.ns.js VALUES (1, 's1', NULL), (2, 's2', NULL)")
+
+    withTable("jt") {
+      sql("CREATE TABLE jt (id INT, data STRING) USING parquet")
+      sql("INSERT INTO jt VALUES (1, 't1'), (2, 't2'), (4, 't4'), (4, 't4b')")
+
+      val query =
+        """
+          |SELECT u.id, count(*) AS cnt FROM (
+          |  SELECT jt.id AS id FROM testcat.ns.ja a RIGHT OUTER JOIN jt ON a.id = jt.id
+          |  UNION ALL
+          |  SELECT id FROM testcat.ns.js) u
+          |JOIN testcat.ns.ja a2 ON u.id = a2.id
+          |GROUP BY u.id
+          |""".stripMargin
+
+      Seq(false, true).foreach { aqe =>
+        withSQLConf(
+            SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+            SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true",
+            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
+          val df = sql(query)
+          checkAnswer(df, Seq(Row(1, 2), Row(2, 2)))
+          if (!aqe) {
+            // The merge is what puts the union's layout in front of the join's shuffle step, so it
+            // is asserted where the plan holds it. Under AQE the plan is rewritten around the
+            // stages, so the counts above carry that arm.
+            val union = collect(df.queryExecution.executedPlan) { case u: UnionExec => u }.head
+            union.outputPartitioning match {
+              case kp: physical.KeyedPartitioning =>
+                assert(kp.mayContainUnknownPartitionKeys,
+                  s"the merged layout must carry the marked leg's marker, got $kp")
+              case other =>
+                fail(s"the union should merge the legs' keys, got $other")
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60277: SPJ: two marked legs route the keys they do not declare alike") {
+    // Both legs are marked and declare a's keys {1, 2, 3}: `t1` and `t2` report no partitioning,
+    // so each is shuffled onto those keys and each right-outer arm exposes the marked layout.
+    // The legs hold different out-of-set keys, and id=4 is held by both. A declared key reaches
+    // the partition named for it from either leg, and id=4 reaches the same declared key from
+    // both, since the partitioner routes an out-of-set key by its own hash over a partition count
+    // the shared declaration fixes. So id=4's three rows are counted once, which is what fails if
+    // the two legs were free to route it differently.
+    createTable("a", columns, Array(identity("id")))
+    sql("INSERT INTO testcat.ns.a VALUES (1, 'a1', NULL), (2, 'a2', NULL), (3, 'a3', NULL)")
+
+    withTable("t1", "t2") {
+      sql("CREATE TABLE t1 (id INT, data STRING) USING parquet")
+      sql("INSERT INTO t1 VALUES (1, 'x1'), (4, 'x4'), (4, 'x4b')")
+      sql("CREATE TABLE t2 (id INT, data STRING) USING parquet")
+      sql("INSERT INTO t2 VALUES (2, 'y2'), (4, 'y4'), (5, 'y5')")
+
+      val query =
+        """
+          |SELECT id, count(*) AS cnt
+          |FROM (SELECT t1.id AS id FROM testcat.ns.a a RIGHT OUTER JOIN t1 ON a.id = t1.id
+          |      UNION ALL
+          |      SELECT t2.id AS id FROM testcat.ns.a a RIGHT OUTER JOIN t2 ON a.id = t2.id)
+          |GROUP BY id
+          |""".stripMargin
+
+      withSQLConf(
+          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+          SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        val df = sql(query)
+        checkAnswer(df, Seq(Row(1, 1), Row(2, 1), Row(4, 3), Row(5, 1)))
+        val plan = df.queryExecution.executedPlan
+        val union = collect(plan) { case u: UnionExec => u }.head
+        val merged = union.outputPartitioning match {
+          case kp: physical.KeyedPartitioning => kp
+          case other => fail(s"the union should merge the legs' keys, got $other")
+        }
+        assert(merged.mayContainUnknownPartitionKeys,
+          s"the merged layout must carry the legs' marker, got $merged")
+        assert(collectAllShuffles(plan).size == 2,
+          s"one one-side shuffle per leg should be the whole exchange count:\n$plan")
+        assert(collectAllGroupPartitions(plan).nonEmpty,
+          s"the aggregate should group the union's partitions:\n$plan")
+      }
+    }
+  }
+
+  test("SPARK-60277: marked legs must declare their keys in one order to be merged") {
+    // The order decides where the keys no leg declares go: both legs send such a key K to
+    // `nonNegativeMod(K.hashCode, 3)`, so legs declaring [1, 2, 3] and [2, 3, 1] send it to the
+    // partition named 2 on one and named 3 on the other, and K's rows would split across two
+    // groups. The gate therefore compares the key lists, not the key sets, and a differing
+    // multiplicity is refused for the same reason. Hand-built, since a planner that lays both
+    // legs out on one template gives them one order.
+    val attrA = AttributeReference("a", IntegerType)()
+    val attrB = AttributeReference("b", IntegerType)()
+    def rows(values: Int*): Seq[InternalRow] = values.map(InternalRow(_))
+    def markedLeg(e: AttributeReference, keys: Seq[InternalRow]): ShuffleExchangeExec =
+      ShuffleExchangeExec(
+        KeyedPartitioning(Seq(e), keys).withLayout(_.copy(mayContainUnknownPartitionKeys = true)),
+        new LocalTableScanExec(Seq(e), Nil, None, false))
+
+    withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
+      val sameOrder = UnionExec(Seq(
+        markedLeg(attrA, rows(1, 2, 3)), markedLeg(attrB, rows(1, 2, 3))))
+      sameOrder.outputPartitioning match {
+        case kp: physical.KeyedPartitioning =>
+          assert(kp.mayContainUnknownPartitionKeys, s"the merged layout must stay marked: $kp")
+          assert(kp.numPartitions === 6, s"the merge concatenates the legs' keys: $kp")
+        case other => fail(s"one order should merge, got $other")
+      }
+
+      Seq(
+        "a different order" -> rows(2, 3, 1),
+        "a different multiplicity" -> rows(1, 2, 2, 3)).foreach { case (label, keys) =>
+        val union = UnionExec(Seq(markedLeg(attrA, rows(1, 2, 3)), markedLeg(attrB, keys)))
+        assert(union.outputPartitioning.isInstanceOf[physical.UnknownPartitioning],
+          s"$label must stop the merge, got ${union.outputPartitioning}")
       }
     }
   }

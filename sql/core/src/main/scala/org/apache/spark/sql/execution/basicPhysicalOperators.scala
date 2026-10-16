@@ -1000,13 +1000,9 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     if (partitionings.forall(_.isInstanceOf[KeyedPartitioning])) {
       val kps = partitionings.map(_.asInstanceOf[KeyedPartitioning])
       val headKp = kps.head
-      // To merge, the `KeyedPartitioning`s must agree on the partition expressions and no leg
-      // may carry the marker: the merged set declares the other legs' keys, so an out-of-set row
-      // can sit in the wrong partition for the merged claim (rule (1) of the
-      // `KeyedPartitioning.mayContainUnknownPartitionKeys` doc). Unlike a join, a union keeps
-      // every leg's rows: an unmarked leg does not excuse a marked one.
-      val compatible = kps.forall(kp =>
-        !kp.mayContainUnknownPartitionKeys && comparePartitioning(kp, headKp))
+      // To merge, the `KeyedPartitioning`s must agree on the partition expressions, and a leg
+      // carrying the marker must declare what the others declare, see `canMergeMarkedKeys`.
+      val compatible = kps.forall(kp => comparePartitioning(kp, headKp)) && canMergeMarkedKeys(kps)
       if (compatible) {
         return KeyedPartitioning.concat(kps)
       }
@@ -1037,6 +1033,30 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
       case Seq() => super.outputPartitioning
       case Seq(p) => p
       case ps => PartitioningCollection.fromPartitionings(ps)
+    }
+  }
+
+  /**
+   * Whether the legs' markers let their keys be merged. A marked leg holds rows whose key it does
+   * not declare, and `KeyGroupedPartitioner` routes such a row into the partition of some declared
+   * key, by `nonNegativeMod(key.hashCode, numPartitions)`. Two conditions keep every key's rows in
+   * one group all the same, which is what a clustering asks:
+   *
+   *   - a marked leg declares every key the other legs declare, or its rows of such a key land in
+   *     a partition the merge names for another key while theirs land in its own. This is rule (1)
+   *     of [[KeyedPartitioning.mayContainUnknownPartitionKeys]], whose union case is this one.
+   *   - marked legs declare the same keys in the same order, so a key no leg declares reaches the
+   *     same declared key, and hence one group, from all of them.
+   *
+   * What the merged layout cannot claim is that a partition holds only the key it names, so
+   * [[KeyedPartitioning.concat]] marks it, and pairing reads the marker there.
+   */
+  private def canMergeMarkedKeys(kps: Seq[KeyedPartitioning]): Boolean = {
+    !kps.exists(_.mayContainUnknownPartitionKeys) || {
+      val (marked, accurate) = kps.partition(_.mayContainUnknownPartitionKeys)
+      val declared = marked.head.partitionKeys
+      marked.tail.forall(_.partitionKeys == declared) &&
+        accurate.forall(_.partitionKeys.forall(declared.contains))
     }
   }
 
