@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.jdk.CollectionConverters._
@@ -479,6 +480,35 @@ class MetricViewV2CatalogSuite extends SharedSparkSession {
         sql(s"DROP NAMESPACE IF EXISTS " +
           s"$testCatalogName.${deepNamespace.mkString(".")} CASCADE")
         sql(s"DROP NAMESPACE IF EXISTS $testCatalogName.${deepNamespace.head} CASCADE")
+      }
+    }
+  }
+
+  test("v2 metric view source cannot reference a temporary function") {
+    withTestCatalogTables {
+      withUserDefinedFunction("norm" -> true) {
+        spark.udf.register("norm", (s: String) => s.toLowerCase(Locale.ROOT))
+        Seq(
+          MetricView("0.1", AssetSource(fullSourceTableName),
+            Some("norm(region) = 'region_1'"), metricViewColumns),
+          MetricView("0.1", AssetSource(fullSourceTableName),
+            Some(s"region IN (SELECT norm(region) FROM $fullSourceTableName)"),
+            metricViewColumns),
+          MetricView("0.1",
+            SQLSource(s"SELECT * FROM $fullSourceTableName WHERE norm(region) = 'region_1'"),
+            None, metricViewColumns)
+        ).foreach { metricView =>
+          checkError(
+            exception = intercept[AnalysisException] {
+              createMetricView(fullMetricViewName, metricView)
+            },
+            condition = "INVALID_TEMP_OBJ_REFERENCE",
+            parameters = Map(
+              "obj" -> "VIEW",
+              "objName" -> s"`$testCatalogName`.`$testNamespace`.`$metricViewName`",
+              "tempObj" -> "FUNCTION",
+              "tempObjName" -> "`norm`"))
+        }
       }
     }
   }

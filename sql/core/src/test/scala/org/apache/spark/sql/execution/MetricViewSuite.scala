@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import java.util.Locale
+
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf
@@ -191,19 +193,71 @@ abstract class MetricViewSuite extends QueryTest {
   }
 
   test("metric view source is analyzed with the configs captured at creation") {
-    // `PRODUCT` only resolves case-insensitively, which is the default at creation.
+    // `PRODUCT` only resolves case-insensitively, the default at creation, and the hour is 0 only
+    // in the UTC session time zone captured at creation.
     val metricView = MetricView(
-      "0.1", AssetSource(testTableName), Some("PRODUCT = 'product_1'"), testMetricViewColumns)
-    withMetricView(testMetricViewName, metricView) {
+      "0.1", AssetSource(testTableName),
+      Some("PRODUCT = 'product_1' AND hour(TIMESTAMP '2024-01-01 00:00:00 UTC') = 0"),
+      testMetricViewColumns)
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      createMetricView(testMetricViewName, metricView)
+    }
+    withView(testMetricViewName) {
+      val query = s"SELECT measure(count_sum) FROM $testMetricViewName"
       val expected = sql(s"SELECT sum(count) FROM $testTableName WHERE product = 'product_1'")
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-        checkAnswer(sql(s"SELECT measure(count_sum) FROM $testMetricViewName"), expected)
-        withSQLConf(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_VIEW.key -> "true") {
-          val e = intercept[AnalysisException] {
-            sql(s"SELECT measure(count_sum) FROM $testMetricViewName")
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+          checkAnswer(sql(query), expected)
+          withSQLConf(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_VIEW.key -> "true") {
+            val e = intercept[AnalysisException](sql(query))
+            assert(e.getCondition === "UNRESOLVED_COLUMN.WITH_SUGGESTION")
           }
-          assert(e.getCondition === "UNRESOLVED_COLUMN.WITH_SUGGESTION")
         }
+        withSQLConf(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_VIEW.key -> "true") {
+          checkAnswer(sql(query), Row(null))
+        }
+      }
+    }
+  }
+
+  test("metric view source cannot reference a temporary function") {
+    withUserDefinedFunction("norm" -> true) {
+      spark.udf.register("norm", (s: String) => s.toLowerCase(Locale.ROOT))
+      Seq(
+        MetricView("0.1", AssetSource(testTableName),
+          Some("norm(product) = 'product_1'"), testMetricViewColumns),
+        MetricView("0.1", AssetSource(testTableName),
+          Some(s"product IN (SELECT norm(product) FROM $testTableName)"), testMetricViewColumns),
+        MetricView("0.1",
+          SQLSource(s"SELECT * FROM $testTableName WHERE norm(product) = 'product_1'"),
+          None, testMetricViewColumns)
+      ).foreach { metricView =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            createMetricView(testMetricViewName, metricView)
+          },
+          condition = "INVALID_TEMP_OBJ_REFERENCE",
+          parameters = Map(
+            "obj" -> "VIEW",
+            "objName" -> s"`default`.`$testMetricViewName`",
+            "tempObj" -> "FUNCTION",
+            "tempObjName" -> "`norm`"))
+      }
+    }
+  }
+
+  test("metric view dimensions and measures can use a temporary function") {
+    withUserDefinedFunction("norm" -> true) {
+      spark.udf.register("norm", (s: String) => s.toUpperCase(Locale.ROOT))
+      val metricView = MetricView("0.1", AssetSource(testTableName), None, Seq(
+        Column("region_norm", DimensionExpression("norm(region)"), 0),
+        Column("product_len", MeasureExpression("sum(length(norm(product)))"), 1)))
+      withMetricView(testMetricViewName, metricView) {
+        checkAnswer(
+          sql(s"SELECT region_norm, measure(product_len) FROM $testMetricViewName " +
+            "GROUP BY region_norm"),
+          sql(s"SELECT upper(region), sum(length(product)) FROM $testTableName " +
+            "GROUP BY upper(region)"))
       }
     }
   }
