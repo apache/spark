@@ -70,6 +70,7 @@ import org.apache.spark.sql.internal.types.{
 import org.apache.spark.sql.types.{
   AbstractDataType,
   AnyDataType,
+  AnyTimestampNanoType,
   AnyTimestampTypeExpression,
   ArrayType,
   BinaryType,
@@ -202,6 +203,27 @@ abstract class TypeCoercionHelper {
     charVarcharToPlainString(e.dataType, StringTypeWithCollation(supportsTrimCollation = true))
       .map(dt => if (dt == e.dataType) e else Cast(e, dt))
       .getOrElse(implicitCast(e, StringType).getOrElse(e))
+  }
+
+  /**
+   * Whether an implicit cast of `from` to `to` narrows a nanosecond-precision timestamp, i.e. drops
+   * sub-microsecond digits (a lower-precision timestamp) or the date (TIME).
+   */
+  protected def isNanosNarrowing(from: DataType, to: DataType): Boolean = from match {
+    case _: AnyTimestampNanoType =>
+      to.isInstanceOf[TimeType] || TimestampFamily.fractionalPrecision(to).exists(
+        _ < TimestampFamily.fractionalPrecision(from).get)
+    case _ => false
+  }
+
+  /**
+   * Picks the implicit cast target for a [[TypeCollection]] from the castable member types, in
+   * member order. A nanosecond-precision timestamp skips DATE, which drops the time of day.
+   */
+  protected def pickTypeCollectionCast(
+      inType: DataType,
+      castable: Seq[DataType]): Option[DataType] = {
+    castable.find(dt => !(inType.isInstanceOf[AnyTimestampNanoType] && dt == DateType))
   }
 
   /**
