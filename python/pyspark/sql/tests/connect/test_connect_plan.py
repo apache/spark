@@ -953,12 +953,13 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         session.client.is_closed = True
         child = self.connect.range(0, 5)._plan
         df = DataFrame(child, session)
-        checkpointed = DataFrame(CachedRemoteRelation("server-checkpoint-id", session), session)
-        session.client.execute_command.return_value = (
-            None,
-            {"checkpoint_command_result": checkpointed},
-            None,
-        )
+
+        def execute_command(command):
+            relation_id = command.checkpoint_command.relation_id
+            checkpointed = DataFrame(CachedRemoteRelation(relation_id, session), session)
+            return None, {"checkpoint_command_result": checkpointed}, None
+
+        session.client.execute_command.side_effect = execute_command
         relation_ids = set()
         for local in (False, True):
             for _ in range(2):
@@ -969,10 +970,10 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
                         )
                     else:
                         result = df.checkpoint(eager=False)
-                    self.assertIs(result, checkpointed)
                     command = session.client.execute_command.call_args.args[0].checkpoint_command
                     self.assertTrue(command.HasField("relation_id"))
                     relation_id = command.relation_id
+                    self.assertEqual(result._plan._relation_id, relation_id)
                     parsed_id = uuid.UUID(relation_id)
                     self.assertEqual(str(parsed_id), relation_id)
                     self.assertEqual(parsed_id.version, 4)
@@ -984,6 +985,26 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
                     if local:
                         self.assertTrue(command.storage_level.use_disk)
                         self.assertFalse(command.storage_level.use_memory)
+
+    def test_checkpoint_mismatched_relation_id(self):
+        session = MagicMock()
+        session.client.is_closed = True
+        df = DataFrame(self.connect.range(0, 5)._plan, session)
+        checkpointed = DataFrame(CachedRemoteRelation("server-checkpoint-id", session), session)
+        session.client.execute_command.return_value = (
+            None,
+            {"checkpoint_command_result": checkpointed},
+            None,
+        )
+        for local in (False, True):
+            with self.subTest(local=local):
+                with self.assertRaisesRegex(
+                    AssertionError, "Checkpoint relation ID does not match the requested ID"
+                ):
+                    if local:
+                        df.localCheckpoint()
+                    else:
+                        df.checkpoint()
 
     def test_coalesce_and_repartition(self):
         # SPARK-41026: test Coalesce and Repartition API in Python client.
