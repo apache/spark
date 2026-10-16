@@ -206,8 +206,8 @@ abstract class TypeCoercionHelper {
   }
 
   /**
-   * Whether an implicit cast of `from` to `to` narrows a nanosecond-precision timestamp, i.e. drops
-   * sub-microsecond digits (a lower-precision timestamp) or the date (TIME).
+   * Whether an implicit cast of `from` to `to` narrows a nanosecond-precision timestamp: a
+   * lower-precision timestamp drops sub-microsecond digits and TIME drops the date part.
    */
   protected def isNanosNarrowing(from: DataType, to: DataType): Boolean = from match {
     case _: AnyTimestampNanoType =>
