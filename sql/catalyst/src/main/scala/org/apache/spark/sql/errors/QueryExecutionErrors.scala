@@ -45,7 +45,9 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
 import org.apache.spark.sql.catalyst.plans.physical.KeyReducer
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
-import org.apache.spark.sql.catalyst.util.{sideBySide, CharsetProvider, DateTimeUtils, FailFastMode, IntervalUtils, MapData}
+import org.apache.spark.sql.catalyst.util.{
+  sideBySide, CharsetProvider, CharVarcharUtils, DateTimeUtils, FailFastMode, IntervalUtils, MapData
+}
 import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.expressions.Transform
@@ -2757,6 +2759,22 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       errorClass = "UNSUPPORTED_XML_CHAR_VARCHAR_MAP_KEY",
       messageParameters = Map(
         "key" -> toSQLValue(key, StringType),
+        "dataType" -> toSQLType(dataType)))
+  }
+
+  /**
+   * Restricting CHAR/VARCHAR Avro map keys is a serde limitation (SQLSTATE 0A000),
+   * but this is a SparkRuntimeException so from_avro parse modes can handle it:
+   * PERMISSIVE nulls the record and FAILFAST surfaces the failure. Avro file scans
+   * do not apply per-row PERMISSIVE around this error.
+   */
+  def unsupportedAvroCharVarcharMapKey(
+      key: UTF8String, dataType: DataType): SparkRuntimeException = {
+    val displayKey = CharVarcharUtils.truncateMapKeyForError(key)
+    new SparkRuntimeException(
+      errorClass = "UNSUPPORTED_AVRO_CHAR_VARCHAR_MAP_KEY",
+      messageParameters = Map(
+        "key" -> toSQLValue(displayKey, StringType),
         "dataType" -> toSQLType(dataType)))
   }
 

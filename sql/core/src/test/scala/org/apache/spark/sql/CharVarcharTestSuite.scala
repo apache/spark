@@ -2234,6 +2234,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       withTempPath { file =>
         val ser = new org.apache.spark.sql.avro.AvroSerializer(
           nestedSchema, nestedAvro, nullable = false)
+        // File-scan deserializers do not assign CHAR padding; values are stored padded.
         val row = org.apache.spark.sql.catalyst.InternalRow(
           org.apache.spark.unsafe.types.UTF8String.fromString("ab  "),
           org.apache.spark.sql.catalyst.InternalRow(
@@ -2270,6 +2271,73 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         } finally {
           reader.close()
         }
+      }
+
+      // SPARK-60242: from_avro-equivalent decode assigns CHAR/VARCHAR STRING values.
+      // File-scan deserializers (default) and to_avro encoding do not.
+      Seq(CharType(4), VarcharType(4)).foreach { dt =>
+        val avro = converters.toAvroType(dt, nullable = false)
+        val fromAvroDeser = new org.apache.spark.sql.avro.AvroDeserializer(
+          avro, dt, "CORRECTED", false, "", -1,
+          applyCharVarcharAssignment = true,
+          charVarcharStandardSemanticsOverride = None)
+        val scanDeser = new org.apache.spark.sql.avro.AvroDeserializer(
+          avro, dt, "CORRECTED", false, "", -1)
+        val padded = dt match {
+          case _: CharType => "ab  "
+          case _ => "ab"
+        }
+        assert(
+          fromAvroDeser.deserialize(new org.apache.avro.util.Utf8("ab")).get.toString === padded,
+          s"from_avro-equivalent decode should assign $dt")
+        assert(
+          scanDeser.deserialize(new org.apache.avro.util.Utf8("ab")).get.toString === "ab",
+          s"file-scan decode should not assign $dt")
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            fromAvroDeser.deserialize(new org.apache.avro.util.Utf8("abcde"))
+          },
+          condition = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "4"))
+        val ser = new org.apache.spark.sql.avro.AvroSerializer(dt, avro, nullable = false)
+        val encoded = ser.serialize(
+          org.apache.spark.unsafe.types.UTF8String.fromString("ab"))
+          .asInstanceOf[org.apache.avro.util.Utf8]
+        assert(encoded.toString === "ab", s"to_avro-equivalent encode should not assign $dt")
+      }
+
+      val enumSchema = org.apache.avro.Schema.createEnum(
+        "Spark60242Enum", "", "", java.util.Arrays.asList("ab", "cd"))
+      val enumVal = new org.apache.avro.generic.GenericData.EnumSymbol(enumSchema, "ab")
+      val enumDeser = new org.apache.spark.sql.avro.AvroDeserializer(
+        enumSchema, CharType(4), "CORRECTED", false, "", -1,
+        applyCharVarcharAssignment = true,
+        charVarcharStandardSemanticsOverride = None)
+      assert(
+        enumDeser.deserialize(enumVal).get.toString === "ab",
+        "ENUM symbols must not be CHAR-padded")
+
+      val mapDt = MapType(CharType(2), IntegerType)
+      val mapAvro = converters.toAvroType(mapDt, nullable = false)
+      val shortKeyMap = new java.util.HashMap[AnyRef, AnyRef]()
+      shortKeyMap.put(new org.apache.avro.util.Utf8("a"), Integer.valueOf(1))
+      withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+        val captured = new org.apache.spark.sql.avro.AvroDeserializer(
+          mapAvro, mapDt, "CORRECTED", false, "", -1,
+          applyCharVarcharAssignment = false,
+          charVarcharStandardSemanticsOverride = Some(true))
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            captured.deserialize(shortKeyMap)
+          },
+          condition = "UNSUPPORTED_AVRO_CHAR_VARCHAR_MAP_KEY",
+          sqlState = "0A000",
+          parameters = Map("key" -> "'a'", "dataType" -> "\"CHAR(2)\""))
+        val live = new org.apache.spark.sql.avro.AvroDeserializer(
+          mapAvro, mapDt, "CORRECTED", false, "", -1)
+        val liveMap = live.deserialize(shortKeyMap).get
+          .asInstanceOf[org.apache.spark.sql.catalyst.util.MapData]
+        assert(liveMap.keyArray().getUTF8String(0).toString === "a")
       }
 
       // JSON has no embedded schema, so a user-specified schema supplies the logical type.

@@ -8783,6 +8783,13 @@
     },
     "sqlState" : "42000"
   },
+  "UNSUPPORTED_AVRO_CHAR_VARCHAR_MAP_KEY" : {
+    "message" : [
+      "The Avro map key <key> is not a valid key for the map key type <dataType>.",
+      "A CHAR key must match the declared length exactly and a VARCHAR key must not exceed it; keys are never padded or trimmed. Use a STRING map key to accept any name."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_BUILT_IN_JDBC_DIALECT" : {
     "message" : [
       "`<name>` is not a supported built-in JDBC dialect. Supported dialects are: <supportedNames>."
