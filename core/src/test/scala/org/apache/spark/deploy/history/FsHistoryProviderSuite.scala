@@ -83,9 +83,10 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
       appId: String,
       appAttemptId: Option[String],
       inProgress: Boolean,
-      codec: Option[String] = None): File = {
+      codec: Option[String] = None,
+      logDir: File = testDir): File = {
     val ip = if (inProgress) EventLogFileWriter.IN_PROGRESS else ""
-    val logUri = SingleEventLogFileWriter.getLogPath(testDir.toURI, appId, appAttemptId, codec)
+    val logUri = SingleEventLogFileWriter.getLogPath(logDir.toURI, appId, appAttemptId, codec)
     val logPath = new Path(logUri).toUri.getPath + ip
     new File(logPath)
   }
@@ -1247,6 +1248,154 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     }
   }
 
+  test("end event reparse when the skip offset lands inside a multi-byte character") {
+    val log = newLogFile("end-event-utf8", None, inProgress = false)
+    val bytes = writeRawLog(log, endEventTestLines("end-event-utf8",
+      jobStartLine(1, 0x4e2d.toChar.toString * 200)))
+    // The job description is written as raw UTF-8. Target the third byte of a 3-byte character,
+    // so that the line boundary scan, which starts one byte before the target, starts on a
+    // continuation byte.
+    val leadByte = bytes.indexWhere(b => (b & 0xF0) == 0xE0)
+    assert(leadByte > 0)
+    val conf = createTestConf().set(END_EVENT_REPARSE_CHUNK_SIZE, (bytes.length - leadByte - 2L))
+    updateAndCheck(new FsHistoryProvider(conf)) { list =>
+      assert(list.size === 1)
+      assert(list(0).attempts.head.completed)
+    }
+  }
+
+  test("end event reparse keeps a line that starts exactly at the skip offset") {
+    val log = newLogFile("end-event-boundary", None, inProgress = false)
+    // The whole-log fallback reparse fails on this malformed line, so the application can only
+    // be listed as completed if the tail reparse finds the end event.
+    val malformed = "{\"Event\":\"SparkListenerApplicationEnd\",\"Timestamp\":"
+    val lines = endEventTestLines("end-event-boundary", malformed)
+    writeRawLog(log, lines)
+    // The application end event is the last line: skip exactly to its first byte.
+    val conf = createTestConf()
+      .set(END_EVENT_REPARSE_CHUNK_SIZE, lineBytes(lines.last).toLong)
+    updateAndCheck(new FsHistoryProvider(conf)) { list =>
+      assert(list.size === 1)
+      assert(list(0).attempts.head.completed)
+    }
+  }
+
+  test("end event reparse stops at the end of a stream shorter than the skip target") {
+    val log = newLogFile("end-event-short", None, inProgress = false, Some(CompressionCodec.LZ4))
+    val codec = CompressionCodec.createCodec(new SparkConf(), CompressionCodec.LZ4)
+    val bytes = writeRawLog(log, Seq(JsonProtocol.sparkEventToJsonString(
+      SparkListenerApplicationStart("a", Some("b"), 1L, "c", None))), Some(codec))
+    // The lz4 framing makes this tiny log larger than its content, so with a 1-byte chunk the
+    // skip target is past the end of the decompressed stream: skip() returns 0 there.
+    assert(log.length() - 2 > bytes.length)
+    val provider = new FsHistoryProvider(
+      createTestConf().set(END_EVENT_REPARSE_CHUNK_SIZE, 1L))
+    // Run the scan in a separate thread so that a skip loop that never ends fails the test.
+    val scan = new Thread(() => provider.checkForLogs())
+    scan.setDaemon(true)
+    scan.start()
+    scan.join(TimeUnit.MINUTES.toMillis(1))
+    assert(!scan.isAlive, "the scan did not finish")
+    assert(provider.getListing().toSeq.map(_.id) === Seq("b"))
+  }
+
+  Seq(None, Some(CompressionCodec.LZ4)).foreach { codecName =>
+    test("end event reparse applies the line length limit and reports relative line numbers " +
+        s"(codec = ${codecName.getOrElse("none")})") {
+      val log = newLogFile("end-event-limit", None, inProgress = false, codecName)
+      val tail = Seq(jobStartLine(2, "x" * 2048), jobStartLine(3, "y"))
+      val lines = endEventTestLines("end-event-limit", tail: _*)
+      val codec = codecName.map(CompressionCodec.createCodec(new SparkConf(), _))
+      writeRawLog(log, lines, codec)
+      // The skip runs on the uncompressed stream while the chunk size is subtracted from the
+      // file length. Skip into the middle of the first line: replay then starts at the second
+      // line, and the over-long line is at relative line `lines.indexOf(tail.head)`.
+      val target = 5L
+      val conf = createTestConf()
+        .set(END_EVENT_REPARSE_CHUNK_SIZE, log.length() - target)
+        .set(EVENT_LOG_MAX_LINE_LENGTH.key, "1k")
+      val appender = new LogAppender("end event reparse")
+      withLogAppender(appender) {
+        updateAndCheck(new FsHistoryProvider(conf)) { list =>
+          assert(list.size === 1)
+          assert(list(0).attempts.head.completed)
+        }
+      }
+      val offset = lineBytes(lines.head)
+      val messages = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+      assert(messages.exists(m => m.contains("Skipped event log lines longer than 1024 bytes") &&
+        m.contains(s"${log.getName}; first skipped line: ${lines.indexOf(tail.head)} " +
+          s"(lines counted from uncompressed byte offset $offset)")), messages)
+    }
+  }
+
+  test("end event reparse reports JSON errors with the skip offset") {
+    val log = newLogFile("end-event-malformed", None, inProgress = false)
+    val malformed = "{\"Event\":\"SparkListenerApplicationEnd\",\"Timestamp\":"
+    val tail = Seq(jobStartLine(2, "x"), malformed, jobStartLine(3, "y"))
+    val lines = endEventTestLines("end-event-malformed", tail: _*)
+    val bytes = writeRawLog(log, lines)
+    val offset = lines.takeWhile(_ != tail.head).map(lineBytes).sum
+    val conf = createTestConf().set(END_EVENT_REPARSE_CHUNK_SIZE, bytes.length - offset + 10L)
+    val appender = new LogAppender("end event reparse")
+    withLogAppender(appender) {
+      // A completed log fails on a malformed line that is not the last one, so the application
+      // is not listed.
+      updateAndCheck(new FsHistoryProvider(conf)) { list =>
+        assert(list.isEmpty)
+      }
+    }
+    val messages = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+    assert(messages.exists(_.contains(s"${log.getName} at line 2 " +
+      s"(lines counted from uncompressed byte offset $offset)")), messages)
+    assert(!messages.exists(_.contains(s"${log.getName} (lines")), messages)
+  }
+
+  test("skipToLineStart aligns to the first line starting at or after the target") {
+    def alignStream(in: InputStream, target: Long): (String, Long) = {
+      val (rest, offset) = FsHistoryProvider.skipToLineStart(in, target)
+      (new String(rest.readAllBytes(), StandardCharsets.UTF_8), offset)
+    }
+    def align(data: String, target: Long): (String, Long) = {
+      alignStream(new ByteArrayInputStream(data.getBytes(StandardCharsets.UTF_8)), target)
+    }
+    // Inside a line, at its '\n', and exactly at the start of the next line.
+    assert(align("abc\ndef\n", 1) === (("def\n", 4L)))
+    assert(align("abc\ndef\n", 3) === (("def\n", 4L)))
+    assert(align("abc\ndef\n", 4) === (("def\n", 4L)))
+    assert(align("abc\ndef\n", 5) === (("", 8L)))
+    // CRLF line endings, and a target at the '\r'.
+    assert(align("ab\r\ncd", 2) === (("cd", 4L)))
+    assert(align("ab\r\ncd", 4) === (("cd", 4L)))
+    // No line starts at or after the target, or the target is beyond the end of the stream.
+    assert(align("abc", 1) === (("", 3L)))
+    assert(align("abc\n", 10) === (("", 4L)))
+    // Targets on each byte of a 3-byte character, and on the '\n' after it.
+    val cjk = "a" + 0x4e2d.toChar + "\nb"
+    (1 to 5).foreach { target =>
+      assert(align(cjk, target) === (("b", 5L)), s"target = $target")
+    }
+    // A non-positive target leaves the stream unchanged.
+    assert(align("abc\ndef", 0) === (("abc\ndef", 0L)))
+    assert(align("abc\ndef", -1) === (("abc\ndef", 0L)))
+    // A partial line longer than the read buffer.
+    val long = "x" * 20000 + "\nnext"
+    assert(align(long, 1) === (("next", 20001L)))
+    // More than a read buffer of varied content after the boundary, so the rest of the
+    // stream must follow the put-back bytes in order.
+    val longTail = (1 to 3000).mkString(",")
+    assert(longTail.length > 8192)
+    assert(align("abc\n" + longTail, 1) === ((longTail, 4L)))
+    // A stream whose skip() never advances, e.g. at the end of a decompressed stream.
+    def noSkip(data: String): InputStream = {
+      new FilterInputStream(new ByteArrayInputStream(data.getBytes(StandardCharsets.UTF_8))) {
+        override def skip(n: Long): Long = 0L
+      }
+    }
+    assert(alignStream(noSkip("abc\ndef"), 2) === (("def", 4L)))
+    assert(alignStream(noSkip("abc\n"), 100) === (("", 4L)))
+  }
+
   test("parse event logs with optimizations off") {
     val conf = createTestConf()
       .set(END_EVENT_REPARSE_CHUNK_SIZE, 0L)
@@ -1731,6 +1880,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
         val conf = createTestConf(true)
         conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
         conf.set(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED, onDemandEnabled)
+        conf.set(EVENT_LOG_SINGLE_ON_DEMAND_LOAD_ENABLED, false)
         val hadoopConf = SparkHadoopUtil.newConfiguration(conf)
         val provider = new FsHistoryProvider(conf)
 
@@ -1756,6 +1906,186 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
 
         provider.stop()
       }
+    }
+  }
+
+  test("Support spark.history.fs.eventLog.onDemandLoadEnabled") {
+    Seq(true, false).foreach { onDemandEnabled =>
+      Seq(None, Some(CompressionCodec.LZF)).foreach { codecName =>
+        withTempDir { dir =>
+          val conf = createTestConf(true)
+          conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
+          conf.set(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED, false)
+          conf.set(EVENT_LOG_SINGLE_ON_DEMAND_LOAD_ENABLED, onDemandEnabled)
+          val provider = new FsHistoryProvider(conf)
+          val appId = s"app1-${codecName.getOrElse("none")}"
+          val logFile = newLogFile(appId, None, inProgress = false, codecName, dir)
+          val codec = codecName.map(CompressionCodec.createCodec(conf, _))
+          writeFile(logFile, codec,
+            SparkListenerApplicationStart(appId, Some(appId), 1000, "testuser", None),
+            SparkListenerApplicationEnd(5000))
+
+          assert(provider.getListing().isEmpty)
+          assert(provider.getAppUI(appId, None).isDefined == onDemandEnabled)
+          assert(provider.getListing().length === (if (onDemandEnabled) 1 else 0))
+
+          if (onDemandEnabled) {
+            val appInfo = provider.getListing().next()
+            assert(appInfo.name === appId)
+            assert(appInfo.attempts.head.sparkUser === "testuser")
+            assert(appInfo.attempts.head.completed)
+            assert(appInfo.attempts.head.duration === 4000)
+          }
+
+          assert(provider.getAppUI("nonexist", None).isEmpty)
+          assert(provider.getListing().length === (if (onDemandEnabled) 1 else 0))
+
+          provider.stop()
+        }
+      }
+    }
+  }
+
+  test("Support on-demand loading for in-progress single event logs") {
+    Seq(None, Some(CompressionCodec.LZF)).foreach { codecName =>
+      withTempDir { dir =>
+        val conf = createTestConf(true)
+        conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
+        conf.set(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED, false)
+        conf.set(EVENT_LOG_SINGLE_ON_DEMAND_LOAD_ENABLED, true)
+        val provider = new FsHistoryProvider(conf)
+        val appId = s"app1-${codecName.getOrElse("none")}"
+        val logFile = newLogFile(appId, None, inProgress = true, codecName, dir)
+        val codec = codecName.map(CompressionCodec.createCodec(conf, _))
+        writeFile(logFile, codec,
+          SparkListenerApplicationStart(appId, Some(appId), 1000, "testuser", None))
+
+        assert(provider.getAppUI(appId, None).isDefined)
+        assert(!provider.getListing().next().attempts.head.completed)
+
+        provider.stop()
+      }
+    }
+  }
+
+  test("On-demand loading preserves in-progress single event logs during cleanup") {
+    withTempDir { dir =>
+      val clock = new ManualClock(0)
+      val conf = createTestConf(true)
+        .set(HISTORY_LOG_DIR, dir.getAbsolutePath)
+        .set(CLEANER_ENABLED, true)
+        .set(MAX_LOG_AGE_S, 0L)
+        .set(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED, false)
+        .set(EVENT_LOG_SINGLE_ON_DEMAND_LOAD_ENABLED, true)
+      val provider = new FsHistoryProvider(conf, clock)
+      val logFile = newLogFile("app1", None, inProgress = true, logDir = dir)
+      writeFile(logFile, None,
+        SparkListenerApplicationStart("app1", Some("app1"), 0, "testuser", None))
+
+      assert(provider.getAppUI("app1", None).isDefined)
+      assert(provider.getListing().next().attempts.head.appSparkVersion === SPARK_VERSION)
+      assert(logFile.exists())
+
+      provider.cleanLogs()
+      assert(logFile.exists())
+
+      provider.stop()
+    }
+  }
+
+  test("On-demand loading respects single event log attempts") {
+    withTempDir { dir =>
+      val conf = createTestConf(true)
+      conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
+      conf.set(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED, false)
+      conf.set(EVENT_LOG_SINGLE_ON_DEMAND_LOAD_ENABLED, true)
+      val provider = new FsHistoryProvider(conf)
+      val logFile = newLogFile("app1", Some("attempt1"), inProgress = false, logDir = dir)
+      writeFile(logFile, None,
+        SparkListenerApplicationStart("app1", Some("app1"), 1000, "testuser", Some("attempt1")),
+        SparkListenerApplicationEnd(5000))
+
+      assert(provider.getAppUI("app1", None).isEmpty)
+      assert(provider.getListing().isEmpty)
+      assert(provider.getAppUI("app1", Some("attempt1")).isDefined)
+
+      provider.stop()
+    }
+  }
+
+  test("On-demand loading finds single event logs in all directories") {
+    withTempDir { dir =>
+      val conf = createTestConf(true)
+      conf.set(HISTORY_LOG_DIR, s"${testDir.getAbsolutePath},${dir.getAbsolutePath}")
+      conf.set(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED, false)
+      conf.set(EVENT_LOG_SINGLE_ON_DEMAND_LOAD_ENABLED, true)
+      val provider = new FsHistoryProvider(conf)
+      val logFile = newLogFile("app1", None, inProgress = false, logDir = dir)
+      writeFile(logFile, None,
+        SparkListenerApplicationStart("app1", Some("app1"), 1000, "testuser", None),
+        SparkListenerApplicationEnd(5000))
+
+      assert(provider.getAppUI("app1", None).isDefined)
+      assert(provider.getListing().next().attempts.head.logSourceFullPath ===
+        Some(dir.getAbsolutePath))
+
+      provider.stop()
+    }
+  }
+
+  test("On-demand loading supports single event logs when scanning is disabled") {
+    withTempDir { dir =>
+      val conf = createTestConf(true)
+      conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
+      conf.set(SCAN_DISABLED_PATH_PATTERNS, Seq("file:.*"))
+      conf.set(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED, false)
+      conf.set(EVENT_LOG_SINGLE_ON_DEMAND_LOAD_ENABLED, true)
+      val provider = new FsHistoryProvider(conf)
+      val logFile = newLogFile("app1", None, inProgress = false, logDir = dir)
+      writeFile(logFile, None,
+        SparkListenerApplicationStart("app1", Some("app1"), 1000, "testuser", None),
+        SparkListenerApplicationEnd(5000))
+
+      provider.checkForLogs()
+      assert(provider.getListing().isEmpty)
+      assert(provider.getAppUI("app1", None).isDefined)
+
+      provider.checkForLogs()
+      assert(provider.getListing().length === 1)
+
+      provider.stop()
+    }
+  }
+
+  test("On-demand loading supports rolling and single event logs together") {
+    withTempDir { dir =>
+      val conf = createTestConf(true)
+      conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
+      conf.set(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED, true)
+      conf.set(EVENT_LOG_SINGLE_ON_DEMAND_LOAD_ENABLED, true)
+      val hadoopConf = SparkHadoopUtil.newConfiguration(conf)
+      val provider = new FsHistoryProvider(conf)
+
+      val rollingWriter = new RollingEventLogFilesWriter(
+        "app-rolling", None, dir.toURI, conf, hadoopConf)
+      rollingWriter.start()
+      writeEventsToRollingWriter(rollingWriter, Seq(
+        SparkListenerApplicationStart("app-rolling", Some("app-rolling"), 0, "user", None),
+        SparkListenerJobStart(1, 0, Seq.empty)), rollFile = false)
+      rollingWriter.stop()
+
+      val singleLog = newLogFile("app-single", None, inProgress = false, logDir = dir)
+      writeFile(singleLog, None,
+        SparkListenerApplicationStart("app-single", Some("app-single"), 0, "user", None),
+        SparkListenerApplicationEnd(1))
+
+      assert(provider.getAppUI("app-rolling", None).isDefined)
+      assert(provider.getAppUI("app-single", None).isDefined)
+      assert(provider.getListing().length === 2)
+      assert(provider.getAppUI("nonexist", None).isEmpty)
+      assert(provider.getListing().length === 2)
+
+      provider.stop()
     }
   }
 
@@ -1972,6 +2302,49 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     } {
       writer.close()
     }
+  }
+
+  /** Writes the given lines as an event log and returns the uncompressed bytes. */
+  private def writeRawLog(
+      file: File,
+      lines: Seq[String],
+      codec: Option[CompressionCodec] = None): Array[Byte] = {
+    val bytes = lines.map(_ + "\n").mkString.getBytes(StandardCharsets.UTF_8)
+    Utils.tryWithResource(new FileOutputStream(file)) { out =>
+      Utils.tryWithResource(codec.map(_.compressedContinuousOutputStream(out)).getOrElse(out)) {
+        _.write(bytes)
+      }
+    }
+    bytes
+  }
+
+  /** UTF-8 length of a line including its '\n'. */
+  private def lineBytes(line: String): Int = line.getBytes(StandardCharsets.UTF_8).length + 1
+
+  private def jobStartLine(jobId: Int, description: String): String = {
+    val properties = new java.util.Properties()
+    properties.setProperty("spark.job.description", description)
+    JsonProtocol.sparkEventToJsonString(SparkListenerJobStart(jobId, 1L, Nil, properties))
+  }
+
+  /**
+   * Event log lines with enough information for a listing entry, then a padding line, the given
+   * tail lines and the application end event.
+   */
+  private def endEventTestLines(appId: String, tail: String*): Seq[String] = {
+    Seq(
+      SparkListenerLogStart(SPARK_VERSION),
+      SparkListenerApplicationStart(appId, Some(appId), 1L, "test", None),
+      SparkListenerEnvironmentUpdate(Map(
+        "Spark Properties" -> Seq.empty,
+        "Hadoop Properties" -> Seq.empty,
+        "JVM Information" -> Seq.empty,
+        "System Properties" -> Seq.empty,
+        "Metrics Properties" -> Seq.empty,
+        "Classpath Entries" -> Seq.empty))
+    ).map(JsonProtocol.sparkEventToJsonString) ++
+      Seq(jobStartLine(1, "padding")) ++ tail ++
+      Seq(JsonProtocol.sparkEventToJsonString(SparkListenerApplicationEnd(5L)))
   }
 
   private def createEmptyFile(file: File) = {

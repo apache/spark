@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.antlr.v4.runtime.{CommonToken, ParserRuleContext}
+import org.antlr.v4.runtime.tree.TerminalNodeImpl
+
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.internal.SQLConf
@@ -499,6 +502,174 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
             s"""\"$jsonName\"""",
             parser = DataType.fromDDL,
             fallbackParser = DataType.fromJson) === TimestampLTZNanosType(p))
+      }
+    }
+  }
+
+  test("SPARK-57955: integer type parameters that overflow Int surface a proper error") {
+    // The grammar backs length/precision/scale/SRID with `INTEGER_VALUE : DIGIT+` (an unbounded
+    // digit run), so a value > Int.MaxValue overflows Int. It must raise a Spark error with an
+    // error class -- mirroring the existing TIMESTAMP(p) behavior -- rather than a raw
+    // NumberFormatException. `tooLarge` is Int.MaxValue + 1, the first value that overflows.
+    val tooLarge = (Int.MaxValue.toLong + 1).toString // 2147483648
+
+    // A parameter equal to Int.MaxValue does NOT overflow: it parses to an Int and is then handled
+    // by each type's own validation, so no DATATYPE_PARAMETER_VALUE_OUT_OF_RANGE is raised for it.
+    // CHAR(Int.MaxValue) is a valid declaration (only length >= 0 is checked at construction).
+    assert(CatalystSqlParser.parseDataType(s"CHAR(${Int.MaxValue})") === CharType(Int.MaxValue))
+
+    // DECIMAL precision reuses DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION (a
+    // SparkArithmeticException): an overflowing value trivially exceeds the max precision of 38,
+    // matching the error DECIMAL(50) already produces. Covers both the scale-present and
+    // scale-absent call sites.
+    Seq(s"DECIMAL($tooLarge, 2)", s"DECIMAL($tooLarge)").foreach { typeString =>
+      checkError(
+        exception = intercept[SparkArithmeticException] {
+          CatalystSqlParser.parseDataType(typeString)
+        },
+        condition = "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
+        parameters = Map("precision" -> tooLarge, "maxPrecision" -> "38"))
+    }
+
+    // DECIMAL scale and CHAR/VARCHAR length use the generic DATATYPE_PARAMETER_VALUE_OUT_OF_RANGE.
+    // Both the bare and the COLLATE-qualified CHAR/VARCHAR branches are exercised.
+    Seq(
+      s"DECIMAL(10, $tooLarge)" -> ("scale", "DECIMAL"),
+      s"CHAR($tooLarge)" -> ("length", "CHAR"),
+      s"CHAR($tooLarge) COLLATE UTF8_BINARY" -> ("length", "CHAR"),
+      s"VARCHAR($tooLarge)" -> ("length", "VARCHAR"),
+      s"VARCHAR($tooLarge) COLLATE UTF8_BINARY" -> ("length", "VARCHAR")).foreach {
+      case (typeString, (parameter, typeName)) =>
+        checkError(
+          exception = intercept[SparkException] {
+            CatalystSqlParser.parseDataType(typeString)
+          },
+          condition = "DATATYPE_PARAMETER_VALUE_OUT_OF_RANGE",
+          parameters = Map(
+            "parameter" -> parameter,
+            "value" -> tooLarge,
+            "type" -> typeName))
+    }
+
+    // TIME precision reuses UNSUPPORTED_TIME_PRECISION.
+    checkError(
+      exception = intercept[SparkException] {
+        CatalystSqlParser.parseDataType(s"TIME($tooLarge)")
+      },
+      condition = "UNSUPPORTED_TIME_PRECISION",
+      parameters = Map("precision" -> tooLarge))
+
+    // GEOMETRY/GEOGRAPHY SRID reuses ST_INVALID_SRID_VALUE (a SparkIllegalArgumentException): an
+    // overflowing SRID surfaces the same error as an in-range but unsupported SRID.
+    Seq(s"GEOMETRY($tooLarge)", s"GEOGRAPHY($tooLarge)").foreach { typeString =>
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          CatalystSqlParser.parseDataType(typeString)
+        },
+        condition = "ST_INVALID_SRID_VALUE",
+        parameters = Map("srid" -> tooLarge))
+    }
+
+    // An unsupported parameterized type must not leak a raw NumberFormatException from rendering
+    // its (oversized) parameter into the error message.
+    checkError(
+      exception = intercept[ParseException] {
+        CatalystSqlParser.parseDataType(s"FOO($tooLarge)")
+      },
+      condition = "UNSUPPORTED_DATATYPE",
+      parameters = Map("typeName" -> s""""FOO($tooLarge)""""))
+
+    // The JSON path (DataType.fromJson) is guarded consistently with the parser path, for every
+    // capture that converts to Int: decimal precision, decimal scale, char length, varchar length.
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        DataType.fromJson(s""""decimal($tooLarge,2)"""")
+      },
+      condition = "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
+      parameters = Map("precision" -> tooLarge, "maxPrecision" -> "38"))
+    Seq(
+      s"decimal(10,$tooLarge)" -> ("scale", "DECIMAL"),
+      s"char($tooLarge)" -> ("length", "CHAR"),
+      s"varchar($tooLarge)" -> ("length", "VARCHAR")).foreach {
+      case (jsonName, (parameter, typeName)) =>
+        checkError(
+          exception = intercept[SparkException] {
+            DataType.fromJson(s""""$jsonName"""")
+          },
+          condition = "DATATYPE_PARAMETER_VALUE_OUT_OF_RANGE",
+          parameters = Map(
+            "parameter" -> parameter,
+            "value" -> tooLarge,
+            "type" -> typeName))
+    }
+
+    // The legacy case-class type-string parser (Spark <= 1.1 Parquet compatibility) is guarded the
+    // same way. It is only reachable as a fallback from StructType.fromString when JSON parsing
+    // fails, so it must not leak a raw NumberFormatException either.
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        LegacyTypeStringParser.parseString(s"DecimalType($tooLarge,2)")
+      },
+      condition = "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
+      parameters = Map("precision" -> tooLarge, "maxPrecision" -> "38"))
+    checkError(
+      exception = intercept[SparkException] {
+        LegacyTypeStringParser.parseString(s"DecimalType(10,$tooLarge)")
+      },
+      condition = "DATATYPE_PARAMETER_VALUE_OUT_OF_RANGE",
+      parameters = Map("parameter" -> "scale", "value" -> tooLarge, "type" -> "DECIMAL"))
+  }
+
+  test("SPARK-59545: PostProcessor leaves a context its parent no longer holds alone") {
+    // The state ANTLR's finally-driven exitRule presents after an error interrupted the identifier
+    // rewrite halfway: the context still holds its token, but the parent, which held the context
+    // as its last child, has had it removed and nothing put back. A second run of the listener
+    // used to remove the parent's last child regardless and fail with an IndexOutOfBoundsException
+    // that replaced the original error.
+    val parent = new ParserRuleContext()
+    val ctx = new SqlBaseParser.QuotedIdentifierContext(parent, 0)
+    val token = new CommonToken(SqlBaseParser.BACKQUOTED_IDENTIFIER, "`a`")
+    ctx.addChild(new TerminalNodeImpl(token))
+    // Attach and remove, so the parent's child list is empty rather than never created: that is
+    // what a second exitRule finds, and the only state in which the old code threw.
+    parent.addChild(ctx)
+    parent.removeLastChild()
+    PostProcessor.exitQuotedIdentifier(ctx)
+    assert(parent.getChildCount === 0)
+    assert(ctx.getChild(0).getPayload == token)
+  }
+
+  test("SPARK-59545: PostProcessor leaves a context that matched no token alone") {
+    // The other state an unwinding error can present: the context is attached to its parent but
+    // the error struck before its token was consumed. The listener used to detach it and then fail
+    // with a NullPointerException reading the token that is not there.
+    val parent = new ParserRuleContext()
+    val ctx = new SqlBaseParser.NonReservedContext(parent, 0)
+    parent.addChild(ctx)
+    PostProcessor.exitNonReserved(ctx)
+    assert(parent.getChildCount === 1)
+    assert(parent.getChild(0) == ctx)
+    assert(ctx.getChildCount === 0)
+  }
+
+  test("SPARK-59545: the identifier rewrite does not replace the overflow that interrupted it") {
+    // A type nested deeply enough to exhaust a small stack, written with backquoted identifiers so
+    // that PostProcessor's identifier rewrite is on the unwinding path. Where the overflow lands
+    // moves with the JIT's frame layouts and cannot be forced from here, so this states the
+    // property a caller relies on rather than reproducing the failure: however the parse
+    // overflows, cold or warm, what comes out is the StackOverflowError itself. The two tests
+    // above pin the exact states that broke.
+    val deep = "struct<`>`:" * 1000 + "int" + ">" * 1000
+    (1 to 2).foreach { attempt =>
+      @volatile var thrown: Throwable = null
+      val runnable: Runnable = () => {
+        try CatalystSqlParser.parseDataType(deep) catch { case e: Throwable => thrown = e }
+      }
+      val t = new Thread(null, runnable, s"spark-59545-deep-type-$attempt", 256 * 1024)
+      t.start()
+      t.join()
+      if (!thrown.isInstanceOf[StackOverflowError]) {
+        fail(s"attempt $attempt: expected the StackOverflowError itself, got $thrown", thrown)
       }
     }
   }

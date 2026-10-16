@@ -134,7 +134,6 @@ object ColumnsRequired {
 }
 
 class FilteredScanSuite extends DataSourceTest with SharedSparkSession {
-  protected override lazy val sql = spark.sql _
 
   override def beforeAll(): Unit = {
     super.beforeAll()

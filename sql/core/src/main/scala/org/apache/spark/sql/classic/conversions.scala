@@ -59,7 +59,21 @@ trait ClassicConversions {
 }
 
 @DeveloperApi
-object ClassicConversions extends ClassicConversions
+object ClassicConversions extends ClassicConversions {
+  /**
+   * Convert an [[Expression]] into a [[Column]]. This is the counterpart of
+   * [[ColumnConversions.expression]], for callers that would rather name the conversion than rely
+   * on the implicit [[ClassicConversions.ColumnConstructorExt]].
+   *
+   * This is intentionally defined on the object rather than on the [[ClassicConversions]] trait:
+   * on the trait it would shadow `functions.column(colName: String)` for everyone who mixes the
+   * trait in, which is the trait's documented use case.
+   *
+   * @since 4.4.0
+   */
+  @DeveloperApi
+  def column(e: Expression): Column = ExpressionUtils.column(e)
+}
 
 /**
  * Conversions from a [[Column]] to an [[Expression]].

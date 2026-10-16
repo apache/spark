@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.pipelines.graph
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.pipelines.autocdc.ScdType
 import org.apache.spark.sql.streaming.Trigger
 
@@ -96,10 +95,21 @@ class FlowPlanner(
               case _ => unsupportedDestinationType(acmf, output)
             }
           case ScdType.Type2 =>
-            throw new AnalysisException(
-              errorClass = "AUTOCDC_SCD2_NOT_SUPPORTED",
-              messageParameters = Map.empty
-            )
+            val flowMetadata = FlowSystemMetadata(updateContext, acmf, graph)
+            output match {
+              case o: Table =>
+                new Scd2MergeStreamingWrite(
+                  identifier = acmf.identifier,
+                  flow = acmf,
+                  graph = graph,
+                  updateContext = updateContext,
+                  checkpointPath = flowMetadata.latestCheckpointLocation,
+                  trigger = triggerFor(acmf),
+                  destination = o,
+                  sqlConf = acmf.sqlConf
+                )
+              case _ => unsupportedDestinationType(acmf, output)
+            }
         }
       case _ =>
         throw new UnsupportedOperationException(

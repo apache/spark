@@ -87,13 +87,13 @@ class QueryPlanningTrackerEndToEndSuite extends StreamTest {
   test("SPARK-57212: Track sub-query AQE rules") {
     // The main query has no shuffle, so its AQE never re-optimizes and thus never runs the AQE
     // logical optimizer. The scalar sub-query does have a shuffle, so its sub-AQE (planned on a
-    // separate thread) re-optimizes and runs `DynamicJoinSelection`. That rule is only visible in
-    // the query tracker if every `AdaptiveSparkPlanExec` records into the shared query tracker.
+    // separate thread) re-optimizes and runs `DemoteBroadcastHashJoin`. That rule is only visible
+    // in the query tracker if every `AdaptiveSparkPlanExec` records into the shared query tracker.
     val df = spark.sql("SELECT id FROM range(10) WHERE id > (SELECT count(*) FROM range(1000))")
     df.collect()
     val ruleNames = df.queryExecution.tracker.rules.keySet
     assert(ruleNames.contains(
-      "org.apache.spark.sql.execution.adaptive.DynamicJoinSelection"))
+      "org.apache.spark.sql.execution.adaptive.DemoteBroadcastHashJoin"))
   }
 
   test("The start times should be in order: parsing <= analysis <= optimization <= planning") {

@@ -49,6 +49,14 @@ class HavingResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
   override def resolve(unresolvedHaving: UnresolvedHaving): LogicalPlan = {
     val resolvedChild = resolver.resolve(unresolvedHaving.child)
 
+    // HAVING over grouping analytics (CUBE/ROLLUP/GROUPING SETS) is not yet supported in
+    // single-pass because the expanded Aggregate's ExprIds get out of sync when HAVING
+    // inserts missing expressions. Fall back to legacy for correct results (SPARK-57346).
+    if (operatorResolutionContextStack.current.hasGroupingAnalytics) {
+      throw new ExplicitlyUnsupportedResolverFeature(
+        "HAVING with grouping analytics (SPARK-57346)")
+    }
+
     resolvedChild match {
       case window: Window if scopes.current.baseAggregate.isDefined =>
         resolveHavingAboveWindow(

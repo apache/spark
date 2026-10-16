@@ -272,8 +272,10 @@ cp -r "$SPARK_HOME/data" "$DISTDIR"
 if [ "$MAKE_PIP" == "true" ]; then
   echo "Building python distribution package"
   pushd "$SPARK_HOME/python" > /dev/null
-  # Delete the egg info file if it exists, this can cache older setup files.
-  rm -rf pyspark.egg-info || echo "No existing egg info file, skipping deletion"
+  # Delete build artifacts that may be left over from earlier builds so that the build
+  # validation logic below doesn't trip on them.
+  rm -rf pyspark.egg-info
+  rm -f dist/pyspark*.tar.gz
   # Ship the Apache LICENSE and NOTICE inside the PySpark source distributions
   # (see MANIFEST.in). These are removed again after the sdists are built.
   #
@@ -365,6 +367,7 @@ cp "$SPARK_HOME/README.md" "$DISTDIR"
 cp -r "$SPARK_HOME/bin" "$DISTDIR"
 if command -v git && command -v cpio && git rev-parse --git-dir 2>/dev/null; then
   git ls-files -z "$SPARK_HOME/python" | cpio -0pdm "$DISTDIR"
+  cp "$SPARK_HOME/python/lib/pyspark.zip" "$DISTDIR/python/lib"
 else
   cp -r "$SPARK_HOME/python" "$DISTDIR"
 fi

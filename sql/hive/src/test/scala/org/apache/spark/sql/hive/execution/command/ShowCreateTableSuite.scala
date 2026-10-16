@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.util.escapeSingleQuotedString
 import org.apache.spark.sql.execution.command.v1
-import org.apache.spark.sql.internal.HiveSerDe
+import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 
 /**
  * The class contains tests for the `SHOW CREATE TABLE` command to check V1 Hive external
@@ -442,6 +442,97 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
         sqlState = "0A000",
         parameters = Map("tableName" -> "`spark_catalog`.`default`.`t1`")
       )
+    }
+  }
+
+  test("plain SHOW CREATE TABLE returns Hive DDL for hive table when the config is on") {
+    withNamespaceAndTable(ns, table) { t =>
+      sql(
+        s"""CREATE TABLE $t (
+           |  c1 INT COMMENT 'bla',
+           |  c2 STRING
+           |) STORED AS PARQUET
+         """.stripMargin
+      )
+      val hiveDDL = getShowCreateDDL(t, true)
+      // By default, plain SHOW CREATE TABLE converts the Hive table to Spark DDL.
+      assert(getShowCreateDDL(t) !== hiveDDL)
+
+      withSQLConf(SQLConf.HIVE_TABLE_SHOW_CREATE_TABLE_AS_SERDE.key -> "true") {
+        assert(getShowCreateDDL(t) === hiveDDL)
+        assert(hiveDDL.mkString(" ").contains(
+          "ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'"))
+      }
+    }
+  }
+
+  test("plain SHOW CREATE TABLE still returns Spark DDL for data source table with config on") {
+    withSQLConf(SQLConf.HIVE_TABLE_SHOW_CREATE_TABLE_AS_SERDE.key -> "true") {
+      withNamespaceAndTable(ns, table) { t =>
+        sql(
+          s"""CREATE TABLE $t (
+             |  c1 STRING COMMENT 'bla',
+             |  c2 STRING
+             |) USING orc
+           """.stripMargin
+        )
+        // Should not fail with UNSUPPORTED_SHOW_CREATE_TABLE.ON_DATA_SOURCE_TABLE_WITH_AS_SERDE.
+        assert(getShowCreateDDL(t).contains("USING orc"))
+      }
+    }
+  }
+
+  test("plain SHOW CREATE TABLE still returns Spark DDL for view when the config is on") {
+    withSQLConf(SQLConf.HIVE_TABLE_SHOW_CREATE_TABLE_AS_SERDE.key -> "true") {
+      withView("v1") {
+        sql("CREATE VIEW v1 AS SELECT 1 AS c1")
+        assert(sql("SHOW CREATE TABLE v1").head().getString(0).startsWith("CREATE VIEW"))
+      }
+    }
+  }
+
+  test("plain SHOW CREATE TABLE returns Hive DDL for unsupported serde when the config is on") {
+    withSQLConf(SQLConf.HIVE_TABLE_SHOW_CREATE_TABLE_AS_SERDE.key -> "true") {
+      withTable("t1") {
+        sql(
+          s"""
+             |CREATE TABLE t1 (
+             |  c1 INT COMMENT 'bla',
+             |  c2 STRING
+             |) STORED AS RCFILE
+           """.stripMargin
+        )
+        // Without the config, this fails with
+        // UNSUPPORTED_SHOW_CREATE_TABLE.WITH_UNSUPPORTED_SERDE_CONFIGURATION because RCFILE
+        // cannot be mapped to a Spark data source.
+        val hiveDDL = getShowCreateDDL("t1", true)
+        assert(getShowCreateDDL("t1") === hiveDDL)
+        assert(hiveDDL.mkString(" ").contains(
+          "INPUTFORMAT 'org.apache.hadoop.hive.ql.io.RCFileInputFormat'"))
+      }
+    }
+  }
+
+  test("plain SHOW CREATE TABLE returns Hive DDL for transactional hive table with config on") {
+    withSQLConf(SQLConf.HIVE_TABLE_SHOW_CREATE_TABLE_AS_SERDE.key -> "true") {
+      withTable("t1") {
+        sql(
+          s"""
+             |CREATE TABLE t1 (
+             |  c1 STRING COMMENT 'bla',
+             |  c2 STRING
+             |)
+             |TBLPROPERTIES ('transactional' = 'true')
+             |CLUSTERED BY (c1) INTO 10 BUCKETS
+             |STORED AS ORC
+           """.stripMargin
+        )
+        // Without the config, this fails with
+        // UNSUPPORTED_SHOW_CREATE_TABLE.ON_TRANSACTIONAL_HIVE_TABLE.
+        val showDDL = getShowCreateDDL("t1").mkString(" ")
+        assert(showDDL.contains("ROW FORMAT SERDE"))
+        assert(showDDL.contains("'transactional' = 'true'"))
+      }
     }
   }
 }

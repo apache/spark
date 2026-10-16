@@ -147,8 +147,12 @@ object RowSetUtils {
             // types that reach this branch do not use the `nested` flag in `toHiveString`. Now,
             // Geospatial types use it for wrapping EWKT in quotes when nested = true, so we need
             // to set `nested` here to false to avoid spurious quotes for standalone geo values.
+            // String types need the same treatment: the fast path above matches only the
+            // default-collation StringType singleton, so CHAR/VARCHAR and collated strings land
+            // here and would otherwise be rendered as "value" instead of value.
             val nested = typ match {
               case _: GeometryType | _: GeographyType => false
+              case _: StringType => false
               case _ => true
             }
             toHiveString((row.get(ordinal), typ), nested, timeFormatters, binaryFormatter)

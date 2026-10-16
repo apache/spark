@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Cast, Expression, GenericInternalRow, JsonToStructs, Literal, StructsToJson, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -85,8 +85,10 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       SparkFiles.getRootDirectory()
     builder.environment().put("PATH", path)
     // if OMP_NUM_THREADS is not explicitly set, override it with the value of "spark.task.cpus"
+    // which may be fractional, so round up to an integer number of threads (at least 1).
     if (System.getenv("OMP_NUM_THREADS") == null) {
-      builder.environment().put("OMP_NUM_THREADS", conf.getConfString("spark.task.cpus", "1"))
+      val taskCpus = conf.getConfString("spark.task.cpus", "1.0").toDouble
+      builder.environment().put("OMP_NUM_THREADS", math.max(1, taskCpus.ceil.toInt).toString)
     }
 
     val proc = builder.start()
@@ -199,7 +201,13 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
   private lazy val outputFieldWriters: Seq[String => Any] = output.map { attr =>
     val converter = CatalystTypeConverters.createToCatalystConverter(attr.dataType)
     attr.dataType match {
-      case StringType => wrapperConvertException(data => data, converter)
+      // CHAR/VARCHAR must not reach the script reader; AstBuilder rewrites them to
+      // unbounded STRING and applies assignment in a Project when first-class types
+      // are enabled. Reject leftover CHAR/VARCHAR, including nested (hand-built plans).
+      case dt if CharVarcharUtils.hasCharVarchar(dt) =>
+        throw QueryExecutionErrors.scriptTransformWithoutSerdeUnsupportedTypeError(dt)
+      // Match collated STRING too (CHAR/VARCHAR COLLATE rewrite via toStringType).
+      case _: StringType => wrapperConvertException(data => data, converter)
       case BooleanType => wrapperConvertException(data => data.toBoolean, converter)
       case ByteType => wrapperConvertException(data => data.toByte, converter)
       case BinaryType =>
@@ -247,11 +255,11 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       case udt: UserDefinedType[_] =>
         wrapperConvertException(data => udt.deserialize(data), converter)
       case dt =>
-        throw QueryExecutionErrors.outputDataTypeUnsupportedByNodeWithoutSerdeError(nodeName, dt)
+        throw QueryExecutionErrors.scriptTransformWithoutSerdeUnsupportedTypeError(dt)
     }
   }
 
-  // Keep consistent with Hive `LazySimpleSerde`, when there is a type case error, return null
+  // Match Hive `LazySimpleSerDe`: return null when a type cast fails.
   private val wrapperConvertException: (String => Any, Any => Any) => String => Any =
     (f: String => Any, converter: Any => Any) =>
       (data: String) => converter {

@@ -171,7 +171,7 @@ object Literal {
       case _: DayTimeIntervalType if v.isInstanceOf[Duration] =>
         Literal(CatalystTypeConverters.createToCatalystConverter(dataType)(v), dataType)
       case _: ObjectType => Literal(v, dataType)
-      case _: CharType | _: VarcharType if SQLConf.get.preserveCharVarcharTypeInfo =>
+      case _: CharType | _: VarcharType if SQLConf.get.charVarcharFirstClassTypes =>
         Literal(CatalystTypeConverters.createToCatalystConverter(dataType)(v), dataType)
       case _ if requiresSchemaAwareNanosConversion(dataType, v) =>
         Literal(CatalystTypeConverters.createToCatalystConverter(dataType)(v), dataType)
@@ -298,6 +298,60 @@ object Literal {
     require(doValidate(value, dataType),
       s"Literal must have a corresponding value to ${dataType.catalogString}, " +
       s"but class ${Utils.getSimpleName(value.getClass)} found.")
+  }
+
+  /**
+   * The size in bytes of a literal `value` of the given `dataType`, or `None` when it cannot be
+   * determined reliably. The result is a safe upper bound, never an under-estimate, so callers can
+   * use it to bound memory:
+   *   - a fixed-length type reports its `defaultSize` (exact);
+   *   - a null `value` reports the type's `defaultSize`;
+   *   - a variable-length type whose real payload size is known (string / binary, or an array /
+   *     map / struct all of whose elements are measurable) reports that real size;
+   *   - any other type (e.g. variant) returns `None`.
+   */
+  private[expressions] def valueSizeInBytes(value: Any, dataType: DataType): Option[Int] = {
+    if (value == null || UnsafeRow.isFixedLength(dataType)) {
+      return Some(dataType.defaultSize)
+    }
+    PhysicalDataType(dataType) match {
+      case _: PhysicalCalendarIntervalType => Some(CalendarIntervalType.defaultSize)
+      case _: PhysicalStringType => Some(value.asInstanceOf[UTF8String].numBytes())
+      case PhysicalBinaryType => Some(value.asInstanceOf[Array[Byte]].length)
+      case _: PhysicalBinaryViewType => Some(value.asInstanceOf[BinaryView].numBytes())
+      case PhysicalArrayType(et, _) =>
+        val array = value.asInstanceOf[ArrayData]
+        var size = 0
+        var i = 0
+        while (i < array.numElements()) {
+          valueSizeInBytes(array.get(i, et), et) match {
+            case Some(elementSize) => size += elementSize
+            case None => return None
+          }
+          i += 1
+        }
+        Some(size)
+      case PhysicalMapType(kt, vt, _) =>
+        val map = value.asInstanceOf[MapData]
+        for {
+          keySize <- valueSizeInBytes(map.keyArray(), ArrayType(kt))
+          valueSize <- valueSizeInBytes(map.valueArray(), ArrayType(vt))
+        } yield keySize + valueSize
+      case st: PhysicalStructType =>
+        val row = value.asInstanceOf[InternalRow]
+        var size = 0
+        var i = 0
+        while (i < st.fields.length) {
+          val fieldType = st.fields(i).dataType
+          valueSizeInBytes(if (row.isNullAt(i)) null else row.get(i, fieldType), fieldType) match {
+            case Some(fieldSize) => size += fieldSize
+            case None => return None
+          }
+          i += 1
+        }
+        Some(size)
+      case _ => None
+    }
   }
 
   /**
@@ -449,6 +503,12 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
   override def contextIndependentFoldable: Boolean = true
 
   override def nullable: Boolean = value == null
+
+  /**
+   * The size in bytes of this literal's value as a safe upper bound, or `None` when it cannot be
+   * determined reliably. See [[Literal.valueSizeInBytes]] for the exact contract.
+   */
+  lazy val valueSizeInBytes: Option[Int] = Literal.valueSizeInBytes(value, dataType)
 
   private def timeZoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
 

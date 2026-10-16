@@ -15,17 +15,18 @@
 # limitations under the License.
 #
 import sys
-from typing import Union, TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Union
 
-from pyspark.resource.requests import ExecutorResourceRequests, TaskResourceRequests
 from pyspark.resource import ResourceProfile
-from pyspark.util import PythonEvalType
+from pyspark.resource.requests import ExecutorResourceRequests, TaskResourceRequests
 from pyspark.sql.types import StructType
+from pyspark.util import PythonEvalType
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
+
     from pyspark.sql.dataframe import DataFrame
-    from pyspark.sql.pandas._typing import PandasMapIterFunction, ArrowMapIterFunction
+    from pyspark.sql.pandas._typing import ArrowMapIterFunction, PandasMapIterFunction
 
 
 class PandasMapOpsMixin:
@@ -105,8 +106,9 @@ class PandasMapOpsMixin:
 
 def _test() -> None:
     import doctest
-    from pyspark.sql import SparkSession
+
     import pyspark.sql.pandas.map_ops
+    from pyspark.sql import SparkSession
 
     globs = pyspark.sql.pandas.map_ops.__dict__.copy()
     spark = (

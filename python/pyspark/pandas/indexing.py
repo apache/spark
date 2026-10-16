@@ -22,27 +22,24 @@ A loc indexer for pandas-on-Spark DataFrame/Series.
 from abc import ABCMeta, abstractmethod
 from collections.abc import Iterable
 from functools import reduce
-from typing import Any, Optional, List, Tuple, TYPE_CHECKING, Union, cast, Sized
+from typing import TYPE_CHECKING, Any, List, Optional, Sized, Tuple, Union, cast
 
+import numpy as np
 import pandas as pd
 from pandas.api.types import is_list_like
-import numpy as np
 
-from pyspark.loose_version import LooseVersion
-from pyspark.sql import functions as F, Column as PySparkColumn
-from pyspark.sql.types import BooleanType, LongType, DataType
-from pyspark.sql.utils import is_remote
-from pyspark.errors import AnalysisException
 from pyspark import pandas as ps  # noqa: F401
+from pyspark.errors import AnalysisException
+from pyspark.loose_version import LooseVersion
 from pyspark.pandas._typing import Label, Name, Scalar
+from pyspark.pandas.exceptions import SparkPandasIndexingError, SparkPandasNotImplementedError
 from pyspark.pandas.internal import (
     DEFAULT_SERIES_NAME,
-    InternalField,
-    InternalFrame,
     NATURAL_ORDER_COLUMN_NAME,
     SPARK_DEFAULT_SERIES_NAME,
+    InternalField,
+    InternalFrame,
 )
-from pyspark.pandas.exceptions import SparkPandasIndexingError, SparkPandasNotImplementedError
 from pyspark.pandas.utils import (
     is_name_like_tuple,
     is_name_like_value,
@@ -53,6 +50,10 @@ from pyspark.pandas.utils import (
     spark_column_equals,
     verify_temp_column_name,
 )
+from pyspark.sql import Column as PySparkColumn
+from pyspark.sql import functions as F
+from pyspark.sql.types import BooleanType, DataType, LongType
+from pyspark.sql.utils import is_remote
 
 if TYPE_CHECKING:
     from pyspark.pandas.frame import DataFrame
@@ -1887,12 +1888,14 @@ class iLocIndexer(LocIndexerLike):
 
 
 def _test() -> None:
-    import os
     import doctest
+    import os
     import sys
-    from pyspark.sql import SparkSession
-    import pyspark.pandas.indexing
+
     from pandas.util.version import Version
+
+    import pyspark.pandas.indexing
+    from pyspark.sql import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 

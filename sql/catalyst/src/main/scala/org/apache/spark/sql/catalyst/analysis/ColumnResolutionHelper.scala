@@ -509,6 +509,22 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     resolveVariables(resolveOuterRef(e))
   }
 
+  /**
+   * Wrap a top-level [[OuterReference]] of a subquery's Project/Aggregate output in an [[Alias]]
+   * so that it gets a fresh ExprId in the subquery's scope. Without the [[Alias]] the outer
+   * attribute's ExprId leaks through the operator's output (since [[OuterReference.toAttribute]]
+   * strips the wrapper), and downstream operators referencing that leaked ExprId can produce
+   * incorrect expression-id tracking. Expressions that are already a [[NamedExpression]] other
+   * than a bare [[OuterReference]] (e.g. an [[Alias]] from struct star expansion or an explicit
+   * alias) are left unchanged.
+   */
+  protected def aliasIfOuterReference(e: NamedExpression): NamedExpression = e match {
+    case _: Alias => e
+    case outerReference: OuterReference =>
+      Alias(outerReference, toPrettySQL(outerReference.e))()
+    case _ => e
+  }
+
   def resolveExprInAssignment(
       expr: Expression,
       hostPlan: LogicalPlan,

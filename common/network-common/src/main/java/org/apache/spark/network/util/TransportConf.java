@@ -534,6 +534,16 @@ public class TransportConf {
     return conf.getBoolean("spark.shuffle.useOldFetchProtocol", false);
   }
 
+  /**
+   * Whether to replace the client worker EventLoopGroup when a netty worker event loop is detected
+   * as dead (a connection is rejected with "event executor terminated"). A dead loop is never
+   * replaced within a fixed-size group and keeps being handed out by the round-robin chooser, so
+   * without this the degradation is permanent. On by default. See SPARK-58292.
+   */
+  public boolean recreateWorkerGroupOnDeadEventLoop() {
+    return conf.getBoolean("spark.network.recreateWorkerGroupOnDeadEventLoop", true);
+  }
+
   /** Whether to enable sasl retries or not. The number of retries is dictated by the config
    * `spark.shuffle.io.maxRetries`.
    */

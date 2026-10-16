@@ -15,27 +15,27 @@
 # limitations under the License.
 #
 
-from contextlib import contextmanager
 import inspect
-import tempfile
-import unittest
 import os
 import sys
+import tempfile
+import unittest
 import warnings
+from contextlib import contextmanager
 from io import StringIO
 from typing import Iterator
 
 from pyspark import SparkConf
 from pyspark.errors import PySparkValueError
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, arrow_udf, pandas_udf, udf
-from pyspark.sql.window import Window
 from pyspark.profiler import UDFBasicProfiler
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import arrow_udf, col, pandas_udf, udf
+from pyspark.sql.window import Window
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
+    have_flameprof,
     have_pandas,
     have_pyarrow,
-    have_flameprof,
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
@@ -526,8 +526,9 @@ class UDFProfiler2TestsMixin:
 
     @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
     def test_perf_profiler_arrow_udf_grouped_agg_iter(self):
-        import pyarrow as pa
         from typing import Iterator
+
+        import pyarrow as pa
 
         @arrow_udf("double")
         def arrow_mean_iter(it: Iterator[pa.Array]) -> float:

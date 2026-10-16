@@ -22,7 +22,7 @@ import java.io._
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
-import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
+import org.apache.spark.ml.linalg.{SQLDataTypes, Vector, Vectors, VectorUDT}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.InternalRow
@@ -302,7 +302,7 @@ private[spark] object SummaryBuilderImpl extends Logging {
     }
   }
 
-  private val vectorUDT = new VectorUDT
+  private val vectorUDT = SQLDataTypes.VectorType.asInstanceOf[VectorUDT]
 
   /**
    * All the metrics that can be currently computed by Spark for vectors.
@@ -648,7 +648,7 @@ private[spark] class SummarizerBuffer(
    * Sample mean of each dimension.
    */
   def mean: Vector = {
-    require(requestedMetrics.contains(Mean))
+    require(requestedMetrics.contains(Mean), "mean was not a requested metric.")
     require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
 
     val realMean = Array.ofDim[Double](n)
@@ -664,7 +664,7 @@ private[spark] class SummarizerBuffer(
    * Sum of each dimension.
    */
   def sum: Vector = {
-    require(requestedMetrics.contains(Sum))
+    require(requestedMetrics.contains(Sum), "sum was not a requested metric.")
     require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
 
     val realSum = Array.ofDim[Double](n)
@@ -680,7 +680,7 @@ private[spark] class SummarizerBuffer(
    * Unbiased estimate of sample variance of each dimension.
    */
   def variance: Vector = {
-    require(requestedMetrics.contains(Variance))
+    require(requestedMetrics.contains(Variance), "variance was not a requested metric.")
     require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
 
     val realVariance = computeVariance
@@ -691,7 +691,7 @@ private[spark] class SummarizerBuffer(
    * Unbiased estimate of standard deviation of each dimension.
    */
   def std: Vector = {
-    require(requestedMetrics.contains(Std))
+    require(requestedMetrics.contains(Std), "std was not a requested metric.")
     require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
 
     val realVariance = computeVariance
@@ -732,7 +732,7 @@ private[spark] class SummarizerBuffer(
    *
    */
   def numNonzeros: Vector = {
-    require(requestedMetrics.contains(NumNonZeros))
+    require(requestedMetrics.contains(NumNonZeros), "numNonZeros was not a requested metric.")
     require(totalCnt > 0, s"Nothing has been added to this summarizer.")
 
     Vectors.dense(nnz.map(_.toDouble))
@@ -742,7 +742,7 @@ private[spark] class SummarizerBuffer(
    * Maximum value of each dimension.
    */
   def max: Vector = {
-    require(requestedMetrics.contains(Max))
+    require(requestedMetrics.contains(Max), "max was not a requested metric.")
     require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
 
     var i = 0
@@ -757,7 +757,7 @@ private[spark] class SummarizerBuffer(
    * Minimum value of each dimension.
    */
   def min: Vector = {
-    require(requestedMetrics.contains(Min))
+    require(requestedMetrics.contains(Min), "min was not a requested metric.")
     require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
 
     var i = 0
@@ -772,7 +772,7 @@ private[spark] class SummarizerBuffer(
    * L2 (Euclidean) norm of each dimension.
    */
   def normL2: Vector = {
-    require(requestedMetrics.contains(NormL2))
+    require(requestedMetrics.contains(NormL2), "normL2 was not a requested metric.")
     require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
 
     val realMagnitude = Array.ofDim[Double](n)
@@ -790,7 +790,7 @@ private[spark] class SummarizerBuffer(
    * L1 norm of each dimension.
    */
   def normL1: Vector = {
-    require(requestedMetrics.contains(NormL1))
+    require(requestedMetrics.contains(NormL1), "normL1 was not a requested metric.")
     require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
 
     Vectors.dense(currL1)

@@ -15,13 +15,13 @@
 # limitations under the License.
 #
 
-from decimal import Decimal
 import unittest
+from decimal import Decimal
 
-from pyspark.errors import AnalysisException, PythonException, PySparkNotImplementedError
+from pyspark.errors import AnalysisException, PySparkNotImplementedError, PythonException
 from pyspark.loose_version import LooseVersion
 from pyspark.sql import Row
-from pyspark.sql.functions import udf, col
+from pyspark.sql.functions import col, udf
 from pyspark.sql.tests.test_udf import BaseUDFTestsMixin
 from pyspark.sql.types import (
     ArrayType,
@@ -276,9 +276,10 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_IMPLEMENTED",
+            errorClass="CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON",
             messageParameters={
-                "feature": "Invalid return type with Arrow-optimized Python UDF: VarcharType(10)"
+                "feature": "Python UDF return types",
+                "data_type": "varchar(10)",
             },
         )
 

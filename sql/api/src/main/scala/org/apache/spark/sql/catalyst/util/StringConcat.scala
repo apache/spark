@@ -30,8 +30,7 @@ class StringConcat(val maxLength: Int = ByteArrayUtils.MAX_ROUNDED_ARRAY_LENGTH)
 
   /**
    * Appends a string and accumulates its length to allocate a string buffer for all appended
-   * strings once in the toString method. Returns true if the string still has room for further
-   * appends before it hits its max limit.
+   * strings once in the toString method.
    */
   def append(s: String): Unit = {
     if (s != null) {

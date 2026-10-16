@@ -16,19 +16,20 @@
 #
 
 
-from pyspark.sql import Row, functions as sf
-from pyspark.sql.types import (
-    StringType,
-    IntegerType,
-    DoubleType,
-    StructType,
-    StructField,
-    BooleanType,
-)
 from pyspark.errors import (
     AnalysisException,
     PySparkTypeError,
     PySparkValueError,
+)
+from pyspark.sql import Row
+from pyspark.sql import functions as sf
+from pyspark.sql.types import (
+    BooleanType,
+    DoubleType,
+    IntegerType,
+    StringType,
+    StructField,
+    StructType,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
@@ -134,8 +135,8 @@ class DataFrameStatTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="VALUE_NOT_ANY_OR_ALL",
-            messageParameters={"arg_name": "how", "arg_value": "foo"},
+            errorClass="VALUE_NOT_ALLOWED",
+            messageParameters={"arg_name": "how", "allowed_values": "['any', 'all']"},
         )
 
     def test_fillna(self):

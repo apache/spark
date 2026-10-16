@@ -15,14 +15,14 @@
 # limitations under the License.
 #
 
-from io import StringIO
 import unittest
+from io import StringIO
 from typing import Iterable
 
 from pyspark.testing.connectutils import (
-    should_test_connect,
-    connect_requirement_message,
     ReusedConnectTestCase,
+    connect_requirement_message,
+    should_test_connect,
 )
 from pyspark.testing.utils import PySparkErrorTestUtils
 

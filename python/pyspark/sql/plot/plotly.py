@@ -20,16 +20,17 @@ from typing import TYPE_CHECKING, Any, List, Optional, Union
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql.plot import (
-    PySparkPlotAccessor,
     PySparkBoxPlotBase,
-    PySparkKdePlotBase,
     PySparkHistogramPlotBase,
+    PySparkKdePlotBase,
+    PySparkPlotAccessor,
 )
 from pyspark.sql.types import NumericType
 
 if TYPE_CHECKING:
-    from pyspark.sql import DataFrame
     from plotly.graph_objs import Figure
+
+    from pyspark.sql import DataFrame
 
 
 def plot_pyspark(data: "DataFrame", kind: str, **kwargs: Any) -> "Figure":
@@ -164,8 +165,8 @@ def plot_box(data: "DataFrame", **kwargs: Any) -> "Figure":
 
 
 def plot_kde(data: "DataFrame", **kwargs: Any) -> "Figure":
-    from pyspark.testing.utils import have_numpy
     from pyspark.sql.pandas.utils import require_minimum_pandas_version
+    from pyspark.testing.utils import have_numpy
 
     require_minimum_pandas_version()
 

@@ -32,8 +32,8 @@ import org.apache.spark.udf.worker.UDFWorkerSpecification
  * worker that backed it MUST NOT be returned to any reuse pool. A transport
  * error leaves the worker in an unknown state; only workers that complete
  * sessions cleanly are eligible for reuse. Implementations are responsible for
- * tracking this condition -- typically [[WorkerSession.doProcess]] flags the
- * worker as invalid before [[WorkerSession.doClose]] releases it, so the
+ * tracking this condition -- [[WorkerSession.close]] marks the worker invalid
+ * (via [[WorkerSession.isWorkerSalvageable]]) before releasing it, so the
  * dispatcher can distinguish a clean release from a failed one.
  */
 @Experimental

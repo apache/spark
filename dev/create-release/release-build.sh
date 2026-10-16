@@ -40,7 +40,7 @@ SPARK_VERSION - (optional) Version of Spark being built (e.g. 2.1.2)
 
 ASF_USERNAME - Username of ASF committer account
 ASF_PASSWORD - Password of ASF committer account
-ASF_NEXUS_TOKEN - API token in ASF Nexus reposiotry
+ASF_NEXUS_TOKEN - API token in ASF Nexus repository
 
 GPG_KEY - GPG key used to sign release artifacts
 GPG_PASSPHRASE - Passphrase for GPG key
@@ -162,9 +162,8 @@ if [[ "$1" == "finalize" ]]; then
   cd spark-website
   git add site/docs/$RELEASE_VERSION
   git commit -m "Add docs for Apache Spark $RELEASE_VERSION"
-  git push origin HEAD:asf-site
   cd ..
-  echo "docs uploaded"
+  echo "docs committed for later upload"
 
   echo "Uploading release docs to spark-website"
   cd spark-website
@@ -302,7 +301,73 @@ EOF
     echo "Edited js/downloads.js"
   fi
 
-  # 3. Add news post
+  # 3. Update the latest stable version in downloads.md and site/static/versions.json.
+  #    site/downloads.html is regenerated from downloads.md by the jekyll build below,
+  #    so it does not need to be edited here.
+  if [[ "$RELEASE_VERSION" =~ -preview[0-9]*$ ]]; then
+    echo "Skipping downloads.md and versions.json for preview release: $RELEASE_VERSION"
+  else
+    python3 <<EOF
+import json
+import re
+
+release_version = "${RELEASE_VERSION}"
+
+def parse_version(v):
+    return [int(p) for p in v.strip().split(".")]
+
+def vercmp(v1, v2):
+    a = parse_version(v1)
+    b = parse_version(v2)
+    return (a > b) - (a < b)
+
+# downloads.md: bump the Maven coordinate example to the latest stable version.
+# Only update when this release is newer than the version currently shown, so a
+# maintenance release on an older branch does not downgrade the coordinate.
+with open("downloads.md") as f:
+    lines = f.readlines()
+
+with open("downloads.md", "w") as f:
+    in_maven_block = False
+    for line in lines:
+        if re.match(r"\s*artifactId:\s*spark-core", line):
+            in_maven_block = True
+        m = re.match(r"(\s*version:\s*)(\d+\.\d+\.\d+)(\s*)$", line)
+        if in_maven_block and m:
+            if vercmp(release_version, m.group(2)) > 0:
+                line = f"{m.group(1)}{release_version}{m.group(3)}"
+            in_maven_block = False
+        f.write(line)
+
+# site/static/versions.json: add (or replace) the entry for this release, keeping
+# the list sorted in descending version order (it drives the API docs version picker).
+path = "site/static/versions.json"
+with open(path) as f:
+    versions = json.load(f)
+
+entry = {
+    "name": release_version,
+    "version": release_version,
+    "url": f"https://spark.apache.org/docs/{release_version}/api/python/",
+}
+
+versions = [v for v in versions if v.get("version") != release_version]
+insert_at = len(versions)
+for i, v in enumerate(versions):
+    if vercmp(release_version, v.get("version", "0.0.0")) > 0:
+        insert_at = i
+        break
+versions.insert(insert_at, entry)
+
+with open(path, "w") as f:
+    json.dump(versions, f, indent=4)
+    f.write("\n")
+EOF
+
+    echo "Edited downloads.md and site/static/versions.json"
+  fi
+
+  # 4. Add news post
   RELEASE_DATE=$(TZ=America/Los_Angeles date +"%Y-%m-%d")
   FILENAME="news/_posts/${RELEASE_DATE}-spark-${RELEASE_VERSION//./-}-released.md"
   mkdir -p news/_posts
@@ -356,7 +421,7 @@ EOF
 
   echo "Created $FILENAME"
 
-  # 4. Add release notes with Python to extract JIRA version ID
+  # 5. Add release notes with Python to extract JIRA version ID
   if [[ "$RELEASE_VERSION" =~ -preview[0-9]*$ ]]; then
     echo "Skipping JIRA release notes for preview release: $RELEASE_VERSION"
   else
@@ -430,11 +495,11 @@ EOF
     echo "Created $FILENAME"
   fi
 
-  # 5. Build the website
+  # 6. Build the website
   bundle install
   bundle exec jekyll build
 
-  # 6. Update latest or preview symlink
+  # 7. Update latest or preview symlink
   IFS='.' read -r rel_maj rel_min rel_patch <<< "$RELEASE_VERSION"
 
   if [[ "$RELEASE_VERSION" =~ -preview[0-9]*$ ]]; then
@@ -475,6 +540,9 @@ EOF
 
   git add .
   git commit -m "Add release docs for Apache Spark $RELEASE_VERSION"
+  # We want to `git push` the website only once to eliminate the chance that
+  # multiple pushes will race with spark-website CI pushing HTML commits,
+  # creating annoying fast-forward failures.
   git push origin HEAD:asf-site
   cd ..
   echo "release docs uploaded"
@@ -617,7 +685,7 @@ SCALA_2_12_PROFILES="-Pscala-2.12"
 HIVE_PROFILES="-Phive -Phive-thriftserver"
 # Profiles for publishing snapshots and release to Maven Central
 # We use Apache Hive 2.3 for publishing
-PUBLISH_PROFILES="$BASE_PROFILES $HIVE_PROFILES -Pspark-ganglia-lgpl -Pkinesis-asl -Phadoop-cloud -Pjvm-profiler"
+PUBLISH_PROFILES="$BASE_PROFILES $HIVE_PROFILES -Pspark-ganglia-lgpl -Pkinesis-asl -Pcredential-aws -Phadoop-cloud -Pjvm-profiler"
 # Profiles for building binary releases
 BASE_RELEASE_PROFILES="$BASE_PROFILES -Psparkr"
 
@@ -629,14 +697,6 @@ elif [[ $JAVA_VERSION < "17.0." ]] && [[ $SPARK_VERSION > "3.5.99" ]]; then
   echo "Java version $JAVA_VERSION is less than required 17 for 4.0+"
   echo "Please set JAVA_HOME correctly."
   exit 1
-fi
-
-# This is a band-aid fix to avoid the failure of Maven nightly snapshot in some Jenkins
-# machines by explicitly calling /usr/sbin/lsof. Please see SPARK-22377 and the discussion
-# in its pull request.
-LSOF=lsof
-if ! hash $LSOF 2>/dev/null; then
-  LSOF=/usr/sbin/lsof
 fi
 
 if [ -z "$SPARK_PACKAGE_VERSION" ]; then

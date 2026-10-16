@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.vectorized;
 
+import java.math.BigDecimal;
+import java.nio.ByteOrder;
+
+import org.apache.arrow.memory.ArrowBuf;
 import org.apache.arrow.vector.*;
 import org.apache.arrow.vector.complex.*;
 import org.apache.arrow.vector.holders.NullableIntervalMonthDayNanoHolder;
@@ -201,7 +205,12 @@ public class ArrowColumnVector extends ColumnVector {
     } else if (vector instanceof Float8Vector float8Vector) {
       accessor = new DoubleAccessor(float8Vector);
     } else if (vector instanceof DecimalVector decimalVector) {
-      accessor = new DecimalAccessor(decimalVector);
+      int precision = decimalVector.getPrecision();
+      if (precision > 0 && precision <= Decimal.MAX_LONG_DIGITS()) {
+        accessor = new SmallDecimalAccessor(decimalVector, ByteOrder.nativeOrder());
+      } else {
+        accessor = new DecimalAccessor(decimalVector);
+      }
     } else if (vector instanceof VarCharVector varCharVector) {
       accessor = new StringAccessor(varCharVector);
     } else if (vector instanceof LargeVarCharVector largeVarCharVector) {
@@ -209,7 +218,11 @@ public class ArrowColumnVector extends ColumnVector {
     } else if (vector instanceof VarBinaryVector varBinaryVector) {
       accessor = new BinaryAccessor(varBinaryVector);
     } else if (vector instanceof LargeVarBinaryVector largeVarBinaryVector) {
-      accessor = new LargeBinaryAccessor(largeVarBinaryVector);
+      accessor = new BinaryAccessor(largeVarBinaryVector);
+    } else if (vector instanceof ViewVarCharVector viewVarCharVector) {
+      accessor = new StringViewAccessor(viewVarCharVector);
+    } else if (vector instanceof ViewVarBinaryVector viewVarBinaryVector) {
+      accessor = new BinaryAccessor(viewVarBinaryVector);
     } else if (vector instanceof DateDayVector dateDayVector) {
       accessor = new DateAccessor(dateDayVector);
     } else if (vector instanceof TimeStampMicroTZVector timeStampMicroTZVector) {
@@ -225,7 +238,9 @@ public class ArrowColumnVector extends ColumnVector {
     } else if (vector instanceof MapVector mapVector) {
       accessor = new MapAccessor(mapVector);
     } else if (vector instanceof ListVector listVector) {
-      accessor = new ArrayAccessor(listVector);
+      accessor = new ArrayAccessor<>(listVector);
+    } else if (vector instanceof ListViewVector listViewVector) {
+      accessor = new ArrayAccessor<>(listViewVector);
     } else if (vector instanceof StructVector structVector) {
       if (ArrowUtils.isTimestampNanosStructField(structVector.getField())) {
         // Lossless struct representation of a nanosecond timestamp (ArrowUtils.toArrowField with
@@ -437,6 +452,37 @@ public class ArrowColumnVector extends ColumnVector {
     }
   }
 
+  static class SmallDecimalAccessor extends ArrowVectorAccessor {
+
+    private final DecimalVector accessor;
+    private final int lowWordOffset;
+    private final int highWordOffset;
+
+    SmallDecimalAccessor(DecimalVector vector, ByteOrder byteOrder) {
+      super(vector);
+      this.accessor = vector;
+      this.lowWordOffset = byteOrder == ByteOrder.LITTLE_ENDIAN ? 0 : Long.BYTES;
+      this.highWordOffset = byteOrder == ByteOrder.LITTLE_ENDIAN ? Long.BYTES : 0;
+    }
+
+    @Override
+    final Decimal getDecimal(int rowId, int precision, int scale) {
+      if (isNullAt(rowId)) return null;
+      // Arrow stores Decimal128 values in native byte order.
+      long offset = (long) rowId * DecimalVector.TYPE_WIDTH;
+      ArrowBuf data = accessor.getDataBuffer();
+      long unscaled = data.getLong(offset + lowWordOffset);
+      long high = data.getLong(offset + highWordOffset);
+      // Preserve full-width values even when they exceed the declared source precision.
+      if (high == (unscaled >> 63)) {
+        // Keep BigDecimal-backed Decimal semantics, including checked integral conversions.
+        return Decimal.apply(
+          BigDecimal.valueOf(unscaled, accessor.getScale()), precision, scale);
+      }
+      return Decimal.apply(accessor.getObject(rowId), precision, scale);
+    }
+  }
+
   static class DecimalAccessor extends ArrowVectorAccessor {
 
     private final DecimalVector accessor;
@@ -500,33 +546,59 @@ public class ArrowColumnVector extends ColumnVector {
     }
   }
 
+  // Covers VarBinaryVector, LargeVarBinaryVector and ViewVarBinaryVector: all of them return
+  // the value as a byte array from getObject, with a null check.
   static class BinaryAccessor extends ArrowVectorAccessor {
 
-    private final VarBinaryVector accessor;
+    private final VariableWidthFieldVector accessor;
 
-    BinaryAccessor(VarBinaryVector vector) {
+    BinaryAccessor(VariableWidthFieldVector vector) {
       super(vector);
       this.accessor = vector;
     }
 
     @Override
     final byte[] getBinary(int rowId) {
-      return accessor.getObject(rowId);
+      return (byte[]) accessor.getObject(rowId);
     }
   }
 
-  static class LargeBinaryAccessor extends ArrowVectorAccessor {
+  static class StringViewAccessor extends ArrowVectorAccessor {
 
-    private final LargeVarBinaryVector accessor;
+    private final ViewVarCharVector accessor;
 
-    LargeBinaryAccessor(LargeVarBinaryVector vector) {
+    StringViewAccessor(ViewVarCharVector vector) {
       super(vector);
       this.accessor = vector;
     }
 
     @Override
-    final byte[] getBinary(int rowId) {
-      return accessor.getObject(rowId);
+    final UTF8String getUTF8String(int rowId) {
+      if (accessor.isNull(rowId)) {
+        return null;
+      }
+      // Decode the 16-byte view struct directly rather than through Arrow's
+      // NullableViewVarCharHolder: the holder's int start/end fields truncate the inline-value
+      // offset (rowId * 16 + 4) once the views buffer grows past Integer.MAX_VALUE bytes, which
+      // would silently read the wrong memory. Both branches read the value with zero copy, like
+      // the non-view string accessors.
+      ArrowBuf views = accessor.getDataBuffer();
+      long viewOffset = (long) rowId * BaseVariableWidthViewVector.ELEMENT_SIZE;
+      int length = views.getInt(viewOffset);
+      if (length <= BaseVariableWidthViewVector.INLINE_SIZE) {
+        // Short values are stored inline in the views buffer, right after the length.
+        long start = viewOffset + BaseVariableWidthViewVector.LENGTH_WIDTH;
+        return UTF8String.fromAddress(null, views.memoryAddress() + start, length);
+      } else {
+        // Long values live in one of the variadic data buffers; the view struct holds the buffer
+        // index and the offset within that buffer, after the length and a 4-byte prefix.
+        long bufferIndexOffset = viewOffset + BaseVariableWidthViewVector.LENGTH_WIDTH
+          + BaseVariableWidthViewVector.PREFIX_WIDTH;
+        int bufferIndex = views.getInt(bufferIndexOffset);
+        int start = views.getInt(bufferIndexOffset + BaseVariableWidthViewVector.BUF_INDEX_WIDTH);
+        ArrowBuf dataBuffer = accessor.getDataBuffers().get(bufferIndex);
+        return UTF8String.fromAddress(null, dataBuffer.memoryAddress() + start, length);
+      }
     }
   }
 
@@ -679,12 +751,16 @@ public class ArrowColumnVector extends ColumnVector {
     }
   }
 
-  static class ArrayAccessor extends ArrowVectorAccessor {
+  // Covers ListVector and ListViewVector. ListView stores an explicit per-value offset and size
+  // (rather than ListVector's contiguous offsets), but both expose a value's element range in the
+  // data vector as [getElementStartIndex, getElementEndIndex).
+  static class ArrayAccessor<T extends BaseListVector & RepeatedValueVector>
+      extends ArrowVectorAccessor {
 
-    private final ListVector accessor;
+    private final T accessor;
     private final ArrowColumnVector arrayData;
 
-    ArrayAccessor(ListVector vector) {
+    ArrayAccessor(T vector) {
       super(vector);
       this.accessor = vector;
       this.arrayData = new ArrowColumnVector(vector.getDataVector());

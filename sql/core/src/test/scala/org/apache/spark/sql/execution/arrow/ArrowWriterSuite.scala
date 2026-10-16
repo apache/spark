@@ -19,9 +19,11 @@ package org.apache.spark.sql.execution.arrow
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.arrow.vector.VectorSchemaRoot
+import org.apache.arrow.vector.{VectorSchemaRoot, ViewVarBinaryVector, ViewVarCharVector}
+import org.apache.arrow.vector.complex.ListViewVector
+import org.apache.arrow.vector.types.pojo.{ArrowType, FieldType}
 
-import org.apache.spark.{SparkArithmeticException, SparkFunSuite}
+import org.apache.spark.{SparkArithmeticException, SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.YearUDT
 import org.apache.spark.sql.catalyst.InternalRow
@@ -151,6 +153,28 @@ class ArrowWriterSuite extends SparkFunSuite {
         new CalendarInterval(-11, -22, -33),
         null))
     check(new YearUDT, Seq(2020, 2021, null, 2022))
+  }
+
+  test("view vectors are rejected with UNSUPPORTED_ARROWTYPE") {
+    // The view types are readable through ArrowColumnVector but have no field writers; the error
+    // must name the Arrow type, not the Spark type its schema maps to.
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator("view", 0, Long.MaxValue)
+    val listView = ListViewVector.empty("arr", allocator)
+    listView.addOrGetVector(FieldType.nullable(new ArrowType.Int(8 * 4, true)))
+    val vectors = Seq(
+      new ViewVarCharVector("str", allocator),
+      new ViewVarBinaryVector("bin", allocator),
+      listView)
+    vectors.foreach { vector =>
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          ArrowWriter.createFieldWriter(vector)
+        },
+        condition = "UNSUPPORTED_ARROWTYPE",
+        parameters = Map("typeName" -> vector.getField.getType.toString))
+      vector.close()
+    }
+    allocator.close()
   }
 
   test("timestamp nanos round-trip") {

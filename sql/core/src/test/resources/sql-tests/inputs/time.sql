@@ -11,6 +11,10 @@ select time '16:39:45\t';
 select to_time(null), to_time('01:02:03'), to_time('23-59-59.999999', 'HH-mm-ss.SSSSSS');
 select to_time(time_str, fmt_str) from time_view;
 
+-- SPARK-58296: a NULL format must not change the result type of `to_time` (stays TIME).
+select typeof(to_time('00:12:00', null));
+select typeof(to_time('00:12:00', cast(null as string)));
+
 -- missing fields in `to_time`
 select to_time("11", "HH");
 -- invalid: there is no 13 hours
@@ -426,3 +430,16 @@ INSERT INTO time_narrow_tbl SELECT '01:02:03.456789' :: TIME(6);
 INSERT INTO time_narrow_tbl SELECT CAST('01:02:03.456789' :: TIME(6) AS TIME(3));
 SELECT typeof(t3), t3 FROM time_narrow_tbl;
 DROP TABLE time_narrow_tbl;
+
+-- width_bucket over the TIME type: 09:00:00 .. 17:00:00 split into 8 one-hour buckets
+select width_bucket(TIME'12:00:00', TIME'09:00:00', TIME'17:00:00', 8);
+select width_bucket(TIME'09:00:00', TIME'09:00:00', TIME'17:00:00', 8);
+select width_bucket(TIME'17:00:00', TIME'09:00:00', TIME'17:00:00', 8);
+select width_bucket(TIME'08:00:00', TIME'09:00:00', TIME'17:00:00', 8);
+-- reversed range (min > max)
+select width_bucket(TIME'12:00:00', TIME'17:00:00', TIME'09:00:00', 8);
+-- mixed precisions are allowed
+select width_bucket(TIME'12:00:00', CAST(TIME'09:00:00' AS TIME(3)), CAST(TIME'17:00:00' AS TIME(9)), 8);
+-- null and degenerate inputs
+select width_bucket(CAST(null AS TIME), TIME'09:00:00', TIME'17:00:00', 8);
+select width_bucket(TIME'12:00:00', TIME'09:00:00', TIME'09:00:00', 8);

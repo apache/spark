@@ -24,6 +24,7 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.internal.config.{ConfigEntry, DEFAULT_PARALLELISM, OptionalConfigEntry}
 import org.apache.spark.sql
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.python.PythonWorkerEnvironment
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -39,7 +40,25 @@ class RuntimeConfig private[sql](val sqlConf: SQLConf = new SQLConf) extends sql
   /** @inheritdoc */
   def set(key: String, value: String): Unit = {
     requireNonStaticConf(key)
-    sqlConf.setConfString(key, value)
+    if (key.startsWith(PythonWorkerEnvironment.confPrefix)) {
+      // Refuse a write that would leave the session's Python worker environment invalid before
+      // it is stored, so the failure points at this call rather than at a later query. The Spark
+      // Connect config RPC writes through this method too, so both front ends behave the same way.
+      //
+      // Scoped to the prefix so an ordinary configuration write does not take the monitor. Check
+      // and write under the monitor that guards the session configurations -- `settings` is a
+      // `Collections.synchronizedMap`, so every `put` locks the wrapper this block locks -- because
+      // the count and total-size limits are properties of the whole environment: without it two
+      // concurrent writers could each validate against the pre-write environment and jointly exceed
+      // a limit that neither write appeared to break. `Option` rather than `Some`, so a null value
+      // is left to `setConfString` to reject as it always has.
+      sqlConf.settings.synchronized {
+        PythonWorkerEnvironment.validateConfigChange(this, key, Option(value))
+        sqlConf.setConfString(key, value)
+      }
+    } else {
+      sqlConf.setConfString(key, value)
+    }
   }
 
   /** @inheritdoc */

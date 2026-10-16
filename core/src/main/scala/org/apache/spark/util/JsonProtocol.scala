@@ -723,6 +723,8 @@ private[spark] object JsonProtocol extends JsonUtils {
         g.writeStringField("Kill Reason", taskKilled.reason)
         g.writeFieldName("Accumulator Updates")
         accumulablesToJson(taskKilled.accumUpdates, g)
+      case executorShutdownFailure: ExecutorShutdownFailure =>
+        g.writeStringField("Executor ID", executorShutdownFailure.executorId)
       case _ =>
         // no extra fields to write
     }
@@ -963,7 +965,8 @@ private[spark] object JsonProtocol extends JsonUtils {
       case `blockUpdate` => blockUpdateFromJson(json)
       case `resourceProfileAdded` => resourceProfileAddedFromJson(json)
       case other =>
-        val otherClass = Utils.classForName(other)
+        // `other` comes from event log content so it may ref unsupported types.
+        val otherClass = Utils.classForName(other, initialize = false)
         if (classOf[SparkListenerEvent].isAssignableFrom(otherClass)) {
           mapper.readValue(json.toString, otherClass)
             .asInstanceOf[SparkListenerEvent]
@@ -1418,6 +1421,7 @@ private[spark] object JsonProtocol extends JsonUtils {
     val taskKilled = Utils.getFormattedClassName(TaskKilled)
     val taskCommitDenied = Utils.getFormattedClassName(TaskCommitDenied)
     val executorLostFailure = Utils.getFormattedClassName(ExecutorLostFailure)
+    val executorShutdownFailure = Utils.getFormattedClassName(ExecutorShutdownFailure)
     val unknownReason = Utils.getFormattedClassName(UnknownReason)
   }
 
@@ -1480,6 +1484,9 @@ private[spark] object JsonProtocol extends JsonUtils {
           executorId.getOrElse("Unknown"),
           exitCausedByApp.getOrElse(true),
           reason)
+      case `executorShutdownFailure` =>
+        val executorId = json.get("Executor ID").extractString
+        ExecutorShutdownFailure(executorId)
       case `unknownReason` => UnknownReason
     }
   }

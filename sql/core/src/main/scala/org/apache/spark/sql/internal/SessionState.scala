@@ -37,7 +37,6 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveRulesHolder
 import org.apache.spark.sql.execution.datasources.DataSourceManager
-import org.apache.spark.sql.execution.externalUDF.ExternalUDFPlanner
 import org.apache.spark.sql.util.ExecutionListenerManager
 import org.apache.spark.util.{DependencyUtils, Utils}
 
@@ -93,8 +92,7 @@ private[sql] class SessionState(
     val columnarRules: Seq[ColumnarRule],
     val adaptiveRulesHolder: AdaptiveRulesHolder,
     val planNormalizationRules: Seq[Rule[LogicalPlan]],
-    val artifactManagerBuilder: () => ArtifactManager,
-    val externalUDFPlanner: ExternalUDFPlanner) {
+    val artifactManagerBuilder: () => ArtifactManager) {
 
   // The following fields are lazy to avoid creating the Hive client when creating SessionState.
   lazy val catalog: SessionCatalog = catalogBuilder()

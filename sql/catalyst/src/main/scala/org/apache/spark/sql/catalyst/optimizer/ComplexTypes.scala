@@ -59,6 +59,9 @@ object SimplifyExtractValueOps extends Rule[LogicalPlan] {
         if (idx >= 0 && idx < elems.size) {
           // valid index
           elems(idx)
+        } else if (ga.failOnError) {
+          // Keep ANSI runtime behavior, which raises on out-of-bounds access.
+          ga
         } else {
           // out of bounds, mimic the runtime behavior and return null
           Literal(null, ga.dataType)

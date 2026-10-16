@@ -1,0 +1,108 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto3";
+package org.apache.spark.config;
+
+option java_multiple_files = true;
+option java_package = "org.apache.spark.config.protobuf";
+
+// The scope of the config
+enum Scope {
+  SCOPE_UNSPECIFIED = 0;
+  // The config is effective for the entire Spark cluster.
+  SCOPE_CLUSTER = 1;
+  // The config is effective for the current session.
+  SCOPE_SESSION = 2;
+}
+
+// The type of the config value
+enum ValueType {
+  VALUE_TYPE_UNSPECIFIED = 0;
+  VALUE_TYPE_BOOL = 1;
+  VALUE_TYPE_INT = 2;
+  VALUE_TYPE_LONG = 3;
+  VALUE_TYPE_DOUBLE = 4;
+  VALUE_TYPE_STRING = 5;
+}
+
+// The visibility of the config
+enum Visibility {
+  VISIBILITY_UNSPECIFIED = 0;
+  VISIBILITY_PUBLIC = 1;
+  VISIBILITY_INTERNAL = 2;
+}
+
+// The binding policy of the config for SQL views, UDFs, and procedures.
+enum BindingPolicy {
+  BINDING_POLICY_UNSPECIFIED = 0;
+  // The config value propagates from the active session to views/UDFs/procedures.
+  BINDING_POLICY_SESSION = 1;
+  // The config uses the value saved at view/UDF/procedure creation time,
+  // or the Spark default if none was saved.
+  BINDING_POLICY_PERSISTED = 2;
+  // The config does not apply to views/UDFs/procedures. At runtime, behaves like SESSION.
+  BINDING_POLICY_NOT_APPLICABLE = 3;
+}
+
+// Whether the config can be changed after system initialization.
+enum Mutability {
+  MUTABILITY_UNSPECIFIED = 0;
+  // The config is fixed once the Spark application starts.
+  MUTABILITY_STATIC = 1;
+  // The config can be changed at runtime (e.g., via SET).
+  MUTABILITY_DYNAMIC = 2;
+}
+
+// A single config entry
+message ConfigEntry {
+  // [Required] The config key.
+  optional string key = 1;
+
+  // [Required] The type of the config value
+  optional ValueType value_type = 2;
+
+  // The default value as a string representation
+  optional string default_value = 3;
+
+  // The default value to use during testing, if different from default_value.
+  // Requires default_value to be set, since it only overrides the production default in tests.
+  optional string test_default = 4;
+
+  // [Required] The scope of the config (CLUSTER or SESSION).
+  optional Scope scope = 5;
+
+  // [Required] Whether the config can be changed after system initialization.
+  optional Mutability mutability = 6;
+
+  // [Required] The visibility of the config (PUBLIC or INTERNAL).
+  optional Visibility visibility = 7;
+
+  // [Required] The binding policy for SQL views, UDFs, and procedures.
+  optional BindingPolicy binding_policy = 8;
+
+  // [Required] Documentation for the config.
+  optional string doc = 9;
+
+  // The Spark version when this config was introduced.
+  optional string version = 10;
+}
+
+// A collection of config entries
+message ConfigEntries {
+  repeated ConfigEntry configs = 1;
+}

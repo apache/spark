@@ -273,35 +273,30 @@ class FPGrowthModel private[ml] (
    * from all the applicable rules as prediction. The prediction column has the same data type as
    * the input column(Array[T]) and will not contain existing items in the input column. The null
    * values in the itemsCol columns are treated as empty sets.
-   * WARNING: internally it collects association rules to the driver and uses broadcast for
-   * efficiency. This may bring pressure to driver memory for large set of association rules.
+   * Internally, transform aggregates association rules into a single-row DataFrame and joins it
+   * with the input dataset.
    */
   @Since("2.2.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    genericTransform(dataset)
-  }
-
-  private def genericTransform(dataset: Dataset[_]): DataFrame = {
-    val rules: Array[(Seq[Any], Seq[Any])] = associationRules.select("antecedent", "consequent")
-      .rdd.map(r => (r.getSeq(0), r.getSeq(1)))
-      .collect().asInstanceOf[Array[(Seq[Any], Seq[Any])]]
-    val brRules = dataset.sparkSession.sparkContext.broadcast(rules)
-
     val dt = dataset.schema($(itemsCol)).dataType
-    // For each rule, examine the input items and summarize the consequents
-    val predictUDF = SparkUserDefinedFunction((items: Seq[Any]) => {
+    val rulesCol = Identifiable.randomUID("rules")
+    // For each rule, examine the input items and summarize the consequents.
+    val predictFunc = (items: Seq[Any], rules: Seq[Row]) => {
       if (items != null) {
         val itemset = items.toSet
-        brRules.value.filter(_._1.forall(itemset.contains))
-          .flatMap(_._2.filter(!itemset.contains(_))).distinct
+        rules.filter(_.getSeq[Any](0).forall(itemset.contains))
+          .flatMap(_.getSeq[Any](1).filter(!itemset.contains(_))).distinct
       } else {
         Seq.empty
-      }},
-      dt,
-      Nil
-    )
-    dataset.withColumn($(predictionCol), predictUDF(col($(itemsCol))))
+      }
+    }
+    val predictUDF = SparkUserDefinedFunction(predictFunc, dt, Nil)
+    dataset.join(
+      associationRules.select("antecedent", "consequent")
+        .agg(collect_set(struct("antecedent", "consequent")).as(rulesCol)))
+      .withColumn($(predictionCol), predictUDF(col($(itemsCol)), col(rulesCol)))
+      .drop(rulesCol)
   }
 
   @Since("2.2.0")
@@ -324,13 +319,17 @@ class FPGrowthModel private[ml] (
   }
 
   private[spark] override def estimatedSize: Long = {
+    var size = estimateMatadataSize
+    // freqItemsets: DataFrame("items": Array, "freq": Long)
     freqItemsets match {
       case df: org.apache.spark.sql.classic.DataFrame =>
-        df.toArrowBatchRdd.map(_.length.toLong).reduce(_ + _) +
-          SizeEstimator.estimate(itemSupport)
+        size += df.toArrowBatchRdd.map(_.length.toLong).reduce(_ + _)
       case o => throw new UnsupportedOperationException(
         s"Unsupported dataframe type: ${o.getClass.getName}")
     }
+    // itemSupport: scala.collection.Map[Any, Double]
+    size += SizeEstimator.estimate(itemSupport)
+    size
   }
 }
 

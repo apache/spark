@@ -20,9 +20,9 @@ A simple example demonstrating Spark SQL data sources.
 Run with:
   ./bin/spark-submit examples/src/main/python/sql/datasource.py
 """
-from pyspark.sql import SparkSession
 # $example on:schema_merging$
-from pyspark.sql import Row
+from pyspark.sql import Row, SparkSession
+
 # $example off:schema_merging$
 
 

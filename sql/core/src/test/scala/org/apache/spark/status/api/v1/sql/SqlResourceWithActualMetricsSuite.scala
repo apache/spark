@@ -75,7 +75,7 @@ class SqlResourceWithActualMetricsSuite
       + s"/api/v1/applications/${spark.sparkContext.applicationId}/sql").toURL
     val jsonResult = verifyAndGetSqlRestResult(url)
     val executionDatas = JsonMethods.parse(jsonResult).extract[Seq[ExecutionData]]
-    assert(executionDatas.size > 0,
+    assert(executionDatas.nonEmpty,
       s"Expected Query Result Size is higher than 0 but received: ${executionDatas.size}")
     val executionData = executionDatas.head
     verifySqlRestContent(executionData)
@@ -197,6 +197,7 @@ class SqlResourceWithActualMetricsSuite
       assert((firstRow \ "status").extract[String].nonEmpty)
       assert((firstRow \ "description").extract[String] != null)
       assert((firstRow \ "duration").extract[Long] >= 0)
+      assert((firstRow \ "totalTaskTime").extract[Long] >= 0)
 
       // Test search filter
       val searchUrl = new URI(

@@ -66,6 +66,7 @@ class ExecutorPVCResizePluginSuite
     when(podOperations.inNamespace(namespace)).thenReturn(podsWithNamespace)
     when(podsWithNamespace.withLabel(SPARK_APP_ID_LABEL, appId)).thenReturn(labeledPods)
     when(labeledPods.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)).thenReturn(labeledPods)
+    when(labeledPods.withoutLabel(SPARK_EXECUTOR_INACTIVE_LABEL, "true")).thenReturn(labeledPods)
     when(labeledPods.list()).thenReturn(podList)
     when(kubernetesClient.persistentVolumeClaims()).thenReturn(pvcOperations)
     when(pvcOperations.inNamespace(namespace)).thenReturn(pvcsWithNamespace)
@@ -73,14 +74,23 @@ class ExecutorPVCResizePluginSuite
 
   private def createPlugin(
       threshold: Double = 0.9,
-      factor: Double = 0.1): ExecutorPVCResizeDriverPlugin = {
+      factor: Double = 0.1,
+      maxStorage: Long = Long.MaxValue): ExecutorPVCResizeDriverPlugin = {
     val plugin = new ExecutorPVCResizeDriverPlugin()
     val cls = plugin.getClass
     setField(cls, plugin, "sparkContext", sparkContext)
     setField(cls, plugin, "namespace", namespace)
     setField(cls, plugin, "threshold", threshold)
     setField(cls, plugin, "factor", factor)
+    setField(cls, plugin, "maxStorage", maxStorage)
     plugin
+  }
+
+  private def patchedStorage(resource: Resource[PersistentVolumeClaim]): Long = {
+    val captor = ArgumentCaptor.forClass(classOf[PersistentVolumeClaim])
+    verify(resource, times(1)).patch(any(), captor.capture())
+    Quantity.getAmountInBytes(
+      captor.getValue.getSpec.getResources.getRequests.get("storage")).longValue()
   }
 
   private def setField(cls: Class[_], obj: Any, name: String, value: Any): Unit = {
@@ -233,6 +243,51 @@ class ExecutorPVCResizePluginSuite
     verify(resource, times(1)).patch(any(), any(classOf[PersistentVolumeClaim]))
   }
 
+  test("SPARK-59304: Resize is clamped to resizeMaxStorage") {
+    val plugin = createPlugin(threshold = 0.9, factor = 0.1, maxStorage = 1050000000L) // 1.05GB
+    val pod = createPodWithPVC(1, "pvc-1", "/data")
+    when(podList.getItems).thenReturn(Collections.singletonList(pod))
+    val resource = mockPvcResource("pvc-1", "1000000000") // 1GB
+    plugin.receive(PVCDiskUsageReport("1", 0.95)) // 95%
+
+    plugin.checkAndResizePVCs()
+
+    // 1GB * (1 + 0.1) = 1.1GB exceeds the cap, so the new size is clamped to 1.05GB
+    assert(patchedStorage(resource) === 1050000000L)
+  }
+
+  test("SPARK-59304: Resize is not clamped when new size is below resizeMaxStorage") {
+    val plugin = createPlugin(threshold = 0.9, factor = 0.1, maxStorage = 2000000000L) // 2GB
+    val pod = createPodWithPVC(1, "pvc-1", "/data")
+    when(podList.getItems).thenReturn(Collections.singletonList(pod))
+    val resource = mockPvcResource("pvc-1", "1000000000") // 1GB
+    plugin.receive(PVCDiskUsageReport("1", 0.95)) // 95%
+
+    plugin.checkAndResizePVCs()
+
+    // 1GB * (1 + 0.1) = 1.1GB is below the 2GB cap, so it is applied as-is.
+    assert(patchedStorage(resource) === 1100000000L)
+  }
+
+  test("SPARK-59304: Resize is skipped and logged once when storage already at resizeMaxStorage") {
+    val plugin = createPlugin(maxStorage = 1000000000L) // 1GB cap
+    val pod = createPodWithPVC(1, "pvc-1", "/data")
+    when(podList.getItems).thenReturn(Collections.singletonList(pod))
+    val resource = mockPvcResource("pvc-1", "1000000000") // 1GB
+    plugin.receive(PVCDiskUsageReport("1", 0.95)) // 95%
+
+    val logAppender = new LogAppender
+    withLogAppender(logAppender) {
+      plugin.checkAndResizePVCs()
+      plugin.checkAndResizePVCs()
+    }
+
+    verify(resource, never()).patch(any(), any(classOf[PersistentVolumeClaim]))
+    val skipLogs = logAppender.loggingEvents
+      .filter(_.getMessage.getFormattedMessage.contains("already reached the maximum"))
+    assert(skipLogs.size === 1)
+  }
+
   test("Pod with no PVC volume triggers no patch") {
     val plugin = createPlugin()
     val pod = new PodBuilder()
@@ -252,6 +307,28 @@ class ExecutorPVCResizePluginSuite
     plugin.checkAndResizePVCs()
 
     verify(pvcsWithNamespace, never()).withName(org.mockito.ArgumentMatchers.anyString())
+  }
+
+  test("SPARK-59839: Reports of executors without a pod are removed") {
+    val plugin = createPlugin()
+    val pod = createPodWithPVC(1, "pvc-1", "/data")
+    when(podList.getItems).thenReturn(Collections.singletonList(pod))
+    plugin.receive(PVCDiskUsageReport("1", 0.5))
+    plugin.receive(PVCDiskUsageReport("2", 0.5)) // No pod for executor 2
+    assert(plugin.latestReports.keySet() === java.util.Set.of("1", "2"))
+
+    plugin.checkAndResizePVCs()
+
+    assert(plugin.latestReports.keySet() === Collections.singleton("1"))
+  }
+
+  test("SPARK-59839: Inactive executor pods are excluded from the listing") {
+    val plugin = createPlugin()
+    when(podList.getItems).thenReturn(Collections.emptyList())
+
+    plugin.checkAndResizePVCs()
+
+    verify(labeledPods).withoutLabel(SPARK_EXECUTOR_INACTIVE_LABEL, "true")
   }
 
   test("pvcsOf returns claim names mounted by the executor container") {

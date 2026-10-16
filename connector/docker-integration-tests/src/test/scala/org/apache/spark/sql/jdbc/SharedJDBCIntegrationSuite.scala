@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.Connection
+import java.sql.{Connection, SQLException}
 
 import org.scalatest.time.SpanSugar._
 
@@ -63,14 +63,27 @@ abstract class SharedJDBCIntegrationSuite extends DockerJDBCIntegrationSuite {
 
     // Exception should be detected in analysis phase first when we resolve a schema from
     // through JDBC by sending SELECT * FROM (<subquery>) [LIMIT 1][WHERE 1=0] query.
-    checkErrorMatchPVals(
-      ex,
+    checkError(
+      exception = ex,
       condition = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_OUTPUT_SCHEMA_RESOLUTION",
+      sqlState = Some("42000"),
       parameters = Map(
         "jdbcQuery" -> "SELECT \\* FROM \\(.*",
-        "externalEngineError" -> "[\\s\\S]*"
-      )
+        "externalEngineError" -> "[\\s\\S]+",
+        "externalEngineSqlState" -> ".+"
+      ),
+      matchPVals = true
     )
+    ex.getCause match {
+      case cause: SQLException =>
+        val expectedSqlState =
+          Option(cause.getSQLState).filter(_.nonEmpty).getOrElse("unknown")
+        assertResult(expectedSqlState) {
+          ex.getMessageParameters.get("externalEngineSqlState")
+        }
+      case other =>
+        fail(s"Expected SQLException cause, but got: $other")
+    }
   }
 
   test("SPARK-53386: Parameter `query` should work when ending with semicolons") {

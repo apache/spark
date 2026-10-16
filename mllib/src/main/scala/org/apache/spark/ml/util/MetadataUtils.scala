@@ -20,7 +20,7 @@ package org.apache.spark.ml.util
 import scala.collection.immutable.HashMap
 
 import org.apache.spark.ml.attribute._
-import org.apache.spark.ml.linalg.VectorUDT
+import org.apache.spark.ml.linalg.{SQLDataTypes, VectorUDT}
 import org.apache.spark.sql.types.StructField
 
 
@@ -46,7 +46,7 @@ private[spark] object MetadataUtils {
    * Returns None if the number of features is not specified.
    */
   def getNumFeatures(vectorSchema: StructField): Option[Int] = {
-    if (vectorSchema.dataType == new VectorUDT) {
+    if (vectorSchema.dataType == SQLDataTypes.VectorType) {
       val group = AttributeGroup.fromStructField(vectorSchema)
       val size = group.size
       if (size >= 0) {

@@ -2737,6 +2737,10 @@ public class CollationSupportSuite {
     assertSubstringIndex("a🙃b🙃c", "d", -1, UTF8_LCASE, "a🙃b🙃c");
     assertSubstringIndex("a🙃b🙃c", "d", -1, UNICODE, "a🙃b🙃c");
     assertSubstringIndex("a🙃b🙃c", "d", -1, UNICODE_CI, "a🙃b🙃c");
+    assertSubstringIndex("a.b.c", ".", Integer.MIN_VALUE, UTF8_BINARY, "a.b.c");
+    assertSubstringIndex("a.b.c", ".", Integer.MIN_VALUE, UTF8_LCASE, "a.b.c");
+    assertSubstringIndex("a.b.c", ".", Integer.MIN_VALUE, UNICODE, "a.b.c");
+    assertSubstringIndex("a.b.c", ".", Integer.MIN_VALUE, UNICODE_CI, "a.b.c");
   }
 
   /**
@@ -2753,11 +2757,11 @@ public class CollationSupportSuite {
 
     if (trimString == null) {
       // Trim string is ASCII space.
-      result = CollationSupport.StringTrim.exec(src);
-      UTF8String trimLeft = CollationSupport.StringTrimLeft.exec(src);
-      resultTrimLeftRight = CollationSupport.StringTrimRight.exec(trimLeft);
-      UTF8String trimRight = CollationSupport.StringTrimRight.exec(src);
-      resultTrimRightLeft = CollationSupport.StringTrimLeft.exec(trimRight);
+      result = CollationSupport.StringTrim.exec(src, collationId);
+      UTF8String trimLeft = CollationSupport.StringTrimLeft.exec(src, collationId);
+      resultTrimLeftRight = CollationSupport.StringTrimRight.exec(trimLeft, collationId);
+      UTF8String trimRight = CollationSupport.StringTrimRight.exec(src, collationId);
+      resultTrimRightLeft = CollationSupport.StringTrimLeft.exec(trimRight, collationId);
     } else {
       // Trim string is specified.
       result = CollationSupport.StringTrim.exec(src, trim, collationId);
@@ -2772,6 +2776,96 @@ public class CollationSupportSuite {
     // Test that the order of the trims is not important.
     assertEquals(resultTrimLeftRight, result);
     assertEquals(resultTrimRightLeft, result);
+  }
+
+  private void assertDefaultStringTrims(
+      String collationName,
+      String sourceString,
+      String expectedLeft,
+      String expectedRight,
+      String expectedBoth) throws SparkException {
+    int collationId = CollationFactory.collationNameToId(collationName);
+    UTF8String source = UTF8String.fromString(sourceString);
+    UTF8String defaultTrimString = UTF8String.fromString(" ");
+
+    UTF8String trimLeft = CollationSupport.StringTrimLeft.exec(source, collationId);
+    UTF8String trimRight = CollationSupport.StringTrimRight.exec(source, collationId);
+    UTF8String trimBoth = CollationSupport.StringTrim.exec(source, collationId);
+
+    assertEquals(UTF8String.fromString(expectedLeft), trimLeft);
+    assertEquals(UTF8String.fromString(expectedRight), trimRight);
+    assertEquals(UTF8String.fromString(expectedBoth), trimBoth);
+    assertEquals(
+      CollationSupport.StringTrimLeft.exec(source, defaultTrimString, collationId), trimLeft);
+    assertEquals(
+      CollationSupport.StringTrimRight.exec(source, defaultTrimString, collationId), trimRight);
+    assertEquals(
+      CollationSupport.StringTrim.exec(source, defaultTrimString, collationId), trimBoth);
+  }
+
+  @Test
+  public void testDefaultStringTrimsUseCollation() throws SparkException {
+    String[] spaceSeparators = {
+      "\u00A0", "\u1680", "\u2000", "\u2001", "\u2002", "\u2003", "\u2004", "\u2005",
+      "\u2006", "\u2007", "\u2008", "\u2009", "\u200A", "\u202F", "\u205F", "\u3000"
+    };
+    String[] unaffectedCollations = {
+      UTF8_BINARY,
+      "UTF8_BINARY_RTRIM",
+      UTF8_LCASE,
+      "UTF8_LCASE_RTRIM",
+      UNICODE,
+      "UNICODE_RTRIM"
+    };
+    String[] affectedCollations = {
+      UNICODE_CI,
+      "UNICODE_CI_RTRIM",
+      "UNICODE_CI_AI",
+      "UNICODE_CI_AI_RTRIM"
+    };
+
+    for (String collation : unaffectedCollations) {
+      int collationId = CollationFactory.collationNameToId(collation);
+      assertEquals(
+        "CollationSupport.StringTrim.execBinary(source)",
+        CollationSupport.StringTrim.genCode("source", collationId));
+      assertEquals(
+        "CollationSupport.StringTrimLeft.execBinary(source)",
+        CollationSupport.StringTrimLeft.genCode("source", collationId));
+      assertEquals(
+        "CollationSupport.StringTrimRight.execBinary(source)",
+        CollationSupport.StringTrimRight.genCode("source", collationId));
+    }
+    for (String collation : affectedCollations) {
+      int collationId = CollationFactory.collationNameToId(collation);
+      assertEquals(
+        String.format("CollationSupport.StringTrim.execICU(source, %d)", collationId),
+        CollationSupport.StringTrim.genCode("source", collationId));
+      assertEquals(
+        String.format("CollationSupport.StringTrimLeft.execICU(source, %d)", collationId),
+        CollationSupport.StringTrimLeft.genCode("source", collationId));
+      assertEquals(
+        String.format("CollationSupport.StringTrimRight.execICU(source, %d)", collationId),
+        CollationSupport.StringTrimRight.genCode("source", collationId));
+    }
+
+    for (String separator : spaceSeparators) {
+      String source = separator + "abc" + separator;
+      for (String collation : unaffectedCollations) {
+        assertDefaultStringTrims(collation, source, source, source, source);
+      }
+      for (String collation : affectedCollations) {
+        assertDefaultStringTrims(
+          collation, source, "abc" + separator, separator + "abc", "abc");
+      }
+    }
+
+    for (String collation : affectedCollations) {
+      assertDefaultStringTrims(collation, "  abc  ", "abc  ", "  abc", "abc");
+      assertDefaultStringTrims(collation, "\tabc\t", "\tabc\t", "\tabc\t", "\tabc\t");
+      assertDefaultStringTrims(
+        collation, "\u200Babc\u200B", "\u200Babc\u200B", "\u200Babc\u200B", "\u200Babc\u200B");
+    }
   }
 
   @Test
@@ -3066,7 +3160,7 @@ public class CollationSupportSuite {
 
     if (trimString == null) {
       // Trim string is ASCII space.
-      result = CollationSupport.StringTrimLeft.exec(src);
+      result = CollationSupport.StringTrimLeft.exec(src, collationId);
     } else {
       // Trim string is specified.
       result = CollationSupport.StringTrimLeft.exec(src, trim, collationId);
@@ -3366,7 +3460,7 @@ public class CollationSupportSuite {
 
     if (trimString == null) {
       // Trim string is ASCII space.
-      result = CollationSupport.StringTrimRight.exec(src);
+      result = CollationSupport.StringTrimRight.exec(src, collationId);
     } else {
       // Trim string is specified.
       result = CollationSupport.StringTrimRight.exec(src, trim, collationId);
@@ -3896,13 +3990,40 @@ public class CollationSupportSuite {
     assertStringTranslate("𝔸", "𝕒", "x", UTF8_LCASE, "𝔸");
     assertStringTranslate("𝔸", "𝕒", "x", UNICODE, "𝔸");
     assertStringTranslate("𝔸", "𝕒", "x", UNICODE_CI, "x");
+    // Literal U+0000 in `to` is preserved as a one-character replacement, not a deletion.
+    assertStringTranslate("A", "A", "\u0000", UTF8_BINARY, "\u0000");
+    assertStringTranslate("A", "A", "\u0000", UTF8_LCASE, "\u0000");
+    assertStringTranslate("A", "A", "\u0000", UNICODE, "\u0000");
+    assertStringTranslate("A", "A", "\u0000", UNICODE_CI, "\u0000");
+    // Deletion still applies when `to` is shorter than `from`.
+    assertStringTranslate("ABC", "BC", "X", UTF8_BINARY, "AX");
+    assertStringTranslate("ABC", "BC", "X", UTF8_LCASE, "AX");
+    assertStringTranslate("ABC", "BC", "X", UNICODE, "AX");
+    assertStringTranslate("ABC", "BC", "X", UNICODE_CI, "AX");
+    // Mixed literal U+0000 replacement and deletion within a single call:
+    // A -> U+0000, B -> X, and C, D are deleted (`to` is shorter than `from`).
+    assertStringTranslate("ABCD", "ABCD", "\u0000" + "X", UTF8_BINARY, "\u0000" + "X");
+    assertStringTranslate("ABCD", "ABCD", "\u0000" + "X", UTF8_LCASE, "\u0000" + "X");
+    assertStringTranslate("ABCD", "ABCD", "\u0000" + "X", UNICODE, "\u0000" + "X");
+    assertStringTranslate("ABCD", "ABCD", "\u0000" + "X", UNICODE_CI, "\u0000" + "X");
+    // Duplicate key in `from`: the first mapping wins over a later would-be deletion.
+    assertStringTranslate("AB", "AA", "X", UTF8_BINARY, "XB");
+    assertStringTranslate("AB", "AA", "X", UTF8_LCASE, "XB");
+    assertStringTranslate("AB", "AA", "X", UNICODE, "XB");
+    assertStringTranslate("AB", "AA", "X", UNICODE_CI, "XB");
+    // Byte-level check: a literal U+0000 replacement yields exactly one code point / one byte.
+    UTF8String nulResult = CollationSupport.StringTranslate.exec(
+      UTF8String.fromString("A"), buildDict("A", "\u0000"),
+      CollationFactory.collationNameToId(UTF8_BINARY));
+    assertEquals(1, nulResult.numChars());
+    assertEquals(1, nulResult.numBytes());
   }
 
   private Map<String, String> buildDict(String matching, String replace) {
     Map<String, String> dict = new HashMap<>();
     int i = 0, j = 0;
     while (i < matching.length()) {
-      String rep = "\u0000";
+      String rep = "";
       if (j < replace.length()) {
         int repCharCount = Character.charCount(replace.codePointAt(j));
         rep = replace.substring(j, j + repCharCount);
@@ -4165,6 +4286,14 @@ public class CollationSupportSuite {
     // Boundary: start out of range (forward/backward)
     assertStringInstrWithOccurrence("İoi\u0307oİo", "İo", 10, 1, UTF8_LCASE, 0);
     assertStringInstrWithOccurrence("İoi\u0307oİo", "İo", -10, 1, UNICODE_CI, 0);
+    assertStringInstrWithOccurrence("abcabc", "abc", Integer.MIN_VALUE, 1, UTF8_BINARY, 0);
+    assertStringInstrWithOccurrence("abcabc", "abc", Integer.MIN_VALUE, 1, UTF8_LCASE, 0);
+    assertStringInstrWithOccurrence("abcabc", "abc", Integer.MIN_VALUE, 1, UNICODE, 0);
+    assertStringInstrWithOccurrence("abcabc", "abc", Integer.MIN_VALUE, 1, UNICODE_CI, 0);
+    assertStringInstrWithOccurrence("İoi\u0307oİo", "İo", Integer.MIN_VALUE, 1, UTF8_BINARY, 0);
+    assertStringInstrWithOccurrence("İoi\u0307oİo", "İo", Integer.MIN_VALUE, 1, UTF8_LCASE, 0);
+    assertStringInstrWithOccurrence("İoi\u0307oİo", "İo", Integer.MIN_VALUE, 1, UNICODE, 0);
+    assertStringInstrWithOccurrence("İoi\u0307oİo", "İo", Integer.MIN_VALUE, 1, UNICODE_CI, 0);
     String sigmaStr = "σΣςσΣς";  // 1:σ, 2:Σ, 3:ς, 4:σ, 5:Σ, 6:ς
     // UTF8_BINARY: all sigma forms are distinct, only exact byte matches succeed
     assertStringInstrWithOccurrence("σΣςσΣς", "Σ", 1, 2, UTF8_BINARY, 5);

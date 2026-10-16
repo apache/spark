@@ -24,9 +24,8 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.LocalSparkContext.withSpark
-import org.apache.spark.internal.config.SHUFFLE_MANAGER
+import org.apache.spark.internal.config.{SHUFFLE_MANAGER, SHUFFLE_MANAGER_INCREMENTAL}
 import org.apache.spark.network.shuffle.streaming.{DataMessage, TerminationAckMessage, TerminationControlMessage}
-import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.shuffle.streaming.StreamingShuffleManager.{getQueryId, getWriterId, QUERY_ID_PROPERTY_KEY}
 
 class StreamingShuffleManagerSuite
@@ -97,10 +96,17 @@ class StreamingShuffleManagerSuite
 
   // ---- SparkEnv tracker initialization gating ----
 
-  private def assertTrackerInitialized(shuffleManager: Option[String], expectPresent: Boolean):
-      Unit = {
+  private def assertTrackerInitialized(
+      defaultManager: Option[String] = None,
+      incrementalManager: Option[String] = None,
+      expectPresent: Boolean): Unit = {
     val conf = new SparkConf()
-    shuffleManager.foreach(conf.set(SHUFFLE_MANAGER, _))
+    // The default slot must be a BlockingShuffleManager; the incremental slot holds a
+    // PipelinedShuffleManager and defaults to the streaming manager. Each is set only when the test
+    // provides it, so leaving the incremental slot unset exercises the streaming default. The
+    // tracker is initialized when either slot requires it.
+    defaultManager.foreach(conf.set(SHUFFLE_MANAGER, _))
+    incrementalManager.foreach(conf.set(SHUFFLE_MANAGER_INCREMENTAL, _))
     withSpark(new SparkContext("local", "StreamingShuffleManagerSuite", conf)) { _ =>
       val tracker = SparkEnv.get.streamingShuffleOutputTracker
       assert(tracker.isDefined == expectPresent)
@@ -111,15 +117,21 @@ class StreamingShuffleManagerSuite
     }
   }
 
-  test("SparkEnv initializes the streaming shuffle tracker for StreamingShuffleManager") {
-    assertTrackerInitialized(Some(classOf[StreamingShuffleManager].getName), expectPresent = true)
+  test("SparkEnv initializes the streaming shuffle tracker by default (streaming incremental " +
+      "manager)") {
+    // The incremental slot defaults to the streaming manager, so the tracker is present with no
+    // explicit configuration.
+    assertTrackerInitialized(expectPresent = true)
   }
 
-  test("SparkEnv does not initialize the tracker for a non-streaming (sort) manager") {
-    assertTrackerInitialized(Some(classOf[SortShuffleManager].getName), expectPresent = false)
+  test("SparkEnv initializes the streaming shuffle tracker for an explicit incremental " +
+      "StreamingShuffleManager") {
+    assertTrackerInitialized(
+      incrementalManager = Some(classOf[StreamingShuffleManager].getName), expectPresent = true)
   }
 
-  test("SparkEnv does not initialize the tracker for the default manager") {
-    assertTrackerInitialized(None, expectPresent = false)
+  test("SparkEnv initializes the streaming shuffle tracker for a MultiShuffleManager default") {
+    assertTrackerInitialized(
+      defaultManager = Some(classOf[MultiShuffleManager].getName), expectPresent = true)
   }
 }

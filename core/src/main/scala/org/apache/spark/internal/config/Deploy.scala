@@ -17,6 +17,7 @@
 
 package org.apache.spark.internal.config
 
+import java.io.ObjectInputFilter
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
@@ -50,6 +51,26 @@ private[spark] object Deploy {
     .timeConf(TimeUnit.SECONDS)
     .checkValue(_ > 0, "spark.deploy.recoveryTimeout must be positive.")
     .createOptional
+
+  val RECOVERY_SERIALIZATION_FILTER =
+    ConfigBuilder("spark.deploy.recoverySerializationFilter")
+      .doc("JEP-290 serialization filter pattern applied when the master reads back " +
+        "recovery state written by the built-in JavaSerializer (currently enforced for " +
+        "the ZOOKEEPER recovery mode). The default allows only JDK, Scala and Spark " +
+        "classes, which covers everything the master persists (ApplicationInfo, " +
+        "DriverInfo, WorkerInfo and their fields). Znodes containing any other class " +
+        "are skipped, without being deleted, during recovery instead of being " +
+        "instantiated in the newly elected master. This only hardens deserialization and " +
+        "is not a replacement for ZooKeeper ACLs, which remain the access control for the " +
+        "recovery state. The filter is applied in addition to any JVM-wide " +
+        "jdk.serialFilter; znodes rejected only by jdk.serialFilter are deleted like other " +
+        "unreadable znodes. Set to '*' to disable filtering.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .stringConf
+      .checkValue(v => v.trim.nonEmpty && ObjectInputFilter.Config.createFilter(v) != null,
+        "must be a non-empty JEP-290 filter pattern; use '*' to disable filtering.")
+      .createWithDefault("java.**;scala.**;org.apache.spark.**;!*")
 
   val ZOOKEEPER_URL = ConfigBuilder("spark.deploy.zookeeper.url")
     .doc(s"When `${RECOVERY_MODE.key}` is set to ZOOKEEPER, this " +

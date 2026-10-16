@@ -68,7 +68,7 @@
          :                    :     :     :     :           :           :     :     :     :           :           :     :     :           :     :           +- * Filter (31)
          :                    :     :     :     :           :           :     :     :     :           :           :     :     :           :     :              +- * HashAggregate (30)
          :                    :     :     :     :           :           :     :     :     :           :           :     :     :           :     :                 +- Exchange (29)
-         :                    :     :     :     :           :           :     :     :     :           :           :     :     :           :     :                    +- * HashAggregate (28)
+         :                    :     :     :     :           :           :     :     :     :           :           :     :     :           :     :                    +- * SortAggregate (28)
          :                    :     :     :     :           :           :     :     :     :           :           :     :     :           :     :                       +- * Project (27)
          :                    :     :     :     :           :           :     :     :     :           :           :     :     :           :     :                          +- * SortMergeJoin Inner (26)
          :                    :     :     :     :           :           :     :     :     :           :           :     :     :           :     :                             :- * Sort (19)
@@ -331,7 +331,7 @@ Join condition: None
 Output [5]: [cs_item_sk#18, cs_ext_list_price#20, cr_refunded_cash#24, cr_reversed_charge#25, cr_store_credit#26]
 Input [8]: [cs_item_sk#18, cs_order_number#19, cs_ext_list_price#20, cr_item_sk#22, cr_order_number#23, cr_refunded_cash#24, cr_reversed_charge#25, cr_store_credit#26]
 
-(28) HashAggregate [codegen id : 9]
+(28) SortAggregate [codegen id : 9]
 Input [5]: [cs_item_sk#18, cs_ext_list_price#20, cr_refunded_cash#24, cr_reversed_charge#25, cr_store_credit#26]
 Keys [1]: [cs_item_sk#18]
 Functions [2]: [partial_sum(UnscaledValue(cs_ext_list_price#20)), partial_sum(((cr_refunded_cash#24 + cr_reversed_charge#25) + cr_store_credit#26))]

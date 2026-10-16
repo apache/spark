@@ -110,7 +110,8 @@ class TxnTable(
     schema,
     delegate.partitioning,
     delegate.properties,
-    delegate.constraints) {
+    delegate.constraints,
+    schemaAlignmentConfig = delegate.schemaAlignmentConfig) {
 
   // Expose the same id as the delegate so that identity checks during transaction re-resolution
   // don't false-positive on the TxnTable wrapper having a different UUID.
@@ -136,6 +137,7 @@ class TxnTable(
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
     catalog.writeTarget = this
+    lastWriteInfo = info
     super.newWriteBuilder(info)
   }
 
@@ -171,12 +173,15 @@ class TxnTable(
 class TxnTableCatalog(delegate: InMemoryRowLevelOperationTableCatalog) extends TableCatalog {
 
   private val tables: util.Map[Identifier, TxnTable] = new ConcurrentHashMap[Identifier, TxnTable]()
+  val loadTableCalls: ArrayBuffer[(TableContext, CaseInsensitiveStringMap)] = ArrayBuffer.empty
 
   var writeTarget: TxnTable = _
 
   override def name: String = delegate.name
 
   override def capabilities: java.util.Set[TableCatalogCapability] = delegate.capabilities
+
+  override def tableStateOptionKeys(): util.Set[String] = delegate.tableStateOptionKeys()
 
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
 
@@ -194,6 +199,22 @@ class TxnTableCatalog(delegate: InMemoryRowLevelOperationTableCatalog) extends T
       val table = delegate.liveTable(ident).asInstanceOf[InMemoryRowLevelOperationTable]
       new TxnTable(table, table.schema(), this)
     })
+  }
+
+  override def loadTable(
+      ident: Identifier,
+      context: TableContext,
+      options: CaseInsensitiveStringMap): Table = {
+    loadTableCalls += ((context, options))
+    super.loadTable(ident, context, options)
+  }
+
+  override def loadTable(ident: Identifier, version: String): Table = {
+    delegate.loadTable(ident, version)
+  }
+
+  override def loadTable(ident: Identifier, timestamp: Long): Table = {
+    delegate.loadTable(ident, timestamp)
   }
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {

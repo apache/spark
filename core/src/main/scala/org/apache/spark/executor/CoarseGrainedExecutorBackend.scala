@@ -223,6 +223,12 @@ private[spark] class CoarseGrainedExecutorBackend(
       logInfo(log"Received tokens of ${MDC(LogKeys.NUM_BYTES, tokenBytes.length)} bytes")
       SparkHadoopUtil.get.addDelegationTokens(tokenBytes, env.conf)
 
+    case UpdateUserCredentials(version, credentials) =>
+      logInfo(log"Received user credentials of " +
+        log"${MDC(LogKeys.NUM_BYTES, credentials.length)} bytes " +
+        log"(version ${MDC(LogKeys.CREDENTIAL_VERSION, version)})")
+      VersionedCredentials.updateIfNewer(env.userCredentials, version, credentials)
+
     case DecommissionExecutor =>
       decommissionSelf()
   }
@@ -505,6 +511,18 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       }
       val env = SparkEnv.createExecutorEnv(driverConf, arguments.executorId, arguments.bindAddress,
         arguments.hostname, arguments.cores, cfg.ioEncryptionKey, isLocal = false)
+
+      // Apply initial user credentials to the executor credential store.
+      // Uses unconditional set() rather than updateIfNewer() because the store is guaranteed
+      // null at this point (executor startup, before any RPC or task is received).
+      // Note: there is a narrow window where a renewal broadcast (vN+1) could arrive between
+      // the SparkAppConfig reply (vN) and executor registration in executorDataMap, leaving
+      // this executor on vN until vN+2. The TaskDescription path covers this case since
+      // every dispatched task carries the latest credentials.
+      cfg.userCredentials.foreach { case (version, credentials) =>
+        env.userCredentials.set(VersionedCredentials(version, credentials))
+      }
+
       // Set the application attemptId in the BlockStoreClient if available.
       val appAttemptId = env.conf.get(APP_ATTEMPT_ID)
       appAttemptId.foreach(attemptId =>

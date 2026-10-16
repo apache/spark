@@ -30,24 +30,28 @@ import org.apache.spark.tags.ExtendedSQLTest
 // maintenance for partitions 0 and 1 (these are arbitrary choices). This is used to test
 // snapshot upload lag can be observed through StreamingQueryProgress metrics.
 class RocksDBSkipMaintenanceOnCertainPartitionsProvider extends RocksDBStateStoreProvider {
-  override def doMaintenance(): Unit = {
-    if (stateStoreId.partitionId == 0 || stateStoreId.partitionId == 1) {
-      return
-    }
-    super.doMaintenance()
-  }
+  private def shouldSkip: Boolean =
+    stateStoreId.partitionId == 0 || stateStoreId.partitionId == 1
+
+  override def doSnapshotMaintenance(): Unit =
+    if (!shouldSkip) super.doSnapshotMaintenance()
+
+  override def doCleanupMaintenance(): Unit =
+    if (!shouldSkip) super.doCleanupMaintenance()
 }
 
 // HDFSBackedSkipMaintenanceOnCertainPartitionsProvider is a test-only provider that skips running
 // maintenance for partitions 0 and 1 (these are arbitrary choices). This is used to test
 // snapshot upload lag can be observed through StreamingQueryProgress metrics.
 class HDFSBackedSkipMaintenanceOnCertainPartitionsProvider extends HDFSBackedStateStoreProvider {
-  override def doMaintenance(): Unit = {
-    if (stateStoreId.partitionId == 0 || stateStoreId.partitionId == 1) {
-      return
-    }
-    super.doMaintenance()
-  }
+  private def shouldSkip: Boolean =
+    stateStoreId.partitionId == 0 || stateStoreId.partitionId == 1
+
+  override def doSnapshotMaintenance(): Unit =
+    if (!shouldSkip) super.doSnapshotMaintenance()
+
+  override def doCleanupMaintenance(): Unit =
+    if (!shouldSkip) super.doCleanupMaintenance()
 }
 
 @ExtendedSQLTest

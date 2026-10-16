@@ -25,13 +25,37 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
  */
 trait CodegenFallback extends Expression {
 
-  protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    CodegenFallback.generate(this, ctx, ev)
+}
+
+object CodegenFallback {
+
+  /**
+   * Generates code that evaluates `e` by calling its `eval`, rather than by generating code for it.
+   * This is what [[CodegenFallback]] gives the expressions that mix it in, and is also used by an
+   * expression that can generate code in general but has to fall back for a particular shape of
+   * its own tree -- see `With.doGenCode`.
+   *
+   * Three places reason about which subtrees run interpretively, and all of them dispatch on the
+   * trait. `CollapseCodegenStages.supportCodegen` walks whole expression trees, so it finds a
+   * non-leaf descendant `CodegenFallback` whatever node called `generate` -- that is how a `With`
+   * holding one gets whole-stage codegen turned off without being one itself. The other two
+   * dispatch on the node in hand: `EquivalentExpressions.childrenToRecurse`, which keeps a subtree
+   * that only `eval` reaches out of subexpression elimination, and
+   * `With.refUnderCodegenFallback`, which decides whether a memoized reference is reached that way.
+   * A caller that is not a `CodegenFallback` is invisible to those two and has to be named in each.
+   * One that falls back for a reason other than holding such a descendant would have to be named in
+   * `CollapseCodegenStages` as well, since nothing else would tell it that the input row this code
+   * needs is not there.
+   */
+  def generate(e: Expression, ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // LeafNode does not need `input`
-    val input = if (this.isInstanceOf[LeafExpression]) "null" else ctx.INPUT_ROW
+    val input = if (e.isInstanceOf[LeafExpression]) "null" else ctx.INPUT_ROW
     val idx = ctx.references.length
-    ctx.references += this
+    ctx.references += e
     var childIndex = idx
-    this.foreach {
+    e.foreach {
       case n: Nondeterministic =>
         // This might add the current expression twice, but it won't hurt.
         ctx.references += n
@@ -44,22 +68,22 @@ trait CodegenFallback extends Expression {
       case _ =>
     }
     val objectTerm = ctx.freshName("obj")
-    val placeHolder = ctx.registerComment(this.toString)
-    val javaType = CodeGenerator.javaType(this.dataType)
-    if (nullable) {
+    val placeHolder = ctx.registerComment(e.toString)
+    val javaType = CodeGenerator.javaType(e.dataType)
+    if (e.nullable) {
       ev.copy(code = code"""
         $placeHolder
         Object $objectTerm = ((Expression) references[$idx]).eval($input);
         boolean ${ev.isNull} = $objectTerm == null;
-        $javaType ${ev.value} = ${CodeGenerator.defaultValue(this.dataType)};
+        $javaType ${ev.value} = ${CodeGenerator.defaultValue(e.dataType)};
         if (!${ev.isNull}) {
-          ${ev.value} = (${CodeGenerator.boxedType(this.dataType)}) $objectTerm;
+          ${ev.value} = (${CodeGenerator.boxedType(e.dataType)}) $objectTerm;
         }""")
     } else {
       ev.copy(code = code"""
         $placeHolder
         Object $objectTerm = ((Expression) references[$idx]).eval($input);
-        $javaType ${ev.value} = (${CodeGenerator.boxedType(this.dataType)}) $objectTerm;
+        $javaType ${ev.value} = (${CodeGenerator.boxedType(e.dataType)}) $objectTerm;
         """, isNull = FalseLiteral)
     }
   }

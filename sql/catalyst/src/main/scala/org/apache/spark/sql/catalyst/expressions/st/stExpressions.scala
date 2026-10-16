@@ -134,6 +134,7 @@ case class ST_AsBinary(geo: Expression, endianness: Expression)
   arguments = """
     Arguments:
       * wkb - A BINARY value in WKB format, representing a GEOGRAPHY value.
+        An expression that evaluates to a binary.
   """,
   examples = """
     Examples:
@@ -179,7 +180,9 @@ case class ST_GeogFromWKB(wkb: Expression)
   arguments = """
     Arguments:
       * wkb - A BINARY value in WKB format, representing a GEOMETRY value.
+        An expression that evaluates to a binary.
       * srid - The optional SRID value of the geometry. Default is 0.
+        An expression that evaluates to an integer.
   """,
   examples = """
     Examples:

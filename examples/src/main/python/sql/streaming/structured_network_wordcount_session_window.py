@@ -19,7 +19,7 @@ r"""
  Split lines into words, group by words and use the state per key to track session of each key.
  Each session window sets a 10 seconds processing time timeout.
  After 10 seconds of idle period, the session summary will be finalized and output to sink.
- Usage: structured_network_wordcount_windowed.py <hostname> <port>
+ Usage: structured_network_wordcount_session_window.py <hostname> <port>
  <hostname> and <port> describe the TCP server that Structured Streaming
  would connect to receive data.
 
@@ -31,21 +31,19 @@ r"""
     localhost 9999`
 """
 import sys
-from typing import Iterator, Any
+from typing import Any, Iterator
 
 import pandas as pd
-
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import explode
-from pyspark.sql.functions import split
+from pyspark.sql.functions import explode, split
+from pyspark.sql.streaming.state import GroupState, GroupStateTimeout
 from pyspark.sql.types import (
     LongType,
     StringType,
-    TimestampType,
-    StructType,
     StructField,
+    StructType,
+    TimestampType,
 )
-from pyspark.sql.streaming.state import GroupStateTimeout, GroupState
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:

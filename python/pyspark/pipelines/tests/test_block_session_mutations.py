@@ -21,15 +21,15 @@ from pyspark.errors import PySparkException
 from pyspark.sql.types import StringType
 from pyspark.testing.connectutils import (
     ReusedConnectTestCase,
-    should_test_connect,
     connect_requirement_message,
+    should_test_connect,
 )
 
 if should_test_connect:
     from pyspark.pipelines.block_session_mutations import (
-        block_session_mutations,
         BLOCKED_METHODS,
         ERROR_CLASS,
+        block_session_mutations,
     )
 
 

@@ -20,11 +20,11 @@ import shutil
 import tempfile
 import time
 
+from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql import Row
 from pyspark.sql.functions import lit
-from pyspark.sql.types import StructType, StructField, IntegerType, StringType, TimestampType
+from pyspark.sql.types import IntegerType, StringType, StructField, StructType, TimestampType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.errors import PySparkTypeError, PySparkValueError
 
 
 class StreamingTestsMixin:
@@ -146,6 +146,15 @@ class StreamingTestsMixin:
             self.fail("Should have thrown an exception")
         except TypeError:
             pass
+
+        for arg_name in ("once", "availableNow"):
+            with self.assertRaises(PySparkValueError) as pe:
+                df.writeStream.trigger(**{arg_name: False})
+            self.check_error(
+                exception=pe.exception,
+                errorClass="VALUE_NOT_ALLOWED",
+                messageParameters={"arg_name": arg_name, "allowed_values": "[True]"},
+            )
 
     def test_stream_real_time_trigger(self):
         df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
@@ -355,8 +364,8 @@ class StreamingTestsMixin:
             finally:
                 sq.stop()
 
-            from pyspark.sql.functions import col, udf
             from pyspark.errors import StreamingQueryException
+            from pyspark.sql.functions import col, udf
 
             bad_udf = udf(lambda x: 1 / 0)
             sq = (

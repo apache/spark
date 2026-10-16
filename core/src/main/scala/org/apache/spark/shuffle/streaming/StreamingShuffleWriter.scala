@@ -17,10 +17,11 @@
 
 package org.apache.spark.shuffle.streaming
 
-import java.util.concurrent.{CancellationException, CompletableFuture, CountDownLatch, LinkedBlockingDeque, Semaphore, TimeUnit}
+import java.util.concurrent.{CancellationException, CompletableFuture, CompletionException, CountDownLatch, LinkedBlockingDeque, Semaphore, TimeoutException, TimeUnit}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong, AtomicReference}
 import javax.annotation.concurrent.NotThreadSafe
 
+import scala.concurrent.duration.DurationInt
 import scala.util.Try
 
 import io.netty.buffer.{ByteBuf, ByteBufOutputStream, CompositeByteBuf, Unpooled}
@@ -28,7 +29,13 @@ import io.netty.channel.{ChannelFuture, ChannelOption}
 
 import org.apache.spark.{SparkContext, SparkEnv, StreamingShuffleTaskLocation, TaskContext}
 import org.apache.spark.internal.LogKeys
-import org.apache.spark.internal.config.{EXECUTOR_ID, STREAMING_SHUFFLE_CHECKSUM_ENABLED, STREAMING_SHUFFLE_NETWORK_BUFFER_MAX_WAIT_TIME_MS, STREAMING_SHUFFLE_NETWORK_BUFFER_SIZE, STREAMING_SHUFFLE_WRITER_MAX_MEMORY}
+import org.apache.spark.internal.config.{
+  EXECUTOR_ID,
+  STREAMING_SHUFFLE_CHECKSUM_ENABLED,
+  STREAMING_SHUFFLE_NETWORK_BUFFER_MAX_WAIT_TIME_MS,
+  STREAMING_SHUFFLE_NETWORK_BUFFER_SIZE,
+  STREAMING_SHUFFLE_WRITER_CONNECTION_TIMEOUT_MS,
+  STREAMING_SHUFFLE_WRITER_MAX_MEMORY}
 import org.apache.spark.internal.config.Network.RPC_IO_THREADS
 import org.apache.spark.memory.{MemoryConsumer, MemoryMode}
 import org.apache.spark.network.TransportContext
@@ -57,6 +64,7 @@ class StreamingShuffleWriter[K, V](
   private val BUFFER_SIZE: Integer = conf.get(STREAMING_SHUFFLE_NETWORK_BUFFER_SIZE)
   // The interval at which we flush pending messages.
   private val MAX_BUFFERING_TIME_MS = conf.get(STREAMING_SHUFFLE_NETWORK_BUFFER_MAX_WAIT_TIME_MS)
+  private val CONNECTION_TIMEOUT_MS = conf.get(STREAMING_SHUFFLE_WRITER_CONNECTION_TIMEOUT_MS)
 
   // Shuffle details.
   private val streamingShuffleHandle = handle.asInstanceOf[StreamingShuffleHandle[K, V, _]]
@@ -88,6 +96,12 @@ class StreamingShuffleWriter[K, V](
       log"minimum for ${MDC(LogKeys.NUM_PARTITIONS, numPartitions)} partitions takes precedence.")
   }
   private val CHECKSUM_ENABLED = conf.get(STREAMING_SHUFFLE_CHECKSUM_ENABLED)
+  // A row larger than the network buffer cannot be packed with any neighbor and forces its own
+  // (oversized) buffer, defeating the batching that BUFFER_SIZE is meant to enable.
+  private val largeRowThreshold = BUFFER_SIZE
+  // Warnings about oversized rows are throttled so a run of large rows cannot flood the logs.
+  private val largeRowWarningThrottler = LogThrottler(logWarning, 1.second)
+  private val hugeRowWarningThrottler = LogThrottler(logWarning, 1.second)
 
   // Helper objects.
 
@@ -198,11 +212,27 @@ class StreamingShuffleWriter[K, V](
   private[streaming] case class ShardState(id: Int) {
     // client may be accessed from other threads via cancel(); @volatile to be safe.
     @volatile private var client: Either[TransportClient, CompletableFuture[TransportClient]] =
-      Right(transportServerHandler.futureClients(id).thenApply(c => {
-        c.getChannel.config.setOption(ChannelOption.SO_SNDBUF, SEND_BUFFER_SIZE)
-        c.getChannel.config.setOption(ChannelOption.SO_RCVBUF, RECV_BUFFER_SIZE)
-        c
-      }))
+      Right(
+        (if (CONNECTION_TIMEOUT_MS == -1) {
+          transportServerHandler.futureClients(id)
+        } else {
+          transportServerHandler.futureClients(id)
+            .orTimeout(CONNECTION_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            .exceptionally {
+              case _: TimeoutException =>
+                throw StreamingShuffleManager.streamingShuffleWriterConnectionTimeout(
+                  streamingShuffleHandle.shuffleId,
+                  shuffleWriterId,
+                  id,
+                  CONNECTION_TIMEOUT_MS)
+              case error =>
+                throw error
+            }
+        }).thenApply(c => {
+          c.getChannel.config.setOption(ChannelOption.SO_SNDBUF, SEND_BUFFER_SIZE)
+          c.getChannel.config.setOption(ChannelOption.SO_RCVBUF, RECV_BUFFER_SIZE)
+          c
+        }))
     val buffer: AtomicReference[TimestampedBuffer] = new AtomicReference(null)
     val lastSentSequenceNum: AtomicLong = new AtomicLong(-1)
     val terminationAckReceived: AtomicBoolean = new AtomicBoolean(false)
@@ -250,7 +280,10 @@ class StreamingShuffleWriter[K, V](
           val newFuture = future.whenComplete { (client, ex) =>
             ex match {
               case null => sendToClient(client)
-              case _ => buf.release(); done()
+              case error =>
+                buf.release()
+                errorNotifier.markError(error)
+                done()
             }
           }
           // Once the future is completed, stop accumulating CompletionStages.
@@ -311,7 +344,7 @@ class StreamingShuffleWriter[K, V](
     // For testing only.
     def hasClient: Boolean = client match {
       case Left(_) => true
-      case Right(future) => future.isDone
+      case Right(future) => future.isDone && !future.isCompletedExceptionally
     }
   }
 
@@ -388,6 +421,11 @@ class StreamingShuffleWriter[K, V](
       System.currentTimeMillis() - cleanupStartTime)} ms")
   }
 
+  private def unwrapCompletionException(error: Throwable): Throwable = error match {
+    case e: CompletionException if e.getCause != null => e.getCause
+    case _ => error
+  }
+
   private def throwErrorIfExists(): Unit = {
     context.getTaskFailure.foreach { throw _ }
     errorNotifier.throwErrorIfExists()
@@ -423,7 +461,7 @@ class StreamingShuffleWriter[K, V](
       Try {
         while (!isWriteFinished.await(MAX_BUFFERING_TIME_MS, TimeUnit.MILLISECONDS))
           shards.foreach(_.send())
-      }.recover { case e => errorNotifier.markError(e) }
+      }.recover { case e => errorNotifier.markError(unwrapCompletionException(e)) }
       , "time-based-flush-for-shuffle-writer-" +
         s"${streamingShuffleHandle.shuffleId}-${shuffleWriterId}")
     try {
@@ -438,6 +476,7 @@ class StreamingShuffleWriter[K, V](
         if (timestampedBuffer == null) {
           timestampedBuffer = newBuffer()
         }
+        val dataStartPos = timestampedBuffer.buffer.writerIndex()
         val partitionSerializationStream = timestampedBuffer.serializationStream
         // When UnsafeRowSerializer, the key, record._1, is only used for determining
         // the partition, and it doesn't need to be sent to the shuffle readers.
@@ -452,6 +491,24 @@ class StreamingShuffleWriter[K, V](
         }
         partitionSerializationStream.writeValue(record._2.asInstanceOf[Any])
         partitionSerializationStream.flush()
+
+        // A single row is never split across buffers (see the TODO above), so an oversized row
+        // grows its buffer past BUFFER_SIZE and inflates the tracked memory budget. Warn
+        // (throttled) so operators can raise the block size or writer memory instead of overshoot.
+        // When a row trips both thresholds the more severe memory warning takes precedence.
+        val rowSize = timestampedBuffer.buffer.writerIndex() - dataStartPos
+        if (rowSize > MAX_BUFFER_BYTES / 4) {
+          hugeRowWarningThrottler(
+            log"Row size ${MDC(LogKeys.BYTE_SIZE, rowSize)} is >25% of " +
+            log"total writer memory " +
+            log"${MDC(LogKeys.MEMORY_THRESHOLD_SIZE, MAX_BUFFER_BYTES)}. " +
+            log"Consider increasing the maximum writer memory.")
+        } else if (rowSize > largeRowThreshold) {
+          largeRowWarningThrottler(
+            log"Row size ${MDC(LogKeys.BYTE_SIZE, rowSize)} is larger than the block size " +
+            log"${MDC(LogKeys.MEMORY_THRESHOLD_SIZE, largeRowThreshold)}. " +
+            log"Consider increasing the block size.")
+        }
 
         timestampedBuffer.updateChecksum()
 
@@ -482,6 +539,9 @@ class StreamingShuffleWriter[K, V](
       logInfo(log"Received all termination acks for shuffle writer ${MDC(
         LogKeys.SHUFFLE_WRITER_ID, shuffleWriterId)}. Closing server channel.")
       throwErrorIfExists()
+    } catch {
+      case e: CompletionException =>
+        throw unwrapCompletionException(e)
     } finally {
       isWriteFinished.countDown() // Duplicate countDowns are a no-op.
       flushThread.join()

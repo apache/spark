@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkThrowable
@@ -27,7 +26,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.connector.catalog.{Identifier, SupportsSchemaEvolution, Table, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, SupportsSchemaEvolution, Table, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnChange
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2CatalogAndIdentifier, ExtractV2Table}
@@ -51,7 +50,8 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
       write.table match {
         case relation @ ExtractV2CatalogAndIdentifier(catalog, ident) =>
           evolveSchema(catalog, ident, write.pendingSchemaChanges)
-          val newTable = catalog.loadTable(ident, write.writePrivileges.asJava)
+          val newTable = CatalogV2Util.loadTableForV2Write(
+            catalog, ident, write.writePrivileges, relation.options)
           val writeWithNewTarget = replaceWriteTarget(write, relation, newTable)
 
           val remainingChanges = writeWithNewTarget.pendingSchemaChanges

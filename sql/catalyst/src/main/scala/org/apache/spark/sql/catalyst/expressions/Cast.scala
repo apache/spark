@@ -660,6 +660,11 @@ object Cast extends QueryErrorsBase {
 @ExpressionDescription(
   usage = "_FUNC_(expr AS type) - Casts the value `expr` to the target data type `type`." +
           " `expr` :: `type` alternative casting syntax is also supported.",
+  arguments = """
+    Arguments:
+      * expr - An expression whose value is converted to the target data type.
+      * type - The target data type to cast the value to.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('10' as int);
@@ -686,6 +691,10 @@ case class Cast(
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
+
+  // Parser, Column.cast, and Connect set USER_SPECIFIED_CAST. Analyzer-inserted Casts do not.
+  override protected def truncateCharVarcharOnCast: Boolean =
+    containsTag(Cast.USER_SPECIFIED_CAST)
 
   override protected def withNewChildInternal(newChild: Expression): Cast = copy(child = newChild)
 
@@ -1609,12 +1618,16 @@ case class Cast(
   override def genCode(ctx: CodegenContext): ExprCode = {
     // If the cast does not change the structure, then we don't really need to cast anything.
     // We can return what the children return. Same thing should happen in the interpreted path.
-    if (DataType.equalsStructurally(child.dataType, dataType)) {
+    if (generatesChildCode) {
       child.genCode(ctx)
     } else {
       super.genCode(ctx)
     }
   }
+
+  /** Whether `genCode` generates the child's code as this cast's, the cast changing nothing. */
+  private[catalyst] def generatesChildCode: Boolean =
+    DataType.equalsStructurally(child.dataType, dataType)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)
@@ -1741,7 +1754,7 @@ case class Cast(
             """
           } else {
             code"""
-              scala.Option<Integer> $intOpt = $dateTimeUtilsCls.stringToDate($c);
+              scala.Option $intOpt = $dateTimeUtilsCls.stringToDate($c);
               if ($intOpt.isDefined()) {
                 $evPrim = ((Integer) $intOpt.get()).intValue();
               } else {
@@ -1786,7 +1799,7 @@ case class Cast(
             """
           } else {
             code"""
-              scala.Option<Long> $longOpt = $dateTimeUtilsCls.stringToTime($c);
+              scala.Option $longOpt = $dateTimeUtilsCls.stringToTime($c);
               if ($longOpt.isDefined()) {
                 $evPrim = $dateTimeUtilsCls.truncateTimeToPrecision(
                   ((Long) $longOpt.get()).longValue(), ${to.precision});
@@ -1976,7 +1989,7 @@ case class Cast(
            """
         } else {
           code"""
-            scala.Option<Long> $longOpt = $dateTimeUtilsCls.stringToTimestamp($c, $zid);
+            scala.Option $longOpt = $dateTimeUtilsCls.stringToTimestamp($c, $zid);
             if ($longOpt.isDefined()) {
               $evPrim = ((Long) $longOpt.get()).longValue();
             } else {
@@ -2052,7 +2065,7 @@ case class Cast(
            """
         } else {
           code"""
-            scala.Option<Long> $longOpt = $dateTimeUtilsCls.stringToTimestampWithoutTimeZone($c);
+            scala.Option $longOpt = $dateTimeUtilsCls.stringToTimestampWithoutTimeZone($c);
             if ($longOpt.isDefined()) {
               $evPrim = ((Long) $longOpt.get()).longValue();
             } else {

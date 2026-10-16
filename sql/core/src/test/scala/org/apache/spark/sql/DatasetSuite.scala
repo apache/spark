@@ -1942,7 +1942,7 @@ class DatasetSuite extends SharedSparkSession
         val agg = cp.groupBy($"id" % 2).agg(count($"id"))
 
         agg.queryExecution.executedPlan.collectFirst {
-          case ShuffleExchangeExec(_, _: RDDScanExec, _, _) =>
+          case ShuffleExchangeExec(_, _: RDDScanExec, _, _, _) =>
           case BroadcastExchangeExec(_, _: RDDScanExec) =>
         }.foreach { _ =>
           fail(
@@ -3083,6 +3083,22 @@ class DatasetSuite extends SharedSparkSession
         result.write.parquet(path.getAbsolutePath)
       }
       assert(ex.getCondition == "COLUMN_ALREADY_EXISTS")
+    }
+  }
+
+  test("SPARK-59682: RemoveRedundantAliases cannot be excluded via excludedRules") {
+    // RemoveRedundantAliases must stay in nonExcludableRules: excluding it lets the
+    // exprId-preserving Alias that EliminateSerialization inserts around a collapsed
+    // DeserializeToObject/SerializeFromObject pair leak into execution as an unsupported
+    // ObjectType projection, which fails in both codegen and the interpreted fallback.
+    withSQLConf(
+        "spark.sql.optimizer.excludedRules" ->
+          "org.apache.spark.sql.catalyst.optimizer.RemoveRedundantAliases") {
+      val grouped = Seq(ClassData("a", 1), ClassData("a", 2), ClassData("b", 3)).toDS()
+        .groupByKey(_.a)
+        .mapGroups { (k: String, it: Iterator[ClassData]) => ClassData(k, it.map(_.b).sum) }
+      val result = grouped.mapPartitions(iter => iter).collect()
+      assert(result.toSet == Set(ClassData("a", 3), ClassData("b", 3)))
     }
   }
 }

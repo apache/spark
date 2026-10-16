@@ -20,12 +20,15 @@ package org.apache.spark.deploy.master
 
 import java.net.ServerSocket
 import java.nio.file.{Files, Paths}
+import java.util.Date
 import java.util.concurrent.ThreadLocalRandom
 
+import org.apache.commons.lang3.mutable.MutableInt
 import org.apache.curator.test.TestingServer
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
-import org.apache.spark.internal.config.Deploy.ZOOKEEPER_URL
+import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite, SparkIllegalArgumentException}
+import org.apache.spark.deploy.{ApplicationDescription, Command, DeployTestUtils, DriverDescription, SparkCuratorUtil}
+import org.apache.spark.internal.config.Deploy.{RECOVERY_SERIALIZATION_FILTER, ZOOKEEPER_URL}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rpc.{RpcEndpoint, RpcEnv}
 import org.apache.spark.serializer.{JavaSerializer, Serializer}
@@ -129,6 +132,76 @@ class PersistenceEngineSuite extends SparkFunSuite {
       })
     } finally {
       zkTestServer.stop()
+    }
+  }
+
+  test("SPARK-59333: ZooKeeperPersistenceEngine skips classes rejected by the filter") {
+    val conf = new SparkConf()
+    val zkTestServer = new TestingServer(findFreePort(conf))
+    try {
+      conf.set(ZOOKEEPER_URL, zkTestServer.getConnectString)
+      val engine = new ZooKeeperPersistenceEngine(conf, new JavaSerializer(conf))
+      try {
+        // A class outside the java/scala/spark allowlist is skipped on read, not
+        // instantiated.
+        engine.persist("test_filtered", new MutableInt(1))
+        assert(engine.read[AnyRef]("test_filtered").isEmpty)
+
+        // The znode is skipped, not deleted: an overly narrow filter pattern must not
+        // wipe the recovery state.
+        val zk = SparkCuratorUtil.newClient(conf)
+        try {
+          assert(zk.checkExists().forPath("/spark/master_status/test_filtered") != null)
+        } finally {
+          zk.close()
+        }
+
+        // Allowlisted JDK/Scala/Spark types still round-trip.
+        engine.persist("test_allowed", "test_allowed_value")
+        assert(engine.read[String]("test_allowed") === Seq("test_allowed_value"))
+
+        // The info classes the master actually persists must round-trip through the filter.
+        val command = new Command("", Nil, Map.empty, Nil, Nil, Nil)
+        val appDesc = new ApplicationDescription(
+          name = "test_app",
+          maxCores = None,
+          command = command,
+          appUiUrl = "",
+          defaultProfile = DeployTestUtils.defaultResourceProfile,
+          eventLogDir = None,
+          eventLogCodec = None)
+        engine.persist("test_app_info",
+          new ApplicationInfo(0, "test_app", appDesc, new Date(), null, 0))
+        assert(engine.read[ApplicationInfo]("test_app_info").map(_.id) === Seq("test_app"))
+
+        val driverDesc = new DriverDescription("", 0, 0, false, command)
+        engine.persist("test_driver_info",
+          new DriverInfo(0, "test_driver", driverDesc, new Date()))
+        assert(engine.read[DriverInfo]("test_driver_info").map(_.id) === Seq("test_driver"))
+      } finally {
+        engine.close()
+      }
+    } finally {
+      zkTestServer.stop()
+    }
+  }
+
+  test("SPARK-59333: recoverySerializationFilter rejects patterns that yield no filter") {
+    // ObjectInputFilter.Config.createFilter returns null for "" and ";", and a filter that
+    // matches nothing for blanks; either would otherwise silently disable the filtering.
+    Seq("", "  ", ";").foreach { pattern =>
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          new SparkConf().set(RECOVERY_SERIALIZATION_FILTER.key, pattern)
+            .get(RECOVERY_SERIALIZATION_FILTER)
+        },
+        condition = "INVALID_CONF_VALUE.REQUIREMENT",
+        parameters = Map(
+          "confName" -> RECOVERY_SERIALIZATION_FILTER.key,
+          "confValue" -> pattern,
+          "confRequirement" ->
+            "must be a non-empty JEP-290 filter pattern; use '*' to disable filtering.")
+      )
     }
   }
 

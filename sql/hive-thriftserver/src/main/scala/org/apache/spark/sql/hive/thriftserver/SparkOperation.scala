@@ -27,6 +27,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, SessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType.{EXTERNAL, MANAGED, METRIC_VIEW, VIEW}
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
 import org.apache.spark.util.Utils
 
@@ -51,7 +52,27 @@ private[hive] trait SparkOperation extends Operation with Logging {
 
   final protected def catalog: SessionCatalog = sessionState.catalog
 
+  final protected def catalogManager: CatalogManager = sessionState.catalogManager
+
   final protected def conf: SQLConf = sessionState.conf
+
+  final protected def isCatalogMetadataEnabled: Boolean =
+    conf.getConf(SQLConf.THRIFTSERVER_CATALOG_METADATA_ENABLED)
+
+  /**
+   * The TABLE_CAT value for rows listed from the V1 SessionCatalog (getTables, getColumns).
+   * These operations always list from `spark_catalog`, so we only populate the real catalog
+   * name when the current catalog IS the session catalog; otherwise we keep the legacy value
+   * to avoid labeling V1-sourced rows with an unrelated DSv2 catalog name. Routing
+   * getTables/getColumns through DSv2 catalogs is a follow-up (SPARK-57518).
+   */
+  final protected def sessionCatalogTableCat(legacyValue: AnyRef): AnyRef =
+    if (isCatalogMetadataEnabled &&
+        catalogManager.currentCatalog.name() == CatalogManager.SESSION_CATALOG_NAME) {
+      CatalogManager.SESSION_CATALOG_NAME
+    } else {
+      legacyValue
+    }
 
   final protected def sparkContext: SparkContext = session.sparkContext
 

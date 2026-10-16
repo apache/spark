@@ -45,15 +45,21 @@ import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 case class SortMergeAsOfJoinExec(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
-    leftAsOfExpr: Expression,
-    rightAsOfExpr: Expression,
+    leftSortExprs: Seq[Expression],
+    rightSortExprs: Seq[Expression],
     asOfCondition: Expression,
     orderExpression: Expression,
+    direction: AsOfJoinDirection,
     joinType: JoinType,
     condition: Option[Expression],
     left: SparkPlan,
     right: SparkPlan,
     isSkewJoin: Boolean = false) extends ShuffledJoin {
+
+  // The sides may have different key counts: each side is sorted on its own, and only the
+  // equi-keys are compared across sides.
+  require(leftSortExprs.nonEmpty && rightSortExprs.nonEmpty,
+    s"$nodeName requires non-empty sort expressions on both sides")
 
   require(Seq(Inner, LeftOuter).exists(joinType == _),
     s"$nodeName does not support join type: $joinType")
@@ -79,33 +85,18 @@ case class SortMergeAsOfJoinExec(
   }
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = {
-    val leftOrdering = leftKeys.map(SortOrder(_, Ascending)) :+
-      SortOrder(leftAsOfExpr, Ascending)
-    val rightOrdering = rightKeys.map(SortOrder(_, Ascending)) :+
-      SortOrder(rightAsOfExpr, Ascending)
+    val leftOrdering = leftKeys.map(SortOrder(_, Ascending)) ++
+      leftSortExprs.map(SortOrder(_, Ascending))
+    val rightOrdering = rightKeys.map(SortOrder(_, Ascending)) ++
+      rightSortExprs.map(SortOrder(_, Ascending))
     leftOrdering :: rightOrdering :: Nil
   }
 
   override def outputOrdering: Seq[SortOrder] = left.outputOrdering
 
-  // Determine scan direction based on the order expression (distance metric).
-  // This is a performance heuristic only -- if it misclassifies, the scan
-  // still produces the correct result; only the early-termination shortcut
-  // is lost.
-  //
-  // orderExpression is direction-unique by construction:
-  //   Backward: Subtract(leftAsOf, rightAsOf) -> backward mode
-  //   Forward:  Subtract(rightAsOf, leftAsOf) -> forward mode
-  //   Nearest:  If(...) -> forward mode
-  private val isBackwardJoin: Boolean = orderExpression match {
-    case Subtract(l, _, _) if l.semanticEquals(leftAsOfExpr) => true
-    case _ => false
-  }
-
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
     val spillSize = longMetric("spillSize")
-    val isBackward = isBackwardJoin
     val inMemoryThreshold = conf.sortMergeJoinExecBufferInMemoryThreshold
     val sizeInBytesSpillThreshold = conf.sortMergeJoinExecBufferSpillSizeThreshold
     val spillThreshold = conf.sortMergeJoinExecBufferSpillThreshold
@@ -117,7 +108,7 @@ case class SortMergeAsOfJoinExec(
         leftKeys, rightKeys,
         asOfCondition, orderExpression,
         joinType, condition,
-        numOutputRows, spillSize, isBackward,
+        numOutputRows, spillSize, direction,
         inMemoryThreshold, sizeInBytesSpillThreshold, spillThreshold
       )
       TaskContext.get().addTaskCompletionListener[Unit](_ => scanner.close())
@@ -136,14 +127,10 @@ case class SortMergeAsOfJoinExec(
  *
  * Both inputs are sorted by (equi-keys, as-of key) ascending. For each
  * left row within an equi-key group, we scan the right-side buffer
- * forward to find the best match.
- *
- * For Backward joins (left.t >= right.t), the forward scan keeps the
- * last as-of-satisfying row as the best match (since the buffer is
- * sorted ascending, the last satisfying row is the closest).
- *
- * For Forward/Nearest joins, the forward scan uses distance-based
- * early termination (stop when distance starts increasing).
+ * forward to find the best match:
+ *  - Backward (left.t >= right.t): the last satisfying row is the closest.
+ *  - Forward (left.t <= right.t): the first satisfying row is the closest.
+ *  - Nearest: the satisfying row with the smallest distance.
  */
 private[joins] class SortMergeAsOfJoinScanner(
     leftIter: Iterator[InternalRow],
@@ -158,18 +145,27 @@ private[joins] class SortMergeAsOfJoinScanner(
     residualCondition: Option[Expression],
     numOutputRows: SQLMetric,
     spillSize: SQLMetric,
-    isBackwardJoin: Boolean,
+    direction: AsOfJoinDirection,
     inMemoryThreshold: Int,
     sizeInBytesSpillThreshold: Long,
     spillThreshold: Int) {
 
   private val joinedOutput = leftOutput ++ rightOutput
   private val joinedRow = new JoinedRow()
-  private val resultProjection =
-    UnsafeProjection.create(joinedOutput, joinedOutput)
+  // Use nullable bound references so outer-join null padding is safe even when
+  // right attributes are NOT NULL in the catalog schema.
+  private val resultProjection = {
+    val nullableRefs = joinedOutput.zipWithIndex.map { case (attr, i) =>
+      BoundReference(i, attr.dataType, nullable = true)
+    }
+    UnsafeProjection.create(nullableRefs, joinedOutput)
+  }
 
   private val boundAsOfCond = bindReference(asOfCondition, joinedOutput)
-  private val boundOrderExpr = bindReference(orderExpression, joinedOutput)
+  // Lazy, since only Nearest reads the distance, and its type may have no ordering.
+  private lazy val boundOrderExpr = bindReference(orderExpression, joinedOutput)
+  private lazy val distanceOrdering =
+    TypeUtils.getInterpretedOrdering(orderExpression.dataType)
   private val boundResidualCond =
     residualCondition.map(bindReference(_, joinedOutput))
 
@@ -187,10 +183,15 @@ private[joins] class SortMergeAsOfJoinScanner(
   private val leftKeyProj = UnsafeProjection.create(leftKeys, leftOutput)
   private val rightKeyProj = UnsafeProjection.create(rightKeys, rightOutput)
 
-  private val distanceOrdering =
-    TypeUtils.getInterpretedOrdering(orderExpression.dataType)
-
-  private val nullRightRow = new GenericInternalRow(rightOutput.length)
+  // Materialize an all-null right row as UnsafeRow. GenericInternalRow cannot be
+  // passed through identity UnsafeProjection when right columns are NOT NULL.
+  private val nullRightRow: InternalRow = {
+    val nullableRefs = rightOutput.zipWithIndex.map { case (attr, i) =>
+      BoundReference(i, attr.dataType, nullable = true)
+    }
+    val proj = UnsafeProjection.create(nullableRefs, rightOutput)
+    proj(new GenericInternalRow(rightOutput.length))
+  }
 
   // Spill-backed right-side buffer
   private val rightGroupBuffer = new ExternalAppendOnlyUnsafeRowArray(
@@ -329,52 +330,58 @@ private[joins] class SortMergeAsOfJoinScanner(
     rightDone = true
   }
 
-  /**
-   * Find the best matching right row using forward-only scan.
-   *
-   * For Backward joins: keeps the last as-of-satisfying row (since the
-   * buffer is sorted ascending, the last satisfying row has the largest
-   * right.t <= left.t, which is the closest match). Early-terminates
-   * when as-of condition transitions from true to false (monotone).
-   *
-   * For Forward/Nearest joins: uses distance-based early termination
-   * (stop when distance starts increasing past the minimum).
-   */
-  private def findBestInGroup(leftRow: InternalRow): InternalRow = {
-    if (isBackwardJoin) {
-      findBestBackwardForward(leftRow)
-    } else {
-      findBestForwardNearest(leftRow)
-    }
+  /** Finds the best right row in the current group for `leftRow`, or null if none passes. */
+  private def findBestInGroup(leftRow: InternalRow): InternalRow = direction match {
+    case Backward => findLastBackward(leftRow)
+    case Forward => findFirstForward(leftRow)
+    case Nearest => findNearest(leftRow)
   }
 
   /**
-   * Forward scan for Backward joins: last-match-wins.
-   * Buffer is sorted ascending by as-of key. For left.t >= right.t,
-   * as-of condition is monotone: true for right.t <= left.t, then false.
-   * The last satisfying row is the closest match.
+   * Retains `rightRow` as the best match found so far.
+   *
+   * While the right-side buffer is held in memory, its iterator yields the distinct rows stored
+   * in the buffer and a match can be retained as is. Once the buffer is spill-backed the
+   * iterator re-points a single [[UnsafeRow]] on every `next()`, so the match has to be copied
+   * out before the scan advances. `needsCopy` is read once per scan by the callers.
    */
-  private def findBestBackwardForward(leftRow: InternalRow): InternalRow = {
+  private def retainMatch(rightRow: UnsafeRow, needsCopy: Boolean): UnsafeRow = {
+    if (needsCopy) rightRow.copy() else rightRow
+  }
+
+  /** Whether `cond` is TRUE on the current joined row. FALSE and NULL both fail. */
+  private def holds(cond: Expression): Boolean = {
+    val result = cond.eval(joinedRow)
+    result != null && result.asInstanceOf[Boolean]
+  }
+
+  /** Whether the residual ON condition, if any, holds on the current joined row. */
+  private def residualHolds: Boolean = boundResidualCond.forall(holds)
+
+  /**
+   * Backward joins keep the last row that passes the as-of and residual conditions.
+   * Once the as-of condition has been true, the scan stops at the first row that fails
+   * it, as later sorted rows cannot satisfy it.
+   */
+  private def findLastBackward(leftRow: InternalRow): InternalRow = {
     var bestMatch: InternalRow = null
     val iter = rightGroupBuffer.generateIterator()
+    val needsCopy = rightGroupBuffer.isSpillBacked
+    var asOfSeen = false
 
+    joinedRow.withLeft(leftRow)
     while (iter.hasNext) {
       val rightRow = iter.next()
-      joinedRow.withLeft(leftRow).withRight(rightRow)
+      joinedRow.withRight(rightRow)
 
-      val asOfSatisfied = boundAsOfCond.eval(joinedRow)
-      if (asOfSatisfied != null && asOfSatisfied.asInstanceOf[Boolean]) {
-        val residualSatisfied = boundResidualCond.forall { cond =>
-          val result = cond.eval(joinedRow)
-          result != null && result.asInstanceOf[Boolean]
-        }
-        if (residualSatisfied) {
+      if (holds(boundAsOfCond)) {
+        asOfSeen = true
+        if (residualHolds) {
           // Last match wins (closest right.t to left.t)
-          bestMatch = rightRow.copy()
+          bestMatch = retainMatch(rightRow, needsCopy)
         }
-      } else if (bestMatch != null) {
-        // as-of condition transitioned true -> false (monotone for Backward).
-        // No further rows can satisfy it.
+      } else if (asOfSeen) {
+        // At or past left.t, so no later row passes the as-of condition.
         return bestMatch
       }
     }
@@ -382,35 +389,60 @@ private[joins] class SortMergeAsOfJoinScanner(
   }
 
   /**
-   * Forward scan for Forward/Nearest joins: distance-based termination.
-   * Stop when distance starts increasing past the minimum found so far.
+   * Forward joins return the first row that passes the as-of and residual conditions.
+   * With a tolerance, if the scan enters the allowed range but finds no match, it
+   * stops at the first row beyond that range, as later sorted rows cannot qualify.
    */
-  private def findBestForwardNearest(leftRow: InternalRow): InternalRow = {
+  private def findFirstForward(leftRow: InternalRow): InternalRow = {
+    val iter = rightGroupBuffer.generateIterator()
+    val needsCopy = rightGroupBuffer.isSpillBacked
+    var asOfSeen = false
+
+    joinedRow.withLeft(leftRow)
+    while (iter.hasNext) {
+      val rightRow = iter.next()
+      joinedRow.withRight(rightRow)
+
+      if (holds(boundAsOfCond)) {
+        asOfSeen = true
+        if (residualHolds) {
+          return retainMatch(rightRow, needsCopy)
+        }
+      } else if (asOfSeen) {
+        // Past the tolerance bound, so no later row passes the as-of condition.
+        return null
+      }
+    }
+    null
+  }
+
+  /**
+   * Nearest joins: keeps the row with the smallest distance. The scan stops once the
+   * distance stops decreasing.
+   */
+  private def findNearest(leftRow: InternalRow): InternalRow = {
     var bestMatch: InternalRow = null
     var bestDistance: Any = null
     val iter = rightGroupBuffer.generateIterator()
+    val needsCopy = rightGroupBuffer.isSpillBacked
+    // Read the lazy vals once, not once per row.
+    val orderExpr = boundOrderExpr
+    val ordering = distanceOrdering
 
+    joinedRow.withLeft(leftRow)
     while (iter.hasNext) {
       val rightRow = iter.next()
-      joinedRow.withLeft(leftRow).withRight(rightRow)
+      joinedRow.withRight(rightRow)
 
-      val asOfSatisfied = boundAsOfCond.eval(joinedRow)
-      if (asOfSatisfied != null && asOfSatisfied.asInstanceOf[Boolean]) {
-        val residualSatisfied = boundResidualCond.forall { cond =>
-          val result = cond.eval(joinedRow)
-          result != null && result.asInstanceOf[Boolean]
-        }
-        if (residualSatisfied) {
-          val distance = boundOrderExpr.eval(joinedRow)
+      if (holds(boundAsOfCond)) {
+        if (residualHolds) {
+          val distance = orderExpr.eval(joinedRow)
           if (distance != null) {
-            if (bestMatch == null || distanceOrdering.lt(distance, bestDistance)) {
-              bestMatch = rightRow.copy()
+            if (bestMatch == null || ordering.lt(distance, bestDistance)) {
+              bestMatch = retainMatch(rightRow, needsCopy)
               bestDistance = distance
             } else {
-              // Distance is increasing past the minimum. For Forward,
-              // the as-of condition guarantees no closer row exists
-              // further right. For Nearest, distance is V-shaped so
-              // once past the minimum no later row can beat it.
+              // The distance stopped decreasing. It is V-shaped, so no later row is closer.
               return bestMatch
             }
           }

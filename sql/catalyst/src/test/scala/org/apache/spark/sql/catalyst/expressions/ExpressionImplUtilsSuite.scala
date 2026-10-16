@@ -403,6 +403,65 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
     // scalastyle:on nonascii
   }
 
+  // RFC 4231 test case 1 (HMAC-SHA-224/256/384/512) and RFC 2202 test case 1
+  // (HMAC-SHA-1 / HMAC-MD5): key is 0x0b repeated, data is "Hi There".
+  private val hmacKey20 = Array.fill[Byte](20)(0x0b)
+  private val hmacKey16 = Array.fill[Byte](16)(0x0b)
+  private val hmacData = "Hi There".getBytes("UTF-8")
+
+  private def hmacHex(key: Array[Byte], message: Array[Byte], algorithm: String): String = {
+    ExpressionImplUtils.hmac(key, message, UTF8String.fromString(algorithm))
+      .map(b => f"$b%02x").mkString
+  }
+
+  test("Hmac with supported algorithms") {
+    assert(hmacHex(hmacKey20, hmacData, "SHA-224") ==
+      "896fb1128abbdf196832107cd49df33f47b4b1169912ba4f53684b22")
+    assert(hmacHex(hmacKey20, hmacData, "SHA-256") ==
+      "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7")
+    assert(hmacHex(hmacKey20, hmacData, "SHA-384") ==
+      "afd03944d84895626b0825f4ab46907f15f9dadbe4101ec682aa034c7cebc59c" +
+      "faea9ea9076ede7f4af152e8b2fa9cb6")
+    assert(hmacHex(hmacKey20, hmacData, "SHA-512") ==
+      "87aa7cdea5ef619d4ff0b4241a1d6cb02379f4e2ce4ec2787ad0b30545e17cde" +
+      "daa833b7d6b8a702038b274eaea3f4e4be9d914eeb61f1702e696c203a126854")
+    assert(hmacHex(hmacKey20, hmacData, "SHA-1") ==
+      "b617318655057264e28bc0b6fb378c8ef146be00")
+    assert(hmacHex(hmacKey16, hmacData, "MD5") ==
+      "9294727a3638bb1c13f48ef8158bfc9d")
+  }
+
+  test("Hmac algorithm name is case-insensitive and accepts the compact form") {
+    val expected = "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7"
+    assert(hmacHex(hmacKey20, hmacData, "sha-256") == expected)
+    assert(hmacHex(hmacKey20, hmacData, "SHA256") == expected)
+  }
+
+  test("Hmac unsupported algorithm error") {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        ExpressionImplUtils.hmac(hmacKey20, hmacData, UTF8String.fromString("SHA-3"))
+      },
+      condition = "INVALID_PARAMETER_VALUE.HMAC_ALGORITHM",
+      parameters = Map(
+        "parameter" -> "`algorithm`",
+        "functionName" -> "`hmac`",
+        "algorithm" -> "'SHA-3'"))
+  }
+
+  test("Hmac empty key error") {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        ExpressionImplUtils.hmac(Array.empty[Byte], hmacData, UTF8String.fromString("SHA-256"))
+      },
+      condition = "INVALID_PARAMETER_VALUE.HMAC_CRYPTO_ERROR",
+      parameters = Map(
+        "parameter" -> "`key`",
+        "functionName" -> "`hmac`",
+        "detailMessage" -> ".*"),
+      matchPVals = true)
+  }
+
   test("TryValidate UTF8 string") {
     def tryValidateUTF8(str: UTF8String, expected: UTF8String): Unit = {
       assert(ExpressionImplUtils.tryValidateUTF8String(str) == expected)
@@ -419,6 +478,48 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
     tryValidateUTF8(UTF8String.fromBytes(Array[Byte](0x61)), UTF8String.fromString("a"))
     tryValidateUTF8(UTF8String.fromBytes(Array[Byte](0x80.toByte)), null)
     tryValidateUTF8(UTF8String.fromBytes(Array[Byte](0xFF.toByte)), null)
+  }
+
+  // These vectors follow Unicode Standard Annex #15's decomposition/composition algorithm and
+  // pin normalize() to Spark's bundled ICU4J/Unicode data (see icu4j.version in pom.xml): a
+  // future ICU4J upgrade that changed these mappings would fail this test, rather than silently
+  // changing query results.
+  test("Normalize with supported forms") {
+    def normalize(input: String, form: String): String =
+      ExpressionImplUtils.normalize(
+        UTF8String.fromString(input), UTF8String.fromString(form)).toString
+
+    // scalastyle:off nonascii
+    assert(normalize("\uFB01", "NFKC") == "fi")
+    assert(normalize("A\u030A", "NFC") == "\u00C5")
+    assert(normalize("\u00C5", "NFD") == "A\u030A")
+    assert(normalize("\uFB01", "nfkc") == "fi")
+    assert(normalize("\u00BD", "NFKD") == "1" + "\u2044" + "2")
+    assert(normalize("\u00BD", "NFD") == "\u00BD")
+    assert(normalize("\uD835\uDC00", "NFKC") == "A")
+    assert(normalize("", "NFC") == "")
+
+    // Combining marks with different combining classes are canonically reordered before
+    // composition (UAX #15 canonical ordering algorithm), so applying COMBINING DOT BELOW
+    // (U+0323) and COMBINING ACUTE ACCENT (U+0301) to the same base letter in either input
+    // order must normalize (NFC) to the same result.
+    val dotBelow = "\u0323"
+    val acute = "\u0301"
+    assert(normalize("a" + dotBelow + acute, "NFC") == normalize("a" + acute + dotBelow, "NFC"))
+    // scalastyle:on nonascii
+  }
+
+  test("Normalize invalid form error") {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        ExpressionImplUtils.normalize(
+          UTF8String.fromString("abc"), UTF8String.fromString("NFE"))
+      },
+      condition = "INVALID_PARAMETER_VALUE.NORMALIZE_FORM",
+      parameters = Map(
+        "parameter" -> "`form`",
+        "functionName" -> "`normalize`",
+        "form" -> "'NFE'"))
   }
 
 }

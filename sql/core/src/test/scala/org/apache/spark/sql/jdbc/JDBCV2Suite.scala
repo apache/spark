@@ -19,7 +19,9 @@ package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, DriverManager}
 import java.util.{HexFormat, Properties}
+import java.util.concurrent.ConcurrentLinkedQueue
 
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrLenStaticMagic
@@ -35,7 +37,7 @@ import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, Unbound
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.execution.{FormattedMode, RowDataSourceScanExec}
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCDatabaseMetadata, JDBCRDD}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCDatabaseMetadata, JDBCOptions, JDBCRDD}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.functions.{abs, acos, asin, atan, atan2, avg, ceil, coalesce, cos, cosh, cot, count, count_distinct, degrees, exp, floor, lit, log => logarithm, log10, not, pow, radians, round, signum, sin, sinh, sqrt, sum, tan, tanh, udf, when}
@@ -236,6 +238,12 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
       batchStmt.addBatch("INSERT INTO \"test\".\"strings_with_nulls\" VALUES ('a a a')")
       batchStmt.addBatch("INSERT INTO \"test\".\"strings_with_nulls\" VALUES (null)")
 
+      batchStmt.addBatch(
+        "CREATE TABLE \"test\".\"null_literal\" (s TEXT(32))")
+      batchStmt.addBatch("INSERT INTO \"test\".\"null_literal\" VALUES ('keep')")
+      batchStmt.addBatch("INSERT INTO \"test\".\"null_literal\" VALUES ('')")
+      batchStmt.addBatch("INSERT INTO \"test\".\"null_literal\" VALUES (null)")
+
       batchStmt.executeBatch()
 
       conn
@@ -257,6 +265,20 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     h2Dialect.clearFunctions()
     Utils.deleteRecursively(tempDir)
     super.afterAll()
+  }
+
+  test("COALESCE with Boolean cast pushes down") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable("h2.test.boolean_cast_coalesce") {
+        sql("CREATE TABLE h2.test.boolean_cast_coalesce (c INT)")
+        sql("INSERT INTO h2.test.boolean_cast_coalesce VALUES (0), (1)")
+        val df = sql("SELECT c FROM h2.test.boolean_cast_coalesce " +
+          "WHERE COALESCE(NOT CAST(c AS BOOLEAN), false)")
+        checkFiltersRemoved(df)
+        checkPushedInfo(df, "PushedFilters: [COALESCE(NOT (CAST(c AS boolean)), FALSE)]")
+        checkAnswer(df, Seq(Row(0)))
+      }
+    }
   }
 
   test("simple scan") {
@@ -1243,14 +1265,16 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     checkPushedInfo(df10, "PushedFilters: [ID IS NOT NULL, ID > 1]")
     checkAnswer(df10, Row("mary", 2))
 
+    // RAND(1) is non-deterministic, so (SPARK-58207) it is not pushed down and stays as a
+    // post-scan filter. RAND(1) < bonus is trivially true for the matching row (bonus = 1300 >= 1).
     val df11 = sql(
       """
         |SELECT * FROM h2.test.employee
         |WHERE GREATEST(bonus, 1100) > 1200 AND RAND(1) < bonus
         |""".stripMargin)
-    checkFiltersRemoved(df11)
+    checkFiltersRemoved(df11, removed = false)
     checkPushedInfo(df11, "PushedFilters: " +
-      "[BONUS IS NOT NULL, (GREATEST(BONUS, 1100.0)) > 1200.0, RAND(1) < BONUS]")
+      "[BONUS IS NOT NULL, (GREATEST(BONUS, 1100.0)) > 1200.0]")
     checkAnswer(df11, Row(2, "david", 10000, 1300, true))
 
     val df12 = sql(
@@ -1817,7 +1841,8 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
       Seq(Row("test", "address", false), Row("test", "people", false),
         Row("test", "empty_table", false), Row("test", "employee", false),
         Row("test", "item", false), Row("test", "dept", false),
-        Row("test", "person", false), Row("test", "view1", false), Row("test", "view2", false),
+        Row("test", "null_literal", false), Row("test", "person", false),
+        Row("test", "view1", false), Row("test", "view2", false),
         Row("test", "datetime", false), Row("test", "binary_tab", false),
         Row("test", "employee_bonus", false),
         Row("test", "strings_with_nulls", false)))
@@ -1887,6 +1912,23 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
 
       sql("SELECT 'bob' AS NAME, 4 AS ID").writeTo("h2.test.abc").overwrite(lit(true))
       checkAnswer(sql("SELECT name, id FROM h2.test.abc"), Row("bob", 4))
+    }
+  }
+
+  test("DataFrameWriterV2: truncate closes JDBC connections") {
+    JdbcDialects.unregisterDialect(h2Dialect)
+    try {
+      ConnectionTrackingH2Dialect.clearConnections()
+      JdbcDialects.registerDialect(ConnectionTrackingH2Dialect)
+      withTable("h2.test.abc") {
+        sql("CREATE TABLE h2.test.abc AS SELECT * FROM h2.test.people")
+        sql("SELECT 'bob' AS NAME, 4 AS ID").writeTo("h2.test.abc").overwrite(lit(true))
+        assert(ConnectionTrackingH2Dialect.hasTrackedConnections)
+        assert(ConnectionTrackingH2Dialect.allConnectionsClosed)
+      }
+    } finally {
+      JdbcDialects.unregisterDialect(ConnectionTrackingH2Dialect)
+      JdbcDialects.registerDialect(h2Dialect)
     }
   }
 
@@ -2513,7 +2555,7 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     checkAggregateRemoved(df3)
     checkPushedInfo(df3,
       """
-        |PushedAggregates: [AVG(CASE WHEN BONUS IS NOT NULL THEN BONUS ELSE null END)],
+        |PushedAggregates: [AVG(CASE WHEN BONUS IS NOT NULL THEN BONUS ELSE NULL END)],
         |PushedFilters: [DEPT IS NOT NULL, DEPT > 0],
         |PushedGroupByExpressions: [DEPT],
         |""".stripMargin.replaceAll("\n", " "))
@@ -2529,7 +2571,7 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     checkAggregateRemoved(df4)
     checkPushedInfo(df4,
       """
-        |PushedAggregates: [AVG(DISTINCT CASE WHEN BONUS IS NOT NULL THEN BONUS ELSE null END)],
+        |PushedAggregates: [AVG(DISTINCT CASE WHEN BONUS IS NOT NULL THEN BONUS ELSE NULL END)],
         |PushedFilters: [DEPT IS NOT NULL, DEPT > 0],
         |PushedGroupByExpressions: [DEPT],
         |""".stripMargin.replaceAll("\n", " "))
@@ -3171,5 +3213,39 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     )
 
     assertResult(expectedMetadata) { jdbcRdd.getDatabaseMetadata }
+  }
+
+  test("SPARK-58782: null literal in aggregate should render as NULL not 'null'") {
+    val df = sql("SELECT NULLIF(s, '') AS g, COUNT(*) FROM h2.test.null_literal GROUP BY g")
+
+    checkAggregateRemoved(df)
+    checkPushedInfo(df,
+      "PushedAggregates: [COUNT(*)]",
+      "PushedGroupByExpressions: [CASE WHEN S = '' THEN NULL ELSE S END]")
+
+    // The '' row should collapse into the NULL group, not create a separate 'null' string group
+    checkAnswer(df, Seq(Row("keep", 1), Row(null, 2)))
+  }
+
+}
+
+private object ConnectionTrackingH2Dialect extends JdbcDialect {
+  private val connections = new ConcurrentLinkedQueue[Connection]()
+
+  def clearConnections(): Unit = connections.clear()
+
+  def hasTrackedConnections: Boolean = !connections.isEmpty
+
+  def allConnectionsClosed: Boolean = connections.asScala.forall(_.isClosed)
+
+  override def canHandle(url: String): Boolean = H2Dialect().canHandle(url)
+
+  override def createConnectionFactory(options: JDBCOptions): Int => Connection = {
+    val connectionFactory = H2Dialect().createConnectionFactory(options)
+    (partitionId: Int) => {
+      val connection = connectionFactory(partitionId)
+      connections.add(connection)
+      connection
+    }
   }
 }

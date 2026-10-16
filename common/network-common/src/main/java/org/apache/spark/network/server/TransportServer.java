@@ -182,4 +182,8 @@ public class TransportServer implements Closeable {
   public Counter getRegisteredConnections() {
     return context.getRegisteredConnections();
   }
+
+  public ChannelFuture channelFuture() {
+    return channelFuture;
+  }
 }

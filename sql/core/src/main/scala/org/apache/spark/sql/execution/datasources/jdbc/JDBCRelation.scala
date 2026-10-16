@@ -27,14 +27,14 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp, stringToTimestampWithoutTimeZone}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.types.{DataType, DateType, NumericType, StructType, TimestampType}
+import org.apache.spark.sql.types.{DataType, DateType, NumericType, StructType, TimestampNTZType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -93,8 +93,10 @@ private[sql] object JDBCRelation extends Logging {
         val (column, columnType) = verifyAndGetNormalizedPartitionColumn(
           schema, partitionColumn.get, resolver, jdbcOptions)
 
-        val lowerBoundValue = toInternalBoundValue(lowerBound.get, columnType, timeZoneId)
-        val upperBoundValue = toInternalBoundValue(upperBound.get, columnType, timeZoneId)
+        val lowerBoundValue = toInternalBoundValue(
+          lowerBound.get, columnType, timeZoneId, JDBC_LOWER_BOUND)
+        val upperBoundValue = toInternalBoundValue(
+          upperBound.get, columnType, timeZoneId, JDBC_UPPER_BOUND)
         JDBCPartitioningInfo(
           column, columnType, lowerBoundValue, upperBoundValue, numPartitions.get)
       }
@@ -188,7 +190,7 @@ private[sql] object JDBCRelation extends Logging {
         columnName, schema.simpleString(maxNumToStringFields))
     }
     column.dataType match {
-      case _: NumericType | DateType | TimestampType =>
+      case _: NumericType | DateType | TimestampType | TimestampNTZType =>
       case _ =>
         throw QueryCompilationErrors.invalidPartitionColumnTypeError(column)
     }
@@ -198,17 +200,18 @@ private[sql] object JDBCRelation extends Logging {
   private def toInternalBoundValue(
       value: String,
       columnType: DataType,
-      timeZoneId: String): Long = {
+      timeZoneId: String,
+      optionName: String): Long = {
     def parse[T](f: UTF8String => Option[T]): T = {
       f(UTF8String.fromString(value)).getOrElse {
-        throw new IllegalArgumentException(
-          s"Cannot parse the bound value $value as ${columnType.catalogString}")
+        throw QueryCompilationErrors.invalidJdbcPartitionBoundError(optionName, value, columnType)
       }
     }
     columnType match {
       case _: NumericType => value.toLong
       case DateType => parse(stringToDate).toLong
       case TimestampType => parse(stringToTimestamp(_, getZoneId(timeZoneId)))
+      case TimestampNTZType => parse(stringToTimestampWithoutTimeZone(_, allowTimeZone = false))
     }
   }
 
@@ -224,12 +227,17 @@ private[sql] object JDBCRelation extends Logging {
           val timestampFormatter = TimestampFormatter.getFractionFormatter(
             DateTimeUtils.getZoneId(timeZoneId))
           timestampFormatter.format(value)
+        case TimestampNTZType =>
+          // NTZ micros are zoneless wall-clock values; format in UTC so no zone shift is applied.
+          val timestampFormatter = TimestampFormatter.getFractionFormatter(
+            DateTimeUtils.getZoneId("UTC"))
+          timestampFormatter.format(value)
       }
       s"'$dateTimeStr'"
     }
     columnType match {
       case _: NumericType => value.toString
-      case DateType | TimestampType => dateTimeToString()
+      case DateType | TimestampType | TimestampNTZType => dateTimeToString()
     }
   }
 

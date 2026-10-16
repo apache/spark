@@ -14,33 +14,33 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import contextlib
+import functools
+import os
 import shutil
 import tempfile
-import os
-import functools
 import unittest
 import uuid
-import contextlib
 from typing import Callable, Optional
 
 from pyspark import Row, SparkConf
 from pyspark.loose_version import LooseVersion
-from pyspark.util import is_remote_only
-from pyspark.testing.utils import (
-    have_pandas,
-    connect_requirement_message,
-    should_test_connect,
-    PySparkErrorTestUtils,
-)
-from pyspark.testing.utils import PySparkBaseTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.sql.session import SparkSession as PySparkSession
+from pyspark.testing.sqlutils import SQLTestUtils
+from pyspark.testing.utils import (
+    PySparkBaseTestCase,
+    PySparkErrorTestUtils,
+    connect_requirement_message,
+    have_pandas,
+    should_test_connect,
+)
+from pyspark.util import is_remote_only
 
 if should_test_connect:
-    from pyspark.sql.connect.dataframe import DataFrame
-    from pyspark.sql.connect.plan import Read, Range, SQL, LogicalPlan
-    from pyspark.sql.connect.session import SparkSession
     import pyspark.sql.connect.proto as pb2
+    from pyspark.sql.connect.dataframe import DataFrame
+    from pyspark.sql.connect.plan import SQL, LogicalPlan, Range, Read
+    from pyspark.sql.connect.session import SparkSession
 
 
 class MockRemoteSession:

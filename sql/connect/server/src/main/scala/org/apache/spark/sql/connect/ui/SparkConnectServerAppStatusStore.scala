@@ -31,19 +31,30 @@ class SparkConnectServerAppStatusStore(store: KVStore) {
     KVUtils.viewToSeq(store.view(classOf[SessionInfo]))
   }
 
+  def getSessionList(offset: Int, length: Int): Seq[SessionInfo] = {
+    KVUtils.viewToSeq(store.view(classOf[SessionInfo]).skip(offset).max(length))
+  }
+
   def getExecutionList: Seq[ExecutionInfo] = {
     KVUtils.viewToSeq(store.view(classOf[ExecutionInfo]))
+  }
+
+  def getExecutionList(offset: Int, length: Int): Seq[ExecutionInfo] = {
+    KVUtils.viewToSeq(store.view(classOf[ExecutionInfo]).skip(offset).max(length))
   }
 
   def getOnlineSessionNum: Int = {
     KVUtils.count(store.view(classOf[SessionInfo]))(_.finishTimestamp == 0)
   }
 
-  def getSession(sessionId: String): Option[SessionInfo] = {
+  def getSession(userId: String, sessionId: String): Option[SessionInfo] = {
     try {
-      Some(store.read(classOf[SessionInfo], sessionId))
+      Some(store.read(classOf[SessionInfo], SessionInfo.uniqueId(userId, sessionId)))
     } catch {
-      case _: NoSuchElementException => None
+      case _: NoSuchElementException =>
+        // Fall back for legacy stores keyed on sessionId alone (e.g. a History Server disk store
+        // from an older Spark). Collapsed same-UUID rows cannot be recovered.
+        getSessionList.find(s => s.userId == userId && s.sessionId == sessionId)
     }
   }
 
@@ -73,12 +84,17 @@ class SparkConnectServerAppStatusStore(store: KVStore) {
   }
 }
 
-private[connect] class SessionInfo(
-    @KVIndexParam val sessionId: String,
+private[spark] class SessionInfo(
+    val sessionId: String,
     val startTimestamp: Long,
     val userId: String,
     val finishTimestamp: Long,
     val totalExecution: Long) {
+  // Natural key. A session is identified by (userId, sessionId), since two users may share the
+  // same session UUID; keying on sessionId alone would merge them into one record.
+  @KVIndexParam
+  def uniqueId: String = SessionInfo.uniqueId(userId, sessionId)
+
   @JsonIgnore @KVIndex("finishTime")
   private def finishTimeIndex: Long = if (finishTimestamp > 0L) finishTimestamp else -1L
   def totalTime: Long = {
@@ -90,7 +106,12 @@ private[connect] class SessionInfo(
   }
 }
 
-private[connect] class ExecutionInfo(
+private[connect] object SessionInfo {
+  // sessionId is a UUID, so joining with '/' yields a key that is unique per (userId, sessionId).
+  def uniqueId(userId: String, sessionId: String): String = s"$userId/$sessionId"
+}
+
+private[spark] class ExecutionInfo(
     @KVIndexParam val jobTag: String,
     val statement: String,
     val sessionId: String,
@@ -125,7 +146,7 @@ private[connect] class ExecutionInfo(
   }
 }
 
-private[connect] object ExecutionState extends Enumeration {
+private[spark] object ExecutionState extends Enumeration {
   val STARTED, COMPILED, READY, CANCELED, FAILED, FINISHED, CLOSED = Value
   type ExecutionState = Value
 }

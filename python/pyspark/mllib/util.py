@@ -17,25 +17,25 @@
 
 import sys
 from functools import reduce
+from typing import TYPE_CHECKING, Generic, Iterable, List, Optional, Tuple, Type, TypeVar, cast
 
 import numpy as np
 
 from pyspark import since
-from pyspark.mllib.common import callMLlibFunc, inherit_doc
-from pyspark.mllib.linalg import Vectors, SparseVector, _convert_to_vector
-from pyspark.sql import DataFrame
-from typing import Generic, Iterable, List, Optional, Tuple, Type, TypeVar, cast, TYPE_CHECKING
 from pyspark.core.context import SparkContext
-from pyspark.mllib.linalg import Vector
 from pyspark.core.rdd import RDD
+from pyspark.mllib.common import callMLlibFunc, inherit_doc
+from pyspark.mllib.linalg import SparseVector, Vector, Vectors, _convert_to_vector
+from pyspark.sql import DataFrame
 
 T = TypeVar("T")
 L = TypeVar("L", bound="Loader")
 JL = TypeVar("JL", bound="JavaLoader")
 
 if TYPE_CHECKING:
-    from pyspark.mllib._typing import VectorLike
     from py4j.java_gateway import JavaObject
+
+    from pyspark.mllib._typing import VectorLike
     from pyspark.mllib.regression import LabeledPoint
 
 
@@ -636,6 +636,7 @@ class LinearDataGenerator:
 
 def _test() -> None:
     import doctest
+
     from pyspark.sql import SparkSession
 
     globs = globals().copy()

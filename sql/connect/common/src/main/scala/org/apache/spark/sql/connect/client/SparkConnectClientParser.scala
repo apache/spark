@@ -42,6 +42,10 @@ private[sql] object SparkConnectClientParser {
        |   --user_agent USER_AGENT      The User-Agent Client information (only intended for logging purposes by the server).
        |   --session_id SESSION_ID      Session Id of the user connecting.
        |   --grpc_max_message_size SIZE Maximum message size allowed for gRPC messages in bytes.
+       |   --grpc_keepalive_enabled BOOL Whether to enable gRPC/HTTP2 keepalive PINGs.
+       |   --grpc_keepalive_time_ms MS  Idle time before sending a gRPC/HTTP2 keepalive PING.
+       |   --grpc_keepalive_timeout_ms MS Time to wait for a keepalive PING ack before failing.
+       |   --grpc_keepalive_without_calls BOOL Whether to keep sending keepalive PINGs when idle.
        |   --option KEY=VALUE           Key-value pair that is used to further configure the session.
      """.stripMargin
   // scalastyle:on line.size.limit
@@ -92,6 +96,18 @@ private[sql] object SparkConnectClientParser {
       case "--grpc_max_message_size" :: tail =>
         val (value, remainder) = extract("--grpc_max_message_size", tail)
         parse(remainder, builder.grpcMaxMessageSize(value.toInt))
+      case "--grpc_keepalive_enabled" :: tail =>
+        val (value, remainder) = extract("--grpc_keepalive_enabled", tail)
+        parse(remainder, builder.grpcKeepAliveEnabled(value.toBoolean))
+      case "--grpc_keepalive_time_ms" :: tail =>
+        val (value, remainder) = extract("--grpc_keepalive_time_ms", tail)
+        parse(remainder, builder.grpcKeepAliveTimeMs(value.toLong))
+      case "--grpc_keepalive_timeout_ms" :: tail =>
+        val (value, remainder) = extract("--grpc_keepalive_timeout_ms", tail)
+        parse(remainder, builder.grpcKeepAliveTimeoutMs(value.toLong))
+      case "--grpc_keepalive_without_calls" :: tail =>
+        val (value, remainder) = extract("--grpc_keepalive_without_calls", tail)
+        parse(remainder, builder.grpcKeepAliveWithoutCalls(value.toBoolean))
       case unsupported :: _ =>
         throw new IllegalArgumentException(s"$unsupported is an unsupported argument.")
     }

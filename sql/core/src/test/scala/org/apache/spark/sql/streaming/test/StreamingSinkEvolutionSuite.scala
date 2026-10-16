@@ -19,12 +19,13 @@ package org.apache.spark.sql.streaming.test
 
 import org.scalatest.{BeforeAndAfterEach, Tag}
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, CommitMetadataV3}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+import org.apache.spark.sql.execution.streaming.state.HDFSBackedStateStoreProvider
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.StreamTest
+import org.apache.spark.sql.streaming.{StreamingQuery, StreamTest, Trigger}
 import org.apache.spark.util.Utils
 
 /**
@@ -145,6 +146,23 @@ class StreamingSinkEvolutionSuite extends StreamTest with BeforeAndAfterEach {
       q.processAllAvailable()
       q.stop()
     }
+  }
+
+  testWithSinkEvolution("fail with continuous processing enabled") {
+    val input = MemoryStream[Int]
+    input.addData(1, 2, 3)
+    // The sink is intentionally left unnamed: the combination is rejected before the execution is
+    // constructed, so the error does not depend on whether name() is set.
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        input.toDF().writeStream
+          .format("noop")
+          .trigger(Trigger.Continuous(1000))
+          .option("checkpointLocation", newMetadataDir)
+          .start()
+      },
+      condition = "STREAMING_QUERY_EVOLUTION_ERROR.CONTINUOUS_PROCESSING_NOT_SUPPORTED",
+      parameters = Map.empty)
   }
 
   testWithSinkEvolution("named sink succeeds with sink evolution enabled") {
@@ -294,6 +312,40 @@ class StreamingSinkEvolutionSuite extends StreamTest with BeforeAndAfterEach {
     val v3 = commitLog.getLatest().get._2.asInstanceOf[CommitMetadataV3]
     assert(v3.activeSinkMetadataInfo.sinkName === "upgraded_sink")
     assert(v3.sinkMetadataMap.size === 1)
+  }
+
+  testWithSinkEvolution("restart V3 commit log with state checkpoint format V1") {
+    val checkpointDir = newMetadataDir
+    val input = MemoryStream[Int]
+
+    withSQLConf(
+        SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "1",
+        SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+          classOf[HDFSBackedStateStoreProvider].getName) {
+      def startQuery(): StreamingQuery = input.toDF()
+        .groupBy("value")
+        .count()
+        .writeStream
+        .format("noop")
+        .outputMode("update")
+        .name("stateful_sink")
+        .option("checkpointLocation", checkpointDir)
+        .start()
+
+      input.addData(1)
+      val firstRun = startQuery()
+      firstRun.processAllAvailable()
+      firstRun.stop()
+
+      input.addData(2)
+      val restarted = startQuery()
+      restarted.processAllAvailable()
+      restarted.stop()
+    }
+
+    val commitLog = new CommitLog(spark, s"$checkpointDir/commits", readOnly = true)
+    val v3 = commitLog.getLatest().get._2.asInstanceOf[CommitMetadataV3]
+    assert(v3.stateUniqueIds.isEmpty)
   }
 
   // ==============

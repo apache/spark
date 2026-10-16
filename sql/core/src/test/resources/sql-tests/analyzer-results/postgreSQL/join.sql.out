@@ -3517,7 +3517,7 @@ Project [x#x, f1#x, y#x]
 +- LateralJoin lateral-subquery#x [x#x], Inner
    :  +- SubqueryAlias ss2
    :     +- Project [x#x AS y#x]
-   :        +- Project [outer(x#x)]
+   :        +- Project [outer(x#x) AS x#x]
    :           +- OneRowRelation
    +- Join Inner, (x#x = cast(f1#x as double))
       :- SubqueryAlias ss1
@@ -3547,7 +3547,7 @@ Project [x#x, f1#x, y#x]
 +- LateralJoin lateral-subquery#x [x#x], Inner
    :  +- SubqueryAlias ss2
    :     +- Project [x#x AS y#x]
-   :        +- Project [outer(x#x)]
+   :        +- Project [outer(x#x) AS x#x]
    :           +- OneRowRelation
    +- SubqueryAlias j
       +- Join Inner, (x#x = cast(f1#x as double))
@@ -3579,7 +3579,7 @@ Project [q1#xL, q2#xL, q1#xL, q2#xL, xq1#xL, yq1#xL, yq2#xL]
 +- LateralJoin lateral-subquery#x [q1#xL && q1#xL && q2#xL], Inner
    :  +- SubqueryAlias v
    :     +- Project [q1#xL AS xq1#xL, q1#xL AS yq1#xL, q2#xL AS yq2#xL]
-   :        +- Project [outer(q1#xL), outer(q1#xL), outer(q2#xL)]
+   :        +- Project [outer(q1#xL) AS q1#xL, outer(q1#xL) AS q1#xL, outer(q2#xL) AS q2#xL]
    :           +- OneRowRelation
    +- Join LeftOuter, (q2#xL = q1#xL)
       :- SubqueryAlias x
@@ -3610,7 +3610,7 @@ Project [q1#xL, q2#xL]
 +- LateralJoin lateral-subquery#x [q1#xL && q1#xL && q2#xL], Inner
    :  +- SubqueryAlias v
    :     +- Project [q1#xL AS xq1#xL, q1#xL AS yq1#xL, q2#xL AS yq2#xL]
-   :        +- Project [outer(q1#xL), outer(q1#xL), outer(q2#xL)]
+   :        +- Project [outer(q1#xL) AS q1#xL, outer(q1#xL) AS q1#xL, outer(q2#xL) AS q2#xL]
    :           +- OneRowRelation
    +- Join LeftOuter, (q2#xL = q1#xL)
       :- SubqueryAlias x

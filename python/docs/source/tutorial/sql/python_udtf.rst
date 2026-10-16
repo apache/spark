@@ -421,7 +421,8 @@ Python UDTFs can be registered and used in SQL queries.
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/udtf.py
     :language: python
-    :lines: 82-116
+    :start-after: $example on:python_udtf_registration$
+    :end-before: $example off:python_udtf_registration$
     :dedent: 4
 
 
@@ -440,7 +441,8 @@ when declaring the UDTF.
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/udtf.py
     :language: python
-    :lines: 121-126
+    :start-after: $example on:python_udtf_arrow$
+    :end-before: $example off:python_udtf_arrow$
     :dedent: 4
 
 
@@ -454,7 +456,8 @@ Here is a simple example of a UDTF class implementation:
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/udtf.py
     :language: python
-    :lines: 36-40
+    :start-after: $example on:python_udtf_simple_class$
+    :end-before: $example off:python_udtf_simple_class$
     :dedent: 4
 
 
@@ -462,7 +465,8 @@ To make use of the UDTF, you'll first need to instantiate it using the ``@udtf``
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/udtf.py
     :language: python
-    :lines: 42-55
+    :start-after: $example on:python_udtf_simple_udtf$
+    :end-before: $example off:python_udtf_simple_udtf$
     :dedent: 4
 
 
@@ -470,21 +474,24 @@ An alternative way to create a UDTF is to use the :func:`udtf` function:
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/udtf.py
     :language: python
-    :lines: 60-77
+    :start-after: $example on:python_udtf_decorator$
+    :end-before: $example off:python_udtf_decorator$
     :dedent: 4
 
 Here is a Python UDTF that expands date ranges into individual dates:
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/udtf.py
     :language: python
-    :lines: 131-152
+    :start-after: $example on:python_udtf_date_expander$
+    :end-before: $example off:python_udtf_date_expander$
     :dedent: 4
 
 Here is a Python UDTF with ``__init__`` and ``terminate``:
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/udtf.py
     :language: python
-    :lines: 157-186
+    :start-after: $example on:python_udtf_terminate$
+    :end-before: $example off:python_udtf_terminate$
     :dedent: 4
 
 
@@ -510,7 +517,8 @@ For example:
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/udtf.py
     :language: python
-    :lines: 191-210
+    :start-after: $example on:python_udtf_table_argument$
+    :end-before: $example off:python_udtf_table_argument$
     :dedent: 4
 
 When calling a UDTF with a table argument, any SQL query can request that the input table be
@@ -535,7 +543,8 @@ For example:
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/udtf.py
     :language: python
-    :lines: 215-287
+    :start-after: $example on:python_udtf_table_argument_with_partitioning$
+    :end-before: $example off:python_udtf_table_argument_with_partitioning$
     :dedent: 4
 
 Note that in for each of these ways of partitioning the input table when calling UDTFs in SQL

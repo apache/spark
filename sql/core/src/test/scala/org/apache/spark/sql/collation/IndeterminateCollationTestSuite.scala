@@ -259,4 +259,55 @@ class IndeterminateCollationTestSuite extends SharedSparkSession {
       sql(s"SELECT c1 || c2 as col FROM $testTableName").show()
     }
   }
+
+  // SPARK-60003: a Default-strength collated CAST over a non-string child
+  // (TRY_CAST(date AS STRING COLLATE UNICODE_CI_AI)) in a CASE next to a default literal
+  // must not poison an outer concat whose other operand is already UNICODE_CI_AI.
+  test("collated cast of non-string in CASE concat stays determinate") {
+    withTable(testTableName, "tst_cast_collation_out") {
+      sql(
+        s"""
+           |CREATE TABLE $testTableName (
+           |  a STRING COLLATE UNICODE_CI_AI,
+           |  b DATE
+           |) USING $dataSource
+           |""".stripMargin)
+      sql(s"INSERT INTO $testTableName VALUES ('x', DATE'2020-01-01')")
+
+      checkAnswer(
+        sql(
+          s"""SELECT collation(
+             |  a || 'X' ||
+             |  (CASE WHEN b IS NULL THEN 'XXXXXX'
+             |        ELSE TRY_CAST(b AS STRING COLLATE UNICODE_CI_AI) END) || 'X')
+             |FROM $testTableName""".stripMargin),
+        Row("SYSTEM.BUILTIN.UNICODE_CI_AI"))
+
+      sql(
+        s"""CREATE TABLE tst_cast_collation_out USING $dataSource AS SELECT
+           |  a || 'X' ||
+           |  (CASE WHEN b IS NULL THEN 'XXXXXX'
+           |        ELSE TRY_CAST(b AS STRING COLLATE UNICODE_CI_AI) END) || 'X' AS o
+           |FROM $testTableName""".stripMargin)
+    }
+  }
+
+  // SPARK-58798 did not change this: two Default non-UTF8 collated CASTs still conflict.
+  test("two Default non-UTF8 collated casts stay indeterminate") {
+    withTable(testTableName, "tst_two_default_casts") {
+      sql(
+        s"""
+           |CREATE TABLE $testTableName (
+           |  a STRING COLLATE UNICODE_CI_AI,
+           |  b DATE
+           |) USING $dataSource
+           |""".stripMargin)
+      assertIndeterminateCollationInSchemaError("o")(
+        sql(
+          s"""CREATE TABLE tst_two_default_casts USING $dataSource AS SELECT
+             |  TRY_CAST(b AS STRING COLLATE UNICODE_CI_AI) ||
+             |  TRY_CAST(b AS STRING COLLATE UTF8_LCASE) AS o
+             |FROM $testTableName""".stripMargin))
+    }
+  }
 }

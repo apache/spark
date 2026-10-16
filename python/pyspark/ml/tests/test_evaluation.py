@@ -19,12 +19,12 @@ import tempfile
 import numpy as np
 
 from pyspark.ml.evaluation import (
-    ClusteringEvaluator,
-    RegressionEvaluator,
     BinaryClassificationEvaluator,
+    ClusteringEvaluator,
     MulticlassClassificationEvaluator,
     MultilabelClassificationEvaluator,
     RankingEvaluator,
+    RegressionEvaluator,
 )
 from pyspark.ml.linalg import Vectors
 from pyspark.sql import Row

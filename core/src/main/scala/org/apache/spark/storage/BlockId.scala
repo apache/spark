@@ -263,7 +263,11 @@ case class CacheId(sessionUUID: String, hash: String) extends BlockId {
 
 @DeveloperApi
 object BlockId {
-  val RDD = "rdd_([0-9]+)_([0-9]+)".r
+  // Safety net: newRddId() fails fast before minting negative ids, but names like
+  // rdd_-1330910599_36 may still appear from blocks cached before upgrade or from
+  // tests. Accept an optional minus so BlockId.apply does not throw
+  // UnrecognizedBlockId for those names.
+  val RDD = "rdd_(-?[0-9]+)_([0-9]+)".r
   val SHUFFLE = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)".r
   val SHUFFLE_BATCH = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+)".r
   val SHUFFLE_DATA = "shuffle_([0-9]+)_([0-9]+)_([0-9]+).data".r

@@ -304,7 +304,7 @@ trait Row extends Serializable {
   def getDecimal(i: Int): java.math.BigDecimal = getAs[java.math.BigDecimal](i)
 
   /**
-   * Returns the value at position i of date type as org.apache.spark.sql.types.Geometry.
+   * Returns the value at position i of geometry type as org.apache.spark.sql.types.Geometry.
    *
    * @throws ClassCastException
    *   when data type does not match.
@@ -313,7 +313,7 @@ trait Row extends Serializable {
     getAs[org.apache.spark.sql.types.Geometry](i)
 
   /**
-   * Returns the value at position i of date type as org.apache.spark.sql.types.Geography.
+   * Returns the value at position i of geography type as org.apache.spark.sql.types.Geography.
    *
    * @throws ClassCastException
    *   when data type does not match.
@@ -338,7 +338,7 @@ trait Row extends Serializable {
   def getLocalDate(i: Int): java.time.LocalDate = getAs[java.time.LocalDate](i)
 
   /**
-   * Returns the value at position i of date type as java.sql.Timestamp.
+   * Returns the value at position i of timestamp type as java.sql.Timestamp.
    *
    * @throws ClassCastException
    *   when data type does not match.
@@ -346,7 +346,7 @@ trait Row extends Serializable {
   def getTimestamp(i: Int): java.sql.Timestamp = getAs[java.sql.Timestamp](i)
 
   /**
-   * Returns the value at position i of date type as java.time.Instant.
+   * Returns the value at position i of timestamp type as java.time.Instant.
    *
    * @throws ClassCastException
    *   when data type does not match.
@@ -389,7 +389,7 @@ trait Row extends Serializable {
   def getMap[K, V](i: Int): scala.collection.Map[K, V] = getAs[Map[K, V]](i)
 
   /**
-   * Returns the value at position i of array type as a `java.util.Map`.
+   * Returns the value at position i of map type as a `java.util.Map`.
    *
    * @throws ClassCastException
    *   when data type does not match.

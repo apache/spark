@@ -21,16 +21,20 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.analysis.ChangelogCacheKey
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog, V2TableUtil}
 import org.apache.spark.sql.connector.catalog.CatalogV2Util
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.util.SchemaValidationMode
 import org.apache.spark.sql.util.SchemaValidationMode.ALLOW_NEW_FIELDS
 import org.apache.spark.sql.util.SchemaValidationMode.PROHIBIT_CHANGES
 
 private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
+  private type CurrentTableKey = (TableCatalog, Identifier, CaseInsensitiveStringMap)
+
   /**
    * Refreshes table metadata for tables in the plan.
    *
@@ -40,8 +44,8 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
    *  - Data columns: Verifies captured columns align with the current schema
    *  - Metadata columns: Checks metadata column consistency
    *
-   * Tables with time travel specifications are skipped as they reference a specific point
-   * in time and don't have to be refreshed.
+   * Tables with time travel specifications and changelogs with an explicit ending bound are
+   * skipped because they reference captured historical data.
    *
    * Schema validation mode depends on the underlying plan. Commands, for instance,
    * prohibit any schema changes while queries permit adding columns.
@@ -67,8 +71,8 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
    *  - Data columns: Verifies captured columns align with the current schema
    *  - Metadata columns: Checks metadata column consistency
    *
-   * Tables with time travel specifications are skipped as they reference a specific point
-   * in time and don't have to be refreshed.
+   * Tables with time travel specifications and changelogs with an explicit ending bound are
+   * skipped because they reference captured historical data.
    *
    * @param spark the currently active Spark session
    * @param plan the logical plan to refresh
@@ -81,25 +85,44 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
       plan: LogicalPlan,
       versionedOnly: Boolean,
       schemaValidationMode: SchemaValidationMode): LogicalPlan = {
-    val currentTables = mutable.HashMap.empty[(TableCatalog, Identifier), Table]
+    val currentTables = mutable.HashMap.empty[CurrentTableKey, Table]
+    val currentChangelogs = mutable.HashMap.empty[ChangelogCacheKey, ChangelogTable]
     plan transformWithSubqueries {
+      case r @ DataSourceV2Relation(changelog: ChangelogTable, _, _, _, _, _)
+          if changelog.isBounded => r
       case r @ ExtractV2CatalogAndIdentifier(catalog, ident)
           if (r.isVersioned || !versionedOnly) && r.timeTravelSpec.isEmpty =>
-        val currentTable = currentTables.getOrElseUpdate((catalog, ident), {
-          val tableName = V2TableUtil.toQualifiedName(catalog, ident)
-          lookupCachedRelation(spark, catalog, ident, r.table) match {
-            case Some(cached) =>
-              logDebug(s"Refreshing table metadata for $tableName using shared relation cache")
-              cached.table
-            case None =>
-              logDebug(s"Refreshing table metadata for $tableName using catalog")
-              catalog.loadTable(ident)
-          }
-        })
+        val currentTable = r.table match {
+          case captured: ChangelogTable =>
+            val stateOptions = CatalogV2Util.extractChangelogStateOptions(catalog, r.options)
+            val key = ChangelogCacheKey(catalog, ident, captured.changelogContext, stateOptions)
+            val current = currentChangelogs.getOrElseUpdate(key,
+              ChangelogTable.load(catalog, ident, captured.changelogContext, stateOptions))
+            captured.validateRefresh(current)
+            current.copy(resolved = captured.resolved)
+          case _ =>
+            val stateOptions = CatalogV2Util.extractTableStateOptions(catalog, r.options)
+            currentTables.getOrElseUpdate((catalog, ident, stateOptions), {
+              val tableName = V2TableUtil.toQualifiedName(catalog, ident)
+              lookupCachedRelation(spark, catalog, ident, r.table, stateOptions) match {
+                case Some(cached) =>
+                  logDebug(s"Refreshing table metadata for $tableName using shared relation cache")
+                  cached.table
+                case _ =>
+                  logDebug(s"Refreshing table metadata for $tableName using catalog")
+                  CatalogV2Util.getTableWithStateOptions(catalog, ident, stateOptions)
+              }
+            })
+        }
         validateTableIdentity(currentTable, r)
         validateDataColumns(currentTable, r, schemaValidationMode)
         validateMetadataColumns(currentTable, r, schemaValidationMode)
-        r.copy(table = currentTable)
+        val refreshed = r.copy(table = currentTable)
+        if (schemaValidationMode == ALLOW_NEW_FIELDS) {
+          AnalyzedSchemaProjection.rebindToAnalyzedSchema(refreshed)
+        } else {
+          refreshed
+        }
     }
   }
 
@@ -107,8 +130,10 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
       spark: SparkSession,
       catalog: TableCatalog,
       ident: Identifier,
-      table: Table): Option[DataSourceV2Relation] = {
-    CatalogV2Util.lookupCachedRelation(spark.sharedState.relationCache, catalog, ident, table, conf)
+      table: Table,
+      stateOptions: CaseInsensitiveStringMap): Option[DataSourceV2Relation] = {
+    CatalogV2Util.lookupCachedRelationWithStateOptions(
+      spark.sharedState.relationCache, catalog, ident, table, stateOptions, conf)
   }
 
   // it is not safe to allow any schema changes in commands (e.g. CTAS, RTAS, MERGE)
@@ -117,7 +142,7 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
   }
 
   private def containsCommand(plan: LogicalPlan): Boolean = {
-    plan.find(_.isInstanceOf[Command]).isDefined
+    plan.exists(_.isInstanceOf[Command])
   }
 
   private def validateTableIdentity(currentTable: Table, relation: DataSourceV2Relation): Unit = {

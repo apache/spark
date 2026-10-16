@@ -38,7 +38,7 @@ import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connect.IllegalStateErrors
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.config.Connect
-import org.apache.spark.sql.connect.ml.MLCache
+import org.apache.spark.sql.connect.ml.{MLCache, MLCacheStatus}
 import org.apache.spark.sql.connect.pipelines.DataflowGraphRegistry
 import org.apache.spark.sql.connect.planner.PythonStreamingQueryListener
 import org.apache.spark.sql.connect.planner.StreamingForeachBatchHelper
@@ -131,8 +131,22 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   private[spark] lazy val dataFrameCache: ConcurrentMap[String, DataFrame] =
     new ConcurrentHashMap()
 
+  // Mapping from streaming query ID to the active cached DataFrame ID for that query.
+  // Used for foreachBatch to detect stale DataFrames from previous batches.
+  private[connect] lazy val dataFrameQueryIndex: ConcurrentMap[String, String] =
+    new ConcurrentHashMap()
+
   // ML model cache
-  private[connect] lazy val mlCache = new MLCache(this)
+  @volatile private var mlCacheInitialized = false
+  private[connect] lazy val mlCache = {
+    val cache = new MLCache(this)
+    mlCacheInitialized = true
+    cache
+  }
+
+  private[connect] def getMLCacheStatus: Option[MLCacheStatus] = {
+    if (mlCacheInitialized) Some(mlCache.getStatus) else None
+  }
 
   // Mapping from id to StreamingQueryListener. Used for methods like removeListener() in
   // StreamingQueryManager.

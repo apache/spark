@@ -150,7 +150,7 @@ final class VectorSlicer @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
   override def transformSchema(schema: StructType): StructType = {
     require($(indices).length > 0 || $(names).length > 0,
       s"VectorSlicer requires that at least one feature be selected.")
-    SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
+    SchemaUtils.checkColumnType(schema, $(inputCol), SQLDataTypes.VectorType)
 
     if (schema.fieldNames.contains($(outputCol))) {
       throw new IllegalArgumentException(s"Output column ${$(outputCol)} already exists.")

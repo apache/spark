@@ -111,3 +111,50 @@ Java	2013	30000	2
 dotNET	2012	15000	NULL
 dotNET	2013	48000	1
 dotNET	2014	22500	1
+
+
+-- !query
+create temporary view mixedTypeValues as select
+  1 as id,
+  cast('2026-01-01' as date) as date1, cast(null as int) as int1,
+  cast(null as date) as date2, 2 as int2,
+  cast(null as date) as date3, cast(null as int) as int3
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM mixedTypeValues
+UNPIVOT EXCLUDE NULLS (
+  (date_value, int_value) FOR kind IN (
+    (date1, int1) as date_only,
+    (date2, int2) as int_only,
+    (date3, int3) as all_null
+  )
+)
+ORDER BY kind
+-- !query schema
+struct<id:int,kind:string,date_value:date,int_value:int>
+-- !query output
+1	date_only	2026-01-01	NULL
+1	int_only	NULL	2
+
+
+-- !query
+SELECT * FROM mixedTypeValues
+UNPIVOT INCLUDE NULLS (
+  (date_value, int_value) FOR kind IN (
+    (date1, int1) as date_only,
+    (date2, int2) as int_only,
+    (date3, int3) as all_null
+  )
+)
+ORDER BY kind
+-- !query schema
+struct<id:int,kind:string,date_value:date,int_value:int>
+-- !query output
+1	all_null	NULL	NULL
+1	date_only	2026-01-01	NULL
+1	int_only	NULL	2

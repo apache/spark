@@ -33,7 +33,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, OrderedFilters}
-import org.apache.spark.sql.execution.datasources.{ArchiveReader, DataSourceUtils, FileFormat, OutputWriterFactory, PartitionedFile}
+import org.apache.spark.sql.execution.datasources.{DataSourceUtils, FileFormat, OutputWriterFactory, PartitionedFile, SupportsArchiveFormat}
 import org.apache.spark.sql.internal.{SessionStateHelper, SQLConf}
 import org.apache.spark.sql.sources.{DataSourceRegister, Filter}
 import org.apache.spark.sql.types._
@@ -71,7 +71,7 @@ private[sql] class AvroFileFormat extends FileFormat
       options: Map[String, String],
       path: Path): Boolean = {
     val parsedOptions = new AvroOptions(options, sparkSession.sessionState.newHadoopConf())
-    if (parsedOptions.archiveFormatEnabled && ArchiveReader.isArchivePath(path)) {
+    if (parsedOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(path)) {
       // A tar archive is read as one sequential stream (entry by entry), so it is never split.
       return false
     }
@@ -102,11 +102,11 @@ private[sql] class AvroFileFormat extends FileFormat
 
     (file: PartitionedFile) => {
       val conf = broadcastedConf.value.value
-      if (parsedOptions.archiveFormatEnabled && ArchiveReader.isArchivePath(file.toPath)) {
+      if (parsedOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(file.toPath)) {
         // A tar archive (always a single split, see `isSplitable`) is streamed entry by entry when
         // archive reads are enabled; otherwise the file is read directly. The V2 data source has
         // no archive support, so this dispatch lives here.
-        readArchive(file, conf, parsedOptions, requiredSchema, filters)
+        readArchive(file, conf, parsedOptions, dataSchema, requiredSchema, filters)
       } else {
       val userProvidedSchema = parsedOptions.schema
 
@@ -161,7 +161,8 @@ private[sql] class AvroFileFormat extends FileFormat
             avroFilters,
             parsedOptions.useStableIdForUnionType,
             parsedOptions.stableIdPrefixForUnionType,
-            parsedOptions.recursiveFieldMaxDepth)
+            parsedOptions.recursiveFieldMaxDepth,
+            dataSchema = Some(dataSchema))
           override val stopPosition = file.start + file.length
 
           override def hasNext: Boolean = hasNextRow
@@ -188,6 +189,7 @@ private[sql] class AvroFileFormat extends FileFormat
       file: PartitionedFile,
       conf: Configuration,
       parsedOptions: AvroOptions,
+      dataSchema: StructType,
       requiredSchema: StructType,
       filters: Seq[Filter]): Iterator[InternalRow] = {
     val userProvidedSchema = parsedOptions.schema
@@ -199,7 +201,9 @@ private[sql] class AvroFileFormat extends FileFormat
     } else {
       new NoopFilters
     }
-    ArchiveReader(file.toPath).readEntries(conf) { (_, in) =>
+    val entryGlob = parsedOptions.archivePathFilterPattern
+    SupportsArchiveFormat.readArchiveEntries(
+        file.toPath, conf, archivePathFilter = entryGlob) { (_, in) =>
       val datumReader = userProvidedSchema match {
         case Some(schema) => new GenericDatumReader[GenericRecord](schema)
         case None => new GenericDatumReader[GenericRecord]()
@@ -216,7 +220,8 @@ private[sql] class AvroFileFormat extends FileFormat
         avroFilters,
         parsedOptions.useStableIdForUnionType,
         parsedOptions.stableIdPrefixForUnionType,
-        parsedOptions.recursiveFieldMaxDepth)
+        parsedOptions.recursiveFieldMaxDepth,
+        dataSchema = Some(dataSchema))
       // The record is deserialized eagerly in `hasNext` because `AvroDeserializer#deserialize` may
       // filter rows (returning None); the stream is closed once its records are exhausted.
       new Iterator[InternalRow] with Closeable {

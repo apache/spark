@@ -164,6 +164,16 @@ private[spark] trait SparkClassUtils {
       currentClass = currentClass.getSuperclass
     }
   }
+
+  /**
+   * Returns the companion object for the given class.
+   */
+  def getCompanionObject(name: String): Any = {
+    val companionCls = classForName(name + "$")
+    // The companion object instance is held in a static MODULE$ field
+    val moduleField = companionCls.getField("MODULE$")
+    moduleField.get(null)
+  }
 }
 
 private[spark] object SparkClassUtils extends SparkClassUtils

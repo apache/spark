@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark.{ShuffleDependency, SparkConf, SparkContext, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.shuffle.{ShuffleBlockResolver, ShuffleHandle, ShuffleManager, ShuffleReader, ShuffleReadMetricsReporter, ShuffleWriteMetricsReporter, ShuffleWriter}
+import org.apache.spark.shuffle.{BlockingShuffleManager, ShuffleBlockResolver, ShuffleHandle, ShuffleManager, ShuffleReader, ShuffleReadMetricsReporter, ShuffleWriteMetricsReporter, ShuffleWriter}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.shuffle.streaming.MultiShuffleManager.isStreamingShuffleEnabled
 
@@ -47,8 +47,14 @@ object MultiShuffleManager {
 and normal queries that depends on sort shuffle to coexist in a cluster. Right now, we only
 allows configuration of shuffle manager at cluster level, so consider using this shuffle
 manager if you want to run batch and real time queries at the same time.
+
+Deprecated: this cluster-level single-slot approach is superseded by per-dependency routing --
+configure spark.shuffle.manager (regular/blocking) and spark.shuffle.manager.incremental
+(pipelined) so each shuffle is routed by its dependency type.
  */
-class MultiShuffleManager(conf: SparkConf) extends ShuffleManager with Logging {
+@deprecated("Use per-dependency routing via spark.shuffle.manager and " +
+  "spark.shuffle.manager.incremental instead", "4.3.0")
+class MultiShuffleManager(conf: SparkConf) extends BlockingShuffleManager with Logging {
   // To make sure the type of shuffle manager used for a shuffle is the same during its lifetime
   private val shuffleIdToManager = new ConcurrentHashMap[Int, ShuffleManager]()
   private var streamingShuffleManager: Option[StreamingShuffleManager] = None
@@ -129,6 +135,8 @@ class MultiShuffleManager(conf: SparkConf) extends ShuffleManager with Logging {
     }
   }
 
+  // As a BlockingShuffleManager, MultiShuffleManager resolves blocks through the inner
+  // SortShuffleManager it delegates regular shuffles to.
   override def shuffleBlockResolver: ShuffleBlockResolver = {
     shuffleIdToManager.synchronized {
       if (sortShuffleManager.nonEmpty) {

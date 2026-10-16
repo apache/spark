@@ -47,9 +47,9 @@ class TimestampNTZType private () extends DatetimeType {
 
 /**
  * The companion case object and its class is separated so the companion object also subclasses
- * the TimestampNTZType class. Otherwise, the companion object would be of type "TimestampNTZType"
- * in byte code. Defined with a private constructor so the companion object is the only possible
- * instantiation.
+ * the TimestampNTZType class. Otherwise, the companion object would be of type
+ * "TimestampNTZType$" in byte code. Defined with a private constructor so the companion object is
+ * the only possible instantiation.
  *
  * @since 3.4.0
  */

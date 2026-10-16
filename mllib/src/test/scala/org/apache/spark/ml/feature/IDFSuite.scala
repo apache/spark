@@ -21,8 +21,6 @@ import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.mllib.feature.{IDFModel => OldIDFModel}
-import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.sql.Row
 import org.apache.spark.util.ArrayImplicits._
 
@@ -45,8 +43,21 @@ class IDFSuite extends MLTest with DefaultReadWriteTest {
 
   test("params") {
     ParamsSuite.checkParams(new IDF)
-    val model = new IDFModel("idf", new OldIDFModel(Vectors.dense(1.0), Array(1L), 1))
+    val model = new IDFModel("idf", Vectors.dense(1.0), Array(1L), 1)
     ParamsSuite.checkParams(model)
+  }
+
+  test("IDFModel estimated size") {
+    val model = new IDF()
+      .setInputCol("features")
+      .setOutputCol("idf")
+      .fit(Seq(
+        Tuple1(Vectors.sparse(3, Array(0), Array(1.0))),
+        Tuple1(Vectors.sparse(3, Array(1), Array(1.0)))).toDF("features"))
+
+    val maxSize = 2 * 1024
+    assert(model.estimatedSize < maxSize,
+      s"Estimation (${model.estimatedSize}) should be less than $maxSize")
   }
 
   test("compute IDF with default parameter") {
@@ -116,8 +127,8 @@ class IDFSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("IDFModel read/write") {
-    val instance = new IDFModel("myIDFModel",
-      new OldIDFModel(Vectors.dense(1.0, 2.0), Array(1, 2), 2))
+    val instance = new IDFModel(
+      "myIDFModel", Vectors.dense(1.0, 2.0), Array(1, 2), 2)
       .setInputCol("myInputCol")
       .setOutputCol("myOutputCol")
 

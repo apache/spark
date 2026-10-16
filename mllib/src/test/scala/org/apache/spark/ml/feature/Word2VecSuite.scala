@@ -21,7 +21,6 @@ import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.mllib.feature.{Word2VecModel => OldWord2VecModel}
 import org.apache.spark.sql.Row
 import org.apache.spark.util.Utils
 
@@ -31,8 +30,21 @@ class Word2VecSuite extends MLTest with DefaultReadWriteTest {
 
   test("params") {
     ParamsSuite.checkParams(new Word2Vec)
-    val model = new Word2VecModel("w2v", new OldWord2VecModel(Map("a" -> Array(0.0f))))
+    val model = new Word2VecModel("w2v", Map("a" -> 0), Array(0.0f))
     ParamsSuite.checkParams(model)
+  }
+
+  test("model estimated size") {
+    val df = sc.parallelize(Seq(Array("a", "b", "c"), Array("a", "b", "c"))).toDF("text")
+    val model = new Word2Vec()
+      .setVectorSize(3)
+      .setMinCount(1)
+      .setInputCol("text")
+      .setOutputCol("result")
+      .fit(df)
+    val maxSize = 1024 * 5
+    assert(model.estimatedSize < maxSize,
+      s"Estimation (${model.estimatedSize}) should be less than $maxSize")
   }
 
   test("Word2Vec") {
@@ -200,8 +212,11 @@ class Word2VecSuite extends MLTest with DefaultReadWriteTest {
       ("taiwan", Array(0.60f, 0.50f, 0.50f, 0.50f)),
       ("korea", Array(0.45f, 0.60f, 0.60f, 0.60f))
     )
-    val oldModel = new OldWord2VecModel(word2VecMap)
-    val instance = new Word2VecModel("myWord2VecModel", oldModel)
+    val wordIndex = word2VecMap.keysIterator.zipWithIndex.toMap
+    val wordVectors = wordIndex.toSeq.sortBy(_._2).flatMap { case (word, _) =>
+      word2VecMap(word)
+    }.toArray
+    val instance = new Word2VecModel("myWord2VecModel", wordIndex, wordVectors)
     val newInstance = testDefaultReadWrite(instance)
     assert(newInstance.getVectors.collect().sortBy(_.getString(0)) ===
       instance.getVectors.collect().sortBy(_.getString(0)))
@@ -226,4 +241,3 @@ class Word2VecSuite extends MLTest with DefaultReadWriteTest {
   }
 
 }
-

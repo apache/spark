@@ -22,7 +22,7 @@ import java.time.ZoneId
 import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.vector.types.{IntervalUnit, TimeUnit}
-import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType}
+import org.apache.arrow.vector.types.pojo.{ArrowType, DictionaryEncoding, Field, FieldType}
 
 import org.apache.spark.{SparkException, SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.LA
@@ -367,6 +367,199 @@ class ArrowUtilsSuite extends SparkFunSuite {
     assert(defaultType.isInstanceOf[ArrowType.Interval])
     assert(
       defaultType.asInstanceOf[ArrowType.Interval].getUnit === IntervalUnit.MONTH_DAY_NANO)
+  }
+
+  test("isCompatibleWithDeclaredField requires congruence with the declared field tree") {
+    def declared(schema: StructType, largeVarTypes: Boolean = false): Field = {
+      ArrowUtils.toArrowSchema(schema, "UTC", true, largeVarTypes).findField("value")
+    }
+    def actual(
+        schema: StructType,
+        lossless: Boolean = false,
+        largeVarTypes: Boolean = false): Field = {
+      ArrowUtils
+        .toArrowSchema(schema, "UTC", true, largeVarTypes, losslessInternalTypes = lossless)
+        .findField("value")
+    }
+    def compat(a: Field, d: Field): Boolean = ArrowUtils.isCompatibleWithDeclaredField(a, d)
+
+    // Identical construction is congruent, for every kind of type the schema can declare,
+    // including the standard nanos/interval encodings, tagged struct types, and nested trees.
+    Seq[DataType](
+      IntegerType,
+      StringType,
+      TimestampNTZNanosType(9),
+      CalendarIntervalType,
+      GeometryType(4326),
+      VariantType,
+      ArrayType(TimestampNTZNanosType(9)),
+      new StructType().add("i", CalendarIntervalType),
+      MapType(IntegerType, StringType)).foreach { dt =>
+      val s = new StructType().add("value", dt)
+      assert(compat(actual(s), declared(s)), dt.toString)
+    }
+
+    // The lossless internal encodings are structs where the declared schema has the
+    // interchange types: incongruent in both directions.
+    Seq[DataType](
+      TimestampNTZNanosType(9),
+      CalendarIntervalType,
+      ArrayType(TimestampLTZNanosType(7))).foreach { dt =>
+      val s = new StructType().add("value", dt)
+      assert(!compat(actual(s, lossless = true), declared(s)), dt.toString)
+    }
+
+    // Var-width offset width must agree with the declared field, in both directions and nested.
+    Seq[DataType](StringType, BinaryType, ArrayType(StringType)).foreach { dt =>
+      val s = new StructType().add("value", dt)
+      assert(compat(actual(s), declared(s)), dt.toString)
+      assert(!compat(actual(s), declared(s, largeVarTypes = true)), dt.toString)
+      assert(!compat(actual(s, largeVarTypes = true), declared(s)), dt.toString)
+      assert(
+        compat(actual(s, largeVarTypes = true), declared(s, largeVarTypes = true)),
+        dt.toString)
+    }
+
+    // A tagged Geometry struct with an extra child is read back as GeometryType by the
+    // recognizers (which tolerate extra children), but the declared canonical field has exactly
+    // two children -- forwarding the three-child body verbatim would shift every following
+    // column's buffers (the extra child's buffers would be consumed as the next argument's
+    // data), so it must be incongruent.
+    val geometrySchema = new StructType().add("value", GeometryType(4326))
+    val canonicalGeometry = declared(geometrySchema)
+    val extraChild = new Field(
+      "extra",
+      new FieldType(true, new ArrowType.Int(32, true), null, null),
+      java.util.Collections.emptyList[Field]())
+    val paddedChildren = new java.util.ArrayList[Field](canonicalGeometry.getChildren)
+    paddedChildren.add(extraChild)
+    val paddedGeometry = new Field(
+      canonicalGeometry.getName,
+      new FieldType(
+        canonicalGeometry.isNullable,
+        canonicalGeometry.getType,
+        null,
+        canonicalGeometry.getMetadata),
+      paddedChildren)
+    assert(ArrowUtils.fromArrowField(paddedGeometry) === GeometryType(4326))
+    assert(!compat(paddedGeometry, canonicalGeometry))
+
+    // List-like types Spark never declares are incongruent with the declared List.
+    val arraySchema = new StructType().add("value", ArrayType(IntegerType))
+    val declaredList = declared(arraySchema)
+    val intChild = new Field(
+      "element",
+      new FieldType(true, new ArrowType.Int(32, true), null, null),
+      java.util.Collections.emptyList[Field]())
+    Seq[ArrowType](
+      ArrowType.LargeList.INSTANCE,
+      ArrowType.ListView.INSTANCE,
+      ArrowType.LargeListView.INSTANCE,
+      new ArrowType.FixedSizeList(4)).foreach { arrowType =>
+      val listLike = new Field(
+        "value",
+        new FieldType(true, arrowType, null, null),
+        java.util.Collections.singletonList(intChild))
+      assert(!compat(listLike, declaredList), arrowType.toString)
+    }
+
+    // The timestamp timezone LABEL does not affect the physical layout and differs across
+    // Spark's own paths (a worker's output comes back labeled UTC while the next stream
+    // declares the session time zone), so it must not cause a reject. Presence-vs-absence must
+    // still match: it distinguishes TimestampType from TimestampNTZType, whose values are
+    // interpreted differently. The unit must also match: both units are int64, but forwarding
+    // one under the other reinterprets every value by a factor of 1000.
+    def tsField(tz: String): Field = new Field(
+      "value",
+      new FieldType(true, new ArrowType.Timestamp(TimeUnit.MICROSECOND, tz), null, null),
+      java.util.Collections.emptyList[Field]())
+    assert(compat(tsField("UTC"), tsField("America/Los_Angeles")))
+    assert(compat(tsField("America/Los_Angeles"), tsField("UTC")))
+    assert(!compat(tsField(null), tsField("UTC")))
+    assert(!compat(tsField("UTC"), tsField(null)))
+    val tsNanoField = new Field(
+      "value",
+      new FieldType(true, new ArrowType.Timestamp(TimeUnit.NANOSECOND, "UTC"), null, null),
+      java.util.Collections.emptyList[Field]())
+    assert(!compat(tsNanoField, tsField("UTC")))
+
+    // Map equality includes keysSorted, which has no layout impact and must not cause a reject.
+    val mapSchema = new StructType().add("value", MapType(IntegerType, StringType))
+    val declaredMap = declared(mapSchema)
+    val sortedMap = new Field(
+      declaredMap.getName,
+      new FieldType(declaredMap.isNullable, new ArrowType.Map(true), null, null),
+      declaredMap.getChildren)
+    assert(compat(sortedMap, declaredMap))
+
+    // An Arrow Map binds key/value semantics to the entry-struct children by name (the key
+    // comes first and MapVector addresses the children as "key"/"value"), yet Arrow tolerates
+    // vectors whose entry children sit in the opposite order. With int keys and int values the
+    // swapped tree is positionally identical to the canonical one, so only the names reveal the
+    // swap -- forwarding the buffers verbatim under the canonical header would silently decode
+    // {k: v} as {v: k}. Map entry names must therefore match the declared ones, at every
+    // nesting level.
+    def swapEntries(mapField: Field): Field = {
+      val entries = mapField.getChildren.get(0)
+      val swapped = new Field(
+        entries.getName,
+        new FieldType(entries.isNullable, entries.getType, null, entries.getMetadata),
+        entries.getChildren.asScala.reverse.asJava)
+      new Field(
+        mapField.getName,
+        new FieldType(mapField.isNullable, mapField.getType, null, mapField.getMetadata),
+        java.util.Collections.singletonList(swapped))
+    }
+    val intMapSchema = new StructType().add("value", MapType(IntegerType, IntegerType, false))
+    val declaredIntMap = declared(intMapSchema)
+    assert(compat(declaredIntMap, declaredIntMap))
+    assert(!compat(swapEntries(declaredIntMap), declaredIntMap))
+    val nestedMapSchema = new StructType()
+      .add("value", MapType(IntegerType, MapType(IntegerType, IntegerType, false), false))
+    val declaredNestedMap = declared(nestedMapSchema)
+    val nestedEntries = declaredNestedMap.getChildren.get(0)
+    val innerSwappedEntries = new Field(
+      nestedEntries.getName,
+      new FieldType(nestedEntries.isNullable, nestedEntries.getType, null,
+        nestedEntries.getMetadata),
+      java.util.Arrays.asList(
+        nestedEntries.getChildren.get(0),
+        swapEntries(nestedEntries.getChildren.get(1))))
+    val innerSwappedMap = new Field(
+      declaredNestedMap.getName,
+      new FieldType(declaredNestedMap.isNullable, declaredNestedMap.getType, null,
+        declaredNestedMap.getMetadata),
+      java.util.Collections.singletonList(innerSwappedEntries))
+    assert(compat(declaredNestedMap, declaredNestedMap))
+    assert(!compat(innerSwappedMap, declaredNestedMap))
+
+    // A view-typed field is incongruent with the declared Utf8.
+    val stringSchema = new StructType().add("value", StringType)
+    val viewField = new Field(
+      "value",
+      new FieldType(true, ArrowType.Utf8View.INSTANCE, null, null),
+      java.util.Collections.emptyList[Field]())
+    assert(!compat(viewField, declared(stringSchema)))
+
+    // A dictionary-encoded field is incongruent even though its value type matches the declared
+    // field: its record batches carry indices whose values live in separate dictionary batches
+    // the UDF stream never writes.
+    val dictField = new Field(
+      "value",
+      new FieldType(
+        true,
+        ArrowType.Utf8.INSTANCE,
+        new DictionaryEncoding(1L, false, new ArrowType.Int(32, true)),
+        null),
+      java.util.Collections.emptyList[Field]())
+    assert(!compat(dictField, declared(stringSchema)))
+    // The same field without the dictionary is congruent, isolating the dictionary as the
+    // reason. Names and metadata are ignored: only the physical layout matters.
+    val plainField = new Field(
+      "renamed",
+      new FieldType(true, ArrowType.Utf8.INSTANCE, null, null),
+      java.util.Collections.emptyList[Field]())
+    assert(compat(plainField, declared(stringSchema)))
   }
 
   test("time") {

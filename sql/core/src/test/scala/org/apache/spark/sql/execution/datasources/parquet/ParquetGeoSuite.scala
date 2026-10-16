@@ -25,7 +25,9 @@ import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions.{st_asbinary, st_geogfromwkb, st_geomfromwkb, st_srid}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{Geography, GeographyType, StructField, StructType}
+import org.apache.spark.tags.ExtendedSQLTest
 
+@ExtendedSQLTest
 class ParquetGeoSuite
     extends ParquetCompatibilityTest
     with SharedSparkSession {

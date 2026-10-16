@@ -708,6 +708,40 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter {
     }
   }
 
+  test("SPARK-57815: nanosecond timestamp is unsupported when writing to a Hive serde directory") {
+    // Disable native data source conversion so that the write goes through the Hive serde path
+    // (HiveFileFormat) instead of a native data source that supports nanosecond timestamps.
+    withSQLConf(
+        HiveUtils.CONVERT_METASTORE_INSERT_DIR.key -> "false",
+        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      Seq("ORC", "PARQUET").foreach { fileFormat =>
+        Seq(
+          "TIMESTAMP_NTZ(9)" -> TimestampNTZNanosType(9),
+          "TIMESTAMP_LTZ(9)" -> TimestampLTZNanosType(9)).foreach { case (typeStr, dt) =>
+          withTempDir { dir =>
+            // InsertIntoHiveDirCommand wraps the failure in a SparkException, so assert on the
+            // cause. Rejecting here avoids a silent downgrade to microsecond precision.
+            val e = intercept[SparkException] {
+              sql(
+                s"""
+                   |INSERT OVERWRITE LOCAL DIRECTORY '${dir.toURI.getPath}'
+                   |STORED AS $fileFormat
+                   |SELECT CAST('2025-01-06 12:30:45.123456789' AS $typeStr) AS c
+                 """.stripMargin)
+            }
+            checkError(
+              exception = e.getCause.asInstanceOf[AnalysisException],
+              condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+              parameters = Map(
+                "columnName" -> "`c`",
+                "columnType" -> s"\"${dt.sql}\"",
+                "format" -> "Hive"))
+          }
+        }
+      }
+    }
+  }
+
   test("insert overwrite to dir from temp table") {
     withTempView("test_insert_table") {
       spark.range(10).selectExpr("id", "id AS str").createOrReplaceTempView("test_insert_table")

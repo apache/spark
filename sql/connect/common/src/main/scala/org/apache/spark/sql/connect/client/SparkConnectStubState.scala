@@ -38,7 +38,9 @@ class SparkConnectStubState(
   }
 
   // Manages the retry handler logic used by the stubs.
-  lazy val retryHandler = new GrpcRetryHandler(configuration.retryPolicies)
+  lazy val retryHandler = new GrpcRetryHandler(
+    configuration.retryPolicies,
+    maxRetryExceptionElapsedTime = configuration.maxRetryExceptionElapsedTime)
 
   // Responsible to convert the GRPC Status exceptions into Spark exceptions.
   lazy val exceptionConverter: GrpcExceptionConverter =

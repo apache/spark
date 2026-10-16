@@ -210,8 +210,13 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
       columnName: String,
       newName: String,
       dbMajorVersion: Int): String = {
-    s"EXEC sp_rename '$tableName.${quoteIdentifier(columnName)}'," +
-      s" ${quoteIdentifier(newName)}, 'COLUMN'"
+    // sp_rename takes @objname as a string value rather than at identifier position, so the
+    // qualified "table.column" name needs both layers: quoteIdentifier for the identifier that
+    // sp_rename itself parses out of the string, and escapeSql for the string literal carrying
+    // it. escapeSql only doubles the single quote, so the generated text is unchanged for any
+    // name that does not contain one.
+    val objName = escapeSql(s"$tableName.${quoteIdentifier(columnName)}")
+    s"EXEC sp_rename '$objName', ${quoteIdentifier(newName)}, 'COLUMN'"
   }
 
   // scalastyle:off line.size.limit

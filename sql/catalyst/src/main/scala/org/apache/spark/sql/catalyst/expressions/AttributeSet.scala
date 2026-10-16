@@ -142,7 +142,7 @@ class AttributeSet private (private val baseSet: mutable.LinkedHashSet[Attribute
    * `this` and `other`.
    */
   def intersect(other: AttributeSet): AttributeSet =
-    new AttributeSet(baseSet.intersect(other.baseSet))
+    new AttributeSet(other.baseSet.filter(baseSet.contains))
 
   override def foreach[U](f: (Attribute) => U): Unit = baseSet.map(_.a).foreach(f)
 

@@ -274,6 +274,7 @@ Management
     StorageLevel.MEMORY_ONLY_2
     StorageLevel.OFF_HEAP
     TaskContext.attemptNumber
+    TaskContext.cpuAmount
     TaskContext.cpus
     TaskContext.get
     TaskContext.getLocalProperty
@@ -286,6 +287,7 @@ Management
     BarrierTaskContext.allGather
     BarrierTaskContext.attemptNumber
     BarrierTaskContext.barrier
+    BarrierTaskContext.cpuAmount
     BarrierTaskContext.cpus
     BarrierTaskContext.get
     BarrierTaskContext.getLocalProperty

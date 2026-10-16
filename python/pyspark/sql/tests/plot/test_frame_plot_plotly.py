@@ -21,10 +21,10 @@ from datetime import datetime
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
-    have_plotly,
-    plotly_requirement_message,
     have_pandas,
+    have_plotly,
     pandas_requirement_message,
+    plotly_requirement_message,
 )
 
 if have_plotly and have_pandas:

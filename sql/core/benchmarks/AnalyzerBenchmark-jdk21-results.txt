@@ -1,0 +1,47 @@
+================================================================================================
+analyzer clone cost
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
+analyzer clone cost:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+withCatalogManager                                    0              0           0         33.3          30.0       1.0X
+
+
+================================================================================================
+analysis overhead simple select
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
+analysis overhead simple select:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+session analyzer                                      0              0           0          0.5        1940.1       1.0X
+cloned analyzer (per query)                           0              0           0          0.5        2189.2       0.9X
+
+
+================================================================================================
+analysis overhead join
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
+analysis overhead join:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+session analyzer                                      0              0           0          0.3        3322.7       1.0X
+cloned analyzer (per query)                           0              0           0          0.3        3488.0       1.0X
+
+
+================================================================================================
+analysis overhead wide schema
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
+analysis overhead wide schema:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+session analyzer                                      1              1           0          0.1       10038.3       1.0X
+cloned analyzer (per query)                           1              1           0          0.1       10299.0       1.0X
+
+

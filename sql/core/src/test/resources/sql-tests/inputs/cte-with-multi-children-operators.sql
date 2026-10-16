@@ -1,3 +1,10 @@
+-- We run these tests with single-pass analyzer separately because in fixed-point we sometimes push
+-- the WithCte node below the multi-children operators (not consistent) whereas in the single-pass
+-- resolver we always keep it above.
+
+--SET spark.sql.analyzer.singlePassResolver.enabledTentatively=false
+--SET spark.sql.analyzer.singlePassResolver.dualRunWithLegacy=false
+
 -- This test tests CTEs with multi-children operators (Union, Intersect, Except, Join etc).
 
 CREATE TEMPORARY VIEW t1 AS SELECT * FROM VALUES

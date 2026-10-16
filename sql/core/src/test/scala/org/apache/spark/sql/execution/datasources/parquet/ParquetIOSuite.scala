@@ -1923,6 +1923,15 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
           val expected = (0 until numRecords).map { _ => lt }.toDF()
           checkAnswer(df, expected)
         }
+        withSQLConf(SQLConf.PARQUET_TIME_TYPE_ALLOW_IS_ADJUSTED_TO_UTC_READ.key -> "true") {
+          withAllParquetReaders {
+            val df = spark.read.parquet(tablePath.toString)
+            assertResult(df.schema) { new StructType().add("time_micros", TimeType()) }
+            val lt = LocalTime.of(23, 59, 59, 123456000)
+            val expected = (0 until numRecords).map { _ => lt }.toDF()
+            checkAnswer(df, expected)
+          }
+        }
       }
     }
   }
@@ -2077,6 +2086,67 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
           assertResult(df.schema)(readSchema)
           val expected = (0 until numRecords).map { i => if (i % 7 == 0) Row(null) else Row(lt) }
           checkAnswer(df, expected)
+        }
+      }
+    }
+  }
+
+  test("Read TimeType for the logical TIME type with isAdjustedToUTC=true throws by default") {
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  required int64 time_micros(TIME(MICROS,true));
+        |}""".stripMargin)
+
+    withTempDir { dir =>
+      val tablePath = new Path(s"${dir.getCanonicalPath}/times.parquet")
+      val writer = createParquetWriter(schema, tablePath, dictionaryEnabled = false)
+      val record = new SimpleGroup(schema)
+      record.add(0, localTime(12, 0, 0, 0) / DateTimeConstants.NANOS_PER_MICROS)
+      writer.write(record)
+      writer.close
+
+      checkError(
+        exception = intercept[org.apache.spark.sql.AnalysisException] {
+          spark.read.parquet(tablePath.toString).collect()
+        },
+        condition = "PARQUET_TYPE_ILLEGAL",
+        parameters = Map("parquetType" -> "INT64 (TIME(MICROS,true))")
+      )
+    }
+  }
+
+  test("SPARK-53368: infer TIME(NANOS, isAdjustedToUTC=true) as TimeType only with the config on") {
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  required int64 time_nanos(TIME(NANOS,true));
+        |}""".stripMargin)
+
+    withTempDir { dir =>
+      val tablePath = new Path(s"${dir.getCanonicalPath}/times_nanos_utc.parquet")
+      val writer = createParquetWriter(schema, tablePath, dictionaryEnabled = false)
+      val record = new SimpleGroup(schema)
+      // Internal storage is nanoseconds since midnight; TIME(NANOS) writes it unchanged.
+      record.add(0, localTime(23, 59, 59, 123456, 789))
+      writer.write(record)
+      writer.close
+
+      // By default, schema inference rejects isAdjustedToUTC=true.
+      checkError(
+        exception = intercept[org.apache.spark.sql.AnalysisException] {
+          spark.read.parquet(tablePath.toString).collect()
+        },
+        condition = "PARQUET_TYPE_ILLEGAL",
+        parameters = Map("parquetType" -> "INT64 (TIME(NANOS,true))")
+      )
+
+      // With the config on, it infers as TimeType(NANOS) and decodes the raw nanos-of-day.
+      withSQLConf(SQLConf.PARQUET_TIME_TYPE_ALLOW_IS_ADJUSTED_TO_UTC_READ.key -> "true") {
+        withAllParquetReaders {
+          val df = spark.read.parquet(tablePath.toString)
+          assertResult(df.schema) {
+            new StructType().add("time_nanos", TimeType(TimeType.NANOS_PRECISION))
+          }
+          checkAnswer(df, Row(LocalTime.of(23, 59, 59, 123456789)))
         }
       }
     }
@@ -2366,6 +2436,47 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
           Row(java.math.BigDecimal.valueOf(unscaledAt(i), 2))
         }
         checkAnswer(df, expected)
+      }
+    }
+  }
+
+  test("SPARK-57828: vectorized read of TIMESTAMP(NANOS) with dictionary encoding") {
+    // Exercises TimestampNanosVectorUpdater.decodeSingleDictionaryId by writing a file with
+    // dictionary encoding enabled and a nullable column (OPTIONAL repetition, which forces
+    // single-value decode paths via def-level interleaving). Analogous to the TIME(NANOS)
+    // dictionary test above (SPARK-55444).
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  optional int64 ts_nanos(TIMESTAMP(NANOS,true));
+        |}""".stripMargin)
+    val readSchema = new StructType()
+      .add("ts_nanos", TimestampLTZNanosType(TimestampLTZNanosType.NANOS_PRECISION))
+
+    // 1_000_000_500 ns = epoch micros 1000000 + 500 ns within micro
+    // Instant: 1000000 micros = 1.000000 seconds, plus 500 ns -> 1.000000500 s
+    val epochNanosValue = 1000000500L
+    val expectedInstant = java.time.Instant.ofEpochSecond(1L, 500L)
+
+    for (dictEnabled <- Seq(true, false)) {
+      withTempDir { dir =>
+        val tablePath = new Path(s"${dir.getCanonicalPath}/ts_nanos_dict.parquet")
+        val numRecords = 100
+        val writer = createParquetWriter(schema, tablePath, dictionaryEnabled = dictEnabled)
+        (0 until numRecords).foreach { i =>
+          val record = new SimpleGroup(schema)
+          // Every 7th row is null: interleaves null/value runs to force single-value path.
+          if (i % 7 != 0) record.add(0, epochNanosValue)
+          writer.write(record)
+        }
+        writer.close()
+
+        withAllParquetReaders {
+          val df = spark.read.schema(readSchema).parquet(tablePath.toString)
+          val expected = (0 until numRecords).map { i =>
+            if (i % 7 == 0) Row(null) else Row(expectedInstant)
+          }
+          checkAnswer(df, expected)
+        }
       }
     }
   }

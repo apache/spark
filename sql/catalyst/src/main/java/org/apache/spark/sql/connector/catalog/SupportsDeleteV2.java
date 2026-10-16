@@ -20,6 +20,7 @@ package org.apache.spark.sql.connector.catalog;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.filter.AlwaysTrue;
 import org.apache.spark.sql.connector.expressions.filter.Predicate;
+import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
  * A mix-in interface for {@link Table} delete support. Data sources can implement this
@@ -71,6 +72,24 @@ public interface SupportsDeleteV2 extends TruncatableTable {
    * @throws IllegalArgumentException If the delete is rejected due to required effort
    */
   void deleteWhere(Predicate[] predicates);
+
+  /**
+   * Delete data from a data source table that matches filter expressions, forwarding the
+   * per-statement options from a {@code DELETE ... WITH (key=value)} clause.
+   * <p>
+   * The default implementation ignores {@code options} and delegates to
+   * {@link #deleteWhere(Predicate[])}, which preserves backward compatibility for connectors
+   * that do not need per-statement options.
+   *
+   * @param predicates predicate expressions, used to select rows to delete when all expressions
+   *                   match
+   * @param options per-statement options from the {@code WITH} clause; empty if none were given
+   * @throws IllegalArgumentException If the delete is rejected due to required effort
+   * @since 4.3.0
+   */
+  default void deleteWhere(Predicate[] predicates, CaseInsensitiveStringMap options) {
+    deleteWhere(predicates);
+  }
 
   @Override
   default boolean truncateTable() {

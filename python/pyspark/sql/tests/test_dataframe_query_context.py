@@ -18,8 +18,8 @@
 from pyspark.errors import (
     AnalysisException,
     ArithmeticException,
-    QueryContextType,
     NumberFormatException,
+    QueryContextType,
 )
 from pyspark.sql import functions as sf
 from pyspark.testing.sqlutils import (

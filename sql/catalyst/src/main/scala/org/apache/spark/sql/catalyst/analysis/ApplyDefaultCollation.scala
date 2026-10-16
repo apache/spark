@@ -197,7 +197,7 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
             collation = getCollationFromSchemaMetadata(catalog, identifier.namespace())))
 
         case createView@CreateView(ResolvedIdentifier(
-        catalog: SupportsNamespaces, identifier), _, _, _, _, _, _, _, _, _, _, _)
+        catalog: SupportsNamespaces, identifier), _, _, _, _, _, _, _, _, _, _, _, _)
           if createView.collation.isEmpty =>
           val newCreateView = CurrentOrigin.withOrigin(createView.origin) {
             createView.copy(
@@ -267,7 +267,7 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
       case replaceCols: ReplaceColumns =>
         replaceCols.copy(columnsToAdd = replaceColumnTypes(replaceCols.columnsToAdd, collation))
 
-      case a @ AlterColumns(ResolvedTable(_, _, _, _), specs: Seq[AlterColumnSpec]) =>
+      case a @ AlterColumns(ResolvedTable(_, _, _, _), specs: Seq[AlterColumnSpec], _) =>
         val newSpecs = specs.map {
           case spec if shouldApplyDefaultCollationToAlterColumn(spec) =>
             spec.copy(newDataType =
@@ -292,7 +292,7 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
   private def pruneRedundantAlterColumnTypes(plan: LogicalPlan): LogicalPlan = {
     plan match {
       case alterColumns@AlterColumns(
-      ResolvedTable(_, _, _, _), specs: Seq[AlterColumnSpec]) =>
+      ResolvedTable(_, _, _, _), specs: Seq[AlterColumnSpec], _) =>
         val resolvedSpecs = specs.map { spec =>
           if (isAlterColumnNOP(spec)) {
             spec.copy(newDataType = None)
@@ -424,8 +424,12 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
       case cast @ Cast(e: DefaultStringProducingExpression, dt, _, _) if newType == dt =>
         cast.copy(child = e.withNewChildren(e.children.map(inner)))
 
-      // Add cast on top of [[DefaultStringProducingExpression]].
-      case e: DefaultStringProducingExpression =>
+      // Add cast on top of [[DefaultStringProducingExpression]], unless it carries an explicitly
+      // collated string type -- e.g. `JSON_ARRAY(... RETURNING STRING COLLATE UTF8_BINARY)`, a
+      // distinct instance the user chose deliberately (even for the default UTF8_BINARY) that the
+      // object/view default must not override. A plain `RETURNING STRING` is the companion (see
+      // `hasExplicitStringCollation`), indistinguishable from omission, and correctly recolored.
+      case e: DefaultStringProducingExpression if !hasExplicitStringCollation(e.dataType) =>
         Cast(e.withNewChildren(e.children.map(inner)), newType)
 
       case other =>
@@ -439,6 +443,19 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
 
   private def hasDefaultStringCharOrVarcharType(dataType: DataType): Boolean =
     dataType.existsRecursively(isDefaultStringCharOrVarcharType)
+
+  /**
+   * A [[StringType]] written with an explicit `COLLATE` clause -- a distinct instance rather than
+   * the `StringType` companion, told apart by reference identity (matching the single-pass
+   * resolver's `DefaultCollationTypeCoercion`), even for the default UTF8_BINARY. Only the explicit
+   * `COLLATE` form is distinct: `DataTypeAstBuilder` returns the companion for a plain `STRING`, so
+   * a plain `RETURNING STRING` is indistinguishable from omission and recolored like it. An
+   * explicit collation is a deliberate choice the object/view default must not overwrite.
+   */
+  private def hasExplicitStringCollation(dataType: DataType): Boolean = dataType match {
+    case st: StringType => !st.eq(StringType)
+    case _ => false
+  }
 
   private def replaceColumnTypes(
       colTypes: Seq[QualifiedColType],

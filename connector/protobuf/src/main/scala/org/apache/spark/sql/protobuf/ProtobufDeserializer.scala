@@ -18,7 +18,10 @@ package org.apache.spark.sql.protobuf
 
 import java.util.concurrent.TimeUnit
 
-import com.google.protobuf.{BoolValue, ByteString, BytesValue, DoubleValue, DynamicMessage, FloatValue, Int32Value, Int64Value, Message, StringValue, TypeRegistry, UInt32Value, UInt64Value}
+import scala.collection.mutable
+import scala.jdk.CollectionConverters._
+
+import com.google.protobuf.{BoolValue, ByteString, BytesValue, DoubleValue, DynamicMessage, FloatValue, Int32Value, Int64Value, InvalidProtocolBufferException, Message, StringValue, TypeRegistry, UInt32Value, UInt64Value}
 import com.google.protobuf.Descriptors._
 import com.google.protobuf.Descriptors.FieldDescriptor.JavaType._
 import com.google.protobuf.util.JsonFormat
@@ -92,6 +95,58 @@ private[sql] class ProtobufDeserializer(
       .omittingInsignificantWhitespace()
       .preservingProtoFieldNames()
       .usingTypeRegistry(typeRegistry)
+  }
+
+  // Matches protobuf-java's default recursion limit for wire-format parsing. A nested
+  // google.protobuf.Any is stored as opaque bytes, so JsonFormat.print re-parses each Any
+  // level with a fresh recursion limit while recursing on the JVM stack; without a shared
+  // budget across levels, an Any-in-Any chain a few hundred KB long overflows the stack, and
+  // StackOverflowError is fatal: it escapes the NonFatal-based malformed-record handling
+  // that implements PERMISSIVE/FAILFAST parse modes and kills the task instead.
+  private val anyJsonRecursionLimit = 100
+
+  /**
+   * Performs the same Any unpacking that JsonFormat will perform (against the same type
+   * registry), but iteratively and under a single depth budget, so an over-deep message
+   * fails as an ordinary malformed record (InvalidProtocolBufferException).
+   */
+  private def checkAnyJsonRecursion(root: DynamicMessage): Unit = {
+    val stack = mutable.Stack[(Message, Int)]((root, 0))
+    while (stack.nonEmpty) {
+      val (message, depth) = stack.pop()
+      if (depth > anyJsonRecursionLimit) {
+        throw new InvalidProtocolBufferException(
+          "Message nesting in google.protobuf.Any exceeds the maximum supported depth " +
+            s"($anyJsonRecursionLimit) for JSON conversion")
+      }
+      val descriptor = message.getDescriptorForType
+      if (descriptor.getFullName == "google.protobuf.Any") {
+        val typeUrl =
+          message.getField(descriptor.findFieldByName("type_url")).asInstanceOf[String]
+        // Leave empty or unregistered type URLs for jsonPrinter.print to handle: an empty
+        // Any prints as {}, and an unresolvable type fails there with a descriptive error.
+        if (typeUrl.nonEmpty) {
+          val nestedDescriptor = typeRegistry.getDescriptorForTypeUrl(typeUrl)
+          if (nestedDescriptor != null) {
+            val bytes =
+              message.getField(descriptor.findFieldByName("value")).asInstanceOf[ByteString]
+            stack.push((DynamicMessage.parseFrom(nestedDescriptor, bytes), depth + 1))
+          }
+        }
+      } else {
+        message.getAllFields.asScala.foreach { case (field, fieldValue) =>
+          if (field.getJavaType == MESSAGE) {
+            if (field.isRepeated) {
+              fieldValue.asInstanceOf[java.util.List[Message]].asScala.foreach { item =>
+                stack.push((item, depth + 1))
+              }
+            } else {
+              stack.push((fieldValue.asInstanceOf[Message], depth + 1))
+            }
+          }
+        }
+      }
+    }
   }
 
   private def newArrayWriter(
@@ -302,106 +357,58 @@ private[sql] class ProtobufDeserializer(
       case (MESSAGE, StringType)
         if protoType.getMessageType.getFullName == "google.protobuf.Any" =>
         (updater, ordinal, value) =>
+          val anyMessage = value.asInstanceOf[DynamicMessage]
+          checkAnyJsonRecursion(anyMessage)
           // Convert 'Any' protobuf message to JSON string.
-          val jsonStr = jsonPrinter.print(value.asInstanceOf[DynamicMessage])
+          val jsonStr = jsonPrinter.print(anyMessage)
           updater.set(ordinal, UTF8String.fromString(jsonStr))
 
       // Handle well known wrapper types. We unpack the value field when the desired
-      // output type is a primitive (determined by the option in [[ProtobufOptions]])
+      // output type is a primitive (determined by the option in [[ProtobufOptions]]).
+      // A wrapper is unwrapped only when present: an absent singular wrapper is nulled by the
+      // caller before reaching here, and container elements are always present. So a present
+      // wrapper -- even an empty one -- carries a value, and unwrapWktValue reads the inner
+      // scalar (its default when unset), never null, independent of `emit.default.values`.
       case (MESSAGE, BooleanType)
         if protoType.getMessageType.getFullName == BoolValue.getDescriptor.getFullName =>
         (updater, ordinal, value) =>
-          val dm = value.asInstanceOf[DynamicMessage]
-          val unwrapped = getFieldValue(dm, dm.getDescriptorForType.getFields.get(0))
-          if (unwrapped == null) {
-            updater.setNullAt(ordinal)
-          } else {
-            updater.setBoolean(ordinal, unwrapped.asInstanceOf[Boolean])
-          }
+          updater.setBoolean(ordinal, unwrapWktValue(value).asInstanceOf[Boolean])
       case (MESSAGE, IntegerType)
         if (protoType.getMessageType.getFullName == Int32Value.getDescriptor.getFullName
           || protoType.getMessageType.getFullName == UInt32Value.getDescriptor.getFullName) =>
         (updater, ordinal, value) =>
-          val dm = value.asInstanceOf[DynamicMessage]
-          val unwrapped = getFieldValue(dm, dm.getDescriptorForType.getFields.get(0))
-          if (unwrapped == null) {
-            updater.setNullAt(ordinal)
-          } else {
-            updater.setInt(ordinal, unwrapped.asInstanceOf[Int])
-          }
+          updater.setInt(ordinal, unwrapWktValue(value).asInstanceOf[Int])
       case (MESSAGE, LongType)
         if (protoType.getMessageType.getFullName == UInt32Value.getDescriptor.getFullName) =>
         (updater, ordinal, value) =>
-          val dm = value.asInstanceOf[DynamicMessage]
-          val unwrapped = getFieldValue(dm, dm.getDescriptorForType.getFields.get(0))
-          if (unwrapped == null) {
-            updater.setNullAt(ordinal)
-          } else {
-            updater.setLong(ordinal, Integer.toUnsignedLong(unwrapped.asInstanceOf[Int]))
-          }
+          updater.setLong(ordinal, Integer.toUnsignedLong(unwrapWktValue(value).asInstanceOf[Int]))
       case (MESSAGE, LongType)
         if (protoType.getMessageType.getFullName == Int64Value.getDescriptor.getFullName
           || protoType.getMessageType.getFullName == UInt64Value.getDescriptor.getFullName) =>
         (updater, ordinal, value) =>
-          val dm = value.asInstanceOf[DynamicMessage]
-          val unwrapped = getFieldValue(dm, dm.getDescriptorForType.getFields.get(0))
-          if (unwrapped == null) {
-            updater.setNullAt(ordinal)
-          } else {
-            updater.setLong(ordinal, unwrapped.asInstanceOf[Long])
-          }
+          updater.setLong(ordinal, unwrapWktValue(value).asInstanceOf[Long])
       case (MESSAGE, DecimalType.LongDecimal)
         if (protoType.getMessageType.getFullName == UInt64Value.getDescriptor.getFullName) =>
         (updater, ordinal, value) =>
-          val dm = value.asInstanceOf[DynamicMessage]
-          val unwrapped = getFieldValue(dm, dm.getDescriptorForType.getFields.get(0))
-          if (unwrapped == null) {
-            updater.setNullAt(ordinal)
-          } else {
-            val dec = Decimal.fromString(
-              UTF8String.fromString(java.lang.Long.toUnsignedString(unwrapped.asInstanceOf[Long])))
-            updater.setDecimal(ordinal, dec)
-          }
+          val dec = Decimal.fromString(UTF8String.fromString(
+            java.lang.Long.toUnsignedString(unwrapWktValue(value).asInstanceOf[Long])))
+          updater.setDecimal(ordinal, dec)
       case (MESSAGE, StringType)
         if protoType.getMessageType.getFullName == StringValue.getDescriptor.getFullName =>
         (updater, ordinal, value) =>
-          val dm = value.asInstanceOf[DynamicMessage]
-          val unwrapped = getFieldValue(dm, dm.getDescriptorForType.getFields.get(0))
-          if (unwrapped == null) {
-            updater.setNullAt(ordinal)
-          } else {
-            updater.set(ordinal, UTF8String.fromString(unwrapped.asInstanceOf[String]))
-          }
+          updater.set(ordinal, UTF8String.fromString(unwrapWktValue(value).asInstanceOf[String]))
       case (MESSAGE, BinaryType)
         if protoType.getMessageType.getFullName == BytesValue.getDescriptor.getFullName =>
         (updater, ordinal, value) =>
-          val dm = value.asInstanceOf[DynamicMessage]
-          val unwrapped = getFieldValue(dm, dm.getDescriptorForType.getFields.get(0))
-          if (unwrapped == null) {
-            updater.setNullAt(ordinal)
-          } else {
-            updater.set(ordinal, unwrapped.asInstanceOf[ByteString].toByteArray)
-          }
+          updater.set(ordinal, unwrapWktValue(value).asInstanceOf[ByteString].toByteArray)
       case (MESSAGE, FloatType)
         if protoType.getMessageType.getFullName == FloatValue.getDescriptor.getFullName =>
         (updater, ordinal, value) =>
-          val dm = value.asInstanceOf[DynamicMessage]
-          val unwrapped = getFieldValue(dm, dm.getDescriptorForType.getFields.get(0))
-          if (unwrapped == null) {
-            updater.setNullAt(ordinal)
-          } else {
-            updater.setFloat(ordinal, unwrapped.asInstanceOf[Float])
-          }
+          updater.setFloat(ordinal, unwrapWktValue(value).asInstanceOf[Float])
       case (MESSAGE, DoubleType)
         if protoType.getMessageType.getFullName == DoubleValue.getDescriptor.getFullName =>
         (updater, ordinal, value) =>
-          val dm = value.asInstanceOf[DynamicMessage]
-          val unwrapped = getFieldValue(dm, dm.getDescriptorForType.getFields.get(0))
-          if (unwrapped == null) {
-            updater.setNullAt(ordinal)
-          } else {
-            updater.setDouble(ordinal, unwrapped.asInstanceOf[Double])
-          }
+          updater.setDouble(ordinal, unwrapWktValue(value).asInstanceOf[Double])
 
       case (MESSAGE, st: StructType) =>
         val writeRecord = getRecordWriter(
@@ -518,6 +525,17 @@ private[sql] class ProtobufDeserializer(
     } else {
       null
     }
+  }
+
+  // Reads the inner `value` scalar of a present well-known wrapper message
+  // (google.protobuf.{Bool,Int32,...}Value). Unlike getFieldValue, this returns the scalar's
+  // default (0/""/false/empty-bytes) rather than null when the inner value is unset, matching the
+  // proto3 wrapper semantics where a present wrapper always carries a value. Absent singular
+  // wrappers never reach here (they are nulled by the caller), so this is only invoked for present
+  // wrappers, and is independent of `emit.default.values`.
+  private def unwrapWktValue(value: Any): AnyRef = {
+    val dm = value.asInstanceOf[DynamicMessage]
+    dm.getField(dm.getDescriptorForType.getFields.get(0))
   }
 
   // TODO: All of the code below this line is same between protobuf and avro, it can be shared.

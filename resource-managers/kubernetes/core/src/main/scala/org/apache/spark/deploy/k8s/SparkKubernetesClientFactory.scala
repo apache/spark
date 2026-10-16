@@ -19,7 +19,6 @@ package org.apache.spark.deploy.k8s
 import java.io.File
 import java.nio.file.Files
 
-import com.fasterxml.jackson.databind.ObjectMapper
 import io.fabric8.kubernetes.client.{ConfigBuilder, KubernetesClient, KubernetesClientBuilder}
 import io.fabric8.kubernetes.client.Config.KUBERNETES_REQUEST_RETRY_BACKOFFLIMIT_SYSTEM_PROPERTY
 import io.fabric8.kubernetes.client.Config.autoConfigure
@@ -107,8 +106,12 @@ object SparkKubernetesClientFactory extends Logging {
       }.withOption(namespace) {
         (ns, configBuilder) => configBuilder.withNamespace(ns)
       }.build()
-    logDebug("Kubernetes client config: " +
-      new ObjectMapper().writerWithDefaultPrettyPrinter().writeValueAsString(config))
+    // Log only non-sensitive fields. Serializing the whole Config would leak credentials
+    // such as the OAuth token, client key, and certificate data.
+    logDebug(s"Kubernetes client config: masterUrl=${config.getMasterUrl}, " +
+      s"namespace=${config.getNamespace}, apiVersion=${config.getApiVersion}, " +
+      s"requestTimeout=${config.getRequestTimeout}, " +
+      s"connectionTimeout=${config.getConnectionTimeout}, trustCerts=${config.isTrustCerts}")
     new KubernetesClientBuilder().withConfig(config).build()
   }
 

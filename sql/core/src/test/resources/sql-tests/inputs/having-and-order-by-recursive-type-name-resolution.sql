@@ -1,3 +1,11 @@
+-- We run these tests with fixed-point analyzer separately because for some cases with recursive
+-- types, fixed-point analyzer either fails to resolve the query completely or resolves it to a
+-- slightly different logical plan due to spark.sql.analyzer.singlePassResolver.preventUsingAliasesFromNonDirectChildren
+-- not being set in all tests.
+
+--SET spark.sql.analyzer.singlePassResolver.enabledTentatively=false
+--SET spark.sql.analyzer.singlePassResolver.dualRunWithLegacy=false
+
 -- This test file contains queries that test recursive types name resolution in ORDER BY and HAVING clauses.
 
 -- Alias type: String, Table column type: Struct

@@ -20,6 +20,7 @@ package org.apache.spark.scheduler
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.util.{Collections, IdentityHashMap}
 import java.util.concurrent.Semaphore
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -546,6 +547,36 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     bus.removeListener(counter3)
     assert(bus.activeQueues().isEmpty)
     assert(bus.findListenersByClass[BasicJobCounter]().isEmpty)
+  }
+
+  test("removing the last listener is uninterruptible") {
+    val bus = new LiveListenerBus(new SparkConf(false))
+    val counter = new BasicJobCounter()
+    val removalFailure = new AtomicReference[Throwable]()
+    val interruptRestored = new AtomicBoolean(false)
+
+    bus.addToSharedQueue(counter)
+    bus.start(mockSparkContext, mockMetricsSystem)
+
+    val remover = new Thread("interrupted-listener-remover") {
+      override def run(): Unit = {
+        Thread.currentThread().interrupt()
+        try {
+          bus.removeListener(counter)
+        } catch {
+          case error: Throwable => removalFailure.set(error)
+        } finally {
+          interruptRestored.set(Thread.currentThread().isInterrupted)
+        }
+      }
+    }
+    remover.start()
+    remover.join()
+
+    assert(removalFailure.get() == null)
+    assert(interruptRestored.get())
+    assert(bus.activeQueues().isEmpty)
+    bus.stop()
   }
 
   Seq(true, false).foreach { throwInterruptedException =>

@@ -50,19 +50,13 @@ import java.util.Deque;
   }
 
   /**
-   * This method will be called when we see '/*' and try to match it as a bracketed comment.
-   * If the next character is '+', it should be parsed as hint later, and we cannot match
-   * it as a bracketed comment.
+   * Called after a top-level '/*' opener to distinguish hints from bracketed comments.
+   * Nested comment openers are handled by NESTED_BRACKETED_COMMENT.
    *
    * Returns true if the next character is '+'.
    */
   public boolean isHint() {
-    int nextChar = _input.LA(1);
-    if (nextChar == '+') {
-      return true;
-    } else {
-      return false;
-    }
+    return _input.LA(1) == '+';
   }
 
   /**
@@ -122,12 +116,13 @@ BANG: '!';
 
 // NOTE: If you add a new token in the list below, you should update the list of keywords
 // and reserved tag in `docs/sql-ref-ansi-compliance.md#sql-keywords`, and
-// modify `ParserUtils.toExprAlias()` which assumes all keywords are between `ADD` and `ZONE`.
+// modify `ParserUtils.toExprAlias()` which assumes all keywords are between `ABSENT` and `ZONE`.
 
 //============================
 // Start of the keywords list
 //============================
 //--SPARK-KEYWORD-LIST-START
+ABSENT: 'ABSENT';
 ADD: 'ADD';
 AFTER: 'AFTER';
 AGGREGATE: 'AGGREGATE';
@@ -145,6 +140,7 @@ APPROX: 'APPROX';
 ARCHIVE: 'ARCHIVE';
 ARRAY: 'ARRAY' {incComplexTypeLevelCounter();};
 AS: 'AS';
+ASOF: 'ASOF';
 ASC: 'ASC';
 ASENSITIVE: 'ASENSITIVE';
 AT: 'AT';
@@ -200,6 +196,7 @@ COMPENSATION: 'COMPENSATION';
 COMPUTE: 'COMPUTE';
 CONCATENATE: 'CONCATENATE';
 CONDITION: 'CONDITION';
+CONDITIONAL: 'CONDITIONAL';
 CONSTRAINT: 'CONSTRAINT';
 CONTAINS: 'CONTAINS';
 CONTINUE: 'CONTINUE';
@@ -253,8 +250,10 @@ DOUBLE: 'DOUBLE';
 DROP: 'DROP';
 ELSE: 'ELSE';
 ELSEIF: 'ELSEIF';
+EMPTY: 'EMPTY';
 END: 'END';
 ENFORCED: 'ENFORCED';
+ERROR: 'ERROR';
 ESCAPE: 'ESCAPE';
 ESCAPED: 'ESCAPED';
 EVOLUTION: 'EVOLUTION';
@@ -299,6 +298,7 @@ GROUPING: 'GROUPING';
 HANDLER: 'HANDLER';
 HAVING: 'HAVING';
 BINARY_HEX: 'X';
+HISTORY: 'HISTORY';
 HOUR: 'HOUR';
 HOURS: 'HOURS';
 IDENTIFIER_KW: 'IDENTIFIER';
@@ -331,6 +331,12 @@ ITEMS: 'ITEMS';
 ITERATE: 'ITERATE';
 JOIN: 'JOIN';
 JSON: 'JSON';
+JSON_ARRAY: 'JSON_ARRAY';
+JSON_EXISTS: 'JSON_EXISTS';
+JSON_QUERY: 'JSON_QUERY';
+JSON_TABLE: 'JSON_TABLE';
+JSON_VALUE: 'JSON_VALUE';
+KEEP: 'KEEP';
 KEY: 'KEY';
 KEYS: 'KEYS';
 LANGUAGE: 'LANGUAGE';
@@ -358,6 +364,7 @@ LOOP: 'LOOP';
 MACRO: 'MACRO';
 MAP: 'MAP' {incComplexTypeLevelCounter();};
 MATCHED: 'MATCHED';
+MATCH_CONDITION: 'MATCH_CONDITION';
 MATERIALIZED: 'MATERIALIZED';
 MAX: 'MAX';
 MEASURE: 'MEASURE';
@@ -388,8 +395,10 @@ NULL: 'NULL';
 NULLS: 'NULLS';
 NUMERIC: 'NUMERIC';
 NORELY: 'NORELY';
+OBJECT: 'OBJECT';
 OF: 'OF';
 OFFSET: 'OFFSET';
+OMIT: 'OMIT';
 ON: 'ON';
 ONLY: 'ONLY';
 OPEN: 'OPEN';
@@ -397,6 +406,7 @@ OPTION: 'OPTION';
 OPTIONS: 'OPTIONS';
 OR: 'OR';
 ORDER: 'ORDER';
+ORDINALITY: 'ORDINALITY';
 OUT: 'OUT';
 OUTER: 'OUTER';
 OUTPUTFORMAT: 'OUTPUTFORMAT';
@@ -422,6 +432,7 @@ PURGE: 'PURGE';
 QUALIFY: 'QUALIFY';
 QUARTER: 'QUARTER';
 QUERY: 'QUERY';
+QUOTES: 'QUOTES';
 RANGE: 'RANGE';
 READ: 'READ';
 READS: 'READS';
@@ -444,6 +455,7 @@ RESET: 'RESET';
 RESPECT: 'RESPECT';
 RESTRICT: 'RESTRICT';
 RETURN: 'RETURN';
+RETURNING: 'RETURNING';
 RETURNS: 'RETURNS';
 REVOKE: 'REVOKE';
 RIGHT: 'RIGHT';
@@ -456,6 +468,7 @@ ROW: 'ROW';
 ROWS: 'ROWS';
 SECOND: 'SECOND';
 SECONDS: 'SECONDS';
+SCD: 'SCD';
 SCHEMA: 'SCHEMA';
 SCHEMAS: 'SCHEMAS';
 SECURITY: 'SECURITY';
@@ -517,6 +530,7 @@ TINYINT: 'TINYINT';
 TO: 'TO';
 EXECUTE: 'EXECUTE';
 TOUCH: 'TOUCH';
+TRACK: 'TRACK';
 TRAILING: 'TRAILING';
 TRANSACTION: 'TRANSACTION';
 TRANSACTIONS: 'TRANSACTIONS';
@@ -529,15 +543,18 @@ TYPE: 'TYPE';
 UNARCHIVE: 'UNARCHIVE';
 UNBOUNDED: 'UNBOUNDED';
 UNCACHE: 'UNCACHE';
+UNCONDITIONAL: 'UNCONDITIONAL';
 UNIFORM: 'UNIFORM';
 UNION: 'UNION';
 UNIQUE: 'UNIQUE';
 UNKNOWN: 'UNKNOWN';
 UNLOCK: 'UNLOCK';
+UNNEST: 'UNNEST';
 UNPIVOT: 'UNPIVOT';
 UNSET: 'UNSET';
 UNTIL: 'UNTIL';
 UPDATE: 'UPDATE';
+UPDATES: 'UPDATES';
 USE: 'USE';
 USER: 'USER';
 USING: 'USING';
@@ -562,6 +579,7 @@ WINDOW: 'WINDOW';
 WITH: 'WITH';
 WITHIN: 'WITHIN';
 WITHOUT: 'WITHOUT';
+WRAPPER: 'WRAPPER';
 YEAR: 'YEAR';
 YEARS: 'YEARS';
 ZONE: 'ZONE';
@@ -703,7 +721,15 @@ SIMPLE_COMMENT
     ;
 
 BRACKETED_COMMENT
-    : '/*' {!isHint()}? ( BRACKETED_COMMENT | . )*? ('*/' | {markUnclosedComment();} EOF) -> channel(HIDDEN)
+    : '/*' {!isHint()}? COMMENT_BODY ('*/' | {markUnclosedComment();} EOF) -> channel(HIDDEN)
+    ;
+
+fragment COMMENT_BODY
+    : (NESTED_BRACKETED_COMMENT | .)*?
+    ;
+
+fragment NESTED_BRACKETED_COMMENT
+    : '/*' COMMENT_BODY ('*/' | EOF)
     ;
 
 WS

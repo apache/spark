@@ -70,8 +70,15 @@ class FailureInjectionCheckpointFileManager(path: Path, hadoopConf: Configuratio
   // Injection state for the path
   private val injectionState = FailureInjectionFileSystem.getInjectionState(path.toString)
 
-  override def createAtomic(path: Path,
-                            overwriteIfPossible: Boolean): CancellableFSDataOutputStream = {
+  override def createAtomic(
+      path: Path,
+      overwriteIfPossible: Boolean): CancellableFSDataOutputStream = {
+    injectionState.delayCreateAtomicRegex.foreach { pattern =>
+      if (path.toString.matches(pattern)) {
+        // wait on the semaphore before proceeding
+        FailureInjectionFileSystem.createAtomicDelaySemaphore.acquire()
+      }
+    }
     injectionState.failureCreateAtomicRegex.foreach { pattern =>
       if (path.toString.matches(pattern)) {
         throw new IOException("Fake File System Create Atomic Failure")
@@ -128,6 +135,10 @@ class FailureInjectionState {
   // File names matching this regex will cause the createAtomic() to fail
   @volatile
   var failureCreateAtomicRegex: Seq[String] = Seq.empty
+  // File names matching this regex will cause the createAtomic() to delay on
+  // createAtomicDelaySemaphore
+  @volatile
+  var delayCreateAtomicRegex: Seq[String] = Seq.empty
   // If true, Exists() call will fail
   @volatile
   var shouldFailExist: Boolean = false
@@ -149,6 +160,9 @@ class FailureInjectionState {
 object FailureInjectionFileSystem {
   // A map from a temp path to its failure injection state.
   var tempPathToInjectionState: Map[String, FailureInjectionState] = Map.empty
+
+  // A semaphore to delay the return of createAtomic
+  val createAtomicDelaySemaphore = new java.util.concurrent.Semaphore(0)
 
   /**
    * Create a new FailureInjectionState for a temp path and add it to the map.

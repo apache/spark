@@ -43,6 +43,10 @@ public class KeyGroupedPartitioning implements Partitioning {
 
   /**
    * Returns the partition transform expressions for this partitioning.
+   * <p>
+   * Spark resolves the column references in these expressions against the table columns,
+   * including columns pruned from the scan output. If any of them cannot be resolved, Spark
+   * ignores the whole reported partitioning and logs a warning.
    */
   public Expression[] keys() {
     return keys;

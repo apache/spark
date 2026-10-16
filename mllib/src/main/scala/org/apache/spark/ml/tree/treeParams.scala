@@ -24,7 +24,7 @@ import scala.util.Try
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.classification.ProbabilisticClassifierParams
-import org.apache.spark.ml.linalg.VectorUDT
+import org.apache.spark.ml.linalg.SQLDataTypes
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
@@ -420,7 +420,7 @@ private[ml] trait TreeEnsembleClassifierParams
       featuresDataType: DataType): StructType = {
     var outputSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
     if ($(leafCol).nonEmpty) {
-      outputSchema = SchemaUtils.appendColumn(outputSchema, $(leafCol), new VectorUDT)
+      outputSchema = SchemaUtils.appendColumn(outputSchema, $(leafCol), SQLDataTypes.VectorType)
     }
     outputSchema
   }
@@ -438,7 +438,7 @@ private[ml] trait TreeEnsembleRegressorParams
       featuresDataType: DataType): StructType = {
     var outputSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
     if ($(leafCol).nonEmpty) {
-      outputSchema = SchemaUtils.appendColumn(outputSchema, $(leafCol), new VectorUDT)
+      outputSchema = SchemaUtils.appendColumn(outputSchema, $(leafCol), SQLDataTypes.VectorType)
     }
     outputSchema
   }
