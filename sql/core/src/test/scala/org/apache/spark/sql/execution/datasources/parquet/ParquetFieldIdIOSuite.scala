@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.SparkException
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.{SparkException, SparkRuntimeException}
+import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -263,6 +263,91 @@ class ParquetFieldIdIOSuite extends QueryTest with ParquetTest with SharedSparkS
           checkAnswer(spark.read.schema(readSchema).parquet(dir.getCanonicalPath),
             Seq(Row(1L), Row(2L), Row(3L)))
         }
+      }
+    }
+  }
+
+  private def checkFieldRequestedMoreThanOnce(
+      df: => DataFrame,
+      requestedFields: Seq[String],
+      parquetField: String): Unit = {
+    // The reader raises the error on the executor, so it is the cause of the job failure.
+    val cause = intercept[SparkException](df.collect()).getCause
+    checkError(
+      exception = cause.asInstanceOf[SparkRuntimeException],
+      condition = "PARQUET_FIELD_REQUESTED_MORE_THAN_ONCE",
+      parameters = Map(
+        "requestedFields" -> requestedFields.map(f => s"`$f`").mkString(", "),
+        "parquetField" -> s"`$parquetField`",
+        "fieldIdReadConf" -> "\"spark.sql.parquet.fieldId.read.enabled\""))
+  }
+
+  test("SPARK-60262: a field id match and a name match must not select the same column") {
+    withTempDir { dir =>
+      // The file column `A` has field id 1. A requested field with id 1 selects it by id, and a
+      // requested field without an id selects it by name.
+      val writeSchema = new StructType().add("A", IntegerType, true, withId(1))
+      spark.createDataFrame(Seq(Row(1), Row(2), Row(3)).asJava, writeSchema)
+        .write.mode("overwrite").parquet(dir.getCanonicalPath)
+
+      val byId = StructField("x", IntegerType, true, withId(1))
+      Seq("false" -> "a", "true" -> "A").foreach { case (caseSensitive, nameOfA) =>
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
+          val byName = StructField(nameOfA, IntegerType, true)
+          withAllParquetReaders {
+            Seq(Seq(byId, byName), Seq(byName, byId)).foreach { fields =>
+              checkFieldRequestedMoreThanOnce(
+                spark.read.schema(StructType(fields)).parquet(dir.getCanonicalPath),
+                fields.map(_.name),
+                "A")
+            }
+          }
+        }
+      }
+
+      // A requested field that matches no column does not select the column either.
+      withAllParquetReaders {
+        checkAnswer(
+          spark.read.schema(new StructType().add(byId).add("b", IntegerType, true))
+            .parquet(dir.getCanonicalPath),
+          Seq(Row(1, null), Row(2, null), Row(3, null)))
+      }
+    }
+  }
+
+  test("SPARK-60262: a field id match and a name match must not select the same nested column") {
+    withTempDir { dir =>
+      val writeSchema = new StructType().add(
+        "s", new StructType().add("A", IntegerType, true, withId(2)), true, withId(1))
+      spark.createDataFrame(Seq(Row(Row(1)), Row(Row(2)), Row(Row(3))).asJava, writeSchema)
+        .write.mode("overwrite").parquet(dir.getCanonicalPath)
+
+      val readSchema = new StructType().add(
+        "s",
+        new StructType()
+          .add("x", IntegerType, true, withId(2))
+          .add("a", IntegerType, true),
+        true,
+        withId(1))
+      withAllParquetReaders {
+        checkFieldRequestedMoreThanOnce(
+          spark.read.schema(readSchema).parquet(dir.getCanonicalPath), Seq("x", "a"), "A")
+      }
+    }
+  }
+
+  test("SPARK-60262: two fields with the same field id must not select the same column") {
+    withTempDir { dir =>
+      val writeSchema = new StructType().add("A", IntegerType, true, withId(1))
+      spark.createDataFrame(Seq(Row(1), Row(2), Row(3)).asJava, writeSchema)
+        .write.mode("overwrite").parquet(dir.getCanonicalPath)
+
+      val readSchema = new StructType()
+        .add("x", IntegerType, true, withId(1))
+        .add("y", IntegerType, true, withId(1))
+      withAllParquetReaders {
+        checkFieldRequestedMoreThanOnce(
+          spark.read.schema(readSchema).parquet(dir.getCanonicalPath), Seq("x", "y"), "A")
       }
     }
   }
