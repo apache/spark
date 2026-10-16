@@ -7722,7 +7722,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       val failure = submitAndCaptureFailure(resultRdd, Array(0, 1))
       // Rejected for fan-out (demand fit within capacity 4), NOT for slots -- proving the reused
       // producer was counted once.
-      assertPipelinedUnsupported(failure, "more than one consumer")
+      assertPipelinedUnsupported(failure, "(fan-out / branching)")
       assert(!failure.getMessage.contains("CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT"),
         s"a reused producer must be counted once (fit capacity 4), got a slot rejection: " +
           s"${failure.getMessage}")
@@ -7751,7 +7751,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       }.toList
       val resultRdd = new MyRDD(sc, 2, consumers, tracker = mapOutputTracker)
       val failure = submitAndCaptureFailure(resultRdd, Array(0, 1))
-      assertPipelinedUnsupported(failure, "more than one consumer")
+      assertPipelinedUnsupported(failure, "(fan-out / branching)")
       assert(!failure.getMessage.contains("CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT"),
         s"a reused producer must be counted once (fit capacity 4), got a slot rejection: " +
           s"${failure.getMessage}")
@@ -9427,8 +9427,22 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       List(new OneToOneDependency(consumerA), new OneToOneDependency(consumerB)),
       tracker = mapOutputTracker)
     assertPipelinedUnsupported(
-      submitAndCaptureFailure(union, Array(0, 1)), "more than one consumer")
+      submitAndCaptureFailure(union, Array(0, 1)), "(fan-out / branching)")
     assertDataStructuresEmpty()
+  }
+
+  test("pipelined shuffle: distinct consumers reading disjoint partitions are rejected") {
+    val dependency = new PipelinedShuffleDependency(
+      new MyRDD(sc, 2, Nil), new HashPartitioner(2))
+    val consumerA = new MyRDD(sc, 2, List(dependency))
+    val consumerB = new MyRDD(sc, 2, List(dependency))
+    val left = PartitionPruningRDD.create(consumerA, _ == 0)
+    val right = PartitionPruningRDD.create(consumerB, _ == 1)
+    // No partition is read twice, so only the distinct-consumer fan-out check rejects this shape.
+    assertPipelinedRejectedBeforeStageRegistration(
+      left.union(right),
+      "a pipelined producer with more than one consumer (fan-out / branching)",
+      Seq(dependency.shuffleId))
   }
 
   for (storage <- Seq("uncached", "persisted", "local checkpoint")) {
@@ -9444,7 +9458,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       // Both zip inputs evaluate the same consumer partition. Persistence cannot guarantee
       // that its block survives, and a pending local checkpoint has not replaced its lineage.
       val result = consumer.zipPartitions(consumer)((left, right) => left ++ right)
-      assertRepeatedPipelinedConsumptionRejected(result, Seq(dependency.shuffleId))
+      assertRepeatedPipelinedConsumptionRejected(result, dependency.shuffleId)
     }
   }
 
@@ -9455,14 +9469,14 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val left = consumer.mapPartitions(iter => iter)
     val right = consumer.mapPartitions(iter => iter).mapPartitions(iter => iter)
     val result = left.zipPartitions(right)((a, b) => a ++ b)
-    assertRepeatedPipelinedConsumptionRejected(result, Seq(dependency.shuffleId))
+    assertRepeatedPipelinedConsumptionRejected(result, dependency.shuffleId)
   }
 
   test("pipelined repeated consumption: duplicate native dependency edges are rejected") {
     val dependency = new PipelinedShuffleDependency(
       new MyRDD(sc, 2, Nil), new HashPartitioner(2))
     val result = new MyRDD(sc, 2, List(dependency, dependency))
-    assertRepeatedPipelinedConsumptionRejected(result, Seq(dependency.shuffleId))
+    assertRepeatedPipelinedConsumptionRejected(result, dependency.shuffleId)
   }
 
   test("pipelined repeated consumption: separate producer stages cannot reread a consumer") {
@@ -9476,7 +9490,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(first.shuffleId != second.shuffleId)
     val result = new MyRDD(sc, 2, List(first, second))
     assertRepeatedPipelinedConsumptionRejected(
-      result, Seq(upstream.shuffleId, first.shuffleId, second.shuffleId))
+      result, upstream.shuffleId, otherShuffleIds = Seq(first.shuffleId, second.shuffleId))
   }
 
   test("pipelined repeated consumption: overlapping pruned inputs are rejected") {
@@ -9487,7 +9501,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val right = PartitionPruningRDD.create(consumer, _ == 0)
     // The union sends distinct result tasks to the same consumer partition, so checking only
     // duplicates within one task misses this second read of reduce partition zero.
-    assertRepeatedPipelinedConsumptionRejected(left.union(right), Seq(dependency.shuffleId))
+    assertRepeatedPipelinedConsumptionRejected(left.union(right), dependency.shuffleId)
   }
 
   test("pipelined repeated consumption: disjoint pruned inputs share one producer stage") {
@@ -9518,7 +9532,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val consumer = new MyRDD(sc, 2, List(dependency)) with ShuffleReducePartitionMapping {
       override def reducePartitionIndex(partitionIndex: Int): Option[Int] = Some(0)
     }
-    assertRepeatedPipelinedConsumptionRejected(consumer, Seq(dependency.shuffleId))
+    assertRepeatedPipelinedConsumptionRejected(
+      consumer, dependency.shuffleId, expectedPartition = 0)
   }
 
   test("pipelined repeated consumption: a permuted reducer mapping remains schedulable") {
@@ -9572,7 +9587,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       result = new MyRDD(sc, 1, List(edge, edge))
     }
 
-    assertRepeatedPipelinedConsumptionRejected(result, Seq(dependency.shuffleId))
+    assertRepeatedPipelinedConsumptionRejected(result, dependency.shuffleId)
     // There are 2^24 paths but only 24 dependency objects. Two submissions each propagate an
     // RDD partition at most twice and inspect its two edges, so every counter is bounded by 8.
     assert(parentCalls.forall(counter => counter.get() > 0 && counter.get() <= 8))
@@ -9739,17 +9754,27 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   private def assertRepeatedPipelinedConsumptionRejected(
-      result: RDD[_], shuffleIds: Seq[Int]): Unit = {
+      result: RDD[_],
+      expectedShuffleId: Int,
+      expectedPartition: Int = 0,
+      otherShuffleIds: Seq[Int] = Nil): Unit = {
+    val reason = "a pipelined producer with more than one consumer invocation for transient " +
+      s"shuffle $expectedShuffleId partition $expectedPartition (repeated consumption)"
+    assertPipelinedRejectedBeforeStageRegistration(
+      result, reason, expectedShuffleId +: otherShuffleIds)
+  }
+
+  private def assertPipelinedRejectedBeforeStageRegistration(
+      result: RDD[_], reason: String, shuffleIds: Seq[Int]): Unit = {
     for (_ <- 0 until 2) {
       clearInvocations(scheduler, mapOutputTracker)
       val failure = submitAndCaptureFailure(result, result.partitions.indices.toArray)
-      assertPipelinedUnsupported(failure, "more than one consumer")
+      assertPipelinedUnsupported(failure, reason)
       checkError(
         exception = failure.asInstanceOf[PipelinedShuffleUnsupportedException],
         condition = "PIPELINED_SHUFFLE_UNSUPPORTED",
         sqlState = Some("0A000"),
-        parameters = immutable.Map("reason" -> ".*more than one consumer.*"),
-        matchPVals = true)
+        parameters = immutable.Map("reason" -> reason))
       assertNoPipelinedStageRegistration(shuffleIds)
       assert(taskSets.isEmpty)
       assert(results.isEmpty)
