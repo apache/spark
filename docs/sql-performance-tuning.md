@@ -650,6 +650,8 @@ The following SQL properties enable Storage Partition Join in different join que
         splits, but can reduce parallelism for large or skewed keys. It applies when partition keys
         survive scan column pruning and requires
         <code>spark.sql.sources.v2.bucketing.enabled</code> to be true.
+        If pruning collapses distinct reported partition keys onto the same key, grouping also
+        requires <code>spark.sql.sources.v2.bucketing.allowKeysSubsetOfPartitionKeys.enabled</code>.
       </td>
       <td>4.4.0</td>
     </tr>

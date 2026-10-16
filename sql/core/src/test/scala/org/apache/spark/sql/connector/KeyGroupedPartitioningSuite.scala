@@ -25,7 +25,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.rdd.SortedMergeCoalescedRDD
 import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, ExprId, Literal, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, ExprId, Literal, TransformExpression, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Complete
 import org.apache.spark.sql.catalyst.plans.{Cross, ExistenceJoin, Inner, JoinType, LeftAnti, LeftSemi, LeftSingle}
 import org.apache.spark.sql.catalyst.plans.physical
@@ -367,31 +367,38 @@ trait KeyGroupedPartitioningRuntimeFilterTests extends KeyGroupedPartitioningSui
       SQLConf.V2_BUCKETING_ENABLED.key -> "true",
       SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "false",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
       SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
       SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
       SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "10") {
-      Seq(40, 100).foreach { price =>
-        val df = sql(s"SELECT i.id, i.name, p.price " +
-          s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
-          s"ON i.id = p.item_id WHERE p.price > $price")
-        val expected = if (price == 40) {
-          (1 to 24).map(split => Row(1, s"split$split", 42.0))
-        } else {
-          Seq.empty
+      for (adaptive <- Seq(false, true); price <- Seq(40, 100)) {
+        withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString,
+          // Keep entirely pruned scan stages observable in the final adaptive join plan.
+          SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key ->
+            "org.apache.spark.sql.execution.adaptive.AQEPropagateEmptyRelation") {
+          val df = sql(s"SELECT i.id, i.name, p.price " +
+            s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
+            s"ON i.id = p.item_id WHERE p.price > $price")
+          val expected = if (price == 40) {
+            (1 to 24).map(split => Row(1, s"split$split", 42.0))
+          } else {
+            Seq.empty
+          }
+          checkAnswer(df, expected)
+          val plan = df.queryExecution.executedPlan
+          assert(collectShuffles(plan).size === 2)
+          val scan = collectScans(plan).find(_.table.name().endsWith(items)).get
+          assert(scan.runtimeFilters.nonEmpty, "the test must reach runtime partition filtering")
+          assert(scan.filteredPartitions.count(_.isEmpty) === (if (price == 40) 24 else 48))
+          val grouping = collect(plan) {
+            case g: GroupPartitionsExec if g.preserveScanGrouping => g
+          }.head
+          val rowsPerTask = grouping.execute()
+            .mapPartitions(rows => Iterator.single(rows.size)).collect()
+          assert(rowsPerTask.sorted.toSeq === (if (price == 40) Seq(0, 24) else Seq(0, 0)))
+          assert(grouping.outputPartitioning.isInstanceOf[KeyedPartitioning])
+          assert(grouping.child.outputPartitioning === grouping.childPartitioning)
         }
-        checkAnswer(df, expected)
-        val plan = df.queryExecution.executedPlan
-        assert(collectShuffles(plan).size === 2)
-        val scan = collectScans(plan).find(_.table.name().endsWith(items)).get
-        assert(scan.runtimeFilters.nonEmpty, "the test must reach runtime partition filtering")
-        assert(scan.filteredPartitions.count(_.isEmpty) === (if (price == 40) 24 else 48))
-        val grouping = collect(plan) {
-          case g: GroupPartitionsExec if g.preserveScanGrouping => g
-        }.head
-        val rowsPerTask = grouping.execute()
-          .mapPartitions(rows => Iterator.single(rows.size)).collect()
-        assert(rowsPerTask.sorted.toSeq === (if (price == 40) Seq(0, 24) else Seq(0, 0)))
       }
     }
   }
@@ -5943,6 +5950,297 @@ class KeyGroupedPartitioningSuite
         }
         assert(collectScans(plan).find(_.table.name().endsWith(items)).get
           .inputRDD.partitions.length === 48)
+      }
+    }
+  }
+
+  test("opt-in scan grouping preserves UnsafeRow conversion for row readers") {
+    createTable(items, itemsColumns, Array(identity("id")))
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 1.0, cast('2020-01-01' as timestamp)), " +
+      "(1, 'bb', 2.0, cast('2020-01-01' as timestamp)), " +
+      "(2, 'cc', 3.0, cast('2020-01-01' as timestamp))")
+    val expected = Seq(
+      Row(1, "aa", 1.0, Timestamp.valueOf("2020-01-01 00:00:00")),
+      Row(1, "bb", 2.0, Timestamp.valueOf("2020-01-01 00:00:00")),
+      Row(2, "cc", 3.0, Timestamp.valueOf("2020-01-01 00:00:00")))
+
+    for {
+      adaptive <- Seq(false, true)
+      codegen <- Seq(false, true)
+      filter <- Seq(false, true)
+    } {
+      withSQLConf(
+        SQLConf.V2_BUCKETING_GROUP_SCAN_PARTITIONS_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString,
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString) {
+        // RLIKE stays above the scan, exercising FilterExec between grouping and conversion.
+        val where = if (filter) " WHERE name RLIKE '^[a-z]+$'" else ""
+        Seq("", " DISTRIBUTE BY name").foreach { shuffle =>
+          val df = sql(s"SELECT * FROM testcat.ns.$items$where$shuffle")
+          val scan = collectScans(df.queryExecution.executedPlan).head
+          val batch = scan.scan.toBatch
+          val reader = batch.createReaderFactory().createReader(batch.planInputPartitions().head)
+          try {
+            assert(reader.next())
+            assert(!reader.get().isInstanceOf[UnsafeRow], "exercise a non-UnsafeRow reader")
+          } finally {
+            reader.close()
+          }
+          checkAnswer(df, expected)
+          val plan = df.queryExecution.executedPlan
+          val groups = collect(plan) {
+            case g: GroupPartitionsExec if g.preserveScanGrouping => g
+          }
+          assert(groups.size === 1)
+          assert(collect(plan) {
+            case p: ProjectExec if p.projectList.map(_.exprId) == p.child.output.map(_.exprId) &&
+                collect(p.child) { case g: GroupPartitionsExec => g }.nonEmpty => p
+          }.nonEmpty, s"retain UnsafeRow conversion (adaptive=$adaptive, " +
+            s"codegen=$codegen, filter=$filter, shuffle=$shuffle):\n$plan")
+          assert(collect(plan) { case s: ShuffleExchangeExec => s }.nonEmpty === shuffle.nonEmpty)
+          val rowsPerTask = groups.head.execute()
+            .mapPartitions(rows => Iterator.single(rows.size)).collect()
+          assert(rowsPerTask.sorted.toSeq === Seq(1, 2))
+        }
+      }
+    }
+  }
+
+  test("opt-in scan grouping honors the collapsed partition key gate") {
+    val columns = Array(
+      Column.create("id", LongType), Column.create("dept", StringType),
+      Column.create("data", StringType))
+    for (collapsed <- Seq(false, true)) {
+      withTable("testcat.ns.group_left", "testcat.ns.group_right") {
+        createTable("group_left", columns, Array(identity("id"), identity("dept")))
+        createTable("group_right", columns, Array(identity("id"), identity("dept")))
+        val leftDept = if (collapsed) "b" else "a"
+        val rightDept = if (collapsed) "y" else "x"
+        sql(s"INSERT INTO testcat.ns.group_left VALUES " +
+          s"(1, 'a', 'l1'), (1, '$leftDept', 'l2'), (2, 'c', 'l3')")
+        sql(s"INSERT INTO testcat.ns.group_right VALUES " +
+          s"(1, 'x', 'r1'), (1, '$rightDept', 'r2'), (2, 'z', 'r3')")
+        for (allowSubset <- Seq(false, true); requireAll <- Seq(false, true)) {
+          withSQLConf(
+            SQLConf.V2_BUCKETING_GROUP_SCAN_PARTITIONS_ENABLED.key -> "true",
+            SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> allowSubset.toString,
+            SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION.key -> requireAll.toString,
+            SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "false",
+            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+            // Pruning dept collapses distinct keys only in the collapsed variant.
+            val df = sql("SELECT /*+ MERGE(l, r) */ l.id, l.data, r.data " +
+              "FROM testcat.ns.group_left l JOIN testcat.ns.group_right r ON l.id = r.id")
+            val plan = df.queryExecution.executedPlan
+            val scans = collectScans(plan)
+            assert(scans.size === 2)
+            scans.foreach { scan =>
+              val kp = scan.outputPartitioning.asInstanceOf[KeyedPartitioning]
+              assert(!kp.isGrouped)
+              assert(kp.isCollapsed === collapsed)
+              assert(scan.inputRDD.partitions.length === 3)
+            }
+            val permitted = !collapsed || allowSubset
+            val groups = collect(plan) {
+              case g: GroupPartitionsExec if g.preserveScanGrouping => g
+            }
+            assert(groups.size === (if (permitted) 2 else 0))
+            assert(collectShuffles(plan).size === (if (permitted) 0 else 2))
+            groups.foreach { group =>
+              assert(group.outputPartitioning.asInstanceOf[KeyedPartitioning].isGrouped)
+              val rowsPerTask = group.execute()
+                .mapPartitions(rows => Iterator.single(rows.size)).collect()
+              assert(rowsPerTask.sorted.toSeq === Seq(1, 2))
+            }
+            checkAnswer(df, Seq(
+              Row(1, "l1", "r1"), Row(1, "l1", "r2"),
+              Row(1, "l2", "r1"), Row(1, "l2", "r2"), Row(2, "l3", "r3")))
+          }
+        }
+      }
+    }
+  }
+
+  test("opt-in scan grouping honors the subset gate after a projection") {
+    createTable("group_left", Array(
+      Column.create("id", LongType), Column.create("dept", StringType),
+      Column.create("data", StringType)), Array(identity("id"), identity("dept")))
+    createTable("group_right", Array(
+      Column.create("id", LongType), Column.create("data", StringType)), Array(identity("id")))
+    sql("INSERT INTO testcat.ns.group_left VALUES " +
+      "(1, 'x', 'la'), (1, 'x', 'lb'), (1, 'y', 'lc'), (2, 'z', 'ld')")
+    sql("INSERT INTO testcat.ns.group_right VALUES (1, 'ra'), (1, 'rb'), (2, 'rc')")
+    val expected = Seq(
+      Row(1L, "la", "ra"), Row(1L, "la", "rb"),
+      Row(1L, "lb", "ra"), Row(1L, "lb", "rb"),
+      Row(1L, "lc", "ra"), Row(1L, "lc", "rb"), Row(2L, "ld", "rc"))
+
+    for (adaptive <- Seq(false, true); allowSubset <- Seq(false, true)) {
+      withSQLConf(
+        SQLConf.V2_BUCKETING_GROUP_SCAN_PARTITIONS_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> allowSubset.toString,
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "false",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString) {
+        // RLIKE keeps dept in the scan; the projection above grouping then collapses its keys.
+        val df = sql("SELECT /*+ MERGE(l, r) */ l.id, l.data, r.data " +
+          "FROM (SELECT id, data FROM testcat.ns.group_left WHERE dept RLIKE 'x|y|z') l " +
+          "JOIN testcat.ns.group_right r ON l.id = r.id")
+        checkAnswer(df, expected)
+        val plan = df.queryExecution.executedPlan
+        assert(collectShuffles(plan).size === (if (allowSubset) 0 else 2))
+        val groups = collect(plan) {
+          case g: GroupPartitionsExec if g.preserveScanGrouping => g
+        }
+        assert(groups.size === 2)
+        val leftGroup = groups.find(g => collectScans(g)
+          .exists(_.table.name().endsWith("group_left"))).get
+        assert(!leftGroup.child.outputPartitioning.asInstanceOf[KeyedPartitioning].isCollapsed)
+        assert(leftGroup.execute().mapPartitions(rows => Iterator.single(rows.size))
+          .collect().sorted.toSeq === Seq(1, 1, 2))
+        val projectedKeys = collect(plan) {
+          case p: ProjectExec if (p.outputPartitioning match {
+            case kp: KeyedPartitioning => kp.isCollapsed && !kp.isGrouped
+            case _ => false
+          }) => p
+        }
+        assert(projectedKeys.nonEmpty, "retain the collapsed layout above the scan grouping")
+        assert(ValidateRequirements.validate(stripAQEPlan(plan)))
+      }
+    }
+  }
+
+  test("opt-in scan grouping preserves a compatible shuffle-free storage-partitioned join") {
+    createTable(items, itemsColumns, Array(identity("id")))
+    createTable(purchases, purchasesColumns, Array(identity("item_id")))
+    val itemValues = (1 to 2).flatMap { id =>
+      (1 to 4).map(split =>
+        s"($id, 'split$split', 1.0, cast('2020-01-01' as timestamp))")
+    }.mkString(", ")
+    val purchaseValues = (1 to 2).flatMap { id =>
+      (1 to 3).map(split =>
+        s"($id, ${40 + split}.0, cast('2020-01-01' as timestamp))")
+    }.mkString(", ")
+    sql(s"INSERT INTO testcat.ns.$items VALUES $itemValues")
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES $purchaseValues")
+    val expected = for (id <- 1 to 2; left <- 1 to 4; right <- 1 to 3) yield {
+      Row(id, s"split$left", 1.0, (40 + right).toDouble)
+    }
+
+    Seq(false, true).foreach { adaptive =>
+      withSQLConf(
+        SQLConf.V2_BUCKETING_GROUP_SCAN_PARTITIONS_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "false",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString) {
+        val df = sql(s"SELECT /*+ MERGE(i, p) */ i.id, i.name, i.price, p.price " +
+          s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p ON i.id = p.item_id")
+        checkAnswer(df, expected)
+        val plan = df.queryExecution.executedPlan
+        assert(collect(plan) { case s: ShuffleExchangeExec => s }.isEmpty)
+        val groups = collect(plan) {
+          case g: GroupPartitionsExec if g.preserveScanGrouping => g
+        }
+        assert(groups.size === 2)
+        Seq(items -> 4, purchases -> 3).foreach { case (table, rowsPerKey) =>
+          val side = groups.filter(g => collectScans(g).exists(_.table.name().endsWith(table)))
+          assert(side.size === 1)
+          val rowsPerTask = side.head.execute()
+            .mapPartitions(rows => Iterator.single(rows.size)).collect()
+          assert(rowsPerTask.toSeq === Seq(rowsPerKey, rowsPerKey))
+        }
+      }
+    }
+  }
+
+  test("opt-in scan grouping preserves join semantics with null and unmatched keys") {
+    val columns = Array(Column.create("id", LongType), Column.create("data", StringType))
+    createTable("group_left", columns, Array(identity("id")))
+    createTable("group_right", columns, Array(identity("id")))
+    sql("INSERT INTO testcat.ns.group_left VALUES " +
+      "(NULL, 'ln'), (1, 'la'), (1, 'lb'), (2, 'lc'), (3, 'l3')")
+    sql("INSERT INTO testcat.ns.group_right VALUES " +
+      "(NULL, 'rn'), (1, 'ra'), (1, 'rb'), (2, 'rc'), (4, 'r4')")
+    val matched = Seq(
+      Row(1L, "la", "ra"), Row(1L, "la", "rb"),
+      Row(1L, "lb", "ra"), Row(1L, "lb", "rb"), Row(2L, "lc", "rc"))
+    val leftOnly = Row(3L, "l3", null)
+    val rightOnly = Row(4L, null, "r4")
+    val leftNull = Row(null, "ln", null)
+    val rightNull = Row(null, null, "rn")
+    val nullMatch = Row(null, "ln", "rn")
+    val semi = Seq(Row(1L, "la"), Row(1L, "lb"), Row(2L, "lc"))
+    val cases = Seq(
+      ("INNER", "=", matched),
+      ("INNER", "<=>", matched :+ nullMatch),
+      ("LEFT OUTER", "=", matched ++ Seq(leftOnly, leftNull)),
+      ("RIGHT OUTER", "=", matched ++ Seq(rightOnly, rightNull)),
+      ("FULL OUTER", "=", matched ++ Seq(leftOnly, rightOnly, leftNull, rightNull)),
+      ("FULL OUTER", "<=>", matched ++ Seq(leftOnly, rightOnly, nullMatch)),
+      ("LEFT SEMI", "=", semi),
+      ("LEFT SEMI", "<=>", semi :+ Row(null, "ln")),
+      ("LEFT ANTI", "=", Seq(Row(3L, "l3"), Row(null, "ln"))),
+      ("LEFT ANTI", "<=>", Seq(Row(3L, "l3"))))
+
+    for {
+      adaptive <- Seq(false, true)
+      partial <- Seq(false, true)
+      filterPartitions <- Seq(false, true)
+    } {
+      withSQLConf(
+        SQLConf.V2_BUCKETING_GROUP_SCAN_PARTITIONS_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString,
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> partial.toString,
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> filterPartitions.toString,
+        SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false") {
+        cases.foreach { case (joinType, equality, expected) =>
+          val projection = if (joinType == "LEFT SEMI" || joinType == "LEFT ANTI") {
+            "l.id, l.data"
+          } else {
+            "coalesce(l.id, r.id), l.data, r.data"
+          }
+          val df = sql(s"SELECT /*+ MERGE(l, r) */ $projection " +
+            s"FROM testcat.ns.group_left l $joinType JOIN testcat.ns.group_right r " +
+            s"ON l.id $equality r.id")
+          withClue(s"adaptive=$adaptive, partial=$partial, " +
+              s"partitionFilter=$filterPartitions, join=$joinType, equality=$equality: ") {
+            checkAnswer(df, expected)
+            val plan = df.queryExecution.executedPlan
+            assert(collect(plan) {
+              case g: GroupPartitionsExec if g.preserveScanGrouping => g
+            }.size === 2)
+            assert(ValidateRequirements.validate(stripAQEPlan(plan)))
+          }
+        }
+      }
+    }
+  }
+
+  test("opt-in scan grouping preserves compatible bucket transform joins") {
+    val columns = Array(Column.create("id", LongType), Column.create("data", StringType))
+    createTable("group_left", columns, Array(bucket(4, "id")))
+    createTable("group_right", columns, Array(bucket(2, "id")))
+    sql("INSERT INTO testcat.ns.group_left VALUES (1, 'la'), (1, 'lb'), (2, 'lc'), (3, 'ld')")
+    sql("INSERT INTO testcat.ns.group_right VALUES (1, 'ra'), (2, 'rb'), (2, 'rc'), (3, 'rd')")
+    val expected = Seq(
+      Row(1L, "la", "ra"), Row(1L, "lb", "ra"),
+      Row(2L, "lc", "rb"), Row(2L, "lc", "rc"), Row(3L, "ld", "rd"))
+    for (adaptive <- Seq(false, true); groupScan <- Seq(false, true)) {
+      withSQLConf(
+        SQLConf.V2_BUCKETING_GROUP_SCAN_PARTITIONS_ENABLED.key -> groupScan.toString,
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString,
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false") {
+        val df = sql("SELECT /*+ MERGE(l, r) */ l.id, l.data, r.data " +
+          "FROM testcat.ns.group_left l JOIN testcat.ns.group_right r ON l.id = r.id")
+        checkAnswer(df, expected)
+        val plan = df.queryExecution.executedPlan
+        assert(collect(plan) { case s: ShuffleExchangeExec => s }.isEmpty)
+        assert(collect(plan) {
+          case g: GroupPartitionsExec if g.preserveScanGrouping => g
+        }.size === (if (groupScan) 2 else 0))
+        assert(ValidateRequirements.validate(stripAQEPlan(plan)))
       }
     }
   }

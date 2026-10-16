@@ -2617,7 +2617,9 @@ object SQLConf {
         "task, even when a downstream shuffle makes grouping unnecessary for correctness. " +
         "This can reduce scan-stage execution time by amortizing per-task costs across small " +
         "splits, but can reduce parallelism for large or skewed keys. Requires " +
-        s"${V2_BUCKETING_ENABLED.key} to be enabled.")
+        s"${V2_BUCKETING_ENABLED.key} to be enabled. Grouping partition keys collapsed by " +
+        "column pruning also requires " +
+        "spark.sql.sources.v2.bucketing.allowKeysSubsetOfPartitionKeys.enabled.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

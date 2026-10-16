@@ -203,10 +203,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
       val batchExec = BatchScanExec(relation.output, relation.scan, runtimeFilters,
         relation.ordering, relation.relation.table, relation.keyGroupedPartitioning)
-      val scanExec = if (session.sessionState.conf
-          .getConf(SQLConf.V2_BUCKETING_GROUP_SCAN_PARTITIONS_ENABLED)) {
+      val conf = session.sessionState.conf
+      val scanExec = if (conf.getConf(SQLConf.V2_BUCKETING_GROUP_SCAN_PARTITIONS_ENABLED)) {
         batchExec.outputPartitioning match {
-          case kp: KeyedPartitioning if !kp.isGrouped =>
+          // Pruning can collapse distinct source keys, which still requires the subset opt-in.
+          case kp: KeyedPartitioning if !kp.isGrouped &&
+              (!kp.isCollapsed || conf.v2BucketingAllowKeysSubsetOfPartitionKeys) =>
             GroupPartitionsExec(batchExec, preserveScanGrouping = true)
           case _ => batchExec
         }
