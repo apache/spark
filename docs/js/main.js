@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-/* global $, anchors */
+/* global $ */
 
 /* Custom JavaScript code in the MarkDown docs */
 
