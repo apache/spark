@@ -105,8 +105,8 @@ class PipelinedRealTimeQuerySuite extends StreamRealTimeModeManualClockSuiteBase
     var query: StreamingQuery = null
     try {
       scheduler.eventProcessLoop.stop()
-      scheduler.setEventProcessLoop(eventLoop)
       eventLoop.start()
+      scheduler.setEventProcessLoop(eventLoop)
       withTempDir { checkpoint =>
         val input = LowLatencyMemoryStream.singlePartition[Int]
         val result = input.toDS().mapPartitions { rows =>
@@ -185,8 +185,8 @@ class PipelinedRealTimeQuerySuite extends StreamRealTimeModeManualClockSuiteBase
         try {
           eventLoop.stop()
           val restored = new DAGSchedulerEventProcessLoop(scheduler)
-          scheduler.setEventProcessLoop(restored)
           restored.start()
+          scheduler.setEventProcessLoop(restored)
         } finally {
           sc.removeSparkListener(listener)
         }
