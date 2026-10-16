@@ -29,11 +29,13 @@ import scala.jdk.CollectionConverters._
 import scala.language.reflectiveCalls
 import scala.util.control.NonFatal
 
+import com.google.common.util.concurrent.Uninterruptibles
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.roaringbitmap.RoaringBitmap
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
+import org.scalatest.concurrent.Eventually.{eventually, timeout => eventuallyTimeout}
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.time.SpanSugar._
 
@@ -7994,6 +7996,111 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       assert(scheduler.pipelinedTaskCompletionReplays.isEmpty)
       assert(failure != null)
     } finally {
+      sc.removeSparkListener(listener)
+    }
+  }
+
+  test("pipelined shuffle: interrupted stop waits for an in-flight completion replay") {
+    val notifications = new LinkedBlockingQueue[(String, Int, Long)]()
+    val listener = new SparkListener {
+      override def onTaskEnd(event: SparkListenerTaskEnd): Unit = {
+        notifications.add(("task", event.stageId, event.taskInfo.taskId))
+      }
+      override def onStageCompleted(event: SparkListenerStageCompleted): Unit = {
+        notifications.add(("stage", event.stageInfo.stageId, -1L))
+      }
+      override def onJobEnd(event: SparkListenerJobEnd): Unit = {
+        notifications.add(("job", event.jobId, -1L))
+      }
+    }
+    sc.addSparkListener(listener)
+    val replayStarted = new CountDownLatch(1)
+    val finishReplay = new CountDownLatch(1)
+    val stopReturned = new CountDownLatch(1)
+    val stopErrors = new LinkedBlockingQueue[Throwable]()
+    @volatile var interruptedAfterStop = false
+    val accumulator = new LongAccumulator {
+      override def merge(other: AccumulatorV2[java.lang.Long, java.lang.Long]): Unit = {
+        replayStarted.countDown()
+        Uninterruptibles.awaitUninterruptibly(finishReplay)
+        super.merge(other)
+      }
+    }
+    sc.register(accumulator, "in-flight pipelined result")
+    val eventLoop = new DAGSchedulerEventProcessLoop(scheduler)
+    val stopThread = new Thread("stop-pipelined-scheduler") {
+      override def run(): Unit = {
+        try {
+          scheduler.stop()
+          interruptedAfterStop = isInterrupted
+        } catch {
+          case t: Throwable => stopErrors.add(t)
+        } finally {
+          stopReturned.countDown()
+        }
+      }
+    }
+    try {
+      val producer = new MyRDD(sc, 2, Nil)
+      val dependency = new PipelinedShuffleDependency(producer, new HashPartitioner(2))
+      val consumer = new MyRDD(sc, 2, List(dependency), tracker = mapOutputTracker)
+      val jobId = submit(consumer, Array(0, 1))
+      val producerTasks = taskSets.head
+      val consumerTasks = taskSets(1)
+      consumerTasks.tasks.zipWithIndex.foreach { case (task, index) =>
+        runEvent(makeCompletionEvent(task, Success, 42 + index,
+          extraAccumUpdates = Seq(AccumulatorSuite.createLongAccum(
+            "", initValue = 1, id = accumulator.id)),
+          taskInfo = createFakeTaskInfoWithId(100L + index)))
+      }
+      runEvent(makeCompletionEvent(producerTasks.tasks(0), Success, makeMapStatus("hostA", 2)))
+      scheduler.setEventProcessLoop(eventLoop)
+      eventLoop.start()
+      eventLoop.post(makeCompletionEvent(
+        producerTasks.tasks(1), Success, makeMapStatus("hostA", 2)))
+      assert(replayStarted.await(10, TimeUnit.SECONDS))
+
+      stopThread.start()
+      eventually(eventuallyTimeout(10.seconds)) {
+        assert(stopThread.getState === Thread.State.WAITING)
+      }
+      stopThread.interrupt()
+      // Wait until the interrupted join has either returned or resumed waiting for the replay.
+      eventually(eventuallyTimeout(10.seconds)) {
+        // The join monitor keeps the wait-state and interrupt observations consistent.
+        eventLoop.eventThread.synchronized {
+          assert(stopReturned.getCount == 0 ||
+            (stopThread.getState == Thread.State.WAITING && !stopThread.isInterrupted))
+        }
+      }
+      val stoppedBeforeReplayFinished = stopReturned.getCount == 0
+      finishReplay.countDown()
+      assert(stopReturned.await(10, TimeUnit.SECONDS))
+      eventLoop.eventThread.join(10000)
+      assert(!eventLoop.isActive)
+      assert(stopErrors.isEmpty)
+      assert(interruptedAfterStop)
+      sc.listenerBus.waitUntilEmpty()
+
+      val recorded = notifications.asScala.toSeq
+      val stageEnd = recorded.indexOf(("stage", consumerTasks.stageId, -1L))
+      val jobEnd = recorded.indexOf(("job", jobId, -1L))
+      assert(stageEnd >= 0 && jobEnd > stageEnd)
+      Seq(100L, 101L).foreach { taskId =>
+        val taskEnd = ("task", consumerTasks.stageId, taskId)
+        assert(recorded.count(_ == taskEnd) === 1)
+        assert(recorded.indexOf(taskEnd) < stageEnd)
+      }
+      assert(!stoppedBeforeReplayFinished)
+      assert(results === Map(0 -> 42))
+      assert(accumulator.value === 1L)
+      assert(failure != null)
+      assert(scheduler.dependentStageMap.isEmpty)
+      assert(scheduler.pipelinedTaskCompletionReplays.isEmpty)
+    } finally {
+      finishReplay.countDown()
+      stopThread.join(10000)
+      eventLoop.stop()
       sc.removeSparkListener(listener)
     }
   }
