@@ -568,6 +568,76 @@ class Scd1ForeachBatchHandlerSuite
   }
 
   // ===========================================================================================
+  // Retry correctness tests
+  // ===========================================================================================
+
+  test("retry after the target merge fails sees the unchanged auxiliary table") {
+    createAuxTable(Row(1, cdcMetadataRow(deleteSeq = Some(10L), upsertSeq = None)))
+    val batch = microbatchOf(sourceSchema)(Row(1, "revived", 20L, false))
+
+    // The missing target table makes the first merge fail. Because the target merge runs first,
+    // the auxiliary tombstone must remain available when the batch is retried.
+    intercept[AnalysisException] {
+      exec.execute(batch, batchId = 10L)
+    }
+    checkAnswer(
+      spark.read.table(defaultAuxTableIdentifier.quotedString),
+      Row(1, Row(10L, null, null)))
+
+    createTargetTable()
+    exec.execute(batch, batchId = 10L)
+
+    checkAnswer(
+      spark.read.table(defaultTargetTableIdentifier.quotedString),
+      Row(1, "revived", Row(null, 20L, null)))
+    assert(spark.read.table(defaultAuxTableIdentifier.quotedString).collect().isEmpty)
+  }
+
+  test("retry after a target-only merge completes the auxiliary merge") {
+    createAuxTable(Row(1, cdcMetadataRow(deleteSeq = Some(10L), upsertSeq = None)))
+    createTargetTable()
+    val batch = microbatchOf(sourceSchema)(Row(1, "revived", 20L, false))
+    val reconciled = processor.reconcileMicrobatch(
+      validatedBatchDf = batch,
+      auxiliaryTableDf = spark.read.table(defaultAuxTableIdentifier.quotedString))
+
+    // Simulate a crash after the target merge commits but before the auxiliary merge starts.
+    processor.mergeMicrobatchOntoTarget(reconciled, defaultTargetTableIdentifier)
+    checkAnswer(
+      spark.read.table(defaultTargetTableIdentifier.quotedString),
+      Row(1, "revived", Row(null, 20L, null)))
+    checkAnswer(
+      spark.read.table(defaultAuxTableIdentifier.quotedString),
+      Row(1, Row(10L, null, null)))
+
+    exec.execute(batch, batchId = 11L)
+
+    checkAnswer(
+      spark.read.table(defaultTargetTableIdentifier.quotedString),
+      Row(1, "revived", Row(null, 20L, null)))
+    assert(spark.read.table(defaultAuxTableIdentifier.quotedString).collect().isEmpty)
+  }
+
+  test("retry after both merges commit leaves both tables unchanged") {
+    createAuxTable()
+    createTargetTable(Row(1, "old", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(10L))))
+    val batch = microbatchOf(sourceSchema)(Row(1, null, 20L, true))
+
+    exec.execute(batch, batchId = 12L)
+    assert(spark.read.table(defaultTargetTableIdentifier.quotedString).collect().isEmpty)
+    checkAnswer(
+      spark.read.table(defaultAuxTableIdentifier.quotedString),
+      Row(1, Row(20L, null, null)))
+
+    exec.execute(batch, batchId = 12L)
+
+    assert(spark.read.table(defaultTargetTableIdentifier.quotedString).collect().isEmpty)
+    checkAnswer(
+      spark.read.table(defaultAuxTableIdentifier.quotedString),
+      Row(1, Row(20L, null, null)))
+  }
+
+  // ===========================================================================================
   // Case-sensitivity tests
   // ===========================================================================================
 
