@@ -463,13 +463,40 @@ object ParquetReadSupport extends Logging {
     }
 
     val shouldMatchById = useFieldId && ParquetUtils.hasFieldIds(structType)
-    structType.map { f =>
+    val clippedType = structType.map { f =>
       if (shouldMatchById && ParquetUtils.hasFieldId(f)) {
         matchIdField(f)
       } else if (caseSensitive) {
         matchCaseSensitiveField(f)
       } else {
         matchCaseInsensitiveField(f)
+      }
+    }
+    checkNoFieldRequestedMoreThanOnce(structType, clippedType)
+    clippedType
+  }
+
+  /**
+   * Fails if two or more requested fields were clipped to the same Parquet field. That happens
+   * when one is looked up by field id and another by name, or when both are looked up by the same
+   * id. The requested Parquet schema would then list the field twice, but a column can be read
+   * only once: the vectorized reader finds no pages left for the second copy and leaves its vector
+   * unwritten, and the parquet-mr reader maps both copies back to the same requested field.
+   *
+   * The fields of a Parquet group have distinct names, so clipped fields with the same name are
+   * the same field.
+   */
+  private def checkNoFieldRequestedMoreThanOnce(
+      structType: StructType,
+      clippedFields: Seq[Type]): Unit = {
+    val clippedNames = new util.HashSet[String]()
+    clippedFields.foreach { clipped =>
+      if (!clippedNames.add(clipped.getName)) {
+        val requestedFields = structType.iterator.zip(clippedFields.iterator)
+          .collect { case (requested, c) if c.getName == clipped.getName => requested.name }
+          .toSeq
+        throw QueryExecutionErrors.parquetFieldRequestedMoreThanOnceError(
+          requestedFields, clipped.getName)
       }
     }
   }
