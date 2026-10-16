@@ -343,16 +343,16 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
     // is processed first but doesn't match the case above due to the !isStreaming guard,
     // so the NamedStreamingRelation case here can match.
     // We pass the sourceIdentifyingName directly to getStreamingRelation.
-    case NamedStreamingRelation(u: UnresolvedCatalogRelation, sourceIdentifyingName) =>
-      getStreamingRelation(u.tableMeta, u.options, sourceIdentifyingName)
+    case named @ NamedStreamingRelation(u: UnresolvedCatalogRelation, sourceIdentifyingName) =>
+      named.copy(child = getStreamingRelation(u.tableMeta, u.options, sourceIdentifyingName))
 
     // Handle NamedStreamingRelation wrapping SubqueryAlias(UnresolvedCatalogRelation)
     // - this happens when resolving streaming tables from catalogs where the table lookup
     // creates a SubqueryAlias wrapper around the UnresolvedCatalogRelation.
-    case NamedStreamingRelation(
+    case named @ NamedStreamingRelation(
         SubqueryAlias(alias, u: UnresolvedCatalogRelation), sourceIdentifyingName) =>
       val resolved = getStreamingRelation(u.tableMeta, u.options, sourceIdentifyingName)
-      SubqueryAlias(alias, resolved)
+      named.copy(child = SubqueryAlias(alias, resolved))
 
     // Fallback for streaming UnresolvedCatalogRelation that is NOT wrapped in
     // NamedStreamingRelation (e.g., from .readStream.table() API path).
