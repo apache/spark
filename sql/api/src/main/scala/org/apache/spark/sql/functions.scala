@@ -18706,13 +18706,13 @@ object functions {
   def vector_avg(col: Column): Column = Column.fn("vector_avg", col)
 
   /**
-   * Aggregate function: returns the element-wise sum of float vectors in a group.
+   * Aggregate function: returns the element-wise sum of float or double vectors in a group.
    * @param col
    *   input vector column. A column that evaluates to an array.
    * @group vector_funcs
    * @since 4.3.0
    * @return
-   *   Returns a column that evaluates to an array.
+   *   Returns a column that evaluates to an array with the same element type as the input.
    */
   def vector_sum(col: Column): Column = Column.fn("vector_sum", col)
 
