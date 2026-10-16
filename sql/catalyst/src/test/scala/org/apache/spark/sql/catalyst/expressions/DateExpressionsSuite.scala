@@ -1323,6 +1323,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         checkEvaluation(
           ntz(Literal.create(123456L, TimestampNTZType), p, failOnError), nanosVal(123456L, 0))
         checkEvaluation(
+          ltz(Literal.create(-123456L, TimestampType), p, failOnError), nanosVal(-123456L, 0))
+        checkEvaluation(
           ltz(Literal.create(nanosVal(5L, 999), TimestampLTZNanosType(9)), p, failOnError),
           nanosVal(5L, nanoOfSecTruncator(p)(999)))
         checkEvaluation(

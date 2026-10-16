@@ -1077,6 +1077,8 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
     withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ") {
       assert(df.selectExpr(s"to_timestamp(s, '$fmt', 9)", s"try_to_timestamp(s, '$fmt', 8)")
         .schema.map(_.dataType) === Seq(TimestampNTZNanosType(9), TimestampNTZNanosType(8)))
+      assert(nanosDF(7).selectExpr("to_timestamp(ltz)", "try_to_timestamp(ltz, 'yyyy')")
+        .schema.map(_.dataType) === Seq(TimestampNTZNanosType(7), TimestampNTZNanosType(7)))
     }
   }
 
