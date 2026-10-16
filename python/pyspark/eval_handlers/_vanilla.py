@@ -17,7 +17,7 @@
 
 """Handler for the plain Python (pickle) UDF eval type, SQL_BATCHED_UDF.
 
-Input rows arrive as pickled batches and are evaluated one row at a time; no Arrow is involved.
+Input rows arrive as pickled batches and are evaluated one row at a time.
 """
 
 import os
