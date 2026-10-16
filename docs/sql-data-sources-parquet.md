@@ -264,7 +264,7 @@ They map to Parquet `INT64` columns annotated as `TIMESTAMP(NANOS, isAdjustedToU
   2262-04-11, so writing a value outside this range fails with a `DATETIME_OVERFLOW` error.
 - For Parquet files not written by Spark, schema inference maps `INT64 (TIMESTAMP(NANOS, true))` to
   `TIMESTAMP_LTZ(9)` and `INT64 (TIMESTAMP(NANOS, false))` to `TIMESTAMP_NTZ(9)`. A read schema with
-  a lower precision `p` truncates the values to `p`.
+  a lower precision `p` floor-truncates the values to that precision.
 
 The legacy configuration `spark.sql.legacy.parquet.nanosAsLong` takes precedence over this
 inference: when it is `true`, these columns are inferred as `BIGINT` holding the number of
