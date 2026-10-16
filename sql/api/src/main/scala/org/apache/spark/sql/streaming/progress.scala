@@ -21,11 +21,12 @@ import java.{util => ju}
 import java.lang.{Long => JLong}
 import java.util.UUID
 
+import scala.annotation.meta.{getter, param}
 import scala.jdk.CollectionConverters._
 import scala.math.BigDecimal.RoundingMode
 import scala.util.control.NonFatal
 
-import com.fasterxml.jackson.annotation.{JsonInclude, JsonProperty, JsonRawValue}
+import com.fasterxml.jackson.annotation.{JsonIgnore, JsonInclude, JsonProperty, JsonRawValue}
 import com.fasterxml.jackson.core.JsonParser
 import com.fasterxml.jackson.databind.{DeserializationContext, DeserializationFeature, JsonDeserializer, JsonNode, ObjectMapper}
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
@@ -221,8 +222,12 @@ class StreamingQueryProgress private[spark] (
     val sink: SinkProgress,
     @JsonDeserialize(contentAs = classOf[GenericRowWithSchema])
     val observedMetrics: ju.Map[String, Row],
-    @JsonProperty("trigger")
-    @JsonDeserialize(using = classOf[ObjectToTriggerDeserializer])
+    // Bind the public "trigger" JSON field to this constructor parameter.
+    @(JsonProperty @param)("trigger")
+    // Build triggerConfig from the public "trigger" field when reading progress JSON.
+    @(JsonDeserialize @param)(using = classOf[ObjectToTriggerDeserializer])
+    // Exclude the internal triggerConfig getter from public JSON.
+    @(JsonIgnore @getter)
     private[spark] val triggerConfig: Trigger)
     extends Serializable {
 
