@@ -1477,7 +1477,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
   }
 
   test("nanosecond timestamps read with a declared lower precision are floored") {
-    // As in createDataFrame from pandas: timestamp[ns] batches read at a lower declared precision.
+    // Mirrors createDataFrame from pandas: timestamp[ns] batches read at a lower precision.
     withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
       Seq(7, 8).foreach { p =>
         Seq[(DataType, DataType, String)](

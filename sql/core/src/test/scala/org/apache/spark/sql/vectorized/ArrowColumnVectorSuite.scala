@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 
 class ArrowColumnVectorSuite extends SparkFunSuite {
 
@@ -920,6 +920,29 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
         allocator.close()
       }
     }
+  }
+
+  test("timestamp nanos struct fields are floored to the field precision") {
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator("struct", 0, Long.MaxValue)
+    val schema = new StructType().add("ts", TimestampNTZNanosType(7))
+    val vector = ArrowUtils.toArrowField("struct", schema, nullable = true, null)
+      .createVector(allocator).asInstanceOf[StructVector]
+    vector.allocateNew()
+    val timestampVector = vector.getChildByOrdinal(0).asInstanceOf[TimeStampNanoVector]
+
+    vector.setIndexDefined(0)
+    timestampVector.setSafe(0, 123456789L)
+
+    timestampVector.setValueCount(1)
+    vector.setValueCount(1)
+
+    val columnVector = new ArrowColumnVector(vector)
+    assert(columnVector.dataType === schema)
+    assert(columnVector.getStruct(0).getTimestampNTZNanos(0) ===
+      TimestampNanosVal.fromParts(123456L, 700.toShort))
+
+    columnVector.close()
+    allocator.close()
   }
 
   private def withDecimalVector(precision: Int, scale: Int)(f: DecimalVector => Unit): Unit = {

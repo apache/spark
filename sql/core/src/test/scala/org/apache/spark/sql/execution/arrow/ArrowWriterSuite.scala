@@ -220,8 +220,7 @@ class ArrowWriterSuite extends SparkFunSuite {
 
     check(TimestampNTZNanosType(9), null, grid = 1)
     check(TimestampLTZNanosType(9), "UTC", grid = 1)
-    // The writer packs the full nanosecond value regardless of the column precision (precision is
-    // carried in the Arrow field metadata, not the value); the reader floors it to the precision.
+    // The writer packs the full value regardless of precision; the reader floors it.
     check(TimestampNTZNanosType(7), null, grid = 100)
     check(TimestampLTZNanosType(7), "UTC", grid = 100)
   }
