@@ -801,17 +801,28 @@ message SinkProgress {
   map<string, string> metrics = 3;
 }
 
+// Configured trigger metadata for a streaming query.
 message Trigger {
+  // Supported streaming query trigger types.
   enum Type {
+    // The trigger type is unavailable or unknown.
     TYPE_UNSPECIFIED = 0;
+    // The query processes micro-batches at a fixed interval.
     PROCESSING_TIME = 1;
+    // The query processes data continuously.
     CONTINUOUS = 2;
+    // The query processes data in real time.
     REAL_TIME = 3;
+    // The query processes all available data, then stops.
     AVAILABLE_NOW = 4;
+    // The query processes one micro-batch, then stops.
     ONCE = 5;
   }
 
+  // The configured trigger type.
   Type type = 1;
+  // For PROCESSING_TIME, the time between batch starts; for CONTINUOUS, the checkpoint interval;
+  // for REAL_TIME, the batch duration. Unset for other trigger types.
   optional int64 interval_ms = 2;
 }
 
@@ -828,6 +839,7 @@ message StreamingQueryProgress {
   repeated SourceProgress sources = 10;
   SinkProgress sink = 11;
   map<string, string> observed_metrics = 12;
+  // The configured trigger, when available.
   Trigger trigger = 13;
 }
 
