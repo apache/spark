@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 import org.apache.spark.sql.catalyst.analysis.{
   AnalysisErrorAt,
   AsOfJoinMatchConditionResolution,
+  AsOfJoinValidation,
   MaterializedMatchCondition,
   NaturalAndUsingJoinResolution
 }
@@ -106,6 +107,8 @@ class AsOfJoinResolver(
       leftNameScope = leftNameScope,
       rightNameScope = rightNameScope
     )
+
+    AsOfJoinValidation.validateKeyTypes(resolvedJoin)
 
     usingOutput match {
       case Some((outputList, hiddenList)) =>
