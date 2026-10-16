@@ -252,6 +252,27 @@ REFRESH TABLE my_table;
 
 </div>
 
+### Nanosecond Timestamps
+
+The nanosecond-precision timestamp types `TIMESTAMP_LTZ(p)` and `TIMESTAMP_NTZ(p)`, with `p` in
+`[7, 9]`, are a preview feature that requires `spark.sql.timestampNanosTypes.enabled` to be `true`.
+Spark stores them as Parquet `INT64` columns annotated as `TIMESTAMP(NANOS, isAdjustedToUTC)`:
+
+- Spark writes `TIMESTAMP_LTZ(p)` as `INT64 (TIMESTAMP(NANOS, true))` and `TIMESTAMP_NTZ(p)` as
+  `INT64 (TIMESTAMP(NANOS, false))`, and reads them back with the precision `p` recorded in the
+  Spark schema in the file footer. A 64-bit count of nanoseconds only covers about 1677-09-21 to
+  2262-04-11, so writing a value outside this range fails with a `DATETIME_OVERFLOW` error.
+- For Parquet files not written by Spark, schema inference maps `INT64 (TIMESTAMP(NANOS, true))` to
+  `TIMESTAMP_LTZ(9)` and `INT64 (TIMESTAMP(NANOS, false))` to `TIMESTAMP_NTZ(9)`. A read schema with
+  a lower precision `p` truncates the values to `p`.
+
+The legacy configuration `spark.sql.legacy.parquet.nanosAsLong` takes precedence over this
+inference: when it is `true`, these columns are inferred as `BIGINT` holding the number of
+nanoseconds since the epoch. When both configurations are `false`, schema inference fails with
+`PARQUET_TYPE_ILLEGAL`. An explicit `BIGINT` read schema returns the raw nanoseconds regardless of
+either configuration. See the [SQL migration guide](sql-migration-guide.html) for how to migrate
+away from `spark.sql.legacy.parquet.nanosAsLong`.
+
 ## Columnar Encryption
 
 
@@ -627,6 +648,17 @@ Configuration of Parquet can be done via `spark.conf.set` or by running
     which are not written by Spark.
   </td>
   <td>3.4.0</td>
+</tr>
+<tr>
+  <td><code>spark.sql.legacy.parquet.nanosAsLong</code></td>
+  <td>false</td>
+  <td>
+    When true, schema inference maps Parquet <code>INT64 (TIMESTAMP(NANOS, isAdjustedToUTC))</code>
+    columns to <code>BIGINT</code> holding the number of nanoseconds since the epoch, even when
+    <code>spark.sql.timestampNanosTypes.enabled</code> is true. See
+    <a href="#nanosecond-timestamps">Nanosecond Timestamps</a>.
+  </td>
+  <td>3.2.4</td>
 </tr>
 <tr>
   <td><code>spark.sql.parquet.timeType.allowIsAdjustedToUtcRead</code></td>
