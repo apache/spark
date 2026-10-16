@@ -256,7 +256,7 @@ REFRESH TABLE my_table;
 
 The nanosecond-precision timestamp types `TIMESTAMP_LTZ(p)` and `TIMESTAMP_NTZ(p)`, with `p` in
 `[7, 9]`, are a preview feature that requires `spark.sql.timestampNanosTypes.enabled` to be `true`.
-Spark stores them as Parquet `INT64` columns annotated as `TIMESTAMP(NANOS, isAdjustedToUTC)`:
+They map to Parquet `INT64` columns annotated as `TIMESTAMP(NANOS, isAdjustedToUTC)`:
 
 - Spark writes `TIMESTAMP_LTZ(p)` as `INT64 (TIMESTAMP(NANOS, true))` and `TIMESTAMP_NTZ(p)` as
   `INT64 (TIMESTAMP(NANOS, false))`, and reads them back with the precision `p` recorded in the
