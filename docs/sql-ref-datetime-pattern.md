@@ -71,6 +71,7 @@ The count of pattern letters determines the format.
   For parsing, the acceptable fraction length can be [1, the number of contiguous 'S'].
   For formatting, the fraction length would be padded to the number of contiguous 'S' with zeros.
   Spark supports datetime of micro-of-second precision, which has up to 6 significant digits, but can parse nano-of-second with exceeded part truncated.
+  The preview nanosecond-precision types `TIMESTAMP_NTZ(p)`/`TIMESTAMP_LTZ(p)` keep up to `p` digits, e.g. `to_timestamp(timestamp_str, fmt, p)`.
 
 - Year: The count of letters determines the minimum field width below which padding is used. If the count of letters is two, then a reduced two digit form is used. For printing, this outputs the rightmost two digits. For parsing, this will parse using the base value of 2000, resulting in a year within the range 2000 to 2099 inclusive. If the count of letters is less than four (but not two), then the sign is only output for negative years. Otherwise, the sign is output if the pad width is exceeded when 'G' is not present. 7 or more letters will fail.
 

@@ -28,7 +28,7 @@ import scala.language.postfixOps
 import scala.reflect.ClassTag
 import scala.util.Random
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkArithmeticException, SparkDateTimeException, SparkException, SparkFunSuite, SparkIllegalArgumentException, SparkRuntimeException, SparkUpgradeException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkArithmeticException, SparkDateTimeException, SparkException, SparkFunSuite, SparkIllegalArgumentException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -1280,6 +1280,89 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       UnixTimestamp(Literal.create(null, TimestampNTZNanosType(9)), fmt, UTC_OPT), null)
     checkEvaluation(
       ToUnixTimestamp(Literal.create(null, TimestampLTZNanosType(9)), fmt, UTC_OPT), null)
+  }
+
+  test("SPARK-57836: GetTimestamp with a nanosecond-precision result type") {
+    import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils._
+    val fmt = "yyyy-MM-dd HH:mm:ss.SSSSSSSSS"
+    val ldt = timestampNTZ(2020, 1, 1, 13, 24, 35, 123456789)
+    def ntz(e: Expression, p: Int, failOnError: Boolean): GetTimestamp =
+      GetTimestamp(e, Literal(fmt), TimestampNTZNanosType(p), timeZoneId = PST_OPT,
+        failOnError = failOnError)
+    def ltz(e: Expression, p: Int, failOnError: Boolean): GetTimestamp =
+      GetTimestamp(e, Literal(fmt), TimestampLTZNanosType(p), timeZoneId = PST_OPT,
+        failOnError = failOnError)
+
+    Seq(true, false).foreach { failOnError =>
+      foreachNanosPrecision { p =>
+        val floored = ldt.withNano(nanoOfSecTruncator(p)(ldt.getNano))
+        // Digits beyond `p` are floored. NTZ ignores the zone; LTZ parses in it.
+        Seq(Literal(fmt), NonFoldableLiteral(fmt)).foreach { f =>
+          checkEvaluation(
+            ntz(Literal("2020-01-01 13:24:35.123456789"), p, failOnError).copy(right = f),
+            localDateTimeToNanosVal(floored))
+          checkEvaluation(
+            ltz(Literal("2020-01-01 13:24:35.123456789"), p, failOnError).copy(right = f),
+            localDateTimeToNanosVal(floored, PST))
+        }
+        // Fewer fractional digits than `p`, and a pre-epoch value.
+        checkEvaluation(
+          ntz(Literal("2020-01-01 13:24:35.1"), p, failOnError),
+          localDateTimeToNanosVal(timestampNTZ(2020, 1, 1, 13, 24, 35, 100000000)))
+        checkEvaluation(
+          ntz(Literal("1969-12-31 23:59:59.999999999"), p, failOnError),
+          localDateTimeToNanosVal(
+            timestampNTZ(1969, 12, 31, 23, 59, 59, nanoOfSecTruncator(p)(999999999))))
+
+        // Non-string inputs ignore the format. DATE and microsecond timestamps keep their
+        // microsecond value; a nanosecond input is floored to `p`.
+        val days = DateTimeUtils.localDateToDays(LocalDate.of(2020, 1, 1))
+        checkEvaluation(
+          ltz(Literal.create(days, DateType), p, failOnError),
+          localDateTimeToNanosVal(timestampNTZ(2020, 1, 1), PST))
+        checkEvaluation(
+          ntz(Literal.create(123456L, TimestampNTZType), p, failOnError), nanosVal(123456L, 0))
+        checkEvaluation(
+          ltz(Literal.create(nanosVal(5L, 999), TimestampLTZNanosType(9)), p, failOnError),
+          nanosVal(5L, nanoOfSecTruncator(p)(999)))
+        checkEvaluation(
+          ntz(Literal.create(nanosVal(-1L, 123), TimestampNTZNanosType(9)), p, failOnError),
+          nanosVal(-1L, nanoOfSecTruncator(p)(123)))
+
+        // NULL input or format.
+        checkEvaluation(ntz(Literal.create(null, StringType), p, failOnError), null)
+        checkEvaluation(
+          ltz(Literal("2020-01-01 13:24:35"), p, failOnError)
+            .copy(right = Literal.create(null, StringType)),
+          null)
+        checkEvaluation(
+          ltz(Literal.create(null, TimestampLTZNanosType(9)), p, failOnError), null)
+
+        // Invalid input fails in ANSI mode like the microsecond path, and is NULL otherwise.
+        Seq("Unparseable", "2020-01-01 13:24:35.1234567891").foreach { s =>
+          Seq(ntz(Literal(s), p, failOnError), ltz(Literal(s), p, failOnError)).foreach { e =>
+            if (failOnError) {
+              checkExceptionInExpression[SparkDateTimeException](e, "could not be parsed")
+            } else {
+              checkEvaluation(e, null)
+            }
+          }
+        }
+      }
+    }
+
+    // The LEGACY parser can't parse nanoseconds: LTZ raises a clean error even when
+    // failOnError is false. NTZ always uses the non-legacy parser.
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "LEGACY") {
+      Seq(true, false).foreach { failOnError =>
+        checkExceptionInExpression[SparkUnsupportedOperationException](
+          ltz(Literal("2020-01-01 13:24:35.123456789"), 9, failOnError),
+          "LEGACY time parser policy")
+        checkEvaluation(
+          ntz(Literal("2020-01-01 13:24:35.123456789"), 9, failOnError),
+          localDateTimeToNanosVal(ldt))
+      }
+    }
   }
 
   test("datediff") {

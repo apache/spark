@@ -1699,3 +1699,104 @@ SELECT timestampadd(NANOSECOND, 50, '2020-01-01 00:00:00.0000001' :: timestamp_n
 -- !query analysis
 Project [timestampadd(NANOSECOND, cast(50 as bigint), cast(2020-01-01 00:00:00.0000001 as timestamp_ntz(7)), Some(America/Los_Angeles)) AS timestampadd(NANOSECOND, 50, CAST(2020-01-01 00:00:00.0000001 AS TIMESTAMP_NTZ(7)))#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT to_timestamp_ntz('2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 9)
+-- !query analysis
+Project [to_timestamp_ntz(2020-01-01 13:24:35.123456789, Some(yyyy-MM-dd HH:mm:ss.SSSSSSSSS), TimestampNTZNanosType(9), Some(America/Los_Angeles), true) AS to_timestamp_ntz(2020-01-01 13:24:35.123456789, yyyy-MM-dd HH:mm:ss.SSSSSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_timestamp_ntz('2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 8)
+-- !query analysis
+Project [to_timestamp_ntz(2020-01-01 13:24:35.123456789, Some(yyyy-MM-dd HH:mm:ss.SSSSSSSSS), TimestampNTZNanosType(8), Some(America/Los_Angeles), true) AS to_timestamp_ntz(2020-01-01 13:24:35.123456789, yyyy-MM-dd HH:mm:ss.SSSSSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_timestamp_ntz('2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 7)
+-- !query analysis
+Project [to_timestamp_ntz(2020-01-01 13:24:35.123456789, Some(yyyy-MM-dd HH:mm:ss.SSSSSSSSS), TimestampNTZNanosType(7), Some(America/Los_Angeles), true) AS to_timestamp_ntz(2020-01-01 13:24:35.123456789, yyyy-MM-dd HH:mm:ss.SSSSSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_timestamp_ntz('2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 6)
+-- !query analysis
+Project [to_timestamp_ntz(2020-01-01 13:24:35.123456789, Some(yyyy-MM-dd HH:mm:ss.SSSSSSSSS), TimestampNTZType, Some(America/Los_Angeles), true) AS to_timestamp_ntz(2020-01-01 13:24:35.123456789, yyyy-MM-dd HH:mm:ss.SSSSSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_timestamp_ntz('1969-12-31 23:59:59.999999999', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 9)
+-- !query analysis
+Project [to_timestamp_ntz(1969-12-31 23:59:59.999999999, Some(yyyy-MM-dd HH:mm:ss.SSSSSSSSS), TimestampNTZNanosType(9), Some(America/Los_Angeles), true) AS to_timestamp_ntz(1969-12-31 23:59:59.999999999, yyyy-MM-dd HH:mm:ss.SSSSSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_timestamp_ntz('2020-01-01 13:24:35.123456789 UTC', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS z', 9)
+-- !query analysis
+Project [to_timestamp_ntz(2020-01-01 13:24:35.123456789 UTC, Some(yyyy-MM-dd HH:mm:ss.SSSSSSSSS z), TimestampNTZNanosType(9), Some(America/Los_Angeles), true) AS to_timestamp_ntz(2020-01-01 13:24:35.123456789 UTC, yyyy-MM-dd HH:mm:ss.SSSSSSSSS z)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT typeof(to_timestamp_ntz('2020-01-01 13:24:35.1', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 8))
+-- !query analysis
+Project [typeof(to_timestamp_ntz(2020-01-01 13:24:35.1, Some(yyyy-MM-dd HH:mm:ss.SSSSSSSSS), TimestampNTZNanosType(8), Some(America/Los_Angeles), true)) AS typeof(to_timestamp_ntz(2020-01-01 13:24:35.1, yyyy-MM-dd HH:mm:ss.SSSSSSSSS))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_timestamp_ntz('bad', 'yyyy-MM-dd', 9)
+-- !query analysis
+Project [to_timestamp_ntz(bad, Some(yyyy-MM-dd), TimestampNTZNanosType(9), Some(America/Los_Angeles), true) AS to_timestamp_ntz(bad, yyyy-MM-dd)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_timestamp_ntz(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'),
+  typeof(to_timestamp_ntz(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'))
+-- !query analysis
+Project [to_timestamp_ntz(2020-01-01 13:24:35.123456789, None, TimestampNTZNanosType(9), Some(America/Los_Angeles), true) AS to_timestamp_ntz(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')#x, typeof(to_timestamp_ntz(2020-01-01 13:24:35.123456789, None, TimestampNTZNanosType(9), Some(America/Los_Angeles), true)) AS typeof(to_timestamp_ntz(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_timestamp_ntz('2020-01-01 13:24:35.12345678' :: timestamp_ntz(8), 'yyyy'),
+  typeof(to_timestamp_ntz('2020-01-01 13:24:35.12345678' :: timestamp_ntz(8), 'yyyy'))
+-- !query analysis
+Project [to_timestamp_ntz(cast(2020-01-01 13:24:35.12345678 as timestamp_ntz(8)), Some(yyyy), TimestampNTZNanosType(8), Some(America/Los_Angeles), true) AS to_timestamp_ntz(CAST(2020-01-01 13:24:35.12345678 AS TIMESTAMP_NTZ(8)), yyyy)#x, typeof(to_timestamp_ntz(cast(2020-01-01 13:24:35.12345678 as timestamp_ntz(8)), Some(yyyy), TimestampNTZNanosType(8), Some(America/Los_Angeles), true)) AS typeof(to_timestamp_ntz(CAST(2020-01-01 13:24:35.12345678 AS TIMESTAMP_NTZ(8)), yyyy))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_timestamp_ntz(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789', 'yyyy', 7)
+-- !query analysis
+Project [to_timestamp_ntz(2020-01-01 13:24:35.123456789, Some(yyyy), TimestampNTZNanosType(7), Some(America/Los_Angeles), true) AS to_timestamp_ntz(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789', yyyy)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'),
+  typeof(to_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'))
+-- !query analysis
+Project [to_timestamp(2020-01-01 13:24:35.123456789, None, TimestampLTZNanosType(9), Some(America/Los_Angeles), true) AS to_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')#x, typeof(to_timestamp(2020-01-01 13:24:35.123456789, None, TimestampLTZNanosType(9), Some(America/Los_Angeles), true)) AS typeof(to_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_timestamp_ntz('2020-01-01 13:24:35', 'yyyy-MM-dd HH:mm:ss', 10)
+-- !query analysis
+org.apache.spark.SparkException
+{
+  "errorClass" : "INVALID_TIMESTAMP_PRECISION",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "precision" : "10",
+    "type" : "TIMESTAMP_NTZ"
+  }
+}
