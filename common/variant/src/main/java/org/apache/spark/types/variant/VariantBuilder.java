@@ -285,10 +285,18 @@ public class VariantBuilder {
     int typeInfo = minimalLongTypeInfo(l);
     int numBytes;
     switch (typeInfo) {
-      case INT1: numBytes = 1; break;
-      case INT2: numBytes = 2; break;
-      case INT4: numBytes = 4; break;
-      default:   numBytes = 8; break; // INT8
+      case INT1:
+        numBytes = 1;
+        break;
+      case INT2:
+        numBytes = 2;
+        break;
+      case INT4:
+        numBytes = 4;
+        break;
+      default:
+        numBytes = 8; // INT8
+        break;
     }
     writeBuffer[writePos++] = primitiveHeader(typeInfo);
     writeLong(writeBuffer, writePos, l, numBytes);
