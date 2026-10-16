@@ -618,6 +618,28 @@ class MatricesSuite extends SparkMLFunSuite {
     assert(sAT.toDense.asBreeze === dATexpected.asBreeze)
   }
 
+  test("SPARK-60300: copy preserves isTransposed") {
+    val denseMatrices = Seq(
+      new DenseMatrix(2, 2, Array(1.0, 2.0, 3.0, 4.0)).transpose,
+      new DenseMatrix(2, 3, Array(1.0, 2.0, 3.0, 4.0, 5.0, 6.0)).transpose)
+    denseMatrices.foreach { m =>
+      val copy = m.copy
+      assert(copy === m)
+      assert(copy.isTransposed === m.isTransposed)
+      assert(!copy.values.eq(m.values), "has to have a new array")
+    }
+
+    val sparseMatrices = Seq(
+      new SparseMatrix(2, 2, Array(0, 2, 3), Array(0, 1, 1), Array(1.0, 2.0, 3.0)).transpose,
+      new SparseMatrix(2, 3, Array(0, 1, 2, 3), Array(0, 1, 0), Array(1.0, 2.0, 3.0)).transpose)
+    sparseMatrices.foreach { m =>
+      val copy = m.copy
+      assert(copy === m)
+      assert(copy.isTransposed === m.isTransposed)
+      assert(!copy.values.eq(m.values), "has to have a new array")
+    }
+  }
+
   test("foreachActive") {
     val m = 3
     val n = 2
