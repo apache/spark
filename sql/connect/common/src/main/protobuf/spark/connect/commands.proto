@@ -23,6 +23,7 @@ import "spark/connect/expressions.proto";
 import "spark/connect/relations.proto";
 import "spark/connect/ml.proto";
 import "spark/connect/pipelines.proto";
+import "spark/connect/graphframes.proto";
 
 package spark.connect;
 
@@ -53,12 +54,26 @@ message Command {
     MlCommand ml_command = 17;
     ExecuteExternalCommand execute_external_command = 18;
     PipelineCommand pipeline_command = 19;
+    GraphFramesCommand graph_frames_command = 20;
 
     // This field is used to mark extensions to the protocol. When plugins generate arbitrary
     // Commands they can add them here. During the planning the correct resolution is done.
     google.protobuf.Any extension = 999;
 
   }
+}
+
+// Executes an eager graph algorithm and publishes its checkpointed result as a temp view.
+message GraphFramesCommand {
+  // (Required) The graph inputs and algorithm to execute. Currently supports connected components.
+  graphframes.GraphFramesAPI api = 1;
+
+  reserved 2;
+  reserved "output_path";
+
+  // (Required) Unique client-generated local temp view name for the result.
+  // Repeating the same command reuses the published result in the same session.
+  string view_name = 3;
 }
 
 // A SQL Command is used to trigger the eager evaluation of SQL commands in Spark.

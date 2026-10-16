@@ -671,7 +671,19 @@ class GraphFrame:
                                     a persistent checkpointDir; from the other side, local
                                     checkpoints are less reliable and require executors to have
                                     big enough local disks.
-        :param storage_level: storage level for both intermediate and final dataframes.
+        :param storage_level: storage level for both intermediate and final dataframes;
+                              in Spark Connect, this controls intermediate dataframes only.
+
+        In Spark Connect, the server eagerly checkpoints the result and registers it as a
+        client-named session-local temporary view. The final checkpoint uses reliable
+        checkpointing when a checkpoint directory is configured, otherwise a local checkpoint
+        with ``DISK_ONLY`` storage. ``use_local_checkpoints`` controls intermediate checkpointing.
+        The returned DataFrame reads the view without automatically persisting it. Dropping
+        the view with ``spark.catalog.dropTempView`` removes the view reference.
+        Checkpoint resources follow Spark's normal lifecycle: local checkpoint blocks are
+        eligible for garbage collection once no references remain. Reliable checkpoint files
+        are retained by default; enable checkpoint cleanup or clean the directory separately.
+        The result is valid only in that session.
 
         :return: DataFrame with new vertices column "component"
         """

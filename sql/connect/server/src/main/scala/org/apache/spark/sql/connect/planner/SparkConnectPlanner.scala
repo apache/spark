@@ -2943,6 +2943,9 @@ class SparkConnectPlanner(
         handleCheckpointCommand(command.getCheckpointCommand, responseObserver)
       case proto.Command.CommandTypeCase.REMOVE_CACHED_REMOTE_RELATION_COMMAND =>
         handleRemoveCachedRemoteRelationCommand(command.getRemoveCachedRemoteRelationCommand)
+      case proto.Command.CommandTypeCase.GRAPH_FRAMES_COMMAND =>
+        GraphFramesConnectUtils.processCommand(command.getGraphFramesCommand, this)
+        executeHolder.eventsManager.postFinished()
       case proto.Command.CommandTypeCase.ML_COMMAND =>
         handleMlCommand(command.getMlCommand, responseObserver)
       case proto.Command.CommandTypeCase.PIPELINE_COMMAND =>

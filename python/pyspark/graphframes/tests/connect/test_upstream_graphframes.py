@@ -18,10 +18,12 @@
 import os
 import shutil
 import tempfile
+from unittest.mock import patch
 
 from pyspark import SparkConf
 from pyspark.graphframes import GraphFrame
 from pyspark.graphframes.tests import test_graphframes as upstream
+from pyspark.sql.connect.session import SparkSession as ConnectSparkSession
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
@@ -83,6 +85,84 @@ class GraphFramesUpstreamConnectTests(ReusedConnectTestCase):
                 with self.subTest(args=args, cc_args=cc_args):
                     upstream.test_connected_components2(self.spark, args, cc_args)
 
+    def test_connected_components_view_result(self) -> None:
+        cache_manager = None
+        if self._legacy_sc is not None:
+            session = self._legacy_sc._jvm.org.apache.spark.sql.SparkSession.builder().getOrCreate()
+            cache_manager = session.sharedState().cacheManager()
+        names = set()
+        with self.sql_conf({"spark.connect.session.planCache.enabled": "false"}):
+            for algorithm in ["two_phase", "randomized_contraction", "graphx"]:
+                for id_type in [int, str]:
+                    for local in [False, True]:
+                        with self.subTest(algorithm=algorithm, id_type=id_type, local=local):
+                            self._check_connected_components_view(
+                                algorithm, id_type, local, names, cache_manager
+                            )
+
+    def _check_connected_components_view(
+        self, algorithm, id_type, local, names, cache_manager
+    ) -> None:
+        vertices = self.spark.createDataFrame(
+            [(id_type(i), f"vertex-{i}") for i in range(1, 7)], ["id", "name"]
+        )
+        edges = self.spark.createDataFrame(
+            [(id_type(a), id_type(b)) for a, b in [(1, 2), (2, 3), (4, 5)]], ["src", "dst"]
+        )
+        graph = GraphFrame(vertices, edges)
+        before = cache_manager.cachedData().size() if cache_manager is not None else None
+        client = self.spark.client
+        with patch.object(client, "execute_command", wraps=client.execute_command) as execute:
+            result = graph.connectedComponents(
+                algorithm=algorithm,
+                checkpointInterval=2,
+                use_local_checkpoints=local,
+                useLabelsAsComponents=True,
+            )
+        command = execute.call_args.args[0]
+        self.assertEqual(command.WhichOneof("command_type"), "graph_frames_command")
+        name = command.graph_frames_command.view_name
+        try:
+            self.assertRegex(name, r"^_graphframes_cc_[0-9a-f]{32}$")
+            self.assertNotIn(name, names)
+            names.add(name)
+            root = result._plan.to_proto(client).root
+            self.assertEqual(root.WhichOneof("rel_type"), "read")
+            self.assertEqual(root.read.named_table.unparsed_identifier, name)
+            self.assertFalse(self.spark.catalog.isCached(name))
+            if cache_manager is not None:
+                self.assertEqual(cache_manager.cachedData().size(), before)
+            rows = result.orderBy("id").collect()
+            groups = {}
+            for row in rows:
+                groups.setdefault(row.component, set()).add(row.id)
+            self.assertEqual(
+                {frozenset(group) for group in groups.values()},
+                {
+                    frozenset(id_type(i) for i in [1, 2, 3]),
+                    frozenset(id_type(i) for i in [4, 5]),
+                    frozenset([id_type(6)]),
+                },
+            )
+            self.assertEqual([row.id for row in rows], [id_type(i) for i in range(1, 7)])
+            if algorithm != "randomized_contraction":
+                self.assertEqual([row.name for row in rows], [f"vertex-{i}" for i in range(1, 7)])
+            self.assertEqual(result.orderBy("id").collect(), rows)
+            result.unpersist(blocking=True)
+            self.assertFalse(self.spark.catalog.isCached(name))
+            self.assertEqual(result.orderBy("id").collect(), rows)
+            # Retrying the command retains the same checkpoint, even without SQL caching.
+            client.execute_command(command)
+            self.assertEqual(result.orderBy("id").collect(), rows)
+            if cache_manager is not None:
+                self.assertEqual(cache_manager.cachedData().size(), before)
+            self.assertEqual(result.cache().count(), 6)
+        finally:
+            self.assertTrue(self.spark.catalog.dropTempView(name))
+        self.assertFalse(self.spark.catalog.tableExists(name))
+        if cache_manager is not None:
+            self.assertEqual(cache_manager.cachedData().size(), before)
+
     def test_shortest_paths(self) -> None:
         for args in upstream.PREGEL_ARGUMENTS:
             with self.subTest(args=args):
@@ -107,6 +187,75 @@ class GraphFramesUpstreamConnectTests(ReusedConnectTestCase):
         for args in upstream.PREGEL_ARGUMENTS:
             with self.subTest(args=args):
                 upstream.test_kcore(self.spark, args)
+
+
+class GraphFramesLocalCheckpointConnectTests(ReusedConnectTestCase):
+    def _graph(self, spark):
+        vertices = spark.createDataFrame([("a",), ("b",), ("c",)], ["id"])
+        edges = spark.createDataFrame([("a", "b")], ["src", "dst"])
+        return GraphFrame(vertices, edges)
+
+    def _persistent_rdd_ids(self):
+        if self._legacy_sc is None:
+            return None
+        entries = self._legacy_sc._jsc.sc().getPersistentRDDs().keysIterator()
+        ids = set()
+        while entries.hasNext():
+            ids.add(entries.next())
+        return ids
+
+    def test_local_checkpoint_without_directory(self) -> None:
+        before = self._persistent_rdd_ids()
+        with self.sql_conf({"spark.connect.session.planCache.enabled": "false"}):
+            result = self._graph(self.spark).connectedComponents(
+                algorithm="two_phase", checkpointInterval=0, use_local_checkpoints=False
+            )
+            name = result._plan.to_proto(
+                self.spark.client
+            ).root.read.named_table.unparsed_identifier
+            try:
+                expected = result.orderBy("id").collect()
+                self.assertEqual(len(expected), 3)
+                result.unpersist(blocking=True)
+                self.assertEqual(result.orderBy("id").collect(), expected)
+                self.assertEqual(self.spark.table(name).count(), 3)
+                self.assertFalse(self.spark.catalog.isCached(name))
+                if before is not None:
+                    self.assertGreater(len(self._persistent_rdd_ids() - before), 0)
+            finally:
+                self.spark.catalog.dropTempView(name)
+
+    def test_result_view_is_session_local(self) -> None:
+        other = ConnectSparkSession(connection=self.spark.client._builder)
+        try:
+            result = self._graph(other).connectedComponents(
+                algorithm="two_phase", checkpointInterval=0, use_local_checkpoints=True
+            )
+            name = result._plan.to_proto(other.client).root.read.named_table.unparsed_identifier
+            self.assertEqual(result.count(), 3)
+            self.assertTrue(other.catalog.tableExists(name))
+            self.assertFalse(self.spark.catalog.tableExists(name))
+            other.catalog.dropTempView(name)
+        finally:
+            other.client.release_session()
+            other.client.close()
+
+    def test_conflicting_retry_keeps_result(self) -> None:
+        client = self.spark.client
+        with patch.object(client, "execute_command", wraps=client.execute_command) as execute:
+            result = self._graph(self.spark).connectedComponents(
+                algorithm="two_phase", checkpointInterval=0, use_local_checkpoints=True
+            )
+        command = execute.call_args.args[0]
+        name = command.graph_frames_command.view_name
+        try:
+            expected = result.orderBy("id").collect()
+            command.graph_frames_command.api.connected_components.max_iter = 5
+            with self.assertRaisesRegex(Exception, "belongs to another request"):
+                client.execute_command(command)
+            self.assertEqual(result.orderBy("id").collect(), expected)
+        finally:
+            self.spark.catalog.dropTempView(name)
 
 
 def _spark_test(function):

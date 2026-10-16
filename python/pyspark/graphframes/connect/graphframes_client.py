@@ -16,6 +16,7 @@
 #
 from __future__ import annotations
 
+import uuid
 from typing import cast, final
 
 from typing_extensions import Self, override
@@ -718,65 +719,24 @@ class GraphFrameConnect:
         max_iter: int,
         storage_level: StorageLevel,
     ) -> DataFrame:
-        @final
-        class ConnectedComponents(LogicalPlan):
-            def __init__(
-                self,
-                v: DataFrame,
-                e: DataFrame,
-                algorithm: str,
-                checkpoint_interval: int,
-                broadcast_threshold: int,
-                use_labels_as_components: bool,
-                use_local_checkpoints: bool,
-                max_iter: int,
-                storage_level: StorageLevel,
-            ) -> None:
-                super().__init__(None)
-                self.v = v
-                self.e = e
-                self.algorithm = algorithm
-                self.checkpoint_interval = checkpoint_interval
-                self.broadcast_threshold = broadcast_threshold
-                self.use_labels_as_components = use_labels_as_components
-                self.use_local_checkpoints = use_local_checkpoints
-                self.max_iter = max_iter
-                self.storage_level = storage_level
-
-            @override
-            def plan(self, session: SparkConnectClient) -> proto.Relation:
-                graphframes_api_call = GraphFrameConnect._get_pb_api_message(
-                    self.v, self.e, session
-                )
-                graphframes_api_call.connected_components.CopyFrom(
-                    pb.ConnectedComponents(
-                        algorithm=self.algorithm,
-                        checkpoint_interval=self.checkpoint_interval,
-                        broadcast_threshold=self.broadcast_threshold,
-                        use_labels_as_components=self.use_labels_as_components,
-                        use_local_checkpoints=self.use_local_checkpoints,
-                        max_iter=self.max_iter,
-                        storage_level=storage_level_to_proto(self.storage_level),
-                    )
-                )
-                plan = self._create_proto_relation()
-                plan.graph_frames.CopyFrom(graphframes_api_call)
-                return plan
-
-        return _dataframe_from_plan(
-            ConnectedComponents(
-                self._vertices,
-                self._edges,
-                algorithm,
-                checkpointInterval,
-                broadcastThreshold,
-                useLabelsAsComponents,
-                use_local_checkpoints,
-                max_iter,
-                storage_level,
-            ),
-            self._spark,
+        view_name = f"_graphframes_cc_{uuid.uuid4().hex}"
+        api = self._get_pb_api_message(self._vertices, self._edges, self._spark.client)
+        api.connected_components.CopyFrom(
+            pb.ConnectedComponents(
+                algorithm=algorithm,
+                checkpoint_interval=checkpointInterval,
+                broadcast_threshold=broadcastThreshold,
+                use_labels_as_components=useLabelsAsComponents,
+                use_local_checkpoints=use_local_checkpoints,
+                max_iter=max_iter,
+                storage_level=storage_level_to_proto(storage_level),
+            )
         )
+        command = proto.Command(
+            graph_frames_command=proto.GraphFramesCommand(api=api, view_name=view_name)
+        )
+        self._spark.client.execute_command(command)
+        return self._spark.table(view_name)
 
     def labelPropagation(
         self,

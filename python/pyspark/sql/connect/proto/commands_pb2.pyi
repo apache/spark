@@ -43,6 +43,7 @@ import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
 import pyspark.sql.connect.proto.common_pb2
 import pyspark.sql.connect.proto.expressions_pb2
+import pyspark.sql.connect.proto.graphframes_pb2
 import pyspark.sql.connect.proto.ml_pb2
 import pyspark.sql.connect.proto.pipelines_pb2
 import pyspark.sql.connect.proto.relations_pb2
@@ -110,6 +111,7 @@ class Command(google.protobuf.message.Message):
     ML_COMMAND_FIELD_NUMBER: builtins.int
     EXECUTE_EXTERNAL_COMMAND_FIELD_NUMBER: builtins.int
     PIPELINE_COMMAND_FIELD_NUMBER: builtins.int
+    GRAPH_FRAMES_COMMAND_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def register_function(
@@ -158,6 +160,8 @@ class Command(google.protobuf.message.Message):
     @property
     def pipeline_command(self) -> pyspark.sql.connect.proto.pipelines_pb2.PipelineCommand: ...
     @property
+    def graph_frames_command(self) -> global___GraphFramesCommand: ...
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
         Commands they can add them here. During the planning the correct resolution is done.
@@ -189,6 +193,7 @@ class Command(google.protobuf.message.Message):
         ml_command: pyspark.sql.connect.proto.ml_pb2.MlCommand | None = ...,
         execute_external_command: global___ExecuteExternalCommand | None = ...,
         pipeline_command: pyspark.sql.connect.proto.pipelines_pb2.PipelineCommand | None = ...,
+        graph_frames_command: global___GraphFramesCommand | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
@@ -208,6 +213,8 @@ class Command(google.protobuf.message.Message):
             b"extension",
             "get_resources_command",
             b"get_resources_command",
+            "graph_frames_command",
+            b"graph_frames_command",
             "merge_into_table_command",
             b"merge_into_table_command",
             "ml_command",
@@ -255,6 +262,8 @@ class Command(google.protobuf.message.Message):
             b"extension",
             "get_resources_command",
             b"get_resources_command",
+            "graph_frames_command",
+            b"graph_frames_command",
             "merge_into_table_command",
             b"merge_into_table_command",
             "ml_command",
@@ -308,12 +317,40 @@ class Command(google.protobuf.message.Message):
             "ml_command",
             "execute_external_command",
             "pipeline_command",
+            "graph_frames_command",
             "extension",
         ]
         | None
     ): ...
 
 global___Command = Command
+
+class GraphFramesCommand(google.protobuf.message.Message):
+    """Executes an eager graph algorithm and publishes its checkpointed result as a temp view."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    API_FIELD_NUMBER: builtins.int
+    VIEW_NAME_FIELD_NUMBER: builtins.int
+    @property
+    def api(self) -> pyspark.sql.connect.proto.graphframes_pb2.GraphFramesAPI:
+        """(Required) The graph inputs and algorithm to execute. Currently supports connected components."""
+    view_name: builtins.str
+    """(Required) Unique client-generated local temp view name for the result.
+    Repeating the same command reuses the published result in the same session.
+    """
+    def __init__(
+        self,
+        *,
+        api: pyspark.sql.connect.proto.graphframes_pb2.GraphFramesAPI | None = ...,
+        view_name: builtins.str = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing_extensions.Literal["api", b"api"]) -> builtins.bool: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["api", b"api", "view_name", b"view_name"]
+    ) -> None: ...
+
+global___GraphFramesCommand = GraphFramesCommand
 
 class SqlCommand(google.protobuf.message.Message):
     """A SQL Command is used to trigger the eager evaluation of SQL commands in Spark.

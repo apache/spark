@@ -1052,6 +1052,13 @@ class GraphFrame private (
     }
   }
 
+  private var cachedVertexIdMapping: Option[DataFrame] = None
+
+  // Release only mappings already created by this graph, without initializing indexedVertices.
+  private[spark] def unpersistVertexIdMapping(): Unit = {
+    cachedVertexIdMapping.foreach(_.unpersist(blocking = false))
+  }
+
   /**
    * Vertices with each vertex assigned a unique long ID. If the vertex ID type is integral, this
    * casts the original IDs to long.
@@ -1075,6 +1082,7 @@ class GraphFrame private (
         .sortWithinPartitions(ID)
         .withColumn(LONG_ID, monotonically_increasing_id())
         .persist(StorageLevel.MEMORY_AND_DISK)
+      cachedVertexIdMapping = Some(withLongIds)
       vertices
         .select(col(ID), nestAsCol(vertices, ATTR))
         .join(withLongIds, ID)
