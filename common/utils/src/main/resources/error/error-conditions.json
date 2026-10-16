@@ -205,6 +205,11 @@
         "message" : [
           "Unsupported as-of join direction '<direction>'. Supported as-of join direction include: <supported>."
         ]
+      },
+      "UNSUPPORTED_NEAREST_KEY_TYPE" : {
+        "message" : [
+          "Nearest sort-merge as-of joins do not support <dataType> keys. Cast the keys to a numeric or datetime type."
+        ]
       }
     },
     "sqlState" : "42604"
