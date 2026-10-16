@@ -502,13 +502,28 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
    * A condition that itself contains a subquery is not normalized. Guarding that
    * group would duplicate the predicate into a second existence join, and collapsing
    * it without the guard would project the raw base.
+   *
+   * A count whose IF/CASE child is also the distinct child of an aggregate that is
+   * not normalized (e.g. SUM(DISTINCT IF(...)) on the same expression) is skipped:
+   * collapsing it would duplicate that child across the guarded {base} group and
+   * the surviving shared group, inflating the first aggregate's output for rows
+   * matching its condition. Keeping the count in the shared group preserves the
+   * original key sharing.
    */
   private def normalizeCountDistinctConditional(a: Aggregate): Aggregate = {
     if (!SQLConf.get.rewriteCountDistinctConditionalEnabled) return a
+    // Distinct children (canonicalized) of aggregates this method will not
+    // normalize. A conditional count sharing one of these children stays put, so
+    // the shared group survives instead of its keys being carried twice.
+    val protectedChildren = collectAggregateExprs(a)
+      .filter(ae => ae.isDistinct && !isConditionalCount(ae))
+      .flatMap(_.aggregateFunction.children.map(_.canonicalized))
+      .toSet
     a.transformExpressionsUpWithPruning(
       _.containsAnyPattern(IF, CASE_WHEN)) {
       case ae @ AggregateExpression(count: Count, _, true, None, _)
-          if count.children.size == 1 =>
+          if count.children.size == 1 &&
+            !protectedChildren.contains(count.children.head.canonicalized) =>
         extractCondAndBase(count.children.head) match {
           case Some((cond, base)) =>
             ae.copy(
@@ -517,6 +532,16 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
           case None => ae
         }
     }
+  }
+
+  /**
+   * Whether `ae` is a COUNT(DISTINCT IF/CASE) that
+   * [[normalizeCountDistinctConditional]] can canonicalize to FILTER form.
+   */
+  private def isConditionalCount(ae: AggregateExpression): Boolean = ae match {
+    case AggregateExpression(count: Count, _, true, None, _) if count.children.size == 1 =>
+      extractCondAndBase(count.children.head).isDefined
+    case _ => false
   }
 
   /**

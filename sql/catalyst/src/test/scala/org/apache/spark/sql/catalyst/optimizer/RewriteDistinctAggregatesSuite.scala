@@ -531,6 +531,54 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
     comparePlans(optimized, input)
   }
 
+  test("conditional: IF shared with an un-normalizable distinct agg is not normalized") {
+    // COUNT(DISTINCT IF(b>1, c, NULL)) shares its IF child with SUM(DISTINCT IF(...)),
+    // which is not canonicalized. Normalizing the COUNT would move it into the guarded
+    // {c} group while the SUM keeps the {IF(b>1, c, NULL)} group, so rows matching b>1
+    // would carry their c keys in both groups, roughly doubling the first aggregate's
+    // output. The count must stay in the shared group; only the other two conditional
+    // counts collapse, and their guard covers exactly b>2 and b>3.
+    val bAttr = conditionalTestRelation.output.find(_.name == "b").get
+    val base = conditionalTestRelation.output.find(_.name == "c").get
+    val sharedIf = If(Symbol("b") > 1, Symbol("c"), Literal(null))
+    val input = conditionalTestRelation
+      .groupBy(Symbol("a"))(
+        Count(sharedIf).toAggregateExpression(isDistinct = true).as("cnt1"),
+        Sum(sharedIf).toAggregateExpression(isDistinct = true).as("sum1"),
+        countDistinctIf(Symbol("b") > 2, Symbol("c")).as("cnt2"),
+        countDistinctIf(Symbol("b") > 3, Symbol("c")).as("cnt3"))
+      .analyze
+    // The resolved shared IF child of the un-normalized COUNT and SUM.
+    val analyzedSharedIf = input.collectFirst {
+      case a: Aggregate => a.aggregateExpressions.flatMap(_.collect {
+        case ae: AggregateExpression
+            if ae.isDistinct && ae.aggregateFunction.isInstanceOf[Sum] =>
+          ae.aggregateFunction.children.head
+      }).head
+    }.get
+    val optimized = RewriteDistinctAggregates(input)
+    val expand = optimized.collectFirst { case e: Expand => e }.get
+    // Two distinct groups: {IF(b>1, c, NULL)} serving cnt1 and sum1, and the guarded
+    // {c} group serving cnt2 and cnt3.
+    assert(expand.projections.size == 2,
+      s"expected 2 distinct groups:\n$optimized")
+    assert(expand.projections.exists(_.exists(_.semanticEquals(analyzedSharedIf))),
+      s"shared IF should stay a raw distinct key:\n$optimized")
+    // Skip the shared IF, whose trueValue is also c.
+    val guard = expand.projections.flatten.collectFirst {
+      case i @ If(_, trueValue, falseValue)
+          if falseValue == nullInt && trueValue.semanticEquals(base) &&
+            !i.semanticEquals(analyzedSharedIf) => i
+    }.getOrElse(fail(s"no union guard over c in Expand projections:\n$optimized"))
+    val leaves = orLeaves(guard.predicate)
+    assert(leaves.size == 2,
+      s"guard condition should cover exactly b>2 and b>3: ${guard.predicate}")
+    Seq(bAttr > 2, bAttr > 3).foreach { cond =>
+      assert(leaves.exists(_.semanticEquals(cond)),
+        s"guard condition misses $cond: ${guard.predicate}")
+    }
+  }
+
   test("conditional: repeated COUNT(DISTINCT IF) with COUNT(*) keeps single-distinct path") {
     // Two identical conditional counts form one unfiltered distinct group. Normalizing
     // them to FILTER form would make mustRewrite true and introduce an Expand
@@ -564,16 +612,59 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
   }
 
   test("conditional: do not rewrite non-distinct COUNT") {
+    // Pair the non-distinct COUNT with two conditional distinct counts on the same
+    // base so that normalization is kept (strict reduction) and rewrite() runs.
+    // The non-distinct COUNT must keep its IF child and get no FILTER clause.
+    val bAttr = conditionalTestRelation.output.find(_.name == "b").get
+    val base = conditionalTestRelation.output.find(_.name == "c").get
     val input = conditionalTestRelation
       .groupBy(Symbol("a"))(
         Count(If(Symbol("b") > 1, Symbol("c"), Literal(null, IntegerType)))
           .toAggregateExpression(isDistinct = false)
-          .as("cnt1"),
-        countDistinct(Symbol("c")).as("cnt2"))
+          .as("cnt"),
+        countDistinctIf(Symbol("b") > 1, Symbol("c")).as("cnt1"),
+        countDistinctIf(Symbol("b") > 2, Symbol("c")).as("cnt2"))
       .analyze
+    // The resolved IF child of the non-distinct COUNT.
+    val analyzedIf = input.collectFirst {
+      case a: Aggregate => a.aggregateExpressions.flatMap(_.collect {
+        case ae: AggregateExpression if !ae.isDistinct =>
+          ae.aggregateFunction.children.head
+      }).head
+    }.get
     val optimized = RewriteDistinctAggregates(input)
-    // Still a single distinct group (cnt2), no canonicalization of the non-distinct agg
-    comparePlans(optimized, input)
+    val expand = optimized.collectFirst { case e: Expand => e }.get
+    // One regular projection plus one distinct projection: the two conditional
+    // distinct counts collapsed into a single guarded distinct group.
+    assert(expand.projections.size == 2,
+      s"expected 1 regular + 1 distinct projection:\n$optimized")
+    // The guard lives in the distinct projection; skip the non-distinct COUNT's own
+    // IF, which is projected raw in the regular projection.
+    val guard = expand.projections.flatten.collectFirst {
+      case i @ If(_, trueValue, falseValue)
+          if falseValue == nullInt && trueValue.semanticEquals(base) &&
+            !i.semanticEquals(analyzedIf) => i
+    }.getOrElse(fail(s"no union guard over c in Expand projections:\n$optimized"))
+    val leaves = orLeaves(guard.predicate)
+    assert(leaves.size == 2,
+      s"guard condition should cover both filters: ${guard.predicate}")
+    Seq(bAttr > 1, bAttr > 2).foreach { cond =>
+      assert(leaves.exists(_.semanticEquals(cond)),
+        s"guard condition misses $cond: ${guard.predicate}")
+    }
+    // The non-distinct COUNT keeps its IF child in the regular projection.
+    assert(expand.projections.exists(_.exists(_.semanticEquals(analyzedIf))),
+      s"non-distinct COUNT should keep its IF child in the Expand:\n$optimized")
+    // ... and gains no FILTER clause in the first aggregate.
+    val innerAgg = optimized.collectFirst {
+      case a @ Aggregate(_, _, _: Expand, _) => a
+    }.get
+    val nonDistinctCounts = collectAggregateExpressions(innerAgg).filter { ae =>
+      !ae.isDistinct && ae.aggregateFunction.isInstanceOf[Count]
+    }
+    assert(nonDistinctCounts.size == 1)
+    assert(nonDistinctCounts.head.filter.isEmpty,
+      "non-distinct COUNT must not gain a FILTER clause")
   }
 
   test("conditional: do not rewrite when FILTER already exists") {
