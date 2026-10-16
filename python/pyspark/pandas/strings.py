@@ -1176,6 +1176,7 @@ class StringMethods:
         """
         str_dtype = is_str_dtype(self._data.dtype)
 
+        # type hint does not support to specify array type yet.
         @pandas_udf(returnType=ArrayType(StringType(), containsNull=True))
         def pudf(s: pd.Series) -> pd.Series:
             ret = s.str.findall(pat, flags)
