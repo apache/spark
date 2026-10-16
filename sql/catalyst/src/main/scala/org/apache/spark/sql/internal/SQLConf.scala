@@ -2303,6 +2303,7 @@ object SQLConf {
         "projection to retrieve only requested fields (e.g. partition spec and location), " +
         "reducing metastore payload and client deserialization overhead.")
       .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
 
