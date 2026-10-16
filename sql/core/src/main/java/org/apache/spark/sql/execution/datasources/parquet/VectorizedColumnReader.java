@@ -229,6 +229,15 @@ public class VectorizedColumnReader {
       if (readState.valuesToReadInPage == 0) {
         int pageValueCount = readPage();
         if (pageValueCount < 0) {
+          if (readState.maxRepetitionLevel == 0) {
+            // A column without repeated values has a value, possibly null, for every row. So
+            // running out of pages with rows left to read means the column chunk holds fewer
+            // values than expected or another reader of the column took its pages, and returning
+            // would leave the rest of the vector unwritten.
+            throw new ParquetDecodingException(String.format(
+              "Column %s ran out of pages with %d of the %d rows of the batch left to read",
+              descriptor, readState.rowsToReadInBatch, total));
+          }
           // we've read all the pages; this could happen when we're reading a repeated list and we
           // don't know where the list will end until we've seen all the pages.
           break;
