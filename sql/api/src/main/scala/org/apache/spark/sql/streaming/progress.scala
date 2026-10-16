@@ -223,7 +223,7 @@ class StreamingQueryProgress private[spark] (
     val observedMetrics: ju.Map[String, Row],
     @JsonProperty("trigger")
     @JsonDeserialize(using = classOf[ObjectToTriggerDeserializer])
-    triggerConfig: Trigger = null)
+    triggerConfig: Trigger)
     extends Serializable {
 
   /**
@@ -265,8 +265,8 @@ class StreamingQueryProgress private[spark] (
       ("batchId" -> JInt(batchId)) ~
       ("batchDuration" -> JInt(batchDuration)) ~
       ("trigger" ->
-        Option(triggerConfig)
-          .map(value => parse(Triggers.toJson(value)))
+        Option(trigger)
+          .map(value => parse(value))
           .getOrElse(JNothing)) ~
       ("numInputRows" -> JInt(numInputRows)) ~
       ("inputRowsPerSecond" -> safeDecimalToJValue(inputRowsPerSecond)) ~

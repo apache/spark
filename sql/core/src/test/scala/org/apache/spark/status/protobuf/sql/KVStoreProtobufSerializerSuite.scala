@@ -463,7 +463,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         stateOperators = Array(stateOperatorProgress0, stateOperatorProgress1),
         sources = Array(source0, source1),
         sink = sink,
-        observedMetrics = null
+        observedMetrics = null,
+        triggerConfig = null
       )
       new StreamingQueryProgressWrapper(progress)
     }
