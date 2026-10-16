@@ -41,7 +41,8 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
  * Everything that says how the node was decided is `@transient`, since only the driver plans and
  * the executors read the groups through [[GroupedPartitionCoalescer]] rather than through this
  * node. The two partitionings are not, matching `ShuffleExchangeExec`'s, since they are what the
- * node claims rather than how it arrived at the claim.
+ * node claims rather than how it arrived at the claim. The explicit scan-grouping flag is also
+ * retained as part of the plan's identity.
  *
  * @param child The child plan providing bucketed/partitioned input
  * @param grouping What this node does to the child's partitions, derived once at planning time by
@@ -87,6 +88,8 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
  *                            against. The child's ordering can follow a config too, so a later
  *                            read could merge by a shorter or empty one (SPARK-60044). The
  *                            captured ordering is never empty.
+ * @param preserveScanGrouping Whether this grouping was explicitly requested for scan task
+ *                             sizing, so EnsureRequirements must retain it below a shuffle.
  */
 case class GroupPartitionsExec(
     child: SparkPlan,
@@ -97,8 +100,12 @@ case class GroupPartitionsExec(
     @transient expectedKeyCount: Option[Int],
     @transient reducers: Option[Seq[Option[KeyReducer]]],
     @transient ungroupingOrigin: Option[UngroupingOrigin],
-    @transient sortedMergeOrdering: Option[Seq[SortOrder]]
-  ) extends UnaryExecNode {
+    @transient sortedMergeOrdering: Option[Seq[SortOrder]],
+    preserveScanGrouping: Boolean
+  ) extends UnaryExecNode with SafeForKWayMerge {
+
+  // Partition state lives in each CoalescedRDD or SortedMergeCoalescedRDD iterator. This node
+  // only constructs the RDD on the driver, so a nested grouping can safely read it concurrently.
 
   /**
    * Whether each key's splits are distributed across its expected slots, or grouped into one
@@ -518,7 +525,8 @@ case class GroupPartitionsExec(
           child = newChild,
           joinKeyPositions = Option.when(positions != newChildKp.expressions.indices)(positions),
           reducers = reducers,
-          ungroupingOrigin = ungroupingOrigin)
+          ungroupingOrigin = ungroupingOrigin,
+          preserveScanGrouping = preserveScanGrouping)
         regrouped.copyTagsFrom(this)
         Some(regrouped)
       case _ => None
@@ -547,7 +555,8 @@ case class GroupPartitionsExec(
     // ordering is shown since it can differ from the one the child reports now.
     val sortedMergeStr = Iterator("SortedMerge: " +
       sortedMergeOrdering.fold("false")(truncatedString(_, "[", ", ", "]", maxFields)))
-    joinKeyStr ++ expectedStr ++ reducersStr ++ distributeStr ++ sortedMergeStr
+    val scanGroupingStr = Option.when(preserveScanGrouping)("PreserveScanGrouping: true")
+    joinKeyStr ++ expectedStr ++ reducersStr ++ distributeStr ++ sortedMergeStr ++ scanGroupingStr
   }
 }
 
@@ -604,7 +613,8 @@ private[sql] object GroupPartitionsExec {
       expectedPartitionKeys: Option[Seq[(InternalRowComparableWrapper, Int)]] = None,
       reducers: Option[Seq[Option[KeyReducer]]] = None,
       ungroupingOrigin: Option[UngroupingOrigin] = None,
-      sortedMergeOrdering: Option[Seq[SortOrder]] = None): GroupPartitionsExec = {
+      sortedMergeOrdering: Option[Seq[SortOrder]] = None,
+      preserveScanGrouping: Boolean = false): GroupPartitionsExec = {
     // There must be a `KeyedPartitioning` in the child's output partitioning, as a
     // `GroupPartitionsExec` node is added to a plan only in that case.
     val childPartitioning = child.outputPartitioning
@@ -618,7 +628,7 @@ private[sql] object GroupPartitionsExec {
     GroupPartitionsExec(child, grouping,
       computeOutputPartitioning(childExpr, grouping, joinKeyPositions, reducers),
       childPartitioning, joinKeyPositions, expectedPartitionKeys.map(_.size), reducers,
-      ungroupingOrigin, sortedMergeOrdering)
+      ungroupingOrigin, sortedMergeOrdering, preserveScanGrouping)
   }
 
   /**

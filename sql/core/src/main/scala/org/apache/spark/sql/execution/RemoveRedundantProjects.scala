@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Final, PartialMerge}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanExecBase
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanExecBase, GroupPartitionsExec}
 import org.apache.spark.sql.execution.joins.BaseJoinExec
 import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.internal.SQLConf
@@ -97,6 +97,14 @@ object RemoveRedundantProjects extends Rule[SparkPlan] {
   private def checkNullability(output: Seq[Attribute], childOutput: Seq[Attribute]): Boolean =
     output.zip(childOutput).forall { case (attr1, attr2) => attr1.nullable || !attr2.nullable }
 
+  private def requiresUnsafeRowConversion(plan: SparkPlan): Boolean = plan match {
+    case scan: DataSourceV2ScanExecBase => !scan.supportsColumnar
+    // Both operators pass the reader's row representation through unchanged.
+    case FilterExec(_, child) => requiresUnsafeRowConversion(child)
+    case group: GroupPartitionsExec => requiresUnsafeRowConversion(group.child)
+    case _ => false
+  }
+
   private def isRedundant(
       project: ProjectExec,
       child: SparkPlan,
@@ -104,8 +112,7 @@ object RemoveRedundantProjects extends Rule[SparkPlan] {
     child match {
       // If a DataSourceV2ScanExec node does not support columnar, a ProjectExec node is required
       // to convert the rows to UnsafeRow. See DataSourceV2Strategy for more details.
-      case d: DataSourceV2ScanExecBase if !d.supportsColumnar => false
-      case FilterExec(_, d: DataSourceV2ScanExecBase) if !d.supportsColumnar => false
+      case p if requiresUnsafeRowConversion(p) => false
       case _ =>
         if (requireOrdering) {
           project.output.map(_.exprId.id) == child.output.map(_.exprId.id) &&

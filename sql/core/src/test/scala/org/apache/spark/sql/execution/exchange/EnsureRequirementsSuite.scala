@@ -1070,10 +1070,10 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         case SortMergeJoinExec(_, _, _, _,
             SortExec(_, _,
               GroupPartitionsExec(DummySparkPlan(_, _, left: KeyedPartitioning, _, _),
-                _, _, _, _, _, _, _, _), _),
+                _, _, _, _, _, _, _, _, false), _),
             SortExec(_, _,
               GroupPartitionsExec(DummySparkPlan(_, _, right: KeyedPartitioning, _, _),
-                _, _, _, _, _, _, _, _), _),
+                _, _, _, _, _, _, _, _, false), _),
             _) =>
           assert(left.expressions === Seq(bucket(4, exprB), bucket(8, exprC)))
           assert(right.expressions === Seq(bucket(4, exprC), bucket(8, exprB)))
@@ -1094,10 +1094,10 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         case SortMergeJoinExec(_, _, _, _,
             SortExec(_, _,
               GroupPartitionsExec(DummySparkPlan(_, _, left: PartitioningCollection, _, _),
-                _, _, _, _, _, _, _, _), _),
+                _, _, _, _, _, _, _, _, false), _),
             SortExec(_, _,
               GroupPartitionsExec(DummySparkPlan(_, _, right: KeyedPartitioning, _, _),
-                _, _, _, _, _, _, _, _), _),
+                _, _, _, _, _, _, _, _, false), _),
             _) =>
           assert(left.partitionings.length == 2)
           assert(left.partitionings.head.isInstanceOf[KeyedPartitioning])
@@ -1129,10 +1129,10 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         case SortMergeJoinExec(_, _, _, _,
             SortExec(_, _,
               GroupPartitionsExec(DummySparkPlan(_, _, left: PartitioningCollection, _, _),
-                _, _, _, _, _, _, _, _), _),
+                _, _, _, _, _, _, _, _, false), _),
             SortExec(_, _,
               GroupPartitionsExec(DummySparkPlan(_, _, right: PartitioningCollection, _, _),
-                _, _, _, _, _, _, _, _), _),
+                _, _, _, _, _, _, _, _, false), _),
             _) =>
           assert(left.partitionings.length == 2)
           assert(left.partitionings.head.isInstanceOf[KeyedPartitioning])
@@ -2323,6 +2323,38 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
+  test("scan grouping enables nested sorted merges after their child ordering is available") {
+    val id = AttributeReference("id", IntegerType)()
+    val dept = AttributeReference("dept", IntegerType)()
+    val data = AttributeReference("data", IntegerType)()
+    val ordering = Seq(SortOrder(id, Ascending), SortOrder(data, Ascending))
+    val leaf = DummyLeafSafeForKWayMerge(outputOrdering = ordering,
+      outputPartitioning = KeyedPartitioning(Seq(id, dept),
+        Seq(InternalRow(1, 1), InternalRow(1, 1), InternalRow(1, 2), InternalRow(2, 3))))
+    val inner = GroupPartitionsExec(leaf, preserveScanGrouping = true)
+    val outer = GroupPartitionsExec(inner, joinKeyPositions = Some(Seq(0)))
+
+    for (preserveKeys <- Seq(false, true)) {
+      withSQLConf(
+        SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key ->
+          preserveKeys.toString) {
+        val alternatives = EnsureRequirements.tryEnableSortedMerge(outer)
+        assert(alternatives.head.fastEquals(outer), "keep the unmodified plan as the first choice")
+        val merged = alternatives.find(_.outputOrdering == ordering).get
+        val groups = merged.collect { case g: GroupPartitionsExec => g }
+        assert(groups.size === 2)
+        assert(groups.forall(_.sortedMergeOrdering.contains(ordering)))
+        assert(groups.count(_.preserveScanGrouping) === 1)
+
+        val unsafeInner = GroupPartitionsExec(DummyPassthroughUnaryExec(leaf))
+        val unsafeOuter = GroupPartitionsExec(unsafeInner, joinKeyPositions = Some(Seq(0)))
+        assert(!EnsureRequirements.tryEnableSortedMerge(unsafeOuter).exists(anyGpeEnabled),
+          "a safe grouping must not hide an unsafe descendant from the merge guard")
+      }
+    }
+  }
+
   test("SPARK-56549: tryEnableSortedMerge traversal continues through plain unary nodes") {
     withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
       val exprKey = AttributeReference("k", IntegerType)()
@@ -2447,6 +2479,25 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     val globalSort = SortExec(ordering, global = true, gpe)
     assert(EnsureRequirements.peelGroupPartitions(globalSort) === globalSort,
       "a GroupPartitionsExec below a global sort must never be peeled off")
+  }
+
+  test("explicit scan grouping survives peeling and join key projection") {
+    val leaf = DummySparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(exprA),
+        Seq(InternalRow(1), InternalRow(1), InternalRow(2))))
+    val scanGrouping = GroupPartitionsExec(leaf, preserveScanGrouping = true)
+    val localSort = SortExec(Seq(SortOrder(exprA, Ascending)), global = false, scanGrouping)
+
+    assert(scanGrouping.copy().preserveScanGrouping)
+    assert(scanGrouping.canonicalized.asInstanceOf[GroupPartitionsExec].preserveScanGrouping)
+    assert(EnsureRequirements.peelGroupPartitions(scanGrouping) === scanGrouping)
+    assert(EnsureRequirements.peelGroupPartitions(localSort) === localSort)
+    assert(EnsureRequirements.peelGroupPartitions(GroupPartitionsExec(localSort)) === localSort)
+    val projected = EnsureRequirements.withJoinKeyPositions(scanGrouping, Seq(0))
+      .asInstanceOf[GroupPartitionsExec]
+    assert(projected.child === scanGrouping,
+      "a join projection must retain the scan's explicitly requested grouping")
+    assert(EnsureRequirements.peelGroupPartitions(projected) === scanGrouping)
   }
 
   test("SPARK-58996: withJoinKeyPositions reuses only a topmost GroupPartitionsExec") {

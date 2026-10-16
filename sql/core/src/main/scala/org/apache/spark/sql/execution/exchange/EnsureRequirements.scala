@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, MultiTransform}
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
@@ -440,17 +441,25 @@ case class EnsureRequirements(
   // expressions in SortOrder, dropping a prefix invalidates the rest of the ordering too -- so in
   // practice the two are always pruned together.
   //
-  // At each GPE the rule emits [original, sorted-merge-enabled] alternatives (or just [original]
-  // when sorted merge cannot be enabled). multiTransformDownWithPruning then builds the Cartesian
-  // product across all GPEs in the subtree, giving every combination.
-  private[exchange] def tryEnableSortedMerge(plan: SparkPlan): LazyList[SparkPlan] =
-    plan.multiTransformDownWithPruning(
-      p => !p.isInstanceOf[SortExec] &&
-        hasKeyedPartitioning(p.asInstanceOf[SparkPlan].outputPartitioning)) {
-      case gpe: GroupPartitionsExec =>
-        // Include the original so that peer GPEs are still independently considered.
-        gpe +: gpe.tryEnableSortedMerge().toSeq
+  // Consider child alternatives before enabling the parent: a nested grouping can provide the
+  // ordering its parent must capture only after its own merge is enabled. Keep both choices at
+  // each GPE and lazily build their Cartesian product so the caller can stop at a satisfying plan.
+  private[exchange] def tryEnableSortedMerge(plan: SparkPlan): LazyList[SparkPlan] = {
+    if (plan.isInstanceOf[SortExec] || !hasKeyedPartitioning(plan.outputPartitioning)) {
+      LazyList(plan)
+    } else {
+      val childAlternatives = plan.children.map(child => () => tryEnableSortedMerge(child))
+      MultiTransform.generateCartesianProduct(childAlternatives).flatMap { children =>
+        val rewritten = plan.withNewChildren(children)
+        rewritten match {
+          case gpe: GroupPartitionsExec =>
+            val enabled = CurrentOrigin.withOrigin(gpe.origin)(gpe.tryEnableSortedMerge())
+            LazyList(gpe) #::: enabled.to(LazyList)
+          case other => LazyList(other)
+        }
+      }
     }
+  }
 
   private def reorder(
       leftKeys: IndexedSeq[Expression],
@@ -1043,8 +1052,8 @@ case class EnsureRequirements(
    * A local sort that is peeled off is re-added by the ordering step at the end of
    * `ensureDistributionAndOrdering`, which is what put it there in the first place.
    *
-   * The two callers are `checkKeyGroupCompatible` and the shuffle step, both on the co-partitioned
-   * path, so every `GroupPartitionsExec` this reaches is one the rule put there itself. A
+   * Explicit scan grouping is retained: it sizes scan tasks even when a shuffle is needed.
+   * The remaining nodes on this path are groupings the rule put there itself. A
    * single-child operator genuinely needs its non-grouped input grouped and keeps the wrap
    * `resolveChild` gave it. `withJoinKeyPositions`, which other multi-child operators reach, does
    * not descend at all.
@@ -1054,7 +1063,8 @@ case class EnsureRequirements(
     // rule's to drop when it sits over one, otherwise it is the user's `sortWithinPartitions` and
     // peeling it would lose an ordering nothing puts back.
     def peel(p: SparkPlan): Option[SparkPlan] = p match {
-      case g: GroupPartitionsExec => Some(peel(g.child).getOrElse(g.child))
+      case g: GroupPartitionsExec if !g.preserveScanGrouping =>
+        Some(peel(g.child).getOrElse(g.child))
       case s: SortExec if !s.global => peel(s.child)
       case _ => None
     }
@@ -1073,7 +1083,8 @@ case class EnsureRequirements(
       // Only a plain grouping is rebuilt. An aligned one carries a merged key count, a reducer or
       // a replication, none of which this rebuild reproduces, so it is wrapped below instead.
       case g: GroupPartitionsExec
-          if g.expectedKeyCount.isEmpty && g.reducers.isEmpty && !g.distributePartitions =>
+          if !g.preserveScanGrouping && g.expectedKeyCount.isEmpty &&
+            g.reducers.isEmpty && !g.distributePartitions =>
         // Rebuilt rather than copied: the positions are an input to the node's grouping, and a
         // `copy` would keep the grouping derived from the old ones.
         //

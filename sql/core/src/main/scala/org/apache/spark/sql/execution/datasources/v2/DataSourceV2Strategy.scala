@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
 import org.apache.spark.sql.catalyst.trees.TreePattern.SCALAR_SUBQUERY
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, GeneratedColumn, IdentityColumn, ResolveDefaultColumns, ResolveTableConstraints, V2ExpressionBuilder}
 import org.apache.spark.sql.classic.SparkSession
@@ -44,7 +45,7 @@ import org.apache.spark.sql.connector.read.LocalScan
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream, SupportsRealTimeMode}
 import org.apache.spark.sql.connector.write.{V1Write, Write}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, ScalarSubquery => ExecScalarSubquery, SparkPlan, SparkStrategy => Strategy}
+import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, ScalarSubquery => ExecScalarSubquery, SparkPlan, SparkStrategy => Strategy}
 import org.apache.spark.sql.execution.command.{CommandUtils, MetricViewHelper}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelationWithTable, PushableColumnAndNestedColumn}
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
@@ -202,9 +203,21 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
       val batchExec = BatchScanExec(relation.output, relation.scan, runtimeFilters,
         relation.ordering, relation.relation.table, relation.keyGroupedPartitioning)
+      val conf = session.sessionState.conf
+      val scanExec = if (conf.getConf(SQLConf.V2_BUCKETING_GROUP_SCAN_PARTITIONS_ENABLED)) {
+        batchExec.outputPartitioning match {
+          // Pruning can collapse distinct source keys, which still requires the subset opt-in.
+          case kp: KeyedPartitioning if !kp.isGrouped &&
+              (!kp.isCollapsed || conf.v2BucketingAllowKeysSubsetOfPartitionKeys) =>
+            GroupPartitionsExec(batchExec, preserveScanGrouping = true)
+          case _ => batchExec
+        }
+      } else {
+        batchExec
+      }
       DataSourceV2Strategy.withProjectAndFilter(
         project, postScanFilters.diff(fullyPushedRuntimeFilters),
-        batchExec, !batchExec.supportsColumnar) :: Nil
+        scanExec, !scanExec.supportsColumnar) :: Nil
 
     case PhysicalOperation(p, f, r: StreamingDataSourceV2ScanRelation)
       if r.startOffset.isDefined && r.endOffset.isDefined =>
@@ -1036,7 +1049,7 @@ private[sql] object DataSourceV2Strategy extends Logging {
   protected[sql] def withProjectAndFilter(
       project: Seq[NamedExpression],
       filters: Seq[Expression],
-      scan: LeafExecNode,
+      scan: SparkPlan,
       needsUnsafeConversion: Boolean): SparkPlan = {
     val filterCondition = filters.reduceLeftOption(And)
     val withFilter = filterCondition.map(FilterExec(_, scan)).getOrElse(scan)
