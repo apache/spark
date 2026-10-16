@@ -21,7 +21,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.{Row, SaveMode}
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTablePartition}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTablePartitionLocation}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
@@ -100,12 +100,12 @@ case class InsertIntoHadoopFsRelationCommand(
 
     var initialMatchingPartitions: Seq[TablePartitionSpec] = Nil
     var customPartitionLocations: Map[TablePartitionSpec, String] = Map.empty
-    var matchingPartitions: Seq[CatalogTablePartition] = Seq.empty
+    var matchingPartitions: Seq[CatalogTablePartitionLocation] = Seq.empty
 
     // When partitions are tracked by the catalog, compute all custom partition locations that
     // may be relevant to the insertion job.
     if (partitionsTrackedByCatalog) {
-      matchingPartitions = sparkSession.sessionState.catalog.listPartitions(
+      matchingPartitions = sparkSession.sessionState.catalog.listPartitionLocations(
         catalogTable.get.identifier, Some(staticPartitions))
       initialMatchingPartitions = matchingPartitions.map(_.spec)
       customPartitionLocations = getCustomPartitionLocations(
@@ -271,7 +271,7 @@ case class InsertIntoHadoopFsRelationCommand(
       fs: FileSystem,
       table: CatalogTable,
       qualifiedOutputPath: Path,
-      partitions: Seq[CatalogTablePartition]): Map[TablePartitionSpec, String] = {
+      partitions: Seq[CatalogTablePartitionLocation]): Map[TablePartitionSpec, String] = {
     val validatePartitionColumns = conf.validatePartitionColumns
     partitions.flatMap { p =>
       val defaultLocation = qualifiedOutputPath.suffix(

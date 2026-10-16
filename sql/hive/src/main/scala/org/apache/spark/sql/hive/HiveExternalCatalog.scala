@@ -1386,6 +1386,25 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     parts.map(restorePartitionMetadata(_, catalogTable))
   }
 
+  override def listPartitionLocations(
+      db: String,
+      table: String,
+      partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartitionLocation] =
+    withClient {
+      val catalogTable = getTable(db, table)
+      val partColNameMap = buildLowerCasePartColNameMap(catalogTable)
+      val metaStoreSpec = partialSpec.map(toMetaStorePartitionSpec)
+      val res = client.getPartitionLocations(db, table, metaStoreSpec)
+        .map { part => part.copy(spec = restorePartitionSpec(part.spec, partColNameMap))
+      }
+
+      metaStoreSpec match {
+        case Some(spec) =>
+          res.filter(p => isPartialPartitionSpec(spec, toMetaStorePartitionSpec(p.spec)))
+        case _ => res
+      }
+    }
+
   override def listPartitionsByFilter(
       db: String,
       table: String,
