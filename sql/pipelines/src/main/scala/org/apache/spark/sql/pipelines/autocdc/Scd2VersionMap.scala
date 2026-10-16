@@ -84,8 +84,8 @@ private[pipelines] object Scd2VersionMap {
    *
    * @param schema The schema whose leaves the version map covers. Null-authorship is tracked
    *   for every leaf column in this schema, as per the version map contract.
-   * @param ignoreNullSelection The ignore-null column selection this schema is being ingested
-   *   under.
+   * @param ignoreNullSelection The ignore-null selection under which to construct the version map
+   *                            for the provided schema.
    * @param resolver Case-sensitivity resolver for column name matching.
    * @return A [[Column]] of [[mapType]] schema.
    */

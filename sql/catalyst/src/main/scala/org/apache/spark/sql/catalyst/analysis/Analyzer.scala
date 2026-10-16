@@ -354,13 +354,30 @@ object Analyzer {
       newConf: SQLConf,
       existingConf: SQLConf,
       createSparkVersion: String = ""): Unit = {
-    existingConf.getAllConfs.foreach { case (key, value) =>
-      if (key.startsWith("spark.sql.catalog.") || SQLConf.isSessionBindingPolicy(key)) {
-        newConf.settings.put(key, value)
+    // The retained configs are memoized on `existingConf` unless
+    // `ANALYZER_MEMOIZE_RETAINED_RESOLUTION_CONFIGS` is off, which recomputes them on every build.
+    if (existingConf.getConf(SQLConf.ANALYZER_MEMOIZE_RETAINED_RESOLUTION_CONFIGS)) {
+      newConf.settings.putAll(existingConf.retainedResolutionConfigs)
+    } else {
+      existingConf.getAllConfs.foreach { case (key, value) =>
+        if (bodyFollowsCaller(key)) {
+          newConf.settings.put(key, value)
+        }
       }
     }
 
     trySetAnsiValue(newConf, createSparkVersion)
+  }
+
+  /**
+   * True if `retainResolutionConfigsForAnalysis` overlays the caller's explicitly set value for
+   * `key` onto a view or SQL function body conf, replacing any value saved with the body. These
+   * are the catalog configs and the SQL configs bound SESSION or NOT_APPLICABLE. Keys the caller
+   * has not set keep their saved values, and confs built without that method do not consult this
+   * predicate.
+   */
+  def bodyFollowsCaller(key: String): Boolean = {
+    key.startsWith("spark.sql.catalog.") || SQLConf.isSessionBindingPolicy(key)
   }
 
   /**
