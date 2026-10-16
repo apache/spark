@@ -123,7 +123,7 @@ class MatricesSuite extends SparkMLFunSuite {
     assert(!sparseMat.toArray.eq(sparseCopy.toArray))
   }
 
-  test("DenseMatrix.hashCode is consistent with equals") {
+  test("SPARK-60296: DenseMatrix.hashCode is consistent with equals") {
     val dm = new DenseMatrix(3, 2, Array(1.0, -0.0, 2.0, 0.0, 3.0, 0.0))
     assert(dm.hashCode === dm.hashCode)
     assert(dm.copy === dm)
@@ -145,6 +145,13 @@ class MatricesSuite extends SparkMLFunSuite {
       assert(m.transpose === sm.transpose)
       assert(m.transpose.hashCode === sm.transpose.hashCode)
     }
+
+    // A nonzero value whose hash code is 0 is skipped as well.
+    val x = 4294967297.0 // (1L << 32) + 1
+    assert(x.## === 0)
+    val dmx = new DenseMatrix(2, 1, Array(1.0, x))
+    assert(dmx === dmx.toSparse)
+    assert(dmx.hashCode === dmx.toSparse.hashCode)
   }
 
   test("matrix indexing and updating") {

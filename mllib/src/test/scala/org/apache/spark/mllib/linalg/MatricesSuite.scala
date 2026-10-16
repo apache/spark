@@ -151,7 +151,7 @@ class MatricesSuite extends SparkFunSuite {
     assert(!sparseMat.toArray.eq(sparseCopy.toArray))
   }
 
-  test("DenseMatrix.hashCode is consistent with equals") {
+  test("SPARK-60296: DenseMatrix.hashCode is consistent with equals") {
     val dm = new DenseMatrix(3, 2, Array(1.0, -0.0, 2.0, 0.0, 3.0, 0.0))
     assert(dm.hashCode === dm.hashCode)
     assert(dm.copy === dm)
