@@ -30,7 +30,6 @@ import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.util.collection.Utils
 
 object ExternalRDD {
 
@@ -117,7 +116,10 @@ case class LogicalRDD(
     session :: originStats :: originConstraints :: Boolean.box(fromCheckpoint) :: Nil
 
   override def newInstance(): LogicalRDD.this.type = {
-    val rewrite = Utils.toMap(output, output.map(_.newInstance()))
+    val newOutput = output.map(_.newInstance())
+    // Keyed by exprId so that references in partitioning, ordering, stats and constraints are
+    // rewritten even if they differ cosmetically (e.g. name casing) from the output attributes.
+    val rewrite = AttributeMap(output.zip(newOutput))
 
     val rewrittenPartitioning = outputPartitioning match {
       case p: Expression =>
@@ -136,7 +138,7 @@ case class LogicalRDD(
     val rewrittenConstraints = originConstraints.map(rewriteConstraints(_, rewrite))
 
     LogicalRDD(
-      output.map(rewrite),
+      newOutput,
       rdd,
       rewrittenPartitioning,
       rewrittenOrdering,
@@ -284,11 +286,12 @@ object LogicalRDD extends Logging {
   private[sql] def rewriteStatistics(
       originStats: Statistics,
       colRewrite: Map[Attribute, Attribute]): Statistics = {
+    val rewrite = AttributeMap(colRewrite)
     Statistics(
       originStats.sizeInBytes,
       originStats.rowCount,
       AttributeMap[ColumnStat](originStats.attributeStats.map {
-        case (attr, v) => (colRewrite.getOrElse(attr, attr), v)
+        case (attr, v) => (rewrite.getOrElse(attr, attr), v)
       }),
       originStats.isRuntime)
   }
@@ -296,8 +299,12 @@ object LogicalRDD extends Logging {
   private[sql] def rewriteConstraints(
       originConstraints: ExpressionSet,
       colRewrite: Map[Attribute, Attribute]): ExpressionSet = {
+    // Look up by exprId: references in constraints can differ cosmetically from the output
+    // attributes (e.g. name casing under case-insensitive resolution), and missing a rewrite
+    // would leave dangling references to the old exprIds.
+    val rewrite = AttributeMap(colRewrite)
     originConstraints.map(_.transform {
-      case e: Attribute => colRewrite.getOrElse(e, e)
+      case e: Attribute => rewrite.getOrElse(e, e)
     })
   }
 }
