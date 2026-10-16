@@ -44,11 +44,10 @@ class BatchedUDFHandler(EvalTypeHandler[Any, Any]):
         return BatchedSerializer(CPickleSerializer(), batch_size)
 
     def run(self, split_index: int, data: Iterator[Any]) -> Iterator[Any]:
-        udfs = self._udfs
-        if len(udfs) == 1:
-            arg_offsets, f = udfs[0]
+        if len(self._udfs) == 1:
+            arg_offsets, f = self._udfs[0]
             return (f(*[row[offset] for offset in arg_offsets]) for row in data)
         return (
-            tuple(f(*[row[offset] for offset in arg_offsets]) for arg_offsets, f in udfs)
+            tuple(f(*[row[offset] for offset in arg_offsets]) for arg_offsets, f in self._udfs)
             for row in data
         )
