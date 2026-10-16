@@ -25,7 +25,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.rdd.SortedMergeCoalescedRDD
 import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, ExprId, Literal, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Descending, ExprId, Literal, TransformExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Complete
 import org.apache.spark.sql.catalyst.plans.{Cross, ExistenceJoin, Inner, JoinType, LeftAnti, LeftSemi, LeftSingle}
 import org.apache.spark.sql.catalyst.plans.physical
@@ -3997,6 +3997,14 @@ class KeyGroupedPartitioningSuite
     (plan, reportingScans.head, warnings)
   }
 
+  /** The output ordering of `scan`, as the names its sort orders reference and their direction. */
+  private def orderingNames(scan: BatchScanExec)
+      : Seq[(Seq[String], org.apache.spark.sql.catalyst.expressions.SortDirection)] =
+    scan.outputOrdering.map(o => (o.child.references.map(_.name).toSeq, o.direction))
+
+  private def sortsAbove(plan: SparkPlan, scan: BatchScanExec): Seq[SortExec] =
+    collect(plan) { case s: SortExec if s.exists(_ eq scan) => s }
+
   test("SPARK-59721: a reported partitioning with an unresolvable key is ignored") {
     // CustomReportingCatalog is not a FunctionCatalog, so a `bucket` key would be dropped even with
     // a resolvable column. The warning assertion shows the unresolvable column is what drops it.
@@ -4094,20 +4102,58 @@ class KeyGroupedPartitioningSuite
             assert(warnings.isEmpty, warnings)
             // The report must reach the scan as it is, or this test would miss the fixed case.
             assert(reportingScan.ordering.map(_.length) == Some(ordering.length))
-            val derivedOrdering = reportingScan.outputOrdering.map { o =>
-              (o.child.references.map(_.name).toSeq, o.direction)
-            }
-            val sortsAboveScan = collect(plan) {
-              case s: SortExec if s.exists(_ eq reportingScan) => s
-            }
             if (keyOrdering) {
-              assert(derivedOrdering == Seq((Seq("id"), Ascending)), ordering)
-              assert(sortsAboveScan.isEmpty, "the join should read the derived ordering")
+              assert(orderingNames(reportingScan) == Seq((Seq("id"), Ascending)), ordering)
+              assert(sortsAbove(plan, reportingScan).isEmpty,
+                "the join should read the derived ordering")
             } else {
-              assert(derivedOrdering.isEmpty, ordering)
-              assert(sortsAboveScan.length == 1, ordering)
+              assert(orderingNames(reportingScan).isEmpty, ordering)
+              assert(sortsAbove(plan, reportingScan).length == 1, ordering)
             }
           }
+        }
+      }
+
+      // With two splits under the key 1, a `GroupPartitionsExec` coalesces them. The ordering
+      // derived from an empty report survives that through `preserveKeyOrderingOnCoalesce`.
+      reportingCatalog.reportedOrdering = Seq.empty
+      sql(s"INSERT INTO $customReportingTableName VALUES (1, 'ab', named_struct('x', 11))")
+      withSQLConf(
+          SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
+        val df = customReportingJoinDf()
+        checkAnswer(df, Seq(Row("aa", "cc"), Row("ab", "cc"), Row("bb", "dd")))
+        val plan = df.queryExecution.executedPlan
+        val coalescing = collectAllGroupPartitions(plan)
+          .filter(_.groupedPartitions.exists(_._2.size > 1))
+        assert(coalescing.length == 1, "test setup: the two splits of the key 1 coalesce")
+        assert(coalescing.head.outputOrdering.map(_.child.references.map(_.name).toSeq) ==
+          Seq(Seq("id")))
+        assert(collect(plan) { case s: SortExec => s }.isEmpty)
+      }
+    }
+  }
+
+  test("SPARK-59981: a reported ordering that keeps a sort order is not replaced by the keys") {
+    withCustomReportingTable { reportingCatalog =>
+      reportingCatalog.reportedKeys = Seq(identity("id"))
+      val sOrder = sort(FieldReference("s"), SortDirection.ASCENDING)
+      val dataOrder = sort(FieldReference("data"), SortDirection.ASCENDING)
+      val idOrder = sort(FieldReference("id"), SortDirection.ASCENDING)
+      val idDescOrder = sort(FieldReference("id"), SortDirection.DESCENDING)
+      withSQLConf(SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "true") {
+        // `data` stays in the scan output, so it is kept and nothing is derived. After the pruned
+        // `s`, the sort order on the partition key `id` is kept as reported, with its direction.
+        Seq(
+          (Seq(dataOrder), Seq((Seq("data"), Ascending)), 1),
+          (Seq(sOrder, idOrder), Seq((Seq("id"), Ascending)), 0),
+          (Seq(sOrder, idDescOrder), Seq((Seq("id"), Descending)), 1)
+        ).foreach { case (ordering, expectedOrdering, expectedSorts) =>
+          reportingCatalog.reportedOrdering = ordering
+          val (plan, reportingScan, warnings) = customReportingJoin()
+          assert(warnings.isEmpty, warnings)
+          assert(orderingNames(reportingScan) == expectedOrdering, ordering)
+          assert(sortsAbove(plan, reportingScan).length == expectedSorts, ordering)
         }
       }
     }

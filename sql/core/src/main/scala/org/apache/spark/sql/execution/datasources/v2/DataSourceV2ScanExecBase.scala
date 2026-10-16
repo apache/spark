@@ -139,45 +139,57 @@ trait DataSourceV2ScanExecBase
    * reference columns pruned out of the scan output, while a consumer binds it against the
    * output, e.g. the k-way merge of `GroupPartitionsExec`. Ordering is prefix-based, so the
    * leading run of sort orders over the output is kept and the rest is dropped, except the sort
-   * orders on a partition key when the output partitioning is a `KeyedPartitioning`: each
+   * orders on a partition key when the output partitioning is a `KeyedPartitioning`. Each
    * partition holds a single key, so those still hold.
    *
-   * If no sort order is left, the ordering is derived from the partition keys instead, when the
-   * output partitioning is a `KeyedPartitioning` and
+   * If nothing of the reported ordering is kept, the ordering is derived from the partition keys
+   * instead, when the output partitioning is a `KeyedPartitioning` and
    * `spark.sql.sources.v2.bucketing.partitionKeyOrdering.enabled` is on. Each partition contains
    * rows where the key expressions evaluate to a single constant value, so the data is trivially
-   * sorted by those expressions within the partition. No sort order is left when the source:
-   *  - reports none, or reports one Spark ignores (see `V2ScanPartitioningAndOrdering`);
-   *  - reports an empty one;
-   *  - reports only sort orders that are dropped.
+   * sorted by those expressions within the partition. Nothing is kept, for example, when the
+   * source reports no ordering, one Spark ignores, or an empty one.
    *
-   * Either way, a sort order that holds a partition transform is dropped, even on a partition key.
-   * In a reported ordering it also ends the leading run, like a sort order over a pruned column.
-   * Dropping it loses nothing today when Spark can call the transform's function, since no
-   * operator then requires an ordering over the transform. The write path sorts by the function
-   * call instead. Keeping such a sort order would add comparisons nobody uses. Dropping it also
-   * handles a transform Spark cannot evaluate. Revisit this if an ordering over a transform
-   * becomes a real requirement.
+   * A kept sort order wins over the derived ordering, since ordering is prefix-based. Putting the
+   * keys in front would stop a kept `[data]` from satisfying a required `[data]`. So the result
+   * can depend on the columns a query reads. A report `[s]` derives the key ordering only when `s`
+   * is pruned.
+   *
+   * In both the reported and the derived ordering, a sort order that holds a partition transform
+   * is dropped, even on a partition key. In a reported ordering it also ends the leading run, like
+   * a sort order over a pruned column. Dropping it loses nothing today when Spark can call the
+   * transform's function, since no operator then requires an ordering over the transform. The
+   * write path sorts by the function call instead. Keeping such a sort order would add
+   * comparisons nobody uses. Dropping it also handles a transform Spark cannot evaluate. Revisit
+   * this if an ordering over a transform becomes a real requirement.
    */
-  override def outputOrdering: Seq[SortOrder] = {
-    def holdsTransform(e: Expression): Boolean = e.exists(_.isInstanceOf[TransformExpression])
-    val reported = ordering.map { o =>
-      val (prefix, rest) =
-        o.span(order => order.references.subsetOf(outputSet) && !holdsTransform(order.child))
-      outputPartitioning match {
-        case k: KeyedPartitioning if rest.nonEmpty =>
-          val keyExprs = ExpressionSet(k.expressions.filterNot(holdsTransform))
-          prefix ++ rest.filter(order => keyExprs.contains(order.child))
-        case _ => prefix
-      }
-    }.getOrElse(Seq.empty)
-    outputPartitioning match {
-      case k: KeyedPartitioning
-          if reported.isEmpty && conf.v2BucketingPartitionKeyOrderingEnabled =>
-        k.expressions.filterNot(holdsTransform).map(SortOrder(_, Ascending))
-      case _ => reported
+  override def outputOrdering: Seq[SortOrder] =
+    if (keptOrdering.isEmpty && derivedOrdering.nonEmpty &&
+        conf.v2BucketingPartitionKeyOrderingEnabled) {
+      derivedOrdering
+    } else {
+      keptOrdering
     }
+
+  /**
+   * What `outputOrdering` keeps of the reported ordering. A lazy val because `ordering`,
+   * `outputSet` and `outputPartitioning` do not change for an instance, so only the config is
+   * read on each call of `outputOrdering`.
+   */
+  @transient private lazy val keptOrdering: Seq[SortOrder] = {
+    val (prefix, rest) = ordering.getOrElse(Nil)
+      .span(order => order.references.subsetOf(outputSet) && !holdsTransform(order.child))
+    val keyExprs = ExpressionSet(derivedOrdering.map(_.child))
+    prefix ++ rest.filter(order => keyExprs.contains(order.child))
   }
+
+  /** The ordering over the partition keys that `outputOrdering` can derive. */
+  @transient private lazy val derivedOrdering: Seq[SortOrder] = outputPartitioning match {
+    case k: KeyedPartitioning =>
+      k.expressions.filterNot(holdsTransform).map(SortOrder(_, Ascending))
+    case _ => Nil
+  }
+
+  private def holdsTransform(e: Expression): Boolean = e.exists(_.isInstanceOf[TransformExpression])
 
   override def supportsColumnar: Boolean = {
     scan.columnarSupportMode() match {

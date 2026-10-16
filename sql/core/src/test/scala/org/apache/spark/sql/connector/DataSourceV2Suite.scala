@@ -315,11 +315,7 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
   }
 
   test("ordering and partitioning reporting") {
-    // The source breaks the `KeyGroupedPartitioning` contract, e.g. [1, 1, 3] under the key 1.
-    // So the ordering derived from the keys is turned off. This test checks the reported one.
-    withSQLConf(
-        SQLConf.V2_BUCKETING_ENABLED.key -> "true",
-        SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "true") {
       Seq(
         classOf[OrderAndPartitionAwareDataSource],
         classOf[JavaOrderAndPartitionAwareDataSource]
@@ -351,49 +347,60 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
           ).foreach { testParams =>
             val (partitionKeys, orderKeys, groupByExpects, windowFuncExpects) = testParams
 
+            // With partitioning on `i` and no order keys, the source reports an empty ordering.
+            // So the scan would derive `[i]` from its keys and drop the sort this case expects.
+            // That ordering only holds by accident. The source breaks the `KeyGroupedPartitioning`
+            // contract, as its partition with the key 1 holds `i` values 1, 1 and 3. So the
+            // derivation is turned off for this case.
+            val derive = !(partitionKeys.contains("i") && orderKeys.isEmpty)
             withClue(f"${partitionKeys.orNull} ${orderKeys.orNull}") {
-              val df = spark.read
-                .option("partitionKeys", partitionKeys.orNull)
-                .option("orderKeys", orderKeys.orNull)
-                .format(cls.getName)
-                .load()
-              checkAnswer(df, Seq(Row(1, 4), Row(1, 5), Row(3, 5), Row(2, 6), Row(4, 1), Row(4, 2)))
+              withSQLConf(
+                  SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> derive.toString) {
+                val df = spark.read
+                  .option("partitionKeys", partitionKeys.orNull)
+                  .option("orderKeys", orderKeys.orNull)
+                  .format(cls.getName)
+                  .load()
+                checkAnswer(df,
+                  Seq(Row(1, 4), Row(1, 5), Row(3, 5), Row(2, 6), Row(4, 1), Row(4, 2)))
 
-              // groupBy(i).flatMapGroups
-              {
-                val groupBy = df.groupBy($"i").as[Int, (Int, Int)]
-                  .flatMapGroups { (i: Int, it: Iterator[(Int, Int)]) =>
-                    Iterator.single((i, it.length)) }
-                checkAnswer(
-                  groupBy.toDF(),
-                  Seq(Row(1, 2), Row(2, 1), Row(3, 1), Row(4, 2))
-                )
+                // groupBy(i).flatMapGroups
+                {
+                  val groupBy = df.groupBy($"i").as[Int, (Int, Int)]
+                    .flatMapGroups { (i: Int, it: Iterator[(Int, Int)]) =>
+                      Iterator.single((i, it.length)) }
+                  checkAnswer(
+                    groupBy.toDF(),
+                    Seq(Row(1, 2), Row(2, 1), Row(3, 1), Row(4, 2))
+                  )
 
-                val (shuffleExpected, sortExpected) = groupByExpects
-                assert(collectFirst(groupBy.queryExecution.executedPlan) {
-                  case e: ShuffleExchangeExec => e
-                }.isDefined === shuffleExpected)
-                assert(collectFirst(groupBy.queryExecution.executedPlan) {
-                  case e: SortExec => e
-                }.isDefined === sortExpected)
-              }
+                  val (shuffleExpected, sortExpected) = groupByExpects
+                  assert(collectFirst(groupBy.queryExecution.executedPlan) {
+                    case e: ShuffleExchangeExec => e
+                  }.isDefined === shuffleExpected)
+                  assert(collectFirst(groupBy.queryExecution.executedPlan) {
+                    case e: SortExec => e
+                  }.isDefined === sortExpected)
+                }
 
-              // aggregation function over window partitioned by i and ordered by j
-              {
-                val windowPartByColIOrderByColJ = df.withColumn("no",
-                  row_number() over Window.partitionBy(Symbol("i")).orderBy(Symbol("j"))
-                )
-                checkAnswer(windowPartByColIOrderByColJ, Seq(
-                  Row(1, 4, 1), Row(1, 5, 2), Row(2, 6, 1), Row(3, 5, 1), Row(4, 1, 1), Row(4, 2, 2)
-                ))
+                // aggregation function over window partitioned by i and ordered by j
+                {
+                  val windowPartByColIOrderByColJ = df.withColumn("no",
+                    row_number() over Window.partitionBy(Symbol("i")).orderBy(Symbol("j"))
+                  )
+                  checkAnswer(windowPartByColIOrderByColJ, Seq(
+                    Row(1, 4, 1), Row(1, 5, 2), Row(2, 6, 1), Row(3, 5, 1), Row(4, 1, 1),
+                    Row(4, 2, 2)
+                  ))
 
-                val (shuffleExpected, sortExpected) = windowFuncExpects
-                assert(collectFirst(windowPartByColIOrderByColJ.queryExecution.executedPlan) {
-                  case e: ShuffleExchangeExec => e
-                }.isDefined === shuffleExpected)
-                assert(collectFirst(windowPartByColIOrderByColJ.queryExecution.executedPlan) {
-                  case e: SortExec => e
-                }.isDefined === sortExpected)
+                  val (shuffleExpected, sortExpected) = windowFuncExpects
+                  assert(collectFirst(windowPartByColIOrderByColJ.queryExecution.executedPlan) {
+                    case e: ShuffleExchangeExec => e
+                  }.isDefined === shuffleExpected)
+                  assert(collectFirst(windowPartByColIOrderByColJ.queryExecution.executedPlan) {
+                    case e: SortExec => e
+                  }.isDefined === sortExpected)
+                }
               }
             }
           }

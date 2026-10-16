@@ -102,7 +102,9 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with Logging {
         // The ordering is kept as reported, even where it references columns pruned out of the
         // scan output: truncating it here would also drop the sort orders on a partition key past a
         // pruned column, which still hold. `DataSourceV2ScanRelation.doCanonicalize` and
-        // `DataSourceV2ScanExecBase.outputOrdering` restrict it to the scan output instead.
+        // `DataSourceV2ScanExecBase.outputOrdering` restrict it to the scan output instead, by
+        // different rules. `doCanonicalize` only feeds plan equality, so a plain `takeWhile` that
+        // drops the pruned columns is enough there.
         val ordering =
           V2ExpressionUtils.toCatalystOrdering(reportedOrdering, relation, relation.funCatalog)
         d.copy(ordering = Some(ordering))
