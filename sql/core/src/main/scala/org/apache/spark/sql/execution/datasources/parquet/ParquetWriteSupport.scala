@@ -248,8 +248,14 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
           // Mark the bytes as reused so Parquet copies values that it retains.
           recordConsumer.addBinary(value.getBaseObject match {
             case bytes: Array[Byte] =>
-              val offset = (value.getBaseOffset - Platform.BYTE_ARRAY_OFFSET).toInt
-              Binary.fromReusedByteArray(bytes, offset, value.numBytes())
+              if (value.getBaseOffset == Platform.BYTE_ARRAY_OFFSET &&
+                  value.numBytes() == bytes.length) {
+                // Use the smaller wrapper for whole-array strings to avoid extra allocation.
+                Binary.fromReusedByteArray(bytes)
+              } else {
+                Binary.fromReusedByteArray(bytes,
+                  (value.getBaseOffset - Platform.BYTE_ARRAY_OFFSET).toInt, value.numBytes())
+              }
             case _ => Binary.fromReusedByteArray(value.getBytes)
           })
 
