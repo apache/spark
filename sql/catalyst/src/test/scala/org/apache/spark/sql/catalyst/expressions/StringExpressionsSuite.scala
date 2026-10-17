@@ -1348,6 +1348,24 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on
   }
 
+  test("INSTR with start = 0 returns 0 for empty substrings") {
+    for (collation <- Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI")) {
+      val stringType = StringType(collation)
+      val expression = StringInstrWithOccurrence(
+        BoundReference(0, stringType, nullable = false),
+        BoundReference(1, stringType, nullable = false),
+        BoundReference(2, IntegerType, nullable = false),
+        BoundReference(3, IntegerType, nullable = false))
+      for {
+        string <- Seq("", "abc")
+        substring <- Seq("", "a")
+        occurrence <- Seq(1, 2)
+      } {
+        checkEvaluation(expression, 0, create_row(string, substring, 0, occurrence))
+      }
+    }
+  }
+
   test("StringInstrExpressionBuilder") {
     val seq1 = Seq(Literal("abcabc"), Literal("a"), Literal(-1), Literal(2))
     val seq2 = Seq(Literal("abcabc"), Literal("a"), Literal(-1))
