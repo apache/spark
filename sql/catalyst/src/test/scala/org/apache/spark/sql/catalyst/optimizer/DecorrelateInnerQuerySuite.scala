@@ -814,4 +814,54 @@ class DecorrelateInnerQuerySuite extends PlanTest {
       check(outputPlan, joinCond, correctAnswer, Seq(a < b))
     }
   }
+
+  // ASOF JOIN of testRelation2 and testRelation3 that matches each row on z >= c3.
+  private def asOfJoin(
+      left: LogicalPlan,
+      right: LogicalPlan,
+      condition: Option[Expression]): AsOfJoin = {
+    AsOfJoin(left, right, z, c3, condition, Inner, tolerance = None, allowExactMatches = true,
+      direction = AsOfJoinDirection("backward"))
+  }
+
+  test("SPARK-60001: ASOF join with a correlated left input") {
+    // Each left row picks its own right row, so the left input needs no domain join.
+    val outerPlan = testRelation
+    val innerPlan =
+      asOfJoin(Filter(OuterReference(a) === x, testRelation2), testRelation3, Some(y === a3))
+    val correctAnswer = asOfJoin(testRelation2, testRelation3, Some(y === a3))
+    check(innerPlan, outerPlan, correctAnswer, Seq(a === x))
+  }
+
+  test("SPARK-60001: ASOF join with a correlated right input") {
+    // A left row may only match right rows of the same outer row, so the left input gets
+    // the domain and the join matches it with the right input.
+    val outerPlan = testRelation
+    val innerPlan =
+      asOfJoin(testRelation2, Filter(OuterReference(a) === b3, testRelation3), Some(y === a3))
+    val correctAnswer =
+      asOfJoin(DomainJoin(Seq(a), testRelation2), testRelation3, Some(And(y === a3, a <=> b3)))
+    check(innerPlan, outerPlan, correctAnswer, Seq(a <=> a, a === b3))
+  }
+
+  test("SPARK-60001: ASOF join keeps correlated ON predicates in the join") {
+    // Moving the predicate above the join would change which right row is the nearest.
+    val outerPlan = testRelation
+    val innerPlan =
+      asOfJoin(testRelation2, testRelation3, Some(And(y === a3, b3 === OuterReference(a))))
+    val correctAnswer =
+      asOfJoin(DomainJoin(Seq(a), testRelation2), testRelation3, Some(And(y === a3, b3 === a)))
+    check(innerPlan, outerPlan, correctAnswer, Seq(a <=> a))
+  }
+
+  test("SPARK-60001: ASOF join allows correlated columns only in the ON condition") {
+    // The analyzer rejects them in MATCH_CONDITION, so this is an internal error.
+    val innerPlan = AsOfJoin(testRelation2, testRelation3, z, c3 + OuterReference(a),
+      Some(y === a3), Inner, tolerance = None, allowExactMatches = true,
+      direction = AsOfJoinDirection("backward"))
+    val e = intercept[AssertionError] {
+      DecorrelateInnerQuery(innerPlan, testRelation.select())
+    }
+    assert(e.getMessage.contains("only allowed in the ON condition of an ASOF join"))
+  }
 }

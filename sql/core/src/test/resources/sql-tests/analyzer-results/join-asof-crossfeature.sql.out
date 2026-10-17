@@ -330,3 +330,377 @@ WithCTE
             :     +- CTERelationRef xxxx, true, [trade_time#x, symbol#x, bid_price#x], false, false
             +- SubqueryAlias e
                +- LocalRelation [ts#x, extra_val#x]
+
+
+-- !query
+SELECT s.symbol,
+  (SELECT max(q.bid_price)
+   FROM (SELECT * FROM trades t WHERE t.symbol = s.symbol) t
+   ASOF JOIN quotes q
+     MATCH_CONDITION (t.trade_time >= q.quote_time)
+     ON t.symbol = q.symbol) AS max_bid
+FROM VALUES ('AAPL'), ('GOOG'), ('MSFT') AS s(symbol)
+ORDER BY s.symbol
+-- !query analysis
+Sort [symbol#x ASC NULLS FIRST], true
++- Project [symbol#x, scalar-subquery#x [symbol#x] AS max_bid#x]
+   :  +- Aggregate [max(bid_price#x) AS max(bid_price)#x]
+   :     +- AsOfJoin (trade_time#x >= quote_time#x), (symbol#x = symbol#x), Inner
+   :        :- SubqueryAlias t
+   :        :  +- Project [trade_time#x, symbol#x, quantity#x]
+   :        :     +- Filter (symbol#x = outer(symbol#x))
+   :        :        +- SubqueryAlias t
+   :        :           +- SubqueryAlias trades
+   :        :              +- View (`trades`, [trade_time#x, symbol#x, quantity#x])
+   :        :                 +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as int) AS quantity#x]
+   :        :                    +- LocalRelation [col1#x, col2#x, col3#x]
+   :        +- SubqueryAlias q
+   :           +- SubqueryAlias quotes
+   :              +- View (`quotes`, [quote_time#x, symbol#x, bid_price#x])
+   :                 +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]
+   :                    +- LocalRelation [col1#x, col2#x, col3#x]
+   +- SubqueryAlias s
+      +- LocalRelation [symbol#x]
+
+
+-- !query
+SELECT o.max_bid,
+  (SELECT sum(q.bid_price)
+   FROM trades t
+   ASOF JOIN (SELECT * FROM quotes q WHERE q.bid_price <= o.max_bid) q
+     MATCH_CONDITION (t.trade_time >= q.quote_time)
+     ON t.symbol = q.symbol) AS total_bid
+FROM VALUES (180.12), (500.00) AS o(max_bid)
+ORDER BY o.max_bid
+-- !query analysis
+Sort [max_bid#x ASC NULLS FIRST], true
++- Project [max_bid#x, scalar-subquery#x [max_bid#x] AS total_bid#x]
+   :  +- Aggregate [sum(bid_price#x) AS sum(bid_price)#x]
+   :     +- AsOfJoin (trade_time#x >= quote_time#x), (symbol#x = symbol#x), Inner
+   :        :- SubqueryAlias t
+   :        :  +- SubqueryAlias trades
+   :        :     +- View (`trades`, [trade_time#x, symbol#x, quantity#x])
+   :        :        +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as int) AS quantity#x]
+   :        :           +- LocalRelation [col1#x, col2#x, col3#x]
+   :        +- SubqueryAlias q
+   :           +- Project [quote_time#x, symbol#x, bid_price#x]
+   :              +- Filter (bid_price#x <= outer(max_bid#x))
+   :                 +- SubqueryAlias q
+   :                    +- SubqueryAlias quotes
+   :                       +- View (`quotes`, [quote_time#x, symbol#x, bid_price#x])
+   :                          +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]
+   :                             +- LocalRelation [col1#x, col2#x, col3#x]
+   +- SubqueryAlias o
+      +- LocalRelation [max_bid#x]
+
+
+-- !query
+SELECT o.max_bid,
+  (SELECT sum(q.bid_price)
+   FROM trades t ASOF JOIN quotes q
+     MATCH_CONDITION (t.trade_time >= q.quote_time)
+     ON t.symbol = q.symbol AND q.bid_price <= o.max_bid) AS total_bid
+FROM VALUES (180.12), (500.00) AS o(max_bid)
+ORDER BY o.max_bid
+-- !query analysis
+Sort [max_bid#x ASC NULLS FIRST], true
++- Project [max_bid#x, scalar-subquery#x [max_bid#x] AS total_bid#x]
+   :  +- Aggregate [sum(bid_price#x) AS sum(bid_price)#x]
+   :     +- AsOfJoin (trade_time#x >= quote_time#x), ((symbol#x = symbol#x) AND (bid_price#x <= outer(max_bid#x))), Inner
+   :        :- SubqueryAlias t
+   :        :  +- SubqueryAlias trades
+   :        :     +- View (`trades`, [trade_time#x, symbol#x, quantity#x])
+   :        :        +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as int) AS quantity#x]
+   :        :           +- LocalRelation [col1#x, col2#x, col3#x]
+   :        +- SubqueryAlias q
+   :           +- SubqueryAlias quotes
+   :              +- View (`quotes`, [quote_time#x, symbol#x, bid_price#x])
+   :                 +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]
+   :                    +- LocalRelation [col1#x, col2#x, col3#x]
+   +- SubqueryAlias o
+      +- LocalRelation [max_bid#x]
+
+
+-- !query
+SELECT o.symbol, o.max_bid,
+  (SELECT sum(q.bid_price)
+   FROM (SELECT * FROM trades t WHERE t.symbol = o.symbol) t
+   ASOF JOIN (SELECT * FROM quotes q WHERE q.bid_price <= o.max_bid) q
+     MATCH_CONDITION (t.trade_time >= q.quote_time)
+     ON t.symbol = q.symbol) AS total_bid
+FROM VALUES ('AAPL', 180.12), ('AAPL', 500.00), ('MSFT', 180.12) AS o(symbol, max_bid)
+ORDER BY o.symbol, o.max_bid
+-- !query analysis
+Sort [symbol#x ASC NULLS FIRST, max_bid#x ASC NULLS FIRST], true
++- Project [symbol#x, max_bid#x, scalar-subquery#x [symbol#x && max_bid#x] AS total_bid#x]
+   :  +- Aggregate [sum(bid_price#x) AS sum(bid_price)#x]
+   :     +- AsOfJoin (trade_time#x >= quote_time#x), (symbol#x = symbol#x), Inner
+   :        :- SubqueryAlias t
+   :        :  +- Project [trade_time#x, symbol#x, quantity#x]
+   :        :     +- Filter (symbol#x = outer(symbol#x))
+   :        :        +- SubqueryAlias t
+   :        :           +- SubqueryAlias trades
+   :        :              +- View (`trades`, [trade_time#x, symbol#x, quantity#x])
+   :        :                 +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as int) AS quantity#x]
+   :        :                    +- LocalRelation [col1#x, col2#x, col3#x]
+   :        +- SubqueryAlias q
+   :           +- Project [quote_time#x, symbol#x, bid_price#x]
+   :              +- Filter (bid_price#x <= outer(max_bid#x))
+   :                 +- SubqueryAlias q
+   :                    +- SubqueryAlias quotes
+   :                       +- View (`quotes`, [quote_time#x, symbol#x, bid_price#x])
+   :                          +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]
+   :                             +- LocalRelation [col1#x, col2#x, col3#x]
+   +- SubqueryAlias o
+      +- LocalRelation [symbol#x, max_bid#x]
+
+
+-- !query
+SELECT t0.trade_time, t0.symbol,
+  t0.quantity IN (
+    SELECT t.quantity
+    FROM (SELECT * FROM trades t WHERE t.symbol = t0.symbol) t
+    ASOF JOIN quotes q
+      MATCH_CONDITION (t.trade_time >= q.quote_time)
+      ON t.symbol = q.symbol) AS has_quote
+FROM trades t0
+ORDER BY t0.trade_time
+-- !query analysis
+Sort [trade_time#x ASC NULLS FIRST], true
++- Project [trade_time#x, symbol#x, quantity#x IN (list#x [symbol#x]) AS has_quote#x]
+   :  +- Project [quantity#x]
+   :     +- AsOfJoin (trade_time#x >= quote_time#x), (symbol#x = symbol#x), Inner
+   :        :- SubqueryAlias t
+   :        :  +- Project [trade_time#x, symbol#x, quantity#x]
+   :        :     +- Filter (symbol#x = outer(symbol#x))
+   :        :        +- SubqueryAlias t
+   :        :           +- SubqueryAlias trades
+   :        :              +- View (`trades`, [trade_time#x, symbol#x, quantity#x])
+   :        :                 +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as int) AS quantity#x]
+   :        :                    +- LocalRelation [col1#x, col2#x, col3#x]
+   :        +- SubqueryAlias q
+   :           +- SubqueryAlias quotes
+   :              +- View (`quotes`, [quote_time#x, symbol#x, bid_price#x])
+   :                 +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]
+   :                    +- LocalRelation [col1#x, col2#x, col3#x]
+   +- SubqueryAlias t0
+      +- SubqueryAlias trades
+         +- View (`trades`, [trade_time#x, symbol#x, quantity#x])
+            +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as int) AS quantity#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+SELECT o.max_bid
+FROM VALUES (100.00), (180.17), (500.00) AS o(max_bid)
+WHERE EXISTS (
+  SELECT 1
+  FROM trades t
+  ASOF JOIN (SELECT * FROM quotes q WHERE q.bid_price <= o.max_bid) q
+    MATCH_CONDITION (t.trade_time >= q.quote_time)
+    ON t.symbol = q.symbol
+  WHERE q.bid_price = 180.15)
+ORDER BY o.max_bid
+-- !query analysis
+Sort [max_bid#x ASC NULLS FIRST], true
++- Project [max_bid#x]
+   +- Filter exists#x [max_bid#x]
+      :  +- Project [1 AS 1#x]
+      :     +- Filter (bid_price#x = 180.15)
+      :        +- AsOfJoin (trade_time#x >= quote_time#x), (symbol#x = symbol#x), Inner
+      :           :- SubqueryAlias t
+      :           :  +- SubqueryAlias trades
+      :           :     +- View (`trades`, [trade_time#x, symbol#x, quantity#x])
+      :           :        +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as int) AS quantity#x]
+      :           :           +- LocalRelation [col1#x, col2#x, col3#x]
+      :           +- SubqueryAlias q
+      :              +- Project [quote_time#x, symbol#x, bid_price#x]
+      :                 +- Filter (bid_price#x <= outer(max_bid#x))
+      :                    +- SubqueryAlias q
+      :                       +- SubqueryAlias quotes
+      :                          +- View (`quotes`, [quote_time#x, symbol#x, bid_price#x])
+      :                             +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]
+      :                                +- LocalRelation [col1#x, col2#x, col3#x]
+      +- SubqueryAlias o
+         +- LocalRelation [max_bid#x]
+
+
+-- !query
+SELECT s.symbol,
+  (SELECT count(*)
+   FROM (SELECT * FROM trades t WHERE t.symbol = s.symbol) t
+   LEFT ASOF JOIN quotes q
+     MATCH_CONDITION (t.trade_time >= q.quote_time)
+     ON t.symbol = q.symbol) AS trade_count
+FROM VALUES ('AAPL'), ('GOOG'), ('MSFT') AS s(symbol)
+ORDER BY s.symbol
+-- !query analysis
+Sort [symbol#x ASC NULLS FIRST], true
++- Project [symbol#x, scalar-subquery#x [symbol#x] AS trade_count#xL]
+   :  +- Aggregate [count(1) AS count(1)#xL]
+   :     +- AsOfJoin (trade_time#x >= quote_time#x), (symbol#x = symbol#x), LeftOuter
+   :        :- SubqueryAlias t
+   :        :  +- Project [trade_time#x, symbol#x, quantity#x]
+   :        :     +- Filter (symbol#x = outer(symbol#x))
+   :        :        +- SubqueryAlias t
+   :        :           +- SubqueryAlias trades
+   :        :              +- View (`trades`, [trade_time#x, symbol#x, quantity#x])
+   :        :                 +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as int) AS quantity#x]
+   :        :                    +- LocalRelation [col1#x, col2#x, col3#x]
+   :        +- SubqueryAlias q
+   :           +- SubqueryAlias quotes
+   :              +- View (`quotes`, [quote_time#x, symbol#x, bid_price#x])
+   :                 +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]
+   :                    +- LocalRelation [col1#x, col2#x, col3#x]
+   +- SubqueryAlias s
+      +- LocalRelation [symbol#x]
+
+
+-- !query
+SELECT o.max_bid,
+  (SELECT count(*)
+   FROM trades t
+   LEFT ASOF JOIN (SELECT * FROM quotes q WHERE q.bid_price <= o.max_bid) q
+     MATCH_CONDITION (t.trade_time >= q.quote_time)
+     ON t.symbol = q.symbol) AS trade_count
+FROM VALUES (180.12) AS o(max_bid)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "treeNode" : "Filter (bid_price#x <= outer(max_bid#x))\n+- SubqueryAlias q\n   +- SubqueryAlias quotes\n      +- View (`quotes`, [quote_time#x, symbol#x, bid_price#x])\n         +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]\n            +- LocalRelation [col1#x, col2#x, col3#x]\n"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 74,
+    "stopIndex" : 126,
+    "fragment" : "SELECT * FROM quotes q WHERE q.bid_price <= o.max_bid"
+  } ]
+}
+
+
+-- !query
+SELECT o.lag,
+  (SELECT count(*)
+   FROM trades t ASOF JOIN quotes q
+     MATCH_CONDITION (t.trade_time >= q.quote_time + o.lag)
+     ON t.symbol = q.symbol) AS matched
+FROM VALUES (INTERVAL '1' SECOND) AS o(lag)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "refs1" : "\"trade_time\"",
+    "refs2" : "\"quote_time + lag\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 51,
+    "stopIndex" : 156,
+    "fragment" : "ASOF JOIN quotes q\n     MATCH_CONDITION (t.trade_time >= q.quote_time + o.lag)\n     ON t.symbol = q.symbol"
+  } ]
+}
+
+
+-- !query
+SELECT o.max_bid,
+  (SELECT sum(q.bid_price)
+   FROM trades t
+   ASOF JOIN (SELECT * FROM quotes q WHERE o.max_bid IS NULL OR q.bid_price <= o.max_bid) q
+     MATCH_CONDITION (t.trade_time >= q.quote_time)
+     ON t.symbol = q.symbol) AS total_bid
+FROM VALUES (180.12), (NULL) AS o(max_bid)
+ORDER BY o.max_bid
+-- !query analysis
+Sort [max_bid#x ASC NULLS FIRST], true
++- Project [max_bid#x, scalar-subquery#x [max_bid#x && max_bid#x] AS total_bid#x]
+   :  +- Aggregate [sum(bid_price#x) AS sum(bid_price)#x]
+   :     +- AsOfJoin (trade_time#x >= quote_time#x), (symbol#x = symbol#x), Inner
+   :        :- SubqueryAlias t
+   :        :  +- SubqueryAlias trades
+   :        :     +- View (`trades`, [trade_time#x, symbol#x, quantity#x])
+   :        :        +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as int) AS quantity#x]
+   :        :           +- LocalRelation [col1#x, col2#x, col3#x]
+   :        +- SubqueryAlias q
+   :           +- Project [quote_time#x, symbol#x, bid_price#x]
+   :              +- Filter (isnull(outer(max_bid#x)) OR (bid_price#x <= outer(max_bid#x)))
+   :                 +- SubqueryAlias q
+   :                    +- SubqueryAlias quotes
+   :                       +- View (`quotes`, [quote_time#x, symbol#x, bid_price#x])
+   :                          +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]
+   :                             +- LocalRelation [col1#x, col2#x, col3#x]
+   +- SubqueryAlias o
+      +- LocalRelation [max_bid#x]
+
+
+-- !query
+SELECT o.max_bid,
+  (SELECT sum(q.bid_price)
+   FROM trades t
+   ASOF JOIN (SELECT symbol, max(quote_time) AS quote_time, max(bid_price) AS bid_price
+              FROM quotes WHERE bid_price <= o.max_bid
+              GROUP BY symbol) q
+     MATCH_CONDITION (t.trade_time >= q.quote_time)
+     ON t.symbol = q.symbol) AS total_bid
+FROM VALUES (180.12), (500.00) AS o(max_bid)
+ORDER BY o.max_bid
+-- !query analysis
+Sort [max_bid#x ASC NULLS FIRST], true
++- Project [max_bid#x, scalar-subquery#x [max_bid#x] AS total_bid#x]
+   :  +- Aggregate [sum(bid_price#x) AS sum(bid_price)#x]
+   :     +- AsOfJoin (trade_time#x >= quote_time#x), (symbol#x = symbol#x), Inner
+   :        :- SubqueryAlias t
+   :        :  +- SubqueryAlias trades
+   :        :     +- View (`trades`, [trade_time#x, symbol#x, quantity#x])
+   :        :        +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as int) AS quantity#x]
+   :        :           +- LocalRelation [col1#x, col2#x, col3#x]
+   :        +- SubqueryAlias q
+   :           +- Aggregate [symbol#x], [symbol#x, max(quote_time#x) AS quote_time#x, max(bid_price#x) AS bid_price#x]
+   :              +- Filter (bid_price#x <= outer(max_bid#x))
+   :                 +- SubqueryAlias quotes
+   :                    +- View (`quotes`, [quote_time#x, symbol#x, bid_price#x])
+   :                       +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]
+   :                          +- LocalRelation [col1#x, col2#x, col3#x]
+   +- SubqueryAlias o
+      +- LocalRelation [max_bid#x]
+
+
+-- !query
+SELECT o.max_bid,
+  (SELECT sum(q.bid_price)
+   FROM trades t
+   ASOF JOIN (SELECT * FROM quotes q WHERE q.bid_price <= o.max_bid
+              ORDER BY q.quote_time LIMIT 2) q
+     MATCH_CONDITION (t.trade_time >= q.quote_time)
+     ON t.symbol = q.symbol) AS total_bid
+FROM VALUES (180.12), (500.00) AS o(max_bid)
+ORDER BY o.max_bid
+-- !query analysis
+Sort [max_bid#x ASC NULLS FIRST], true
++- Project [max_bid#x, scalar-subquery#x [max_bid#x] AS total_bid#x]
+   :  +- Aggregate [sum(bid_price#x) AS sum(bid_price)#x]
+   :     +- AsOfJoin (trade_time#x >= quote_time#x), (symbol#x = symbol#x), Inner
+   :        :- SubqueryAlias t
+   :        :  +- SubqueryAlias trades
+   :        :     +- View (`trades`, [trade_time#x, symbol#x, quantity#x])
+   :        :        +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as int) AS quantity#x]
+   :        :           +- LocalRelation [col1#x, col2#x, col3#x]
+   :        +- SubqueryAlias q
+   :           +- GlobalLimit 2
+   :              +- LocalLimit 2
+   :                 +- Sort [quote_time#x ASC NULLS FIRST], true
+   :                    +- Project [quote_time#x, symbol#x, bid_price#x]
+   :                       +- Filter (bid_price#x <= outer(max_bid#x))
+   :                          +- SubqueryAlias q
+   :                             +- SubqueryAlias quotes
+   :                                +- View (`quotes`, [quote_time#x, symbol#x, bid_price#x])
+   :                                   +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]
+   :                                      +- LocalRelation [col1#x, col2#x, col3#x]
+   +- SubqueryAlias o
+      +- LocalRelation [max_bid#x]
