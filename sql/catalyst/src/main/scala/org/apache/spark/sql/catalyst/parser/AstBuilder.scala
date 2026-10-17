@@ -6203,7 +6203,6 @@ class AstBuilder extends DataTypeAstBuilder
     def entry(key: String, value: StringLitContext): Seq[(String, String)] = {
       Option(value).toSeq.map(x => key -> string(visitStringLit(x)))
     }
-    // TODO we need proper support for the NULL format.
     val entries =
       entry("field.delim", ctx.fieldsTerminatedBy) ++
           entry("serialization.format", ctx.fieldsTerminatedBy) ++
@@ -6211,6 +6210,7 @@ class AstBuilder extends DataTypeAstBuilder
           // The following typo is inherited from Hive...
           entry("colelction.delim", ctx.collectionItemsTerminatedBy) ++
           entry("mapkey.delim", ctx.keysTerminatedBy) ++
+          entry("serialization.null.format", ctx.nullDefinedAs) ++
           Option(ctx.linesSeparatedBy).toSeq.map { token =>
             val value = string(visitStringLit(token))
             if (value != "\n") {
