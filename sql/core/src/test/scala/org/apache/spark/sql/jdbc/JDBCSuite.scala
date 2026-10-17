@@ -1675,6 +1675,28 @@ class JDBCSuite extends SharedSparkSession {
       0, metadata) == Some(FloatType))
   }
 
+  test("OracleDialect classifies broken synonyms and invalid objects as not selectable") {
+    val dialect = OracleDialect()
+    val notSelectable = Seq(
+      new SQLException("ORA-00980: synonym translation is no longer valid", "42000", 980),
+      new SQLException(
+        "ORA-04044: procedure, function, package, or type is not allowed here", "42000", 4044),
+      new SQLException(
+        "ORA-04063: view \"S.V\" has errors", "72000", 4063))
+    notSelectable.foreach { e =>
+      assert(dialect.isNotSelectableObjectException(e), e.getMessage)
+      assert(!dialect.isObjectNotFoundException(e), e.getMessage)
+    }
+
+    // Missing objects and genuine syntax errors are not classified as not selectable.
+    val tableNotFound = new SQLException("ORA-00942: table or view does not exist", "42000", 942)
+    assert(!dialect.isNotSelectableObjectException(tableNotFound))
+    assert(dialect.isObjectNotFoundException(tableNotFound))
+    val syntaxError = new SQLException("ORA-00900: invalid SQL statement", "42000", 900)
+    assert(!dialect.isNotSelectableObjectException(syntaxError))
+    assert(dialect.isSyntaxErrorBestEffort(syntaxError))
+  }
+
   test("OracleDialect jdbc type mapping") {
     val oracleDialect = JdbcDialects.get("jdbc:oracle")
     val metadata = new MetadataBuilder().putString("name", "test_column").putLong("scale", -127)
@@ -2035,6 +2057,15 @@ class JDBCSuite extends SharedSparkSession {
         }
       }
     }
+  }
+
+  test("MsSqlServerDialect maps native JSON JDBC type to StringType") {
+    val msSqlServerDialect = JdbcDialects.get("jdbc:sqlserver")
+    val metadata = new MetadataBuilder()
+    assert(msSqlServerDialect.getCatalystType(
+      MsSqlServerDialect.JSON, "json", 0, metadata).get == StringType)
+    assert(msSqlServerDialect.getCatalystType(
+      java.sql.Types.OTHER, "json", 0, metadata).isEmpty)
   }
 
   test("SPARK-42469: MsSqlServerDialect Limit query test") {
