@@ -191,6 +191,21 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
       messageParameters = Map("t" -> toSQLValue(clazz.toString)))
   }
 
+  def notARecordClassError(className: String): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "NOT_A_RECORD_CLASS",
+      messageParameters = Map("className" -> className))
+  }
+
+  def genericRecordNotSupportedError(
+      recordClass: Class[_]): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "GENERIC_RECORD_NOT_SUPPORTED",
+      messageParameters = Map(
+        "recordClass" -> recordClass.getName,
+        "typeParams" -> recordClass.getTypeParameters.mkString(", ")))
+  }
+
   def cannotFindConstructorForTypeError(tpe: String): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
       errorClass = "_LEGACY_ERROR_TEMP_2144",

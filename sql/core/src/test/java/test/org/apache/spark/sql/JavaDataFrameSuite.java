@@ -23,13 +23,23 @@ import java.net.URL;
 import java.util.*;
 import java.math.BigInteger;
 import java.math.BigDecimal;
+import java.sql.Date;
+import java.sql.Timestamp;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
+import javax.annotation.Nonnull;
 
 import scala.collection.Seq;
 import scala.jdk.javaapi.CollectionConverters;
 
 import com.google.common.primitives.Ints;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.function.Executable;
 
+import org.apache.spark.SparkArithmeticException;
+import org.apache.spark.SparkRuntimeException;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.Column;
@@ -37,7 +47,11 @@ import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation;
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan;
+import org.apache.spark.sql.execution.LogicalRDD;
 import org.apache.spark.sql.expressions.UserDefinedFunction;
+import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.util.sketch.BloomFilter;
@@ -485,6 +499,202 @@ public class JavaDataFrameSuite {
     Dataset<Row> df = spark.createDataFrame(data, BeanWithoutGetter.class);
     Assertions.assertEquals(0, df.schema().length());
     Assertions.assertEquals(1, df.collectAsList().size());
+  }
+
+  public static class WideBean implements Serializable {
+    public int getPrimitiveInt() { return 1; }
+    public boolean isPrimitiveBoolean() { return true; }
+    public Long getBoxedLong() { return 2L; }
+    public Double getNullBoxedDouble() { return null; }
+    @Nonnull public Integer getNonNullBoxedInt() { return 3; }
+    @Nonnull public String getNonNullString() { return "a"; }
+    public String getNullString() { return null; }
+    public Bean.NestedBean getNested() { return new Bean.NestedBean(); }
+    public List<String> getList() { return Arrays.asList("b", null); }
+    public Map<String, Integer> getMap() { return Map.of("k", 4); }
+    public String[] getStringArray() { return new String[] { "c", null }; }
+    public int[] getIntArray() { return new int[] { 5, 6 }; }
+    public byte[] getBinary() { return new byte[] { 7, 8 }; }
+    public BigDecimal getDecimal() { return new BigDecimal("12.34"); }
+    public Date getSqlDate() { return Date.valueOf("2024-01-02"); }
+    public Timestamp getSqlTimestamp() { return Timestamp.valueOf("2024-01-02 03:04:05.123456"); }
+    public LocalDate getLocalDate() { return LocalDate.of(2024, 1, 3); }
+    public Instant getInstant() { return Instant.parse("2024-01-03T03:04:05.123456Z"); }
+  }
+
+  @Test
+  public void testCreateDataFrameSchemaAndRowsForBeans() {
+    // SPARK-55396: createDataFrame takes its schema from the bean encoder and converts
+    // values with the encoder's serializer.
+    Map<String, Object> expected = new HashMap<>();
+    expected.put("primitiveInt", 1);
+    expected.put("primitiveBoolean", true);
+    expected.put("boxedLong", 2L);
+    expected.put("nullBoxedDouble", null);
+    expected.put("nonNullBoxedInt", 3);
+    expected.put("nonNullString", "a");
+    expected.put("nullString", null);
+    expected.put("nested", RowFactory.create(1));
+    expected.put("list", toSeq(Arrays.asList("b", null)));
+    expected.put("map", CollectionConverters.asScala(Map.of("k", 4)));
+    expected.put("stringArray", toSeq(Arrays.asList("c", null)));
+    expected.put("intArray", toSeq(Arrays.asList(5, 6)));
+    expected.put("binary", new byte[] { 7, 8 });
+    expected.put("decimal", new BigDecimal("12.34").setScale(18));
+    expected.put("sqlDate", Date.valueOf("2024-01-02"));
+    expected.put("sqlTimestamp", Timestamp.valueOf("2024-01-02 03:04:05.123456"));
+    expected.put("localDate", Date.valueOf(LocalDate.of(2024, 1, 3)));
+    expected.put("instant", Timestamp.from(Instant.parse("2024-01-03T03:04:05.123456Z")));
+
+    StructType schema = Encoders.bean(WideBean.class).schema();
+    Assertions.assertEquals(expected.keySet(), new HashSet<>(Arrays.asList(schema.fieldNames())));
+    Assertions.assertFalse(schema.apply("nonNullBoxedInt").nullable());
+    Row expectedRow =
+      RowFactory.create(Arrays.stream(schema.fieldNames()).map(expected::get).toArray());
+
+    List<WideBean> data = Arrays.asList(new WideBean());
+    for (Dataset<Row> df : Arrays.asList(
+        spark.createDataFrame(data, WideBean.class),
+        spark.createDataFrame(jsc.parallelize(data), WideBean.class))) {
+      Assertions.assertEquals(schema, df.schema());
+      Assertions.assertEquals(Arrays.asList(expectedRow), df.collectAsList());
+    }
+  }
+
+  private static <T> scala.collection.immutable.Seq<T> toSeq(List<T> list) {
+    return CollectionConverters.asScala(list).toSeq();
+  }
+
+  public static class BeanWithEnum implements Serializable {
+    public TimeUnit getUnit() { return TimeUnit.SECONDS; }
+  }
+
+  @Test
+  public void testCreateDataFrameWithEnumProperty() {
+    // SPARK-55396: enum properties are stored as their names.
+    Dataset<Row> df = spark.createDataFrame(Arrays.asList(new BeanWithEnum()), BeanWithEnum.class);
+    Assertions.assertEquals(StringType, df.schema().apply("unit").dataType());
+    Assertions.assertEquals(Arrays.asList(RowFactory.create("SECONDS")), df.collectAsList());
+  }
+
+  public static class BeanWithNestedBeanCollections implements Serializable {
+    public List<Bean.NestedBean> getList() { return Arrays.asList(new Bean.NestedBean()); }
+    public Map<String, Bean.NestedBean> getMap() { return Map.of("k", new Bean.NestedBean()); }
+    public Bean.NestedBean[] getArray() { return new Bean.NestedBean[] { new Bean.NestedBean() }; }
+  }
+
+  @Test
+  public void testCreateDataFrameWithNestedBeansInCollections() {
+    // SPARK-55396: nested beans inside arrays, lists and maps (see also SPARK-25654).
+    Dataset<Row> df = spark.createDataFrame(
+      Arrays.asList(new BeanWithNestedBeanCollections()), BeanWithNestedBeanCollections.class);
+    Row nested = RowFactory.create(1);
+    Row expected = RowFactory.create(
+      toSeq(Arrays.asList(nested)),
+      toSeq(Arrays.asList(nested)),
+      CollectionConverters.asScala(Map.of("k", nested)));
+    Assertions.assertEquals(
+      Arrays.asList(expected), df.select("array", "list", "map").collectAsList());
+  }
+
+  @Test
+  public void testCreateDataFramePlanForBeans() {
+    // SPARK-55396: the List overload builds a LocalRelation, and the RDD overload a LogicalRDD
+    // named after the source RDD.
+    List<Bean.NestedBean> data = Arrays.asList(new Bean.NestedBean());
+    org.apache.spark.sql.classic.Dataset<Row> fromList =
+      spark.createDataFrame(data, Bean.NestedBean.class);
+    Assertions.assertInstanceOf(LocalRelation.class, fromList.queryExecution().analyzed());
+    JavaRDD<Bean.NestedBean> rdd = jsc.parallelize(data).setName("beans");
+    LogicalPlan fromRdd =
+      spark.createDataFrame(rdd, Bean.NestedBean.class).queryExecution().analyzed();
+    Assertions.assertInstanceOf(LogicalRDD.class, fromRdd);
+    Assertions.assertEquals("beans", ((LogicalRDD) fromRdd).rdd().name());
+  }
+
+  public static class GetterOnlyBean implements Serializable {
+    private final int id;
+    private final String name;
+
+    public GetterOnlyBean(int id, String name) {
+      this.id = id;
+      this.name = name;
+    }
+
+    public int getId() { return id; }
+    public String getName() { return name; }
+  }
+
+  @Test
+  public void testCreateDataFrameWithGetterOnlyBean() {
+    // SPARK-55396: beans without setters or a no-arg constructor are supported, since only
+    // the serializer is used.
+    List<GetterOnlyBean> data = Arrays.asList(new GetterOnlyBean(1, "a"));
+    for (Dataset<Row> df : Arrays.asList(
+        spark.createDataFrame(data, GetterOnlyBean.class),
+        spark.createDataFrame(jsc.parallelize(data), GetterOnlyBean.class))) {
+      Assertions.assertEquals(Encoders.bean(GetterOnlyBean.class).schema(), df.schema());
+      Assertions.assertEquals(Arrays.asList(RowFactory.create(1, "a")), df.collectAsList());
+    }
+  }
+
+  public static class DecimalBean implements Serializable {
+    public BigDecimal getValue() { return new BigDecimal("1e30"); }
+  }
+
+  private List<Supplier<List<Row>>> createDecimalBeanDataFrames() {
+    List<DecimalBean> data = Arrays.asList(new DecimalBean());
+    return Arrays.asList(
+      () -> spark.createDataFrame(data, DecimalBean.class).collectAsList(),
+      () -> spark.createDataFrame(jsc.parallelize(data), DecimalBean.class).collectAsList());
+  }
+
+  private void withAnsi(boolean enabled, Runnable body) {
+    String key = SQLConf.ANSI_ENABLED().key();
+    String original = spark.conf().get(key);
+    spark.conf().set(key, String.valueOf(enabled));
+    try {
+      body.run();
+    } finally {
+      spark.conf().set(key, original);
+    }
+  }
+
+  @Test
+  public void testCreateDataFrameWithDecimalOverflowNonAnsi() {
+    // SPARK-55396: without ANSI mode, a BigDecimal that doesn't fit decimal(38, 18) is null.
+    withAnsi(false, () -> {
+      for (Supplier<List<Row>> call : createDecimalBeanDataFrames()) {
+        Assertions.assertEquals(Arrays.asList(RowFactory.create((Object) null)), call.get());
+      }
+    });
+  }
+
+  @Test
+  public void testCreateDataFrameWithDecimalOverflowAnsi() {
+    // SPARK-55396: with ANSI mode, the overflow fails to encode, as in createDataset.
+    withAnsi(true, () -> {
+      for (Supplier<List<Row>> call : createDecimalBeanDataFrames()) {
+        SparkRuntimeException e = Assertions.assertThrows(SparkRuntimeException.class, call::get);
+        Assertions.assertEquals("EXPRESSION_ENCODING_FAILED", e.getCondition());
+        Assertions.assertInstanceOf(SparkArithmeticException.class, e.getCause());
+        Assertions.assertTrue(((SparkArithmeticException) e.getCause()).getCondition()
+          .startsWith("NUMERIC_VALUE_OUT_OF_RANGE"));
+      }
+    });
+  }
+
+  @Test
+  public void testCreateDataFrameWithNullBean() {
+    // SPARK-55396: a null element fails with NOT_NULL_ASSERT_VIOLATION.
+    List<Bean.NestedBean> data = Arrays.asList(new Bean.NestedBean(), null);
+    List<Executable> calls = Arrays.asList(
+      () -> spark.createDataFrame(data, Bean.NestedBean.class).collectAsList(),
+      () -> spark.createDataFrame(jsc.parallelize(data), Bean.NestedBean.class).collectAsList());
+    for (Executable call : calls) {
+      SparkRuntimeException e = Assertions.assertThrows(SparkRuntimeException.class, call);
+      Assertions.assertEquals("NOT_NULL_ASSERT_VIOLATION", e.getCondition());
+    }
   }
 
   @SuppressWarnings("deprecation")

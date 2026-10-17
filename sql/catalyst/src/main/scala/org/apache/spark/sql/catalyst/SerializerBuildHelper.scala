@@ -424,6 +424,17 @@ object SerializerBuildHelper {
       }
       createSerializerForObject(input, serializedFields)
 
+    case AgnosticEncoders.JavaRecordEncoder(_, fields) =>
+      val serializedFields = fields.map { field =>
+        val getter = Invoke(
+          KnownNotNull(input),
+          field.name,
+          externalDataTypeFor(field.enc),
+          returnNullable = field.nullable)
+        field.name -> createSerializer(field.enc, getter)
+      }
+      createSerializerForObject(input, serializedFields)
+
     case AgnosticEncoders.RowEncoder(fields) =>
       val serializedFields = fields.zipWithIndex.map { case (field, index) =>
         val fieldValue = createSerializer(
