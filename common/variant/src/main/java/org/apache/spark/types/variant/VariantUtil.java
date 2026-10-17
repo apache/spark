@@ -156,6 +156,11 @@ public class VariantUtil {
   public static final int MAX_DECIMAL8_PRECISION = 18;
   public static final int MAX_DECIMAL16_PRECISION = 38;
 
+  // Long.MIN_VALUE / Long.MAX_VALUE as BigDecimals, hoisted so the decimal-to-long range check
+  // (VariantBuilder.decimalPromotesToLong) does not rebuild them on every call.
+  static final BigDecimal LONG_MIN_AS_DECIMAL = BigDecimal.valueOf(Long.MIN_VALUE);
+  static final BigDecimal LONG_MAX_AS_DECIMAL = BigDecimal.valueOf(Long.MAX_VALUE);
+
   // Write the least significant `numBytes` bytes in `value` into `bytes[pos, pos + numBytes)` in
   // little endian.
   public static void writeLong(byte[] bytes, int pos, long value, int numBytes) {
@@ -698,6 +703,13 @@ public class VariantUtil {
     return Arrays.compareUnsigned(left, right);
   }
 
+  // Number of keys in the variant metadata dictionary.
+  public static int getMetadataNumKeys(byte[] metadata) {
+    checkIndex(0, metadata.length);
+    int offsetSize = ((metadata[0] >> 6) & 0x3) + 1;
+    return readUnsigned(metadata, 1, offsetSize);
+  }
+
   // Get a key at `id` in the variant metadata.
   // Throw `MALFORMED_VARIANT` if the variant is malformed. An out-of-bound `id` is also considered
   // a malformed variant because it is read from the corresponding variant value.
@@ -718,5 +730,24 @@ public class VariantUtil {
     // Dictionary keys are UTF-8 encoded (see `VariantBuilder.addKey`). Decode with UTF-8
     // explicitly rather than relying on the platform-dependent JVM default charset.
     return new String(metadata, stringStart + offset, nextOffset - offset, StandardCharsets.UTF_8);
+  }
+
+  // Like `getMetadataKey`, but returns the key's raw stored bytes instead of decoding to a
+  // `String`.
+  public static byte[] getMetadataKeyBytes(byte[] metadata, int id) {
+    checkIndex(0, metadata.length);
+    // Extracts the highest 2 bits in the metadata header to determine the integer size of the
+    // offset list.
+    int offsetSize = ((metadata[0] >> 6) & 0x3) + 1;
+    int dictSize = readUnsigned(metadata, 1, offsetSize);
+    if (id >= dictSize) throw malformedVariant();
+    // There are a header byte, a `dictSize` with `offsetSize` bytes, and `(dictSize + 1)` offsets
+    // before the string data.
+    int stringStart = 1 + (dictSize + 2) * offsetSize;
+    int offset = readUnsigned(metadata, 1 + (id + 1) * offsetSize, offsetSize);
+    int nextOffset = readUnsigned(metadata, 1 + (id + 2) * offsetSize, offsetSize);
+    if (offset > nextOffset) throw malformedVariant();
+    checkIndex(stringStart + nextOffset - 1, metadata.length);
+    return Arrays.copyOfRange(metadata, stringStart + offset, stringStart + nextOffset);
   }
 }
