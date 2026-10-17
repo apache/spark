@@ -37,6 +37,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, CONFIG}
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.expressions.JoinedRow
 import org.apache.spark.sql.catalyst.expressions.variant.VariantExpressionEvalUtils
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
@@ -249,23 +250,23 @@ object ParquetUtils extends Logging {
   private[sql] def createAggInternalRowFromFooter(
       footer: ParquetMetadata,
       filePath: String,
-      dataSchema: StructType,
       partitionSchema: StructType,
       aggregation: Aggregation,
       aggSchema: StructType,
       partitionValues: InternalRow,
+      isCaseSensitive: Boolean,
       datetimeRebaseSpec: RebaseSpec): InternalRow = {
-    val (primitiveTypes, values) = getPushedDownAggResult(
-      footer, filePath, dataSchema, partitionSchema, aggregation)
-
-    val builder = Types.buildMessage
-    primitiveTypes.foreach(t => builder.addField(t))
-    val parquetSchema = builder.named("root")
-
     // if there are group by columns, we will build result row first,
     // and then append group by columns values (partition columns values) to the result row.
     val schemaWithoutGroupBy =
       AggregatePushDownUtils.getSchemaWithoutGroupingExpression(aggSchema, aggregation)
+
+    val (primitiveTypes, values) = getPushedDownAggResult(
+      footer, filePath, partitionSchema, aggregation, schemaWithoutGroupBy, isCaseSensitive)
+
+    val builder = Types.buildMessage
+    primitiveTypes.foreach(t => builder.addField(t))
+    val parquetSchema = builder.named("root")
 
     val schemaConverter = new ParquetToSparkSchemaConverter
     val converter = new ParquetRowConverter(
@@ -276,8 +277,11 @@ object ParquetUtils extends Logging {
       datetimeRebaseSpec,
       RebaseSpec(LegacyBehaviorPolicy.CORRECTED),
       NoopUpdater)
+    // Reset fields to null so a column absent from the file reads as null, not the zero default.
+    converter.start()
     val primitiveTypeNames = primitiveTypes.map(_.getPrimitiveTypeName)
     primitiveTypeNames.zipWithIndex.foreach {
+      case (_, i) if values(i) == null =>
       case (PrimitiveType.PrimitiveTypeName.BOOLEAN, i) =>
         val v = values(i).asInstanceOf[Boolean]
         converter.getConverter(i).asPrimitiveConverter.addBoolean(v)
@@ -323,54 +327,65 @@ object ParquetUtils extends Logging {
   private[sql] def getPushedDownAggResult(
       footer: ParquetMetadata,
       filePath: String,
-      dataSchema: StructType,
       partitionSchema: StructType,
-      aggregation: Aggregation)
+      aggregation: Aggregation,
+      aggSchema: StructType,
+      isCaseSensitive: Boolean)
   : (Array[PrimitiveType], Array[Any]) = {
     val footerFileMetaData = footer.getFileMetaData
-    val fields = footerFileMetaData.getSchema.getFields
+    // Resolve by name in the file's own schema; a positional lookup breaks under mergeSchema.
+    val fileSchema = footerFileMetaData.getSchema
+    val resolver = if (isCaseSensitive) caseSensitiveResolution else caseInsensitiveResolution
+    def fileFieldIndex(colName: String): Int =
+      (0 until fileSchema.getFieldCount)
+        .indexWhere(i => resolver(fileSchema.getFieldName(i), colName))
     val blocks = footer.getBlocks
     val primitiveTypeBuilder = mutable.ArrayBuilder.make[PrimitiveType]
     val valuesBuilder = mutable.ArrayBuilder.make[Any]
+    lazy val sparkToParquet = new SparkToParquetSchemaConverter(SQLConf.get)
 
-    aggregation.aggregateExpressions.foreach { agg =>
+    aggregation.aggregateExpressions.zipWithIndex.foreach { case (agg, aggIndex) =>
       var value: Any = None
       var rowCount = 0L
       var isCount = false
-      var index = 0
+      var index = -1
       var schemaName = ""
       blocks.forEach { block =>
         val blockMetaData = block.getColumns
         agg match {
           case max: Max if V2ColumnUtils.extractV2Column(max.column).isDefined =>
             val colName = V2ColumnUtils.extractV2Column(max.column).get
-            index = dataSchema.getFieldIndex(colName).getOrElse(-1)
+            index = fileFieldIndex(colName)
             schemaName = "max(" + colName + ")"
-            val currentMax = getCurrentBlockMaxOrMin(filePath, blockMetaData, index, true)
-            if (value == None || currentMax.asInstanceOf[Comparable[Any]].compareTo(value) > 0) {
-              value = currentMax
+            if (index >= 0) {
+              val currentMax = getCurrentBlockMaxOrMin(filePath, blockMetaData, index, true)
+              if (value == None || currentMax.asInstanceOf[Comparable[Any]].compareTo(value) > 0) {
+                value = currentMax
+              }
             }
           case min: Min if V2ColumnUtils.extractV2Column(min.column).isDefined =>
             val colName = V2ColumnUtils.extractV2Column(min.column).get
-            index = dataSchema.getFieldIndex(colName).getOrElse(-1)
+            index = fileFieldIndex(colName)
             schemaName = "min(" + colName + ")"
-            val currentMin = getCurrentBlockMaxOrMin(filePath, blockMetaData, index, false)
-            if (value == None || currentMin.asInstanceOf[Comparable[Any]].compareTo(value) < 0) {
-              value = currentMin
+            if (index >= 0) {
+              val currentMin = getCurrentBlockMaxOrMin(filePath, blockMetaData, index, false)
+              if (value == None || currentMin.asInstanceOf[Comparable[Any]].compareTo(value) < 0) {
+                value = currentMin
+              }
             }
           case count: Count if V2ColumnUtils.extractV2Column(count.column).isDefined =>
             val colName = V2ColumnUtils.extractV2Column(count.column).get
             schemaName = "count(" + colName + ")"
             rowCount += block.getRowCount
-            var isPartitionCol = false
-            if (partitionSchema.getFieldIndex(colName).isDefined) {
-              isPartitionCol = true
-            }
+            val isPartitionCol = partitionSchema.getFieldIndex(colName).isDefined
             isCount = true
             if (!isPartitionCol) {
-              index = dataSchema.getFieldIndex(colName).getOrElse(-1)
-              // Count(*) includes the null values, but Count(colName) doesn't.
-              rowCount -= getNumNulls(filePath, blockMetaData, index)
+              index = fileFieldIndex(colName)
+              if (index >= 0) {
+                rowCount -= getNumNulls(filePath, blockMetaData, index)
+              } else {
+                rowCount -= block.getRowCount
+              }
             }
           case _: CountStar =>
             schemaName = "count(*)"
@@ -381,14 +396,21 @@ object ParquetUtils extends Logging {
       }
       if (isCount) {
         valuesBuilder += rowCount
-        primitiveTypeBuilder += Types.required(PrimitiveTypeName.INT64).named(schemaName);
-      } else {
+        primitiveTypeBuilder += Types.required(PrimitiveTypeName.INT64).named(schemaName)
+      } else if (index >= 0) {
         valuesBuilder += value
-        val field = fields.get(index)
+        val field = fileSchema.getFields.get(index)
         primitiveTypeBuilder += Types.required(field.asPrimitiveType.getPrimitiveTypeName)
           .as(field.getLogicalTypeAnnotation)
           .length(field.asPrimitiveType.getTypeLength)
           .named(schemaName)
+      } else {
+        // Absent column: null result; the type comes from the requested Spark type.
+        valuesBuilder += null
+        val sparkType = aggSchema(aggIndex).dataType
+        val parquetType = sparkToParquet.convertField(
+          StructField(schemaName, sparkType, nullable = true), inShredded = false)
+        primitiveTypeBuilder += parquetType.asPrimitiveType()
       }
     }
     (primitiveTypeBuilder.result(), valuesBuilder.result())
