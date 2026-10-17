@@ -21,7 +21,6 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.parquet.column.ColumnDescriptor
-import org.apache.parquet.io.ParquetDecodingException
 import org.apache.parquet.schema._
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.Type._
@@ -1043,42 +1042,30 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     e
   }
 
-  test("schema mismatch failure error message for parquet reader") {
-    withTempPath { dir =>
-      val e = testSchemaMismatch(dir.getCanonicalPath, vectorizedReaderEnabled = false)
-      val expectedMessage = "Encountered error while reading file"
-      assert(e.getCause.isInstanceOf[ParquetDecodingException])
-      assert(e.getMessage.contains(expectedMessage))
-    }
-  }
-
-  test("schema mismatch failure error message for parquet vectorized reader") {
-    withTempPath { dir =>
-      val e = testSchemaMismatch(dir.getCanonicalPath, vectorizedReaderEnabled = true)
-      assert(e.getCause.isInstanceOf[SchemaColumnConvertNotSupportedException])
-      val file = e.getMessageParameters.get("path")
-      val col = spark.read.parquet(file).schema.fields.filter(_.name == "a")
-      assert(col.length == 1)
-      if (col(0).dataType == StringType) {
+  Seq(false, true).foreach { vectorizedReaderEnabled =>
+    val readerName = if (vectorizedReaderEnabled) "parquet vectorized reader" else "parquet reader"
+    test(s"schema mismatch failure error message for $readerName") {
+      withTempPath { dir =>
+        val e = testSchemaMismatch(dir.getCanonicalPath, vectorizedReaderEnabled)
+        assert(e.getCause.isInstanceOf[SchemaColumnConvertNotSupportedException])
+        val file = e.getMessageParameters.get("path")
+        val failedColName =
+          e.getMessageParameters.get("column").stripPrefix("[").stripSuffix("]")
+        val col = spark.read.parquet(file).schema.fields.filter(_.name == failedColName)
+        assert(col.length == 1)
+        val (expectedType, actualType) = if (col(0).dataType == StringType) {
+          ("int", "BINARY")
+        } else {
+          ("string", "INT32")
+        }
         checkErrorMatchPVals(
           exception = e,
           condition = "FAILED_READ_FILE.PARQUET_COLUMN_DATA_TYPE_MISMATCH",
           parameters = Map(
-            "path" -> s".*${dir.getCanonicalPath}.*",
-            "column" -> "\\[a\\]",
-            "expectedType" -> "int",
-            "actualType" -> "BINARY"
-          )
-        )
-      } else {
-        checkErrorMatchPVals(
-          exception = e,
-          condition = "FAILED_READ_FILE.PARQUET_COLUMN_DATA_TYPE_MISMATCH",
-          parameters = Map(
-            "path" -> s".*${dir.getCanonicalPath}.*",
-            "column" -> "\\[a\\]",
-            "expectedType" -> "string",
-            "actualType" -> "INT32"
+            "path" -> s".*${dir.getCanonicalPath.replace('\\', '/')}.*",
+            "column" -> s"\\[$failedColName\\]",
+            "expectedType" -> expectedType,
+            "actualType" -> actualType
           )
         )
       }

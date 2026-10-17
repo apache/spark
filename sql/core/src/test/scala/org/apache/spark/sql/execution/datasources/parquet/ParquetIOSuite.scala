@@ -2024,6 +2024,128 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-59251: Parquet readers reject incompatible primitive type conversions consistently") {
+    val cases: Seq[(String, DataType, SimpleGroup => Unit, String, String)] = Seq(
+      ("required int32 c (DATE);", DecimalType(10, 0),
+        (record: SimpleGroup) => record.add(0, 1), "INT32", "decimal(10,0)"),
+      ("required fixed_len_byte_array(4) c;", StringType,
+        (record: SimpleGroup) =>
+          record.add(0, Binary.fromConstantByteArray(Array[Byte](1, 2, 3, 4))),
+        "FIXED_LEN_BYTE_ARRAY", "string"),
+      ("required int96 c;", StringType,
+        (record: SimpleGroup) =>
+          record.add(0, Binary.fromConstantByteArray(new Array[Byte](12))),
+        "INT96", "string"),
+      ("required int64 c (TIMESTAMP(MICROS,true));", DecimalType(20, 0),
+        (record: SimpleGroup) => record.add(0, 123456789L),
+        "INT64", "decimal(20,0)")
+    )
+
+    cases.foreach { case (column, readType, writeValue, actualType, expectedType) =>
+      val parquetSchema = MessageTypeParser.parseMessageType(
+        s"message root {\n  $column\n}")
+      val readSchema = new StructType().add("c", readType)
+
+      withTempDir { dir =>
+        val path = new Path(s"${dir.getCanonicalPath}/incompatible.parquet")
+        val writer = createParquetWriter(parquetSchema, path)
+        val record = new SimpleGroup(parquetSchema)
+        writeValue(record)
+        writer.write(record)
+        writer.close()
+
+        withAllParquetReaders {
+          checkErrorMatchPVals(
+            exception = intercept[SparkException] {
+              spark.read.schema(readSchema).parquet(path.toString).collect()
+            },
+            condition = "FAILED_READ_FILE.PARQUET_COLUMN_DATA_TYPE_MISMATCH",
+            parameters = Map(
+              "path" -> ".*",
+              "column" -> "\\[c\\]",
+              "expectedType" -> java.util.regex.Pattern.quote(expectedType),
+              "actualType" -> actualType
+            )
+          )
+        }
+      }
+    }
+  }
+
+  test("SPARK-59251: Parquet readers reject incompatible nested conversions with full path") {
+    // Nested struct field
+    val structSchema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  optional group s {
+        |    required int32 c (DATE);
+        |  }
+        |}""".stripMargin)
+    val readStructSchema =
+      new StructType().add("s", new StructType().add("c", DecimalType(10, 0)))
+
+    withTempDir { dir =>
+      val path = new Path(s"${dir.getCanonicalPath}/nested_struct.parquet")
+      val writer = createParquetWriter(structSchema, path)
+      val record = new SimpleGroup(structSchema)
+      val sGroup = record.addGroup(0)
+      sGroup.add(0, 1)
+      writer.write(record)
+      writer.close()
+
+      withAllParquetReaders {
+        checkErrorMatchPVals(
+          exception = intercept[SparkException] {
+            spark.read.schema(readStructSchema).parquet(path.toString).collect()
+          },
+          condition = "FAILED_READ_FILE.PARQUET_COLUMN_DATA_TYPE_MISMATCH",
+          parameters = Map(
+            "path" -> ".*",
+            "column" -> "\\[s, c\\]",
+            "expectedType" -> java.util.regex.Pattern.quote("decimal(10,0)"),
+            "actualType" -> "INT32"
+          )
+        )
+      }
+    }
+
+    // Nested array element
+    val arraySchema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  optional group arr (LIST) {
+        |    repeated group list {
+        |      required fixed_len_byte_array(4) element;
+        |    }
+        |  }
+        |}""".stripMargin)
+    val readArraySchema = new StructType().add("arr", ArrayType(StringType))
+
+    withTempDir { dir =>
+      val path = new Path(s"${dir.getCanonicalPath}/nested_array.parquet")
+      val writer = createParquetWriter(arraySchema, path)
+      val record = new SimpleGroup(arraySchema)
+      val arrGroup = record.addGroup(0)
+      val listGroup = arrGroup.addGroup(0)
+      listGroup.add(0, Binary.fromConstantByteArray(Array[Byte](1, 2, 3, 4)))
+      writer.write(record)
+      writer.close()
+
+      withAllParquetReaders {
+        checkErrorMatchPVals(
+          exception = intercept[SparkException] {
+            spark.read.schema(readArraySchema).parquet(path.toString).collect()
+          },
+          condition = "FAILED_READ_FILE.PARQUET_COLUMN_DATA_TYPE_MISMATCH",
+          parameters = Map(
+            "path" -> ".*",
+            "column" -> "\\[arr, list, element\\]",
+            "expectedType" -> "string",
+            "actualType" -> "FIXED_LEN_BYTE_ARRAY"
+          )
+        )
+      }
+    }
+  }
+
   test("SPARK-55444: vectorized read rejects an incompatible encoding requested as TimeType") {
     // TimeTypeParquetOps.getVectorUpdater returns None for any encoding other than INT64
     // TIME(MICROS/NANOS), so the vectorized factory falls through to a clean
