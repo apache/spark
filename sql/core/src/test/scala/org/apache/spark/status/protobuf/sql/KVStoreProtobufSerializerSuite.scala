@@ -25,16 +25,51 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+import org.apache.spark.sql.execution.streaming.{
+  AvailableNowTrigger,
+  ContinuousTrigger,
+  OneTimeTrigger,
+  ProcessingTimeTrigger,
+  RealTimeTrigger}
 import org.apache.spark.sql.execution.ui._
-import org.apache.spark.sql.streaming.{SinkProgress, SourceProgress, StateOperatorProgress, StreamingQueryProgress}
+import org.apache.spark.sql.streaming.{
+  SinkProgress,
+  SourceProgress,
+  StateOperatorProgress,
+  StreamingQueryProgress,
+  Trigger}
 import org.apache.spark.sql.streaming.ui.{StreamingQueryData, StreamingQueryProgressWrapper}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.status.api.v1.sql.SqlResourceSuite
-import org.apache.spark.status.protobuf.KVStoreProtobufSerializer
+import org.apache.spark.status.protobuf.{KVStoreProtobufSerializer, StoreTypes}
 
 class KVStoreProtobufSerializerSuite extends SparkFunSuite {
 
   private val serializer = new KVStoreProtobufSerializer()
+
+  test("unsupported trigger metadata does not fail progress store decoding") {
+    Seq(
+      StoreTypes.Trigger.newBuilder().setTypeValue(999).build(),
+      StoreTypes.Trigger.newBuilder()
+        .setType(StoreTypes.Trigger.Type.PROCESSING_TIME)
+        .build(),
+      StoreTypes.Trigger.newBuilder()
+        .setType(StoreTypes.Trigger.Type.PROCESSING_TIME)
+        .setIntervalMs(-1)
+        .build(),
+      StoreTypes.Trigger.newBuilder()
+        .setType(StoreTypes.Trigger.Type.AVAILABLE_NOW)
+        .setIntervalMs(1)
+        .build()).foreach { trigger =>
+      val storedProgress = StoreTypes.StreamingQueryProgress.newBuilder()
+        .setSink(StoreTypes.SinkProgress.newBuilder())
+        .setTrigger(trigger)
+        .build()
+      val result = StreamingQueryProgressSerializer.deserialize(storedProgress)
+      assert(result.trigger == null)
+      assert(result.batchId === storedProgress.getBatchId)
+    }
+  }
 
   test("SQLExecutionUIData") {
     val normal = SqlResourceSuite.sqlExecutionUIData
@@ -284,7 +319,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
   }
 
   test("StreamingQueryProgressWrapper") {
-    val normalInput = {
+    def normalInput(triggerConfig: Trigger): StreamingQueryProgressWrapper = {
       val stateOperatorProgress0 = new StateOperatorProgress(
         operatorName = "op-0",
         numRowsTotal = 1L,
@@ -375,7 +410,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         stateOperators = Array(stateOperatorProgress0, stateOperatorProgress1),
         sources = Array(source0, source1),
         sink = sink,
-        observedMetrics = observedMetrics
+        observedMetrics = observedMetrics,
+        triggerConfig = triggerConfig
       )
       new StreamingQueryProgressWrapper(progress)
     }
@@ -446,15 +482,26 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         stateOperators = Array(stateOperatorProgress0, stateOperatorProgress1),
         sources = Array(source0, source1),
         sink = sink,
-        observedMetrics = null
+        observedMetrics = null,
+        triggerConfig = null
       )
       new StreamingQueryProgressWrapper(progress)
     }
 
-    Seq((false, normalInput), (true, withNullInput)).foreach { case (hasNullValue, input) =>
+    val triggers = Seq(
+      ProcessingTimeTrigger(3000000000L),
+      ContinuousTrigger(4000000000L),
+      RealTimeTrigger(5000000000L),
+      AvailableNowTrigger,
+      OneTimeTrigger)
+    val inputs = triggers.map(trigger => (false, normalInput(trigger))) :+ (true, withNullInput)
+
+    inputs.foreach { case (hasNullValue, input) =>
       // Do serialization and deserialization
       val bytes = serializer.serialize(input)
       val result = serializer.deserialize(bytes, classOf[StreamingQueryProgressWrapper])
+      val storedProgress = StoreTypes.StreamingQueryProgressWrapper.parseFrom(bytes).getProgress
+      assert(storedProgress.hasTrigger == !hasNullValue)
 
       // Assertion results
       val progress = input.progress
@@ -465,6 +512,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       assert(progress.timestamp == resultProcess.timestamp)
       assert(progress.batchId == resultProcess.batchId)
       assert(progress.batchDuration == resultProcess.batchDuration)
+      assert(progress.trigger == resultProcess.trigger)
       if (hasNullValue) {
         assert(resultProcess.durationMs.isEmpty)
         assert(resultProcess.eventTime.isEmpty)
@@ -531,5 +579,6 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         }
       }
     }
+
   }
 }

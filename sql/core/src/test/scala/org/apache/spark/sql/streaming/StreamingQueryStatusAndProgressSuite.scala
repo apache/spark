@@ -24,7 +24,9 @@ import java.util.UUID
 
 import scala.jdk.CollectionConverters._
 import scala.math.BigDecimal.RoundingMode
+import scala.reflect.runtime.universe.{runtimeMirror, NoSymbol, TermName}
 
+import org.json4s.JNothing
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
@@ -33,6 +35,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+import org.apache.spark.sql.execution.streaming.Triggers
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -43,6 +46,123 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ArrayImplicits._
 
 class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually with Matchers {
+  gridTest("SPARK-59986: trigger metadata")(Seq[(Trigger, String)](
+    Trigger.ProcessingTime(0) -> """{"type":"ProcessingTime","intervalMs":0}""",
+    Trigger.ProcessingTime(3000000000L) ->
+      """{"type":"ProcessingTime","intervalMs":3000000000}""",
+    Trigger.Continuous(2000) -> """{"type":"Continuous","intervalMs":2000}""",
+    Trigger.RealTime(3000) -> """{"type":"RealTime","batchDurationMs":3000}""",
+    Trigger.AvailableNow() -> """{"type":"AvailableNow"}""",
+    Trigger.Once() -> """{"type":"Once"}""")) {
+    case (trigger, expected) =>
+      assert(Triggers.toJson(trigger) === expected)
+      assert(Triggers.fromJson(expected) === trigger)
+  }
+
+  test("SPARK-59986: unknown trigger metadata identifies the unsupported trigger") {
+    val trigger = new Trigger {}
+    val exception = intercept[IllegalStateException] {
+      Triggers.toJson(trigger)
+    }
+    assert(exception.getMessage === s"Unknown type of trigger: $trigger")
+  }
+
+  test("SPARK-59986: starting a query with an unknown trigger identifies the input") {
+    import testImplicits._
+
+    val input = MemoryStream[Int]
+    val trigger = new Trigger {}
+    val exception = intercept[IllegalStateException] {
+      input.toDS().writeStream
+        .format("memory")
+        .queryName("unsupported_trigger")
+        .trigger(trigger)
+        .start()
+    }
+    assert(exception.getMessage === s"Unknown type of trigger: $trigger")
+  }
+
+  test("SPARK-59986: trigger metadata has a public read-only JVM accessor") {
+    val accessor = runtimeMirror(getClass.getClassLoader)
+      .classSymbol(classOf[StreamingQueryProgress])
+      .toType.member(TermName("trigger"))
+    assert(accessor.isPublic)
+    assert(accessor.privateWithin === NoSymbol)
+    assert(!classOf[StreamingQueryProgress].getMethods.exists(_.getName == "trigger_$eq"))
+  }
+
+  test("SPARK-59986: trigger metadata is initialized by the constructor") {
+    val trigger = Trigger.ProcessingTime(3000000000L)
+    val progress = testProgress8
+    assert(progress.trigger === Triggers.toJson(trigger))
+    assert(parse(progress.json) \ "trigger" === parse(Triggers.toJson(trigger)))
+  }
+
+  test("SPARK-59986: trigger JSON serialization") {
+    val progress = testProgress8
+    Seq(progress.json, progress.prettyJson, StreamingQueryProgress.jsonString(progress))
+      .foreach { json =>
+        assert(parse(json) \ "trigger" === parse(progress.trigger))
+      }
+    assert(StreamingQueryProgress.fromJson(progress.json).trigger === progress.trigger)
+  }
+
+  test("SPARK-59986: unsupported trigger metadata does not fail progress decoding") {
+    val progress = testProgress8
+    Seq(
+      """{"type":"FutureTrigger"}""",
+      """{"type":"ProcessingTime"}""",
+      """{"type":"ProcessingTime","intervalMs":"invalid"}""").foreach { triggerJson =>
+      val json = progress.json.replace(progress.trigger, triggerJson)
+      val result = StreamingQueryProgress.fromJson(json)
+      assert(result.trigger == null)
+      assert(result.batchId === progress.batchId)
+    }
+  }
+
+  test("SPARK-59986: micro-batch progress reports the configured trigger") {
+    import testImplicits._
+
+    val input = MemoryStream[Int]
+    testStream(input.toDS())(
+      AddData(input, 1),
+      StartStream(Trigger.ProcessingTime(1000)),
+      CheckAnswer(1),
+      Execute { query =>
+        eventually(timeout(streamingTimeout)) {
+          assert(query.lastProgress != null)
+          assert(parse(query.lastProgress.json) \ "trigger" ===
+            parse("""{"type":"ProcessingTime","intervalMs":1000}"""))
+        }
+      },
+      StopStream)
+  }
+
+  test("SPARK-59986: idle progress preserves the configured trigger") {
+    import testImplicits._
+
+    val input = MemoryStream[Int]
+    val triggerClock = new StreamManualClock
+    withSQLConf(SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "0") {
+      testStream(input.toDS())(
+        AddData(input, 1),
+        StartStream(Trigger.ProcessingTime(1000), triggerClock = triggerClock),
+        AdvanceManualClock(1000),
+        CheckAnswer(1),
+        AdvanceManualClock(1000),
+        Execute { query =>
+          eventually(timeout(streamingTimeout)) {
+            val idleProgress = query.lastProgress
+            assert(idleProgress != null)
+            assert(!idleProgress.durationMs.containsKey("addBatch"))
+            assert(parse(idleProgress.json) \ "trigger" ===
+              parse("""{"type":"ProcessingTime","intervalMs":1000}"""))
+          }
+        },
+        StopStream)
+    }
+  }
+
   test("StreamingQueryProgress - prettyJson") {
     val json1 = testProgress1.prettyJson
     assertJson(
@@ -313,6 +433,8 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
     ).foreach { input =>
       val jsonString = StreamingQueryProgress.jsonString(input)
       val result = StreamingQueryProgress.fromJson(jsonString)
+      assert(parse(jsonString) \ "trigger" === JNothing)
+      assert(result.trigger == null)
       assert(input.id == result.id)
       assert(input.runId == result.runId)
       assert(input.name == result.name)
@@ -719,7 +841,8 @@ object StreamingQueryStatusAndProgressSuite {
     sink = SinkProgress("sink", None),
     observedMetrics = new java.util.HashMap(Map(
       "event1" -> row(schema1, 1L, 3.0d),
-      "event2" -> row(schema2, 1L, "hello", "world")).asJava)
+      "event2" -> row(schema2, 1L, "hello", "world")).asJava),
+    triggerConfig = null
   )
 
   val testProgress2 = new StreamingQueryProgress(
@@ -751,7 +874,8 @@ object StreamingQueryStatusAndProgressSuite {
     observedMetrics = new java.util.HashMap(Map(
       "event_a" -> row(schema1, null, -20.7d),
       "event_b1" -> row(schema2, 33L, "foo", "bar"),
-      "event_b2" -> row(schema2, 200L, "fzo", "baz")).asJava)
+      "event_b2" -> row(schema2, 200L, "fzo", "baz")).asJava),
+    triggerConfig = null
   )
 
   val testProgress3 = new StreamingQueryProgress(
@@ -773,7 +897,8 @@ object StreamingQueryStatusAndProgressSuite {
     )),
     sources = Array(),
     sink = SinkProgress("sink", None),
-    observedMetrics = null
+    observedMetrics = null,
+    triggerConfig = null
   )
 
   val testProgress4 = new StreamingQueryProgress(
@@ -811,7 +936,8 @@ object StreamingQueryStatusAndProgressSuite {
     sink = SinkProgress("sink", None),
     observedMetrics = new java.util.HashMap(Map(
       "event1" -> row(schema1, 1L, 3.0d),
-      "event2" -> row(schema2, 1L, "hello", "world")).asJava)
+      "event2" -> row(schema2, 1L, "hello", "world")).asJava),
+    triggerConfig = null
   )
 
   val testProgress5 = new StreamingQueryProgress(
@@ -885,7 +1011,8 @@ object StreamingQueryStatusAndProgressSuite {
       )
     ),
     sink = SinkProgress("sink", None),
-    observedMetrics = new java.util.HashMap(Map().asJava)
+    observedMetrics = new java.util.HashMap(Map().asJava),
+    triggerConfig = null
   )
 
   val testProgress6 = new StreamingQueryProgress(
@@ -909,7 +1036,8 @@ object StreamingQueryStatusAndProgressSuite {
       )
     ),
     sink = SinkProgress("sink", None),
-    observedMetrics = new java.util.HashMap(Map().asJava)
+    observedMetrics = new java.util.HashMap(Map().asJava),
+    triggerConfig = null
   )
 
   val testProgress7 = new StreamingQueryProgress(
@@ -950,7 +1078,23 @@ object StreamingQueryStatusAndProgressSuite {
       "DeltaSink[s3://<masked-storage>/delta-source]"
       , None
     ),
-    observedMetrics = new java.util.HashMap())
+    observedMetrics = new java.util.HashMap(),
+    triggerConfig = null)
+
+  val testProgress8 = new StreamingQueryProgress(
+    id = testProgress3.id,
+    runId = testProgress3.runId,
+    name = testProgress3.name,
+    timestamp = testProgress3.timestamp,
+    batchId = testProgress3.batchId,
+    batchDuration = testProgress3.batchDuration,
+    durationMs = testProgress3.durationMs,
+    eventTime = testProgress3.eventTime,
+    stateOperators = testProgress3.stateOperators,
+    sources = testProgress3.sources,
+    sink = testProgress3.sink,
+    observedMetrics = testProgress3.observedMetrics,
+    triggerConfig = Trigger.ProcessingTime(3000000000L))
 
   val testStatus = new StreamingQueryStatus("active", true, false)
 }

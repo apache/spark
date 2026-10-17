@@ -20,8 +20,10 @@ package org.apache.spark.sql.execution.streaming
 import java.util.concurrent.TimeUnit
 
 import scala.concurrent.duration.{Duration, MINUTES}
+import scala.util.control.NonFatal
 
 import org.json4s.DefaultFormats
+import org.json4s.jackson.JsonMethods.parse
 
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
@@ -30,7 +32,37 @@ import org.apache.spark.sql.catalyst.util.SparkIntervalUtils
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.unsafe.types.UTF8String
 
-private object Triggers {
+private[spark] object Triggers {
+  private implicit val formats: DefaultFormats = DefaultFormats
+
+  def toJson(trigger: Trigger): String = trigger match {
+    case ProcessingTimeTrigger(intervalMs) =>
+      s"""{"type":"ProcessingTime","intervalMs":$intervalMs}"""
+    case ContinuousTrigger(intervalMs) =>
+      s"""{"type":"Continuous","intervalMs":$intervalMs}"""
+    case RealTimeTrigger(batchDurationMs) =>
+      s"""{"type":"RealTime","batchDurationMs":$batchDurationMs}"""
+    case AvailableNowTrigger => """{"type":"AvailableNow"}"""
+    case OneTimeTrigger => """{"type":"Once"}"""
+    case other => throw new IllegalStateException(s"Unknown type of trigger: $other")
+  }
+
+  def fromJson(json: String): Trigger = {
+    try {
+      val value = parse(json)
+      (value \ "type").extract[String] match {
+        case "ProcessingTime" => ProcessingTimeTrigger((value \ "intervalMs").extract[Long])
+        case "Continuous" => ContinuousTrigger((value \ "intervalMs").extract[Long])
+        case "RealTime" => RealTimeTrigger((value \ "batchDurationMs").extract[Long])
+        case "AvailableNow" => AvailableNowTrigger
+        case "Once" => OneTimeTrigger
+        case _ => null
+      }
+    } catch {
+      case NonFatal(_) => null
+    }
+  }
+
   def validate(intervalMs: Long): Unit = {
     require(intervalMs >= 0, "the interval of trigger should not be negative")
   }

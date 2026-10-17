@@ -319,6 +319,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     testSerialization(new QueryProgressEvent(StreamingQueryStatusAndProgressSuite.testProgress4))
     testSerialization(new QueryProgressEvent(StreamingQueryStatusAndProgressSuite.testProgress5))
     testSerialization(new QueryProgressEvent(StreamingQueryStatusAndProgressSuite.testProgress6))
+    testSerialization(new QueryProgressEvent(StreamingQueryStatusAndProgressSuite.testProgress8))
   }
 
   test("QueryTerminatedEvent serialization") {

@@ -17,13 +17,40 @@
 
 package org.apache.spark.sql.streaming.continuous
 
-import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
-import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
+import java.util.UUID
+
+import org.json4s.jackson.JsonMethods.parse
+
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.execution.streaming.runtime.{ContinuousExecutionContext, ProgressReporter, StreamExecution}
+import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemoryStream, MemorySink}
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.util.ManualClock
 
 @SlowSQLTest
 class ContinuousQueryStatusAndProgressSuite extends ContinuousSuiteBase {
+  test("SPARK-59986: continuous progress construction preserves the configured trigger") {
+    val clock = new ManualClock
+    val reporter = new ProgressReporter(
+      spark, clock, Trigger.Continuous(100), () => LocalRelation())
+    val context = new ContinuousExecutionContext(
+      id = UUID.randomUUID(),
+      runId = UUID.randomUUID(),
+      name = "continuous",
+      triggerClock = clock,
+      sources = Seq.empty,
+      sink = new MemorySink,
+      progressReporter = reporter,
+      epochId = 0,
+      sparkSession = spark)
+    context.startTrigger()
+    context.recordTriggerOffsets(context.startOffsets, context.endOffsets, context.latestOffsets)
+    context.finishNoExecutionTrigger(0)
+    assert(parse(reporter.lastProgress.json) \ "trigger" ===
+      parse("""{"type":"Continuous","intervalMs":100}"""))
+  }
+
   test("StreamingQueryStatus - ContinuousExecution isDataAvailable and isTriggerActive " +
       "should be false") {
     import testImplicits._

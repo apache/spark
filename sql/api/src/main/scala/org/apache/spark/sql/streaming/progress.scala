@@ -21,10 +21,12 @@ import java.{util => ju}
 import java.lang.{Long => JLong}
 import java.util.UUID
 
+import scala.annotation.meta.{getter, param}
 import scala.jdk.CollectionConverters._
 import scala.math.BigDecimal.RoundingMode
 import scala.util.control.NonFatal
 
+import com.fasterxml.jackson.annotation.{JsonIgnore, JsonInclude, JsonProperty, JsonRawValue}
 import com.fasterxml.jackson.core.JsonParser
 import com.fasterxml.jackson.databind.{DeserializationContext, DeserializationFeature, JsonDeserializer, JsonNode, ObjectMapper}
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
@@ -37,6 +39,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+import org.apache.spark.sql.execution.streaming.Triggers
 import org.apache.spark.sql.streaming.SafeJsonSerializer.{safeDecimalToJValue, safeMapToJValue}
 import org.apache.spark.sql.streaming.SinkProgress.DEFAULT_NUM_OUTPUT_ROWS
 
@@ -200,6 +203,8 @@ class StateOperatorProgress private[spark] (
  *   detailed statistics on data being read from each of the streaming sources.
  * @param sink
  *   detailed statistics on data being written to the sink.
+ * @param triggerConfig
+ *   The configured trigger, or null when metadata is unavailable.
  * @since 2.1.0
  */
 @Evolving
@@ -216,8 +221,29 @@ class StreamingQueryProgress private[spark] (
     val sources: Array[SourceProgress],
     val sink: SinkProgress,
     @JsonDeserialize(contentAs = classOf[GenericRowWithSchema])
-    val observedMetrics: ju.Map[String, Row])
+    val observedMetrics: ju.Map[String, Row],
+    // Bind the public "trigger" JSON field to this constructor parameter.
+    @(JsonProperty @param)("trigger")
+    // Build triggerConfig from the public "trigger" field when reading progress JSON.
+    @(JsonDeserialize @param)(using = classOf[ObjectToTriggerDeserializer])
+    // Exclude the internal triggerConfig getter from public JSON.
+    @(JsonIgnore @getter)
+    private[spark] val triggerConfig: Trigger)
     extends Serializable {
+
+  /**
+   * JSON metadata for the configured trigger, or null when metadata is unavailable.
+   *
+   * The `type` field is `ProcessingTime`, `Continuous`, `RealTime`, `AvailableNow`, or `Once`.
+   * `ProcessingTime` and `Continuous` include `intervalMs`; `RealTime` includes
+   * `batchDurationMs`. Both intervals are in milliseconds. `AvailableNow` and `Once` contain only
+   * the `type` field.
+   *
+   * @since 4.4.0
+   */
+  @JsonRawValue
+  @JsonInclude(JsonInclude.Include.NON_NULL)
+  val trigger: String = Option(triggerConfig).map(Triggers.toJson).orNull
 
   /** The aggregate (across all sources) number of records processed in a trigger. */
   def numInputRows: Long = sources.map(_.numInputRows).sum
@@ -243,6 +269,10 @@ class StreamingQueryProgress private[spark] (
       ("timestamp" -> JString(timestamp)) ~
       ("batchId" -> JInt(batchId)) ~
       ("batchDuration" -> JInt(batchDuration)) ~
+      ("trigger" ->
+        Option(trigger)
+          .map(value => parse(value))
+          .getOrElse(JNothing)) ~
       ("numInputRows" -> JInt(numInputRows)) ~
       ("inputRowsPerSecond" -> safeDecimalToJValue(inputRowsPerSecond)) ~
       ("processedRowsPerSecond" -> safeDecimalToJValue(processedRowsPerSecond)) ~
@@ -292,6 +322,13 @@ private class ObjectToStringDeserializer extends JsonDeserializer[String] {
       // Convert JSON object/array to string representation
       node.toString
     }
+  }
+}
+
+private class ObjectToTriggerDeserializer extends JsonDeserializer[Trigger] {
+  override def deserialize(parser: JsonParser, context: DeserializationContext): Trigger = {
+    val node: JsonNode = parser.readValueAsTree()
+    Triggers.fromJson(if (node.isTextual) node.asText() else node.toString)
   }
 }
 

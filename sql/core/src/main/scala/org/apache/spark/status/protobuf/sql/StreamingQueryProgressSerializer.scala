@@ -24,7 +24,13 @@ import com.fasterxml.jackson.module.scala.DefaultScalaModule
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
-import org.apache.spark.sql.streaming.StreamingQueryProgress
+import org.apache.spark.sql.execution.streaming.{
+  AvailableNowTrigger,
+  ContinuousTrigger,
+  OneTimeTrigger,
+  ProcessingTimeTrigger,
+  RealTimeTrigger}
+import org.apache.spark.sql.streaming.{StreamingQueryProgress, Trigger}
 import org.apache.spark.status.protobuf.StoreTypes
 import org.apache.spark.status.protobuf.Utils.{getStringField, setJMapField, setStringField}
 
@@ -55,6 +61,9 @@ private[protobuf] object StreamingQueryProgressSerializer {
     )
     builder.setSink(SinkProgressSerializer.serialize(process.sink))
     setJMapField(process.observedMetrics, putAllObservedMetrics(builder, _))
+    Option(process.triggerConfig).foreach { trigger =>
+      builder.setTrigger(serializeTrigger(trigger))
+    }
     builder.build()
   }
 
@@ -78,8 +87,48 @@ private[protobuf] object StreamingQueryProgressSerializer {
         StateOperatorProgressSerializer.deserializeToArray(process.getStateOperatorsList),
       sources = SourceProgressSerializer.deserializeToArray(process.getSourcesList),
       sink = SinkProgressSerializer.deserialize(process.getSink),
-      observedMetrics = convertToObservedMetrics(process.getObservedMetricsMap)
+      observedMetrics = convertToObservedMetrics(process.getObservedMetricsMap),
+      triggerConfig = if (process.hasTrigger) deserializeTrigger(process.getTrigger) else null
     )
+  }
+
+  private def serializeTrigger(trigger: Trigger): StoreTypes.Trigger = {
+    val builder = StoreTypes.Trigger.newBuilder()
+    trigger match {
+      case ProcessingTimeTrigger(intervalMs) =>
+        builder.setType(StoreTypes.Trigger.Type.PROCESSING_TIME).setIntervalMs(intervalMs)
+      case ContinuousTrigger(intervalMs) =>
+        builder.setType(StoreTypes.Trigger.Type.CONTINUOUS).setIntervalMs(intervalMs)
+      case RealTimeTrigger(batchDurationMs) =>
+        builder.setType(StoreTypes.Trigger.Type.REAL_TIME).setIntervalMs(batchDurationMs)
+      case AvailableNowTrigger =>
+        builder.setType(StoreTypes.Trigger.Type.AVAILABLE_NOW)
+      case OneTimeTrigger =>
+        builder.setType(StoreTypes.Trigger.Type.ONCE)
+      case other =>
+        throw new IllegalStateException(s"Unknown type of trigger: $other")
+    }
+    builder.build()
+  }
+
+  private def deserializeTrigger(trigger: StoreTypes.Trigger): Trigger = {
+    trigger.getType match {
+      case StoreTypes.Trigger.Type.PROCESSING_TIME
+          if trigger.hasIntervalMs && trigger.getIntervalMs >= 0 =>
+        ProcessingTimeTrigger(trigger.getIntervalMs)
+      case StoreTypes.Trigger.Type.CONTINUOUS
+          if trigger.hasIntervalMs && trigger.getIntervalMs >= 0 =>
+        ContinuousTrigger(trigger.getIntervalMs)
+      case StoreTypes.Trigger.Type.REAL_TIME
+          if trigger.hasIntervalMs && trigger.getIntervalMs > 0 =>
+        RealTimeTrigger(trigger.getIntervalMs)
+      case StoreTypes.Trigger.Type.AVAILABLE_NOW if !trigger.hasIntervalMs =>
+        AvailableNowTrigger
+      case StoreTypes.Trigger.Type.ONCE if !trigger.hasIntervalMs =>
+        OneTimeTrigger
+      case _ =>
+        null
+    }
   }
 
   private def putAllObservedMetrics(
