@@ -296,8 +296,9 @@ object LogicalRDD extends Logging {
   private[sql] def rewriteConstraints(
       originConstraints: ExpressionSet,
       colRewrite: Map[Attribute, Attribute]): ExpressionSet = {
+    val attributeMap = AttributeMap(colRewrite)
     originConstraints.map(_.transform {
-      case e: Attribute => colRewrite.getOrElse(e, e)
+      case e: Attribute => attributeMap.getOrElse(e, e)
     })
   }
 }
