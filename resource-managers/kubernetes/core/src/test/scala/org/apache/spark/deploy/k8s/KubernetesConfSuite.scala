@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.k8s
 
-import io.fabric8.kubernetes.api.model.{LocalObjectReferenceBuilder, PodBuilder}
+import io.fabric8.kubernetes.api.model.{LocalObjectReferenceBuilder, Pod, PodBuilder}
 
 import org.apache.spark.{SPARK_VERSION, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config._
@@ -161,6 +161,33 @@ class KubernetesConfSuite extends SparkFunSuite {
     assert(conf.driverPod.get === DRIVER_POD)
     assert(conf.resourceProfileId === DEFAULT_RESOURCE_PROFILE_ID)
     assert(conf.authSecret.isEmpty)
+  }
+
+  test("Java-friendly KubernetesExecutorConf constructor with nullable driverPod and secret") {
+    val sparkConf = new SparkConf(false)
+    val conf = new KubernetesExecutorConf(
+      sparkConf,
+      KubernetesTestConf.APP_ID,
+      EXECUTOR_ID,
+      null: Pod,
+      DEFAULT_RESOURCE_PROFILE_ID,
+      null: String)
+    assert(conf.appId === KubernetesTestConf.APP_ID)
+    assert(conf.executorId === EXECUTOR_ID)
+    assert(conf.driverPod === None)
+    assert(conf.resourceProfileId === DEFAULT_RESOURCE_PROFILE_ID)
+    assert(conf.authSecret === None)
+
+    val confWithValues = new KubernetesExecutorConf(
+      sparkConf,
+      KubernetesTestConf.APP_ID,
+      EXECUTOR_ID,
+      DRIVER_POD,
+      3,
+      "custom-secret")
+    assert(confWithValues.driverPod === Some(DRIVER_POD))
+    assert(confWithValues.resourceProfileId === 3)
+    assert(confWithValues.authSecret === Some("custom-secret"))
   }
 
   test("KubernetesExecutorConf authSecret resolution.") {

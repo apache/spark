@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.expressions.xml.{StructsToXmlEvaluator, XmlExpressionEvalUtils, XmlToStructsEvaluator}
 import org.apache.spark.sql.catalyst.util.DropMalformedMode
@@ -86,7 +87,7 @@ case class XmlToStructs(
   def this(child: Expression, schema: Expression, options: Expression) =
     this(
       schema = ExprUtils.evalTypeExpr(schema),
-      options = ExprUtils.convertToMapData(options),
+      options = ExprUtils.convertToMapData(options, "from_xml"),
       child = child,
       timeZoneId = None)
 
@@ -113,22 +114,30 @@ case class XmlToStructs(
     copy(timeZoneId = Option(timeZoneId))
   }
 
-  override def nullSafeEval(xml: Any): Any = evaluator.evaluate(xml.asInstanceOf[UTF8String])
+  override def nullSafeEval(xml: Any): Any = {
+    evaluator.evaluate(xml.asInstanceOf[UTF8String])
+  }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val expr = ctx.addReferenceObj("this", this)
+    val inputEval = child.genCode(ctx)
     // nullSafeEval returns an InternalRow for struct output and a VariantVal for variant output.
     // The variant result can be null (e.g. a malformed record rescued under PERMISSIVE mode), so
     // cast to the actual output type and null-check the result.
     val resultType = CodeGenerator.javaType(dataType)
     val result = ctx.freshName("xmlResult")
-    nullSafeCodeGen(ctx, ev, input =>
-      s"""
-         |$resultType $result = ($resultType) $expr.nullSafeEval($input);
-         |if ($result == null) {
-         |  ${ev.isNull} = true;
-         |} else {
-         |  ${ev.value} = $result;
+    ev.copy(code =
+      code"""
+         |${inputEval.code}
+         |boolean ${ev.isNull} = ${inputEval.isNull};
+         |$resultType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+         |if (!${ev.isNull}) {
+         |  $resultType $result = ($resultType) $expr.nullSafeEval(${inputEval.value});
+         |  if ($result == null) {
+         |    ${ev.isNull} = true;
+         |  } else {
+         |    ${ev.value} = $result;
+         |  }
          |}
        """.stripMargin)
   }
@@ -173,7 +182,7 @@ case class SchemaOfXml(
 
   def this(child: Expression, options: Expression) = this(
     child = child,
-    options = ExprUtils.convertToMapData(options))
+    options = ExprUtils.convertToMapData(options, "schema_of_xml"))
 
   override def nullable: Boolean = false
 
@@ -200,7 +209,7 @@ case class SchemaOfXml(
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_NULL",
         messageParameters = Map("exprName" -> "xml"))
-    } else if (child.dataType != StringType) {
+    } else if (!child.dataType.isInstanceOf[StringType]) {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
@@ -274,7 +283,7 @@ case class StructsToXml(
 
   def this(child: Expression, options: Expression) =
     this(
-      options = ExprUtils.convertToMapData(options),
+      options = ExprUtils.convertToMapData(options, "to_xml"),
       child = child,
       timeZoneId = None)
 

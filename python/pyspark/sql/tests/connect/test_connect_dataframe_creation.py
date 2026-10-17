@@ -32,7 +32,7 @@ from pyspark.sql.types import (
     StructType,
 )
 from pyspark.testing.connectutils import ReusedMixedTestCase, should_test_connect
-from pyspark.testing.objects import MyObject, PythonOnlyUDT
+from pyspark.testing.objects import MyObject, PythonOnlyPoint, PythonOnlyUDT
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 if should_test_connect:
@@ -44,7 +44,7 @@ if should_test_connect:
     from pyspark.sql.connect import functions as CF
 
 
-class SparkConnectCreationTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
+class SparkConnectDataFrameCreationTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
     def test_with_local_data(self):
         """SPARK-41114: Test creating a dataframe using local data"""
         pdf = pd.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]})
@@ -732,6 +732,46 @@ class SparkConnectCreationTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
             sdf = self.spark.createDataFrame(data=[], schema=schema)
 
             self.assertEqual(cdf.schema, sdf.schema)
+
+    def test_python_udt_with_local_data(self):
+        direct_schema = StructType().add("point", PythonOnlyUDT(), nullable=False)
+        nested_schema = StructType().add(
+            "nested",
+            StructType(
+                [
+                    StructField(
+                        "points", ArrayType(PythonOnlyUDT(), containsNull=False), nullable=False
+                    ),
+                    StructField(
+                        "points_by_id",
+                        MapType(IntegerType(), PythonOnlyUDT(), valueContainsNull=False),
+                        nullable=False,
+                    ),
+                ]
+            ),
+            nullable=False,
+        )
+        test_cases = [
+            (direct_schema, [(PythonOnlyPoint(1.0, 2.0),)]),
+            (
+                nested_schema,
+                [
+                    (
+                        Row(
+                            points=[PythonOnlyPoint(1.0, 2.0)],
+                            points_by_id={3: PythonOnlyPoint(4.0, 5.0)},
+                        ),
+                    )
+                ],
+            ),
+        ]
+
+        for schema, data in test_cases:
+            with self.subTest(schema=schema):
+                cdf = self.connect.createDataFrame(data, schema)
+                sdf = self.spark.createDataFrame(data, schema)
+                self.assertEqual(cdf.schema, sdf.schema)
+                self.assertEqual(cdf.collect(), sdf.collect())
 
 
 if __name__ == "__main__":

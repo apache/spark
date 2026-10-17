@@ -190,10 +190,14 @@
 | org.apache.spark.sql.catalyst.expressions.IsNull | isnull | SELECT isnull(1) | struct<(1 IS NULL):boolean> |
 | org.apache.spark.sql.catalyst.expressions.IsValidUTF8 | is_valid_utf8 | SELECT is_valid_utf8('Spark') | struct<is_valid_utf8(Spark):boolean> |
 | org.apache.spark.sql.catalyst.expressions.JaroWinkler | jaro_winkler_similarity | SELECT jaro_winkler_similarity('MARTHA', 'MARHTA') | struct<jaro_winkler_similarity(MARTHA, MARHTA):double> |
+| org.apache.spark.sql.catalyst.expressions.JsonArrayExpressionBuilder | json_array | SELECT json_array(1, 'x', true) | struct<JSON_ARRAY(1, x, true):string> |
+| org.apache.spark.sql.catalyst.expressions.JsonExistsExpressionBuilder | json_exists | SELECT json_exists('{"a":1}', '$.a') | struct<JSON_EXISTS({"a":1}, '$.a'):boolean> |
 | org.apache.spark.sql.catalyst.expressions.JsonObjectKeys | json_object_keys | SELECT json_object_keys('{}') | struct<json_object_keys({}):array<string>> |
+| org.apache.spark.sql.catalyst.expressions.JsonQueryExpressionBuilder | json_query | SELECT json_query('{"a":[1,2]}', '$.a') | struct<JSON_QUERY({"a":[1,2]}, '$.a'):string> |
 | org.apache.spark.sql.catalyst.expressions.JsonToStructs | from_json | SELECT from_json('{"a":1, "b":0.8}', 'a INT, b DOUBLE') | struct<from_json({"a":1, "b":0.8}):struct<a:int,b:double>> |
 | org.apache.spark.sql.catalyst.expressions.JsonTuple | json_tuple | SELECT json_tuple('{"a":1, "b":2}', 'a', 'b') | struct<c0:string,c1:string> |
 | org.apache.spark.sql.catalyst.expressions.JsonTypeof | json_typeof | SELECT json_typeof('{"a": 1}') | struct<json_typeof({"a": 1}):string> |
+| org.apache.spark.sql.catalyst.expressions.JsonValueExpressionBuilder | json_value | SELECT json_value('{"id":7,"name":"Ada"}', '$.name') | struct<JSON_VALUE({"id":7,"name":"Ada"}, '$.name'):string> |
 | org.apache.spark.sql.catalyst.expressions.KllSketchGetNBigint | kll_sketch_get_n_bigint | SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(col)) FROM VALUES (1), (2), (3), (4), (5) tab(col) | struct<kll_sketch_get_n_bigint(kll_sketch_agg_bigint(col)):bigint> |
 | org.apache.spark.sql.catalyst.expressions.KllSketchGetNDouble | kll_sketch_get_n_double | SELECT kll_sketch_get_n_double(kll_sketch_agg_double(col)) FROM VALUES (CAST(1.0 AS DOUBLE)), (CAST(2.0 AS DOUBLE)), (CAST(3.0 AS DOUBLE)), (CAST(4.0 AS DOUBLE)), (CAST(5.0 AS DOUBLE)) tab(col) | struct<kll_sketch_get_n_double(kll_sketch_agg_double(col)):bigint> |
 | org.apache.spark.sql.catalyst.expressions.KllSketchGetNFloat | kll_sketch_get_n_float | SELECT kll_sketch_get_n_float(kll_sketch_agg_float(col)) FROM VALUES (CAST(1.0 AS FLOAT)), (CAST(2.0 AS FLOAT)), (CAST(3.0 AS FLOAT)), (CAST(4.0 AS FLOAT)), (CAST(5.0 AS FLOAT)) tab(col) | struct<kll_sketch_get_n_float(kll_sketch_agg_float(col)):bigint> |

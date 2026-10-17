@@ -87,7 +87,8 @@ object JDBCRDD extends Logging {
           errorClass = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_OUTPUT_SCHEMA_RESOLUTION",
           messageParameters = Map(
             "jdbcQuery" -> fullQuery,
-            "externalEngineError" -> e.getMessage.replaceAll("\\.+$", "")
+            "externalEngineError" -> e.getMessage.replaceAll("\\.+$", ""),
+            "externalEngineSqlState" -> getSQLState(e)
           ),
           cause = e)
     }
@@ -117,6 +118,13 @@ object JDBCRDD extends Logging {
     JdbcUtils.withConnection(options) {
       getQueryOutputSchema(query, options, dialect, _)
     }
+  }
+
+  /**
+   * Gets the SQLSTATE of the provided SQL exception or "unknown" if it is not defined.
+   */
+  private def getSQLState(e: SQLException): String = {
+    Option(e.getSQLState).filter(_.nonEmpty).getOrElse("unknown")
   }
 
   /**
@@ -379,7 +387,8 @@ class JDBCRDD(
             errorClass = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_QUERY_EXECUTION",
             messageParameters = Map(
               "jdbcQuery" -> sqlText,
-              "externalEngineError" -> e.getMessage.replaceAll("\\.+$", "")
+              "externalEngineError" -> e.getMessage.replaceAll("\\.+$", ""),
+              "externalEngineSqlState" -> JDBCRDD.getSQLState(e)
             ),
             cause = e)
       }
@@ -391,7 +400,8 @@ class JDBCRDD(
         dialect,
         schema,
         inputMetrics,
-        Some(fetchAndTransformToInternalRowsMetric))
+        Some(fetchAndTransformToInternalRowsMetric),
+        Some(options))
 
     CompletionIterator[InternalRow, Iterator[InternalRow]](
       new InterruptibleIterator(context, rowsIterator), close())

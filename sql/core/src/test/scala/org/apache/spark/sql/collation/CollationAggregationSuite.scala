@@ -616,6 +616,51 @@ class CollationAggregationSuite
     }
   }
 
+  // A null nested inside a collated complex type (struct field, array element, map value)
+  // must fold as its own group instead of reaching the collation-key path, which throws on
+  // null. These guard that null-safety while also confirming the collation fold still applies
+  // to the non-null siblings ('b'/'B' collapse to one group under UTF8_LCASE).
+
+  test("SPARK-48701: pandas_mode is null-safe for a null collated string nested in struct") {
+    withTable("t") {
+      sql("CREATE TABLE t (c STRUCT<f: STRING COLLATE UTF8_LCASE>) USING parquet")
+      sql(
+        """INSERT INTO t VALUES (named_struct('f', 'b')), (named_struct('f', 'B')),
+          |  (named_struct('f', CAST(null AS STRING)))""".stripMargin)
+      val modes = pandasMode(spark.table("t").repartition(4), "c", ignoreNA = true)
+        .map(_.asInstanceOf[Row])
+      // {b, B} fold to one group of 2, outvoting the null-field struct (1).
+      assert(modes.length == 1)
+      assert(modes.head.getString(0).toLowerCase(Locale.ROOT) == "b")
+    }
+  }
+
+  test("SPARK-48701: pandas_mode is null-safe for a null collated string nested in array") {
+    withTable("t") {
+      sql("CREATE TABLE t (c ARRAY<STRING COLLATE UTF8_LCASE>) USING parquet")
+      sql(
+        """INSERT INTO t VALUES (array('b')), (array('B')),
+          |  (array(CAST(null AS STRING)))""".stripMargin)
+      val modes = pandasMode(spark.table("t").repartition(4), "c", ignoreNA = true)
+        .map(_.asInstanceOf[collection.Seq[String]])
+      // [b] and [B] fold to one group of 2, outvoting [null] (1).
+      assert(modes.length == 1)
+      assert(modes.head.head.toLowerCase(Locale.ROOT) == "b")
+    }
+  }
+
+  test("SPARK-48701: pandas_mode is null-safe for a null collated string nested in map value") {
+    withTable("t") {
+      sql("CREATE TABLE t (c MAP<STRING, STRING COLLATE UTF8_LCASE>) USING parquet")
+      sql(
+        """INSERT INTO t VALUES (map('k', 'b')), (map('k', 'B')),
+          |  (map('k', CAST(null AS STRING)))""".stripMargin)
+      val modes = pandasMode(spark.table("t").repartition(4), "c", ignoreNA = true)
+      // {k->b, k->B} fold to one group of 2, outvoting {k->null} (1).
+      assert(modes.length == 1)
+    }
+  }
+
   // `mode` (the public aggregate) is already collation-aware; these tests guard that
   // behavior, which currently has no coverage (the original tests were removed with
   // CollationSQLExpressionsSuite by SPARK-51067). Unlike pandas_mode, `mode` returns a

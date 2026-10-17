@@ -53,6 +53,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   SpecialFrameBoundary,
   SpecifiedWindowFrame,
   SubtractTimestamps,
+  TimeBucket,
   TimestampAddInterval,
   WindowSpecDefinition
 }
@@ -695,21 +696,28 @@ abstract class TypeCoercionHelper {
    */
   object ImplicitTypeCoercion {
     def apply(expression: Expression): Expression = expression match {
-      case b @ BinaryOperator(left, right)
-          if canHandleTypeCoercion(left.dataType, right.dataType) =>
-        findTightestCommonType(left.dataType, right.dataType)
-          .map { commonType =>
-            if (b.inputType.acceptsType(commonType)) {
-              // If the expression accepts the tightest common type, cast to that.
-              val newLeft = if (left.dataType == commonType) left else Cast(left, commonType)
-              val newRight = if (right.dataType == commonType) right else Cast(right, commonType)
-              b.withNewChildren(Seq(newLeft, newRight))
-            } else {
-              // Otherwise, don't do anything with the expression.
-              b
-            }
-          }
-          .getOrElse(b) // If there is no applicable conversion, leave expression unchanged.
+      case b: BinaryOperator if canHandleTypeCoercion(b.left.dataType, b.right.dataType) =>
+        findTightestCommonType(b.left.dataType, b.right.dataType) match {
+          case Some(commonType) if b.inputType.acceptsType(commonType) =>
+            // If the expression accepts the tightest common type, cast to that.
+            val newLeft = if (b.left.dataType == commonType) b.left else Cast(b.left, commonType)
+            val newRight =
+              if (b.right.dataType == commonType) b.right else Cast(b.right, commonType)
+            b.withNewChildren(Seq(newLeft, newRight))
+          case _ =>
+            // If there is no applicable conversion, leave the expression unchanged.
+            b
+        }
+
+      case t: TimeBucket =>
+        val children = t.children.zip(t.inputTypes).zipWithIndex.map {
+          case ((in, _), index) if index > 0 && in.dataType.isInstanceOf[TimeType] =>
+            // TIME-to-timestamp depends on CURRENT_DATE, so require an explicit cast.
+            in
+          case ((in, expected), _) =>
+            implicitCast(in, expected).getOrElse(in)
+        }
+        t.withNewChildren(children)
 
       case e: ImplicitCastInputTypes if e.inputTypes.nonEmpty =>
         val children: Seq[Expression] = e.children.zip(e.inputTypes).map {
@@ -734,12 +742,12 @@ abstract class TypeCoercionHelper {
 
       case e: ExpectsInputTypes if e.inputTypes.nonEmpty =>
         // Convert NullType into some specific target type for ExpectsInputTypes that don't do
-        // general implicit casting. Also promote CHAR/VARCHAR to STRING here: these
-        // expressions skip ImplicitCastInputTypes, so without this the length constraint would
-        // remain on the child.
+        // general implicit casting. Also promote CHAR/VARCHAR to STRING here because these
+        // expressions skip ImplicitCastInputTypes.
         val children: Seq[Expression] = e.children.zip(e.inputTypes).map {
           case (in, expected) =>
-            charVarcharToPlainString(in.dataType, expected)
+            val promotedType = charVarcharToPlainString(in.dataType, expected)
+            promotedType
               .map(dt => if (dt == in.dataType) in else Cast(in, dt))
               .getOrElse {
                 if (in.dataType == NullType && !expected.acceptsType(NullType)) {

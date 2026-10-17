@@ -314,6 +314,16 @@ SELECT typeof(c), c FROM (
 SELECT typeof(c), c FROM (
     SELECT '1582-10-04 12:30:45.1234567' :: timestamp_ntz(7) AS c
     UNION ALL SELECT '1582-10-15 23:59:59.123456789' :: timestamp_ntz(9)) ORDER BY c;
+-- The p=8 boundary widens to the wider precision (nanos(7)/nanos(8) -> nanos(8), nanos(8)/nanos(9)
+-- -> nanos(9)); widening never floors, so each operand keeps its exact value and only the resolved
+-- type moves up. typeof() locks the wider precision; the rendered fractions confirm neither operand
+-- lost a digit (trailing zeros are trimmed on render, so the narrower value shows fewer digits).
+SELECT typeof(c), c FROM (
+    SELECT '2020-01-01 00:00:00.1234567' :: timestamp_ntz(7) AS c
+    UNION ALL SELECT '2021-07-15 12:34:56.12345678' :: timestamp_ntz(8)) ORDER BY c;
+SELECT typeof(c), c FROM (
+    SELECT '2020-01-01 00:00:00.12345678' :: timestamp_ntz(8) AS c
+    UNION ALL SELECT '2021-07-15 12:34:56.123456789' :: timestamp_ntz(9)) ORDER BY c;
 
 -- coalesce keeps the first non-null, widened to the wider precision: pre-epoch boundary values.
 SELECT typeof(v), v FROM (SELECT coalesce(
@@ -570,3 +580,18 @@ SELECT map(TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001', 'a',
 SELECT element_at(map(TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001', 'a',
            TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999', 'b'),
        TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001');
+
+-- SPARK-57833: timestampadd over TIMESTAMP_NTZ(p). Units of MICROSECOND or coarser keep the
+-- sub-microsecond fraction unchanged; the NANOSECOND unit adds whole nanoseconds and carries into
+-- the microsecond (a negative quantity borrows across the boundary). The result stays nanos-typed.
+SELECT timestampadd(SECOND, 5, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000123');
+SELECT timestampadd(MICROSECOND, 2, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000123');
+SELECT timestampadd(NANOSECOND, 300, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000123');
+SELECT timestampadd(NANOSECOND, 900, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000200');
+SELECT timestampadd(NANOSECOND, -300, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000100');
+-- NANOSECOND is rejected on a microsecond-precision timestamp (nanoseconds are unrepresentable).
+SELECT timestampadd(NANOSECOND, 1, TIMESTAMP_NTZ '2020-01-01 00:00:00');
+-- At p=7 (100ns step) the NANOSECOND result is floored to the type's precision: +150ns on a
+-- .0000001 value lands on .0000002, and a sub-step +50ns is truncated back to .0000001.
+SELECT timestampadd(NANOSECOND, 150, '2020-01-01 00:00:00.0000001' :: timestamp_ntz(7));
+SELECT timestampadd(NANOSECOND, 50, '2020-01-01 00:00:00.0000001' :: timestamp_ntz(7));

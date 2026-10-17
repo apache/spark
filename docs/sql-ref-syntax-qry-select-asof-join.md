@@ -102,6 +102,14 @@ comparison_operator
 
 ### Notes
 
+* **Structured Streaming - micro-batch mode.** Micro-batch queries support stream-static
+  `ASOF JOIN`,
+  with the streaming relation on the left and the static relation on the right. Static-stream
+  and stream-stream `ASOF JOIN` are not supported because a streaming right side requires state
+  to account for future, closer matches.
+
+* **Structured Streaming - real-time mode.** `ASOF JOIN` is not supported in real-time mode.
+
 * **Direction of match.** Let *L* be the operand of `MATCH_CONDITION` that references
   the left table and *R* the operand that references the right table. The operator
   determines which row on the right is closest:
@@ -111,9 +119,11 @@ comparison_operator
   * *L* `<=` *R*: the smallest *R* not less than *L* (first-following).
   * *L* `<` *R*: the smallest *R* strictly greater than *L* (first strictly-following).
 
-* **NULL.** A `NULL` in either operand never satisfies the `MATCH_CONDITION`
+* **NULL.** A `NULL` operand on either side never satisfies the `MATCH_CONDITION`
   comparison. Left rows whose operand is `NULL` are dropped under `INNER ASOF` and
-  retained with `NULL` right-side columns under `LEFT ASOF`.
+  retained with `NULL` right-side columns under `LEFT ASOF`. A `NULL` element of an
+  `ARRAY` operand, or a `NULL` field of a `STRUCT` operand, does not block a match. It
+  sorts before any non-`NULL` value, so `ARRAY(NULL) <= ARRAY(5)` is true.
 
 * **Ties.** If multiple right rows share the same *R* value that is closest to *L*
   after applying `ON`/`USING`, the choice among tied rows is not deterministic. Add a

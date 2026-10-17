@@ -17,13 +17,21 @@
 
 package org.apache.spark.shuffle.local.pipelined
 
+import java.util.concurrent.{Callable, ConcurrentLinkedQueue, CountDownLatch, ExecutionException, Executors, TimeUnit}
+import java.util.concurrent.atomic.AtomicBoolean
+
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.mockito.Mockito.{mock, when}
+import org.scalatest.concurrent.Eventually._
+import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{HashPartitioner, Partitioner, PipelinedShuffleDependency, SparkConf, SparkContext, SparkEnv, SparkFunSuite, TaskContext, TaskKilledException}
+import org.apache.spark.{HashPartitioner, Partitioner, PipelinedShuffleDependency, SparkConf, SparkContext, SparkEnv, SparkException, SparkFunSuite, TaskContext, TaskKilled, TaskKilledException}
 import org.apache.spark.executor.TempShuffleReadMetrics
+import org.apache.spark.internal.config.SHUFFLE_PIPELINED_CHANNEL_BATCH_SIZE
 import org.apache.spark.rdd.{RDD, ShuffledRDD}
+import org.apache.spark.scheduler.{JobFailed, SparkListener, SparkListenerJobEnd, SparkListenerStageCompleted, SparkListenerTaskEnd, SparkListenerTaskStart}
 import org.apache.spark.shuffle.BaseShuffleHandle
 
 /**
@@ -74,6 +82,75 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
     out.mapPartitionsWithIndex { (idx, it) =>
       it.map { case (k, v) => (idx, k, v) }
     }.collect()
+  }
+
+  /** Records the task, stage, and job events of a SparkContext. */
+  private class JobEvents extends SparkListener {
+    val taskStarts = new ConcurrentLinkedQueue[SparkListenerTaskStart]()
+    val taskEnds = new ConcurrentLinkedQueue[SparkListenerTaskEnd]()
+    val stageEnds = new ConcurrentLinkedQueue[SparkListenerStageCompleted]()
+    val jobEnds = new ConcurrentLinkedQueue[SparkListenerJobEnd]()
+    override def onTaskStart(start: SparkListenerTaskStart): Unit = taskStarts.add(start)
+    override def onTaskEnd(end: SparkListenerTaskEnd): Unit = taskEnds.add(end)
+    override def onStageCompleted(done: SparkListenerStageCompleted): Unit = stageEnds.add(done)
+    override def onJobEnd(end: SparkListenerJobEnd): Unit = jobEnds.add(end)
+  }
+
+  /**
+   * Run `rdd.collect()` in the background and, once `beforeKill` returns, kill the task waiting in
+   * [[PipelinedChannelShuffleSuite.awaitKill]]. Check that the kill failed the job outright, with
+   * no task or stage retried and no channel queue left behind. Returns the job's events and the
+   * killed task's stage.
+   */
+  private def killDuringJob(sc: SparkContext, rdd: RDD[Int])(
+      beforeKill: JobEvents => Unit): (JobEvents, Int) = {
+    val events = new JobEvents
+    sc.addSparkListener(events)
+    PipelinedChannelShuffleSuite.armKill()
+    val pool = Executors.newSingleThreadExecutor()
+    val killed = try {
+      val job = pool.submit(new Callable[Array[Int]] {
+        override def call(): Array[Int] = rdd.collect()
+      })
+      val target = PipelinedChannelShuffleSuite.taskToKill()
+      beforeKill(events)
+      assert(sc.killTaskAttempt(target, interruptThread = true, reason = "manual kill"))
+      val failure = intercept[ExecutionException](job.get(1, TimeUnit.MINUTES)).getCause
+      assert(failure.isInstanceOf[SparkException])
+      assert(failure.getMessage.contains("failed 1 times"), failure.getMessage)
+      assert(failure.getMessage.contains(s"(TID $target)"), failure.getMessage)
+      assert(failure.getMessage.contains("manual kill"), failure.getMessage)
+      target
+    } finally {
+      PipelinedChannelShuffleSuite.releaseKill()
+      pool.shutdownNow()
+    }
+    // Every started task ends. Drain the bus first, so that `started` holds every start: each task
+    // started before the kill, and the scheduler posts a start before it fails the job. The
+    // group's other running tasks are killed with it, and their ends, like the job's end, can be
+    // posted after collect has thrown.
+    sc.listenerBus.waitUntilEmpty()
+    val started = events.taskStarts.asScala.map(_.taskInfo.taskId).toSet
+    assert(started.contains(killed))
+    eventually(timeout(1.minute)) {
+      assert(events.taskEnds.asScala.map(_.taskInfo.taskId).toSet === started)
+      assert(!events.jobEnds.isEmpty)
+    }
+    sc.listenerBus.waitUntilEmpty()
+    // The job failed once, and nothing was retried: every task ran once, in the first attempt of
+    // its stage.
+    assert(events.jobEnds.size === 1)
+    assert(events.jobEnds.peek().jobResult.isInstanceOf[JobFailed])
+    assert(events.taskStarts.asScala.forall { start =>
+      start.stageAttemptId == 0 && start.taskInfo.attemptNumber == 0
+    })
+    assert(sc.statusTracker.getActiveJobIds().isEmpty)
+    assert(ChannelShuffleRendezvous.numQueuesForTesting === 0)
+    val killedStage = events.taskStarts.asScala.find(_.taskInfo.taskId == killed).get.stageId
+    assert(events.stageEnds.asScala.exists { done =>
+      done.stageInfo.stageId == killedStage && done.stageInfo.failureReason.isDefined
+    })
+    (events, killedStage)
   }
 
   test("repartition through the channel transport loses no rows and routes correctly") {
@@ -134,6 +211,24 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
       assert(ex.getMessage.contains("CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT") ||
         ex.getMessage.contains("concurrent task slots"),
         s"expected an insufficient-slot rejection, got: ${ex.getMessage}")
+    }
+  }
+
+  test("a channel shuffle runs through job submission with no output tracker") {
+    // The channel manager needs no output tracker (usesStreamingShuffleOutputTracker = false), so
+    // the job's preflight and its stage construction must accept the shuffle without a tracker
+    // and register it with none: it stays out of the MapOutputTracker, and no
+    // StreamingShuffleOutputTracker exists.
+    withPipelinedSparkContext(cores = 4) { sc =>
+      val keyed: RDD[(Int, Int)] = sc.parallelize(0 until 100, 2).map(v => (v, v))
+      val rdd = new PipelinedShuffledRDD[Int, Int, Int](keyed, new HashPartitioner(2))
+      val shuffleId = rdd.dependencies.head
+        .asInstanceOf[org.apache.spark.ShuffleDependency[_, _, _]].shuffleId
+      assert(rdd.collect().map(_._2).toSet === (0 until 100).toSet)
+      assert(sc.env.streamingShuffleOutputTracker.isEmpty)
+      assert(!sc.env.mapOutputTracker.asInstanceOf[org.apache.spark.MapOutputTrackerMaster]
+        .containsShuffle(shuffleId),
+        "a channel shuffle must not be registered with the MapOutputTracker")
     }
   }
 
@@ -372,6 +467,63 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
     }
   }
 
+  test("killing a producer task fails the whole group instead of retrying the task") {
+    // A killed producer attempt has already handed rows to its consumer, so retrying it in the
+    // same stage attempt would deliver those rows twice. The kill must fail the group, like any
+    // other member failure; the caller reruns it as a fresh job. Kill the first producer attempt
+    // once two batches are in the consumer's queue.
+    withPipelinedSparkContext(cores = 4) { sc =>
+      val batchSize = sc.conf.get(SHUFFLE_PIPELINED_CHANNEL_BATCH_SIZE)
+      val numRows = 6 * batchSize
+      val keyed = sc.parallelize(0 until numRows, 2).mapPartitionsWithIndex { (index, rows) =>
+        rows.map { v =>
+          // Producer 0 has filled two batches when it reaches this row.
+          if (index == 0 && v == 2 * batchSize) PipelinedChannelShuffleSuite.awaitKill()
+          (v, v)
+        }
+      }
+      val values =
+        new PipelinedShuffledRDD[Int, Int, Int](keyed, new HashPartitioner(1)).map(_._2)
+      val (events, producerStage) = killDuringJob(sc, values) { recorded =>
+        // Kill once the consumer runs too, so the group abort has a running task to clean up.
+        eventually(timeout(1.minute)) {
+          assert(recorded.taskStarts.asScala.map(_.stageId).toSet.size === 2)
+        }
+      }
+      // The consumer's running task was killed with the group, and both stages ended as failed.
+      val consumerEnds = events.taskEnds.asScala.filter(_.stageId != producerStage)
+      assert(consumerEnds.nonEmpty && consumerEnds.forall(_.reason.isInstanceOf[TaskKilled]))
+      assert(events.stageEnds.asScala.map(_.stageInfo.stageId).toSet ===
+        events.taskStarts.asScala.map(_.stageId).toSet)
+      assert(events.stageEnds.asScala.forall(_.stageInfo.failureReason.isDefined))
+      // The caller recovers by rerunning the group as a fresh job.
+      assert(values.collect().sorted === (0 until numRows).toArray)
+    }
+  }
+
+  test("killing a consumer task fails the whole group instead of hanging") {
+    // A killed consumer attempt has already taken rows off its queue, so retrying it in the same
+    // stage attempt would wait for a stream that is gone. The kill must fail the group instead.
+    // Kill the consumer once it has read two batches.
+    withPipelinedSparkContext(cores = 4) { sc =>
+      val batchSize = sc.conf.get(SHUFFLE_PIPELINED_CHANNEL_BATCH_SIZE)
+      val numRows = 6 * batchSize
+      val keyed = sc.parallelize(0 until numRows, 2).map(v => (v, v))
+      val values = new PipelinedShuffledRDD[Int, Int, Int](keyed, new HashPartitioner(1))
+        .mapPartitions { rows =>
+          var read = 0
+          rows.map { case (_, v) =>
+            read += 1
+            if (read == 2 * batchSize) PipelinedChannelShuffleSuite.awaitKill()
+            v
+          }
+        }
+      killDuringJob(sc, values)(_ => ())
+      // The caller recovers by rerunning the group as a fresh job.
+      assert(values.collect().sorted === (0 until numRows).toArray)
+    }
+  }
+
   test("the channel manager refuses to construct outside local mode") {
     // The rendezvous is JVM-local; on a multi-executor master every reader would hang on
     // data written in another JVM. A cluster misconfiguration must fail loudly at startup.
@@ -587,4 +739,48 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
 private object PipelinedChannelShuffleSuite {
   /** Row count of one partition; a top-level function so a job closure captures no suite state. */
   def countRows(it: Iterator[_]): Long = it.size.toLong
+
+  // Lets a test kill a task mid-stream. The first task to call awaitKill after armKill, which
+  // runs in this JVM in local mode, publishes its attempt ID and waits until it is killed. Each
+  // armKill starts from fresh state, so a task left over from an earlier arming cannot affect it.
+  private class KillTarget(armedAtStart: Boolean) {
+    val armed = new AtomicBoolean(armedAtStart)
+    val waiting = new CountDownLatch(1)
+    val released = new CountDownLatch(1)
+    @volatile var taskId = -1L
+  }
+
+  // Disarmed until the first armKill, so the helpers below are safe to call in any order.
+  @volatile private var killTarget = new KillTarget(armedAtStart = false)
+
+  def armKill(): Unit = {
+    killTarget = new KillTarget(armedAtStart = true)
+  }
+
+  /** Run by the task to kill: publish its attempt ID, then wait to be killed or released. */
+  def awaitKill(): Unit = {
+    val target = killTarget
+    if (target.armed.compareAndSet(true, false)) {
+      val context = TaskContext.get()
+      target.taskId = context.taskAttemptId()
+      target.waiting.countDown()
+      // Give up after a minute, so that a kill that never comes fails the test instead of hanging.
+      val deadline = System.nanoTime() + TimeUnit.MINUTES.toNanos(1)
+      while (!target.released.await(10, TimeUnit.MILLISECONDS) && System.nanoTime() < deadline) {
+        context.killTaskIfInterrupted()
+      }
+    }
+  }
+
+  /** The attempt ID of the armed task, once it is waiting to be killed. */
+  def taskToKill(): Long = {
+    val target = killTarget
+    assert(target.waiting.await(1, TimeUnit.MINUTES), "no task started waiting to be killed")
+    target.taskId
+  }
+
+  /** Let a waiting task continue if it was never killed, e.g. after a failed assertion. */
+  def releaseKill(): Unit = {
+    killTarget.released.countDown()
+  }
 }

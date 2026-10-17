@@ -84,6 +84,9 @@ private[master] class FileSystemPersistenceEngine(
     }
   }
 
+  // Unlike ZooKeeperPersistenceEngine, no recovery serialization filter is applied here:
+  // the store is a lower-exposure surface than a shared ZooKeeper ensemble, though it can
+  // still be shared across hosts (e.g. an NFS-mounted recovery directory).
   private def deserializeFromFile[T](file: File)(implicit m: ClassTag[T]): T = {
     var fileIn: InputStream = new FileInputStream(file)
     codec.foreach { c => fileIn = c.compressedInputStream(new FileInputStream(file)) }

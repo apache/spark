@@ -24,6 +24,7 @@ import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Add, AggregateWindowFunction, Ascending, Attribute, BoundReference, CurrentRow, DateAdd, DateAddYMInterval, DecimalAddNoOverflowCheck, Descending, Expression, ExtractANSIIntervalDays, FrameLessOffsetWindowFunction, FrameType, IdentityProjection, IntegerLiteral, MutableProjection, NamedExpression, OffsetWindowFunction, PythonFuncExpression, RangeFrame, RowFrame, RowOrdering, SortOrder, SpecifiedWindowFrame, TimestampAddInterval, TimestampAddYMInterval, UnaryMinus, UnboundedFollowing, UnboundedPreceding, UnsafeProjection, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, DeclarativeAggregate}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{CalendarIntervalType, DateType, DayTimeIntervalType, DecimalType, IntegerType, TimestampNTZType, TimestampType, YearMonthIntervalType}
@@ -44,6 +45,22 @@ trait WindowEvaluatorFactoryBase {
    */
   def numSegmentTreeFrames: Option[SQLMetric] = None
   def numSegmentTreeFallbackFrames: Option[SQLMetric] = None
+
+  /**
+   * Fail fast if the buffered partition has more rows than its frames can handle.
+   *
+   * Most frames track the row index within a partition and the window bounds in 32-bit `Int`s
+   * (including the row index the driver passes to [[WindowFunctionFrame.write]]). A partition
+   * with more than `Int.MaxValue` rows would overflow those counters and silently produce wrong
+   * results, so throw a clear user-facing error instead, unless every frame declares
+   * [[WindowFunctionFrame.supportsLargePartition]] (e.g. LEAD/LAG).
+   */
+  protected def checkPartitionSizeLimit(
+      numRows: Long, frames: Array[WindowFunctionFrame]): Unit = {
+    if (numRows > Int.MaxValue && frames.exists(!_.supportsLargePartition)) {
+      throw QueryExecutionErrors.windowFunctionPartitionSizeExceedsLimitError(numRows)
+    }
+  }
 
   /**
    * Create the resulting projection.
