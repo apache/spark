@@ -521,4 +521,30 @@ class ParquetVectorUpdaterSuite extends SparkFunSuite {
       }
     }
   }
+
+  test("SPARK-60010: factory rejects a DECIMAL with a non-zero scale read as an integral type") {
+    // Parquet stores a DECIMAL as its unscaled value, so reading one with a non-zero scale as an
+    // integral type would silently drop the scale (1.23 read as 123). getUpdater must fall
+    // through to a clean SchemaColumnConvertNotSupportedException instead.
+    val integralTypes = Seq(
+      DataTypes.ByteType, DataTypes.ShortType, DataTypes.IntegerType, DataTypes.LongType)
+    Seq(
+      int32DecimalDescriptor(precision = 9, scale = 2),
+      int64DecimalDescriptor(precision = 9, scale = 2),
+      int64DecimalDescriptor(precision = 18, scale = 2)
+    ).foreach { desc =>
+      integralTypes.foreach { sparkType =>
+        intercept[SchemaColumnConvertNotSupportedException] {
+          newFactory(desc).getUpdater(desc, sparkType)
+        }
+      }
+    }
+    // A DECIMAL with scale 0 stores the integral value itself, so it can still be read as one.
+    val int32Scale0 = int32DecimalDescriptor(precision = 9, scale = 0)
+    integralTypes.foreach { sparkType =>
+      assert(newFactory(int32Scale0).getUpdater(int32Scale0, sparkType) != null)
+    }
+    val int64Scale0 = int64DecimalDescriptor(precision = 18, scale = 0)
+    assert(newFactory(int64Scale0).getUpdater(int64Scale0, DataTypes.LongType) != null)
+  }
 }
