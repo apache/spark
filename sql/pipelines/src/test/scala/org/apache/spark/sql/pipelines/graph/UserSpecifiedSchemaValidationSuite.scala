@@ -21,10 +21,15 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.pipelines.autocdc.{ChangeArgs, ScdType, UnqualifiedColumnName}
+import org.apache.spark.sql.pipelines.autocdc.{
+  AutoCdcReservedNames,
+  ChangeArgs,
+  ScdType,
+  UnqualifiedColumnName
+}
 import org.apache.spark.sql.pipelines.utils.{PipelineTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 /**
  * Tests for `GraphValidations.validateUserSpecifiedSchemas`, which requires a table's
@@ -39,9 +44,10 @@ import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
  * declared schemas.
  *
  * For an AUTO CDC flow the inferred schema is the source's data columns plus an appended reserved
- * `__spark_autocdc_metadata` column, so a declared schema listing only the data columns is
- * incompatible (it is missing the metadata column) while one that also includes the metadata
- * column is compatible.
+ * `__spark_autocdc_metadata` column. The reserved column is engine-owned (SPARK-58118): a declared
+ * schema listing only the data columns is accepted, with the engine appending the reserved
+ * column(s) at materialization. A declared schema that also includes the metadata column stays
+ * accepted, and any mismatch in the data columns themselves is still rejected.
  */
 class UserSpecifiedSchemaValidationSuite extends PipelineTest with SharedSparkSession {
 
@@ -79,7 +85,10 @@ class UserSpecifiedSchemaValidationSuite extends PipelineTest with SharedSparkSe
   }
 
   /** Registers an AUTO CDC flow into `target`; `flowName == "target"` yields an implicit flow. */
-  private def autoCdcGraph(flowName: String, declaredSchema: Option[StructType]): DataflowGraph = {
+  private def autoCdcGraph(
+      flowName: String,
+      declaredSchema: Option[StructType],
+      scdType: ScdType = ScdType.Type1): DataflowGraph = {
     val ctx = new TestGraphRegistrationContext(spark)
     ctx.registerTable("target", specifiedSchema = declaredSchema)
     ctx.registerFlow(AutoCdcFlow(
@@ -95,13 +104,15 @@ class UserSpecifiedSchemaValidationSuite extends PipelineTest with SharedSparkSe
         sequencing = functions.col("version"),
         columnSelection = None,
         deleteCondition = None,
-        storedAsScdType = ScdType.Type1)))
+        storedAsScdType = scdType)))
     ctx.resolveToDataflowGraph()
   }
 
   /** The full inferred AUTO CDC output schema (data columns plus the reserved metadata column). */
-  private def autoCdcInferredSchema(flowName: String): StructType =
-    autoCdcGraph(flowName, declaredSchema = None)
+  private def autoCdcInferredSchema(
+      flowName: String,
+      scdType: ScdType = ScdType.Type1): StructType =
+    autoCdcGraph(flowName, declaredSchema = None, scdType)
       .inferSchemas(spark.sessionState.conf.caseSensitiveAnalysis)(targetIdentifier)
 
   private def validateGraph(graph: DataflowGraph): DataflowGraph =
@@ -180,16 +191,46 @@ class UserSpecifiedSchemaValidationSuite extends PipelineTest with SharedSparkSe
     }
   }
 
-  // AUTO CDC flows: the inferred schema appends a reserved metadata column to the data columns.
-
-  test("data-only user-specified schema is rejected for an implicit AUTO CDC flow") {
-    // Schema lists the data columns but omits the appended metadata column, so it is incompatible.
-    assertSchemaIncompatible(autoCdcGraph(flowName = "target", declaredSchema = Some(dataSchema)))
+  test("a non-AUTO CDC table's declared schema is compared exactly, so omitting a reserved-" +
+    "prefixed column the flow produces is rejected") {
+    val session = spark
+    import session.implicits._
+    // A plain (non-AUTO CDC) flow that produces a reserved-prefixed column, with a declared
+    // schema that omits it. For a plain flow the reserved prefix is not special, so this must fail
+    // validation the same as omitting any other produced column -- the AUTO CDC strip-both
+    // relaxation must not apply here (otherwise the column would be accepted and later dropped at
+    // materialization).
+    val reservedCol = s"${AutoCdcReservedNames.prefix}x"
+    val src = Seq((1, "alice", "m")).toDF("id", "name", reservedCol)
+    val ctx = new TestGraphRegistrationContext(spark)
+    ctx.registerTable(
+      "target",
+      query = Some(ctx.dfFlowFunc(src)),
+      specifiedSchema = Some(new StructType().add("id", IntegerType, nullable = false)
+        .add("name", StringType)))
+    assertSchemaIncompatible(ctx.resolveToDataflowGraph())
   }
 
-  test("data-only user-specified schema is rejected for a named AUTO CDC flow") {
+  // AUTO CDC flows: the inferred schema appends a reserved metadata column to the data columns.
+
+  test("data-only user-specified schema is accepted for an implicit AUTO CDC flow") {
+    // Schema lists only the data columns; the reserved metadata column is engine-owned and may
+    // be omitted from the declared schema.
+    autoCdcGraph(flowName = "target", declaredSchema = Some(dataSchema))
+      .validate(spark.sessionState.conf.caseSensitiveAnalysis)
+  }
+
+  test("data-only user-specified schema is accepted for a named AUTO CDC flow") {
+    autoCdcGraph(flowName = "auto_cdc_flow", declaredSchema = Some(dataSchema))
+      .validate(spark.sessionState.conf.caseSensitiveAnalysis)
+  }
+
+  test("user-specified schema with wrong data columns is still rejected " +
+    "for an AUTO CDC flow") {
+    // Omitting the reserved metadata column is allowed, but a mismatch in the data columns
+    // themselves (here: a missing data column) remains incompatible.
     assertSchemaIncompatible(
-      autoCdcGraph(flowName = "auto_cdc_flow", declaredSchema = Some(dataSchema)))
+      autoCdcGraph(flowName = "auto_cdc_flow", declaredSchema = Some(dataSchemaMissingColumn)))
   }
 
   test("full user-specified schema is accepted for an implicit AUTO CDC flow") {
@@ -205,5 +246,29 @@ class UserSpecifiedSchemaValidationSuite extends PipelineTest with SharedSparkSe
       flowName = "auto_cdc_flow",
       declaredSchema = Some(autoCdcInferredSchema("auto_cdc_flow"))).validate(
         spark.sessionState.conf.caseSensitiveAnalysis)
+  }
+
+  test("a user-specified schema that declares the reserved metadata column with the wrong " +
+    "type is rejected for an AUTO CDC flow") {
+    // Declaring the engine-owned metadata column is allowed, but only with the shape the engine
+    // produces. A conflicting type is caught when the declared schema is merged with the inferred
+    // one, before the AUTO CDC MERGE ever runs, so the target can never be created with a
+    // malformed metadata column.
+    val wrongTypeMetadata = StructType(
+      dataSchema.fields :+ StructField(AutoCdcReservedNames.cdcMetadataColName, StringType))
+    assertSchemaIncompatible(
+      autoCdcGraph(flowName = "auto_cdc_flow", declaredSchema = Some(wrongTypeMetadata)))
+  }
+
+  test("data-only user-specified schema is accepted for an SCD2 AUTO CDC flow") {
+    // An SCD2 flow's inferred schema is the data columns plus the SCD2 interval bounds
+    // __START_AT / __END_AT plus the reserved metadata column. The interval bounds are part of the
+    // SCD2 contract and stay user-visible; only the prefixed metadata column is engine-reserved,
+    // so a declared schema that omits just that column is accepted.
+    val declaredWithoutReserved = StructType(
+      autoCdcInferredSchema("target", ScdType.Type2)
+        .filterNot(_.name.startsWith(AutoCdcReservedNames.prefix)))
+    autoCdcGraph("target", Some(declaredWithoutReserved), ScdType.Type2)
+      .validate(spark.sessionState.conf.caseSensitiveAnalysis)
   }
 }
