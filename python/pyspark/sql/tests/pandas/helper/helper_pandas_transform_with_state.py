@@ -148,6 +148,14 @@ class ListStateProcessorFactory(StatefulProcessorFactory):
         return RowListStateProcessor()
 
 
+class ListStateClearProcessorFactory(StatefulProcessorFactory):
+    def pandas(self):
+        return PandasListStateClearProcessor()
+
+    def row(self):
+        return RowListStateClearProcessor()
+
+
 class ListStateLargeListProcessorFactory(StatefulProcessorFactory):
     def pandas(self):
         return PandasListStateLargeListProcessor()
@@ -1013,6 +1021,53 @@ class RowListStateProcessor(StatefulProcessor):
 
     def close(self) -> None:
         pass
+
+
+class PandasListStateClearProcessor(StatefulProcessor):
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        state_schema = StructType([StructField("temperature", IntegerType(), True)])
+        self.list_state = handle.getListState("temperatures", state_schema)
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
+        initially_exists = self.list_state.exists()
+        for pdf in rows:
+            for temperature in pdf["temperature"]:
+                self.list_state.appendValue((int(temperature),))
+        populated_exists = self.list_state.exists()
+        temperatures = sorted(value[0] for value in self.list_state.get())
+        self.list_state.clear()
+        yield pd.DataFrame(
+            {
+                "id": [key[0]],
+                "initiallyExists": [initially_exists],
+                "populatedExists": [populated_exists],
+                "temperatures": [temperatures],
+                "clearedExists": [self.list_state.exists()],
+                "remaining": [[value[0] for value in self.list_state.get()]],
+            }
+        )
+
+
+class RowListStateClearProcessor(StatefulProcessor):
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        state_schema = StructType([StructField("temperature", IntegerType(), True)])
+        self.list_state = handle.getListState("temperatures", state_schema)
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[Row]:
+        initially_exists = self.list_state.exists()
+        for row in rows:
+            self.list_state.appendValue((row.temperature,))
+        populated_exists = self.list_state.exists()
+        temperatures = sorted(value[0] for value in self.list_state.get())
+        self.list_state.clear()
+        yield Row(
+            id=key[0],
+            initiallyExists=initially_exists,
+            populatedExists=populated_exists,
+            temperatures=temperatures,
+            clearedExists=self.list_state.exists(),
+            remaining=[value[0] for value in self.list_state.get()],
+        )
 
 
 class PandasListStateLargeListProcessor(StatefulProcessor):

@@ -28,6 +28,7 @@ from pyspark.sql.functions import array_sort, col, explode, split
 from pyspark.sql.streaming import StatefulProcessor
 from pyspark.sql.tests.pandas.helper.helper_pandas_transform_with_state import (
     InvalidSimpleStatefulProcessorFactory,
+    ListStateClearProcessorFactory,
     ListStateLargeListProcessorFactory,
     ListStateLargeTTLProcessorFactory,
     ListStateProcessorFactory,
@@ -215,6 +216,32 @@ class TransformWithStateStateVariableTestsMixin:
 
         self._test_transform_with_state_basic(
             ListStateProcessorFactory(), check_results, True, "processingTime"
+        )
+
+    def test_transform_with_state_list_state_clear(self):
+        def check_results(batch_df, batch_id):
+            expected_temperatures = (
+                [[46, 123], [146, 346]] if batch_id == 0 else [[123, 223, 323], [6, 246]]
+            )
+            assert batch_df.orderBy("id").collect() == [
+                Row(
+                    id=str(key),
+                    initiallyExists=False,
+                    populatedExists=True,
+                    temperatures=temperatures,
+                    clearedExists=False,
+                    remaining=[],
+                )
+                for key, temperatures in enumerate(expected_temperatures)
+            ]
+
+        self._test_transform_with_state_basic(
+            ListStateClearProcessorFactory(),
+            check_results,
+            output_schema=(
+                "id string, initiallyExists boolean, populatedExists boolean, "
+                "temperatures array<int>, clearedExists boolean, remaining array<int>"
+            ),
         )
 
     def test_transform_with_state_list_state_large_list(self):
