@@ -197,6 +197,7 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
     val checkedType = DateType
     checkTypeCasting(checkedType, castableTypes = Seq(checkedType, StringType) ++ datetimeTypes)
     shouldCast(checkedType, AnyTimestampType, AnyTimestampType.defaultConcreteType)
+    shouldNotCast(checkedType, AnyTimeType)
     shouldNotCast(checkedType, DecimalType)
     shouldNotCast(checkedType, NumericType)
     shouldNotCast(checkedType, IntegralType)
@@ -206,6 +207,7 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
     val checkedType = TimestampType
     checkTypeCasting(checkedType, castableTypes = Seq(checkedType, StringType) ++ datetimeTypes)
     shouldCast(checkedType, AnyTimestampType, checkedType)
+    shouldNotCast(checkedType, AnyTimeType)
     shouldNotCast(checkedType, DecimalType)
     shouldNotCast(checkedType, NumericType)
     shouldNotCast(checkedType, IntegralType)
@@ -215,6 +217,7 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
     val checkedType = TimestampNTZType
     checkTypeCasting(checkedType, castableTypes = Seq(checkedType, StringType) ++ datetimeTypes)
     shouldCast(checkedType, AnyTimestampType, checkedType)
+    shouldNotCast(checkedType, AnyTimeType)
     shouldNotCast(checkedType, DecimalType)
     shouldNotCast(checkedType, NumericType)
     shouldNotCast(checkedType, IntegralType)
@@ -274,8 +277,10 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
 
   test("SPARK-56152: implicit type cast - TimeType") {
     val checkedType = TimeType()
-    checkTypeCasting(checkedType, castableTypes = Seq(checkedType, StringType) ++ datetimeTypes)
+    checkTypeCasting(checkedType, castableTypes = Seq(checkedType, StringType))
     shouldCast(checkedType, AnyTimeType, AnyTimeType.defaultConcreteType)
+    shouldNotCast(checkedType, AnyTimestampType)
+    shouldNotCast(checkedType, AnyTimestampNanoType)
     shouldNotCast(checkedType, DecimalType)
     shouldNotCast(checkedType, NumericType)
     shouldNotCast(checkedType, IntegralType)
