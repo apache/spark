@@ -8473,9 +8473,9 @@ object functions {
   def regexp_instr(str: Column, regexp: Column): Column = Column.fn("regexp_instr", str, regexp)
 
   /**
-   * Searches a string for a regular expression and returns an integer that indicates the
-   * beginning position of the matched substring. Positions are 1-based, not 0-based. If no match
-   * is found, returns 0.
+   * Searches a string for a regular expression and returns the 1-based position in `str` of the
+   * regex group `idx` of the first match. If no match is found, or the group does not take part
+   * in the match, returns 0.
    *
    * @param str
    *   target column to work on. A column that evaluates to a string.
