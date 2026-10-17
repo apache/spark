@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.variant
 
 import java.time.ZoneId
 
+import scala.util.matching.Regex
 import scala.util.parsing.combinator.RegexParsers
 
 import org.apache.spark.SparkRuntimeException
@@ -369,7 +370,7 @@ object VariantPathParser extends RegexParsers {
   override def skipWhitespace: Boolean = false
 
   // Parse key segment like `.name`, `['name']`, or `["name"]`.
-  private def key: Parser[VariantPathSegment] =
+  private def literalBackslashKey: Parser[VariantPathSegment] =
     for {
       key <- '.' ~> "[^\\.\\[]+".r | "['" ~> "[^']*".r <~ "']" |
         "[\"" ~> """[^"]*""".r <~ "\"]"
@@ -377,9 +378,79 @@ object VariantPathParser extends RegexParsers {
       ObjectExtraction(key)
     }
 
-  private val parser: Parser[List[VariantPathSegment]] = phrase(root ~> rep(key | index))
+  // Only bracket keys decode escapes.
+  private def escapedKey: Parser[VariantPathSegment] =
+    '.' ~> "[^\\.\\[]+".r ^^ ObjectExtraction |
+      "['" ~> """(?:\\[\s\S]|[^'\\])*+""".r <~ "']" ^^ { k =>
+        ObjectExtraction(unescapeQuotedKey(k, '\''))
+      } |
+      "[\"" ~> """(?:\\[\s\S]|[^"\\])*+""".r <~ "\"]" ^^ { k =>
+        ObjectExtraction(unescapeQuotedKey(k, '"'))
+      }
 
-  def parse(str: String): Option[Array[VariantPathSegment]] = {
+  // Match a surrogate pair, `\uXXXX`, or a backslash followed by one character.
+  private val escapeSeq =
+    ("""\\(u[dD][89abAB][0-9a-fA-F]{2}\\u[dD][c-fC-F][0-9a-fA-F]{2}|""" +
+      """u[0-9a-fA-F]{4}|[\s\S])""").r
+
+  // Unrecognized escapes remain literal.
+  private def unescapeQuotedKey(raw: String, quote: Char): String =
+    if (raw.indexOf('\\') < 0) raw
+    else escapeSeq.replaceAllIn(raw, m =>
+      Regex.quoteReplacement(decodeEscape(m.group(1), quote)))
+
+  private def decodeEscape(esc: String, quote: Char): String = esc match {
+    case "b" => "\b"
+    case "f" => "\f"
+    case "n" => "\n"
+    case "r" => "\r"
+    case "t" => "\t"
+    case "/" => "/"
+    case "\\" => "\\"
+    case "'" if quote == '\'' => "'"
+    case "\"" if quote == '"' => "\""
+    case escape if escape.length == 11 =>
+      val high = Integer.parseInt(escape.substring(1, 5), 16).toChar
+      val low = Integer.parseInt(escape.substring(7), 16).toChar
+      s"$high$low"
+    case escape if escape.length == 5 =>
+      val decoded = Integer.parseInt(escape.substring(1), 16).toChar
+      if (Character.isSurrogate(decoded)) "\\" + escape else decoded.toString
+    case other => "\\" + other
+  }
+
+  // Escape and quote a key using bracket notation.
+  private[variant] def quoteKey(key: String, quote: Char): String = {
+    val result = new java.lang.StringBuilder(key.length + 4).append('[').append(quote)
+    var i = 0
+    while (i < key.length) {
+      key.charAt(i) match {
+        case '\\' => result.append("\\\\")
+        case c if c == quote => result.append('\\').append(c)
+        case '\b' => result.append("\\b")
+        case '\f' => result.append("\\f")
+        case '\n' => result.append("\\n")
+        case '\r' => result.append("\\r")
+        case '\t' => result.append("\\t")
+        case c if c < 0x20 => result.append("\\u%04x".format(c.toInt))
+        case c => result.append(c)
+      }
+      i += 1
+    }
+    result.append(quote).append(']').toString
+  }
+
+  private val escapedParser = phrase(root ~> rep(escapedKey | index))
+  private val literalBackslashParser = phrase(root ~> rep(literalBackslashKey | index))
+
+  def parse(
+      str: String,
+      legacyPathBackslashAsLiteral: Boolean): Option[Array[VariantPathSegment]] = {
+    val parser = if (legacyPathBackslashAsLiteral) {
+      literalBackslashParser
+    } else {
+      escapedParser
+    }
     try {
       this.parseAll(parser, str) match {
         case Success(result, _) => Some(result.toArray)
@@ -408,6 +479,7 @@ object VariantPathArg {
   private def parseFoldableExpression(
       child: Expression,
       functionName: String,
+      legacyPathBackslashAsLiteral: Boolean,
       allowRoot: Boolean): Option[FoldableVariantPath] = {
     val value = child.eval()
     if (value == null) {
@@ -415,16 +487,18 @@ object VariantPathArg {
     } else {
       val pathStr = value.asInstanceOf[UTF8String].toString
       Some(FoldableVariantPath(
-        VariantExpressionEvalUtils.parseVariantPath(pathStr, functionName, allowRoot), pathStr))
+        VariantExpressionEvalUtils.parseVariantPath(
+          pathStr, functionName, legacyPathBackslashAsLiteral, allowRoot), pathStr))
     }
   }
 
   def fromExpression(
       child: Expression,
       functionName: String,
+      legacyPathBackslashAsLiteral: Boolean,
       allowRoot: Boolean = false): Option[VariantPathArg] = {
     if (child.foldable) {
-      parseFoldableExpression(child, functionName, allowRoot)
+      parseFoldableExpression(child, functionName, legacyPathBackslashAsLiteral, allowRoot)
     } else {
       Some(DynamicVariantPath(child))
     }
@@ -433,9 +507,10 @@ object VariantPathArg {
   def foldableFromExpression(
       child: Expression,
       functionName: String,
+      legacyPathBackslashAsLiteral: Boolean,
       allowRoot: Boolean = false): Option[FoldableVariantPath] = {
     if (child.foldable) {
-      parseFoldableExpression(child, functionName, allowRoot)
+      parseFoldableExpression(child, functionName, legacyPathBackslashAsLiteral, allowRoot)
     } else {
       None
     }
@@ -448,8 +523,10 @@ object VariantManipulationExpressionUtils extends QueryErrorsBase {
   def foldablePath(
       path: Expression,
       functionName: String,
+      legacyPathBackslashAsLiteral: Boolean,
       allowRoot: Boolean = false): Option[FoldableVariantPath] =
-    VariantPathArg.foldableFromExpression(path, functionName, allowRoot)
+    VariantPathArg.foldableFromExpression(
+      path, functionName, legacyPathBackslashAsLiteral, allowRoot)
 
   def checkValueType(dataType: DataType): TypeCheckResult = {
     if (dataType == NullType || VariantGet.checkDataType(dataType, allowStructsAndMaps = false)) {
@@ -489,7 +566,9 @@ case class VariantGet(
     path: Expression,
     targetType: DataType,
     failOnError: Boolean,
-    timeZoneId: Option[String] = None)
+    timeZoneId: Option[String] = None,
+    legacyPathBackslashAsLiteral: Boolean =
+      SQLConf.get.getConf(SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL))
     extends BinaryExpression
     with TimeZoneAwareExpression
     with ExpectsInputTypes
@@ -513,7 +592,7 @@ case class VariantGet(
   @transient private lazy val parsedPath: Option[Array[VariantPathSegment]] = {
     if (path.foldable) {
       val pathValue = path.eval().toString
-      Some(VariantGet.getParsedPath(pathValue, prettyName))
+      Some(VariantGet.getParsedPath(pathValue, prettyName, legacyPathBackslashAsLiteral))
     } else {
       None
     }
@@ -544,7 +623,7 @@ case class VariantGet(
       VariantGet.variantGet(input.asInstanceOf[VariantVal], pp, dataType, castArgs)
     case _ =>
       VariantGet.variantGet(input.asInstanceOf[VariantVal], path.asInstanceOf[UTF8String], dataType,
-        castArgs, prettyName)
+        castArgs, prettyName, legacyPathBackslashAsLiteral)
   }
 
   protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -569,7 +648,9 @@ case class VariantGet(
       if (!${ev.isNull}) {
         Object $tmp = org.apache.spark.sql.catalyst.expressions.variant.VariantGet.variantGet(
           ${childCode.value}, $parsedPathArg, $dataTypeArg,
-          $castArgsArg${if (parsedPath.isEmpty) s""", "$prettyName"""" else ""});
+          $castArgsArg${if (parsedPath.isEmpty) {
+            s""", "$prettyName", $legacyPathBackslashAsLiteral"""
+          } else ""});
         if ($tmp == null) {
           ${ev.isNull} = true;
         } else {
@@ -620,8 +701,11 @@ case object VariantGet {
   /**
    * Get parsed Array[VariantPathSegment] from string representing path
    */
-  def getParsedPath(pathValue: String, prettyName: String): Array[VariantPathSegment] = {
-    VariantPathParser.parse(pathValue).getOrElse {
+  def getParsedPath(
+      pathValue: String,
+      prettyName: String,
+      legacyPathBackslashAsLiteral: Boolean): Array[VariantPathSegment] = {
+    VariantPathParser.parse(pathValue, legacyPathBackslashAsLiteral).getOrElse {
       throw QueryExecutionErrors.invalidVariantGetPath(pathValue, prettyName)
     }
   }
@@ -652,9 +736,10 @@ case object VariantGet {
       path: UTF8String,
       dataType: DataType,
       castArgs: VariantCastArgs,
-      prettyName: String): Any = {
+      prettyName: String,
+      legacyPathBackslashAsLiteral: Boolean): Any = {
     val pathValue = path.toString
-    val parsedPath = VariantGet.getParsedPath(pathValue, prettyName)
+    val parsedPath = VariantGet.getParsedPath(pathValue, prettyName, legacyPathBackslashAsLiteral)
     variantGet(input, parsedPath, dataType, castArgs)
   }
 
@@ -969,9 +1054,15 @@ object TryVariantGetExpressionBuilder extends VariantGetExpressionBuilderBase(fa
   group = "variant_funcs"
 )
 // scalastyle:on line.size.limit
-case class VariantDelete(children: Seq[Expression])
+case class VariantDelete(
+    children: Seq[Expression],
+    legacyPathBackslashAsLiteral: Boolean =
+      SQLConf.get.getConf(SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL))
     extends Expression
     with ExpectsInputTypes {
+
+  def this(children: Seq[Expression]) =
+    this(children, SQLConf.get.getConf(SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL))
 
   override def dataType: DataType = VariantType
 
@@ -996,7 +1087,8 @@ case class VariantDelete(children: Seq[Expression])
   private def pathChildren: Seq[Expression] = children.tail
 
   @transient private lazy val pathArgs: Seq[VariantPathArg] =
-    pathChildren.flatMap(VariantPathArg.fromExpression(_, prettyName))
+    pathChildren.flatMap(
+      VariantPathArg.fromExpression(_, prettyName, legacyPathBackslashAsLiteral))
 
   override def eval(input: InternalRow): Any = {
     val inputVariant = variantChild.eval(input).asInstanceOf[VariantVal]
@@ -1011,7 +1103,8 @@ case class VariantDelete(children: Seq[Expression])
         case DynamicVariantPath(expr) =>
           val pathVal = expr.eval(input).asInstanceOf[UTF8String]
           if (pathVal != null) {
-            current = VariantExpressionEvalUtils.deleteAtPath(current, pathVal)
+            current = VariantExpressionEvalUtils.deleteAtPath(
+              current, pathVal, legacyPathBackslashAsLiteral)
           }
       }
       i += 1
@@ -1034,7 +1127,8 @@ case class VariantDelete(children: Seq[Expression])
         s"""
            |${pCode.code}
            |if (!${pCode.isNull}) {
-           |  $current = $cls.deleteAtPath($current, ${pCode.value});
+           |  $current = $cls.deleteAtPath(
+           |    $current, ${pCode.value}, $legacyPathBackslashAsLiteral);
            |}
          """.stripMargin
     }.mkString("\n")
@@ -1093,9 +1187,15 @@ case class VariantDelete(children: Seq[Expression])
   group = "variant_funcs"
 )
 // scalastyle:on line.size.limit
-case class VariantPick(children: Seq[Expression])
+case class VariantPick(
+    children: Seq[Expression],
+    legacyPathBackslashAsLiteral: Boolean =
+      SQLConf.get.getConf(SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL))
     extends Expression
     with ExpectsInputTypes {
+
+  def this(children: Seq[Expression]) =
+    this(children, SQLConf.get.getConf(SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL))
 
   override def dataType: DataType = VariantType
 
@@ -1119,7 +1219,8 @@ case class VariantPick(children: Seq[Expression])
   private def pathChildren: Seq[Expression] = children.tail
 
   @transient private lazy val pathArgs: Seq[VariantPathArg] =
-    pathChildren.flatMap(VariantPathArg.fromExpression(_, prettyName, allowRoot = true))
+    pathChildren.flatMap(VariantPathArg.fromExpression(
+      _, prettyName, legacyPathBackslashAsLiteral, allowRoot = true))
 
   // When every path is constant, the keep-tree is the same for all rows, so build it once here and
   // reuse it rather than rebuilding it per row. `None` means at least one path is dynamic.
@@ -1148,7 +1249,8 @@ case class VariantPick(children: Seq[Expression])
         case DynamicVariantPath(expr) =>
           val pathVal = expr.eval(input).asInstanceOf[UTF8String]
           if (pathVal != null) {
-            paths.add(VariantExpressionEvalUtils.parsePickPath(pathVal))
+            paths.add(VariantExpressionEvalUtils.parsePickPath(
+              pathVal, legacyPathBackslashAsLiteral))
           }
       }
       i += 1
@@ -1191,7 +1293,7 @@ case class VariantPick(children: Seq[Expression])
             s"""
                |${pCode.code}
                |if (!${pCode.isNull}) {
-               |  $paths.add($cls.parsePickPath(${pCode.value}));
+               |  $paths.add($cls.parsePickPath(${pCode.value}, $legacyPathBackslashAsLiteral));
                |}
              """.stripMargin
         }.mkString("\n")
@@ -1223,7 +1325,9 @@ case class VariantInsert(
     input: Expression,
     path: Expression,
     value: Expression,
-    failOnError: Boolean = true)
+    failOnError: Boolean = true,
+    legacyPathBackslashAsLiteral: Boolean =
+      SQLConf.get.getConf(SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL))
     extends TernaryExpression
     with ExpectsInputTypes {
 
@@ -1248,7 +1352,7 @@ case class VariantInsert(
   }
 
   @transient private lazy val foldablePath: Option[FoldableVariantPath] =
-    VariantManipulationExpressionUtils.foldablePath(path, prettyName)
+    VariantManipulationExpressionUtils.foldablePath(path, prettyName, legacyPathBackslashAsLiteral)
 
   override def eval(input: InternalRow): Any = {
     val _ = foldablePath
@@ -1261,11 +1365,11 @@ case class VariantInsert(
       case Some(parsed) =>
         VariantExpressionEvalUtils.insertAtPath(
           inputVariant, parsed.javaSegments, parsed.pathStr, valValue, value.dataType, prettyName,
-          failOnError)
+          failOnError, legacyPathBackslashAsLiteral)
       case None =>
         VariantExpressionEvalUtils.insertAtPath(
           inputVariant, p.asInstanceOf[UTF8String], valValue, value.dataType, prettyName,
-          failOnError)
+          failOnError, legacyPathBackslashAsLiteral)
     }
   }
 
@@ -1277,9 +1381,11 @@ case class VariantInsert(
         val parsedArg = ctx.addReferenceObj("insertPath", parsed)
         s"""$cls.insertAtPath(
            |  $vVal, $parsedArg.javaSegments(), $parsedArg.pathStr(), $valVal, $fromArg,
-           |  "$prettyName", $failOnError)""".stripMargin
+           |  "$prettyName", $failOnError, $legacyPathBackslashAsLiteral)""".stripMargin
       case None =>
-        s"""$cls.insertAtPath($vVal, $pVal, $valVal, $fromArg, "$prettyName", $failOnError)"""
+        s"""$cls.insertAtPath(
+           |  $vVal, $pVal, $valVal, $fromArg, "$prettyName", $failOnError,
+           |  $legacyPathBackslashAsLiteral)""".stripMargin
     }
     nullSafeCodeGen(ctx, ev, (vVal, pVal, valVal) =>
       VariantManipulationExpressionUtils.assignVariantResult(
@@ -1385,7 +1491,9 @@ case class VariantSet(
     path: Expression,
     value: Expression,
     createIfMissing: Expression,
-    failOnError: Boolean = true)
+    failOnError: Boolean = true,
+    legacyPathBackslashAsLiteral: Boolean =
+      SQLConf.get.getConf(SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL))
     extends QuaternaryExpression
     with ExpectsInputTypes
     with QueryErrorsBase {
@@ -1423,7 +1531,7 @@ case class VariantSet(
   }
 
   @transient private lazy val foldablePath: Option[FoldableVariantPath] =
-    VariantManipulationExpressionUtils.foldablePath(path, prettyName)
+    VariantManipulationExpressionUtils.foldablePath(path, prettyName, legacyPathBackslashAsLiteral)
 
   override def eval(input: InternalRow): Any = {
     val _ = foldablePath
@@ -1437,11 +1545,11 @@ case class VariantSet(
       case Some(parsed) =>
         VariantExpressionEvalUtils.setAtPath(
           inputVariant, parsed.javaSegments, parsed.pathStr, valValue, value.dataType,
-          createIfMissingValue, prettyName, failOnError)
+          createIfMissingValue, prettyName, failOnError, legacyPathBackslashAsLiteral)
       case None =>
         VariantExpressionEvalUtils.setAtPath(
           inputVariant, p.asInstanceOf[UTF8String], valValue, value.dataType,
-          createIfMissingValue, prettyName, failOnError)
+          createIfMissingValue, prettyName, failOnError, legacyPathBackslashAsLiteral)
     }
   }
 
@@ -1454,10 +1562,12 @@ case class VariantSet(
           val parsedArg = ctx.addReferenceObj("setPath", parsed)
           s"""$cls.setAtPath(
              |  $vVal, $parsedArg.javaSegments(), $parsedArg.pathStr(), $valVal, $fromArg,
-             |  $createVal, "$prettyName", $failOnError)""".stripMargin
+             |  $createVal, "$prettyName", $failOnError,
+             |  $legacyPathBackslashAsLiteral)""".stripMargin
         case None =>
           s"""$cls.setAtPath(
-             |  $vVal, $pVal, $valVal, $fromArg, $createVal, "$prettyName", $failOnError)"""
+             |  $vVal, $pVal, $valVal, $fromArg, $createVal, "$prettyName", $failOnError,
+             |  $legacyPathBackslashAsLiteral)"""
             .stripMargin
     }
     nullSafeCodeGen(ctx, ev, (vVal, pVal, valVal, createVal) =>
@@ -1578,7 +1688,9 @@ case class VariantArrayAppend(
     input: Expression,
     path: Expression,
     value: Expression,
-    failOnError: Boolean = true)
+    failOnError: Boolean = true,
+    legacyPathBackslashAsLiteral: Boolean =
+      SQLConf.get.getConf(SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL))
     extends TernaryExpression
     with ExpectsInputTypes {
 
@@ -1603,7 +1715,8 @@ case class VariantArrayAppend(
   }
 
   @transient private lazy val foldablePath: Option[FoldableVariantPath] =
-    VariantManipulationExpressionUtils.foldablePath(path, prettyName, allowRoot = true)
+    VariantManipulationExpressionUtils.foldablePath(
+      path, prettyName, legacyPathBackslashAsLiteral, allowRoot = true)
 
   override def eval(input: InternalRow): Any = {
     val _ = foldablePath
@@ -1616,11 +1729,11 @@ case class VariantArrayAppend(
       case Some(parsed) =>
         VariantExpressionEvalUtils.arrayAppendAtPath(
           inputVariant, parsed.javaSegments, parsed.pathStr, valValue, value.dataType, prettyName,
-          failOnError)
+          failOnError, legacyPathBackslashAsLiteral)
       case None =>
         VariantExpressionEvalUtils.arrayAppendAtPath(
           inputVariant, p.asInstanceOf[UTF8String], valValue, value.dataType, prettyName,
-          failOnError)
+          failOnError, legacyPathBackslashAsLiteral)
     }
   }
 
@@ -1632,9 +1745,11 @@ case class VariantArrayAppend(
         val parsedArg = ctx.addReferenceObj("appendPath", parsed)
         s"""$cls.arrayAppendAtPath(
            |  $vVal, $parsedArg.javaSegments(), $parsedArg.pathStr(), $valVal, $fromArg,
-           |  "$prettyName", $failOnError)""".stripMargin
+           |  "$prettyName", $failOnError, $legacyPathBackslashAsLiteral)""".stripMargin
       case None =>
-        s"""$cls.arrayAppendAtPath($vVal, $pVal, $valVal, $fromArg, "$prettyName", $failOnError)"""
+        s"""$cls.arrayAppendAtPath(
+           |  $vVal, $pVal, $valVal, $fromArg, "$prettyName", $failOnError,
+           |  $legacyPathBackslashAsLiteral)""".stripMargin
     }
     nullSafeCodeGen(ctx, ev, (vVal, pVal, valVal) =>
       VariantManipulationExpressionUtils.assignVariantResult(

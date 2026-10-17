@@ -364,7 +364,7 @@ class ParquetFilters(
                   // `VariantPathParser.parse` returns None for an unparseable path; use it directly
                   // rather than `parsedPath()` (which throws) so a bad path is a clean no-push and
                   // we don't swallow unrelated exceptions.
-                  VariantPathParser.parse(meta.path) match {
+                  VariantPathParser.parse(meta.path, meta.legacyPathBackslashAsLiteral) match {
                     case None => Nil
                     case Some(segments) =>
                       // Only scalar object-extraction paths are eligible. Reject array-index paths
