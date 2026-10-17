@@ -342,6 +342,28 @@ class DataFramePivotSuite extends SharedSparkSession {
     checkAnswer(actual, expected)
   }
 
+  test("SPARK-59678: pivot with explicit values on an array column with non-nullable elements") {
+    val df = Seq((1.0d, "x"), (2.0d, "y")).toDF("v", "s").selectExpr("v", "s", "array(v) AS a")
+    assert(!df.schema("a").dataType.asInstanceOf[ArrayType].containsNull)
+    checkAnswer(
+      df.groupBy("v").pivot($"a", Seq(Array(1.0d))).count(),
+      Row(1.0d, 1L) :: Row(2.0d, null) :: Nil)
+    checkAnswer(
+      df.groupBy("v").pivot($"a", Seq(Array(1.0d))).agg(first("s")),
+      Row(1.0d, "x") :: Row(2.0d, null) :: Nil)
+  }
+
+  test("SPARK-59678: SQL PIVOT on a struct column with a non-nullable field") {
+    val source = "SELECT named_struct('x', id) AS c, id AS v, CAST(id AS STRING) AS s FROM range(2)"
+    val value = "named_struct('x', if(true, 1L, null))"
+    checkAnswer(
+      sql(s"SELECT * FROM (SELECT c, v FROM ($source)) PIVOT (sum(v) FOR c IN ($value))"),
+      Row(1L))
+    checkAnswer(
+      sql(s"SELECT * FROM (SELECT c, s FROM ($source)) PIVOT (first(s) FOR c IN ($value))"),
+      Row("1"))
+  }
+
   test("SPARK-35480: percentile_approx should work with pivot") {
     val actual = Seq(
       ("a", -1.0), ("a", 5.5), ("a", 2.5), ("b", 3.0), ("b", 5.2)).toDF("type", "value")
