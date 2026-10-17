@@ -160,6 +160,7 @@ function mypy_data_test {
       python/pyspark/tests/typing \
       python/pyspark/sql/tests/typing \
       python/pyspark/ml/tests/typing \
+      python/pyspark/mllib/tests/typing \
       ) 2>&1)
 
     PYTEST_STATUS=$?
