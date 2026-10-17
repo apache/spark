@@ -32,19 +32,32 @@ import org.apache.spark.internal.LogKeys.{POD_NAME, POD_NAMESPACE, POD_PHASE}
  */
 private[spark] case class ExecutorPodsSnapshot(
     executorPods: Map[Long, ExecutorPodState],
-    fullSnapshotTs: Long) {
+    fullSnapshotTs: Long)(
+    // Terminal and inactive pods from executorPods, maintained incrementally so lifecycle
+    // processing need not scan healthy pods. Derived, so kept out of equality and copy defaults.
+    private[k8s] val lifecyclePods: Map[Long, ExecutorPodState]) {
 
   import ExecutorPodsSnapshot._
 
   def withUpdate(updatedPod: Pod): ExecutorPodsSnapshot = {
-    val newExecutorPods = executorPods ++ toStatesByExecutorId(Seq(updatedPod))
-    new ExecutorPodsSnapshot(newExecutorPods, fullSnapshotTs)
+    val updates = toStatesByExecutorId(Seq(updatedPod))
+    val newLifecyclePods = (lifecyclePods -- updates.keys) ++ updates.filter {
+      case (_, state) => needsLifecycleHandling(state)
+    }
+    new ExecutorPodsSnapshot(executorPods ++ updates, fullSnapshotTs)(newLifecyclePods)
   }
 }
 
 object ExecutorPodsSnapshot extends Logging {
   private var shouldCheckAllContainers: Boolean = _
   private var sparkContainerName: String = DEFAULT_EXECUTOR_CONTAINER_NAME
+
+  def apply(
+      executorPods: Map[Long, ExecutorPodState],
+      fullSnapshotTs: Long): ExecutorPodsSnapshot = {
+    val lifecyclePods = executorPods.filter { case (_, state) => needsLifecycleHandling(state) }
+    new ExecutorPodsSnapshot(executorPods, fullSnapshotTs)(lifecyclePods)
+  }
 
   def apply(executorPods: Seq[Pod], fullSnapshotTs: Long): ExecutorPodsSnapshot = {
     ExecutorPodsSnapshot(toStatesByExecutorId(executorPods), fullSnapshotTs)
@@ -58,6 +71,16 @@ object ExecutorPodsSnapshot extends Logging {
 
   def setSparkContainerName(containerName: String): Unit = {
     sparkContainerName = containerName
+  }
+
+  private[k8s] def isPodInactive(pod: Pod): Boolean = {
+    pod.getMetadata.getLabels.get(SPARK_EXECUTOR_INACTIVE_LABEL) == "true"
+  }
+
+  // The states ExecutorPodsLifecycleManager acts on. Terminal pods stay indexed across updates
+  // so cleanup is retried.
+  private def needsLifecycleHandling(state: ExecutorPodState): Boolean = {
+    state.isInstanceOf[FinalPodState] || isPodInactive(state.pod)
   }
 
   private def toStatesByExecutorId(executorPods: Seq[Pod]): Map[Long, ExecutorPodState] = {

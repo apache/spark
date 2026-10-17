@@ -43,6 +43,7 @@ private[spark] class ExecutorPodsLifecycleManager(
     clock: Clock = new SystemClock()) extends Logging {
 
   import ExecutorPodsLifecycleManager._
+  import ExecutorPodsSnapshot.isPodInactive
 
   private lazy val shouldDeleteExecutors = conf.get(KUBERNETES_DELETE_EXECUTORS)
   private lazy val missingPodDetectDelta = conf.get(KUBERNETES_EXECUTOR_MISSING_POD_DETECT_DELTA)
@@ -106,7 +107,7 @@ private[spark] class ExecutorPodsLifecycleManager(
       snapshots: Seq[ExecutorPodsSnapshot]): Unit = {
     val execIdsRemovedInThisRound = mutable.HashSet.empty[Long]
     snapshots.foreach { snapshot =>
-      val currentFailedExecutorIds = snapshot.executorPods.filter {
+      val currentFailedExecutorIds = snapshot.lifecyclePods.filter {
         case (_, PodFailed(_)) => true
         case _ => false
       }.keySet
@@ -117,10 +118,15 @@ private[spark] class ExecutorPodsLifecycleManager(
         newFailedExecutorIds.foreach { _ => failureTracker.registerExecutorFailure() }
       }
       failedExecutorIds = failedExecutorIds ++ currentFailedExecutorIds
-      snapshot.executorPods.foreach { case (execId, state) =>
+      // Only terminal and inactive pods are indexed in lifecyclePods. Handling another state
+      // here requires updating ExecutorPodsSnapshot.needsLifecycleHandling.
+      snapshot.lifecyclePods.foreach { case (execId, state) =>
         state match {
           case _state if isPodInactive(_state.pod) =>
-            inactivatedPods -= execId
+            // Avoid boxing executor IDs when no inactive-label acknowledgements are pending.
+            if (inactivatedPods.nonEmpty) {
+              inactivatedPods -= execId
+            }
 
           case deleted@PodDeleted(_) =>
             execIdsRemovedInThisRound += execId
@@ -308,10 +314,6 @@ private[spark] class ExecutorPodsLifecycleManager(
     }.map { terminatedContainer =>
       terminatedContainer.getState.getTerminated.getExitCode.toInt
     }.getOrElse(UNKNOWN_EXIT_CODE)
-  }
-
-  private def isPodInactive(pod: Pod): Boolean = {
-    pod.getMetadata.getLabels.get(SPARK_EXECUTOR_INACTIVE_LABEL) == "true"
   }
 }
 
