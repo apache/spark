@@ -1328,6 +1328,46 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  test("SPARK-59234 repro: partial clustering reducer overflow") {
+    // self_reduce(id) is an identity transform that reduces itself, merging its four keys to two
+    // (x -> x % 2) on both sides. Partial clustering spreads one side; without the fix its expected
+    // count is read from the four un-reduced keys (one each) while the node groups two reduced
+    // splits under each merged key, so the aligner over-emits (a planning error with the guard, a
+    // silent shuffle on master). Reducing the expected count into the node's space keeps the join,
+    // which this asserts: correct rows and no shuffle.
+    withFunction(SelfReduceFunction) {
+      val cols = Array(Column.create("id", LongType), Column.create("data", StringType))
+      createTable("t1", cols, Array(Expressions.apply("self_reduce", Expressions.column("id"))))
+      sql("INSERT INTO testcat.ns.t1 VALUES (0, 'a'), (1, 'b'), (2, 'c'), (3, 'd')")
+      createTable("t2", cols, Array(Expressions.apply("self_reduce", Expressions.column("id"))))
+      sql("INSERT INTO testcat.ns.t2 VALUES (0, 'w'), (1, 'x'), (2, 'y'), (3, 'z')")
+      val df = sql(
+        "SELECT t1.id FROM testcat.ns.t1 JOIN testcat.ns.t2 ON t1.id = t2.id")
+      withSQLConf(
+          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true") {
+        checkAnswer(df, Seq(Row(0L), Row(1L), Row(2L), Row(3L)))
+        val plan = stripAQEPlan(df.queryExecution.executedPlan)
+        assert(collectShuffles(plan).isEmpty,
+          "storage-partitioned join should be kept, not shuffled")
+        // Rows and no shuffle alone do not pin this fix: an alternative that skips partial
+        // clustering when a side has reducers would group on the reduced keys, shuffle nothing,
+        // and still pass. Assert the partially-clustered layout the fix produces, so only it
+        // passes: one side spreads a merged key across tasks (`SPLIT_FOR_JOIN`) while the other
+        // repeats it (`REPLICATED_FOR_JOIN`), each merged key carries its four splits, and the
+        // join keeps its required distribution.
+        val gpes = collectGroupPartitions(plan)
+        assert(gpes.flatMap(_.ungroupingOrigin).toSet == Set(SPLIT_FOR_JOIN, REPLICATED_FOR_JOIN),
+          s"one side spreads and the other repeats:\n$plan")
+        assert(gpes.map(_.outputPartitioning.numPartitions) == Seq(4, 4),
+          s"each merged key gets the two splits it holds on the spread side:\n$plan")
+        val joins = collect(plan) { case smj: SortMergeJoinExec => smj }
+        assert(joins.size == 1 && ValidateRequirements.validate(joins.head),
+          s"the pair holds up:\n$plan")
+      }
+    }
+  }
+
   test("SPARK-59045: reduced expression is retargeted per KeyedPartitioning") {
     // A chained SPJ's output partitioning reports one `KeyedPartitioning` per join side, but the
     // reduced expression is derived from the one member `checkKeyGroupCompatible` paired this side

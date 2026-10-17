@@ -895,12 +895,17 @@ case class EnsureRequirements(
             // nothing.
             val originalKeyedPartitioning = PartitioningCollection
               .representativeOf(partiallyClusteredChild.outputPartitioning).get
-            val projectedOriginalPartitionKeys = partiallyClusteredPositions
-              .fold(originalKeyedPartitioning.partitionKeys)(
-                originalKeyedPartitioning.projectKeys(_)._2)
+            // Derive the expected counts from the same keys `GroupPartitionsExec` groups by
+            // (project then reduce, via the shared `groupingKeys`), so they land in the node's
+            // reduced key space. Reading them from the un-reduced keys instead lets a reducer that
+            // merges keys report a reduced key's count off an unrelated raw key, so the aligner
+            // overflows (SPARK-59234).
+            val spreadReducers = if (replicateLeftSide) rightReducers else leftReducers
+            val reducedExpectedKeys = GroupPartitionsExec.groupingKeys(
+              originalKeyedPartitioning, partiallyClusteredPositions, spreadReducers)._2
 
             val numExpectedPartitions =
-              projectedOriginalPartitionKeys.groupBy(identity).view.mapValues(_.size)
+              reducedExpectedKeys.groupBy(identity).view.mapValues(_.size)
 
             mergedPartitionKeys = mergedPartitionKeys.map { case (key, numParts) =>
               (key, numExpectedPartitions.getOrElse(key, numParts))

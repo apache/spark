@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{IdentityReducer, KeyedParti
 import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
 import org.apache.spark.sql.execution.{SafeForKWayMerge, SparkPlan, SQLExecution, UnaryExecNode}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.types.DataType
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 /**
@@ -722,12 +723,23 @@ private[sql] object GroupPartitionsExec {
       val splits = keyMap.getOrElse(key, Seq.empty)
       numMatchedPartitions += splits.size
       if (distributePartitions) {
+        // `padTo` only pads, never truncates, so a key holding more splits than its expected
+        // count would be emitted more times than the count says, while `isGrouped` can still
+        // read as grouped. No producer does this today: the join split reduces its keys into this
+        // node's space before counting them (`EnsureRequirements`), and the ordering split counts
+        // the same keys it groups, so every count matches its splits. The assert surfaces any
+        // future miscount here instead of as a shuffle fallback at the `committed` gate in
+        // `EnsureRequirements` or as a bad grouped layout.
+        assert(splits.size <= numSplits,
+          s"a distributed partition key holds more splits (${splits.size}) than its expected " +
+            s"count ($numSplits)")
         // Distribute splits across expected partitions, padding with empty sequences
         val paddedSplits = splits.map(Seq(_)).padTo(numSplits, Seq.empty)
         paddedSplits.map((key, _))
       } else {
-        // The slots beyond the first re-read the whole group. A key this side does not hold
-        // has no splits to re-read, so the product is 0 and no explicit guard is needed.
+        // `Seq.fill(numSplits)` emits exactly `numSplits` entries whatever the split count, so this
+        // branch cannot over-emit and needs no size guard. The slots beyond the first re-read the
+        // whole group; a key this side does not hold has no splits to re-read, so the product is 0.
         numReplicatedPartitionReads += (numSplits - 1) * splits.size
         // Replicate all splits to each expected partition
         Seq.fill(numSplits)((key, splits))
@@ -737,6 +749,23 @@ private[sql] object GroupPartitionsExec {
     // total minus the matched.
     val numPrunedPartitions = numInputPartitions - numMatchedPartitions
     (alignedPartitions, isGrouped, numPrunedPartitions, numReplicatedPartitionReads)
+  }
+
+  /**
+   * The keys a node over `childKp` groups by: projected to `joinKeyPositions` when present, then
+   * reduced when reducers are present. `EnsureRequirements` derives a partial-clustering spread
+   * side's expected partition counts from the same keys, so the two must compute them identically;
+   * sharing this one definition is what keeps both in the node's reduced key space (SPARK-59234).
+   */
+  def groupingKeys(
+      childKp: KeyedPartitioning,
+      joinKeyPositions: Option[Seq[Int]],
+      reducers: Option[Seq[Option[KeyReducer]]])
+      : (Seq[DataType], Seq[InternalRowComparableWrapper]) = {
+    val (projectedDataTypes, projectedKeys) =
+      joinKeyPositions.fold((childKp.keyDataTypes, childKp.partitionKeys))(childKp.projectKeys)
+    reducers.fold((projectedDataTypes, projectedKeys))(
+      KeyedPartitioning.reduceKeys(projectedKeys, projectedDataTypes, _))
   }
 
   /**
@@ -757,15 +786,9 @@ private[sql] object GroupPartitionsExec {
       ungroupingOrigin: Option[UngroupingOrigin]): PartitionGrouping = {
     // The routing follows the origin, the same derivation the node itself reports.
     val distributePartitions = ungroupingOrigin.exists(_ != REPLICATED_FOR_JOIN)
-    // Project partition keys if join key positions are specified
-    val (projectedDataTypes, projectedKeys) =
-      joinKeyPositions.fold(
-        (childKp.keyDataTypes, childKp.partitionKeys)
-      )(childKp.projectKeys)
-
-    // Reduce keys if reducers are specified
-    val (reducedDataTypes, reducedKeys) = reducers.fold((projectedDataTypes, projectedKeys))(
-      KeyedPartitioning.reduceKeys(projectedKeys, projectedDataTypes, _))
+    // Project then reduce the child's keys. `EnsureRequirements` derives the expected partition
+    // counts from this same call, so both land in the one reduced key space.
+    val (reducedDataTypes, reducedKeys) = groupingKeys(childKp, joinKeyPositions, reducers)
 
     val keyToPartitionIndices = reducedKeys.zipWithIndex.groupMap(_._1)(_._2)
 
