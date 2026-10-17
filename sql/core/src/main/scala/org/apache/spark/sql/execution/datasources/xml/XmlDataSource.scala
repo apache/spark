@@ -127,7 +127,7 @@ abstract class XmlDataSource extends Serializable with Logging with SupportsArch
       options.parameters))
     FileInputFormat.setInputPaths(job, paths: _*)
     val conf = job.getConfiguration
-    // Honor the `decompressionCodec` option during multiLine schema inference too, so the codec is
+    // Honor the `decompression` option during multiLine schema inference too, so the codec is
     // forced rather than inferred from the file name extension.
     CompressionCodecs.setReadCodecConfiguration(conf, options.decompressionCodec)
 
@@ -374,6 +374,8 @@ object MultiLineXmlDataSource extends XmlDataSource {
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
       parsedOptions: XmlOptions): StructType = {
+    SupportsArchiveFormat.checkNoDecompressionCodecForArchives(
+      inputPaths, parsedOptions.decompressionCodec)
     val baseRdd = createBaseRdd(sparkSession, inputPaths, parsedOptions)
     // Inference must see the same entries the scan reads, so it honors archivePathFilter too.
     // Capture the glob string: the compiled GlobPattern is not serializable, so each task

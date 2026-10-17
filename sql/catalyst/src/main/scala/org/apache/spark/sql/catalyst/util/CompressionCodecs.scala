@@ -51,7 +51,7 @@ object CompressionCodecs {
   /**
    * Read-side counterpart of [[getCodecClassName]]. Accepts the same short names plus `zstd` /
    * `zstandard`, since the file readers can decompress Zstandard even though the writers cannot
-   * produce it. Used to parse the `decompressionCodec` option.
+   * produce it. Used to parse the `decompression` option.
    */
   def getReadCodecClassName(name: String): String = {
     getCodecClassName(name, readShortCompressionCodecNames)
@@ -93,12 +93,12 @@ object CompressionCodecs {
   }
 
   /**
-   * Records the codec requested via the `decompressionCodec` data source option into the Hadoop
+   * Records the codec requested via the `decompression` data source option into the Hadoop
    * `Configuration`, so the file readers decompress with it instead of inferring the codec from
    * the file name extension (see [[HadoopCodecStreams.getDecompressionCodec]]). Called on the
    * driver while planning the read, so an unsupported setup fails before any task runs.
    *
-   * @param decompressionCodec the parsed `decompressionCodec` option: `None` when absent (unset
+   * @param decompressionCodec the parsed `decompression` option: `None` when absent (unset
    *                           the conf so the codec is inferred from the extension),
    *                           `Some(null)` for `none`/`uncompressed` (read the file as-is), or
    *                           `Some(className)` to force that codec.
@@ -121,7 +121,7 @@ object CompressionCodecs {
   }
 
   /**
-   * Whether files decompressed with the given parsed `decompressionCodec` value can be split into
+   * Whether files decompressed with the given parsed `decompression` value can be split into
    * multiple partitions: `null` (`none`/`uncompressed`) reads the raw file and stays splittable,
    * and a codec class is splittable only if it is a `SplittableCompressionCodec` (e.g. bzip2).
    */

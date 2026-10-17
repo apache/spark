@@ -54,14 +54,14 @@ case class CSVScan(
     conf.columnNameOfCorruptRecord)
 
   override def isSplitable(path: Path): Boolean = {
-    // When `decompressionCodec` is set, its splittability wins over the file extension.
+    // When `decompression` is set, its splittability wins over the file extension.
     CSVDataSource(parsedOptions).isSplitable &&
       parsedOptions.decompressionCodecSplittable.getOrElse(super.isSplitable(path))
   }
 
   override def getFileUnSplittableReason(path: Path): String = {
     assert(!isSplitable(path))
-    // Report the codec first: a forced `decompressionCodec` decides splittability, not the
+    // Report the codec first: a forced `decompression` decides splittability, not the
     // file name extension.
     if (!parsedOptions.decompressionCodecSplittable.getOrElse(super.isSplitable(path))) {
       super.getFileUnSplittableReason(path)

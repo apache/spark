@@ -38,7 +38,7 @@ abstract class TextBasedFileScan(
 
   /**
    * Creates the Hadoop configuration the readers use, from the scan options (Hadoop configurations
-   * are case sensitive), with the `decompressionCodec` read option, when set, forced onto it so
+   * are case sensitive), with the `decompression` read option, when set, forced onto it so
    * the readers decompress every file with that codec instead of inferring it from the file name
    * extension (see [[CompressionCodecs.setReadCodecConfiguration]]).
    */

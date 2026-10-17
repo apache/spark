@@ -34,7 +34,7 @@ import org.apache.commons.compress.archivers.zip.ZipFile
 import org.apache.commons.io.ByteOrderMark
 import org.apache.commons.io.input.{BOMInputStream, CloseShieldInputStream}
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FSDataInputStream, GlobPattern, Path}
+import org.apache.hadoop.fs.{FileStatus, FSDataInputStream, GlobPattern, Path}
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.util.LineReader
 
@@ -210,7 +210,7 @@ object SupportsArchiveFormat {
   }
 
   /**
-   * Fails when the `decompressionCodec` read option is set for the archive at `path`. The option is
+   * Fails when the `decompression` read option is set for the archive at `path`. The option is
    * not supported for archives (yet): a container is always decoded based on its file name
    * extension, so fail rather than silently ignore the option. Called while planning the scan so
    * the error is raised on the driver and is not swallowed by `ignoreCorruptFiles`.
@@ -218,6 +218,21 @@ object SupportsArchiveFormat {
   def checkNoDecompressionCodec(path: Path, decompressionCodec: Option[String]): Unit = {
     if (decompressionCodec.isDefined) {
       throw QueryExecutionErrors.decompressionCodecForArchiveUnsupportedError(path.toString)
+    }
+  }
+
+  /**
+   * [[checkNoDecompressionCodec]] for every archive among `inputPaths`. Called by the
+   * archive-aware schema inference paths on the driver, before their inference tasks open any
+   * archive, so inference fails with the same error as the scan instead of a task failure that
+   * `ignoreCorruptFiles` could swallow.
+   */
+  def checkNoDecompressionCodecForArchives(
+      inputPaths: Seq[FileStatus],
+      decompressionCodec: Option[String]): Unit = {
+    if (decompressionCodec.isDefined) {
+      inputPaths.map(_.getPath).find(isArchivePath)
+        .foreach(checkNoDecompressionCodec(_, decompressionCodec))
     }
   }
 
@@ -229,7 +244,7 @@ object SupportsArchiveFormat {
    * `(entry, stream)` pairs.
    */
   private def openArchiveStream(path: Path, conf: Configuration): ArchiveEntries = {
-    // Backstop for paths that open archives without planning a scan (e.g. schema inference).
+    // Backstop for any path that opens an archive without one of the driver-side checks above.
     checkNoDecompressionCodec(path, Option(conf.get(HadoopCodecStreams.DECOMPRESSION_CODEC_CONF)))
     val name = path.getName.toLowerCase(Locale.ROOT)
     name match {

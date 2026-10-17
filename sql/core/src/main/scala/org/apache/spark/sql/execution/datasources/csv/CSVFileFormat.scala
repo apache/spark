@@ -50,10 +50,7 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
       SupportsArchiveFormat.checkNoDecompressionCodec(path, parsedOptions.decompressionCodec)
       return false
     }
-    // When `decompressionCodec` is set, its splittability wins over the file extension.
-    CSVDataSource(parsedOptions).isSplitable &&
-      parsedOptions.decompressionCodecSplittable.getOrElse(
-        super.isSplitable(sparkSession, options, path))
+    CSVDataSource(parsedOptions).isSplitable && super.isSplitable(sparkSession, options, path)
   }
 
   override def inferSchema(

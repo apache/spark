@@ -103,7 +103,7 @@ class FileSourceOptions(
   // The raw option value, captured eagerly because `parameters` is transient and so unavailable
   // once these options are deserialized on an executor.
   private val decompressionCodecName: Option[String] =
-    parameters.get(DataSourceOptions.DECOMPRESSION_CODEC)
+    parameters.get(DataSourceOptions.DECOMPRESSION)
 
   /**
    * Read-only codec used to decompress the input files instead of inferring it from their file
@@ -111,8 +111,9 @@ class FileSourceOptions(
    * `None` when the option is absent. Accepts the `compression` short names plus
    * `zstd`/`zstandard`, which readers support even though writers do not.
    *
-   * Honored only by the CSV, JSON, XML and text data sources. Lazy so that the other file formats,
-   * which ignore the option, never parse or validate it.
+   * Honored by the text-based file sources (CSV, JSON, XML and text, which document it, plus other
+   * `TextBasedFileFormat` sources such as libsvm). Lazy so that the other file formats, which
+   * ignore the option, never parse or validate it.
    */
   lazy val decompressionCodec: Option[String] =
     decompressionCodecName.map(CompressionCodecs.getReadCodecClassName)

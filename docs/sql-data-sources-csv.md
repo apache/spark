@@ -298,9 +298,9 @@ Data source options of CSV can be set via:
     <td>write</td>
   </tr>
   <tr>
-    <td><code>decompressionCodec</code></td>
+    <td><code>decompression</code></td>
     <td>(none)</td>
-    <td>Compression codec used to decompress the input files, instead of inferring it from each file name extension. This can be one of the known case-insensitive short names (<code>none</code>, <code>uncompressed</code>, <code>bzip2</code>, <code>deflate</code>, <code>gzip</code>, <code>lz4</code>, <code>snappy</code>, <code>zstd</code> and <code>zstandard</code>) or a fully qualified Hadoop <code>CompressionCodec</code> class name. <code>none</code> and <code>uncompressed</code> read the files as-is, even when the file name carries a compression extension. The codec applies to every file read; setting it when the input includes an archive file (<code>.tar</code>, <code>.tar.gz</code>, <code>.tgz</code>, <code>.zip</code> or <code>.7z</code>) is not supported and fails the query. Unlike the write option <code>compression</code>, which is ignored on read, it does not affect writes. CSV built-in functions ignore this option.</td>
+    <td>Compression codec used to decompress the input files, instead of inferring it from each file name extension. This can be one of the known case-insensitive short names (<code>none</code>, <code>uncompressed</code>, <code>bzip2</code>, <code>deflate</code>, <code>gzip</code>, <code>lz4</code>, <code>snappy</code>, <code>zstd</code> and <code>zstandard</code>) or a fully qualified Hadoop <code>CompressionCodec</code> class name. <code>none</code> and <code>uncompressed</code> read the files as-is, even when the file name carries a compression extension. The codec applies to every file read. When archive reading is enabled (<code>spark.sql.files.archive.reader.enabled</code>), setting it when the input includes an archive file (<code>.tar</code>, <code>.tar.gz</code>, <code>.tgz</code>, <code>.zip</code> or <code>.7z</code>) is not supported and fails the query. Unlike the write option <code>compression</code>, which is ignored on read, it does not affect writes. CSV built-in functions ignore this option.</td>
     <td>read</td>
   </tr>
   <tr>

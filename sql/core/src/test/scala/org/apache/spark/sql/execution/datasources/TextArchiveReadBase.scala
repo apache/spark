@@ -95,7 +95,7 @@ trait TextArchiveReadBase extends QueryTest with SharedSparkSession {
   }
 
   Seq(true, false).foreach { ignoreCorrupt =>
-    test(s"decompressionCodec is rejected for an archive (ignoreCorruptFiles=$ignoreCorrupt)") {
+    test(s"decompression is rejected for an archive (ignoreCorruptFiles=$ignoreCorrupt)") {
       archiveExtensions.foreach { ext =>
         withArchiveFile(ext) { archive =>
           writeArchive(archive, Seq("a.txt" -> textBytes("line1\n")))
@@ -103,11 +103,11 @@ trait TextArchiveReadBase extends QueryTest with SharedSparkSession {
           withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> ignoreCorrupt.toString) {
             checkErrorMatchPVals(
               exception = intercept[SparkUnsupportedOperationException] {
-                read(archive.getCanonicalPath, Map("decompressionCodec" -> "gzip")).collect()
+                read(archive.getCanonicalPath, Map("decompression" -> "gzip")).collect()
               },
               condition = "UNSUPPORTED_FEATURE.DECOMPRESSION_CODEC_FOR_ARCHIVE",
               parameters = Map(
-                "option" -> "\"decompressionCodec\"",
+                "option" -> "\"decompression\"",
                 "path" -> s".*${Pattern.quote(archive.getName)}"))
           }
         }

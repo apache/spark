@@ -87,7 +87,7 @@ object DataSourceOptions {
   // The common option name for the text-based file data sources (CSV, JSON, XML and text) that
   // support forcing the codec used to decompress the input files, instead of inferring it from
   // each file name extension. See `FileSourceOptions.decompressionCodec` for details.
-  val DECOMPRESSION_CODEC = "decompressionCodec"
+  val DECOMPRESSION = "decompression"
 
   // The JSON data source option for exploding an embedded top-level array into rows. See
   // `JSONOptions.explodeEmbeddedArray` for details.

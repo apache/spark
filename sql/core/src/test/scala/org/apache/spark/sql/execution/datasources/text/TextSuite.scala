@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources.text
 
-import java.io.{File, FileOutputStream}
+import java.io.{File, FileOutputStream, InputStream}
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.SequenceFile.CompressionType
-import org.apache.hadoop.io.compress.{CompressionCodecFactory, GzipCodec}
+import org.apache.hadoop.io.compress.{CompressionCodecFactory, CompressionInputStream, Decompressor, DefaultCodec, GzipCodec}
 
 import org.apache.spark.{SparkConf, SparkIllegalArgumentException, SparkUnsupportedOperationException, TestUtils}
 import org.apache.spark.io.{HadoopCodecStreams, ZStdCompressionCodec}
@@ -254,7 +254,7 @@ abstract class TextSuite extends SharedSparkSession with CommonFileDataSourceSui
     assert(TextOptions.getAllOptions.size == 5)
     // Please add validation on any new Text options here
     assert(TextOptions.isValidOption("compression"))
-    assert(TextOptions.isValidOption("decompressionCodec"))
+    assert(TextOptions.isValidOption("decompression"))
     assert(TextOptions.isValidOption("wholetext"))
     assert(TextOptions.isValidOption("encoding"))
     assert(TextOptions.isValidOption("lineSep"))
@@ -349,7 +349,7 @@ abstract class TextSuite extends SharedSparkSession with CommonFileDataSourceSui
   // Spark's built-in Zstandard codec for zstd (which Hadoop may not be compiled with) and Hadoop's
   // CompressionCodecFactory otherwise. The file name intentionally does NOT carry the codec's
   // extension, so extension-based detection cannot pick the right codec and the
-  // `decompressionCodec` option is what makes the read succeed.
+  // `decompression` option is what makes the read succeed.
   private def writeCompressed(file: File, data: String, codec: String): Unit = {
     val codecFactory = new CompressionCodecFactory(spark.sessionState.newHadoopConf())
     val os = new FileOutputStream(file)
@@ -362,7 +362,7 @@ abstract class TextSuite extends SharedSparkSession with CommonFileDataSourceSui
     out.close()
   }
 
-  test("SPARK-60217 decompressionCodec option overrides file name extension") {
+  test("SPARK-60217 decompression option overrides file name extension") {
     val numRecord = 100
     val data = (1 to numRecord).map(i => s"$i, value_$i")
     // Every read-supported codec, including zstd/zstandard which the writers do not support.
@@ -372,12 +372,12 @@ abstract class TextSuite extends SharedSparkSession with CommonFileDataSourceSui
     for (wholeText <- Seq(true, false); codec <- codecs) {
       withTempDir { dir =>
         // Misleading `.txt` name (no codec suffix): extension-based detection would read it as
-        // plain text and fail. The `decompressionCodec` option forces the correct codec.
+        // plain text and fail. The `decompression` option forces the correct codec.
         val file = new File(dir, "data.txt")
         writeCompressed(file, data.mkString("\n"), codec)
 
         val df = spark.read
-          .option("decompressionCodec", codec)
+          .option("decompression", codec)
           .option("wholeText", wholeText.toString)
           .text(file.getCanonicalPath)
         val expected = if (wholeText) Seq(Row(data.mkString("\n"))) else data.map(Row(_))
@@ -386,31 +386,31 @@ abstract class TextSuite extends SharedSparkSession with CommonFileDataSourceSui
     }
   }
 
-  test("SPARK-60217 decompressionCodec option none reads a file with a codec extension as-is") {
+  test("SPARK-60217 decompression option none reads a file with a codec extension as-is") {
     withTempDir { dir =>
       val data = "not really gzip compressed"
       // A plain-text file that happens to carry a `.gz` extension. Extension-based detection would
-      // try (and fail) to gunzip it; `decompressionCodec` = none must read the raw bytes.
+      // try (and fail) to gunzip it; `decompression` = none must read the raw bytes.
       val file = new File(dir, "plain.txt.gz")
       writeCompressed(file, data, "")
 
       Seq(NONE, UNCOMPRESSED).foreach { codec =>
         val df = spark.read
-          .option("decompressionCodec", codec.lowerCaseName())
+          .option("decompression", codec.lowerCaseName())
           .text(file.getCanonicalPath)
         checkAnswer(df, Row(data) :: Nil)
       }
     }
   }
 
-  test("SPARK-60217 decompressionCodec option rejects an invalid codec") {
+  test("SPARK-60217 decompression option rejects an invalid codec") {
     withTempPath { dir =>
       Seq("value").toDF().write.text(dir.getCanonicalPath)
       // The suggested codec list is built from a Map, so its order is not asserted here; the read
       // set additionally includes zstd/zstandard on top of the write-supported codecs.
       checkErrorMatchPVals(
         exception = intercept[SparkIllegalArgumentException] {
-          spark.read.option("decompressionCodec", "illegal").text(dir.getCanonicalPath).collect()
+          spark.read.option("decompression", "illegal").text(dir.getCanonicalPath).collect()
         },
         condition = "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
         parameters = Map(
@@ -420,9 +420,9 @@ abstract class TextSuite extends SharedSparkSession with CommonFileDataSourceSui
     }
   }
 
-  test("SPARK-60217 decompressionCodec option decides whether a file is split") {
+  test("SPARK-60217 decompression option decides whether a file is split") {
     val lines = (1 to 2000).map(i => s"line_$i")
-    // (codec the file is written with, file name, `decompressionCodec`, whether it is split)
+    // (codec the file is written with, file name, `decompression`, whether it is split)
     Seq(
       // bzip2 is splittable even though the `.txt` name says nothing about it.
       (BZIP2.lowerCaseName(), "data.txt", BZIP2.lowerCaseName(), true),
@@ -435,28 +435,47 @@ abstract class TextSuite extends SharedSparkSession with CommonFileDataSourceSui
         val file = new File(dir, name)
         writeCompressed(file, lines.mkString("\n"), writeCodec)
         withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "256") {
-          val df = spark.read.option("decompressionCodec", readCodec).text(file.getCanonicalPath)
+          val df = spark.read.option("decompression", readCodec).text(file.getCanonicalPath)
           val numPartitions = df.rdd.getNumPartitions
           assert(if (split) numPartitions > 1 else numPartitions == 1,
-            s"decompressionCodec=$readCodec on $name: $numPartitions partitions")
+            s"decompression=$readCodec on $name: $numPartitions partitions")
           checkAnswer(df, lines.map(Row(_)))
         }
       }
     }
   }
 
-  test("SPARK-60217 decompressionCodec option is rejected with the legacy line reader") {
+  test("SPARK-60217 a forced codec that fails is not replaced by zstd based on the extension") {
+    withTempDir { dir =>
+      // A zstd file with a `.zst` name, read with a forced codec whose streams cannot be created.
+      // The zstd fallback for codecs that fail must not kick in, since a codec was forced.
+      val file = new File(dir, "data.txt.zst")
+      writeCompressed(file, "a\nb", "zstd")
+      Seq(false, true).foreach { wholeText =>
+        val e = intercept[Exception] {
+          spark.read
+            .option("decompression", classOf[FailingDecompressionCodec].getName)
+            .option("wholetext", wholeText.toString)
+            .text(file.getCanonicalPath).collect()
+        }
+        assert(Iterator.iterate[Throwable](e)(_.getCause).takeWhile(_ != null)
+          .exists(_.getMessage == FailingDecompressionCodec.message), s"wholetext=$wholeText")
+      }
+    }
+  }
+
+  test("SPARK-60217 decompression option is rejected with the legacy line reader") {
     withTempPath { dir =>
       Seq("value").toDF().write.text(dir.getCanonicalPath)
       // Hadoop's LineRecordReader infers the codec from the extension and would ignore the option.
       withSQLConf(SQLConf.HADOOP_LINE_RECORD_READER_ENABLED.key -> "false") {
         checkError(
           exception = intercept[SparkUnsupportedOperationException] {
-            spark.read.option("decompressionCodec", "gzip").text(dir.getCanonicalPath).collect()
+            spark.read.option("decompression", "gzip").text(dir.getCanonicalPath).collect()
           },
           condition = "UNSUPPORTED_FEATURE.DECOMPRESSION_CODEC_WITH_LEGACY_LINE_READER",
           parameters = Map(
-            "option" -> "\"decompressionCodec\"",
+            "option" -> "\"decompression\"",
             "config" -> s"\"${SQLConf.HADOOP_LINE_RECORD_READER_ENABLED.key}\""))
       }
     }
@@ -467,7 +486,7 @@ abstract class TextSuite extends SharedSparkSession with CommonFileDataSourceSui
       val file = new File(dir, "plain.txt")
       writeCompressed(file, "plain text", "")
       // Session confs are copied into the read's Hadoop conf; the read must unset the internal key
-      // since it did not set `decompressionCodec`, so the plain file is not gunzipped.
+      // since it did not set `decompression`, so the plain file is not gunzipped.
       withSQLConf(HadoopCodecStreams.DECOMPRESSION_CODEC_CONF -> classOf[GzipCodec].getName) {
         checkAnswer(spark.read.text(file.getCanonicalPath), Row("plain text") :: Nil)
       }
@@ -476,7 +495,7 @@ abstract class TextSuite extends SharedSparkSession with CommonFileDataSourceSui
 
   test("SPARK-60217 compression option does not force a codec on read") {
     withTempDir { dir =>
-      // Unlike `decompressionCodec`, the write-side `compression` option (which may be persisted
+      // Unlike `decompression`, the write-side `compression` option (which may be persisted
       // in a table's options) must not force a codec on read: a plain file is still read as-is.
       val file = new File(dir, "plain.txt")
       writeCompressed(file, "plain text", "")
@@ -503,7 +522,7 @@ class TextV2Suite extends TextSuite {
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
 
-  test("SPARK-60217 unsplittable reason reports a forced decompressionCodec") {
+  test("SPARK-60217 unsplittable reason reports a forced decompression codec") {
     withTempDir { dir =>
       val file = new File(dir, "data.txt")
       Files.write(file.toPath, "line".getBytes(StandardCharsets.UTF_8))
@@ -515,11 +534,26 @@ class TextV2Suite extends TextSuite {
         scan.getFileUnSplittableReason(new Path(file.getCanonicalPath))
       }
       // The `.txt` name alone is splittable, so the forced codec is what prevents splitting.
-      assert(reason(Map("decompressionCodec" -> GZIP.lowerCaseName())) ==
+      assert(reason(Map("decompression" -> GZIP.lowerCaseName())) ==
         "the file is compressed by unsplittable compression codec")
       // A forced `none` keeps the file splittable, so wholetext is the reason.
-      assert(reason(Map("decompressionCodec" -> NONE.lowerCaseName(), "wholetext" -> "true")) ==
+      assert(reason(Map("decompression" -> NONE.lowerCaseName(), "wholetext" -> "true")) ==
         "the text datasource is set wholetext mode")
     }
   }
+}
+
+/** A codec that fails to create any input stream, like a codec whose native library is missing. */
+class FailingDecompressionCodec extends DefaultCodec {
+  override def createInputStream(in: InputStream): CompressionInputStream =
+    throw new UnsupportedOperationException(FailingDecompressionCodec.message)
+
+  override def createInputStream(
+      in: InputStream,
+      decompressor: Decompressor): CompressionInputStream =
+    throw new UnsupportedOperationException(FailingDecompressionCodec.message)
+}
+
+object FailingDecompressionCodec {
+  val message = "Cannot create a FailingDecompressionCodec input stream"
 }

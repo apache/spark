@@ -239,7 +239,7 @@ object XmlOptions extends DataSourceOptions {
   val MODE = newOption("mode")
   val LOCALE = newOption("locale")
   val COMPRESSION = newOption("compression")
-  val DECOMPRESSION_CODEC = newOption(DataSourceOptions.DECOMPRESSION_CODEC)
+  val DECOMPRESSION = newOption(DataSourceOptions.DECOMPRESSION)
   val MULTI_LINE = newOption("multiLine")
   val SAMPLING_RATIO = newOption("samplingRatio")
   val COLUMN_NAME_OF_CORRUPT_RECORD = newOption(DataSourceOptions.COLUMN_NAME_OF_CORRUPT_RECORD)

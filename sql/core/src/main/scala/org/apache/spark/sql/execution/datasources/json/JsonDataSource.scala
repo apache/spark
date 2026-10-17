@@ -148,7 +148,7 @@ object JsonDataSource {
     val job = Job.getInstance(sparkSession.sessionState.newHadoopConfWithOptions(
       parsedOptions.parameters))
     val conf = job.getConfiguration
-    // Honor the `decompressionCodec` option during multiLine schema inference too, so the codec is
+    // Honor the `decompression` option during multiLine schema inference too, so the codec is
     // forced rather than inferred from the file name extension.
     CompressionCodecs.setReadCodecConfiguration(conf, parsedOptions.decompressionCodec)
     val name = paths.mkString(",")
@@ -292,6 +292,8 @@ object MultiLineJsonDataSource extends JsonDataSource {
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
       parsedOptions: JSONOptions): StructType = {
+    SupportsArchiveFormat.checkNoDecompressionCodecForArchives(
+      inputPaths, parsedOptions.decompressionCodec)
     val baseRdd = JsonDataSource.createBaseRdd(sparkSession, inputPaths, parsedOptions)
     // Inference must see the same entries the scan reads, so it honors archivePathFilter too.
     // Capture the glob string: the compiled GlobPattern is not serializable, so each task

@@ -170,7 +170,7 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
   protected def supportsSchemaMerge: Boolean = true
 
   /**
-   * Whether this format accepts the `decompressionCodec` read option. It does not mean archives
+   * Whether this format accepts the `decompression` read option. It does not mean archives
    * support the option: a format that accepts it must reject it for archive inputs, failing with
    * `UNSUPPORTED_FEATURE.DECOMPRESSION_CODEC_FOR_ARCHIVE`, since an archive is always decoded based
    * on its file name extension. Gates the shared tests that assert that rejection. CSV, JSON and
@@ -761,11 +761,11 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
     }
   }
 
-  // ----- shared `decompressionCodec` tests (run when `supportsDecompressionCodec`) -----
+  // ----- shared `decompression` tests (run when `supportsDecompressionCodec`) -----
 
   if (supportsDecompressionCodec) {
     Seq(true, false).foreach { ignoreCorrupt =>
-      test("decompressionCodec is rejected for an archive " +
+      test("decompression is rejected for an archive " +
           s"(ignoreCorruptFiles=$ignoreCorrupt)") {
         archiveExtensions.foreach { ext =>
           withArchiveFile(ext) { archive =>
@@ -774,11 +774,11 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
             withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> ignoreCorrupt.toString) {
               checkErrorMatchPVals(
                 exception = intercept[SparkUnsupportedOperationException] {
-                  read(archive.getCanonicalPath, Map("decompressionCodec" -> "gzip")).collect()
+                  read(archive.getCanonicalPath, Map("decompression" -> "gzip")).collect()
                 },
                 condition = "UNSUPPORTED_FEATURE.DECOMPRESSION_CODEC_FOR_ARCHIVE",
                 parameters = Map(
-                  "option" -> "\"decompressionCodec\"",
+                  "option" -> "\"decompression\"",
                   "path" -> s".*${Pattern.quote(archive.getName)}"))
             }
           }
@@ -786,16 +786,39 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
       }
     }
 
-    test("decompressionCodec is rejected for an archive among loose files") {
+    test("decompression is rejected for an archive among loose files") {
       withTempDir { dir =>
         writeArchive(
           new File(dir, s"data.${archiveExtensions.head}"),
           Seq(entryName(0) -> encodeFile(sampleDf((1, "Alice")))))
         Files.write(new File(dir, entryName(1)).toPath, encodeFile(sampleDf((2, "Bob"))))
         val e = intercept[SparkUnsupportedOperationException] {
-          read(dir.getCanonicalPath, Map("decompressionCodec" -> "none")).collect()
+          read(dir.getCanonicalPath, Map("decompression" -> "none")).collect()
         }
         assert(e.getCondition == "UNSUPPORTED_FEATURE.DECOMPRESSION_CODEC_FOR_ARCHIVE")
+      }
+    }
+
+    if (supportsSchemaInference) {
+      Seq(true, false).foreach { ignoreCorrupt =>
+        test("decompression is rejected for an archive during schema inference " +
+            s"(ignoreCorruptFiles=$ignoreCorrupt)") {
+          withArchiveFile() { archive =>
+            writeArchive(archive, Seq(entryName(0) -> encodeFile(sampleDf((1, "Alice")))))
+            // Raised on the driver before any inference task opens the archive, so it is neither
+            // wrapped in a task failure nor skipped by `ignoreCorruptFiles`.
+            withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> ignoreCorrupt.toString) {
+              checkErrorMatchPVals(
+                exception = intercept[SparkUnsupportedOperationException] {
+                  inferredSchema(Seq(archive.getCanonicalPath), Map("decompression" -> "gzip"))
+                },
+                condition = "UNSUPPORTED_FEATURE.DECOMPRESSION_CODEC_FOR_ARCHIVE",
+                parameters = Map(
+                  "option" -> "\"decompression\"",
+                  "path" -> s".*${Pattern.quote(archive.getName)}"))
+            }
+          }
+        }
       }
     }
   }

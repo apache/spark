@@ -68,10 +68,7 @@ case class TextFileFormat()
       // A tar archive is read as one sequential stream (entry by entry), so it is never split.
       return false
     }
-    // When `decompressionCodec` is set, its splittability wins over the file extension.
-    textOptions.decompressionCodecSplittable.getOrElse(
-      super.isSplitable(sparkSession, options, path)) &&
-      !textOptions.wholeText
+    super.isSplitable(sparkSession, options, path) && !textOptions.wholeText
   }
 
   override def inferSchema(
