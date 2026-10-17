@@ -29,11 +29,13 @@ import scala.jdk.CollectionConverters._
 import scala.language.reflectiveCalls
 import scala.util.control.NonFatal
 
+import com.google.common.util.concurrent.Uninterruptibles
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.roaringbitmap.RoaringBitmap
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
+import org.scalatest.concurrent.Eventually.{eventually, timeout => eventuallyTimeout}
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.time.SpanSugar._
 
@@ -6799,6 +6801,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(scheduler.shuffleIdToMapStage.isEmpty)
     assert(scheduler.waitingStages.isEmpty)
     assert(scheduler.dependentStageMap.isEmpty)
+    assert(scheduler.pipelinedTaskCompletionReplays.isEmpty)
     assert(scheduler.outputCommitCoordinator.isEmpty)
   }
 
@@ -7831,6 +7834,275 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(results === Map(0 -> 42, 1 -> 43),
       "deferred consumer completions should replay once the producer finishes")
     assertDataStructuresEmpty()
+  }
+
+  gridTest("pipelined shuffle: cancellation notifies owned completions before stage and job end")(
+      Seq("buffered", "released", "partially replayed")) { phase =>
+    val notifications = new LinkedBlockingQueue[(String, Int, Long)]()
+    val listener = new SparkListener {
+      override def onTaskEnd(event: SparkListenerTaskEnd): Unit = {
+        notifications.add(("task", event.stageId, event.taskInfo.taskId))
+      }
+      override def onStageCompleted(event: SparkListenerStageCompleted): Unit = {
+        notifications.add(("stage", event.stageInfo.stageId, -1L))
+      }
+      override def onJobEnd(event: SparkListenerJobEnd): Unit = {
+        notifications.add(("job", event.jobId, -1L))
+      }
+    }
+    sc.addSparkListener(listener)
+    try {
+      val producer = new MyRDD(sc, 2, Nil)
+      val dependency = new PipelinedShuffleDependency(producer, new HashPartitioner(2))
+      val consumer = new MyRDD(sc, 2, List(dependency), tracker = mapOutputTracker)
+      val jobId = submit(consumer, Array(0, 1))
+      val producerTasks = taskSets.head
+      val consumerTasks = taskSets(1)
+      val accumulator = sc.longAccumulator("cancelled pipelined results")
+      consumerTasks.tasks.zipWithIndex.foreach { case (task, index) =>
+        runEvent(makeCompletionEvent(task, Success, 42 + index,
+          extraAccumUpdates = Seq(AccumulatorSuite.createLongAccum(
+            "", initValue = 1, id = accumulator.id)),
+          taskInfo = createFakeTaskInfoWithId(100L + index)))
+      }
+      runEvent(makeCompletionEvent(producerTasks.tasks(0), Success, makeMapStatus("hostA", 2),
+        taskInfo = createFakeTaskInfoWithId(200L)))
+      val lastProducerCompletion = makeCompletionEvent(
+        producerTasks.tasks(1), Success, makeMapStatus("hostA", 2),
+        taskInfo = createFakeTaskInfoWithId(201L))
+      phase match {
+        case "buffered" =>
+          cancel(jobId)
+        case "released" =>
+          // Replays posted by the producer land behind the already-queued cancellation.
+          dagEventProcessLoopTester.post(lastProducerCompletion)
+          dagEventProcessLoopTester.post(JobCancelled(jobId, None))
+          dagEventProcessLoopTester.runEvents()
+        case "partially replayed" =>
+          // Process one released completion, then cancel while the remaining tokens are queued.
+          scheduler.handleTaskCompletion(lastProducerCompletion)
+          val replayId = scheduler.pipelinedTaskCompletionReplays(
+            consumerTasks.stageId).keys.head
+          scheduler.handlePipelinedTaskCompletionReplay(
+            PipelinedTaskCompletionReplay(consumerTasks.stageId, replayId))
+          assert(results === Map(0 -> 42))
+          scheduler.handleJobCancellation(jobId, None)
+          dagEventProcessLoopTester.runEvents()
+        case other => fail(s"Unexpected completion phase: $other")
+      }
+      sc.listenerBus.waitUntilEmpty()
+      val recorded = notifications.asScala.toSeq
+      val stageEnd = recorded.indexOf(("stage", consumerTasks.stageId, -1L))
+      val jobEnd = recorded.indexOf(("job", jobId, -1L))
+      assert(stageEnd >= 0 && jobEnd > stageEnd)
+      Seq(100L, 101L).foreach { taskId =>
+        val taskEnd = ("task", consumerTasks.stageId, taskId)
+        assert(recorded.count(_ == taskEnd) === 1)
+        assert(recorded.indexOf(taskEnd) < stageEnd,
+          s"$phase completion $taskId was notified after its stage ended: $recorded")
+      }
+      val expectedResults = if (phase == "partially replayed") Map(0 -> 42) else Map.empty
+      assert(results === expectedResults)
+      assert(accumulator.value === (if (phase == "partially replayed") 1L else 0L))
+      assert(failure != null)
+      assertDataStructuresEmpty()
+    } finally {
+      sc.removeSparkListener(listener)
+    }
+  }
+
+  test("pipelined shuffle: duplicate replay tokens are inert after success") {
+    val taskEnds = new LinkedBlockingQueue[Long]()
+    val listener = new SparkListener {
+      override def onTaskEnd(event: SparkListenerTaskEnd): Unit = {
+        taskEnds.add(event.taskInfo.taskId)
+      }
+    }
+    sc.addSparkListener(listener)
+    try {
+      val producer = new MyRDD(sc, 2, Nil)
+      val dependency = new PipelinedShuffleDependency(producer, new HashPartitioner(2))
+      val consumer = new MyRDD(sc, 2, List(dependency), tracker = mapOutputTracker)
+      submit(consumer, Array(0, 1))
+      val consumerTasks = taskSets(1)
+      val accumulator = sc.longAccumulator("replayed pipelined results")
+      consumerTasks.tasks.zipWithIndex.foreach { case (task, index) =>
+        runEvent(makeCompletionEvent(task, Success, 42 + index,
+          extraAccumUpdates = Seq(AccumulatorSuite.createLongAccum(
+            "", initValue = 1, id = accumulator.id)),
+          taskInfo = createFakeTaskInfoWithId(100L + index)))
+      }
+      // An extra successful attempt for an already-completed output must be notified even when
+      // earlier replays finish the stage, but must not replace the output or run twice.
+      runEvent(makeCompletionEvent(consumerTasks.tasks(0), Success, 999,
+        extraAccumUpdates = Seq(AccumulatorSuite.createLongAccum(
+          "", initValue = 1, id = accumulator.id)),
+        taskInfo = createFakeTaskInfoWithId(102L)))
+      runEvent(makeCompletionEvent(taskSets.head.tasks(0), Success, makeMapStatus("hostA", 2)))
+      scheduler.handleTaskCompletion(makeCompletionEvent(
+        taskSets.head.tasks(1), Success, makeMapStatus("hostA", 2)))
+      val replayIds = scheduler.pipelinedTaskCompletionReplays(
+        consumerTasks.stageId).keys.toSeq
+      replayIds.foreach { replayId =>
+        dagEventProcessLoopTester.post(
+          PipelinedTaskCompletionReplay(consumerTasks.stageId, replayId))
+      }
+      dagEventProcessLoopTester.runEvents()
+      sc.listenerBus.waitUntilEmpty()
+      Seq(100L, 101L, 102L).foreach { taskId =>
+        assert(taskEnds.asScala.count(_ == taskId) === 1)
+      }
+      assert(results === Map(0 -> 42, 1 -> 43))
+      assert(accumulator.value === 2L)
+      assertDataStructuresEmpty()
+    } finally {
+      sc.removeSparkListener(listener)
+    }
+  }
+
+  gridTest("pipelined shuffle: scheduler stop drains buffered and released completions")(
+      Seq(false, true)) { released =>
+    val taskEnds = new LinkedBlockingQueue[Long]()
+    val listener = new SparkListener {
+      override def onTaskEnd(event: SparkListenerTaskEnd): Unit = {
+        taskEnds.add(event.taskInfo.taskId)
+      }
+    }
+    sc.addSparkListener(listener)
+    try {
+      val producer = new MyRDD(sc, 2, Nil)
+      val dependency = new PipelinedShuffleDependency(producer, new HashPartitioner(2))
+      val consumer = new MyRDD(sc, 2, List(dependency), tracker = mapOutputTracker)
+      submit(consumer, Array(0, 1))
+      val consumerTasks = taskSets(1)
+      consumerTasks.tasks.zipWithIndex.foreach { case (task, index) =>
+        runEvent(makeCompletionEvent(task, Success, 42 + index,
+          taskInfo = createFakeTaskInfoWithId(100L + index)))
+      }
+      if (released) {
+        runEvent(makeCompletionEvent(taskSets.head.tasks(0), Success, makeMapStatus("hostA", 2)))
+        scheduler.handleTaskCompletion(makeCompletionEvent(
+          taskSets.head.tasks(1), Success, makeMapStatus("hostA", 2)))
+        assert(scheduler.pipelinedTaskCompletionReplays.nonEmpty)
+      }
+      scheduler.cleanUpAfterSchedulerStop()
+      dagEventProcessLoopTester.runEvents()
+      sc.listenerBus.waitUntilEmpty()
+      Seq(100L, 101L).foreach { taskId =>
+        assert(taskEnds.asScala.count(_ == taskId) === 1)
+      }
+      assert(results.isEmpty)
+      assert(scheduler.dependentStageMap.isEmpty)
+      assert(scheduler.pipelinedTaskCompletionReplays.isEmpty)
+      assert(failure != null)
+    } finally {
+      sc.removeSparkListener(listener)
+    }
+  }
+
+  test("pipelined shuffle: interrupted stop waits for an in-flight completion replay") {
+    val notifications = new LinkedBlockingQueue[(String, Int, Long)]()
+    val listener = new SparkListener {
+      override def onTaskEnd(event: SparkListenerTaskEnd): Unit = {
+        notifications.add(("task", event.stageId, event.taskInfo.taskId))
+      }
+      override def onStageCompleted(event: SparkListenerStageCompleted): Unit = {
+        notifications.add(("stage", event.stageInfo.stageId, -1L))
+      }
+      override def onJobEnd(event: SparkListenerJobEnd): Unit = {
+        notifications.add(("job", event.jobId, -1L))
+      }
+    }
+    sc.addSparkListener(listener)
+    val replayStarted = new CountDownLatch(1)
+    val finishReplay = new CountDownLatch(1)
+    val stopReturned = new CountDownLatch(1)
+    val stopErrors = new LinkedBlockingQueue[Throwable]()
+    @volatile var interruptedAfterStop = false
+    val accumulator = new LongAccumulator {
+      override def merge(other: AccumulatorV2[java.lang.Long, java.lang.Long]): Unit = {
+        replayStarted.countDown()
+        Uninterruptibles.awaitUninterruptibly(finishReplay)
+        super.merge(other)
+      }
+    }
+    sc.register(accumulator, "in-flight pipelined result")
+    val eventLoop = new DAGSchedulerEventProcessLoop(scheduler)
+    val stopThread = new Thread("stop-pipelined-scheduler") {
+      override def run(): Unit = {
+        try {
+          scheduler.stop()
+          interruptedAfterStop = isInterrupted
+        } catch {
+          case t: Throwable => stopErrors.add(t)
+        } finally {
+          stopReturned.countDown()
+        }
+      }
+    }
+    try {
+      val producer = new MyRDD(sc, 2, Nil)
+      val dependency = new PipelinedShuffleDependency(producer, new HashPartitioner(2))
+      val consumer = new MyRDD(sc, 2, List(dependency), tracker = mapOutputTracker)
+      val jobId = submit(consumer, Array(0, 1))
+      val producerTasks = taskSets.head
+      val consumerTasks = taskSets(1)
+      consumerTasks.tasks.zipWithIndex.foreach { case (task, index) =>
+        runEvent(makeCompletionEvent(task, Success, 42 + index,
+          extraAccumUpdates = Seq(AccumulatorSuite.createLongAccum(
+            "", initValue = 1, id = accumulator.id)),
+          taskInfo = createFakeTaskInfoWithId(100L + index)))
+      }
+      runEvent(makeCompletionEvent(producerTasks.tasks(0), Success, makeMapStatus("hostA", 2)))
+      scheduler.setEventProcessLoop(eventLoop)
+      eventLoop.start()
+      eventLoop.post(makeCompletionEvent(
+        producerTasks.tasks(1), Success, makeMapStatus("hostA", 2)))
+      assert(replayStarted.await(10, TimeUnit.SECONDS))
+
+      stopThread.start()
+      eventually(eventuallyTimeout(10.seconds)) {
+        assert(stopThread.getState === Thread.State.WAITING)
+      }
+      stopThread.interrupt()
+      // Wait until the interrupted join has either returned or resumed waiting for the replay.
+      eventually(eventuallyTimeout(10.seconds)) {
+        // The join monitor keeps the wait-state and interrupt observations consistent.
+        eventLoop.eventThread.synchronized {
+          assert(stopReturned.getCount == 0 ||
+            (stopThread.getState == Thread.State.WAITING && !stopThread.isInterrupted))
+        }
+      }
+      val stoppedBeforeReplayFinished = stopReturned.getCount == 0
+      finishReplay.countDown()
+      assert(stopReturned.await(10, TimeUnit.SECONDS))
+      eventLoop.eventThread.join(10000)
+      assert(!eventLoop.isActive)
+      assert(stopErrors.isEmpty)
+      assert(interruptedAfterStop)
+      sc.listenerBus.waitUntilEmpty()
+
+      val recorded = notifications.asScala.toSeq
+      val stageEnd = recorded.indexOf(("stage", consumerTasks.stageId, -1L))
+      val jobEnd = recorded.indexOf(("job", jobId, -1L))
+      assert(stageEnd >= 0 && jobEnd > stageEnd)
+      Seq(100L, 101L).foreach { taskId =>
+        val taskEnd = ("task", consumerTasks.stageId, taskId)
+        assert(recorded.count(_ == taskEnd) === 1)
+        assert(recorded.indexOf(taskEnd) < stageEnd)
+      }
+      assert(!stoppedBeforeReplayFinished)
+      assert(results === Map(0 -> 42))
+      assert(accumulator.value === 1L)
+      assert(failure != null)
+      assert(scheduler.dependentStageMap.isEmpty)
+      assert(scheduler.pipelinedTaskCompletionReplays.isEmpty)
+    } finally {
+      finishReplay.countDown()
+      stopThread.join(10000)
+      eventLoop.stop()
+      sc.removeSparkListener(listener)
+    }
   }
 
   test("pipelined shuffle: producer-then-consumer ordering completes normally (no deferral " +
