@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector.catalog;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.catalog.constraints.Constraint;
+import org.apache.spark.sql.connector.expressions.SortOrder;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.errors.QueryCompilationErrors;
 import org.apache.spark.sql.types.StructType;
@@ -104,6 +105,28 @@ public interface Table extends Relation {
    * Returns the constraints for this table.
    */
   default Constraint[] constraints() { return new Constraint[0]; }
+
+  /**
+   * Returns the write distribution this table declares as the default for writes into it, or null
+   * if it declares none.
+   * <p>
+   * This is a declared default only. A write may override it and a table may narrow it; what a
+   * write actually requires is reported by
+   * {@link org.apache.spark.sql.connector.write.RequiresDistributionAndOrdering}. It says nothing
+   * about how existing data is laid out.
+   *
+   * @since 4.4.0
+   */
+  default WriteDistributionMode writeDistributionMode() { return null; }
+
+  /**
+   * Returns the write ordering this table declares as the default for writes into it, or an empty
+   * array, never null, if it declares none. Its keys take the shape described in
+   * {@link TableInfo#writeOrdering()}. See {@link #writeDistributionMode()}.
+   *
+   * @since 4.4.0
+   */
+  default SortOrder[] writeOrdering() { return new SortOrder[0]; }
 
   /**
    * Returns the version of this table if versioning is supported, null otherwise.

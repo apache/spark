@@ -19,18 +19,22 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
+import scala.util.Try
+import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.ResolvedTable
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.CreateTable
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, CharVarcharUtils}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Table, TableCatalog, V1Table}
-import org.apache.spark.sql.connector.expressions.BucketTransform
+import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, CharVarcharUtils, WriteDistributionAndOrdering}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Table, TableCatalog, TableCatalogCapability, V1Table, WriteDistributionMode}
+import org.apache.spark.sql.connector.expressions.{BucketTransform, SortOrder}
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Physical plan node for show create table.
@@ -58,6 +62,7 @@ case class ShowCreateTableExec(
       }.toMap
     showTableOptions(builder, tableOptions)
     showTablePartitioning(table, builder)
+    showTableWriteDistributionAndOrdering(resolvedTable, builder)
     showTableComment(table, builder)
     showTableCollation(table, builder)
     showTableLocation(table, builder)
@@ -122,6 +127,57 @@ case class ShowCreateTableExec(
         }
         builder ++= s"INTO ${bucket.numBuckets} BUCKETS\n"
       }
+    }
+  }
+
+  /**
+   * Emits the table's declared write distribution and ordering as clauses when parsing them in
+   * this session declares the same pair. Otherwise the pair is omitted: it has no clause form, or
+   * the catalog does not accept the clauses, or the statement would create a v1 table, or a sort
+   * key references a column the table does not have or does not parse back to the same key.
+   */
+  private def showTableWriteDistributionAndOrdering(
+      resolvedTable: ResolvedTable,
+      builder: StringBuilder): Unit = {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+    val table = resolvedTable.table
+    val writeOrdering = table.writeOrdering().toImmutableArraySeq
+    val accepted = resolvedTable.catalog.capabilities().contains(
+      TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_WRITE_DISTRIBUTION_AND_ORDERING)
+    if (accepted && !createsV1Table(resolvedTable)) {
+      WriteDistributionAndOrdering.writeClausesSQL(
+        table.writeDistributionMode(),
+        writeOrdering,
+        table.partitioning.toImmutableArraySeq,
+        table.columns.asSchema,
+        replay
+      ).foreach(clauses => builder ++= s"$clauses\n")
+    }
+  }
+
+  // Whether the printed CREATE TABLE, which has the table's provider as USING and no STORED AS
+  // or ROW FORMAT, would create a v1 table, which cannot record the clauses, so the replay would
+  // be rejected. A provider that cannot be looked up fails the replay too.
+  private def createsV1Table(resolvedTable: ResolvedTable): Boolean = {
+    DataSourceV2Utils.supportsV1Command(resolvedTable.catalog, conf) && {
+      val provider = DataSourceV2Utils.createTableProvider(
+        Option(resolvedTable.table.properties.get(TableCatalog.PROP_PROVIDER)),
+        hasSerde = false,
+        ctas = false,
+        conf)
+      !Try(DataSourceV2Utils.isV2Provider(provider, conf)).getOrElse(false)
+    }
+  }
+
+  private def replay(clauses: String): Option[(WriteDistributionMode, Seq[SortOrder])] = {
+    try {
+      session.sessionState.sqlParser.parsePlan(
+          WriteDistributionAndOrdering.replayStatement(clauses)) match {
+        case c: CreateTable => Some((c.writeDistributionMode, c.writeOrdering))
+        case _ => None
+      }
+    } catch {
+      case NonFatal(_) => None
     }
   }
 
