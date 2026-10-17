@@ -447,29 +447,20 @@ private[netty] class NettyRpcEnv(
       source: FileDownloadChannel,
       client: TransportClient) extends StreamCallback {
 
-    // Only accessed from the connection's event loop thread.
-    private var discarding = false
-
     override def onData(streamId: String, buf: ByteBuffer): Unit = {
       // If the reader already closed its end (e.g. the fetch failed before reading), drop the
       // rest of this stream. Failing here would close the shared connection and fail every
-      // other download on it.
+      // other download on it. This runs on the connection's event loop, so it does not log:
+      // logging there can block on a class loader that is itself waiting on this event loop.
       if (source.isOpen()) {
         try {
           while (buf.remaining() > 0) {
             sink.write(buf)
           }
         } catch {
-          case e: IOException if !source.isOpen() =>
-            logDebug(s"Reader of stream $streamId closed before reading it fully; " +
-              "discarding the rest of the stream", e)
-            discarding = true
+          case _: IOException if !source.isOpen() =>
             buf.position(buf.limit())
         }
-      } else if (!discarding) {
-        logDebug(s"Reader of stream $streamId closed before reading it fully; " +
-          "discarding the rest of the stream")
-        discarding = true
       }
     }
 
