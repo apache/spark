@@ -31,7 +31,8 @@ import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CharVarcharUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.{AbstractMapType, StringTypeWithCollation}
-import org.apache.spark.sql.types.{DataType, MapType, StringType, StructType, VariantType}
+import org.apache.spark.sql.types.{
+  DataType, DecimalType, MapType, NumericType, StringType, StructType, VariantType}
 import org.apache.spark.unsafe.types.UTF8String
 
 object ExprUtils extends EvalHelper with QueryErrorsBase {
@@ -243,14 +244,20 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
    *
    * Only a whitelist of total, deterministic expressions qualifies:
    *   - leaves: attribute references and literals;
+   *   - non-throwing widening numeric up-casts (Cast.canUpCast): Cast where both types are
+   *     numeric, Cast.canUpCast is true, and a decimal source only widens to a decimal
+   *     target, since canUpCast admits overflowing decimal-to-integral casts such as
+   *     DECIMAL(19,0) -> BIGINT. The admitted casts are total but not necessarily lossless
+   *     (Int/Long -> Float/Double can round the value); the whitelist relies on them never
+   *     throwing, not on losslessness;
    *   - total accessors: GetStructField, GetArrayStructFields and GetMapValue never throw.
    *     Note that GetArrayItem/ElementAt are NOT included: they throw on invalid ordinals
    *     when ANSI mode is on;
    *   - logic/predicates: And, Or, Not, comparisons, IsNull, IsNotNull, IsNaN, NullIf,
    *     Coalesce, In and InSet are total boolean functions.
-   * Anything else (arithmetic, casts, string functions, UDFs, nested IF/CASE WHEN, ...)
-   * conservatively returns false. On top of the whitelist, the expression must be
-   * deterministic and must not contain subqueries.
+   * Anything else (arithmetic, other casts, string functions, UDFs,
+   * nested IF/CASE WHEN, ...) conservatively returns false. On top of the whitelist,
+   * the expression must be deterministic and must not contain subqueries.
    *
    * Note: this deliberately does not rely on [[Expression.throwable]], which is opt-in
    * metadata that most expressions do not override. A throwing ScalaUDF with
@@ -262,6 +269,12 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
 
   private def canEvaluateUnconditionallyInternal(e: Expression): Boolean = e match {
     case _: AttributeReference | _: Literal => true
+    case Cast(child, toType, _, _) =>
+      // Decimal sources must only widen to decimal targets: canUpCast admits overflowing
+      // decimal-to-integral casts such as DECIMAL(19,0) -> BIGINT.
+      child.dataType.isInstanceOf[NumericType] && toType.isInstanceOf[NumericType] &&
+        (!child.dataType.isInstanceOf[DecimalType] || toType.isInstanceOf[DecimalType]) &&
+        Cast.canUpCast(child.dataType, toType) && canEvaluateUnconditionallyInternal(child)
     case _: GetStructField | _: GetArrayStructFields | _: GetMapValue =>
       e.children.forall(canEvaluateUnconditionallyInternal)
     case _: And | _: Or | _: Not | _: BinaryComparison | _: IsNull | _: IsNotNull |
