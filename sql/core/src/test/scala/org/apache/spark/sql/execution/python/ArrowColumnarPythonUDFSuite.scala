@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.python
 
 import org.apache.spark.sql.IntegratedUDFTestUtils
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{ColumnarToRowExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StringType
@@ -37,11 +37,15 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
   private val arrowSource =
     "org.apache.spark.sql.execution.python.ArrowBackedDataSourceV2"
 
-  private def readArrowSource(numRows: Int = 100, numPartitions: Int = 1) = {
+  private def readArrowSource(
+      numRows: Int = 100,
+      numPartitions: Int = 1,
+      batchSize: Int = ArrowBackedDataSourceV2.BATCH_SIZE) = {
     spark.read
       .format(arrowSource)
       .option("numRows", numRows.toString)
       .option("numPartitions", numPartitions.toString)
+      .option("batchSize", batchSize.toString)
       .load()
   }
 
@@ -99,6 +103,28 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
         assert(row.getInt(0) == i, s"id mismatch at row $i")
         assert(row.getString(1) == i.toString,
           s"UDF result mismatch at row $i")
+      }
+    }
+  }
+
+  test("ColumnarToRow releases each batch once its rows are consumed") {
+    Seq(true, false).foreach { codegen =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString) {
+        val numRows = 50000
+        val numBatches = 500
+        val df = readArrowSource(numRows = numRows, batchSize = numRows / numBatches)
+        val plan = df.queryExecution.executedPlan
+        assert(collectNodes[ColumnarToRowExec](plan).nonEmpty)
+        assert(collectNodes[WholeStageCodegenExec](plan).nonEmpty == codegen)
+
+        ArrowBackedDataSourceV2.resetBatchCounters()
+        val rows = df.collect()
+        assert(rows.map(_.getInt(0)).toSeq == (0 until numRows))
+        assert(rows.forall(row => row.getString(1) == s"row_${row.getInt(0)}"))
+        // A batch is released before the next one is read.
+        assert(ArrowBackedDataSourceV2.returnedBatches.get == numBatches)
+        assert(ArrowBackedDataSourceV2.releasedBatches.get == numBatches)
+        assert(ArrowBackedDataSourceV2.maxUnreleasedBatches.get == 1)
       }
     }
   }
