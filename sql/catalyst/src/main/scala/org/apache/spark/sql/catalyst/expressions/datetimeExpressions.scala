@@ -1341,7 +1341,7 @@ case class UnixNanos(child: Expression)
 
   // epochMicros * 1000 overflows a 64-bit BIGINT across the full [0001..9999] calendar range, so
   // the result is a DECIMAL that holds every value in that range (~2.5e20 max). Values beyond
-  // ~+/-31,000 years from the epoch exceed 21 digits and raise NUMERIC_VALUE_OUT_OF_RANGE.
+  // ~+/-31,700 years from the epoch exceed 21 digits and raise NUMERIC_VALUE_OUT_OF_RANGE.
   override def dataType: DataType = DecimalType(21, 0)
 
   override def nullSafeEval(input: Any): Any = {
@@ -2611,7 +2611,8 @@ case class TimestampAddInterval(
       left.dataType match {
         case _: AnyTimestampNanoType =>
           timestampNanosAddDayTime(
-            start.asInstanceOf[TimestampNanosVal], interval.asInstanceOf[Long], zoneIdInEval)
+            start.asInstanceOf[TimestampNanosVal], interval.asInstanceOf[Long], zoneIdInEval,
+            left.dataType, right.dataType)
         case _ =>
           timestampAddDayTime(start.asInstanceOf[Long], interval.asInstanceOf[Long], zoneIdInEval)
       }
@@ -2627,7 +2628,10 @@ case class TimestampAddInterval(
       case _: DayTimeIntervalType =>
         left.dataType match {
           case _: AnyTimestampNanoType =>
-            defineCodeGen(ctx, ev, (sd, dt) => s"""$dtu.timestampNanosAddDayTime($sd, $dt, $zid)""")
+            val st = ctx.addReferenceObj("startType", left.dataType, classOf[DataType].getName)
+            val it = ctx.addReferenceObj("intervalType", right.dataType, classOf[DataType].getName)
+            defineCodeGen(ctx, ev, (sd, dt) =>
+              s"""$dtu.timestampNanosAddDayTime($sd, $dt, $zid, $st, $it)""")
           case _ =>
             defineCodeGen(ctx, ev, (sd, dt) => s"""$dtu.timestampAddDayTime($sd, $dt, $zid)""")
         }
@@ -2998,7 +3002,8 @@ case class TimestampAddYMInterval(
   override def nullSafeEval(start: Any, months: Any): Any = left.dataType match {
     case _: AnyTimestampNanoType =>
       timestampNanosAddMonths(
-        start.asInstanceOf[TimestampNanosVal], months.asInstanceOf[Int], zoneIdInEval)
+        start.asInstanceOf[TimestampNanosVal], months.asInstanceOf[Int], zoneIdInEval,
+        left.dataType, right.dataType)
     case _ =>
       timestampAddMonths(start.asInstanceOf[Long], months.asInstanceOf[Int], zoneIdInEval)
   }
@@ -3008,8 +3013,10 @@ case class TimestampAddYMInterval(
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     left.dataType match {
       case _: AnyTimestampNanoType =>
+        val st = ctx.addReferenceObj("startType", left.dataType, classOf[DataType].getName)
+        val it = ctx.addReferenceObj("intervalType", right.dataType, classOf[DataType].getName)
         defineCodeGen(ctx, ev, (sd, months) =>
-          s"""$dtu.timestampNanosAddMonths($sd, $months, $zid)""")
+          s"""$dtu.timestampNanosAddMonths($sd, $months, $zid, $st, $it)""")
       case _ =>
         defineCodeGen(ctx, ev, (micros, months) =>
           s"""$dtu.timestampAddMonths($micros, $months, $zid)""")

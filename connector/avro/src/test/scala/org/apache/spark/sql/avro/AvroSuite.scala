@@ -3705,13 +3705,8 @@ abstract class AvroSuite
             val e = intercept[SparkException] {
               df.write.format("avro").save(dir.getCanonicalPath)
             }
-            var cause: Throwable = e
-            while (cause != null && !cause.isInstanceOf[SparkArithmeticException]) {
-              cause = cause.getCause
-            }
-            assert(cause != null, s"Expected a DATETIME_OVERFLOW error, but got: ${e.getMessage}")
             checkError(
-              exception = cause.asInstanceOf[SparkArithmeticException],
+              exception = getRootCause(e).asInstanceOf[SparkArithmeticException],
               condition = "DATETIME_OVERFLOW",
               parameters = Map("operation" ->
                 (s"write the timestamp value $shown as Avro epoch-nanoseconds " +

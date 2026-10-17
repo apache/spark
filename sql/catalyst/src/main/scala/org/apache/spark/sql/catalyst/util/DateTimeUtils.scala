@@ -28,7 +28,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.{QueryContext, SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{DayTimeIntervalType, Decimal, DoubleExactNumeric, TimestampNTZType, TimestampType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{DataType, Decimal, DoubleExactNumeric, TimestampNTZType, TimestampType}
 import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String}
 
 /**
@@ -286,18 +286,20 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Adds a year-month interval expressed in months to a nanosecond-precision timestamp value while
    * preserving the `nanosWithinMicro` remainder. Throws `DATETIME_OVERFLOW` if the result does not
-   * fit in the epoch-microseconds range.
+   * fit in the epoch-microseconds range; `startType` and `intervalType` render the operands in it.
    */
   def timestampNanosAddMonths(
       start: TimestampNanosVal,
       months: Int,
-      zoneId: ZoneId): TimestampNanosVal = {
+      zoneId: ZoneId,
+      startType: DataType,
+      intervalType: DataType): TimestampNanosVal = {
     val epochMicros = try {
       timestampAddMonths(start.epochMicros, months, zoneId)
     } catch {
       case _: ArithmeticException | _: DateTimeException =>
         throw QueryExecutionErrors.timestampNanosAddIntervalOverflowError(
-          start, months, YearMonthIntervalType(), zoneId)
+          start, startType, months, intervalType)
     }
     TimestampNanosVal.fromParts(epochMicros, start.nanosWithinMicro)
   }
@@ -327,18 +329,20 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Adds a day-time interval to a nanosecond-precision timestamp value while preserving
    * the `nanosWithinMicro` remainder. Throws `DATETIME_OVERFLOW` if the result does not fit in the
-   * epoch-microseconds range.
+   * epoch-microseconds range; `startType` and `intervalType` render the operands in it.
    */
   def timestampNanosAddDayTime(
       start: TimestampNanosVal,
       dayTime: Long,
-      zoneId: ZoneId): TimestampNanosVal = {
+      zoneId: ZoneId,
+      startType: DataType,
+      intervalType: DataType): TimestampNanosVal = {
     val epochMicros = try {
       timestampAddDayTime(start.epochMicros, dayTime, zoneId)
     } catch {
       case _: ArithmeticException | _: DateTimeException =>
         throw QueryExecutionErrors.timestampNanosAddIntervalOverflowError(
-          start, dayTime, DayTimeIntervalType(), zoneId)
+          start, startType, dayTime, intervalType)
     }
     TimestampNanosVal.fromParts(epochMicros, start.nanosWithinMicro)
   }

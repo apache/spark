@@ -390,23 +390,33 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
         val min = "1677-09-21 00:12:43.145224192"
         val max = "2262-04-11 23:47:16.854775807"
-        withAllParquetReaders {
-          withTempPath { dir =>
-            val df = spark.sql(
-              s"""SELECT * FROM VALUES
-                 |  (TIMESTAMP_NTZ '$min', TIMESTAMP_LTZ '$min'),
-                 |  (TIMESTAMP_NTZ '$max', TIMESTAMP_LTZ '$max')
-                 |  AS t(ntz, ltz)""".stripMargin)
-            df.write.parquet(dir.getCanonicalPath)
-            val read = spark.read.parquet(dir.getCanonicalPath)
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          val df = spark.sql(
+            s"""SELECT * FROM VALUES
+               |  (TIMESTAMP_NTZ '$min', TIMESTAMP_LTZ '$min'),
+               |  (TIMESTAMP_NTZ '$max', TIMESTAMP_LTZ '$max')
+               |  AS t(ntz, ltz)""".stripMargin)
+          df.write.parquet(path)
+          def filterAt(ts: String): String =
+            s"ntz = TIMESTAMP_NTZ '$ts' AND ltz = TIMESTAMP_LTZ '$ts'"
+          withAllParquetReaders {
+            val read = spark.read.parquet(path)
             checkAnswer(read, df.collect().toSeq)
-            // Pushed-down filters on the limits encode them exactly.
             withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
               Seq(min, max).foreach { ts =>
-                checkAnswer(
-                  read.where(s"ntz = TIMESTAMP_NTZ '$ts' AND ltz = TIMESTAMP_LTZ '$ts'"),
-                  df.where(s"ntz = TIMESTAMP_NTZ '$ts'").collect().toSeq)
+                checkAnswer(read.where(filterAt(ts)), df.where(filterAt(ts)).collect().toSeq)
               }
+            }
+          }
+          // The filters on the limits are pushed down and encode them exactly: with record-level
+          // filtering, Parquet alone returns exactly the matching row.
+          withSQLConf(
+            SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
+            SQLConf.PARQUET_RECORD_FILTER_ENABLED.key -> "true",
+            SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+            Seq(min, max).foreach { ts =>
+              assert(stripSparkFilter(spark.read.parquet(path).where(filterAt(ts))).count() === 1)
             }
           }
         }
@@ -421,13 +431,11 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
                   val e = intercept[SparkException] {
                     spark.sql(s"SELECT $typeName '$ts' AS ts").write.parquet(dir.getCanonicalPath)
                   }
-                  var cause: Throwable = e
-                  while (cause != null && !cause.isInstanceOf[SparkArithmeticException]) {
-                    cause = cause.getCause
-                  }
-                  assert(cause != null, s"Expected DATETIME_OVERFLOW, but got: ${e.getMessage}")
+                  val cause = Iterator.iterate[Throwable](e)(_.getCause).takeWhile(_ != null)
+                    .collectFirst { case a: SparkArithmeticException => a }
+                  assert(cause.isDefined, s"Expected DATETIME_OVERFLOW, but got: ${e.getMessage}")
                   checkError(
-                    exception = cause.asInstanceOf[SparkArithmeticException],
+                    exception = cause.get,
                     condition = "DATETIME_OVERFLOW",
                     parameters = Map("operation" ->
                       (s"write the timestamp value $renderedValue as Parquet INT64 " +

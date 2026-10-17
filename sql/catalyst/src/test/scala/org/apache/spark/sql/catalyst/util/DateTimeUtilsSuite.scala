@@ -35,8 +35,8 @@ import org.apache.spark.sql.catalyst.util.RebaseDateTime.rebaseJulianToGregorian
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.nanosVal
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLConf
 import org.apache.spark.sql.internal.SqlApiConf
-import org.apache.spark.sql.types.{Decimal, TimeType}
-import org.apache.spark.sql.types.DayTimeIntervalType.{HOUR, SECOND}
+import org.apache.spark.sql.types.{DayTimeIntervalType, Decimal, TimestampLTZNanosType, TimestampNTZNanosType, TimeType, YearMonthIntervalType}
+import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, SECOND}
 import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String}
 
 class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
@@ -1158,12 +1158,15 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   test("SPARK-57501: timestamp nanos add day-time interval preserves nanosWithinMicro") {
     def nanos(epochMicros: Long, nanosWithinMicro: Int): TimestampNanosVal =
       TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro.toShort)
+    // The operand types only render the overflow error.
+    val ltz = TimestampLTZNanosType(9)
+    val dayTimeType = DayTimeIntervalType()
 
     // The epoch-micros part follows the micro `timestampAddDayTime` (including the transition from
     // Pacific Standard to Pacific Daylight Time) while the sub-microsecond remainder is carried
     // through unchanged.
     assert(timestampNanosAddDayTime(
-      nanos(date(2019, 3, 9, 12, 0, 0, 123000, LA), 789), MICROS_PER_DAY, LA) ===
+      nanos(date(2019, 3, 9, 12, 0, 0, 123000, LA), 789), MICROS_PER_DAY, LA, ltz, dayTimeType) ===
       nanos(date(2019, 3, 10, 12, 0, 0, 123000, LA), 789))
 
     outstandingZoneIds.foreach { zid =>
@@ -1171,20 +1174,23 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       Seq(0, 1, 999).foreach { rem =>
         // Zero interval is a no-op on both the epoch-micros and the remainder.
         assert(timestampNanosAddDayTime(
-          nanos(date(2021, 3, 18, 19, 44, 1, 100000, zid), rem), 0, zid) ===
+          nanos(date(2021, 3, 18, 19, 44, 1, 100000, zid), rem), 0, zid, ltz, dayTimeType) ===
           nanos(date(2021, 3, 18, 19, 44, 1, 100000, zid), rem))
         // Subtracting whole days shifts only the epoch-micros part.
         assert(timestampNanosAddDayTime(
-          nanos(date(2021, 1, 19, 0, 0, 0, 0, zid), rem), -18 * MICROS_PER_DAY, zid) ===
+          nanos(date(2021, 1, 19, 0, 0, 0, 0, zid), rem), -18 * MICROS_PER_DAY, zid,
+          ltz, dayTimeType) ===
           nanos(date(2021, 1, 1, 0, 0, 0, 0, zid), rem))
         // A +1 microsecond carry from the day-time interval only moves epochMicros
         // (123456 -> 123457), never the remainder.
         assert(timestampNanosAddDayTime(
-          nanos(date(2019, 5, 9, 12, 0, 0, 123456, zid), rem), 2 * MICROS_PER_DAY + 1, zid) ===
+          nanos(date(2019, 5, 9, 12, 0, 0, 123456, zid), rem), 2 * MICROS_PER_DAY + 1, zid,
+          ltz, dayTimeType) ===
           nanos(date(2019, 5, 11, 12, 0, 0, 123457, zid), rem))
         // Pre-epoch (negative epochMicros) value.
         assert(timestampNanosAddDayTime(
-          nanos(date(1960, 1, 2, 3, 4, 5, 123456, zid), rem), MICROS_PER_DAY, zid) ===
+          nanos(date(1960, 1, 2, 3, 4, 5, 123456, zid), rem), MICROS_PER_DAY, zid,
+          ltz, dayTimeType) ===
           nanos(date(1960, 1, 3, 3, 4, 5, 123456, zid), rem))
       }
     }
@@ -1194,7 +1200,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     outstandingZoneIds.foreach { zid =>
       val start = nanos(date(2020, 1, 2, 3, 4, 5, 123456, zid), 789)
       val dayTime = 3 * MICROS_PER_HOUR + 7
-      val result = timestampNanosAddDayTime(start, dayTime, zid)
+      val result = timestampNanosAddDayTime(start, dayTime, zid, ltz, dayTimeType)
       assert(result.epochMicros === timestampAddDayTime(start.epochMicros, dayTime, zid))
       assert(result.nanosWithinMicro === start.nanosWithinMicro)
     }
@@ -1203,11 +1209,14 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   test("SPARK-57825: timestamp nanos add year-month interval preserves nanosWithinMicro") {
     def nanos(epochMicros: Long, nanosWithinMicro: Int): TimestampNanosVal =
       TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro.toShort)
+    // The operand types only render the overflow error.
+    val ltz = TimestampLTZNanosType(9)
+    val yearMonthType = YearMonthIntervalType()
 
     // The epoch-micros part follows the micro `timestampAddMonths` (including the Jan-31 -> Feb-29
     // day clamp in a leap year) while the sub-microsecond remainder is carried through unchanged.
     assert(timestampNanosAddMonths(
-      nanos(date(2020, 1, 31, 12, 0, 0, 123000, LA), 789), 1, LA) ===
+      nanos(date(2020, 1, 31, 12, 0, 0, 123000, LA), 789), 1, LA, ltz, yearMonthType) ===
       nanos(date(2020, 2, 29, 12, 0, 0, 123000, LA), 789))
 
     outstandingZoneIds.foreach { zid =>
@@ -1215,19 +1224,19 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       Seq(0, 1, 999).foreach { rem =>
         // Zero interval is a no-op on both the epoch-micros and the remainder.
         assert(timestampNanosAddMonths(
-          nanos(date(2021, 3, 18, 19, 44, 1, 123456, zid), rem), 0, zid) ===
+          nanos(date(2021, 3, 18, 19, 44, 1, 123456, zid), rem), 0, zid, ltz, yearMonthType) ===
           nanos(date(2021, 3, 18, 19, 44, 1, 123456, zid), rem))
         // Adding whole years/months shifts only the month field, never the fraction.
         assert(timestampNanosAddMonths(
-          nanos(date(2020, 1, 2, 3, 4, 5, 123456, zid), rem), 14, zid) ===
+          nanos(date(2020, 1, 2, 3, 4, 5, 123456, zid), rem), 14, zid, ltz, yearMonthType) ===
           nanos(date(2021, 3, 2, 3, 4, 5, 123456, zid), rem))
         // Subtracting months is symmetric.
         assert(timestampNanosAddMonths(
-          nanos(date(2020, 1, 2, 3, 4, 5, 123456, zid), rem), -1, zid) ===
+          nanos(date(2020, 1, 2, 3, 4, 5, 123456, zid), rem), -1, zid, ltz, yearMonthType) ===
           nanos(date(2019, 12, 2, 3, 4, 5, 123456, zid), rem))
         // Pre-epoch (negative epochMicros) value.
         assert(timestampNanosAddMonths(
-          nanos(date(1960, 1, 2, 3, 4, 5, 123456, zid), rem), 1, zid) ===
+          nanos(date(1960, 1, 2, 3, 4, 5, 123456, zid), rem), 1, zid, ltz, yearMonthType) ===
           nanos(date(1960, 2, 2, 3, 4, 5, 123456, zid), rem))
       }
     }
@@ -1237,52 +1246,59 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     outstandingZoneIds.foreach { zid =>
       val start = nanos(date(2020, 1, 2, 3, 4, 5, 123456, zid), 789)
       val months = 15
-      val result = timestampNanosAddMonths(start, months, zid)
+      val result = timestampNanosAddMonths(start, months, zid, ltz, yearMonthType)
       assert(result.epochMicros === timestampAddMonths(start.epochMicros, months, zid))
       assert(result.nanosWithinMicro === start.nanosWithinMicro)
     }
   }
 
   test("SPARK-57838: timestamp nanos add interval at the range boundaries") {
-    def nanos(epochMicros: Long, nanosWithinMicro: Int): TimestampNanosVal =
-      TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro.toShort)
-    val max = nanos(Long.MaxValue, 999)
-    val min = nanos(Long.MinValue, 0)
+    val ntz = TimestampNTZNanosType(9)
+    val dayTimeType = DayTimeIntervalType()
+    val yearMonthType = YearMonthIntervalType()
+    val max = nanosVal(Long.MaxValue, 999)
+    val min = nanosVal(Long.MinValue, 0)
 
     // Crossing 9999-12-31 or 0001-01-01 is not an error, as for the microsecond types.
-    val maxCalendar = nanos(date(9999, 12, 31, 23, 59, 59, 999999, UTC), 999)
-    assert(timestampNanosAddDayTime(maxCalendar, MICROS_PER_DAY, UTC) ===
-      nanos(date(10000, 1, 1, 23, 59, 59, 999999, UTC), 999))
-    assert(timestampNanosAddMonths(maxCalendar, 1, UTC) ===
-      nanos(date(10000, 1, 31, 23, 59, 59, 999999, UTC), 999))
-    assert(timestampNanosAddDayTime(nanos(date(1, 1, 1, 0, 0, 0, 0, UTC), 1), -1, UTC) ===
-      nanos(date(0, 12, 31, 23, 59, 59, 999999, UTC), 1))
+    val maxCalendar = nanosVal(date(9999, 12, 31, 23, 59, 59, 999999, UTC), 999)
+    assert(timestampNanosAddDayTime(maxCalendar, MICROS_PER_DAY, UTC, ntz, dayTimeType) ===
+      nanosVal(date(10000, 1, 1, 23, 59, 59, 999999, UTC), 999))
+    assert(timestampNanosAddMonths(maxCalendar, 1, UTC, ntz, yearMonthType) ===
+      nanosVal(date(10000, 1, 31, 23, 59, 59, 999999, UTC), 999))
+    assert(timestampNanosAddDayTime(
+      nanosVal(date(1, 1, 1, 0, 0, 0, 0, UTC), 1), -1, UTC, ntz, dayTimeType) ===
+      nanosVal(date(0, 12, 31, 23, 59, 59, 999999, UTC), 1))
     // The epoch-microsecond limits themselves are reachable.
-    assert(timestampNanosAddDayTime(nanos(Long.MaxValue - MICROS_PER_DAY, 999), MICROS_PER_DAY,
-      UTC) === max)
-    assert(timestampNanosAddDayTime(nanos(Long.MinValue + 1, 0), -1, UTC) === min)
+    assert(timestampNanosAddDayTime(
+      nanosVal(Long.MaxValue - MICROS_PER_DAY, 999), MICROS_PER_DAY, UTC, ntz, dayTimeType) === max)
+    assert(timestampNanosAddDayTime(
+      nanosVal(Long.MinValue + 1, 0), -1, UTC, ntz, dayTimeType) === min)
 
-    // Past them the addition raises DATETIME_OVERFLOW instead of a raw ArithmeticException.
-    Seq(
-      (() => timestampNanosAddDayTime(max, 1, UTC),
-        "add INTERVAL '0 00:00:00.000001' DAY TO SECOND to the timestamp value " +
-          "+294247-01-10T04:00:54.775807999"),
-      (() => timestampNanosAddDayTime(min, -MICROS_PER_DAY, UTC),
-        "add INTERVAL '-1 00:00:00' DAY TO SECOND to the timestamp value " +
-          "-290308-12-21T19:59:05.224192"),
-      (() => timestampNanosAddMonths(max, 1, UTC),
-        "add INTERVAL '0-1' YEAR TO MONTH to the timestamp value " +
-          "+294247-01-10T04:00:54.775807999"),
-      (() => timestampNanosAddMonths(min, -12, UTC),
-        "add INTERVAL '-1-0' YEAR TO MONTH to the timestamp value -290308-12-21T19:59:05.224192"),
-      // The value is rendered as the wall clock at the given zone.
-      (() => timestampNanosAddDayTime(max, MICROS_PER_DAY, LA),
-        "add INTERVAL '1 00:00:00' DAY TO SECOND to the timestamp value " +
-          "+294247-01-09T20:00:54.775807999")).foreach { case (f, operation) =>
-      checkError(
-        exception = intercept[SparkArithmeticException](f()),
-        condition = "DATETIME_OVERFLOW",
-        parameters = Map("operation" -> operation))
+    // Past them the addition raises DATETIME_OVERFLOW instead of a raw ArithmeticException, with
+    // the operands rendered as SQL literals of their own types.
+    withSQLConf(SqlApiConf.SESSION_LOCAL_TIMEZONE_KEY -> LA.getId) {
+      Seq(
+        (() => timestampNanosAddDayTime(max, 1, UTC, ntz, dayTimeType),
+          "add INTERVAL '0 00:00:00.000001' DAY TO SECOND to " +
+            "TIMESTAMP_NTZ '+294247-01-10 04:00:54.775807999'"),
+        (() => timestampNanosAddDayTime(
+          min, -MICROS_PER_DAY, UTC, TimestampNTZNanosType(7), DayTimeIntervalType(DAY)),
+          "add INTERVAL '-1' DAY to TIMESTAMP_NTZ '-290308-12-21 19:59:05.2241920'"),
+        (() => timestampNanosAddMonths(
+          max, 1, UTC, ntz, YearMonthIntervalType(YearMonthIntervalType.MONTH)),
+          "add INTERVAL '1' MONTH to TIMESTAMP_NTZ '+294247-01-10 04:00:54.775807999'"),
+        (() => timestampNanosAddMonths(min, -12, UTC, ntz, yearMonthType),
+          "add INTERVAL '-1-0' YEAR TO MONTH to TIMESTAMP_NTZ '-290308-12-21 19:59:05.224192000'"),
+        // TIMESTAMP_LTZ renders in the session time zone.
+        (() => timestampNanosAddDayTime(
+          max, MICROS_PER_DAY, LA, TimestampLTZNanosType(9), DayTimeIntervalType(HOUR)),
+          "add INTERVAL '24' HOUR to TIMESTAMP_LTZ '+294247-01-09 20:00:54.775807999'")).foreach {
+        case (f, operation) =>
+          checkError(
+            exception = intercept[SparkArithmeticException](f()),
+            condition = "DATETIME_OVERFLOW",
+            parameters = Map("operation" -> operation))
+      }
     }
   }
 

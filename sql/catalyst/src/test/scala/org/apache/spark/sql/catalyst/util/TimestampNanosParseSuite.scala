@@ -22,6 +22,7 @@ import java.time.{ZoneId, ZoneOffset}
 import org.apache.spark.{SparkDateTimeException, SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.nanosVal
 import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 
 /**
@@ -147,24 +148,22 @@ class TimestampNanosParseSuite extends SparkFunSuite {
   }
 
   test("SPARK-57838: parse and format at the calendar and int64 boundaries") {
-    def nanos(epochMicros: Long, nanosWithinMicro: Int): TimestampNanosVal =
-      TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro.toShort)
     val formatter = TimestampFormatter.getFractionFormatter(ZoneOffset.UTC)
-    val minMicros = nanos(Long.MinValue, 0)
-    val maxMicros = nanos(Long.MaxValue, 999)
+    val minMicros = nanosVal(Long.MinValue, 0)
+    val maxMicros = nanosVal(Long.MaxValue, 999)
     Seq(
       // Calendar range 0001-01-01 .. 9999-12-31.
-      "0001-01-01 00:00:00" -> nanos(date(1, 1, 1, 0, 0, 0, 0, ZoneOffset.UTC), 0),
+      "0001-01-01 00:00:00" -> nanosVal(date(1, 1, 1, 0, 0, 0, 0, ZoneOffset.UTC), 0),
       "9999-12-31 23:59:59.999999999" ->
-        nanos(date(9999, 12, 31, 23, 59, 59, 999999, ZoneOffset.UTC), 999),
+        nanosVal(date(9999, 12, 31, 23, 59, 59, 999999, ZoneOffset.UTC), 999),
       // The int64 epoch-nanosecond limits of Parquet/Avro/Arrow, and one nanosecond beyond them.
       "1677-09-21 00:12:43.145224192" -> epochNanosToTimestampNanos(Long.MinValue, 9),
-      "1677-09-21 00:12:43.145224191" -> nanos(Long.MinValue / 1000 - 1, 191),
+      "1677-09-21 00:12:43.145224191" -> nanosVal(Long.MinValue / 1000 - 1, 191),
       "2262-04-11 23:47:16.854775807" -> epochNanosToTimestampNanos(Long.MaxValue, 9),
-      "2262-04-11 23:47:16.854775808" -> nanos(Long.MaxValue / 1000, 808),
+      "2262-04-11 23:47:16.854775808" -> nanosVal(Long.MaxValue / 1000, 808),
       // Years beyond 9999 are accepted, as for the microsecond types.
       "+10000-01-01 00:00:00.000000001" ->
-        nanos(date(10000, 1, 1, 0, 0, 0, 0, ZoneOffset.UTC), 1),
+        nanosVal(date(10000, 1, 1, 0, 0, 0, 0, ZoneOffset.UTC), 1),
       // The epoch-microsecond (Long) limits.
       "-290308-12-21 19:59:05.224192" -> minMicros,
       "+294247-01-10 04:00:54.775807999" -> maxMicros).foreach { case (str, expected) =>

@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils, Timesta
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, TimeZoneUTC}
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.nanosVal
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.TimestampTypes
 import org.apache.spark.sql.types._
@@ -2466,55 +2467,60 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-57838: nanos timestamp arithmetic at the range boundaries") {
-    def tnv(micros: Long, frac: Int): TimestampNanosVal =
-      TimestampNanosVal.fromParts(micros, frac.toShort)
     def utc(s: String): TimestampNanosVal =
       DateTimeUtils.localDateTimeToTimestampNanos(LocalDateTime.parse(s), precision = 9)
     val maxCalendar = utc("9999-12-31T23:59:59.999999999")
-    val max = tnv(Long.MaxValue, 999)
-    val min = tnv(Long.MinValue, 0)
+    val max = nanosVal(Long.MaxValue, 999)
+    val min = nanosVal(Long.MinValue, 0)
     val int64Max = DateTimeUtils.epochNanosToTimestampNanos(Long.MaxValue, 9)
     val int64Min = DateTimeUtils.epochNanosToTimestampNanos(Long.MinValue, 9)
 
-    Seq("true", "false").foreach { ansi =>
-      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
-        Seq(TimestampNTZNanosType(9), TimestampLTZNanosType(9)).foreach { t =>
-          def lit(v: TimestampNanosVal): Literal = Literal.create(v, t)
-          // Crossing 9999-12-31 is not an error, as for the microsecond types.
-          checkEvaluation(
-            TimestampAddInterval(lit(maxCalendar), Literal(Duration.ofDays(1)), Some("UTC")),
-            utc("+10000-01-01T23:59:59.999999999"))
-          checkEvaluation(
-            TimestampAddYMInterval(lit(maxCalendar), Literal(Period.ofYears(1)), Some("UTC")),
-            utc("+10000-12-31T23:59:59.999999999"))
-          checkEvaluation(
-            TimestampAdd("DAY", Literal(1L), lit(maxCalendar), Some("UTC")),
-            utc("+10000-01-01T23:59:59.999999999"))
-          // The int64 epoch-nanosecond limits are ordinary values: no wrap-around past them.
-          checkEvaluation(
-            TimestampAdd("NANOSECOND", Literal(1L), lit(int64Max), Some("UTC")),
-            tnv(int64Max.epochMicros, int64Max.nanosWithinMicro + 1))
-          checkEvaluation(
-            TimestampAdd("NANOSECOND", Literal(-1L), lit(int64Min), Some("UTC")),
-            tnv(int64Min.epochMicros, int64Min.nanosWithinMicro - 1))
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      Seq(
+        TimestampNTZNanosType(9) -> "TIMESTAMP_NTZ",
+        TimestampLTZNanosType(9) -> "TIMESTAMP_LTZ").foreach { case (t, typeName) =>
+        def lit(v: TimestampNanosVal): Literal = Literal.create(v, t)
+        // Crossing 9999-12-31 is not an error, as for the microsecond types.
+        checkEvaluation(
+          TimestampAddInterval(lit(maxCalendar), Literal(Duration.ofDays(1)), Some("UTC")),
+          utc("+10000-01-01T23:59:59.999999999"))
+        checkEvaluation(
+          TimestampAddYMInterval(lit(maxCalendar), Literal(Period.ofYears(1)), Some("UTC")),
+          utc("+10000-12-31T23:59:59.999999999"))
+        checkEvaluation(
+          TimestampAdd("DAY", Literal(1L), lit(maxCalendar), Some("UTC")),
+          utc("+10000-01-01T23:59:59.999999999"))
+        // The int64 epoch-nanosecond limits are ordinary values: no wrap-around past them.
+        checkEvaluation(
+          TimestampAdd("NANOSECOND", Literal(1L), lit(int64Max), Some("UTC")),
+          nanosVal(int64Max.epochMicros, int64Max.nanosWithinMicro + 1))
+        checkEvaluation(
+          TimestampAdd("NANOSECOND", Literal(-1L), lit(int64Min), Some("UTC")),
+          nanosVal(int64Min.epochMicros, int64Min.nanosWithinMicro - 1))
 
-          // Past the epoch-microsecond limits, interval arithmetic raises DATETIME_OVERFLOW.
-          checkErrorInExpression[SparkArithmeticException](
-            TimestampAddInterval(lit(max), Literal(Duration.ofDays(1)), Some("UTC")),
-            condition = "DATETIME_OVERFLOW",
-            parameters = Map("operation" -> ("add INTERVAL '1 00:00:00' DAY TO SECOND to the " +
-              "timestamp value +294247-01-10T04:00:54.775807999")))
-          checkErrorInExpression[SparkArithmeticException](
-            TimestampAddInterval(lit(min), UnaryMinus(Literal(Duration.ofDays(1))), Some("UTC")),
-            condition = "DATETIME_OVERFLOW",
-            parameters = Map("operation" -> ("add INTERVAL '-1 00:00:00' DAY TO SECOND to the " +
-              "timestamp value -290308-12-21T19:59:05.224192")))
-          checkErrorInExpression[SparkArithmeticException](
-            TimestampAddYMInterval(lit(max), Literal(Period.ofMonths(1)), Some("UTC")),
-            condition = "DATETIME_OVERFLOW",
-            parameters = Map("operation" -> ("add INTERVAL '0-1' YEAR TO MONTH to the " +
-              "timestamp value +294247-01-10T04:00:54.775807999")))
-        }
+        // Past the epoch-microsecond limits, interval arithmetic raises DATETIME_OVERFLOW, with
+        // the operands rendered as SQL literals of their own types.
+        val maxSql = s"$typeName '+294247-01-10 04:00:54.775807999'"
+        checkErrorInExpression[SparkArithmeticException](
+          TimestampAddInterval(lit(max), Literal(Duration.ofDays(1)), Some("UTC")),
+          condition = "DATETIME_OVERFLOW",
+          parameters = Map("operation" -> s"add INTERVAL '1 00:00:00' DAY TO SECOND to $maxSql"))
+        checkErrorInExpression[SparkArithmeticException](
+          TimestampAddInterval(
+            lit(max), Literal(MICROS_PER_HOUR, DayTimeIntervalType(DayTimeIntervalType.HOUR)),
+            Some("UTC")),
+          condition = "DATETIME_OVERFLOW",
+          parameters = Map("operation" -> s"add INTERVAL '01' HOUR to $maxSql"))
+        checkErrorInExpression[SparkArithmeticException](
+          TimestampAddInterval(lit(min), UnaryMinus(Literal(Duration.ofDays(1))), Some("UTC")),
+          condition = "DATETIME_OVERFLOW",
+          parameters = Map("operation" -> (s"add INTERVAL '-1 00:00:00' DAY TO SECOND to " +
+            s"$typeName '-290308-12-21 19:59:05.224192000'")))
+        checkErrorInExpression[SparkArithmeticException](
+          TimestampAddYMInterval(
+            lit(max), Literal(1, YearMonthIntervalType(YearMonthIntervalType.MONTH)), Some("UTC")),
+          condition = "DATETIME_OVERFLOW",
+          parameters = Map("operation" -> s"add INTERVAL '1' MONTH to $maxSql"))
       }
     }
   }
@@ -2534,7 +2540,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       unixNanos(DateTimeUtils.localDateTimeToTimestampNanos(
         LocalDateTime.parse("0001-01-01T00:00:00"), precision = 9)),
       decimal(BigInt("-62135596800000000000")))
-    // DECIMAL(21, 0) holds +/-(10^21 - 1) nanoseconds (about +/-31,000 years from the epoch);
+    // DECIMAL(21, 0) holds +/-(10^21 - 1) nanoseconds (about +/-31,700 years from the epoch);
     // timestamps further out raise NUMERIC_VALUE_OUT_OF_RANGE instead of wrapping.
     val maxDecimalMicros = (BigInt(10).pow(21) - 1) / 1000
     checkEvaluation(

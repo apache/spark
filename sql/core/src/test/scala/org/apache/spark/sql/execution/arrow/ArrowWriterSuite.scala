@@ -192,9 +192,9 @@ class ArrowWriterSuite extends SparkFunSuite {
       // large positive/negative epoch-nanoseconds within the representable range
       fromEpochNanos(9000000000000000000L),
       fromEpochNanos(-9000000000000000000L),
-      // the int64 epoch-nanosecond limits
+      // the Arrow limits: the int64 minimum itself is NaT in pandas (see the test below)
       fromEpochNanos(Long.MaxValue),
-      fromEpochNanos(Long.MinValue))
+      fromEpochNanos(Long.MinValue + 1))
 
     def check(dt: DataType, timeZoneId: String): Unit = {
       val schema = new StructType().add("value", dt, nullable = true)
@@ -245,6 +245,20 @@ class ArrowWriterSuite extends SparkFunSuite {
         assert(e.getCondition === "DATETIME_OVERFLOW")
         assert(e.getMessage.contains("Arrow INT64"))
       }
+      // The int64 minimum is rejected too: pandas/numpy read it as NaT.
+      val int64Min = TimestampNanosVal.fromParts(Long.MinValue / 1000L - 1L, 192.toShort)
+      val rendered = dt match {
+        case _: TimestampNTZNanosType => "1677-09-21T00:12:43.145224192"
+        case _ => "1677-09-21T00:12:43.145224192Z"
+      }
+      checkError(
+        exception = intercept[SparkArithmeticException] {
+          writer.write(InternalRow(int64Min))
+        },
+        condition = "DATETIME_OVERFLOW",
+        parameters = Map("operation" ->
+          (s"write the timestamp value $rendered as Arrow INT64 epoch-nanoseconds " +
+            "(supported range: 1677-09-21T00:12:43.145224193Z to 2262-04-11T23:47:16.854775807Z)")))
       writer.root.close()
     }
 
