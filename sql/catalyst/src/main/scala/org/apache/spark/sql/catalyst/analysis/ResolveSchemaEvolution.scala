@@ -21,7 +21,7 @@ import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Expression, ExtractValue, GetArrayStructFields, GetStructField, Literal, PlanExpression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
@@ -89,7 +89,7 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
     val newOutput = DataTypeUtils.toAttributes(newTable.columns)
     val newRelation = relation.copy(table = newTable, output = newOutput)
     val writeWithNewTargetTable = write.withNewTable(newRelation)
-    rewriteAttrs(writeWithNewTargetTable, oldOutput, newOutput)
+    rebindNestedExtractions(rewriteAttrs(writeWithNewTargetTable, oldOutput, newOutput))
   }
 
   private def rewriteAttrs[T <: LogicalPlan](
@@ -103,6 +103,35 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
       newOutput.find(newAttr => resolver(newAttr.name, oldAttr.name)).map(oldAttr -> _)
     })
     plan.rewriteAttrs(attrMap).asInstanceOf[T]
+  }
+
+  /**
+   * Re-resolves field extractions recorded before the target schema changed.
+   * Positioned adds shift the ordinals of following siblings, so [[GetStructField]]
+   * and [[GetArrayStructFields]] are re-derived by their recorded name; unnamed
+   * extractions and fields that no longer resolve are left unchanged.
+   */
+  private def rebindNestedExtractions[T <: LogicalPlan](plan: T): T = {
+    val resolver = conf.resolver
+
+    def rederived(child: Expression, name: String, original: Expression): Expression =
+      ExtractValue.extractValue(child, Literal(name), resolver) match {
+        case Left(resolved) => resolved
+        case Right(_) => original
+      }
+
+    def rebind: PartialFunction[Expression, Expression] = {
+      case gsf: GetStructField if gsf.name.isDefined =>
+        rederived(gsf.child, gsf.name.get, gsf)
+      case gasf: GetArrayStructFields =>
+        rederived(gasf.child, gasf.field.name, gasf)
+      case pe: PlanExpression[LogicalPlan @unchecked] =>
+        pe.withNewPlan(pe.plan.transformDown {
+          case node => node.transformExpressionsUp(rebind)
+        })
+    }
+
+    plan.transformExpressionsUp(rebind).asInstanceOf[T]
   }
 
   /**

@@ -784,6 +784,425 @@ trait MergeIntoSchemaEvolutionColumnOrderTests extends MergeIntoSchemaEvolutionS
     partitionCols = Seq.empty
   )
 
+  testNestedStructsEvolution("preserve order - matched condition on nested " +
+      "field after positioned add")(
+    target = Seq(
+      """{ "pk": 1, "info": { "salary": 100, "status": "inactive" }, "dep": "hr" }""",
+      """{ "pk": 2, "info": { "salary": 200, "status": "active" }, "dep": "software" }"""
+    ),
+    source = Seq(
+      """{ "pk": 2, "info": { "salary": 150, "bonus": 50, "status": "x" },
+        | "dep": "finance" }""".stripMargin.replace("\n", ""),
+      """{ "pk": 3, "info": { "salary": 250, "bonus": 75, "status": "y" },
+        | "dep": "finance" }""".stripMargin.replace("\n", "")
+    ),
+    targetSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("info", StructType(Seq(
+        StructField("salary", IntegerType),
+        StructField("status", StringType)
+      ))),
+      StructField("dep", StringType)
+    )),
+    sourceSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("info", StructType(Seq(
+        StructField("salary", IntegerType),
+        StructField("bonus", IntegerType),
+        StructField("status", StringType)
+      ))),
+      StructField("dep", StringType)
+    )),
+    clauses = Seq(updateAll(condition = "t.info.status = 'active'"), insertAll()),
+    result = Seq(
+      """{ "pk": 1, "info": { "salary": 100, "status": "inactive" }, "dep": "hr" }""",
+      """{ "pk": 2, "info": { "salary": 150, "bonus": 50, "status": "x" },
+        | "dep": "finance" }""".stripMargin.replace("\n", ""),
+      """{ "pk": 3, "info": { "salary": 250, "bonus": 75, "status": "y" },
+        | "dep": "finance" }""".stripMargin.replace("\n", "")
+    ),
+    resultSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("info", StructType(Seq(
+        StructField("salary", IntegerType),
+        StructField("bonus", IntegerType),
+        StructField("status", StringType)
+      ))),
+      StructField("dep", StringType)
+    )),
+    expectErrorWithoutEvolutionContains = "Cannot write extra fields",
+    confs = preserveOrderConfs
+  )
+
+  // Same scenario with a string field inserted before status: a stale ordinal reads
+  // an all-NULL field, so the row would silently fail the condition instead of erroring.
+  testNestedStructsEvolution("preserve order - matched condition on nested " +
+      "field after same-type positioned add")(
+    target = Seq(
+      """{ "pk": 1, "info": { "salary": 100, "status": "inactive" }, "dep": "hr" }""",
+      """{ "pk": 2, "info": { "salary": 200, "status": "active" }, "dep": "software" }"""
+    ),
+    source = Seq(
+      """{ "pk": 2, "info": { "salary": 150, "region": "us", "status": "x" },
+        | "dep": "finance" }""".stripMargin.replace("\n", ""),
+      """{ "pk": 3, "info": { "salary": 250, "region": "eu", "status": "y" },
+        | "dep": "finance" }""".stripMargin.replace("\n", "")
+    ),
+    targetSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("info", StructType(Seq(
+        StructField("salary", IntegerType),
+        StructField("status", StringType)
+      ))),
+      StructField("dep", StringType)
+    )),
+    sourceSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("info", StructType(Seq(
+        StructField("salary", IntegerType),
+        StructField("region", StringType),
+        StructField("status", StringType)
+      ))),
+      StructField("dep", StringType)
+    )),
+    clauses = Seq(updateAll(condition = "t.info.status = 'active'"), insertAll()),
+    result = Seq(
+      """{ "pk": 1, "info": { "salary": 100, "status": "inactive" }, "dep": "hr" }""",
+      """{ "pk": 2, "info": { "salary": 150, "region": "us", "status": "x" },
+        | "dep": "finance" }""".stripMargin.replace("\n", ""),
+      """{ "pk": 3, "info": { "salary": 250, "region": "eu", "status": "y" },
+        | "dep": "finance" }""".stripMargin.replace("\n", "")
+    ),
+    resultSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("info", StructType(Seq(
+        StructField("salary", IntegerType),
+        StructField("region", StringType),
+        StructField("status", StringType)
+      ))),
+      StructField("dep", StringType)
+    )),
+    expectErrorWithoutEvolutionContains = "Cannot write extra fields",
+    confs = preserveOrderConfs
+  )
+
+  testNestedStructsEvolution("preserve order - merge condition on nested " +
+      "field after positioned add")(
+    target = Seq(
+      """{ "pk": 1, "info": { "salary": 100, "status": "inactive" }, "dep": "hr" }""",
+      """{ "pk": 2, "info": { "salary": 200, "status": "active" }, "dep": "software" }"""
+    ),
+    source = Seq(
+      """{ "pk": 2, "info": { "salary": 150, "region": "us", "status": "x" },
+        | "dep": "finance" }""".stripMargin.replace("\n", ""),
+      """{ "pk": 3, "info": { "salary": 250, "region": "eu", "status": "y" },
+        | "dep": "finance" }""".stripMargin.replace("\n", "")
+    ),
+    targetSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("info", StructType(Seq(
+        StructField("salary", IntegerType),
+        StructField("status", StringType)
+      ))),
+      StructField("dep", StringType)
+    )),
+    sourceSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("info", StructType(Seq(
+        StructField("salary", IntegerType),
+        StructField("region", StringType),
+        StructField("status", StringType)
+      ))),
+      StructField("dep", StringType)
+    )),
+    cond = "t.pk = s.pk AND t.info.status = 'active'",
+    clauses = Seq(updateAll(), insertAll()),
+    result = Seq(
+      """{ "pk": 1, "info": { "salary": 100, "status": "inactive" }, "dep": "hr" }""",
+      """{ "pk": 2, "info": { "salary": 150, "region": "us", "status": "x" },
+        | "dep": "finance" }""".stripMargin.replace("\n", ""),
+      """{ "pk": 3, "info": { "salary": 250, "region": "eu", "status": "y" },
+        | "dep": "finance" }""".stripMargin.replace("\n", "")
+    ),
+    resultSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("info", StructType(Seq(
+        StructField("salary", IntegerType),
+        StructField("region", StringType),
+        StructField("status", StringType)
+      ))),
+      StructField("dep", StringType)
+    )),
+    expectErrorWithoutEvolutionContains = "Cannot write extra fields",
+    confs = preserveOrderConfs
+  )
+
+  testNestedStructsEvolution("preserve order - not matched by source condition " +
+      "on nested field after positioned add")(
+    target = Seq(
+      """{ "pk": 1, "info": { "salary": 100, "status": "active" }, "dep": "hr" }""",
+      """{ "pk": 2, "info": { "salary": 200, "status": "inactive" }, "dep": "software" }"""
+    ),
+    source = Seq(
+      """{ "pk": 2, "info": { "salary": 150, "region": "us", "status": "x" },
+        | "dep": "finance" }""".stripMargin.replace("\n", "")
+    ),
+    targetSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("info", StructType(Seq(
+        StructField("salary", IntegerType),
+        StructField("status", StringType)
+      ))),
+      StructField("dep", StringType)
+    )),
+    sourceSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("info", StructType(Seq(
+        StructField("salary", IntegerType),
+        StructField("region", StringType),
+        StructField("status", StringType)
+      ))),
+      StructField("dep", StringType)
+    )),
+    clauses = Seq(
+      updateAll(),
+      updateNotMatched(set = "dep = 'gone'", condition = "t.info.status = 'active'")
+    ),
+    result = Seq(
+      """{ "pk": 1, "info": { "salary": 100, "status": "active" }, "dep": "gone" }""",
+      """{ "pk": 2, "info": { "salary": 150, "region": "us", "status": "x" },
+        | "dep": "finance" }""".stripMargin.replace("\n", "")
+    ),
+    resultSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("info", StructType(Seq(
+        StructField("salary", IntegerType),
+        StructField("region", StringType),
+        StructField("status", StringType)
+      ))),
+      StructField("dep", StringType)
+    )),
+    expectErrorWithoutEvolutionContains = "Cannot write extra fields",
+    confs = preserveOrderConfs
+  )
+
+  testNestedStructsEvolution("preserve order - update assignment reads nested " +
+      "field after positioned add")(
+    target = Seq(
+      """{ "pk": 1, "info": { "salary": 100, "status": "inactive" }, "dep": "hr" }""",
+      """{ "pk": 2, "info": { "salary": 200, "status": "active" }, "dep": "software" }"""
+    ),
+    source = Seq(
+      """{ "pk": 2, "info": { "salary": 150, "bonus": 50, "status": "x" },
+        | "dep": "finance" }""".stripMargin.replace("\n", ""),
+      """{ "pk": 3, "info": { "salary": 250, "bonus": 75, "status": "y" },
+        | "dep": "finance" }""".stripMargin.replace("\n", "")
+    ),
+    targetSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("info", StructType(Seq(
+        StructField("salary", IntegerType),
+        StructField("status", StringType)
+      ))),
+      StructField("dep", StringType)
+    )),
+    sourceSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("info", StructType(Seq(
+        StructField("salary", IntegerType),
+        StructField("bonus", IntegerType),
+        StructField("status", StringType)
+      ))),
+      StructField("dep", StringType)
+    )),
+    clauses = Seq(update(set = "dep = t.info.status"), insertAll()),
+    result = Seq(
+      """{ "pk": 1, "info": { "salary": 100, "status": "inactive" }, "dep": "hr" }""",
+      """{ "pk": 2, "info": { "salary": 200, "status": "active" }, "dep": "active" }""",
+      """{ "pk": 3, "info": { "salary": 250, "bonus": 75, "status": "y" },
+        | "dep": "finance" }""".stripMargin.replace("\n", "")
+    ),
+    resultSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("info", StructType(Seq(
+        StructField("salary", IntegerType),
+        StructField("bonus", IntegerType),
+        StructField("status", StringType)
+      ))),
+      StructField("dep", StringType)
+    )),
+    expectErrorWithoutEvolutionContains = "Cannot write extra fields",
+    confs = preserveOrderConfs
+  )
+
+  testNestedStructsEvolution("preserve order - nested assignment key after " +
+      "positioned add")(
+    target = Seq(
+      """{ "pk": 1, "info": { "salary": 100, "status": "inactive" }, "dep": "hr" }""",
+      """{ "pk": 2, "info": { "salary": 200, "status": "active" }, "dep": "software" }"""
+    ),
+    source = Seq(
+      """{ "pk": 2, "info": { "salary": 150, "bonus": 50, "status": "x" },
+        | "dep": "finance" }""".stripMargin.replace("\n", ""),
+      """{ "pk": 3, "info": { "salary": 250, "bonus": 75, "status": "y" },
+        | "dep": "finance" }""".stripMargin.replace("\n", "")
+    ),
+    targetSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("info", StructType(Seq(
+        StructField("salary", IntegerType),
+        StructField("status", StringType)
+      ))),
+      StructField("dep", StringType)
+    )),
+    sourceSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("info", StructType(Seq(
+        StructField("salary", IntegerType),
+        StructField("bonus", IntegerType),
+        StructField("status", StringType)
+      ))),
+      StructField("dep", StringType)
+    )),
+    clauses = Seq(update(set = "info.status = 'changed'"), insertAll()),
+    result = Seq(
+      """{ "pk": 1, "info": { "salary": 100, "status": "inactive" }, "dep": "hr" }""",
+      """{ "pk": 2, "info": { "salary": 200, "status": "changed" }, "dep": "software" }""",
+      """{ "pk": 3, "info": { "salary": 250, "bonus": 75, "status": "y" },
+        | "dep": "finance" }""".stripMargin.replace("\n", "")
+    ),
+    resultSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("info", StructType(Seq(
+        StructField("salary", IntegerType),
+        StructField("bonus", IntegerType),
+        StructField("status", StringType)
+      ))),
+      StructField("dep", StringType)
+    )),
+    expectErrorWithoutEvolutionContains = "Cannot write extra fields",
+    confs = preserveOrderConfs
+  )
+
+  // mid lands inside info before addr and region inside addr before zip, so both
+  // levels of the extraction chain shift and the inner one must rebind first.
+  testNestedStructsEvolution("preserve order - chained nested field condition " +
+      "after positioned adds")(
+    target = Seq(
+      """{ "pk": 1, "info": { "status": "inactive",
+        | "addr": { "city": "la", "zip": "90001" } }, "dep": "hr" }"""
+        .stripMargin.replace("\n", ""),
+      """{ "pk": 2, "info": { "status": "active",
+        | "addr": { "city": "sf", "zip": "94102" } }, "dep": "software" }"""
+        .stripMargin.replace("\n", "")
+    ),
+    source = Seq(
+      """{ "pk": 2, "info": { "status": "x", "mid": "m",
+        | "addr": { "city": "ny", "region": "r", "zip": "10001" } },
+        | "dep": "finance" }""".stripMargin.replace("\n", ""),
+      """{ "pk": 3, "info": { "status": "y", "mid": "n",
+        | "addr": { "city": "bo", "region": "e", "zip": "02101" } },
+        | "dep": "finance" }""".stripMargin.replace("\n", "")
+    ),
+    targetSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("info", StructType(Seq(
+        StructField("status", StringType),
+        StructField("addr", StructType(Seq(
+          StructField("city", StringType),
+          StructField("zip", StringType)
+        )))
+      ))),
+      StructField("dep", StringType)
+    )),
+    sourceSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("info", StructType(Seq(
+        StructField("status", StringType),
+        StructField("mid", StringType),
+        StructField("addr", StructType(Seq(
+          StructField("city", StringType),
+          StructField("region", StringType),
+          StructField("zip", StringType)
+        )))
+      ))),
+      StructField("dep", StringType)
+    )),
+    clauses = Seq(updateAll(condition = "t.info.addr.zip = '94102'"), insertAll()),
+    result = Seq(
+      """{ "pk": 1, "info": { "status": "inactive",
+        | "addr": { "city": "la", "zip": "90001" } }, "dep": "hr" }"""
+        .stripMargin.replace("\n", ""),
+      """{ "pk": 2, "info": { "status": "x", "mid": "m",
+        | "addr": { "city": "ny", "region": "r", "zip": "10001" } },
+        | "dep": "finance" }""".stripMargin.replace("\n", ""),
+      """{ "pk": 3, "info": { "status": "y", "mid": "n",
+        | "addr": { "city": "bo", "region": "e", "zip": "02101" } },
+        | "dep": "finance" }""".stripMargin.replace("\n", "")
+    ),
+    resultSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("info", StructType(Seq(
+        StructField("status", StringType),
+        StructField("mid", StringType),
+        StructField("addr", StructType(Seq(
+          StructField("city", StringType),
+          StructField("region", StringType),
+          StructField("zip", StringType)
+        )))
+      ))),
+      StructField("dep", StringType)
+    )),
+    expectErrorWithoutEvolutionContains = "Cannot write extra fields",
+    confs = preserveOrderConfs
+  )
+
+  testNestedStructsEvolution("preserve order - array element field condition " +
+      "after positioned add")(
+    target = Seq(
+      """{ "pk": 1, "arr": [ { "a": 1, "c": 9 } ], "dep": "hr" }""",
+      """{ "pk": 2, "arr": [ { "a": 2, "c": 3 } ], "dep": "software" }"""
+    ),
+    source = Seq(
+      """{ "pk": 2, "arr": [ { "a": 3, "b": 10, "c": 5 } ], "dep": "finance" }""",
+      """{ "pk": 3, "arr": [ { "a": 4, "b": 20, "c": 6 } ], "dep": "finance" }"""
+    ),
+    targetSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("arr", ArrayType(StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("c", IntegerType)
+      )))),
+      StructField("dep", StringType)
+    )),
+    sourceSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("arr", ArrayType(StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("b", IntegerType),
+        StructField("c", IntegerType)
+      )))),
+      StructField("dep", StringType)
+    )),
+    clauses = Seq(updateAll(condition = "array_contains(t.arr.c, 3)"), insertAll()),
+    result = Seq(
+      """{ "pk": 1, "arr": [ { "a": 1, "c": 9 } ], "dep": "hr" }""",
+      """{ "pk": 2, "arr": [ { "a": 3, "b": 10, "c": 5 } ], "dep": "finance" }""",
+      """{ "pk": 3, "arr": [ { "a": 4, "b": 20, "c": 6 } ], "dep": "finance" }"""
+    ),
+    resultSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("arr", ArrayType(StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("b", IntegerType),
+        StructField("c", IntegerType)
+      )))),
+      StructField("dep", StringType)
+    )),
+    expectErrorWithoutEvolutionContains = "Cannot write extra fields",
+    confs = preserveOrderConfs
+  )
+
   test("preserve order - add rejected by connector is skipped when anchoring") {
     val targetData = Seq((1, "hr")).toDF("id", "data")
     val sourceData = Seq((2, 5, 9, "eng")).toDF("id", "v", "b", "data")

@@ -980,6 +980,33 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
     }
   }
 
+  test("Insert schema evolution: preserve order - REPLACE WHERE predicate " +
+    "on nested field after positioned add") {
+    withSQLConf(SQLConf.SCHEMA_EVOLUTION_PRESERVE_COLUMN_ORDER.key -> "true") {
+      val t1 = s"${catalogAndNamespace}tbl"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (id int, info struct<salary:int,status:string>) " +
+          s"USING $v2Format PARTITIONED BY (id)")
+        doInsert(t1,
+          Seq((1, 100, "active"), (2, 200, "inactive"))
+            .toDF("id", "salary", "status")
+            .select($"id", struct($"salary", $"status").as("info")))
+        // bonus lands before status; the pushed predicate must reference
+        // status. The in-memory table only resolves pushed attributes against
+        // partition columns, so it reports the translated name in the error.
+        val e = intercept[IllegalArgumentException] {
+          doInsertWithSchemaEvolution(t1,
+            Seq((1, 300, 50, "new"), (3, 400, 60, "x"))
+              .toDF("id", "salary", "bonus", "status")
+              .select($"id", struct($"salary", $"bonus", $"status").as("info")),
+            byName = true,
+            replaceWhere = Some("info.status = 'active'"))
+        }
+        assert(e.getMessage.contains("info.status"))
+      }
+    }
+  }
+
   test("Insert schema evolution: extra nested field by name in overwrite") {
     val t1 = s"${catalogAndNamespace}tbl"
     withTable(t1) {
