@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback}
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -238,6 +238,19 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       Seq(null, "b", "a"))
     checkEvaluation(arraySort(a4, (left, right) => UnaryMinus(ArraySort.comparator(left, right))),
       Seq(d2, d1))
+  }
+
+  test("ArraySort codegen") {
+    def codeOf(e: Expression): String = e.genCode(new CodegenContext).code.toString
+
+    val input = Literal.create(Seq(2, 1, 3), ArrayType(IntegerType, containsNull = false))
+    val defaultComparatorCode = codeOf(arraySort(input))
+    assert(defaultComparatorCode.contains("java.util.Arrays.parallelSort"))
+    assert(!defaultComparatorCode.contains(".eval("))
+
+    val customComparatorCode =
+      codeOf(arraySort(input, (left, right) => UnaryMinus(ArraySort.comparator(left, right))))
+    assert(customComparatorCode.contains(".eval("))
   }
 
   test("MapFilter") {
