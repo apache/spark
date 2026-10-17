@@ -2138,35 +2138,17 @@ object CollapseWindow extends Rule[LogicalPlan] {
         WindowFunctionType.functionType(w2.windowExpressions.head)
   }
 
-  /**
-   * Whether `apply` would merge the window directly under `parent` into `parent`. Matches
-   * both the adjacent `Window`-`Window` case and the `Window`-`Project`-`Window` case
-   * (including the parent-references-subset-of-grandchild check). Shared with
-   * `TransposeWindow`, which rebuilds the under-pin plan via `rebuildReorderedStack` and
-   * passes it here so a pinned reorder cannot invent a collapsing shape that defeats
-   * `InferWindowGroupLimit`.
-   */
-  private[optimizer] def wouldMergeInto(
-      parent: Window, beneathParent: LogicalPlan): Boolean = beneathParent match {
-    case w2: Window =>
-      windowsCompatible(parent, w2)
-    case Project(_, w2: Window) =>
-      windowsCompatible(parent, w2) && parent.references.subsetOf(w2.child.outputSet)
-    case _ =>
-      false
-  }
-
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsPattern(WINDOW), ruleId) {
     case w1 @ Window(we1, _, _, w2 @ Window(we2, _, _, grandChild, _), _)
-        if wouldMergeInto(w1, w2) =>
+        if windowsCompatible(w1, w2) =>
       w1.copy(
         orderSpec = if (w1.orderSpec.nonEmpty) w1.orderSpec else w2.orderSpec,
         windowExpressions = we2 ++ we1,
         child = grandChild)
 
-    case w1 @ Window(we1, _, _, p @ Project(pl, w2 @ Window(we2, _, _, grandChild, _)), _)
-        if wouldMergeInto(w1, p) =>
+    case w1 @ Window(we1, _, _, Project(pl, w2 @ Window(we2, _, _, grandChild, _)), _)
+        if windowsCompatible(w1, w2) && w1.references.subsetOf(grandChild.outputSet) =>
       Project(
         pl ++ w1.windowOutputSet,
         w1.copy(
@@ -2195,6 +2177,11 @@ object CollapseWindow extends Rule[LogicalPlan] {
  * is not claimed. When `reorderable` rejects a chain, the rule falls back to the previous
  * adjacent-pair transposition on that chain only (not below `bottomChild`), so enabling the
  * flag is never worse than leaving it off; reorderable chains get the full stack reorder.
+ * A chain cut by a derived alias hides a Window-Project-Window pair from the stack
+ * reorder, so that pairwise swap is applied at the cut as well: to a reorderable chain's
+ * bottom window before the reorder, and to a one-window run in place of it. The one
+ * deliberate exception is a window pinned by a rank filter, which is never swapped down
+ * so the `InferWindowGroupLimit` rewrite survives.
  * Under `requireAllClusterKeysForDistribution`, a partitioning only satisfies a window's
  * `ClusteredDistribution` with the exact same keys in the same order, so the subset
  * relation degenerates to exact spec equality: the lower bound equals the number of
@@ -2224,8 +2211,9 @@ object CollapseWindow extends Rule[LogicalPlan] {
  * The stack reordering is gated by `spark.sql.optimizer.windowReorder.enabled` (default
  * false). When disabled, the rule only transposes adjacent window pairs whose upper
  * partition spec is a proper subset of the lower one (see `transposeAdjacentPairs`). When
- * enabled, reorderable chains are stack-reordered; rejected chains use that same pairwise
- * transposition as a per-chain fallback.
+ * enabled, reorderable chains are stack-reordered; rejected chains, one-window runs, and
+ * chain bottoms at a derived-alias cut still get that same pairwise transposition, so
+ * opting in loses no pairwise win (the rank-filter pin excepted).
  */
 object TransposeWindow extends Rule[LogicalPlan] {
 
@@ -2266,7 +2254,12 @@ object TransposeWindow extends Rule[LogicalPlan] {
       topWindowChildOutput: Seq[Attribute],
       originalOutput: Seq[Attribute])
 
-  /** Collect the maximal window chain topped by `plan`, if `plan` tops at least 2 windows. */
+  /**
+   * Collect the maximal window chain topped by `plan`, if `plan` tops at least one
+   * window. One-window chains are returned too: they have nothing to reorder, but their
+   * bottom window may sit on a derived `Project` over another window, where the legacy
+   * pairwise swap still applies (see `reorderIfChainTop`).
+   */
   private def collectChain(plan: LogicalPlan): Option[WindowChain] = {
     // Collect the chain top-down: `windows` is filled from the top window down,
     // `betweenLinks(i)` holds the transparent links accumulated right above `windows(i)`,
@@ -2292,7 +2285,7 @@ object TransposeWindow extends Rule[LogicalPlan] {
       }
     }
 
-    if (windows.length < 2) {
+    if (windows.isEmpty) {
       None
     } else {
       val n = windows.length
@@ -2457,88 +2450,91 @@ object TransposeWindow extends Rule[LogicalPlan] {
     windowGroups(windows).flatten
 
   /**
-   * Whether `CollapseWindow` would merge into `parent` from the plan that will sit under
-   * it (`beneathParent`, from `rebuildReorderedStack`) and add a non-expanding expression,
-   * defeating `InferWindowGroupLimit` on `parent`.
-   *
-   * `rebuildReorderedStack` re-applies every hoisted transparent link above the reordered
-   * windows, so the pin's child may be a stack of attribute/`Alias(attribute)` Projects
-   * over the window that would actually merge (e.g. after DataFrame `withColumn`).
-   * `CollapseProject` removes that spine before `CollapseWindow` runs; peel the same
-   * transparent links here so the merge check sees that window.
+   * Whether emitting `order` under the chain's pinned rank window lets `CollapseWindow`
+   * merge a non-expanding window into it in the later operator-optimization iterations,
+   * defeating `InferWindowGroupLimit`. Checking only the window directly under the pin is
+   * not enough: the emitted order packs the tail's own group directly below the tail and
+   * `CollapseWindow` merges bottom-up, so a non-expanding window can reach the pin through
+   * the tail (an empty-order window can also inherit an order spec on the way, becoming
+   * mergeable where it was not on its own). The check therefore rebuilds the exact
+   * under-pin plan `order` would produce (`rebuildReorderedStack`), puts the pinned window
+   * on top, and applies `CollapseProject` and `CollapseWindow` -- the rules the batch will
+   * run on that subtree -- until they stop changing. Each merge only removes operators, so
+   * this terminates within subtree-size iterations.
    */
   private def collapseMergeDefeatsGroupLimit(
-      parent: Window, beneathParent: LogicalPlan): Boolean = {
-    @scala.annotation.tailrec
-    def peelTransparentProjects(plan: LogicalPlan): LogicalPlan = plan match {
-      case p: Project if isTransparentLink(p) => peelTransparentProjects(p.child)
-      case other => other
+      chain: WindowChain, toPermute: Seq[Window], order: Seq[Int]): Boolean = {
+    val pinned = chain.windows.last
+    val rebuilt = rebuildReorderedStack(
+      chain, toPermute, order, chain.betweenLinks.flatten, chain.topWindowChildOutput)
+
+    var collapsed: LogicalPlan = pinned.withNewChildren(Seq(rebuilt))
+    var prev: LogicalPlan = null
+    while (prev == null || !collapsed.fastEquals(prev)) {
+      prev = collapsed
+      collapsed = CollapseWindow(CollapseProject(collapsed))
     }
 
-    val beneath = peelTransparentProjects(beneathParent)
-    if (!CollapseWindow.wouldMergeInto(parent, beneath)) {
-      return false
+    // The pin stays the top window of the subtree: CollapseWindow only merges upward into
+    // it, possibly leaving a Project on top. Any other shape is outside what this check
+    // models, so refuse the candidate; another order (or no reorder) is always safe.
+    var top = collapsed
+    while (top.isInstanceOf[Project]) {
+      top = top.children.head
     }
-
-    // `wouldMergeInto` only accepts Window or Project(Window).
-    val mergedIn = beneath match {
-      case w: Window => w
-      case Project(_, w: Window) => w
-      case other =>
-        throw SparkException.internalError(
-          s"Unexpected plan under pinned window: ${other.nodeName}")
+    top match {
+      case w: Window =>
+        w.windowExpressions.exists(!InferWindowGroupLimit.isExpandingWindow(_))
+      case _ => true
     }
-    mergedIn.windowExpressions.exists(!InferWindowGroupLimit.isExpandingWindow(_))
   }
 
   /**
    * Like `exchangeOptimalOrder`, but with a pinned rank window above the chain: prefer a
    * group order whose last group the pin can ride (so the pin shares that exchange), and
    * reject orders for which `CollapseWindow` would merge into the pin in a way that defeats
-   * `InferWindowGroupLimit`. If no order is safe, returns the identity order (no reorder).
+   * `InferWindowGroupLimit` (see `collapseMergeDefeatsGroupLimit`). If no order is safe,
+   * returns the identity order (no reorder).
    *
    * Only two choices affect the outcome: which group sits last, because the pin rides the
    * exchange keyed on that group's leader (minimal) spec, and which member of it sits
-   * directly under the pin, because the merge check reads only the window under the pin.
-   * Every other group keeps its `windowGroups` order, so the search stays quadratic in the
-   * number of windows instead of enumerating group orders and last-group permutations.
+   * directly under the pin, because a merge cascade into the pin starts there. Every other
+   * group keeps its `windowGroups` order, so the search probes one candidate order per
+   * (last group, tail) pair instead of enumerating group orders and last-group
+   * permutations.
    */
   private def groupLimitSafeOrder(chain: WindowChain, toPermute: Seq[Window]): Seq[Int] = {
-    val pinned = chain.windows.last
     val groups = windowGroups(toPermute)
-    val hoistedLinks = chain.betweenLinks.flatten
-    val boundaryOutput = chain.topWindowChildOutput
 
-    // Whether `top` sitting directly under the pin makes `CollapseWindow` merge into the
-    // pin with a non-expanding expression, defeating `InferWindowGroupLimit`. The merge
-    // reads only the window under the pin, so the rest of the order cannot change the
-    // answer; probe with the other windows in their original relative order.
-    def defeats(top: Int): Boolean = {
-      val order = toPermute.indices.filterNot(_ == top) :+ top
-      collapseMergeDefeatsGroupLimit(
-        pinned, rebuildReorderedStack(chain, toPermute, order, hoistedLinks, boundaryOutput))
+    // The order a candidate emits: group `g` last with `top` as its tail, every other
+    // group in its `windowGroups` order. The probe must see this exact order: cascades
+    // into the pin depend on every window below the tail, not just the tail.
+    def orderWithLastGroup(g: Int, top: Int): Seq[Int] = {
+      val last = groups(g)
+      groups.indices.filterNot(_ == g).flatMap(groups) ++ (last.filterNot(_ == top) :+ top)
     }
 
-    // The pin rides the exchange keyed on the last group's leader (minimal) spec.
-    def pinRides(group: Seq[Int]): Boolean =
-      canRideExchange(toPermute(group.head).partitionSpec, pinned.partitionSpec)
+    def defeats(g: Int, top: Int): Boolean =
+      collapseMergeDefeatsGroupLimit(chain, toPermute, orderWithLastGroup(g, top))
 
-    // The safe window closest to the top of `group` (last in group order) is the first tail
-    // the previous per-permutation scan accepted. Moving it to the group's top keeps the
-    // leader first unless the safe member is the leader itself, so the group still shares
-    // the exchange keyed on its minimal spec.
-    def safeTail(group: Seq[Int]): Option[Int] = group.reverse.find(!defeats(_))
+    // The pin rides the exchange keyed on the last group's leader (minimal) spec.
+    def pinRides(g: Int): Boolean =
+      canRideExchange(
+        toPermute(groups(g).head).partitionSpec, chain.windows.last.partitionSpec)
+
+    // The safe window closest to the top of the group (last in group order) is the first
+    // tail the previous per-permutation scan accepted. Moving it to the group's top keeps
+    // the leader first unless the safe member is the leader itself, so the group still
+    // shares the exchange keyed on its minimal spec.
+    def safeTail(g: Int): Option[Int] = groups(g).reverse.find(t => !defeats(g, t))
 
     // Among the groups that admit a safe tail, prefer one the pin can ride, then any; the
     // previous search took the first group order in first-appearance order, which puts the
     // last qualifying group last with the other groups in their original order.
-    val withSafeTail = groups.indices.flatMap(g => safeTail(groups(g)).map(g -> _))
-    val rideable = withSafeTail.filter { case (g, _) => pinRides(groups(g)) }
+    val withSafeTail = groups.indices.flatMap(g => safeTail(g).map(g -> _))
+    val rideable = withSafeTail.filter { case (g, _) => pinRides(g) }
     (if (rideable.nonEmpty) rideable else withSafeTail).lastOption match {
-      case Some((g, top)) =>
-        val last = groups(g)
-        groups.indices.filterNot(_ == g).flatMap(groups) ++
-          (last.filterNot(_ == top) :+ top)
+      case Some((g, top)) => orderWithLastGroup(g, top)
       case None =>
         toPermute.indices
     }
@@ -2548,7 +2544,8 @@ object TransposeWindow extends Rule[LogicalPlan] {
    * Stack `toPermute` in `order`, re-apply `hoistedLinks` (passing through attrs still
    * required above), and restore `boundaryOutput` with a `Project` when needed. For a
    * pinned reorder this is exactly the plan under the pinned window, so the WGL-safety
-   * check can pass it to `CollapseWindow.wouldMergeInto`.
+   * check can simulate the later collapse rules on it (see
+   * `collapseMergeDefeatsGroupLimit`).
    */
   private def rebuildReorderedStack(
       chain: WindowChain,
@@ -2699,17 +2696,63 @@ object TransposeWindow extends Rule[LogicalPlan] {
   private def reorderIfChainTop(
       plan: LogicalPlan, parent: Option[LogicalPlan]): Option[LogicalPlan] = {
     val chain = collectChain(plan).getOrElse(return None)
-    if (!reorderable(chain)) {
+    val pinTopWindow = parent.exists {
+      case filter: Filter => isRankFilterOnTopWindow(filter, chain)
+      case _ => false
+    }
+    if (chain.windows.length < 2) {
+      // A one-window run has nothing to reorder, but the pairwise fallback must still
+      // see it: the run's bottom child may be a non-transparent Project over a Window
+      // (a derived-alias cut), where the legacy Window-Project-Window swap applies just
+      // as with the flag off. Skip when the window is pinned by a rank filter: the swap
+      // would bury it under the lower window and lose the InferWindowGroupLimit rewrite.
+      if (pinTopWindow) {
+        None
+      } else {
+        val transposed = transposeAdjacentPairsBounded(plan, chain.bottomChild)
+        if (transposed.fastEquals(plan)) None else Some(transposed)
+      }
+    } else if (!reorderable(chain)) {
       // Stack reorder is all-or-nothing; keep the legacy pairwise wins on this chain only.
       val transposed = transposeAdjacentPairsBounded(plan, chain.bottomChild)
       if (transposed.fastEquals(plan)) None else Some(transposed)
     } else {
-      val pinTopWindow = parent.exists {
-        case filter: Filter => isRankFilterOnTopWindow(filter, chain)
-        case _ => false
+      // If the chain's bottom window sits on a non-transparent Project over a Window (a
+      // derived-alias cut), first apply the legacy pairwise swap across that cut, as the
+      // flag-off path would, then continue with the shortened chain. Each swap moves one
+      // window down across the cut into the lower chain, so this converges; the grown
+      // lower chain is re-collected on the next fixed-point iteration.
+      val bottomWindow = chain.windows.head
+      val swappedBottom =
+        transposeAdjacentPair.applyOrElse(bottomWindow, (_: LogicalPlan) => bottomWindow)
+      if (!swappedBottom.fastEquals(bottomWindow)) {
+        val shortened = rebuildWithSwappedBottom(chain, swappedBottom)
+        Some(reorderIfChainTop(shortened, parent).getOrElse(shortened))
+      } else {
+        reorderChain(chain, pinTopWindow)
       }
-      reorderChain(chain, pinTopWindow)
     }
+  }
+
+  /**
+   * Rebuild the plan topped by `chain` with its bottom window replaced by
+   * `swappedBottom` (the bottom window after a pairwise swap across the derived-`Project`
+   * cut below it), keeping the between-window links, the windows above, and the top links
+   * in place.
+   */
+  private def rebuildWithSwappedBottom(
+      chain: WindowChain, swappedBottom: LogicalPlan): LogicalPlan = {
+    var cur = swappedBottom
+    chain.windows.indices.drop(1).foreach { i =>
+      cur = chain.betweenLinks(i - 1).foldLeft(cur) { (c, link) =>
+        link.withNewChildren(Seq(c))
+      }
+      cur = chain.windows(i).withNewChildren(Seq(cur))
+    }
+    chain.topLinks.foreach { link =>
+      cur = link.withNewChildren(Seq(cur))
+    }
+    cur
   }
 
   /**
