@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.python.streaming
 
+import java.util.concurrent.{CountDownLatch, TimeUnit}
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.mockito.Mockito.when
@@ -66,6 +68,66 @@ class PythonForeachWriterSuite extends SparkFunSuite with Eventually with Mockit
     b.assertOutput(1 to 2000)
   }
 
+  test("SPARK-60310: UnsafeRowBuffer: close does not free a row that the reading thread uses") {
+    val buffer = createBuffer(4 << 10)
+    val intProj = UnsafeProjection.create(Array[DataType](IntegerType))
+    buffer.add(intProj(new GenericInternalRow(Array[Any](1))))
+    val rowRead = new CountDownLatch(1)
+    val bufferClosed = new CountDownLatch(1)
+    @volatile var value = 0
+    // Like the WriterThread converting a row while the task completion listener closes the
+    // buffer, e.g. after the task was killed while waiting for the WriterThread.
+    val reader = new Thread() {
+      override def run(): Unit = {
+        val row = buffer.iterator.next()
+        rowRead.countDown()
+        bufferClosed.await()
+        value = row.getInt(0)
+      }
+    }
+    reader.start()
+    try {
+      assert(rowRead.await(60, TimeUnit.SECONDS))
+      buffer.close()
+    } finally {
+      bufferClosed.countDown()
+      reader.join()
+    }
+    // A row in a freed page reads 0x5a5a5a5a, the pattern of spark.memory.debugFill.
+    assert(value === 1)
+  }
+
+  test("SPARK-60310: UnsafeRowBuffer: close stops the reading thread waiting for rows") {
+    val buffer = createBuffer(4 << 10)
+    @volatile var error: Throwable = null
+    val reader = new Thread() {
+      override def run(): Unit = {
+        try {
+          buffer.iterator.hasNext
+        } catch {
+          case t: Throwable => error = t
+        }
+      }
+    }
+    reader.start()
+    try {
+      import Thread.State._
+      eventually(timeout(60.seconds)) {
+        assert(reader.getState == TIMED_WAITING || reader.getState == WAITING)
+      }
+      // When the task is killed, `allRowsAdded()` can fail on the interrupted task thread, and
+      // the task completion listener closes the buffer while the reading thread waits for rows.
+      buffer.close()
+      reader.join(10000)
+      assert(!reader.isAlive)
+      // An error, not the end of the input, so that Python does not see a complete partition.
+      assert(error.isInstanceOf[IllegalStateException], error)
+    } finally {
+      reader.interrupt()
+      reader.join()
+    }
+  }
+
   def testWithBuffer(
       name: String,
       memBytes: Long = 4 << 10,
@@ -85,18 +147,20 @@ class PythonForeachWriterSuite extends SparkFunSuite with Eventually with Mockit
   }
 
 
+  def createBuffer(memBytes: Long): UnsafeRowBuffer = {
+    val mockEnv = mock[SparkEnv]
+    val conf = new SparkConf()
+    val serializerManager = new SerializerManager(new JavaSerializer(conf), conf, None)
+    when(mockEnv.serializerManager).thenReturn(serializerManager)
+    SparkEnv.set(mockEnv)
+    val mem = new TestMemoryManager(conf)
+    mem.limit(memBytes)
+    val taskM = new TaskMemoryManager(mem, 0)
+    new UnsafeRowBuffer(taskM, Utils.createTempDir(), 1)
+  }
+
   class BufferTester(memBytes: Long, sleepPerRowReadMs: Int) {
-    private val buffer = {
-      val mockEnv = mock[SparkEnv]
-      val conf = new SparkConf()
-      val serializerManager = new SerializerManager(new JavaSerializer(conf), conf, None)
-      when(mockEnv.serializerManager).thenReturn(serializerManager)
-      SparkEnv.set(mockEnv)
-      val mem = new TestMemoryManager(conf)
-      mem.limit(memBytes)
-      val taskM = new TaskMemoryManager(mem, 0)
-      new UnsafeRowBuffer(taskM, Utils.createTempDir(), 1)
-    }
+    private val buffer = createBuffer(memBytes)
     private val iterator = buffer.iterator
     private val outputBuffer = new ArrayBuffer[Int]
     private val testTimeout = timeout(60.seconds)
