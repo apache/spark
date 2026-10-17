@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Add
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -122,7 +121,7 @@ class PushProjectionThroughLimitAndOffsetSuite extends PlanTest {
     val optimized3 = Optimize.execute(query3)
     val expected3 = testRelation
       .select($"a", $"b", $"c")
-      .localLimit(Add(15, 5)).offset(5).globalLimit(15)
+      .localLimit(20).offset(5).globalLimit(15)
       .analyze
     comparePlans(optimized3, expected3)
 
@@ -133,7 +132,7 @@ class PushProjectionThroughLimitAndOffsetSuite extends PlanTest {
     val optimized4 = Optimize.execute(query4)
     val expected4 = testRelation
       .select($"a", $"b", $"c")
-      .localLimit(Add(10, 5)).offset(5).globalLimit(10)
+      .localLimit(15).offset(5).globalLimit(10)
       .analyze
     comparePlans(optimized4, expected4)
 
