@@ -39,6 +39,11 @@ final class ParquetColumnVector {
   private final List<ParquetColumnVector> children;
   private final WritableColumnVector vector;
 
+  // Cache of number of children in vector for use in `close`. Call to `close` is not guaranteed to
+  // happen before `ColumnarBatch.close` which dereferences `WritableColumnVector.childColumns`
+  // leading to `WritableColumnVector.getNumChildren` throwing exception.
+  private int vectorNumChildren;
+
   // Describes the file schema of the Parquet variant column. When it is not null, `children`
   // contains only one child that reads the underlying file content. This `ParquetColumnVector`
   // should assemble Spark variant values from the file content.
@@ -118,17 +123,19 @@ final class ParquetColumnVector {
         definitionLevels = vector.reserveNewColumn(capacity, DataTypes.IntegerType);
       }
     } else {
+      vectorNumChildren = vector.getNumChildren();
+
       // If a child is not present in the allocated vectors, it means we don't care about this
       // child's data, we just want to read its levels to help assemble some parent struct. So we
       // create a dummy vector below to hold the child's data. There can only be one such child.
-      JavaUtils.checkArgument(column.children().size() == vector.getNumChildren() ||
-        column.children().size() == vector.getNumChildren() + 1,
+      JavaUtils.checkArgument(column.children().size() == vectorNumChildren ||
+        column.children().size() == vectorNumChildren + 1,
         "The number of column children is not equal to the number of vector children or that + 1");
       boolean allChildrenAreMissing = true;
 
       for (int i = 0; i < column.children().size(); i++) {
         ParquetColumn childColumn = column.children().apply(i);
-        WritableColumnVector childVector = i < vector.getNumChildren()
+        WritableColumnVector childVector = i < vectorNumChildren
           ? vector.getChild(i)
           : vector.reserveNewColumn(capacity, childColumn.sparkType());
         ParquetColumnVector childCv = new ParquetColumnVector(childColumn, childVector, capacity,
@@ -228,6 +235,30 @@ final class ParquetColumnVector {
     }
     for (ParquetColumnVector child : children) {
       child.reset();
+    }
+  }
+
+  void close() {
+    // Calls `ColumnVector.close` for scenarios using `reserveNewColumn`.
+    if (column.variantFileType().isDefined()) {
+      ParquetColumnVector child = children.get(0);
+      child.close();
+      child.vector.close();
+    } else if (isPrimitive) {
+      if (repetitionLevels != null) {
+        repetitionLevels.close();
+      }
+      if (definitionLevels != null) {
+        definitionLevels.close();
+      }
+    } else {
+      for (int i = 0; i < children.size(); i++) {
+        ParquetColumnVector child = children.get(i);
+        child.close();
+        if (i >= vectorNumChildren) {
+          child.vector.close();
+        }
+      }
     }
   }
 
