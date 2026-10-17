@@ -1321,6 +1321,40 @@ class DataFrameAggregateSuite extends SharedSparkSession
       Row(Row(Double.NaN)))
   }
 
+  test("SPARK-XXXXX: mode compares binary values by content") {
+    // X'02' occurs three times. Counting byte arrays by reference made every count 1, so mode()
+    // returned an arbitrary value and mode() WITHIN GROUP the smallest one, X'01'.
+    val values = Seq(2, 1, 1, 2, 2, 3).map(i => Array(i.toByte))
+    def checkModes(df: DataFrame): Unit = {
+      checkAnswer(
+        df.selectExpr("mode(b)", "mode() WITHIN GROUP (ORDER BY b)"),
+        Row(Array[Byte](2), Array[Byte](2)))
+      // pandas_mode is an internal expression, so invoke it via Column.internalFn.
+      checkAnswer(
+        df.select(Column.internalFn("pandas_mode", col("b"), lit(true))),
+        Row(Seq(Array[Byte](2))))
+    }
+
+    // One partition, aggregated in Complete mode (update only) or by adjacent Partial and Final
+    // aggregates (which also serialize, deserialize and merge the buffer).
+    val df = values.toDF("b").repartition(1)
+    Seq(true, false).foreach { combine =>
+      withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> combine.toString) {
+        checkModes(df)
+      }
+    }
+    // Three partitions [X'02', X'01'], [X'01', X'02'] and [X'02', X'03']: each one sees X'02'
+    // once, so only a merge that compares the deserialized keys by content counts it 3 times.
+    checkModes(spark.sparkContext.parallelize(values, 3).toDF("b"))
+
+    // X'7F' and X'80' tie as the most frequent values. Binary values compare as unsigned bytes,
+    // so X'7F' is the smaller one.
+    checkAnswer(
+      sql("SELECT mode() WITHIN GROUP (ORDER BY b), mode() WITHIN GROUP (ORDER BY b DESC) " +
+        "FROM VALUES (X'01'), (X'7F'), (X'7F'), (X'80'), (X'80'), (X'FF') AS t(b)"),
+      Row(Array(0x7F.toByte), Array(0x80.toByte)))
+  }
+
   test("SPARK-27581: DataFrame count_distinct(\"*\") shouldn't fail with AnalysisException") {
     val df = sql("select id % 100 from range(100000)")
     val distinctCount1 = df.select(expr("count(distinct(*))"))
