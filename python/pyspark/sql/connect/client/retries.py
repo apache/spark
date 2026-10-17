@@ -151,10 +151,9 @@ class RetryPolicyState:
         wait_time = self._next_wait
 
         # Calculate future backoff
+        self._next_wait = wait_time * self.policy.backoff_multiplier
         if self.policy.max_backoff is not None:
-            self._next_wait = min(
-                float(self.policy.max_backoff), wait_time * self.policy.backoff_multiplier
-            )
+            self._next_wait = min(float(self.policy.max_backoff), self._next_wait)
 
         if exception is not None and self.policy.recognize_server_retry_delay:
             retry_delay = extract_retry_delay(exception)
