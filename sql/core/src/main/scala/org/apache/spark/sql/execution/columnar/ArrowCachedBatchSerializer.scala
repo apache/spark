@@ -1257,6 +1257,12 @@ private class ColumnarBatchToArrowCachedBatchIterator(
 
 /**
  * Iterator that converts ArrowCachedBatch to ColumnarBatch.
+ *
+ * Every batch is loaded into its own root, and its columns are plain [[ArrowColumnVector]]s, which
+ * a consumer may hold past the next batch: the consumer releases a batch with closeIfFreeable once
+ * it is done with it (see [[org.apache.spark.sql.execution.vectorized.ReusedColumnVector]]), which
+ * closes its root once all its columns are closed. The roots of the batches that are not released
+ * that way, e.g. when the consumer stops early, are closed when the task completes.
  */
 private class ArrowCachedBatchToColumnarBatchIterator(
     batchIter: Iterator[CachedBatch],
@@ -1291,14 +1297,16 @@ private class ArrowCachedBatchToColumnarBatchIterator(
       arrowSchema
     }
 
-  // Track only the previous root to close it when next batch is produced
-  private var previousRoot: VectorSchemaRoot = null
+  // The roots of the returned batches that the consumer has not released yet. A consumer may
+  // release a batch from another thread than the one calling next(), e.g. the writer thread of a
+  // pipelined Python UDF, so it is guarded by its own lock.
+  private val unreleasedRoots = java.util.Collections.newSetFromMap(
+    new java.util.IdentityHashMap[VectorSchemaRoot, java.lang.Boolean]())
 
   // Prefetch support: deserialize the next batch into its own root in a background thread while
   // the current batch is being consumed. Only the deserialization (IPC read + decompression +
-  // loading into a fresh root) happens off-thread; closing the previous root stays on the
-  // consumer thread in next(), so the vectors backing a returned ColumnarBatch are never released
-  // while the consumer may still read them.
+  // loading into a fresh root) happens off-thread; the vectors backing a returned ColumnarBatch are
+  // only released by its consumer, so never while the consumer may still read them.
   private val prefetchExecutor: ExecutorService = if (prefetchEnabled) {
     Executors.newSingleThreadExecutor(r => {
       val t = new Thread(r, "arrow-cache-prefetch")
@@ -1310,7 +1318,7 @@ private class ArrowCachedBatchToColumnarBatchIterator(
   }
   private var prefetchFuture: Future[VectorSchemaRoot] = _
 
-  // Register cleanup - close remaining root and allocator when task completes
+  // Register cleanup - close the unreleased roots and the allocator when the task completes
   Option(TaskContext.get()).foreach { tc =>
     tc.addTaskCompletionListener[Unit] { _ =>
       // Stop the worker and close any root it already produced before closing the allocator.
@@ -1319,9 +1327,9 @@ private class ArrowCachedBatchToColumnarBatchIterator(
       // would then fail with "Memory was leaked by query".
       prefetchFuture = ArrowCachedBatchSerializer.drainAndClosePrefetch(
         prefetchExecutor, prefetchFuture)
-      if (previousRoot != null) {
-        previousRoot.close()
-        previousRoot = null
+      unreleasedRoots.synchronized {
+        unreleasedRoots.forEach(_.close())
+        unreleasedRoots.clear()
       }
       allocator.close()
     }
@@ -1330,12 +1338,6 @@ private class ArrowCachedBatchToColumnarBatchIterator(
   override def hasNext: Boolean = prefetchFuture != null || batchIter.hasNext
 
   override def next(): ColumnarBatch = {
-    // Close the previous root since the consumer has moved on from the batch it backed.
-    if (previousRoot != null) {
-      previousRoot.close()
-      previousRoot = null
-    }
-
     val root = if (prefetchFuture != null) {
       val r = try {
         prefetchFuture.get()
@@ -1348,19 +1350,24 @@ private class ArrowCachedBatchToColumnarBatchIterator(
       deserializeToRoot(batchIter.next().asInstanceOf[ArrowCachedBatch])
     }
 
-    previousRoot = root
-
     // When projected on load, the root already holds only the selected columns in output order,
     // so wrap its vectors directly. Otherwise it holds all cache columns and must be selected.
-    val selectedColumns = if (canProjectOnLoad) {
-      root.getFieldVectors.asScala.map(v => new ArrowColumnVector(v)).toArray[ColumnVector]
+    val selectedVectors = if (canProjectOnLoad) {
+      root.getFieldVectors.asScala.toArray
     } else {
-      val allColumns = root.getFieldVectors.asScala.map { vector =>
-        new ArrowColumnVector(vector)
-      }.toArray[ColumnVector]
-      columnIndices.map(allColumns(_))
+      columnIndices.map(root.getFieldVectors.get(_))
     }
-    val batch = new ColumnarBatch(selectedColumns, root.getRowCount)
+    val numRows = root.getRowCount
+    val batch = if (selectedVectors.isEmpty) {
+      // No column can release the root, and it holds no buffer the batch needs.
+      root.close()
+      new ColumnarBatch(Array.empty[ColumnVector], numRows)
+    } else {
+      unreleasedRoots.synchronized(unreleasedRoots.add(root))
+      val release = new RootRelease(root, selectedVectors.length)
+      new ColumnarBatch(
+        selectedVectors.map(new ReleasingArrowColumnVector(_, release): ColumnVector), numRows)
+    }
 
     // Start prefetching the next batch while this one is being consumed.
     submitPrefetch()
@@ -1397,6 +1404,42 @@ private class ArrowCachedBatchToColumnarBatchIterator(
       }
     } {
       recordBatch.close()
+    }
+  }
+
+  /** Closes `root` once all `numColumns` columns of the batch over it have been closed. */
+  private class RootRelease(root: VectorSchemaRoot, numColumns: Int) {
+    private var numOpen = numColumns
+
+    /**
+     * Closes a column of the batch with `closeColumn`, and the root after the last one. A no-op
+     * once the root is closed, e.g. by the task completion listener.
+     */
+    def closeColumn(closeColumn: () => Unit): Unit = unreleasedRoots.synchronized {
+      if (unreleasedRoots.contains(root)) {
+        closeColumn()
+        numOpen -= 1
+        if (numOpen == 0) {
+          unreleasedRoots.remove(root)
+          root.close()
+        }
+      }
+    }
+  }
+
+  /** A column of a returned batch, which releases the batch's root once all are closed. */
+  private class ReleasingArrowColumnVector(
+      vector: org.apache.arrow.vector.FieldVector,
+      release: RootRelease) extends ArrowColumnVector(vector) {
+    private var closed = false
+
+    private def closeVector(): Unit = super.close()
+
+    override def close(): Unit = unreleasedRoots.synchronized {
+      if (!closed) {
+        closed = true
+        release.closeColumn(() => closeVector())
+      }
     }
   }
 
