@@ -23,7 +23,7 @@ import org.apache.spark.sql.vectorized.ArrowColumnVector;
 /**
  * An {@link ArrowColumnVector} whose producer may release or overwrite it after returning it, for
  * example by loading every batch into the same Arrow vectors. A consumer must not hold it past the
- * next batch.
+ * next batch. See {@link ReusedColumnVector}.
  *
  * <p>Like the vectors that {@link WritableColumnVector} and {@link ConstantColumnVector} reuse
  * across batches, the producer releases it: {@link #closeIfFreeable()}, which a consumer calls
@@ -32,7 +32,7 @@ import org.apache.spark.sql.vectorized.ArrowColumnVector;
  * returns for the fields of a struct are plain {@link ArrowColumnVector}s, which consumers do not
  * release on their own.
  */
-public class ReusedArrowColumnVector extends ArrowColumnVector {
+public class ReusedArrowColumnVector extends ArrowColumnVector implements ReusedColumnVector {
 
   public ReusedArrowColumnVector(ValueVector vector) {
     super(vector);

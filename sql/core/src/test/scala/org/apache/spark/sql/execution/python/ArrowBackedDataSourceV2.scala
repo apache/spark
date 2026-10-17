@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read._
+import org.apache.spark.sql.execution.vectorized.ReusedArrowColumnVector
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -206,7 +207,8 @@ private class ArrowBackedReaderFactory(
 /**
  * Reads the same rows as [[ArrowBackedPartitionReader]], with short values in `data`, but refills
  * the same vectors for every batch and closes them once the reader is closed, as columnar readers
- * may: a batch is only valid until the next one.
+ * may: a batch is only valid until the next one, so its columns are
+ * [[ReusedArrowColumnVector]]s.
  */
 private class ReusingArrowPartitionReader(start: Int, end: Int, batchSize: Int)
     extends PartitionReader[ColumnarBatch] {
@@ -218,7 +220,7 @@ private class ReusingArrowPartitionReader(start: Int, end: Int, batchSize: Int)
       errorOnDuplicatedFieldNames = true, largeVarTypes = false),
     allocator)
   private val batch = new ColumnarBatch(
-    root.getFieldVectors.asScala.map(new ArrowColumnVector(_): ColumnVector).toArray)
+    root.getFieldVectors.asScala.map(new ReusedArrowColumnVector(_): ColumnVector).toArray)
 
   override def next(): Boolean = {
     if (current >= end) return false
@@ -259,7 +261,7 @@ private class ReusingArrowPartitionReader(start: Int, end: Int, batchSize: Int)
  * - value (DOUBLE): id * 0.1
  * - data (STRING): 100 random characters
  *
- * Every batch has vectors of its own, which are not reused vectors: the consumer may
+ * Every batch has vectors of its own, which are not [[ReusedArrowColumnVector]]s: the consumer may
  * hold them past the next batch, even past the close of the reader, and releases them with
  * closeIfFreeable. The ones it does not release are closed when the task completes. Their
  * release is counted in [[ArrowBackedDataSourceV2]].

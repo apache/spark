@@ -34,8 +34,11 @@ import org.apache.spark.unsafe.types.VariantVal;
  * which will set the exact same value to all rows.
  *
  * Capacity: The vector stores only one copy of the data.
+ *
+ * Readers reuse a ConstantColumnVector across batches and free it when they are closed, so it is a
+ * {@link ReusedColumnVector}.
  */
-public class ConstantColumnVector extends ColumnVector {
+public class ConstantColumnVector extends ColumnVector implements ReusedColumnVector {
 
   // The data stored in this ConstantColumnVector, the vector stores only one copy of the data.
   private byte nullData;
