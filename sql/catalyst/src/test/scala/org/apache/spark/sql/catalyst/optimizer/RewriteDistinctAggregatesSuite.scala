@@ -18,11 +18,12 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Literal, Round}
-import org.apache.spark.sql.catalyst.expressions.aggregate.CollectSet
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, CaseWhen, Cast, Coalesce, Exists, Expression, GetMapValue, GetStructField, If, InSubquery, ListQuery, Literal, Lower, Not, Or, Rand, Round}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, CollectSet, Count, Sum}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LocalRelation, LogicalPlan}
-import org.apache.spark.sql.types.{IntegerType, StringType}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{DoubleType, IntegerType, MapType, StringType, StructField, StructType}
 
 class RewriteDistinctAggregatesSuite extends PlanTest {
   val nullInt = Literal(null, IntegerType)
@@ -124,5 +125,686 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
     if (!rewrite.resolved) {
       fail(s"Plan is not as expected:\n$rewrite")
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // COUNT(DISTINCT IF/CASE) canonicalization (SPARK-56898)
+  // ---------------------------------------------------------------------------
+
+  val conditionalTestRelation = LocalRelation(
+    Symbol("a").int, Symbol("b").int, Symbol("c").int, Symbol("d").string)
+
+  private def countDistinctIf(cond: Expression, base: Expression): Expression = {
+    Count(If(cond, base, Literal(null))).toAggregateExpression(isDistinct = true)
+  }
+
+  private def countDistinctCaseWhen(cond: Expression, base: Expression): Expression = {
+    val caseWhen = CaseWhen(
+      Seq((cond, base)),
+      None)
+    Count(caseWhen).toAggregateExpression(isDistinct = true)
+  }
+
+  private def countDistinctCaseWhenElseNull(cond: Expression, base: Expression): Expression = {
+    val caseWhen = CaseWhen(
+      Seq((cond, base)),
+      Some(Literal(null)))
+    Count(caseWhen).toAggregateExpression(isDistinct = true)
+  }
+
+  private def collectAggregateExpressions(plan: LogicalPlan): Seq[AggregateExpression] = {
+    plan.collect { case a: Aggregate => a.aggregateExpressions }
+      .flatten
+      .flatMap(_.collect { case ae: AggregateExpression => ae })
+  }
+
+  /**
+   * Asserts that the optimized plan has exactly one Expand node with one projection,
+   * that the shared distinct key is guarded by the union of the member filters,
+   * and that the outer aggregate has moved the conditions into FILTER clauses.
+   */
+  private def assertSingleDistinctGroupExpand(
+      optimized: LogicalPlan,
+      baseColName: String,
+      conds: Seq[Expression]): Unit = {
+    // rewrite() adds EqualTo(gid, id) to every distinct aggregate, so filter.isDefined
+    // alone always passes. Require a user-condition reference (same as assertCanonicalized).
+    val hasUserConditionFilter = collectAggregateExpressions(optimized)
+      .flatMap(_.filter)
+      .exists(_.references.exists(_.name != "gid"))
+    assert(hasUserConditionFilter,
+      "expected at least one AggregateExpression with a user-condition FILTER clause")
+    val baseAttr = conditionalTestRelation.output.find(_.name == baseColName).get
+    assertGuardedExpandKey(optimized, baseAttr, conds)
+  }
+
+  /**
+   * Asserts that the collapsed distinct group's Expand key is guarded by the union
+   * of the member filters, i.e. IF(Or(cond1, ..., condN), base, NULL): rows matching
+   * no predicate project NULL as the distinct key and collapse into a single key in
+   * the first aggregate, keeping its output cardinality bounded by the pre-rewrite
+   * plan (distinct(base | Or(conds)) + 1 <= sum_i distinct(base | cond_i) + N).
+   */
+  private def assertGuardedExpandKey(
+      optimized: LogicalPlan,
+      base: Expression,
+      conds: Seq[Expression]): Unit = {
+    val expand = optimized.collectFirst { case e: Expand => e }.get
+    assert(expand.projections.size == 1,
+      s"expected 1 distinct group but got ${expand.projections.size}")
+    val guard = expand.projections.head.collectFirst {
+      case i @ If(_, trueValue, falseValue)
+          if falseValue == nullInt && trueValue.semanticEquals(base) => i
+    }.getOrElse(fail(s"no union guard over $base in Expand projections:\n$optimized"))
+    val leaves = orLeaves(guard.predicate)
+    assert(leaves.size == conds.size,
+      s"guard condition should cover all ${conds.size} filters: ${guard.predicate}")
+    conds.foreach { c =>
+      assert(leaves.exists(_.semanticEquals(c)),
+        s"guard condition misses $c: ${guard.predicate}")
+    }
+  }
+
+  private def orLeaves(expr: Expression): Seq[Expression] = expr match {
+    case Or(left, right) => orLeaves(left) ++ orLeaves(right)
+    case other => Seq(other)
+  }
+
+  /** EXISTS / IN / NOT IN nodes in Expand projections. The guard must not copy these. */
+  private def subqueryExprCount(plan: LogicalPlan): Int = {
+    val exprs = plan.collect { case e: Expand => e }.flatMap(_.projections.flatten)
+    exprs.map(_.collect { case _: Exists | _: InSubquery => () }.size).sum
+  }
+
+  test("conditional: disabled when config is false") {
+    withSQLConf(SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "false") {
+      val input = conditionalTestRelation
+        .groupBy(Symbol("a"))(
+          countDistinctIf(Symbol("b") > 1, Symbol("c")).as("cnt1"),
+          countDistinctIf(Symbol("b") > 2, Symbol("c")).as("cnt2"))
+        .analyze
+      val optimized = RewriteDistinctAggregates(input)
+      // The general RewriteDistinctAggregates still fires, but conditional
+      // canonicalization is disabled so the two conditional counts stay as 2
+      // distinct groups instead of collapsing to 1.
+      val expands = optimized.collect { case e: Expand => e }
+      assert(expands.head.projections.size == 2,
+        "expected 2 distinct groups when conditional canonicalization is disabled")
+    }
+  }
+
+  test("conditional: rewrite COUNT(DISTINCT IF(cond, col, NULL)) to COUNT(DISTINCT col) FILTER") {
+    val bAttr = conditionalTestRelation.output.find(_.name == "b").get
+    val input = conditionalTestRelation
+      .groupBy(Symbol("a"))(
+        countDistinctIf(Symbol("b") > 1, Symbol("c")).as("cnt1"),
+        countDistinctIf(Symbol("b") > 2, Symbol("c")).as("cnt2"))
+      .analyze
+    val optimized = RewriteDistinctAggregates(input)
+    assertSingleDistinctGroupExpand(optimized, "c", Seq(bAttr > 1, bAttr > 2))
+  }
+
+  test("conditional: rewrite COUNT(DISTINCT CASE WHEN cond THEN col END) to " +
+      "COUNT(DISTINCT col) FILTER") {
+    val bAttr = conditionalTestRelation.output.find(_.name == "b").get
+    val input = conditionalTestRelation
+      .groupBy(Symbol("a"))(
+        countDistinctCaseWhen(Symbol("b") > 1, Symbol("c")).as("cnt1"),
+        countDistinctCaseWhen(Symbol("b") > 2, Symbol("c")).as("cnt2"))
+      .analyze
+    val optimized = RewriteDistinctAggregates(input)
+    assertSingleDistinctGroupExpand(optimized, "c", Seq(bAttr > 1, bAttr > 2))
+  }
+
+  test("conditional: rewrite COUNT(DISTINCT CASE WHEN cond THEN col ELSE NULL END)") {
+    val bAttr = conditionalTestRelation.output.find(_.name == "b").get
+    val input = conditionalTestRelation
+      .groupBy(Symbol("a"))(
+        countDistinctCaseWhenElseNull(Symbol("b") > 1, Symbol("c")).as("cnt1"),
+        countDistinctCaseWhenElseNull(Symbol("b") > 2, Symbol("c")).as("cnt2"))
+      .analyze
+    val optimized = RewriteDistinctAggregates(input)
+    assertSingleDistinctGroupExpand(optimized, "c", Seq(bAttr > 1, bAttr > 2))
+  }
+
+  test("conditional: multiple conditional distinct counts collapse to single distinct group") {
+    val bAttr = conditionalTestRelation.output.find(_.name == "b").get
+    val input = conditionalTestRelation
+      .groupBy(Symbol("a"))(
+        countDistinctIf(Symbol("b") > 1, Symbol("c")).as("cnt1"),
+        countDistinctIf(Symbol("b") > 2, Symbol("c")).as("cnt2"),
+        countDistinctIf(Symbol("b") > 3, Symbol("c")).as("cnt3"))
+      .analyze
+    val optimized = RewriteDistinctAggregates(input)
+    // All three counts share the same base column c, collapsed to 1 distinct group.
+    assertSingleDistinctGroupExpand(
+      optimized, "c", Seq(bAttr > 1, bAttr > 2, bAttr > 3))
+  }
+
+  test("conditional: guarded Expand key is IF(union of conditions, base, NULL)") {
+    val bAttr = conditionalTestRelation.output.find(_.name == "b").get
+    val base = conditionalTestRelation.output.find(_.name == "c").get
+    val input = conditionalTestRelation
+      .groupBy(Symbol("a"))(
+        countDistinctIf(Symbol("b") > 1, Symbol("c")).as("cnt1"),
+        countDistinctIf(Symbol("b") > 2, Symbol("c")).as("cnt2"))
+      .analyze
+    val optimized = RewriteDistinctAggregates(input)
+    assertGuardedExpandKey(optimized, base, Seq(bAttr > 1, bAttr > 2))
+  }
+
+  test("conditional: guarded Expand key covers CASE WHEN conditions too") {
+    val bAttr = conditionalTestRelation.output.find(_.name == "b").get
+    val base = conditionalTestRelation.output.find(_.name == "c").get
+    val input = conditionalTestRelation
+      .groupBy(Symbol("a"))(
+        countDistinctCaseWhen(Symbol("b") > 1, Symbol("c")).as("cnt1"),
+        countDistinctCaseWhenElseNull(Symbol("b") > 2, Symbol("c")).as("cnt2"))
+      .analyze
+    val optimized = RewriteDistinctAggregates(input)
+    assertGuardedExpandKey(optimized, base, Seq(bAttr > 1, bAttr > 2))
+  }
+
+  test("conditional: guarded Expand key covers all conditions of a 3-count collapse") {
+    val bAttr = conditionalTestRelation.output.find(_.name == "b").get
+    val base = conditionalTestRelation.output.find(_.name == "c").get
+    val input = conditionalTestRelation
+      .groupBy(Symbol("a"))(
+        countDistinctIf(Symbol("b") > 1, Symbol("c")).as("cnt1"),
+        countDistinctIf(Symbol("b") > 2, Symbol("c")).as("cnt2"),
+        countDistinctIf(Symbol("b") > 3, Symbol("c")).as("cnt3"))
+      .analyze
+    val optimized = RewriteDistinctAggregates(input)
+    assertGuardedExpandKey(optimized, base, Seq(bAttr > 1, bAttr > 2, bAttr > 3))
+  }
+
+  test("conditional: user-written FILTER counts sharing a base get the union guard") {
+    val bAttr = conditionalTestRelation.output.find(_.name == "b").get
+    val base = conditionalTestRelation.output.find(_.name == "c").get
+    val input = conditionalTestRelation
+      .groupBy(Symbol("a"))(
+        Count(base).toAggregateExpression(isDistinct = true, filter = Some(bAttr > 1)).as("cnt1"),
+        Count(base).toAggregateExpression(isDistinct = true, filter = Some(bAttr > 2)).as("cnt2"))
+      .analyze
+    val optimized = RewriteDistinctAggregates(input)
+    assertGuardedExpandKey(optimized, base, Seq(bAttr > 1, bAttr > 2))
+  }
+
+  test("conditional: config false disables union guard for user-written FILTER") {
+    // The config is the kill switch for both IF/CASE normalize and the union-of-filters
+    // guard. With it off, user-written FILTER distincts still Expand (mustRewrite) but
+    // keep the raw base as the Expand key.
+    withSQLConf(SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "false") {
+      val bAttr = conditionalTestRelation.output.find(_.name == "b").get
+      val base = conditionalTestRelation.output.find(_.name == "c").get
+      val input = conditionalTestRelation
+        .groupBy(Symbol("a"))(
+          Count(base).toAggregateExpression(isDistinct = true, filter = Some(bAttr > 1))
+            .as("cnt1"),
+          Count(base).toAggregateExpression(isDistinct = true, filter = Some(bAttr > 2))
+            .as("cnt2"))
+        .analyze
+      val optimized = RewriteDistinctAggregates(input)
+      val expand = optimized.collectFirst { case e: Expand => e }.get
+      assert(expand.projections.size == 1)
+      assert(expand.projections.head.exists(_.semanticEquals(base)),
+        "raw base expected when rewriteCountDistinctConditional is disabled")
+      assert(
+        !expand.projections.head.exists {
+          case If(_, trueValue, falseValue) =>
+            falseValue == nullInt && trueValue.semanticEquals(base)
+          case _ => false
+        },
+        "union guard should be off when rewriteCountDistinctConditional is disabled")
+    }
+  }
+
+  test("conditional: unfiltered count in the group keeps the raw base key") {
+    val base = conditionalTestRelation.output.find(_.name == "c").get
+    val input = conditionalTestRelation
+      .groupBy(Symbol("a"))(
+        Count(base).toAggregateExpression(isDistinct = true).as("cnt0"),
+        Count(base).toAggregateExpression(isDistinct = true,
+          filter = Some(Symbol("b") > 1)).as("cnt1"),
+        Count(base).toAggregateExpression(isDistinct = true,
+          filter = Some(Symbol("b") > 2)).as("cnt2"))
+      .analyze
+    val optimized = RewriteDistinctAggregates(input)
+    val expand = optimized.collectFirst { case e: Expand => e }.get
+    // One distinct group {c}, but the unfiltered count needs the raw child over all
+    // rows, so the Expand key must not be guarded.
+    assert(expand.projections.size == 1)
+    assert(expand.projections.head.exists(_.semanticEquals(base)),
+      "raw base attribute expected when the group contains an unfiltered count")
+  }
+
+  test("conditional: non-deterministic filter keeps the raw base key") {
+    val base = conditionalTestRelation.output.find(_.name == "c").get
+    val nondet = Rand(42) < Literal(0.5, DoubleType)
+    val input = conditionalTestRelation
+      .groupBy(Symbol("a"))(
+        Count(base).toAggregateExpression(isDistinct = true, filter = Some(nondet)).as("cnt1"),
+        Count(base).toAggregateExpression(isDistinct = true, filter = Some(nondet)).as("cnt2"))
+      .analyze
+    val optimized = RewriteDistinctAggregates(input)
+    val expand = optimized.collectFirst { case e: Expand => e }.get
+    // The guard re-evaluates the filters, so non-deterministic ones must not be
+    // guarded; the Expand key stays the raw attribute.
+    assert(expand.projections.head.exists(_.semanticEquals(base)),
+      "raw base attribute expected with a non-deterministic filter")
+  }
+
+  test("conditional: EXISTS, IN, and NOT IN filters keep the raw key") {
+    // RewritePredicateSubquery has not run. Copying a predicate subquery into the
+    // Expand key builds a second ExistenceJoin later, so the key stays raw and each
+    // predicate appears once, as its flag column.
+    val dim = LocalRelation(Symbol("x").int)
+    val existsPred = Exists(dim)
+    val inPred = InSubquery(Seq(Symbol("b")), ListQuery(dim, numCols = 1))
+    val notInPred = Not(InSubquery(Seq(Symbol("c")), ListQuery(dim, numCols = 1)))
+    val b = conditionalTestRelation.output.find(_.name == "b").get
+    val c = conditionalTestRelation.output.find(_.name == "c").get
+    val d = conditionalTestRelation.output.find(_.name == "d").get
+    val input = conditionalTestRelation
+      .groupBy(Symbol("a"))(
+        Count(b).toAggregateExpression(isDistinct = true, filter = Some(existsPred)).as("cnt1"),
+        Count(c).toAggregateExpression(isDistinct = true, filter = Some(inPred)).as("cnt2"),
+        Count(d).toAggregateExpression(isDistinct = true, filter = Some(notInPred)).as("cnt3"))
+      .analyze
+    val optimized = RewriteDistinctAggregates(input)
+    val expand = optimized.collectFirst { case e: Expand => e }.get
+    assert(expand.projections.size == 3)
+    Seq(b, c, d).foreach { base =>
+      val nullOfBase = Literal.create(null, base.dataType)
+      assert(expand.projections.exists(_.exists(_.semanticEquals(base))),
+        s"raw key expected for $base")
+      assert(!expand.projections.exists(_.exists {
+        case If(_, trueValue, falseValue) =>
+          falseValue.semanticEquals(nullOfBase) && trueValue.semanticEquals(base)
+        case _ => false
+      }), s"subquery filter must not guard $base")
+    }
+    assert(subqueryExprCount(optimized) == 3,
+      "each predicate subquery should appear once in the Expand")
+  }
+
+  test("conditional: do not canonicalize counts whose condition is a predicate subquery") {
+    // Normalizing would merge these into one group that cannot be guarded, and Expand
+    // would project the raw base. Leave each IF/CASE in its own group.
+    val dim = LocalRelation(Symbol("x").int)
+    val x = dim.output.head
+    val input = conditionalTestRelation
+      .groupBy(Symbol("a"))(
+        countDistinctIf(Exists(dim.where(x > 0)), Symbol("c")).as("cnt1"),
+        countDistinctCaseWhen(Exists(dim.where(x > 1)), Symbol("c")).as("cnt2"),
+        countDistinctCaseWhenElseNull(Exists(dim.where(x > 2)), Symbol("c")).as("cnt3"))
+      .analyze
+    val optimized = RewriteDistinctAggregates(input)
+    val expand = optimized.collectFirst { case e: Expand => e }.get
+    assert(expand.projections.size == 3,
+      "subquery conditions should stay 3 distinct groups")
+    val hasUserConditionFilter = collectAggregateExpressions(optimized)
+      .flatMap(_.filter)
+      .exists(_.references.exists(_.name != "gid"))
+    assert(!hasUserConditionFilter,
+      "subquery condition should not become a user-condition FILTER clause")
+    assert(subqueryExprCount(optimized) == 3,
+      "each predicate subquery should appear once in the Expand")
+  }
+
+  test("conditional: subquery-free filters stay guarded beside a subquery condition") {
+    val bAttr = conditionalTestRelation.output.find(_.name == "b").get
+    val base = conditionalTestRelation.output.find(_.name == "c").get
+    val dim = LocalRelation(Symbol("x").int)
+    val input = conditionalTestRelation
+      .groupBy(Symbol("a"))(
+        countDistinctIf(Symbol("b") > 1, Symbol("c")).as("cnt1"),
+        countDistinctIf(Symbol("b") > 2, Symbol("c")).as("cnt2"),
+        countDistinctIf(Exists(dim), Symbol("c")).as("cnt3"))
+      .analyze
+    val optimized = RewriteDistinctAggregates(input)
+    val expand = optimized.collectFirst { case e: Expand => e }.get
+    // The two plain predicates share one guarded group. The EXISTS count stays separate.
+    assert(expand.projections.size == 2)
+    val guard = expand.projections.flatten.collectFirst {
+      case i @ If(_, trueValue, falseValue)
+          if falseValue == nullInt && trueValue.semanticEquals(base) => i
+    }.getOrElse(fail(s"no union guard over c:\n$optimized"))
+    val leaves = orLeaves(guard.predicate)
+    assert(leaves.size == 2, s"guard should cover only the plain predicates: ${guard.predicate}")
+    Seq(bAttr > 1, bAttr > 2).foreach { cond =>
+      assert(leaves.exists(_.semanticEquals(cond)), s"guard misses $cond: ${guard.predicate}")
+    }
+    assert(subqueryExprCount(optimized) == 1,
+      "the EXISTS condition should appear once, in its own group")
+  }
+
+  test("conditional: throwable distinct child keeps the raw key") {
+    // Division can throw under ANSI on rows the filter rejects. Wrapping it in
+    // the guard would skip those evaluations, so the Expand key stays raw.
+    val input = conditionalTestRelation
+      .groupBy(Symbol("a"))(
+        Count(Symbol("c") / Symbol("b")).toAggregateExpression(
+          isDistinct = true, filter = Some(Symbol("a") > 0)).as("cnt"))
+      .analyze
+    val child = input.collectFirst {
+      case a: Aggregate =>
+        a.aggregateExpressions.flatMap(_.collect {
+          case ae: AggregateExpression if ae.isDistinct =>
+            ae.aggregateFunction.children.headOption
+        }).flatten.head
+    }.get
+    val optimized = RewriteDistinctAggregates(input)
+    val expand = optimized.collectFirst { case e: Expand => e }.get
+    assert(expand.projections.head.exists(_.semanticEquals(child)),
+      s"raw distinct child expected, projections:\n${expand.projections.head}")
+  }
+
+  test("conditional: single conditional distinct count is gated out by mayNeedtoRewrite") {
+    // A lone COUNT(DISTINCT IF(...)) must NOT be pushed onto the Expand path.
+    // The canonicalization runs inside rewrite(), which is only called when
+    // mayNeedtoRewrite returns true. A single conditional distinct count has no filter
+    // and forms only one distinct group, so mayNeedtoRewrite returns false, rewrite()
+    // is never called, and no Expand is produced.
+    val input = conditionalTestRelation
+      .groupBy(Symbol("a"))(
+        countDistinctIf(Symbol("b") > 1, Symbol("c")).as("cnt1"))
+      .analyze
+    val optimized = RewriteDistinctAggregates(input)
+    val expands = optimized.collect { case e: Expand => e }
+    assert(expands.isEmpty, "single conditional distinct count should not produce an Expand")
+  }
+
+  test("conditional: COUNT+SUM sharing IF keeps single-distinct path") {
+    // Both share one unfiltered distinct child. Normalizing only the COUNT would
+    // split the group into {c} and {IF(b>1,c,NULL)} and force a 2-projection Expand.
+    // Keep the original aggregate so AggregationStrategy handles it without Expand.
+    // Use the same null literal as countDistinctIf so the IF children are one
+    // ExpressionSet key after analysis (as in SQL COUNT/SUM over the same IF).
+    val sharedIf = If(Symbol("b") > 1, Symbol("c"), Literal(null))
+    val input = conditionalTestRelation
+      .groupBy(Symbol("a"))(
+        Count(sharedIf).toAggregateExpression(isDistinct = true).as("cnt"),
+        Sum(sharedIf).toAggregateExpression(isDistinct = true).as("sum"))
+      .analyze
+    val optimized = RewriteDistinctAggregates(input)
+    comparePlans(optimized, input)
+  }
+
+  test("conditional: IF shared with an un-normalizable distinct agg is not normalized") {
+    // COUNT(DISTINCT IF(b>1, c, NULL)) shares its IF child with SUM(DISTINCT IF(...)),
+    // which is not canonicalized. Normalizing the COUNT would move it into the guarded
+    // {c} group while the SUM keeps the {IF(b>1, c, NULL)} group, so rows matching b>1
+    // would carry their c keys in both groups, roughly doubling the first aggregate's
+    // output. The count must stay in the shared group; only the other two conditional
+    // counts collapse, and their guard covers exactly b>2 and b>3.
+    val bAttr = conditionalTestRelation.output.find(_.name == "b").get
+    val base = conditionalTestRelation.output.find(_.name == "c").get
+    val sharedIf = If(Symbol("b") > 1, Symbol("c"), Literal(null))
+    val input = conditionalTestRelation
+      .groupBy(Symbol("a"))(
+        Count(sharedIf).toAggregateExpression(isDistinct = true).as("cnt1"),
+        Sum(sharedIf).toAggregateExpression(isDistinct = true).as("sum1"),
+        countDistinctIf(Symbol("b") > 2, Symbol("c")).as("cnt2"),
+        countDistinctIf(Symbol("b") > 3, Symbol("c")).as("cnt3"))
+      .analyze
+    // The resolved shared IF child of the un-normalized COUNT and SUM.
+    val analyzedSharedIf = input.collectFirst {
+      case a: Aggregate => a.aggregateExpressions.flatMap(_.collect {
+        case ae: AggregateExpression
+            if ae.isDistinct && ae.aggregateFunction.isInstanceOf[Sum] =>
+          ae.aggregateFunction.children.head
+      }).head
+    }.get
+    val optimized = RewriteDistinctAggregates(input)
+    val expand = optimized.collectFirst { case e: Expand => e }.get
+    // Two distinct groups: {IF(b>1, c, NULL)} serving cnt1 and sum1, and the guarded
+    // {c} group serving cnt2 and cnt3.
+    assert(expand.projections.size == 2,
+      s"expected 2 distinct groups:\n$optimized")
+    assert(expand.projections.exists(_.exists(_.semanticEquals(analyzedSharedIf))),
+      s"shared IF should stay a raw distinct key:\n$optimized")
+    // Skip the shared IF, whose trueValue is also c.
+    val guard = expand.projections.flatten.collectFirst {
+      case i @ If(_, trueValue, falseValue)
+          if falseValue == nullInt && trueValue.semanticEquals(base) &&
+            !i.semanticEquals(analyzedSharedIf) => i
+    }.getOrElse(fail(s"no union guard over c in Expand projections:\n$optimized"))
+    val leaves = orLeaves(guard.predicate)
+    assert(leaves.size == 2,
+      s"guard condition should cover exactly b>2 and b>3: ${guard.predicate}")
+    Seq(bAttr > 2, bAttr > 3).foreach { cond =>
+      assert(leaves.exists(_.semanticEquals(cond)),
+        s"guard condition misses $cond: ${guard.predicate}")
+    }
+  }
+
+  test("conditional: repeated COUNT(DISTINCT IF) with COUNT(*) keeps single-distinct path") {
+    // Two identical conditional counts form one unfiltered distinct group. Normalizing
+    // them to FILTER form would make mustRewrite true and introduce an Expand
+    // (regular branch + distinct branch) with no fan-out reduction.
+    val input = conditionalTestRelation
+      .groupBy(Symbol("a"))(
+        countDistinctIf(Symbol("b") > 1, Symbol("c")).as("cnt"),
+        countDistinctIf(Symbol("b") > 1, Symbol("c")).as("cnt2"),
+        Count(Literal(1)).toAggregateExpression().as("n"))
+      .analyze
+    val optimized = RewriteDistinctAggregates(input)
+    comparePlans(optimized, input)
+  }
+
+  test("conditional: do not rewrite IF with non-null else branch") {
+    val input = conditionalTestRelation
+      .groupBy(Symbol("a"))(
+        Count(If(Symbol("b") > 1, Symbol("c"), Literal(0, IntegerType)))
+          .toAggregateExpression(isDistinct = true)
+          .as("cnt1"),
+        Count(If(Symbol("b") > 2, Symbol("c"), Literal(0, IntegerType)))
+          .toAggregateExpression(isDistinct = true)
+          .as("cnt2"))
+      .analyze
+    val optimized = RewriteDistinctAggregates(input)
+    // Plan is rewritten (2 distinct groups) but not canonicalized
+    checkRewrite(optimized)
+    val expands = optimized.collect { case e: Expand => e }
+    assert(expands.head.projections.size == 2,
+      "non-null else branch should not be collapsed to 1 distinct group")
+  }
+
+  test("conditional: do not rewrite non-distinct COUNT") {
+    // Pair the non-distinct COUNT with two conditional distinct counts on the same
+    // base so that normalization is kept (strict reduction) and rewrite() runs.
+    // The non-distinct COUNT must keep its IF child and get no FILTER clause.
+    val bAttr = conditionalTestRelation.output.find(_.name == "b").get
+    val base = conditionalTestRelation.output.find(_.name == "c").get
+    val input = conditionalTestRelation
+      .groupBy(Symbol("a"))(
+        Count(If(Symbol("b") > 1, Symbol("c"), Literal(null, IntegerType)))
+          .toAggregateExpression(isDistinct = false)
+          .as("cnt"),
+        countDistinctIf(Symbol("b") > 1, Symbol("c")).as("cnt1"),
+        countDistinctIf(Symbol("b") > 2, Symbol("c")).as("cnt2"))
+      .analyze
+    // The resolved IF child of the non-distinct COUNT.
+    val analyzedIf = input.collectFirst {
+      case a: Aggregate => a.aggregateExpressions.flatMap(_.collect {
+        case ae: AggregateExpression if !ae.isDistinct =>
+          ae.aggregateFunction.children.head
+      }).head
+    }.get
+    val optimized = RewriteDistinctAggregates(input)
+    val expand = optimized.collectFirst { case e: Expand => e }.get
+    // One regular projection plus one distinct projection: the two conditional
+    // distinct counts collapsed into a single guarded distinct group.
+    assert(expand.projections.size == 2,
+      s"expected 1 regular + 1 distinct projection:\n$optimized")
+    // The guard lives in the distinct projection; skip the non-distinct COUNT's own
+    // IF, which is projected raw in the regular projection.
+    val guard = expand.projections.flatten.collectFirst {
+      case i @ If(_, trueValue, falseValue)
+          if falseValue == nullInt && trueValue.semanticEquals(base) &&
+            !i.semanticEquals(analyzedIf) => i
+    }.getOrElse(fail(s"no union guard over c in Expand projections:\n$optimized"))
+    val leaves = orLeaves(guard.predicate)
+    assert(leaves.size == 2,
+      s"guard condition should cover both filters: ${guard.predicate}")
+    Seq(bAttr > 1, bAttr > 2).foreach { cond =>
+      assert(leaves.exists(_.semanticEquals(cond)),
+        s"guard condition misses $cond: ${guard.predicate}")
+    }
+    // The non-distinct COUNT keeps its IF child in the regular projection.
+    assert(expand.projections.exists(_.exists(_.semanticEquals(analyzedIf))),
+      s"non-distinct COUNT should keep its IF child in the Expand:\n$optimized")
+    // ... and gains no FILTER clause in the first aggregate.
+    val innerAgg = optimized.collectFirst {
+      case a @ Aggregate(_, _, _: Expand, _) => a
+    }.get
+    val nonDistinctCounts = collectAggregateExpressions(innerAgg).filter { ae =>
+      !ae.isDistinct && ae.aggregateFunction.isInstanceOf[Count]
+    }
+    assert(nonDistinctCounts.size == 1)
+    assert(nonDistinctCounts.head.filter.isEmpty,
+      "non-distinct COUNT must not gain a FILTER clause")
+  }
+
+  test("conditional: do not rewrite when FILTER already exists") {
+    val input = conditionalTestRelation
+      .groupBy(Symbol("a"))(
+        Count(If(Symbol("b") > 1, Symbol("c"), Literal(null, IntegerType)))
+          .toAggregateExpression(isDistinct = true, filter = Some(Symbol("d") === "x"))
+          .as("cnt1"),
+        Count(If(Symbol("b") > 2, Symbol("c"), Literal(null, IntegerType)))
+          .toAggregateExpression(isDistinct = true, filter = Some(Symbol("d") === "y"))
+          .as("cnt2"))
+      .analyze
+    val optimized = RewriteDistinctAggregates(input)
+    checkRewrite(optimized)
+    val expands = optimized.collect { case e: Expand => e }
+    // 2 groups because existing FILTERs prevent canonicalization
+    assert(expands.head.projections.size == 2)
+  }
+
+  test("conditional: do not rewrite multi-branch CASE WHEN") {
+    val caseWhen1 = new CaseWhen(
+      Seq(
+        (Symbol("b") > Literal(1), Symbol("c")),
+        (Symbol("b") > Literal(2), Symbol("a"))),
+      Some(Literal(null)))
+    val caseWhen2 = new CaseWhen(
+      Seq(
+        (Symbol("b") > Literal(3), Symbol("c")),
+        (Symbol("b") > Literal(4), Symbol("a"))),
+      Some(Literal(null)))
+    val input = conditionalTestRelation
+      .groupBy(Symbol("a"))(
+        Count(caseWhen1).toAggregateExpression(isDistinct = true).as("cnt1"),
+        Count(caseWhen2).toAggregateExpression(isDistinct = true).as("cnt2"))
+      .analyze
+    val optimized = RewriteDistinctAggregates(input)
+    checkRewrite(optimized)
+    val expands = optimized.collect { case e: Expand => e }
+    // 2 groups - multi-branch CASE was not canonicalized
+    assert(expands.head.projections.size == 2)
+  }
+
+  test("conditional: do not rewrite SUM(DISTINCT IF(...))") {
+    val input = conditionalTestRelation
+      .groupBy(Symbol("a"))(
+        Sum(If(Symbol("b") > 1, Symbol("c"), Literal(null, IntegerType)))
+          .toAggregateExpression(isDistinct = true)
+          .as("sum1"),
+        Sum(If(Symbol("b") > 2, Symbol("c"), Literal(null, IntegerType)))
+          .toAggregateExpression(isDistinct = true)
+          .as("sum2"))
+      .analyze
+    val optimized = RewriteDistinctAggregates(input)
+    checkRewrite(optimized)
+    val expands = optimized.collect { case e: Expand => e }
+    // 2 groups - SUM(DISTINCT IF) is not canonicalized
+    assert(expands.head.projections.size == 2)
+  }
+
+  /**
+   * Asserts that two conditional distinct counts over `base` collapse into a single
+   * distinct group with a FILTER clause, i.e. the conditional canonicalization fired.
+   */
+  private def assertCanonicalized(relation: LocalRelation, base: Expression): Unit = {
+    val input = relation
+      .groupBy(Symbol("a"))(
+        countDistinctIf(Symbol("b") > 1, base).as("cnt1"),
+        countDistinctIf(Symbol("b") > 2, base).as("cnt2"))
+      .analyze
+    val optimized = RewriteDistinctAggregates(input)
+    val expand = optimized.collectFirst { case e: Expand => e }.get
+    assert(expand.projections.size == 1,
+      s"branch-safe base should collapse to 1 distinct group: $base")
+    // The Expand rewrite adds gid-routing filters to every distinct aggregate; the
+    // canonicalization additionally introduces filters referencing the user condition.
+    val hasUserConditionFilter = collectAggregateExpressions(optimized)
+      .flatMap(_.filter)
+      .exists(_.references.exists(_.name != "gid"))
+    assert(hasUserConditionFilter,
+      s"expected a user-condition FILTER clause after canonicalizing base: $base")
+  }
+
+  /**
+   * Asserts that two conditional distinct counts over `base` are rewritten by the
+   * general Expand path but are NOT canonicalized, i.e. they stay 2 distinct groups
+   * and no FILTER clause is introduced.
+   */
+  private def assertNotCanonicalized(relation: LocalRelation, base: Expression): Unit = {
+    val input = relation
+      .groupBy(Symbol("a"))(
+        countDistinctIf(Symbol("b") > 1, base).as("cnt1"),
+        countDistinctIf(Symbol("b") > 2, base).as("cnt2"))
+      .analyze
+    val optimized = RewriteDistinctAggregates(input)
+    checkRewrite(optimized)
+    val expand = optimized.collectFirst { case e: Expand => e }.get
+    assert(expand.projections.size == 2,
+      s"non-branch-safe base should stay 2 distinct groups: $base")
+    // The Expand rewrite adds gid-routing filters to every distinct aggregate; a
+    // user-condition filter introduced by the canonicalization would reference the
+    // condition's columns instead of only gid.
+    val hasUserConditionFilter = collectAggregateExpressions(optimized)
+      .flatMap(_.filter)
+      .exists(_.references.exists(_.name != "gid"))
+    assert(!hasUserConditionFilter,
+      s"non-branch-safe base should not produce a user-condition FILTER clause: $base")
+  }
+
+  test("conditional: do not rewrite when base is not branch-safe") {
+    val unsafeBases = Seq(
+      // Division may throw (e.g. divide-by-zero under ANSI mode) on rows where the
+      // original IF branch is not taken.
+      Symbol("c") / Symbol("b"),
+      // Cast may throw under ANSI mode.
+      Cast(Symbol("c"), StringType),
+      // String functions are not in the branch-safe whitelist.
+      Lower(Symbol("d")))
+    unsafeBases.foreach { base =>
+      assertNotCanonicalized(conditionalTestRelation, base)
+    }
+  }
+
+  test("conditional: rewrite branch-safe expression bases") {
+    // Predicate and null-handling bases on the flat test relation.
+    Seq(
+      Symbol("b") > Symbol("c"),
+      Coalesce(Seq(Symbol("b"), Literal(0, IntegerType))))
+      .foreach { base =>
+        assertCanonicalized(conditionalTestRelation, base)
+      }
+
+    // Total accessor bases need struct/map attributes.
+    val structAttr = AttributeReference("s", StructType(Seq(StructField("f", IntegerType))))()
+    val mapAttr = AttributeReference("m", MapType(IntegerType, StringType))()
+    val richRelation = LocalRelation(Symbol("a").int, Symbol("b").int, structAttr, mapAttr)
+    Seq(
+      GetStructField(structAttr, 0),
+      GetMapValue(mapAttr, Literal(1, IntegerType)))
+      .foreach { base =>
+        assertCanonicalized(richRelation, base)
+      }
   }
 }
