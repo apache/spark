@@ -4547,8 +4547,26 @@ class SparkConnectPlanner(
     if (isValidSQLWithRefs(getWithRelations)) {
       transformSqlWithRefs(getWithRelations)
     } else {
+      val referencePlanIds = getWithRelations.getReferencesList.asScala.collect {
+        case ref if ref.hasCommon && ref.getCommon.hasPlanId => ref.getCommon.getPlanId
+      }.toSet
+
       // Wrap the plan to keep the original planId.
-      val plan = Project(Seq(UnresolvedStar(None)), transformRelation(getWithRelations.getRoot))
+      val plan = try {
+        Project(Seq(UnresolvedStar(None)), transformRelation(getWithRelations.getRoot))
+      } catch {
+        // Some transforms analyze the root eagerly, before the referenced plans are substituted
+        // below. A plan id that is attached here is then a server-side issue, not a client error.
+        case e: AnalysisException
+            if e.getCondition == "CONNECT_INVALID_PLAN.SUBQUERY_PLAN_NOT_ATTACHED" &&
+              e.getMessageParameters.asScala.get("planId").exists { id =>
+                referencePlanIds.contains(id.toLong)
+              } =>
+          throw SparkException.internalError(
+            s"The subquery plan referenced by plan id ${e.getMessageParameters.get("planId")} " +
+              "is attached in WithRelations but was analyzed before it was substituted.",
+            e)
+      }
 
       val relations = getWithRelations.getReferencesList.asScala.map { ref =>
         if (ref.hasCommon && ref.getCommon.hasPlanId) {

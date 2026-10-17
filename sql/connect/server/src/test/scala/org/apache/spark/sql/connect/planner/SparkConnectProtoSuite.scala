@@ -22,13 +22,13 @@ import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.ByteString
 
-import org.apache.spark.{SparkClassNotFoundException, SparkIllegalArgumentException}
+import org.apache.spark.{SparkClassNotFoundException, SparkException, SparkIllegalArgumentException}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression
 import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.sql.{AnalysisException, Column, Observation, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, UnresolvedInSubqueryPlanId, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{CollectMetrics, Deduplicate, DeduplicateWithinWatermark, Distinct, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -973,6 +973,154 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(
       connectTestRelation.withColumns(Map("id" -> 1024, "col_not_exist" -> 2048)),
       sparkTestRelation.withColumns(Map("id" -> lit(1024), "col_not_exist" -> lit(2048))))
+  }
+
+  test("SPARK-60096: IN-subquery with an unattached plan id is an invalid Connect plan") {
+    // A Connect `col.isin(<subquery>)` inside `when(...)` whose plan id is not attached by any
+    // WithRelations leaves an UnresolvedInSubqueryPlanId in the plan.
+    val unattachedPlanId = 42L
+    val inSubquery = Expression
+      .newBuilder()
+      .setSubqueryExpression(
+        proto.SubqueryExpression
+          .newBuilder()
+          .setPlanId(unattachedPlanId)
+          .setSubqueryType(proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_IN)
+          .addInSubqueryValues("id".protoAttr))
+      .build()
+    val caseWhen = Expression
+      .newBuilder()
+      .setUnresolvedFunction(
+        Expression.UnresolvedFunction
+          .newBuilder()
+          .setFunctionName("when")
+          .addArguments(inSubquery)
+          .addArguments(Expression.newBuilder().setLiteral(toLiteralProto(1)).build())
+          .addArguments(Expression.newBuilder().setLiteral(toLiteralProto(0)).build()))
+      .build()
+    val connectPlan = connectTestRelation.select(caseWhen.as("x"))
+
+    val transformed = transform(connectPlan)
+
+    // The planner leaves an UnresolvedInSubqueryPlanId in the tree: no analyzer rule resolves
+    // it (plan-id references are wired up only at proto-transform time via WithRelations).
+    val survivingInSubqueries = transformed.collect { case plan =>
+      plan.expressions.flatMap(_.collect { case u: UnresolvedInSubqueryPlanId => u })
+    }.flatten
+    assert(survivingInSubqueries.map(_.planId) == Seq(unattachedPlanId))
+    assert(!transformed.resolved)
+
+    // CheckAnalysis now rejects the surviving plan-id subquery as an invalid Spark Connect plan
+    // instead of the previous INTERNAL_ERROR / XX000 "Found the unresolved operator".
+    checkError(
+      exception = intercept[AnalysisException] {
+        analyzePlan(transformed)
+      },
+      condition = "CONNECT_INVALID_PLAN.SUBQUERY_PLAN_NOT_ATTACHED",
+      sqlState = Some("56K00"),
+      parameters = Map("planId" -> unattachedPlanId.toString))
+  }
+
+  // `id IN <plan id>`: a Connect IN-subquery whose plan is referenced by plan id.
+  private def inSubqueryProto(planId: Long): Expression = {
+    Expression
+      .newBuilder()
+      .setSubqueryExpression(
+        proto.SubqueryExpression
+          .newBuilder()
+          .setPlanId(planId)
+          .setSubqueryType(proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_IN)
+          .addInSubqueryValues("id".protoAttr))
+      .build()
+  }
+
+  // Wraps `root` in a WithRelations that attaches a range plan with the given plan id.
+  private def withAttachedRange(root: proto.Relation, attachedPlanId: Long): proto.Relation = {
+    val reference = proto.Relation
+      .newBuilder()
+      .setCommon(proto.RelationCommon.newBuilder().setPlanId(attachedPlanId))
+      .setRange(proto.Range.newBuilder().setStart(0).setEnd(3).setStep(1))
+      .build()
+    proto.Relation
+      .newBuilder()
+      .setWithRelations(proto.WithRelations.newBuilder().setRoot(root).addReferences(reference))
+      .build()
+  }
+
+  // `rootWithSubquery` builds a root that analyzes an IN-subquery on the given plan id eagerly,
+  // before WithRelations substitutes the referenced plans.
+  private def checkEagerlyAnalyzedSubquery(rootWithSubquery: Long => proto.Relation): Unit = {
+    // The plan id is attached, so the failure is a server-side issue.
+    val attachedPlanId = 7L
+    val e = intercept[SparkException] {
+      transform(withAttachedRange(rootWithSubquery(attachedPlanId), attachedPlanId))
+    }
+    assert(e.getCondition == "INTERNAL_ERROR")
+    assert(e.getMessage.contains(s"plan id $attachedPlanId is attached in WithRelations"))
+    assert(e.getCause.asInstanceOf[AnalysisException].getCondition ==
+      "CONNECT_INVALID_PLAN.SUBQUERY_PLAN_NOT_ATTACHED")
+
+    // The plan id is not attached, so the failure remains an invalid Spark Connect plan.
+    val unattachedPlanId = 8L
+    checkError(
+      exception = intercept[AnalysisException] {
+        transform(withAttachedRange(rootWithSubquery(unattachedPlanId), attachedPlanId))
+      },
+      condition = "CONNECT_INVALID_PLAN.SUBQUERY_PLAN_NOT_ATTACHED",
+      sqlState = Some("56K00"),
+      parameters = Map("planId" -> unattachedPlanId.toString))
+  }
+
+  test("SPARK-60096: sampleBy with an attached IN-subquery is an internal error") {
+    // sampleBy(when(id IN <plan id>, 'a').otherwise('b'), {'a': 0.5}) runs a filter, which
+    // analyzes the column eagerly.
+    checkEagerlyAnalyzedSubquery { planId =>
+      val caseWhen = Expression
+        .newBuilder()
+        .setUnresolvedFunction(
+          Expression.UnresolvedFunction
+            .newBuilder()
+            .setFunctionName("when")
+            .addArguments(inSubqueryProto(planId))
+            .addArguments(Expression.newBuilder().setLiteral(toLiteralProto("a")).build())
+            .addArguments(Expression.newBuilder().setLiteral(toLiteralProto("b")).build()))
+        .build()
+      proto.Relation
+        .newBuilder()
+        .setSampleBy(
+          proto.StatSampleBy
+            .newBuilder()
+            .setInput(connectTestRelation)
+            .setCol(caseWhen)
+            .setSeed(1)
+            .addFractions(
+              proto.StatSampleBy.Fraction
+                .newBuilder()
+                .setStratum(toLiteralProto("a"))
+                .setFraction(0.5)))
+        .build()
+    }
+  }
+
+  test("SPARK-60096: joinAsOf with an attached IN-subquery is an internal error") {
+    // joinAsOf(right, id, rid, joinExprs = id IN <plan id>) analyzes the join condition eagerly.
+    val right = createLocalRelationProto(Seq(AttributeReference("rid", IntegerType)()), Seq.empty)
+    checkEagerlyAnalyzedSubquery { planId =>
+      proto.Relation
+        .newBuilder()
+        .setAsOfJoin(
+          proto.AsOfJoin
+            .newBuilder()
+            .setLeft(connectTestRelation)
+            .setRight(right)
+            .setLeftAsOf("id".protoAttr)
+            .setRightAsOf("rid".protoAttr)
+            .setJoinExpr(inSubqueryProto(planId))
+            .setJoinType("inner")
+            .setAllowExactMatches(true)
+            .setDirection("backward"))
+        .build()
+    }
   }
 
   test("Test cast") {
