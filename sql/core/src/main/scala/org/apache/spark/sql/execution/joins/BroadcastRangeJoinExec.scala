@@ -37,10 +37,12 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
  *
  * The build side is an index. Point-in-range and interval overlap both build an
  * [[IntervalIndex]] and probe it with `overlapping`. A single inequality builds a
- * [[PointIndex]] and scans the side of the bound the build side holds. Either probe
- * returns a superset. A candidate is kept only when the original join condition is
- * true, so inclusivity stays on the predicate. Heavy overlap can make one probe
- * return almost every build row.
+ * [[PointIndex]] and scans the side of the bound the build side holds. Keys that
+ * map to one order-preserving long instead build [[LongIntervalIndex]] or
+ * [[LongPointIndex]], so their probes compare raw longs without boxing. Either
+ * probe returns a superset. A candidate is kept only when the original join
+ * condition is true, so inclusivity stays on the predicate. Heavy overlap can
+ * make one probe return almost every build row.
  */
 case class BroadcastRangeJoinExec(
     left: SparkPlan,
@@ -122,6 +124,30 @@ case class BroadcastRangeJoinExec(
       streamRow: InternalRow): Iterator[InternalRow] = {
     val low = boundStreamKeys.head.eval(streamRow)
     relation match {
+      case longs: LongIntervalIndex =>
+        if (low == null) {
+          Iterator.empty
+        } else {
+          // A point probe has one key. Pass it as both ends so it is evaluated once.
+          val high = if (boundStreamKeys.length == 1) low else boundStreamKeys(1).eval(streamRow)
+          if (high == null) Iterator.empty else {
+            longs.overlapping(longs.toLong(low), longs.toLong(high))
+          }
+        }
+      case points: LongPointIndex =>
+        if (low == null) {
+          Iterator.empty
+        } else {
+          rangeJoin match {
+            case partial: PartialRangeJoin if buildHoldsLowerBound(partial) =>
+              points.upTo(points.toLong(low))
+            case _: PartialRangeJoin =>
+              points.from(points.toLong(low))
+            case _ =>
+              throw new IllegalStateException(
+                s"Point index is only built for a partial range, got $rangeJoin.")
+          }
+        }
       case intervals: IntervalIndex =>
         val high = if (boundStreamKeys.length == 1) low else boundStreamKeys(1).eval(streamRow)
         intervals.overlapping(low, high)
@@ -135,30 +161,6 @@ case class BroadcastRangeJoinExec(
             throw new IllegalStateException(
               s"Point index is only built for a partial range, got $rangeJoin.")
         }
-    }
-  }
-
-  override def doExecute(): RDD[InternalRow] = {
-    require(BroadcastRangeJoinExec.supports(joinType, buildSide),
-      s"BroadcastRangeJoin does not support $joinType with $buildSide")
-    val relation = buildPlan.executeBroadcast[RangeRelation]()
-    val joined = joinType match {
-      case _: InnerLike => innerJoin(relation)
-      case LeftOuter | RightOuter => outerJoin(relation)
-      case LeftSemi => existenceJoin(relation, exists = true)
-      case LeftAnti => existenceJoin(relation, exists = false)
-      case t =>
-        throw new IllegalArgumentException(
-          s"BroadcastRangeJoin should not take $t as the JoinType")
-    }
-    val numOutputRows = longMetric("numOutputRows")
-    joined.mapPartitionsWithIndexInternal { (index, iter) =>
-      val resultProj = genResultProjection
-      resultProj.initialize(index)
-      iter.map { r =>
-        numOutputRows += 1
-        resultProj(r)
-      }
     }
   }
 
@@ -286,6 +288,30 @@ case class BroadcastRangeJoinExec(
         output, (left.output ++ right.output).map(_.withNullability(true)))
   }
 
+  override def doExecute(): RDD[InternalRow] = {
+    require(BroadcastRangeJoinExec.supports(joinType, buildSide),
+      s"BroadcastRangeJoin does not support $joinType with $buildSide")
+    val relation = buildPlan.executeBroadcast[RangeRelation]()
+    val joined = joinType match {
+      case _: InnerLike => innerJoin(relation)
+      case LeftOuter | RightOuter => outerJoin(relation)
+      case LeftSemi => existenceJoin(relation, exists = true)
+      case LeftAnti => existenceJoin(relation, exists = false)
+      case t =>
+        throw new IllegalArgumentException(
+          s"BroadcastRangeJoin should not take $t as the JoinType")
+    }
+    val numOutputRows = longMetric("numOutputRows")
+    joined.mapPartitionsWithIndexInternal { (index, iter) =>
+      val resultProj = genResultProjection
+      resultProj.initialize(index)
+      iter.map { r =>
+        numOutputRows += 1
+        resultProj(r)
+      }
+    }
+  }
+
   override def supportCodegen: Boolean = {
     BroadcastRangeJoinExec.supports(joinType, buildSide)
   }
@@ -358,10 +384,10 @@ case class BroadcastRangeJoinExec(
 
   /**
    * Probe the broadcast index. The index kind and scan direction are fixed when
-   * the plan is built, so generated code calls [[IntervalIndex.overlapping]],
-   * [[PointIndex.upTo]], or [[PointIndex.from]] directly. A null key yields the
-   * empty iterator those methods already return. Generated code does not
-   * allocate a key array. An interval probe owns its walk stack.
+   * the plan is built, so generated code calls the concrete index method
+   * directly. A null key yields the empty scan those methods already return.
+   * Generated code does not allocate a key array. An interval probe owns its
+   * walk stack.
    */
   private def genCandidateIterator(
       ctx: CodegenContext,
@@ -385,14 +411,76 @@ case class BroadcastRangeJoinExec(
   }
 
   /**
+   * Fixed-width keys route to the long indexes: build and probe keys then cross
+   * as raw longs, with no boxing on either side. One test picks both the
+   * `RangeBroadcastMode` index family and the generated probe code, so they
+   * cannot disagree.
+   */
+  private[this] lazy val usesLongKeys: Boolean = RangeIndex.canMapKeysToLong(buildKeys)
+
+  /**
+   * Evaluate each streamed key into a primitive long. Each key keeps the null
+   * term of its expression; the candidate call turns a null into an empty scan.
+   */
+  private def genLongProbeKeys(
+      ctx: CodegenContext,
+      input: Seq[ExprCode]): (String, Seq[String], Seq[String]) = {
+    ctx.currentVars = input
+    val keys = streamedKeys.map { key =>
+      val bound = BindReferences.bindReference(key, streamedOutput)
+      val ev = bound.genCode(ctx)
+      val toLong = RangeIndex.requiredLongKey(key.dataType)
+      val name = ctx.freshName("probeKey")
+      val code =
+        s"""
+           |${ev.code}
+           |long $name = ${ev.isNull} ? 0L : ${toLong.code(ev.value)};
+         """.stripMargin
+      (code, name, ev.isNull)
+    }
+    (keys.map(_._1).mkString("\n"), keys.map(_._2), keys.map(_._3))
+  }
+
+  private def genLongCandidateIterator(
+      ctx: CodegenContext,
+      relationTerm: String,
+      keyVars: Seq[String],
+      nullVars: Seq[String]): (String, String) = {
+    val matches = ctx.freshName("matches")
+    val iterCls = classOf[Iterator[InternalRow]].getName
+    val emptyScan = s"${classOf[RowSlice].getName}$$.MODULE$$.empty()"
+    val call = rangeJoin match {
+      case partial: PartialRangeJoin =>
+        val points = classOf[LongPointIndex].getName
+        val scan = if (buildHoldsLowerBound(partial)) "upTo" else "from"
+        s"(($points) $relationTerm).$scan(${keyVars.head})"
+      case _ =>
+        val intervals = classOf[LongIntervalIndex].getName
+        // A point probe has one key. Reuse it as both ends so it is evaluated once.
+        val high = if (keyVars.length == 1) keyVars.head else keyVars(1)
+        s"(($intervals) $relationTerm).overlapping(${keyVars.head}, $high)"
+    }
+    val code = s"$iterCls $matches = ${nullVars.mkString(" || ")} ?" +
+      s" ($iterCls) $emptyScan : $call;"
+    (matches, code)
+  }
+
+  /**
    * Shared init for every doConsume path: broadcasts the relation, evaluates the
    * streamed probe keys, and opens the candidate iterator over it.
    */
   private def prepareProbe(ctx: CodegenContext, input: Seq[ExprCode]): (String, String, String) = {
     val relationTerm = addRelation(ctx)
-    val (keyCode, keyVars) = genProbeKeys(ctx, input)
-    val (matches, iteratorCode) = genCandidateIterator(ctx, relationTerm, keyVars)
-    (keyCode, iteratorCode, matches)
+    if (usesLongKeys) {
+      val (keyCode, keyVars, nullVars) = genLongProbeKeys(ctx, input)
+      val (matches, iteratorCode) =
+        genLongCandidateIterator(ctx, relationTerm, keyVars, nullVars)
+      (keyCode, iteratorCode, matches)
+    } else {
+      val (keyCode, keyVars) = genProbeKeys(ctx, input)
+      val (matches, iteratorCode) = genCandidateIterator(ctx, relationTerm, keyVars)
+      (keyCode, iteratorCode, matches)
+    }
   }
 
   private def joinedVars(input: Seq[ExprCode], buildVars: Seq[ExprCode]): Seq[ExprCode] = {

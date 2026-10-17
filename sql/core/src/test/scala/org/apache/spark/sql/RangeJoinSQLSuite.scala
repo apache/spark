@@ -426,6 +426,30 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
     }
   }
 
+  test("boolean range joins match the nested loop result, including a null point") {
+    sql(
+      """
+        |CREATE OR REPLACE TEMP VIEW bool_ranges(lo, hi) AS VALUES
+        |  (false, true),
+        |  (true, true)
+        |""".stripMargin)
+    sql(
+      """
+        |CREATE OR REPLACE TEMP VIEW bool_points(p) AS VALUES
+        |  (false),
+        |  (true),
+        |  (CAST(NULL AS BOOLEAN))
+        |""".stripMargin)
+    val query = "SELECT p.p, r.lo, r.hi FROM bool_points p JOIN bool_ranges r " +
+      "ON p.p >= r.lo AND p.p <= r.hi"
+    val expected = sql(query).collect()
+    withRangeJoin() {
+      val df = sql(query)
+      assert(findRangeJoin(df.queryExecution.executedPlan).size == 1, query)
+      checkAnswer(df, expected)
+    }
+  }
+
   test("whole-stage codegen covers each range-join probe") {
     setupIpLookupViews()
     setupDecimalViews()
