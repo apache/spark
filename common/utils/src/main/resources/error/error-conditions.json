@@ -1426,6 +1426,11 @@
           "To disable plan compression, set 'spark.connect.session.planCompression.threshold' to -1."
         ]
       },
+      "CHECKPOINT_RELATION_ID_EMPTY" : {
+        "message" : [
+          "The checkpoint relation ID must not be empty."
+        ]
+      },
       "CHUNKED_CACHED_LOCAL_RELATION_WITHOUT_DATA" : {
         "message" : [
           "ChunkedCachedLocalRelation should contain data."

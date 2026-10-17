@@ -22,6 +22,7 @@ import json
 import os
 import random
 import sys
+import uuid
 import warnings
 from collections.abc import Iterable
 from typing import (
@@ -2417,26 +2418,47 @@ class DataFrame(ParentDataFrame):
         return DataFrame(plan.Offset(child=self._plan, offset=num), session=self._session)
 
     def checkpoint(self, eager: bool = True) -> ParentDataFrame:
-        cmd = plan.Checkpoint(child=self._plan, local=False, eager=eager)
+        relation_id = str(uuid.uuid4())
+        cmd = plan.Checkpoint(
+            child=self._plan,
+            local=False,
+            eager=eager,
+            relation_id=relation_id,
+        )
         _, properties, self._execution_info = self._session.client.execute_command(
             cmd.command(self._session.client)
         )
         assert "checkpoint_command_result" in properties
-        checkpointed = properties["checkpoint_command_result"]
-        assert isinstance(checkpointed._plan, plan.CachedRemoteRelation)
-        return checkpointed
+        assert properties["checkpoint_command_result"] == relation_id, (
+            "Checkpoint relation ID does not match the requested ID"
+        )
+        return DataFrame(
+            plan=plan.CachedRemoteRelation(relation_id, self._session),
+            session=self._session,
+        )
 
     def localCheckpoint(
         self, eager: bool = True, storageLevel: Optional[StorageLevel] = None
     ) -> ParentDataFrame:
-        cmd = plan.Checkpoint(child=self._plan, local=True, eager=eager, storage_level=storageLevel)
+        relation_id = str(uuid.uuid4())
+        cmd = plan.Checkpoint(
+            child=self._plan,
+            local=True,
+            eager=eager,
+            storage_level=storageLevel,
+            relation_id=relation_id,
+        )
         _, properties, self._execution_info = self._session.client.execute_command(
             cmd.command(self._session.client)
         )
         assert "checkpoint_command_result" in properties
-        checkpointed = properties["checkpoint_command_result"]
-        assert isinstance(checkpointed._plan, plan.CachedRemoteRelation)
-        return checkpointed
+        assert properties["checkpoint_command_result"] == relation_id, (
+            "Checkpoint relation ID does not match the requested ID"
+        )
+        return DataFrame(
+            plan=plan.CachedRemoteRelation(relation_id, self._session),
+            session=self._session,
+        )
 
     def toJSON(self) -> ParentDataFrame:
         return self.select(F.to_json(F.struct(F.col("*"))).alias("value"))
