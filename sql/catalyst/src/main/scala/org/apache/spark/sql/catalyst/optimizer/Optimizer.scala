@@ -2257,7 +2257,7 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
       val newFilters = filter.constraints --
         (child.constraints ++ splitConjunctivePredicates(condition))
       if (newFilters.nonEmpty) {
-        Filter(And(newFilters.reduce(And), condition), child)
+        Filter(And(buildBalancedPredicate(newFilters.toSeq, And), condition), child)
       } else {
         filter
       }
@@ -2308,7 +2308,7 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
     if (newPredicates.isEmpty) {
       plan
     } else {
-      Filter(newPredicates.reduce(And), plan)
+      Filter(buildBalancedPredicate(newPredicates.toSeq, And), plan)
     }
   }
 }
@@ -2407,14 +2407,16 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
     case Filter(fc, nf @ Filter(nc, grandChild)) if nc.deterministic =>
       val (combineCandidates, rest) =
         splitConjunctivePredicates(fc).partition(p => p.deterministic && !p.throwable)
-      val mergedFilter = (ExpressionSet(combineCandidates) --
-        ExpressionSet(splitConjunctivePredicates(nc))).reduceOption(And) match {
+      val mergedFilter = buildBalancedPredicateOption(
+        (ExpressionSet(combineCandidates) --
+          ExpressionSet(splitConjunctivePredicates(nc))).toSeq, And) match {
         case Some(ac) =>
           Filter(And(nc, ac), grandChild)
         case None =>
           nf
       }
-      rest.reduceOption(And).map(c => Filter(c, mergedFilter)).getOrElse(mergedFilter)
+      buildBalancedPredicateOption(rest, And)
+        .map(c => Filter(c, mergedFilter)).getOrElse(mergedFilter)
   }
 }
 
@@ -2538,7 +2540,7 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
       } else if (remainingPredicates.isEmpty) {
         p
       } else {
-        val newCond = remainingPredicates.reduce(And)
+        val newCond = buildBalancedPredicate(remainingPredicates, And)
         Filter(newCond, p)
       }
   }
@@ -2634,7 +2636,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
           }
         // Cheap filters (cases 1 & 2) pushed below the projection.
         val baseChild: LogicalPlan = if (cheapWithUsed.nonEmpty) {
-          val combinedCheapFilter = cheapWithUsed.map(_._3).reduce(And)
+          val combinedCheapFilter = buildBalancedPredicate(cheapWithUsed.map(_._3), And)
           Filter(combinedCheapFilter, child = grandChild)
         } else {
           grandChild
@@ -2669,7 +2671,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
           if (stayUp.isEmpty) {
             topProjection
           } else {
-            Filter(stayUp.reduce(And), topProjection)
+            Filter(buildBalancedPredicate(stayUp, And), topProjection)
           }
         }
       }
@@ -2692,12 +2694,16 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       }
 
       if (pushDown.nonEmpty) {
-        val pushDownPredicate = pushDown.reduce(And)
+        val pushDownPredicate = buildBalancedPredicate(pushDown, And)
         val replaced = replaceAlias(pushDownPredicate, aliasMap)
         val newAggregate = aggregate.copy(child = Filter(replaced, aggregate.child))
         // If there is no more filter to stay up, just eliminate the filter.
         // Otherwise, create "Filter(stayUp) <- Aggregate <- Filter(pushDownPredicate)".
-        if (stayUp.isEmpty) newAggregate else Filter(stayUp.reduce(And), newAggregate)
+        if (stayUp.isEmpty) {
+          newAggregate
+        } else {
+          Filter(buildBalancedPredicate(stayUp, And), newAggregate)
+        }
       } else {
         filter
       }
@@ -2721,9 +2727,9 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       val stayUp = rest ++ nonDeterministic
 
       if (pushDown.nonEmpty) {
-        val pushDownPredicate = pushDown.reduce(And)
+        val pushDownPredicate = buildBalancedPredicate(pushDown, And)
         val newWindow = w.copy(child = Filter(pushDownPredicate, w.child))
-        if (stayUp.isEmpty) newWindow else Filter(stayUp.reduce(And), newWindow)
+        if (stayUp.isEmpty) newWindow else Filter(buildBalancedPredicate(stayUp, And), newWindow)
       } else {
         filter
       }
@@ -2733,7 +2739,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition(_.deterministic)
 
       if (pushDown.nonEmpty) {
-        val pushDownCond = pushDown.reduceLeft(And)
+        val pushDownCond = buildBalancedPredicate(pushDown, And)
         // The union is the child of the filter so it's children are grandchildren.
         // Moves filters down to the grandchild if there is an element in the grand child's
         // output which is semantically equal to the filter being evaluated.
@@ -2749,7 +2755,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         val newUnion = union.withNewChildren(newGrandChildren)
         if (stayUp.nonEmpty) {
           // If there is any filter we can't push evaluate them post union
-          Filter(stayUp.reduceLeft(And), newUnion)
+          Filter(buildBalancedPredicate(stayUp, And), newUnion)
         } else {
           // If we pushed all filters then just return the new union.
           newUnion
@@ -2765,11 +2771,15 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       }
 
       if (pushDown.nonEmpty) {
-        val pushDownPredicate = pushDown.reduceLeft(And)
+        val pushDownPredicate = buildBalancedPredicate(pushDown, And)
         val newWatermark = watermark.copy(child = Filter(pushDownPredicate, watermark.child))
         // If there is no more filter to stay up, just eliminate the filter.
         // Otherwise, create "Filter(stayUp) <- watermark <- Filter(pushDownPredicate)".
-        if (stayUp.isEmpty) newWatermark else Filter(stayUp.reduceLeft(And), newWatermark)
+        if (stayUp.isEmpty) {
+          newWatermark
+        } else {
+          Filter(buildBalancedPredicate(stayUp, And), newWatermark)
+        }
       } else {
         filter
       }
@@ -2818,9 +2828,9 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     val stayUp = rest ++ nonDeterministic
 
     if (pushDown.nonEmpty) {
-      val newChild = insertFilter(pushDown.reduceLeft(And))
+      val newChild = insertFilter(buildBalancedPredicate(pushDown, And))
       if (stayUp.nonEmpty) {
-        Filter(stayUp.reduceLeft(And), newChild)
+        Filter(buildBalancedPredicate(stayUp, And), newChild)
       } else {
         newChild
       }
@@ -2944,7 +2954,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         // the extras.
         val newProject = project.copy(projectList = plan.output ++ newAliases, child = plan)
         val (evaluable, rest) = pending.partition { case (used, _) => used.subsetOf(computed) }
-        plan = Filter(conditionsOf(evaluable).reduce(And), newProject)
+        plan = Filter(buildBalancedPredicate(conditionsOf(evaluable), And), newProject)
         pending = rest
       }
     }
@@ -3012,41 +3022,41 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
       joinType match {
         case _: InnerLike =>
           // push down the single side `where` condition into respective sides
-          val newLeft = leftFilterConditions.
-            reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
-          val newRight = rightFilterConditions.
-            reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
+          val newLeft = buildBalancedPredicateOption(leftFilterConditions, And)
+            .map(Filter(_, left)).getOrElse(left)
+          val newRight = buildBalancedPredicateOption(rightFilterConditions, And)
+            .map(Filter(_, right)).getOrElse(right)
           // don't push throwable expressions into join condition
           val (newJoinConditions, others) =
             commonFilterCondition.partition(cond => canEvaluateWithinJoin(cond) && !cond.throwable)
-          val newJoinCond = (newJoinConditions ++ joinCondition).reduceLeftOption(And)
+          val newJoinCond = buildBalancedPredicateOption(newJoinConditions ++ joinCondition, And)
 
           val join = Join(newLeft, newRight, joinType, newJoinCond, hint)
           if (others.nonEmpty) {
-            Filter(others.reduceLeft(And), join)
+            Filter(buildBalancedPredicate(others, And), join)
           } else {
             join
           }
         case RightOuter =>
           // push down the right side only `where` condition
           val newLeft = left
-          val newRight = rightFilterConditions.
-            reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
+          val newRight = buildBalancedPredicateOption(rightFilterConditions, And)
+            .map(Filter(_, right)).getOrElse(right)
           val newJoinCond = joinCondition
           val newJoin = Join(newLeft, newRight, RightOuter, newJoinCond, hint)
 
-          (leftFilterConditions ++ commonFilterCondition).
-            reduceLeftOption(And).map(Filter(_, newJoin)).getOrElse(newJoin)
+          buildBalancedPredicateOption(leftFilterConditions ++ commonFilterCondition, And)
+            .map(Filter(_, newJoin)).getOrElse(newJoin)
         case LeftOuter | LeftSingle | LeftExistence(_) =>
           // push down the left side only `where` condition
-          val newLeft = leftFilterConditions.
-            reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
+          val newLeft = buildBalancedPredicateOption(leftFilterConditions, And)
+            .map(Filter(_, left)).getOrElse(left)
           val newRight = right
           val newJoinCond = joinCondition
           val newJoin = Join(newLeft, newRight, joinType, newJoinCond, hint)
 
-          (rightFilterConditions ++ commonFilterCondition).
-            reduceLeftOption(And).map(Filter(_, newJoin)).getOrElse(newJoin)
+          buildBalancedPredicateOption(rightFilterConditions ++ commonFilterCondition, And)
+            .map(Filter(_, newJoin)).getOrElse(newJoin)
 
         case other =>
           throw SparkException.internalError(s"Unexpected join type: $other")
@@ -3060,27 +3070,29 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
       joinType match {
         case _: InnerLike | LeftSemi =>
           // push down the single side only join filter for both sides sub queries
-          val newLeft = leftJoinConditions.
-            reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
-          val newRight = rightJoinConditions.
-            reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
-          val newJoinCond = commonJoinCondition.reduceLeftOption(And)
+          val newLeft = buildBalancedPredicateOption(leftJoinConditions, And)
+            .map(Filter(_, left)).getOrElse(left)
+          val newRight = buildBalancedPredicateOption(rightJoinConditions, And)
+            .map(Filter(_, right)).getOrElse(right)
+          val newJoinCond = buildBalancedPredicateOption(commonJoinCondition, And)
 
           Join(newLeft, newRight, joinType, newJoinCond, hint)
         case RightOuter =>
           // push down the left side only join filter for left side sub query
-          val newLeft = leftJoinConditions.
-            reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
+          val newLeft = buildBalancedPredicateOption(leftJoinConditions, And)
+            .map(Filter(_, left)).getOrElse(left)
           val newRight = right
-          val newJoinCond = (rightJoinConditions ++ commonJoinCondition).reduceLeftOption(And)
+          val newJoinCond =
+            buildBalancedPredicateOption(rightJoinConditions ++ commonJoinCondition, And)
 
           Join(newLeft, newRight, RightOuter, newJoinCond, hint)
         case LeftOuter | LeftAnti | ExistenceJoin(_) =>
           // push down the right side only join filter for right sub query
           val newLeft = left
-          val newRight = rightJoinConditions.
-            reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
-          val newJoinCond = (leftJoinConditions ++ commonJoinCondition).reduceLeftOption(And)
+          val newRight = buildBalancedPredicateOption(rightJoinConditions, And)
+            .map(Filter(_, right)).getOrElse(right)
+          val newJoinCond =
+            buildBalancedPredicateOption(leftJoinConditions ++ commonJoinCondition, And)
 
           Join(newLeft, newRight, joinType, newJoinCond, hint)
         // Do not move join predicates of a single join.
@@ -3384,13 +3396,14 @@ object ReplaceDeduplicateWithAggregate extends Rule[LogicalPlan] {
  * 2. This rule has to be done after de-duplicating the attributes; otherwise, the generated
  *    join conditions will be incorrect.
  */
-object ReplaceIntersectWithSemiJoin extends Rule[LogicalPlan] {
+object ReplaceIntersectWithSemiJoin extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(INTERSECT), ruleId) {
     case Intersect(left, right, false) =>
       assert(left.output.size == right.output.size)
       val joinCond = left.output.zip(right.output).map { case (l, r) => EqualNullSafe(l, r) }
-      Distinct(Join(left, right, LeftSemi, joinCond.reduceLeftOption(And), JoinHint.NONE))
+      Distinct(
+        Join(left, right, LeftSemi, buildBalancedPredicateOption(joinCond, And), JoinHint.NONE))
   }
 }
 
@@ -3406,13 +3419,14 @@ object ReplaceIntersectWithSemiJoin extends Rule[LogicalPlan] {
  * 2. This rule has to be done after de-duplicating the attributes; otherwise, the generated
  *    join conditions will be incorrect.
  */
-object ReplaceExceptWithAntiJoin extends Rule[LogicalPlan] {
+object ReplaceExceptWithAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(EXCEPT), ruleId) {
     case Except(left, right, false) =>
       assert(left.output.size == right.output.size)
       val joinCond = left.output.zip(right.output).map { case (l, r) => EqualNullSafe(l, r) }
-      Distinct(Join(left, right, LeftAnti, joinCond.reduceLeftOption(And), JoinHint.NONE))
+      Distinct(
+        Join(left, right, LeftAnti, buildBalancedPredicateOption(joinCond, And), JoinHint.NONE))
   }
 }
 
