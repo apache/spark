@@ -17,14 +17,17 @@
 
 package org.apache.spark
 
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 
+import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration.FiniteDuration
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import com.codahale.metrics.{Counter, Gauge, MetricRegistry}
+import com.google.common.cache.CacheBuilder
 
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.LogKeys._
@@ -36,6 +39,8 @@ import org.apache.spark.resource.ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID
 import org.apache.spark.resource.ResourceProfileManager
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.dynalloc.ExecutorMonitor
+import org.apache.spark.status.AppStatusStore
+import org.apache.spark.status.api.v1
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 
 /**
@@ -108,12 +113,21 @@ private[spark] class ExecutorAllocationManager(
     cleaner: Option[ContextCleaner] = None,
     clock: Clock = new SystemClock(),
     resourceProfileManager: ResourceProfileManager,
-    reliableShuffleStorage: Boolean)
+    reliableShuffleStorage: Boolean,
+    // Provides access to the driver's AppStatusStore so this manager can reconcile its
+    // bookkeeping against ground-truth stage state when a SparkListenerStageSubmitted event
+    // is dropped from the executorManagement listener queue (SPARK-58935). Defaults to None
+    // so existing callers/tests are unaffected.
+    statusStoreProvider: () => Option[AppStatusStore] = () => None)
   extends Logging {
 
   allocationManager =>
 
   import ExecutorAllocationManager._
+
+  // SPARK-58935: the last-seen value of listenerBus.numDroppedExecutorManagementEvents,
+  // used by maybeReconcileWithStatusStore() to detect a new drop and trigger reconciliation.
+  private var lastSeenDroppedEvents: Long = 0L
 
   // Lower and upper bounds on the number of executors.
   private val minNumExecutors = conf.get(DYN_ALLOCATION_MIN_EXECUTORS)
@@ -414,6 +428,17 @@ private[spark] class ExecutorAllocationManager(
    * under the current load to satisfy all running and pending tasks, rounded up.
    */
   private[spark] def maxNumExecutorsNeededPerResourceProfile(rpId: Int): Int = {
+    // SPARK-58935: scope listener.groundTruthCache to exactly this one need-calculation,
+    // regardless of whether the caller is schedule()'s periodic tick or the
+    // numberMaxNeededExecutors JMX gauge sampling this on demand from a separate thread. A
+    // leading clear (rather than clearing both before and after) is enough: the next call's
+    // own leading clear is what bounds *this* call's cache lifetime, so a trailing clear here
+    // would be redundant. groundTruthCache is a lock-free TrieMap precisely because this clear
+    // can itself race with a concurrent call on another thread; at worst that racing call's
+    // cache is cleared early and it re-fetches from AppStatusStore, which is the same
+    // best-effort trade-off this mechanism already makes for dropped listener events. See that
+    // field's comment for the full reasoning.
+    listener.clearGroundTruthCache()
     val pendingTask = listener.pendingTasksPerResourceProfile(rpId)
     val pendingSpeculative = listener.pendingSpeculativeTasksPerResourceProfile(rpId)
     val unschedulableTaskSets = listener.pendingUnschedulableTaskSetsPerResourceProfile(rpId)
@@ -436,9 +461,9 @@ private[spark] class ExecutorAllocationManager(
     }
 
     if (unschedulableTaskSets > 0) {
-      // Request additional executors to account for task sets having tasks that are unschedulable
-      // due to executors excluded for failures when the active executor count has already reached
-      // the max needed which we would normally get.
+      // Request additional executors to account for task sets having tasks that are
+      // unschedulable due to executors excluded for failures when the active executor count
+      // has already reached the max needed which we would normally get.
       val maxNeededForUnschedulables = math.ceil(unschedulableTaskSets * executorAllocationRatio /
         tasksPerExecutor).toInt
       math.max(maxNeededWithSpeculationLocalityOffset,
@@ -458,6 +483,7 @@ private[spark] class ExecutorAllocationManager(
    * This is factored out into its own method for testing.
    */
   private def schedule(): Unit = synchronized {
+    maybeReconcileWithStatusStore()  // SPARK-58935
     if (targetSyncPending) {
       if (ticksUntilTargetSync <= 0) {
         // Deferred target push, retried with a backoff until acknowledged: an earlier push
@@ -482,6 +508,27 @@ private[spark] class ExecutorAllocationManager(
     updateAndSyncNumExecutorsTarget(clock.nanoTime())
     if (executorIdsToBeRemoved.nonEmpty) {
       removeExecutors(executorIdsToBeRemoved)
+    }
+  }
+
+  // SPARK-58935: cheap (single Long comparison) in the common case; only calls into
+  // AppStatusStore when a drop was actually observed, and only registers the affected
+  // stage(s) -- their ongoing pending/running counts are then always read fresh from
+  // AppStatusStore (see listener.getPendingTaskSum / totalRunningTasksPerResourceProfile)
+  // for as long as they remain "recovered", instead of trying to reconstruct or patch the
+  // normal per-task-index bookkeeping. This deliberately avoids touching
+  // onTaskStart/onTaskEnd/onSpeculativeTaskSubmitted at all.
+  private def maybeReconcileWithStatusStore(): Unit = {
+    val dropped = listenerBus.numDroppedExecutorManagementEvents
+    if (dropped > lastSeenDroppedEvents) {
+      // Only mark this drop count as "handled" *after* reconcile() returns without throwing.
+      // If it throws (caught by Utils.tryLog at the schedule() call site, so this periodic
+      // task keeps running), lastSeenDroppedEvents stays at its old value, so the next
+      // schedule() tick (~intervalMillis later) sees dropped > lastSeenDroppedEvents again
+      // and retries -- instead of waiting indefinitely for an unrelated, later drop to
+      // happen to re-arm the trigger.
+      statusStoreProvider().foreach(listener.reconcile)
+      lastSeenDroppedEvents = dropped
     }
   }
 
@@ -803,6 +850,53 @@ private[spark] class ExecutorAllocationManager(
     private val resourceProfileIdToStageAttempt =
       new mutable.HashMap[Int, mutable.Set[StageAttempt]]
 
+    // SPARK-58935: stages recovered via reconcile() after a dropped
+    // SparkListenerStageSubmitted event. Deliberately does NOT try to reconstruct
+    // stageAttemptToTaskIndices/stageAttemptToNumRunningTask for these -- those maps may
+    // already be partially/inconsistently populated by events that arrived during the
+    // "unknown" window between the drop and the next reconciliation. Instead, for as long as
+    // a stageAttempt is in this set, its pending/running contribution is always read fresh
+    // from AppStatusStore (see getPendingTaskSum/totalRunningTasksPerResourceProfile below),
+    // and onTaskStart/onTaskEnd/onSpeculativeTaskSubmitted are not modified at all.
+    // Like groundTruthCache below, this is read without a lock by the numberMaxNeededExecutors
+    // JMX gauge (via getPendingTaskSum/totalRunningTasksPerResourceProfile) concurrently with
+    // writes from the schedule()-driven path, so a plain mutable.HashSet is not safe here.
+    private val recoveredStageAttempts = ConcurrentHashMap.newKeySet[StageAttempt]()
+
+    // SPARK-58935: stages this manager has already legitimately completed, so reconcile()
+    // never mistakes a stale (independently drop-affected) AppStatusStore snapshot for a
+    // genuinely missed stage and resurrects it. Bounded via CacheBuilder (the same pattern
+    // TaskSchedulerImpl.executorsRemovedByDecom and CoarseGrainedSchedulerBackend use for a
+    // capped recently-seen set) rather than a hand-rolled LinkedHashSet eviction loop.
+    private val recentlyCompletedStageAttempts = CacheBuilder.newBuilder()
+      .maximumSize(1000000) // a StageAttempt is just two Ints, so even 1M entries is a few tens
+      // of MB at most, and is only reached by very long-running applications that have
+      // completed that many stage attempts.
+      .build[StageAttempt, java.lang.Boolean]()
+
+    // SPARK-58935: memoizes groundTruthStageData() for (approximately) the duration of a
+    // single maxNumExecutorsNeededPerResourceProfile() call (see the leading clear on that
+    // method below). Without this, a recovered stage's ground truth gets queried from
+    // AppStatusStore twice per call -- once from getPendingTaskSum, once from
+    // totalRunningTasksPerResourceProfile's recovered-stage branch -- for what is logically one
+    // decision. Scoped to a single call rather than to a schedule() tick, since this method is
+    // also sampled on-demand from a separate thread by the `numberMaxNeededExecutors` JMX gauge
+    // (registerGauge below), which calls it directly with no lock at all -- unlike the other
+    // mutable maps in this listener (e.g. stageAttemptToNumTasks), which that same gauge only
+    // *reads* without a lock while writes stay serialized through allocationManager.synchronized,
+    // this cache is also *written to* (clear()/getOrElseUpdate()) from that unsynchronized gauge
+    // call path, concurrently with writes from the schedule()-driven path. A plain
+    // mutable.HashMap gives no safety guarantee under concurrent writers, so this uses a
+    // lock-free TrieMap instead -- that alone doesn't make the "single call" scoping exact (two
+    // concurrent callers' leading clears can interleave with each other's reads), but it does
+    // guarantee the map itself never corrupts under the concurrent access, and an occasional
+    // extra AppStatusStore re-fetch from a cleared-early cache is a correctness-neutral,
+    // acceptable cost -- consistent with the "some drops are still possible, this is
+    // best-effort" trade-off the rest of this reconciliation mechanism already accepts.
+    private val groundTruthCache = new TrieMap[StageAttempt, Option[v1.StageData]]
+
+    private[spark] def clearGroundTruthCache(): Unit = groundTruthCache.clear()
+
     // Keep track of unschedulable task sets because of executor/node exclusions from too many task
     // failures. This is a Set of StageAttempt's because we'll only take the last unschedulable task
     // in a taskset although there can be more. This is done in order to avoid costly loops in the
@@ -818,16 +912,23 @@ private[spark] class ExecutorAllocationManager(
       new mutable.HashMap[StageAttempt, (Int, Map[String, Int], Int)]
 
     override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = {
+      handleStageSubmitted(stageSubmitted.stageInfo)
+    }
+
+    // SPARK-58935: extracted verbatim from onStageSubmitted, unchanged, so that reconcile()
+    // (below) can register a recovered stage through the exact same code, with zero logic
+    // duplication.
+    private[spark] def handleStageSubmitted(stageInfo: StageInfo): Unit = {
       initializing = false
-      val stageId = stageSubmitted.stageInfo.stageId
-      val stageAttemptId = stageSubmitted.stageInfo.attemptNumber()
+      val stageId = stageInfo.stageId
+      val stageAttemptId = stageInfo.attemptNumber()
       val stageAttempt = StageAttempt(stageId, stageAttemptId)
-      val numTasks = stageSubmitted.stageInfo.numTasks
+      val numTasks = stageInfo.numTasks
       allocationManager.synchronized {
         stageAttemptToNumTasks(stageAttempt) = numTasks
         allocationManager.onSchedulerBacklogged()
         // need to keep stage task requirements to ask for the right containers
-        val profId = stageSubmitted.stageInfo.resourceProfileId
+        val profId = stageInfo.resourceProfileId
         logDebug(s"Stage resource profile id is: $profId with numTasks: $numTasks")
         resourceProfileIdToStageAttempt.getOrElseUpdate(
           profId, new mutable.HashSet[StageAttempt]) += stageAttempt
@@ -836,7 +937,7 @@ private[spark] class ExecutorAllocationManager(
         // Compute the number of tasks requested by the stage on each host
         var numTasksPending = 0
         val hostToLocalTaskCountPerStage = new mutable.HashMap[String, Int]()
-        stageSubmitted.stageInfo.taskLocalityPreferences.foreach { locality =>
+        stageInfo.taskLocalityPreferences.foreach { locality =>
           if (!locality.isEmpty) {
             numTasksPending += 1
             locality.foreach { location =>
@@ -867,9 +968,93 @@ private[spark] class ExecutorAllocationManager(
       }
     }
 
+    // SPARK-58935: for each stage AppStatusStore currently considers active but this manager
+    // doesn't know about (likely a dropped SparkListenerStageSubmitted), register it via the
+    // exact same code path as a real submission (so resourceProfileIdToStageAttempt, ramp-up
+    // counters, etc. all stay consistent), then mark it as "recovered" so its ongoing
+    // pending/running contribution is always read fresh from AppStatusStore from now on --
+    // deliberately not trying to reconstruct or patch stageAttemptToTaskIndices/
+    // stageAttemptToNumRunningTask, which is fragile: those maps can already be
+    // partially/inconsistently populated by events for the same stage that arrived normally
+    // while the StageSubmitted event itself was dropped (see getPendingTaskSum below for how
+    // a recovered stage's counts are computed instead).
+    private[spark] def reconcile(store: AppStatusStore): Unit = {
+      store.activeStages().foreach { stage =>
+        val key = StageAttempt(stage.stageId, stage.attemptId)
+        allocationManager.synchronized {
+          if (!stageAttemptToNumTasks.contains(key) &&
+              recentlyCompletedStageAttempts.getIfPresent(key) == null) {
+            logWarning(s"Reconciled stage $key missing from bookkeeping, likely due to a " +
+              "dropped SparkListenerStageSubmitted event")
+            val syntheticStageInfo = new StageInfo(
+              stageId = stage.stageId,
+              attemptId = stage.attemptId,
+              name = stage.name,
+              numTasks = stage.numTasks,
+              rddInfos = Nil,
+              parentIds = Nil,
+              details = stage.details,
+              resourceProfileId = stage.resourceProfileId,
+              // AppStatusStore's lightweight StageData has no per-task locality data; the
+              // recovered stage's task placement is therefore not locality-optimized. This is
+              // an accepted approximation -- the goal here is correct executor *count*, not
+              // optimal placement.
+              taskLocalityPreferences = Seq.fill(stage.numTasks)(Nil))
+            handleStageSubmitted(syntheticStageInfo)
+            recoveredStageAttempts.add(key)
+          }
+        }
+      }
+
+      // SPARK-58935: symmetric sweep -- the same queue congestion that dropped a recovered
+      // stage's SparkListenerStageSubmitted event could later also drop *its own*
+      // SparkListenerStageCompleted event. Since only handleStageCompleted removes an
+      // attempt from recoveredStageAttempts, such an attempt would otherwise never be
+      // cleaned up: it would keep querying AppStatusStore for it on every future
+      // need-calculation, for the remaining lifetime of the application. This runs on the
+      // same trigger as the recovery loop above (a new drop was observed) because a dropped
+      // Completed event increments the exact same counter that triggers reconcile() in the
+      // first place, so this sweep is guaranteed to eventually run for it. recoveredStageAttempts
+      // is expected to stay small (only ever contains attempts affected by a drop), so this
+      // is a small, bounded number of extra point-reads, not a scan of all active stages.
+      allocationManager.synchronized {
+        recoveredStageAttempts.asScala.toSet.foreach { attempt: StageAttempt =>
+          val groundTruthStatus = try {
+            Some(store.stageAttempt(attempt.stageId, attempt.stageAttemptId)._1.status)
+          } catch {
+            case _: NoSuchElementException => None // evicted from AppStatusStore entirely
+            case NonFatal(e) =>
+              // Same rationale as fetchGroundTruthStageData's NonFatal branch below: a
+              // disk-backed live UI store can throw something other than
+              // NoSuchElementException if this races with the store being closed during
+              // application shutdown. Treat it the same as "no ground truth available" so
+              // this sweep doesn't propagate into schedule()'s caller and keep failing (and
+              // re-logging via Utils.tryLog) on every tick for the remainder of shutdown.
+              logDebug(s"Failed to fetch ground truth stage status for $attempt", e)
+              None
+          }
+          groundTruthStatus match {
+            case Some(v1.StageStatus.ACTIVE) | Some(v1.StageStatus.PENDING) =>
+            // Ground truth still considers this attempt in progress; leave it recovered.
+            case _ =>
+              // COMPLETE/FAILED/SKIPPED, or evicted/unreachable entirely (None) -- either way
+              // AppStatusStore no longer considers this attempt in progress (or can't be
+              // asked). Clean it up the same way a real (undropped) StageCompleted would have.
+              handleStageCompleted(attempt.stageId, attempt.stageAttemptId)
+          }
+        }
+      }
+    }
+
     override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
-      val stageId = stageCompleted.stageInfo.stageId
-      val stageAttemptId = stageCompleted.stageInfo.attemptNumber()
+      handleStageCompleted(
+        stageCompleted.stageInfo.stageId, stageCompleted.stageInfo.attemptNumber())
+    }
+
+    // SPARK-58935: extracted from onStageCompleted, unchanged, so that reconcile()'s
+    // terminal-stage sweep (below) can clean up a recovered stage attempt through the exact
+    // same code path as a real completion, with zero logic duplication.
+    private[spark] def handleStageCompleted(stageId: Int, stageAttemptId: Int): Unit = {
       val stageAttempt = StageAttempt(stageId, stageAttemptId)
       allocationManager.synchronized {
         // do NOT remove stageAttempt from stageAttemptToNumRunningTask
@@ -881,6 +1066,13 @@ private[spark] class ExecutorAllocationManager(
         stageAttemptToSpeculativeTaskIndices -= stageAttempt
         stageAttemptToExecutorPlacementHints -= stageAttempt
         removeStageFromResourceProfileIfUnused(stageAttempt)
+
+        // SPARK-58935: this stageAttempt is genuinely done -- stop reading its pending/running
+        // contribution from AppStatusStore (if it was ever recovered), and remember it so a
+        // stale/independent-queue-lagging AppStatusStore snapshot can never cause reconcile()
+        // to resurrect it later.
+        recoveredStageAttempts.remove(stageAttempt)
+        recentlyCompletedStageAttempts.put(stageAttempt, true)
 
         // Update the executor placement hints
         updateExecutorPlacementHints()
@@ -1036,10 +1228,77 @@ private[spark] class ExecutorAllocationManager(
       attemptSets.exists(attempts => attempts.exists(getPendingTaskSum(_) > 0))
     }
 
+    // SPARK-58935: shared by getPendingTaskSum and totalRunningTasksPerResourceProfile below --
+    // both need the same "read fresh from AppStatusStore if recovered, else from the per-task
+    // maps" branch, differing only in which value each side computes.
+    private def valueOrGroundTruth(attempt: StageAttempt)(fallback: => Int)
+        (fromGroundTruth: v1.StageData => Int): Int = {
+      if (recoveredStageAttempts.contains(attempt)) {
+        groundTruthStageData(attempt).map(fromGroundTruth).getOrElse(0)
+      } else {
+        fallback
+      }
+    }
+
     private def getPendingTaskSum(attempt: StageAttempt): Int = {
-      val numTotalTasks = stageAttemptToNumTasks.getOrElse(attempt, 0)
-      val numRunning = stageAttemptToTaskIndices.get(attempt).map(_.size).getOrElse(0)
-      numTotalTasks - numRunning
+      // SPARK-58935: a recovered stage's pending count is read fresh from AppStatusStore
+      // rather than from the per-task-index maps below, which were never populated for it.
+      valueOrGroundTruth(attempt) {
+        val numTotalTasks = stageAttemptToNumTasks.getOrElse(attempt, 0)
+        val numRunning = stageAttemptToTaskIndices.get(attempt).map(_.size).getOrElse(0)
+        numTotalTasks - numRunning
+      } { stage =>
+        if (isGroundTruthStageTerminal(stage.status)) {
+          // The stage is done according to ground truth. Trust `status` over the
+          // numTasks/numActiveTasks/numCompleteTasks arithmetic below: those per-task
+          // counters could still be lagging (e.g. this same reconciliation mechanism hasn't
+          // yet run its terminal-stage sweep in reconcile() to clean this attempt up), and
+          // computing from them here could otherwise keep reporting stale nonzero pending
+          // tasks for an attempt that has actually already finished.
+          0
+        } else {
+          // Deliberately does NOT subtract numFailedTasks: a failed (non-killed) task still
+          // needs a retry, so it remains part of the pending count -- matching how the
+          // normal stageAttemptToTaskIndices-based path behaves (SPARK-30511 puts a failed
+          // task's index back into "pending" by removing it from that set). numKilledTasks
+          // is not subtracted either, erring on the side of over- rather than
+          // under-counting.
+          math.max(0, stage.numTasks - stage.numActiveTasks - stage.numCompleteTasks)
+        }
+      }
+    }
+
+    // SPARK-58935: COMPLETE/FAILED/SKIPPED are terminal -- AppStatusStore will not update
+    // this attempt's per-task counters any further. ACTIVE/PENDING are not.
+    private def isGroundTruthStageTerminal(status: v1.StageStatus): Boolean = status match {
+      case v1.StageStatus.COMPLETE | v1.StageStatus.FAILED | v1.StageStatus.SKIPPED => true
+      case v1.StageStatus.ACTIVE | v1.StageStatus.PENDING => false
+    }
+
+    // SPARK-58935: a cheap, indexed point-read (not a scan); only called for the rare set of
+    // recovered stages. Memoized via groundTruthCache -- see that field's comment for why
+    // and for what scope.
+    private def groundTruthStageData(attempt: StageAttempt): Option[v1.StageData] = {
+      groundTruthCache.getOrElseUpdate(attempt, fetchGroundTruthStageData(attempt))
+    }
+
+    private def fetchGroundTruthStageData(attempt: StageAttempt): Option[v1.StageData] = {
+      statusStoreProvider().flatMap { store =>
+        try {
+          Some(store.stageAttempt(attempt.stageId, attempt.stageAttemptId)._1)
+        } catch {
+          case _: NoSuchElementException => None
+          case NonFatal(e) =>
+            // A disk-backed live UI store (spark.ui.liveUpdate.... / LIVE_UI_LOCAL_STORE_DIR)
+            // can throw something other than NoSuchElementException if this races with the
+            // store being closed during application shutdown. This lookup is best-effort;
+            // treat any such failure the same as "no ground truth available" rather than
+            // letting it propagate into a caller that isn't expecting it (e.g. the
+            // `numberMaxNeededExecutors` gauge, sampled by the metrics-reporting thread).
+            logDebug(s"Failed to fetch ground truth stage data for $attempt", e)
+            None
+        }
+      }
     }
 
     def pendingSpeculativeTasksPerResourceProfile(rp: Int): Int = {
@@ -1076,7 +1335,11 @@ private[spark] class ExecutorAllocationManager(
       val attempts = resourceProfileIdToStageAttempt.getOrElse(rp, Set.empty).toSeq
       // attempts is a Set, change to Seq so we keep all values
       attempts.map { attempt =>
-        stageAttemptToNumRunningTask.getOrElse(attempt, 0)
+        // SPARK-58935: same rationale as getPendingTaskSum above -- once terminal, trust
+        // `status` over `numActiveTasks` in case that counter is still lagging.
+        valueOrGroundTruth(attempt)(stageAttemptToNumRunningTask.getOrElse(attempt, 0)) { stage =>
+          if (isGroundTruthStageTerminal(stage.status)) 0 else stage.numActiveTasks
+        }
       }.sum
     }
 
