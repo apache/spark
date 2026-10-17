@@ -87,6 +87,17 @@ class StreamingShuffleOutputTrackerSuite
       new StreamingShuffleOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
   }
 
+  test("track reliable storage per shuffle") {
+    val master = newTrackerMaster()
+
+    master.registerShuffle(0, 1, 1, 0, isReliablyStored = true)
+    master.registerShuffle(1, 1, 1, 0, isReliablyStored = false)
+
+    master.isReliablyStored(0) should be(true)
+    master.isReliablyStored(1) should be(false)
+    master.isReliablyStored(2) should be(false)
+  }
+
   test("test tracker workflow") {
     val master = newTrackerMaster()
     val worker = newTrackerWorker()
