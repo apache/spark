@@ -1062,7 +1062,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     // The writer gets `bufferStream` only through this stream. Arrow writers write through an
     // interruptible channel, so a task kill that interrupts this thread closes the stream they
     // write to on the killing thread; that must not free `bufferStream` under the writer. It is
-    // freed only by `bufferStream.close()` below. See `CloseShieldOutputStream`.
+    // freed only on this thread, by `writeAdditionalInputToPythonWorker()`, once all input is
+    // sent or when writing fails. See `CloseShieldOutputStream`.
     private[this] val writerStream = new CloseShieldOutputStream(bufferStream)
     /**
      * Buffers data to be written to the Python worker until the socket is
@@ -1233,11 +1234,27 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       }
     }
 
+    private def writeAdditionalInputToPythonWorker(): Unit = {
+      try {
+        writeBufferedInputToPythonWorker()
+      } catch {
+        case t: Throwable =>
+          // Writing failed or the task was killed mid-write, so the close at the end of
+          // `writeBufferedInputToPythonWorker()` is never reached. Free the buffer here, on the
+          // thread that writes into it, instead of leaving it to GC, and stop sending input so
+          // that a later call does not touch it.
+          hasInput = false
+          buffer = ByteBuffer.allocate(0)
+          bufferStream.close()
+          throw t
+      }
+    }
+
     /**
      * Reads input data from `writer.inputIterator` into `buffer` and writes the buffer to the
      * Python worker if the socket is available for writing.
      */
-    private def writeAdditionalInputToPythonWorker(): Unit = {
+    private def writeBufferedInputToPythonWorker(): Unit = {
       var acceptsInput = true
       while (acceptsInput && (hasInput || buffer.hasRemaining)) {
         if (!buffer.hasRemaining && hasInput) {

@@ -20,7 +20,7 @@ package org.apache.spark.api.python
 import java.io.{FilterOutputStream, OutputStream}
 
 /**
- * An output stream that forwards writes to `out` but does not close it on [[close()]].
+ * An output stream that forwards writes to `underlying` but does not close it on [[close()]].
  *
  * Python runners serialize their input into a `DirectByteBufferOutputStream`, whose `close()`
  * frees its native buffer. Arrow writers write that stream through `Channels.newChannel(...)`,
@@ -31,7 +31,8 @@ import java.io.{FilterOutputStream, OutputStream}
  * writing thread still stops with a `ClosedByInterruptException`, and the buffer is freed only
  * by its owner.
  */
-private[python] class CloseShieldOutputStream(out: OutputStream) extends FilterOutputStream(out) {
+private[python] class CloseShieldOutputStream(underlying: OutputStream)
+  extends FilterOutputStream(underlying) {
 
   // FilterOutputStream writes an array one byte at a time.
   override def write(b: Array[Byte], off: Int, len: Int): Unit = out.write(b, off, len)
