@@ -202,7 +202,7 @@ case class BroadcastExchangeExec(
               case arr: Array[InternalRow] =>
                 arr.map(_.asInstanceOf[UnsafeRow].getSizeInBytes.toLong).sum
               case relation: RangeRelation =>
-                relation.estimatedSize()
+                relation.estimatedSize
               case _ =>
                 throw new SparkException("[BUG] BroadcastMode.transform returned unexpected " +
                   s"type: ${relation.getClass.getName}")
