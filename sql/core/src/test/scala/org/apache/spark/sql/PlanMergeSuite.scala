@@ -21,6 +21,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{BooleanType, IntegerType, StructType}
 
 class PlanMergeSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
@@ -392,6 +393,49 @@ class PlanMergeSuite extends SharedSparkSession
         assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
         assert(reusedSubqueryIds.size == 1,
           "Missing or unexpected ReusedSubqueryExec in the plan")
+      }
+    }
+  }
+
+  test("SPARK-60304: Merge a subquery without filters into subqueries that share a lower filter") {
+    // Excluding PushDownPredicates keeps the stacked Filters apart, so the first two subqueries
+    // merge their outer `fa` and `fb` Filters above the shared `a > 0` Filter. The third one has
+    // no Filter, and the merge has to keep `a > 0` for the first two aggregates, which would
+    // otherwise also read the row where `a <= 0` and return -2 and -5.
+    val schema = new StructType()
+      .add("a", IntegerType, nullable = false)
+      .add("fa", BooleanType, nullable = false)
+      .add("fb", BooleanType, nullable = false)
+    val rows = Seq(Row(-5, true, true), Row(3, true, false))
+    withTempView("t") {
+      spark.createDataFrame(spark.sparkContext.parallelize(rows), schema)
+        .createOrReplaceTempView("t")
+      Seq(false, true).foreach { enableAQE =>
+        withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
+          SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "true",
+          SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+            "org.apache.spark.sql.catalyst.optimizer.PushDownPredicates") {
+          val df = sql(
+            """
+              |SELECT
+              |  (SELECT sum(a) FROM (SELECT * FROM t WHERE a > 0) WHERE fa),
+              |  (SELECT max(a) FROM (SELECT * FROM t WHERE a > 0) WHERE fb),
+              |  (SELECT count(a) FROM t)
+            """.stripMargin)
+
+          checkAnswer(df, Row(3, null, 2) :: Nil)
+
+          val plan = df.queryExecution.executedPlan
+          val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+          val reusedSubqueryIds = collectWithSubqueries(plan) {
+            case rs: ReusedSubqueryExec => rs.child.id
+          }
+
+          assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
+          assert(reusedSubqueryIds.size == 2,
+            "Missing or unexpected ReusedSubqueryExec in the plan")
+        }
       }
     }
   }

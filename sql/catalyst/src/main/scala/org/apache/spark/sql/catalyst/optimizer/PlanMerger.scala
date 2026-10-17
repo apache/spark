@@ -304,8 +304,10 @@ class PlanMerger(
 
               // Apply each propagated boolean attribute as a FILTER (WHERE ...) clause on the
               // corresponding side's aggregate expressions.
-              // A None filter means the side's aggregate expressions already carry their individual
-              // FILTER attributes from a previous merge round and should be left unchanged.
+              // A None filter leaves the side's aggregate expressions unchanged, e.g. ones that
+              // already carry their individual FILTER attributes from a previous merge round. A
+              // Some filter is ANDed with any FILTER they carry, e.g. a cpFilter from a filter
+              // below a merged Filter, which those attributes don't include.
               // Filter propagation is consumed here and not passed further up.
               val filteredNPAggregateExpressions = npFilterOpt.fold(np.aggregateExpressions)(
                 applyFilterToAggregateExpressions(np.aggregateExpressions, _))
@@ -355,7 +357,9 @@ class PlanMerger(
                   existingNPFilter match {
                     case Some(reusedFilter) =>
                       val newFilter = cp.withNewChildren(Seq(mergedChild))
-                      Some(TryMergeResult(newFilter, npMapping, Some(reusedFilter), None))
+                      // The child's cpFilter is a filter below this one that np lacks. The
+                      // OR's aliases don't include it, so pass it up to cp's aggregates.
+                      Some(TryMergeResult(newFilter, npMapping, Some(reusedFilter), cpFilter))
                     case None =>
                       val newNPFilterAlias =
                         Alias(newNPCondition, s"propagatedFilter_${PlanMerger.newId}")()
@@ -364,7 +368,9 @@ class PlanMerger(
                         projectList = childProject.projectList ++ Seq(newNPFilterAlias))
                       val newFilter = Filter(Or(cp.condition, newNPFilter), newProject)
                       newFilter.copyTagsFrom(cp)
-                      Some(TryMergeResult(newFilter, npMapping, Some(newNPFilter), None))
+                      // The child's cpFilter is a filter below this one that np lacks. The
+                      // OR's aliases don't include it, so pass it up to cp's aggregates.
+                      Some(TryMergeResult(newFilter, npMapping, Some(newNPFilter), cpFilter))
                   }
                 } else {
                   // First-time filter propagation: alias both sides' conditions as boolean
@@ -424,9 +430,10 @@ class PlanMerger(
                 // restrict each aggregation to its originating side. Synthesising a new cpFilter
                 // alias for cp.condition would just produce `FILTER AND(OR(pf_0, pf_1, ...), pf_i)`
                 // upstream, which simplifies to `FILTER pf_i` -- wasted work and plan bloat.
-                // Drop cp's Filter and let the recursion's result flow up with cpFilter = None so
-                // cp's aggregates are left untouched.
-                TryMergeResult(mergedChild, npMapping, npFilter, None)
+                // Drop cp's Filter and let the recursion's result flow up as is. A cpFilter in it
+                // is a filter below cp's that np lacks, which the pf_i don't include, so cp's
+                // aggregates still need it.
+                TryMergeResult(mergedChild, npMapping, npFilter, cpFilter)
               } else {
                 val newCPCondition = cpFilter.fold(cp.condition)(And(_, cp.condition))
                 val newCPFilterAlias =
