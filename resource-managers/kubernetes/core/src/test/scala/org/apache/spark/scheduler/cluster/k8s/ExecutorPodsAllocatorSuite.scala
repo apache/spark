@@ -366,6 +366,26 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     assert(m.contains("Exceed the pod creation limit: 1"))
   }
 
+  test("SPARK-52589: Prune scheduler-known newly created executors if " +
+    "removed from scheduler backend") {
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1))
+    verify(podsWithNamespace).resource(podWithAttachedContainerForId(1))
+
+    // Executor 1 is registered with schedulerBackend
+    when(schedulerBackend.getExecutorIds()).thenReturn(Seq("1"))
+    snapshotsStore.notifySubscribers()
+
+    // Executor 1 is decommissioned/removed from schedulerBackend without appearing in pod snapshot
+    when(schedulerBackend.getExecutorIds()).thenReturn(Seq.empty)
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 0))
+    snapshotsStore.notifySubscribers()
+
+    // Upscale to 1 executor; verify new executor 2 is requested
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1))
+    snapshotsStore.notifySubscribers()
+    verify(podsWithNamespace).resource(podWithAttachedContainerForId(2))
+  }
+
   test("Request executors in batches. Allow another batch to be requested if" +
     " all pending executors start running.") {
     val counter = PrivateMethod[AtomicInteger](Symbol("EXECUTOR_ID_COUNTER"))()
