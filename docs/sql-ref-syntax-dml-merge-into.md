@@ -124,8 +124,9 @@ not_matched_by_source_action
 - An `UPDATE` or `INSERT` that directly assigns a struct column counts as a direct assignment of every
   nested field in that struct, so schema evolution is triggered for all of those fields.
 - Columns added by schema evolution are appended at the end of the target schema by default. Setting
-  `spark.sql.schemaEvolution.preserveColumnOrder` to `true` makes each new column keep the position
-  it occupies in the source schema instead.
+  `spark.sql.schemaEvolution.preserveColumnOrder` to `true` places each new column immediately after
+  the column that precedes it in the source schema, or first if there is no such column in the
+  target; existing columns keep their order.
 
 ### Examples
 

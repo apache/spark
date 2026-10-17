@@ -21,7 +21,7 @@ import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Expression, ExtractValue, GetArrayStructFields, GetStructField, Literal, PlanExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Expression, ExtractValue, GetArrayStructFields, GetStructField, HigherOrderFunction, LambdaFunction, Literal, NamedLambdaVariable, PlanExpression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
@@ -125,6 +125,32 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
         rederived(gsf.child, gsf.name.get, gsf)
       case gasf: GetArrayStructFields =>
         rederived(gasf.child, gasf.field.name, gasf)
+      // Lambda variables keep the type they were bound with. Rebinding them from the
+      // evolved argument type and re-deriving the body keeps extractions like `x.c`
+      // reading the named field after a positioned add inside its struct.
+      case hof: HigherOrderFunction =>
+        hof.bind { case (lf: LambdaFunction, argTypes) =>
+          val refreshedArgs = (lf.arguments zip argTypes).map {
+            case (v: NamedLambdaVariable, (dataType, nullable)) =>
+              v.copy(dataType = dataType, nullable = nullable)
+            case (arg, _) => arg
+          }
+          val refreshed = (lf.arguments zip refreshedArgs).collect {
+            case (v: NamedLambdaVariable, newV: NamedLambdaVariable)
+                if newV.dataType != v.dataType || newV.nullable != v.nullable =>
+              v.exprId -> newV
+          }.toMap
+          if (refreshed.isEmpty) {
+            lf
+          } else {
+            lf.copy(
+              function = lf.function.transformUp(rebind orElse {
+                case v: NamedLambdaVariable if refreshed.contains(v.exprId) =>
+                  refreshed(v.exprId)
+              }),
+              arguments = refreshedArgs)
+          }
+        }
       case pe: PlanExpression[LogicalPlan @unchecked] =>
         pe.withNewPlan(pe.plan.transformDown {
           case node => node.transformExpressionsUp(rebind)

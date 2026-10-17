@@ -858,6 +858,26 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
     }
   }
 
+  test("Insert schema evolution: preserve order - new column anchors on a " +
+    "reordered source") {
+    withSQLConf(SQLConf.SCHEMA_EVOLUTION_PRESERVE_COLUMN_ORDER.key -> "true") {
+      val t1 = s"${catalogAndNamespace}tbl"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+        doInsert(t1, Seq((1L, "a")).toDF("id", "data"))
+        checkInsertMetrics(t1, numInsertedRows = 1)
+        doInsertWithSchemaEvolution(t1,
+          Seq(("b", true, 2L)).toDF("data", "active", "id"), byName = true)
+        checkInsertMetrics(t1, numInsertedRows = 1)
+        assert(spark.table(t1).schema.fieldNames.toSeq === Seq("id", "data", "active"))
+        verifyTable(t1, Seq[(java.lang.Long, String, java.lang.Boolean)](
+          (1L, "a", null),
+          (2L, "b", true)
+        ).toDF("id", "data", "active"))
+      }
+    }
+  }
+
   test("Insert schema evolution: preserve order off - extra column by name appends") {
     val t1 = s"${catalogAndNamespace}tbl"
     withTable(t1) {
@@ -976,6 +996,9 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
         // The insert must fail on the extra `v` column, not inside alterTable on a
         // dangling AFTER anchor.
         assert(e.getMessage.contains("too many data columns"))
+        // `b` anchors on `id`, the nearest preceding source column the
+        // connector kept, not first or at the end.
+        assert(spark.table(t1).schema.fieldNames.toSeq === Seq("id", "b", "data"))
       }
     }
   }
