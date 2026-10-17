@@ -887,7 +887,19 @@ object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
 
   private def simplifyLike(
       input: Expression, pattern: String, escapeChar: Char = '\\'): Option[Expression] = {
-    if (pattern.contains(escapeChar)) {
+    val binaryEquality = input.dataType match {
+      case st: StringType => st.supportsBinaryEquality
+      case _ => false
+    }
+    if (!binaryEquality) {
+      // LIKE takes one collation without binary equality, UTF8_LCASE, under which it matches
+      // with a Unicode case-insensitive regex (see `CollationSupport.collationAwareRegexFlags`),
+      // while EqualTo, StartsWith, EndsWith and Contains compare the lowercase strings. The two
+      // disagree on some characters: the regex matches U+017F (long s) to 's' as both uppercase
+      // to 'S', and lowercasing turns U+0130 into 'i' followed by U+0307, which the regex does
+      // not match. So the replacement could change the result.
+      None
+    } else if (pattern.contains(escapeChar)) {
       // There are three different situations when pattern containing escapeChar:
       // 1. pattern contains invalid escape sequence, e.g. 'm\aca'
       // 2. pattern contains escaped wildcard character, e.g. 'ma\%ca'
@@ -907,24 +919,13 @@ object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
         // input; a nondeterministic one could give each read a different value.
         case startsAndEndsWith(prefix, postfix) if input.deterministic =>
           // The length guard only rejects inputs too short to hold both the prefix and the
-          // suffix. When the collation matches raw bytes (supportsBinaryEquality),
-          // StartsWith/EndsWith pin the literal bytes of the prefix and suffix, so a
-          // byte-length guard (OctetLength, O(1) via the stored numBytes) accepts exactly the
-          // same inputs as the code-point guard and is cheaper. Otherwise the anchors are
-          // collation-aware (LIKE reaches this only for UTF8_LCASE) and can match a code point
-          // whose UTF-8 length differs from the pattern's -- a single multibyte code point
-          // could then satisfy both anchors and clear the byte guard -- so the code-point
-          // (Length) guard must be kept for correctness.
-          val lengthGuard = input.dataType match {
-            case st: StringType if st.supportsBinaryEquality =>
-              GreaterThanOrEqual(OctetLength(input),
-                Literal.create(UTF8String.fromString(prefix).numBytes
-                  + UTF8String.fromString(postfix).numBytes))
-            case _ =>
-              GreaterThanOrEqual(Length(input),
-                Literal.create(prefix.codePointCount(0, prefix.length)
-                  + postfix.codePointCount(0, postfix.length)))
-          }
+          // suffix. As the collation matches raw bytes, StartsWith/EndsWith pin the literal
+          // bytes of the prefix and suffix, so a byte-length guard (OctetLength, O(1) via the
+          // stored numBytes) accepts exactly the same inputs as a code-point guard and is
+          // cheaper.
+          val lengthGuard = GreaterThanOrEqual(OctetLength(input),
+            Literal.create(UTF8String.fromString(prefix).numBytes
+              + UTF8String.fromString(postfix).numBytes))
           Some(And(lengthGuard,
             And(StartsWith(input, Literal.create(prefix, input.dataType)),
               EndsWith(input, Literal.create(postfix, input.dataType)))))
