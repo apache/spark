@@ -61,6 +61,11 @@ options { tokenVocab = SqlBaseLexer; }
   public boolean single_character_pipe_operator_enabled = true;
 
   /**
+   * When true, the FILE data type is recognized and supported.
+   */
+  public boolean file_type_enabled = false;
+
+  /**
    * Checks if the next token after PIPE can start an operator pipe right side.
    * This disambiguates between bitwise OR (|) in expressions and pipe operator (|) in queries.
    * Used to maintain backwards compatibility when allowing both | and |> as pipe operators.
@@ -1694,6 +1699,7 @@ nonTrivialPrimitiveType
     | TIME (LEFT_PAREN precision=integerValue RIGHT_PAREN)? (withoutTimeZone)?
     | GEOGRAPHY LEFT_PAREN (srid=integerValue | any=ANY) RIGHT_PAREN
     | GEOMETRY LEFT_PAREN (srid=integerValue | any=ANY) RIGHT_PAREN
+    | {file_type_enabled}? FILE (fileTypeMode=EXTERNAL)?
     ;
 
 trivialPrimitiveType
@@ -2269,6 +2275,7 @@ ansiNonReserved
     | EXTERNAL
     | EXTRACT
     | FIELDS
+    | FILE
     | FILEFORMAT
     | FIRST
     | FLOAT
@@ -2711,6 +2718,7 @@ nonReserved
     | FETCH
     | FILTER
     | FIELDS
+    | FILE
     | FILEFORMAT
     | FIRST
     | FLOAT

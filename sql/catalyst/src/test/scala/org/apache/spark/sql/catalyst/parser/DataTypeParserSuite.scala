@@ -88,6 +88,15 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
   checkDataType("cHaR(27)", CharType(27))
   checkDataType("BINARY", BinaryType)
   checkDataType("void", NullType)
+  checkDataType("FILE EXTERNAL", FileType.external)
+  checkDataType("file external", FileType.external)
+  // A bare FILE is the type of an expression or a UDF result, not of a column declaration.
+  checkDataType("FILE", FileType())
+  checkDataType("array<FILE EXTERNAL>", ArrayType(FileType.external))
+  checkDataType("map<string, FILE EXTERNAL>", MapType(StringType, FileType.external))
+  checkDataType(
+    "struct<f: FILE EXTERNAL, file: int>",
+    StructType(Seq(StructField("f", FileType.external), StructField("file", IntegerType))))
   checkDataType("interval", CalendarIntervalType)
   checkDataType("INTERVAL YEAR TO MONTH", YearMonthIntervalType())
   checkDataType("interval day to second", DayTimeIntervalType())
@@ -670,6 +679,20 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
       t.join()
       if (!thrown.isInstanceOf[StackOverflowError]) {
         fail(s"attempt $attempt: expected the StackOverflowError itself, got $thrown", thrown)
+      }
+    }
+  }
+
+  test("FILE is a non-reserved keyword and can still be used as an identifier") {
+    assert(CatalystSqlParser.parseTableSchema("file INT, file2 FILE EXTERNAL") ===
+      StructType(Seq(StructField("file", IntegerType), StructField("file2", FileType.external))))
+    assert(CatalystSqlParser.parseExpression("file").sql === "file")
+  }
+
+  test("FILE is not recognized when the FILE type is disabled") {
+    withSQLConf(SQLConf.FILE_TYPE_ENABLED.key -> "false") {
+      Seq("FILE", "FILE EXTERNAL", "array<FILE EXTERNAL>").foreach { ddl =>
+        intercept(ddl)
       }
     }
   }

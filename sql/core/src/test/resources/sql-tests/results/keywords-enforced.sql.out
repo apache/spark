@@ -156,6 +156,7 @@ EXTRACT	false
 FALSE	true
 FETCH	true
 FIELDS	false
+FILE	false
 FILEFORMAT	false
 FILTER	true
 FIRST	false
