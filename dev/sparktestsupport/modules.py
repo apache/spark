@@ -1303,6 +1303,7 @@ pyspark_connect = Module(
         "pyspark.sql.connect.streaming.query",
         "pyspark.sql.connect.tvf",
         # sql unittests
+        "pyspark.sql.tests.connect.test_connect_conf",
         "pyspark.sql.tests.connect.test_connect_plan",
         "pyspark.sql.tests.connect.test_connect_basic",
         "pyspark.sql.tests.connect.test_connect_dataframe_property",
