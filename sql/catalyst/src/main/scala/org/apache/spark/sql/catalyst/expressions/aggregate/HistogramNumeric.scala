@@ -24,7 +24,7 @@ import com.google.common.primitives.{Doubles, Ints}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes}
+import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, ImplicitCastInputTypes}
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.errors.QueryErrorsBase
@@ -83,18 +83,27 @@ case class HistogramNumeric(
 
   private lazy val propagateInputType: Boolean = SQLConf.get.histogramNumericPropagateInputType
 
+  // Types whose internal value is a number that is converted to double for processing.
+  private def supportedInputType = TypeCollection(NumericType, DateType, TimestampType,
+    TimestampNTZType, YearMonthIntervalType, DayTimeIntervalType, AnyTimeType)
+
   override def inputTypes: Seq[AbstractDataType] = {
-    // Support NumericType, DateType, TimestampType, TimestampNTZType, TimeType,
-    // YearMonthIntervalType, DayTimeIntervalType since their internal types are all numeric,
-    // and can be easily cast to double for processing.
-    Seq(TypeCollection(NumericType, DateType, TimestampType, TimestampNTZType,
-      YearMonthIntervalType, DayTimeIntervalType, AnyTimeType), IntegerType)
+    // Keep a nanosecond timestamp as is, so that checkInputDataTypes rejects it instead of the
+    // analyzer implicitly casting it to DATE.
+    val inputType = child.dataType match {
+      case t: AnyTimestampNanoType => t
+      case _ => supportedInputType
+    }
+    Seq(inputType, IntegerType)
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
     if (defaultCheck.isFailure) {
       defaultCheck
+    } else if (child.dataType.isInstanceOf[AnyTimestampNanoType]) {
+      // The histogram holds doubles, which can't represent nanosecond timestamps exactly.
+      ExpectsInputTypes.checkInputDataTypes(Seq(child), Seq(supportedInputType))
     } else if (!nBins.foldable) {
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
