@@ -23428,6 +23428,45 @@ def is_variant_null(v: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def variant_array_length(v: "ColumnOrName", path: Optional[Union[Column, str]] = None) -> Column:
+    """
+    Returns the number of elements in the variant array at `path`. If `path` is omitted, the root
+    array is inspected. Returns NULL if the input is SQL NULL, the path does not exist, or the
+    target is not an array.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name.
+    path : :class:`~pyspark.sql.Column` or str, optional
+        the JSONPath identifying the array to inspect. A `str` is a literal path; a
+        :class:`~pyspark.sql.Column` supplies the path at runtime. If omitted, the root array is
+        inspected.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        an integer column representing the array length, or NULL for non-array variant values.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('''{"a": [1, 2, 3]}''',), ('''{"a": 1}''',)], ['json'])
+    >>> df.select(variant_array_length(parse_json(df.json), "$.a").alias("r")).collect()
+    [Row(r=3), Row(r=None)]
+    >>> df.select(variant_array_length(parse_json(lit("[1, 2]"))).alias("r")).collect()
+    [Row(r=2), Row(r=2)]
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    if path is None:
+        return _invoke_function("variant_array_length", _to_java_column(v))
+    path_col = path if isinstance(path, Column) else lit(path)
+    return _invoke_function("variant_array_length", _to_java_column(v), _to_java_column(path_col))
+
+
+@_try_remote_functions
 def is_valid_variant(v: "ColumnOrName") -> Column:
     """
     Check if a variant value is valid. Returns true if the variant is valid, false if it is
