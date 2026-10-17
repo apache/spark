@@ -672,7 +672,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
         """
           |(17) ShuffleQueryStage
           |Output [1]: [max#xL]
-          |Arguments: 0""".stripMargin,
+          |Arguments: 2""".stripMargin,
         """
           |(22) AdaptiveSparkPlan
           |Output [1]: [max(id)#xL]
