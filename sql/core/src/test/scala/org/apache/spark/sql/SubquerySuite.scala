@@ -3227,4 +3227,142 @@ class SubquerySuite extends SharedSparkSession
       }
     }
   }
+
+  test("SPARK-59438: scalar subquery in SELECT over sorted LIMIT returns correct rows") {
+    // Verifies that PushProjectionThroughLimitAndOffset does NOT push a Project
+    // containing a scalar subquery below a Limit. If pushed, the subquery-to-join
+    // rewrite inserts a join below the Limit, destroying the sort order and
+    // returning wrong rows.
+    withTempView("p", "k") {
+      // Table p: 10 rows with id 1..10, name, age
+      sql(
+        """CREATE TEMPORARY VIEW p AS
+          |SELECT * FROM VALUES
+          |  (1, 'Alice', 30), (2, 'Bob', 25), (3, 'Carol', 35),
+          |  (4, 'Dave', 28), (5, 'Eve', 22), (6, 'Frank', 40),
+          |  (7, 'Grace', 33), (8, 'Heidi', 27), (9, 'Ivan', 31),
+          |  (10, 'Judy', 29)
+          |AS t(id, name, age)
+        """.stripMargin)
+
+      // Table k: counts per id
+      sql(
+        """CREATE TEMPORARY VIEW k AS
+          |SELECT * FROM VALUES (1, 10), (2, 20), (3, 30), (5, 50), (7, 70)
+          |AS t(a, b)
+        """.stripMargin)
+
+      // CTE: top 3 by age DESC => Frank(40), Carol(35), Grace(33)
+      // Then for each, compute a scalar subquery count from k.
+      // The bug would return wrong 3 rows because the join destroys sort order.
+      val result = sql(
+        """WITH s AS (SELECT id, name FROM p ORDER BY age DESC LIMIT 3)
+          |SELECT name, (SELECT count(*) FROM k WHERE k.a = s.id) AS cnt
+          |FROM s ORDER BY name
+        """.stripMargin)
+
+      // Frank(id=6, no k match -> 0), Carol(id=3, one k match -> 1), Grace(id=7, one k match -> 1)
+      checkAnswer(result, Seq(
+        Row("Carol", 1),
+        Row("Frank", 0),
+        Row("Grace", 1)
+      ))
+    }
+  }
+
+  test("SPARK-59438: scalar subquery in SELECT over OFFSET returns correct rows") {
+    withTempView("p2", "k2") {
+      sql(
+        """CREATE TEMPORARY VIEW p2 AS
+          |SELECT * FROM VALUES
+          |  (1, 'A', 10), (2, 'B', 20), (3, 'C', 30), (4, 'D', 40), (5, 'E', 50)
+          |AS t(id, name, score)
+        """.stripMargin)
+
+      sql(
+        """CREATE TEMPORARY VIEW k2 AS
+          |SELECT * FROM VALUES (3, 100), (4, 200), (5, 300)
+          |AS t(a, b)
+        """.stripMargin)
+
+      // ORDER BY score ASC LIMIT 5 OFFSET 2 => skip first 2 (A=10, B=20), take C(30), D(40), E(50)
+      val result = sql(
+        """WITH s AS (SELECT id, name FROM p2 ORDER BY score ASC LIMIT 5 OFFSET 2)
+          |SELECT name, (SELECT sum(b) FROM k2 WHERE k2.a = s.id) AS total
+          |FROM s ORDER BY name
+        """.stripMargin)
+
+      checkAnswer(result, Seq(
+        Row("C", 100),
+        Row("D", 200),
+        Row("E", 300)
+      ))
+    }
+  }
+
+  test("SPARK-59438: EXISTS in SELECT over sorted LIMIT returns correct rows") {
+    // EXISTS is also a subquery expression that gets rewritten to a join.
+    withTempView("p3", "k3") {
+      sql(
+        """CREATE TEMPORARY VIEW p3 AS
+          |SELECT * FROM VALUES
+          |  (1, 'A', 10), (2, 'B', 20), (3, 'C', 30), (4, 'D', 40), (5, 'E', 50)
+          |AS t(id, name, score)
+        """.stripMargin)
+
+      sql(
+        """CREATE TEMPORARY VIEW k3 AS
+          |SELECT * FROM VALUES (1), (3), (5) AS t(a)
+        """.stripMargin)
+
+      // Top 3 by score DESC => E(50), D(40), C(30). Check EXISTS against k3.
+      val result = sql(
+        """WITH s AS (SELECT id, name FROM p3 ORDER BY score DESC LIMIT 3)
+          |SELECT name, EXISTS(SELECT 1 FROM k3 WHERE k3.a = s.id) AS has_match
+          |FROM s ORDER BY name
+        """.stripMargin)
+
+      // C(id=3, match), D(id=4, no match), E(id=5, match)
+      checkAnswer(result, Seq(
+        Row("C", true),
+        Row("D", false),
+        Row("E", true)
+      ))
+    }
+  }
+
+  test("SPARK-59438: forced SortMergeJoin reproduces the bug without the fix") {
+    // When broadcast is disabled, the subquery-to-join rewrite uses SortMergeJoin
+    // which repartitions inputs and destroys sort order. This test ensures the fix
+    // works even with SMJ.
+    withTempView("p4", "k4") {
+      sql(
+        """CREATE TEMPORARY VIEW p4 AS
+          |SELECT * FROM VALUES
+          |  (1, 'A', 100), (2, 'B', 90), (3, 'C', 80), (4, 'D', 70), (5, 'E', 60)
+          |AS t(id, name, score)
+        """.stripMargin)
+
+      sql(
+        """CREATE TEMPORARY VIEW k4 AS
+          |SELECT * FROM VALUES (1, 10), (2, 20), (3, 30), (4, 40), (5, 50)
+          |AS t(a, b)
+        """.stripMargin)
+
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        // Top 3 by score DESC => A(100), B(90), C(80)
+        val result = sql(
+          """WITH s AS (SELECT id, name FROM p4 ORDER BY score DESC LIMIT 3)
+            |SELECT name, (SELECT sum(b) FROM k4 WHERE k4.a = s.id) AS total
+            |FROM s ORDER BY name
+          """.stripMargin)
+
+        checkAnswer(result, Seq(
+          Row("A", 10),
+          Row("B", 20),
+          Row("C", 30)
+        ))
+      }
+    }
+  }
 }

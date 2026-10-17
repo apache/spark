@@ -17,27 +17,38 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{GlobalLimit, LocalLimit, LogicalPlan, Offset, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LIMIT, OFFSET, PROJECT}
 
 /**
  * Pushes Project operator through Limit operator.
+ *
+ * This is safe for simple deterministic projections (column pruning). However, subquery
+ * expressions must be excluded even though they are deterministic: later optimizer rules
+ * rewrite subqueries into joins, and a join placed below a Limit/Offset can destroy the
+ * sort order that the Limit depends on (SPARK-59438).
  */
 object PushProjectionThroughLimitAndOffset extends Rule[LogicalPlan] {
+
+  private def canPushThrough(projectList: Seq[org.apache.spark.sql.catalyst.expressions.NamedExpression]): Boolean = {
+    projectList.forall(e => e.deterministic && !SubqueryExpression.hasSubquery(e))
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(treeBits =>
     treeBits.containsPattern(PROJECT) && treeBits.containsAnyPattern(OFFSET, LIMIT)) {
 
     case p @ Project(projectList, limit @ LocalLimit(_, child))
-        if projectList.forall(_.deterministic) =>
+        if canPushThrough(projectList) =>
       limit.copy(child = p.copy(projectList, child))
 
     case p @ Project(projectList, g @ GlobalLimit(_, limit @ LocalLimit(_, child)))
-        if projectList.forall(_.deterministic) =>
+        if canPushThrough(projectList) =>
       g.copy(child = limit.copy(child = p.copy(projectList, child)))
 
     case p @ Project(projectList, offset @ Offset(_, child))
-      if projectList.forall(_.deterministic) =>
+      if canPushThrough(projectList) =>
       offset.copy(child = p.copy(projectList, child))
   }
 }
