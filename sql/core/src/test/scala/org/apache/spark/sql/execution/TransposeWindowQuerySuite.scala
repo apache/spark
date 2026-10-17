@@ -119,6 +119,36 @@ class TransposeWindowQuerySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("window over a derived projection over a window still shares one exchange") {
+    // The derived alias `d` cuts the window chain into two one-window runs, so there is
+    // nothing to stack-reorder, but the legacy pairwise Window-Project-Window swap at the
+    // cut must still fire with the flag on: the (k1) window moves below the (k1, k2)
+    // window and its exchange satisfies the wider spec -- one exchange, as with the flag
+    // off.
+    val query =
+      """
+        |SELECT *, sum(v) OVER (PARTITION BY k1 ORDER BY k1) AS s
+        |FROM (SELECT *, sum(v) OVER (PARTITION BY k1, k2 ORDER BY k1) * 2 AS d FROM t)
+      """.stripMargin
+
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withInput {
+        val expected = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "false") {
+          val df = sql(query)
+          assert(numExchanges(df) == 1)
+          planned(df)
+        }
+        val actualDf = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+          val df = sql(query)
+          assert(numWindows(df) == 2)
+          assert(numExchanges(df) == 1)
+          planned(df)
+        }
+        checkAnswer(actualDf, expected.collect())
+      }
+    }
+  }
+
   test("windows with equal order specs become adjacent to share one sort") {
     // The three windows share the partition spec (k1, k2), so they all ride one exchange in
     // any order, and the two k1-ordered ones come from different scopes (the analyzer groups
@@ -342,6 +372,78 @@ class TransposeWindowQuerySuite extends QueryTest with SharedSparkSession {
         .withColumn("a", sum("v").over(wA))
         .withColumn("c", sum("v").over(wC))
         .withColumn("rn", row_number().over(wRn))
+        .where(col("rn") <= 1)
+    }
+
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withInput {
+        val actualDf = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+          val df = rankFiltered
+          assert(df.queryExecution.executedPlan.collect {
+            case _: WindowGroupLimitExec => ()
+          }.nonEmpty)
+          planned(df)
+        }
+        val expected = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "false") {
+          rankFiltered.collect()
+        }
+        checkAnswer(actualDf, expected)
+      }
+    }
+  }
+
+  test("pinned reorder survives a bottom-up merge cascade into the rank window") {
+    // withColumn builds separate Window operators connected by transparent projects. r is
+    // a merge-safe tail under rn in isolation, but the order it emits packs its group
+    // below it (x, y, s, r), and CollapseWindow merges bottom-up -- the same-spec RANGE
+    // sum s into r, then into rn -- defeating InferWindowGroupLimit. Merge safety must be
+    // checked against the order a candidate tail would actually emit.
+    def rankFiltered: DataFrame = {
+      val t = spark.table("t")
+      val wF = Window.partitionBy("k1", "k2").orderBy("k1")
+      val wX = Window.partitionBy("k3").orderBy("k1")
+      val wY = Window.partitionBy("k4").orderBy("k1")
+      t.withColumn("s", sum("v").over(wF))
+        .withColumn("x", sum("v").over(wX))
+        .withColumn("r", row_number().over(wF))
+        .withColumn("y", sum("v").over(wY))
+        .withColumn("rn", row_number().over(wF))
+        .where(col("rn") <= 1)
+    }
+
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withInput {
+        val actualDf = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+          val df = rankFiltered
+          assert(df.queryExecution.executedPlan.collect {
+            case _: WindowGroupLimitExec => ()
+          }.nonEmpty)
+          planned(df)
+        }
+        val expected = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "false") {
+          rankFiltered.collect()
+        }
+        checkAnswer(actualDf, expected)
+      }
+    }
+  }
+
+  test("pinned reorder survives a merge cascade through an inherited order spec") {
+    // Same stack, but r has no ORDER BY: it cannot merge into rn on its own (an
+    // empty-order child merging into an ordered parent is gated off by default), yet
+    // packed above the same-spec ordered sum s it inherits s's ORDER BY when they merge,
+    // and the cascade into rn defeats InferWindowGroupLimit all the same.
+    def rankFiltered: DataFrame = {
+      val t = spark.table("t")
+      val wF = Window.partitionBy("k1", "k2").orderBy("k1")
+      val wR = Window.partitionBy("k1", "k2")
+      val wX = Window.partitionBy("k3").orderBy("k1")
+      val wY = Window.partitionBy("k4").orderBy("k1")
+      t.withColumn("s", sum("v").over(wF))
+        .withColumn("x", sum("v").over(wX))
+        .withColumn("r", sum("v").over(wR))
+        .withColumn("y", sum("v").over(wY))
+        .withColumn("rn", row_number().over(wF))
         .where(col("rn") <= 1)
     }
 
