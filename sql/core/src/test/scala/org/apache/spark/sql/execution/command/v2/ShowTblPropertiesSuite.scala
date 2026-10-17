@@ -17,10 +17,48 @@
 
 package org.apache.spark.sql.execution.command.v2
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.command
 
 /**
  * The class contains tests for the `SHOW TBLPROPERTIES` command to check V2 table catalogs.
  */
 class ShowTblPropertiesSuite extends command.ShowTblPropertiesSuiteBase with CommandSuiteBase {
+  test("display properties supplement current properties and exclude reserved keys") {
+    withNamespaceAndTable("ns", "table") { tbl =>
+      sql(s"CREATE TABLE $tbl (id bigint) $defaultUsing " +
+        "TBLPROPERTIES ('persisted' = 'stored')")
+      setDisplayProperties(loadTable(catalog, "ns", "table"))
+
+      checkAnswer(sql(s"SHOW TBLPROPERTIES $tbl"),
+        Seq(Row("catalog-label", "catalog-value"), Row("password", "*********(redacted)"),
+          Row("persisted", "stored")))
+      checkAnswer(sql(s"SHOW TBLPROPERTIES $tbl ('persisted')"), Row("persisted", "stored"))
+      checkAnswer(sql(s"SHOW TBLPROPERTIES $tbl ('catalog-label')"),
+        Row("catalog-label", "catalog-value"))
+      checkAnswer(sql(s"SHOW TBLPROPERTIES $tbl ('password')"),
+        Row("password", "*********(redacted)"))
+
+      sql(s"ALTER TABLE $tbl SET TBLPROPERTIES ('persisted' = 'updated')")
+      checkAnswer(sql(s"SHOW TBLPROPERTIES $tbl"),
+        Seq(Row("catalog-label", "catalog-value"), Row("password", "*********(redacted)"),
+          Row("persisted", "updated")))
+
+      sql(s"ALTER TABLE $tbl UNSET TBLPROPERTIES ('persisted', 'catalog-label')")
+      checkAnswer(sql(s"SHOW TBLPROPERTIES $tbl"),
+        Seq(Row("catalog-label", "catalog-value"), Row("password", "*********(redacted)"),
+          Row("persisted", "display-value")))
+      checkAnswer(sql(s"SHOW TBLPROPERTIES $tbl ('persisted')"),
+        Row("persisted", "display-value"))
+      assert(spark.catalog.getTableProperties(tbl).get("persisted") === "display-value")
+      assert(!spark.catalog.getCreateTableString(tbl).contains("persisted"))
+
+      sql(s"ALTER TABLE $tbl SET TBLPROPERTIES ('catalog-label' = 'updated')")
+      checkAnswer(sql(s"SHOW TBLPROPERTIES $tbl ('catalog-label')"),
+        Row("catalog-label", "updated"))
+      sql(s"ALTER TABLE $tbl UNSET TBLPROPERTIES ('catalog-label')")
+      checkAnswer(sql(s"SHOW TBLPROPERTIES $tbl ('catalog-label')"),
+        Row("catalog-label", "catalog-value"))
+    }
+  }
 }
