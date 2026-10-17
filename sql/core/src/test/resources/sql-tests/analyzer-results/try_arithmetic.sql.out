@@ -89,6 +89,18 @@ SELECT try_add(1, date'2021-01-01')
 
 
 -- !query
+SELECT try_add(date'2021-01-01', 2147483647)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT try_add(2147483647, date'2021-01-01')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
 SELECT try_add(date'2021-01-01', interval 2 year)
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
@@ -412,6 +424,18 @@ SELECT try_subtract(sum(1), 1) GROUP BY ALL
 -- !query analysis
 Aggregate [try_subtract(sum(1), 1) AS try_subtract(sum(1), 1)#xL]
 +- OneRowRelation
+
+
+-- !query
+SELECT try_subtract(date'2021-01-01', 1)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT try_subtract(date'1900-01-01', 2147483647)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
