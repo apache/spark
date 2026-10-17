@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.io.ByteArrayInputStream
 import java.math.{BigDecimal => JBigDecimal}
 import java.nio.file.Files
 import java.time.{LocalDateTime, LocalTime}
@@ -36,6 +37,7 @@ import org.apache.parquet.column.{Encoding, ParquetProperties}
 import org.apache.parquet.column.ParquetProperties.WriterVersion.PARQUET_1_0
 import org.apache.parquet.example.data.Group
 import org.apache.parquet.example.data.simple.{SimpleGroup, SimpleGroupFactory}
+import org.apache.parquet.format.{PageType, Util}
 import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.example.ExampleParquetWriter
 import org.apache.parquet.io.ParquetDecodingException
@@ -2488,31 +2490,18 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
   }
 
   /**
-   * Writes 100 rows of `column` to a single uncompressed data page, lets `corrupt` modify the
-   * RLE section that starts with `03 00 00 00 C8 01 01` (the 4-byte length 3, then one RLE run
-   * with header 100 << 1 and value 1), and returns the error of reading the file with the
-   * vectorized reader. For a nullable INT32 column that is the definition levels; for a
-   * BOOLEAN column written as a V2 page it is the RLE-encoded values.
+   * Writes 100 rows of `column` with the writer `options`, lets `corrupt` modify the bytes of
+   * the written file, and returns the error of reading the file with the vectorized reader.
    */
-  private def readCorruptedRleSection(
-      column: String,
-      writerVersion: String = "PARQUET_1_0")(
-      corrupt: (Array[Byte], Int) => Unit): Throwable = {
+  private def readCorruptedFile(column: String, options: Map[String, String])(
+      corrupt: Array[Byte] => Unit): Throwable = {
     var error: Throwable = null
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      spark.range(100).selectExpr(column).coalesce(1)
-        .write
-        .option(ParquetOutputFormat.ENABLE_DICTIONARY, "false")
-        .option(ParquetOutputFormat.WRITER_VERSION, writerVersion)
-        .option("compression", "uncompressed")
-        .parquet(path)
+      spark.range(100).selectExpr(column).coalesce(1).write.options(options).parquet(path)
       val file = dir.listFiles().filter(_.getName.endsWith(".parquet")).head
       val bytes = Files.readAllBytes(file.toPath)
-      val section = Array[Byte](3, 0, 0, 0, 0xC8.toByte, 0x01, 1)
-      val offset = bytes.indexOfSlice(section)
-      assert(offset >= 0 && bytes.indexOfSlice(section, offset + 1) < 0)
-      corrupt(bytes, offset)
+      corrupt(bytes)
       Files.write(file.toPath, bytes)
       dir.listFiles().filter(_.getName.endsWith(".crc")).foreach(_.delete())
 
@@ -2526,6 +2515,29 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
       }
     }
     error
+  }
+
+  /**
+   * Writes 100 rows of `column` to a single uncompressed data page, lets `corrupt` modify the
+   * RLE section that starts with `03 00 00 00 C8 01 01` (the 4-byte length 3, then one RLE run
+   * with header 100 << 1 and value 1), and returns the error of reading the file with the
+   * vectorized reader. For a nullable INT32 column that is the definition levels; for a
+   * BOOLEAN column written as a V2 page it is the RLE-encoded values.
+   */
+  private def readCorruptedRleSection(
+      column: String,
+      writerVersion: String = "PARQUET_1_0")(
+      corrupt: (Array[Byte], Int) => Unit): Throwable = {
+    val options = Map(
+      ParquetOutputFormat.ENABLE_DICTIONARY -> "false",
+      ParquetOutputFormat.WRITER_VERSION -> writerVersion,
+      "compression" -> "uncompressed")
+    readCorruptedFile(column, options) { bytes =>
+      val section = Array[Byte](3, 0, 0, 0, 0xC8.toByte, 0x01, 1)
+      val offset = bytes.indexOfSlice(section)
+      assert(offset >= 0 && bytes.indexOfSlice(section, offset + 1) < 0)
+      corrupt(bytes, offset)
+    }
   }
 
   private def causes(e: Throwable): Seq[Throwable] =
@@ -2569,6 +2581,26 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
     val e = readCorruptedRleSection("id >= 0 as b", writerVersion = "PARQUET_2_0")(setMaxLength)
     assertInvalidLengthReportsColumn(e, "b")
   }
+
+  test("SPARK-59854: a ZSTD page that cannot be decompressed reports the column") {
+    Seq(PageType.DATA_PAGE -> false, PageType.DICTIONARY_PAGE -> true).foreach {
+      case (pageType, dictionary) =>
+        val options = Map(
+          ParquetOutputFormat.ENABLE_DICTIONARY -> dictionary.toString,
+          "compression" -> "zstd")
+        val e = readCorruptedFile("cast(id % 10 as int) as a", options) { bytes =>
+          // The first page of the only column chunk starts right after the magic number.
+          val in = new ByteArrayInputStream(bytes, ParquetFileWriter.MAGIC.length, bytes.length)
+          assert(Util.readPageHeader(in).getType == pageType)
+          // Invert the first bytes of the page, the ZSTD frame magic number.
+          val pageStart = bytes.length - in.available()
+          (pageStart until pageStart + 4).foreach(i => bytes(i) = (~bytes(i)).toByte)
+        }
+        assert(causes(e).exists(c =>
+          Option(c.getMessage).exists(_.contains("[a] optional int32 a"))), e)
+    }
+  }
+
 }
 
 class JobCommitFailureParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)
