@@ -443,4 +443,32 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter with P
     assert(getHeartbeatTask(worker) == heartbeatTask)
     assert(getWorkDirCleanupTask(worker) == workDirCleanupTask)
   }
+
+  test("app cleanup removes only the worker's own per-application executor local dir") {
+    val externalShuffleServiceSupplier = new Supplier[ExternalShuffleService] {
+      override def get: ExternalShuffleService = shuffleService
+    }
+    val worker = makeWorker(new SparkConf(), externalShuffleServiceSupplier)
+    val root = Utils.createTempDir(namePrefix = "worker-local-root")
+    try {
+      // LaunchExecutor layout: the executor local dir is <root>/spark-<workerId>/<appId>.
+      // Workers sharing a local root (local-cluster mode) each get their own
+      // spark-<workerId> directory, so application cleanup must remove only this worker's
+      // per-application directory and leave another worker's untouched.
+      val appId = "app-20260922000000-0001"
+      val appDir = new File(new File(root, "spark-worker-1"), appId)
+      val otherWorkerAppDir = new File(new File(root, "spark-worker-2"), appId)
+      assert(appDir.mkdirs() && otherWorkerAppDir.mkdirs())
+      worker.appDirectories(appId) = Seq(appDir.getAbsolutePath)
+      worker.finishedApps += appId
+      worker.handleExecutorStateChanged(
+        ExecutorStateChanged(appId, 0, ExecutorState.EXITED, None, None))
+      eventually(timeout(1.second), interval(10.milliseconds)) {
+        assert(!appDir.exists())
+      }
+      assert(otherWorkerAppDir.exists())
+    } finally {
+      Utils.deleteRecursively(root)
+    }
+  }
 }
