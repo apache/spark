@@ -110,6 +110,7 @@ options for deployment:
 * [Spark Streaming](streaming-programming-guide.html): processing data streams using DStreams (old API)
 * [MLlib](ml-guide.html): applying machine learning algorithms
 * [GraphX](graphx-programming-guide.html): processing graphs
+* [GraphFrames](graphframes-programming-guide.html): processing graphs with DataFrames
 * [SparkR (Deprecated)](sparkr.html): processing data with Spark in R
 * [PySpark](api/python/getting_started/index.html): processing data with Spark in Python
 * [Spark SQL CLI](sql-distributed-sql-engine-spark-sql-cli.html): processing data with SQL on the command line
