@@ -46,14 +46,14 @@ import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.{LEGACY_ABORT_STAGE_AFTER_KILL_TASKS, Tests}
 import org.apache.spark.network.shuffle.ExternalBlockStoreClient
-import org.apache.spark.rdd.{DeterministicLevel, RDD, ReliableRDDCheckpointData}
+import org.apache.spark.rdd.{DeterministicLevel, LocalRDDCheckpointData, RDD, ReliableRDDCheckpointData}
 import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, ResourceProfileBuilder, TaskResourceProfile, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
 import org.apache.spark.rpc.RpcTimeoutException
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.shuffle.{FetchFailedException, MetadataFetchFailedException}
-import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerId, BlockManagerMaster}
+import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerId, BlockManagerMaster, StorageLevel}
 import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, CallSite, Clock, LongAccumulator, SystemClock, ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.Utils.createArray
@@ -7487,8 +7487,9 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         exception = failure.asInstanceOf[SparkException],
         condition = "CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT",
         parameters = scala.collection.immutable.Map("numTasks" -> "4", "numSlots" -> "0"))
-      // Classification and admission each enumerate the edge once; no stage was created.
-      assert(edgeVisits.get() === 2)
+      // Classification, cache-intent collection and admission each enumerate the edge once;
+      // no stage was created.
+      assert(edgeVisits.get() === 3)
       assert(taskSets.isEmpty)
       assertDataStructuresEmpty()
     } finally {
@@ -9470,6 +9471,216 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
+  for {
+    (cacheState, cachedPartitions) <- Seq(
+      "cold" -> Seq.empty[Int], "partial" -> Seq(0), "full" -> Seq(0, 1),
+      "evicted" -> Seq(0, 1))
+    slots <- Seq(3, 4)
+  } {
+    test(s"pipelined cache preflight: reject a persisted consumer before admission " +
+        s"(cache=$cacheState, slots=$slots)") {
+      val producer = new MyRDD(sc, 2, Nil)
+      val dependency = new PipelinedShuffleDependency(producer, new HashPartitioner(2))
+      val consumer = new MyRDD(sc, 2, List(dependency)).cache()
+      cachedPartitions.foreach { partition =>
+        cacheLocations(consumer.id -> partition) = Seq(makeBlockManagerId("hostA"))
+      }
+      if (cacheState == "evicted") {
+        // Keep a stale driver snapshot after the blocks disappear. Cache presence cannot
+        // authorize execution of a transient shuffle whose readers can be bypassed.
+        assert(scheduler.getCacheLocs(consumer).forall(_.nonEmpty))
+        cacheLocations.clear()
+        assert(scheduler.getCacheLocs(consumer).forall(_.nonEmpty))
+      }
+      scheduler.asInstanceOf[MyDAGScheduler].maxConcurrentTasksForTest = slots
+
+      assertPersistedPipelinedConsumerRejected(consumer, Seq(dependency.shuffleId))
+    }
+  }
+
+  test("pipelined cache preflight: reject persisted consumers with slot checking disabled") {
+    conf.set(config.PIPELINED_GROUP_SLOT_CHECK_ENABLED, false)
+    val dependency = new PipelinedShuffleDependency(new MyRDD(sc, 2, Nil), new HashPartitioner(2))
+    val consumer = new MyRDD(sc, 2, List(dependency)).persist(StorageLevel.MEMORY_AND_DISK)
+    cacheLocations(consumer.id -> 0) = Seq(makeBlockManagerId("hostA"))
+
+    assertPersistedPipelinedConsumerRejected(consumer, Seq(dependency.shuffleId))
+  }
+
+  test("pipelined cache preflight: reject a persisted narrow descendant inside a consumer stage") {
+    val dependency = new PipelinedShuffleDependency(new MyRDD(sc, 2, Nil), new HashPartitioner(2))
+    val reads = new MyRDD(sc, 2, List(dependency))
+    val cached = new MyRDD(sc, 2, List(new OneToOneDependency(reads))).cache()
+    val result = new MyRDD(sc, 2, List(new OneToOneDependency(cached)))
+    cacheLocations(cached.id -> 0) = Seq(makeBlockManagerId("hostA"))
+
+    assertPersistedPipelinedConsumerRejected(result, Seq(dependency.shuffleId))
+  }
+
+  test("pipelined cache preflight: reject a persisted stage that consumes and produces shuffles") {
+    val first = new PipelinedShuffleDependency(new MyRDD(sc, 2, Nil), new HashPartitioner(2))
+    val middle = new MyRDD(sc, 2, List(first)).cache()
+    val second = new PipelinedShuffleDependency(middle, new HashPartitioner(2))
+    val result = new MyRDD(sc, 2, List(second))
+    for (partition <- 0 until 2) {
+      cacheLocations(middle.id -> partition) = Seq(makeBlockManagerId("hostA"))
+    }
+
+    assertPersistedPipelinedConsumerRejected(result, Seq(first.shuffleId, second.shuffleId))
+  }
+
+  test("pipelined cache preflight: reject a pending local checkpoint in a consumer") {
+    val dependency = new PipelinedShuffleDependency(new MyRDD(sc, 2, Nil), new HashPartitioner(2))
+    val consumer = new MyRDD(sc, 2, List(dependency)).localCheckpoint()
+    assert(!consumer.isCheckpointed)
+    assert(consumer.getStorageLevel != StorageLevel.NONE)
+
+    assertPersistedPipelinedConsumerRejected(consumer, Seq(dependency.shuffleId))
+  }
+
+  test("pipelined cache preflight: unpersisting a pending local checkpoint still requires " +
+      "rebuilding the consumer") {
+    val dependency = new PipelinedShuffleDependency(new MyRDD(sc, 2, Nil), new HashPartitioner(2))
+    val consumer = new MyRDD(sc, 2, List(dependency)).localCheckpoint()
+    consumer.unpersist(blocking = true)
+    assert(consumer.getStorageLevel === StorageLevel.NONE)
+    assert(consumer.checkpointData.exists(_.isInstanceOf[LocalRDDCheckpointData[_]]))
+    assert(!consumer.isCheckpointed)
+
+    val exception = submitAndCaptureFailure(consumer, Array(0, 1))
+    assertPipelinedUnsupported(exception, "cache/persist/localCheckpoint in a pipelined consumer")
+    assert(exception.getMessage.contains(
+      "rebuild locally checkpointed consumers without localCheckpoint"))
+    assert(consumer.getStorageLevel === StorageLevel.NONE)
+    assertNoPipelinedStageRegistration(Seq(dependency.shuffleId))
+    assert(taskSets.isEmpty)
+    assertDataStructuresEmpty()
+  }
+
+  for (cachedProducerRoot <- Seq(false, true)) {
+    test(s"pipelined cache preflight: allow cached producer input " +
+        s"(producerRoot=$cachedProducerRoot)") {
+      val input = new MyRDD(sc, 2, Nil)
+      val producer = new MyRDD(sc, 2, List(new OneToOneDependency(input)))
+      val cached = if (cachedProducerRoot) producer else input
+      cached.cache()
+      for (partition <- 0 until 2) {
+        cacheLocations(cached.id -> partition) = Seq(makeBlockManagerId("hostA"))
+      }
+      val dependency = new PipelinedShuffleDependency(producer, new HashPartitioner(2))
+      val result = new MyRDD(sc, 2, List(dependency))
+      scheduler.asInstanceOf[MyDAGScheduler].maxConcurrentTasksForTest = 4
+
+      submit(result, Array(0, 1))
+      assert(failure === null)
+      assert(taskSets.size === 2)
+      assert(taskSets.forall(_.isPipelined))
+      completeShuffleMapStageSuccessfully(taskSets.head.stageId, 0, 2)
+      complete(taskSets.last, Seq((Success, 42), (Success, 43)))
+      assert(results === Map(0 -> 42, 1 -> 43))
+      assertDataStructuresEmpty()
+    }
+  }
+
+  test("pipelined cache preflight: allow unrelated cached branches with shared ancestry") {
+    val edgeReads = Seq.fill(8)(new AtomicInteger)
+    var shared: RDD[(Int, Int)] = new MyRDD(sc, 2, Nil)
+    edgeReads.foreach { counter =>
+      val dependency = new OneToOneDependency(shared) {
+        override def rdd: RDD[(Int, Int)] = {
+          counter.incrementAndGet()
+          super.rdd
+        }
+      }
+      shared = new MyRDD(sc, 2, List(dependency))
+    }
+    val cachedBranches = (0 until 32).map { _ =>
+      val cached = new MyRDD(sc, 2, List(new OneToOneDependency(shared))).cache()
+      cacheLocations(cached.id -> 0) = Seq(makeBlockManagerId("hostA"))
+      cached
+    }
+    val pipelined = new PipelinedShuffleDependency(new MyRDD(sc, 2, Nil), new HashPartitioner(2))
+    val reads = new MyRDD(sc, 2, List(pipelined))
+    val result = new MyRDD(sc, 2,
+      (reads +: cachedBranches).map(new OneToOneDependency(_)).toList)
+    var preflightEdgeReads = Seq.empty[Int]
+    doAnswer { invocation =>
+      if (preflightEdgeReads.isEmpty) {
+        preflightEdgeReads = edgeReads.map(_.get())
+      }
+      invocation.callRealMethod()
+    }.when(scheduler).getShuffleDependenciesAndResourceProfiles(result)
+    edgeReads.foreach(_.set(0))
+
+    submit(result, Array(0, 1))
+    assert(failure === null)
+    // Every cached branch shares a safe ancestor. Searching each branch independently would
+    // visit each edge at least 32 times before stage creation.
+    assert(preflightEdgeReads.nonEmpty)
+    assert(preflightEdgeReads.forall(_ <= 6), s"repeated shared traversal: $preflightEdgeReads")
+    assert(taskSets.size === 2)
+    completeShuffleMapStageSuccessfully(taskSets.head.stageId, 0, 2)
+    complete(taskSets.last, Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined cache preflight: persistence changes are checked on every submission") {
+    val dependency = new PipelinedShuffleDependency(new MyRDD(sc, 2, Nil), new HashPartitioner(2))
+    val consumer = new MyRDD(sc, 2, List(dependency))
+    submit(consumer, Array(0, 1))
+    completeShuffleMapStageSuccessfully(taskSets.head.stageId, 0, 2)
+    complete(taskSets.last, Seq((Success, 42), (Success, 43)))
+    assertDataStructuresEmpty()
+
+    consumer.persist(StorageLevel.MEMORY_AND_DISK)
+    for (partition <- 0 until 2) {
+      cacheLocations(consumer.id -> partition) = Seq(makeBlockManagerId("hostA"))
+    }
+    clearInvocations(scheduler, mapOutputTracker)
+    assertPipelinedUnsupported(
+      submitAndCaptureFailure(consumer, Array(0, 1)),
+      "cache/persist/localCheckpoint in a pipelined consumer")
+    assertNoPipelinedStageRegistration(Nil)
+    assert(taskSets.size === 2, "the rejected submission must launch no additional tasks")
+    assertDataStructuresEmpty()
+
+    consumer.unpersist(blocking = true)
+    assert(consumer.getStorageLevel === StorageLevel.NONE)
+    results.clear()
+    submit(consumer, Array(0, 1))
+    assert(taskSets.size === 4)
+    assert(failure === null)
+    completeShuffleMapStageSuccessfully(taskSets(2).stageId, 0, 2)
+    complete(taskSets.last, Seq((Success, 44), (Success, 45)))
+    assert(results === Map(0 -> 44, 1 -> 45))
+    assertDataStructuresEmpty()
+  }
+
+  for (cachedPartitions <- Seq(Seq.empty[Int], Seq(0), Seq(0, 1))) {
+    test(s"pipelined cache preflight: preserve ordinary post-shuffle cache execution " +
+        s"(cachedPartitions=$cachedPartitions)") {
+      val dependency = new ShuffleDependency(new MyRDD(sc, 2, Nil), new HashPartitioner(2))
+      val consumer = new MyRDD(sc, 2, List(dependency)).cache()
+      cachedPartitions.foreach { partition =>
+        cacheLocations(consumer.id -> partition) = Seq(makeBlockManagerId("hostA"))
+      }
+
+      submit(consumer, Array(0, 1))
+      assert(failure === null)
+      if (cachedPartitions.size != 2) {
+        completeShuffleMapStageSuccessfully(taskSets.head.stageId, 0, 2)
+        assert(taskSets.size === 2)
+      } else {
+        assert(taskSets.size === 1, "a fully cached regular consumer skips its producer")
+      }
+      assert(taskSets.forall(!_.isPipelined))
+      complete(taskSets.last, Seq((Success, 42), (Success, 43)))
+      assert(results === Map(0 -> 42, 1 -> 43))
+      assertDataStructuresEmpty()
+    }
+  }
+
   test("pipelined shuffle: a reliable RDD checkpoint in a PRODUCER's chain is rejected") {
     // A reliable checkpoint writes a durable, lineage-truncated snapshot -> reintroduces cross-time
     // reuse of a transient edge and needs a post-success recompute of the vanished input. Rejected
@@ -9581,9 +9792,9 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         edgeReads.foreach(_.set(0))
         submit(result, Array(0, 1))
         assert(failure === null)
-        // Classification, admission, and group collection each visit once. Only the search
-        // rooted on this shared chain adds a visit, regardless of the number of roots.
-        val expected = if (roots == "no-checkpoint") 3 else 4
+        // Classification, cache-intent collection, admission, and group collection each visit
+        // once. The checkpoint search adds one visit, regardless of the number of roots.
+        val expected = if (roots == "no-checkpoint") 4 else 5
         assert(preflightEdgeReads === Seq.fill(edgeReads.size)(expected))
         pipelined.foreach { dep =>
           completeShuffleMapStageSuccessfully(
@@ -9829,6 +10040,20 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
           matchPVals = true)
       case other => fail(s"expected a PipelinedShuffleUnsupportedException, not $other")
     }
+  }
+
+  private def assertPersistedPipelinedConsumerRejected(
+      finalRdd: RDD[_], shuffleIds: Seq[Int]): Unit = {
+    val storageLevel = finalRdd.getStorageLevel
+    val exception = submitAndCaptureFailure(finalRdd, Array(0, 1))
+    assertPipelinedUnsupported(exception, "cache/persist/localCheckpoint in a pipelined consumer")
+    assert(exception.getMessage.contains("unpersist"), "the error must explain how to recover")
+    assert(exception.getMessage.contains(
+      "persist only RDDs that do not read a pipelined shuffle within their stage"))
+    assert(finalRdd.getStorageLevel === storageLevel)
+    assertNoPipelinedStageRegistration(shuffleIds)
+    assert(taskSets.isEmpty, "rejected consumers must not leave a producer waiting for readers")
+    assertDataStructuresEmpty()
   }
 
   test("submitMapStage on an RDD with 0 partitions reports an internal error") {
