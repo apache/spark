@@ -193,7 +193,7 @@ def _parallelFitTasks(
     return [get_single_task(index, param_map) for index, param_map in enumerate(epm)]
 
 
-class _CrossValidatorReadWrite(MetaAlgorithmReadWrite):
+class _CrossValidatorReadWrite(_ValidatorParams, MetaAlgorithmReadWrite):
     def _get_skip_saving_params(self) -> List[str]:
         """
         Returns params to be skipped when saving metadata.
@@ -213,7 +213,7 @@ class _CrossValidatorReadWrite(MetaAlgorithmReadWrite):
                 {"parent": param.parent, "name": param.name, "value": value}
                 for param, value in param_map.items()
             ]
-            for param_map in self.getEstimatorParamMaps()  # type: ignore[attr-defined]
+            for param_map in self.getEstimatorParamMaps()
         ]
 
         if isinstance(self, CrossValidatorModel):
@@ -229,12 +229,12 @@ class _CrossValidatorReadWrite(MetaAlgorithmReadWrite):
         estimator = ParamsReadWrite._load_instance_from_metadata(
             node_metadata["estimator"], root_path
         )
-        self.set(self.estimator, estimator)  # type: ignore[attr-defined]
+        self.set(self.estimator, estimator)
 
         evaluator = ParamsReadWrite._load_instance_from_metadata(
             node_metadata["evaluator"], root_path
         )
-        self.set(self.evaluator, evaluator)  # type: ignore[attr-defined]
+        self.set(self.evaluator, evaluator)
 
         json_epm = node_metadata["estimator_param_maps"]
 
@@ -250,7 +250,7 @@ class _CrossValidatorReadWrite(MetaAlgorithmReadWrite):
                 param_map[param] = value
             epm.append(param_map)
 
-        self.set(self.estimatorParamMaps, epm)  # type: ignore[attr-defined]
+        self.set(self.estimatorParamMaps, epm)
 
         if isinstance(self, CrossValidatorModel):
             self.avgMetrics = node_metadata["avg_metrics"]
