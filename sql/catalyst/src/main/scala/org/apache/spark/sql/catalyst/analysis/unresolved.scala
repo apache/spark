@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.collection.mutable
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
@@ -590,7 +592,8 @@ trait UnresolvedStarBase extends Star with Unevaluable {
       // keep any restrictions that may break column resolution for normal attributes.
       // See SPARK-42084 for more details.
       .map(_.markAsAllowAnyAccess())
-    val expandedAttributes = (hiddenOutput ++ parameters.childOperatorOutput)
+    val expandedAttributes = UnresolvedStarBase
+      .mergeHiddenAndVisibleOutput(hiddenOutput, parameters.childOperatorOutput)
       .filter(matchedQualifier(_, target.get, parameters.resolver))
 
     if (expandedAttributes.nonEmpty) return expandedAttributes
@@ -632,6 +635,34 @@ trait UnresolvedStarBase extends Star with Unevaluable {
   override def toString: String = target.map(_.mkString("", ".", ".")).getOrElse("") + "*"
 }
 
+object UnresolvedStarBase {
+
+  /**
+   * Merges the hidden output of a plan with its visible output, in the order a qualified star
+   * expands them.
+   *
+   * Hidden output usually holds attributes that are not visible at all, such as the duplicated
+   * join keys of a USING join. It may also repeat an attribute that is visible, to pin that
+   * attribute's position in the expansion, as the SQL pipe SET operator does to keep the original
+   * column order of the row its table alias refers to (SPARK-59146).
+   *
+   * Every occurrence of the source row is therefore preserved: a hidden attribute consumes at
+   * most one visible occurrence, which is emitted in the hidden attribute's place, because a
+   * projection may repeat the same attribute. Visible attributes that no hidden attribute
+   * consumed keep their relative order, after the hidden output.
+   */
+  def mergeHiddenAndVisibleOutput(
+      hiddenOutput: Seq[Attribute],
+      visibleOutput: Seq[Attribute]): Seq[Attribute] = {
+    val unconsumed = visibleOutput.to(mutable.ArrayBuffer)
+    val merged = hiddenOutput.map { hidden =>
+      val visible = unconsumed.indexWhere(_.exprId == hidden.exprId)
+      if (visible >= 0) unconsumed.remove(visible) else hidden
+    }
+    merged ++ unconsumed.toSeq
+  }
+}
+
 /**
  * Represents some of the input attributes to a given relational operator, for example in
  * "SELECT * EXCEPT(a) FROM ...".
@@ -646,11 +677,20 @@ trait UnresolvedStarBase extends Star with Unevaluable {
  *                     expressions removed by EXCEPT. If present, the length of this list must
  *                     be the same as the length of the EXCEPT list. This supports replacing
  *                     expressions instead of excluding them from the original SELECT list.
+ *
+ * @param retainExceptedColumnsAsHidden if true, the excluded attributes are kept as the hidden
+ *                                      output of the enclosing [[Project]], so that they remain
+ *                                      reachable through their table alias. The SQL pipe SET
+ *                                      operator sets this, since it documents that table aliases
+ *                                      keep referring to the original row values after an
+ *                                      assignment. It stays false for SELECT * EXCEPT, where the
+ *                                      excluded columns must not be reachable at all.
  */
 case class UnresolvedStarExceptOrReplace(
     target: Option[Seq[String]],
     excepts: Seq[Seq[String]],
-    replacements: Option[Seq[NamedExpression]])
+    replacements: Option[Seq[NamedExpression]],
+    retainExceptedColumnsAsHidden: Boolean = false)
   extends LeafExpression with UnresolvedStarBase {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_STAR_EXCEPT_OR_REPLACE)
