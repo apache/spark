@@ -33,7 +33,6 @@ import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
-import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.util.ThreadUtils;
 
 /**
@@ -104,8 +103,10 @@ public class ReadAheadInputStream extends InputStream {
    */
   public ReadAheadInputStream(
       InputStream inputStream, int bufferSizeInBytes) {
-    JavaUtils.checkArgument(bufferSizeInBytes > 0,
-        "bufferSizeInBytes should be greater than 0, but the value is " + bufferSizeInBytes);
+    if (bufferSizeInBytes <= 0) {
+      throw new IllegalArgumentException(
+          "bufferSizeInBytes should be greater than 0, but the value is " + bufferSizeInBytes);
+    }
     activeBuffer = ByteBuffer.allocate(bufferSizeInBytes);
     readAheadBuffer = ByteBuffer.allocate(bufferSizeInBytes);
     this.underlyingInputStream = inputStream;
