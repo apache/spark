@@ -150,10 +150,24 @@ class UtilTests(PySparkTestCase):
             _parse_memory("2gs")
 
     def test_disable_gc(self):
-        self.assertTrue(gc.isenabled())
-        with disable_gc():
-            self.assertFalse(gc.isenabled())
-        self.assertTrue(gc.isenabled())
+        # Restore the caller's GC state even if an assertion fails.
+        self.addCleanup(gc.enable if gc.isenabled() else gc.disable)
+        for enabled, set_gc in ((True, gc.enable), (False, gc.disable)):
+            with self.subTest(enabled=enabled):
+                set_gc()
+                # Exiting the inner context must not re-enable GC inside the outer context.
+                with disable_gc():
+                    with disable_gc():
+                        self.assertFalse(gc.isenabled())
+                    self.assertFalse(gc.isenabled())
+                self.assertEqual(gc.isenabled(), enabled)
+
+                # Exceptions must also restore the original state, including already-disabled GC.
+                with self.assertRaisesRegex(ValueError, "test error"):
+                    with disable_gc():
+                        self.assertFalse(gc.isenabled())
+                        raise ValueError("test error")
+                self.assertEqual(gc.isenabled(), enabled)
 
     @eventually(timeout=180, catch_timeout=True)
     @timeout(timeout=1)
