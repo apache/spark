@@ -632,6 +632,8 @@ private[serializer] object KryoSerializer {
       "org.apache.spark.sql.execution.joins.UnsafeHashedRelation",
       "org.apache.spark.sql.execution.joins.IntervalIndex",
       "org.apache.spark.sql.execution.joins.PointIndex",
+      "org.apache.spark.sql.execution.joins.LongIntervalIndex",
+      "org.apache.spark.sql.execution.joins.LongPointIndex",
       "org.apache.spark.sql.columnar.CachedBatch",
       "org.apache.spark.sql.columnar.SimpleMetricsCachedBatch",
       "org.apache.spark.sql.execution.columnar.DefaultCachedBatch",

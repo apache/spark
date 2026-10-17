@@ -488,28 +488,45 @@ object ExtractRangeJoinKeys extends PredicateHelper {
     }
   }
 
+  /**
+   * The first pair of range predicates whose `shape` regrouping holds and
+   * whose keys evaluate one side each. `place` settles the orientation,
+   * `supportedKeys` the eligibility; a rejected pair stays on the condition.
+   */
+  private def pairJoin(
+      rangePreds: Seq[(DataType, Expression, Expression)],
+      left: LogicalPlan,
+      right: LogicalPlan,
+      joinType: JoinType,
+      rangeJoin: RangeJoin)(
+      shape: PartialFunction[(Expression, Expression, Expression, Expression),
+        (Seq[Expression], Seq[Expression])]): Option[ReturnType] = {
+    rangePreds.combinations(2).collectFirst(Function.unlift {
+      case Seq((d1, l1, h1), (d2, l2, h2)) if d1 == d2 =>
+        shape.lift((l1, h1, l2, h2)).flatMap { case (keysA, keysB) =>
+          place(keysA, keysB, left, right).filter { case (l, r) =>
+            supportedKeys(l, r)
+          }.map { case (leftKeys, rightKeys) =>
+            (left, right, leftKeys, rightKeys, joinType, rangeJoin)
+          }
+        }
+      case _ => None
+    })
+  }
+
   private def pointInRange(
       rangePreds: Seq[(DataType, Expression, Expression)],
       left: LogicalPlan,
       right: LogicalPlan,
       joinType: JoinType): Option[ReturnType] = {
-    rangePreds.combinations(2).flatMap {
-      case Seq((d1, l1, h1), (d2, l2, h2)) if d1 == d2 =>
-        val pointCandidate =
-          if (h1.semanticEquals(l2) && !l1.semanticEquals(h2) && l1.dataType == h2.dataType) {
-            place(Seq(l2), Seq(l1, h2), left, right)
-          } else if (l1.semanticEquals(h2) && !h1.semanticEquals(l2) &&
-              l2.dataType == h1.dataType) {
-            place(Seq(l1), Seq(l2, h1), left, right)
-          } else {
-            None
-          }
-        pointCandidate.collect {
-          case (leftKeys, rightKeys) if supportedKeys(leftKeys, rightKeys) =>
-            (left, right, leftKeys, rightKeys, joinType, PointInRangeJoin)
-        }
-      case _ => None
-    }.nextOption()
+    pairJoin(rangePreds, left, right, joinType, PointInRangeJoin)({
+      case (l1, h1, l2, h2)
+          if h1.semanticEquals(l2) && !l1.semanticEquals(h2) && l1.dataType == h2.dataType =>
+        (Seq(l2), Seq(l1, h2))
+      case (l1, h1, l2, h2)
+          if l1.semanticEquals(h2) && !h1.semanticEquals(l2) && l2.dataType == h1.dataType =>
+        (Seq(l1), Seq(l2, h1))
+    })
   }
 
   /**
@@ -538,21 +555,12 @@ object ExtractRangeJoinKeys extends PredicateHelper {
       left: LogicalPlan,
       right: LogicalPlan,
       joinType: JoinType): Option[ReturnType] = {
-    rangePreds.combinations(2).flatMap {
-      case Seq((d1, l1, h1), (d2, l2, h2)) if d1 == d2 =>
-        // `(l1, h2)` is one interval and `(l2, h1)` is the other.
-        val overlapCandidate = place(Seq(l1, h2), Seq(l2, h1), left, right)
-        overlapCandidate.collect {
-          case (leftKeys, rightKeys)
-              if !leftKeys.head.semanticEquals(leftKeys(1)) &&
-                !rightKeys.head.semanticEquals(rightKeys(1)) &&
-                leftKeys.head.dataType == leftKeys(1).dataType &&
-                rightKeys.head.dataType == rightKeys(1).dataType &&
-                supportedKeys(leftKeys, rightKeys) =>
-            (left, right, leftKeys, rightKeys, joinType, IntervalOverlapJoin)
-        }
-      case _ => None
-    }.nextOption()
+    pairJoin(rangePreds, left, right, joinType, IntervalOverlapJoin)({
+      case (l1, h1, l2, h2)
+          if !l1.semanticEquals(h2) && !l2.semanticEquals(h1) &&
+            l1.dataType == h2.dataType && l2.dataType == h1.dataType =>
+        (Seq(l1, h2), Seq(l2, h1))
+    })
   }
 
   private def supportedKeys(keys: Seq[Expression]*): Boolean = {
