@@ -216,6 +216,7 @@ JOIN	false
 JSON	false
 JSON_ARRAY	false
 JSON_EXISTS	false
+JSON_OBJECT	false
 JSON_QUERY	false
 JSON_TABLE	false
 JSON_VALUE	false
