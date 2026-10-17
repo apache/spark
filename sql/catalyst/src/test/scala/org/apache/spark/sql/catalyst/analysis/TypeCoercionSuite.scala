@@ -397,12 +397,17 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
       shouldNotCast(ArrayType(ntz9), _)
     }
     shouldNotCast(MapType(StringType, ntz9), MapType(StringType, TimeType()))
+    shouldNotCast(MapType(ntz9, StringType), MapType(TimeType(), StringType))
     shouldNotCast(new StructType().add("a", ntz9), new StructType().add("a", TimeType()))
     shouldCast(ArrayType(ntz9), ArrayType(DateType), ArrayType(DateType))
     shouldCast(
       ArrayType(ntz9),
       TypeCollection(ArrayType(DateType), ArrayType(StringType)),
       ArrayType(StringType))
+    shouldCast(
+      MapType(ntz9, StringType),
+      TypeCollection(MapType(DateType, StringType), MapType(StringType, StringType)),
+      MapType(StringType, StringType))
     shouldCast(ArrayType(TimestampNTZNanosType(7)), ArrayType(ntz9), ArrayType(ntz9))
 
     // Micro timestamps are unchanged, including the DATE fallback.
