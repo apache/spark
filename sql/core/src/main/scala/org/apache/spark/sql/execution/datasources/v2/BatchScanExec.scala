@@ -127,6 +127,17 @@ case class BatchScanExec(
     redact(result)
   }
 
+  // A fully pushed runtime filter has no FilterExec above the scan, so this is the only place
+  // the formatted explain can show it.
+  override def verboseStringWithOperatorId(): String = {
+    val base = super.verboseStringWithOperatorId()
+    if (runtimeFilters.isEmpty) {
+      base
+    } else {
+      base + redact(s"RuntimeFilters: ${runtimeFilters.mkString("[", ", ", "]")}") + "\n"
+    }
+  }
+
   override def nodeName: String = {
     s"BatchScan ${table.name()}".trim
   }
