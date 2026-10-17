@@ -42,9 +42,9 @@ private[spark] class VolcanoFeatureStep extends KubernetesDriverCustomFeatureCon
     kubernetesConf = config
   }
 
-  override def getAdditionalPreKubernetesResources(): Seq[HasMetadata] = {
+  override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
     if (kubernetesConf.isInstanceOf[KubernetesExecutorConf]) {
-      logWarning("VolcanoFeatureStep#getAdditionalPreKubernetesResources() is not supported " +
+      logWarning("VolcanoFeatureStep#getAdditionalKubernetesResources() is not supported " +
         "for executor.")
       return Seq.empty
     }
