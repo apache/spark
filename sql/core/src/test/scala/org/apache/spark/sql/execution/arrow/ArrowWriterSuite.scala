@@ -191,7 +191,10 @@ class ArrowWriterSuite extends SparkFunSuite {
       TimestampNanosVal.fromParts(-1234567L, 13.toShort),
       // large positive/negative epoch-nanoseconds within the representable range
       fromEpochNanos(9000000000000000000L),
-      fromEpochNanos(-9000000000000000000L))
+      fromEpochNanos(-9000000000000000000L),
+      // the int64 epoch-nanosecond limits
+      fromEpochNanos(Long.MaxValue),
+      fromEpochNanos(Long.MinValue))
 
     def check(dt: DataType, timeZoneId: String): Unit = {
       val schema = new StructType().add("value", dt, nullable = true)
@@ -230,13 +233,18 @@ class ArrowWriterSuite extends SparkFunSuite {
       val schema = new StructType().add("value", dt, nullable = true)
       val writer = ArrowWriter.create(schema, timeZoneId)
       // epochMicros past the int64 epoch-nanosecond range overflows when packed, but still
-      // renders as a valid Instant/LocalDateTime in the error message.
-      val tooLarge = TimestampNanosVal.fromParts(Long.MaxValue / 1000L + 1L, 0.toShort)
-      val e = intercept[SparkArithmeticException] {
-        writer.write(InternalRow(tooLarge))
+      // renders as a valid Instant/LocalDateTime in the error message. One nanosecond past either
+      // limit overflows too.
+      Seq(
+        TimestampNanosVal.fromParts(Long.MaxValue / 1000L + 1L, 0.toShort),
+        TimestampNanosVal.fromParts(Long.MaxValue / 1000L, 808.toShort),
+        TimestampNanosVal.fromParts(Long.MinValue / 1000L - 1L, 191.toShort)).foreach { v =>
+        val e = intercept[SparkArithmeticException] {
+          writer.write(InternalRow(v))
+        }
+        assert(e.getCondition === "DATETIME_OVERFLOW")
+        assert(e.getMessage.contains("Arrow INT64"))
       }
-      assert(e.getCondition === "DATETIME_OVERFLOW")
-      assert(e.getMessage.contains("Arrow INT64"))
       writer.root.close()
     }
 

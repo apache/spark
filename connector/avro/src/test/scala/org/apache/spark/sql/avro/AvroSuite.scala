@@ -3638,9 +3638,7 @@ abstract class AvroSuite
       SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
       SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       // Long.MaxValue epoch-nanoseconds = 2262-04-11T23:47:16.854775807Z, the largest instant the
-      // INT64 epoch-nanos encoding can represent. The lower bound Long.MinValue is intentionally
-      // not exercised: re-encoding its floored epoch-microseconds overflows Long (see
-      // DateTimeUtilsSuite), so it is not writable.
+      // INT64 epoch-nanos encoding can represent.
       val maxInstant = java.time.Instant.ofEpochSecond(9223372036L, 854775807L)
       val maxLocal = LocalDateTime.ofEpochSecond(9223372036L, 854775807, java.time.ZoneOffset.UTC)
       Seq(
@@ -3663,13 +3661,11 @@ abstract class AvroSuite
     withSQLConf(
       SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
       SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
-      // The smallest *writable* instant: Long.MinValue epoch-nanoseconds floor to an epochMicros
-      // whose re-encode overflows Long, so the practical minimum is the next whole microsecond up
-      // (~1677-09-21), the symmetric counterpart of the maximum-instant test above.
-      val minEpochNanos = (Long.MinValue / 1000L) * 1000L
+      // The smallest instant: Long.MinValue epoch-nanoseconds = 1677-09-21T00:12:43.145224192Z,
+      // the symmetric counterpart of the maximum-instant test above.
       // Pre-epoch full-precision value: 1969-12-31T23:59:59.999999999Z (= -1 epoch-nanosecond),
       // exercising the floor semantics end to end (mirrors the Parquet/ORC suites).
-      Seq(-1L, minEpochNanos).foreach { epochNanos =>
+      Seq(-1L, Long.MinValue).foreach { epochNanos =>
         val seconds = Math.floorDiv(epochNanos, 1000000000L)
         val nanoOfSecond = Math.floorMod(epochNanos, 1000000000L).toInt
         val instant = java.time.Instant.ofEpochSecond(seconds, nanoOfSecond.toLong)
@@ -3686,6 +3682,41 @@ abstract class AvroSuite
             val readBack = spark.read.schema(new StructType().add("ts", nanosType))
               .format("avro").load(dir.getCanonicalPath)
             checkAnswer(readBack, df)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57838: writing one nanosecond past the int64 epoch-nanos range fails loudly") {
+    withSQLConf(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      Seq(
+        "2262-04-11T23:47:16.854775808", "1677-09-21T00:12:43.145224191").foreach { ts =>
+        val local = LocalDateTime.parse(ts)
+        Seq(
+          (TimestampLTZNanosType(9), local.toInstant(java.time.ZoneOffset.UTC): Any, s"${ts}Z"),
+          (TimestampNTZNanosType(9), local: Any, ts)).foreach { case (nanosType, value, shown) =>
+          withTempPath { dir =>
+            val df = spark.createDataFrame(
+              spark.sparkContext.parallelize(Seq(Row(value)), numSlices = 1),
+              new StructType().add("ts", nanosType))
+            val e = intercept[SparkException] {
+              df.write.format("avro").save(dir.getCanonicalPath)
+            }
+            var cause: Throwable = e
+            while (cause != null && !cause.isInstanceOf[SparkArithmeticException]) {
+              cause = cause.getCause
+            }
+            assert(cause != null, s"Expected a DATETIME_OVERFLOW error, but got: ${e.getMessage}")
+            checkError(
+              exception = cause.asInstanceOf[SparkArithmeticException],
+              condition = "DATETIME_OVERFLOW",
+              parameters = Map("operation" ->
+                (s"write the timestamp value $shown as Avro epoch-nanoseconds " +
+                  "(supported range: 1677-09-21T00:12:43.145224192Z to " +
+                  "2262-04-11T23:47:16.854775807Z)")))
           }
         }
       }

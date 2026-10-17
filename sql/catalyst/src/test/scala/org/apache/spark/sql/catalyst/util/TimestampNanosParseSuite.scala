@@ -146,6 +146,57 @@ class TimestampNanosParseSuite extends SparkFunSuite {
         date(9999, 12, 31, 23, 59, 59, 999999, ZoneOffset.UTC), 999.toShort))
   }
 
+  test("SPARK-57838: parse and format at the calendar and int64 boundaries") {
+    def nanos(epochMicros: Long, nanosWithinMicro: Int): TimestampNanosVal =
+      TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro.toShort)
+    val formatter = TimestampFormatter.getFractionFormatter(ZoneOffset.UTC)
+    val minMicros = nanos(Long.MinValue, 0)
+    val maxMicros = nanos(Long.MaxValue, 999)
+    Seq(
+      // Calendar range 0001-01-01 .. 9999-12-31.
+      "0001-01-01 00:00:00" -> nanos(date(1, 1, 1, 0, 0, 0, 0, ZoneOffset.UTC), 0),
+      "9999-12-31 23:59:59.999999999" ->
+        nanos(date(9999, 12, 31, 23, 59, 59, 999999, ZoneOffset.UTC), 999),
+      // The int64 epoch-nanosecond limits of Parquet/Avro/Arrow, and one nanosecond beyond them.
+      "1677-09-21 00:12:43.145224192" -> epochNanosToTimestampNanos(Long.MinValue, 9),
+      "1677-09-21 00:12:43.145224191" -> nanos(Long.MinValue / 1000 - 1, 191),
+      "2262-04-11 23:47:16.854775807" -> epochNanosToTimestampNanos(Long.MaxValue, 9),
+      "2262-04-11 23:47:16.854775808" -> nanos(Long.MaxValue / 1000, 808),
+      // Years beyond 9999 are accepted, as for the microsecond types.
+      "+10000-01-01 00:00:00.000000001" ->
+        nanos(date(10000, 1, 1, 0, 0, 0, 0, ZoneOffset.UTC), 1),
+      // The epoch-microsecond (Long) limits.
+      "-290308-12-21 19:59:05.224192" -> minMicros,
+      "+294247-01-10 04:00:54.775807999" -> maxMicros).foreach { case (str, expected) =>
+      assert(ntz(str, 9).get === expected)
+      assert(ltz(s"${str}Z", 9, ZoneOffset.UTC).get === expected)
+      assert(formatter.formatWithoutTimeZoneNanos(expected, 9) === str)
+      assert(formatter.formatNanos(expected, 9) === str)
+      // The epoch-microseconds part matches the microsecond parser.
+      assert(stringToTimestampWithoutTimeZone(UTF8String.fromString(str), allowTimeZone = true)
+        === Some(expected.epochMicros))
+    }
+
+    // Past the epoch-microsecond limits parsing fails like the microsecond parser (NULL, or
+    // CAST_INVALID_INPUT under ANSI).
+    Seq("+294247-01-10 04:00:54.775808", "-290308-12-21 19:59:05.224191999").foreach { str =>
+      assert(ntz(str, 9).isEmpty)
+      assert(ltz(s"${str}Z", 9, ZoneOffset.UTC).isEmpty)
+      assert(stringToTimestampWithoutTimeZone(UTF8String.fromString(str), allowTimeZone = true)
+        .isEmpty)
+      checkError(
+        exception = intercept[SparkDateTimeException] {
+          stringToTimestampNTZNanosAnsi(UTF8String.fromString(str), 9)
+        },
+        condition = "CAST_INVALID_INPUT",
+        parameters = Map(
+          "expression" -> s"'$str'",
+          "sourceType" -> "\"STRING\"",
+          "targetType" -> "\"TIMESTAMP_NTZ(9)\"",
+          "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
+    }
+  }
+
   test("null input returns None") {
     assert(stringToTimestampNTZNanos(null, 9).isEmpty)
     assert(stringToTimestampLTZNanos(null, 9, ZoneOffset.UTC).isEmpty)

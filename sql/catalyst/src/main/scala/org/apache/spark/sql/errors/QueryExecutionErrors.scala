@@ -2829,6 +2829,22 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
+  def timestampNanosAddIntervalOverflowError(
+      start: TimestampNanosVal,
+      interval: Any,
+      intervalType: DataType,
+      zoneId: java.time.ZoneId): SparkArithmeticException = {
+    // The wall clock at `zoneId` (UTC for TIMESTAMP_NTZ), as shown in query results.
+    val rendered = DateTimeUtils.timestampNanosToInstant(start).atZone(zoneId).toLocalDateTime
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map(
+        "operation" ->
+          s"add ${toSQLValue(interval, intervalType)} to the timestamp value $rendered"),
+      context = Array.empty,
+      summary = "")
+  }
+
   def timestampNanosOverflowError(nanos: java.math.BigInteger): SparkArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DATETIME_OVERFLOW",

@@ -2465,6 +2465,93 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-57838: nanos timestamp arithmetic at the range boundaries") {
+    def tnv(micros: Long, frac: Int): TimestampNanosVal =
+      TimestampNanosVal.fromParts(micros, frac.toShort)
+    def utc(s: String): TimestampNanosVal =
+      DateTimeUtils.localDateTimeToTimestampNanos(LocalDateTime.parse(s), precision = 9)
+    val maxCalendar = utc("9999-12-31T23:59:59.999999999")
+    val max = tnv(Long.MaxValue, 999)
+    val min = tnv(Long.MinValue, 0)
+    val int64Max = DateTimeUtils.epochNanosToTimestampNanos(Long.MaxValue, 9)
+    val int64Min = DateTimeUtils.epochNanosToTimestampNanos(Long.MinValue, 9)
+
+    Seq("true", "false").foreach { ansi =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+        Seq(TimestampNTZNanosType(9), TimestampLTZNanosType(9)).foreach { t =>
+          def lit(v: TimestampNanosVal): Literal = Literal.create(v, t)
+          // Crossing 9999-12-31 is not an error, as for the microsecond types.
+          checkEvaluation(
+            TimestampAddInterval(lit(maxCalendar), Literal(Duration.ofDays(1)), Some("UTC")),
+            utc("+10000-01-01T23:59:59.999999999"))
+          checkEvaluation(
+            TimestampAddYMInterval(lit(maxCalendar), Literal(Period.ofYears(1)), Some("UTC")),
+            utc("+10000-12-31T23:59:59.999999999"))
+          checkEvaluation(
+            TimestampAdd("DAY", Literal(1L), lit(maxCalendar), Some("UTC")),
+            utc("+10000-01-01T23:59:59.999999999"))
+          // The int64 epoch-nanosecond limits are ordinary values: no wrap-around past them.
+          checkEvaluation(
+            TimestampAdd("NANOSECOND", Literal(1L), lit(int64Max), Some("UTC")),
+            tnv(int64Max.epochMicros, int64Max.nanosWithinMicro + 1))
+          checkEvaluation(
+            TimestampAdd("NANOSECOND", Literal(-1L), lit(int64Min), Some("UTC")),
+            tnv(int64Min.epochMicros, int64Min.nanosWithinMicro - 1))
+
+          // Past the epoch-microsecond limits, interval arithmetic raises DATETIME_OVERFLOW.
+          checkErrorInExpression[SparkArithmeticException](
+            TimestampAddInterval(lit(max), Literal(Duration.ofDays(1)), Some("UTC")),
+            condition = "DATETIME_OVERFLOW",
+            parameters = Map("operation" -> ("add INTERVAL '1 00:00:00' DAY TO SECOND to the " +
+              "timestamp value +294247-01-10T04:00:54.775807999")))
+          checkErrorInExpression[SparkArithmeticException](
+            TimestampAddInterval(lit(min), UnaryMinus(Literal(Duration.ofDays(1))), Some("UTC")),
+            condition = "DATETIME_OVERFLOW",
+            parameters = Map("operation" -> ("add INTERVAL '-1 00:00:00' DAY TO SECOND to the " +
+              "timestamp value -290308-12-21T19:59:05.224192")))
+          checkErrorInExpression[SparkArithmeticException](
+            TimestampAddYMInterval(lit(max), Literal(Period.ofMonths(1)), Some("UTC")),
+            condition = "DATETIME_OVERFLOW",
+            parameters = Map("operation" -> ("add INTERVAL '0-1' YEAR TO MONTH to the " +
+              "timestamp value +294247-01-10T04:00:54.775807999")))
+        }
+      }
+    }
+  }
+
+  test("SPARK-57838: unix_nanos at the range boundaries") {
+    def unixNanos(v: TimestampNanosVal): UnixNanos =
+      UnixNanos(Literal.create(v, TimestampNTZNanosType(9)))
+    def decimal(n: BigInt): Decimal = Decimal(BigDecimal(n), 21, 0)
+    // The int64 epoch-nanosecond limits and the calendar range map to exact values.
+    checkEvaluation(
+      unixNanos(DateTimeUtils.epochNanosToTimestampNanos(Long.MaxValue, 9)),
+      decimal(Long.MaxValue))
+    checkEvaluation(
+      unixNanos(DateTimeUtils.epochNanosToTimestampNanos(Long.MinValue, 9)),
+      decimal(Long.MinValue))
+    checkEvaluation(
+      unixNanos(DateTimeUtils.localDateTimeToTimestampNanos(
+        LocalDateTime.parse("0001-01-01T00:00:00"), precision = 9)),
+      decimal(BigInt("-62135596800000000000")))
+    // DECIMAL(21, 0) holds +/-(10^21 - 1) nanoseconds (about +/-31,000 years from the epoch);
+    // timestamps further out raise NUMERIC_VALUE_OUT_OF_RANGE instead of wrapping.
+    val maxDecimalMicros = (BigInt(10).pow(21) - 1) / 1000
+    checkEvaluation(
+      unixNanos(TimestampNanosVal.fromParts(maxDecimalMicros.toLong, 999.toShort)),
+      decimal(BigInt(10).pow(21) - 1))
+    checkEvaluation(
+      unixNanos(TimestampNanosVal.fromParts(-maxDecimalMicros.toLong - 1, 1.toShort)),
+      decimal(-(BigInt(10).pow(21) - 1)))
+    Seq(
+      TimestampNanosVal.fromParts(maxDecimalMicros.toLong + 1, 0.toShort),
+      TimestampNanosVal.fromParts(Long.MaxValue, 999.toShort),
+      TimestampNanosVal.fromParts(Long.MinValue, 0.toShort)).foreach { v =>
+      checkExceptionInExpression[SparkArithmeticException](
+        unixNanos(v), "NUMERIC_VALUE_OUT_OF_RANGE")
+    }
+  }
+
   test("SPARK-57832: subtract nanosecond-precision timestamps") {
     // The difference between two nanosecond timestamps is reported on the microsecond grid: only
     // each operand's epochMicros participates, so the sub-microsecond remainder is truncated. The

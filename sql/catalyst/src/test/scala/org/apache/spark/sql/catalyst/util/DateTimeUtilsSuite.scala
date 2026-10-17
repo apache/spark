@@ -1243,6 +1243,49 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
+  test("SPARK-57838: timestamp nanos add interval at the range boundaries") {
+    def nanos(epochMicros: Long, nanosWithinMicro: Int): TimestampNanosVal =
+      TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro.toShort)
+    val max = nanos(Long.MaxValue, 999)
+    val min = nanos(Long.MinValue, 0)
+
+    // Crossing 9999-12-31 or 0001-01-01 is not an error, as for the microsecond types.
+    val maxCalendar = nanos(date(9999, 12, 31, 23, 59, 59, 999999, UTC), 999)
+    assert(timestampNanosAddDayTime(maxCalendar, MICROS_PER_DAY, UTC) ===
+      nanos(date(10000, 1, 1, 23, 59, 59, 999999, UTC), 999))
+    assert(timestampNanosAddMonths(maxCalendar, 1, UTC) ===
+      nanos(date(10000, 1, 31, 23, 59, 59, 999999, UTC), 999))
+    assert(timestampNanosAddDayTime(nanos(date(1, 1, 1, 0, 0, 0, 0, UTC), 1), -1, UTC) ===
+      nanos(date(0, 12, 31, 23, 59, 59, 999999, UTC), 1))
+    // The epoch-microsecond limits themselves are reachable.
+    assert(timestampNanosAddDayTime(nanos(Long.MaxValue - MICROS_PER_DAY, 999), MICROS_PER_DAY,
+      UTC) === max)
+    assert(timestampNanosAddDayTime(nanos(Long.MinValue + 1, 0), -1, UTC) === min)
+
+    // Past them the addition raises DATETIME_OVERFLOW instead of a raw ArithmeticException.
+    Seq(
+      (() => timestampNanosAddDayTime(max, 1, UTC),
+        "add INTERVAL '0 00:00:00.000001' DAY TO SECOND to the timestamp value " +
+          "+294247-01-10T04:00:54.775807999"),
+      (() => timestampNanosAddDayTime(min, -MICROS_PER_DAY, UTC),
+        "add INTERVAL '-1 00:00:00' DAY TO SECOND to the timestamp value " +
+          "-290308-12-21T19:59:05.224192"),
+      (() => timestampNanosAddMonths(max, 1, UTC),
+        "add INTERVAL '0-1' YEAR TO MONTH to the timestamp value " +
+          "+294247-01-10T04:00:54.775807999"),
+      (() => timestampNanosAddMonths(min, -12, UTC),
+        "add INTERVAL '-1-0' YEAR TO MONTH to the timestamp value -290308-12-21T19:59:05.224192"),
+      // The value is rendered as the wall clock at the given zone.
+      (() => timestampNanosAddDayTime(max, MICROS_PER_DAY, LA),
+        "add INTERVAL '1 00:00:00' DAY TO SECOND to the timestamp value " +
+          "+294247-01-09T20:00:54.775807999")).foreach { case (f, operation) =>
+      checkError(
+        exception = intercept[SparkArithmeticException](f()),
+        condition = "DATETIME_OVERFLOW",
+        parameters = Map("operation" -> operation))
+    }
+  }
+
   test("SPARK-57159: timestampNanosToEpochNanos packs into int64 epoch-nanoseconds") {
     def nanos(epochMicros: Long, nanosWithinMicro: Int): TimestampNanosVal =
       TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro.toShort)
@@ -1265,14 +1308,28 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       assert(Math.floorMod(packed, NANOS_PER_MICROS) === v.nanosWithinMicro.toLong)
     }
 
-    // The maximum representable instant packs exactly to Long.MaxValue.
+    // The maximum and minimum representable instants pack exactly to Long.MaxValue and
+    // Long.MinValue (2262-04-11T23:47:16.854775807Z and 1677-09-21T00:12:43.145224192Z).
     assert(timestampNanosToEpochNanos(
       nanos(Long.MaxValue / NANOS_PER_MICROS, (Long.MaxValue % NANOS_PER_MICROS).toInt)) ===
       Long.MaxValue)
+    assert(timestampNanosToEpochNanos(nanos(Long.MinValue / NANOS_PER_MICROS - 1, 192)) ===
+      Long.MinValue)
+    assert(timestampNanosToEpochNanos(nanos(Long.MinValue / NANOS_PER_MICROS - 1, 999)) ===
+      Long.MinValue + 807)
 
-    // Out-of-range values raise ArithmeticException (callers translate it into DATETIME_OVERFLOW).
-    intercept[ArithmeticException] {
-      timestampNanosToEpochNanos(nanos(Long.MaxValue / NANOS_PER_MICROS + 1, 0))
+    // Out-of-range values, including one nanosecond beyond either limit, raise
+    // ArithmeticException (callers translate it into DATETIME_OVERFLOW).
+    Seq(
+      nanos(Long.MaxValue / NANOS_PER_MICROS, 808),
+      nanos(Long.MaxValue / NANOS_PER_MICROS + 1, 0),
+      nanos(Long.MinValue / NANOS_PER_MICROS - 1, 191),
+      nanos(Long.MinValue / NANOS_PER_MICROS - 2, 999),
+      nanos(Long.MaxValue, 999),
+      nanos(Long.MinValue, 0)).foreach { v =>
+      intercept[ArithmeticException] {
+        timestampNanosToEpochNanos(v)
+      }
     }
   }
 
@@ -1304,12 +1361,10 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(epochNanosToTimestampNanos(Long.MaxValue, 9) === nanos(9223372036854775L, 807))
     assert(epochNanosToTimestampNanos(Long.MinValue, 9) === nanos(-9223372036854776L, 192))
 
-    // Round-trips with timestampNanosToEpochNanos at full precision. Long.MinValue is excluded: its
-    // decode (-9223372036854776, 192) re-encodes through an intermediate epochMicros * 1000 that
-    // overflows Long, an existing limitation of the multiplyExact-based pack path.
+    // Round-trips with timestampNanosToEpochNanos at full precision, including both int64 extremes.
     Seq(
       0L, 999L, 1234567L * NANOS_PER_MICROS + 7L, -1234567L * NANOS_PER_MICROS + 13L,
-      Long.MaxValue).foreach { epochNanos =>
+      Long.MaxValue, Long.MinValue, Long.MinValue + 807).foreach { epochNanos =>
       assert(timestampNanosToEpochNanos(epochNanosToTimestampNanos(epochNanos, 9)) === epochNanos)
     }
 

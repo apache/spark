@@ -28,7 +28,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.{QueryContext, SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{Decimal, DoubleExactNumeric, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{DayTimeIntervalType, Decimal, DoubleExactNumeric, TimestampNTZType, TimestampType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String}
 
 /**
@@ -285,13 +285,20 @@ object DateTimeUtils extends SparkDateTimeUtils {
 
   /**
    * Adds a year-month interval expressed in months to a nanosecond-precision timestamp value while
-   * preserving the `nanosWithinMicro` remainder.
+   * preserving the `nanosWithinMicro` remainder. Throws `DATETIME_OVERFLOW` if the result does not
+   * fit in the epoch-microseconds range.
    */
   def timestampNanosAddMonths(
       start: TimestampNanosVal,
       months: Int,
       zoneId: ZoneId): TimestampNanosVal = {
-    val epochMicros = timestampAddMonths(start.epochMicros, months, zoneId)
+    val epochMicros = try {
+      timestampAddMonths(start.epochMicros, months, zoneId)
+    } catch {
+      case _: ArithmeticException | _: DateTimeException =>
+        throw QueryExecutionErrors.timestampNanosAddIntervalOverflowError(
+          start, months, YearMonthIntervalType(), zoneId)
+    }
     TimestampNanosVal.fromParts(epochMicros, start.nanosWithinMicro)
   }
 
@@ -319,13 +326,20 @@ object DateTimeUtils extends SparkDateTimeUtils {
 
   /**
    * Adds a day-time interval to a nanosecond-precision timestamp value while preserving
-   * the `nanosWithinMicro` remainder.
+   * the `nanosWithinMicro` remainder. Throws `DATETIME_OVERFLOW` if the result does not fit in the
+   * epoch-microseconds range.
    */
   def timestampNanosAddDayTime(
       start: TimestampNanosVal,
       dayTime: Long,
       zoneId: ZoneId): TimestampNanosVal = {
-    val epochMicros = timestampAddDayTime(start.epochMicros, dayTime, zoneId)
+    val epochMicros = try {
+      timestampAddDayTime(start.epochMicros, dayTime, zoneId)
+    } catch {
+      case _: ArithmeticException | _: DateTimeException =>
+        throw QueryExecutionErrors.timestampNanosAddIntervalOverflowError(
+          start, dayTime, DayTimeIntervalType(), zoneId)
+    }
     TimestampNanosVal.fromParts(epochMicros, start.nanosWithinMicro)
   }
 
@@ -338,9 +352,16 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * [[org.apache.spark.sql.errors.QueryExecutionErrors.timestampNanosEpochNanosOverflowError]]).
    */
   def timestampNanosToEpochNanos(value: TimestampNanosVal): Long = {
-    Math.addExact(
-      Math.multiplyExact(value.epochMicros, NANOS_PER_MICROS),
-      value.nanosWithinMicro.toLong)
+    if (value.epochMicros < 0) {
+      // Pack from `epochMicros + 1`: `epochMicros * 1000` alone overflows at the int64 minimum.
+      Math.addExact(
+        Math.multiplyExact(value.epochMicros + 1, NANOS_PER_MICROS),
+        value.nanosWithinMicro.toLong - NANOS_PER_MICROS)
+    } else {
+      Math.addExact(
+        Math.multiplyExact(value.epochMicros, NANOS_PER_MICROS),
+        value.nanosWithinMicro.toLong)
+    }
   }
 
   /**
