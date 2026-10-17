@@ -204,7 +204,8 @@ object AnsiTypeCoercion extends TypeCoercionBase {
 
       // When the target type is `TypeCollection`, there is another branch to find the
       // "closet convertible data type" below.
-      // Unlike store assignment, a nanos timestamp is never implicitly narrowed to TIME.
+      // Unlike store assignment, a nanos timestamp, also nested, is never implicitly narrowed to
+      // TIME.
       case (_, target) if !target.isInstanceOf[TypeCollection] =>
         val concreteType = target.defaultConcreteType
         if (Cast.canANSIStoreAssign(inType, concreteType) &&

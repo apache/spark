@@ -626,7 +626,11 @@ SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY c)
   FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
 SELECT percentile_disc(0.5) WITHIN GROUP (ORDER BY c)
   FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
-SELECT last_day(c), next_day(c, 'MO'), datediff(c, DATE '2019-12-31'), add_months(c, 1)
+SELECT time_trunc('HOUR', c)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SELECT time_diff('SECOND', TIME '12:00:00', c)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SELECT last_day(c), next_day(c, 'MO'), datediff(c, '2019-12-31'), add_months(c, 1)
   FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
 SET spark.sql.ansi.enabled=false;
 SELECT timestampdiff(MICROSECOND, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999',
@@ -649,6 +653,10 @@ SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY c)
   FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
 SELECT percentile_disc(0.5) WITHIN GROUP (ORDER BY c)
   FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
-SELECT last_day(c), next_day(c, 'MO'), datediff(c, DATE '2019-12-31'), add_months(c, 1)
+SELECT time_trunc('HOUR', c)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SELECT time_diff('SECOND', TIME '12:00:00', c)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SELECT last_day(c), next_day(c, 'MO'), datediff(c, '2019-12-31'), add_months(c, 1)
   FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
 SET spark.sql.ansi.enabled=true;

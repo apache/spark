@@ -388,6 +388,23 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
     shouldNotCast(TimestampNTZNanosType(9), TimestampNTZNanosType(7))
     shouldNotCast(TimestampLTZNanosType(9), TimestampNTZNanosType(8))
 
+    // The same holds inside arrays, maps and structs.
+    val ntz9 = TimestampNTZNanosType(9)
+    Seq(
+      ArrayType(TimeType()),
+      ArrayType(TimestampNTZType),
+      TypeCollection(ArrayType(DateType), ArrayType(TimeType()))).foreach {
+      shouldNotCast(ArrayType(ntz9), _)
+    }
+    shouldNotCast(MapType(StringType, ntz9), MapType(StringType, TimeType()))
+    shouldNotCast(new StructType().add("a", ntz9), new StructType().add("a", TimeType()))
+    shouldCast(ArrayType(ntz9), ArrayType(DateType), ArrayType(DateType))
+    shouldCast(
+      ArrayType(ntz9),
+      TypeCollection(ArrayType(DateType), ArrayType(StringType)),
+      ArrayType(StringType))
+    shouldCast(ArrayType(TimestampNTZNanosType(7)), ArrayType(ntz9), ArrayType(ntz9))
+
     // Micro timestamps are unchanged, including the DATE fallback.
     shouldCast(TimestampType, AnyTimestampType, TimestampType)
     shouldCast(TimestampNTZType, TypeCollection(NumericType, DateType), DateType)

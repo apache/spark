@@ -231,7 +231,8 @@ object TypeCoercion extends TypeCoercionBase {
       // For any other numeric types, implicitly cast to each other, e.g. long -> int, int -> long
       case (_: NumericType, target: NumericType) => target
 
-      // Implicit cast between date time types. A nanos timestamp is never narrowed implicitly.
+      // Implicit cast between date time types. A nanos timestamp is never implicitly cast to a
+      // lower-precision timestamp or to TIME; a direct DATE target is still allowed.
       case (_: DatetimeType, d @ (_: DatetimeType | AnyTimestampType))
           if isNanosNarrowing(inType, d.defaultConcreteType) => null
       case (_: DatetimeType, d: DatetimeType) => d
