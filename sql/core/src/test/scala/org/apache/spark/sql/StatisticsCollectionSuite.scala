@@ -666,6 +666,28 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
+  test("SPARK-57826: no histogram for nanosecond timestamp columns") {
+    withSQLConf(SQLConf.HISTOGRAM_ENABLED.key -> "true") {
+      withTempView("nanos") {
+        sql(
+          """CACHE TABLE nanos AS SELECT * FROM VALUES
+            |  (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789', CAST(NULL AS TIMESTAMP_LTZ(7)), 1),
+            |  (TIMESTAMP_NTZ '2021-06-01 00:00:00.000000001', CAST(NULL AS TIMESTAMP_LTZ(7)), 2)
+            |  AS t(ntz, ltz, i)
+          """.stripMargin)
+        sql("ANALYZE TABLE nanos COMPUTE STATISTICS FOR COLUMNS ntz, ltz, i")
+        val stats = spark.table("nanos").queryExecution.optimizedPlan.stats.attributeStats
+          .map { case (attr, stat) => attr.name -> stat }
+        assert(stats.keySet === Set("ntz", "ltz", "i"))
+        assert(stats("ntz").histogram.isEmpty)
+        assert(stats("ntz").nullCount.contains(0))
+        assert(stats("ltz").histogram.isEmpty)
+        assert(stats("ltz").nullCount.contains(2))
+        assert(stats("i").histogram.isDefined)
+      }
+    }
+  }
+
   test("analyzes column statistics in cached local temporary view") {
     withTempView("tempView") {
       // Analyzes in a temporary view

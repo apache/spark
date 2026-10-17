@@ -83,9 +83,7 @@ case class HistogramNumeric(
 
   private lazy val propagateInputType: Boolean = SQLConf.get.histogramNumericPropagateInputType
 
-  // Support NumericType, DateType, TimestampType, TimestampNTZType, TimeType,
-  // YearMonthIntervalType, DayTimeIntervalType since their internal types are all numeric,
-  // and can be easily cast to double for processing.
+  // Types whose internal value is a number that is converted to double for processing.
   private def supportedInputType = TypeCollection(NumericType, DateType, TimestampType,
     TimestampNTZType, YearMonthIntervalType, DayTimeIntervalType, AnyTimeType)
 
