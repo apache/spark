@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.ProjectingInternalRow
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, ResolvedProcedure, ResolveSchemaEvolution, TypeCheckResult, UnresolvedAttribute, UnresolvedException, UnresolvedProcedure, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.catalog.{FunctionResource, RoutineLanguage}
@@ -356,6 +357,18 @@ trait RowLevelWrite extends V2WriteCommand with SupportsSubquery {
   def condition: Expression
   def originalTable: NamedRelation
 
+  /** The projections that read query columns by ordinal. */
+  protected def queryProjections: Seq[ProjectingInternalRow]
+
+  /**
+   * The write reads the operation column at ordinal 0 and other columns only through projections.
+   * The query columns after the last one it reads can be pruned without changing its ordinals.
+   */
+  override lazy val references: AttributeSet = {
+    val lastReadOrdinal = queryProjections.flatMap(_.colOrdinals).foldLeft(0)(math.max)
+    AttributeSet(query.output.take(lastReadOrdinal + 1))
+  }
+
   protected def operationResolved: Boolean = {
     val attr = query.output.head
     attr.name == RowDeltaUtils.OPERATION_COLUMN && attr.dataType == IntegerType && !attr.nullable
@@ -397,8 +410,6 @@ case class ReplaceData(
 
   override def stringArgs: Iterator[Any] = Iterator(table, query, write)
 
-  override lazy val references: AttributeSet = query.outputSet
-
   lazy val operation: RowLevelOperation = {
     EliminateSubqueryAliases(table) match {
       case ExtractV2Table(RowLevelOperationTable(_, operation)) =>
@@ -438,6 +449,8 @@ case class ReplaceData(
   private def isMetadataNullabilityPreserved(attr: Attribute): Boolean = {
     operation.command == DELETE || MetadataAttribute.isPreservedOnUpdate(attr)
   }
+
+  override protected def queryProjections: Seq[ProjectingInternalRow] = projections.all
 
   override def withNewQuery(newQuery: LogicalPlan): ReplaceData = copy(query = newQuery)
 
@@ -486,8 +499,6 @@ case class WriteDelta(
     throw SparkException.internalError("WriteDelta.writePrivileges should not be called.")
 
   override def stringArgs: Iterator[Any] = Iterator(table, query, write)
-
-  override lazy val references: AttributeSet = query.outputSet
 
   lazy val operation: SupportsDelta = {
     EliminateSubqueryAliases(table) match {
@@ -550,6 +561,8 @@ case class WriteDelta(
         MetadataAttribute.isPreservedOnDelete(attr) && MetadataAttribute.isPreservedOnUpdate(attr)
     }
   }
+
+  override protected def queryProjections: Seq[ProjectingInternalRow] = projections.all
 
   override def withNewQuery(newQuery: LogicalPlan): V2WriteCommand = copy(query = newQuery)
 

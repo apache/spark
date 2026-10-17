@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector.write;
 
 import org.apache.spark.annotation.Experimental;
+import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
@@ -37,4 +38,16 @@ public interface RowLevelOperationInfo {
    * Returns the row-level SQL command (e.g. DELETE, UPDATE, MERGE).
    */
   Command command();
+
+  /**
+   * Returns the columns being updated by this operation. Currently only UPDATE populates it;
+   * other commands report an empty array.
+   * <p>
+   * A column is reported only if it is assigned a new value, so identity assignments such as
+   * {@code SET a = a} are excluded. Nested struct field updates are reported at root-column
+   * granularity (e.g. {@code SET s.c1 = -1} returns {@code s}).
+   *
+   * @since 4.4.0
+   */
+  NamedReference[] updatedColumns();
 }

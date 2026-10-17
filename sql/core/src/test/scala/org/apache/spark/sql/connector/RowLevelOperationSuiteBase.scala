@@ -27,10 +27,10 @@ import org.apache.spark.sql.{DataFrame, Encoders, Row}
 import org.apache.spark.sql.QueryTest.{sameRows, withQueryExecutionsCaptured}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Expression, GenericRowWithSchema}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReplaceData, WriteDelta}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReplaceData, RowLevelWrite, WriteDelta}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.METADATA_COL_ATTR_KEY
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Delete, Identifier, InMemoryRowLevelOperationTable, InMemoryRowLevelOperationTableCatalog, Insert, MetadataColumn, Operation, Reinsert, RowLevelOperationWithOptions, Table, TableInfo, Txn, TxnTable, Update, Write}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Delete, Identifier, InMemoryRowLevelOperationTable, InMemoryRowLevelOperationTableCatalog, Insert, MetadataColumn, Operation, Reinsert, RowLevelOperationWithOptions, Table, TableInfo, Txn, TxnTable, Update, Write, WriteColumnUpdate}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.{identity, reference}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.write.RowLevelOperationTable
@@ -52,6 +52,7 @@ abstract class RowLevelOperationSuiteBase
     spark.conf.set("spark.sql.catalog.cat", classOf[InMemoryRowLevelOperationTableCatalog].getName)
     spark.conf.set(
       "spark.sql.catalog.cat.tableStateOptionKeys", "load-option,targetLoadOption")
+    InMemoryRowLevelOperationTable.resetLastScanSchema()
   }
 
   after {
@@ -84,6 +85,7 @@ abstract class RowLevelOperationSuiteBase
       .putBoolean(MetadataColumn.PRESERVE_ON_UPDATE, value = false)
       .build())
   protected final val INDEX_FIELD_NULLABLE = INDEX_FIELD.copy(nullable = true)
+  protected final val DEP_FIELD = StructField("dep", StringType, nullable = true)
 
   protected val namespace: Array[String] = Array("ns1")
   protected val ident: Identifier = Identifier.of(namespace, "test_table")
@@ -141,6 +143,19 @@ abstract class RowLevelOperationSuiteBase
     append(schemaString, jsonData)
   }
 
+  protected def createAndInitTable(
+      schemaString: String,
+      jsonData: String,
+      tableProps: java.util.Map[String, String]): Unit = {
+    val tableInfo = new TableInfo.Builder()
+      .withColumns(CatalogV2Util.structTypeToV2Columns(StructType.fromDDL(schemaString)))
+      .withPartitions(Array[Transform](identity(reference(Seq("dep")))))
+      .withProperties(tableProps)
+      .build()
+    catalog.createTable(ident, tableInfo)
+    append(schemaString, jsonData)
+  }
+
   protected def append(schemaString: String, jsonData: String): Unit = {
     withSQLConf(SQLConf.LEGACY_RESPECT_NULLABILITY_IN_TEXT_DATASET_CONVERSION.key -> "true") {
       val df = toDF(jsonData, schemaString)
@@ -191,6 +206,27 @@ abstract class RowLevelOperationSuiteBase
       case rd: ReplaceData => (rd.condition, rd.groupFilterCondition)
       case wd: WriteDelta => (wd.condition, wd.groupFilterCondition)
     }.getOrElse(fail("couldn't find row-level operation in optimized plan"))
+  }
+
+  // executes an operation and extracts the analyzed ReplaceData or WriteDelta
+  protected def executeAndKeepAnalyzedWrite(func: => Unit): RowLevelWrite = {
+    val Seq(qe) = withQueryExecutionsCaptured(spark)(func)
+    qe.analyzed.collectFirst {
+      case w: RowLevelWrite => w
+    }.getOrElse(fail("couldn't find row-level operation in analyzed plan"))
+  }
+
+  // checks that a column-update write narrows only the write relation to the declared columns
+  protected def checkColumnUpdateWrite(write: RowLevelWrite, declaredNames: String*): Unit = {
+    assert(write.table.output.map(_.name) == declaredNames,
+      s"write relation must have the declared columns: ${write.table.output}")
+    assert(write.originalTable.output.map(_.name) == table.schema.fieldNames.toSeq,
+      s"original table must have every column: ${write.originalTable.output}")
+    assert(table.lastWriteInfo.schema.isEmpty,
+      s"row schema must be empty: ${table.lastWriteInfo.schema}")
+    assert(table.lastWriteInfo.columnUpdateSchema.get.fieldNames.toSeq == declaredNames,
+      s"column update schema must have the declared columns: " +
+        s"${table.lastWriteInfo.columnUpdateSchema}")
   }
 
   // Asserts the given SQL options reached every V2 layer that should carry them: the target
@@ -306,16 +342,72 @@ abstract class RowLevelOperationSuiteBase
   protected def checkLastWriteInfo(
       expectedRowSchema: StructType = new StructType(),
       expectedRowIdSchema: Option[StructType] = None,
-      expectedMetadataSchema: Option[StructType] = None): Unit = {
+      expectedMetadataSchema: Option[StructType] = None,
+      expectedColumnUpdateSchema: Option[StructType] = None): Unit = {
     val info = table.lastWriteInfo
     assert(info.schema == expectedRowSchema, "row schema must match")
     val actualRowIdSchema = Option(info.rowIdSchema.orElse(null))
     assert(actualRowIdSchema == expectedRowIdSchema, "row ID schema must match")
     val actualMetadataSchema = Option(info.metadataSchema.orElse(null))
     assert(actualMetadataSchema == expectedMetadataSchema, "metadata schema must match")
+    val actualColumnUpdateSchema = Option(info.columnUpdateSchema.orElse(null))
+    assert(actualColumnUpdateSchema == expectedColumnUpdateSchema,
+      "column update schema must match")
+  }
+
+
+  /**
+   * Asserts that the column names in RowLevelOperationInfo.updatedColumns() received by the
+   * last operation match exactly the expected set.  Order is ignored.
+   */
+  protected def checkLastUpdatedColumns(expectedNames: String*): Unit = {
+    val actual = table.lastUpdatedColumns.map(_.describe()).toSet
+    val expected = expectedNames.toSet
+    assert(actual == expected,
+      s"updatedColumns mismatch: expected ${expected.mkString("[", ", ", "]")} " +
+        s"but got ${actual.mkString("[", ", ", "]")}")
+  }
+
+  /** Asserts that the last connector scan schema contains none of the given columns. */
+  protected def checkLastScanExcludes(excludedNames: String*): Unit = {
+    val schema = table.lastScanSchema
+    assert(schema != null, "no scan schema was recorded")
+    val actual = schema.fieldNames.toSet
+    val leaked = excludedNames.toSet.intersect(actual)
+    assert(leaked.isEmpty,
+      s"scan should not include ${leaked.mkString("[", ", ", "]")} " +
+        s"but lastScanSchema=${schema.fieldNames.mkString("[", ", ", "]")}")
+  }
+
+  /** Asserts that the last connector scan schema contains all of the given columns. */
+  protected def checkLastScanIncludes(includedNames: String*): Unit = {
+    val schema = table.lastScanSchema
+    assert(schema != null, "no scan schema was recorded")
+    val actual = schema.fieldNames.toSet
+    val missing = includedNames.toSet.diff(actual)
+    assert(missing.isEmpty,
+      s"scan must include ${missing.mkString("[", ", ", "]")} " +
+        s"but lastScanSchema=${schema.fieldNames.mkString("[", ", ", "]")}")
+  }
+
+  /** Asserts the exact schema of the last connector scan, ignoring nullability. */
+  protected def checkLastScanSchema(expectedSchema: String): Unit = {
+    val schema = table.lastScanSchema
+    assert(schema != null, "no scan schema was recorded")
+    assert(DataTypeUtils.sameType(schema, StructType.fromDDL(expectedSchema)),
+      s"lastScanSchema=${schema.toDDL} but expected $expectedSchema")
   }
 
   protected def checkLastWriteLog(expectedEntries: WriteLogEntry*): Unit = {
+    checkWriteLog(table.schema, expectedEntries)
+  }
+
+  /** Checks the last write log, reading row data in the layout of `columnUpdateSchema()`. */
+  protected def checkLastColumnUpdateWriteLog(expectedEntries: WriteLogEntry*): Unit = {
+    checkWriteLog(table.lastWriteInfo.columnUpdateSchema.get, expectedEntries)
+  }
+
+  private def checkWriteLog(dataSchema: StructType, expectedEntries: Seq[WriteLogEntry]): Unit = {
     val entryType = new StructType()
       .add(StructField("operation", StringType))
       .add(StructField("id", IntegerType))
@@ -324,7 +416,7 @@ abstract class RowLevelOperationSuiteBase
         new StructType(Array(
           StructField("_partition", StringType),
           StructField("_index", IntegerType)))))
-      .add(StructField("data", table.schema))
+      .add(StructField("data", dataSchema))
 
     val expectedEntriesAsRows = expectedEntries.map { entry =>
       new GenericRowWithSchema(
@@ -352,6 +444,14 @@ abstract class RowLevelOperationSuiteBase
 
   protected def writeWithMetadataLogEntry(metadata: Row, data: Row): WriteLogEntry = {
     WriteLogEntry(operation = Write, metadata = Some(metadata), data = Some(data))
+  }
+
+  protected def writeColumnUpdateLogEntry(data: Row): WriteLogEntry = {
+    WriteLogEntry(operation = WriteColumnUpdate, data = Some(data))
+  }
+
+  protected def writeColumnUpdateWithMetadataLogEntry(metadata: Row, data: Row): WriteLogEntry = {
+    WriteLogEntry(operation = WriteColumnUpdate, metadata = Some(metadata), data = Some(data))
   }
 
   protected def deleteWriteLogEntry(id: Int, metadata: Row): WriteLogEntry = {

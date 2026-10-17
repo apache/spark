@@ -22,13 +22,15 @@ import java.util.UUID
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.expressions.PredicateHelper
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertOnlyMerge, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceData, WriteDelta}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertOnlyMerge, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceData, RowLevelWrite, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.catalyst.util.WriteDeltaProjections
 import org.apache.spark.sql.connector.catalog.Table
+import org.apache.spark.sql.connector.distributions.{ClusteredDistribution, OrderedDistribution}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.write.{DeltaWriteBuilder, LogicalWriteInfoImpl, SupportsDynamicOverwrite, SupportsOverwriteV2, SupportsTruncate, Write, WriteBuilder}
+import org.apache.spark.sql.connector.write.{DeltaWriteBuilder, LogicalWriteInfoImpl, RequiresDistributionAndOrdering, SupportsColumnUpdates, SupportsDynamicOverwrite, SupportsOverwriteV2, SupportsTruncate, Write, WriteBuilder}
+import org.apache.spark.sql.connector.write.RowLevelOperation.Command.UPDATE
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.streaming.sources.{MicroBatchWrite, WriteToMicroBatchDataSource}
 import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
@@ -109,20 +111,73 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       WriteToDataSourceV2(Some(r), microBatchWrite, newQuery, customMetrics)
 
     case rd @ ReplaceData(r: DataSourceV2Relation, _, query, _, projections, _, None) =>
-      val rowSchema = projections.rowProjection.schema
+      val (rowSchema, columnUpdateSchema) =
+        writeSchemas(projections.rowProjection.schema, hasNarrowRows(rd))
       val metadataSchema = projections.metadataProjection.map(_.schema)
       val writeOptions = mergeOptions(Map.empty, r.options.asCaseSensitiveMap.asScala.toMap)
-      val writeBuilder = newWriteBuilder(r.table, writeOptions, rowSchema, metadataSchema)
+      val writeBuilder = newWriteBuilder(r.table, writeOptions, rowSchema, metadataSchema,
+        columnUpdateSchema)
       val write = writeBuilder.build()
+      validateColumnUpdateWrite(rd, write)
       val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, r.funCatalog)
       rd.copy(write = Some(write), query = newQuery)
 
     case wd @ WriteDelta(r: DataSourceV2Relation, _, query, _, projections, _, None) =>
       val writeOptions = mergeOptions(Map.empty, r.options.asCaseSensitiveMap.asScala.toMap)
-      val deltaWriteBuilder = newDeltaWriteBuilder(r.table, writeOptions, projections)
+      val deltaWriteBuilder =
+        newDeltaWriteBuilder(r.table, writeOptions, projections, hasNarrowRows(wd))
       val deltaWrite = deltaWriteBuilder.build()
+      validateColumnUpdateWrite(wd, deltaWrite)
       val newQuery = DistributionAndOrderingUtils.prepareQuery(deltaWrite, query, r.funCatalog)
       wd.copy(write = Some(deltaWrite), query = newQuery)
+  }
+
+  /**
+   * Whether a row-level write delivers narrow rows for updated, copied, and reinserted records.
+   * This must match the writes whose write relation RewriteUpdateTable narrows, even when the
+   * declared columns cover the whole table.
+   */
+  private[v2] def hasNarrowRows(write: RowLevelWrite): Boolean = {
+    write.operation.isInstanceOf[SupportsColumnUpdates] && write.operation.command == UPDATE
+  }
+
+  /**
+   * Checks that the distribution and ordering of a write that delivers narrow rows reference only
+   * columns the write reads. Other columns stay in the query only until column pruning removes
+   * them, so they are rejected here whether or not pruning ran.
+   */
+  private def validateColumnUpdateWrite(rowLevelWrite: RowLevelWrite, write: Write): Unit = {
+    write match {
+      case w: RequiresDistributionAndOrdering if hasNarrowRows(rowLevelWrite) =>
+        val distribution = w.requiredDistribution match {
+          case d: ClusteredDistribution => d.clustering.toImmutableArraySeq
+          case d: OrderedDistribution => d.ordering.toImmutableArraySeq
+          case _ => Seq.empty
+        }
+        val readNames = rowLevelWrite.references.toSeq.map(_.name)
+        val unread = (distribution ++ w.requiredOrdering.toImmutableArraySeq)
+          .flatMap(_.references.toImmutableArraySeq)
+          .filterNot(_.fieldNames.headOption.exists(n => readNames.exists(conf.resolver(_, n))))
+          .map(_.describe)
+          .distinct
+          .sorted
+        if (unread.nonEmpty) {
+          throw QueryCompilationErrors.undeclaredWriteRequirementColumnsError(
+            rowLevelWrite.operation.getClass.getName, unread)
+        }
+      case _ =>
+    }
+  }
+
+  /**
+   * Returns the `schema()` and `columnUpdateSchema()` of the write. Narrow rows are reported as
+   * `columnUpdateSchema()`, and `schema()` covers only newly inserted rows, which is empty as only
+   * UPDATE is narrowed and it inserts no new rows.
+   */
+  private def writeSchemas(
+      rowSchema: StructType,
+      narrowRows: Boolean): (StructType, Option[StructType]) = {
+    if (narrowRows) (StructType(Nil), Some(rowSchema)) else (rowSchema, None)
   }
 
   private def mergeOptions(
@@ -163,6 +218,7 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       writeOptions: Map[String, String],
       rowSchema: StructType,
       metadataSchema: Option[StructType] = None,
+      columnUpdateSchema: Option[StructType] = None,
       queryId: String = UUID.randomUUID().toString): WriteBuilder = {
 
     val info = LogicalWriteInfoImpl(
@@ -170,7 +226,8 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       rowSchema,
       writeOptions.asOptions,
       rowIdSchema = None,
-      metadataSchema)
+      metadataSchema,
+      columnUpdateSchema)
     table.asWritable.newWriteBuilder(info)
   }
 
@@ -178,9 +235,11 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       table: Table,
       writeOptions: Map[String, String],
       projections: WriteDeltaProjections,
+      narrowRows: Boolean,
       queryId: String = UUID.randomUUID().toString): DeltaWriteBuilder = {
 
-    val rowSchema = projections.rowProjection.map(_.schema).getOrElse(StructType(Nil))
+    val (rowSchema, columnUpdateSchema) = writeSchemas(
+      projections.rowProjection.map(_.schema).getOrElse(StructType(Nil)), narrowRows)
     val rowIdSchema = Some(projections.rowIdProjection.schema)
     val metadataSchema = projections.metadataProjection.map(_.schema)
 
@@ -189,7 +248,8 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       rowSchema,
       writeOptions.asOptions,
       rowIdSchema,
-      metadataSchema)
+      metadataSchema,
+      columnUpdateSchema)
 
     val writeBuilder = table.asWritable.newWriteBuilder(info)
     assert(writeBuilder.isInstanceOf[DeltaWriteBuilder], s"$writeBuilder must be DeltaWriteBuilder")
