@@ -34,6 +34,7 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.api.python.SimplePythonFunction
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.IntegratedUDFTestUtils
+import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.connect.{PythonTestDepsChecker, SparkConnectTestUtils}
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.config.Connect
@@ -47,6 +48,45 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.ArrayImplicits._
 
 class SparkConnectSessionHolderSuite extends SharedSparkSession {
+
+  for (previous <- Seq(null, "outer-user"); fail <- Seq(false, true)) {
+    test(s"SPARK-56891: restore SQL user $previous after withSession, failure=$fail") {
+      val original = CURRENT_USER.get()
+      val holder = SparkConnectTestUtils.createDummySessionHolder(spark)
+      try {
+        if (previous == null) CURRENT_USER.remove() else CURRENT_USER.set(previous)
+        def run(): Unit = holder.withSession { _ =>
+          assert(CURRENT_USER.get() == holder.userId)
+          if (fail) throw new IllegalStateException("expected failure")
+        }
+        if (fail) {
+          val error = intercept[IllegalStateException](run())
+          assert(error.getMessage == "expected failure")
+        } else {
+          run()
+        }
+        assert(CURRENT_USER.get() == previous)
+      } finally {
+        if (original == null) CURRENT_USER.remove() else CURRENT_USER.set(original)
+      }
+    }
+  }
+
+  test("SPARK-56891: empty session user preserves the SQL user fallback") {
+    val original = CURRENT_USER.get()
+    try {
+      CURRENT_USER.remove()
+      val query = "SELECT user(), current_user(), session_user()"
+      val expected = spark.sql(query).collect().toSeq
+      val holder = SessionHolder("", java.util.UUID.randomUUID().toString, spark)
+      holder.withSession { session =>
+        assert(session.sql(query).collect().toSeq == expected)
+      }
+      assert(CURRENT_USER.get() == null)
+    } finally {
+      if (original == null) CURRENT_USER.remove() else CURRENT_USER.set(original)
+    }
+  }
 
   test("DataFrame cache: Successful put and get") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
