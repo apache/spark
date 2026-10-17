@@ -51,11 +51,23 @@ object PythonUDF {
     PythonEvalType.SQL_SCALAR_PANDAS_UDF,
     PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
     PythonEvalType.SQL_SCALAR_ARROW_UDF,
-    PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF
+    PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
+    PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF
   )
 
   def isScalarPythonUDF(e: Expression): Boolean = {
     e.isInstanceOf[PythonUDF] && SCALAR_TYPES.contains(e.asInstanceOf[PythonUDF].evalType)
+  }
+
+  /**
+   * Whether `e` is a scalar Python UDF that runs in a Python worker, where it can be chained
+   * with the scalar Python UDFs around it. In-process UDFs never are: each one is evaluated by
+   * its own operator. Rules that keep or build such chains use this rather than
+   * [[isScalarPythonUDF]].
+   */
+  def chainsInWorker(e: Expression): Boolean = {
+    isScalarPythonUDF(e) &&
+      e.asInstanceOf[PythonUDF].evalType != PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF
   }
 
   /**
@@ -430,12 +442,13 @@ case class TranspiledPythonUDF(
     case other => other.children
   }
 
-  // True when every argument is a plain PythonUDF (not a TranspiledPythonUDF). Used to decide
-  // whether to preserve the UDF batch pipeline rather than inserting a Catalyst node in the middle
-  // of a Python UDF chain. Reads `arguments`, not `pythonUDFExpr.children`: for an aggregate UDF
-  // the latter is the aggregate function and its filter, so this said false for every UDAF.
+  // True when every argument is a plain PythonUDF (not a TranspiledPythonUDF) that runs in a
+  // worker. Used to decide whether to preserve the UDF batch pipeline rather than inserting a
+  // Catalyst node in the middle of a Python UDF chain; an in-process argument is not part of one.
+  // Reads `arguments`, not `pythonUDFExpr.children`: for an aggregate UDF the latter is the
+  // aggregate function and its filter, so this said false for every UDAF.
   def hasOnlyPythonUDFInputs: Boolean =
-    arguments.nonEmpty && arguments.forall(_.isInstanceOf[PythonUDF])
+    arguments.nonEmpty && arguments.forall(PythonUDF.chainsInWorker)
 }
 
 /**

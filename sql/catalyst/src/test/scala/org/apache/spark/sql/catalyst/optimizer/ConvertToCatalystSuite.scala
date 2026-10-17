@@ -606,6 +606,37 @@ class ConvertToCatalystSuite extends PlanTest {
     }
   }
 
+  test("apply transpiles a UDF wrapped by an in-process Python UDF") {
+    // An in-process UDF never chains with worker UDFs, so there is no pipeline to preserve.
+    transpileOn {
+      val plain = makePyUDF(attrA)
+      val midTPUDF = makeTPUDF(makePyUDF(plain), Add(plain, Literal(4L)))
+      val outer = PythonUDF("inproc", null, LongType, Seq(midTPUDF),
+        PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF, udfDeterministic = true)
+      val optimized = ConvertToCatalyst(Project(Seq(Alias(outer, "v")()), LocalRelation(attrA)))
+      val exprs = optimized.flatMap(_.expressions)
+      // The in-process and the plain UDF remain; the mid one became its Add option.
+      assert(exprs.map(_.collect { case u: PythonUDF => u }.size).sum == 2,
+        s"Expected the mid UDF to be transpiled (2 PythonUDFs), got: $optimized")
+    }
+  }
+
+  test("apply transpiles a UDF whose only Python argument is an in-process UDF") {
+    // `w(t(inproc(a)))`: `inproc` runs in its own operator, so `t` chains with nothing below it.
+    transpileOn {
+      val inproc = PythonUDF("inproc", null, LongType, Seq(attrA),
+        PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF, udfDeterministic = true)
+      val midTPUDF = makeTPUDF(makePyUDF(inproc), Add(inproc, Literal(4L)))
+      assert(!midTPUDF.hasOnlyPythonUDFInputs)
+      val outerPy = makePyUDF(midTPUDF)
+      val optimized = ConvertToCatalyst(Project(Seq(Alias(outerPy, "v")()), LocalRelation(attrA)))
+      val exprs = optimized.flatMap(_.expressions)
+      // The outer and the in-process UDF remain; the mid one became its Add option.
+      assert(exprs.map(_.collect { case u: PythonUDF => u }.size).sum == 2,
+        s"Expected the mid UDF to be transpiled (2 PythonUDFs), got: $optimized")
+    }
+  }
+
   test("projects the pre-evaluated column away again below a Filter") {
     transpileOn {
       // A Filter takes its output from its child, so without the restoring Project the schema
