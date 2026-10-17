@@ -118,6 +118,15 @@ class PythonUDFSuite extends SharedSparkSession {
     assert(df.agg(pandasTestUDF(df("id"))).schema.fieldNames.exists(_.startsWith(udfName)))
   }
 
+  test("SPARK-60150: filter on a float key above a grouped-agg pandas UDF aggregate") {
+    assume(shouldTestPandasUDFs)
+    val pandasTestUDF = TestGroupedAggPandasUDF(name = "pandas_udf")
+    // The aggregate outputs the raw key -0.0, and the filter pushed below it must read it raw.
+    val grouped = Seq(-0.0d, -0.0d).toDF("x").groupBy("x").agg(pandasTestUDF(col("x")))
+    assert(grouped.where(col("x").cast("string") === "-0.0").collect().length == 1)
+    assert(grouped.where(col("x").cast("string") === "0.0").collect().isEmpty)
+  }
+
   test("SPARK-27052: Python UDF in a higher order function lambda") {
     assume(shouldTestPythonUDFs)
     // SPARK-48706 originally rejected this. `ExtractPythonUDFFromLambda` now rewrites it so the

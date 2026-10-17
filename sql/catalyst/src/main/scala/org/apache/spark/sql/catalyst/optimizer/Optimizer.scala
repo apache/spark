@@ -1005,11 +1005,14 @@ object LimitPushDown extends Rule[LogicalPlan] {
     // There is a Project between LocalLimit and Join if they do not have the same output.
     case LocalLimit(exp, project @ Project(_, join: Join)) =>
       LocalLimit(exp, project.copy(child = pushLocalLimitThroughJoin(exp, join)))
-    // Push down limit 1 through Aggregate and turn Aggregate into Project if it is group only.
-    case Limit(le @ IntegerLiteral(1), a: Aggregate) if a.groupOnly =>
+    // Push down limit 1 through Aggregate and turn Aggregate into Project if it is group only,
+    // unless the Project would read float/double keys that the Aggregate normalizes.
+    case Limit(le @ IntegerLiteral(1), a: Aggregate) if a.groupOnly &&
+        !NormalizeFloatingNumbers.readsNormalizedKeys(a, a.aggregateExpressions) =>
       val newAgg = EliminateSorts(a.copy(child = LocalLimit(le, a.child))).asInstanceOf[Aggregate]
       Limit(le, Project(newAgg.aggregateExpressions, newAgg.child))
-    case Limit(le @ IntegerLiteral(1), p @ Project(_, a: Aggregate)) if a.groupOnly =>
+    case Limit(le @ IntegerLiteral(1), p @ Project(_, a: Aggregate)) if a.groupOnly &&
+        !NormalizeFloatingNumbers.readsNormalizedKeys(a, a.aggregateExpressions) =>
       val newAgg = EliminateSorts(a.copy(child = LocalLimit(le, a.child))).asInstanceOf[Aggregate]
       Limit(le, p.copy(child = Project(newAgg.aggregateExpressions, newAgg.child)))
     // Merge offset value and limit value into LocalLimit and pushes down LocalLimit through Offset.
@@ -2677,7 +2680,9 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // We can push down deterministic predicate through Aggregate, including throwable predicate.
     // If we can push down a filter through Aggregate, it means the filter only references the
     // grouping keys or constants. The Aggregate operator can't reduce distinct values of grouping
-    // keys so the filter won't see any new data after push down.
+    // keys so the filter won't see any new data after push down. Float/double grouping keys are
+    // normalized by the Aggregate, so the pushed filter reads them normalized wherever that could
+    // change its result (see `pushBelowAggregate`).
     case filter @ Filter(condition, aggregate: Aggregate)
       if aggregate.aggregateExpressions.forall(_.deterministic)
         && aggregate.groupingExpressions.nonEmpty =>
@@ -2692,8 +2697,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       }
 
       if (pushDown.nonEmpty) {
-        val pushDownPredicate = pushDown.reduce(And)
-        val replaced = replaceAlias(pushDownPredicate, aliasMap)
+        val replaced = pushBelowAggregate(pushDown, aggregate)
         val newAggregate = aggregate.copy(child = Filter(replaced, aggregate.child))
         // If there is no more filter to stay up, just eliminate the filter.
         // Otherwise, create "Filter(stayUp) <- Aggregate <- Filter(pushDownPredicate)".
@@ -2799,6 +2803,65 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case _: Expand => true
     case _: BinBy => true
     case _ => false
+  }
+
+  // Rewrites conjuncts pushed below `aggregate` in terms of the aggregate's child and ANDs them.
+  // Expressions above the aggregate see its float/double grouping keys normalized (see
+  // NormalizeFloatingNumbers: -0.0 becomes 0.0 and every NaN becomes one canonical NaN), so the
+  // pushed conjuncts read them normalized too, wherever the raw value could change the result.
+  // NormalizeFloatingNumbers.outputsNormalizedKeys says when the keys come out normalized, whether
+  // the aggregate is planned or a later rule replaces it with a Project. Aggregates of grouped-agg
+  // pandas UDFs output the raw keys, so conjuncts pushed below them read the raw keys.
+  private[optimizer] def pushBelowAggregate(
+      conds: Seq[Expression],
+      aggregate: Aggregate): Expression = {
+    val aliasMap = getAliasMap(aggregate)
+    val normalizedGrouping = if (NormalizeFloatingNumbers.outputsNormalizedKeys(aggregate)) {
+      aggregate.groupingExpressions
+        .filter(e => NormalizeFloatingNumbers.needNormalize(e.dataType))
+        .map(trimAliases)
+    } else {
+      Nil
+    }
+    conds.map { cond =>
+      val replaced = replaceAlias(cond, aliasMap)
+      if (normalizedGrouping.isEmpty) {
+        replaced
+      } else {
+        normalizeGroupingExpressions(replaced, normalizedGrouping)
+      }
+    }.reduce(And)
+  }
+
+  // Rewrites `e` so that it gives the same result on the raw values of `grouping` as `e` gives on
+  // their normalized values (see NormalizeFloatingNumbers). Each occurrence of a grouping
+  // expression is wrapped in its normalized form, with one exception: a float/double attribute
+  // that is a direct operand of one of the comparisons matched below is left as is, and so is a
+  // float attribute widened to double (as when a FLOAT column is compared with a DOUBLE or
+  // DECIMAL value), since widening keeps -0.0 and NaN. Those comparisons already treat -0.0 and
+  // 0.0 as equal and all NaNs as equal (see SQLOrderingUtil.compareDoubles and
+  // CodegenContext.genEqual), and IsNull, IsNotNull and IsNaN cannot tell normalized values apart
+  // either, so wrapping would not change the result. Leaving them as is keeps plain comparisons
+  // usable by data sources and partition pruning.
+  private[optimizer] def normalizeGroupingExpressions(
+      e: Expression,
+      grouping: Seq[Expression]): Expression = e match {
+    // A grouping key already normalized when the filter was pushed through an Aggregate above on
+    // the same key. Any other normalized expression may be computed from a grouping key (when the
+    // upper Aggregate groups by an expression of this one's key), so the key inside it still has
+    // to be normalized. `normalize` builds new lambda variables for array and map keys, so those
+    // are normalized again, which gives the same values.
+    case _: KnownFloatingPointNormalized
+        if grouping.exists(g => NormalizeFloatingNumbers.normalize(g).semanticEquals(e)) => e
+    case _: EqualTo | _: EqualNullSafe | _: LessThan | _: LessThanOrEqual | _: GreaterThan |
+         _: GreaterThanOrEqual | _: In | _: IsNull | _: IsNotNull | _: IsNaN =>
+      e.mapChildren {
+        case a: Attribute if a.dataType == FloatType || a.dataType == DoubleType => a
+        case c @ Cast(a: Attribute, DoubleType, _, _) if a.dataType == FloatType => c
+        case c => normalizeGroupingExpressions(c, grouping)
+      }
+    case _ if grouping.exists(_.semanticEquals(e)) => NormalizeFloatingNumbers.normalize(e)
+    case _ => e.mapChildren(normalizeGroupingExpressions(_, grouping))
   }
 
   private def pushDownPredicate(

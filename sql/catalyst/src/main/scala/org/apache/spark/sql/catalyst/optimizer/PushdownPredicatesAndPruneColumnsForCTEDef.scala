@@ -185,9 +185,11 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] with
    * `plan`, wherever predicate push-down rules sharing the fixedPoint batches with this rule
    * (e.g. `PushDownPredicates`) may have moved it. The descent mirrors the cases of
    * `PushPredicateThroughNonJoin` and `PushPredicateThroughJoin`, translating `predicate` back
-   * the same way they translate the pushed condition (for `Project` and `Aggregate` it uses
-   * the very same `AliasHelper` utilities, so the two cannot drift apart): through projection
-   * and grouping-key aliases, positionally into each branch (`Union`), and unchanged
+   * the same way they translate the pushed condition (for `Project` it uses the very same
+   * `AliasHelper` utilities, and for `Aggregate` it calls
+   * `PushPredicateThroughNonJoin.pushBelowAggregate`, so the two cannot drift apart): through
+   * projection aliases, through grouping-key aliases with float/double grouping keys normalized
+   * as `pushBelowAggregate` does, positionally into each branch (`Union`), and unchanged
    * through operators that pass the referenced attributes verbatim (`Join`, `Window`, and
    * output-preserving unary nodes like `Filter`, `Sort`, `Repartition`). The descent is recursive
    * because the filter can end up several operators down -- in particular between the projections
@@ -239,11 +241,11 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] with
         }
         if (removedAny) (u.withNewChildren(newChildren), true) else (u, false)
       case agg: Aggregate =>
-        // Mirror PushPredicateThroughNonJoin: translate the target through the grouping
-        // aliases with the same helper it uses to move grouping-key filters below the
-        // aggregate (filters referencing aggregate expressions stay up, so they are always
-        // found above this node).
-        val translated = replaceAlias(target, getAliasMap(agg))
+        // Mirror PushPredicateThroughNonJoin: translate the target with the same helper it uses
+        // to move grouping-key filters below the aggregate (filters referencing aggregate
+        // expressions stay up, so they are always found above this node).
+        val translated =
+          PushPredicateThroughNonJoin.pushBelowAggregate(splitConjunctivePredicates(target), agg)
         val (newChild, removed) = remove(agg.child, translated)
         if (removed) (agg.withNewChildren(Seq(newChild)), true) else (agg, false)
       case w: Window =>
