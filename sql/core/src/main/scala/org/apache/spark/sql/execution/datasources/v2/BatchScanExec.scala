@@ -153,6 +153,17 @@ case class BatchScanExec(
     }
   }
 
+  override def outputOrdering: Seq[SortOrder] = {
+    // The base class checks grouping by the original partition keys. A later projection or
+    // reduction can concatenate separately ordered splits, so that ordering no longer applies.
+    // Check only planning parameters here: inspecting filteredPartitions executes runtime filters.
+    val projectsSubset = spjParams.joinKeyPositions.exists { positions =>
+      spjParams.keyGroupedPartitioning.exists(_.length > positions.length)
+    }
+    val reducesKeys = spjParams.reducers.exists(_.exists(_.isDefined))
+    if (projectsSubset || reducesKeys) Seq.empty else super.outputOrdering
+  }
+
   override lazy val readerFactory: PartitionReaderFactory = batch.createReaderFactory()
 
   override lazy val inputRDD: RDD[InternalRow] = {
