@@ -1745,6 +1745,20 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val LEGACY_FILTER_SHORT_CIRCUIT_ON_NULL_CONJUNCT =
+    buildConf("spark.sql.legacy.filterShortCircuitOnNullConjunct")
+      .internal()
+      .doc("When true, whole stage codegen of a filter condition, including the FILTER clause " +
+        "of an aggregate function, drops a row at the first top-level conjunct that evaluates " +
+        "to NULL without evaluating the remaining conjuncts, so an error that one of them " +
+        "would raise on that row is not raised. When false, only a FALSE conjunct stops the " +
+        "evaluation, as the SQL standard requires and as the interpreted evaluation does, and " +
+        "the row is dropped after the remaining conjuncts are evaluated.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val CASE_SENSITIVE = buildConf(SqlApiConfHelper.CASE_SENSITIVE_KEY)
     .internal()
     .doc("Whether the query analyzer should be case sensitive or not. " +
@@ -9585,6 +9599,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def subexpressionEliminationFilterExecEnabled: Boolean =
     getConf(SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED)
+
+  def legacyFilterShortCircuitOnNullConjunct: Boolean =
+    getConf(LEGACY_FILTER_SHORT_CIRCUIT_ON_NULL_CONJUNCT)
 
   def autoBroadcastJoinThreshold: Long = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 
