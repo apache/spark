@@ -534,8 +534,7 @@ object SparkEnv extends Logging {
   /**
    * Spark-owned implementation of direct worker creation. A string, not a compile-time
    * reference: `core` depends on `udf-worker-proto` and `udf-worker-core` only, so the
-   * gRPC runtime stays out of this module. A packaged Spark loads the class from the
-   * shaded `spark-udf-worker-runtime` jar. This is not a user extension point.
+   * gRPC runtime stays out of this module. This is not a user extension point.
    */
   private[spark] val DIRECT_DISPATCHER_FACTORY_CLASS =
     "org.apache.spark.udf.worker.grpc.DirectDispatcherFactory"
@@ -569,8 +568,7 @@ object SparkEnv extends Logging {
 
   /**
    * Loads a Spark-owned factory. A missing runtime is reported against the worker
-   * type, because the factory lives in the separately packaged
-   * `spark-udf-worker-runtime` jar rather than in an engine module.
+   * type and the distribution artifact that provides the implementation.
    */
   private def loadBuiltInDispatcherFactory(
       workerType: String,
@@ -578,10 +576,10 @@ object SparkEnv extends Logging {
     val cls = try {
       classOf[SparkEnv].getClassLoader.loadClass(className)
     } catch {
-      case e: ClassNotFoundException =>
-        throw dispatcherRuntimeUnavailable(workerType, className, e)
-      case e: LinkageError =>
-        throw dispatcherRuntimeUnavailable(workerType, className, e)
+      case _: ClassNotFoundException =>
+        throw dispatcherRuntimeUnavailable(workerType, className)
+      case _: LinkageError =>
+        throw dispatcherRuntimeUnavailable(workerType, className)
     }
     if (!classOf[UDFDispatcherFactory].isAssignableFrom(cls)) {
       throw new SparkException(
@@ -591,10 +589,10 @@ object SparkEnv extends Logging {
     try {
       cls.getConstructor().newInstance().asInstanceOf[UDFDispatcherFactory]
     } catch {
-      case e: ClassNotFoundException =>
-        throw dispatcherRuntimeUnavailable(workerType, className, e)
-      case e: LinkageError =>
-        throw dispatcherRuntimeUnavailable(workerType, className, e)
+      case _: ClassNotFoundException =>
+        throw dispatcherRuntimeUnavailable(workerType, className)
+      case _: LinkageError =>
+        throw dispatcherRuntimeUnavailable(workerType, className)
       case e: Exception =>
         throw new SparkException(
           s"Could not construct the built-in dispatcher factory $className for worker " +
@@ -604,13 +602,11 @@ object SparkEnv extends Logging {
 
   private def dispatcherRuntimeUnavailable(
       workerType: String,
-      className: String,
-      cause: Throwable): SparkException = {
+      className: String): SparkException = {
     new SparkException(
       s"Spark could not load the built-in dispatcher implementation ($className) for " +
-        s"worker type $workerType. The direct dispatcher is packaged in the " +
-        "spark-udf-worker-runtime jar; check that it is on the Spark classpath.",
-      cause)
+        s"worker type $workerType. The direct dispatcher comes from the " +
+        "spark-udf-worker-runtime module, which is missing from the runtime classpath.")
   }
 
   def set(e: SparkEnv): Unit = {

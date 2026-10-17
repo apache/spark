@@ -46,10 +46,10 @@
     those modules via the proto messages, as it was before; only gRPC is
     removed from their classpath.)
 
-    Note: the gRPC runtime here is NOT shaded. The Spark assembly ships this
-    module only inside spark-udf-worker-runtime (udf/worker/runtime), which
-    relocates io.grpc and Guava under org.sparkproject.spark_udf_worker and
-    leaves Netty and protobuf-java to the rest of the Spark classpath.
+    The spark-udf-worker-runtime module packages this module for the Spark
+    distribution and relocates its gRPC and protobuf dependencies. This
+    module remains unshaded so its focused tests and engine integration tests
+    run against the normal development classpath.
   -->
   <dependencies>
     <dependency>

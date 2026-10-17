@@ -480,7 +480,7 @@ object SparkBuild extends PomBuild {
   /* UDF Worker gRPC settings */
   enable(UDFWorkerGrpc.settings)(udfWorkerGrpc)
 
-  /* UDF Worker runtime settings */
+  /* UDF Worker distribution runtime settings */
   enable(UDFWorkerRuntime.settings)(udfWorkerRuntime)
 
   /* Config module protobuf settings */
@@ -1131,26 +1131,10 @@ object SparkProtobuf {
 }
 
 object UDFWorkerProto {
-  // Reuses SparkConnectCommon for proto codegen wiring; overrides the assembly
-  // fields that need the UDF-worker namespace and restricts code generation to
-  // protobuf-java messages only. The gRPC service stubs are generated in the
-  // separate udf-worker-grpc module, so this module (and its consumers) carry
-  // no gRPC dependency.
+  // Reuses SparkConnectCommon for proto codegen wiring and restricts code
+  // generation to protobuf-java messages only. The distribution runtime owns
+  // shading; this module and its consumers stay unshaded for compilation and tests.
   lazy val settings = SparkConnectCommon.settings ++ Seq(
-    // Include only this module's jar and protobuf-java in the assembly.
-    (assembly / assemblyExcludedJars) := {
-      val cp = (assembly / fullClasspath).value
-      val validPrefixes = Set("spark-udf-worker-proto", "protobuf-")
-      cp filterNot { v =>
-        validPrefixes.exists(v.data.getName.startsWith)
-      }
-    },
-
-    (assembly / assemblyShadeRules) := Seq(
-      ShadeRule.rename("com.google.protobuf.**" ->
-        "org.sparkproject.spark_udf_worker.protobuf.@1").inAll
-    ),
-
     // Generate only protobuf-java messages here (overrides the java + grpc-java
     // targets inherited from SparkConnectCommon).
     (Compile / PB.targets) := Seq(
@@ -1206,64 +1190,78 @@ object UDFWorkerGrpc {
 }
 
 object UDFWorkerRuntime {
-  val buildTestDeps = TaskKey[Unit]("buildTestDeps", "Build needed dependencies for test.")
-
-  // Packages udf-worker-grpc with gRPC and Guava relocated under
-  // org.sparkproject.spark_udf_worker, so the direct dispatcher can sit on the Spark
-  // runtime classpath. Netty and protobuf-java stay unrelocated and unbundled: gRPC
-  // uses Spark's Netty and its native transports, and the stubs must share protobuf
-  // with the udf-worker-proto messages. CopyDependencies puts the assembly output in
-  // the jars directory. This needs to be consistent with the content of
-  // `maven-shade-plugin` in udf/worker/runtime/pom.xml.
   lazy val settings = Seq(
     (assembly / test) := { },
 
     (assembly / logLevel) := Level.Info,
 
-    // Exclude `scala-library` from assembly.
     (assembly / assemblyPackageScala / assembleArtifact) := false,
 
+    // This needs to be consistent with udf/worker/runtime's maven-shade-plugin.
     (assembly / assemblyExcludedJars) := {
       val cp = (assembly / fullClasspath).value
-      val validPrefixes = Set("spark-udf-worker-grpc", "grpc-", "perfmark-api", "guava-",
-        "failureaccess-", "gson-", "annotations-", "animal-sniffer-annotations")
+      val validPrefixes = Set(
+        "spark-udf-worker-", "grpc-", "proto-google-common-protos-",
+        "perfmark-api-", "annotations-", "animal-sniffer-annotations-", "gson-",
+        "guava-", "failureaccess-")
       cp filterNot { v =>
-        validPrefixes.exists(v.data.getName.startsWith)
+        val name = v.data.getName
+        validPrefixes.exists(name.startsWith) ||
+          (name.startsWith("protobuf-java-") && !name.startsWith("protobuf-java-util-"))
       }
     },
 
+    // These rules need to be consistent with udf/worker/runtime's maven-shade-plugin.
     (assembly / assemblyShadeRules) := Seq(
-      ShadeRule.rename("io.grpc.**" -> "org.sparkproject.spark_udf_worker.grpc.@1").inAll,
+      ShadeRule.rename("com.google.protobuf.**" ->
+        "org.sparkproject.spark_udf_worker.protobuf.@1").inAll,
+      ShadeRule.rename("io.grpc.**" ->
+        "org.sparkproject.spark_udf_worker.grpc.@1").inAll,
+      ShadeRule.rename("io.perfmark.**" ->
+        "org.sparkproject.spark_udf_worker.io_perfmark.@1").inAll,
+      ShadeRule.rename("android.annotation.**" ->
+        "org.sparkproject.spark_udf_worker.android_annotation.@1").inAll,
+      ShadeRule.rename("org.codehaus.mojo.animal_sniffer.**" ->
+        "org.sparkproject.spark_udf_worker.animal_sniffer.@1").inAll,
+      ShadeRule.rename("com.google.gson.**" ->
+        "org.sparkproject.spark_udf_worker.gson.@1").inAll,
       ShadeRule.rename("com.google.common.**" ->
         "org.sparkproject.spark_udf_worker.guava.@1").inAll,
       ShadeRule.rename("com.google.thirdparty.**" ->
         "org.sparkproject.spark_udf_worker.guava.thirdparty.@1").inAll,
-      ShadeRule.rename("io.perfmark.**" ->
-        "org.sparkproject.spark_udf_worker.io_perfmark.@1").inAll,
-      ShadeRule.rename("com.google.gson.**" -> "org.sparkproject.spark_udf_worker.gson.@1").inAll,
-      ShadeRule.rename("android.annotation.**" ->
-        "org.sparkproject.spark_udf_worker.android_annotation.@1").inAll,
-      ShadeRule.rename("org.codehaus.mojo.animal_sniffer.**" ->
-        "org.sparkproject.spark_udf_worker.animal_sniffer.@1").inAll
+      ShadeRule.rename("org.sparkproject.guava.**" ->
+        "org.sparkproject.spark_udf_worker.guava.@1").inAll,
+      ShadeRule.rename("com.google.api.**" ->
+        "org.sparkproject.spark_udf_worker.google_protos.api.@1").inAll,
+      ShadeRule.rename("com.google.apps.**" ->
+        "org.sparkproject.spark_udf_worker.google_protos.apps.@1").inAll,
+      ShadeRule.rename("com.google.cloud.**" ->
+        "org.sparkproject.spark_udf_worker.google_protos.cloud.@1").inAll,
+      ShadeRule.rename("com.google.geo.**" ->
+        "org.sparkproject.spark_udf_worker.google_protos.geo.@1").inAll,
+      ShadeRule.rename("com.google.logging.**" ->
+        "org.sparkproject.spark_udf_worker.google_protos.logging.@1").inAll,
+      ShadeRule.rename("com.google.longrunning.**" ->
+        "org.sparkproject.spark_udf_worker.google_protos.longrunning.@1").inAll,
+      ShadeRule.rename("com.google.rpc.**" ->
+        "org.sparkproject.spark_udf_worker.google_protos.rpc.@1").inAll,
+      ShadeRule.rename("com.google.shopping.**" ->
+        "org.sparkproject.spark_udf_worker.google_protos.shopping.@1").inAll,
+      ShadeRule.rename("com.google.type.**" ->
+        "org.sparkproject.spark_udf_worker.google_protos.type.@1").inAll
     ),
 
     (assembly / assemblyMergeStrategy) := {
       case m if m.toLowerCase(Locale.ROOT).endsWith("manifest.mf") => MergeStrategy.discard
-      case m if m.toLowerCase(Locale.ROOT).matches("meta-inf.*\\.sf$") => MergeStrategy.discard
+      case m if m.toLowerCase(Locale.ROOT).matches("meta-inf.*\\.(sf|dsa|rsa)$") =>
+        MergeStrategy.discard
+      case m if m.toLowerCase(Locale.ROOT)
+          .matches("meta-inf/versions/[^/]+/module-info\\.class") => MergeStrategy.discard
       case m if m.toLowerCase(Locale.ROOT).startsWith("meta-inf/services/") =>
         MergeStrategy.filterDistinctLines
       case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
-      // Bundled libraries' module descriptors do not describe the shaded jar.
-      case m if m.endsWith("module-info.class") => MergeStrategy.discard
       case _ => MergeStrategy.first
-    },
-
-    // The tests check the jars directory that `assembly/package` produces.
-    buildTestDeps := {
-      (LocalProject("assembly") / Compile / Keys.`package`).value
-    },
-    test := ((Test / test) dependsOn (buildTestDeps)).value,
-    testOnly := ((Test / testOnly) dependsOn (buildTestDeps)).evaluated
+    }
   )
 }
 
@@ -1985,10 +1983,10 @@ object CopyDependencies {
             if (!noProvidedSparkJars) {
               Files.copy(fidProtobuf.toPath, destJar.toPath)
             }
-          } else if (jar.getName.contains("spark-udf-worker-grpc")) {
-            // Don't copy the UDF worker gRPC JAR as it is shaded in the UDF worker runtime.
           } else if (jar.getName.contains("spark-udf-worker-runtime")) {
             Files.copy(fidUdfWorkerRuntime.toPath, destJar.toPath)
+          } else if (jar.getName.contains("spark-udf-worker-")) {
+            // The shaded runtime contains proto, core, and gRPC worker classes.
           } else {
             Files.copy(jar.toPath(), destJar.toPath())
           }

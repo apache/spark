@@ -91,7 +91,6 @@ class SparkEnvUDFDispatcherSuite extends SparkFunSuite {
     assert(e.getMessage.contains("DIRECT"))
     assert(e.getMessage.contains("spark-udf-worker-runtime"))
     assert(e.getMessage.contains(SparkEnv.DIRECT_DISPATCHER_FACTORY_CLASS))
-    assert(e.getCause.isInstanceOf[ClassNotFoundException])
   }
 
   test("stop waits for lazy dispatcher manager creation and closes created dispatchers") {

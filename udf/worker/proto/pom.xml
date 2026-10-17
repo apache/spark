@@ -94,55 +94,6 @@
         </executions>
       </plugin>
       <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-shade-plugin</artifactId>
-        <!--
-          Override the parent pom's shade configuration completely (rather than
-          merging) so this module's shade output contains only the proto module
-          plus its relocated protobuf-java classes. The shaded fat jar is published
-          as an attached `-shaded` classifier artifact, keeping the main artifact
-          unshaded so consumers (e.g. spark-udf-worker-core) and their tests can
-          continue to compile against the unrelocated com.google.protobuf.ByteString.
-          This mirrors the SBT setup where `udf-worker-proto/assembly` produces a
-          shaded fat jar separately from the regular `package` output.
-        -->
-        <configuration combine.self="override">
-          <shadedArtifactAttached>true</shadedArtifactAttached>
-          <shadedClassifierName>shaded</shadedClassifierName>
-          <shadeTestJar>false</shadeTestJar>
-          <artifactSet>
-            <includes>
-              <include>com.google.protobuf:*</include>
-            </includes>
-          </artifactSet>
-          <relocations>
-            <relocation>
-              <pattern>com.google.protobuf</pattern>
-              <shadedPattern>${spark.shade.packageName}.spark_udf_worker.protobuf</shadedPattern>
-              <includes>
-                <include>com.google.protobuf.**</include>
-              </includes>
-            </relocation>
-          </relocations>
-          <filters>
-            <filter>
-              <artifact>*:*</artifact>
-              <excludes>
-                <exclude>google/protobuf/**</exclude>
-              </excludes>
-            </filter>
-          </filters>
-        </configuration>
-        <executions>
-          <execution>
-            <phase>package</phase>
-            <goals>
-              <goal>shade</goal>
-            </goals>
-          </execution>
-        </executions>
-      </plugin>
-      <plugin>
         <groupId>net.alchim31.maven</groupId>
         <artifactId>scala-maven-plugin</artifactId>
       </plugin>
