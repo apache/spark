@@ -49,7 +49,7 @@ the properties.
 
 #### Syntax
 ```sql
-ALTER VIEW view_identifier SET TBLPROPERTIES ( property_key = property_val [ , ... ] )
+ALTER VIEW view_identifier SET TBLPROPERTIES ( property_key [=] property_val [ , ... ] )
 ```
 
 #### Parameters
@@ -62,6 +62,8 @@ ALTER VIEW view_identifier SET TBLPROPERTIES ( property_key = property_val [ , .
 * **property_key**
 
     Specifies the property key. The key may consists of multiple parts separated by dot.
+    The `=` between the key and the value is optional; `SET TBLPROPERTIES ('key1' 'val1')`
+    is equivalent to `SET TBLPROPERTIES ('key1'='val1')`.
 
     **Syntax:** `[ key_part1 ] [ .key_part2 ] [ ... ]`
 
