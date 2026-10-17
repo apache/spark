@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.linalg
 
-import java.util.Random
+import java.util.{Locale, Random}
 
 import scala.collection.mutable.{Map => MutableMap}
 
@@ -103,6 +103,70 @@ class MatricesSuite extends SparkMLFunSuite {
     val sm2 = dm2.asInstanceOf[DenseMatrix].toSparse
     assert(sm1 === sm2.transpose)
     assert(sm1 === dm2.transpose)
+  }
+
+  test("equals preserves Breeze floating-point and storage semantics") {
+    val values = Seq(0.0, -0.0, 1.0, Double.NaN,
+      Double.PositiveInfinity, Double.NegativeInfinity)
+    val matrices = values.flatMap { value =>
+      val dense = new DenseMatrix(2, 2, Array(0.0, value, 2.0, 0.0))
+      val sparse = new SparseMatrix(2, 2, Array(0, 1, 2), Array(1, 0), Array(value, 2.0))
+      Seq(dense, dense.copy, sparse, sparse.copy, dense.transpose, sparse.transpose)
+    } ++ Seq(
+      new DenseMatrix(0, 2, Array.emptyDoubleArray),
+      new DenseMatrix(2, 0, Array.emptyDoubleArray),
+      new SparseMatrix(0, 2, Array(0, 0, 0), Array.emptyIntArray, Array.emptyDoubleArray),
+      new SparseMatrix(2, 0, Array(0), Array.emptyIntArray, Array.emptyDoubleArray))
+
+    for (left <- matrices; right <- matrices) {
+      assert(left.equals(right) === left.asBreeze.equals(right.asBreeze))
+    }
+    matrices.foreach { matrix =>
+      assert(!matrix.equals(null))
+      assert(!matrix.equals(matrix.toArray))
+    }
+  }
+
+  test("sparse equality preserves explicit-zero compatibility") {
+    val empty = new SparseMatrix(3, 1, Array(0, 0), Array.emptyIntArray, Array.emptyDoubleArray)
+    val zeroAtFirst = new SparseMatrix(3, 1, Array(0, 1), Array(0), Array(0.0))
+    val zeroAtLast = new SparseMatrix(3, 1, Array(0, 1), Array(2), Array(-0.0))
+    assert(zeroAtFirst.equals(empty))
+    assert(zeroAtLast.equals(empty))
+    assert(!zeroAtFirst.equals(zeroAtLast))
+    assert(zeroAtFirst.transpose.equals(zeroAtLast.transpose))
+
+    val nonzero = new SparseMatrix(3, 1, Array(0, 1), Array(0), Array(2.0))
+    val middleZero = new SparseMatrix(3, 1, Array(0, 2), Array(0, 1), Array(2.0, 0.0))
+    val lastZero = new SparseMatrix(3, 1, Array(0, 2), Array(0, 2), Array(2.0, -0.0))
+    assert(middleZero.equals(nonzero))
+    assert(lastZero.equals(nonzero))
+    assert(!middleZero.equals(lastZero))
+    assert(middleZero.transpose.equals(lastZero.transpose))
+  }
+
+  test("sparse hashCode preserves Breeze value hashing") {
+    val sparse = new SparseMatrix(3, 2, Array(0, 3, 6), Array(0, 1, 2, 0, 1, 2),
+      Array(0.0, -0.0, Double.NaN, Double.PositiveInfinity, 4294967297.0, 2.5))
+    val ordinary = new SparseMatrix(3, 2, Array(0, 2, 4), Array(0, 2, 0, 1),
+      Array(1.0, 2.0, 3.0, 4.0))
+    val empty = new SparseMatrix(2, 3, Array(0, 0, 0, 0),
+      Array.emptyIntArray, Array.emptyDoubleArray)
+    Seq(sparse, ordinary, empty).foreach { matrix =>
+      Seq(matrix, matrix.transpose).foreach { m =>
+        assert(m.hashCode() === m.asBreeze.hashCode())
+      }
+    }
+  }
+
+  test("sparse equality and hashing do not materialize dense storage") {
+    val matrix = new SparseMatrix(Int.MaxValue, 2, Array(0, 1, 2),
+      Array(0, Int.MaxValue - 1), Array(1.0, 2.0))
+    val copy = matrix.copy
+    assert(matrix.equals(copy))
+    assert(matrix.hashCode() === copy.hashCode())
+    copy.values(1) = 3.0
+    assert(!matrix.equals(copy))
   }
 
   test("matrix copies are deep copies") {
@@ -371,6 +435,81 @@ class MatricesSuite extends SparkMLFunSuite {
     assert(sm13 === smZeros)
     assert(sm13.values === Array.empty[Double])
     assert(sm13.isColMajor)
+  }
+
+  test("sparse layout conversion preserves sorted indices and removes explicit zeros") {
+    val colPtrs = Array(0, 0, 3, 3, 5, 5)
+    val rowIndices = Array(0, 1, 3, 1, 2)
+    val values = Array(1.0, 0.0, 2.0, -0.0, 3.0)
+    val matrix = new SparseMatrix(4, 5, colPtrs.clone(), rowIndices.clone(), values.clone())
+
+    Seq(matrix, matrix.transpose).foreach { input =>
+      val converted = input.toSparseMatrix(colMajor = input.isRowMajor)
+      assert(converted.numRows === input.numRows)
+      assert(converted.numCols === input.numCols)
+      assert(converted.isTransposed !== input.isTransposed)
+      assert(converted.colPtrs === Array(0, 1, 1, 2, 3))
+      assert(converted.rowIndices === Array(1, 3, 1))
+      assert(converted.values === Array(1.0, 3.0, 2.0))
+
+      val restored = converted.toSparseMatrix(colMajor = input.isColMajor)
+      assert(restored.colPtrs === Array(0, 0, 2, 2, 3, 3))
+      assert(restored.rowIndices === Array(0, 3, 2))
+      assert(restored.values === Array(1.0, 2.0, 3.0))
+      assert(restored.isTransposed === input.isTransposed)
+    }
+
+    assert(matrix.colPtrs === colPtrs)
+    assert(matrix.rowIndices === rowIndices)
+    assert(matrix.values.map(java.lang.Double.doubleToRawLongBits) ===
+      values.map(java.lang.Double.doubleToRawLongBits))
+  }
+
+  test("sparse layout conversion with empty matrices") {
+    Seq((0, 0), (0, 4), (3, 0), (3, 4)).foreach { case (numRows, numCols) =>
+      val matrix = new SparseMatrix(numRows, numCols, new Array[Int](numCols + 1),
+        Array.emptyIntArray, Array.emptyDoubleArray)
+      Seq(matrix, matrix.transpose).foreach { input =>
+        val converted = input.toSparseMatrix(colMajor = input.isRowMajor)
+        val numPtrs = if (input.isRowMajor) input.numCols else input.numRows
+        assert(converted.numRows === input.numRows)
+        assert(converted.numCols === input.numCols)
+        assert(converted.isTransposed !== input.isTransposed)
+        assert(converted.colPtrs === new Array[Int](numPtrs + 1))
+        assert(converted.rowIndices.isEmpty)
+        assert(converted.values.isEmpty)
+      }
+    }
+  }
+
+  test("sparse layout conversion preserves NaN and infinite values") {
+    val matrix = new SparseMatrix(3, 2, Array(0, 2, 4), Array(0, 2, 0, 1),
+      Array(Double.NaN, -0.0, Double.PositiveInfinity, Double.NegativeInfinity))
+    Seq(matrix, matrix.transpose).foreach { input =>
+      val converted = input.toSparseMatrix(colMajor = input.isRowMajor)
+      assert(converted.colPtrs === Array(0, 2, 3, 3))
+      assert(converted.rowIndices === Array(0, 1, 1))
+      assert(converted.values.length === 3)
+      assert(converted.values(0).isNaN)
+      assert(converted.values(1) === Double.PositiveInfinity)
+      assert(converted.values(2) === Double.NegativeInfinity)
+    }
+  }
+
+  test("sparse layout conversion does not densify large matrices") {
+    val size = 100000
+    val colPtrs = Array.fill(size + 1)(1)
+    colPtrs(0) = 0
+    colPtrs(size) = 2
+    val matrix = new SparseMatrix(size, size, colPtrs, Array(size - 1, 0), Array(1.0, 2.0))
+    Seq(matrix, matrix.transpose).foreach { input =>
+      val converted = input.toSparseMatrix(colMajor = input.isRowMajor)
+      assert(converted.numRows === size)
+      assert(converted.numCols === size)
+      assert(converted.colPtrs === colPtrs)
+      assert(converted.rowIndices === Array(size - 1, 0))
+      assert(converted.values === Array(2.0, 1.0))
+    }
   }
 
   test("sparse to dense") {
@@ -921,6 +1060,57 @@ class MatricesSuite extends SparkMLFunSuite {
 
     lines = mat.toString(5, 100).split('\n')
     assert(lines.length == 5 && lines.forall(_.length <= 100))
+  }
+
+  test("matrix formatting preserves Breeze layout and truncation") {
+    val dense = new DenseMatrix(3, 4,
+      Array(0.0, -0.0, 1.0, 12.0, -123.0, 1e100, Double.NaN,
+        Double.PositiveInfinity, Double.NegativeInfinity, 0.01, 0.0, 3.0))
+    val sparse = new SparseMatrix(3, 4, Array(0, 2, 2, 4, 5),
+      Array(0, 2, 0, 1, 2), Array(-0.0, 1.0, Double.NaN, 0.0, Double.PositiveInfinity))
+    val tall = new DenseMatrix(85, 1, Array.tabulate(85)(_.toDouble))
+    val wide = DenseMatrix.ones(2, 30)
+    val matrices = Seq(dense, sparse, dense.transpose, sparse.transpose,
+      tall, tall.toSparse, wide, DenseMatrix.zeros(0, 0), DenseMatrix.zeros(0, 3),
+      DenseMatrix.zeros(3, 0), SparseMatrix.fromCOO(0, 3, Seq.empty),
+      SparseMatrix.fromCOO(3, 0, Seq.empty))
+    val limits = Seq((-1, -5), (0, 0), (1, 1), (2, 15), (3, 25), (5, 50),
+      (80, 80), (Int.MaxValue, Int.MaxValue))
+    matrices.foreach { matrix =>
+      assert(matrix.toString == matrix.asBreeze.toString())
+      limits.foreach { case (lines, width) =>
+        withClue(s"${matrix.numRows} x ${matrix.numCols}, limits ($lines, $width): ") {
+          assert(matrix.toString(lines, width) == matrix.asBreeze.toString(lines, width))
+        }
+      }
+    }
+    val expectedWideRow = "1.0  " * 13
+    assert(wide.toString == s"$expectedWideRow... (30 total)\n$expectedWideRow...")
+    assert(new DenseMatrix(2, 2, Array(1.0, 20.0, 3.0, 4.0)).toString(10, 80) ==
+      "1.0   3.0  \n20.0  4.0  ")
+    assert(new SparseMatrix(2, 2, Array(0, 1, 2), Array(1, 0), Array(2.0, 3.0))
+      .toString(2, 1) == "2 x 2 CSCMatrix\n(1,0) 2.0")
+  }
+
+  test("matrix formatting preserves the default formatting locale") {
+    val originalLocale = Locale.getDefault(Locale.Category.FORMAT)
+    try {
+      Locale.setDefault(Locale.Category.FORMAT, Locale.forLanguageTag("ar-EG"))
+      val dense = new DenseMatrix(2, 2, Array(1.0, 2.0, 3.0, 4.0))
+      val sparse = dense.toSparse
+      assert(dense.toString(1, 1) == dense.asBreeze.toString(1, 1))
+      assert(sparse.toString == sparse.asBreeze.toString())
+      assert(sparse.transpose.toString == sparse.transpose.asBreeze.toString())
+    } finally {
+      Locale.setDefault(Locale.Category.FORMAT, originalLocale)
+    }
+  }
+
+  test("formatting large sparse matrices does not allocate dense storage") {
+    val size = 100000
+    val matrix = SparseMatrix.fromCOO(size, size, Seq((size - 1, 0, 2.0), (0, size - 1, 3.0)))
+    assert(matrix.toString(2, 80) == s"$size x $size CSCMatrix\n(${size - 1},0) 2.0")
+    assert(matrix.transpose.toString(2, 80) == s"$size x $size CSCMatrix\n(${size - 1},0) 3.0")
   }
 
   test("numNonzeros and numActives") {
