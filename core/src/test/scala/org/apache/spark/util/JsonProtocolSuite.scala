@@ -305,6 +305,37 @@ class JsonProtocolSuite extends SparkFunSuite {
     assertEquals(exceptionFailure, JsonProtocol.taskEndReasonFromJson(oldEvent))
   }
 
+  test("OOM task failure classification is preserved in event logs") {
+    val exceptionFailure = new ExceptionFailure(
+      new RuntimeException("spill failed", new OutOfMemoryError("heap")), Nil)
+    testTaskEndReason(exceptionFailure)
+    val executorFailure = ExecutorLostFailure("1", true, Some("exit code 137"))
+    executorFailure.isOutOfMemoryError = true
+    testTaskEndReason(executorFailure)
+  }
+
+  test("OOM task failure classification is compatible with old event logs") {
+    val wrapped = new ExceptionFailure(
+      new RuntimeException("spill failed", new OutOfMemoryError("heap")), Nil)
+    val wrappedJson = toJsonString(JsonProtocol.taskEndReasonToJson(wrapped, _))
+      .removeField("Out Of Memory Error")
+    assert(!JsonProtocol.taskEndReasonFromJson(wrappedJson)
+      .asInstanceOf[ExceptionFailure].isOutOfMemoryError)
+
+    val direct = new ExceptionFailure(new OutOfMemoryError("heap"), Nil)
+    val directJson = toJsonString(JsonProtocol.taskEndReasonToJson(direct, _))
+      .removeField("Out Of Memory Error")
+    assert(JsonProtocol.taskEndReasonFromJson(directJson)
+      .asInstanceOf[ExceptionFailure].isOutOfMemoryError)
+
+    val executorFailure = ExecutorLostFailure("1", true, Some("OOMKilled, exit code 137"))
+    executorFailure.isOutOfMemoryError = true
+    val executorJson = toJsonString(JsonProtocol.taskEndReasonToJson(executorFailure, _))
+      .removeField("Out Of Memory Error")
+    assert(!JsonProtocol.taskEndReasonFromJson(executorJson)
+      .asInstanceOf[ExecutorLostFailure].isOutOfMemoryError)
+  }
+
   test("StageInfo backward compatibility (details, accumulables)") {
     val info = makeStageInfo(1, 2, 3, 4L, 5L)
     val newJson = toJsonString(
@@ -1392,6 +1423,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
         assert(r1.description === r2.description)
         assertSeqEquals(r1.stackTrace, r2.stackTrace, assertStackTraceElementEquals)
         assert(r1.fullStackTrace === r2.fullStackTrace)
+        assert(r1.isOutOfMemoryError === r2.isOutOfMemoryError)
         val filteredUpdates = r1.accumUpdates
           .filterNot { acc => acc.name.exists(accumulableExcludeList.contains) }
         assertSeqEquals[AccumulableInfo](filteredUpdates, r2.accumUpdates, (a, b) => a.equals(b))
@@ -1403,11 +1435,11 @@ private[spark] object JsonProtocolSuite extends Assertions {
         assert(jobId1 === jobId2)
         assert(partitionId1 === partitionId2)
         assert(attemptNumber1 === attemptNumber2)
-      case (ExecutorLostFailure(execId1, exit1CausedByApp, reason1),
-          ExecutorLostFailure(execId2, exit2CausedByApp, reason2)) =>
-        assert(execId1 === execId2)
-        assert(exit1CausedByApp === exit2CausedByApp)
-        assert(reason1 === reason2)
+      case (r1: ExecutorLostFailure, r2: ExecutorLostFailure) =>
+        assert(r1.execId === r2.execId)
+        assert(r1.exitCausedByApp === r2.exitCausedByApp)
+        assert(r1.reason === r2.reason)
+        assert(r1.isOutOfMemoryError === r2.isOutOfMemoryError)
       case (ExecutorShutdownFailure(execId1), ExecutorShutdownFailure(execId2)) =>
         assert(execId1 === execId2)
       case (UnknownReason, UnknownReason) =>
