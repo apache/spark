@@ -79,6 +79,7 @@ license: |
   - For a `SELECT` over partitions `dep = 'hr'` and `dep = '1'` with the filter `CAST(dep AS INT) = 1`, evaluating the predicate for `dep = 'hr'` fails. Returning `true` kept that partition, and because Spark had removed the post-scan filter, the query incorrectly returned its rows.
   - For a metadata-only `DELETE` with the same condition, returning `true` could delete the `dep = 'hr'` partition even though the condition never matched it.
   Spark now propagates the evaluation error in these cases. Queries that previously returned an incorrect result may therefore fail, and the error can surface while the scan is built rather than while rows are read. Runtime filters are unaffected because Spark still evaluates their condition after pruning.
+- Since Spark 4.3, `corr` returns `NULL` instead of failing with `DIVIDE_BY_ZERO` in ANSI mode when either input column has zero variance over two or more rows, for example a constant column. In non-ANSI mode, the result is `NULL` as before.
 
 ## Upgrading from Spark SQL 4.2.0 to 4.2.1
 
