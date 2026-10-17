@@ -55,6 +55,10 @@ on:
         required: false
         type: string
         default: '{}'
+    secrets:
+      SPARK_DEVELOCITY_ACCESS_KEY:
+        description: Develocity access key for develocity.apache.org.
+        required: false
 jobs:
   # Precompile Spark with SBT once and publish target/ as an artifact for the
   # matrix entries below to consume. Optional: any failure here degrades the
@@ -87,6 +91,8 @@ jobs:
           java-version: ${{ inputs.java }}
           coursier: cache
       - name: Build Spark
+        env:
+          DEVELOCITY_ACCESS_KEY: ${{ secrets.SPARK_DEVELOCITY_ACCESS_KEY }}
         run: |
           ./build/sbt -Phadoop-3 -Pyarn -Pspark-ganglia-lgpl -Phadoop-cloud -Phive \
             -Pkubernetes -Pjvm-profiler -Pkinesis-asl -Pcredential-aws -Phive-thriftserver \
@@ -140,6 +146,7 @@ jobs:
           - >-
             pyspark-pandas-slow-connect
     env:
+      DEVELOCITY_ACCESS_KEY: ${{ secrets.SPARK_DEVELOCITY_ACCESS_KEY }}
       MODULES_TO_TEST: ${{ matrix.modules }}
       PYTHON_TO_TEST: python${{inputs.python}}
       HADOOP_PROFILE: ${{ inputs.hadoop }}

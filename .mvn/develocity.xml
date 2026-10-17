@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<develocity
+    xmlns="https://www.gradle.com/develocity-maven" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="https://www.gradle.com/develocity-maven https://www.gradle.com/schema/develocity-maven.xsd">
+  <projectId>spark</projectId>
+  <server>
+    <url>https://develocity.apache.org</url>
+  </server>
+  <buildScan>
+    <publishing>
+      <onlyIf><![CDATA[authenticated]]></onlyIf>
+    </publishing>
+    <backgroundBuildScanUpload>#{env['GITHUB_ACTIONS'] == null}</backgroundBuildScanUpload>
+  </buildScan>
+  <buildCache>
+    <remote>
+      <enabled>#{env['DEVELOCITY_ACCESS_KEY'] != null and env['DEVELOCITY_ACCESS_KEY'] != ''}</enabled>
+      <storeEnabled>#{env['GITHUB_ACTIONS'] != null and env['DEVELOCITY_ACCESS_KEY'] != null and env['DEVELOCITY_ACCESS_KEY'] != ''}</storeEnabled>
+    </remote>
+  </buildCache>
+</develocity>
