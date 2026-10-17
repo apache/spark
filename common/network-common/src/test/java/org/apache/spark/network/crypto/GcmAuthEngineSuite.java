@@ -17,6 +17,9 @@
 
 package org.apache.spark.network.crypto;
 
+import com.google.common.primitives.Longs;
+import com.google.crypto.tink.subtle.AesGcmHkdfStreaming;
+import com.google.crypto.tink.subtle.StreamSegmentEncrypter;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
@@ -567,6 +570,60 @@ public class GcmAuthEngineSuite extends AuthEngineSuite {
       }
       assertEquals(data.length, offset);
       assertArrayEquals(data, decrypted);
+    }
+  }
+
+  @Test
+  public void testCiphertextLengthLargerThanMaxInt() throws Exception {
+    TransportConf gcmConf = getConf(2, false);
+    try (AuthEngine client = new AuthEngine("appId", "secret", gcmConf);
+         AuthEngine server = new AuthEngine("appId", "secret", gcmConf)) {
+      AuthMessage clientChallenge = client.challenge();
+      AuthMessage serverResponse = server.response(clientChallenge);
+      client.deriveSessionCipher(clientChallenge, serverResponse);
+      GcmTransportCipher cipher = (GcmTransportCipher) server.sessionCipher();
+      GcmTransportCipher.DecryptionHandler decryptionHandler = cipher.getDecryptionHandler();
+      AesGcmHkdfStreaming streaming = cipher.getAesGcmHkdfStreaming();
+
+      // remaining ciphertext length is Integer.MAX_VALUE + 1,
+      // which becomes Integer.MIN_VALUE when cast to int.
+      long expectedLength = (long) GcmTransportCipher.LENGTH_HEADER_BYTES +
+              streaming.getHeaderLength() + Integer.MAX_VALUE + 1L;
+      StreamSegmentEncrypter encrypter = streaming.newStreamSegmentEncrypter(
+              Longs.toByteArray(expectedLength));
+      ByteBuffer header = encrypter.getHeader();
+      ByteBuf ciphertext = Unpooled.buffer(GcmTransportCipher.LENGTH_HEADER_BYTES +
+              header.remaining() + 1)
+              .writeLong(expectedLength)
+              .writeBytes(header)
+              .writeByte(0);
+      ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
+
+      decryptionHandler.channelRead(ctx, ciphertext);
+
+      verify(ctx, never()).fireChannelRead(any());
+    }
+  }
+
+  @Test
+  public void testInvalidExpectedCiphertextLength() throws Exception {
+    TransportConf gcmConf = getConf(2, false);
+    try (AuthEngine client = new AuthEngine("appId", "secret", gcmConf);
+         AuthEngine server = new AuthEngine("appId", "secret", gcmConf)) {
+      AuthMessage clientChallenge = client.challenge();
+      AuthMessage serverResponse = server.response(clientChallenge);
+      client.deriveSessionCipher(clientChallenge, serverResponse);
+      GcmTransportCipher cipher = (GcmTransportCipher) server.sessionCipher();
+      GcmTransportCipher.DecryptionHandler decryptionHandler = cipher.getDecryptionHandler();
+      long invalidLength = (long) GcmTransportCipher.LENGTH_HEADER_BYTES +
+              cipher.getAesGcmHkdfStreaming().getHeaderLength() - 1;
+      ByteBuf ciphertext = Unpooled.buffer(8).writeLong(invalidLength);
+
+      IllegalStateException error = assertThrows(
+              IllegalStateException.class,
+              () -> decryptionHandler.channelRead(mock(ChannelHandlerContext.class), ciphertext));
+
+      assertEquals("Invalid expected ciphertext length: " + invalidLength, error.getMessage());
     }
   }
 
