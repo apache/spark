@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, L
 import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.test.TestHiveVersion
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
@@ -428,6 +429,40 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
       client.getPartitions("default", "src_part", None).size)
   }
 
+  test("getPartitionLocations(db, table, spec)") {
+    val partitions = client.getPartitionLocations("default", "src_part", None)
+    assert(testPartitionCount == partitions.size)
+    assert(partitions.forall(_.locationUri.isDefined))
+
+    val prefix = client.getPartitionLocations(
+      "default", "src_part", Some(Map("key1" -> "1")))
+    assert(testPartitionCount == prefix.size)
+    assert(prefix.forall(_.locationUri.isDefined))
+
+    val partial = client.getPartitionLocations(
+      "default", "src_part", Some(Map("key2" -> "1")))
+    assert(partial.size == 1)
+    assert(partial.head.spec == Map("key1" -> "1", "key2" -> "1"))
+    assert(partial.head.locationUri.isDefined)
+
+    assert(client.getPartitionLocations("default", "src", None).isEmpty)
+  }
+
+  test("getPartitionLocations returns the same specs and locations as getPartitions") {
+    // Shims below 4.0 serve getPartitionLocations from the full-fetch path, while
+    // Shim_v4_0 and above fulfill it with HMS partition projection. Running per version,
+    // this pins the projected specs and locations to the classic full-fetch results.
+    Seq(None, Some(Map("key1" -> "1")), Some(Map("key2" -> "1")),
+      Some(Map("key1" -> "1", "key2" -> "1")), Some(Map("key2" -> "unknown"))).foreach { spec =>
+      val full = client.getPartitions("default", "src_part", spec)
+        .map(p => p.spec -> p.storage.locationUri).toSet
+      val light = client.getPartitionLocations("default", "src_part", spec)
+        .map(p => p.spec -> p.locationUri).toSet
+      assert(light == full,
+        s"mismatch between getPartitionLocations and getPartitions with spec: $spec")
+    }
+  }
+
   test("getPartitionsByFilter") {
     // Only one partition [1, 1] for key2 == 1
     val result = client.getPartitionsByFilter(client.getRawHiveTable("default", "src_part"),
@@ -505,6 +540,10 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
       .storage.locationUri.contains(newLocation))
     assert(client.getPartition("default", "src_part", spec)
       .parameters.get(StatsSetupConst.TOTAL_SIZE).contains("0"))
+
+    val customPartitions = client.getPartitionLocations("default", "src_part", Some(spec))
+    assert(customPartitions.length == 1)
+    assert(customPartitions.head.locationUri.contains(newLocation))
   }
 
   test("dropPartitions") {
@@ -728,6 +767,230 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
       val newTotalSize = newPartMeta.get(StatsSetupConst.TOTAL_SIZE).map(_.toLong)
       val newNumFiles = newPartMeta.get(StatsSetupConst.NUM_FILES).map(_.toLong)
       assert(newTotalSize.nonEmpty && newNumFiles.nonEmpty)
+    }
+  }
+
+  test("INSERT OVERWRITE a partition with a custom location uses the location reported by " +
+      "getPartitionLocations") {
+    // Only Shim_v4_0 (and its 4.1/4.2 descendants) implement partition projection via
+    // getPartitionsWithSpecs; earlier shims fall back to the plain getPartitions-based
+    // implementation, which this test is not meant to exercise.
+    withTable("custom_loc_tbl") {
+      withTempDir { partDir =>
+        versionSpark.sql(
+          "CREATE TABLE custom_loc_tbl(c1 int, p1 int) USING PARQUET PARTITIONED BY (p1)")
+        versionSpark.sql("INSERT INTO custom_loc_tbl PARTITION (p1 = 1) VALUES (10)")
+        versionSpark.sql(
+          s"ALTER TABLE custom_loc_tbl PARTITION (p1 = 1) SET LOCATION '${partDir.toURI}'")
+
+        val parts = versionSpark.sessionState.catalog.listPartitionLocations(
+          TableIdentifier("custom_loc_tbl"))
+        assert(parts.length == 1)
+        assert(parts.head.locationUri.map(_.toString.stripSuffix("/")) ==
+          Some(partDir.toURI.toString.stripSuffix("/")))
+
+        // This overwrite must resolve the partition's custom location via
+        // getCustomPartitionLocations, which depends on Shim_v4_0.getPartitionLocations
+        // correctly reporting the post-ALTER location rather than the table's default path.
+        versionSpark.sql("INSERT OVERWRITE TABLE custom_loc_tbl PARTITION (p1 = 1) VALUES (20)")
+        assert(versionSpark.table("custom_loc_tbl").collect().toSeq == Seq(Row(20, 1)))
+        assert(partDir.listFiles().exists(_.getName.startsWith("part-")))
+
+        // A second overwrite must delete-and-rewrite the same custom directory again, proving
+        // the custom location is resolved correctly on every call, not just the first one.
+        versionSpark.sql("INSERT OVERWRITE TABLE custom_loc_tbl PARTITION (p1 = 1) VALUES (30)")
+        assert(versionSpark.table("custom_loc_tbl").collect().toSeq == Seq(Row(30, 1)))
+        assert(partDir.listFiles().count(_.getName.startsWith("part-")) == 1)
+      }
+    }
+  }
+
+  test("getPartitionLocations resolves a partition location that shares a string prefix " +
+      "with the table's own location") {
+    // Guards against a bug in Shim_v4_0.getPartitionLocations (and, previously, getPartitions):
+    // the metastore's MetaStoreServerUtils.getPartitionspecsGroupedByStorageDescriptor groups a
+    // partition into a PartitionSpecWithSharedSD whenever its location has the table's own
+    // location as a *string* prefix -- a plain String.startsWith check, not path-boundary aware.
+    // A sibling directory like "<tableLocation>_external" matches that check even though it is
+    // not actually nested under the table, so the metastore encodes it as a relativePath with no
+    // leading separator (e.g. "_external/p1=1"). Hive's own client-side reconstruction
+    // (PartitionSpecWithSharedSDProxy.Iterator.getCurrent) undoes this with plain string
+    // concatenation, not by joining root and relPath as filesystem path segments --
+    // normalizeLocation must match that exactly or it silently computes the wrong location.
+    withTempDir { baseDir =>
+      val tableDir = new File(baseDir, "prefix_collision_tbl")
+      val siblingDir = new File(baseDir, "prefix_collision_tbl_external")
+      withTable("prefix_collision_tbl") {
+        versionSpark.sql(
+          s"""
+             |CREATE TABLE prefix_collision_tbl(c1 int, p1 int)
+             |USING PARQUET PARTITIONED BY (p1)
+             |LOCATION '${tableDir.toURI}'
+           """.stripMargin)
+        versionSpark.sql("INSERT INTO prefix_collision_tbl PARTITION (p1 = 1) VALUES (10)")
+        versionSpark.sql(
+          s"ALTER TABLE prefix_collision_tbl PARTITION (p1 = 1) SET LOCATION " +
+            s"'${siblingDir.toURI}'")
+
+        val parts = versionSpark.sessionState.catalog.listPartitionLocations(
+          TableIdentifier("prefix_collision_tbl"))
+        assert(parts.length == 1)
+        assert(parts.head.locationUri.map(_.toString.stripSuffix("/")) ==
+          Some(siblingDir.toURI.toString.stripSuffix("/")))
+
+        // This overwrite must resolve the partition's custom location via
+        // getCustomPartitionLocations; if normalizeLocation miscomputed the location, this
+        // would either write to the wrong (likely non-existent) directory or throw.
+        versionSpark.sql(
+          "INSERT OVERWRITE TABLE prefix_collision_tbl PARTITION (p1 = 1) VALUES (20)")
+        assert(versionSpark.table("prefix_collision_tbl").collect().toSeq == Seq(Row(20, 1)))
+        assert(siblingDir.exists() && siblingDir.listFiles().exists(_.getName.startsWith("part-")))
+      }
+    }
+  }
+
+  test("listPartitionLocations and INSERT OVERWRITE with partition specs") {
+    assume(version.startsWith("4."))
+    withTable("spec_part_tbl") {
+      versionSpark.sql(
+        "CREATE TABLE spec_part_tbl(c1 int, p1 int, p2 int) " +
+        "USING PARQUET PARTITIONED BY (p1, p2)")
+      versionSpark.sql(
+        "INSERT INTO spec_part_tbl PARTITION (p1 = 1, p2 = 1) VALUES (10)")
+      versionSpark.sql(
+        "INSERT INTO spec_part_tbl PARTITION (p1 = 1, p2 = 2) VALUES (20)")
+      versionSpark.sql(
+        "INSERT INTO spec_part_tbl PARTITION (p1 = 2, p2 = 1) VALUES (30)")
+      versionSpark.sql(
+        "INSERT INTO spec_part_tbl PARTITION (p1 = 2, p2 = 2) VALUES (40)")
+      // Verify integer key p1=1 does not over-match p1=10 via trailing wildcard without slash
+      versionSpark.sql(
+        "INSERT INTO spec_part_tbl PARTITION (p1 = 10, p2 = 1) VALUES (50)")
+
+      val catalog = versionSpark.sessionState.catalog
+      val tableIdent = TableIdentifier("spec_part_tbl")
+
+      // 1. Leading prefix spec (p1 = 1): pushes down BY_VALUES filter in Shim_v4_0
+      val leadingPartitions = catalog.listPartitionLocations(
+        tableIdent, Some(Map("p1" -> "1")))
+      assert(leadingPartitions.map(_.spec).toSet == Set(
+        Map("p1" -> "1", "p2" -> "1"),
+        Map("p1" -> "1", "p2" -> "2")
+      ))
+
+      // 2. Non-leading spec (p2 = 1): pads leading columns with "" to match p1=.*/p2=1
+      val nonLeadingPartitions = catalog.listPartitionLocations(
+        tableIdent, Some(Map("p2" -> "1")))
+      assert(nonLeadingPartitions.map(_.spec).toSet == Set(
+        Map("p1" -> "1", "p2" -> "1"),
+        Map("p1" -> "2", "p2" -> "1"),
+        Map("p1" -> "10", "p2" -> "1")
+      ))
+
+      // 3. Full spec (p1 = 2, p2 = 2)
+      val fullPartitions = catalog.listPartitionLocations(
+        tableIdent, Some(Map("p1" -> "2", "p2" -> "2")))
+      assert(fullPartitions.map(_.spec).toSet == Set(
+        Map("p1" -> "2", "p2" -> "2")
+      ))
+
+      // 4. End-to-end INSERT OVERWRITE with partition spec
+      versionSpark.sql(
+        "INSERT OVERWRITE TABLE spec_part_tbl PARTITION (p1 = 1, p2 = 1) VALUES (100)")
+      val rows = versionSpark.table("spec_part_tbl").collect().map { r =>
+        (r.getInt(0), r.getInt(1), r.getInt(2))
+      }.toSet
+      assert(rows == Set((100, 1, 1), (20, 1, 2), (30, 2, 1), (40, 2, 2), (50, 10, 1)))
+    }
+  }
+
+  test("listPartitionLocations matches listPartitions across partition location shapes " +
+      "for all Hive versions") {
+    // For Hive 4.0+ shims the projection RPC may group the table's partitions into every
+    // response shape it can produce: partitions inside the table directory form a
+    // shared-SD group whose relative path carries the leading separator, a partition
+    // under a sibling directory that has the table location as a *string* prefix ends up
+    // in a shared-SD group whose relative path has no leading separator, and a partition
+    // outside the table directory is returned with its own storage descriptor. Shims
+    // below 4.0 serve all shapes from the full-fetch path. The new lightweight listing
+    // must report exactly the same specs and locations as the full listPartitions.
+    withTempDir { baseDir =>
+      val tableDir = new File(baseDir, "projection_parity_tbl")
+      val customDir = new File(baseDir, "custom_loc_dir")
+      val prefixSiblingDir = new File(baseDir, "projection_parity_tbl_external")
+      withTable("projection_parity_tbl") {
+        versionSpark.sql(
+          s"""
+             |CREATE TABLE projection_parity_tbl(c1 int, p1 int, p2 int)
+             |USING PARQUET PARTITIONED BY (p1, p2)
+             |LOCATION '${tableDir.toURI}'
+           """.stripMargin)
+        // Partitions at default locations, inside the table directory
+        versionSpark.sql(
+          "INSERT INTO projection_parity_tbl PARTITION (p1 = 1, p2 = 1) VALUES (10)")
+        versionSpark.sql(
+          "INSERT INTO projection_parity_tbl PARTITION (p1 = 1, p2 = 2) VALUES (20)")
+        versionSpark.sql(
+          "INSERT INTO projection_parity_tbl PARTITION (p1 = 10, p2 = 1) VALUES (30)")
+        // Custom location outside the table directory
+        versionSpark.sql(
+          s"ALTER TABLE projection_parity_tbl PARTITION (p1 = 1, p2 = 2) SET LOCATION " +
+            s"'${customDir.toURI}'")
+        // Location under a sibling directory that shares the table location as a string
+        // prefix, without a path separator
+        versionSpark.sql(
+          s"ALTER TABLE projection_parity_tbl PARTITION (p1 = 10, p2 = 1) SET LOCATION " +
+            s"'${prefixSiblingDir.toURI}'")
+
+        val catalog = versionSpark.sessionState.catalog
+        val tableIdent = TableIdentifier("projection_parity_tbl")
+        val specs = Seq(None, Some(Map("p1" -> "1")), Some(Map("p2" -> "1")),
+          Some(Map("p1" -> "1", "p2" -> "2")), Some(Map("p1" -> "10", "p2" -> "1")),
+          Some(Map("p1" -> "unknown")))
+        specs.foreach { spec =>
+          val light = catalog.listPartitionLocations(tableIdent, spec)
+            .map(p => (p.spec, p.locationUri)).toSet
+          val full = catalog.listPartitions(tableIdent, spec)
+            .map(p => (p.spec, p.storage.locationUri)).toSet
+          assert(light == full,
+            s"listPartitionLocations mismatched listPartitions with the partial spec: $spec")
+        }
+      }
+    }
+  }
+
+  test("listPartitionLocations yields identical results with partition projection " +
+      "enabled or disabled") {
+    // Shim_v4_0 and above apply HMS partition projection only when the flag is on, so
+    // for Hive 4.x the results must not depend on the flag. Older shims always take the
+    // full-fetch path, where the flag is irrelevant, hence the version assumption.
+    assume(version.startsWith("4."))
+    withTable("projection_conf_tbl") {
+      versionSpark.sql(
+        "CREATE TABLE projection_conf_tbl(c1 int, p1 int, p2 int) " +
+        "USING PARQUET PARTITIONED BY (p1, p2)")
+      versionSpark.sql(
+        "INSERT INTO projection_conf_tbl PARTITION (p1 = 1, p2 = 1) VALUES (10)")
+      versionSpark.sql(
+        "INSERT INTO projection_conf_tbl PARTITION (p1 = 1, p2 = 2) VALUES (20)")
+
+      val catalog = versionSpark.sessionState.catalog
+      val tableIdent = TableIdentifier("projection_conf_tbl")
+      val specs = Seq(None, Some(Map("p1" -> "1")), Some(Map("p2" -> "1")),
+        Some(Map("p1" -> "1", "p2" -> "1")))
+      def locations(): Seq[Set[(Map[String, String], Option[URI])]] = specs.map { spec =>
+        catalog.listPartitionLocations(tableIdent, spec)
+          .map(p => (p.spec, p.locationUri)).toSet
+      }
+
+      val withProjection = locations()
+      try {
+        versionSpark.conf.setConfString(
+          SQLConf.HIVE_METASTORE_PARTITION_PROJECTION_ENABLED.key, "false")
+        assert(locations() == withProjection)
+      } finally {
+        versionSpark.conf.unsetConf(SQLConf.HIVE_METASTORE_PARTITION_PROJECTION_ENABLED.key)
+      }
     }
   }
 
