@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.immutable.HashSet
-import scala.collection.mutable.{ArrayBuffer, Stack}
+import scala.collection.mutable.{ArrayBuffer, BitSet, LinkedHashMap, Stack}
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.analysis._
@@ -380,6 +380,88 @@ object OptimizeIn extends Rule[LogicalPlan] {
         } else { // newList.length == list.length && newList.length > 1
           expr
         }
+    }
+  }
+}
+
+
+/**
+ * Coalesces OR-connected membership tests on the same value into a single [[In]] predicate, so that
+ * [[OptimizeIn]] (which runs next) can dedup them and, for large lists, convert to [[InSet]]. An
+ * [[EqualTo]] is treated as a one-element membership. For example:
+ * {{{
+ *   x = 1 OR x = 2 OR x = 3     ==>  x IN (1, 2, 3)
+ *   x IN (1, 2) OR x IN (3, 4)  ==>  x IN (1, 2, 3, 4)
+ *   x = 1 OR x IN (2, 3)        ==>  x IN (1, 2, 3)
+ * }}}
+ * Only disjuncts that share a deterministic, non-foldable subject are merged: this preserves the
+ * single subject evaluation that [[In]] provides (an OR of N tests evaluates the subject N times),
+ * and avoids degenerate rewrites such as `x = 1 OR y = 1` turning into `1 IN (x, y)`.
+ * [[EqualNullSafe]] and struct-typed subjects are left untouched, matching [[OptimizeIn]].
+ */
+object CombineDisjunctiveInPredicates extends Rule[LogicalPlan] with PredicateHelper {
+
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    if (!conf.combineDisjunctiveInPredicates) {
+      plan
+    } else {
+      plan.transformWithPruning(_.containsPattern(OR), ruleId) {
+        case q: LogicalPlan =>
+          q.transformExpressionsDownWithPruning(_.containsPattern(OR), ruleId) {
+            case or: Or => combineDisjunctiveMemberships(or)
+          }
+      }
+    }
+  }
+
+  // An operand may serve as the shared "subject" (the `In` value) only if it is deterministic
+  // and not a constant, so the merge keeps a single subject evaluation and targets column
+  // memberships (never `1 IN (x, y)`). Struct-typed subjects are excluded to avoid the
+  // struct-equality gap `OptimizeIn` also sidesteps (SPARK-24443); members are type-compatible
+  // with the subject, so this excludes struct members too.
+  private def canBeSubject(e: Expression): Boolean =
+    e.deterministic && !e.foldable && !e.dataType.isInstanceOf[StructType]
+
+  // Decomposes a disjunct into the membership groups it can join, as (subject, members) pairs.
+  private def asMemberships(e: Expression): Seq[(Expression, Seq[Expression])] = e match {
+    case In(v, list) if canBeSubject(v) => Seq((v, list))
+    case EqualTo(l, r) =>
+      val fromLeft = if (canBeSubject(l)) Seq((l, Seq(r))) else Nil
+      val fromRight = if (!l.semanticEquals(r) && canBeSubject(r)) Seq((r, Seq(l))) else Nil
+      fromLeft ++ fromRight
+    case _ => Nil
+  }
+
+  private def combineDisjunctiveMemberships(or: Or): Expression = {
+    val disjuncts = splitDisjunctivePredicates(or)
+    // subject canonical form -> contributions as (disjunctIndex, subject, values)
+    val bySubject =
+      LinkedHashMap.empty[Expression, ArrayBuffer[(Int, Expression, Seq[Expression])]]
+    disjuncts.zipWithIndex.foreach { case (d, i) =>
+      asMemberships(d).foreach { case (subject, values) =>
+        bySubject.getOrElseUpdate(subject.canonicalized, ArrayBuffer.empty) +=
+          ((i, subject, values))
+      }
+    }
+
+    val claimed = BitSet.empty
+    val merged = ArrayBuffer.empty[(Int, Expression)] // (anchor index, combined In)
+    bySubject.values.foreach { entries =>
+      val available = entries.filterNot(e => claimed(e._1))
+      if (available.length >= 2) {
+        available.foreach(e => claimed += e._1)
+        val subject = available.head._2
+        val values = available.sortBy(_._1).flatMap(_._3).toSeq
+        merged += ((available.map(_._1).min, In(subject, values)))
+      }
+    }
+
+    if (merged.isEmpty) {
+      or // no change: keeps the fixed point stable
+    } else {
+      val untouched = disjuncts.zipWithIndex.collect { case (d, i) if !claimed(i) => (i, d) }
+      val ordered = (merged ++ untouched).sortBy(_._1).map(_._2).toSeq
+      buildBalancedPredicate(ordered, Or)
     }
   }
 }
