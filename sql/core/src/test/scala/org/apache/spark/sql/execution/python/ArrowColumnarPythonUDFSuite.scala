@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.python
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.IntegratedUDFTestUtils
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.internal.SQLConf
@@ -34,14 +35,24 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
 
   import IntegratedUDFTestUtils._
 
+  // The tests of the columnar input path enable it, since it is disabled by default.
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED.key, "true")
+
   private val arrowSource =
     "org.apache.spark.sql.execution.python.ArrowBackedDataSourceV2"
 
-  private def readArrowSource(numRows: Int = 100, numPartitions: Int = 1) = {
+  private def readArrowSource(
+      numRows: Int = 100,
+      numPartitions: Int = 1,
+      reuseVectors: Boolean = false,
+      batchSize: Int = ArrowBackedDataSourceV2.BATCH_SIZE) = {
     spark.read
       .format(arrowSource)
       .option("numRows", numRows.toString)
       .option("numPartitions", numPartitions.toString)
+      .option("reuseVectors", reuseVectors.toString)
+      .option("batchSize", batchSize.toString)
       .load()
   }
 
@@ -99,6 +110,43 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
         assert(row.getInt(0) == i, s"id mismatch at row $i")
         assert(row.getString(1) == i.toString,
           s"UDF result mismatch at row $i")
+      }
+    }
+  }
+
+  test("Arrow-backed source that reuses its vectors: correct with the default configuration") {
+    assume(shouldTestPandasUDFs)
+    // The Arrow columnar path keeps the pass-through columns of a batch until its result comes
+    // back from Python, which is only correct if the batch stays valid until then. A reader may
+    // refill its vectors for the next batch, or release them once it is closed, as soon as it is
+    // exhausted, so columnar input is disabled by default.
+    withSQLConf(
+        SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true",
+        SQLConf.ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED.key ->
+          SQLConf.ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED.defaultValueString) {
+      val pandasUDF = TestScalarPandasUDF(
+        name = "arrow_reuse_udf", returnType = Some(StringType))
+      registerTestUDF(pandasUDF, spark)
+
+      // Spark writes batches to Python before the results of the earlier ones come back. With
+      // two batches, the reader is closed once it is exhausted, before their results come back.
+      // With many, the reader refills its vectors with the next batches before then. The test
+      // UDF casts its input to string: on a string column, the cast is removed, so that the
+      // batches would take the Arrow columnar path if columnar input were enabled.
+      Seq(200, 200000).foreach { numRows =>
+        val result = readArrowSource(numRows = numRows, reuseVectors = true, batchSize = 100)
+          .selectExpr("id", "name", "value", "data", "arrow_reuse_udf(name) as udf_name")
+        val arrowExec = collectNodes[ArrowEvalPythonExec](result.queryExecution.executedPlan)
+        assert(arrowExec.nonEmpty && !arrowExec.head.supportsColumnar)
+
+        val rows = result.collect()
+        assert(rows.map(_.getInt(0)).toSeq == (0 until numRows))
+        rows.foreach { row =>
+          val id = row.getInt(0)
+          assert(row.getString(1) == s"row_$id", s"name mismatch for id $id")
+          assert(row.getString(3) == s"data_$id", s"data mismatch for id $id")
+          assert(row.getString(4) == s"row_$id", s"UDF result mismatch for id $id")
+        }
       }
     }
   }
