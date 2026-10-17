@@ -35,9 +35,9 @@ import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, EqualTo, IsNull, Literal, Or, SortOrder}
-import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, EliminateLimits}
-import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, Inner, LeftAnti, LeftSemi, LeftSingle}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, EmptyRelation, GlobalLimit, Join, JoinHint, LeafNode, LocalRelation, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, EliminateLimits, PropagateEmptyRelation}
+import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, FullOuter, Inner, LeftAnti, LeftSemi, LeftSingle}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, EmptyRelation, GlobalLimit, Join, JoinHint, LeafNode, LocalRelation, LogicalPlan, Statistics, Union}
 import org.apache.spark.sql.catalyst.plans.physical.{CoalescedNullAwareHashPartitioning, SinglePartition}
 import org.apache.spark.sql.classic.Strategy
 import org.apache.spark.sql.execution._
@@ -4871,6 +4871,56 @@ class AdaptiveQueryExecSuite
             |""".stripMargin
         )
         assert(findTopLevelBroadcastNestedLoopJoin(adaptivePlan).size == 1)
+      }
+    }
+  }
+
+  test("SPARK-53618: AQEPropagateEmptyRelation keeps a false full outer join over a " +
+    "broadcast stage") {
+    // Exclude the regular rule so that the join is still there when AQE re-optimizes.
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> PropagateEmptyRelation.ruleName) {
+      Seq("t1" -> BuildLeft, "t2" -> BuildRight).foreach { case (broadcastSide, buildSide) =>
+        val df = sql(
+          s"""
+             |SELECT /*+ BROADCAST($broadcastSide) */ * FROM testData2 t1
+             |FULL OUTER JOIN testData3 t2 ON false
+           """.stripMargin)
+        val logicalJoin = df.queryExecution.optimizedPlan.collectFirst {
+          case join: Join => join
+        }.getOrElse(fail("expected the full outer join to survive the regular optimizer"))
+        assert(logicalJoin.joinType == FullOuter)
+        assert(logicalJoin.condition.contains(Literal.FalseLiteral))
+
+        checkAnswer(df,
+          testData2.collect().map(r => Row(r(0), r(1), null, null)).toSeq ++
+            testData3.collect().map(r => Row(null, null, r(0), r(1))))
+
+        val adaptivePlan = stripAQEPlan(df.queryExecution.executedPlan)
+        val joins = findTopLevelBroadcastNestedLoopJoin(adaptivePlan)
+        assert(joins.size == 1)
+        val join = joins.head.asInstanceOf[BroadcastNestedLoopJoinExec]
+        assert(join.buildSide == buildSide)
+        val broadcastStage = (if (buildSide == BuildLeft) join.left else join.right) match {
+          case stage: BroadcastQueryStageExec => stage
+          case other => fail(s"expected a broadcast query stage but got $other")
+        }
+
+        // A broadcast stage can't be executed without the join, on whichever side it is. The
+        // rule is called directly as AQE silently falls back to the previous plan when
+        // re-optimization produces an invalid one.
+        val stagedJoin = if (buildSide == BuildLeft) {
+          logicalJoin.copy(left = LogicalQueryStage(logicalJoin.left, broadcastStage))
+        } else {
+          logicalJoin.copy(right = LogicalQueryStage(logicalJoin.right, broadcastStage))
+        }
+        assert(AQEPropagateEmptyRelation(stagedJoin).fastEquals(stagedJoin))
+
+        // Without a broadcast stage the same join is still rewritten.
+        val rewritten = AQEPropagateEmptyRelation(logicalJoin)
+        assert(rewritten.isInstanceOf[Union], rewritten)
+        assert(rewritten.output == logicalJoin.output)
       }
     }
   }
