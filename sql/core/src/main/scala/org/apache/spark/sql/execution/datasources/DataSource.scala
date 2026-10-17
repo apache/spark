@@ -48,7 +48,8 @@ import org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
-import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
+import org.apache.spark.sql.execution.datasources.v2.{FileDataSourceV2, NamedTableProvider}
+import org.apache.spark.sql.execution.datasources.v2.ffi.{NativeDataSourceRegistry, NativeDataSourceV2}
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
 import org.apache.spark.sql.execution.datasources.v2.python.PythonDataSourceV2
 import org.apache.spark.sql.execution.datasources.xml.XmlFileFormat
@@ -666,6 +667,21 @@ object DataSource extends Logging {
 
   /** Given a provider name, look up the data source class definition. */
   def lookupDataSource(provider: String, conf: SQLConf): Class[_] = {
+    lookupDataSource(provider, conf, includeNativeDataSources = true)
+  }
+
+  /**
+   * Given a provider name, look up the data source class definition.
+   *
+   * @param includeNativeDataSources whether to look the name up among the native data sources,
+   *                                 which come after the Java and Python data sources
+   */
+  private[sql] def lookupDataSource(
+      provider: String,
+      conf: SQLConf,
+      includeNativeDataSources: Boolean): Class[_] = {
+    // The provider created for a native data source only takes the result of this lookup.
+    NativeDataSourceRegistry.clearLookup()
     val provider1 = backwardCompatibilityMap.getOrElse(provider, provider) match {
       case name if name.equalsIgnoreCase("orc") &&
           conf.getConf(SQLConf.ORC_IMPLEMENTATION) == "native" =>
@@ -682,6 +698,9 @@ object DataSource extends Logging {
     val serviceLoader = ServiceLoader.load(classOf[DataSourceRegister], loader)
     lazy val isUserDefinedDataSource = SparkSession.getActiveSession.exists(
       _.sessionState.dataSourceManager.dataSourceExists(provider))
+    // The provider created for the native data source takes the result of this lookup.
+    lazy val isNativeDataSource = includeNativeDataSources &&
+      NativeDataSourceRegistry.lookupForProvider(provider, conf).isDefined
 
     try {
       serviceLoader.asScala.filter(_.shortName().equalsIgnoreCase(provider1)).toList match {
@@ -703,6 +722,8 @@ object DataSource extends Logging {
                   throw QueryCompilationErrors.failedToFindKafkaDataSourceError(provider1)
                 } else if (isUserDefinedDataSource) {
                   classOf[PythonDataSourceV2]
+                } else if (isNativeDataSource) {
+                  classOf[NativeDataSourceV2]
                 } else {
                   throw QueryExecutionErrors.dataSourceNotFoundError(provider1, error)
                 }
@@ -718,9 +739,9 @@ object DataSource extends Logging {
               }
           }
         case head :: Nil =>
-          // We do not check whether the provider is a Python data source
-          // (isUserDefinedDataSource) to avoid the lookup cost. Java data sources
-          // always take precedence over Python user-defined data sources.
+          // We do not check whether the provider is a Python or native data source
+          // (isUserDefinedDataSource, isNativeDataSource) to avoid the lookup cost. Java data
+          // sources always take precedence over Python and native data sources.
           head.getClass
         case sources =>
           // There are multiple registered aliases for the input. If there is single datasource
@@ -783,7 +804,7 @@ object DataSource extends Logging {
       case t: TableProvider
           if !useV1Sources.contains(cls.getCanonicalName.toLowerCase(Locale.ROOT)) =>
         t match {
-          case p: PythonDataSourceV2 => p.setShortName(provider)
+          case p: NamedTableProvider => p.setShortName(provider)
           case _ =>
         }
         Some(t)
