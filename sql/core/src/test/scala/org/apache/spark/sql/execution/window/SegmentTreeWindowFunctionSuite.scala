@@ -441,7 +441,7 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
   // MIN/MAX non-invertible, guaranteeing seg-tree path is exercised.
 
   /** Run `sql` twice (flag off / on) and checkAnswer equality. */
-  private def checkRangeEquivalence(df: DataFrame, query: String): Unit = {
+  private def checkSqlEquivalence(df: DataFrame, query: String): Unit = {
     df.createOrReplaceTempView("t")
     try {
       val baseline = withSQLConf(disableSegTree.toSeq: _*) {
@@ -467,7 +467,7 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
         "WHEN 0 THEN 1 WHEN 1 THEN 3 WHEN 2 THEN 4 WHEN 3 THEN 4 " +
         "WHEN 4 THEN 7 WHEN 5 THEN 10 ELSE 15 END + (CAST(id AS INT) / 7) * 20 AS INT) AS k",
       "CAST((id * 31) % 97 AS INT) AS v")
-    checkRangeEquivalence(df,
+    checkSqlEquivalence(df,
       """SELECT id, pk,
         |  MIN(v) OVER (PARTITION BY pk ORDER BY k
         |    RANGE BETWEEN 2 PRECEDING AND 2 FOLLOWING) AS mn,
@@ -486,7 +486,7 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
         "(CASE CAST(id AS INT) % 3 WHEN 0 THEN 1 WHEN 1 THEN 3 ELSE 4 END), 0) " +
         "AS TIMESTAMP) AS ts",
       "CAST((id * 17) % 53 AS INT) AS v")
-    checkRangeEquivalence(df,
+    checkSqlEquivalence(df,
       """SELECT id, pk,
         |  MAX(v) OVER (PARTITION BY pk ORDER BY ts
         |    RANGE BETWEEN INTERVAL '1' HOUR PRECEDING
@@ -503,7 +503,7 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
       (i, i % 2, k, (i * 13) % 41)
     }
     val df = rows.toDF("id", "pk", "k", "v")
-    checkRangeEquivalence(df,
+    checkSqlEquivalence(df,
       """SELECT id, pk, k,
         |  MIN(v) OVER (PARTITION BY pk ORDER BY k
         |    RANGE BETWEEN 0 PRECEDING AND 0 FOLLOWING) AS mn,
@@ -520,7 +520,7 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
       "(CAST(id AS INT) / 5) AS pk",
       "CAST((id * 7) % 23 AS INT) AS k",
       "CAST((id * 19) % 101 AS INT) AS v")
-    checkRangeEquivalence(df,
+    checkSqlEquivalence(df,
       """SELECT id, pk,
         |  MIN(v) OVER (PARTITION BY pk ORDER BY k
         |    RANGE BETWEEN 100 PRECEDING AND 100 FOLLOWING) AS mn,
@@ -543,7 +543,7 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
       (i, i % 2, kOpt, (i * 11) % 37)
     }
     val df = rows.toDF("id", "pk", "k", "v")
-    checkRangeEquivalence(df,
+    checkSqlEquivalence(df,
       """SELECT id, pk,
         |  MIN(v) OVER (PARTITION BY pk ORDER BY k ASC NULLS FIRST
         |    RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS mn_nf,
@@ -554,6 +554,149 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
         |  MAX(v) OVER (PARTITION BY pk ORDER BY k ASC NULLS LAST
         |    RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS mx_nl
         |FROM t""".stripMargin)
+  }
+
+  // ---- GROUPS frames ----
+
+  /** Two partitions with two rows per peer group. */
+  private def groupsTiedDF: DataFrame = {
+    val rows = (0 until 60).map(i => (i, i % 2, i / 4, (i * 13) % 41))
+    rows.toDF("id", "pk", "k", "v")
+  }
+
+  test("-- GROUPS offset bounds with multi-row peer groups (MIN/MAX/SUM/COUNT/AVG)") {
+    // A two-group offset spans six rows, distinguishing group and row offsets.
+    checkSqlEquivalence(groupsTiedDF,
+      """SELECT id, pk,
+        |  MIN(v) OVER w AS mn, MAX(v) OVER w AS mx, SUM(v) OVER w AS sm,
+        |  COUNT(v) OVER w AS ct, AVG(v) OVER w AS av
+        |FROM t
+        |WINDOW w AS (PARTITION BY pk ORDER BY k
+        |  GROUPS BETWEEN 2 PRECEDING AND 2 FOLLOWING)""".stripMargin)
+  }
+
+  test("-- GROUPS with CURRENT ROW on either edge (mixed bound kinds)") {
+    // Cover every combination of row-reading and index-only bounds.
+    checkSqlEquivalence(groupsTiedDF,
+      """SELECT id, pk,
+        |  MIN(v) OVER (PARTITION BY pk ORDER BY k
+        |    GROUPS BETWEEN 2 PRECEDING AND CURRENT ROW) AS a,
+        |  MAX(v) OVER (PARTITION BY pk ORDER BY k
+        |    GROUPS BETWEEN CURRENT ROW AND 2 FOLLOWING) AS b,
+        |  SUM(v) OVER (PARTITION BY pk ORDER BY k
+        |    GROUPS BETWEEN CURRENT ROW AND CURRENT ROW) AS c
+        |FROM t""".stripMargin)
+  }
+
+  test("-- GROUPS with an entirely one-sided frame (0 PRECEDING / 0 FOLLOWING)") {
+    // Zero offsets use index-only bounds but must equal CURRENT ROW.
+    checkSqlEquivalence(groupsTiedDF,
+      """SELECT id, pk,
+        |  SUM(v) OVER (PARTITION BY pk ORDER BY k
+        |    GROUPS BETWEEN 0 PRECEDING AND 0 FOLLOWING) AS c,
+        |  SUM(v) OVER (PARTITION BY pk ORDER BY k
+        |    GROUPS BETWEEN CURRENT ROW AND CURRENT ROW) AS d
+        |FROM t""".stripMargin)
+  }
+
+  test("-- GROUPS with multi-column ORDER BY (no single-column restriction)") {
+    // Unlike RANGE offsets, GROUPS offsets support multiple order expressions.
+    val rows = (0 until 48).map(i => (i, i % 2, i / 8, (i / 2) % 4, (i * 7) % 29))
+    val df = rows.toDF("id", "pk", "k1", "k2", "v")
+    checkSqlEquivalence(df,
+      """SELECT id, pk,
+        |  MIN(v) OVER (PARTITION BY pk ORDER BY k1, k2
+        |    GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS mn,
+        |  MAX(v) OVER (PARTITION BY pk ORDER BY k1, k2
+        |    GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS mx
+        |FROM t""".stripMargin)
+  }
+
+  test("-- GROUPS with NULL order key and DESC / NULLS FIRST / NULLS LAST") {
+    // Group indices follow the configured sort order, including NULL placement.
+    val rows = (0 until 42).map { i =>
+      val kOpt: Option[Int] = (i % 7) match {
+        case 0 | 3 => None
+        case 1 | 2 => Some(1)
+        case 4 => Some(2)
+        case _ => Some(3)
+      }
+      (i, i % 2, kOpt, (i * 11) % 37)
+    }
+    val df = rows.toDF("id", "pk", "k", "v")
+    checkSqlEquivalence(df,
+      """SELECT id, pk,
+        |  MIN(v) OVER (PARTITION BY pk ORDER BY k ASC NULLS FIRST
+        |    GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS a,
+        |  MAX(v) OVER (PARTITION BY pk ORDER BY k ASC NULLS LAST
+        |    GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS b,
+        |  SUM(v) OVER (PARTITION BY pk ORDER BY k DESC NULLS FIRST
+        |    GROUPS BETWEEN 2 PRECEDING AND CURRENT ROW) AS c,
+        |  COUNT(v) OVER (PARTITION BY pk ORDER BY k DESC NULLS LAST
+        |    GROUPS BETWEEN CURRENT ROW AND 2 FOLLOWING) AS d
+        |FROM t""".stripMargin)
+  }
+
+  test("-- GROUPS frame wider than the partition (admit/drop loops saturate)") {
+    // Bounds saturate at the partition edges.
+    checkSqlEquivalence(groupsTiedDF,
+      """SELECT id, pk,
+        |  MIN(v) OVER (PARTITION BY pk ORDER BY k
+        |    GROUPS BETWEEN 1000 PRECEDING AND 1000 FOLLOWING) AS wide,
+        |  MAX(v) OVER (PARTITION BY pk ORDER BY k
+        |    GROUPS BETWEEN 1000 PRECEDING AND CURRENT ROW) AS lo,
+        |  SUM(v) OVER (PARTITION BY pk ORDER BY k
+        |    GROUPS BETWEEN CURRENT ROW AND 1000 FOLLOWING) AS hi
+        |FROM t""".stripMargin)
+  }
+
+  test("-- GROUPS frame spanning segment-tree block boundaries") {
+    // Use a frame wider than the minimum block size to exercise block merging.
+    withSQLConf(SQLConf.WINDOW_SEGMENT_TREE_BLOCK_SIZE.key -> segTreeBlock) {
+      val rows = (0 until 120).map(i => (i, i % 2, i / 2, (i * 17) % 53))
+      val df = rows.toDF("id", "pk", "k", "v")
+      checkSqlEquivalence(df,
+        """SELECT id, pk,
+          |  MIN(v) OVER (PARTITION BY pk ORDER BY k
+          |    GROUPS BETWEEN 20 PRECEDING AND 20 FOLLOWING) AS mn,
+          |  SUM(v) OVER (PARTITION BY pk ORDER BY k
+          |    GROUPS BETWEEN 20 PRECEDING AND 20 FOLLOWING) AS sm
+          |FROM t""".stripMargin)
+    }
+  }
+
+  /** Compares two queries with segment-tree evaluation enabled. */
+  private def checkSameUnderSegTree(df: DataFrame, left: String, right: String): Unit = {
+    df.createOrReplaceTempView("t")
+    try {
+      withSQLConf(enableSegTree.toSeq: _*) {
+        val l = spark.sql(left).collect().sortBy(_.toString)
+        val r = spark.sql(right).collect().sortBy(_.toString)
+        assert(l.toSeq === r.toSeq,
+          s"queries disagree under the segment tree.\nLeft:  ${l.toSeq}\nRight: ${r.toSeq}")
+      }
+    } finally {
+      spark.catalog.dropTempView("t")
+    }
+  }
+
+  test("-- GROUPS over all-distinct order keys degenerates to ROWS") {
+    // With one row per peer group, GROUPS is equivalent to ROWS.
+    val df = (0 until 60).map(i => (i, i % 2, i, (i * 23) % 47)).toDF("id", "pk", "k", "v")
+    checkSameUnderSegTree(df,
+      """SELECT id, MIN(v) OVER (PARTITION BY pk ORDER BY k
+        |  GROUPS BETWEEN 3 PRECEDING AND 2 FOLLOWING) AS r FROM t""".stripMargin,
+      """SELECT id, MIN(v) OVER (PARTITION BY pk ORDER BY k
+        |  ROWS BETWEEN 3 PRECEDING AND 2 FOLLOWING) AS r FROM t""".stripMargin)
+  }
+
+  test("-- GROUPS over a single peer group covers the whole partition") {
+    // With one peer group, any offset selects the entire partition.
+    val df = (0 until 60).map(i => (i, i % 2, 1, (i * 23) % 47)).toDF("id", "pk", "k", "v")
+    checkSameUnderSegTree(df,
+      """SELECT id, SUM(v) OVER (PARTITION BY pk ORDER BY k
+        |  GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS r FROM t""".stripMargin,
+      """SELECT id, SUM(v) OVER (PARTITION BY pk) AS r FROM t""".stripMargin)
   }
 
     // Decimal overflow / BinaryType MIN/MAX across block merge; UDAF fallback.
