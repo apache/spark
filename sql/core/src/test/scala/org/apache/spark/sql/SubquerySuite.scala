@@ -26,13 +26,13 @@ import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, EqualTo, Ex
   ExprId, GreaterThanOrEqual, Literal, NamedExpression, OuterReference, PlanExpression, Rand,
   SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, GeneratePredicate}
-import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
+import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan, Project, Sort, Union}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.datasources.FileScanRDD
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
-import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec}
+import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.IntegerType
@@ -792,7 +792,6 @@ class SubquerySuite extends SharedSparkSession
             |                  where  t1.c2 <= t2.c2)""".stripMargin),
         Row(1) :: Nil)
 
-
       // Add a HAVING on top and augmented within an OR predicate
       checkAnswer(
         sql(
@@ -1265,7 +1264,6 @@ class SubquerySuite extends SharedSparkSession
            |              ORDER  BY c1)
         """.stripMargin
       assert(getNumSortsInQuery(query2) == 0)
-
 
       // nested IN
       val query3 =
@@ -2650,7 +2648,6 @@ class SubquerySuite extends SharedSparkSession
     )
   }
 
-
   test("SPARK-52896: Outer reference ExprId should match exposed attribute") {
     val plan =
       sql(
@@ -3225,6 +3222,627 @@ class SubquerySuite extends SharedSparkSession
         assertContainsInSubqueryExec(falseDf)
         checkAnswer(falseDf, Seq(Row(1, 1)))
       }
+    }
+  }
+
+  /**
+   * Checks the result of `query`, that every node of its optimized plan can produce the attributes
+   * it references, and that the existence join a nested subquery was rewritten into sits on the
+   * subquery side of the semi/anti join.
+   *
+   * The plan checks are what SPARK-59351 is about: an existence join whose condition references an
+   * attribute produced by neither of its children can still return the right answer when the
+   * nested relation is empty at runtime, because the invalid condition is then never bound, and a
+   * rewrite that placed the join on the other side would return the right answer here too. Note
+   * that missingInput cannot see a subquery expression that survives in a condition, since
+   * QueryPlan.references folds only the outer attributes of one and collect does not walk its
+   * plan, so it is not a substitute for asserting the shape.
+   */
+  private def checkAnswerAndPlan(
+      query: String,
+      expected: Seq[Row],
+      existenceJoinOnSubqueryPlan: Boolean = true): Unit = {
+    val df = sql(query)
+    val plan = df.queryExecution.optimizedPlan
+    val invalidNodes = plan.collect { case p if p.missingInput.nonEmpty => p }
+    assert(invalidNodes.isEmpty,
+      s"""Plan nodes reference non-reachable attributes:
+         |${invalidNodes.mkString("\n")}
+         |$plan""".stripMargin)
+    if (existenceJoinOnSubqueryPlan) {
+      val semiOrAnti = plan.collectFirst {
+        case j: Join if j.joinType == LeftSemi || j.joinType == LeftAnti => j
+      }
+      assert(semiOrAnti.nonEmpty, s"expected a semi or anti join in\n$plan")
+      val existenceJoins = plan.collect {
+        case j: Join if j.joinType.isInstanceOf[ExistenceJoin] => j
+      }
+      assert(existenceJoins.nonEmpty, s"expected an existence join in\n$plan")
+      // The existence join must be under the right side of the semi/anti join, which is the
+      // subquery plan, and not under its left side, which is the outer plan.
+      assert(existenceJoins.forall(j => semiOrAnti.get.right.exists(_.fastEquals(j))),
+        s"the existence join must sit on the subquery side in\n$plan")
+    }
+    checkAnswer(df, expected)
+  }
+
+  test("SPARK-59351: nested subquery referencing the inner query becomes an existence join") {
+    // SPARK-45580 covers the case where the nested subquery references the outer query, in which
+    // case its existence join is built on top of the outer plan. Here the nested subquery
+    // references the query it is nested in, so the existence join has to be built on top of the
+    // subquery plan instead.
+    withTempView("t1", "t2", "t3", "t3n", "t4", "t5") {
+      Seq((1), (2), (3), (7), (9)).toDF("a").persist().createOrReplaceTempView("t1")
+      Seq((1), (8), (9)).toDF("c1").persist().createOrReplaceTempView("t2")
+      // t3 shares a value with t2, t5 does not, so the nested subquery decides the answer below.
+      Seq((3), (9)).toDF("col1").persist().createOrReplaceTempView("t3")
+      Seq((3), (7)).toDF("col1").persist().createOrReplaceTempView("t5")
+      Seq(Some(3), Some(9), None).toDF("col1").persist().createOrReplaceTempView("t3n")
+      // A correlated nested IN over t4 is false for every c1 in t2, while the same IN without its
+      // correlated predicate is true for 1 and 9, so the correlation decides the answer below.
+      Seq((1, 9), (9, 1)).toDF("col1", "k").persist().createOrReplaceTempView("t4")
+
+      // EXISTS rewritten as a left semi join. The correlated predicate is a disjunction, so it
+      // is pulled up as a whole and carries the nested IN-subquery, which references c1, out of
+      // the subquery plan.
+      val query1 =
+        """
+          |SELECT *
+          |FROM t1
+          |WHERE EXISTS (
+          |  SELECT c1
+          |  FROM t2
+          |  WHERE a = c1
+          |  OR c1 IN (SELECT col1 FROM t3)
+          |)""".stripMargin
+      checkAnswerAndPlan(query1, Row(1) :: Row(2) :: Row(3) :: Row(7) :: Row(9) :: Nil)
+
+      // Same over t5, which shares no value with t2, so the nested IN is false for every c1 and
+      // only the correlated predicate can hold: a mistake making it true would return every row.
+      val query2 =
+        """
+          |SELECT *
+          |FROM t1
+          |WHERE EXISTS (
+          |  SELECT c1
+          |  FROM t2
+          |  WHERE a = c1
+          |  OR c1 IN (SELECT col1 FROM t5)
+          |)""".stripMargin
+      checkAnswerAndPlan(query2, Row(1) :: Row(9) :: Nil)
+
+      // NOT EXISTS rewritten as a left anti join.
+      val query3 =
+        """
+          |SELECT *
+          |FROM t1
+          |WHERE NOT EXISTS (
+          |  SELECT c1
+          |  FROM t2
+          |  WHERE a = c1
+          |  OR c1 IN (SELECT col1 FROM t5)
+          |)""".stripMargin
+      checkAnswerAndPlan(query3, Row(2) :: Row(3) :: Row(7) :: Nil)
+
+      // IN-subquery rewritten as a left semi join. The hoisted predicate is a > c1 rather than
+      // the key equality a = c1, so the answer is a IN (t2 INTERSECT t3) and depends on the
+      // nested subquery: dropping it would leave no row at all.
+      val query4 =
+        """
+          |SELECT *
+          |FROM t1
+          |WHERE a IN (
+          |  SELECT c1
+          |  FROM t2
+          |  WHERE a > c1
+          |  OR c1 IN (SELECT col1 FROM t3)
+          |)""".stripMargin
+      checkAnswerAndPlan(query4, Row(9) :: Nil)
+
+      // NOT IN-subquery rewritten as a null-aware left anti join, with a nested EXISTS. Only the
+      // nested EXISTS keeps 9 out of the answer, as a > c1 alone does not hold for it.
+      val query5 =
+        """
+          |SELECT *
+          |FROM t1
+          |WHERE a NOT IN (
+          |  SELECT c1
+          |  FROM t2
+          |  WHERE a > c1
+          |  OR EXISTS (SELECT 1 FROM t3 WHERE col1 = c1)
+          |)""".stripMargin
+      checkAnswerAndPlan(query5, Row(1) :: Row(2) :: Row(3) :: Row(7) :: Nil)
+
+      // A nested NOT IN-subquery keeps its null-aware semantics: c1 NOT IN (3, 9, NULL) is never
+      // true, so only the correlated predicate can be satisfied. Compare with query7, where the
+      // same NOT IN over a relation without NULL holds for c1 = 1 and returns every row.
+      val query6 =
+        """
+          |SELECT *
+          |FROM t1
+          |WHERE EXISTS (
+          |  SELECT c1
+          |  FROM t2
+          |  WHERE a = c1
+          |  OR c1 NOT IN (SELECT col1 FROM t3n)
+          |)""".stripMargin
+      checkAnswerAndPlan(query6, Row(1) :: Row(9) :: Nil)
+
+      val query7 =
+        """
+          |SELECT *
+          |FROM t1
+          |WHERE EXISTS (
+          |  SELECT c1
+          |  FROM t2
+          |  WHERE a = c1
+          |  OR c1 NOT IN (SELECT col1 FROM t3)
+          |)""".stripMargin
+      checkAnswerAndPlan(query7, Row(1) :: Row(2) :: Row(3) :: Row(7) :: Row(9) :: Nil)
+
+      // A nested subquery correlated to the query it is nested in, on a column it does not
+      // project, so its correlated predicate changes the answer: without it the nested IN would
+      // hold for c1 = 1 and row 1 would be returned as well.
+      val query8 =
+        """
+          |SELECT *
+          |FROM t1
+          |WHERE EXISTS (
+          |  SELECT c1
+          |  FROM t2
+          |  WHERE a > c1
+          |  OR c1 IN (SELECT col1 FROM t4 WHERE k = c1)
+          |)""".stripMargin
+      checkAnswerAndPlan(query8, Row(2) :: Row(3) :: Row(7) :: Row(9) :: Nil)
+    }
+  }
+
+  test("SPARK-59351: nested subquery referencing both the outer and the inner query") {
+    withTempView("t1", "t2", "t3", "t4") {
+      Seq((1), (2), (3)).toDF("a").persist().createOrReplaceTempView("t1")
+      Seq((1), (8), (9)).toDF("c1").persist().createOrReplaceTempView("t2")
+      Seq((3), (9)).toDF("col1").persist().createOrReplaceTempView("t3")
+      // Correlated, this is false for every c1 in t2; without its correlated predicate it holds
+      // for 1 and 9, so the correlation decides the answer below.
+      Seq((1, 9), (9, 1)).toDF("col1", "k").persist().createOrReplaceTempView("t4")
+
+      // The nested subquery references the outer query through its values and the inner query
+      // through its own correlated predicate, so it can be rewritten into an existence join on
+      // neither side and stays in the join condition. Planning it there as an in-subquery filter
+      // drops its correlated predicate col1 = c1, which is why it is rejected rather than left.
+      // These rows do not distinguish the two forms; the EXISTS form of this shape does, and
+      // returned an extra row before the rejection was added.
+      //
+      // NOT IN is the outer predicate on purpose: its rewrite returns a bare Join, which
+      // RewritePredicateSubquery does not offer to its own handling of predicate subqueries in
+      // join conditions, so this rejection is the only one that can fire and the assertion below
+      // pins it. With EXISTS the rewrite returns a Project over the join, which that handling
+      // reaches under the default configuration and rejects with
+      // UNSUPPORTED_CORRELATED_EXPRESSION_IN_JOIN_CONDITION instead, so the query would still
+      // fail but on a different condition than the one asserted here.
+      val correlated =
+        """
+          |SELECT *
+          |FROM t1
+          |WHERE a NOT IN (
+          |  SELECT c1
+          |  FROM t2
+          |  WHERE a = c1
+          |  OR a IN (SELECT col1 FROM t3 WHERE col1 = c1)
+          |)""".stripMargin
+      Seq("true", "false").foreach { decorrelateInJoinCondition =>
+        withSQLConf(SQLConf.DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION.key ->
+          decorrelateInJoinCondition) {
+          val e = intercept[AnalysisException](sql(correlated).collect())
+          assert(e.getCondition == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+            "NESTED_SUBQUERY_REFERENCING_OUTER_AND_INNER_QUERY")
+          // The message must name the subquery that was rejected.
+          val reported = e.getMessageParameters.get("subqueryExpression")
+          assert(reported.contains("IN") && reported.contains("listquery"),
+            s"unexpected subqueryExpression: $reported")
+        }
+      }
+
+      // A correlated predicate that BooleanSimplification has eliminated:
+      // PullupCorrelatedPredicates retains c1 as an outer attribute of the nested subquery for
+      // idempotency, but the subquery
+      // no longer reads it, so there is no condition to lose. It must still be rewritten against
+      // the outer plan, which is the only plan it effectively references, rather than be treated
+      // as referencing the subquery plan and rejected.
+      val simplifiedAwayCorrelation =
+        """
+          |SELECT *
+          |FROM t1
+          |WHERE EXISTS (
+          |  SELECT 1
+          |  FROM t2
+          |  WHERE a = c1
+          |  OR a IN (SELECT col1 FROM t3 WHERE false AND col1 = c1)
+          |)""".stripMargin
+      Seq("true", "false").foreach { decorrelateInJoinCondition =>
+        withSQLConf(SQLConf.DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION.key ->
+          decorrelateInJoinCondition) {
+          checkAnswer(sql(simplifiedAwayCorrelation), Row(1) :: Nil)
+        }
+      }
+
+      // A subquery that stays in the join condition stays there whole, since the rewrite does
+      // not descend into one it declines, so a correlated subquery below it is left as well.
+      // Its own references make it look routable, being owned by the subquery plan, but
+      // nothing reaches it and planning a list query as an in-subquery filter drops the
+      // predicate the pull-up hoisted into it. The enclosing subquery is rejected for
+      // carrying it: PostgreSQL and DuckDB return 1 and 3 here, and losing the correlation
+      // returns 2 as well.
+      val carriedCorrelation =
+        """
+          |SELECT *
+          |FROM t1
+          |WHERE EXISTS (
+          |  SELECT 1
+          |  FROM t2
+          |  WHERE a = c1
+          |  OR (a + (CASE WHEN c1 IN (SELECT col1 FROM t4 WHERE k = c1) THEN 1 ELSE 0 END))
+          |     IN (SELECT col1 FROM t3)
+          |)""".stripMargin
+      Seq("true", "false").foreach { decorrelateInJoinCondition =>
+        withSQLConf(SQLConf.DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION.key ->
+          decorrelateInJoinCondition) {
+          val e = intercept[AnalysisException](sql(carriedCorrelation).collect())
+          assert(e.getCondition == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+            "NESTED_SUBQUERY_REFERENCING_OUTER_AND_INNER_QUERY")
+        }
+      }
+
+      // An uncorrelated nested subquery referencing both queries has no correlated predicate to
+      // lose, so it stays in the join condition and is planned as an in-subquery filter. The
+      // configuration is disabled because the rewrite of predicate subqueries in join conditions
+      // rejects a subquery referencing both join inputs, which is what this one becomes.
+      val uncorrelated =
+        """
+          |SELECT *
+          |FROM t1
+          |WHERE EXISTS (
+          |  SELECT 1
+          |  FROM t2
+          |  WHERE a = c1
+          |  OR (a + c1) IN (SELECT col1 FROM t3)
+          |)""".stripMargin
+      withSQLConf(
+        SQLConf.DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION.key -> "false") {
+        // No existence join here: this subquery stays in the join condition, which is the
+        // point of the case, so only the result and the reachability of the plan are
+        // checked.
+        checkAnswerAndPlan(uncorrelated, Row(1) :: Row(2) :: Nil,
+          existenceJoinOnSubqueryPlan = false)
+      }
+    }
+  }
+
+  test("SPARK-59351: existential subquery carried by a rewritten nested subquery") {
+    // The nested IN over t4 is owned by the subquery plan, so it is rewritten into an existence
+    // join and the condition PullupCorrelatedPredicates hoisted into it is grafted onto that
+    // join. That condition carries a third-level IN correlated to t4, which references neither
+    // the outer nor the subquery plan and so is routed by neither of the guards above. It has to
+    // be rewritten against the inputs of the join just built: left in place, PlanSubqueries plans
+    // it as an in-subquery filter and drops its own correlated predicate col1 = k, which returns
+    // every row of t1 instead of the one row where the correlation holds.
+    withTempView("t1", "t2", "t4", "t5") {
+      Seq(1, 2, 3).toDF("a").persist().createOrReplaceTempView("t1")
+      Seq(1, 8, 9).toDF("c1").persist().createOrReplaceTempView("t2")
+      // No k equals any c1, so only the third-level IN can satisfy the hoisted disjunction, and
+      // its correlated predicate col1 = k is false for every row of t4: dropping it makes the
+      // level-2 IN hold for c1 = 1 and returns 1, 2 and 3.
+      Seq((1, 100), (9, 7)).toDF("col1", "k").persist().createOrReplaceTempView("t4")
+      Seq(1).toDF("col1").persist().createOrReplaceTempView("t5")
+      val query =
+        """SELECT * FROM t1 WHERE EXISTS (
+          |  SELECT 1 FROM t2
+          |  WHERE a = c1
+          |  OR c1 IN (SELECT col1 FROM t4
+          |            WHERE k = c1 OR col1 IN (SELECT col1 FROM t5 WHERE col1 = k)))""".stripMargin
+      // The routing must not depend on the rewrite of predicate subqueries in join conditions,
+      // which is what used to make these two configurations disagree: it reached the grafted
+      // condition only when enabled.
+      Seq("true", "false").foreach { decorrelateInJoinCondition =>
+        withSQLConf(SQLConf.DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION.key ->
+          decorrelateInJoinCondition) {
+          checkAnswerAndPlan(query, Row(1) :: Nil)
+        }
+      }
+    }
+  }
+
+  test("SPARK-59351: NOT IN keeps an uncorrelated three-valued residual") {
+    // The NOT IN rewrite returns a bare Join, which this rule does not offer to its own handling
+    // of predicate subqueries in join conditions, so an uncorrelated nested IN left in the
+    // anti-join condition stays there and InSubqueryExec evaluates it three-valued. No existence
+    // join is built for it and it has no hoisted condition to lose, so it must not be rejected:
+    // these queries returned the standard SQL answer before SPARK-59351 and must keep doing so.
+    withTempView("t1", "t2", "t3n", "t4n") {
+      Seq(1, 2, 3).toDF("a").persist().createOrReplaceTempView("t1")
+      Seq(1, 8, 9).toDF("c1").persist().createOrReplaceTempView("t2")
+      // The NULL matches no c1, so c1 IN (SELECT col1 FROM t3n) is unknown for every row of t2.
+      Seq(Some(3), None).toDF("col1").persist().createOrReplaceTempView("t3n")
+      // Nullable col1 again, but correlated through k = c1.
+      Seq((Some(3), 1), (None, 8)).toDF("col1", "k").persist().createOrReplaceTempView("t4n")
+
+      Seq(
+        "(c1 IN (SELECT col1 FROM t3n)) <=> false",
+        "(c1 IN (SELECT col1 FROM t3n)) IS NULL",
+        "COALESCE(c1 IN (SELECT col1 FROM t3n), true)",
+        "(c1 NOT IN (SELECT col1 FROM t3n)) <=> false").foreach { predicate =>
+        // Every such predicate is FALSE for every row of t2, so the subquery reduces to a = c1
+        // and only 2 and 3 survive the NOT IN. Rejecting instead, or rewriting the nested IN into
+        // a two-valued exists, would change this.
+        checkAnswer(
+          sql(s"SELECT * FROM t1 WHERE a NOT IN (SELECT c1 FROM t2 WHERE a = c1 OR $predicate)"),
+          Row(2) :: Row(3) :: Nil)
+      }
+
+      // A correlated one is still rejected, under this arm as under the others: its hoisted
+      // condition is what planning it as an in-subquery filter would drop.
+      Seq(
+        s"SELECT * FROM t1 WHERE a NOT IN (SELECT c1 FROM t2 WHERE a = c1" +
+          " OR ((c1 IN (SELECT col1 FROM t4n WHERE k = c1)) <=> false))",
+        s"SELECT * FROM t1 WHERE EXISTS (SELECT 1 FROM t2 WHERE a = c1" +
+          " OR ((c1 IN (SELECT col1 FROM t4n WHERE k = c1)) <=> false))").foreach { query =>
+        val e = intercept[AnalysisException](sql(query).collect())
+        assert(e.getCondition == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+          "NESTED_IN_SUBQUERY_WITH_UNKNOWN_RESULT", query)
+      }
+
+      // And a truth-only nested IN under an outer NOT IN is still rewritten, not kept.
+      checkAnswer(
+        sql("""SELECT * FROM t1 WHERE a NOT IN (
+              |  SELECT c1 FROM t2 WHERE a = c1 OR c1 IN (SELECT col1 FROM t3n))""".stripMargin),
+        Row(2) :: Row(3) :: Nil)
+    }
+  }
+
+  test("SPARK-59351: nested IN subquery whose result can be unknown") {
+    withTempView("t1", "t2", "t2n", "t3n", "t3", "t4", "tb", "t2r", "t2rn", "t6", "t7") {
+      Seq((1), (2), (3)).toDF("a").persist().createOrReplaceTempView("t1")
+      Seq((1), (8), (9)).toDF("c1").persist().createOrReplaceTempView("t2")
+      // A nullable compared value, against a subquery column that is not nullable.
+      Seq(Some(1), None).toDF("c1").persist().createOrReplaceTempView("t2n")
+      Seq((1, 1), (9, 9)).toDF("col1", "k").persist().createOrReplaceTempView("t4")
+      // A boolean relation, to compare the result of a nested IN subquery against.
+      Seq(false).toDF("b").persist().createOrReplaceTempView("tb")
+      // Row-valued shapes. t2r and t7 are not nullable anywhere; the nullability of t2rn and of
+      // t6 sits in the second field, so the first pair of the comparison does not expose it.
+      Seq((1, 1), (8, 8), (9, 9)).toDF("c1", "c2").persist().createOrReplaceTempView("t2r")
+      Seq((1, Option.empty[Int]), (8, Some(8))).toDF("c1", "c2n").persist()
+        .createOrReplaceTempView("t2rn")
+      Seq((1, Option.empty[Int]), (5, Some(5))).toDF("col1", "col2").persist()
+        .createOrReplaceTempView("t6")
+      Seq((1, 1), (5, 5)).toDF("col1", "col2").persist().createOrReplaceTempView("t7")
+      // The NULL matches no value of t2, so c1 IN (SELECT col1 FROM t3n) is unknown there, and
+      // c1 NOT IN (SELECT col1 FROM t3n) is never true.
+      Seq(Some(3), None).toDF("col1").persist().createOrReplaceTempView("t3n")
+      Seq((3), (9)).toDF("col1").persist().createOrReplaceTempView("t3")
+
+      // An existence join only records whether a row matched, so its exists attribute is false
+      // where IN is unknown. That is not observable while the value feeds a predicate, but it is
+      // once it reaches anything else, so these are rejected rather than rewritten. Both
+      // configurations are checked, as the rejection must not depend on the rewrite of predicate
+      // subqueries in join conditions.
+      Seq(
+        "(c1 IN (SELECT col1 FROM t3n)) <=> false",
+        "(c1 IN (SELECT col1 FROM t3n)) IS NULL",
+        // COALESCE to a non-false default does tell unknown from false.
+        "COALESCE(c1 IN (SELECT col1 FROM t3n), true)",
+        "(c1 NOT IN (SELECT col1 FROM t3n)) <=> false").foreach { predicate =>
+        Seq("true", "false").foreach { decorrelateInJoinCondition =>
+          withSQLConf(SQLConf.DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION.key ->
+            decorrelateInJoinCondition) {
+            val e = intercept[AnalysisException] {
+              sql(s"SELECT * FROM t1 WHERE EXISTS (SELECT 1 FROM t2 WHERE a = c1 OR $predicate)")
+                .collect()
+            }
+            assert(e.getCondition == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+              "NESTED_IN_SUBQUERY_WITH_UNKNOWN_RESULT")
+            // A NOT IN must be reported as a NOT IN, not as the IN underneath it.
+            val reported = e.getMessageParameters.get("subqueryExpression")
+            assert(reported.startsWith("(NOT ") == predicate.contains("NOT IN"),
+              s"unexpected subqueryExpression for $predicate: $reported")
+          }
+        }
+      }
+
+      // The ordinary case: the value of the nested IN feeds a predicate, where unknown and
+      // false cannot be told apart, so it is still rewritten even though it can be unknown.
+      checkAnswerAndPlan(
+        """SELECT * FROM t1 WHERE EXISTS (
+          |  SELECT 1 FROM t2 WHERE a = c1 OR c1 IN (SELECT col1 FROM t3n))""".stripMargin,
+        Row(1) :: Nil)
+
+      // And a nested IN that cannot be unknown is rewritten even outside a predicate.
+      checkAnswerAndPlan(
+        """SELECT * FROM t1 WHERE EXISTS (
+          |  SELECT 1 FROM t2
+          |  WHERE a = c1 OR ((c1 IN (SELECT col1 FROM t3)) <=> false))""".stripMargin,
+        Row(1) :: Row(2) :: Row(3) :: Nil)
+
+      // Only truth is observed by `<=> true`, by an IF predicate and by a CASE WHEN
+      // condition, so those are rewritten rather than rejected. SimplifyConditionals folds
+      // the latter two into the first, so ordinary SQL reaches this position.
+      //
+      // The result branches of a conditional are consumed wherever the conditional is, so
+      // under a filter predicate they are truth-only as well. The three cases whose nested IN
+      // sits in a result branch exercise that inheritance rather than the rewrites above:
+      // SimplifyConditionals folds an IF or CASE WHEN only when its branches are TRUE/FALSE
+      // literals, or null literals with a non-nullable condition, so none of the three folds.
+      Seq(
+        "(c1 IN (SELECT col1 FROM t3n)) <=> true",
+        "IF(c1 IN (SELECT col1 FROM t3n), true, false)",
+        "CASE WHEN c1 IN (SELECT col1 FROM t3n) THEN true ELSE false END",
+        "IF(c1 > 0, c1 IN (SELECT col1 FROM t3n), false)",
+        "CASE WHEN c1 > 0 THEN c1 IN (SELECT col1 FROM t3n) ELSE false END",
+        "CASE WHEN c1 > 100 THEN false ELSE c1 IN (SELECT col1 FROM t3n) END",
+        // COALESCE to false maps unknown and false alike, so only truth is observed.
+        "COALESCE(c1 IN (SELECT col1 FROM t3n), false)")
+        .foreach { predicate =>
+          checkAnswerAndPlan(
+            s"SELECT * FROM t1 WHERE EXISTS (SELECT 1 FROM t2 WHERE a = c1 OR $predicate)",
+            Row(1) :: Nil)
+        }
+
+      // The unknown can come from the compared value rather than from the subquery column.
+      // spark.sql.legacy.inSubqueryNullability makes InSubquery.nullable ignore the
+      // nullability of the list query columns, but it always keeps that of the compared
+      // values, and the guard re-derives both, so this case is rejected under either value.
+      Seq("true", "false").foreach { legacyNullability =>
+        withSQLConf(SQLConf.LEGACY_IN_SUBQUERY_NULLABILITY.key -> legacyNullability) {
+          val nullableValue = intercept[AnalysisException] {
+            sql("""SELECT * FROM t1 WHERE EXISTS (
+                  |  SELECT 1 FROM t2n
+                  |  WHERE a = c1 OR ((c1 IN (SELECT col1 FROM t3)) <=> false))""".stripMargin)
+              .collect()
+          }
+          assert(nullableValue.getCondition == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+            "NESTED_IN_SUBQUERY_WITH_UNKNOWN_RESULT")
+        }
+      }
+
+      // The other direction is what the legacy configuration actually suppresses: a non-nullable
+      // compared value, t2.c1, against a nullable list output, t3n.col1. The two settings do not
+      // agree here, and the difference is not a gap in the guard.
+      //
+      // Under the default, `InSubquery.nullable` is true, the comparison against FALSE stays an
+      // EqualNullSafe, the value of the IN is therefore observed beyond being TRUE, and the guard
+      // rejects it.
+      val nullableListOutput = intercept[AnalysisException] {
+        sql("""SELECT * FROM t1 WHERE EXISTS (
+              |  SELECT 1 FROM t2
+              |  WHERE a = c1 OR ((c1 IN (SELECT col1 FROM t3n)) <=> false))""".stripMargin)
+          .collect()
+      }
+      assert(nullableListOutput.getCondition == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+        "NESTED_IN_SUBQUERY_WITH_UNKNOWN_RESULT")
+      assert(nullableListOutput.getMessageParameters.get("subqueryExpression") ==
+        "(t2.c1 IN (listquery()))",
+        nullableListOutput.getMessageParameters.get("subqueryExpression"))
+
+      // Under legacy = true the same query is accepted, and correctly so. That configuration
+      // makes `InSubquery.nullable` false here, so SimplifyBinaryComparison turns `x <=> false`
+      // into `NOT x`, and a NOT directly over an IN takes the null-aware rewrite, whose join
+      // condition is `cond OR isnull(cond)`. Its `exists` is TRUE where the comparison is
+      // unknown, so `NOT exists` is FALSE there, which is what `unknown <=> false` is. The
+      // guard is not reached because there is no longer an EqualNullSafe to reach it, not
+      // because it failed to re-derive the nullability.
+      withSQLConf(SQLConf.LEGACY_IN_SUBQUERY_NULLABILITY.key -> "true") {
+        checkAnswerAndPlan(
+          """SELECT * FROM t1 WHERE EXISTS (
+            |  SELECT 1 FROM t2
+            |  WHERE a = c1 OR ((c1 IN (SELECT col1 FROM t3n)) <=> false))""".stripMargin,
+          Row(1) :: Nil)
+      }
+
+      // A row-valued nested IN: the guard pairs every compared value with the matching list
+      // output, so a shape whose first pair is non-nullable on both sides and whose nullability
+      // sits in a later pair is what tells that apart from inspecting only the first pair. Taken
+      // once on the list-output side and once on the compared-value side.
+      Seq(
+        // t2r.c2 and t6.col1 are not nullable; t6.col2 is.
+        "((c1, c2) IN (SELECT col1, col2 FROM t6)) <=> false" -> "t2r",
+        // t7 is not nullable at all; t2rn.c2n is.
+        "((c1, c2n) IN (SELECT col1, col2 FROM t7)) <=> false" -> "t2rn")
+        .foreach { case (predicate, inner) =>
+          val rowValued = intercept[AnalysisException] {
+            sql(s"SELECT * FROM t1 WHERE EXISTS (" +
+              s"SELECT 1 FROM $inner WHERE a = c1 OR $predicate)").collect()
+          }
+          assert(rowValued.getCondition == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+            "NESTED_IN_SUBQUERY_WITH_UNKNOWN_RESULT",
+            s"$predicate over $inner was not rejected")
+        }
+
+      // And the fully non-nullable row-valued shape cannot be unknown, so it is still rewritten
+      // rather than rejected by a guard that gave up on arity.
+      checkAnswerAndPlan(
+        """SELECT * FROM t1 WHERE EXISTS (
+          |  SELECT 1 FROM t2r
+          |  WHERE a = c1 OR (((c1, c2) IN (SELECT col1, col2 FROM t7)) <=> false))""".stripMargin,
+        Row(1) :: Row(2) :: Row(3) :: Nil)
+
+      // An IN subquery nested in the hoisted condition of another one is reached only by
+      // descending through that one, which is a Predicate and not a SubqueryExpression. Leaving
+      // it unexamined turned its unknown into false.
+      val nestedInJoinCondition = intercept[AnalysisException] {
+        sql("""SELECT * FROM t1 WHERE EXISTS (
+              |  SELECT 1 FROM t2
+              |  WHERE a = c1 OR c1 IN (
+              |    SELECT col1 FROM t4
+              |    WHERE k = c1 AND ((c1 IN (SELECT col1 FROM t3n)) <=> false)))""".stripMargin)
+          .collect()
+      }
+      assert(nestedInJoinCondition.getCondition == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+        "NESTED_IN_SUBQUERY_WITH_UNKNOWN_RESULT")
+
+      // And the values an IN subquery compares are a separate descent, as they are neither its
+      // list query nor part of its hoisted condition. They are value positions, so an IN
+      // subquery there is observed beyond being TRUE even though the IN consuming it is not:
+      // c1 IN (SELECT col1 FROM t3n) is unknown for every c1 of t2, which is not in (false),
+      // while the FALSE an existence join would leave in its place is. Without this descent the
+      // query returned every row of t1 instead of only the one a = c1 holds for.
+      val nestedInValues = intercept[AnalysisException] {
+        sql("""SELECT * FROM t1 WHERE EXISTS (
+              |  SELECT 1 FROM t2
+              |  WHERE a = c1
+              |  OR (c1 IN (SELECT col1 FROM t3n)) IN (SELECT b FROM tb))""".stripMargin)
+          .collect()
+      }
+      assert(nestedInValues.getCondition == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+        "NESTED_IN_SUBQUERY_WITH_UNKNOWN_RESULT")
+      // The IN that is reported is the nested one, not the one it is a compared value of, whose
+      // own compared value would be printed as an IN in turn.
+      val reportedNested = nestedInValues.getMessageParameters.get("subqueryExpression")
+      assert(reportedNested == "(t2.c1 IN (listquery()))", reportedNested)
+    }
+  }
+
+  test("SPARK-59351: an existence join on the build side does not disqualify a broadcast",
+    DisableAdaptiveExecution("the estimate under test is the one the planner uses")) {
+    // The nested subquery is rewritten into an existence join on top of the subquery plan, which
+    // is the build side of the enclosing semi join. An existence join returns exactly the rows of
+    // its left child, so that build side is as small as `small` is, but a generic product estimate
+    // would scale it by the cardinality of `nested` and disqualify the broadcast, planning a sort
+    // merge join over the much larger outer input instead.
+    withTable("outer_side", "small", "nested") {
+      spark.range(0, 20000).selectExpr("id as a").write.saveAsTable("outer_side")
+      spark.range(0, 400).selectExpr("id as c1").write.saveAsTable("small")
+      spark.range(0, 400).selectExpr("id as col1").write.saveAsTable("nested")
+      // The hoisted predicate is `a > c1` rather than the key equality, so the semi join keeps an
+      // equi key and a broadcast hash join is available at all; with a disjunction as the whole
+      // condition it would be a broadcast nested loop join whatever the statistics say.
+      val query =
+        """SELECT * FROM outer_side
+          |WHERE a IN (
+          |  SELECT c1 FROM small
+          |  WHERE a > c1 OR c1 IN (SELECT col1 FROM nested))""".stripMargin
+      val plan = sql(query).queryExecution.optimizedPlan
+      val existenceJoin = plan.collectFirst {
+        case j: Join if j.joinType.isInstanceOf[ExistenceJoin] => j
+      }
+      assert(existenceJoin.nonEmpty, s"expected an existence join in\n$plan")
+      // The estimate has to stay within reach of the left child rather than the product.
+      val j = existenceJoin.get
+      assert(j.stats.sizeInBytes < j.left.stats.sizeInBytes * 2,
+        s"the existence join is estimated at ${j.stats.sizeInBytes} from a left child of " +
+          s"${j.left.stats.sizeInBytes} and a right child of ${j.right.stats.sizeInBytes}")
+      // A threshold above the real build side but below what the product would be.
+      val threshold = j.left.stats.sizeInBytes * 4
+      assert(threshold < j.left.stats.sizeInBytes * j.right.stats.sizeInBytes,
+        "the fixture must distinguish the left-derived estimate from the product")
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> threshold.toString) {
+        val executed = sql(query).queryExecution.executedPlan
+        val semiJoins = collect(executed) { case j: BaseJoinExec => j }
+        assert(semiJoins.exists(_.isInstanceOf[BroadcastHashJoinExec]),
+          s"the build side must stay broadcastable in\n$executed")
+        assert(!semiJoins.exists(_.isInstanceOf[SortMergeJoinExec]),
+          s"no sort merge join should be planned in\n$executed")
+      }
+      checkAnswer(sql(query), spark.range(0, 400).selectExpr("id as a").collect().toSeq)
     }
   }
 }

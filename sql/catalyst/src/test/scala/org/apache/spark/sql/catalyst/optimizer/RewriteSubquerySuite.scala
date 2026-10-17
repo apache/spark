@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Cast, EqualTo, Exists, InSubquery, IsNull, ListQuery, Literal, Not, Or}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, AttributeReference, Cast, EqualTo, Exists, Expression, InSubquery, IsNull, ListQuery, Literal, Not, Or}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, LeftSemi, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, TreeNodeTag}
 import org.apache.spark.sql.types.LongType
 
 
@@ -160,5 +162,125 @@ class RewriteSubquerySuite extends PlanTest {
     val existsOptimized = OptimizeWithPullup.execute(existsQuery.analyze)
     val existsExpected = LocalRelation(existsQuery.analyze.output).analyze
     comparePlans(existsOptimized, existsExpected)
+  }
+
+  test("SPARK-59351: nested subquery of an EXISTS whose plan shares attributes with the outer " +
+    "plan") {
+    // The EXISTS arms route the nested subquery against the raw subquery plan, while the IN arms
+    // route it against the plan dedupSubqueryOnSelfJoin has already separated from the outer
+    // plan. A self-join can leave an ExprId shared between the two plans for the optimizer
+    // (SPARK-21835), and the analyzer is not involved here, so build that state directly: `a` is
+    // the same attribute in the outer and in the subquery plan.
+    val a = $"a".int
+    val outer = LocalRelation(a, $"b".int)
+    val sub = LocalRelation(a)
+    val nested = LocalRelation($"col1".int)
+    assert(outer.outputSet.intersect(sub.outputSet).nonEmpty,
+      "the two plans must share an attribute for this test to mean anything")
+
+    // The nested subquery references `a`, which only the subquery plan is meant to give it, and
+    // is correlated to it, so it must be rewritten against the subquery plan. Classifying `a` as
+    // a reference to the outer plan as well would report it as referencing both plans.
+    val nestedInSubquery = InSubquery(
+      Seq(a),
+      ListQuery(nested.select($"col1"), joinCond = Seq(EqualTo($"col1", a))))
+    val query = Filter(
+      Exists(sub, joinCond = Seq(Or(EqualTo($"b", a), nestedInSubquery))),
+      outer)
+
+    // The shared attribute is attributed to the subquery plan, so the nested subquery is routed
+    // there rather than declined and left in the semi join condition. What then reports this
+    // state is the conflict check that dedupSubqueryOnSelfJoin has always run over that
+    // condition, which names the duplicated attribute: an attribute shared between the two plans
+    // that the hoisted condition mentions cannot be turned into a semi join whatever the routing
+    // does, so this fixture pins the shape rather than the outcome of the attribution.
+    val e = intercept[AnalysisException](Optimize.execute(query))
+    assert(e.getCondition == "_LEGACY_ERROR_TEMP_1212",
+      s"expected the pre-existing conflict check to report this, got ${e.getCondition}")
+  }
+
+  test("SPARK-59351: the rewrite keeps the origin and the tags of the sub-query it replaces") {
+    // The rewrite of a nested existential sub-query builds its replacement by hand rather than
+    // through TreeNode.transformDownWithPruning, so it has to reproduce what that does: apply the
+    // rule under the origin of the node being replaced and copy its tags. Without this a runtime
+    // error raised from the rewritten condition quotes the enclosing operator instead of the
+    // sub-query fragment, which no result or plan assertion would notice.
+    val outer = LocalRelation($"a".int)
+    val inner = LocalRelation($"x".int)
+    val tag = TreeNodeTag[String]("SPARK-59351")
+    val origin = Origin(line = Some(42), startPosition = Some(7))
+    val a = outer.output.head
+    val x = inner.output.head
+    // Correlated, so that the rule's unary node handler picks the projection up at all.
+    val exists = CurrentOrigin.withOrigin(origin) {
+      Exists(inner, outerAttrs = Seq(a), joinCond = Seq(EqualTo(a, x)))
+    }
+    exists.setTagValue(tag, "kept")
+
+    // An Exists outside a Filter goes through the unary node handler, which is the path that
+    // builds the replacement by hand.
+    val rewritten = RewritePredicateSubquery(Project(Seq(Alias(exists, "e")()), outer))
+    val replacements = rewritten.expressions.flatMap(_.collect {
+      case attr: AttributeReference if attr.name == "exists" => attr
+    })
+    assert(replacements.size == 1, s"expected one exists attribute in\n$rewritten")
+    assert(replacements.head.origin == origin,
+      s"the replacement must carry the sub-query's origin, got ${replacements.head.origin}")
+    assert(replacements.head.getTagValue(tag).contains("kept"),
+      "the replacement must carry the sub-query's tags")
+  }
+
+  test("SPARK-59351: the rewrite keeps the origin on the conditions it synthesizes for IN") {
+    // The Exists arm above only has to keep the origin on its `exists` attribute, since its join
+    // condition is the one the pull-up hoisted and is reused as it is. The IN arms synthesize the
+    // comparison against the sub-query output, and NOT IN also synthesizes the null-aware wrapper
+    // and combines both with the hoisted condition. Those nodes end up in the join condition, so a
+    // runtime failure evaluating one of them reports their origin, and nothing else asserts it.
+    val outer = LocalRelation($"a".int)
+    val inner = LocalRelation($"x".int)
+    val origin = Origin(line = Some(42), startPosition = Some(7))
+    // A distinct origin for the hoisted condition, which the rewrite reuses rather than builds,
+    // and must therefore leave alone.
+    val hoistedOrigin = Origin(line = Some(7), startPosition = Some(42))
+    val a = outer.output.head
+    val x = inner.output.head
+
+    // Returns the condition of the existence join the sub-query was rewritten into.
+    def joinCondOf(expr: Expression): Expression = {
+      val rewritten = RewritePredicateSubquery(Project(Seq(Alias(expr, "e")()), outer))
+      val joins = rewritten.collect {
+        case j: Join if j.joinType.isInstanceOf[ExistenceJoin] => j
+      }
+      assert(joins.size == 1, s"expected one existence join in\n$rewritten")
+      joins.head.condition.getOrElse(
+        fail(s"the existence join must have a condition in\n$rewritten"))
+    }
+
+    // Positive IN, uncorrelated: the condition is exactly the synthesized comparison.
+    val in = CurrentOrigin.withOrigin(origin)(InSubquery(Seq(a), ListQuery(inner)))
+    joinCondOf(in) match {
+      case cond @ EqualTo(_, _) => assert(cond.origin == origin,
+        s"the synthesized comparison must carry the sub-query's origin, got ${cond.origin}")
+      case other => fail(s"unexpected condition for a positive IN: $other")
+    }
+
+    // NOT IN, correlated: the condition is And(Or(cmp, IsNull(cmp)), hoisted). Every node the
+    // rewrite builds must take the sub-query's origin, and the hoisted condition must keep its
+    // own.
+    val hoisted = CurrentOrigin.withOrigin(hoistedOrigin)(EqualTo(a, x))
+    val notIn = CurrentOrigin.withOrigin(origin) {
+      Not(InSubquery(Seq(a), ListQuery(inner, outerAttrs = Seq(a), joinCond = Seq(hoisted))))
+    }
+    joinCondOf(notIn) match {
+      case cond @ And(nullAware @ Or(cmp @ EqualTo(_, _), isNull @ IsNull(_)), keptHoisted) =>
+        Seq("combined condition" -> cond, "null-aware wrapper" -> nullAware,
+          "comparison" -> cmp, "null check" -> isNull).foreach { case (what, node) =>
+          assert(node.origin == origin,
+            s"the synthesized $what must carry the sub-query's origin, got ${node.origin}")
+        }
+        assert(keptHoisted.origin == hoistedOrigin,
+          s"the hoisted condition must keep its own origin, got ${keptHoisted.origin}")
+      case other => fail(s"unexpected condition for a NOT IN: $other")
+    }
   }
 }
