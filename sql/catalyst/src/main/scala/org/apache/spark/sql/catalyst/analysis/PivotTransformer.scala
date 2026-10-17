@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   Expression,
   ExtractValue,
   If,
+  In,
   Literal,
   NamedExpression
 }
@@ -120,12 +121,64 @@ object PivotTransformer extends AliasHelper with SQLConfHelper {
         case _ =>
           newAlias(pivotColumn, Some("__pivot_col"))
       }
-      val extendedGroupingExpressions = groupByExpressions :+ namedPivotCol
+      // SPARK-55569: Collapse non-matching pivot column values to null so
+      // the firstAgg produces at most one group per (groupBy-key, null)
+      // instead of one group per distinct non-matching value. PivotFirst
+      // ignores the null group, but the groupBy key is preserved in
+      // secondAgg, keeping the semantics identical to the un-optimized
+      // plan. The firstAgg aggregate inputs are also masked to null for
+      // non-matching rows, preventing overflow in the discarded null
+      // group under ANSI mode.
+      //
+      // Skip when: the config is disabled, the pivot column contains an
+      // aggregate (SPARK-24722), a NULL pivot value is present
+      // (non-matching rows would merge with legitimate null rows), or a
+      // NaN pivot value is present (In uses != which is always false for
+      // NaN, but PivotFirst uses EqualNullSafe which matches NaN).
+      val canCollapse =
+        conf.dataFramePivotCollapseNonMatchingEnabled &&
+        !pivotColumn.exists(_.isInstanceOf[AggregateFunction]) &&
+        !evalPivotValues.contains(null) &&
+        !evalPivotValues.exists {
+          case d: Double => d.isNaN
+          case f: Float => f.isNaN
+          case _ => false
+        }
+      val (effectivePivotCol, effectiveAggExps) = if (canCollapse) {
+        val matchesPivotValue = In(pivotColumn, pivotValues.map { v =>
+          Cast(v, pivotColumn.dataType,
+            Some(conf.sessionLocalTimeZone))
+        })
+        val collapsedCol = newAlias(
+          If(matchesPivotValue, pivotColumn,
+            Literal(null, pivotColumn.dataType)),
+          Some(namedPivotCol.name))
+        // Mask aggregate inputs to null for non-matching rows so the
+        // merged null group never aggregates real measure values.
+        // This prevents ANSI overflow in the discarded group.
+        val maskedAggs = namedAggExps.map { namedAgg =>
+          val masked = namedAgg.transformDown {
+            case af: AggregateFunction =>
+              af.withNewChildren(af.children.map { c =>
+                If(matchesPivotValue, c, Literal(null, c.dataType))
+              })
+          }
+          newAlias(masked, Some(namedAgg.asInstanceOf[Alias]
+            .child.sql))
+        }
+        (collapsedCol, maskedAggs)
+      } else {
+        (namedPivotCol, namedAggExps)
+      }
+      val extendedGroupingExpressions =
+        groupByExpressions :+ effectivePivotCol
       val firstAgg =
-        Aggregate(extendedGroupingExpressions, extendedGroupingExpressions ++ namedAggExps, child)
-      val pivotAggregates = namedAggExps.map { a =>
+        Aggregate(extendedGroupingExpressions,
+          extendedGroupingExpressions ++ effectiveAggExps, child)
+      val pivotAggregates = effectiveAggExps.map { a =>
         newAlias(
-          PivotFirst(namedPivotCol.toAttribute, a.toAttribute, evalPivotValues)
+          PivotFirst(effectivePivotCol.toAttribute,
+            a.toAttribute, evalPivotValues)
             .toAggregateExpression(),
           Some("__pivot_" + a.sql)
         )
