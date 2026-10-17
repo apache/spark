@@ -61,7 +61,9 @@ JSON_OBJECT ( [ key, value [, key, value] ... ]
     error at runtime. The key is validated before the `ON NULL` handling, so a `NULL` key raises the
     error even when the member's value is `NULL` and `ABSENT ON NULL` would otherwise omit it.
     In the `key : value` form, the first top-level `:` after the key ends it, so a key that is
-    itself a `:` extraction (e.g. `v:x`) must be parenthesized: `JSON_OBJECT((v:x) : 1)`.
+    itself a `:` extraction (e.g. `v:x`) must be parenthesized. An extraction also yields a
+    `VARIANT`, which is not a valid key type, so cast it to a string:
+    `JSON_OBJECT((v:x::string) : 1)` (or use the `VALUE` form, `JSON_OBJECT(v:x::string VALUE 1)`).
 
 * **value**
 
