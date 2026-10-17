@@ -163,7 +163,7 @@ case class Mode(
     val key = child.eval(input)
 
     if (key != null) {
-      buffer.changeValue(keyNormalizer(key).asInstanceOf[AnyRef], 1L, _ + 1L)
+      buffer.changeValue(toBufferKey(keyNormalizer(key)), 1L, _ + 1L)
     }
     buffer
   }
@@ -195,7 +195,10 @@ case class Mode(
     // The new map is then used in the rest of the Mode evaluation logic.
     //
     // It is expected to work for all simple and complex types with collated fields.
+    //
+    // Unwrap binary keys (see `toBufferKey`) before they are ordered or returned.
     val collationAwareBuffer = getCollationAwareBuffer(child.dataType, buffer)
+      .view.map { case (key, count) => (fromBufferKey(key), count) }
 
     reverseOpt.map { reverse =>
       val defaultKeyOrdering = if (reverse) {
@@ -359,7 +362,7 @@ case class PandasMode(
     val key = child.eval(input)
 
     if (key != null) {
-      buffer.changeValue(keyNormalizer(key).asInstanceOf[AnyRef], 1L, _ + 1L)
+      buffer.changeValue(toBufferKey(keyNormalizer(key)), 1L, _ + 1L)
     } else if (!ignoreNA) {
       buffer.changeValue(null, 1L, _ + 1L)
     }
@@ -383,7 +386,9 @@ case class PandasMode(
     // Fold collation-equal keys into one group before selecting the mode(s), so that under a
     // non-binary collation values such as 'b' and 'B' (equal under UTF8_LCASE) are counted
     // together. Binary-stable types return the buffer unchanged (no overhead). Mirrors Mode.eval.
+    // Unwrap binary keys (see `toBufferKey`) before they are returned.
     val collationAwareBuffer = getCollationAwareBuffer(child.dataType, buffer)
+      .view.map { case (key, count) => (fromBufferKey(key), count) }
 
     val modes = collection.mutable.ArrayBuffer.empty[AnyRef]
     var maxCount = -1L
