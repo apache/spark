@@ -1105,6 +1105,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "matchedFields" -> matchedFields))
   }
 
+  def parquetFieldRequestedMoreThanOnceError(
+      requestedFields: Seq[String], parquetField: String): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "PARQUET_FIELD_REQUESTED_MORE_THAN_ONCE",
+      messageParameters = Map(
+        "requestedFields" -> requestedFields.map(f => toSQLId(Seq(f))).mkString(", "),
+        "parquetField" -> toSQLId(Seq(parquetField)),
+        "fieldIdReadConf" -> toSQLConf(SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key)))
+  }
+
   def failedToMergeIncompatibleSchemasError(
       left: StructType, right: StructType, e: Throwable): Throwable = {
     new SparkException(
