@@ -27,10 +27,11 @@ import org.apache.arrow.vector.ipc.ArrowStreamReader
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.api.python.{BasePythonRunner, PythonWorker, PythonWorkerHandle, SpecialLengths}
 import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.vectorized.ReusedArrowColumnVector
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
-import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
+import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 
 /**
  * A trait that can be mixed-in with [[BasePythonRunner]]. It implements the logic from
@@ -167,12 +168,18 @@ trait ArrowOutputProcessor {
   def close(): Unit
 }
 
+/**
+ * Loads every batch from Python into the reader's root and returns batches over the same vectors,
+ * so the vectors of a batch are only valid until the next one is loaded. They are
+ * [[ReusedArrowColumnVector]]s: a consumer does not hold them past the next batch, and its
+ * `closeIfFreeable` leaves them to this processor, which closes them in `close`.
+ */
 class ArrowOutputProcessorImpl(reader: ArrowStreamReader, pythonMetrics: Map[String, SQLMetric])
     extends ArrowOutputProcessor {
   protected val root = reader.getVectorSchemaRoot()
   protected val schema: StructType = ArrowUtils.fromArrowSchema(root.getSchema())
   private val vectors: Array[ColumnVector] = root.getFieldVectors().asScala.map { vector =>
-    new ArrowColumnVector(vector)
+    new ReusedArrowColumnVector(vector)
   }.toArray[ColumnVector]
 
   protected var rowCount = -1
@@ -242,9 +249,10 @@ abstract class BaseSliceArrowOutputProcessor(
     batch
   }
 
+  // The slices of a batch are closed once the next one is produced, so they are reused vectors.
   protected override def getVectors(root: VectorSchemaRoot): Array[ColumnVector] = {
     root.getFieldVectors.asScala.map { vector =>
-      new ArrowColumnVector(vector)
+      new ReusedArrowColumnVector(vector)
     }.toArray[ColumnVector]
   }
 

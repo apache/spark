@@ -50,9 +50,9 @@ import org.apache.spark.unsafe.types.UTF8String;
  * A WritableColumnVector should be considered immutable once originally created. In other words,
  * it is not valid to call put APIs after reads until reset() is called.
  *
- * WritableColumnVector are intended to be reused.
+ * WritableColumnVector are intended to be reused, so they are {@link ReusedColumnVector}s.
  */
-public abstract class WritableColumnVector extends ColumnVector {
+public abstract class WritableColumnVector extends ColumnVector implements ReusedColumnVector {
   private final byte[] byte8 = new byte[8];
 
   // Lookup table that "expands" each of the 8 bits in a byte into a separate byte within a long.
