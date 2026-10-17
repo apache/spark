@@ -202,6 +202,9 @@ package object util extends Logging {
    */
   val QUALIFIED_ACCESS_ONLY = "__qualified_access_only"
 
+  /** If set, this metadata column retains an input attribute for a SQL pipe SET assignment. */
+  val PIPE_SET_RETAINED = "__pipe_set_retained"
+
   /**
    * If set, this column can only be accessed under [[AggregateExpression]]. This is important when
    * resolving columns in ORDER BY and HAVING clauses on top of [[Aggregate]]. In this case we can
@@ -217,6 +220,9 @@ package object util extends Logging {
     def qualifiedAccessOnly: Boolean = attr.isMetadataCol &&
       attr.metadata.contains(QUALIFIED_ACCESS_ONLY) &&
       attr.metadata.getBoolean(QUALIFIED_ACCESS_ONLY)
+
+    def pipeSetRetained: Boolean = attr.metadata.contains(PIPE_SET_RETAINED) &&
+      attr.metadata.getBoolean(PIPE_SET_RETAINED)
 
     def aggregatedAccessOnly: Boolean = attr.metadata.contains(AGGREGATED_ACCESS_ONLY) &&
       attr.metadata.getBoolean(AGGREGATED_ACCESS_ONLY)
@@ -236,13 +242,21 @@ package object util extends Logging {
         .build()
     )
 
+    def markAsPipeSetRetained(): Attribute = attr.withMetadata(
+      new MetadataBuilder()
+        .withMetadata(attr.metadata)
+        .putBoolean(PIPE_SET_RETAINED, true)
+        .build()
+    )
+
     def markAsAllowAnyAccess(): Attribute = {
-      if (qualifiedAccessOnly) {
+      if (qualifiedAccessOnly || pipeSetRetained) {
         attr.withMetadata(
           new MetadataBuilder()
             .withMetadata(attr.metadata)
             .remove(QUALIFIED_ACCESS_ONLY)
             .remove(AGGREGATED_ACCESS_ONLY)
+            .remove(PIPE_SET_RETAINED)
             .build()
         )
       } else {
@@ -257,6 +271,7 @@ package object util extends Logging {
     AUTO_GENERATED_ALIAS,
     METADATA_COL_ATTR_KEY,
     QUALIFIED_ACCESS_ONLY,
+    PIPE_SET_RETAINED,
     FIELD_ID_METADATA_KEY,
     FileSourceMetadataAttribute.FILE_SOURCE_METADATA_COL_ATTR_KEY,
     FileSourceConstantMetadataStructField.FILE_SOURCE_CONSTANT_METADATA_COL_ATTR_KEY,

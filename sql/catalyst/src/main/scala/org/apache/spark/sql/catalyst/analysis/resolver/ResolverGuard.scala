@@ -103,6 +103,8 @@ class ResolverGuard(
         checkWithCte(withCte)
       case project: Project =>
         checkProject(project)
+      case pipeSetInput: PipeSetInput =>
+        checkOperator(pipeSetInput.child)
       case aggregate: Aggregate =>
         checkAggregate(aggregate)
       case filter: Filter =>
@@ -193,6 +195,9 @@ class ResolverGuard(
         checkLiteral(literal)
       case unresolvedOrdinal: UnresolvedOrdinal =>
         checkUnresolvedOrdinal(unresolvedOrdinal)
+      case pipeExpression: PipeExpression
+          if pipeExpression.clause == PipeOperators.setClause =>
+        checkExpression(pipeExpression.child)
       case unresolvedPredicate: Predicate =>
         checkUnresolvedPredicate(unresolvedPredicate)
       case scalarSubquery: ScalarSubquery =>

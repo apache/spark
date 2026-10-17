@@ -175,13 +175,18 @@ class JoinResolver(
 
     val resolvedCondition =
       resolveJoinCondition(unresolvedJoin, newCondition, leftNameScope, rightNameScope)
+    val filteredHiddenOutput = filterHiddenOutputMetadataForJoin(
+      joinType = joinType,
+      oldHiddenOutput = scopes.current.hiddenOutput,
+      rightHiddenOutput = rightNameScope.hiddenOutput
+    )
 
     scopes.overwriteCurrent(
       output = Some(newOutputList.map(_.toAttribute)),
       hiddenOutput = Some(
         computeHiddenOutputForNaturalAndUsingJoin(
           newHiddenOutput = hiddenList,
-          oldHiddenOutput = scopes.current.hiddenOutput
+          oldHiddenOutput = filteredHiddenOutput
         )
       )
     )
@@ -263,10 +268,15 @@ class JoinResolver(
       leftOutput = leftNameScope.output,
       rightOutput = rightNameScope.output
     )
+    val filteredHiddenOutput = filterHiddenOutputMetadataForJoin(
+      joinType = partiallyResolvedJoin.joinType,
+      oldHiddenOutput = scopes.current.hiddenOutput,
+      rightHiddenOutput = rightNameScope.hiddenOutput
+    )
 
     val newHiddenOutput = computeHiddenOutputForRegularJoin(
       mainOutput = newOutput,
-      oldHiddenOutput = scopes.current.hiddenOutput
+      oldHiddenOutput = filteredHiddenOutput
     )
 
     scopes.overwriteCurrent(
