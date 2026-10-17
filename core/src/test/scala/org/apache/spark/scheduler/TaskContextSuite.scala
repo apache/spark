@@ -18,10 +18,11 @@
 package org.apache.spark.scheduler
 
 import java.util.Properties
-import java.util.concurrent.Semaphore
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.{CountDownLatch, Semaphore, TimeUnit}
+import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.mockito.ArgumentMatchers.{any, eq => mockitoEq}
 import org.mockito.Mockito._
@@ -755,6 +756,165 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     assert(invocationOrder === Seq("C", "B", "A"))
     context.addTaskCompletionListener(makeLoggingListener("D"))
     assert(invocationOrder === Seq("C", "B", "A", "D"))
+  }
+
+  test("SPARK-60113: pre-completion listeners run before all completion listeners") {
+    val context = TaskContext.empty()
+    val invocationOrder = ArrayBuffer.empty[String]
+
+    def makeLoggingListener(id: String): TaskCompletionListener = new TaskCompletionListener {
+      override def onTaskCompletion(context: TaskContext): Unit = {
+        invocationOrder += id
+      }
+    }
+    context.addTaskCompletionListener(makeLoggingListener("A"))
+    context.addTaskPreCompletionListener(makeLoggingListener("P1"))
+    context.addTaskPreCompletionListener(makeLoggingListener("P2"))
+    // Added after the pre-completion listeners, e.g. lazily by the thread they stop. Had P1 and
+    // P2 been added with addTaskCompletionListener, B would run before them.
+    context.addTaskCompletionListener(makeLoggingListener("B"))
+
+    context.markTaskCompleted(None)
+    assert(invocationOrder === Seq("P2", "P1", "B", "A"))
+    // Called immediately once the task has completed, like completion listeners.
+    context.addTaskPreCompletionListener(makeLoggingListener("P3"))
+    assert(invocationOrder === Seq("P2", "P1", "B", "A", "P3"))
+  }
+
+  test("SPARK-60113: completion listeners run even if a pre-completion listener fails") {
+    val context = TaskContext.empty()
+    val listener = mock(classOf[TaskCompletionListener])
+    context.addTaskCompletionListener(listener)
+    context.addTaskPreCompletionListener(new TaskCompletionListener {
+      override def onTaskCompletion(context: TaskContext): Unit = throw new Exception("pre")
+    })
+
+    val e = intercept[TaskCompletionListenerException] {
+      context.markTaskCompleted(None)
+    }
+    assert(e.getMessage.contains("pre"))
+    verify(listener, times(1)).onTaskCompletion(any())
+    assert(context.isFailed())
+  }
+
+  test("SPARK-60113: failures of pre-completion and completion listeners are both reported") {
+    val context = TaskContext.empty()
+    context.addTaskCompletionListener(new TaskCompletionListener {
+      override def onTaskCompletion(context: TaskContext): Unit = throw new Exception("post")
+    })
+    context.addTaskPreCompletionListener(new TaskCompletionListener {
+      override def onTaskCompletion(context: TaskContext): Unit = throw new Exception("pre")
+    })
+
+    val e = intercept[TaskCompletionListenerException] {
+      context.markTaskCompleted(None)
+    }
+    assert(e.getMessage.contains("pre"))
+    assert(e.getMessage.contains("post"))
+  }
+
+  test("SPARK-60113: a pre-completion listener added after completion runs immediately") {
+    val context = TaskContext.empty()
+    val invocations = new java.util.concurrent.ConcurrentLinkedQueue[(String, Thread)]()
+
+    def makeLoggingListener(id: String): TaskCompletionListener = new TaskCompletionListener {
+      override def onTaskCompletion(context: TaskContext): Unit = {
+        invocations.add((id, Thread.currentThread()))
+      }
+    }
+    context.addTaskCompletionListener(makeLoggingListener("A"))
+    context.addTaskCompletionListener(new TaskCompletionListener {
+      override def onTaskCompletion(context: TaskContext): Unit = {
+        invocations.add(("B", Thread.currentThread()))
+        // Added from a second thread while this thread runs the completion listeners: the task
+        // has completed, so the adding thread runs it right away.
+        val thread = new Thread(() => {
+          context.addTaskPreCompletionListener(makeLoggingListener("P"))
+        })
+        thread.setDaemon(true)
+        thread.start()
+        thread.join(TimeUnit.MINUTES.toMillis(1))
+        assert(!thread.isAlive)
+        assert(invocations.asScala.toSeq === Seq(("B", Thread.currentThread()), ("P", thread)))
+      }
+    })
+
+    context.markTaskCompleted(None)
+    assert(invocations.asScala.map(_._1).toSeq === Seq("B", "P", "A"))
+  }
+
+  test("SPARK-60113: listeners added while pre-completion listeners run are queued") {
+    val context = TaskContext.empty()
+    val invocations = new java.util.concurrent.ConcurrentLinkedQueue[(String, Thread)]()
+    val inPreCompletion = new CountDownLatch(1)
+    val release = new CountDownLatch(1)
+
+    def makeLoggingListener(id: String): TaskCompletionListener = new TaskCompletionListener {
+      override def onTaskCompletion(context: TaskContext): Unit = {
+        invocations.add((id, Thread.currentThread()))
+      }
+    }
+    context.addTaskCompletionListener(makeLoggingListener("A"))
+    context.addTaskPreCompletionListener(new TaskCompletionListener {
+      override def onTaskCompletion(context: TaskContext): Unit = {
+        // Like the listener that waits for a pipelined Python UDF writer to exit.
+        inPreCompletion.countDown()
+        release.await(1, TimeUnit.MINUTES)
+      }
+    })
+
+    val completion = new Thread(() => context.markTaskCompleted(None))
+    completion.setDaemon(true)
+    completion.start()
+    try {
+      assert(inPreCompletion.await(1, TimeUnit.MINUTES))
+      // Like the writer adding listeners lazily while the pre-completion listener waits for it:
+      // the task has not completed yet, so these calls only queue them, and the adding thread
+      // cannot start running the listeners.
+      context.addTaskCompletionListener(makeLoggingListener("B"))
+      context.addTaskPreCompletionListener(makeLoggingListener("P"))
+      assert(!context.isCompleted())
+      assert(invocations.isEmpty)
+    } finally {
+      release.countDown()
+    }
+    completion.join(TimeUnit.MINUTES.toMillis(1))
+    assert(!completion.isAlive)
+    assert(context.isCompleted())
+    assert(invocations.asScala.toSeq ===
+      Seq(("P", completion), ("B", completion), ("A", completion)))
+  }
+
+  test("SPARK-60113: failure listeners run while pre-completion listeners run") {
+    val context = TaskContext.empty()
+    val inPreCompletion = new CountDownLatch(1)
+    val release = new CountDownLatch(1)
+    val failureListenerThread = new AtomicReference[Thread]()
+    context.addTaskFailureListener(new TaskFailureListener {
+      override def onTaskFailure(context: TaskContext, error: Throwable): Unit =
+        failureListenerThread.set(Thread.currentThread())
+    })
+    context.addTaskPreCompletionListener(new TaskCompletionListener {
+      override def onTaskCompletion(context: TaskContext): Unit = {
+        inPreCompletion.countDown()
+        release.await(1, TimeUnit.MINUTES)
+      }
+    })
+
+    val completion = new Thread(() => context.markTaskCompleted(None))
+    completion.setDaemon(true)
+    completion.start()
+    try {
+      assert(inPreCompletion.await(1, TimeUnit.MINUTES))
+      // E.g. a kill whose interrupt listener fails while the pre-completion listener waits for a
+      // writer. This thread is not held up by the waiting listener and runs the failure listeners.
+      context.markTaskFailed(new Exception("failed elsewhere"))
+      assert(failureListenerThread.get eq Thread.currentThread())
+    } finally {
+      release.countDown()
+    }
+    completion.join(TimeUnit.MINUTES.toMillis(1))
+    assert(!completion.isAlive)
   }
 
   test("SPARK-46480: Add isFailed in TaskContext") {
