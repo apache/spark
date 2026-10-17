@@ -131,13 +131,24 @@ private[grpc] object UnixDomainSocketTransport {
       // transport is present the only alternative is a different transport
       // entirely -- e.g. TCP loopback -- which is a deployment choice, not a
       // fallback we silently substitute here, so we fail loudly instead.
-      val epollErr = Option(epollUnavailable).map(_.getMessage).getOrElse("unknown")
-      val kqueueErr = Option(kqueueUnavailable).map(_.getMessage).getOrElse("unknown")
+      val epollErr = nativeFailure(epollUnavailable)
+      val kqueueErr = nativeFailure(kqueueUnavailable)
       throw new UnsupportedOperationException(
         s"No Netty native UDS transport available on os=$os " +
           s"(epoll: $epollErr, kqueue: $kqueueErr). " +
           "UDS-backed gRPC requires netty-transport-native-epoll on Linux or " +
           "netty-transport-native-kqueue on macOS.")
+    }
+  }
+
+  private def nativeFailure(cause: Throwable): String = {
+    if (cause == null) {
+      "unknown"
+    } else {
+      Iterator.iterate(cause)(_.getCause).takeWhile(_ != null).take(6).map { err =>
+        val message = err.getMessage
+        if (message == null || message.isEmpty) err.getClass.getName else message
+      }.mkString(" | ")
     }
   }
 

@@ -568,8 +568,7 @@ object SparkEnv extends Logging {
 
   /**
    * Loads a Spark-owned factory. A missing runtime is reported against the worker
-   * type, because `spark-udf-worker-grpc` is intentionally absent from the engine
-   * classpath until its gRPC dependencies are shaded.
+   * type and the distribution artifact that provides the implementation.
    */
   private def loadBuiltInDispatcherFactory(
       workerType: String,
@@ -607,7 +606,7 @@ object SparkEnv extends Logging {
     new SparkException(
       s"Spark could not load the built-in dispatcher implementation ($className) for " +
         s"worker type $workerType. The direct dispatcher comes from the " +
-        "spark-udf-worker-grpc module, which is not on the Spark runtime classpath yet.")
+        "spark-udf-worker-runtime module, which is missing from the runtime classpath.")
   }
 
   def set(e: SparkEnv): Unit = {
