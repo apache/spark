@@ -17,9 +17,11 @@
 # limitations under the License.
 #
 
+import itertools
 import os
 import subprocess
 import sys
+from collections.abc import Iterable
 
 from sparktestsupport import modules
 from sparktestsupport.shellutils import run_cmd
@@ -152,6 +154,36 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
     return toposort_flatten(
         {m: set(m.dependencies).intersection(modules_to_test) for m in modules_to_test}, sort=True
     )
+
+
+def determine_shell_script_test_goals(
+    test_modules: Iterable[modules.Module], stage: modules.TestStage
+) -> tuple[modules.ShellScriptTestGoal, ...]:
+    """
+    Return the shell script test goals that the given modules declare for a stage.
+
+    Modules can declare the same goal, so each goal is returned once, in declaration order:
+
+    >>> from types import SimpleNamespace
+    >>> Goal, Stage = modules.ShellScriptTestGoal, modules.TestStage
+    >>> shared = Goal("dev/shared")
+    >>> first = SimpleNamespace(shell_script_test_goals=[shared, Goal("dev/first")])
+    >>> second = SimpleNamespace(shell_script_test_goals=[Goal("dev/second"), shared])
+    >>> [g.path for g in determine_shell_script_test_goals([first, second], Stage.PRE_BUILD)]
+    ['dev/shared', 'dev/first', 'dev/second']
+
+    Goals for another stage are left out. The stand-in is not a ShellScriptTestGoal
+    because that type only accepts a stage defined on the enum:
+
+    >>> other = SimpleNamespace(path="dev/later", stage="other")
+    >>> later = SimpleNamespace(shell_script_test_goals=[other])
+    >>> [g.path for g in determine_shell_script_test_goals([first, later], Stage.PRE_BUILD)]
+    ['dev/shared', 'dev/first']
+    """
+    declared_goals = itertools.chain.from_iterable(m.shell_script_test_goals for m in test_modules)
+    stage_goals = (goal for goal in declared_goals if goal.stage == stage)
+    # `dict.fromkeys` preserves order, unlike `set`.
+    return tuple(dict.fromkeys(stage_goals))
 
 
 def determine_dangling_python_tests(changed_files):
