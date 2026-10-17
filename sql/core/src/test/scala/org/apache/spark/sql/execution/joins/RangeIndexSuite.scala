@@ -157,16 +157,15 @@ class RangeIndexSuite extends SparkFunSuite {
   }
 
   test("an inverted build interval reaches the windows the condition accepts") {
-    // (3, 1) is normalized to [1, 3]. A window with low < 1 and high > 3 accepts it,
-    // and dropping the row would lose the pair the join condition accepts.
+    // Int keys route to the long index, so this also pins swap normalization there.
     val index = RangeBroadcastMode(
       Seq(BoundReference(0, IntegerType, nullable = true),
         BoundReference(1, IntegerType, nullable = true)),
       IntervalIndexKind)
       .transform(Array(InternalRow(3, 1), InternalRow(0, 5)))
-      .asInstanceOf[IntervalIndex]
-    assert(ids(index.overlapping(0, 4)).toSet == Set(3, 0))
-    assert(ids(index.overlapping(4, 9)) == List(0))
+      .asInstanceOf[LongIntervalIndex]
+    assert(index.overlapping(0L, 4L).map(_.getInt(0)).toSet == Set(3, 0))
+    assert(index.overlapping(4L, 9L).map(_.getInt(0)).toList == List(0))
   }
 
   test("interval tree returns each overlapping row once") {
@@ -206,7 +205,7 @@ class RangeIndexSuite extends SparkFunSuite {
     assert(probeIds(withNull, 5, null).isEmpty)
     // The null bound is dropped, so two intervals remain and the estimate covers both.
     val one = buildIntervals(Seq(span(0, 10, 0)))
-    assert(withNull.estimatedSize() > one.estimatedSize())
+    assert(withNull.estimatedSize > one.estimatedSize)
 
     // At an interior endpoint, the range that ends and the one that starts
     // are each a candidate once.
@@ -255,12 +254,12 @@ class RangeIndexSuite extends SparkFunSuite {
     val disjoint = buildIntervals((0 until n).map(i => span(2 * i, 2 * i + 1, i)))
     val overlap = buildIntervals((0 until n).map(i => span(i, i + n, i)))
     val again = buildIntervals((0 until n).map(i => span(2 * i, 2 * i + 1, i)))
-    assert(disjoint.estimatedSize() > one.estimatedSize())
-    assert(overlap.estimatedSize() > one.estimatedSize())
-    assert(disjoint.estimatedSize() == again.estimatedSize())
+    assert(disjoint.estimatedSize > one.estimatedSize)
+    assert(overlap.estimatedSize > one.estimatedSize)
+    assert(disjoint.estimatedSize == again.estimatedSize)
     // Nesting stores no extra copy of the rows. Key objects differ, so the two
     // indexes need not be equal, but overlap stays the same order of magnitude.
-    assert(overlap.estimatedSize() < disjoint.estimatedSize() * 3)
+    assert(overlap.estimatedSize < disjoint.estimatedSize * 3)
   }
 
   test("estimatedSize includes distinct key objects") {
@@ -269,7 +268,7 @@ class RangeIndexSuite extends SparkFunSuite {
     val strings = IntervalIndex.build(
       StringType,
       Array((wide, wide, row(0))))
-    assert(strings.estimatedSize() > ints.estimatedSize())
+    assert(strings.estimatedSize > ints.estimatedSize)
   }
 
   test("interval tree treats NaN as its own point and Infinity as a bound") {
@@ -391,8 +390,8 @@ class RangeIndexSuite extends SparkFunSuite {
     assert(empty.upTo(1).isEmpty)
     assert(empty.from(1).isEmpty)
     // SizeEstimator charges the empty array shell, and the five kept points on top of it.
-    assert(empty.estimatedSize() > 0)
-    assert(index.estimatedSize() > empty.estimatedSize())
+    assert(empty.estimatedSize > 0)
+    assert(index.estimatedSize > empty.estimatedSize)
   }
 
   test("PointIndex.build defends against a build-side iterator reusing its row buffer") {
@@ -501,12 +500,14 @@ class RangeIndexSuite extends SparkFunSuite {
   }
 
   test("overlap iterator right-sizes scratch stack to tree depth") {
+    // A single-row index has a trivial core equal to its one interval, so the
+    // probe deliberately lands outside it to exercise the walk's scratch stack.
     val oneRowIndex = buildIntervals(Seq(span(0, 10, 0)))
-    val oneRowIter = oneRowIndex.overlapping(5, 5).asInstanceOf[OverlapIterator]
+    val oneRowIter = oneRowIndex.overlapping(15, 15).asInstanceOf[OverlapIterator]
     assert(oneRowIter.stackCapacity == 8,
       s"one-row index should allocate minimal scratch (8), got ${oneRowIter.stackCapacity}")
 
-    val largeIndex = buildIntervals((0 until 10000).map(i => span(0, 100, i)))
+    val largeIndex = buildIntervals((0 until 10000).map(i => span(i, i + 100, i)))
     val largeIter = largeIndex.overlapping(50, 50).asInstanceOf[OverlapIterator]
     // 10,000 rows has tree depth 14, requiring 3 * 14 = 42 capacity.
     assert(largeIter.stackCapacity == 42,
@@ -515,11 +516,13 @@ class RangeIndexSuite extends SparkFunSuite {
 
   test("overlapping traversal is lazy and supports early exit under high overlap") {
     // The pending-work stack tracks tree depth, not match count: draining a handful
-    // of candidates out of n fully-overlapping intervals must not grow it toward n.
+    // of candidates out of ~100 matches among n=10,000 intervals must not grow it
+    // toward n. Staggered spans also avoid the common-core short cut, which would
+    // skip the walk entirely.
     val n = 10000
-    val overlappingSpans = (0 until n).map(i => span(0, 100, i))
+    val overlappingSpans = (0 until n).map(i => span(i, i + 100, i))
     val index = buildIntervals(overlappingSpans)
-    val iter = index.overlapping(50, 50).asInstanceOf[OverlapIterator]
+    val iter = index.overlapping(5000, 5000).asInstanceOf[OverlapIterator]
     val initialCapacity = iter.stackCapacity
 
     assert(iter.take(3).size == 3)
@@ -527,6 +530,24 @@ class RangeIndexSuite extends SparkFunSuite {
       s"lazy traversal must perform bounded steps ($n total intervals), but took ${iter.steps}")
     assert(iter.stackCapacity == initialCapacity,
       s"stack grew from $initialCapacity to ${iter.stackCapacity} after taking 3 of $n matches")
+  }
+
+  test("overlapping uses the common-core short cut without changing the answer") {
+    // [0, 10], [5, 15], and [8, 20] share the core [8, 10] (1-D Helly). Any
+    // window that reaches it overlaps every interval, so the index returns
+    // all rows directly; windows outside keep the walk's selective answer.
+    val index = buildIntervals(Seq(span(0, 10, 0), span(5, 15, 1), span(8, 20, 2)))
+    assert(probeIds(index, 9, 9).sorted == List(0, 1, 2))
+    assert(probeIds(index, 8, 10).sorted == List(0, 1, 2))
+    assert(probeIds(index, 6, 12).sorted == List(0, 1, 2))
+    // Endpoints are normalized first, so a reversed window reaches the core too.
+    assert(probeIds(index, 12, 6).sorted == List(0, 1, 2))
+    // The short cut skips the walk's iterator for a core window, and only there.
+    assert(!index.overlapping(9, 9).isInstanceOf[OverlapIterator])
+    assert(probeIds(index, 0, 2) == List(0))
+    assert(probeIds(index, 6, 7).sorted == List(0, 1))
+    assert(probeIds(index, 11, 12).sorted == List(1, 2))
+    assert(probeIds(index, 16, 30) == List(2))
   }
 
   test("overlapping matches a brute-force reference across randomized interval sets") {
@@ -553,5 +574,175 @@ class RangeIndexSuite extends SparkFunSuite {
           s"n=$n low=$low high=$high expected=$expected")
       }
     }
+  }
+
+  test("broadcast modes route fixed-width keys to the long indexes") {
+    // Both build keys are long-convertible: the long interval index.
+    assert(RangeBroadcastMode(
+      Seq(BoundReference(0, IntegerType, nullable = true),
+        BoundReference(1, IntegerType, nullable = true)),
+      IntervalIndexKind)
+      .transform(Array(InternalRow(0, 10, 1))).isInstanceOf[LongIntervalIndex])
+    assert(RangeBroadcastMode(
+      Seq(BoundReference(0, IntegerType, nullable = true)), PointIndexKind)
+      .transform(Array(InternalRow(5, 1))).isInstanceOf[LongPointIndex])
+    // Floating point has no bit-preserving SQL order, and strings are not one long.
+    assert(RangeBroadcastMode(
+      Seq(BoundReference(0, FloatType, nullable = true)), PointIndexKind)
+      .transform(Array(InternalRow(1.0f, 1))).isInstanceOf[PointIndex])
+    assert(RangeBroadcastMode(
+      Seq(BoundReference(0, StringType, nullable = true),
+        BoundReference(1, StringType, nullable = true)),
+      IntervalIndexKind)
+      .transform(Array(InternalRow(
+        UTF8String.fromString("a"), UTF8String.fromString("b"), 1))).isInstanceOf[IntervalIndex])
+  }
+
+  test("the long interval index answers the same windows as the generic one") {
+    def longIndex(spans: Seq[(Any, Any, InternalRow)]): LongIntervalIndex =
+      RangeBroadcastMode(
+        Seq(BoundReference(0, IntegerType, nullable = true),
+          BoundReference(1, IntegerType, nullable = true)),
+        IntervalIndexKind)
+        .transform(spans.map(t => InternalRow(t._1, t._2, t._3.getInt(0))).toArray)
+        .asInstanceOf[LongIntervalIndex]
+    def assertSameWindow(
+        generic: IntervalIndex,
+        longIdx: LongIntervalIndex,
+        lo: Int,
+        hi: Int): Unit = {
+      val expected = probeIds(generic, lo, hi).sorted
+      val actual = longIdx.overlapping(lo.toLong, hi.toLong).map(_.getInt(2)).toList.sorted
+      assert(actual == expected, s"window ($lo, $hi): expected $expected, got $actual")
+    }
+
+    // Includes an inverted span and a null bound, and shares the core [8, 10].
+    val spans = Seq(span(0, 10, 0), span(5, 15, 1), (null, 4, row(9)),
+      span(8, 20, 2), span(15, 5, 3))
+    val generic = IntervalIndex.build(IntegerType, spans.toArray)
+    val longIdx = longIndex(spans)
+    assert(longIdx.estimatedSize > 0)
+    // A window that meets the core skips the walk and still answers everything.
+    assert(!longIdx.overlapping(9L, 9L).isInstanceOf[LongOverlapIterator])
+    assert(longIdx.overlapping(9L, 9L).map(_.getInt(2)).toList.sorted == List(0, 1, 2, 3))
+    Seq((2, 2), (5, 7), (9, 9), (13, 12), (11, 11), (15, 15), (20, 30))
+      .foreach { case (lo, hi) => assertSameWindow(generic, longIdx, lo, hi) }
+
+    // Randomized sets cross-check the families independently: the generic index
+    // is itself brute-force verified, so this pins the walk, the lo/hi swap,
+    // and null drops without recomputing expectations by hand.
+    val rand = new scala.util.Random(42)
+    val bound = 50
+    for (_ <- 0 until 20) {
+      val n = 1 + rand.nextInt(300)
+      val raw = (0 until n).map(i => (rand.nextInt(bound), rand.nextInt(bound), i))
+      val randomSpans = raw.map { case (a, b, i) => span(a, b, i) }
+      val randomGeneric = IntervalIndex.build(IntegerType, randomSpans.toArray)
+      val randomLong = longIndex(randomSpans)
+      for (_ <- 0 until 15) {
+        val a = rand.nextInt(bound)
+        val b = rand.nextInt(bound)
+        assertSameWindow(randomGeneric, randomLong, math.min(a, b), math.max(a, b))
+      }
+    }
+  }
+
+  test("boolean keys take the long path and answer the same windows") {
+    // false < true maps to 0 < 1. Intervals: [false, true], [true, true], one
+    // null-bound row that both families drop.
+    val spans = Array(
+      (false: Any, true: Any, row(0)),
+      (true: Any, true: Any, row(1)),
+      (null, true: Any, row(2)))
+    val generic = IntervalIndex.build(BooleanType, spans)
+    val longIdx = RangeBroadcastMode(
+      Seq(BoundReference(0, BooleanType, nullable = true),
+        BoundReference(1, BooleanType, nullable = true)),
+      IntervalIndexKind)
+      .transform(Array(InternalRow(false, true, 0), InternalRow(true, true, 1),
+        InternalRow(null, true, 2)))
+      .asInstanceOf[LongIntervalIndex]
+    assert(longIdx.estimatedSize > 0)
+    Seq((false, false), (true, true), (false, true)).foreach { case (lo, hi) =>
+      val expected = probeIds(generic, lo, hi).sorted
+      val actual = longIdx
+        .overlapping(if (lo) 1L else 0L, if (hi) 1L else 0L)
+        .map(_.getInt(2)).toList.sorted
+      assert(actual == expected, s"window ($lo, $hi): expected $expected, got $actual")
+    }
+  }
+
+  test("the long point index answers the same bounds as the generic one") {
+    // Unsorted, with two rows on key 5, and a null key that both paths drop.
+    val keyed = Array[(Any, InternalRow)](
+      (8, row(8)), (1, row(1)), (5, row(5)), (5, row(50)), (3, row(3)), (null, row(-1)))
+    val generic = PointIndex.build(IntegerType, keyed)
+    val longIdx = RangeBroadcastMode(
+      Seq(BoundReference(0, IntegerType, nullable = true)), PointIndexKind)
+      .transform(keyed.map(t => InternalRow(t._1, t._2.getInt(0))).toArray)
+      .asInstanceOf[LongPointIndex]
+    Seq(0, 1, 4, 5, 6, 8, 9).foreach { v =>
+      val upTo = longIdx.upTo(v.toLong).map(_.getInt(1)).toList.sorted
+      assert(upTo == ids(generic.upTo(v)).sorted, s"upTo($v)")
+      val from = longIdx.from(v.toLong).map(_.getInt(1)).toList.sorted
+      assert(from == ids(generic.from(v)).sorted, s"from($v)")
+    }
+  }
+
+  test("LongIntervalIndex.build defends against a build-side iterator reusing its buffer") {
+    // Same hazard as the generic case: keys and rows are copied out, so a
+    // reused row buffer cannot corrupt the finished index.
+    val n = 50
+    val buildKeys = Seq(
+      BoundReference(0, IntegerType, nullable = true),
+      BoundReference(1, IntegerType, nullable = true))
+    val (shared, rows) = reusingRowIterator(fields = 3, n)
+    val index = RangeBroadcastMode(buildKeys, IntervalIndexKind)
+      .transform(rows, Some(n)).asInstanceOf[LongIntervalIndex]
+
+    shared.update(0, -1)
+    shared.update(1, -1)
+    shared.update(2, -1)
+
+    (0 until n).foreach { i =>
+      val payloads = index.overlapping(i.toLong, i.toLong).map(_.getInt(2)).toList
+      assert(payloads == List(i), s"interval $i was corrupted by later reuse of the row buffer")
+    }
+  }
+
+  test("long indexes round-trip through Java and Kryo serialization") {
+    val interval = RangeBroadcastMode(
+      Seq(BoundReference(0, IntegerType, nullable = true),
+        BoundReference(1, IntegerType, nullable = true)),
+      IntervalIndexKind)
+      .transform(Array(InternalRow(0, 10, 0), InternalRow(5, 15, 1)))
+      .asInstanceOf[LongIntervalIndex]
+    val point = RangeBroadcastMode(
+      Seq(BoundReference(0, IntegerType, nullable = true)), PointIndexKind)
+      .transform(Array(InternalRow(3, 3), InternalRow(7, 7)))
+      .asInstanceOf[LongPointIndex]
+
+    val javaBytes = new ByteArrayOutputStream()
+    val out = new ObjectOutputStream(javaBytes)
+    out.writeObject(interval)
+    out.writeObject(point)
+    out.close()
+    val in = new ObjectInputStream(new ByteArrayInputStream(javaBytes.toByteArray))
+    try {
+      val restoredInterval = in.readObject().asInstanceOf[LongIntervalIndex]
+      val restoredPoint = in.readObject().asInstanceOf[LongPointIndex]
+      assert(restoredInterval.overlapping(5L, 5L).map(_.getInt(2)).toSet == Set(0, 1))
+      assert(restoredPoint.upTo(4L).map(_.getInt(1)).toList == List(3))
+    } finally {
+      in.close()
+    }
+
+    val conf = new org.apache.spark.SparkConf()
+      .set(org.apache.spark.internal.config.Kryo.KRYO_REGISTRATION_REQUIRED, true)
+    val kryo = new org.apache.spark.serializer.KryoSerializer(conf).newInstance()
+    val kryoInterval = kryo.deserialize[LongIntervalIndex](kryo.serialize(interval))
+    val kryoPoint = kryo.deserialize[LongPointIndex](kryo.serialize(point))
+    assert(kryoInterval.overlapping(6L, 7L).map(_.getInt(2)).toSet == Set(0, 1))
+    assert(kryoPoint.from(5L).map(_.getInt(1)).toList == List(7))
   }
 }

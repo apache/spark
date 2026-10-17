@@ -70,15 +70,24 @@ private[execution] case class RangeBroadcastMode private(
   override def transform(
       rows: Iterator[InternalRow],
       sizeHint: Option[Long]): RangeRelation = {
+    val longKeys = RangeIndex.canMapKeysToLong(buildKeys)
     indexKind match {
       case IntervalIndexKind =>
         require(buildKeys.nonEmpty && buildKeys.length <= 2,
           "An interval index expects (low, high), or one point used as both ends.")
-        IntervalIndex.build(buildKeys.head.dataType, buildKeys, rows, sizeHint)
+        if (longKeys) {
+          LongIntervalIndex.build(buildKeys.head.dataType, buildKeys, rows, sizeHint)
+        } else {
+          IntervalIndex.build(buildKeys.head.dataType, buildKeys, rows, sizeHint)
+        }
 
       case PointIndexKind =>
         require(buildKeys.length == 1, "A point index expects one build key.")
-        PointIndex.build(buildKeys.head.dataType, buildKeys, rows, sizeHint)
+        if (longKeys) {
+          LongPointIndex.build(buildKeys.head.dataType, buildKeys, rows, sizeHint)
+        } else {
+          PointIndex.build(buildKeys.head.dataType, buildKeys, rows, sizeHint)
+        }
     }
   }
 
