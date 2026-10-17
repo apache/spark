@@ -602,3 +602,23 @@ SELECT timestampadd(NANOSECOND, -300, TIMESTAMP_LTZ '2020-01-01 00:00:00.0000001
 SELECT timestampadd(NANOSECOND, 900, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000200 UTC');
 -- NANOSECOND is rejected on a microsecond-precision timestamp (nanoseconds are unrepresentable).
 SELECT timestampadd(NANOSECOND, 1, TIMESTAMP_LTZ '2020-01-01 00:00:00 UTC');
+
+-- SPARK-57836: to_timestamp / to_timestamp_ltz / try_to_timestamp(str, fmt, p) parse up to 9
+-- fractional digits into TIMESTAMP_LTZ(p), flooring the digits beyond p; p = 6 keeps TIMESTAMP.
+-- A TIMESTAMP_LTZ(p) input keeps p.
+SELECT to_timestamp('2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 9);
+SELECT to_timestamp_ltz('2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 7);
+SELECT try_to_timestamp('2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 8);
+SELECT typeof(to_timestamp('2020-01-01 13:24:35.1', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 9)),
+  typeof(to_timestamp_ltz('2020-01-01 13:24:35.1', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 6));
+SELECT to_timestamp('2020-01-01 13:24:35.123456789 UTC', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS z', 9);
+SELECT try_to_timestamp('bad', 'yyyy', 9);
+SELECT to_timestamp('bad', 'yyyy', 9);
+SELECT to_timestamp_ltz(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789'),
+  typeof(to_timestamp_ltz(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789'));
+SELECT try_to_timestamp('2020-01-01 13:24:35.12345678' :: timestamp_ltz(8), 'yyyy'),
+  typeof(try_to_timestamp('2020-01-01 13:24:35.12345678' :: timestamp_ltz(8), 'yyyy'));
+SELECT to_timestamp(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789', 'yyyy', 7);
+SELECT to_timestamp_ntz(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789'),
+  typeof(to_timestamp_ntz(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789'));
+SELECT to_timestamp('2020', 'yyyy', 5);

@@ -1869,3 +1869,119 @@ org.apache.spark.SparkIllegalArgumentException
     "parameter" : "`unit`"
   }
 }
+
+
+-- !query
+SELECT to_timestamp('2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 9)
+-- !query schema
+struct<to_timestamp(2020-01-01 13:24:35.123456789, yyyy-MM-dd HH:mm:ss.SSSSSSSSS):timestamp_ltz(9)>
+-- !query output
+2020-01-01 13:24:35.123456789
+
+
+-- !query
+SELECT to_timestamp_ltz('2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 7)
+-- !query schema
+struct<to_timestamp_ltz(2020-01-01 13:24:35.123456789, yyyy-MM-dd HH:mm:ss.SSSSSSSSS):timestamp_ltz(7)>
+-- !query output
+2020-01-01 13:24:35.1234567
+
+
+-- !query
+SELECT try_to_timestamp('2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 8)
+-- !query schema
+struct<try_to_timestamp(2020-01-01 13:24:35.123456789, yyyy-MM-dd HH:mm:ss.SSSSSSSSS):timestamp_ltz(8)>
+-- !query output
+2020-01-01 13:24:35.12345678
+
+
+-- !query
+SELECT typeof(to_timestamp('2020-01-01 13:24:35.1', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 9)),
+  typeof(to_timestamp_ltz('2020-01-01 13:24:35.1', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 6))
+-- !query schema
+struct<typeof(to_timestamp(2020-01-01 13:24:35.1, yyyy-MM-dd HH:mm:ss.SSSSSSSSS)):string,typeof(to_timestamp_ltz(2020-01-01 13:24:35.1, yyyy-MM-dd HH:mm:ss.SSSSSSSSS)):string>
+-- !query output
+timestamp_ltz(9)	timestamp
+
+
+-- !query
+SELECT to_timestamp('2020-01-01 13:24:35.123456789 UTC', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS z', 9)
+-- !query schema
+struct<to_timestamp(2020-01-01 13:24:35.123456789 UTC, yyyy-MM-dd HH:mm:ss.SSSSSSSSS z):timestamp_ltz(9)>
+-- !query output
+2020-01-01 05:24:35.123456789
+
+
+-- !query
+SELECT try_to_timestamp('bad', 'yyyy', 9)
+-- !query schema
+struct<try_to_timestamp(bad, yyyy):timestamp_ltz(9)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT to_timestamp('bad', 'yyyy', 9)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "22007",
+  "messageParameters" : {
+    "func" : "`try_to_timestamp`",
+    "message" : "Text 'bad' could not be parsed at index 0"
+  }
+}
+
+
+-- !query
+SELECT to_timestamp_ltz(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789'),
+  typeof(to_timestamp_ltz(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789'))
+-- !query schema
+struct<to_timestamp_ltz(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789'):timestamp_ltz(9),typeof(to_timestamp_ltz(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789')):string>
+-- !query output
+2020-01-01 13:24:35.123456789	timestamp_ltz(9)
+
+
+-- !query
+SELECT try_to_timestamp('2020-01-01 13:24:35.12345678' :: timestamp_ltz(8), 'yyyy'),
+  typeof(try_to_timestamp('2020-01-01 13:24:35.12345678' :: timestamp_ltz(8), 'yyyy'))
+-- !query schema
+struct<try_to_timestamp(CAST(2020-01-01 13:24:35.12345678 AS TIMESTAMP_LTZ(8)), yyyy):timestamp_ltz(8),typeof(try_to_timestamp(CAST(2020-01-01 13:24:35.12345678 AS TIMESTAMP_LTZ(8)), yyyy)):string>
+-- !query output
+2020-01-01 13:24:35.12345678	timestamp_ltz(8)
+
+
+-- !query
+SELECT to_timestamp(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789', 'yyyy', 7)
+-- !query schema
+struct<to_timestamp(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789', yyyy):timestamp_ltz(7)>
+-- !query output
+2020-01-01 13:24:35.1234567
+
+
+-- !query
+SELECT to_timestamp_ntz(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789'),
+  typeof(to_timestamp_ntz(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789'))
+-- !query schema
+struct<to_timestamp_ntz(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789'):timestamp_ntz(9),typeof(to_timestamp_ntz(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789')):string>
+-- !query output
+2020-01-01 13:24:35.123456789	timestamp_ntz(9)
+
+
+-- !query
+SELECT to_timestamp('2020', 'yyyy', 5)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkException
+{
+  "errorClass" : "INVALID_TIMESTAMP_PRECISION",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "precision" : "5",
+    "type" : "TIMESTAMP_LTZ"
+  }
+}

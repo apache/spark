@@ -595,3 +595,22 @@ SELECT timestampadd(NANOSECOND, 1, TIMESTAMP_NTZ '2020-01-01 00:00:00');
 -- .0000001 value lands on .0000002, and a sub-step +50ns is truncated back to .0000001.
 SELECT timestampadd(NANOSECOND, 150, '2020-01-01 00:00:00.0000001' :: timestamp_ntz(7));
 SELECT timestampadd(NANOSECOND, 50, '2020-01-01 00:00:00.0000001' :: timestamp_ntz(7));
+
+-- SPARK-57836: to_timestamp_ntz(str, fmt, p) parses up to 9 fractional digits into TIMESTAMP_NTZ(p),
+-- flooring the digits beyond p; p = 6 keeps TIMESTAMP_NTZ. A TIMESTAMP_NTZ(p) input keeps p.
+SELECT to_timestamp_ntz('2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 9);
+SELECT to_timestamp_ntz('2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 8);
+SELECT to_timestamp_ntz('2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 7);
+SELECT to_timestamp_ntz('2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 6);
+SELECT to_timestamp_ntz('1969-12-31 23:59:59.999999999', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 9);
+SELECT to_timestamp_ntz('2020-01-01 13:24:35.123456789 UTC', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS z', 9);
+SELECT typeof(to_timestamp_ntz('2020-01-01 13:24:35.1', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 8));
+SELECT to_timestamp_ntz('bad', 'yyyy-MM-dd', 9);
+SELECT to_timestamp_ntz(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'),
+  typeof(to_timestamp_ntz(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'));
+SELECT to_timestamp_ntz('2020-01-01 13:24:35.12345678' :: timestamp_ntz(8), 'yyyy'),
+  typeof(to_timestamp_ntz('2020-01-01 13:24:35.12345678' :: timestamp_ntz(8), 'yyyy'));
+SELECT to_timestamp_ntz(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789', 'yyyy', 7);
+SELECT to_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'),
+  typeof(to_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'));
+SELECT to_timestamp_ntz('2020-01-01 13:24:35', 'yyyy-MM-dd HH:mm:ss', 10);
