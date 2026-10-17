@@ -185,6 +185,24 @@ private[sql] object OrcFilters extends OrcFiltersBase {
     case _ => value
   }
 
+  // Spark treats 0.0 and -0.0 as equal, but ORC orders them like `Double.compare`, -0.0 before
+  // 0.0, in its statistics, and its bloom filters tell them apart. So a comparison with a zero is
+  // built in a form that keeps exactly the values that the Spark predicate keeps: an equality
+  // names both zeros, `lessThan` takes -0.0 as the bound and `lessThanEquals` takes 0.0. Keeping
+  // fewer values would drop rows, and keeping more would drop rows once the predicate is negated,
+  // which is how `>` and `>=` are built.
+  private val Zero = java.lang.Double.valueOf(0.0)
+  private val NegativeZero = java.lang.Double.valueOf(-0.0)
+
+  /** Whether a value cast by `castLiteralValue` is a FLOAT or DOUBLE zero. */
+  private def isZero(castedValue: Any): Boolean = castedValue match {
+    case d: java.lang.Double => d.doubleValue == 0.0
+    case _ => false
+  }
+
+  private def toBound(castedValue: Any, zero: java.lang.Double): Any =
+    if (isZero(castedValue)) zero else castedValue
+
   /**
    * Build a SearchArgument and return the builder so far.
    *
@@ -244,33 +262,45 @@ private[sql] object OrcFilters extends OrcFiltersBase {
     expression match {
       case EqualTo(name, value) if dataTypeMap.contains(name) =>
         val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
-        Some(builder.startAnd()
-          .equals(dataTypeMap(name).fieldName, getType(name), castedValue).end())
+        if (isZero(castedValue)) {
+          Some(builder.startOr()
+            .equals(dataTypeMap(name).fieldName, getType(name), Zero)
+            .equals(dataTypeMap(name).fieldName, getType(name), NegativeZero).end())
+        } else {
+          Some(builder.startAnd()
+            .equals(dataTypeMap(name).fieldName, getType(name), castedValue).end())
+        }
 
       case EqualNullSafe(name, value) if dataTypeMap.contains(name) =>
         val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
-        Some(builder.startAnd()
-          .nullSafeEquals(dataTypeMap(name).fieldName, getType(name), castedValue).end())
+        if (isZero(castedValue)) {
+          Some(builder.startOr()
+            .nullSafeEquals(dataTypeMap(name).fieldName, getType(name), Zero)
+            .nullSafeEquals(dataTypeMap(name).fieldName, getType(name), NegativeZero).end())
+        } else {
+          Some(builder.startAnd()
+            .nullSafeEquals(dataTypeMap(name).fieldName, getType(name), castedValue).end())
+        }
 
       case LessThan(name, value) if dataTypeMap.contains(name) =>
         val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
-        Some(builder.startAnd()
-          .lessThan(dataTypeMap(name).fieldName, getType(name), castedValue).end())
+        Some(builder.startAnd().lessThan(
+          dataTypeMap(name).fieldName, getType(name), toBound(castedValue, NegativeZero)).end())
 
       case LessThanOrEqual(name, value) if dataTypeMap.contains(name) =>
         val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
-        Some(builder.startAnd()
-          .lessThanEquals(dataTypeMap(name).fieldName, getType(name), castedValue).end())
+        Some(builder.startAnd().lessThanEquals(
+          dataTypeMap(name).fieldName, getType(name), toBound(castedValue, Zero)).end())
 
       case GreaterThan(name, value) if dataTypeMap.contains(name) =>
         val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
-        Some(builder.startNot()
-          .lessThanEquals(dataTypeMap(name).fieldName, getType(name), castedValue).end())
+        Some(builder.startNot().lessThanEquals(
+          dataTypeMap(name).fieldName, getType(name), toBound(castedValue, Zero)).end())
 
       case GreaterThanOrEqual(name, value) if dataTypeMap.contains(name) =>
         val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
-        Some(builder.startNot()
-          .lessThan(dataTypeMap(name).fieldName, getType(name), castedValue).end())
+        Some(builder.startNot().lessThan(
+          dataTypeMap(name).fieldName, getType(name), toBound(castedValue, NegativeZero)).end())
 
       case IsNull(name) if dataTypeMap.contains(name) =>
         Some(builder.startAnd()
@@ -281,7 +311,10 @@ private[sql] object OrcFilters extends OrcFiltersBase {
           .isNull(dataTypeMap(name).fieldName, getType(name)).end())
 
       case In(name, values) if dataTypeMap.contains(name) =>
-        val castedValues = values.map(v => castLiteralValue(v, dataTypeMap(name).fieldType))
+        val castedValues = values.flatMap { v =>
+          val castedValue = castLiteralValue(v, dataTypeMap(name).fieldType)
+          if (isZero(castedValue)) Seq(Zero, NegativeZero) else Seq(castedValue)
+        }
         Some(builder.startAnd().in(dataTypeMap(name).fieldName, getType(name),
           castedValues.map(_.asInstanceOf[AnyRef]): _*).end())
 
