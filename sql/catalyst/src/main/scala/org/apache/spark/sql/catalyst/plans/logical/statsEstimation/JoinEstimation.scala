@@ -263,9 +263,11 @@ case class JoinEstimation(join: Join) extends Logging {
     val overlappedRanges = getOverlappedRanges(
       leftHistogram = leftHistogram,
       rightHistogram = rightHistogram,
-      // Only numeric values have equi-height histograms.
-      lowerBound = newMin.get.toString.toDouble,
-      upperBound = newMax.get.toString.toDouble)
+      // Only numeric values have equi-height histograms. Go through the shared toDouble
+      // conversion (rather than value.toString.toDouble) so this stays correct for any type
+      // toDouble supports, not just ones whose internal value happens to stringify as a number.
+      lowerBound = toDouble(newMin.get, leftKey.dataType),
+      upperBound = toDouble(newMax.get, leftKey.dataType))
 
     var card: BigDecimal = 0
     var totalNdv: Double = 0
