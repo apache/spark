@@ -160,6 +160,7 @@ to return the metadata pertaining to a partition or column respectively.
 | TimestampNTZType      | `{ "name" : "timestamp_ntz" }`                                                                                                                                   |
 | YearMonthIntervalType | `{ "name" : "interval", "start_unit": "<start_unit>", "end_unit": "<end_unit>" }`                                                                                |
 | DayTimeIntervalType   | `{ "name" : "interval", "start_unit": "<start_unit>", "end_unit": "<end_unit>" }`                                                                                |
+| GeographyType         | `{ "name" : "geography", "srid": "<srid>" }` (`srid` is a numeric string, or `"ANY"` for a mixed-SRID column)                                                    |
 | ArrayType             | `{ "name" : "array", "element_type": <type_json>, "element_nullable": <boolean> }`                                                                               |
 | MapType               | `{ "name" : "map", "key_type": <type_json>, "value_type": <type_json>, "value_nullable": <boolean> }`                                                            |
 | StructType            | `{ "name" : "struct", "fields": [ {"name" : "field1", "type" : <type_json>, “nullable”: <boolean>, "comment": “<comment>”, "default": “<default_val>”}, ... ] }` |
@@ -307,6 +308,24 @@ DESC FORMATTED customer AS JSON;
   "provider": "parquet",
   "partition_provider": "Catalog",
   "partition_columns": ["state"]
+}
+
+-- GEOGRAPHY columns report their SRID as a dedicated, structured field rather than folding it
+-- into the type name, so consumers can read it without parsing a string.
+CREATE TABLE stores(store_id INT, located_at GEOGRAPHY(4326)) USING parquet;
+
+DESC EXTENDED stores AS JSON;
+{
+  "table_name": "stores",
+  "catalog_name": "spark_catalog",
+  "schema_name": "default",
+  "namespace": ["default"],
+  "columns": [
+    {"name": "store_id", "type": {"name": "int"}, "nullable": true},
+    {"name": "located_at", "type": {"name": "geography", "srid": "4326"}, "nullable": true}
+  ],
+  "type": "MANAGED",
+  "provider": "parquet"
 }
 
 -- DESCRIBE EXTENDED on a view emits view-specific rows.

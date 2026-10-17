@@ -367,6 +367,7 @@ case class TableColumn(
 case class Type(
     name: String,
     collation: Option[String] = None,
+    srid: Option[String] = None,
     fields: Option[List[Field]] = None,
     `type`: Option[Type] = None,
     element_type: Option[Type] = None,
