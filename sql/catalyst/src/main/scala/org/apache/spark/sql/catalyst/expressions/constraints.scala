@@ -22,8 +22,10 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.codegen.{Block, CodegenContext, ExprCode, FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
+import org.apache.spark.sql.catalyst.optimizer.{ComputeCurrentTime, ReplaceExpressions, SpecialDatetimeValues}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+import org.apache.spark.sql.catalyst.trees.TreePattern.{ANALYSIS_AWARE_EXPRESSION, CURRENT_LIKE, TreePattern}
 import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.expressions.FieldReference
@@ -120,16 +122,32 @@ case class CheckConstraint(
     condition: String,
     override val userProvidedName: String = null,
     override val tableName: String = null,
-    override val userProvidedCharacteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty)
+    override val userProvidedCharacteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty,
+    analyzedChild: Option[Expression] = None)
   extends UnaryExpression
   with TableConstraint
-  with ImplicitCastInputTypes {
+  with ImplicitCastInputTypes
+  with AnalysisAwareExpression[CheckConstraint] {
 // scalastyle:on line.size.limit
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(ANALYSIS_AWARE_EXPRESSION)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(BooleanType)
 
+  override def stringArgs: Iterator[Any] =
+    Iterator(child, condition, userProvidedName, tableName, userProvidedCharacteristic)
+
+  override def markAsAnalyzed(): CheckConstraint = copy(analyzedChild = Some(child))
+
+  // ALTER TABLE builds the constraint from the optimized plan, where the current time, date,
+  // catalog, user and the like are replaced by their values at the time of the ALTER TABLE. A
+  // condition that reads one is stored without a predicate, so that writes check `predicateSql`.
   def toV2Constraint: Constraint = {
-    val predicate = new V2ExpressionBuilder(child, true).buildPredicate().orNull
+    val predicate = if (analyzedChild.exists(readsCurrentContext)) {
+      null
+    } else {
+      new V2ExpressionBuilder(child, true).buildPredicate().orNull
+    }
     val enforced = userProvidedCharacteristic.enforced.getOrElse(true)
     val rely = userProvidedCharacteristic.rely.getOrElse(false)
     Constraint
@@ -140,6 +158,17 @@ case class CheckConstraint(
       .enforced(enforced)
       .validationStatus(Constraint.ValidationStatus.VALID)
       .build()
+  }
+
+  /**
+   * Whether the rules that compute the current time, date, catalog and the like change part of `e`,
+   * applied to `e` as the optimizer has it, with its `RuntimeReplaceable`s replaced.
+   */
+  private def readsCurrentContext(e: Expression): Boolean = {
+    val replaced = ReplaceExpressions.replace(e)
+    replaced.containsPattern(CURRENT_LIKE) ||
+      (ComputeCurrentTime.applyForExpression(replaced) ne replaced) ||
+      (SpecialDatetimeValues.applyForExpression(replaced) ne replaced)
   }
 
   override protected def withNewChildInternal(newChild: Expression): Expression =
