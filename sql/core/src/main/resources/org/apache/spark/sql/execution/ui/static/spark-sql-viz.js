@@ -271,7 +271,8 @@ function postprocessForAdditionalMetrics() {
     });
 
   var checkboxNode = $("#stageId-and-taskId-checkbox");
-  checkboxNode.click(function() {
+  // This runs on every (re)render, so replace the click handler instead of adding another one.
+  checkboxNode.off("click.planViz").on("click.planViz", function() {
     onClickAdditionalMetricsCheckbox($(this), true);
   });
   var isChecked = window.localStorage.getItem("stageId-and-taskId-checked") === "true";
