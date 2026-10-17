@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
+import java.time.LocalDateTime
 
 import scala.collection.immutable.HashSet
 
@@ -297,6 +298,100 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     withSQLConf(SQLConf.OPTIMIZER_INSET_SWITCH_THRESHOLD.key -> "20") {
       checkAllTypes()
+    }
+  }
+
+  test("InSet uses a specialized primitive set for integral and date/time types") {
+    // Assert value present -> true, absent -> false, null subject -> null, and a null set member
+    // makes a non-match null (3VL). checkEvaluation runs both interpreted eval and Janino codegen
+    // (so a wrong specialized-method name would fail to compile and fail the test here).
+    def check(present: Literal, absent: Literal, members: Seq[Literal]): Unit = {
+      require(present.dataType == absent.dataType)
+      val values = members.map(_.eval()).toSet[Any]
+      val nullLiteral = Literal(null, present.dataType)
+      checkEvaluation(InSet(nullLiteral, values), expected = null)
+      checkEvaluation(InSet(nullLiteral, values + null), expected = null)
+      checkEvaluation(InSet(present, values), expected = true)
+      checkEvaluation(InSet(present, values + null), expected = true)
+      checkEvaluation(InSet(absent, values), expected = false)
+      checkEvaluation(InSet(absent, values + null), expected = null)
+    }
+
+    def checkAllTypes(): Unit = {
+      check(Literal(2.toByte), Literal(3.toByte),
+        Seq(Literal(1.toByte), Literal(2.toByte), Literal(Byte.MinValue), Literal(Byte.MaxValue)))
+      check(Literal(20.toShort), Literal(-14.toShort),
+        Seq(Literal(-10.toShort), Literal(20.toShort),
+          Literal(Short.MinValue), Literal(Short.MaxValue)))
+      check(Literal(20), Literal(-14),
+        Seq(Literal(20), Literal(-100), Literal(Int.MinValue), Literal(Int.MaxValue)))
+      check(Literal(2L), Literal(-14L),
+        Seq(Literal(1L), Literal(2L), Literal(Long.MinValue), Literal(Long.MaxValue)))
+      check(Literal(Date.valueOf("2017-01-01")), Literal(Date.valueOf("2017-01-02")),
+        Seq(Literal(Date.valueOf("2017-01-01")), Literal(Date.valueOf("1950-01-02"))))
+      check(Literal(Timestamp.valueOf("2017-01-01 00:00:00")),
+        Literal(Timestamp.valueOf("2017-01-02 00:00:00")),
+        Seq(Literal(Timestamp.valueOf("2017-01-01 00:00:00")),
+          Literal(Timestamp.valueOf("1950-01-02 03:04:05"))))
+      check(Literal.create(LocalDateTime.of(2017, 1, 1, 0, 0, 0), TimestampNTZType),
+        Literal.create(LocalDateTime.of(2000, 1, 1, 0, 0, 0), TimestampNTZType),
+        Seq(Literal.create(LocalDateTime.of(2017, 1, 1, 0, 0, 0), TimestampNTZType),
+          Literal.create(LocalDateTime.of(1950, 1, 2, 3, 4, 5), TimestampNTZType)))
+    }
+
+    // Force the non-switch set path so the specialized OpenHashSet is exercised for the
+    // switch-eligible types (byte/short/int/date) too; long/timestamp never use the switch.
+    withSQLConf(SQLConf.OPTIMIZER_INSET_SWITCH_THRESHOLD.key -> "0") {
+      // Default: the specialized primitive set path.
+      checkAllTypes()
+      // Kill-switch off: identical results via the generic boxed Set path.
+      withSQLConf(SQLConf.OPTIMIZER_INSET_BINARY_SEARCH_ENABLED.key -> "false") {
+        checkAllTypes()
+      }
+    }
+  }
+
+  test("InSet specialized set generates a boxing-free binarySearch probe") {
+    def genCode(dt: DataType, values: Set[Any]): String = {
+      val ctx = new CodegenContext()
+      InSet(BoundReference(0, dt, nullable = true), values).genCode(ctx).code.toString
+    }
+    val bs = "java.util.Arrays.binarySearch"
+    // Threshold 0 forces the switch-eligible int type off the switch and onto the array path.
+    withSQLConf(SQLConf.OPTIMIZER_INSET_SWITCH_THRESHOLD.key -> "0") {
+      // Long and Int both probe a sorted primitive array via the boxing-free binarySearch overload.
+      assert(genCode(LongType, HashSet[Any](1L, 2L, 3L)).contains(bs))
+      assert(genCode(IntegerType, HashSet[Any](1, 2, 3)).contains(bs))
+      // Decimal also uses binarySearch (Object[] overload).
+      assert(genCode(DecimalType(12, 1), HashSet[Any](Decimal(1), Decimal(2))).contains(bs))
+      // The kill-switch falls back to the generic boxed Set.contains(Object) path.
+      withSQLConf(SQLConf.OPTIMIZER_INSET_BINARY_SEARCH_ENABLED.key -> "false") {
+        assert(!genCode(LongType, HashSet[Any](1L, 2L, 3L)).contains(bs))
+      }
+    }
+  }
+
+  test("InSet uses a sorted-array binary search for decimal types") {
+    def check(dt: DecimalType): Unit = {
+      def d(v: Int): Decimal = Decimal(BigDecimal(v), dt.precision, dt.scale)
+      val values = Seq(d(1), d(2), d(3)).toSet[Any]
+      val present = Literal(d(2))
+      val absent = Literal(d(9))
+      val nullLit = Literal(null, dt)
+      require(present.dataType == dt && absent.dataType == dt)
+      checkEvaluation(InSet(nullLit, values), expected = null)
+      checkEvaluation(InSet(nullLit, values + null), expected = null)
+      checkEvaluation(InSet(present, values), expected = true)
+      checkEvaluation(InSet(present, values + null), expected = true)
+      checkEvaluation(InSet(absent, values), expected = false)
+      checkEvaluation(InSet(absent, values + null), expected = null)
+    }
+    // compact (precision <= 18, long-backed) and BigDecimal-backed (precision > 18); flag on/off.
+    Seq(DecimalType(12, 1), DecimalType(30, 7)).foreach { dt =>
+      check(dt)
+      withSQLConf(SQLConf.OPTIMIZER_INSET_BINARY_SEARCH_ENABLED.key -> "false") {
+        check(dt)
+      }
     }
   }
 
