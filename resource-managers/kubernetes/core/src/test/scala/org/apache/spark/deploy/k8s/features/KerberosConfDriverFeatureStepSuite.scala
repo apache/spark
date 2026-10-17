@@ -49,7 +49,7 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite {
 
     checkPodForKrbConf(step.configurePod(SparkPod.initialPod()), configMap)
     assert(step.getAdditionalPodSystemProperties().isEmpty)
-    assert(filter[ConfigMap](step.getAdditionalKubernetesResources()).isEmpty)
+    assert(filter[ConfigMap](step.getAdditionalPreKubernetesResources()).isEmpty)
   }
 
   test("create krb5.conf config map if local config provided") {
@@ -60,7 +60,7 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite {
       .set(KUBERNETES_KERBEROS_KRB5_FILE, krbConf.getAbsolutePath())
     val step = createStep(sparkConf)
 
-    val confMap = filter[ConfigMap](step.getAdditionalKubernetesResources()).head
+    val confMap = filter[ConfigMap](step.getAdditionalPreKubernetesResources()).head
     assert(confMap.getData().keySet().asScala === Set(krbConf.getName()))
 
     checkPodForKrbConf(step.configurePod(SparkPod.initialPod()), confMap.getMetadata().getName())
@@ -82,7 +82,7 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite {
 
     assert(step.getAdditionalPodSystemProperties().keys === Set(KEYTAB.key))
 
-    val secret = filter[Secret](step.getAdditionalKubernetesResources()).head
+    val secret = filter[Secret](step.getAdditionalPreKubernetesResources()).head
     assert(secret.getData().keySet().asScala === Set(keytab.getName()))
   }
 
@@ -95,7 +95,7 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite {
     val initial = SparkPod.initialPod()
     assert(step.configurePod(initial) === initial)
     assert(step.getAdditionalPodSystemProperties().isEmpty)
-    assert(step.getAdditionalKubernetesResources().isEmpty)
+    assert(step.getAdditionalPreKubernetesResources().isEmpty)
   }
 
   test("mount delegation tokens if provided") {
@@ -107,7 +107,7 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite {
 
     checkPodForTokens(step.configurePod(SparkPod.initialPod()), dtSecret)
     assert(step.getAdditionalPodSystemProperties().isEmpty)
-    assert(step.getAdditionalKubernetesResources().isEmpty)
+    assert(step.getAdditionalPreKubernetesResources().isEmpty)
   }
 
   test("create delegation tokens if needed") {
@@ -125,7 +125,7 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite {
 
         val step = createStep(new SparkConf(false))
 
-        val dtSecret = filter[Secret](step.getAdditionalKubernetesResources()).head
+        val dtSecret = filter[Secret](step.getAdditionalPreKubernetesResources()).head
         assert(dtSecret.getData().get(KERBEROS_SECRET_KEY) ===
           Base64.getEncoder().encodeToString(tokens))
 
@@ -142,7 +142,7 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite {
     val initial = SparkPod.initialPod()
     assert(step.configurePod(initial) === initial)
     assert(step.getAdditionalPodSystemProperties().isEmpty)
-    assert(step.getAdditionalKubernetesResources().isEmpty)
+    assert(step.getAdditionalPreKubernetesResources().isEmpty)
   }
 
   private def checkPodForKrbConf(pod: SparkPod, confMapName: String): Unit = {

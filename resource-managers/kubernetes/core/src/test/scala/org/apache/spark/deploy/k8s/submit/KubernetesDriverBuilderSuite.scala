@@ -66,6 +66,12 @@ class KubernetesDriverBuilderSuite extends PodBuilderSuite {
   test("SPARK-37331: check driver pre kubernetes resource, empty by default") {
     val sparkConf = new SparkConf(false)
       .set(Config.CONTAINER_IMAGE, "spark-driver:latest")
+      // SPARK-38079: HadoopConfDriverFeatureStep now also contributes a pre-resource
+      // whenever HADOOP_CONF_DIR is set in the environment the test JVM inherits, which
+      // would otherwise make this assertion depend on that environment variable. Exclude
+      // it so this test only exercises the "empty by default" case it is meant to check.
+      .set(Config.KUBERNETES_DRIVER_POD_EXCLUDED_FEATURE_STEPS.key,
+        "org.apache.spark.deploy.k8s.features.HadoopConfDriverFeatureStep")
     val client = mockKubernetesClient()
     val conf = KubernetesTestConf.createDriverConf(sparkConf)
     val spec = new KubernetesDriverBuilder().buildFromFeatures(conf, client)
@@ -77,6 +83,10 @@ class KubernetesDriverBuilderSuite extends PodBuilderSuite {
       .set(Config.CONTAINER_IMAGE, "spark-driver:latest")
       .set(Config.KUBERNETES_DRIVER_POD_FEATURE_STEPS.key,
         "org.apache.spark.deploy.k8s.submit.TestStep")
+      // SPARK-38079: see the comment on the previous test -- without this, an inherited
+      // HADOOP_CONF_DIR would add an extra pre-resource and break the exact-size assertion.
+      .set(Config.KUBERNETES_DRIVER_POD_EXCLUDED_FEATURE_STEPS.key,
+        "org.apache.spark.deploy.k8s.features.HadoopConfDriverFeatureStep")
     val client = mockKubernetesClient()
     val conf = KubernetesTestConf.createDriverConf(
       sparkConf = sparkConf

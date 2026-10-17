@@ -128,4 +128,17 @@ class KubernetesClientUtilsSuite extends SparkFunSuite with BeforeAndAfter {
         .build()
     assert(outputConfigMap === expectedConfigMap)
   }
+
+  test("SPARK-38079: configMapNameDriver generates a distinct name on every call, unlike " +
+      "configMapNameExecutor") {
+    // configMapNameExecutor must keep returning the one name every executor of a running
+    // application agrees on (it is created once by KubernetesClusterSchedulerBackend and
+    // referenced by name independently by BasicExecutorFeatureStep for every executor), while
+    // configMapNameDriver -- called once per submission, into a local val reused for that
+    // whole submission -- has no such requirement and must vary across submissions instead.
+    assert(KubernetesClientUtils.configMapNameDriver !==
+      KubernetesClientUtils.configMapNameDriver)
+    assert(KubernetesClientUtils.configMapNameExecutor ===
+      KubernetesClientUtils.configMapNameExecutor)
+  }
 }
