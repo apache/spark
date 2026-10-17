@@ -5461,7 +5461,33 @@ class DataFrameAggregateSuite extends SharedSparkSession
     assert(outType.precision == 24 && outType.scale == 6,
       s"expected DecimalType(24, 6) from un-rewritten AVG, got $outType")
   }
+
+  test("SPARK-60124: listagg(DISTINCT ...) with FILTER") {
+    val df = Seq(
+      ("b", 1), ("a", 1), ("a", 1), (null.asInstanceOf[String], 1), ("c", 0)
+    ).toDF("s", "keep")
+
+    checkAnswer(
+      df.selectExpr("listagg(DISTINCT s, '|') WITHIN GROUP (ORDER BY s) FILTER (WHERE keep = 1)"),
+      Seq(Row("a|b"))
+    )
+    checkAnswer(
+      df.selectExpr(
+        "count(DISTINCT keep)",
+        "listagg(DISTINCT s, '|') WITHIN GROUP (ORDER BY s) FILTER (WHERE keep = 1)"
+      ),
+      Seq(Row(2, "a|b"))
+    )
+    checkAnswer(
+      df.selectExpr(
+        "count(DISTINCT keep)",
+        "listagg(s, '|') WITHIN GROUP (ORDER BY s)"
+      ),
+      Seq(Row(2, "a|a|b|c"))
+    )
+  }
 }
+
 
 case class B(c: Option[Double])
 case class A(b: Option[B])
