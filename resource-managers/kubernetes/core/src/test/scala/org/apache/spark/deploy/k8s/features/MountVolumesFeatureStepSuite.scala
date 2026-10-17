@@ -573,4 +573,66 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     assert(configuredPod.pod.getSpec.getVolumes.size() === 2)
     assert(configuredPod.container.getVolumeMounts.size() === 2)
   }
+
+  test("Mounts csi") {
+    val volumeConf = KubernetesVolumeSpec(
+      "testVolume",
+      "/mnt/disk1",
+      "",
+      "",
+      true,
+      KubernetesCSIVolumeConf("csi.example.com", Map(
+        "parentIndex" -> "0",
+        "size" -> "500",
+        "volumeType" -> "HostPath",
+        "mountOptions" -> "dir_mode=0777,actimeo=30,nosharesock"),
+        fsType = Some("ext4"),
+        nodePublishSecretName = Some("csi-secret"))
+    )
+    val kubernetesConf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeConf))
+    val step = new MountVolumesFeatureStep(kubernetesConf)
+    val configuredPod = step.configurePod(SparkPod.initialPod())
+
+    assert(configuredPod.pod.getSpec.getVolumes.size() === 1)
+    val csi = configuredPod.pod.getSpec.getVolumes.get(0).getCsi
+    assert(csi.getDriver === "csi.example.com")
+    assert(csi.getReadOnly === true)
+    assert(csi.getFsType === "ext4")
+    assert(csi.getNodePublishSecretRef.getName === "csi-secret")
+    assert(csi.getVolumeAttributes.size() === 4)
+    assert(csi.getVolumeAttributes.get("parentIndex") === "0")
+    assert(csi.getVolumeAttributes.get("size") === "500")
+    assert(csi.getVolumeAttributes.get("volumeType") === "HostPath")
+    assert(csi.getVolumeAttributes.get("mountOptions") === "dir_mode=0777,actimeo=30,nosharesock")
+
+    assert(configuredPod.container.getVolumeMounts.size() === 1)
+    assert(configuredPod.container.getVolumeMounts.get(0).getMountPath === "/mnt/disk1")
+    assert(configuredPod.container.getVolumeMounts.get(0).getName === "testVolume")
+  }
+
+  test("Mounts csi with driver only") {
+    val volumeConf = KubernetesVolumeSpec(
+      "testVolume",
+      "/mnt/disk1",
+      "",
+      "",
+      false,
+      KubernetesCSIVolumeConf("csi.example.com", Map("foo" -> "bar"))
+    )
+    val kubernetesConf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeConf))
+    val step = new MountVolumesFeatureStep(kubernetesConf)
+    val configuredPod = step.configurePod(SparkPod.initialPod())
+
+    assert(configuredPod.pod.getSpec.getVolumes.size() === 1)
+    val csi = configuredPod.pod.getSpec.getVolumes.get(0).getCsi
+    assert(csi.getDriver === "csi.example.com")
+    assert(csi.getReadOnly === false)
+    assert(csi.getFsType === null)
+    assert(csi.getNodePublishSecretRef === null)
+    assert(csi.getVolumeAttributes === Map("foo" -> "bar").asJava)
+
+    assert(configuredPod.container.getVolumeMounts.size() === 1)
+    assert(configuredPod.container.getVolumeMounts.get(0).getMountPath === "/mnt/disk1")
+    assert(configuredPod.container.getVolumeMounts.get(0).getName === "testVolume")
+  }
 }
