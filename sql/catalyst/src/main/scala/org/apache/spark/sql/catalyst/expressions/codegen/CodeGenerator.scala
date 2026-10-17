@@ -1322,22 +1322,17 @@ class CodegenContext extends Logging {
     val args = mutable.LinkedHashMap.empty[String, VariableValue]
     val inputsToEvaluate = mutable.ArrayBuffer.empty[ExprCode]
     // Whether the code can read `v` from the method: false for a value no parameter can carry
-    // where the policy asks for names. `ExpandExec` hands out a `VariableValue` naming a slot of a
-    // compacted mutable state array, and a `SimpleExprValue` is an expression rather than a name
+    // where the policy asks for names. A `SimpleExprValue` is an expression rather than a name
     // -- `posexplode_outer` gives its position the nullness `index == -1`, and a `Byte` or `Short`
     // literal's value is `(byte)1`. A field or a literal needs no parameter and is read as it
     // stands; so is a field handed out as a `VariableValue` where the policy says so, passing one
-    // being refused by the split methods' own check, a slot of a compacted array included.
+    // being refused by the split methods' own check.
     def take(v: ExprValue): Boolean = v match {
       case local: VariableValue =>
         val name = local.variableName
         val isName = name.nonEmpty && Character.isJavaIdentifierStart(name.head) &&
           name.forall(Character.isJavaIdentifierPart)
-        // A slot of a compacted array is a field under every policy, since no parameter can be
-        // named `array[i]`, where the whole stage split is on; with it off, every policy answers
-        // as it did before that split existed. Another field is passed where the policy says so.
-        val isField = (isCompactedSlot(name) && wholeStageSplit != WholeStageSplit.Off) ||
-          (policy.fieldsNeedNoArgument && mutableStateNames.contains(name))
+        val isField = policy.fieldsNeedNoArgument && mutableStateNames.contains(name)
         val taken = isName || isField || !policy.onlyNames
         if (taken && !isField) {
           args.getOrElseUpdate(name, local)
@@ -1409,15 +1404,6 @@ class CodegenContext extends Logging {
         isValidParamLength(calculateParamLengthFromExprValues(arguments)))) {
       CollectedInputs(arguments, readsRow, inputsToEvaluate.toSeq)
     }
-  }
-
-  /**
-   * Whether `name` is a slot of a compacted mutable state array, such as `mutableStateArray_0[3]`,
-   * which `addMutableState` hands out for a state it does not inline: a field of the class.
-   */
-  private def isCompactedSlot(name: String): Boolean = name match {
-    case CodeGenerator.CompactedSlot(array) => mutableStateNames.contains(array)
-    case _ => false
   }
 
   /**
@@ -2149,7 +2135,7 @@ class CodegenContext extends Logging {
     // WHEN or a `With` definition's method. A generation that splits the stage's expressions
     // (`WholeStageSplit.Split`) removes those functions then; any other keeps them, as the class
     // did before that split existed, so that a stage kept in one piece, and the split turned off,
-    // give back the code generated before it.
+    // have the functions they had before it.
     val functionsBeforeNonSplit = functionsMark()
     val occurrencesBeforeNonSplit = wholeStageSplitOccurrences.clone()
     val blocksSplitBeforeNonSplit = wholeStageBlocksSplit
@@ -3056,9 +3042,6 @@ object CodeGenerator extends Logging {
   // ---------------------------------------------------------------------------------------------
   // The whole stage split of expressions (`CodegenContext.splitExpressionsWithSources`)
   // ---------------------------------------------------------------------------------------------
-
-  /** A slot of a compacted mutable state array, such as `mutableStateArray_0[3]`. */
-  private[codegen] val CompactedSlot = "([A-Za-z_$][\\w$]*)\\[\\d+\\]".r
 
   /** A name and an opening parenthesis: a call, or a keyword such as `if`. */
   private[codegen] val CallSite = "(?<![\\w$])([A-Za-z_$][\\w$]*)\\s*\\(".r
