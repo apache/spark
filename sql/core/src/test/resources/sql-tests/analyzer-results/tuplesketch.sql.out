@@ -3103,12 +3103,13 @@ FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "[SKETCH_INVALID_LG_NOM_ENTRIES] Invalid call to `tuple_sketch_agg_double`; the `lgNomEntries` value must be between 4 and 26, inclusive: 2. SQLSTATE: 22003",
-    "sqlExpr" : "\"tuple_sketch_agg_double(col, val, 2, sum)\""
+    "currentValue" : "2",
+    "exprName" : "lgNomEntries",
+    "sqlExpr" : "\"tuple_sketch_agg_double(col, val, 2, sum)\"",
+    "valueRange" : "[4, 26]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3126,12 +3127,13 @@ FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "[SKETCH_INVALID_LG_NOM_ENTRIES] Invalid call to `tuple_sketch_agg_double`; the `lgNomEntries` value must be between 4 and 26, inclusive: 40. SQLSTATE: 22003",
-    "sqlExpr" : "\"tuple_sketch_agg_double(col, val, 40, sum)\""
+    "currentValue" : "40",
+    "exprName" : "lgNomEntries",
+    "sqlExpr" : "\"tuple_sketch_agg_double(col, val, 40, sum)\"",
+    "valueRange" : "[4, 26]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3153,12 +3155,13 @@ FROM (SELECT tuple_sketch_agg_double(col, val, 12) as sketch
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "[SKETCH_INVALID_LG_NOM_ENTRIES] Invalid call to `tuple_union_agg_double`; the `lgNomEntries` value must be between 4 and 26, inclusive: 3. SQLSTATE: 22003",
-    "sqlExpr" : "\"tuple_union_agg_double(sketch, 3, sum)\""
+    "currentValue" : "3",
+    "exprName" : "lgNomEntries",
+    "sqlExpr" : "\"tuple_union_agg_double(sketch, 3, sum)\"",
+    "valueRange" : "[4, 26]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3180,12 +3183,13 @@ FROM (SELECT tuple_sketch_agg_double(col, val, 12) as sketch
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "[SKETCH_INVALID_LG_NOM_ENTRIES] Invalid call to `tuple_union_agg_double`; the `lgNomEntries` value must be between 4 and 26, inclusive: 27. SQLSTATE: 22003",
-    "sqlExpr" : "\"tuple_union_agg_double(sketch, 27, sum)\""
+    "currentValue" : "27",
+    "exprName" : "lgNomEntries",
+    "sqlExpr" : "\"tuple_union_agg_double(sketch, 27, sum)\"",
+    "valueRange" : "[4, 26]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3329,12 +3333,13 @@ FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "[SKETCH_INVALID_LG_NOM_ENTRIES] Invalid call to `tuple_sketch_agg_double`; the `lgNomEntries` value must be between 4 and 26, inclusive: 2. SQLSTATE: 22003",
-    "sqlExpr" : "\"tuple_sketch_agg_double(col, val, 2.0, 15)\""
+    "currentValue" : "2",
+    "exprName" : "lgNomEntries",
+    "sqlExpr" : "\"tuple_sketch_agg_double(col, val, 2.0, 15)\"",
+    "valueRange" : "[4, 26]"
   },
   "queryContext" : [ {
     "objectType" : "",

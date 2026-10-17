@@ -291,14 +291,16 @@ abstract class TupleSketchAggBase[U, S <: UpdatableSummary[U]]
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
-    val lgCheck = checkLgNomEntriesParameter()
 
     if (defaultCheck.isFailure) {
       defaultCheck
-    } else if (lgCheck.isFailure) {
-      lgCheck
     } else {
-      checkModeParameter()
+      val lgCheck = checkLgNomEntriesParameter()
+      if (lgCheck.isFailure) {
+        lgCheck
+      } else {
+        checkModeParameter()
+      }
     }
   }
 

@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.datasketches.theta.SetOperation
 
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.util.ThetaSketchUtils
@@ -77,9 +78,8 @@ case class ThetaSketchEstimate(child: Expression)
           An expression that evaluates to binary.
       * second - The binary representation of the second Datasketches ThetaSketch.
           An expression that evaluates to binary.
-      * lgNomEntries - Optional. The log-base-2 of the nominal entries used to size the
-          union buffer, between 4 and 26. An expression that evaluates to an integer.
-          Defaults to 12.
+      * lgNomEntries - Optional. A foldable integer expression containing the log-base-2 of the
+          nominal entries used to size the union buffer, between 4 and 26. Defaults to 12.
   """,
   examples = """
     Examples:
@@ -112,6 +112,15 @@ case class ThetaUnion(first: Expression, second: Expression, third: Expression)
   override def prettyName: String = "theta_union"
 
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BinaryType, IntegerType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      defaultCheck
+    } else {
+      ThetaSketchUtils.checkLgNomEntriesInput(third)
+    }
+  }
 
   override def dataType: DataType = BinaryType
 

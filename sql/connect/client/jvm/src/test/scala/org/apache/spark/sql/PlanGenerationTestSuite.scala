@@ -3335,15 +3335,15 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
   }
 
   test("hll_sketch_agg with column lgConfigK") {
-    binary.select(fn.hll_sketch_agg(fn.col("bytes"), lit(0)))
+    binary.select(fn.hll_sketch_agg(fn.col("bytes"), lit(12)))
   }
 
   test("hll_sketch_agg with column lgConfigK_int") {
-    binary.select(fn.hll_sketch_agg(fn.col("bytes"), 0))
+    binary.select(fn.hll_sketch_agg(fn.col("bytes"), 12))
   }
 
   test("hll_sketch_agg with columnName lgConfigK_int") {
-    binary.select(fn.hll_sketch_agg("bytes", 0))
+    binary.select(fn.hll_sketch_agg("bytes", 12))
   }
 
   test("hll_sketch_agg") {

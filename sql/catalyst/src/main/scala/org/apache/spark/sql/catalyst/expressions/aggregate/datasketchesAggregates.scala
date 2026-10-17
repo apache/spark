@@ -23,6 +23,8 @@ import org.apache.datasketches.memory.Memory
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.util.CollationFactory
@@ -31,6 +33,38 @@ import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{AbstractDataType, AnyTimeType, BinaryType, BooleanType, DataType, IntegerType, LongType, StringType, TimeType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
 
+private object DatasketchesInputValidation {
+  def checkFoldableInput(
+      input: Expression,
+      inputName: String,
+      inputType: String,
+      valueRange: String)(validate: Any => Boolean): TypeCheckResult = {
+    if (!input.foldable) {
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> inputName,
+          "inputType" -> inputType,
+          "inputExpr" -> input.sql))
+    } else {
+      val inputValue = input.eval()
+      if (inputValue == null) {
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_NULL",
+          messageParameters = Map("exprName" -> inputName))
+      } else if (!validate(inputValue)) {
+        DataTypeMismatch(
+          errorSubClass = "VALUE_OUT_OF_RANGE",
+          messageParameters = Map(
+            "exprName" -> inputName,
+            "valueRange" -> valueRange,
+            "currentValue" -> inputValue.toString))
+      } else {
+        TypeCheckResult.TypeCheckSuccess
+      }
+    }
+  }
+}
 
 /**
  * The HllSketchAgg function utilizes a Datasketches HllSketch instance to count a probabilistic
@@ -52,8 +86,8 @@ import org.apache.spark.unsafe.types.UTF8String
     Arguments:
       * expr - The expression to aggregate into the HLL sketch.
         An expression that evaluates to an integer, long, time, string, or binary.
-      * lgConfigK - The log-base-2 of K, where K is the number of buckets for the sketch.
-        An expression that evaluates to an integer.
+      * lgConfigK - A foldable integer expression containing the log-base-2 of K, where K is the
+        number of buckets for the sketch.
   """,
   examples = """
     Examples:
@@ -77,7 +111,13 @@ case class HllSketchAgg(
       throw QueryExecutionErrors.hllKMustBeConstantError(prettyName)
     }
     val lgConfigK = right.eval().asInstanceOf[Int]
-    HllSketchAgg.checkLgK(lgConfigK)
+    if (!HllSketchAgg.checkLgK(lgConfigK)) {
+      throw QueryExecutionErrors.hllInvalidLgK(
+        function = "hll_sketch_agg",
+        min = HllSketchAgg.minLgConfigK,
+        max = HllSketchAgg.maxLgConfigK,
+        value = lgConfigK)
+    }
     lgConfigK
   }
 
@@ -129,6 +169,21 @@ case class HllSketchAgg(
         BinaryType,
         AnyTimeType),
       IntegerType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      defaultCheck
+    } else {
+      DatasketchesInputValidation.checkFoldableInput(
+        right,
+        inputName = "lgConfigK",
+        inputType = "int",
+        valueRange = s"[${HllSketchAgg.minLgConfigK}, ${HllSketchAgg.maxLgConfigK}]") { value =>
+        HllSketchAgg.checkLgK(value.asInstanceOf[Int])
+      }
+    }
+  }
 
   override def dataType: DataType = BinaryType
 
@@ -229,12 +284,9 @@ object HllSketchAgg {
   private val minLgConfigK = 4
   private val maxLgConfigK = 21
 
-  // Replicate Datasketches' HllUtil's checkLgK implementation, as we can't reference it directly.
-  def checkLgK(lgConfigK: Int): Unit = {
-    if (lgConfigK < minLgConfigK || lgConfigK > maxLgConfigK) {
-      throw QueryExecutionErrors.hllInvalidLgK(function = "hll_sketch_agg",
-        min = minLgConfigK, max = maxLgConfigK, value = lgConfigK)
-    }
+  // Replicate Datasketches' HllUtil's range check, as we can't reference it directly.
+  def checkLgK(lgConfigK: Int): Boolean = {
+    lgConfigK >= minLgConfigK && lgConfigK <= maxLgConfigK
   }
 }
 
@@ -257,9 +309,8 @@ object HllSketchAgg {
     Arguments:
       * expr - The binary representation of an HllSketch to merge.
           An expression that evaluates to binary.
-      * allowDifferentLgConfigK - Optional. Whether to allow sketches with different
-          lgConfigK values to be unioned. An expression that evaluates to a boolean.
-          Defaults to false.
+      * allowDifferentLgConfigK - Optional. A foldable boolean expression indicating whether to
+          allow sketches with different lgConfigK values to be unioned. Defaults to false.
   """,
   examples = """
     Examples:
@@ -317,6 +368,22 @@ case class HllUnionAgg(
   override def prettyName: String = "hll_union_agg"
 
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BooleanType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      defaultCheck
+    } else if (!right.foldable) {
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "allowDifferentLgConfigK",
+          "inputType" -> "boolean",
+          "inputExpr" -> right.sql))
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
 
   override def dataType: DataType = BinaryType
 

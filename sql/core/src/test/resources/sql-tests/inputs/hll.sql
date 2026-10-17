@@ -87,6 +87,12 @@ FROM VALUES (15), (16), (17) tab(col);
 SELECT hll_sketch_agg(col, CAST(col AS INT)) AS k_non_constant
 FROM VALUES (15), (16), (17) tab(col);
 
+-- allowDifferentLgConfigK parameter is not foldable (non-constant)
+SELECT allow_different_lg_config_k,
+    hll_union_agg(CAST('' AS BINARY), allow_different_lg_config_k)
+FROM VALUES (false) tab(allow_different_lg_config_k)
+GROUP BY allow_different_lg_config_k;
+
 SELECT hll_sketch_agg(col, '15')
 FROM VALUES (50), (60), (60) tab(col);
 
