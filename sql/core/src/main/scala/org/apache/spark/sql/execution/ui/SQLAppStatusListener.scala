@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.ui
 
-import java.util.{Arrays, Date, NoSuchElementException}
+import java.util.{Date, NoSuchElementException}
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -36,7 +36,8 @@ import org.apache.spark.sql.execution.metric._
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.status.{ElementTrackingStore, KVUtils, LiveEntity}
 import org.apache.spark.util.{MetricUtils, Utils}
-import org.apache.spark.util.collection.OpenHashMap
+import org.apache.spark.util.collection.{CompactLongArray, OpenHashMap}
+import org.apache.spark.util.kvstore.KVIndex
 
 class SQLAppStatusListener(
     conf: SparkConf,
@@ -46,6 +47,9 @@ class SQLAppStatusListener(
   // How often to flush intermediate state of a live execution to the store. When replaying logs,
   // never flush (only do the very last write).
   private val liveUpdatePeriodNs = if (live) conf.get(LIVE_ENTITY_UPDATE_PERIOD) else -1L
+  private val compactMetrics = conf.get(COMPACT_UI_STORE_ENABLED)
+  private val compactStore = kvstore.usingCompactStore
+  private val statusStore = new SQLAppStatusStore(kvstore)
 
   // Live tracked data is needed by the SQL status store to calculate metrics for in-flight
   // executions; that means arbitrary threads may be querying these maps, so they need to be
@@ -58,7 +62,12 @@ class SQLAppStatusListener(
     liveExecutions.isEmpty && stageMetrics.isEmpty
   }
 
-  kvstore.addTrigger(classOf[SQLExecutionUIData], conf.get[Int](UI_RETAINED_EXECUTIONS)) { count =>
+  private val executionClass = if (compactStore) {
+    classOf[SQLExecutionSummary]
+  } else {
+    classOf[SQLExecutionUIData]
+  }
+  kvstore.addTrigger(executionClass, conf.get[Int](UI_RETAINED_EXECUTIONS)) { count =>
     cleanupExecutions(count)
   }
 
@@ -89,8 +98,9 @@ class SQLAppStatusListener(
         try {
           // Should not overwrite the kvstore with new entry, if it already has the SQLExecution
           // data corresponding to the execId.
-          val sqlStoreData = kvstore.read(classOf[SQLExecutionUIData], executionId)
-          val executionData = new LiveExecutionData(executionId)
+          val sqlStoreData = statusStore.execution(executionId)
+            .getOrElse(throw new NoSuchElementException(executionId.toString))
+          val executionData = new LiveExecutionData(executionId, compactStore, compactMetrics)
           executionData.rootExecutionId = sqlStoreData.rootExecutionId
           executionData.queryId = sqlStoreData.queryId
           executionData.description = sqlStoreData.description
@@ -100,6 +110,7 @@ class SQLAppStatusListener(
           executionData.addMetrics(sqlStoreData.metrics)
           executionData.submissionTime = sqlStoreData.submissionTime
           executionData.completionTime = sqlStoreData.completionTime
+          executionData.errorMessage = sqlStoreData.errorMessage
           executionData.jobs = sqlStoreData.jobs
           executionData.stages = sqlStoreData.stages
           executionData.metricsValues = sqlStoreData.metricValues
@@ -117,7 +128,7 @@ class SQLAppStatusListener(
     if (accumIdsAndType.nonEmpty) {
       event.stageInfos.foreach { stage =>
         stageMetrics.put(stage.stageId, new LiveStageMetrics(stage.stageId, 0,
-          stage.numTasks, accumIdsAndType))
+          stage.numTasks, accumIdsAndType, compactMetrics))
       }
     }
 
@@ -136,7 +147,17 @@ class SQLAppStatusListener(
       if (stage.attemptId != event.stageInfo.attemptNumber()) {
         stageMetrics.put(event.stageInfo.stageId,
           new LiveStageMetrics(event.stageInfo.stageId, event.stageInfo.attemptNumber(),
-            stage.numTasks, stage.accumIdsToMetricType))
+            stage.numTasks, stage.accumIdsToMetricType, compactMetrics))
+      }
+    }
+  }
+
+  override def onStageCompleted(event: SparkListenerStageCompleted): Unit = {
+    if (compactMetrics) {
+      Option(stageMetrics.get(event.stageInfo.stageId)).foreach { stage =>
+        if (stage.attemptId == event.stageInfo.attemptNumber()) {
+          stage.compact()
+        }
       }
     }
   }
@@ -206,10 +227,12 @@ class SQLAppStatusListener(
   }
 
   private def aggregateMetrics(exec: LiveExecutionData): Map[Long, String] = {
-    val accumIds = exec.metrics.map(_.accumulatorId).toSet
+    val metrics = exec.metrics
+    val accumIds = metrics.map(_.accumulatorId).toSet
+    val metricTypes = metrics.iterator.map(m => m.accumulatorId -> m.metricType).toMap
 
     val metricAggregationMap = new mutable.HashMap[String, (Array[Long], Array[Long]) => String]()
-    val metricAggregationMethods = exec.metrics.map { m =>
+    val metricAggregationMethods = metrics.map { m =>
       val optClassName = CustomMetrics.parseV2CustomMetricType(m.metricType)
       val metricAggMethod = optClassName.map { className =>
         if (metricAggregationMap.contains(className)) {
@@ -244,23 +267,8 @@ class SQLAppStatusListener(
     val liveStageMetrics = exec.stages.toSeq
       .flatMap { stageId => Option(stageMetrics.get(stageId)) }
 
-    val taskMetrics = liveStageMetrics.flatMap(_.metricValues())
-
     val maxMetrics = liveStageMetrics.flatMap(_.maxMetricValues())
-
-    val allMetrics = new mutable.HashMap[Long, Array[Long]]()
-
     val maxMetricsFromAllStages = new mutable.HashMap[Long, Array[Long]]()
-
-    taskMetrics.filter(m => accumIds.contains(m._1)).foreach { case (id, values) =>
-      val prev = allMetrics.getOrElse(id, null)
-      val updated = if (prev != null) {
-        prev ++ values
-      } else {
-        values
-      }
-      allMetrics(id) = updated
-    }
 
     // Find the max for each metric id between all stages.
     val validMaxMetrics = maxMetrics.filter(m => accumIds.contains(m._1))
@@ -275,29 +283,37 @@ class SQLAppStatusListener(
       maxMetricsFromAllStages(id) = updated
     }
 
-    exec.driverAccumUpdates.foreach { case (id, value) =>
-      if (accumIds.contains(id)) {
-        val prev = allMetrics.getOrElse(id, null)
-        val updated = if (prev != null) {
-          // If the driver updates same metrics as tasks and has higher value then remove
-          // that entry from maxMetricsFromAllStage. This would make stringValue function default
-          // to "driver" that would be displayed on UI.
-          if (maxMetricsFromAllStages.contains(id) && value > maxMetricsFromAllStages(id)(0)) {
-            maxMetricsFromAllStages.remove(id)
-          }
-          val _copy = Arrays.copyOf(prev, prev.length + 1)
-          _copy(prev.length) = value
-          _copy
-        } else {
-          Array(value)
-        }
-        allMetrics(id) = updated
-      }
-    }
+    val driverMetrics = exec.driverAccumUpdates.filter(m => accumIds.contains(m._1))
+      .groupMap(_._1)(_._2)
+    val metricIds = liveStageMetrics.iterator.flatMap(_.metricIds()).toSet
+      .intersect(accumIds) ++ driverMetrics.keySet
 
-    val aggregatedMetrics = allMetrics.map { case (id, values) =>
-      id -> metricAggregationMethods(id)(values, maxMetricsFromAllStages.getOrElse(id,
-        Array.empty[Long]))
+    // Decode and aggregate one metric at a time. This bounds temporary arrays to one metric
+    // and avoids repeatedly copying the accumulated values when an execution has many stages.
+    val aggregatedMetrics = metricIds.iterator.map { id =>
+      val stageValues = liveStageMetrics.flatMap(_.metricValues(id))
+      val driverValues = driverMetrics.getOrElse(id, Seq.empty)
+      if (maxMetricsFromAllStages.get(id).exists(m => driverValues.exists(_ > m(0)))) {
+        maxMetricsFromAllStages.remove(id)
+      }
+      val values = if (metricTypes(id) == MetricUtils.SUM_METRIC) {
+        Array(stageValues.iterator.map(_.sum).sum + driverValues.sum)
+      } else {
+        val length = stageValues.iterator.map(_.length).sum + driverValues.size
+        val result = new Array[Long](length)
+        var offset = 0
+        stageValues.foreach { stage =>
+          System.arraycopy(stage, 0, result, offset, stage.length)
+          offset += stage.length
+        }
+        driverValues.foreach { value =>
+          result(offset) = value
+          offset += 1
+        }
+        result
+      }
+      id -> metricAggregationMethods(id)(values,
+        maxMetricsFromAllStages.getOrElse(id, Array.empty[Long]))
     }.toMap
 
     // Check the execution again for whether the aggregated metrics data has been calculated.
@@ -446,7 +462,7 @@ class SQLAppStatusListener(
 
   private def getOrCreateExecution(executionId: Long): LiveExecutionData = {
     liveExecutions.computeIfAbsent(executionId,
-      (_: Long) => new LiveExecutionData(executionId))
+      (_: Long) => new LiveExecutionData(executionId, compactStore, compactMetrics))
   }
 
   private def update(exec: LiveExecutionData, force: Boolean = false): Unit = {
@@ -470,23 +486,34 @@ class SQLAppStatusListener(
     }
   }
 
-  private def cleanupExecutions(count: Long): Unit = {
+  private def cleanupExecutions(count: Long): Unit = kvstore.transactionLock.synchronized {
     val countToDelete = count - conf.get(UI_RETAINED_EXECUTIONS)
     if (countToDelete <= 0) {
       return
     }
 
-    val view = kvstore.view(classOf[SQLExecutionUIData]).index("completionTime").first(0L)
-    val toDelete = KVUtils.viewToSeq(view, countToDelete.toInt)(_.completionTime.isDefined)
+    val toDelete = if (compactStore) {
+      val view = kvstore.view(classOf[SQLExecutionSummary]).index("completionTime").first(0L)
+      KVUtils.viewToSeq(view, countToDelete.toInt)(_.info.completionTime.isDefined).map(_.info)
+    } else {
+      val view = kvstore.view(classOf[SQLExecutionUIData]).index("completionTime").first(0L)
+      KVUtils.viewToSeq(view, countToDelete.toInt)(_.completionTime.isDefined)
+    }
     toDelete.foreach { e =>
-      kvstore.delete(e.getClass(), e.executionId)
+      kvstore.delete(executionClass, e.executionId)
+      if (compactStore) {
+        kvstore.delete(classOf[SQLExecutionDetails], e.executionId)
+      }
       kvstore.delete(classOf[SparkPlanGraphWrapper], e.executionId)
     }
   }
 
 }
 
-private class LiveExecutionData(val executionId: Long) extends LiveEntity {
+private class LiveExecutionData(
+    val executionId: Long,
+    compactStore: Boolean,
+    compactMetrics: Boolean) extends LiveEntity {
 
   var rootExecutionId: Long = _
   var queryId: java.util.UUID = null
@@ -514,6 +541,34 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
   // end events arrived so that the listener can stop tracking the execution.
   val endEvents = new AtomicInteger()
 
+  private var lastDetails: SQLExecutionUIData = null
+
+  override def write(
+      store: ElementTrackingStore,
+      now: Long,
+      checkTriggers: Boolean = false): Unit = {
+    if (compactStore) store.transactionLock.synchronized {
+      val data = doUpdate().asInstanceOf[SQLExecutionUIData]
+      // Job status updates do not change plans or SQL metrics. Avoid encoding those again.
+      if (lastDetails == null ||
+          !(lastDetails.details eq data.details) ||
+          !(lastDetails.physicalPlanDescription eq data.physicalPlanDescription) ||
+          !(lastDetails.modifiedConfigs eq data.modifiedConfigs) ||
+          !(lastDetails.metrics eq data.metrics) ||
+          lastDetails.errorMessage != data.errorMessage ||
+          !(lastDetails.metricValues eq data.metricValues) ||
+          store.count(classOf[SQLExecutionDetails], KVIndex.NATURAL_INDEX_NAME, executionId) == 0) {
+        val details = CompactSQLExecutionData.details(data)
+        store.write(details)
+        lastDetails = details.info
+      }
+      store.write(CompactSQLExecutionData.summary(data), checkTriggers || lastWriteTime == -1L)
+      lastWriteTime = now
+    } else {
+      super.write(store, now, checkTriggers)
+    }
+  }
+
   override protected def doUpdate(): Any = {
     new SQLExecutionUIData(
       executionId,
@@ -533,7 +588,14 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
   }
 
   def addMetrics(newMetrics: collection.Seq[SQLPlanMetric]): Unit = {
-    _metrics ++= newMetrics
+    if (compactMetrics) {
+      val byId = new mutable.LinkedHashMap[Long, SQLPlanMetric]()
+      _metrics.foreach(m => byId(m.accumulatorId) = m)
+      newMetrics.foreach(m => byId(m.accumulatorId) = m)
+      _metrics = byId.values.toList
+    } else {
+      _metrics ++= newMetrics
+    }
     newMetrics.foreach { m =>
       metricAccumulatorIdToMetricType.put(m.accumulatorId, m.metricType)
     }
@@ -544,13 +606,15 @@ private class LiveStageMetrics(
     val stageId: Int,
     val attemptId: Int,
     val numTasks: Int,
-    val accumIdsToMetricType: mutable.Map[Long, String]) {
+    val accumIdsToMetricType: mutable.Map[Long, String],
+    compactMetrics: Boolean = false) {
 
   /**
    * Mapping of task IDs to their respective index. Note this may contain more elements than the
    * stage's number of tasks, if speculative execution is on.
    */
-  private val taskIndices = new OpenHashMap[Long, Int]()
+  private val taskIndices = if (compactMetrics) null else new OpenHashMap[Long, Int]()
+  private val unfinishedTaskIndices = if (compactMetrics) new mutable.LongMap[Int]() else null
 
   /** Bit set tracking which indices have been successfully computed. */
   private val completedIndices = new mutable.BitSet()
@@ -563,10 +627,22 @@ private class LiveStageMetrics(
    */
   private val taskMetrics = new ConcurrentHashMap[Long, Array[Long]]()
 
-  private val  metricsIdToMaxTaskValue = new ConcurrentHashMap[Long, Array[Long]]()
+  private val compactTaskMetrics = new mutable.HashMap[Long, SQLTaskMetricValues]()
+  private val metricBlockSize = 256
+  private val completedPerBlock = if (compactMetrics) {
+    new Array[Int](((numTasks.toLong + metricBlockSize - 1) / metricBlockSize).toInt)
+  } else {
+    Array.emptyIntArray
+  }
+
+  private val metricsIdToMaxTaskValue = new ConcurrentHashMap[Long, Array[Long]]()
 
   def registerTask(taskId: Long, taskIdx: Int): Unit = {
-    taskIndices.update(taskId, taskIdx)
+    if (compactMetrics) {
+      synchronized { unfinishedTaskIndices.update(taskId, taskIdx) }
+    } else {
+      taskIndices.update(taskId, taskIdx)
+    }
   }
 
   def updateTaskMetrics(
@@ -574,12 +650,27 @@ private class LiveStageMetrics(
       eventIdx: Int,
       finished: Boolean,
       accumUpdates: Seq[AccumulableInfo]): Unit = {
+    if (compactMetrics) {
+      synchronized {
+        doUpdateTaskMetrics(taskId, eventIdx, finished, accumUpdates)
+      }
+    } else {
+      doUpdateTaskMetrics(taskId, eventIdx, finished, accumUpdates)
+    }
+  }
+
+  private def doUpdateTaskMetrics(
+      taskId: Long,
+      eventIdx: Int,
+      finished: Boolean,
+      accumUpdates: Seq[AccumulableInfo]): Unit = {
     val taskIdx = if (eventIdx == SQLAppStatusListener.UNKNOWN_INDEX) {
-      if (!taskIndices.contains(taskId)) {
+      val index = if (compactMetrics) unfinishedTaskIndices.get(taskId) else taskIndices.get(taskId)
+      if (index.isEmpty) {
         // We probably missed the start event for the task, just ignore it.
         return
       }
-      taskIndices(taskId)
+      index.get
     } else {
       // Here we can recover from a missing task start event. Just register the task again.
       registerTask(taskId, eventIdx)
@@ -587,6 +678,7 @@ private class LiveStageMetrics(
     }
 
     if (completedIndices.contains(taskIdx)) {
+      if (compactMetrics) unfinishedTaskIndices.remove(taskId)
       return
     }
 
@@ -602,8 +694,18 @@ private class LiveStageMetrics(
           case o => throw QueryExecutionErrors.unexpectedAccumulableUpdateValueError(o)
         }
 
-        val metricValues = taskMetrics.computeIfAbsent(acc.id, _ => new Array(numTasks))
-        metricValues(taskIdx) = value
+        if (compactMetrics) {
+          val values = compactTaskMetrics.getOrElseUpdate(acc.id,
+            if (accumIdsToMetricType(acc.id) == MetricUtils.SUM_METRIC) {
+              new SumSQLTaskMetricValues
+            } else {
+              new ExactSQLTaskMetricValues(numTasks, metricBlockSize)
+            })
+          values.update(taskIdx, value)
+        } else {
+          val metricValues = taskMetrics.computeIfAbsent(acc.id, _ => new Array(numTasks))
+          metricValues(taskIdx) = value
+        }
 
         if (MetricUtils.metricNeedsMax(accumIdsToMetricType(acc.id))) {
           val maxMetricsTaskId = metricsIdToMaxTaskValue.computeIfAbsent(acc.id, _ => Array(value,
@@ -617,17 +719,78 @@ private class LiveStageMetrics(
       }
     if (finished) {
       completedIndices += taskIdx
+      if (compactMetrics) {
+        unfinishedTaskIndices.remove(taskId)
+        compactTaskMetrics.valuesIterator.foreach(_.finishTask(taskIdx))
+        val block = taskIdx / metricBlockSize
+        completedPerBlock(block) += 1
+        val size = math.min(metricBlockSize, numTasks - block * metricBlockSize)
+        if (completedPerBlock(block) == size) {
+          compactTaskMetrics.valuesIterator.foreach(_.compactBlock(block))
+        }
+      }
     }
   }
 
-  def metricValues(): Seq[(Long, Array[Long])] = taskMetrics.asScala.toSeq
+  def metricIds(): Seq[Long] = {
+    if (compactMetrics) synchronized { compactTaskMetrics.keysIterator.toList }
+    else taskMetrics.keySet().asScala.toList
+  }
+
+  def metricValues(id: Long): Option[Array[Long]] = {
+    if (compactMetrics) synchronized { compactTaskMetrics.get(id).map(_.values()) }
+    else Option(taskMetrics.get(id))
+  }
+
+  def compact(): Unit = synchronized {
+    compactTaskMetrics.valuesIterator.foreach(_.compact())
+  }
 
   // Return Seq of metric id, value, taskId, stageId, attemptId for this stage
   def maxMetricValues(): Seq[(Long, Long, Long, Int, Int)] = {
+    if (compactMetrics) synchronized { readMaxMetricValues() }
+    else readMaxMetricValues()
+  }
+
+  private def readMaxMetricValues(): Seq[(Long, Long, Long, Int, Int)] = {
     metricsIdToMaxTaskValue.asScala.toSeq.map { case (id, maxMetrics) => (id, maxMetrics(0),
       maxMetrics(1), stageId, attemptId)
     }
   }
+}
+
+/** Access is synchronized by the containing stage, including UI snapshots. */
+private sealed trait SQLTaskMetricValues {
+  def update(index: Int, value: Long): Unit
+  def finishTask(index: Int): Unit = {}
+  def compactBlock(index: Int): Unit = {}
+  def compact(): Unit = {}
+  def values(): Array[Long]
+}
+
+private class SumSQLTaskMetricValues extends SQLTaskMetricValues {
+  private val unfinished = new mutable.LongMap[Long]()
+  private var completed = 0L
+
+  override def update(index: Int, value: Long): Unit = unfinished.update(index.toLong, value)
+
+  override def finishTask(index: Int): Unit = {
+    completed += unfinished.remove(index.toLong).getOrElse(0L)
+  }
+
+  override def values(): Array[Long] = Array(completed + unfinished.valuesIterator.sum)
+}
+
+private class ExactSQLTaskMetricValues(size: Int, blockSize: Int) extends SQLTaskMetricValues {
+  private val data = new CompactLongArray(size, blockSize)
+
+  override def update(index: Int, value: Long): Unit = data(index) = value
+
+  override def compactBlock(index: Int): Unit = data.compactBlock(index)
+
+  override def compact(): Unit = data.compact()
+
+  override def values(): Array[Long] = data.toArray
 }
 
 private object SQLAppStatusListener {
