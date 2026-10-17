@@ -497,9 +497,19 @@ object ResolveDefaultColumns extends QueryErrorsBase
    * Afterwards, set element(s) to false before calling [[applyExistenceDefaultValuesToRow]] below.
    */
   def resetExistenceDefaultsBitmask(schema: StructType, bitmask: Array[Boolean]): Unit = {
-    val defaultValues = existenceDefaultValues(schema)
-    for (i <- 0 until defaultValues.length) {
-      bitmask(i) = (defaultValues(i) != null)
+    resetExistenceDefaultsBitmask(existenceDefaultValues(schema), bitmask)
+  }
+
+  /**
+   * Resets the bitmask from a precomputed array of existence default values (see
+   * [[getExistenceDefaultValues]]). Callers that cache the values should use this overload to avoid
+   * recomputing them from the schema on every row.
+   */
+  def resetExistenceDefaultsBitmask(defaultValues: Array[Any], bitmask: Array[Boolean]): Unit = {
+    var i = 0
+    while (i < defaultValues.length) {
+      bitmask(i) = defaultValues(i) != null
+      i += 1
     }
   }
 
@@ -510,11 +520,25 @@ object ResolveDefaultColumns extends QueryErrorsBase
       bitmask: Array[Boolean]): Unit = {
     val existingValues = existenceDefaultValues(schema)
     if (hasExistenceDefaultValues(schema)) {
-      for (i <- 0 until existingValues.length) {
-        if (bitmask(i)) {
-          row.update(i, existingValues(i))
-        }
+      applyExistenceDefaultValuesToRow(existingValues, row, bitmask)
+    }
+  }
+
+  /**
+   * Updates a subset of columns in the row from a precomputed array of existence default values
+   * (see [[getExistenceDefaultValues]]). Callers that cache the values should use this overload to
+   * avoid recomputing them from the schema on every row. A column is updated only when its bitmask
+   * entry is set, which the caller sets from the same values via [[resetExistenceDefaultsBitmask]],
+   * so a schema with no existence defaults leaves the row unchanged.
+   */
+  def applyExistenceDefaultValuesToRow(
+      defaultValues: Array[Any], row: InternalRow, bitmask: Array[Boolean]): Unit = {
+    var i = 0
+    while (i < defaultValues.length) {
+      if (bitmask(i)) {
+        row.update(i, defaultValues(i))
       }
+      i += 1
     }
   }
 
