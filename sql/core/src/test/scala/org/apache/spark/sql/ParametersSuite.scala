@@ -27,10 +27,10 @@ import org.apache.spark.sql.catalyst.plans.logical.{CacheTableAsSelect, CTEInChi
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.functions.{array, call_function, lit, map, map_from_arrays, map_from_entries, str_to_map, struct}
+import org.apache.spark.sql.functions.{array, call_function, expr, lit, map, map_from_arrays, map_from_entries, str_to_map, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{CharType, DataType, DecimalType, StructField, VarcharType}
+import org.apache.spark.sql.types.{CharType, DataType, DecimalType, StructField, TimeType, VarcharType}
 
 class ParametersSuite extends SharedSparkSession {
 
@@ -524,6 +524,29 @@ class ParametersSuite extends SharedSparkSession {
           .atZone(ZoneId.of("Europe/Amsterdam"))
           .toInstant) :: Nil)
     }
+  }
+
+  test("SPARK-60314: TIME(7)-TIME(9) literal argument keeps its precision") {
+    // Arguments are substituted as `Literal.sql` text. A TIME(9) argument rendered without its
+    // trailing zeros is parsed as TIME(6), which truncates the strings compared with it.
+    val time = expr("TIME '12:00:00.100000000'")
+    assert(spark.sql("SELECT :t", args = Map("t" -> time)).schema.head.dataType === TimeType(9))
+    checkAnswer(
+      spark.sql("SELECT :t = '12:00:00.100000001'", args = Map("t" -> time)),
+      Row(false))
+    checkAnswer(
+      spark.sql("SELECT ? < '12:00:00.100000001'", args = Array(time)),
+      Row(true))
+    checkAnswer(
+      spark.sql(
+        "SELECT s FROM VALUES ('12:00:00.100000001'), ('12:00:00.1') AS t(s) WHERE s = :t",
+        args = Map("t" -> time)),
+      Row("12:00:00.1") :: Nil)
+    checkAnswer(
+      sql(
+        """EXECUTE IMMEDIATE 'SELECT ? = \'12:00:00.100000001\''
+          |USING TIME '12:00:00.100000000'""".stripMargin),
+      Row(false))
   }
 
   test("unused positional arguments") {
