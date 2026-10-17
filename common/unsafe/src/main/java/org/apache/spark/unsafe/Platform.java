@@ -186,6 +186,18 @@ public final class Platform {
     _UNSAFE.putDouble(object, offset, value);
   }
 
+  /**
+   * Returns the offset of a non-static field, for use with {@link #getObject(Object, long)}.
+   * Unlike reflection, this works for fields of classes in packages that are not opened to Spark.
+   */
+  public static long objectFieldOffset(Field field) {
+    return _UNSAFE.objectFieldOffset(field);
+  }
+
+  public static Object getObject(Object object, long offset) {
+    return _UNSAFE.getObject(object, offset);
+  }
+
   public static Object getObjectVolatile(Object object, long offset) {
     return _UNSAFE.getObjectVolatile(object, offset);
   }
