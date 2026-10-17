@@ -52,7 +52,7 @@ object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
       case e @ Except(left, right, false) if isEligible(left, right) =>
         val filterCondition = combineFilters(skipProject(right)).asInstanceOf[Filter].condition
         if (filterCondition.deterministic) {
-          transformCondition(left, filterCondition).map { c =>
+          transformCondition(left, right, filterCondition).map { c =>
             Distinct(Filter(Not(c), left))
           }.getOrElse {
             e
@@ -63,11 +63,27 @@ object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
     }
   }
 
-  private def transformCondition(plan: LogicalPlan, condition: Expression): Option[Expression] = {
-    val attributeNameMap: Map[String, Attribute] = plan.output.map(x => (x.name, x)).toMap
-    if (condition.references.forall(r => attributeNameMap.contains(r.name))) {
+  private def transformCondition(
+      left: LogicalPlan,
+      right: LogicalPlan,
+      condition: Expression): Option[Expression] = {
+    // The condition references the attributes of the right side's base relation, below the right
+    // projection. That base relation is known to produce the same result as the left side's one
+    // (see `verifyConditions`), so the two outputs correspond to each other positionally.
+    val baseMap = AttributeMap(
+      nonFilterChild(skipProject(right)).output.zip(nonFilterChild(skipProject(left)).output))
+    // The rewritten condition is applied on top of the left plan, so it can only reference the
+    // left output. A left base attribute reaches that output either directly or through an alias.
+    val leftOutputMap = AttributeMap(projectList(left).collect {
+      case a: Attribute => a -> a
+      case a @ Alias(child: Attribute, _) => child -> a.toAttribute
+    })
+    // Bail out and keep the anti-join when a reference cannot be traced to the left output. Note
+    // that the attributes are matched by expression id rather than by name: an alias on the left
+    // side may reuse the name of an unrelated base column that the right condition references.
+    if (condition.references.forall(r => baseMap.get(r).exists(leftOutputMap.contains))) {
       val rewrittenCondition = condition.transform {
-        case a: AttributeReference => attributeNameMap(a.name)
+        case a: AttributeReference => leftOutputMap(baseMap(a))
       }
       // We need to consider as False when the condition is NULL, otherwise we do not return those
       // rows containing NULL which are instead filtered in the Except right plan
@@ -87,11 +103,10 @@ object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
     val leftProjectList = projectList(left)
     val rightProjectList = projectList(right)
 
-    left.output.size == left.output.map(_.name).distinct.size &&
-      !left.exists(_.expressions.exists(SubqueryExpression.hasSubquery)) &&
-        !right.exists(_.expressions.exists(SubqueryExpression.hasSubquery)) &&
-          Project(leftProjectList, nonFilterChild(skipProject(left))).sameResult(
-            Project(rightProjectList, nonFilterChild(skipProject(right))))
+    !left.exists(_.expressions.exists(SubqueryExpression.hasSubquery)) &&
+      !right.exists(_.expressions.exists(SubqueryExpression.hasSubquery)) &&
+        Project(leftProjectList, nonFilterChild(skipProject(left))).sameResult(
+          Project(rightProjectList, nonFilterChild(skipProject(right))))
   }
 
   private def projectList(node: LogicalPlan): Seq[NamedExpression] = node match {
