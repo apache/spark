@@ -1874,6 +1874,41 @@ class DataFrameWindowFunctionsSuite extends SharedSparkSession
       }
     }
   }
+
+  test("SPARK-59608: first_value with a FILTER clause keeps the filter when the frame lets " +
+    "OptimizeWindowFunctions rewrite it to nth_value") {
+    withTempView("t") {
+      Seq(
+        (1, 1, 10, false),
+        (2, 1, 20, true),
+        (3, 1, 30, false),
+        (1, 2, 40, false),
+        (2, 2, 50, true)).toDF("id", "grp", "v", "flag").createOrReplaceTempView("t")
+
+      // UNBOUNDED PRECEDING to CURRENT ROW and to UNBOUNDED FOLLOWING are the two row frames
+      // the rule rewrites to nth_value, so both have to keep the filter.
+      Seq(
+        "ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW" ->
+          Seq(
+            Row(1, 1, null), Row(2, 1, 20), Row(3, 1, 20),
+            Row(1, 2, null), Row(2, 2, 50)),
+        "ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING" ->
+          Seq(
+            Row(1, 1, 20), Row(2, 1, 20), Row(3, 1, 20),
+            Row(1, 2, 50), Row(2, 2, 50))
+      ).foreach { case (frame, expected) =>
+        checkAnswer(
+          sql(
+            s"""
+               |SELECT id, grp,
+               |  first_value(v) FILTER (WHERE flag) OVER (
+               |    PARTITION BY grp ORDER BY id $frame) AS first_flagged
+               |FROM t
+             """.stripMargin),
+          expected)
+      }
+    }
+  }
 }
 
 /**
