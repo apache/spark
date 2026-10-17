@@ -9796,6 +9796,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_STORE_ASSIGNMENT_POLICY" : {
+    "message" : [
+      "LEGACY store assignment policy is disallowed in Spark data source V2. Please set the configuration <configKey> to other values."
+    ],
+    "sqlState" : "42000"
+  },
   "UNSUPPORTED_STREAMING_OPERATOR_WITHOUT_WATERMARK" : {
     "message" : [
       "<outputMode> output mode not supported for <statefulOperator> on streaming DataFrames/DataSets without watermark."
@@ -10337,11 +10343,6 @@
   "_LEGACY_ERROR_TEMP_0063" : {
     "message" : [
       "<msg>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1000" : {
-    "message" : [
-      "LEGACY store assignment policy is disallowed in Spark data source V2. Please set the configuration <configKey> to other values."
     ]
   },
   "_LEGACY_ERROR_TEMP_1002" : {

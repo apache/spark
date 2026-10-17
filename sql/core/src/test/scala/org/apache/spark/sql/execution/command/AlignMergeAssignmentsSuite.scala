@@ -938,13 +938,19 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
 
   test("legacy mode assignments") {
     withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key -> StoreAssignmentPolicy.LEGACY.toString) {
-      assertAnalysisException(
-        s"""MERGE INTO nested_struct_table t USING nested_struct_table src
-           |ON t.i = src.i
-           |WHEN MATCHED THEN
-           | UPDATE SET i = 1L
-           |""".stripMargin,
-        "LEGACY store assignment policy is disallowed in Spark data source V2")
+      val e = intercept[AnalysisException] {
+        parseAndResolve(
+          s"""MERGE INTO nested_struct_table t USING nested_struct_table src
+             |ON t.i = src.i
+             |WHEN MATCHED THEN
+             | UPDATE SET i = 1L
+             |""".stripMargin)
+      }
+      checkError(
+        exception = e,
+        condition = "UNSUPPORTED_STORE_ASSIGNMENT_POLICY",
+        parameters = Map("configKey" -> "\"spark.sql.storeAssignmentPolicy\"")
+      )
     }
   }
 
