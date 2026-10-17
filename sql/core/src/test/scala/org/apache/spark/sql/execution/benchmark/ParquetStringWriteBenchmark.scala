@@ -27,7 +27,6 @@ import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions.col
-import org.apache.spark.util.Utils
 
 /**
  * Measures Parquet string writes from heap-backed row slices after a shuffle.
@@ -47,18 +46,17 @@ object ParquetStringWriteBenchmark extends SqlBasedBenchmark {
       Workload("short", 120000, 8, 32),
       Workload("wide", 40000, 32, 32),
       Workload("long", 12000, 8, 1024),
-      Workload("low-cardinality", 120000, 8, 32))
-    require(mainArgs.forall(name => workloads.exists(_.name == name)), "Unknown workload")
+      Workload("low-cardinality", 120000, 8, 32, seed = "id % 16"))
+    val names = workloads.map(_.name)
+    require(mainArgs.forall(names.contains), s"Unknown workload, expected one of $names")
     val allocationBean = ManagementFactory.getThreadMXBean.asInstanceOf[ThreadMXBean]
     require(allocationBean.isThreadAllocatedMemorySupported)
     allocationBean.setThreadAllocatedMemoryEnabled(true)
 
     workloads.filter(w => mainArgs.isEmpty || mainArgs.contains(w.name)).foreach { workload =>
-      val root = Utils.createTempDir(namePrefix = "parquet-string-write")
-      try {
+      withTempPath { root =>
         val columns = (0 until workload.columns).map { index =>
-          val seed = if (workload.name == "low-cardinality") "id % 16" else "id"
-          val value = s"sha2(concat(cast($seed as string), '-$index'), 256)"
+          val value = s"sha2(concat(cast(${workload.seed} as string), '-$index'), 256)"
           val repeated = s"substring(repeat($value, ${(workload.length + 63) / 64}), " +
             s"1, ${workload.length})"
           s"if(id % 10 = 0, null, $repeated) as s$index"
@@ -66,59 +64,65 @@ object ParquetStringWriteBenchmark extends SqlBasedBenchmark {
         val source = new Path(root.toURI.toString, "source").toString
         spark.range(workload.rows).selectExpr((Seq("id") ++ columns): _*)
           .write.parquet(source)
-        val input = spark.read.parquet(source).repartition(4, col("id"))
-        val expected = checksum(input)
-        ParquetProperties.WriterVersion.values().foreach { version =>
-          runBenchmark(s"${workload.name} strings, $version") {
-            val destination = new Path(root.toURI.toString, "output")
-            val fs = destination.getFileSystem(spark.sessionState.newHadoopConf())
-            val cpu = new AtomicLong()
-            val listener = new SparkListener {
-              override def onTaskEnd(event: SparkListenerTaskEnd): Unit = {
-                if (event.taskMetrics != null) {
-                  cpu.addAndGet(event.taskMetrics.executorCpuTime)
+        // Cache before the shuffle so that the measured region pays for the shuffle and the write
+        // but not for the Parquet scan. Caching after the shuffle would instead feed rows from the
+        // columnar cache, bypassing the UnsafeRow slices this benchmark exists to measure.
+        val cached = spark.read.parquet(source).cache()
+        cached.count()
+        try {
+          val input = cached.repartition(4, col("id"))
+          val expected = checksum(input)
+          val destination = new Path(root.toURI.toString, "output")
+          val fs = destination.getFileSystem(spark.sessionState.newHadoopConf())
+          ParquetProperties.WriterVersion.values().foreach { version =>
+            val name = s"${workload.name} strings, $version"
+            runBenchmark(name) {
+              val cpu = new AtomicLong()
+              val listener = new SparkListener {
+                override def onTaskEnd(event: SparkListenerTaskEnd): Unit = {
+                  if (event.taskMetrics != null) {
+                    cpu.addAndGet(event.taskMetrics.executorCpuTime)
+                  }
                 }
               }
-            }
-            spark.sparkContext.addSparkListener(listener)
-            try {
-              val benchmark = new Benchmark(
-                s"${workload.name} strings, $version", workload.rows, output = output)
-              benchmark.addTimerCase("write strings", numIters = 5) { timer =>
-                spark.sparkContext.listenerBus.waitUntilEmpty(30000)
-                val beforeCpu = cpu.get()
-                val beforeAllocation = allocationBean.getTotalThreadAllocatedBytes
-                timer.startTiming()
-                input.write.mode("overwrite")
-                  .option("compression", "snappy")
-                  .option("parquet.writer.version", version.toString)
-                  .option("parquet.enable.dictionary", "true")
-                  .option("parquet.dictionary.page.size", 1024 * 1024)
-                  .parquet(destination.toString)
-                timer.stopTiming()
-                val allocated = allocationBean.getTotalThreadAllocatedBytes - beforeAllocation
-                spark.sparkContext.listenerBus.waitUntilEmpty(30000)
-                val executorCpu = cpu.get() - beforeCpu
+              spark.sparkContext.addSparkListener(listener)
+              try {
+                val benchmark = new Benchmark(name, workload.rows, output = output)
+                benchmark.addTimerCase("write strings", numIters = 5) { timer =>
+                  spark.sparkContext.listenerBus.waitUntilEmpty(30000)
+                  val beforeCpu = cpu.get()
+                  val beforeAllocation = allocationBean.getTotalThreadAllocatedBytes
+                  timer.startTiming()
+                  input.write.mode("overwrite")
+                    .option("compression", "snappy")
+                    .option("parquet.writer.version", version.toString)
+                    .option("parquet.enable.dictionary", "true")
+                    .option("parquet.dictionary.page.size", 1024 * 1024)
+                    .parquet(destination.toString)
+                  timer.stopTiming()
+                  val allocated = allocationBean.getTotalThreadAllocatedBytes - beforeAllocation
+                  spark.sparkContext.listenerBus.waitUntilEmpty(30000)
+                  // Warm-up runs get iteration -1; report only the timed ones.
+                  if (timer.iteration >= 0) {
+                    val files = fs.listStatus(destination)
+                      .filter(_.getPath.getName.endsWith(".parquet"))
+                    // scalastyle:off println
+                    benchmark.out.println(s"${workload.name},$version,${timer.iteration}," +
+                      s"allocatedBytes=$allocated,executorCpuNs=${cpu.get() - beforeCpu}," +
+                      s"outputBytes=${files.map(_.getLen).sum},files=${files.length}")
+                    // scalastyle:on println
+                  }
+                }
+                benchmark.run()
                 assert(checksum(spark.read.parquet(destination.toString)) == expected)
-                val files = fs.listStatus(destination)
-                  .filter(_.getPath.getName.endsWith(".parquet"))
-                if (timer.iteration >= 0) {
-                  // scalastyle:off println
-                  benchmark.out.println(s"${workload.name},$version,${timer.iteration}," +
-                    s"allocatedBytes=$allocated,executorCpuNs=$executorCpu," +
-                    s"wallNs=${timer.totalTime()},outputBytes=${files.map(_.getLen).sum}," +
-                    s"files=${files.length}")
-                  // scalastyle:on println
-                }
+              } finally {
+                spark.sparkContext.removeSparkListener(listener)
               }
-              benchmark.run()
-            } finally {
-              spark.sparkContext.removeSparkListener(listener)
             }
           }
+        } finally {
+          cached.unpersist()
         }
-      } finally {
-        Utils.deleteRecursively(root)
       }
     }
   }
@@ -127,5 +131,10 @@ object ParquetStringWriteBenchmark extends SqlBasedBenchmark {
     data.selectExpr("count(*)", "sum(cast(xxhash64(*) as decimal(38, 0)))").head()
   }
 
-  private case class Workload(name: String, rows: Int, columns: Int, length: Int)
+  private case class Workload(
+      name: String,
+      rows: Int,
+      columns: Int,
+      length: Int,
+      seed: String = "id")
 }
