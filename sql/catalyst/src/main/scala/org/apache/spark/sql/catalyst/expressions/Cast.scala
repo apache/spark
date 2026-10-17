@@ -823,9 +823,9 @@ case class Cast(
 
   override protected def nullString: String = if (legacyCastToStr) "" else "null"
 
-  // In ANSI mode, Spark always use plain string representation on casting Decimal values
-  // as strings. Otherwise, the casting is using `BigDecimal.toString` which may use scientific
-  // notation if an exponent is needed.
+  // In ANSI mode, Spark uses plain string representation when casting Decimal values unless a
+  // huge negative scale would make the result unbounded. Otherwise, the casting uses
+  // `BigDecimal.toString`, which may use scientific notation if an exponent is needed.
   override protected def useDecimalPlainString: Boolean = ansiEnabled
 
   // The class name of `DateTimeUtils`
