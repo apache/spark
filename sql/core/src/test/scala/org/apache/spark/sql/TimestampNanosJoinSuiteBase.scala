@@ -397,6 +397,92 @@ abstract class TimestampNanosJoinSuiteBase extends SharedSparkSession with Adapt
       }
     }
   }
+
+  // ==========================================================================================
+  // RIGHT / LEFT SEMI / LEFT ANTI over the sub-microsecond key, on every strategy (all support
+  // them). FULL OUTER runs on sort-merge only -- broadcast-hash cannot build a full outer join.
+  // ==========================================================================================
+  private val smjConf: Seq[(String, String)] =
+    joinStrategies.find(_._1 == "SortMergeJoin").getOrElse(fail("no SortMergeJoin strategy"))._3
+
+  // select(lid, rid). RIGHT keeps all right rows; only 500 == 500 matches.
+  private val expectedRightOuter: Seq[Row] =
+    Seq(Row(1, 10), Row(null, 20), Row(null, 30), Row(null, 40))
+  // FULL keeps all rows from both sides.
+  private val expectedFullOuter: Seq[Row] = Seq(
+    Row(1, 10), Row(2, null), Row(3, null), Row(4, null),
+    Row(null, 20), Row(null, 30), Row(null, 40))
+  // LEFT SEMI keeps left rows with a match; LEFT ANTI keeps the rest (incl. the NULL key).
+  private val expectedLeftSemi: Seq[Row] = Seq(Row(1))
+  private val expectedLeftAnti: Seq[Row] = Seq(Row(2), Row(3), Row(4))
+
+  for {
+    (stratName, execClass, stratConf) <- joinStrategies
+    cgConf <- codegenModes
+  } {
+    test(s"NTZ nanos right/semi/anti join distinguishes the sub-micro key - " +
+      s"$stratName ${cgLabel(cgConf)}") {
+      withSQLConf((stratConf ++ cgConf): _*) {
+        Seq(7, 8, 9).foreach { p =>
+          val left = ntzLeft(p)
+          val right = ntzRight(p)
+          def j(t: String): DataFrame = left.join(right, left("k") === right("k"), t)
+          val ro = j("right_outer").select(left("lid"), right("rid"))
+          assertJoinUsed(ro, execClass); checkAnswer(ro, expectedRightOuter)
+          val ls = j("left_semi").select(left("lid"))
+          assertJoinUsed(ls, execClass); checkAnswer(ls, expectedLeftSemi)
+          val la = j("left_anti").select(left("lid"))
+          assertJoinUsed(la, execClass); checkAnswer(la, expectedLeftAnti)
+        }
+      }
+    }
+
+    test(s"LTZ nanos right/semi/anti join distinguishes the sub-micro key - " +
+      s"$stratName ${cgLabel(cgConf)}") {
+      withSQLConf((stratConf ++ cgConf): _*) {
+        Seq(7, 8, 9).foreach { p =>
+          val left = ltzLeft(p)
+          val right = ltzRight(p)
+          def j(t: String): DataFrame = left.join(right, left("k") === right("k"), t)
+          val ro = j("right_outer").select(left("lid"), right("rid"))
+          assertJoinUsed(ro, execClass); checkAnswer(ro, expectedRightOuter)
+          val ls = j("left_semi").select(left("lid"))
+          assertJoinUsed(ls, execClass); checkAnswer(ls, expectedLeftSemi)
+          val la = j("left_anti").select(left("lid"))
+          assertJoinUsed(la, execClass); checkAnswer(la, expectedLeftAnti)
+        }
+      }
+    }
+  }
+
+  // FULL OUTER on the sort-merge path (broadcast-hash cannot build it).
+  for { cgConf <- codegenModes } {
+    test(s"NTZ nanos full outer join distinguishes the sub-micro key (SMJ) - " +
+      s"${cgLabel(cgConf)}") {
+      withSQLConf((smjConf ++ cgConf): _*) {
+        Seq(7, 8, 9).foreach { p =>
+          val left = ntzLeft(p)
+          val right = ntzRight(p)
+          val fo = left.join(right, left("k") === right("k"), "full_outer")
+            .select(left("lid"), right("rid"))
+          assertJoinUsed(fo, classOf[SortMergeJoinExec]); checkAnswer(fo, expectedFullOuter)
+        }
+      }
+    }
+
+    test(s"LTZ nanos full outer join distinguishes the sub-micro key (SMJ) - " +
+      s"${cgLabel(cgConf)}") {
+      withSQLConf((smjConf ++ cgConf): _*) {
+        Seq(7, 8, 9).foreach { p =>
+          val left = ltzLeft(p)
+          val right = ltzRight(p)
+          val fo = left.join(right, left("k") === right("k"), "full_outer")
+            .select(left("lid"), right("rid"))
+          assertJoinUsed(fo, classOf[SortMergeJoinExec]); checkAnswer(fo, expectedFullOuter)
+        }
+      }
+    }
+  }
 }
 
 // Runs the nanosecond timestamp join tests with ANSI mode enabled explicitly.

@@ -1047,3 +1047,27 @@ ScriptTransformation cat, [a#x, b#x], ScriptInputOutputSchema(List(),List(),None
 +- Project [a#x, b#x]
    +- SubqueryAlias t
       +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT TRANSFORM (c7, c8, c9)
+  USING 'cat' AS (c7 STRING, c8 STRING, c9 STRING)
+FROM VALUES (TIMESTAMP_NTZ '2020-01-01 00:00:00.1234567',
+             TIMESTAMP_NTZ '2020-01-01 00:00:00.12345678',
+             TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789') t(c7, c8, c9)
+-- !query analysis
+ScriptTransformation cat, [c7#x, c8#x, c9#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
++- Project [c7#x, c8#x, c9#x]
+   +- SubqueryAlias t
+      +- LocalRelation [c7#x, c8#x, c9#x]
+
+
+-- !query
+SELECT TRANSFORM (c)
+  USING 'cat' AS (c STRING)
+FROM VALUES (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC') t(c)
+-- !query analysis
+ScriptTransformation cat, [c#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
++- Project [c#x]
+   +- SubqueryAlias t
+      +- LocalRelation [c#x]
