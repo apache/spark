@@ -311,7 +311,8 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
         )
         self.assertEqual(
             get_number_of_public_methods("org.apache.spark.sql.streaming.StreamingQueryProgress"),
-            42,
+            # SPARK-59986: bumped from 42 to 43 for the internal triggerConfig getter.
+            43,
             msg,
         )
         self.assertEqual(
