@@ -598,26 +598,34 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
         writeForeignNanosParquet(
           new File(dir, "part.parquet"), isAdjustedToUTC = true, Seq(Some(123L)))
         val path = dir.getCanonicalPath
-        withTable("t") {
-          withView("v") {
-            withSQLConf(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key -> "true") {
-              spark.sql(s"CREATE TABLE t USING parquet LOCATION '$path'")
-              spark.sql(s"CREATE VIEW v AS SELECT * FROM parquet.`$path`")
-            }
-            // The table's stored BIGINT schema is the read schema.
-            assert(spark.table("t").schema("ts").dataType === LongType)
-            checkAnswer(spark.table("t"), Row(123L))
-            checkError(
-              exception = intercept[AnalysisException](spark.table("v")),
-              condition = "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
-              parameters = Map(
-                "sqlExpr" -> "\"ts\"",
-                "srcType" -> "\"TIMESTAMP_LTZ(9)\"",
-                "targetType" -> "\"BIGINT\""))
+        val expected = spark.sql("SELECT TIMESTAMP_LTZ '1970-01-01 00:00:00.000000123 UTC'")
+        withAllParquetReaders {
+          withTable("t") {
+            withView("v", "ve") {
+              withSQLConf(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key -> "true") {
+                spark.sql(s"CREATE TABLE t USING parquet LOCATION '$path'")
+                spark.sql(s"CREATE VIEW v AS SELECT * FROM parquet.`$path`")
+                spark.sql(
+                  s"CREATE VIEW ve WITH SCHEMA EVOLUTION AS SELECT * FROM parquet.`$path`")
+              }
+              // The table's stored BIGINT schema is the read schema.
+              assert(spark.table("t").schema("ts").dataType === LongType)
+              checkAnswer(spark.table("t"), Row(123L))
+              checkError(
+                exception = intercept[AnalysisException](spark.table("v")),
+                condition = "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
+                parameters = Map(
+                  "sqlExpr" -> "\"ts\"",
+                  "srcType" -> "\"TIMESTAMP_LTZ(9)\"",
+                  "targetType" -> "\"BIGINT\""))
+              assert(spark.table("ve").schema("ts").dataType === TimestampLTZNanosType(9))
+              checkAnswer(spark.table("ve"), expected)
 
-            spark.sql("DROP TABLE t")
-            spark.sql(s"CREATE TABLE t USING parquet LOCATION '$path'")
-            assert(spark.table("t").schema("ts").dataType === TimestampLTZNanosType(9))
+              spark.sql("DROP TABLE t")
+              spark.sql(s"CREATE TABLE t USING parquet LOCATION '$path'")
+              assert(spark.table("t").schema("ts").dataType === TimestampLTZNanosType(9))
+              checkAnswer(spark.table("t"), expected)
+            }
           }
         }
       }
@@ -632,10 +640,28 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
             "TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789' AS ltz")
         df.write.parquet(dir.getCanonicalPath)
         withSQLConf(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key -> "true") {
-          val read = spark.read.parquet(dir.getCanonicalPath)
-          assert(read.schema("ntz").dataType === TimestampNTZNanosType(7))
-          assert(read.schema("ltz").dataType === TimestampLTZNanosType(9))
-          checkAnswer(read, df)
+          withAllParquetReaders {
+            val read = spark.read.parquet(dir.getCanonicalPath)
+            assert(read.schema("ntz").dataType === TimestampNTZNanosType(7))
+            assert(read.schema("ltz").dataType === TimestampLTZNanosType(9))
+            checkAnswer(read, df)
+          }
+        }
+      }
+    }
+  }
+
+  test("TIMESTAMP(NANOS) inference does not depend on inferTimestampNTZ") {
+    withNanosEnabled {
+      withSQLConf(SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key -> "false") {
+        Seq(true, false).foreach { isAdjustedToUTC =>
+          withTempPath { dir =>
+            val file = new File(dir, "foreign.parquet")
+            writeForeignNanosParquet(file, isAdjustedToUTC, Seq(Some(123L)))
+            val expected =
+              if (isAdjustedToUTC) TimestampLTZNanosType(9) else TimestampNTZNanosType(9)
+            assert(spark.read.parquet(file.getCanonicalPath).schema("ts").dataType === expected)
+          }
         }
       }
     }

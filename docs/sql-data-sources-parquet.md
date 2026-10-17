@@ -263,15 +263,18 @@ They map to Parquet `INT64` columns annotated as `TIMESTAMP(NANOS, isAdjustedToU
   Spark schema in the file footer. A 64-bit count of nanoseconds only covers about 1677-09-21 to
   2262-04-11, so writing a value outside this range fails with a `DATETIME_OVERFLOW` error.
 - For Parquet files not written by Spark, schema inference maps `INT64 (TIMESTAMP(NANOS, true))` to
-  `TIMESTAMP_LTZ(9)` and `INT64 (TIMESTAMP(NANOS, false))` to `TIMESTAMP_NTZ(9)`. A read schema with
-  a lower precision `p` floor-truncates the values to that precision.
+  `TIMESTAMP_LTZ(9)` and `INT64 (TIMESTAMP(NANOS, false))` to `TIMESTAMP_NTZ(9)`, regardless of
+  `spark.sql.parquet.inferTimestampNTZ.enabled`. A read schema with a lower precision `p`
+  floor-truncates the values to that precision.
 
-The legacy configuration `spark.sql.legacy.parquet.nanosAsLong` takes precedence over this
-inference: when it is `true`, these columns are inferred as `BIGINT` holding the number of
-nanoseconds since the epoch. When both configurations are `false`, schema inference fails with
-`PARQUET_TYPE_ILLEGAL`. An explicit `BIGINT` read schema returns the raw nanoseconds regardless of
-either configuration. See the [SQL migration guide](sql-migration-guide.html) for how to migrate
-away from `spark.sql.legacy.parquet.nanosAsLong`.
+For files not written by Spark, the legacy configuration `spark.sql.legacy.parquet.nanosAsLong`
+takes precedence over this inference: when it is `true`, these columns are inferred as `BIGINT`
+holding the number of nanoseconds since the epoch. When both configurations are `false`, schema
+inference fails with `PARQUET_TYPE_ILLEGAL`. `spark.sql.legacy.parquet.nanosAsLong` doesn't affect
+files written by Spark, which are read with the schema stored in their footer. An explicit `BIGINT`
+read schema returns the raw nanoseconds regardless of either configuration. See the
+[SQL migration guide](sql-migration-guide.html#upgrading-from-spark-sql-42-to-43) for how to
+migrate away from `spark.sql.legacy.parquet.nanosAsLong`.
 
 ## Columnar Encryption
 
@@ -642,8 +645,9 @@ Configuration of Parquet can be done via `spark.conf.set` or by running
   <td>
     When enabled, Parquet timestamp columns with annotation <code>isAdjustedToUTC = false</code>
     are inferred as TIMESTAMP_NTZ type during schema inference. Otherwise, all the Parquet
-    timestamp columns are inferred as TIMESTAMP_LTZ types. Note that Spark writes the
-    output schema into Parquet's footer metadata on file writing and leverages it on file
+    timestamp columns are inferred as TIMESTAMP_LTZ types, except <code>TIMESTAMP(NANOS)</code>
+    columns (see <a href="#nanosecond-timestamps">Nanosecond Timestamps</a>). Note that Spark
+    writes the output schema into Parquet's footer metadata on file writing and leverages it on file
     reading. Thus this configuration only affects the schema inference on Parquet files
     which are not written by Spark.
   </td>
@@ -655,7 +659,9 @@ Configuration of Parquet can be done via `spark.conf.set` or by running
   <td>
     When true, schema inference maps Parquet <code>INT64 (TIMESTAMP(NANOS, isAdjustedToUTC))</code>
     columns to <code>BIGINT</code> holding the number of nanoseconds since the epoch, even when
-    <code>spark.sql.timestampNanosTypes.enabled</code> is true. See
+    <code>spark.sql.timestampNanosTypes.enabled</code> is true. Like
+    <code>spark.sql.parquet.inferTimestampNTZ.enabled</code>, this configuration only affects the
+    schema inference on Parquet files which are not written by Spark. See
     <a href="#nanosecond-timestamps">Nanosecond Timestamps</a>.
   </td>
   <td>3.2.4</td>
