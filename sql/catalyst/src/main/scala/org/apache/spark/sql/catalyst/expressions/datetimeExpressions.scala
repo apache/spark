@@ -4156,7 +4156,8 @@ case class MakeTimestamp(
         DateTimeExpressionUtils.makeTimestampMicros(
           year, month, day, hour, min, secAndMicros, zoneId, timestampNTZ)
       } catch {
-        case _: DateTimeException => null
+        // A year outside the microsecond timestamp range overflows the conversion to micros.
+        case _: ArithmeticException | _: DateTimeException => null
       }
     }
   }
@@ -4198,6 +4199,8 @@ case class MakeTimestamp(
           ${ev.value} = $utils.makeTimestampMicros(
             $year, $month, $day, $hour, $min, $secAndNanos, $zoneIdExpr, $timestampNTZ);
         } catch (java.time.DateTimeException e) {
+          ${ev.isNull} = true;
+        } catch (java.lang.ArithmeticException e) {
           ${ev.isNull} = true;
         }"""
       }
