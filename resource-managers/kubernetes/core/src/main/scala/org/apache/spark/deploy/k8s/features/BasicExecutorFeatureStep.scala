@@ -17,6 +17,7 @@
 package org.apache.spark.deploy.k8s.features
 
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.jdk.CollectionConverters._
 
@@ -27,7 +28,7 @@ import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit.KubernetesClientUtils
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile}
 import org.apache.spark.rpc.RpcEndpointAddress
@@ -142,6 +143,32 @@ private[spark] class BasicExecutorFeatureStep(
         case _ => Nil
       }.getOrElse(Nil)
 
+      // spark.ssl.* passwords are withheld from the executor conf, so they go through env.
+      // Unlike standalone, a name the user already binds wins; for secretKeyRef the skip only
+      // keeps a plaintext copy out of the pod spec. envFrom keys are unknown and lose to env,
+      // so any envFrom disables the injection.
+      val container = Option(pod.container)
+      val userBoundEnvNames = kubernetesConf.secretEnvNamesToKeyRefs.keySet ++
+        kubernetesConf.environment.keySet ++
+        container.flatMap(c => Option(c.getEnv))
+          .map(_.asScala.map(_.getName).toSet).getOrElse(Set.empty)
+      val unboundSslRpcPasswords = kubernetesConf.sslRpcPasswordEnvs.filterNot {
+        case (name, _) => userBoundEnvNames.contains(name)
+      }
+      val hasEnvFrom = container.flatMap(c => Option(c.getEnvFrom)).exists(!_.isEmpty)
+      val sslRpcPasswords = if (hasEnvFrom) {
+        if (unboundSslRpcPasswords.nonEmpty &&
+            BasicExecutorFeatureStep.sslRpcEnvFromWarned.compareAndSet(false, true)) {
+          val names = unboundSslRpcPasswords.keys.toSeq.sorted.mkString(", ")
+          logWarning(log"Executor container uses envFrom, so RPC SSL passwords are not " +
+            log"injected. Bind ${MDC(LogKeys.EXECUTOR_ENVS, names)} on the executors unless " +
+            log"envFrom provides them.")
+        }
+        Seq.empty
+      } else {
+        unboundSslRpcPasswords.toSeq
+      }
+
       val userOpts = kubernetesConf.get(EXECUTOR_JAVA_OPTIONS).toSeq.flatMap { opts =>
         val subsOpts = Utils.substituteAppNExecIds(opts, kubernetesConf.appId,
           kubernetesConf.executorId)
@@ -186,6 +213,7 @@ private[spark] class BasicExecutorFeatureStep(
           ++ attributes
           ++ kubernetesConf.environment
           ++ sparkAuthSecret
+          ++ sslRpcPasswords
           ++ Seq(ENV_CLASSPATH -> kubernetesConf.get(EXECUTOR_CLASS_PATH).orNull)
           ++ Seq(ENV_EXECUTOR_LIBRARY_PATH -> kubernetesConf.get(EXECUTOR_LIBRARY_PATH).orNull)
           ++ allOpts) ++
@@ -339,4 +367,9 @@ private[spark] class BasicExecutorFeatureStep(
 
     SparkPod(executorPod, containerWithLifecycle)
   }
+}
+
+private[spark] object BasicExecutorFeatureStep {
+  /** Logs the envFrom warning at most once per JVM. */
+  private[features] val sslRpcEnvFromWarned = new AtomicBoolean(false)
 }

@@ -183,6 +183,28 @@ Unlike the other SSL settings for the UI, the RPC SSL is *not* automatically ena
 `spark.ssl.enabled` is set. It must be explicitly enabled, to ensure a safe migration path for users
 upgrading Spark versions.
 
+On Kubernetes, RPC SSL passwords set in the Spark configuration are propagated to executor pods
+using environment variables, like the authentication secret described under
+[Kubernetes](#kubernetes) above, so any user who can list pods in the namespace can read them. In
+cluster mode they are also stored in plaintext in the driver's ConfigMap. To avoid both, store the
+passwords in a Kubernetes Secret and bind the following variables on the driver and the executors
+using `spark.kubernetes.driver.secretKeyRef.<name>` and
+`spark.kubernetes.executor.secretKeyRef.<name>`, instead of setting them in the Spark configuration:
+
+* `_SPARK_SSL_RPC_KEY_STORE_PASSWORD`
+* `_SPARK_SSL_RPC_KEY_PASSWORD`
+* `_SPARK_SSL_RPC_PRIVATE_KEY_PASSWORD`
+* `_SPARK_SSL_RPC_TRUST_STORE_PASSWORD`
+
+For example:
+`spark.kubernetes.executor.secretKeyRef._SPARK_SSL_RPC_KEY_STORE_PASSWORD=<secret-name>:<key>`.
+
+A variable already bound on the executors, through `secretKeyRef`, `spark.executorEnv` or the
+executor pod template, is not overwritten. Passwords the driver reads from a Hadoop credential
+provider, from its environment or through variable substitution are not propagated and must be
+provided to the executors directly. If the executor container in the pod template uses `envFrom`,
+no passwords are propagated.
+
 ## AES-based Encryption (Legacy)
 
 Spark supports AES-based encryption for RPC connections. For encryption to be enabled, RPC
