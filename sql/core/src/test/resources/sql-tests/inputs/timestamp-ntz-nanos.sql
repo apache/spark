@@ -315,7 +315,8 @@ SELECT months_between('1997-02-28 10:30:00.000000500' :: timestamp_ntz(9),
 SELECT months_between('1997-02-28 10:30:00.000000000' :: timestamp_ntz(9),
     TIMESTAMP_NTZ '1996-10-30 00:00:00');
 -- A nanos operand paired with a microsecond TIMESTAMP_LTZ operand: the zone is derived from the
--- first operand's family, mirroring the existing SubtractTimestamps convention.
+-- first operand's family. Unlike SubtractTimestamps, months_between does not coerce a
+-- cross-family pair to one family, so the LTZ operand is read in the first operand's zone.
 SELECT months_between('1997-02-28 10:30:00.000000000' :: timestamp_ntz(9),
     TIMESTAMP_LTZ '1996-10-30 00:00:00 UTC');
 -- NULL nanosecond timestamp.

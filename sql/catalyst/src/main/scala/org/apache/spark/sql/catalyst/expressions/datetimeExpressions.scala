@@ -3051,6 +3051,8 @@ case class TimestampAddYMInterval(
        3.94959677
       > SELECT _FUNC_('1997-02-28 10:30:00', '1996-10-30', false);
        3.9495967741935485
+      > SELECT _FUNC_(TIMESTAMP_NTZ '1997-02-28 10:30:00.123456789', TIMESTAMP_NTZ '1996-10-30 00:00:00');
+       3.94959677
   """,
   group = "datetime_funcs",
   since = "1.5.0")
