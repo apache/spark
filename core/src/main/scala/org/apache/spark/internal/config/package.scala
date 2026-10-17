@@ -1633,6 +1633,23 @@ package object config {
       .toSequence
       .createWithDefault(Nil)
 
+  private[spark] val KUBERNETES_ARCHIVES_EXECUTOR_DIRECT_FETCH_SCHEMES =
+    ConfigBuilder("spark.kubernetes.archives.executorDirectFetchSchemes")
+      .doc("Comma-separated list of schemes for which archives are fetched by the executors " +
+        "directly from the remote file system instead of being served through the driver's " +
+        "file server. Only takes effect in kubernetes cluster mode, where the driver runs " +
+        "inside the driver pod. The driver still downloads these archives and extracts them " +
+        "into its working directory. Archives with a 'file' or 'local' scheme are always " +
+        "served through the driver's file server. " +
+        "For use in cases when the archives are big and executor counts are high, " +
+        "concurrent download causes network saturation and timeouts. " +
+        "Wildcard '*' matches any scheme.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
   private[spark] val FORCE_DOWNLOAD_SCHEMES =
     ConfigBuilder("spark.yarn.dist.forceDownloadSchemes")
       .doc("Comma-separated list of schemes for which resources will be downloaded to the " +
