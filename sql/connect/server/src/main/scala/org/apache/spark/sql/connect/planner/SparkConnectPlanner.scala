@@ -44,7 +44,7 @@ import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{AnalysisException, Column, Encoders, ForeachWriter, Row}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, InternalRow, QueryPlanningTracker}
-import org.apache.spark.sql.catalyst.analysis.{ChangelogContextUtils, FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, RelationChanges, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeduplicate, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedOrdinal, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
+import org.apache.spark.sql.catalyst.analysis.{ChangelogContextUtils, FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, NamedStreamingRelation, RelationChanges, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeduplicate, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedOrdinal, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.catalyst.expressions._
@@ -1730,7 +1730,18 @@ class SparkConnectPlanner(
           temporalIdent.nameParts,
           new CaseInsensitiveStringMap(rel.getNamedTable.getOptionsMap),
           isStreaming = rel.getIsStreaming)
-        temporalIdent.wrapTimeTravel(relation)
+        if (rel.getIsStreaming) {
+          val sourceName = if (rel.getNamedTable.hasSourceName) {
+            val name = rel.getNamedTable.getSourceName
+            session.readStream.validateSourceName(name)
+            Some(name)
+          } else {
+            None
+          }
+          NamedStreamingRelation.withUserProvidedName(relation, sourceName)
+        } else {
+          temporalIdent.wrapTimeTravel(relation)
+        }
 
       case proto.Read.ReadTypeCase.DATA_SOURCE if !rel.getIsStreaming =>
         val reader = session.read
