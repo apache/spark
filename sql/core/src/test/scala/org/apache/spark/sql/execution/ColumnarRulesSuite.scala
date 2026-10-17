@@ -57,8 +57,10 @@ class ColumnarRulesSuite extends SharedSparkSession {
       spark.sessionState.columnarRules, false)
 
     val plan = CanDoColumnarAndRowOp(UnaryOp(LeafOp(true), true))
+    val expected = CanDoColumnarAndRowOp(ColumnarToRowExec(UnaryOp(LeafOp(true), true)))
     val appliedOnce = rules.apply(plan)
-    assert(appliedOnce == plan)
+    assert(appliedOnce == expected)
+    assert(rules.apply(appliedOnce) == expected)
   }
 }
 
