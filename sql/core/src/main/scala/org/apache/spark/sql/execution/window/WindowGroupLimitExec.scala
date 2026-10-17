@@ -19,9 +19,10 @@ package org.apache.spark.sql.execution.window
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, SortOrder, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, InterpretedOrdering, SortOrder, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
+import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 
@@ -205,6 +206,19 @@ class GroupedLimitIterator(
 
   val grouping = UnsafeProjection.create(partitionSpec, output)
 
+  private val groupEqualityCheck: (UnsafeRow, UnsafeRow) => Boolean =
+    if (partitionSpec.forall(e => UnsafeRowUtils.isBinaryStable(e.dataType))) {
+      (key1, key2) => key1.equals(key2)
+    } else {
+      // InterpretedOrdering is applied to all fields when any field is non-binary-stable
+      // (e.g. a collated STRING). As a side effect, any DOUBLE/FLOAT fields in the same
+      // spec use SQLOrderingUtil.compareDoubles, so -0.0 and +0.0 compare as equal --
+      // consistent with the sort order, but different from a pure-Double spec (binary path).
+      val types = partitionSpec.map(_.dataType)
+      val ordering = InterpretedOrdering.forSchema(types)
+      (key1, key2) => ordering.compare(key1, key2) == 0
+    }
+
   // Manage the stream and the grouping.
   var nextRow: UnsafeRow = null
   var nextGroup: UnsafeRow = null
@@ -243,7 +257,7 @@ class GroupedLimitIterator(
     // Before we start to fetch new input rows, make a copy of nextGroup.
     var currentGroup = nextGroup.copy()
 
-    def hasNext: Boolean = nextRowAvailable && nextGroup == currentGroup
+    def hasNext: Boolean = nextRowAvailable && groupEqualityCheck(nextGroup, currentGroup)
 
     def next(): InternalRow = {
       if (!hasNext) throw new NoSuchElementException
