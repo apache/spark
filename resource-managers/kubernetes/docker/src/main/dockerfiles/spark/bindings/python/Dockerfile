@@ -31,6 +31,8 @@ USER 0
 RUN mkdir ${SPARK_HOME}/python
 RUN apt-get update && \
     apt install -y --no-install-recommends python3 python3-pip && \
+    # PyArrow is required by Arrow-optimized Python UDFs, the default since Spark 4.2 (SPARK-54555)
+    pip3 install --break-system-packages --no-cache-dir "pyarrow>=18.0.0" && \
     apt-get clean && \
     rm -rf /var/cache/apt/* /var/lib/apt/lists/*
 
