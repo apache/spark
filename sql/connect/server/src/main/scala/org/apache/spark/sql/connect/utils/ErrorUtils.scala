@@ -26,7 +26,7 @@ import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import com.google.protobuf.{Any => ProtoAny}
-import com.google.rpc.{Code => RPCCode, ErrorInfo, Status => RPCStatus}
+import com.google.rpc.{Code => RPCCode, ErrorInfo, RetryInfo, Status => RPCStatus}
 import io.grpc.{Metadata, ServerCall, Status, StatusRuntimeException}
 import io.grpc.protobuf.StatusProto
 import io.grpc.stub.StreamObserver
@@ -39,7 +39,7 @@ import org.apache.spark.connect.proto.FetchErrorDetailsResponse
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{OP_TYPE, SESSION_ID, USER_ID}
 import org.apache.spark.sql.connect.config.Connect
-import org.apache.spark.sql.connect.service.{ExecuteEventsManager, SessionHolder, SessionKey, SparkConnectService}
+import org.apache.spark.sql.connect.service.{ExecuteEventsManager, RetryableGrpcError, SessionHolder, SessionKey, SparkConnectService}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
@@ -272,12 +272,20 @@ private[connect] object ErrorUtils extends Logging {
         errorInfo
       }
 
-    RPCStatus
+    val statusBuilder = RPCStatus
       .newBuilder()
       .setCode(RPCCode.INTERNAL_VALUE)
       .addDetails(ProtoAny.pack(withStackTrace.build()))
       .setMessage(errorDescription(st))
-      .build()
+
+    // Attach a RetryInfo detail for errors that are safe to retry, so that Spark Connect clients
+    // transparently re-submit the request. The retry delay is left unset (0), letting the client
+    // pace retries with its own backoff.
+    if (st.isInstanceOf[RetryableGrpcError]) {
+      statusBuilder.addDetails(ProtoAny.pack(RetryInfo.newBuilder().build()))
+    }
+
+    statusBuilder.build()
   }
 
   private def isPythonExecutionException(se: SparkException): Boolean = {
