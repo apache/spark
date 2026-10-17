@@ -1985,3 +1985,27 @@ org.apache.spark.SparkException
     "type" : "TIMESTAMP_LTZ"
   }
 }
+
+
+-- !query
+SELECT to_timestamp_ntz(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789', 'yyyy', 9)
+-- !query schema
+struct<to_timestamp_ntz(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789', yyyy):timestamp_ntz(9)>
+-- !query output
+2020-01-01 13:24:35.123456789
+
+
+-- !query
+SELECT to_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456', 'yyyy', 9)
+-- !query schema
+struct<to_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456', yyyy):timestamp_ltz(9)>
+-- !query output
+2020-01-01 13:24:35.123456
+
+
+-- !query
+SELECT to_timestamp_ltz(DATE '2020-01-01', 'yyyy-MM-dd', 9)
+-- !query schema
+struct<to_timestamp_ltz(DATE '2020-01-01', yyyy-MM-dd):timestamp_ltz(9)>
+-- !query output
+2020-01-01 00:00:00

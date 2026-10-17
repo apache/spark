@@ -1882,3 +1882,44 @@ org.apache.spark.SparkException
     "type" : "TIMESTAMP_NTZ"
   }
 }
+
+
+-- !query
+SELECT to_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS')
+-- !query schema
+struct<to_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789', yyyy-MM-dd HH:mm:ss.SSSSSSSSS):timestamp_ltz(9)>
+-- !query output
+2020-01-01 13:24:35.123456789
+
+
+-- !query
+SELECT to_timestamp_ntz(DATE '2020-01-01', 'yyyy-MM-dd', 9)
+-- !query schema
+struct<to_timestamp_ntz(DATE '2020-01-01', yyyy-MM-dd):timestamp_ntz(9)>
+-- !query output
+2020-01-01 00:00:00
+
+
+-- !query
+SELECT to_timestamp_ntz('2020-01-01 13:24:35', 'yyyy-MM-dd HH:mm:ss', 9, 9)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "4",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "[1, 2, 3]",
+    "functionName" : "`to_timestamp_ntz`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 75,
+    "fragment" : "to_timestamp_ntz('2020-01-01 13:24:35', 'yyyy-MM-dd HH:mm:ss', 9, 9)"
+  } ]
+}

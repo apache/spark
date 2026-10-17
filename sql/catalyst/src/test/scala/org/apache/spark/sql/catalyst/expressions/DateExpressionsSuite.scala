@@ -1357,12 +1357,14 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // failOnError is false. NTZ always uses the non-legacy parser.
     withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "LEGACY") {
       Seq(true, false).foreach { failOnError =>
-        checkExceptionInExpression[SparkUnsupportedOperationException](
-          ltz(Literal("2020-01-01 13:24:35.123456789"), 9, failOnError),
-          "LEGACY time parser policy")
-        checkEvaluation(
-          ntz(Literal("2020-01-01 13:24:35.123456789"), 9, failOnError),
-          localDateTimeToNanosVal(ldt))
+        Seq(Literal(fmt), NonFoldableLiteral(fmt)).foreach { f =>
+          checkExceptionInExpression[SparkUnsupportedOperationException](
+            ltz(Literal("2020-01-01 13:24:35.123456789"), 9, failOnError).copy(right = f),
+            "LEGACY time parser policy")
+          checkEvaluation(
+            ntz(Literal("2020-01-01 13:24:35.123456789"), 9, failOnError).copy(right = f),
+            localDateTimeToNanosVal(ldt))
+        }
       }
     }
   }
@@ -3921,8 +3923,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(CurrentTimestampExpressionBuilder.build("current_timestamp", Seq(Add(Literal(4),
       Literal(5)))) === CurrentTimestampNanos(9))
 
-    // Out-of-range precision (other than 6) is rejected with INVALID_TIMESTAMP_PRECISION.
-    Seq(0, 3, 5, 10).foreach { p =>
+    // Out-of-range precision (other than 6) is rejected with INVALID_TIMESTAMP_PRECISION. A
+    // BIGINT precision does not wrap into range.
+    Seq[Any](0, 3, 5, 10, 4294967305L).foreach { p =>
       checkError(
         exception = intercept[SparkException] {
           CurrentTimestampExpressionBuilder.build("current_timestamp", Seq(Literal(p)))
