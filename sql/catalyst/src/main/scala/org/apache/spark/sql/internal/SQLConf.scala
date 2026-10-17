@@ -4891,9 +4891,11 @@ object SQLConf {
         "and may place windows that share the same complete required child ordering next to " +
         "each other so they can share a sort or be merged. The resulting shuffle count is not " +
         "guaranteed to be minimal: the child's existing partitioning is not considered, and " +
-        "sorts are not minimized. If a stack cannot be reordered as a whole, the rule falls " +
-        "back to swapping adjacent pairs with compatible partitions on that stack only. " +
-        "When false, only those adjacent-pair swaps are applied.")
+        "sorts are not minimized. If a stack cannot be reordered as a whole, or a " +
+        "projection computing new columns cuts it into one-window runs, the rule still " +
+        "applies those adjacent-pair swaps to the affected windows, so enabling this does " +
+        "not lose a swap the disabled rule would do (a window kept on top by a rank " +
+        "filter excepted). When false, only those adjacent-pair swaps are applied.")
       .version("4.4.0")
       .booleanConf
       .createWithDefault(false)
