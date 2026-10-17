@@ -1331,7 +1331,8 @@ class SparkSession:
 
                 # Lastly only keep runtime configurations because other configurations are
                 # disallowed to set in the regular Spark Connect session.
-                utl = SparkContext._jvm.PythonSQLUtils  # type: ignore[union-attr]
+                assert SparkContext._jvm is not None
+                utl = SparkContext._jvm.PythonSQLUtils
                 runtime_conf_keys = [c._1() for c in utl.listRuntimeSQLConfigs()]
                 new_opts = {k: opts[k] for k in opts if k in runtime_conf_keys}
                 opts.clear()
