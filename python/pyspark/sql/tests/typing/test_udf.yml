@@ -111,6 +111,29 @@
     pandas_udf(lambda *xs: 42, "str", PandasUDFType.GROUPED_AGG)
 
 
+- case: pandasUDFTypeHints
+  main: |
+    from pyspark.sql.pandas.functions import pandas_udf
+    from pyspark.sql.types import IntegerType, MapType, StringType
+    import pandas.core.series
+
+    @pandas_udf(MapType(StringType(), IntegerType()))
+    def f(x: pandas.core.series.Series) -> pandas.core.series.Series:
+        return x
+
+    @pandas_udf(returnType="string")
+    def g(x: pandas.core.series.Series) -> pandas.core.series.Series:
+        return x
+
+    h = pandas_udf(lambda x: x, "string")
+    pandas_udf(lambda x: x, returnType=IntegerType())
+
+    f(x="id")
+    f(42)  # E: Argument 1 to "__call__" of "UserDefinedFunctionLike" has incompatible type "int"; expected "Column | str"  [arg-type]
+    g(x=42)  # E: Argument "x" to "__call__" of "UserDefinedFunctionLike" has incompatible type "int"; expected "Column | str"  [arg-type]
+    h(42)  # E: Argument 1 to "__call__" of "UserDefinedFunctionLike" has incompatible type "int"; expected "Column | str"  [arg-type]
+
+
 - case: mapIterUdf
   main: |
     from pyspark.sql.session import SparkSession
