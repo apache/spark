@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCoercion._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile
 import org.apache.spark.sql.catalyst.plans.ReferenceAllColumns
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
@@ -354,6 +355,54 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
 
   test("ineligible implicit type cast - TypeCollection") {
     shouldNotCast(IntegerType, TypeCollection(DateType, TimestampType))
+  }
+
+  test("implicit type cast - nanosecond-precision timestamps are not narrowed") {
+    Seq(
+      TimestampNTZNanosType(7),
+      TimestampNTZNanosType(9),
+      TimestampLTZNanosType(8),
+      TimestampLTZNanosType(9)).foreach { nanos =>
+      // Dropping sub-microsecond digits or the date needs an explicit CAST.
+      Seq(TimestampType, TimestampNTZType, AnyTimestampType, TimeType(), AnyTimeType).foreach {
+        shouldNotCast(nanos, _)
+      }
+      // DATE stays a direct target for date-valued functions.
+      shouldCast(nanos, DateType, DateType)
+      shouldCast(nanos, StringType, StringType)
+      // A TypeCollection fallback picks neither DATE nor TIME.
+      shouldNotCast(nanos, TypeCollection(NumericType, DateType, TimestampType, TimestampNTZType))
+      shouldNotCast(nanos, TypeCollection(NumericType, AnyTimeType))
+      shouldCast(nanos, TypeCollection(DateType, StringType), StringType)
+      shouldCast(nanos, TypeCollection(AnyTimestampType, AnyTimestampNanoType), nanos)
+    }
+
+    // Widening to a higher precision or the other family is kept.
+    shouldCast(TimestampType, TimestampLTZNanosType(9), TimestampLTZNanosType(9))
+    shouldCast(TimestampNTZNanosType(7), TimestampNTZNanosType(9), TimestampNTZNanosType(9))
+    shouldCast(TimestampNTZNanosType(9), TimestampLTZNanosType(9), TimestampLTZNanosType(9))
+    shouldCast(
+      TimestampLTZNanosType(8),
+      TypeCollection(DateType, TimestampLTZNanosType(9)),
+      TimestampLTZNanosType(9))
+    shouldNotCast(TimestampNTZNanosType(9), TimestampNTZNanosType(7))
+    shouldNotCast(TimestampLTZNanosType(9), TimestampNTZNanosType(8))
+
+    // Micro timestamps are unchanged, including the DATE fallback.
+    shouldCast(TimestampType, AnyTimestampType, TimestampType)
+    shouldCast(TimestampNTZType, TypeCollection(NumericType, DateType), DateType)
+  }
+
+  test("implicit type cast - nanos arguments of functions without nanos support") {
+    val nanos = Literal.default(TimestampNTZNanosType(9))
+    Seq(
+      MonthsBetween(nanos, nanos, Literal(true)),
+      TimeTrunc(Literal("HOUR"), nanos),
+      new ApproximatePercentile(nanos, Literal(0.5))).foreach { e =>
+      ruleTest(implicitTypeCastsRule, e, e)
+    }
+    // A date-valued function still takes the nanos input as DATE.
+    ruleTest(implicitTypeCastsRule, LastDay(nanos), LastDay(Cast(nanos, DateType)))
   }
 
   test("type coercion for Concat") {
