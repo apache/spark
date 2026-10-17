@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.UUID
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisErrorAt, TypeCheckResult, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.codegen.{Block, CodegenContext, ExprCode, FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.expressions.FieldReference
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.types.{AbstractDataType, BooleanType, DataType}
 
 trait TableConstraint extends Expression with Unevaluable {
@@ -168,6 +168,29 @@ case class CheckConstraint(
       )
     }
     copy(userProvidedCharacteristic = c)
+  }
+}
+
+object CheckConstraint extends QueryErrorsBase {
+  /**
+   * Rejects session/temp variables in persisted CHECK constraints by detecting the first
+   * [[VariableReference]] in the constraint expression and raising INVALID_TEMP_OBJ_REFERENCE.
+   */
+  def rejectTempVariables(check: CheckConstraint): Unit = {
+    check.child.collectFirst {
+      case v: VariableReference => v
+    }.foreach { v =>
+      v.failAnalysis(
+        errorClass = "INVALID_TEMP_OBJ_REFERENCE",
+        messageParameters = Map(
+          "obj" -> "CHECK CONSTRAINT",
+          // Inline (unnamed) constraints have no name yet (it is synthesized later from the
+          // table name), so the empty string here is intentional.
+          "objName" -> toSQLId(
+            Option(check.userProvidedName).getOrElse("")),
+          "tempObj" -> "VARIABLE",
+          "tempObjName" -> toSQLId(v.originalNameParts)))
+    }
   }
 }
 
