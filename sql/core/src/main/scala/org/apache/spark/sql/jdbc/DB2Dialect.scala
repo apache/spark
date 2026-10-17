@@ -218,7 +218,7 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLe
       val offsetClause = dialect.getOffsetClause(offset)
 
       options.prepareQuery +
-        s"SELECT $columnList FROM ${options.tableOrQuery}" +
+        s"SELECT $columnList FROM $tableOrQuery" +
         s" $whereClause $groupByClause $orderByClause $offsetClause $limitClause"
     }
   }
@@ -229,4 +229,6 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLe
   override def supportsLimit: Boolean = true
 
   override def supportsOffset: Boolean = true
+
+  override def supportsJoin: Boolean = true
 }
