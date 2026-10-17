@@ -182,6 +182,109 @@ Project [to_timestamp(2020-12-31-366, Some(yyyy-MM-dd-DDD), TimestampType, Some(
 
 
 -- !query
+select to_timestamp(20201231, 'yyyyMMdd')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"20201231\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"STRING\" or \"DATE\" or \"TIMESTAMP\" or \"TIMESTAMP_NTZ\"",
+    "sqlExpr" : "\"to_timestamp(20201231, yyyyMMdd)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 41,
+    "fragment" : "to_timestamp(20201231, 'yyyyMMdd')"
+  } ]
+}
+
+
+-- !query
+select to_timestamp(20260924073325, 'yyyyMMddHHmmss')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"20260924073325\"",
+    "inputType" : "\"BIGINT\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"STRING\" or \"DATE\" or \"TIMESTAMP\" or \"TIMESTAMP_NTZ\"",
+    "sqlExpr" : "\"to_timestamp(20260924073325, yyyyMMddHHmmss)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 53,
+    "fragment" : "to_timestamp(20260924073325, 'yyyyMMddHHmmss')"
+  } ]
+}
+
+
+-- !query
+select to_timestamp(1.5BD, 'yyyy')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"1.5\"",
+    "inputType" : "\"DECIMAL(2,1)\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"STRING\" or \"DATE\" or \"TIMESTAMP\" or \"TIMESTAMP_NTZ\"",
+    "sqlExpr" : "\"to_timestamp(1.5, yyyy)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 34,
+    "fragment" : "to_timestamp(1.5BD, 'yyyy')"
+  } ]
+}
+
+
+-- !query
+select try_to_timestamp(20201231, 'yyyyMMdd')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"20201231\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"STRING\" or \"DATE\" or \"TIMESTAMP\" or \"TIMESTAMP_NTZ\"",
+    "sqlExpr" : "\"try_to_timestamp(20201231, yyyyMMdd)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 45,
+    "fragment" : "try_to_timestamp(20201231, 'yyyyMMdd')"
+  } ]
+}
+
+
+-- !query
+select to_timestamp(1)
+-- !query analysis
+Project [to_timestamp(1, None, TimestampType, Some(America/Los_Angeles), true) AS to_timestamp(1)#x]
++- OneRowRelation
+
+
+-- !query
 select to_time('00:00:00')
 -- !query analysis
 Project [to_time(00:00:00, None) AS to_time(00:00:00)#x]

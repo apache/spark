@@ -44,6 +44,15 @@ select to_timestamp('2020-30-365', 'yyyy-dd-DDD');
 select to_timestamp('2020-12-350', 'yyyy-MM-DDD');
 select to_timestamp('2020-12-31-366', 'yyyy-MM-dd-DDD');
 
+-- SPARK-59988: a numeric argument combined with a format is a DATATYPE_MISMATCH. These used to
+-- raise an INTERNAL_ERROR because the GetTimestamp replacement rejects numeric inputs while the
+-- ParseToTimestamp wrapper accepted them. Without a format, numeric inputs are still cast.
+select to_timestamp(20201231, 'yyyyMMdd');
+select to_timestamp(20260924073325, 'yyyyMMddHHmmss');
+select to_timestamp(1.5BD, 'yyyy');
+select try_to_timestamp(20201231, 'yyyyMMdd');
+select to_timestamp(1);
+
 -- parsing TIME with `to_time`
 select to_time('00:00:00');
 select to_time('12', 'HH');
