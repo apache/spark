@@ -47,7 +47,7 @@ def main(infile: IO, outfile: IO) -> None:
 
     log_name = "Streaming ForeachBatch worker"
 
-    def process(df_id, batch_id, cloned_session_id):  # type: ignore[no-untyped-def]
+    def process(df_id: str, batch_id: int, cloned_session_id: str) -> None:
         global spark
         # Lazily create or switch the SparkSession when the cloned session changes.
         # Use create() instead of getOrCreate() because the latter returns the cached
