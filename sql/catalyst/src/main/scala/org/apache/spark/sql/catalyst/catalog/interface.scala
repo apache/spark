@@ -49,6 +49,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
+import org.apache.spark.unsafe.types.TimestampNanosVal
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
@@ -1035,6 +1036,20 @@ object CatalogColumnStat extends Logging {
   }
 
   /**
+   * Returns a [[TimestampFormatter]] with nanosecond precision (9 fractional digits) for
+   * lossless serialization of nanosecond-precision timestamp column statistics.
+   */
+  private def getTimestampNanosFormatter(
+      isParsing: Boolean,
+      forTimestampNTZ: Boolean = false): TimestampFormatter = {
+    TimestampFormatter(
+      format = "yyyy-MM-dd HH:mm:ss.SSSSSSSSS",
+      zoneId = ZoneOffset.UTC,
+      isParsing = isParsing,
+      forTimestampNTZ = forTimestampNTZ)
+  }
+
+  /**
    * Converts from string representation of data type to the corresponding Catalyst data type.
    */
   def fromExternalString(s: String, name: String, dataType: DataType, version: Int): Any = {
@@ -1047,6 +1062,11 @@ object CatalogColumnStat extends Logging {
       case TimestampType => getTimestampFormatter(isParsing = true).parse(s)
       case TimestampNTZType =>
         getTimestampFormatter(isParsing = true, forTimestampNTZ = true).parse(s)
+      case t: TimestampLTZNanosType =>
+        getTimestampNanosFormatter(isParsing = true).parseNanos(s, t.precision)
+      case t: TimestampNTZNanosType =>
+        getTimestampNanosFormatter(isParsing = true, forTimestampNTZ = true)
+          .parseWithoutTimeZoneNanos(s, t.precision)
       case ByteType => s.toByte
       case ShortType => s.toShort
       case IntegerType => s.toInt
@@ -1073,6 +1093,12 @@ object CatalogColumnStat extends Logging {
       case TimestampNTZType =>
         getTimestampFormatter(isParsing = false, forTimestampNTZ = true)
           .format(v.asInstanceOf[Long])
+      case t: TimestampLTZNanosType =>
+        getTimestampNanosFormatter(isParsing = false)
+          .formatNanos(v.asInstanceOf[TimestampNanosVal], t.precision)
+      case t: TimestampNTZNanosType =>
+        getTimestampNanosFormatter(isParsing = false, forTimestampNTZ = true)
+          .formatWithoutTimeZoneNanos(v.asInstanceOf[TimestampNanosVal], t.precision)
       case BooleanType | _: IntegralType | FloatType | DoubleType => v
       case _: DecimalType => v.asInstanceOf[Decimal].toJavaBigDecimal
       // This version of Spark does not use min/max for binary/string types so we ignore it.
