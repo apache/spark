@@ -99,9 +99,10 @@ public class VectorizedColumnReader {
   private long pageFirstRowIndex;
 
   /**
-   * The data page the values are being decoded from, for error messages.
+   * The data page the values are being decoded from, for error messages. Only its description is
+   * kept: for codecs that decompress lazily, the page holds the decompressor stream.
    */
-  private DataPage currentPage;
+  private String currentPage;
 
   private final PageReader pageReader;
   private final ColumnDescriptor descriptor;
@@ -151,38 +152,31 @@ public class VectorizedColumnReader {
       int96RebaseMode,
       int96RebaseTz);
 
-    DictionaryPage dictionaryPage;
+    Dictionary dict = null;
     try {
       // This decompresses the page eagerly for some codecs, e.g. ZSTD.
-      dictionaryPage = pageReader.readDictionaryPage();
+      DictionaryPage dictionaryPage = pageReader.readDictionaryPage();
+      if (dictionaryPage != null) {
+        dict = dictionaryPage.getEncoding().initDictionary(descriptor, dictionaryPage);
+      }
+    } catch (IOException e) {
+      throw new IOException("could not decode the dictionary for " + descriptor, e);
     } catch (ParquetDecodingException e) {
       throw new ParquetDecodingException(
-        "could not read the dictionary page for " + descriptor + ": " + e.getMessage(), e);
+        "could not decode the dictionary for " + descriptor + ": " + e.getMessage(), e);
+    } catch (IndexOutOfBoundsException | NegativeArraySizeException |
+        UnsupportedOperationException e) {
+      // Reading the dictionary page decompresses it, for some codecs only when initDictionary
+      // reads its bytes, and initDictionary parses it. A corrupted page or page header makes
+      // them throw these: an IndexOutOfBoundsException when a BINARY dictionary ends within the
+      // length of an entry, a NegativeArraySizeException for a negative size, and an
+      // UnsupportedOperationException for an encoding that has no dictionary. An entry that
+      // claims more bytes than the page has is not detected here (SPARK-60316).
+      throw new ParquetDecodingException(
+        "could not decode the dictionary for " + descriptor + ": " + e, e);
     }
-    if (dictionaryPage != null) {
-      try {
-        this.dictionary = dictionaryPage.getEncoding().initDictionary(descriptor, dictionaryPage);
-        this.isCurrentPageDictionaryEncoded = true;
-      } catch (IOException e) {
-        throw new IOException("could not decode the dictionary for " + descriptor, e);
-      } catch (ParquetDecodingException e) {
-        throw new ParquetDecodingException(
-          "could not decode the dictionary for " + descriptor + ": " + e.getMessage(), e);
-      } catch (IndexOutOfBoundsException | NegativeArraySizeException |
-          UnsupportedOperationException e) {
-        // initDictionary reads the bytes of the page, which also decompresses them for codecs
-        // that decompress lazily, e.g. SNAPPY, and parses them. A corrupted page or page header
-        // makes it throw these:
-        // an IndexOutOfBoundsException for a truncated BINARY dictionary, a
-        // NegativeArraySizeException for a negative dictionary size, and an
-        // UnsupportedOperationException for an encoding that has no dictionary.
-        throw new ParquetDecodingException(
-          "could not decode the dictionary for " + descriptor + ": " + e, e);
-      }
-    } else {
-      this.dictionary = null;
-      this.isCurrentPageDictionaryEncoded = false;
-    }
+    this.dictionary = dict;
+    this.isCurrentPageDictionaryEncoded = dict != null;
     if (pageReader.getTotalValueCount() == 0) {
       throw new IOException("totalValueCount == 0");
     }
@@ -380,10 +374,10 @@ public class VectorizedColumnReader {
       throw new ParquetDecodingException(
         "could not read the next page in col " + descriptor + ": " + e.getMessage(), e);
     }
-    this.currentPage = page;
     if (page == null) {
       return -1;
     }
+    this.currentPage = page.toString();
     this.pageFirstRowIndex = page.getFirstRowIndex().orElse(0L);
 
     return page.accept(new DataPage.Visitor<Integer>() {

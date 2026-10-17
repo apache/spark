@@ -37,11 +37,9 @@ import org.apache.parquet.column.{Encoding, ParquetProperties}
 import org.apache.parquet.column.ParquetProperties.WriterVersion.PARQUET_1_0
 import org.apache.parquet.example.data.Group
 import org.apache.parquet.example.data.simple.{SimpleGroup, SimpleGroupFactory}
-import org.apache.parquet.format.Util
-import org.apache.parquet.format.converter.ParquetMetadataConverter
+import org.apache.parquet.format.{PageType, Util}
 import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.example.ExampleParquetWriter
-import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.io.ParquetDecodingException
 import org.apache.parquet.io.api.Binary
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
@@ -2496,14 +2494,14 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
    * the written file, and returns the error of reading the file with the vectorized reader.
    */
   private def readCorruptedFile(column: String, options: Map[String, String])(
-      corrupt: (Path, Array[Byte]) => Unit): Throwable = {
+      corrupt: Array[Byte] => Unit): Throwable = {
     var error: Throwable = null
     withTempPath { dir =>
       val path = dir.getCanonicalPath
       spark.range(100).selectExpr(column).coalesce(1).write.options(options).parquet(path)
       val file = dir.listFiles().filter(_.getName.endsWith(".parquet")).head
       val bytes = Files.readAllBytes(file.toPath)
-      corrupt(new Path(file.getCanonicalPath), bytes)
+      corrupt(bytes)
       Files.write(file.toPath, bytes)
       dir.listFiles().filter(_.getName.endsWith(".crc")).foreach(_.delete())
 
@@ -2534,7 +2532,7 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
       ParquetOutputFormat.ENABLE_DICTIONARY -> "false",
       ParquetOutputFormat.WRITER_VERSION -> writerVersion,
       "compression" -> "uncompressed")
-    readCorruptedFile(column, options) { (_, bytes) =>
+    readCorruptedFile(column, options) { bytes =>
       val section = Array[Byte](3, 0, 0, 0, 0xC8.toByte, 0x01, 1)
       val offset = bytes.indexOfSlice(section)
       assert(offset >= 0 && bytes.indexOfSlice(section, offset + 1) < 0)
@@ -2585,28 +2583,24 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
   }
 
   test("SPARK-59854: a ZSTD page that cannot be decompressed reports the column") {
-    Seq(false, true).foreach { dictionary =>
-      val options = Map(
-        ParquetOutputFormat.ENABLE_DICTIONARY -> dictionary.toString,
-        "compression" -> "zstd")
-      val e = readCorruptedFile("cast(id % 10 as int) as a", options) { (file, bytes) =>
-        val footer = ParquetFooterReader.readFooter(
-          HadoopInputFile.fromPath(file, spark.sessionState.newHadoopConf()),
-          ParquetMetadataConverter.NO_FILTER)
-        val chunk = footer.getBlocks.get(0).getColumns.get(0)
-        assert(chunk.hasDictionaryPage == dictionary)
-        // Invert the first bytes of the first page, the ZSTD frame magic number.
-        val in = new ByteArrayInputStream(bytes, chunk.getStartingPos.toInt, bytes.length)
-        Util.readPageHeader(in)
-        val pageStart = bytes.length - in.available()
-        (pageStart until pageStart + 4).foreach(i => bytes(i) = (~bytes(i)).toByte)
-      }
-      val columnErrors =
-        causes(e).filter(c => Option(c.getMessage).exists(_.contains("[a] optional int32 a")))
-      assert(columnErrors.size == 1, e)
-      assert(columnErrors.head.isInstanceOf[ParquetDecodingException], e)
+    Seq(PageType.DATA_PAGE -> false, PageType.DICTIONARY_PAGE -> true).foreach {
+      case (pageType, dictionary) =>
+        val options = Map(
+          ParquetOutputFormat.ENABLE_DICTIONARY -> dictionary.toString,
+          "compression" -> "zstd")
+        val e = readCorruptedFile("cast(id % 10 as int) as a", options) { bytes =>
+          // The first page of the only column chunk starts right after the magic number.
+          val in = new ByteArrayInputStream(bytes, ParquetFileWriter.MAGIC.length, bytes.length)
+          assert(Util.readPageHeader(in).getType == pageType)
+          // Invert the first bytes of the page, the ZSTD frame magic number.
+          val pageStart = bytes.length - in.available()
+          (pageStart until pageStart + 4).foreach(i => bytes(i) = (~bytes(i)).toByte)
+        }
+        assert(causes(e).exists(c =>
+          Option(c.getMessage).exists(_.contains("[a] optional int32 a"))), e)
     }
   }
+
 }
 
 class JobCommitFailureParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)

@@ -101,7 +101,7 @@ public class VectorizedDeltaBinaryPackedReader extends VectorizedReaderBase {
       throw new ParquetDecodingException("Invalid DELTA_BINARY_PACKED block size in values: "
           + blockSizeInValues + " (must be in [1, " + MAX_BLOCK_SIZE_IN_VALUES + "])");
     }
-    if (miniBlockNumInABlock <= 0 || miniBlockNumInABlock > blockSizeInValues) {
+    if (miniBlockNumInABlock <= 0) {
       throw new ParquetDecodingException("Invalid DELTA_BINARY_PACKED mini block count: "
           + miniBlockNumInABlock + " (block size in values: " + blockSizeInValues + ")");
     }
@@ -476,9 +476,15 @@ public class VectorizedDeltaBinaryPackedReader extends VectorizedReaderBase {
    * see org.apache.parquet.column.values.delta.DeltaBinaryPackingValuesReader#unpackMiniBlock
    */
   private void unpackMiniBlock() throws IOException {
+    int bitWidth = bitWidths[currentMiniBlock];
+    // The bit widths of the unused mini blocks of the last block can be anything, so a width is
+    // checked only when its mini block is unpacked.
+    if (bitWidth > 64) {
+      throw new ParquetDecodingException("Invalid DELTA_BINARY_PACKED mini block bit width: "
+          + bitWidth + " (must be at most 64)");
+    }
     Arrays.fill(this.unpackedValuesBuffer, 0);
-    BytePackerForLong packer = Packer.LITTLE_ENDIAN.newBytePackerForLong(
-        bitWidths[currentMiniBlock]);
+    BytePackerForLong packer = Packer.LITTLE_ENDIAN.newBytePackerForLong(bitWidth);
     for (int j = 0; j < miniBlockSizeInValues; j += 8) {
       ByteBuffer buffer = in.slice(packer.getBitWidth());
       if (buffer.hasArray()) {
