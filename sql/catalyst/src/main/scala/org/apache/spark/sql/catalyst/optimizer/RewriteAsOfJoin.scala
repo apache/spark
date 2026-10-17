@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.analysis.AsOfJoinValidation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans._
@@ -66,7 +67,9 @@ object RewriteAsOfJoin extends Rule[LogicalPlan] {
           _,
           _,
           _)
-          if !conf.useSortMergeAsOfJoinOperator(j.requiresSortMergeAsOfJoin) =>
+          if !conf.useSortMergeAsOfJoinOperator(j.requiresSortMergeAsOfJoin) ||
+            AsOfJoinValidation.hasMixedTimestampKeyTypes(j) ||
+            AsOfJoinValidation.hasNearestStringKeys(j) =>
         val conditionWithOuterReference =
           condition.map(And(_, asOfCondition)).getOrElse(asOfCondition).transformUp {
             case a: AttributeReference if left.outputSet.contains(a) =>

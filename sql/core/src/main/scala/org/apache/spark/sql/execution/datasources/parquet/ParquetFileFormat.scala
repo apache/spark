@@ -197,22 +197,16 @@ class ParquetFileFormat
   }
 
   /**
-   * The conf that turns this on is read here rather than in the planner, the way `supportBatch`
-   * reads its own confs, so a Parquet-named conf does not decide for a format that is not Parquet.
-   *
-   * Subclasses answer false on purpose, even though they inherit this reader, since a subclass may
-   * customize reading by overriding `buildReaderWithPartitionValues`, and a scan with storage
-   * filters routes through `buildReaderWithStorageFilters` instead, which would silently bypass
-   * whatever the subclass does.
+   * The conf is read here, the way `supportBatch` reads its own. Subclasses answer false, since one
+   * may customize reading through `buildReaderWithPartitionValues`, which a scan with storage
+   * filters would bypass.
    */
   override def supportsStorageFilterPushdown(sparkSession: SparkSession): Boolean =
     getSqlConf(sparkSession).parquetStorageFilterPushdownEnabled && isExactlyParquetFileFormat
 
   /**
    * Whether this is `ParquetFileFormat` itself rather than a subclass, which both storage-filter
-   * entry points ask. Private, so overriding one entry point does not opt a subclass in. A subclass
-   * that overrides only `supportsStorageFilterPushdown` is still declined by
-   * `buildReaderWithStorageFilters`, and its scan reads plainly.
+   * entry points ask. Private, so overriding one entry point does not opt a subclass in.
    */
   private def isExactlyParquetFileFormat: Boolean = getClass == classOf[ParquetFileFormat]
 
@@ -234,9 +228,8 @@ class ParquetFileFormat
       hadoopConf: Configuration,
       storageFilterMetrics: Map[String, SQLMetric])
     : Option[PartitionedFile => Iterator[InternalRow]] = {
-    // The same subclass exclusion as `supportsStorageFilterPushdown`, asked again because this
-    // entry point is reachable without the planner having asked it, and `None` sends the caller to
-    // the ordinary builder, which is the one a subclass overrides.
+    // Asked again, since this entry point is reachable without the planner, and `None` sends the
+    // caller to the builder a subclass overrides.
     if (!isExactlyParquetFileFormat) {
       None
     } else {
@@ -296,10 +289,8 @@ class ParquetFileFormat
     val int96RebaseModeInRead = parquetOptions.int96RebaseModeInRead
     val archiveFormatEnabled = parquetOptions.archiveFormatEnabled
 
-    // Late materialization needs the vectorized reader. `enableVectorizedReader` is recomputed from
-    // the live session conf when the RDD is built, so a flip of
-    // spark.sql.parquet.enableVectorizedReader (or the nested-column variant) after planning lands
-    // here, and the filters are simply not installed, the post-scan Filter still holding them.
+    // Late materialization needs the vectorized reader, which is decided again from the live conf
+    // here. So a flip after planning leaves the filters out, and the post-scan Filter holds them.
     val storageFilterOpt: Option[ParquetStorageFilter] = if (storageFilters.isEmpty) {
       None
     } else if (!enableVectorizedReader) {
@@ -307,8 +298,6 @@ class ParquetFileFormat
         log"${MDC(SCHEMA, resultSchema.catalogString)}: the vectorized Parquet reader is disabled")
       None
     } else {
-      // `create` requires every condition storageFiltersFor already pre-checked, so a violation
-      // is a planner bug rather than something to work around here.
       Some(ParquetStorageFilter.create(storageFilters, requiredSchema,
         StorageFilterMetrics.fromMap(storageFilterMetrics),
         sqlConf.parquetStorageFilterPushdownMaxSplicedRowGroupBytes))

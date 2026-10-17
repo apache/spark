@@ -187,6 +187,14 @@ private[spark] class DAGScheduler(
       delayedTaskCompletionEvents: ListBuffer[CompletionEvent] = new ListBuffer[CompletionEvent])
   private[scheduler] val dependentStageMap = new HashMap[Stage, DependentStageInfo]
 
+  // Released completions remain owned until their TaskEnd is posted. Queue only identifiers so
+  // cancellation can drain notifications before StageCompleted/JobEnd and leave stale replays
+  // inert.
+  // The event loop serializes normal access; stop joins it before the final drain.
+  private[scheduler] val pipelinedTaskCompletionReplays =
+    new HashMap[Int, mutable.LinkedHashMap[Long, CompletionEvent]]
+  private var nextPipelinedTaskCompletionReplayId = 0L
+
   // Whether we have already logged that the pipelined-group slot check is disabled. Only the
   // (single-threaded) event loop touches this, so a plain var is safe. Limits the warning to once
   // per scheduler rather than once per submitted batch job.
@@ -1668,22 +1676,9 @@ private[spark] class DAGScheduler(
                   logDebug("Removing stage %d from failed set.".format(stageId))
                   failedStages -= stage
                 }
-                // Drop any pipelined-completion deferral keyed on this stage (as consumer), and
-                // remove it from other consumers' pending-producer sets (as producer), so no
-                // deferral outlives its job (e.g. on job abort before the producers finished).
-                // A consumer's buffered completion events hold TaskEnds that have not been emitted
-                // yet (the whole event is deferred until group completion). This teardown is a job
-                // failure / cancellation, so the buffered successes must NOT be applied as results
-                // -- but their TaskEnds must still be flushed, exactly as the producer-failed drop
-                // path does (see releaseDeferredPipelinedConsumers), or a listener tracking active
-                // tasks (e.g. AppStatusListener) would leak these tasks as perpetually running.
-                // Normally releaseDeferredPipelinedConsumers has already drained the deferral by
-                // the time cleanup runs (cancelRunningIndependentStages finishes each running
-                // producer first); this covers the case where it has not -- e.g. a producer left in
-                // resubmit limbo (finished but not available) that cancelRunningIndependentStages
-                // skips because it is neither running nor failed.
-                dependentStageMap.remove(stage).foreach(_.delayedTaskCompletionEvents.foreach(
-                  postTaskEnd))
+                // Backstop for stages skipped by cancellation (e.g. a producer in resubmit limbo).
+                // Terminal stages normally drain notifications before their StageCompleted event.
+                discardPipelinedTaskCompletions(stage)
                 dependentStageMap.values.foreach(_.parents -= stage)
               }
               // data structures based on StageId
@@ -1997,7 +1992,8 @@ private[spark] class DAGScheduler(
   }
 
   /**
-   * Kill a given task. It will be retried.
+   * Kill a given task. It will be retried, unless it is a task of a pipelined group, whose job
+   * fails instead.
    *
    * @return Whether the task was successfully killed.
    */
@@ -2480,6 +2476,12 @@ private[spark] class DAGScheduler(
   }
 
   private[scheduler] def cleanUpAfterSchedulerStop(): Unit = {
+    // No replay can run after the event loop stops. Notify before any stage/job teardown instead
+    // of leaving payloads in the scheduler or active tasks in listener accounting.
+    dependentStageMap.keys.toArray.foreach(discardPipelinedTaskCompletions)
+    pipelinedTaskCompletionReplays.keys.toArray.foreach { stageId =>
+      pipelinedTaskCompletionReplays.remove(stageId).foreach(_.values.foreach(postTaskEnd))
+    }
     for (job <- activeJobs) {
       val error =
         new SparkException(s"Job ${job.jobId} cancelled because SparkContext was shut down")
@@ -3759,15 +3761,41 @@ private[spark] class DAGScheduler(
    * modify the scheduler's internal state. Use taskEnded() to post a task end event from outside.
    */
   private[scheduler] def handleTaskCompletion(event: CompletionEvent): Unit = {
+    handleTaskCompletion(event, replayId = None)
+  }
+
+  private[scheduler] def handlePipelinedTaskCompletionReplay(
+      replay: PipelinedTaskCompletionReplay): Unit = {
+    pipelinedTaskCompletionReplays.get(replay.stageId).flatMap(_.get(replay.replayId))
+      .foreach { event =>
+        handleTaskCompletion(event, replayId = Some(replay.replayId))
+      }
+  }
+
+  private def removePipelinedTaskCompletionReplay(
+      stageId: Int,
+      replayId: Long): Option[CompletionEvent] = {
+    pipelinedTaskCompletionReplays.get(stageId).flatMap { events =>
+      val removed = events.remove(replayId)
+      if (events.isEmpty) {
+        pipelinedTaskCompletionReplays -= stageId
+      }
+      removed
+    }
+  }
+
+  private def handleTaskCompletion(event: CompletionEvent, replayId: Option[Long]): Unit = {
     val task = event.task
     val stageId = task.stageId
 
-    outputCommitCoordinator.taskCompleted(
-      stageId,
-      task.stageAttemptId,
-      task.partitionId,
-      event.taskInfo.attemptNumber, // this is a task attempt number
-      event.reason)
+    if (replayId.isEmpty) {
+      outputCommitCoordinator.taskCompleted(
+        stageId,
+        task.stageAttemptId,
+        task.partitionId,
+        event.taskInfo.attemptNumber, // this is a task attempt number
+        event.reason)
+    }
 
     if (!stageIdToStage.contains(task.stageId)) {
       // The stage may have already finished when we get this event -- e.g. maybe it was a
@@ -3776,6 +3804,7 @@ private[spark] class DAGScheduler(
       // doing their own accounting and if they don't get the task end event they think
       // tasks are still running when they really aren't.
       postTaskEnd(event)
+      replayId.foreach(removePipelinedTaskCompletionReplay(stageId, _))
 
       // Skip all the actions if the stage has been cancelled.
       return
@@ -3795,11 +3824,12 @@ private[spark] class DAGScheduler(
     // producer would advance job completion and cancel the still-running producer (via
     // cancelRunningIndependentStages), or expose its output early.
     // Deferring the entire event is what makes the side effects run exactly ONCE, at replay:
-    // releaseDeferredPipelinedConsumers re-posts the buffered event once the last producer completes
-    // (or drops it if a producer fails, S6), and it then re-enters here and runs the side effects
-    // normally. This deferral check must therefore precede updateAccumulators and postTaskEnd. Inert
+    // releaseDeferredPipelinedConsumers transfers the buffered event to an owned replay once the
+    // last producer completes (or drops it if a producer fails, S6). Its queue reference then
+    // re-enters here and runs the side effects normally; teardown may claim it instead. This
+    // deferral check must therefore precede updateAccumulators and postTaskEnd. Inert
     // for jobs with no pipelined dependency (the map is empty), so the regular path is unchanged.
-    if (event.reason == Success) {
+    if (event.reason == Success && replayId.isEmpty) {
       dependentStageMap.get(stage) match {
         case Some(deferral) if deferral.parents.nonEmpty =>
           logInfo(log"Deferring completion of task ${MDC(TASK_ID, event.taskInfo.taskId)} in " +
@@ -3840,6 +3870,9 @@ private[spark] class DAGScheduler(
     }
 
     postTaskEnd(event)
+    // Retire only after notification, but before result callbacks or terminal stage bookkeeping
+    // can drain the remaining completions. The current replay must not be notified twice.
+    replayId.foreach(removePipelinedTaskCompletionReplay(stageId, _))
 
     event.reason match {
       case Success =>
@@ -4969,6 +5002,14 @@ private[spark] class DAGScheduler(
     if (!willRetry) {
       outputCommitCoordinator.stageEnd(stage.id)
     }
+    val producerFailed = errorMessage.isDefined
+    val producerAboutToResubmit = stage match {
+      case m: ShuffleMapStage => !producerFailed && !m.isAvailable
+      case _ => false
+    }
+    if (!willRetry && !producerAboutToResubmit) {
+      discardPipelinedTaskCompletions(stage)
+    }
     listenerBus.post(SparkListenerStageCompleted(stage.latestInfo))
     runningStages -= stage
 
@@ -4983,15 +5024,19 @@ private[spark] class DAGScheduler(
     // Otherwise: producerFailed = the stage failed (errorMessage set) -> drop the consumers'
     // buffered successes; producer succeeded -> replay them.
     if (!willRetry) {
-      val producerFailed = errorMessage.isDefined
-      val producerAboutToResubmit = stage match {
-        case m: ShuffleMapStage => !producerFailed && !m.isAvailable
-        case _ => false
-      }
       if (!producerAboutToResubmit) {
         releaseDeferredPipelinedConsumers(stage, producerFailed = producerFailed)
       }
     }
+  }
+
+  /** Drop unapplied results while notifying all already-completed tasks before stage teardown. */
+  private def discardPipelinedTaskCompletions(stage: Stage): Unit = {
+    val buffered = dependentStageMap.remove(stage).toSeq
+      .flatMap(_.delayedTaskCompletionEvents.toList)
+    val released = pipelinedTaskCompletionReplays.remove(stage.id).toSeq
+      .flatMap(_.values.toList)
+    (buffered ++ released).foreach(postTaskEnd)
   }
 
   /**
@@ -5028,7 +5073,6 @@ private[spark] class DAGScheduler(
         // one base path that fails a stage and then resubmits it (a barrier task failure) cannot
         // occur, because a barrier member is rejected up front (rejectUnadmittablePipelinedGroup),
         // so a pipelined group never contains one.
-        dependentStageMap -= consumer
         val events = deferral.delayedTaskCompletionEvents.toList
         logInfo(log"Dropping ${MDC(NUM_EVENTS, events.size.toLong)} deferred completion(s) for " +
           log"pipelined consumer ${MDC(STAGE, consumer)} because a producer failed; failing the " +
@@ -5037,13 +5081,22 @@ private[spark] class DAGScheduler(
         // listeners that track active tasks (e.g. AppStatusListener) would believe these tasks are
         // still running. We deliberately do NOT run the stage/job completion bookkeeping: the group
         // is being failed as a unit, so the consumer's results must not be applied.
-        events.foreach(postTaskEnd)
+        discardPipelinedTaskCompletions(consumer)
       } else if (deferral.parents.isEmpty) {
         dependentStageMap -= consumer
         val events = deferral.delayedTaskCompletionEvents.toList
         logInfo(log"Replaying ${MDC(NUM_EVENTS, events.size.toLong)} deferred completion(s) " +
           log"for pipelined consumer ${MDC(STAGE, consumer)} now that its producers finished")
-        events.foreach(eventProcessLoop.post)
+        if (events.nonEmpty) {
+          val ownedEvents = pipelinedTaskCompletionReplays.getOrElseUpdate(
+            consumer.id, new mutable.LinkedHashMap[Long, CompletionEvent])
+          events.foreach { event =>
+            val replayId = nextPipelinedTaskCompletionReplayId
+            nextPipelinedTaskCompletionReplayId += 1
+            ownedEvents(replayId) = event
+            eventProcessLoop.post(PipelinedTaskCompletionReplay(consumer.id, replayId))
+          }
+        }
       }
     }
   }
@@ -5345,6 +5398,9 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
 
     case completion: CompletionEvent =>
       dagScheduler.handleTaskCompletion(completion)
+
+    case replay: PipelinedTaskCompletionReplay =>
+      dagScheduler.handlePipelinedTaskCompletionReplay(replay)
 
     case StageFailed(stageId, reason, exception) =>
       dagScheduler.handleStageFailed(stageId, reason, exception)

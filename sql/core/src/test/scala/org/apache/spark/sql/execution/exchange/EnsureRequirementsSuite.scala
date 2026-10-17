@@ -2681,7 +2681,6 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         leftSortExprs = Seq(exprA),
         rightSortExprs = Seq(exprB),
         asOfCondition = GreaterThan(exprA, exprB),
-        orderExpression = exprA,
         direction = Backward,
         joinType = Inner,
         condition = None,

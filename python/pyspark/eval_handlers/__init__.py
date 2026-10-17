@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-"""Internal handlers for the Arrow/Pandas UDF and UDTF eval types.
+"""Internal handlers for the UDF and UDTF eval types.
 
 Not a supported extension API: the registry is per executor process and filled at
 import time, so handlers must be defined in this package rather than by user code.
@@ -32,4 +32,11 @@ handler runs.
 """
 
 # Registers the handlers on import.
-from pyspark.eval_handlers import _arrow, _elementwise, _pandas, _stateful, _udtf  # noqa: F401
+from pyspark.eval_handlers import (  # noqa: F401
+    _arrow,
+    _elementwise,
+    _pandas,
+    _stateful,
+    _udtf,
+    _vanilla,
+)
