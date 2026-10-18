@@ -14,7 +14,7 @@
   </buildScan>
   <buildCache>
     <remote>
-      <enabled>#{env['DEVELOCITY_ACCESS_KEY'] != null and env['DEVELOCITY_ACCESS_KEY'] != ''}</enabled>
+      <enabled>true</enabled>
       <storeEnabled>#{env['GITHUB_ACTIONS'] != null and env['DEVELOCITY_ACCESS_KEY'] != null and env['DEVELOCITY_ACCESS_KEY'] != ''}</storeEnabled>
     </remote>
   </buildCache>
