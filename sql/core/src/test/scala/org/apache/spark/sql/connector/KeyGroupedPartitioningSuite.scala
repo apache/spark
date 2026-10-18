@@ -1328,13 +1328,14 @@ class KeyGroupedPartitioningSuite
     }
   }
 
-  test("SPARK-59234 repro: partial clustering reducer overflow") {
-    // self_reduce(id) is an identity transform that reduces itself, merging its four keys to two
-    // (x -> x % 2) on both sides. Partial clustering spreads one side; without the fix its expected
-    // count is read from the four un-reduced keys (one each) while the node groups two reduced
-    // splits under each merged key, so the aligner over-emits (a planning error with the guard, a
-    // silent shuffle on master). Reducing the expected count into the node's space keeps the join,
-    // which this asserts: correct rows and no shuffle.
+  test("SPARK-59234: a self-reducing function is not reduced under partial clustering") {
+    // self_reduce(id) is a transform that reduces itself. Under partial clustering
+    // `canReduceKeys` is false, so a same-function pair is admitted without a reduce and
+    // `reducersBothWays` returns none (SPARK-59234): the join stays on the raw keys, with no
+    // merging to miscount. Assert that: correct rows, no shuffle, the partially-clustered layout
+    // (one side spreads with `SPLIT_FOR_JOIN`, the other repeats with `REPLICATED_FOR_JOIN`), and
+    // that neither side reduced. If a change brought the reducer back, the merged keys would no
+    // longer match the spread side's groups and the fail-fast guard would trip.
     withFunction(SelfReduceFunction) {
       val cols = Array(Column.create("id", LongType), Column.create("data", StringType))
       createTable("t1", cols, Array(Expressions.apply("self_reduce", Expressions.column("id"))))
@@ -1350,17 +1351,13 @@ class KeyGroupedPartitioningSuite
         val plan = stripAQEPlan(df.queryExecution.executedPlan)
         assert(collectShuffles(plan).isEmpty,
           "storage-partitioned join should be kept, not shuffled")
-        // Rows and no shuffle alone do not pin this fix: an alternative that skips partial
-        // clustering when a side has reducers would group on the reduced keys, shuffle nothing,
-        // and still pass. Assert the partially-clustered layout the fix produces, so only it
-        // passes: one side spreads a merged key across tasks (`SPLIT_FOR_JOIN`) while the other
-        // repeats it (`REPLICATED_FOR_JOIN`), each merged key carries its four splits, and the
-        // join keeps its required distribution.
         val gpes = collectGroupPartitions(plan)
         assert(gpes.flatMap(_.ungroupingOrigin).toSet == Set(SPLIT_FOR_JOIN, REPLICATED_FOR_JOIN),
           s"one side spreads and the other repeats:\n$plan")
+        assert(gpes.forall(_.reducers.isEmpty),
+          s"a same-function pair is admitted without reducing under partial clustering:\n$plan")
         assert(gpes.map(_.outputPartitioning.numPartitions) == Seq(4, 4),
-          s"each merged key gets the two splits it holds on the spread side:\n$plan")
+          s"each side keeps its four partitions:\n$plan")
         val joins = collect(plan) { case smj: SortMergeJoinExec => smj }
         assert(joins.size == 1 && ValidateRequirements.validate(joins.head),
           s"the pair holds up:\n$plan")
