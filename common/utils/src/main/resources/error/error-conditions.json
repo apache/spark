@@ -6730,6 +6730,12 @@
     },
     "sqlState" : "42846"
   },
+  "PARQUET_FIELD_REQUESTED_MORE_THAN_ONCE" : {
+    "message" : [
+      "Requested fields <requestedFields> resolve to the same Parquet field <parquetField>, which can be read only once. When <fieldIdReadConf> is enabled, a requested field with a field ID is resolved by ID and any other requested field by name. Request the Parquet field only once, and refer to the resulting column more than once in the query instead."
+    ],
+    "sqlState" : "KD000"
+  },
   "PARQUET_TYPE_ILLEGAL" : {
     "message" : [
       "Illegal Parquet type: <parquetType>."
@@ -8777,6 +8783,13 @@
       }
     },
     "sqlState" : "42000"
+  },
+  "UNSUPPORTED_AVRO_CHAR_VARCHAR_MAP_KEY" : {
+    "message" : [
+      "The Avro map key <key> is not a valid key for the map key type <dataType>.",
+      "A CHAR key must match the declared length exactly and a VARCHAR key must not exceed it; keys are never padded or trimmed. Use a STRING map key to accept any name."
+    ],
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_BUILT_IN_JDBC_DIALECT" : {
     "message" : [
