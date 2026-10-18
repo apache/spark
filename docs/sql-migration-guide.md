@@ -22,6 +22,10 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Spark SQL 4.3.0 to 4.3.1
+
+- Since Spark 4.3.1, `spark.sql.execution.arrow.pythonUDF.columnarInput.enabled` is `false` by default: Arrow-based Python UDFs read rows from an Arrow-backed upstream operator, such as a Data Source V2 scan or the Arrow cache, as in Spark 4.1. With columnar input, they kept the columns that they pass through until the results of their batch came back from Python, and failed or returned wrong results when the operator reused or released the vectors of the batch in the meantime. To enable columnar input again, set `spark.sql.execution.arrow.pythonUDF.columnarInput.enabled` to `true`.
+
 ## Upgrading from Spark SQL 4.2 to 4.3
 
 - Since Spark 4.3, map-typed arguments to distinct aggregates are normalized by key order. As a result, `COUNT(DISTINCT m)` treats maps with the same entries in different orders as the same value, and aggregates that return distinct input values, such as `COLLECT_LIST(DISTINCT m)`, return maps sorted by key.
