@@ -5516,11 +5516,14 @@ object SQLConf {
         "Arrow-backed ColumnarBatch (e.g., DataSource V2 connectors), " +
         "bypassing the ColumnarToRow and ArrowWriter conversion. " +
         "This optimization reduces data transfer overhead between " +
-        "the JVM and Python worker processes.")
+        "the JVM and Python worker processes. It keeps the columns that the UDFs pass " +
+        "through until the results of their batch come back from Python, so it requires " +
+        "an upstream operator whose batches stay valid until then, which a columnar " +
+        "reader does not promise.")
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val ARROW_CACHE_PREFETCH_ENABLED =
     buildConf("spark.sql.execution.arrow.cache.prefetch.enabled")
