@@ -200,7 +200,8 @@ object PythonForeachWriter {
         unblockRemove.await(100, TimeUnit.MILLISECONDS)
       }
 
-      // If there was any error in the adding thread, then rethrow it in the removing thread
+      // If there was any error in the adding thread or the buffer was closed, then rethrow it in
+      // the removing thread
       if (exception != null) throw exception
 
       if (count > 0) {
@@ -209,7 +210,9 @@ object PythonForeachWriter {
           s"[count = $count, allAdded = $allAdded, exception = $exception]")
         count -= 1
         logTrace(s"Removed $row, $count left")
-        row
+        // The row points into a page of the queue, which `close()` can free while the removing
+        // thread is still using the row.
+        row.copy()
       } else {
         null
       }
@@ -220,7 +223,24 @@ object PythonForeachWriter {
       unblockRemove.signal()
     }
 
-    def close(): Unit = { queue.close() }
+    /**
+     * Frees the buffered rows. A task completion listener calls this, possibly while the
+     * removing thread is still running, e.g. when the task was killed while waiting for it in
+     * `PythonForeachWriter.close()`. The lock keeps this from freeing a page in the middle of
+     * `remove()`, and the error stops the removing thread instead of letting it read the freed
+     * queue or wait for more rows forever.
+     */
+    def close(): Unit = {
+      // Not interruptible, because the task thread can be interrupted when it calls this.
+      lock.lock()
+      try {
+        if (exception == null) exception = new IllegalStateException("UnsafeRowBuffer is closed")
+        unblockRemove.signal()
+        queue.close()
+      } finally {
+        lock.unlock()
+      }
+    }
 
     private def withLock[T](f: => T): T = {
       lock.lockInterruptibly()
