@@ -23,8 +23,9 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{
-  Concat, CurrentRow, DenseRank, Literal, Rand, RowFrame, RowNumber, SpecifiedWindowFrame,
+  Concat, CurrentRow, DenseRank, In, Literal, Rand, RowFrame, RowNumber, SpecifiedWindowFrame,
   UnboundedFollowing, UnboundedPreceding, WindowExpression, WindowSpecDefinition}
+import org.apache.spark.sql.catalyst.expressions.aggregate.CollectList
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Window, WindowGroupLimit}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -397,6 +398,56 @@ class TransposeWindowSuite extends PlanTest {
     }
   }
 
+  test("wide-output groups rank last among exchange-optimal orders") {
+    // s1 [k1] and s4 [k4] key the two exchanges; evs [k1, k2] rides s1's exchange. Both
+    // group orders cost two exchanges, but first appearance would put evs below the [k4]
+    // exchange and ship each partition's full collect_list array through it and its sort.
+    val query = wideRelation
+      .window(Seq(sum(v).as("s1")), Seq(k1), order)
+      .window(Seq(sum(v).as("s4")), Seq(k4), order)
+      .window(Seq(CollectList(v).toAggregateExpression().as("evs")), Seq(k1, k2), order)
+
+    val analyzed = query.analyze
+
+    val correctAnswer = wideRelation
+      .window(Seq(sum(v).as("s4")), Seq(k4), order)
+      .window(Seq(sum(v).as("s1")), Seq(k1), order)
+      .window(Seq(CollectList(v).toAggregateExpression().as("evs")), Seq(k1, k2), order)
+      .select(k1, k2, k3, k4, v, u, $"s1", $"s4", $"evs")
+
+    withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+      val once = TransposeWindow.apply(analyzed)
+      comparePlans(once, correctAnswer.analyze)
+      // The wide flags do not change with the stack order, so one application is a
+      // fixed point.
+      comparePlans(once, TransposeWindow.apply(once))
+    }
+  }
+
+  test("a wide-output group leader also ranks last") {
+    // evs keys its own exchange: its spec [k4] is minimal, so it leads its group. The
+    // wide tier is about the group, not only non-leader members, so the [k1] group goes
+    // first even though the wide window sits at the bottom of the stack.
+    val query = wideRelation
+      .window(Seq(CollectList(v).toAggregateExpression().as("evs")), Seq(k4), order)
+      .window(Seq(sum(v).as("s1")), Seq(k1), order)
+      .window(Seq(sum(v).as("s2")), Seq(k1, k2), order)
+
+    val analyzed = query.analyze
+
+    val correctAnswer = wideRelation
+      .window(Seq(sum(v).as("s1")), Seq(k1), order)
+      .window(Seq(sum(v).as("s2")), Seq(k1, k2), order)
+      .window(Seq(CollectList(v).toAggregateExpression().as("evs")), Seq(k4), order)
+      .select(k1, k2, k3, k4, v, u, $"evs", $"s1", $"s2")
+
+    withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+      val once = TransposeWindow.apply(analyzed)
+      comparePlans(once, correctAnswer.analyze)
+      comparePlans(once, TransposeWindow.apply(once))
+    }
+  }
+
   test("windows with identical partition specs become adjacent") {
     val query = wideRelation
       .window(Seq(sum(v).as("sum_f")), specF, order)
@@ -646,6 +697,36 @@ class TransposeWindowSuite extends PlanTest {
     }
   }
 
+  test("pairwise fallback does not rewrite a lower reordered chain") {
+    // Bottom-to-top, the lower stack becomes (k3), (k1, k3), (k1). Its top pair is
+    // legacy-swappable; Rand rejects the upper chain, but its pairwise fallback must stop
+    // at the derived Project rather than descending and swapping that lower pair.
+    val query = wideRelation
+      .window(Seq(sum(v).as("sum_k3")), Seq(k3), order)
+      .window(Seq(sum(v).as("sum_k1")), Seq(k1), order)
+      .window(Seq(sum(v).as("sum_k13")), Seq(k1, k3), order)
+      .select(k1, k2, k3, k4, v, u, $"sum_k3", $"sum_k1", $"sum_k13",
+        (v + u).as("s"))
+      .window(Seq(sum(v).as("sum_u1")), Seq(k2), order)
+      .window(Seq(Rand(0).as("nd"), sum(v).as("sum_u2")), Seq(k4), order)
+
+    val correctAnswer = wideRelation
+      .window(Seq(sum(v).as("sum_k3")), Seq(k3), order)
+      .window(Seq(sum(v).as("sum_k13")), Seq(k1, k3), order)
+      .window(Seq(sum(v).as("sum_k1")), Seq(k1), order)
+      .select(k1, k2, k3, k4, v, u, $"sum_k3", $"sum_k1", $"sum_k13")
+      .select(k1, k2, k3, k4, v, u, $"sum_k3", $"sum_k1", $"sum_k13",
+        (v + u).as("s"))
+      .window(Seq(sum(v).as("sum_u1")), Seq(k2), order)
+      .window(Seq(Rand(0).as("nd"), sum(v).as("sum_u2")), Seq(k4), order)
+
+    withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+      val optimized = TransposeWindow.apply(query.analyze)
+      comparePlans(optimized, correctAnswer.analyze)
+      comparePlans(optimized, TransposeWindow.apply(optimized))
+    }
+  }
+
   test("nondeterministic project between windows blocks stack reordering") {
     // Same window pair as the derived-alias cut test, but the between-window project adds
     // a nondeterministic alias. `isTransparentLink` rejects it, so the project is never
@@ -696,6 +777,22 @@ class TransposeWindowSuite extends PlanTest {
     withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
       val optimized = Optimize.execute(analyzed)
       comparePlans(optimized, correctAnswer.analyze)
+    }
+  }
+
+  test("window reading a between-link rename blocks stack reordering") {
+    // `sf` renames the lower window's `sum_f`, and the upper window consumes it. The
+    // window-output reference check sees different attributes; the alias guard must reject
+    // the chain so reordering cannot move the consumer below the rename.
+    val query = wideRelation
+      .window(Seq(sum(v).as("sum_f")), specF, order)
+      .select(k1, k2, k3, k4, v, u, $"sum_f".as("sf"))
+      .window(Seq(sum($"sf").as("sum_sf")), Seq(k1), order)
+
+    val analyzed = query.analyze
+    withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+      // comparePlans also runs CheckAnalysis on the transformed plan.
+      comparePlans(Optimize.execute(analyzed), analyzed)
     }
   }
 
@@ -830,21 +927,23 @@ class TransposeWindowSuite extends PlanTest {
 
   /**
    * CollapseWindow + TransposeWindow to a fixed point (as in the operator-optimization
-   * batch), normalize the rank bound, optionally push filters through top projects, then
+   * batch), normalize the rank bound (including the IN/NOT shapes OptimizeIn and
+   * BooleanSimplification rewrite), optionally push filters through top projects, then
    * InferWindowGroupLimit.
    */
   private object OptimizeWithGroupLimit extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Operator", FixedPoint(10),
         CollapseWindow, TransposeWindow, PushDownPredicates) ::
-      Batch("NormalizeFilter", Once, ConstantFolding, UnwrapCastInBinaryComparison) ::
+      Batch("NormalizeFilter", Once, ConstantFolding, UnwrapCastInBinaryComparison,
+        OptimizeIn, BooleanSimplification) ::
       Batch("InferWindowGroupLimit", Once, InferWindowGroupLimit) :: Nil
   }
 
-  test("rank filter on the top window pins it without a WGL-defeating reorder") {
-    // The exchange-optimal order under the pin would put same-spec sum_p directly under rn;
-    // CollapseWindow would then merge the RANGE sum into rn and defeat InferWindowGroupLimit.
-    // The merge-safe pin keeps the original order (sum_f under rn) so the group limit fires.
+  test("rank filter on the top window does not pin when it rides lower exchange") {
+    // Unpinned exchangeOptimalOrder keeps rn on top while moving specF below specP, so the
+    // top window still rides the lower [k1, k2] exchange. Prefer that lower-exchange plan and
+    // accept losing WindowGroupLimit instead of pinning just to protect it.
     val query = wideRelation
       .window(Seq(sum(v).as("sum_p")), specP, order)
       .window(Seq(sum(v).as("sum_f")), specF, order)
@@ -853,10 +952,17 @@ class TransposeWindowSuite extends PlanTest {
 
     val analyzed = query.analyze
 
+    val correctAnswer = wideRelation
+      .window(Seq(sum(v).as("sum_f")), specF, order)
+      .window(Seq(sum(v).as("sum_p")), specP, order)
+      .window(Seq(rankAlias), specP, order)
+      .select(k1, k2, k3, k4, v, u, $"sum_p", $"sum_f", $"rn")
+      .where($"rn" <= 1)
+
     withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
-      comparePlans(Optimize.execute(analyzed), analyzed)
+      comparePlans(Optimize.execute(analyzed), correctAnswer.analyze)
       assert(OptimizeWithGroupLimit.execute(analyzed)
-        .collect { case _: WindowGroupLimit => () }.nonEmpty)
+        .collect { case _: WindowGroupLimit => () }.isEmpty)
     }
   }
 
@@ -887,6 +993,63 @@ class TransposeWindowSuite extends PlanTest {
 
     withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
       comparePlans(Optimize.execute(withoutFilter.analyze), buriedRank.analyze)
+      comparePlans(Optimize.execute(analyzed), analyzed)
+      assert(OptimizeWithGroupLimit.execute(analyzed)
+        .collect { case _: WindowGroupLimit => () }.nonEmpty)
+    }
+  }
+
+  test("rank filter pin overrides the wide-output group ranking") {
+    // evs [k4] is the wide group and would rank last, but the pinned rn rides only the
+    // specF group's exchange, which must therefore stay last; the original order is
+    // already that order, so the plan is unchanged and the group limit still fires.
+    val query = wideRelation
+      .window(Seq(CollectList(v).toAggregateExpression().as("evs")), Seq(k4), order)
+      .window(Seq(sum(v).as("sum_f")), specF, order)
+      .window(Seq(rankAlias), specP, order)
+      .where($"rn" <= 1)
+
+    val analyzed = query.analyze
+
+    withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+      comparePlans(Optimize.execute(analyzed), analyzed)
+      assert(OptimizeWithGroupLimit.execute(analyzed)
+        .collect { case _: WindowGroupLimit => () }.nonEmpty)
+    }
+  }
+
+  test("single-element IN rank filter pins the top window") {
+    // OptimizeIn rewrites `rn IN (1)` to `rn = 1` later in the same fixed-point batch, so
+    // TransposeWindow can see the IN shape first; the pin must not rely on the normalized
+    // shape. Same displacing stack as the rank-filter pin test above.
+    val query = wideRelation
+      .window(Seq(sum(v).as("sum_f")), specF, order)
+      .window(Seq(sum(v).as("sum_s")), specS, order)
+      .window(Seq(rankOnSpecF), specF, order)
+      .where(In($"rn", Seq(Literal(1))))
+
+    val analyzed = query.analyze
+
+    withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+      comparePlans(Optimize.execute(analyzed), analyzed)
+      assert(OptimizeWithGroupLimit.execute(analyzed)
+        .collect { case _: WindowGroupLimit => () }.nonEmpty)
+    }
+  }
+
+  test("negated comparison rank filter pins the top window") {
+    // BooleanSimplification rewrites `NOT (rn > 1)` to `rn <= 1` later in the same
+    // fixed-point batch, so TransposeWindow can see the NOT shape first; the pin must not
+    // rely on the normalized shape. Same displacing stack as the rank-filter pin test.
+    val query = wideRelation
+      .window(Seq(sum(v).as("sum_f")), specF, order)
+      .window(Seq(sum(v).as("sum_s")), specS, order)
+      .window(Seq(rankOnSpecF), specF, order)
+      .where(!($"rn" > 1))
+
+    val analyzed = query.analyze
+
+    withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
       comparePlans(Optimize.execute(analyzed), analyzed)
       assert(OptimizeWithGroupLimit.execute(analyzed)
         .collect { case _: WindowGroupLimit => () }.nonEmpty)
@@ -974,11 +1137,10 @@ class TransposeWindowSuite extends PlanTest {
     }
   }
 
-  test("pinned reorder picks a safe member that is not the group's last") {
-    // One group under the pin, in group order: leader [k1, k2] (the pin rides its exchange),
-    // then [k1, k4, k2] and [k1, k2, k3]. The group's last member [k1, k2, k3] would merge
-    // into the pin, so the only safe tail is [k1, k4, k2], which is not the last member:
-    // taking it permutes the group, and the result differs from the identity fallback.
+  test("rank filter does not pin when the top window rides the leader's exchange") {
+    // One group under the top rank window: without pinning, exchangeOptimalOrder still leaves
+    // rn on top and lets it ride the leader's [k1, k2] exchange, so prefer that order even
+    // though the pin would have picked a different safe tail to preserve WindowGroupLimit.
     val query = wideRelation
       .window(Seq(sum(v).as("s0")), specFExtra, order)
       .window(Seq(sum(v).as("s1")), specP, order)
@@ -990,16 +1152,16 @@ class TransposeWindowSuite extends PlanTest {
 
     val correctAnswer = wideRelation
       .window(Seq(sum(v).as("s2")), specF, order)
-      .window(Seq(sum(v).as("s1")), specP, order)
       .window(Seq(sum(v).as("s0")), specFExtra, order)
-      .select(k1, k2, k3, k4, v, u, $"s0", $"s1", $"s2")
+      .window(Seq(sum(v).as("s1")), specP, order)
       .window(Seq(rankAlias), specP, order)
+      .select(k1, k2, k3, k4, v, u, $"s0", $"s1", $"s2", $"rn")
       .where($"rn" <= 1)
 
     withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
       comparePlans(TransposeWindow.apply(analyzed), correctAnswer.analyze)
       assert(OptimizeWithGroupLimit.execute(analyzed)
-        .collect { case _: WindowGroupLimit => () }.nonEmpty)
+        .collect { case _: WindowGroupLimit => () }.isEmpty)
     }
   }
 
@@ -1119,9 +1281,10 @@ class TransposeWindowSuite extends PlanTest {
     }
   }
 
-  test("pinned order avoids CollapseWindow merge that defeats WindowGroupLimit") {
-    // Pinned exchangeOptimalOrder is b, c, a: CollapseWindow then merges same-spec RANGE sum
-    // a into rn and isExpandingWindow fails. groupLimitSafeOrder (a, b, c) keeps WGL.
+  test("rank filter does not pin when the top window rides lower [k1] exchange") {
+    // Pinning could avoid the WGL-defeating merge by choosing (a, b, c), but the unpinned
+    // exchange-optimal order b, c, a still leaves rn on top and lets it reuse the lower [k1]
+    // exchange. Prefer that lower-exchange plan and give up WindowGroupLimit.
     val orderK1 = Seq(k1.asc)
     val orderK2 = Seq(k2.asc)
     val query = wideRelation
@@ -1134,27 +1297,24 @@ class TransposeWindowSuite extends PlanTest {
     val analyzed = query.analyze
 
     val correctAnswer = wideRelation
-      .window(Seq(sum(v).as("sum_a")), Seq(k1), orderK2)
       .window(Seq(sum(v).as("sum_b")), Seq(k3), orderK1)
       .window(Seq(sum(v).as("sum_c")), Seq(k3), orderK2)
-      .select(k1, k2, k3, k4, v, u, $"sum_b", $"sum_a", $"sum_c")
+      .window(Seq(sum(v).as("sum_a")), Seq(k1), orderK2)
       .window(Seq(rankOnK1OrderK2), Seq(k1), orderK2)
+      .select(k1, k2, k3, k4, v, u, $"sum_b", $"sum_a", $"sum_c", $"rn")
       .where($"rn" <= 1)
 
     withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
       val optimized = Optimize.execute(analyzed)
       comparePlans(optimized, correctAnswer.analyze)
       assert(OptimizeWithGroupLimit.execute(analyzed)
-        .collect { case _: WindowGroupLimit => () }.nonEmpty)
+        .collect { case _: WindowGroupLimit => () }.isEmpty)
     }
   }
 
-  test("pinned merge check collapses stacked transparent projects under the pin") {
-    // Rename links between windows are hoisted as a Project spine under the pin. A merge
-    // check that looked only at the raw spine would miss Window(a) under Project+ when
-    // pin-ride puts same-spec sum_a under rn; the probe collapses the candidate's
-    // under-pin plan first, so the merge into rn is still seen and WGL is kept (the
-    // withColumn shape covered end-to-end in TransposeWindowQuerySuite).
+  test("stacked transparent projects do not force pinning when top window rides lower exchange") {
+    // The same rename spine remains under the top rank window, but the new selective policy
+    // prefers the lower-exchange unpinned order over preserving WindowGroupLimit.
     val orderK1 = Seq(k1.asc)
     val orderK2 = Seq(k2.asc)
     val query = wideRelation
@@ -1170,7 +1330,7 @@ class TransposeWindowSuite extends PlanTest {
     val analyzed = query.analyze
     withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
       assert(OptimizeWithGroupLimit.execute(analyzed)
-        .collect { case _: WindowGroupLimit => () }.nonEmpty)
+        .collect { case _: WindowGroupLimit => () }.isEmpty)
     }
   }
 
@@ -1240,9 +1400,10 @@ class TransposeWindowSuite extends PlanTest {
     }
   }
 
-  test("rank filter above an attribute-only top project still pins the top window") {
-    // Same merge-safe pin as the Filter-over-Window case: refuse the order that would put
-    // same-spec sum_p under rn, so the plan stays unchanged and WindowGroupLimit still fires.
+  test("attribute-only top project does not force pinning when top window rides lower exchange") {
+    // The transparent top project still lets the filter target rn, but unpinned reorder keeps
+    // rn on top and lets it ride the lower [k1, k2] exchange, so prefer that lower-exchange
+    // plan over preserving WindowGroupLimit.
     val query = wideRelation
       .window(Seq(sum(v).as("sum_p")), specP, order)
       .window(Seq(sum(v).as("sum_f")), specF, order)
@@ -1252,10 +1413,17 @@ class TransposeWindowSuite extends PlanTest {
 
     val analyzed = query.analyze
 
+    val correctAnswer = wideRelation
+      .window(Seq(sum(v).as("sum_f")), specF, order)
+      .window(Seq(sum(v).as("sum_p")), specP, order)
+      .window(Seq(rankAlias), specP, order)
+      .select(k1, k2, k3, k4, v, u, $"sum_f", $"sum_p", $"rn")
+      .where($"rn" <= 1)
+
     withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
-      comparePlans(Optimize.execute(analyzed), analyzed)
+      comparePlans(Optimize.execute(analyzed), correctAnswer.analyze)
       assert(OptimizeWithGroupLimit.execute(analyzed)
-        .collect { case _: WindowGroupLimit => () }.nonEmpty)
+        .collect { case _: WindowGroupLimit => () }.isEmpty)
     }
   }
 
@@ -1354,10 +1522,9 @@ class TransposeWindowSuite extends PlanTest {
     }
   }
 
-  test("rank filter above a renaming top project pins the top window") {
-    // The top project renames the rank attribute, so `isRankFilterOnTopWindow` must peel
-    // the alias off the filter condition to see the rank reference underneath. Merge-safe
-    // pin keeps the original window order (see the Filter-over-Window pin test).
+  test("renaming top project does not force pinning when top window rides lower exchange") {
+    // The top project still renames the rank attribute through a transparent link, but the
+    // unpinned order keeps rn on top and lets it reuse the lower [k1, k2] exchange.
     val query = wideRelation
       .window(Seq(sum(v).as("sum_p")), specP, order)
       .window(Seq(sum(v).as("sum_f")), specF, order)
@@ -1367,18 +1534,25 @@ class TransposeWindowSuite extends PlanTest {
 
     val analyzed = query.analyze
 
+    val correctAnswer = wideRelation
+      .window(Seq(sum(v).as("sum_f")), specF, order)
+      .window(Seq(sum(v).as("sum_p")), specP, order)
+      .window(Seq(rankAlias), specP, order)
+      .select(k1, k2, k3, k4, v, u, $"rn".as("rank"))
+      .where($"rank" <= 1)
+
     withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
-      comparePlans(Optimize.execute(analyzed), analyzed)
+      comparePlans(Optimize.execute(analyzed), correctAnswer.analyze)
       assert(OptimizeWithGroupLimit.execute(analyzed)
-        .collect { case _: WindowGroupLimit => () }.nonEmpty)
+        .collect { case _: WindowGroupLimit => () }.isEmpty)
     }
   }
 
-  test("rank filter across two renaming top projects pins the top window") {
-    // Two stacked rename-only top projects: the filter references the outer rename
-    // `rank2`, whose definition goes through the inner rename `rank`.
-    // `isRankFilterOnTopWindow` must peel both aliases. Apply `TransposeWindow` alone so
-    // `CollapseProject` does not fold the renames before the peel runs.
+  test("two renaming top projects do not force pinning when top window rides lower exchange") {
+    // Two stacked rename-only top projects: the filter still resolves through both aliases,
+    // but the selective policy prefers the lower-exchange unpinned order once rn remains on
+    // top and can reuse the lower [k1, k2] exchange. Apply `TransposeWindow` alone so the
+    // alias peel is tested before `CollapseProject` can fold the renames.
     val query = wideRelation
       .window(Seq(sum(v).as("sum_p")), specP, order)
       .window(Seq(sum(v).as("sum_f")), specF, order)
@@ -1389,10 +1563,18 @@ class TransposeWindowSuite extends PlanTest {
 
     val analyzed = query.analyze
 
+    val correctAnswer = wideRelation
+      .window(Seq(sum(v).as("sum_f")), specF, order)
+      .window(Seq(sum(v).as("sum_p")), specP, order)
+      .window(Seq(rankAlias), specP, order)
+      .select(k1, k2, k3, k4, v, u, $"rn".as("rank"))
+      .select(k1, k2, k3, k4, v, u, $"rank".as("rank2"), $"rank".as("rank3"))
+      .where($"rank2" <= 1)
+
     withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
-      comparePlans(TransposeWindow.apply(analyzed), analyzed)
+      comparePlans(TransposeWindow.apply(analyzed), correctAnswer.analyze)
       assert(OptimizeWithGroupLimit.execute(analyzed)
-        .collect { case _: WindowGroupLimit => () }.nonEmpty)
+        .collect { case _: WindowGroupLimit => () }.isEmpty)
     }
   }
 
