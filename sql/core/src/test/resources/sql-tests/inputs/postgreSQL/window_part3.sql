@@ -151,50 +151,41 @@ insert into datetimes values
 
 -- GROUPS tests
 
--- [SPARK-28648] Adds support to `groups` unit type in window clauses
--- SELECT sum(unique1) over (order by four groups between unbounded preceding and current row),
--- unique1, four
--- FROM tenk1 WHERE unique1 < 10;
+SELECT sum(unique1) over (order by four groups between unbounded preceding and current row),
+unique1, four
+FROM tenk1 WHERE unique1 < 10;
 
--- [SPARK-28648] Adds support to `groups` unit type in window clauses
--- SELECT sum(unique1) over (order by four groups between unbounded preceding and unbounded following),
--- unique1, four
--- FROM tenk1 WHERE unique1 < 10;
+SELECT sum(unique1) over (order by four groups between unbounded preceding and unbounded following),
+unique1, four
+FROM tenk1 WHERE unique1 < 10;
 
--- [SPARK-28648] Adds support to `groups` unit type in window clauses
--- SELECT sum(unique1) over (order by four groups between current row and unbounded following),
--- unique1, four
--- FROM tenk1 WHERE unique1 < 10;
+SELECT sum(unique1) over (order by four groups between current row and unbounded following),
+unique1, four
+FROM tenk1 WHERE unique1 < 10;
 
--- [SPARK-28648] Adds support to `groups` unit type in window clauses
--- SELECT sum(unique1) over (order by four groups between 1 preceding and unbounded following),
--- unique1, four
--- FROM tenk1 WHERE unique1 < 10;
+SELECT sum(unique1) over (order by four groups between 1 preceding and unbounded following),
+unique1, four
+FROM tenk1 WHERE unique1 < 10;
 
--- [SPARK-28648] Adds support to `groups` unit type in window clauses
--- SELECT sum(unique1) over (order by four groups between 1 following and unbounded following),
--- unique1, four
--- FROM tenk1 WHERE unique1 < 10;
+SELECT sum(unique1) over (order by four groups between 1 following and unbounded following),
+unique1, four
+FROM tenk1 WHERE unique1 < 10;
 
--- [SPARK-28648] Adds support to `groups` unit type in window clauses
--- SELECT sum(unique1) over (order by four groups between unbounded preceding and 2 following),
--- unique1, four
--- FROM tenk1 WHERE unique1 < 10;
+SELECT sum(unique1) over (order by four groups between unbounded preceding and 2 following),
+unique1, four
+FROM tenk1 WHERE unique1 < 10;
 
--- [SPARK-28648] Adds support to `groups` unit type in window clauses
--- SELECT sum(unique1) over (order by four groups between 2 preceding and 1 preceding),
--- unique1, four
--- FROM tenk1 WHERE unique1 < 10;
+SELECT sum(unique1) over (order by four groups between 2 preceding and 1 preceding),
+unique1, four
+FROM tenk1 WHERE unique1 < 10;
 
--- [SPARK-28648] Adds support to `groups` unit type in window clauses
--- SELECT sum(unique1) over (order by four groups between 2 preceding and 1 following),
--- unique1, four
--- FROM tenk1 WHERE unique1 < 10;
+SELECT sum(unique1) over (order by four groups between 2 preceding and 1 following),
+unique1, four
+FROM tenk1 WHERE unique1 < 10;
 
--- [SPARK-28648] Adds support to `groups` unit type in window clauses
--- SELECT sum(unique1) over (order by four groups between 0 preceding and 0 following),
--- unique1, four
--- FROM tenk1 WHERE unique1 < 10;
+SELECT sum(unique1) over (order by four groups between 0 preceding and 0 following),
+unique1, four
+FROM tenk1 WHERE unique1 < 10;
 
 -- [SPARK-28428] Spark `exclude` always expecting `()`
 -- SELECT sum(unique1) over (order by four groups between 2 preceding and 1 following
@@ -211,41 +202,39 @@ insert into datetimes values
 --   exclude ties), unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
 
--- [SPARK-28648] Adds support to `groups` unit type in window clauses
--- SELECT sum(unique1) over (partition by ten
---   order by four groups between 0 preceding and 0 following),unique1, four, ten
--- FROM tenk1 WHERE unique1 < 10;
+SELECT sum(unique1) over (partition by ten
+  order by four groups between 0 preceding and 0 following),unique1, four, ten
+FROM tenk1 WHERE unique1 < 10;
 
 -- [SPARK-28428] Spark `exclude` always expecting `()`
--- [SPARK-28648] Adds support to `groups` unit type in window clauses
 -- SELECT sum(unique1) over (partition by ten
 --   order by four groups between 0 preceding and 0 following exclude current row), unique1, four, ten
 -- FROM tenk1 WHERE unique1 < 10;
 
 -- [SPARK-28428] Spark `exclude` always expecting `()`
--- [SPARK-28648] Adds support to `groups` unit type in window clauses
 -- SELECT sum(unique1) over (partition by ten
 --   order by four groups between 0 preceding and 0 following exclude group), unique1, four, ten
 -- FROM tenk1 WHERE unique1 < 10;
 
 -- [SPARK-28428] Spark `exclude` always expecting `()`
--- [SPARK-28648] Adds support to `groups` unit type in window clauses
 -- SELECT sum(unique1) over (partition by ten
 --   order by four groups between 0 preceding and 0 following exclude ties), unique1, four, ten
 -- FROM tenk1 WHERE unique1 < 10;
 
--- [SPARK-27951] ANSI SQL: NTH_VALUE function
--- [SPARK-28648] Adds support to `groups` unit type in window clauses
--- select first_value(salary) over(order by enroll_date groups between 1 preceding and 1 following),
--- lead(salary) over(order by enroll_date groups between 1 preceding and 1 following),
--- nth_value(salary, 1) over(order by enroll_date groups between 1 preceding and 1 following),
--- salary, enroll_date from empsalary;
+-- Keep unsupported lead/lag frames separate so the value functions are also executed.
+-- Use the order key as the value so the results do not depend on the order within a peer group.
+select first_value(enroll_date) over(order by enroll_date groups between 1 preceding and 1 following),
+nth_value(enroll_date, 1) over(order by enroll_date groups between 1 preceding and 1 following),
+salary, enroll_date from empsalary;
 
--- [SPARK-28508] Support for range frame+row frame in the same query
--- [SPARK-28648] Adds support to `groups` unit type in window clauses
--- select last(salary) over(order by enroll_date groups between 1 preceding and 1 following),
--- lag(salary)         over(order by enroll_date groups between 1 preceding and 1 following),
--- salary, enroll_date from empsalary;
+select lead(salary) over(order by enroll_date groups between 1 preceding and 1 following)
+from empsalary;
+
+select last(enroll_date) over(order by enroll_date groups between 1 preceding and 1 following),
+salary, enroll_date from empsalary;
+
+select lag(salary) over(order by enroll_date groups between 1 preceding and 1 following)
+from empsalary;
 
 -- [SPARK-27951] ANSI SQL: NTH_VALUE function
 -- select first_value(salary) over(order by enroll_date groups between 1 following and 3 following
@@ -276,13 +265,12 @@ SELECT x, (sum(x) over w)
 FROM cte
 WINDOW w AS (ORDER BY x range between 1 preceding and 1 following);
 
--- [SPARK-28648] Adds support to `groups` unit type in window clauses
--- WITH cte (x) AS (
---         SELECT * FROM range(1, 36, 2)
--- )
--- SELECT x, (sum(x) over w)
--- FROM cte
--- WINDOW w AS (ORDER BY x groups between 1 preceding and 1 following);
+WITH cte (x) AS (
+        SELECT * FROM range(1, 36, 2)
+)
+SELECT x, (sum(x) over w)
+FROM cte
+WINDOW w AS (ORDER BY x groups between 1 preceding and 1 following);
 
 WITH cte (x) AS (
         select 1 union all select 1 union all select 1 union all
@@ -300,14 +288,13 @@ SELECT x, (sum(x) over w)
 FROM cte
 WINDOW w AS (ORDER BY x range between 1 preceding and 1 following);
 
--- [SPARK-28648] Adds support to `groups` unit type in window clauses
--- WITH cte (x) AS (
---         select 1 union all select 1 union all select 1 union all
---         SELECT * FROM range(5, 50, 2)
--- )
--- SELECT x, (sum(x) over w)
--- FROM cte
--- WINDOW w AS (ORDER BY x groups between 1 preceding and 1 following);
+WITH cte (x) AS (
+        select 1 union all select 1 union all select 1 union all
+        SELECT * FROM range(5, 50, 2)
+)
+SELECT x, (sum(x) over w)
+FROM cte
+WINDOW w AS (ORDER BY x groups between 1 preceding and 1 following);
 
 -- with UNION
 SELECT count(*) OVER (PARTITION BY four) FROM (SELECT * FROM tenk1 UNION ALL SELECT * FROM tenk2)s LIMIT 0;
@@ -338,10 +325,9 @@ select f1, sum(f1) over (partition by f1, f2 order by f2
 range between 1 following and 2 following)
 from t1 where f1 = f2;
 
--- [SPARK-28648] Adds support to `groups` unit type in window clauses
--- select f1, sum(f1) over (partition by f1,
--- groups between 1 preceding and 1 following)
--- from t1 where f1 = f2;
+select f1, sum(f1) over (partition by f1,
+groups between 1 preceding and 1 following)
+from t1 where f1 = f2;
 
 -- Since EXPLAIN clause rely on host physical location, it is commented out
 -- explain
@@ -349,20 +335,17 @@ from t1 where f1 = f2;
 -- range between 1 preceding and 1 following)
 -- from t1 where f1 = f2;
 
--- [SPARK-28648] Adds support to `groups` unit type in window clauses
--- select f1, sum(f1) over (partition by f1 order by f2
--- groups between 1 preceding and 1 following)
--- from t1 where f1 = f2;
+select f1, sum(f1) over (partition by f1 order by f2
+groups between 1 preceding and 1 following)
+from t1 where f1 = f2;
 
--- [SPARK-28648] Adds support to `groups` unit type in window clauses
--- select f1, sum(f1) over (partition by f1, f1 order by f2
--- groups between 2 preceding and 1 preceding)
--- from t1 where f1 = f2;
+select f1, sum(f1) over (partition by f1, f1 order by f2
+groups between 2 preceding and 1 preceding)
+from t1 where f1 = f2;
  
--- [SPARK-28648] Adds support to `groups` unit type in window clauses
--- select f1, sum(f1) over (partition by f1, f2 order by f2
--- groups between 1 following and 2 following)
--- from t1 where f1 = f2;
+select f1, sum(f1) over (partition by f1, f2 order by f2
+groups between 1 following and 2 following)
+from t1 where f1 = f2;
 
 -- ordering by a non-integer constant is allowed
 SELECT rank() OVER (ORDER BY length('abc'));
