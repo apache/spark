@@ -90,7 +90,9 @@ class TransformWithStateInPySparkPythonRunner(
       currentDataIterator = dataIter
     }
 
-    val startData = dataOut.size()
+    // The batches go through `writer`, which stays bound to the stream of the first call, while
+    // `dataOut` can be a new stream on every call. So count the bytes that `writer` writes.
+    val startData = writer.bytesWritten()
     val hasInput = if (currentDataIterator != null) {
       var isCurrentBatchFull = false
       // Stop writing when the current arrowBatch is finalized/full. If we have rows left
@@ -109,7 +111,7 @@ class TransformWithStateInPySparkPythonRunner(
       super[PythonArrowInput].close()
       false
     }
-    val deltaData = dataOut.size() - startData
+    val deltaData = writer.bytesWritten() - startData
     pythonMetrics("pythonDataSent") += deltaData
     hasInput
   }
@@ -162,6 +164,9 @@ class TransformWithStateInPySparkPythonInitialStateRunner(
       )
     }
 
+    // The batches go through `writer`, which stays bound to the stream of the first call, while
+    // `dataOut` can be a new stream on every call. So count the bytes that `writer` writes.
+    val startData = writer.bytesWritten()
 
     // If we don't have data left for the current group, move to the next group.
     if (currentDataIterator == null && inputIterator.hasNext) {
@@ -174,11 +179,10 @@ class TransformWithStateInPySparkPythonInitialStateRunner(
         pandasWriter.getTotalNumRowsForBatch > 0) {
         // So we won't have batches with mixed data and init state.
         pandasWriter.finalizeCurrentArrowBatch()
+        pythonMetrics("pythonDataSent") += writer.bytesWritten() - startData
         return true
       }
     }
-
-    val startData = dataOut.size()
 
     val hasInput = if (currentDataIterator != null) {
       var isCurrentBatchFull = false
@@ -206,7 +210,7 @@ class TransformWithStateInPySparkPythonInitialStateRunner(
       false
     }
 
-    val deltaData = dataOut.size() - startData
+    val deltaData = writer.bytesWritten() - startData
     pythonMetrics("pythonDataSent") += deltaData
     hasInput
   }
