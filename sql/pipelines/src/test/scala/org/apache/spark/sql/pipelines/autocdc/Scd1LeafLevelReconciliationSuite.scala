@@ -130,6 +130,53 @@ class Scd1LeafLevelReconciliationSuite extends QueryTest with SharedSparkSession
     checkAnswer(result, Row(1, null, "San Francisco", null, Row(null, 3L, expectedVersionMap)))
   }
 
+  test("reconcileMicrobatch lets only deletes and tombstones author target columns that the " +
+    "microbatch omits") {
+    val inputSchema = new StructType()
+      .add("id", IntegerType)
+      .add("name", StringType)
+      .add("op", StringType)
+      .add("seq", LongType)
+    val targetSchema = new StructType()
+      .add("id", IntegerType)
+      .add("name", StringType)
+      .add("targetOnly", StringType)
+      .add(metadataColName, metadataSchema)
+    val auxiliarySchema = new StructType()
+      .add("id", IntegerType)
+      .add(metadataColName, metadataSchema)
+    val input = dataFrameOf(inputSchema)(
+      Row(1, "Alice", "UPSERT", 1L),
+      Row(2, null, "DELETE", 2L),
+      Row(2, "Bob", "UPSERT", 3L),
+      Row(3, "Carol", "UPSERT", 4L)
+    )
+    val auxiliary = dataFrameOf(auxiliarySchema)(Row(3, Row(2L, null, null)))
+    // `targetOnly` is outside the ignore-null selection, so it is reconciled as a whole column.
+    val args = changeArgs(
+      ignoreNullSelection =
+        Some(ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("name")))),
+      columnSelection = Some(ColumnSelection.ExcludeColumns(
+        Seq(UnqualifiedColumnName("op"), UnqualifiedColumnName("seq"))))
+    ).copy(deleteCondition = Some(F.col("op") === "DELETE"))
+
+    val result = Scd1LeafLevelReconciliation.reconcileMicrobatch(
+      changeArgs = args,
+      resolvedSequencingType = LongType,
+      validatedBatchDf = input,
+      targetTableDf = dataFrameOf(targetSchema)(),
+      auxiliaryTableDf = auxiliary
+    )
+
+    val name = encodedPath("name")
+    val targetOnly = encodedPath("targetOnly")
+    checkAnswer(result, Seq(
+      Row(1, "Alice", null, Row(null, 1L, Map[String, Any](name -> 1L, targetOnly -> null))),
+      Row(2, "Bob", null, Row(null, 3L, Map(name -> 3L, targetOnly -> 2L))),
+      Row(3, "Carol", null, Row(null, 4L, Map(name -> 4L, targetOnly -> 2L)))
+    ))
+  }
+
   test("extendMicrobatchRowsWithVersionMap is a no-op when ignore-null is disabled") {
     val schema = new StructType()
       .add("id", IntegerType)
