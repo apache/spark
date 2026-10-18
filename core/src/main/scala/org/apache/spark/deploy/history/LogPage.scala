@@ -63,7 +63,7 @@ private[history] class LogPage(conf: SparkConf) extends WebUIPage("logPage") wit
     val content =
       <script type="module" src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script> ++
       <div>
-        <p><a href="/">Back to Main page</a></p>
+        <p><a href={UIUtils.prependBaseUri(request, "/")}>Back to Main page</a></p>
         {range}
         <div class="log-content" style="height:80vh; overflow:auto; padding:5px;">
           <div>{moreButton}</div>
