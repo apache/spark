@@ -41,11 +41,13 @@ class Scd1LeafLevelReconciliationSuite extends QueryTest with SharedSparkSession
 
   private def extendMicrobatchRowsWithVersionMap(
       input: DataFrame,
-      ignoreNullSelection: Option[ColumnSelection]): DataFrame =
+      ignoreNullSelection: Option[ColumnSelection],
+      unalignedSchema: Option[StructType] = None): DataFrame =
     Scd1LeafLevelReconciliation.extendMicrobatchRowsWithVersionMap(
       changeArgs = changeArgs(ignoreNullSelection),
       resolvedSequencingType = LongType,
-      alignedDf = input
+      alignedDf = input,
+      unalignedSchema = unalignedSchema.getOrElse(input.schema)
     )
 
   private def metadataSchema: StructType =
@@ -122,6 +124,48 @@ class Scd1LeafLevelReconciliationSuite extends QueryTest with SharedSparkSession
         Row(Row(null, 30L, expectedSecondUpsertMap))
       )
     )
+  }
+
+  test("extendMicrobatchRowsWithVersionMap leaves the leaves that alignment added unauthored") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val schema = new StructType()
+        .add("id", IntegerType)
+        .add("selected", StringType)
+        .add("carried", StringType)
+        .add("omitted", StringType)
+        .add("profile", new StructType()
+          .add("city", StringType)
+          .add("zip", StringType))
+        .add(metadataColName, metadataSchema)
+      val unalignedSchema = new StructType()
+        .add("ID", IntegerType)
+        .add("Selected", StringType)
+        .add("Carried", StringType)
+        .add("profile", new StructType()
+          .add("City", StringType))
+        .add(metadataColName, metadataSchema)
+      val input = dataFrameOf(schema)(
+        Row(1, "value", null, null, Row(null, null), Row(null, 10L, null))
+      )
+
+      val result = extendMicrobatchRowsWithVersionMap(
+        input = input,
+        ignoreNullSelection =
+          Some(ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("selected")))),
+        unalignedSchema = Some(unalignedSchema)
+      )
+
+      val expectedVersionMap = Map[String, Any](
+        encodedPath("selected") -> 10L,
+        encodedPath("carried") -> 10L,
+        encodedPath("omitted") -> null,
+        encodedPath("profile", "city") -> 10L,
+        encodedPath("profile", "zip") -> null
+      )
+      checkAnswer(
+        result.select(F.col(metadataColName)),
+        Row(Row(null, 10L, expectedVersionMap)))
+    }
   }
 
   test("alignMicrobatchToTargetSchema preserves target shape and source-only columns") {

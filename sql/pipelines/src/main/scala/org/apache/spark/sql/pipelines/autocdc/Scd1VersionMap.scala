@@ -89,9 +89,9 @@ private[pipelines] object Scd1VersionMap {
   /**
    * Builds a column that computes a row's version map from that row's column values.
    *
-   * Every leaf in `schema` receives an entry of `authorshipSequence`, except that a leaf selected
-   * by `ignoreNullSelection` is read by path from the row and receives a null entry when its value
-   * is null.
+   * Every leaf in `schema` receives an entry of `authorshipSequence`, except that a leaf in
+   * `omittedLeafPaths` receives a null entry, and any other leaf selected by `ignoreNullSelection`
+   * is read by path from the row and receives a null entry when its value is null.
    *
    * @param schema The user-data schema, without keys or framework columns, whose leaves receive
    *               version-map entries. Keys take each name part's spelling verbatim from this
@@ -99,6 +99,8 @@ private[pipelines] object Scd1VersionMap {
    *               same across runs. Its leaves selected by `ignoreNullSelection` must resolve by
    *               path in the DataFrame on which the returned column is evaluated.
    * @param ignoreNullSelection The selection identifying leaves whose null values are unauthored.
+   * @param omittedLeafPaths The leaf paths of `schema`, spelled as in it, that are not authored at
+   *                         `authorshipSequence`, such as leaves the row's source did not carry.
    * @param authorshipSequence The sequence at which the leaves of `schema` are considered authored.
    * @param sequencingType The data type of `authorshipSequence`.
    * @param resolver The resolver used for column-name matching.
@@ -107,6 +109,7 @@ private[pipelines] object Scd1VersionMap {
   def buildVersionMap(
       schema: StructType,
       ignoreNullSelection: ColumnSelection,
+      omittedLeafPaths: Set[Seq[String]],
       authorshipSequence: Column,
       sequencingType: DataType,
       resolver: Resolver): Column = {
@@ -116,7 +119,9 @@ private[pipelines] object Scd1VersionMap {
 
     val entries = AutoCdcSchemaUtils.flattenStructFieldPaths(schema).map { path =>
       val leafSequence =
-        if (ignoreNullLeafPaths.contains(path)) {
+        if (omittedLeafPaths.contains(path)) {
+          F.lit(null)
+        } else if (ignoreNullLeafPaths.contains(path)) {
           F.when(F.col(QuotingUtils.quoteNameParts(path)).isNotNull, authorshipSequence)
         } else {
           authorshipSequence
