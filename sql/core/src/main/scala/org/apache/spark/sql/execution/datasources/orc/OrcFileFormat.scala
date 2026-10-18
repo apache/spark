@@ -28,7 +28,6 @@ import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.orc.{OrcUtils => _, _}
 import org.apache.orc.OrcConf.COMPRESS
 import org.apache.orc.mapred.OrcStruct
-import org.apache.orc.mapreduce._
 
 import org.apache.spark.TaskContext
 import org.apache.spark.memory.MemoryMode
@@ -195,12 +194,13 @@ class OrcFileFormat
       if (resultedColPruneInfo.isEmpty) {
         Iterator.empty
       } else {
-        // ORC predicate pushdown
-        if (orcFilterPushDown && filters.nonEmpty) {
-          val fileSchema = OrcUtils.toCatalystSchema(orcSchema)
-          OrcFilters.createFilter(fileSchema, filters).foreach { f =>
-            OrcInputFormat.setSearchArgument(conf, f, fileSchema.fieldNames)
-          }
+        // ORC predicate pushdown. The SearchArgument is passed to the ORC reader directly, as
+        // OrcInputFormat.setSearchArgument serializes it into the conf with Kryo, which truncates
+        // TIMESTAMP literals to milliseconds.
+        val searchArgument = if (orcFilterPushDown && filters.nonEmpty) {
+          OrcFilters.createFilter(OrcUtils.toCatalystSchema(orcSchema), filters)
+        } else {
+          None
         }
 
         val (requestedColIds, canPruneCols) = resultedColPruneInfo.get
@@ -226,7 +226,8 @@ class OrcFileFormat
           val requestedDataColIds = requestedColIds ++ Array.fill(partitionSchema.length)(-1)
           val requestedPartitionColIds =
             Array.fill(requiredSchema.length)(-1) ++ Range(0, partitionSchema.length)
-          batchReader.initialize(fileSplit, taskAttemptContext, readerOptions.getOrcTail)
+          batchReader.initialize(
+            fileSplit, taskAttemptContext, readerOptions.getOrcTail, searchArgument.orNull)
           batchReader.initBatch(
             TypeDescription.fromString(resultSchemaString),
             resultSchema.fields,
@@ -237,7 +238,7 @@ class OrcFileFormat
           iter.asInstanceOf[Iterator[InternalRow]]
         } else {
           val orcRecordReader = OrcUtils.createOrcMapreduceRecordReader(
-            filePath, taskConf, fileSplit, readerOptions)
+            filePath, taskConf, fileSplit, readerOptions, searchArgument)
           val iter = new RecordReaderIterator[OrcStruct](orcRecordReader)
           Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))
 

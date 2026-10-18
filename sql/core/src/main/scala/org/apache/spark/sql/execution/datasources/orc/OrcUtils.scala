@@ -28,6 +28,7 @@ import scala.util.control.NonFatal
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, GlobPattern, Path}
+import org.apache.hadoop.hive.ql.io.sarg.SearchArgument
 import org.apache.hadoop.hive.serde2.io.DateWritable
 import org.apache.hadoop.io.{BooleanWritable, ByteWritable, DoubleWritable, FloatWritable, IntWritable, LongWritable, ShortWritable, WritableComparable}
 import org.apache.hadoop.mapreduce.lib.input.FileSplit
@@ -723,11 +724,16 @@ object OrcUtils extends Logging {
     }
   }
 
+  /**
+   * Creates a record reader of `fileSplit`, pushing down `searchArgument` to the ORC reader if it
+   * is defined. Its columns are the top-level columns of the file.
+   */
   def createOrcMapreduceRecordReader(
       filePath: Path,
       conf: Configuration,
       fileSplit: FileSplit,
-      readerOptions: OrcFile.ReaderOptions): OrcMapreduceRecordReader[OrcStruct] = {
+      readerOptions: OrcFile.ReaderOptions,
+      searchArgument: Option[SearchArgument]): OrcMapreduceRecordReader[OrcStruct] = {
     val fs = filePath.getFileSystem(conf)
     val orcReader = OrcFile.createReader(
       filePath,
@@ -738,6 +744,9 @@ object OrcUtils extends Logging {
     val options = OrcMapredInputFormat
       .buildOptions(conf, orcReader, fileSplit.getStart, fileSplit.getLength)
       .useSelected(true)
+    searchArgument.foreach { sarg =>
+      options.searchArgument(sarg, orcReader.getSchema.getFieldNames.asScala.toArray)
+    }
     new OrcMapreduceRecordReader[OrcStruct](orcReader, options)
   }
 }

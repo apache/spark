@@ -21,6 +21,7 @@ import java.io.IOException;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hive.ql.io.sarg.SearchArgument;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
@@ -123,13 +124,18 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
   @Override
   public void initialize(
       InputSplit inputSplit, TaskAttemptContext taskAttemptContext) throws IOException {
-    initialize(inputSplit, taskAttemptContext, null);
+    initialize(inputSplit, taskAttemptContext, null, null);
   }
 
+  /**
+   * Initialize ORC file reader and batch record reader, pushing down `searchArgument` to the ORC
+   * reader if it is not null. Its columns are the top-level columns of the file.
+   */
   public void initialize(
       InputSplit inputSplit,
       TaskAttemptContext taskAttemptContext,
-      OrcTail orcTail) throws IOException {
+      OrcTail orcTail,
+      SearchArgument searchArgument) throws IOException {
     FileSplit fileSplit = (FileSplit)inputSplit;
     Configuration conf = taskAttemptContext.getConfiguration();
     Reader reader = OrcFile.createReader(
@@ -140,6 +146,10 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
         .orcTail(orcTail));
     Reader.Options options =
       OrcInputFormat.buildOptions(conf, reader, fileSplit.getStart(), fileSplit.getLength());
+    if (searchArgument != null) {
+      options.searchArgument(
+        searchArgument, reader.getSchema().getFieldNames().toArray(new String[0]));
+    }
     recordReader = reader.rows(options);
   }
 

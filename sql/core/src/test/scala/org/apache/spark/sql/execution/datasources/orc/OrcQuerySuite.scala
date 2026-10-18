@@ -1148,6 +1148,42 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-60326: ORC predicate pushdown with sub-millisecond TIMESTAMP literals") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      // One file per value, so each file's min and max is its value. The value of file 1 is on a
+      // millisecond.
+      Seq(
+        "TIMESTAMP'2024-06-01 12:00:00.123456'",
+        "TIMESTAMP'2024-06-01 12:00:00.123'",
+        "TIMESTAMP'2024-06-01 12:00:01.123456'").zipWithIndex.foreach { case (t, id) =>
+        sql(s"SELECT $id AS id, $t AS t").write.mode("append").orc(path)
+      }
+      Seq(true, false).foreach { vectorized =>
+        withSQLConf(
+            SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString,
+            SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+          val df = spark.read.orc(path)
+          def check(predicate: String, expected: Seq[Int]): Unit = {
+            checkAnswer(df.where(predicate).select("id"), expected.map(Row(_)))
+          }
+          check("t = TIMESTAMP'2024-06-01 12:00:00.123456'", Seq(0))
+          check("t <=> TIMESTAMP'2024-06-01 12:00:00.123456'", Seq(0))
+          check("t <= TIMESTAMP'2024-06-01 12:00:00.123456'", Seq(0, 1))
+          check("t < TIMESTAMP'2024-06-01 12:00:00.123001'", Seq(1))
+          check("t IN (TIMESTAMP'2024-06-01 12:00:00.123456', " +
+            "TIMESTAMP'2024-06-01 12:00:01.123456')", Seq(0, 2))
+          check("t != TIMESTAMP'2024-06-01 12:00:00.123456'", Seq(1, 2))
+          check("t >= TIMESTAMP'2024-06-01 12:00:00.123456'", Seq(0, 2))
+          // The other two files are still skipped.
+          checkAnswer(
+            stripSparkFilter(df.where("t = TIMESTAMP'2024-06-01 12:00:00.123456'")).select("id"),
+            Row(0))
+        }
+      }
+    }
+  }
+
   test("SPARK-57455: ORC round-trips nanos timestamps in nested/complex types") {
     withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
       val wallClocks = Seq(LocalDateTime.of(1970, 1, 1, 0, 20, 34, 567890123))
