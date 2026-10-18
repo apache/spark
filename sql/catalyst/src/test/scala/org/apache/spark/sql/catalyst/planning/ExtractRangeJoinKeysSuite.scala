@@ -66,17 +66,15 @@ class ExtractRangeJoinKeysSuite extends PlanTest {
   }
 
   test("point-in-range keys are the point and the two bounds") {
-    // Inclusivity and conjunct order stay on the condition. BETWEEN lowers to a With
-    // whose deterministic common expression is inlined before range matching, substituting
-    // the reference back to the original point expression so keys are the point and bounds.
+    // Inclusivity and conjunct order stay on the condition. BETWEEN lowers to a With,
+    // but RewriteWithExpression resolves it to a plain And of comparisons before physical
+    // planning runs, so by the time this extractor sees the condition it is already one
+    // of these shapes.
     val inclusive = And(GreaterThanOrEqual(p, rLo), LessThanOrEqual(p, rHi))
     val exclusive = And(GreaterThan(p, rLo), LessThan(p, rHi))
     val highFirst = And(LessThanOrEqual(p, rHi), GreaterThan(p, rLo))
     val lowFirst = And(GreaterThanOrEqual(p, rLo), LessThan(p, rHi))
-    val between = With(p) { case Seq(ref) =>
-      And(GreaterThanOrEqual(ref, rLo), LessThanOrEqual(ref, rHi))
-    }
-    Seq(inclusive, exclusive, highFirst, lowFirst, between).foreach { cond =>
+    Seq(inclusive, exclusive, highFirst, lowFirst).foreach { cond =>
       assertKeys(points, ranges, cond, PointInRangeJoin, Seq(p), Seq(rLo, rHi))
     }
     assertKeys(
@@ -117,13 +115,6 @@ class ExtractRangeJoinKeysSuite extends PlanTest {
       intervalsA, intervalsB,
       And(GreaterThan(Rand(Literal(0L)), Literal(0.0)), LessThan(aLo, bHi)),
       LessPartialRangeJoin, Seq(aLo), Seq(bHi))
-
-    val nonDetWith = With(Rand(Literal(0L))) { case Seq(ref) =>
-      And(
-        GreaterThanOrEqual(ref, Cast(rLo, DoubleType)),
-        LessThanOrEqual(ref, Cast(rHi, DoubleType)))
-    }
-    assertUnrecognized(join(points, ranges, nonDetWith))
   }
 
   test("interval overlap keys are (low, high) on each side") {

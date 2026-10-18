@@ -469,6 +469,30 @@ class RangeIndexSuite extends SparkFunSuite {
     assert(ids(index.from(Double.NegativeInfinity)) == List(-80, -1, 0, 1, 80, 90))
   }
 
+  test("upTo/from matches a brute-force reference across randomized point sets") {
+    // PointIndex's counterpart to "overlapping matches a brute-force reference
+    // across randomized interval sets": cross-checks the binary-search bound
+    // scan against an independent O(n) scan, across many random key sets and
+    // probe values, including duplicate keys.
+    val rand = new scala.util.Random(42)
+    val bound = 50
+    for (_ <- 0 until 30) {
+      val n = 1 + rand.nextInt(300)
+      val raw = (0 until n).map(i => (rand.nextInt(bound), i))
+      val index = buildPoints(IntegerType, raw.map { case (k, i) => (k, row(i)) })
+
+      for (_ <- 0 until 20) {
+        val probe = rand.nextInt(bound)
+        val expectedUpTo = raw.collect { case (k, i) if k <= probe => i }.toSet
+        val expectedFrom = raw.collect { case (k, i) if k >= probe => i }.toSet
+        assert(ids(index.upTo(probe)).toSet == expectedUpTo,
+          s"n=$n probe=$probe expected=$expectedUpTo")
+        assert(ids(index.from(probe)).toSet == expectedFrom,
+          s"n=$n probe=$probe expected=$expectedFrom")
+      }
+    }
+  }
+
   test("indexes round-trip through Java and strict Kryo serialization") {
     val serializers = Seq(
       "Java" -> new org.apache.spark.serializer.JavaSerializer(
@@ -482,7 +506,9 @@ class RangeIndexSuite extends SparkFunSuite {
     // (key type, lo, hi, probe) covering each supported key family: fixed
     // width, floating point, decimal, binary, and collated strings. The
     // collated probe mixes cases, so a restored index only answers it when
-    // its collation ordering survived the round trip.
+    // its collation ordering survived the round trip. CharType/VarcharType
+    // carry a StringConstraint (FixedLength/MaxLength) that Kryo must have
+    // registered separately from plain StringType.
     val cases: Seq[(DataType, Any, Any, Any)] = Seq(
       (ByteType, 0.toByte, 10.toByte, 5.toByte),
       (ShortType, 0.toShort, 10.toShort, 5.toShort),
@@ -493,6 +519,10 @@ class RangeIndexSuite extends SparkFunSuite {
       (DecimalType(10, 2), Decimal(0.0), Decimal(10.0), Decimal(5.0)),
       (StringType("UTF8_LCASE"),
         UTF8String.fromString("abc"), UTF8String.fromString("zzz"), UTF8String.fromString("MMM")),
+      (CharType(3),
+        UTF8String.fromString("abc"), UTF8String.fromString("zzz"), UTF8String.fromString("mmm")),
+      (VarcharType(10),
+        UTF8String.fromString("abc"), UTF8String.fromString("zzz"), UTF8String.fromString("mmm")),
       (BinaryType, Array[Byte](0), Array[Byte](10), Array[Byte](5)),
       (DateType, 100, 200, 150),
       (TimestampType, 1000L, 2000L, 1500L),
@@ -724,19 +754,39 @@ class RangeIndexSuite extends SparkFunSuite {
   }
 
   test("the long point index answers the same bounds as the generic one") {
-    // Unsorted, with two rows on key 5, and a null key that both paths drop.
-    val keyed = Array[(Any, InternalRow)](
-      (8, row(8)), (1, row(1)), (5, row(5)), (5, row(50)), (3, row(3)), (null, row(-1)))
-    val generic = buildPoints(IntegerType, keyed.toSeq)
-    val longIdx = RangeBroadcastMode(
-      Seq(BoundReference(0, IntegerType, nullable = true)), PointIndexKind)
-      .transform(keyed.map(t => InternalRow(t._1, t._2.getInt(0))).toArray)
-      .asInstanceOf[LongPointIndex]
-    Seq(0, 1, 4, 5, 6, 8, 9).foreach { v =>
+    def longIndex(keyed: Seq[(Any, InternalRow)]): LongPointIndex =
+      RangeBroadcastMode(
+        Seq(BoundReference(0, IntegerType, nullable = true)), PointIndexKind)
+        .transform(keyed.map(t => InternalRow(t._1, t._2.getInt(0))).toArray)
+        .asInstanceOf[LongPointIndex]
+    def assertSameBounds(generic: PointIndex, longIdx: LongPointIndex, v: Int): Unit = {
       val upTo = longIdx.upTo(v.toLong).map(_.getInt(1)).toList.sorted
       assert(upTo == ids(generic.upTo(v)).sorted, s"upTo($v)")
       val from = longIdx.from(v.toLong).map(_.getInt(1)).toList.sorted
       assert(from == ids(generic.from(v)).sorted, s"from($v)")
+    }
+
+    // Unsorted, with two rows on key 5, and a null key that both paths drop.
+    val keyed = Array[(Any, InternalRow)](
+      (8, row(8)), (1, row(1)), (5, row(5)), (5, row(50)), (3, row(3)), (null, row(-1)))
+    val generic = buildPoints(IntegerType, keyed.toSeq)
+    val longIdx = longIndex(keyed.toSeq)
+    Seq(0, 1, 4, 5, 6, 8, 9).foreach(v => assertSameBounds(generic, longIdx, v))
+
+    // Randomized sets cross-check the families independently: the generic index
+    // is itself brute-force verified, so this pins the long path's bound search
+    // and null handling without recomputing expectations by hand.
+    val rand = new scala.util.Random(42)
+    val bound = 50
+    for (_ <- 0 until 20) {
+      val n = 1 + rand.nextInt(300)
+      val raw = (0 until n).map(i => (rand.nextInt(bound), i))
+      val randomKeyed = raw.map { case (k, i) => (k: Any, row(i)) }
+      val randomGeneric = buildPoints(IntegerType, randomKeyed)
+      val randomLong = longIndex(randomKeyed)
+      for (_ <- 0 until 15) {
+        assertSameBounds(randomGeneric, randomLong, rand.nextInt(bound))
+      }
     }
   }
 

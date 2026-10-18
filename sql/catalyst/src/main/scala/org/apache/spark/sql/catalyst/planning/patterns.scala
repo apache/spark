@@ -425,22 +425,14 @@ object ExtractSingleColumnNullAwareAntiJoin extends JoinSelectionHelper with Pre
 /**
  * Finds joins whose condition is a range predicate usable by a broadcast range join.
  *
- * Recognizes point-in-range (`a.ip` against `[b.lo, b.hi]`), interval overlap
- * (`a.lo < b.hi AND b.lo < a.hi`), and a cross-side inequality (`a.start < b.end`).
- * Point-in-range keys are the point once and `(low, high)`. The index probes
- * that one value as both ends of the window. Overlap keys are `(low, high)`
- * on each side. A partial range carries the one column from each side.
- * Extra conjuncts stay on the original condition and are evaluated per candidate.
- * A point-in-range pair wins over overlap, and overlap wins over a partial range.
- * [[RangePredicate]] supplies the canonical `low <= high` form; inclusivity stays
- * on the original condition. Keys whose type the range index cannot compare, and
- * keys that are not deterministic, stay unrecognized, so the join stays a nested
- * loop. The index stores one evaluation of each key and the original condition
- * evaluates it again; a second `rand()` would drop rows the condition accepts.
- * A non-deterministic conjunct that is not a key stays on that condition.
- * A deterministic [[With]] (`BETWEEN` lowers to one) is inlined first, so the
- * keys are the common expressions. A non-deterministic definition is left in
- * place and is not used as a range key.
+ * Tries three shapes, each capturing more of the condition than the last, and keeps
+ * the first that matches:
+ *  - point-in-range: one key probed as both ends of a `(low, high)` window on the other side.
+ *  - interval overlap: a `(low, high)` key on each side.
+ *  - partial range: one inequality, one column per side.
+ * Leftover conjuncts, including inclusivity ([[RangePredicate]] only extracts the
+ * canonical `low <= high` shape), stay on the original condition and are evaluated
+ * per candidate.
  */
 object ExtractRangeJoinKeys extends PredicateHelper {
   type ReturnType = (LogicalPlan, LogicalPlan, Seq[Expression], Seq[Expression],
@@ -448,7 +440,7 @@ object ExtractRangeJoinKeys extends PredicateHelper {
 
   def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
     case Join(left, right, joinType, Some(condition), _) =>
-      val predicates = splitConjunctivePredicates(inlineCommonExpressions(condition))
+      val predicates = splitConjunctivePredicates(condition)
       val rangePreds = predicates.collect {
         case RangePredicate(dt, low, high) if RangePredicate.supportedType(dt) =>
           (dt, low, high)
@@ -461,31 +453,6 @@ object ExtractRangeJoinKeys extends PredicateHelper {
           .orElse(partialRange(rangePreds, left, right, joinType))
       }
     case _ => None
-  }
-
-  /**
-   * Replaces each deterministic [[With]] with its child, substituting every
-   * [[CommonExpressionRef]] by the common expression. A ref has no attributes,
-   * so `canEvaluate` would accept it on either side. A cycle or a ref with no
-   * definition in this [[With]] is left as a ref, and [[RangePredicate]] then
-   * rejects the predicate.
-   */
-  private def inlineCommonExpressions(expression: Expression): Expression = {
-    expression.transformUp {
-      case w: With if w.defs.forall(_.deterministic) =>
-        val defsById = w.defs.iterator.map(d => d.id -> d.child).toMap
-        def substitute(e: Expression, stack: Set[Long]): Expression = {
-          e.transform {
-            case r: CommonExpressionRef =>
-              defsById.get(r.id) match {
-                case Some(definition) if !stack.contains(r.id.id) =>
-                  substitute(definition, stack + r.id.id)
-                case _ => r
-              }
-          }
-        }
-        substitute(w.child, Set.empty)
-    }
   }
 
   /**
@@ -611,16 +578,12 @@ object RangePredicate {
   }
 
   def unapply(expression: Expression): Option[(DataType, Expression, Expression)] = {
-    if (expression.exists(_.isInstanceOf[CommonExpressionRef])) {
-      None
-    } else {
-      expression match {
-        case LessThan(low, high) => Some((low.dataType, low, high))
-        case LessThanOrEqual(low, high) => Some((low.dataType, low, high))
-        case GreaterThan(high, low) => Some((low.dataType, low, high))
-        case GreaterThanOrEqual(high, low) => Some((low.dataType, low, high))
-        case _ => None
-      }
+    expression match {
+      case LessThan(low, high) => Some((low.dataType, low, high))
+      case LessThanOrEqual(low, high) => Some((low.dataType, low, high))
+      case GreaterThan(high, low) => Some((low.dataType, low, high))
+      case GreaterThanOrEqual(high, low) => Some((low.dataType, low, high))
+      case _ => None
     }
   }
 }

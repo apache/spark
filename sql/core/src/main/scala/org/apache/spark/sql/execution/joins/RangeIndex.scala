@@ -20,11 +20,11 @@ package org.apache.spark.sql.execution.joins
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Expression, InterpretedProjection}
+import org.apache.spark.sql.catalyst.expressions.{Expression, InterpretedProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
-import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DateType, IntegerType,
-  LongType, ShortType, TimestampNTZType, TimestampType}
-import org.apache.spark.util.{KnownSizeEstimation, SizeEstimator}
+import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DateType, Decimal, IntegerType, LongType, ShortType, TimestampNTZType, TimestampType}
+import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.KnownSizeEstimation
 
 /**
  * Broadcast payload of a range join. An index only names candidate rows.
@@ -150,6 +150,15 @@ private[joins] object RangeIndex {
     longKey(dt).getOrElse(
       throw new IllegalStateException(s"$dt has no order-preserving long key."))
   }
+
+  /** Estimated bytes of a row or key value, without reflection or SizeEstimator. */
+  private[joins] def valueSize(v: Any): Long = v match {
+    case u: UnsafeRow => u.getSizeInBytes.toLong
+    case s: UTF8String => s.numBytes().toLong
+    case b: Array[Byte] => b.length.toLong
+    case d: Decimal if d.precision > Decimal.MAX_LONG_DIGITS => 24L + d.precision.toLong
+    case _ => 8L
+  }
 }
 
 /**
@@ -207,8 +216,16 @@ private[joins] class IntervalIndex private (
   private[this] val hasCommonCore: Boolean =
     coreLow != null && ordering.lteq(coreLow, coreHigh)
 
-  override def estimatedSize: Long =
-    SizeEstimator.estimate(Array[AnyRef](intervals, maxHighs, rows))
+  override def estimatedSize: Long = {
+    var size = 24L + intervals.length * 24L
+    var i = 0
+    while (i < intervals.length) {
+      val (lo, hi, row) = intervals(i)
+      size += RangeIndex.valueSize(lo) + RangeIndex.valueSize(hi) + RangeIndex.valueSize(row)
+      i += 1
+    }
+    size
+  }
 
   def overlapping(low: Any, high: Any): Iterator[InternalRow] = {
     if (intervals.isEmpty || low == null || high == null) return Iterator.empty
@@ -375,7 +392,16 @@ private[joins] class PointIndex private (
 
   private[this] val length = points.length
 
-  override def estimatedSize: Long = SizeEstimator.estimate(Array[AnyRef](points, rows))
+  override def estimatedSize: Long = {
+    var size = 16L + points.length * 16L
+    var i = 0
+    while (i < points.length) {
+      val (key, row) = points(i)
+      size += RangeIndex.valueSize(key) + RangeIndex.valueSize(row)
+      i += 1
+    }
+    size
+  }
 
   /** Points whose key is less than or equal to `value`. */
   def upTo(value: Any): Iterator[InternalRow] =
@@ -475,8 +501,15 @@ private[joins] class LongIntervalIndex private (
   }
   private[this] val hasCommonCore: Boolean = !lows.isEmpty && coreLow <= coreHigh
 
-  override def estimatedSize: Long =
-    SizeEstimator.estimate(Array[AnyRef](lows, highs, maxHighs, rows))
+  override def estimatedSize: Long = {
+    var size = 24L + lows.length * 24L
+    var i = 0
+    while (i < rows.length) {
+      size += RangeIndex.valueSize(rows(i))
+      i += 1
+    }
+    size
+  }
 
   def overlapping(low: Long, high: Long): Iterator[InternalRow] = {
     if (lows.isEmpty) return Iterator.empty
@@ -565,12 +598,15 @@ private[joins] class LongOverlapIterator(
     probeHigh: Long) extends Iterator[InternalRow] {
 
   private[this] val depth = 32 - java.lang.Integer.numberOfLeadingZeros(lows.length)
-  private[this] var stackStart = new Array[Int](math.max(8, depth * 3))
-  private[this] var stackEnd = new Array[Int](math.max(8, depth * 3))
-  private[this] var stackTop = 0
+  private[joins] var stackStart = new Array[Int](math.max(8, depth * 3))
+  private[joins] var stackEnd = new Array[Int](math.max(8, depth * 3))
+  private[joins] var stackTop = 0
+  private[joins] var steps = 0
   private[this] var nextRow: InternalRow = null
 
   push(0, lows.length)
+
+  private[joins] def stackCapacity: Int = stackStart.length
 
   private def push(s: Int, e: Int): Unit = {
     if (stackTop >= stackStart.length) {
@@ -584,6 +620,7 @@ private[joins] class LongOverlapIterator(
 
   private def advance(): InternalRow = {
     while (stackTop > 0) {
+      steps += 1
       stackTop -= 1
       val start = stackStart(stackTop)
       val end = stackEnd(stackTop)
@@ -629,7 +666,15 @@ private[joins] class LongPointIndex private (
 
   private[this] val length = keys.length
 
-  override def estimatedSize: Long = SizeEstimator.estimate(Array[AnyRef](keys, rows))
+  override def estimatedSize: Long = {
+    var size = 16L + keys.length * 8L
+    var i = 0
+    while (i < rows.length) {
+      size += RangeIndex.valueSize(rows(i))
+      i += 1
+    }
+    size
+  }
 
   /** Points whose key is less than or equal to `value`. */
   def upTo(value: Long): Iterator[InternalRow] =

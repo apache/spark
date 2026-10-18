@@ -480,6 +480,70 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
     }
   }
 
+  test("interpreted execution covers each range-join probe") {
+    // Mirrors "whole-stage codegen covers each range-join probe" with codegen off, so the
+    // interpreted paths (innerJoin/outerJoin/existenceJoin) are exercised for every key
+    // family, not just the Long-specialized one the earlier codegen-only tests happen to hit.
+    setupIpLookupViews()
+    setupDecimalViews()
+    setupCollatedStrings()
+    setupIntervalViews()
+    val queries = Seq(
+      s"SELECT s.id, l.zip_id FROM signin_ip s JOIN ip_lookup l ON $pointCond",
+      s"SELECT s.id, l.zip_id FROM signin_ip s LEFT JOIN ip_lookup l ON $pointCond",
+      s"SELECT s.id, l.zip_id FROM signin_ip s RIGHT JOIN ip_lookup l ON $pointCond",
+      s"SELECT s.id FROM signin_ip s LEFT SEMI JOIN ip_lookup l ON $pointCond",
+      s"SELECT s.id FROM signin_ip s LEFT ANTI JOIN ip_lookup l ON $pointCond",
+      "SELECT p.p, r.lo, r.hi FROM dec_points p JOIN dec_ranges r ON p.p >= r.lo AND p.p <= r.hi",
+      "SELECT /*+ BROADCAST(r) */ p.s, r.lo, r.hi FROM str_points p JOIN str_ranges r " +
+        "ON p.s >= r.lo AND p.s <= r.hi",
+      "SELECT a.lo, a.hi, b.lo, b.hi FROM intervals_a a JOIN intervals_b b " +
+        "ON a.lo < b.hi AND b.lo < a.hi",
+      "SELECT a.lo, a.hi, b.lo, b.hi FROM intervals_a a LEFT JOIN intervals_b b ON a.hi < b.lo",
+      "SELECT /*+ BROADCAST(a) */ a.lo, b.hi FROM intervals_a a JOIN intervals_b b ON a.lo < b.hi")
+    queries.foreach { query =>
+      val expected = sql(query).collect()
+      withRangeJoin(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+        val df = sql(query)
+        checkAnswer(df, expected)
+        assert(findRangeJoin(df.queryExecution.executedPlan).size == 1, query)
+        assert(!rangeJoinIsCodegen(df.queryExecution.executedPlan), query)
+      }
+    }
+  }
+
+  test("boolean and date/timestamp range joins match the nested loop result " +
+      "with codegen off") {
+    sql(
+      """
+        |CREATE OR REPLACE TEMP VIEW bool_ranges2(lo, hi) AS VALUES
+        |  (false, true),
+        |  (true, true)
+        |""".stripMargin)
+    sql(
+      """
+        |CREATE OR REPLACE TEMP VIEW bool_points2(p) AS VALUES
+        |  (false),
+        |  (true),
+        |  (CAST(NULL AS BOOLEAN))
+        |""".stripMargin)
+    setupDateAndTimestampViews()
+    val queries = Seq(
+      "SELECT p.p, r.lo, r.hi FROM bool_points2 p JOIN bool_ranges2 r " +
+        "ON p.p >= r.lo AND p.p <= r.hi",
+      "SELECT p.d, r.lo, r.hi FROM dt_points p JOIN dt_ranges r ON p.d BETWEEN r.lo AND r.hi",
+      "SELECT p.t, r.lo, r.hi FROM ts_points p JOIN ts_ranges r ON p.t BETWEEN r.lo AND r.hi")
+    queries.foreach { query =>
+      val expected = sql(query).collect()
+      withRangeJoin(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+        val df = sql(query)
+        checkAnswer(df, expected)
+        assert(findRangeJoin(df.queryExecution.executedPlan).size == 1, query)
+        assert(!rangeJoinIsCodegen(df.queryExecution.executedPlan), query)
+      }
+    }
+  }
+
   test("two interval range joins in one whole-stage match nested loop") {
     sql("CREATE OR REPLACE TEMP VIEW chain_a(id, lo, hi) AS VALUES (1, 0, 10), (2, 20, 21)")
     sql(
