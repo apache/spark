@@ -219,7 +219,8 @@ private[pipelines] object Scd1RowLevelReconciliation extends Scd1ReconciliationS
  *     the selection. The set of fields depends only on the schema and the ignore-null selection.
  *  2. Authorship candidates: each of the key's microbatch events either authors the field, with a
  *     value and the event's sequence, or leaves it unauthored. A delete authors null. An upsert
- *     authors a whole column always, and a selected leaf only when it provides the leaf.
+ *     authors a whole column unless the microbatch omits all of its leaves, and a selected leaf
+ *     only when it provides the leaf.
  *  3. Latest microbatch authorship: the candidate with the greatest sequence, or none if no event
  *     authored the field. This is the field's reconciled value.
  *  4. Output: the reconciled fields are reassembled into the key's columns, rebuilding each
@@ -321,8 +322,9 @@ private[pipelines] object Scd1LeafLevelReconciliation {
    *
    * Columns selected for ignore-null are reconciled leaf by leaf: upsert events refer to their
    * version map to determine which leaves they author, and a null version map means every leaf is
-   * authored by the upsert. Every other column is reconciled as a whole value, which every upsert
-   * authors. Delete events always author null values for every leaf. Selection between events
+   * authored by the upsert. Every other column is reconciled as a whole value, which an upsert
+   * authors if its version map records any of the column's leaves as authored. Delete events
+   * always author null values for every leaf. Selection between events
    * with equal sequencing values is undefined.
    *
    * @param changeArgs The CDC configuration providing the key columns and the ignore-null
