@@ -227,6 +227,25 @@ class V1WriteCommandSuite extends SharedSparkSession with V1WriteCommandSuiteBas
     }
   }
 
+  test("v1 write with already sorted plan - floating-point partition column") {
+    withPlannedWrite { enabled =>
+      withTable("t") {
+        sql(
+          """
+            |CREATE TABLE t(i INT, k STRING) USING PARQUET
+            |PARTITIONED BY (j DOUBLE)
+            |""".stripMargin)
+        // Normalizing the partition values keeps them in order, so they are not sorted again.
+        executeAndCheckOrderingAndCustomValidate(
+            hasLogicalSort = true, orderingMatched = Some(true)) {
+          sql("INSERT INTO t SELECT i, k, CAST(j AS DOUBLE) AS j FROM t0 ORDER BY j")
+        } { plan =>
+          assert(plan.collect { case s: Sort => s }.length == 1)
+        }
+      }
+    }
+  }
+
   test("SPARK-41914: v1 write with AQE and in-partition sorted - non-string partition column") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
       withPlannedWrite { enabled =>
@@ -338,6 +357,46 @@ class V1WriteCommandSuite extends SharedSparkSession with V1WriteCommandSuiteBas
             f => f.getName.startsWith(".") || f.getName.startsWith("_"))
           assert(files.length == 2)
         }
+      }
+    }
+  }
+
+  test("SPARK-60324: v1 write with 0.0, -0.0 and NaN partition column values") {
+    // 0.0 and -0.0 are equal, and so are NaNs with different bits, so they are not kept apart
+    // when the rows are grouped by the partition values, although their bytes differ. Unless
+    // they are normalized, the writer goes back to a partition directory that it has already
+    // written and fails because the file exists.
+    val negativeNaN = java.lang.Double.longBitsToDouble(0xfff8000000000000L)
+    val data = Seq((0, 0.0), (1, -0.0), (2, Double.NaN), (3, 0.0), (4, negativeNaN), (5, -0.0),
+      (6, 1.0))
+    Seq("DOUBLE", "FLOAT").foreach { dataType =>
+      // With 0 the rows are sorted, with 1 the concurrent writer falls back to sorting them, and
+      // with 4 they are all written by concurrent writers.
+      Seq(0, 1, 4).foreach { maxWriters =>
+        withSQLConf(SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS.key -> maxWriters.toString) {
+          withPlannedWrite { _ =>
+            withTempPath { path =>
+              data.toDF("id", "p").selectExpr("id", s"CAST(p AS $dataType) AS p").coalesce(1)
+                .write.partitionBy("p").parquet(path.toString)
+              assert(path.listFiles().filter(_.isDirectory).map(_.getName).sorted ===
+                Array("p=0.0", "p=1.0", "p=NaN"))
+              val df = spark.read.parquet(path.toString)
+              checkAnswer(df.where("p = 0").select("id"), Seq(0, 1, 3, 5).map(Row(_)))
+              checkAnswer(df.where("isnan(p)").select("id"), Seq(2, 4).map(Row(_)))
+              checkAnswer(df.where("p = 1").select("id"), Row(6))
+            }
+          }
+        }
+      }
+    }
+    // A static partition value is written as it is given, as it names the directory that an
+    // overwrite replaces.
+    withPlannedWrite { _ =>
+      withTable("t") {
+        sql("CREATE TABLE t(i INT) USING PARQUET PARTITIONED BY (p DOUBLE)")
+        sql("INSERT OVERWRITE t PARTITION (p = '-0.0') SELECT 1")
+        sql("INSERT OVERWRITE t PARTITION (p = '-0.0') SELECT 2")
+        checkAnswer(spark.table("t"), Row(2, -0.0))
       }
     }
   }
