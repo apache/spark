@@ -137,7 +137,7 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
         val result = readArrowSource(numRows = numRows, reuseVectors = true, batchSize = 100)
           .selectExpr("id", "name", "value", "data", "arrow_reuse_udf(name) as udf_name")
         val arrowExec = collectNodes[ArrowEvalPythonExec](result.queryExecution.executedPlan)
-        assert(arrowExec.nonEmpty && !arrowExec.head.supportsColumnar)
+        assert(arrowExec.nonEmpty && !arrowExec.head.child.supportsColumnar)
 
         val rows = result.collect()
         assert(rows.map(_.getInt(0)).toSeq == (0 until numRows))
