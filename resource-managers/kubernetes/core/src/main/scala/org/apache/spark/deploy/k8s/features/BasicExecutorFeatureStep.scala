@@ -146,7 +146,8 @@ private[spark] class BasicExecutorFeatureStep(
       // spark.ssl.* passwords are withheld from the executor conf, so they go through env.
       // Unlike standalone, a name the user already binds wins; for secretKeyRef the skip only
       // keeps a plaintext copy out of the pod spec. envFrom keys are unknown and lose to env,
-      // so any envFrom disables the injection.
+      // so any envFrom disables the injection. Kubernetes expands $(VAR) and $$ in env values,
+      // so $ is escaped to keep the password verbatim.
       val container = Option(pod.container)
       val userBoundEnvNames = kubernetesConf.secretEnvNamesToKeyRefs.keySet ++
         kubernetesConf.environment.keySet ++
@@ -166,7 +167,9 @@ private[spark] class BasicExecutorFeatureStep(
         }
         Seq.empty
       } else {
-        unboundSslRpcPasswords.toSeq
+        unboundSslRpcPasswords.toSeq.map { case (name, value) =>
+          name -> value.replace("$", "$$")
+        }
       }
 
       val userOpts = kubernetesConf.get(EXECUTOR_JAVA_OPTIONS).toSeq.flatMap { opts =>

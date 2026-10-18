@@ -201,9 +201,11 @@ For example:
 
 A variable already bound on the executors, through `secretKeyRef`, `spark.executorEnv` or the
 executor pod template, is not overwritten. Passwords the driver reads from a Hadoop credential
-provider, from its environment or through variable substitution are not propagated and must be
-provided to the executors directly. If the executor container in the pod template uses `envFrom`,
-no passwords are propagated.
+provider or from its environment are not propagated and must be provided to the executors
+directly. Passwords set through variable substitution, for example
+`spark.ssl.rpc.keyStorePassword=${env:KS_PASS}`, are not propagated either; bind both the
+referenced variable (`KS_PASS`) and the matching `_SPARK_SSL_RPC_*` variable on the executors.
+If the executor container in the pod template uses `envFrom`, no passwords are propagated.
 
 ## AES-based Encryption (Legacy)
 

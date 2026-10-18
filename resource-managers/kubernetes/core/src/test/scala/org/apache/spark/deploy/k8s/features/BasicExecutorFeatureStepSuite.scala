@@ -446,6 +446,29 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       SSLOptions.ENV_RPC_SSL_TRUST_STORE_PASSWORD -> "trustStorePass"))
   }
 
+  test("SSL RPC passwords are escaped for Kubernetes env var expansion") {
+    val conf = baseConf.clone()
+      .set("spark.ssl.rpc.enabled", "true")
+      .set("spark.ssl.rpc.keyStorePassword", "pa$$word$(SPARK_EXECUTOR_ID)")
+      .set("spark.ssl.rpc.keyPassword", "keyPass")
+      .set("spark.ssl.rpc.privateKeyPassword", "privateKeyPass")
+      .set("spark.ssl.rpc.trustStorePassword", "trustStorePass")
+
+    val secMgr = new SecurityManager(conf)
+    val step = new BasicExecutorFeatureStep(
+      KubernetesTestConf.createExecutorConf(
+        sparkConf = conf,
+        sslRpcPasswordEnvs = secMgr.getEnvironmentForSslRpcPasswords),
+      defaultProfile)
+
+    val executor = step.configurePod(SparkPod.initialPod())
+    checkEnv(executor, conf, Map(
+      SSLOptions.ENV_RPC_SSL_KEY_STORE_PASSWORD -> "pa$$$$word$$(SPARK_EXECUTOR_ID)",
+      SSLOptions.ENV_RPC_SSL_KEY_PASSWORD -> "keyPass",
+      SSLOptions.ENV_RPC_SSL_PRIVATE_KEY_PASSWORD -> "privateKeyPass",
+      SSLOptions.ENV_RPC_SSL_TRUST_STORE_PASSWORD -> "trustStorePass"))
+  }
+
   test("SSL RPC passwords shouldn't override an explicit secretKeyRef") {
     val conf = baseConf.clone()
       .set("spark.ssl.rpc.enabled", "true")
