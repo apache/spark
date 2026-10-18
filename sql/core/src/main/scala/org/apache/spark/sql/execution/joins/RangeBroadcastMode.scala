@@ -93,11 +93,6 @@ private[execution] case class RangeBroadcastMode private (
 
   override lazy val canonicalized: RangeBroadcastMode =
     RangeBroadcastMode(buildKeys.map(_.canonicalized), indexKind)
-
-  def copy(
-      buildKeys: Seq[Expression] = buildKeys,
-      indexKind: RangeIndexKind = indexKind): RangeBroadcastMode =
-    RangeBroadcastMode(buildKeys, indexKind)
 }
 
 private[execution] object RangeBroadcastMode {
