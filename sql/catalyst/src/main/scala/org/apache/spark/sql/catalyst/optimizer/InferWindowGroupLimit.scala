@@ -81,7 +81,7 @@ object InferWindowGroupLimit extends Rule[LogicalPlan] with PredicateHelper {
     case _ => false
   }
 
-  private def support(windowFunction: Expression): Boolean = windowFunction match {
+  private[optimizer] def support(windowFunction: Expression): Boolean = windowFunction match {
     case _: Rank | _: DenseRank | _: RowNumber => true
     case _ => false
   }

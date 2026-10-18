@@ -25,6 +25,7 @@ import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{col, lit, row_number, sum}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.ArrayType
 
 /**
  * SQL end-to-end tests for window stack reordering done by the `TransposeWindow` optimizer
@@ -193,9 +194,10 @@ class TransposeWindowQuerySuite extends QueryTest with SharedSparkSession {
   test("window with an empty order spec and a relative frame blocks reordering") {
     // The running sum has no ORDER BY, so its ROWS ... CURRENT ROW frame covers whatever
     // row prefix the operator receives; a full stack permute would change that order and
-    // hence the results, so `reorderable` rejects the chain. The partition specs are
-    // pairwise incomparable, so the pairwise fallback (and flag-off) leave the plan
-    // untouched; config-on results stay identical to config-off. `checkAnswer` compares
+    // hence the results, so `reorderable` rejects the chain. Every adjacent upper spec
+    // is incomparable to the window below it, so the pairwise fallback (and flag-off)
+    // leave the plan untouched; config-on results stay identical to config-off.
+    // `checkAnswer` compares
     // the answers without making the physical row order of the unordered query part of
     // the contract.
     val query =
@@ -422,6 +424,41 @@ class TransposeWindowQuerySuite extends QueryTest with SharedSparkSession {
         }
         val expected = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "false") {
           rankFiltered.collect()
+        }
+        checkAnswer(actualDf, expected)
+      }
+    }
+  }
+
+  test("collect_list output stays above the other group's exchange") {
+    // (k1) and (k2) key the two minimal exchanges; collect_list on (k1, k3) rides
+    // only the (k1) exchange ((k2) is not a subset of its keys, so the (k2) group stays
+    // narrow). First appearance would move it below the (k2) exchange and ship each
+    // partition's array through that shuffle, so the wide group must rank last instead.
+    // ORDER BY v is unique, so the arrays are deterministic across the compared plans.
+    val query =
+      """
+        |SELECT k1, k2, k3, v,
+        |  sum(v) OVER (PARTITION BY k1 ORDER BY v) AS s1,
+        |  sum(v) OVER (PARTITION BY k2 ORDER BY v) AS s4,
+        |  collect_list(v) OVER (PARTITION BY k1, k3 ORDER BY v) AS evs
+        |FROM t
+      """.stripMargin
+
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withInput {
+        val actualDf = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+          val df = sql(query)
+          assert(numWindows(df) == 3)
+          assert(numExchanges(df) == 2)
+          val topWindow = df.queryExecution.executedPlan.collect {
+            case w: WindowExec => w
+          }.head
+          assert(topWindow.windowExpression.exists(_.dataType.isInstanceOf[ArrayType]))
+          planned(df)
+        }
+        val expected = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "false") {
+          sql(query).collect()
         }
         checkAnswer(actualDf, expected)
       }

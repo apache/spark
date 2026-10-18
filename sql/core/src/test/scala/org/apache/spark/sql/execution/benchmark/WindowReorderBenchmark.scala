@@ -36,6 +36,13 @@ import org.apache.spark.sql.internal.SQLConf
  * share sorts here; the measured win is from grouping by partition spec and
  * removing redundant shuffles.
  *
+ * A second case mixes a COLLECT_LIST window (an unbounded array output) with narrow
+ * ranking windows over incomparable key groups. The collect_list rides one minimal
+ * group's exchange, and first-appearance group order would move it below the other
+ * group's exchange, shipping every partition's array through that shuffle and its
+ * sort. The rule ranks the wide group last among exchange-optimal orders, so the
+ * optimized run keeps the wide output above the surviving exchanges.
+ *
  * This benchmark compares the baseline (default, reordering off) against the
  * optimized behavior (reordering on), and measures the wall-clock runtime only:
  * the exchanges that the reordering removes are observable as fewer, larger
@@ -107,19 +114,50 @@ object WindowReorderBenchmark extends SqlBasedBenchmark {
        |      ORDER BY create_ts) AS prev_create_ts
        |FROM $table""".stripMargin
 
+  /**
+   * Fewer users than the serving table, so each COLLECT_LIST partition holds enough
+   * events for the wide-output shuffle cost to be observable.
+   */
+  private def prepareSessionTable(name: String, n: Long): Unit = {
+    spark.range(n)
+      .selectExpr(
+        "id as req_id",
+        "cast(id % 50000 as long) as user_id",
+        "cast(id % 2 as int) as is_primary",
+        "cast(id % 3 as int) as model",
+        "cast(id % 4 as int) as priority",
+        "cast(id as long) as create_ts")
+      .createOrReplaceTempView(name)
+  }
+
+  /**
+   * Narrow ranking windows beside a wide collect_list: (user_id, is_primary) and
+   * (model) are the minimal specs, and the collect_list on (user_id, is_primary,
+   * priority) rides the first one's exchange. With the flag off the collect_list
+   * stays on top over three exchanges; with it on, the wide group must rank last
+   * over two exchanges rather than crossing the (model) shuffle.
+   */
+  private def wideWindowedSelect(table: String): String =
+    s"""SELECT
+       |  ROW_NUMBER() OVER (PARTITION BY user_id, is_primary
+       |      ORDER BY create_ts) AS rn_user,
+       |  COUNT(1) OVER (PARTITION BY model) AS model_reqs,
+       |  COLLECT_LIST(create_ts) OVER (PARTITION BY user_id, is_primary, priority
+       |      ORDER BY create_ts) AS user_events
+       |FROM $table""".stripMargin
+
   private def windowReorderBenchmark(
-      title: String, n: Long, table: String, numIters: Int): Unit = {
+      title: String, n: Long, query: String, numIters: Int): Unit = {
     val benchmark = new Benchmark(title, n, output = output)
-    val sql = windowedSelect(table)
 
     benchmark.addCase("baseline (window reorder off)", numIters = numIters) { _ =>
       withSQLConf(WINDOW_REORDER_ENABLED -> "false") {
-        spark.sql(sql).noop()
+        spark.sql(query).noop()
       }
     }
     benchmark.addCase("optimized (window reorder on)", numIters = numIters) { _ =>
       withSQLConf(WINDOW_REORDER_ENABLED -> "true") {
-        spark.sql(sql).noop()
+        spark.sql(query).noop()
       }
     }
 
@@ -133,7 +171,13 @@ object WindowReorderBenchmark extends SqlBasedBenchmark {
     prepareServingTable("serving_log", n)
     runBenchmark("WindowReorder: stack reordering of the window chain") {
       windowReorderBenchmark("window batch over two user key groups", n,
-        "serving_log", numIters)
+        windowedSelect("serving_log"), numIters)
+    }
+
+    prepareSessionTable("session_log", n)
+    runBenchmark("WindowReorder: wide collect_list output in the window chain") {
+      windowReorderBenchmark("ranking windows with a wide event list", n,
+        wideWindowedSelect("session_log"), numIters)
     }
   }
 }
