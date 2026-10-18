@@ -601,12 +601,14 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
         val expected = spark.sql("SELECT TIMESTAMP_LTZ '1970-01-01 00:00:00.000000123 UTC'")
         withAllParquetReaders {
           withTable("t") {
-            withView("v", "ve") {
+            withView("v", "ve", "vte") {
               withSQLConf(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key -> "true") {
                 spark.sql(s"CREATE TABLE t USING parquet LOCATION '$path'")
                 spark.sql(s"CREATE VIEW v AS SELECT * FROM parquet.`$path`")
                 spark.sql(
                   s"CREATE VIEW ve WITH SCHEMA EVOLUTION AS SELECT * FROM parquet.`$path`")
+                spark.sql(
+                  s"CREATE VIEW vte WITH SCHEMA TYPE EVOLUTION AS SELECT * FROM parquet.`$path`")
               }
               // The table's stored BIGINT schema is the read schema.
               assert(spark.table("t").schema("ts").dataType === LongType)
@@ -618,8 +620,10 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
                   "sqlExpr" -> "\"ts\"",
                   "srcType" -> "\"TIMESTAMP_LTZ(9)\"",
                   "targetType" -> "\"BIGINT\""))
-              assert(spark.table("ve").schema("ts").dataType === TimestampLTZNanosType(9))
-              checkAnswer(spark.table("ve"), expected)
+              Seq("ve", "vte").foreach { view =>
+                assert(spark.table(view).schema("ts").dataType === TimestampLTZNanosType(9))
+                checkAnswer(spark.table(view), expected)
+              }
 
               spark.sql("DROP TABLE t")
               spark.sql(s"CREATE TABLE t USING parquet LOCATION '$path'")
