@@ -156,7 +156,7 @@ class TimestampNanosParseSuite extends SparkFunSuite {
       "0001-01-01 00:00:00" -> nanosVal(date(1, 1, 1, 0, 0, 0, 0, ZoneOffset.UTC), 0),
       "9999-12-31 23:59:59.999999999" ->
         nanosVal(date(9999, 12, 31, 23, 59, 59, 999999, ZoneOffset.UTC), 999),
-      // The int64 epoch-nanosecond limits of Parquet/Avro/Arrow, and one nanosecond beyond them.
+      // The int64 epoch-nanosecond limits of Parquet/Avro, and one nanosecond beyond them.
       "1677-09-21 00:12:43.145224192" -> epochNanosToTimestampNanos(Long.MinValue, 9),
       "1677-09-21 00:12:43.145224191" -> nanosVal(Long.MinValue / 1000 - 1, 191),
       "2262-04-11 23:47:16.854775807" -> epochNanosToTimestampNanos(Long.MaxValue, 9),

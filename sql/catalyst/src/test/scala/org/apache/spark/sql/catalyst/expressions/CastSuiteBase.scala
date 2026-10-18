@@ -1729,7 +1729,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-57838: cast nanosecond timestamps at the range boundaries") {
-    // The calendar range, the int64 epoch-nanosecond limits of Parquet/Avro/Arrow and the
+    // The calendar range, the int64 epoch-nanosecond limits of Parquet/Avro and the
     // epoch-microsecond (Long) limits. Years beyond 9999 are accepted, as for the micro types.
     Seq(
       "0001-01-01 00:00:00" -> nanosVal(-62135596800000000L, 0),
