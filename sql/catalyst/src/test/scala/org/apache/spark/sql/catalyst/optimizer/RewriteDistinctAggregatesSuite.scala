@@ -611,6 +611,34 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
       "non-null else branch should not be collapsed to 1 distinct group")
   }
 
+  test("conditional: do not rewrite CASE WHEN with non-null else branch") {
+    // ELSE NULL is removed by SimplifyConditionals before this rule, so the
+    // CaseWhen arm with an else is only reached for a non-null else. Rewriting
+    // it would drop that value and collapse both counts onto one guarded group.
+    val caseWhen1 = CaseWhen(
+      Seq((Symbol("b") > 1, Symbol("c"))),
+      Some(Literal(0, IntegerType)))
+    val caseWhen2 = CaseWhen(
+      Seq((Symbol("b") > 2, Symbol("c"))),
+      Some(Literal(0, IntegerType)))
+    val input = conditionalTestRelation
+      .groupBy(Symbol("a"))(
+        Count(caseWhen1).toAggregateExpression(isDistinct = true).as("cnt1"),
+        Count(caseWhen2).toAggregateExpression(isDistinct = true).as("cnt2"))
+      .analyze
+    val optimized = RewriteDistinctAggregates(input)
+    // Plan is rewritten (2 distinct groups) but not canonicalized.
+    checkRewrite(optimized)
+    val expands = optimized.collect { case e: Expand => e }
+    assert(expands.head.projections.size == 2,
+      "non-null else branch should not be collapsed to 1 distinct group")
+    val hasUserConditionFilter = collectAggregateExpressions(optimized)
+      .flatMap(_.filter)
+      .exists(_.references.exists(_.name != "gid"))
+    assert(!hasUserConditionFilter,
+      "CASE WHEN with a non-null else must not gain a user-condition FILTER")
+  }
+
   test("conditional: do not rewrite non-distinct COUNT") {
     // Pair the non-distinct COUNT with two conditional distinct counts on the same
     // base so that normalization is kept (strict reduction) and rewrite() runs.
