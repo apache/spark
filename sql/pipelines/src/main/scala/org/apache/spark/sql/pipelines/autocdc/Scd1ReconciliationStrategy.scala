@@ -21,7 +21,7 @@ import org.apache.spark.sql.{functions => F}
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.classic.DataFrame
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.ArrayImplicits._
 
 /** Strategy for reconciling an SCD1 microbatch. */
@@ -237,20 +237,24 @@ private[pipelines] object Scd1LeafLevelReconciliation {
    * Populates the version map for upsert rows, if ignore-null is being used.
    *
    * The caller must supply rows whose schema already reflects target column selection and
-   * target-schema alignment.
+   * target-schema alignment. An upsert does not author the leaves that alignment added, since its
+   * event did not carry them.
    *
    * @param changeArgs The CDC configuration providing keys and the ignore-null selection.
    * @param resolvedSequencingType The resolved type of the sequencing expression and version-map
    *                               values.
    * @param alignedDf Microbatch rows already target-selected and target-schema-aligned, with the
    *                  canonical CDC metadata column populated.
+   * @param unalignedSchema The schema of the microbatch rows before target-schema alignment. The
+   *                        leaves of `alignedDf` that it lacks were added by alignment.
    * @return `alignedDf` unchanged when ignore-null is disabled; otherwise, the same rows but with
    *         version maps populated for upsert rows.
    */
   private[autocdc] def extendMicrobatchRowsWithVersionMap(
       changeArgs: ChangeArgs,
       resolvedSequencingType: DataType,
-      alignedDf: DataFrame): DataFrame =
+      alignedDf: DataFrame,
+      unalignedSchema: StructType): DataFrame =
     changeArgs.ignoreNullSelection match {
       case None => alignedDf
       case Some(ignoreNullSelection) =>
@@ -269,6 +273,9 @@ private[pipelines] object Scd1LeafLevelReconciliation {
               resolver = resolver
             ),
             ignoreNullSelection = ignoreNullSelection,
+            omittedLeafPaths = AutoCdcSchemaUtils
+              .fieldPathsMissingFrom(alignedDf.schema, unalignedSchema, resolver)
+              .toSet,
             upsertSequence = upsertSequence,
             sequencingType = resolvedSequencingType,
             resolver = resolver

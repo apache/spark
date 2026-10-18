@@ -46,4 +46,21 @@ private[autocdc] object AutoCdcSchemaUtils {
         case _ => Seq(Seq(field.name))
       }
     }
+
+  /**
+   * Returns the [[flattenStructFieldPaths]] of `schema` that are absent from `otherSchema`,
+   * preserving `schema` order. A path is present in `otherSchema` if one of its flattened paths
+   * has the same length and matches each name part under `resolver`.
+   */
+  def fieldPathsMissingFrom(
+      schema: StructType,
+      otherSchema: StructType,
+      resolver: Resolver): Seq[Seq[String]] = {
+    val otherPaths = flattenStructFieldPaths(otherSchema)
+    flattenStructFieldPaths(schema).filterNot { path =>
+      otherPaths.exists { otherPath =>
+        otherPath.length == path.length && path.zip(otherPath).forall(resolver.tupled)
+      }
+    }
+  }
 }
