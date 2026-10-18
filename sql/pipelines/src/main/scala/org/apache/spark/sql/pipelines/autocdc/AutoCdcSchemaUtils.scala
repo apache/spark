@@ -18,7 +18,7 @@
 package org.apache.spark.sql.pipelines.autocdc
 
 import org.apache.spark.sql.catalyst.analysis.Resolver
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType}
 
 private[autocdc] object AutoCdcSchemaUtils {
 
@@ -62,5 +62,34 @@ private[autocdc] object AutoCdcSchemaUtils {
         otherPath.length == path.length && path.zip(otherPath).forall(resolver.tupled)
       }
     }
+  }
+
+  /**
+   * Returns the paths of the fields nested in `dataType` that `otherType` lacks, at any depth,
+   * preserving `dataType` order. Each path ends at the outermost missing field. Paths descend
+   * into array elements and map keys and values as `element`, `key`, and `value`. Fields match by
+   * name under `resolver`, and fields whose types differ in kind are not compared.
+   */
+  def nestedFieldPathsMissingFrom(
+      dataType: DataType,
+      otherType: DataType,
+      resolver: Resolver): Seq[Seq[String]] = (dataType, otherType) match {
+    case (struct: StructType, otherStruct: StructType) =>
+      struct.fields.toSeq.flatMap { field =>
+        otherStruct.fields.find(otherField => resolver(otherField.name, field.name)) match {
+          case Some(otherField) =>
+            nestedFieldPathsMissingFrom(field.dataType, otherField.dataType, resolver)
+              .map(field.name +: _)
+          case None => Seq(Seq(field.name))
+        }
+      }
+    case (array: ArrayType, otherArray: ArrayType) =>
+      nestedFieldPathsMissingFrom(array.elementType, otherArray.elementType, resolver)
+        .map("element" +: _)
+    case (map: MapType, otherMap: MapType) =>
+      nestedFieldPathsMissingFrom(map.keyType, otherMap.keyType, resolver).map("key" +: _) ++
+        nestedFieldPathsMissingFrom(map.valueType, otherMap.valueType, resolver)
+          .map("value" +: _)
+    case _ => Seq.empty
   }
 }

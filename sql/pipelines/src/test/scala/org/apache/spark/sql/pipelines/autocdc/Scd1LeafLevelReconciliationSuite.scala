@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
-import org.apache.spark.sql.{functions => F, QueryTest, Row}
+import org.apache.spark.sql.{functions => F, AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -26,6 +27,9 @@ import org.apache.spark.sql.types._
 class Scd1LeafLevelReconciliationSuite extends QueryTest with SharedSparkSession {
 
   private val metadataColName = AutoCdcReservedNames.cdcMetadataColName
+
+  private val targetTableIdentifier =
+    TableIdentifier(table = "target", database = Some("db"), catalog = Some("cat"))
 
   private def dataFrameOf(schema: StructType)(rows: Row*): DataFrame =
     spark.createDataFrame(spark.sparkContext.parallelize(rows), schema)
@@ -121,6 +125,7 @@ class Scd1LeafLevelReconciliationSuite extends QueryTest with SharedSparkSession
       changeArgs = args,
       resolvedSequencingType = LongType,
       validatedBatchDf = input,
+      targetTableIdentifier = targetTableIdentifier,
       targetTableDf = target,
       auxiliaryTableDf = auxiliary
     )
@@ -164,6 +169,7 @@ class Scd1LeafLevelReconciliationSuite extends QueryTest with SharedSparkSession
       changeArgs = args,
       resolvedSequencingType = LongType,
       validatedBatchDf = input,
+      targetTableIdentifier = targetTableIdentifier,
       targetTableDf = dataFrameOf(targetSchema)(),
       auxiliaryTableDf = auxiliary
     )
@@ -175,6 +181,77 @@ class Scd1LeafLevelReconciliationSuite extends QueryTest with SharedSparkSession
       Row(2, "Bob", null, Row(null, 3L, Map(name -> 3L, targetOnly -> 2L))),
       Row(3, "Carol", null, Row(null, 4L, Map(name -> 4L, targetOnly -> 2L)))
     ))
+  }
+
+  test("reconcileMicrobatch fails when the microbatch carries a column without all of its " +
+    "nested fields") {
+    val itemsType = ArrayType(new StructType().add("x", IntegerType).add("y", IntegerType))
+    val selectedType = new StructType()
+      .add("kept", IntegerType)
+      .add("omitted", IntegerType)
+      .add("items", itemsType)
+    val wholeType = new StructType().add("a", IntegerType).add("b", IntegerType)
+    val auxiliarySchema = new StructType()
+      .add("id", IntegerType)
+      .add(metadataColName, metadataSchema)
+    def reconcile(
+        microbatchUserDataSchema: StructType,
+        ignoreNullSelection: Option[ColumnSelection] =
+          Some(ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("selected"))))
+    ): DataFrame = {
+      val inputSchema = StructType(
+        StructField("id", IntegerType) +:
+          microbatchUserDataSchema.fields :+
+          StructField("seq", LongType))
+      val targetSchema = new StructType()
+        .add("id", IntegerType)
+        .add("selected", selectedType)
+        .add("whole", wholeType)
+        .add(metadataColName, metadataSchema)
+      Scd1LeafLevelReconciliation.reconcileMicrobatch(
+        changeArgs = changeArgs(
+          ignoreNullSelection,
+          columnSelection =
+            Some(ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("seq"))))),
+        resolvedSequencingType = LongType,
+        validatedBatchDf = dataFrameOf(inputSchema)(),
+        targetTableIdentifier = targetTableIdentifier,
+        targetTableDf = dataFrameOf(targetSchema)(),
+        auxiliaryTableDf = dataFrameOf(auxiliarySchema)()
+      )
+    }
+    def checkMissingField(colName: String)(reconciliation: => DataFrame): Unit =
+      checkError(
+        exception = intercept[AnalysisException](reconciliation),
+        condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+        parameters = Map("tableName" -> "`cat`.`db`.`target`", "colName" -> colName))
+    val withoutOmitted = new StructType()
+      .add("selected", new StructType()
+        .add("kept", IntegerType)
+        .add("items", itemsType))
+      .add("whole", wholeType)
+
+    reconcile(new StructType().add("whole", wholeType))
+    reconcile(new StructType().add("selected", selectedType))
+    checkMissingField("`selected`.`omitted`") {
+      reconcile(withoutOmitted)
+    }
+    checkMissingField("`selected`.`omitted`") {
+      reconcile(withoutOmitted, ignoreNullSelection = None)
+    }
+    checkMissingField("`whole`.`b`") {
+      reconcile(new StructType()
+        .add("selected", selectedType)
+        .add("whole", new StructType().add("a", IntegerType)))
+    }
+    checkMissingField("`selected`.`items`.`element`.`y`") {
+      reconcile(new StructType()
+        .add("selected", new StructType()
+          .add("kept", IntegerType)
+          .add("omitted", IntegerType)
+          .add("items", ArrayType(new StructType().add("x", IntegerType))))
+        .add("whole", wholeType))
+    }
   }
 
   test("extendMicrobatchRowsWithVersionMap is a no-op when ignore-null is disabled") {

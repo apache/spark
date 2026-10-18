@@ -19,8 +19,10 @@ package org.apache.spark.sql.pipelines.autocdc
 
 import org.apache.spark.sql.{functions => F}
 import org.apache.spark.sql.Column
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.classic.DataFrame
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -290,7 +292,9 @@ private[pipelines] object Scd1LeafLevelReconciliation {
    * Inputs must satisfy the contract documented by [[Scd1ReconciliationSupport]].
    * The selected microbatch columns are aligned to the target schema, stamped with per-leaf
    * authorship, collapsed into one synthetic row per key, and reconciled with persisted tombstones.
+   * Fails if the microbatch carries a column without every field nested in it.
    *
+   * @param targetTableIdentifier The identifier of the target table, used for error messages.
    * @param targetTableDf A snapshot of the target table whose schema defines the target-aligned
    *                      leaves; its rows are ignored.
    * @return A dataframe containing the target-aligned user columns followed by the CDC metadata
@@ -300,6 +304,7 @@ private[pipelines] object Scd1LeafLevelReconciliation {
       changeArgs: ChangeArgs,
       resolvedSequencingType: DataType,
       validatedBatchDf: DataFrame,
+      targetTableIdentifier: TableIdentifier,
       targetTableDf: DataFrame,
       auxiliaryTableDf: DataFrame): DataFrame = {
     val withCdcMetadata = Scd1ReconciliationSupport.extendMicrobatchRowsWithCdcMetadata(
@@ -314,6 +319,18 @@ private[pipelines] object Scd1LeafLevelReconciliation {
     val aligned = alignMicrobatchToTargetSchema(
       microbatchDf = projected,
       targetTableDf = targetTableDf
+    )
+    // Target-schema alignment fills omitted nested fields with nulls, which the target merge would
+    // accept. Row-level reconciliation does not align, so its target merge rejects them. Reject
+    // them here too, so that changing the ignore-null selection, which can switch a flow between
+    // the two strategies, does not change how they are treated.
+    // TODO(SPARK-58478): Allow omitting nested fields under row-level and leaf-level
+    // reconciliation together.
+    validateNoPartiallyCarriedColumns(
+      changeArgs = changeArgs,
+      targetTableIdentifier = targetTableIdentifier,
+      alignedMicrobatchDf = aligned,
+      unalignedMicrobatchSchema = projected.schema
     )
     val withVersionMap = extendMicrobatchRowsWithVersionMap(
       changeArgs = changeArgs,
@@ -349,6 +366,44 @@ private[pipelines] object Scd1LeafLevelReconciliation {
       microbatchDf: DataFrame,
       targetTableDf: DataFrame): DataFrame =
     targetTableDf.limit(0).unionByName(microbatchDf, allowMissingColumns = true)
+
+  /**
+   * Fails if the microbatch carries a target's user-data column without every field nested in it,
+   * including fields of array elements and map keys and values. Columns that the microbatch omits
+   * entirely are allowed.
+   *
+   * @param changeArgs The CDC configuration providing the key columns.
+   * @param targetTableIdentifier The identifier of the target table, used for error messages.
+   * @param alignedMicrobatchDf Microbatch rows already target-selected and target-schema-aligned.
+   *                            Its rows are ignored.
+   * @param unalignedMicrobatchSchema The schema of the microbatch rows before target-schema
+   *                                  alignment.
+   */
+  private[autocdc] def validateNoPartiallyCarriedColumns(
+      changeArgs: ChangeArgs,
+      targetTableIdentifier: TableIdentifier,
+      alignedMicrobatchDf: DataFrame,
+      unalignedMicrobatchSchema: StructType): Unit = {
+    val resolver = alignedMicrobatchDf.sparkSession.sessionState.conf.resolver
+    val userDataSchema = AutoCdcSchemaUtils.excludeColumns(
+      schema = alignedMicrobatchDf.schema,
+      columnNamesToExclude =
+        changeArgs.keys.map(_.name) :+ AutoCdcReservedNames.cdcMetadataColName,
+      resolver = resolver
+    )
+    for {
+      alignedColumn <- userDataSchema.fields
+      unalignedColumn <- unalignedMicrobatchSchema.fields
+        .find(f => resolver(f.name, alignedColumn.name))
+      missingPath <- AutoCdcSchemaUtils
+        .nestedFieldPathsMissingFrom(alignedColumn.dataType, unalignedColumn.dataType, resolver)
+        .headOption
+    } {
+      throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(
+        tableName = targetTableIdentifier.quotedString,
+        colName = QuotingUtils.quoteNameParts(alignedColumn.name +: missingPath))
+    }
+  }
 
   /**
    * Populates the version map for upsert rows, if ignore-null is being used.
