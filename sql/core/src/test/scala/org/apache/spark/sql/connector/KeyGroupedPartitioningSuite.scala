@@ -25,7 +25,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.rdd.SortedMergeCoalescedRDD
 import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, ExprId, Literal, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Descending, ExprId, Literal, TransformExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Complete
 import org.apache.spark.sql.catalyst.plans.{Cross, ExistenceJoin, Inner, JoinType, LeftAnti, LeftSemi, LeftSingle}
 import org.apache.spark.sql.catalyst.plans.physical
@@ -3998,6 +3998,14 @@ class KeyGroupedPartitioningSuite
     (plan, reportingScans.head, warnings)
   }
 
+  /** The output ordering of `scan`, as the names its sort orders reference and their direction. */
+  private def orderingNames(scan: BatchScanExec)
+      : Seq[(Seq[String], org.apache.spark.sql.catalyst.expressions.SortDirection)] =
+    scan.outputOrdering.map(o => (o.child.references.map(_.name).toSeq, o.direction))
+
+  private def sortsAbove(plan: SparkPlan, scan: BatchScanExec): Seq[SortExec] =
+    collect(plan) { case s: SortExec if s.exists(_ eq scan) => s }
+
   test("SPARK-59721: a reported partitioning with an unresolvable key is ignored") {
     // CustomReportingCatalog is not a FunctionCatalog, so a `bucket` key would be dropped even with
     // a resolvable column. The warning assertion shows the unresolvable column is what drops it.
@@ -4074,6 +4082,79 @@ class KeyGroupedPartitioningSuite
             (o.child.references.map(_.name).toSeq, o.direction)
           }
           assert(derivedOrdering == Seq((Seq("id"), Ascending)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-59981: a reported ordering that keeps no sort order falls back to the keys") {
+    withCustomReportingTable { reportingCatalog =>
+      reportingCatalog.reportedKeys = Seq(identity("id"))
+      // An empty report, one on `s`, which the join's projection prunes from the scan output, and
+      // one that starts with `s` and goes on with `data`, which is not a partition key.
+      val sOrder = sort(FieldReference("s"), SortDirection.ASCENDING)
+      val dataOrder = sort(FieldReference("data"), SortDirection.ASCENDING)
+      Seq(Seq.empty, Seq(sOrder), Seq(sOrder, dataOrder)).foreach { ordering =>
+        reportingCatalog.reportedOrdering = ordering
+        Seq(true, false).foreach { keyOrdering =>
+          withSQLConf(
+              SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> keyOrdering.toString) {
+            val (plan, reportingScan, warnings) = customReportingJoin()
+            assert(warnings.isEmpty, warnings)
+            // The report must reach the scan as it is, or this test would miss the fixed case.
+            assert(reportingScan.ordering.map(_.length) == Some(ordering.length))
+            if (keyOrdering) {
+              assert(orderingNames(reportingScan) == Seq((Seq("id"), Ascending)), ordering)
+              assert(sortsAbove(plan, reportingScan).isEmpty,
+                "the join should read the derived ordering")
+            } else {
+              assert(orderingNames(reportingScan).isEmpty, ordering)
+              assert(sortsAbove(plan, reportingScan).length == 1, ordering)
+            }
+          }
+        }
+      }
+
+      // With two splits under the key 1, a `GroupPartitionsExec` coalesces them. The ordering
+      // derived from an empty report survives that through `preserveKeyOrderingOnCoalesce`.
+      reportingCatalog.reportedOrdering = Seq.empty
+      sql(s"INSERT INTO $customReportingTableName VALUES (1, 'ab', named_struct('x', 11))")
+      withSQLConf(
+          SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
+        val df = customReportingJoinDf()
+        checkAnswer(df, Seq(Row("aa", "cc"), Row("ab", "cc"), Row("bb", "dd")))
+        val plan = df.queryExecution.executedPlan
+        val coalescing = collectAllGroupPartitions(plan)
+          .filter(_.groupedPartitions.exists(_._2.size > 1))
+        assert(coalescing.length == 1, "test setup: the two splits of the key 1 coalesce")
+        assert(coalescing.head.outputOrdering.map(_.child.references.map(_.name).toSeq) ==
+          Seq(Seq("id")))
+        assert(collect(plan) { case s: SortExec => s }.isEmpty)
+      }
+    }
+  }
+
+  test("SPARK-59981: a reported ordering that keeps a sort order is not replaced by the keys") {
+    withCustomReportingTable { reportingCatalog =>
+      reportingCatalog.reportedKeys = Seq(identity("id"))
+      val sOrder = sort(FieldReference("s"), SortDirection.ASCENDING)
+      val dataOrder = sort(FieldReference("data"), SortDirection.ASCENDING)
+      val idOrder = sort(FieldReference("id"), SortDirection.ASCENDING)
+      val idDescOrder = sort(FieldReference("id"), SortDirection.DESCENDING)
+      withSQLConf(SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "true") {
+        // `data` stays in the scan output, so it is kept and nothing is derived. After the pruned
+        // `s`, the sort order on the partition key `id` is kept as reported, with its direction.
+        Seq(
+          (Seq(dataOrder), Seq((Seq("data"), Ascending)), 1),
+          (Seq(sOrder, idOrder), Seq((Seq("id"), Ascending)), 0),
+          (Seq(sOrder, idDescOrder), Seq((Seq("id"), Descending)), 1)
+        ).foreach { case (ordering, expectedOrdering, expectedSorts) =>
+          reportingCatalog.reportedOrdering = ordering
+          val (plan, reportingScan, warnings) = customReportingJoin()
+          assert(warnings.isEmpty, warnings)
+          assert(orderingNames(reportingScan) == expectedOrdering, ordering)
+          assert(sortsAbove(plan, reportingScan).length == expectedSorts, ordering)
         }
       }
     }
@@ -6590,24 +6671,28 @@ class KeyGroupedPartitioningSuite
   test("SPARK-59995: a scan's output ordering drops sort orders that hold a partition transform") {
     // `t1` reports a transform in the middle, so the leading run of its ordering stops there.
     // `t2` reports a transform key first. Each split holds a single key, so the sort order on `id`
-    // after it still holds. `t3` reports no ordering, so the scan derives one from its keys. In
-    // each case a sort on `id` right above the scan needs no `SortExec`. A `GROUP BY id` plans a
-    // `SortAggregateExec`. The query selects `ts`, so the transform's column stays in the scan
-    // output. Otherwise SPARK-59899's pruned-column handling would give the same orderings even
-    // without this fix.
+    // after it still holds. `t3` reports no ordering, so the scan derives one from its keys. `t4`
+    // reports only a transform key. Nothing of the report is left, so the scan falls back to its
+    // keys (SPARK-59981). In each case a sort on `id` right above the scan needs no `SortExec`. A
+    // `GROUP BY id` plans a `SortAggregateExec`. The query selects `ts`, so the transform's column
+    // stays in the scan output. Otherwise SPARK-59899's pruned-column handling would give the same
+    // orderings even without this fix.
     val table1 = "transform_order_t1"
     val table2 = "transform_order_t2"
     val table3 = "transform_order_t3"
+    val table4 = "transform_order_t4"
     def asc(expr: Expression): SortOrder = sort(expr, SortDirection.ASCENDING)
     createTable(table1, columns, Array(identity("id")),
       Array(asc(FieldReference("id")), asc(years("ts")), asc(FieldReference("data"))))
     createTable(table2, columns, Array(years("ts"), identity("id")),
       Array(asc(years("ts")), asc(FieldReference("id"))))
     createTable(table3, columns, Array(days("ts"), identity("id")))
+    createTable(table4, columns, Array(years("ts"), identity("id")),
+      Array(asc(years("ts"))))
     withSQLConf(
         SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "true",
         SQLConf.REPLACE_HASH_WITH_SORT_AGG_ENABLED.key -> "true") {
-      Seq(table1, table2, table3).foreach { table =>
+      Seq(table1, table2, table3, table4).foreach { table =>
         sql(s"INSERT INTO testcat.ns.$table VALUES (1, 'aa', cast('2020-01-01' as timestamp))")
         val df = sql(s"SELECT id, data, ts FROM testcat.ns.$table")
         val scan = collectScans(df.queryExecution.executedPlan).head
