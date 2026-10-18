@@ -361,9 +361,43 @@ class TransposeWindowQuerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("pinned reorder keeps WindowGroupLimit when a same-spec sum sits in the chain") {
+    // The sum and rank windows share a spec but are separated by an incomparable window.
+    // Unpinned reordering would place rn below that window, so the pin keeps rn on top.
+    // It must also avoid putting the same-spec sum directly below rn, which would merge
+    // into rn and defeat InferWindowGroupLimit.
+    def rankFiltered: DataFrame = {
+      val t = spark.table("t")
+      val wA = Window.partitionBy("k1", "k2").orderBy("k1")
+      val wS = Window.partitionBy("k1", "k4").orderBy("k1")
+      val wRn = Window.partitionBy("k1", "k2").orderBy("k1")
+      t.withColumn("a", sum("v").over(wA))
+        .withColumn("s", sum("v").over(wS))
+        .withColumn("rn", row_number().over(wRn))
+        .where(col("rn") <= 1)
+    }
+
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withInput {
+        val actualDf = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+          val df = rankFiltered
+          assert(df.queryExecution.executedPlan.collect {
+            case _: WindowGroupLimitExec => ()
+          }.nonEmpty)
+          planned(df)
+        }
+        val expected = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "false") {
+          rankFiltered.collect()
+        }
+        checkAnswer(actualDf, expected)
+      }
+    }
+  }
+
+  test("rank filter does not pin when a same-spec sum lets the top window ride an exchange") {
     // withColumn builds separate Window operators that share partition/order with rn; SQL
-    // analysis would have merged those into one Window. A naive pinned order puts sum a
-    // under rn; CollapseWindow would merge it and defeat InferWindowGroupLimit.
+    // analysis would have merged those into one Window. The exchange-optimal order lets rn
+    // reuse sum a's exchange while staying on top, so it is intentionally not pinned even
+    // though putting a directly below rn makes CollapseWindow remove WindowGroupLimit.
     def rankFiltered: DataFrame = {
       val t = spark.table("t")
       val wB = Window.partitionBy("k3").orderBy("k1")
@@ -383,7 +417,7 @@ class TransposeWindowQuerySuite extends QueryTest with SharedSparkSession {
           val df = rankFiltered
           assert(df.queryExecution.executedPlan.collect {
             case _: WindowGroupLimitExec => ()
-          }.nonEmpty)
+          }.isEmpty)
           planned(df)
         }
         val expected = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "false") {
