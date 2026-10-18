@@ -280,7 +280,7 @@ case class BroadcastRangeJoinExec(
     }
   }
 
-  private[this] def genResultProjection: UnsafeProjection = joinType match {
+  private def genResultProjection: UnsafeProjection = joinType match {
     case LeftSemi | LeftAnti =>
       UnsafeProjection.create(output, output)
     case _ =>
