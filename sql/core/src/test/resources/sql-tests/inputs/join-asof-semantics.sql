@@ -23,6 +23,15 @@ CREATE OR REPLACE TEMP VIEW requests(req_ts, seq, service) AS
   VALUES (TIMESTAMP '2026-06-29 10:00:00', 5, 'api'),
          (TIMESTAMP '2026-06-29 10:03:00', 1, 'api');
 
+CREATE OR REPLACE TEMP VIEW using_left(k, lts) AS
+  VALUES (1, 10), (2, 20), (8, 30);
+
+CREATE OR REPLACE TEMP VIEW using_right(k, rts) AS
+  VALUES (1, 5), (2, 12), (8, 15);
+
+CREATE OR REPLACE TEMP VIEW using_keys(k) AS
+  VALUES (1), (2);
+
 -- FVT-ASOF-2-001: >= selects largest preceding right row
 SELECT t.trade_time, q.quote_time
 FROM trades t ASOF JOIN quotes q
@@ -228,3 +237,87 @@ FROM VALUES (TIMESTAMP '2026-06-29 10:00:05', 'AAPL', 100) AS t(trade_time, symb
      VALUES (TIMESTAMP '2026-06-29 10:00:00', 'AAPL', 100) AS q(quote_time, symbol, quantity)
   MATCH_CONDITION (t.trade_time >= q.quote_time)
   USING (symbol, quantity);
+
+-- FVT-ASOF-2-027: a hidden USING column of the right input is a MATCH_CONDITION operand
+SELECT l.lts, r.rts
+FROM using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.lts >= d.k);
+
+-- FVT-ASOF-2-028: a hidden USING column of the left input is a MATCH_CONDITION operand
+SELECT l.lts, r.rts
+FROM (using_left l LEFT JOIN using_keys d USING (k)) ASOF JOIN using_right r
+  MATCH_CONDITION (d.k <= r.rts);
+
+-- FVT-ASOF-2-029: same as FVT-ASOF-2-027, with an inner USING join
+SELECT l.lts, r.rts
+FROM using_left l ASOF JOIN (using_right r JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.lts >= d.k);
+
+-- FVT-ASOF-2-030: a hidden USING column is a MATCH_CONDITION operand of an ASOF JOIN with USING
+SELECT l.lts, r.rts
+FROM using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.lts >= d.k) USING (k);
+
+-- FVT-ASOF-2-031: the SELECT list also outputs the hidden MATCH_CONDITION column
+SELECT l.lts, r.rts, d.k
+FROM using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.lts >= d.k);
+
+-- FVT-ASOF-2-032: the SELECT list uses the hidden MATCH_CONDITION column in an expression
+SELECT l.lts, d.k + 1 AS next_k
+FROM using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.lts >= d.k);
+
+-- FVT-ASOF-2-033: GROUP BY the hidden MATCH_CONDITION column
+SELECT d.k, count(*) AS cnt
+FROM using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.k >= d.k)
+GROUP BY d.k;
+
+-- FVT-ASOF-2-034: WHERE on the hidden MATCH_CONDITION column
+SELECT l.lts
+FROM using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.k >= d.k)
+WHERE d.k > 1;
+
+-- FVT-ASOF-2-035: an aggregate that doesn't use the hidden MATCH_CONDITION column
+SELECT count(*) AS cnt
+FROM using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.lts >= d.k);
+
+-- FVT-ASOF-2-036: a WHERE that doesn't use the hidden MATCH_CONDITION column
+SELECT l.lts, r.rts
+FROM using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.lts >= d.k)
+WHERE l.lts > 15;
+
+-- FVT-ASOF-2-037: an ASOF JOIN with a hidden MATCH_CONDITION column under a table alias
+SELECT s.lts, s.rts
+FROM (using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+        MATCH_CONDITION (l.lts >= d.k)) AS s;
+
+-- FVT-ASOF-2-038: an ASOF JOIN with a hidden MATCH_CONDITION column feeds another join
+SELECT l.lts, r.rts
+FROM using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.lts >= d.k)
+JOIN using_keys x ON l.k = x.k;
+
+-- FVT-ASOF-2-039: the SELECT list uses a hidden ON column in an expression
+SELECT d.k AS dk, r.rts
+FROM using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.lts >= r.rts)
+  ON l.k = d.k;
+
+-- FVT-ASOF-2-040: a bare FROM query does not output the hidden MATCH_CONDITION column
+FROM using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.lts >= d.k);
+
+-- FVT-ASOF-2-041: a LEFT ASOF JOIN with a hidden MATCH_CONDITION column keeps unmatched left rows
+SELECT l.lts, r.rts
+FROM using_left l LEFT ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.k <= d.k);
+
+-- FVT-ASOF-2-042: a LEFT ASOF JOIN makes a NOT NULL hidden MATCH_CONDITION column nullable
+SELECT l.lts, d.k
+FROM using_left l LEFT ASOF JOIN (using_right r JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.k <= d.k);
