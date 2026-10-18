@@ -379,12 +379,12 @@ object VariantPathParser extends RegexParsers {
     }
 
   // Only bracket keys decode escapes.
-  private def escapedKey: Parser[VariantPathSegment] =
+  private val escapedKey: Parser[VariantPathSegment] =
     '.' ~> "[^\\.\\[]+".r ^^ ObjectExtraction |
-      "['" ~> """(?:\\[\s\S]|[^'\\])*+""".r <~ "']" ^^ { k =>
+      "['" ~> """[^'\\]*+(?:\\[\s\S][^'\\]*+)*+""".r <~ "']" ^^ { k =>
         ObjectExtraction(unescapeQuotedKey(k, '\''))
       } |
-      "[\"" ~> """(?:\\[\s\S]|[^"\\])*+""".r <~ "\"]" ^^ { k =>
+      "[\"" ~> """[^"\\]*+(?:\\[\s\S][^"\\]*+)*+""".r <~ "\"]" ^^ { k =>
         ObjectExtraction(unescapeQuotedKey(k, '"'))
       }
 

@@ -967,6 +967,32 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     }
   }
 
+  gridTest("VariantGet translation uses the captured path parser mode")(
+      Seq(false, true)) { legacy =>
+    val ref = AttributeReference("v", VariantType)()
+    val conf = SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL.key
+    for {
+      (path, modeSensitive) <- Seq(
+        "$['city']" -> false,
+        """$.a\nb""" -> false,
+        """$['a\qb']""" -> false,
+        """$['a\nb']""" -> true,
+        """$["a\nb"]""" -> true,
+        """$['a\']""" -> true)
+      failOnError <- Seq(false, true)
+    } {
+      val expression = VariantGet(
+        ref, Literal(path), BooleanType, failOnError, legacyPathBackslashAsLiteral = legacy)
+      val expected = Option.when(!legacy || !modeSensitive)(
+        new V2VariantGet(FieldReference("v"), path, BooleanType, failOnError, null))
+      withSQLConf(conf -> (!legacy).toString) {
+        assert(new V2ExpressionBuilder(expression).build() == expected)
+        testTranslateFilter(expression,
+          expected.map(extraction => new Predicate("BOOLEAN_EXPRESSION", Array(extraction))))
+      }
+    }
+  }
+
   test("VariantGet with non-foldable path returns None") {
     val ref = AttributeReference("v", VariantType)()
     val s = AttributeReference("s", StringType)()

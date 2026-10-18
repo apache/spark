@@ -22,7 +22,7 @@ import org.apache.spark.internal.LogKeys.EXPR
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Complete}
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
-import org.apache.spark.sql.catalyst.expressions.variant.VariantGet
+import org.apache.spark.sql.catalyst.expressions.variant.{VariantGet, VariantPathParser}
 import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction
 import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, Extract => V2Extract, FieldReference, GeneralScalarExpression, GetArrayItem => V2GetArrayItem, LiteralValue, NullOrdering, SortDirection, SortValue, UserDefinedScalarFunc, VariantGet => V2VariantGet}
@@ -345,7 +345,10 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
       }
     case v: VariantGet if v.path.foldable =>
       (Option(v.path.eval()).map(_.toString), generateExpression(v.child)) match {
-        case (Some(path), Some(colRef: FieldReference)) =>
+        case (Some(path), Some(colRef: FieldReference))
+            if !v.legacyPathBackslashAsLiteral ||
+              VariantPathParser.parse(path, legacyPathBackslashAsLiteral = true).map(_.toSeq) ==
+                VariantPathParser.parse(path, legacyPathBackslashAsLiteral = false).map(_.toSeq) =>
           val vg = new V2VariantGet(colRef, path, v.targetType, v.failOnError,
             v.timeZoneId.orNull)
           if (isPredicate && v.dataType.isInstanceOf[BooleanType]) {
