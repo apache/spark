@@ -1869,3 +1869,19 @@ org.apache.spark.SparkIllegalArgumentException
     "parameter" : "`unit`"
   }
 }
+
+
+-- !query
+SELECT timestampdiff(NANOSECOND, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000100 UTC', TIMESTAMP_LTZ '2020-01-01 00:00:00.000000900 UTC')
+-- !query schema
+struct<timestampdiff(NANOSECOND, TIMESTAMP_LTZ '2019-12-31 16:00:00.000000100', TIMESTAMP_LTZ '2019-12-31 16:00:00.000000900'):bigint>
+-- !query output
+800
+
+
+-- !query
+SELECT timestampdiff(SECOND, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000900 UTC', TIMESTAMP_LTZ '2020-01-01 00:00:01.000000100 UTC')
+-- !query schema
+struct<timestampdiff(SECOND, TIMESTAMP_LTZ '2019-12-31 16:00:00.000000900', TIMESTAMP_LTZ '2019-12-31 16:00:01.000000100'):bigint>
+-- !query output
+0
