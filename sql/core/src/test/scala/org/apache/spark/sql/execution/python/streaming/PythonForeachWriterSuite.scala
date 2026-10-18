@@ -93,7 +93,8 @@ class PythonForeachWriterSuite extends SparkFunSuite with Eventually with Mockit
       bufferClosed.countDown()
       reader.join()
     }
-    // A row in a freed page reads 0x5a5a5a5a, the pattern of spark.memory.debugFill.
+    // A row in a freed page reads 0x5a5a5a5a, the pattern of spark.memory.debugFill, which the
+    // build enables for tests.
     assert(value === 1)
   }
 
