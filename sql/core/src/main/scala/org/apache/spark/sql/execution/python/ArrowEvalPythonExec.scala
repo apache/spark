@@ -25,7 +25,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{ColumnarToRowIterator, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.types.{StructType, UserDefinedType}
@@ -110,10 +110,11 @@ case class ArrowEvalPythonExec(
       // Columnar path: delegate to doExecuteColumnar, flatten to
       // UnsafeRow. ColumnarBatchRow from rowIterator() is NOT
       // UnsafeRow, and downstream operators (e.g., outer
-      // EvalPythonExec) may cast to UnsafeRow.
+      // EvalPythonExec) may cast to UnsafeRow. Like ColumnarToRowExec,
+      // this releases each batch once its rows are consumed: the
+      // batches of the Arrow columnar path carry the input columns.
       doExecuteColumnar().mapPartitionsInternal { batchIter =>
-        val toUnsafe = UnsafeProjection.create(schema)
-        batchIter.flatMap(_.rowIterator().asScala.map(toUnsafe))
+        new ColumnarToRowIterator(batchIter, UnsafeProjection.create(schema))
       }
     } else {
       // Row-based path: unchanged.

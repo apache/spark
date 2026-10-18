@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import scala.jdk.CollectionConverters._
-
 import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeProjection}
@@ -44,12 +42,52 @@ class ColumnarToRowEvaluatorFactory(
         inputs: Iterator[ColumnarBatch]*): Iterator[InternalRow] = {
       assert(inputs.length == 1)
       val toUnsafe = UnsafeProjection.create(childOutput, childOutput)
-      inputs.head.flatMap { input =>
+      new ColumnarToRowIterator(inputs.head, toUnsafe, { batch =>
         numInputBatches += 1
-        numOutputRows += input.numRows()
-        input.rowIterator().asScala.map(toUnsafe)
-      }
+        numOutputRows += batch.numRows()
+      })
     }
+  }
+}
+
+/**
+ * Flattens columnar batches into `UnsafeRow`s. A batch is released with closeIfFreeable once all
+ * its rows have been returned, before the next batch is fetched, as the generated code of
+ * [[ColumnarToRowExec]] does in [[ColumnarToRowExec.advanceBatch]]. The rows are projected into a
+ * buffer of their own, so the last row of a batch stays valid after the batch is released.
+ *
+ * @param onNextBatch called on each batch once it is fetched
+ */
+private[sql] class ColumnarToRowIterator(
+    input: Iterator[ColumnarBatch],
+    toUnsafe: UnsafeProjection,
+    onNextBatch: ColumnarBatch => Unit = _ => ())
+  extends Iterator[InternalRow] {
+
+  private var batch: ColumnarBatch = _
+  private var rows: java.util.Iterator[InternalRow] = java.util.Collections.emptyIterator()
+
+  override def hasNext: Boolean = {
+    while (!rows.hasNext) {
+      if (batch != null) {
+        batch.closeIfFreeable()
+        batch = null
+      }
+      if (!input.hasNext) {
+        return false
+      }
+      batch = input.next()
+      onNextBatch(batch)
+      rows = batch.rowIterator()
+    }
+    true
+  }
+
+  override def next(): InternalRow = {
+    if (!hasNext) {
+      throw new NoSuchElementException("End of the columnar batches")
+    }
+    toUnsafe(rows.next())
   }
 }
 
