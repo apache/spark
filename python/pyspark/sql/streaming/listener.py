@@ -135,7 +135,8 @@ class StreamingQueryListener(ABC):
         if hasattr(self, "_jlistenerobj"):
             return self._jlistenerobj
 
-        self._jlistenerobj: "JavaObject" = SparkContext._jvm.PythonStreamingQueryListenerWrapper(  # type: ignore[union-attr]
+        assert SparkContext._jvm is not None
+        self._jlistenerobj: "JavaObject" = SparkContext._jvm.PythonStreamingQueryListenerWrapper(
             JStreamingQueryListener(self)
         )
         return self._jlistenerobj
@@ -474,6 +475,7 @@ class StreamingQueryProgress(dict):
     def fromJObject(cls, jprogress: "JavaObject") -> "StreamingQueryProgress":
         from pyspark import SparkContext
 
+        assert SparkContext._jvm is not None
         return cls(
             jprogress=jprogress,
             id=uuid.UUID(jprogress.id().toString()),
@@ -493,9 +495,7 @@ class StreamingQueryProgress(dict):
             inputRowsPerSecond=jprogress.inputRowsPerSecond(),
             processedRowsPerSecond=jprogress.processedRowsPerSecond(),
             observedMetrics={
-                k: cloudpickle.loads(
-                    SparkContext._jvm.PythonSQLUtils.toPyRow(jr)  # type: ignore[union-attr]
-                )
+                k: cloudpickle.loads(SparkContext._jvm.PythonSQLUtils.toPyRow(jr))
                 for k, jr in dict(jprogress.observedMetrics()).items()
             },
         )

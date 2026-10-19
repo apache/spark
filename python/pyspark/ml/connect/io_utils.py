@@ -36,7 +36,9 @@ def _copy_file_from_local_to_fs(local_path: str, dest_path: str) -> None:
     if is_remote():
         session.copyFromLocalToFs(local_path, dest_path)
     else:
-        jvm = session.sparkContext._gateway.jvm  # type: ignore[union-attr]
+        gateway = session.sparkContext._gateway
+        assert gateway is not None
+        jvm = gateway.jvm
         getattr(jvm, "org.apache.spark.ml.python.MLUtil").copyFileFromLocalToFs(
             local_path, dest_path
         )
