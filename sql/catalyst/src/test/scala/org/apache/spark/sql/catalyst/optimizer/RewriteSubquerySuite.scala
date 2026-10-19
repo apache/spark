@@ -22,8 +22,9 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Cast, EqualTo, Exists, InSubquery, IsNull, ListQuery, Literal, Not, Or}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, LeftSemi, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{DomainJoin, Filter, Join, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.LongType
 
 
@@ -37,6 +38,67 @@ class RewriteSubquerySuite extends PlanTest {
         ColumnPruning,
         CollapseProject,
         RemoveNoopOperators) :: Nil
+  }
+
+  test("Early existence rewrite requires join pushdown") {
+    val a = $"a".int
+    val b = $"b".int
+    val left = LocalRelation(a)
+    val right = LocalRelation(b)
+    val exists = Exists(right, outerAttrs = Seq(a), joinCond = Seq(EqualTo(a, b)))
+
+    Seq(exists, Not(exists)).foreach { predicate =>
+      val plan = Filter(predicate, left)
+      withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
+        comparePlans(RewriteExistsSubquery(plan), plan)
+      }
+      withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+        val rewritten = RewriteExistsSubquery(plan)
+        comparePlans(rewritten, RewritePredicateSubquery(plan))
+        comparePlans(RewriteExistsSubquery(rewritten), rewritten)
+      }
+    }
+  }
+
+  test("Early existence rewrite with multiple predicates") {
+    val a = $"a".int
+    val b = $"b".int
+    val c = $"c".int
+    val left = LocalRelation(a)
+    val exists = Exists(LocalRelation(b), outerAttrs = Seq(a), joinCond = Seq(EqualTo(a, b)))
+    val notExists = Not(Exists(
+      LocalRelation(c), outerAttrs = Seq(a), joinCond = Seq(EqualTo(a, c))))
+    val plan = Filter(exists && notExists && a > 0, left)
+
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      comparePlans(RewriteExistsSubquery(plan), RewritePredicateSubquery(plan))
+    }
+  }
+
+  test("Early existence rewrite leaves complex subqueries unchanged") {
+    val a = $"a".int
+    val b = $"b".int
+    val c = $"c".int
+    val left = LocalRelation(a)
+    val right = LocalRelation(b)
+    val exists = Exists(right, outerAttrs = Seq(a), joinCond = Seq(EqualTo(a, b)))
+    val plans = Seq(
+      Filter(exists || a > 0, left),
+      Filter(exists && a.in(ListQuery(right, numCols = 1)), left),
+      Filter(exists, Filter(a.in(ListQuery(right, numCols = 1)), left)),
+      Filter(exists.copy(joinCond = Nil), left),
+      Filter(exists.copy(joinCond = Seq(a.in(ListQuery(right, numCols = 1)))), left),
+      Filter(exists.copy(outerAttrs = Nil), left),
+      Filter(exists.copy(plan = right.groupBy(b)(b)), left),
+      Filter(exists.copy(plan = right.limit(1)), left),
+      Filter(exists.copy(plan = DomainJoin(Seq(c), right)), left),
+      Filter(exists.copy(plan = Filter(Exists(LocalRelation(c)), right)), left))
+
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      plans.foreach { plan =>
+        comparePlans(RewriteExistsSubquery(plan), plan)
+      }
+    }
   }
 
   test("Column pruning after rewriting predicate subquery") {

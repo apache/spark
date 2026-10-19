@@ -24,10 +24,11 @@ import scala.collection.mutable
 import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.internal.LogKeys.{AGGREGATE_FUNCTIONS, COLUMN_NAME, COLUMN_NAMES, EXPR, GROUP_BY_EXPRS, JOIN_CONDITION, JOIN_TYPE, POST_SCAN_FILTERS, PUSHED_FILTERS, RELATION_NAME, RELATION_OUTPUT}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, BoundReference, Cast, Expression, ExpressionSet, ExprId, GetArrayStructFields, GetStructField, IntegerLiteral, LateralColumnAliasReference, Literal, NamedExpression, OuterReference, OuterScopeReference, PredicateHelper, ProjectionOverSchema, RuntimeReplaceable, SortOrder, SubqueryExpression, Unevaluable, UserDefinedExpression}
+import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, BoundReference, Cast, Expression, ExpressionSet, ExprId, GetArrayStructFields, GetStructField, IntegerLiteral, IsNull, LateralColumnAliasReference, Literal, NamedExpression, Or, OuterReference, OuterScopeReference, PredicateHelper, ProjectionOverSchema, RuntimeReplaceable, SortOrder, SubqueryExpression, Unevaluable, UserDefinedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.{CollapseGroupedSumOfCount, CollapseProject}
 import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, ScanOperation}
+import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LeafNode, Limit, LimitAndOffset, LocalLimit, LocalRelation, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, SampleMethod, Sort}
 import org.apache.spark.sql.catalyst.plans.logical.PlanHelper
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -200,6 +201,10 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         rightProjections.forall(_.isInstanceOf[AttributeReference]) &&
         // Cross joins are not supported because they increase the amount of data.
         condition.isDefined &&
+        (joinType != LeftAnti || !splitConjunctivePredicates(condition.get).exists {
+          case Or(e, IsNull(other)) if e.semanticEquals(other) => true
+          case _ => false
+        }) &&
         lBuilder.isOtherSideCompatibleForJoin(rBuilder) =>
       // Process left and right columns in original order
       val (leftSideRequiredColumnsWithAliases, rightSideRequiredColumnsWithAliases) =
@@ -208,8 +213,12 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           getRequiredColumnNames(rightProjections, rightHolder))
 
       // Create the AttributeMap that holds (Attribute -> Attribute with up to date name) mapping.
+      val joinInputs = joinType match {
+        case LeftSemi | LeftAnti => node.output ++ rightProjections.map(_.toAttribute)
+        case _ => node.output
+      }
       val pushedJoinOutputMap = AttributeMap[Expression](
-        node.output
+        joinInputs
           .zip(leftSideRequiredColumnsWithAliases ++ rightSideRequiredColumnsWithAliases)
           .collect {
             case (attr, columnWithAlias) =>
