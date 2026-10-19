@@ -492,11 +492,19 @@ class VectorAggSuite extends SparkFunSuite {
     val cases = Seq(
       (Float.MaxValue, -Float.MaxValue, 0.0f),
       (Float.PositiveInfinity, 1.0f, Float.PositiveInfinity),
-      (Float.PositiveInfinity, Float.PositiveInfinity, Float.PositiveInfinity))
+      (Float.NegativeInfinity, 1.0f, Float.NegativeInfinity),
+      (Float.PositiveInfinity, Float.PositiveInfinity, Float.PositiveInfinity),
+      (Float.NegativeInfinity, Float.NegativeInfinity, Float.NegativeInfinity),
+      (Float.PositiveInfinity, Float.NegativeInfinity, Float.NaN),
+      (Float.NaN, Float.NaN, Float.NaN),
+      (Float.NaN, Float.PositiveInfinity, Float.NaN),
+      (Float.NaN, Float.NegativeInfinity, Float.NaN),
+      (Float.NaN, 1.0f, Float.NaN))
     for {
-      dim <- Seq(1, 7, 8, 9, 17)
+      dim <- Seq(1, 3, 4, 5, 7, 8, 9, 17)
       index <- 0 until dim
-      (oldAvg, value, expectedValue) <- cases
+      (left, right, expectedValue) <- cases
+      (oldAvg, value) <- Seq((left, right), (right, left))
       useGenericArray <- Seq(false, true)
     } {
       val (agg, buffer, _) = createVectorAvg()
@@ -506,15 +514,25 @@ class VectorAggSuite extends SparkFunSuite {
       first(index) = oldAvg
       second(index) = value
       expected(index) = expectedValue
-      Seq(first, second).foreach { values =>
+      val rows = Seq(first, second).map { values =>
         val array = if (useGenericArray) {
           new GenericArrayData(values)
         } else {
           ArrayData.toArrayData(values)
         }
-        agg.update(buffer, InternalRow(array))
+        InternalRow(array)
       }
-      assertResult(expected)(evalAsFloatArray(agg, buffer))
+      rows.foreach(row => agg.update(buffer, row))
+      assertResult(expected.map(java.lang.Float.floatToIntBits))(
+        evalAsFloatArray(agg, buffer).map(java.lang.Float.floatToIntBits))
+
+      val (_, buffer1, _) = createVectorAvg()
+      val (_, buffer2, _) = createVectorAvg()
+      agg.update(buffer1, rows.head)
+      agg.update(buffer2, rows(1))
+      agg.merge(buffer1, buffer2)
+      assertResult(expected.map(java.lang.Float.floatToIntBits))(
+        evalAsFloatArray(agg, buffer1).map(java.lang.Float.floatToIntBits))
     }
   }
 

@@ -674,7 +674,7 @@ object VectorAvg {
         newCount: Long): Unit = {
       // Update running average: new_avg = old_avg + (new_value - old_avg) / new_count
       val invCount = 1.0f / newCount
-      if (dim < 8) {
+      if (dim < 4) {
         updateRemainingElements(accBytes, inputArray, 0, dim, invCount)
       } else {
         updateElementsInBlocks(accBytes, inputArray, dim, invCount)
@@ -687,7 +687,7 @@ object VectorAvg {
         dim: Int,
         invCount: Float): Unit = {
       var i = 0
-      while (i <= dim - 8) {
+      while (i <= dim - 4) {
         val off = Platform.BYTE_ARRAY_OFFSET + i.toLong * 4
         val oldAvg0 = Platform.getFloat(accBytes, off)
         val delta0 = inputArray.getFloat(i) - oldAvg0
@@ -697,16 +697,8 @@ object VectorAvg {
         val delta2 = inputArray.getFloat(i + 2) - oldAvg2
         val oldAvg3 = Platform.getFloat(accBytes, off + 12)
         val delta3 = inputArray.getFloat(i + 3) - oldAvg3
-        val oldAvg4 = Platform.getFloat(accBytes, off + 16)
-        val delta4 = inputArray.getFloat(i + 4) - oldAvg4
-        val oldAvg5 = Platform.getFloat(accBytes, off + 20)
-        val delta5 = inputArray.getFloat(i + 5) - oldAvg5
-        val oldAvg6 = Platform.getFloat(accBytes, off + 24)
-        val delta6 = inputArray.getFloat(i + 6) - oldAvg6
-        val oldAvg7 = Platform.getFloat(accBytes, off + 28)
-        val delta7 = inputArray.getFloat(i + 7) - oldAvg7
-        val deltaSum = ((delta0 + delta1) + (delta2 + delta3)) +
-          ((delta4 + delta5) + (delta6 + delta7))
+        // A finite sum guarantees finite deltas; sum overflow only triggers a scalar fallback.
+        val deltaSum = (delta0 + delta1) + (delta2 + delta3)
         if (!java.lang.Float.isFinite(deltaSum)) {
           updateRemainingElements(accBytes, inputArray, i, dim, invCount)
           return
@@ -715,11 +707,7 @@ object VectorAvg {
         Platform.putFloat(accBytes, off + 4, oldAvg1 + delta1 * invCount)
         Platform.putFloat(accBytes, off + 8, oldAvg2 + delta2 * invCount)
         Platform.putFloat(accBytes, off + 12, oldAvg3 + delta3 * invCount)
-        Platform.putFloat(accBytes, off + 16, oldAvg4 + delta4 * invCount)
-        Platform.putFloat(accBytes, off + 20, oldAvg5 + delta5 * invCount)
-        Platform.putFloat(accBytes, off + 24, oldAvg6 + delta6 * invCount)
-        Platform.putFloat(accBytes, off + 28, oldAvg7 + delta7 * invCount)
-        i += 8
+        i += 4
       }
       if (i < dim) {
         updateRemainingElements(accBytes, inputArray, i, dim, invCount)
@@ -741,8 +729,16 @@ object VectorAvg {
         val newAvg = if (java.lang.Float.isFinite(delta)) {
           oldAvg + delta * invCount
         } else if (java.lang.Float.isFinite(oldAvg) && java.lang.Float.isFinite(value)) {
+          // Scale before subtracting when opposite finite values overflow the delta.
+          // For oldAvg = Float.MaxValue, value = -Float.MaxValue and invCount = 0.5f,
+          // the delta is -Infinity, but scaling first gives the correct average of 0.0f.
           oldAvg + (value * invCount - oldAvg * invCount)
         } else {
+          // IEEE addition handles these cases in either operand order:
+          // Inf + Inf -> Inf; -Inf + (-Inf) -> -Inf.
+          // Inf + (-Inf) -> NaN.
+          // NaN + any value -> NaN.
+          // Inf + finite -> Inf; -Inf + finite -> -Inf.
           oldAvg + value
         }
         Platform.putFloat(accBytes, off, newAvg)
