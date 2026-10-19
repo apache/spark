@@ -2246,6 +2246,57 @@ abstract class StreamingLeftSemiJoinBase extends StreamingJoinSuite {
 
   import testImplicits._
 
+  test("left semi output watermark closes downstream windows across restart") {
+    val leftInput = MemoryStream[(Int, Int)]
+    val rightInput = MemoryStream[(Int, Int)]
+    val left = leftInput.toDF()
+      .select($"_1".as("leftKey"), timestamp_seconds($"_2").as("leftTime"))
+      .withWatermark("leftTime", "0 seconds")
+    val right = rightInput.toDF()
+      .select($"_1".as("rightKey"), timestamp_seconds($"_2").as("rightTime"))
+      .withWatermark("rightTime", "0 seconds")
+    val result = left.join(right, expr(
+      "leftKey = rightKey AND leftTime > rightTime - INTERVAL 5 SECONDS AND " +
+        "leftTime < rightTime + INTERVAL 30 SECONDS"), "left_semi")
+      .groupBy(window($"leftTime", "10 seconds"))
+      .count()
+      .select($"window.start".cast("long"), $"count")
+
+    withSQLConf(
+        SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "true",
+        SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+      withTempDir { checkpointDir =>
+        testStream(result)(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          MultiAddData(leftInput, (1, 105))(rightInput, (1, 105)),
+          CheckNewAnswer(),
+          MultiAddData(leftInput, (2, 120))(rightInput, (2, 120)),
+          CheckNewAnswer(),
+          StopStream,
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(rightInput, (9, 120)),
+          // Left state is bounded at 115 seconds; right state at 90 seconds is not output.
+          CheckNewAnswer(Row(100L, 1L)),
+          // A new left row can still match restored old right state.
+          AddData(leftInput, (1, 125)),
+          CheckNewAnswer(),
+          MultiAddData(leftInput, (3, 140), (4, 137))(rightInput, (3, 140)),
+          CheckNewAnswer(),
+          AddData(rightInput, (9, 140)),
+          CheckNewAnswer(Row(120L, 2L)),
+          StopStream,
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          // Restored buffered left state is emitted only once despite two right matches.
+          AddData(rightInput, (4, 141), (4, 142)),
+          CheckNewAnswer(),
+          MultiAddData(leftInput, (8, 160))(rightInput, (9, 160)),
+          CheckNewAnswer(),
+          AddData(rightInput, (9, 160)),
+          CheckNewAnswer(Row(130L, 1L), Row(140L, 1L)))
+      }
+    }
+  }
+
   testWithAppendAndUpdate("windowed left semi join") { outputMode =>
     withTempDir { checkpointDir =>
       val (leftInput, rightInput, joined) = setupWindowedJoin("left_semi")

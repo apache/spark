@@ -1121,6 +1121,11 @@ case class StreamingSymmetricHashJoinExec(
         left.output, right.output, leftKeys, rightKeys, condition.full, Some(inputWatermarkMs),
         !allowMultipleStatefulOperators)
 
-    Some((leftStateWatermark ++ rightStateWatermark ++ Some(inputWatermarkMs)).min)
+    if (joinType == LeftSemi && leftStateWatermark.isDefined) {
+      // Right timestamps are not output. Keep the existing fallback if no left bound is known.
+      Some((leftStateWatermark ++ Some(inputWatermarkMs)).min)
+    } else {
+      Some((leftStateWatermark ++ rightStateWatermark ++ Some(inputWatermarkMs)).min)
+    }
   }
 }
