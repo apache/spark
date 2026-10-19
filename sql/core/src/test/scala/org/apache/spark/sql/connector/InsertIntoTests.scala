@@ -1026,6 +1026,9 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
             replaceWhere = Some("info.status = 'active'"))
         }
         assert(e.getMessage.contains("info.status"))
+        // The alter commits before the write fails, so the add is observable.
+        val info = spark.table(t1).schema("info").dataType.asInstanceOf[StructType]
+        assert(info.fieldNames.toSeq === Seq("salary", "bonus", "status"))
       }
     }
   }

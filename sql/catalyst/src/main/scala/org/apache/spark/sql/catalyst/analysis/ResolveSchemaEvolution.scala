@@ -98,9 +98,12 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
       newOutput: Seq[Attribute]): T = {
     // Match attributes by name rather than position: schema changes may add fields at
     // any position, shifting the ordinal of following columns.
-    val resolver = conf.resolver
+    val newAttrsByName = {
+      val byName = newOutput.map(attr => attr.name -> attr).toMap
+      if (SQLConf.get.caseSensitiveAnalysis) byName else CaseInsensitiveMap(byName)
+    }
     val attrMap = AttributeMap(oldOutput.flatMap { oldAttr =>
-      newOutput.find(newAttr => resolver(newAttr.name, oldAttr.name)).map(oldAttr -> _)
+      newAttrsByName.get(oldAttr.name).map(oldAttr -> _)
     })
     plan.rewriteAttrs(attrMap).asInstanceOf[T]
   }
@@ -128,7 +131,14 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
       // Lambda variables keep the type they were bound with. Rebinding them from the
       // evolved argument type and re-deriving the body keeps extractions like `x.c`
       // reading the named field after a positioned add inside its struct.
-      case hof: HigherOrderFunction =>
+      // bindInternal assumes the same precondition as ResolveLambdaVariables, so
+      // ill-typed or unbound functions are left for CheckAnalysis to report.
+      case hof: HigherOrderFunction if hof.argumentsResolved &&
+          hof.checkArgumentDataTypes().isSuccess &&
+          hof.functions.forall {
+            case l: LambdaFunction => l.bound
+            case _ => false
+          } =>
         hof.bind { case (lf: LambdaFunction, argTypes) =>
           val refreshedArgs = (lf.arguments zip argTypes).map {
             case (v: NamedLambdaVariable, (dataType, nullable)) =>

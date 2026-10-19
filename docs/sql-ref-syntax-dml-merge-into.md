@@ -125,8 +125,8 @@ not_matched_by_source_action
   nested field in that struct, so schema evolution is triggered for all of those fields.
 - Columns added by schema evolution are appended at the end of the target schema by default. Setting
   `spark.sql.schemaEvolution.preserveColumnOrder` to `true` places each new column immediately after
-  the column that precedes it in the source schema, or first if there is no such column in the
-  target; existing columns keep their order.
+  the nearest preceding source column that exists in the target or is added by the same statement,
+  or first if there is none; existing columns keep their order.
 
 ### Examples
 

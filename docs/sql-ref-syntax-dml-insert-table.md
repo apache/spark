@@ -41,8 +41,10 @@ INSERT [ WITH SCHEMA EVOLUTION ] INTO [ TABLE ] table_identifier [ BY NAME ] REP
     on the source query, subject to the capabilities of the underlying connector. Columns added
     by schema evolution are appended at the end of the target schema by default; setting
     `spark.sql.schemaEvolution.preserveColumnOrder` to `true` places each new column immediately
-    after the column that precedes it in the source schema, or first if there is no such column in
-    the target; existing columns keep their order.
+    after the nearest preceding source column that exists in the target or is added by the same
+    statement, or first if there is none; existing columns keep their order. This applies to
+    by-name inserts, including by-name DataFrame writes; by-position inserts keep appending new
+    columns.
 
 * **table_identifier**
 

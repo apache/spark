@@ -1502,6 +1502,45 @@ trait MergeIntoSchemaEvolutionColumnOrderTests extends MergeIntoSchemaEvolutionS
     confs = preserveOrderConfs
   )
 
+  testEvolution("preserve order - ill-typed higher order function in matched " +
+      "condition reports data type mismatch")(
+    targetData = Seq(
+      (1, 100, "hr"),
+      (2, 200, "software")
+    ).toDF("pk", "salary", "dep"),
+    sourceData = Seq(
+      (2, 150, "finance", 50),
+      (3, 250, "eng", 75)
+    ).toDF("pk", "salary", "dep", "bonus"),
+    clauses = Seq(
+      updateAll(condition = "exists(t.salary, x -> x > 0)"),
+      insertAll()
+    ),
+    expectErrorContains = "DATATYPE_MISMATCH",
+    expectErrorWithoutEvolutionContains = "DATATYPE_MISMATCH",
+    partitionCols = Seq.empty,
+    confs = preserveOrderConfs
+  )
+
+  testEvolution("ill-typed higher order function in matched condition reports " +
+      "data type mismatch")(
+    targetData = Seq(
+      (1, 100, "hr"),
+      (2, 200, "software")
+    ).toDF("pk", "salary", "dep"),
+    sourceData = Seq(
+      (2, 150, "finance", 50),
+      (3, 250, "eng", 75)
+    ).toDF("pk", "salary", "dep", "bonus"),
+    clauses = Seq(
+      updateAll(condition = "exists(t.salary, x -> x > 0)"),
+      insertAll()
+    ),
+    expectErrorContains = "DATATYPE_MISMATCH",
+    expectErrorWithoutEvolutionContains = "DATATYPE_MISMATCH",
+    partitionCols = Seq.empty
+  )
+
   testEvolution("preserve order - new column anchors on a reordered source")(
     targetData = Seq(
       (1, "hr"),
