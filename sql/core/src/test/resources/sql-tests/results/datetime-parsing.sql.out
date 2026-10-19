@@ -210,53 +210,17 @@ struct<to_timestamp(2020-12-31-366, yyyy-MM-dd-DDD):timestamp>
 -- !query
 select to_timestamp(20201231, 'yyyyMMdd')
 -- !query schema
-struct<>
+struct<to_timestamp(20201231, yyyyMMdd):timestamp>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"20201231\"",
-    "inputType" : "\"INT\"",
-    "paramIndex" : "first",
-    "requiredType" : "\"STRING\" or \"DATE\" or \"TIMESTAMP\" or \"TIMESTAMP_NTZ\"",
-    "sqlExpr" : "\"to_timestamp(20201231, yyyyMMdd)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 41,
-    "fragment" : "to_timestamp(20201231, 'yyyyMMdd')"
-  } ]
-}
+2020-12-31 00:00:00
 
 
 -- !query
 select to_timestamp(20260924073325, 'yyyyMMddHHmmss')
 -- !query schema
-struct<>
+struct<to_timestamp(20260924073325, yyyyMMddHHmmss):timestamp>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"20260924073325\"",
-    "inputType" : "\"BIGINT\"",
-    "paramIndex" : "first",
-    "requiredType" : "\"STRING\" or \"DATE\" or \"TIMESTAMP\" or \"TIMESTAMP_NTZ\"",
-    "sqlExpr" : "\"to_timestamp(20260924073325, yyyyMMddHHmmss)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 53,
-    "fragment" : "to_timestamp(20260924073325, 'yyyyMMddHHmmss')"
-  } ]
-}
+2026-09-24 07:33:25
 
 
 -- !query
@@ -264,51 +228,23 @@ select to_timestamp(1.5BD, 'yyyy')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "22007",
   "messageParameters" : {
-    "inputSql" : "\"1.5\"",
-    "inputType" : "\"DECIMAL(2,1)\"",
-    "paramIndex" : "first",
-    "requiredType" : "\"STRING\" or \"DATE\" or \"TIMESTAMP\" or \"TIMESTAMP_NTZ\"",
-    "sqlExpr" : "\"to_timestamp(1.5, yyyy)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 34,
-    "fragment" : "to_timestamp(1.5BD, 'yyyy')"
-  } ]
+    "func" : "`try_to_timestamp`",
+    "message" : "Text '1.5' could not be parsed at index 0"
+  }
 }
 
 
 -- !query
 select try_to_timestamp(20201231, 'yyyyMMdd')
 -- !query schema
-struct<>
+struct<try_to_timestamp(20201231, yyyyMMdd):timestamp>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"20201231\"",
-    "inputType" : "\"INT\"",
-    "paramIndex" : "first",
-    "requiredType" : "\"STRING\" or \"DATE\" or \"TIMESTAMP\" or \"TIMESTAMP_NTZ\"",
-    "sqlExpr" : "\"try_to_timestamp(20201231, yyyyMMdd)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 45,
-    "fragment" : "try_to_timestamp(20201231, 'yyyyMMdd')"
-  } ]
-}
+2020-12-31 00:00:00
 
 
 -- !query

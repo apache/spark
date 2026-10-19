@@ -3289,29 +3289,13 @@ case class ParseToTimestamp(
         DateType,
         TimestampType,
         TimestampNTZType)
+    // NumericType is only accepted without a format, where `replacement` is a plain Cast. With a
+    // format, `replacement` is GetTimestamp, which does not accept numeric inputs, so numeric
+    // inputs are implicitly cast to string and parsed with the format instead.
+    val acceptsNumeric = dataType.isInstanceOf[TimestampType] && format.isEmpty
     TypeCollection(
-      (if (dataType.isInstanceOf[TimestampType]) types :+ NumericType else types): _*
+      (if (acceptsNumeric) types :+ NumericType else types): _*
     ) +: format.map(_ => StringTypeWithCollation(supportsTrimCollation = true)).toSeq
-  }
-
-  override def checkInputDataTypes(): TypeCheckResult = super.checkInputDataTypes() match {
-    // NumericType is only valid on the no-format path, where `replacement` is a plain Cast. With
-    // a format, `replacement` is GetTimestamp, which does not accept numeric inputs. Reject it
-    // here so the user gets a DATATYPE_MISMATCH instead of an INTERNAL_ERROR about an unresolved
-    // replacement.
-    case TypeCheckSuccess if format.isDefined && left.dataType.isInstanceOf[NumericType] =>
-      DataTypeMismatch(
-        errorSubClass = "UNEXPECTED_INPUT_TYPE",
-        messageParameters = Map(
-          "paramIndex" -> ordinalNumber(0),
-          "requiredType" -> Seq(
-            StringTypeWithCollation(supportsTrimCollation = true),
-            DateType,
-            TimestampType,
-            TimestampNTZType).map(toSQLType).mkString(" or "),
-          "inputSql" -> toSQLExpr(left),
-          "inputType" -> toSQLType(left.dataType)))
-    case other => other
   }
 
   override protected def withNewChildrenInternal(
