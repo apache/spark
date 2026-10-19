@@ -32,6 +32,8 @@ import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.classic.ExpressionUtils.expression
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.Platform
+import org.apache.spark.unsafe.hash.Murmur3_x86_32
 import org.apache.spark.util.Utils
 
 object FrequentItems extends Logging {
@@ -89,8 +91,9 @@ case class CollectFrequentItems(
     mutable.Map.empty[Any, Long]
 
   /**
-   * Returns the map key for `value`. A BinaryType value is wrapped in a [[BinaryKey]] so that the
-   * map compares it by content; any other value is its own key.
+   * Returns the map key for `value`. A binary value (BinaryType, or a UDT whose sqlType is
+   * BinaryType) is wrapped in a [[BinaryKey]] so that the map compares it by content; any other
+   * value is its own key.
    */
   private def toKey(value: Any): Any = value match {
     case bytes: Array[Byte] => new BinaryKey(bytes)
@@ -191,7 +194,8 @@ case class CollectFrequentItems(
         // Insert the pairs into counts map.
         val key = toKey(row.get(0, child.dataType))
         val count = row.get(1, LongType).asInstanceOf[Long]
-        map.update(key, count)
+        // A buffer serialized before binary keys compared by content can hold equal keys.
+        map.update(key, map.getOrElse(key, 0L) + count)
         sizeOfNextRow = ins.readInt()
       }
 
@@ -219,7 +223,8 @@ case class CollectFrequentItems(
  */
 private final class BinaryKey(val bytes: Array[Byte]) {
   // Computed once: adding a key hashes it twice, to look it up and then to update or insert it.
-  private[this] val hash = java.util.Arrays.hashCode(bytes)
+  private[this] val hash =
+    Murmur3_x86_32.hashUnsafeBytes2(bytes, Platform.BYTE_ARRAY_OFFSET, bytes.length, 42)
 
   override def hashCode(): Int = hash
 
