@@ -25,9 +25,24 @@ import org.apache.spark.sql.execution.joins.StoragePartitionJoinParams
 
 /** Base trait for a data source scan capable of producing a key-grouped output. */
 trait KeyGroupedPartitionedScan[T] {
+  /**
+   * Return join-key positions for `outputPartitioning`. [[getInputPartitionGrouping]] always
+   * uses `spjParams.joinKeyPositions`. Skip output projection for a leading-prefix subset of
+   * partition keys when common-partition metadata remains at full width; projecting output
+   * misaligns nested siblings in a
+   * [[org.apache.spark.sql.catalyst.plans.physical.PartitioningCollection]].
+   */
   private def joinKeyPositionsForOutput(
-      spjParams: StoragePartitionJoinParams): Option[Seq[Int]] = {
-    if (spjParams.preserveFullOutputPartitioning) None else spjParams.joinKeyPositions
+      spjParams: StoragePartitionJoinParams,
+      baseExpressions: Seq[Expression]): Option[Seq[Int]] = {
+    spjParams.joinKeyPositions match {
+      case Some(pos) if pos.length < baseExpressions.length &&
+          pos == (0 until pos.length).toSeq &&
+          spjParams.commonPartitionValues.exists(
+            _.exists(_._1.numFields == baseExpressions.length)) =>
+        None
+      case other => spjParams.joinKeyPositions
+    }
   }
 
   private def projectCommonPartitionValuesIfNeeded(
@@ -36,6 +51,7 @@ trait KeyGroupedPartitionedScan[T] {
       joinKeyPositions: Option[Seq[Int]]): Seq[(InternalRow, Int)] = {
     joinKeyPositions match {
       case Some(projectionPositions) =>
+        // Project only when common values match full partition-key width.
         commonPartValues.map { case (partValue, numSplits) =>
           if (partValue.numFields == baseExpressions.length) {
             (KeyGroupedPartitioning.project(baseExpressions, projectionPositions, partValue),
@@ -56,7 +72,7 @@ trait KeyGroupedPartitionedScan[T] {
   def getOutputKeyGroupedPartitioning(
       basePartitioning: KeyGroupedPartitioning,
       spjParams: StoragePartitionJoinParams): KeyGroupedPartitioning = {
-    val outputJoinKeyPositions = joinKeyPositionsForOutput(spjParams)
+    val outputJoinKeyPositions = joinKeyPositionsForOutput(spjParams, basePartitioning.expressions)
     val projectedExpressions = outputJoinKeyPositions match {
       case Some(projectionPositions) =>
         projectionPositions.map(i => basePartitioning.expressions(i))
@@ -65,9 +81,8 @@ trait KeyGroupedPartitionedScan[T] {
 
     val newPartValues = spjParams.commonPartitionValues match {
       case Some(commonPartValues) =>
-        // We allow duplicated partition values if
-        // `spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled` is true.
-        // Project common values when join keys are a subset of the partition keys.
+        // Allow duplicated partition values when partially clustered distribution is enabled.
+        // Project common partition values to join-key width when applicable.
         val projectedCommonPartValues = projectCommonPartitionValuesIfNeeded(
           commonPartValues, basePartitioning.expressions, outputJoinKeyPositions)
          projectedCommonPartValues.flatMap {
