@@ -70,6 +70,7 @@ import org.apache.spark.sql.internal.types.{
 import org.apache.spark.sql.types.{
   AbstractDataType,
   AnyDataType,
+  AnyTimestampNanoType,
   AnyTimestampTypeExpression,
   ArrayType,
   BinaryType,
@@ -202,6 +203,40 @@ abstract class TypeCoercionHelper {
     charVarcharToPlainString(e.dataType, StringTypeWithCollation(supportsTrimCollation = true))
       .map(dt => if (dt == e.dataType) e else Cast(e, dt))
       .getOrElse(implicitCast(e, StringType).getOrElse(e))
+  }
+
+  /**
+   * Whether an implicit cast of `from` to `to` narrows a nanosecond-precision timestamp, also
+   * inside an array, map or struct: a lower-precision timestamp drops sub-microsecond digits and
+   * TIME drops the date part.
+   */
+  protected def isNanosNarrowing(from: DataType, to: DataType): Boolean =
+    existsNanosPair(from, to) { (nanos, t) =>
+      t.isInstanceOf[TimeType] || TimestampFamily.fractionalPrecision(nanos).exists(fp =>
+        TimestampFamily.fractionalPrecision(t).exists(_ < fp))
+    }
+
+  /**
+   * Picks the implicit cast target for a [[TypeCollection]] from the castable member types, in
+   * member order. A nanosecond-precision timestamp, also nested, skips DATE, which drops the time
+   * of day.
+   */
+  protected def pickTypeCollectionCast(
+      inType: DataType,
+      castable: Seq[DataType]): Option[DataType] = {
+    castable.find(dt => !existsNanosPair(inType, dt)((_, t) => t == DateType))
+  }
+
+  /** Whether `p` holds for some nanos timestamp in `from` and its counterpart in `to`. */
+  private def existsNanosPair(from: DataType, to: DataType)(
+      p: (DataType, DataType) => Boolean): Boolean = (from, to) match {
+    case (_: AnyTimestampNanoType, _) => p(from, to)
+    case (ArrayType(f, _), ArrayType(t, _)) => existsNanosPair(f, t)(p)
+    case (MapType(fk, fv, _), MapType(tk, tv, _)) =>
+      existsNanosPair(fk, tk)(p) || existsNanosPair(fv, tv)(p)
+    case (StructType(ff), StructType(tf)) =>
+      ff.zip(tf).exists { case (f, t) => existsNanosPair(f.dataType, t.dataType)(p) }
+    case _ => false
   }
 
   /**
