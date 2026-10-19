@@ -248,8 +248,7 @@ def _truthiness_col(cat: Optional[str], c: Column) -> Optional[Column]:
     return None
 
 
-# ``str`` method -> (Catalyst function, argument count, result category). The
-# receiver and every argument must be strings (SPARK-59816).
+# ``str`` method -> (Catalyst function, argument count, result category).
 _STRING_METHODS: dict[str, Tuple[Callable[..., Column], int, str]] = {
     "upper": (upper, 0, "string"),
     "lower": (lower, 0, "string"),
