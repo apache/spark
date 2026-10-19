@@ -152,6 +152,12 @@ DropTableCommand `spark_catalog`.`default`.`drop_table_missing`, true, false, fa
 
 
 -- !query
+EXPLAIN DROP TABLE IF EXISTS drop_table_missing
+-- !query analysis
+ExplainCommand 'DropTable true, false, SimpleMode
+
+
+-- !query
 CREATE TABLE drop_table_t9 (c INT) USING parquet
 -- !query analysis
 CreateDataSourceTableCommand `spark_catalog`.`default`.`drop_table_t9`, false

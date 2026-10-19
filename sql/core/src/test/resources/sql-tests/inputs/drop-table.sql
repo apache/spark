@@ -37,6 +37,7 @@ SET spark.sql.legacy.useV1Command=true;
 CREATE TABLE drop_table_t7 (c INT) USING parquet;
 DROP TABLE drop_table_t7;
 DROP TABLE IF EXISTS drop_table_missing;
+EXPLAIN DROP TABLE IF EXISTS drop_table_missing;
 CREATE TABLE drop_table_t9 (c INT) USING parquet;
 DROP TABLE IF EXISTS drop_table_t9;
 SHOW TABLES LIKE 'drop_table_t9';
