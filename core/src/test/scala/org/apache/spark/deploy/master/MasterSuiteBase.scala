@@ -144,6 +144,9 @@ trait MasterSuiteBase extends SparkFunSuite
   // groups represent URL and worker ID
   val WORKER_LINK_RE = """<a href="(.+?)">\s*(worker-.+?)\s*</a>""".r
 
+  // regex to extract site-relative links from the webui HTML
+  val SITE_RELATIVE_LINK_RE = """href="(/[^"]*)"""".r
+
   private var _master: Master = _
 
   after {
@@ -179,6 +182,8 @@ trait MasterSuiteBase extends SparkFunSuite
     html should include (s"""href="$proxyUrl/static""")
     html should not include ("""src="/static""")
     html should include (s"""src="$proxyUrl/static""")
+    // other site-relative links, e.g. "Back to Master", must not bypass the proxy either
+    (SITE_RELATIVE_LINK_RE findAllMatchIn html).foreach(_.group(1) should startWith (proxyUrl))
   }
 
   protected def verifyDrivers(

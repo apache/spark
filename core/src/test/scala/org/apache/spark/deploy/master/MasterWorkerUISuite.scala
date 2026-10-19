@@ -133,6 +133,11 @@ class MasterWorkerUISuite extends MasterSuiteBase {
           .tryWithResource(Source.fromURL(s"$masterUrl/"))(_.getLines().mkString("\n"))
         html should include ("Spark Master at spark://")
         verifyStaticResourcesServedByProxy(html, reverseProxyUrl)
+        Seq("environment/", "logPage/?self&logType=out").foreach { path =>
+          val pageHtml = Utils
+            .tryWithResource(Source.fromURL(s"$masterUrl/$path"))(_.getLines().mkString("\n"))
+          verifyStaticResourcesServedByProxy(pageHtml, reverseProxyUrl)
+        }
         verifyWorkerUI(html, masterUrl, reverseProxyUrl)
       }
     } finally {
