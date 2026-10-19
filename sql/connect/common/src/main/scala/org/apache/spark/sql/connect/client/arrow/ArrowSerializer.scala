@@ -391,7 +391,7 @@ object ArrowSerializer {
           override def set(index: Int, value: LocalDateTime): Unit =
             vector.setSafe(index, SparkDateTimeUtils.localDateTimeToMicros(value))
         }
-      case (LocalTimeEncoder, v: TimeNanoVector) =>
+      case (_: LocalTimeEncoder, v: TimeNanoVector) =>
         new FieldSerializer[LocalTime, TimeNanoVector](v) {
           override def set(index: Int, value: LocalTime): Unit =
             vector.setSafe(index, SparkDateTimeUtils.localTimeToNanos(value))

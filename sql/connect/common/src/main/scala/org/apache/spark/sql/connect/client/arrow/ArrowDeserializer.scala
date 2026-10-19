@@ -200,7 +200,7 @@ object ArrowDeserializers {
         new LeafFieldDeserializer[LocalDateTime](encoder, v, timeZoneId) {
           override def value(i: Int): LocalDateTime = reader.getLocalDateTime(i)
         }
-      case (LocalTimeEncoder, v: FieldVector) =>
+      case (_: LocalTimeEncoder, v: FieldVector) =>
         new LeafFieldDeserializer[LocalTime](encoder, v, timeZoneId) {
           override def value(i: Int): LocalTime = reader.getLocalTime(i)
         }

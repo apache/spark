@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.util.{DateFormatter, SparkIntervalUtils, Ti
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils._
-import org.apache.spark.sql.types.{DataType, DayTimeIntervalType, Decimal, UpCastRule, YearMonthIntervalType}
+import org.apache.spark.sql.types.{DataType, DayTimeIntervalType, Decimal, TimeType, UpCastRule, YearMonthIntervalType}
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.util.SparkStringUtils
 
@@ -70,7 +70,9 @@ object ArrowVectorReader {
       vector: FieldVector,
       timeZoneId: String): ArrowVectorReader = {
     val vectorDataType = ArrowUtils.fromArrowType(vector.getField.getType)
-    if (!UpCastRule.canUpCast(vectorDataType, targetDataType)) {
+    // Arrow `Time(NANOSECOND)` does not carry the precision, so any `TIME(p)` can be read from it.
+    val isTime = vectorDataType.isInstanceOf[TimeType] && targetDataType.isInstanceOf[TimeType]
+    if (!isTime && !UpCastRule.canUpCast(vectorDataType, targetDataType)) {
       throw new RuntimeException(
         s"Reading '$targetDataType' values from a ${vector.getClass} instance is not supported.")
     }

@@ -91,7 +91,7 @@ object RowEncoder extends DataTypeErrorsBase {
       case TimestampNTZType => LocalDateTimeEncoder
       case DateType if SqlApiConf.get.datetimeJava8ApiEnabled => LocalDateEncoder(lenient)
       case DateType => DateEncoder(lenient)
-      case _: TimeType => LocalTimeEncoder
+      case t: TimeType => LocalTimeEncoder(t.precision)
       case CalendarIntervalType => CalendarIntervalEncoder
       case _: DayTimeIntervalType => DayTimeIntervalEncoder
       case _: YearMonthIntervalType => YearMonthIntervalEncoder
