@@ -1057,8 +1057,9 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     }
     assert(e.getCondition == "INTERNAL_ERROR")
     assert(e.getMessage.contains(s"plan id $attachedPlanId is attached in WithRelations"))
-    assert(e.getCause.asInstanceOf[AnalysisException].getCondition ==
-      "CONNECT_INVALID_PLAN.SUBQUERY_PLAN_NOT_ATTACHED")
+    assert(
+      e.getCause.asInstanceOf[AnalysisException].getCondition ==
+        "CONNECT_INVALID_PLAN.SUBQUERY_PLAN_NOT_ATTACHED")
 
     // The plan id is not attached, so the failure remains an invalid Spark Connect plan.
     val unattachedPlanId = 8L
@@ -1093,11 +1094,10 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
             .setInput(connectTestRelation)
             .setCol(caseWhen)
             .setSeed(1)
-            .addFractions(
-              proto.StatSampleBy.Fraction
-                .newBuilder()
-                .setStratum(toLiteralProto("a"))
-                .setFraction(0.5)))
+            .addFractions(proto.StatSampleBy.Fraction
+              .newBuilder()
+              .setStratum(toLiteralProto("a"))
+              .setFraction(0.5)))
         .build()
     }
   }
