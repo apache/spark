@@ -571,8 +571,8 @@ class StreamingOuterJoinV4Suite
           val setup = if (history == "old checkpoint") {
             // Written by 2dad66372a4 with this query and one shuffle partition, after the
             // three input batches below. The old code leaves (1, 12) in state without output.
-            Utils.unpack(new File(getClass.getResource(
-              "/structured-streaming/v4-join-skipped-row-checkpoint.zip").toURI), checkpointDir)
+            Utils.copyDirectory(new File(getClass.getResource(
+              "/structured-streaming/v4-join-skipped-row-checkpoint/").toURI), checkpointDir)
             // Only relocate the fixture's schema path; keep saved rows and offsets unchanged.
             val statePath = new Path(checkpointDir.getCanonicalPath, "state/0")
             val metadataPath = new Path(statePath, "_metadata/v2/0")
