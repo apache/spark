@@ -18,10 +18,12 @@
 package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.{DataFrame, QueryTest}
-import org.apache.spark.sql.catalyst.expressions.{Add, And, LessThan, Literal, Rand}
+import org.apache.spark.sql.catalyst.expressions.{Add, And, Cast, LessThan, Literal, Rand}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.LeftOuter
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.LongType
 
 /**
  * Tests for streamed-side join condition hoisting in whole-stage codegen. The
@@ -130,6 +132,32 @@ class SplitStreamedSideJoinConditionSuite extends QueryTest with SharedSparkSess
     assert(rest.contains(nonDeterministic))
   }
 
+  test("split hoists widening cast") {
+    val streamed = spark.range(8).selectExpr("id", "CAST(id AS int) AS a")
+      .queryExecution.executedPlan
+    val a = streamed.output.find(_.name == "a").get
+    val hoistable = LessThan(Cast(a, LongType), Literal(5L))
+    val (streamedOnly, rest) = StreamedSideJoinCondition.split(
+      Some(hoistable), LeftOuter, streamed, splitEnabled = true)
+    assert(streamedOnly.contains(hoistable))
+    assert(rest.isEmpty)
+  }
+
+  test("split does not hoist decimal to integral cast that can overflow") {
+    val streamed = spark.range(8).selectExpr("id", "CAST(id AS decimal(19,0)) AS d")
+      .queryExecution.executedPlan
+    val d = streamed.output.find(_.name == "d").get
+    // canUpCast admits DECIMAL(19,0) -> BIGINT, but a value such as 9999999999999999999
+    // exceeds Long.MaxValue and the cast then throws CAST_OVERFLOW under ANSI mode.
+    // Hoisting it would turn the null-extended result of an unmatched streamed row into
+    // an exception, so it must stay in the residual.
+    val overflowing = LessThan(Cast(d, LongType), Literal(5L))
+    val (streamedOnly, rest) = StreamedSideJoinCondition.split(
+      Some(overflowing), LeftOuter, streamed, splitEnabled = true)
+    assert(streamedOnly.isEmpty)
+    assert(rest.contains(overflowing))
+  }
+
   // The streamed-only condition a < 5 is false for ids 5..7, so the hoisted guard fires on
   // those rows. pad is selected but not referenced by the join.
 
@@ -150,6 +178,41 @@ class SplitStreamedSideJoinConditionSuite extends QueryTest with SharedSparkSess
       |LEFT OUTER JOIN (SELECT bid, b FROM build_t UNION ALL SELECT bid, b FROM build_t) b
       |ON s.id = b.bid AND s.a < 5
     """.stripMargin))
+
+  // Long -> Double is excluded from UnwrapCastInBinaryComparison (SPARK-39476), so unlike an
+  // Int -> Long cast against a literal, this conjunct survives the optimizer and reaches the
+  // physical join with the Cast intact. Re-run the split the BroadcastHashJoinExec performs
+  // on its actual condition and assert the Cast conjunct lands in the streamed-only part:
+  // the result comparison below cannot tell hoisting on from off (the rows are identical),
+  // so this assertion is what fails when the Cast arm of the whitelist is removed.
+  private def assertWideningCastHoisted(query: DataFrame): DataFrame = {
+    val plan = query.queryExecution.executedPlan
+    val bhj = plan.collectFirst { case j: BroadcastHashJoinExec => j }
+      .getOrElse(fail(s"expected a BroadcastHashJoinExec in $plan"))
+    assert(
+      bhj.condition.exists(_.exists(_.isInstanceOf[Cast])),
+      s"the cast conjunct did not survive the optimizer: ${bhj.condition}")
+    val streamedPlan = bhj.buildSide match {
+      case BuildLeft => bhj.right
+      case BuildRight => bhj.left
+    }
+    val (streamedOnly, rest) = StreamedSideJoinCondition.split(
+      bhj.condition, bhj.joinType, streamedPlan, splitEnabled = true)
+    assert(
+      streamedOnly.exists(_.exists(_.isInstanceOf[Cast])),
+      s"the cast conjunct was not hoisted into the streamed-only part: $streamedOnly")
+    assert(rest.isEmpty, s"the whole condition should be hoisted: $rest")
+    query
+  }
+
+  testWithCodegenOnAndOff(
+    "left outer join with widening cast in streamed-only condition")(
+    assertWideningCastHoisted(spark.sql("""
+      |SELECT /*+ BROADCAST(b) */ s.id, s.a, s.pad, b.bid
+      |FROM (SELECT * FROM streamed_t WHERE pad % 2 = 0) s
+      |LEFT OUTER JOIN (SELECT DISTINCT bid FROM build_t) b
+      |ON s.id = b.bid AND CAST(s.id AS double) < 5.0D
+    """.stripMargin)))
 
   // The "compiles without pre-materialized column" variants drop the residual filter, so pad
   // stays lazy through the join and is only materialized by the join's own consume code. They
