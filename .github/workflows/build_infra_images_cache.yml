@@ -43,6 +43,7 @@ on:
     - 'dev/spark-test-image/python-312-pandas-3/Dockerfile'
     - 'dev/spark-test-image/python-313/Dockerfile'
     - 'dev/spark-test-image/python-314/Dockerfile'
+    - 'dev/spark-test-image/python-315/Dockerfile'
     - 'dev/spark-test-image/python-314-nogil/Dockerfile'
     - '.github/workflows/build_infra_images_cache.yml'
     - 'pyproject.toml'
@@ -226,6 +227,22 @@ jobs:
       - name: Image digest (PySpark with Python 3.14)
         if: hashFiles('dev/spark-test-image/python-314/Dockerfile') != ''
         run: echo ${{ steps.docker_build_pyspark_python_314.outputs.digest }}
+      - name: Build and push (PySpark with Python 3.15)
+        if: hashFiles('dev/spark-test-image/python-315/Dockerfile') != ''
+        id: docker_build_pyspark_python_315
+        continue-on-error: true
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        with:
+          context: ./dev/spark-test-image/python-315/
+          build-contexts: |
+            root=./
+          push: true
+          tags: ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-python-315-cache:${{ github.ref_name }}-static
+          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-python-315-cache:${{ github.ref_name }}
+          cache-to: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-python-315-cache:${{ github.ref_name }},mode=max
+      - name: Image digest (PySpark with Python 3.15)
+        if: hashFiles('dev/spark-test-image/python-315/Dockerfile') != ''
+        run: echo ${{ steps.docker_build_pyspark_python_315.outputs.digest }}
       - name: Build and push (PySpark with Python 3.14 no GIL)
         if: hashFiles('dev/spark-test-image/python-314-nogil/Dockerfile') != ''
         id: docker_build_pyspark_python_314_nogil
@@ -264,6 +281,7 @@ jobs:
           check "pyspark-python-312-pandas-3"     "${{ steps.docker_build_pyspark_python_312_pandas_3.outcome }}"
           check "pyspark-python-313"              "${{ steps.docker_build_pyspark_python_313.outcome }}"
           check "pyspark-python-314"              "${{ steps.docker_build_pyspark_python_314.outcome }}"
+          check "pyspark-python-315"              "${{ steps.docker_build_pyspark_python_315.outcome }}"
           check "pyspark-python-314-nogil"        "${{ steps.docker_build_pyspark_python_314_nogil.outcome }}"
           if [ "$status" -ne 0 ]; then
             echo "::error::One or more image builds failed; see entries above marked 'failure'."

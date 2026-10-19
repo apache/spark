@@ -22,30 +22,17 @@ import org.apache.spark.sql.types.*;
 
 /**
  * Copies one key value between column vectors. Picked per key column at init time by
- * {@link #forType(DataType)} and called per surviving row; the caller handles null sources.
+ * {@link #forType(DataType)} and called per surviving row. The caller handles null sources.
  *
- * <p>Nothing here is about Parquet. A copier is chosen from the Spark type alone, and both sides of
- * the copy are {@link WritableColumnVector}s.
- *
- * <p>The types this handles are also the types a storage filter's key columns may have:
- * {@code ParquetStorageFilter.isSupportedKeyType} answers from {@link #supports}, so the planner's
- * gate, the filter's own checks and the copy itself read one list. That list is narrower than
- * {@code AtomicType}, for three different reasons:
+ * <p>The types this handles are the types a storage filter's key columns may have, since
+ * {@code ParquetStorageFilter.isSupportedKeyType} answers from {@link #supports}. That is narrower
+ * than {@code AtomicType}:
  * <ul>
- *   <li>{@code VariantType} cannot be supported, since its Parquet representation is a group
- *       rather than a primitive leaf, so phase 1 has nothing flat to read it into. It is
- *       unreachable anyway, since {@code HashExpression.checkInputDataTypes} rejects variant, so no
- *       bloom can be built on one.
- *   <li>{@code GeometryType} and {@code GeographyType} could be supported. Both map to a primitive
- *       Parquet BINARY and both are handled by {@code WritableColumnVector.isArray}, so the
- *       byte-array copier below would work. But no bloom can currently reference them, because
- *       {@code HashExpression}'s codegen type dispatch has no case for either, so hashing one fails
- *       at codegen. They are left out until something can actually produce such a filter.
- *   <li>{@code TimestampNTZNanosType} and {@code TimestampLTZNanosType}, behind
- *       {@code spark.sql.timestampNanosTypes.enabled}, could be supported too. A bloom can be built
- *       on one, but a vector holds it in two children, the epoch micros and the nanos within the
- *       micro, so neither copier below fits. A filter on one is not offered, and the scan reads
- *       the way it would without this feature.
+ *   <li>{@code VariantType} is a Parquet group rather than a primitive leaf, and no bloom can hash
+ *       it anyway;</li>
+ *   <li>{@code GeometryType} and {@code GeographyType} would work with the byte-array copier, but
+ *       no bloom can hash them today;</li>
+ *   <li>the nanosecond timestamp types are held in two children, which neither copier fits.</li>
  * </ul>
  */
 @FunctionalInterface
@@ -53,21 +40,19 @@ interface ValueCopier {
   void copy(WritableColumnVector dst, int dstRow, WritableColumnVector src, int srcRow);
 
   /**
-   * The one copier for a value the vector holds in its byte child, which is every variable-length
-   * type below. Shared so that {@link #isVariableLength} can answer by asking which copier a type
-   * gets, rather than stating the same boundary a second time.
+   * The copier for a value the vector holds in its byte child, which is every variable-length type
+   * below. {@link #isVariableLength} answers by it.
    */
   ValueCopier BYTE_ARRAY = (dst, dRow, src, sRow) -> dst.putByteArray(dRow, src.getBinary(sRow));
 
-  /** Whether a value of this type can be copied, which is the one list described above. */
+  /** Whether a value of this type can be copied. */
   static boolean supports(DataType dt) {
     return forTypeOrNull(dt) != null;
   }
 
   /**
-   * Returns a {@link ValueCopier} for the given key {@link DataType}. Unreachable for a type
-   * {@link #supports} rejects, since both the planner's gate and
-   * {@code ParquetStorageFilter.create} ask that first.
+   * Returns a {@link ValueCopier} for the given key {@link DataType}. The planner and
+   * {@code ParquetStorageFilter.create} have already asked {@link #supports}.
    */
   static ValueCopier forType(DataType dt) {
     ValueCopier copier = forTypeOrNull(dt);
@@ -124,10 +109,9 @@ interface ValueCopier {
   }
 
   /**
-   * Whether a key value lives in the vector's byte child rather than in its fixed-width array,
-   * which is what the survivor budget charges by length. Answered by which copier the type gets, so
-   * a type added above cannot be charged as fixed-width by accident.
-   * {@code WritableColumnVector.isArray()} is the vector's own answer, but it is protected.
+   * Whether a key value lives in the vector's byte child, which the survivor budget charges by
+   * length. Answered by which copier the type gets, so a type added above cannot be charged as
+   * fixed-width by accident.
    */
   static boolean isVariableLength(DataType dt) {
     return forTypeOrNull(dt) == BYTE_ARRAY;

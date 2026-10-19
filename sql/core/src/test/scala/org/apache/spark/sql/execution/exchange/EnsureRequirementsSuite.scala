@@ -2681,7 +2681,6 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         leftSortExprs = Seq(exprA),
         rightSortExprs = Seq(exprB),
         asOfCondition = GreaterThan(exprA, exprB),
-        orderExpression = exprA,
         direction = Backward,
         joinType = Inner,
         condition = None,
@@ -2925,6 +2924,22 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       assert(declared.forall(_.isDefined), s"both sides stay keyed:\n${planned.treeString}")
       assert(declared.head == declared(1),
         s"both sides must declare one key sequence:\n${planned.treeString}")
+    }
+  }
+
+  test("SPARK-60044: pushing join key positions into a merging node keeps its ordering") {
+    val keys = Seq(InternalRow(1, 1), InternalRow(1, 2))
+    // Safe for the merge, so the rebuilt node can merge, which `Seq(0)` makes it do.
+    val leaf = DummyLeafSafeForKWayMerge(
+      outputPartitioning = KeyedPartitioning(Seq(exprA, exprB), keys))
+    val frozen = Seq(SortOrder(exprA, Ascending), SortOrder(exprB, Ascending))
+    val merging = GroupPartitionsExec(leaf, sortedMergeOrdering = Some(frozen))
+    assert(leaf.outputOrdering.isEmpty, "test setup: the child reports no ordering now")
+    EnsureRequirements.withJoinKeyPositions(merging, Seq(0)) match {
+      case g: GroupPartitionsExec =>
+        assert(g.sortedMergeOrdering.contains(frozen))
+        assert(g.outputOrdering == frozen, "the rebuilt node merges by the frozen ordering")
+      case other => fail(s"expected a rebuilt GroupPartitionsExec, got $other")
     }
   }
 
