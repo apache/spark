@@ -2675,11 +2675,18 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     withSQLConf(
         SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true") {
-      val asOf = SortMergeAsOfJoinExec(Seq(exprA), Seq(exprB), Seq(exprA), Seq(exprB),
-        GreaterThan(exprA, exprB), exprA, Inner, None,
-        DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprA),
+      val asOf = SortMergeAsOfJoinExec(
+        leftKeys = Seq(exprA),
+        rightKeys = Seq(exprB),
+        leftSortExprs = Seq(exprA),
+        rightSortExprs = Seq(exprB),
+        asOfCondition = GreaterThan(exprA, exprB),
+        direction = Backward,
+        joinType = Inner,
+        condition = None,
+        left = DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprA),
           Seq(InternalRow(1), InternalRow(1), InternalRow(1)))),
-        DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprB),
+        right = DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprB),
           Seq(InternalRow(1), InternalRow(2)))))
       EnsureRequirements.apply(asOf).children.foreach { child =>
         assert(groupPartitionsNodes(child).isEmpty,
@@ -2917,6 +2924,22 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       assert(declared.forall(_.isDefined), s"both sides stay keyed:\n${planned.treeString}")
       assert(declared.head == declared(1),
         s"both sides must declare one key sequence:\n${planned.treeString}")
+    }
+  }
+
+  test("SPARK-60044: pushing join key positions into a merging node keeps its ordering") {
+    val keys = Seq(InternalRow(1, 1), InternalRow(1, 2))
+    // Safe for the merge, so the rebuilt node can merge, which `Seq(0)` makes it do.
+    val leaf = DummyLeafSafeForKWayMerge(
+      outputPartitioning = KeyedPartitioning(Seq(exprA, exprB), keys))
+    val frozen = Seq(SortOrder(exprA, Ascending), SortOrder(exprB, Ascending))
+    val merging = GroupPartitionsExec(leaf, sortedMergeOrdering = Some(frozen))
+    assert(leaf.outputOrdering.isEmpty, "test setup: the child reports no ordering now")
+    EnsureRequirements.withJoinKeyPositions(merging, Seq(0)) match {
+      case g: GroupPartitionsExec =>
+        assert(g.sortedMergeOrdering.contains(frozen))
+        assert(g.outputOrdering == frozen, "the rebuilt node merges by the frozen ordering")
+      case other => fail(s"expected a rebuilt GroupPartitionsExec, got $other")
     }
   }
 

@@ -569,7 +569,7 @@ class CrossValidatorModelReader(MLReader["CrossValidatorModel"]):
         persistSubModels = ("persistSubModels" in metadata) and metadata["persistSubModels"]
 
         if persistSubModels:
-            subModels = [[None] * len(estimatorParamMaps)] * numFolds
+            subModels = [[None] * len(estimatorParamMaps) for _ in range(numFolds)]
             for splitIndex in range(numFolds):
                 for paramIndex in range(len(estimatorParamMaps)):
                     modelPath = os.path.join(

@@ -23,9 +23,9 @@ import org.apache.logging.log4j.Level
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.rdd.SortedMergeCoalescedRDD
-import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, ExprId, Literal, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Descending, ExprId, Literal, TransformExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Complete
 import org.apache.spark.sql.catalyst.plans.{Cross, ExistenceJoin, Inner, JoinType, LeftAnti, LeftSemi, LeftSingle}
 import org.apache.spark.sql.catalyst.plans.physical
@@ -3921,7 +3921,8 @@ class KeyGroupedPartitioningSuite
       // A k-way merge binds the scan's ordering against the scan output. A row-based scan like this
       // one always gets a `ProjectExec`, which truncates the ordering, but a columnar scan may get
       // nothing between it and the merge that does. So the merge is built right over the scan here.
-      val merged = GroupPartitionsExec(scan, enableSortedMerge = true).execute()
+      val merged =
+        GroupPartitionsExec(scan, sortedMergeOrdering = Some(scan.outputOrdering)).execute()
       assert(merged.isInstanceOf[SortedMergeCoalescedRDD[_]])
       val rows = merged.map(r => (r.getInt(0), r.getString(1))).collect().toSeq
       val expected = Seq((1, "aa"), (1, "bb"), (2, "cc"))
@@ -3996,6 +3997,14 @@ class KeyGroupedPartitioningSuite
     assert(reportingScans.length == 1)
     (plan, reportingScans.head, warnings)
   }
+
+  /** The output ordering of `scan`, as the names its sort orders reference and their direction. */
+  private def orderingNames(scan: BatchScanExec)
+      : Seq[(Seq[String], org.apache.spark.sql.catalyst.expressions.SortDirection)] =
+    scan.outputOrdering.map(o => (o.child.references.map(_.name).toSeq, o.direction))
+
+  private def sortsAbove(plan: SparkPlan, scan: BatchScanExec): Seq[SortExec] =
+    collect(plan) { case s: SortExec if s.exists(_ eq scan) => s }
 
   test("SPARK-59721: a reported partitioning with an unresolvable key is ignored") {
     // CustomReportingCatalog is not a FunctionCatalog, so a `bucket` key would be dropped even with
@@ -4078,6 +4087,79 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  test("SPARK-59981: a reported ordering that keeps no sort order falls back to the keys") {
+    withCustomReportingTable { reportingCatalog =>
+      reportingCatalog.reportedKeys = Seq(identity("id"))
+      // An empty report, one on `s`, which the join's projection prunes from the scan output, and
+      // one that starts with `s` and goes on with `data`, which is not a partition key.
+      val sOrder = sort(FieldReference("s"), SortDirection.ASCENDING)
+      val dataOrder = sort(FieldReference("data"), SortDirection.ASCENDING)
+      Seq(Seq.empty, Seq(sOrder), Seq(sOrder, dataOrder)).foreach { ordering =>
+        reportingCatalog.reportedOrdering = ordering
+        Seq(true, false).foreach { keyOrdering =>
+          withSQLConf(
+              SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> keyOrdering.toString) {
+            val (plan, reportingScan, warnings) = customReportingJoin()
+            assert(warnings.isEmpty, warnings)
+            // The report must reach the scan as it is, or this test would miss the fixed case.
+            assert(reportingScan.ordering.map(_.length) == Some(ordering.length))
+            if (keyOrdering) {
+              assert(orderingNames(reportingScan) == Seq((Seq("id"), Ascending)), ordering)
+              assert(sortsAbove(plan, reportingScan).isEmpty,
+                "the join should read the derived ordering")
+            } else {
+              assert(orderingNames(reportingScan).isEmpty, ordering)
+              assert(sortsAbove(plan, reportingScan).length == 1, ordering)
+            }
+          }
+        }
+      }
+
+      // With two splits under the key 1, a `GroupPartitionsExec` coalesces them. The ordering
+      // derived from an empty report survives that through `preserveKeyOrderingOnCoalesce`.
+      reportingCatalog.reportedOrdering = Seq.empty
+      sql(s"INSERT INTO $customReportingTableName VALUES (1, 'ab', named_struct('x', 11))")
+      withSQLConf(
+          SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
+        val df = customReportingJoinDf()
+        checkAnswer(df, Seq(Row("aa", "cc"), Row("ab", "cc"), Row("bb", "dd")))
+        val plan = df.queryExecution.executedPlan
+        val coalescing = collectAllGroupPartitions(plan)
+          .filter(_.groupedPartitions.exists(_._2.size > 1))
+        assert(coalescing.length == 1, "test setup: the two splits of the key 1 coalesce")
+        assert(coalescing.head.outputOrdering.map(_.child.references.map(_.name).toSeq) ==
+          Seq(Seq("id")))
+        assert(collect(plan) { case s: SortExec => s }.isEmpty)
+      }
+    }
+  }
+
+  test("SPARK-59981: a reported ordering that keeps a sort order is not replaced by the keys") {
+    withCustomReportingTable { reportingCatalog =>
+      reportingCatalog.reportedKeys = Seq(identity("id"))
+      val sOrder = sort(FieldReference("s"), SortDirection.ASCENDING)
+      val dataOrder = sort(FieldReference("data"), SortDirection.ASCENDING)
+      val idOrder = sort(FieldReference("id"), SortDirection.ASCENDING)
+      val idDescOrder = sort(FieldReference("id"), SortDirection.DESCENDING)
+      withSQLConf(SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "true") {
+        // `data` stays in the scan output, so it is kept and nothing is derived. After the pruned
+        // `s`, the sort order on the partition key `id` is kept as reported, with its direction.
+        Seq(
+          (Seq(dataOrder), Seq((Seq("data"), Ascending)), 1),
+          (Seq(sOrder, idOrder), Seq((Seq("id"), Ascending)), 0),
+          (Seq(sOrder, idDescOrder), Seq((Seq("id"), Descending)), 1)
+        ).foreach { case (ordering, expectedOrdering, expectedSorts) =>
+          reportingCatalog.reportedOrdering = ordering
+          val (plan, reportingScan, warnings) = customReportingJoin()
+          assert(warnings.isEmpty, warnings)
+          assert(orderingNames(reportingScan) == expectedOrdering, ordering)
+          assert(sortsAbove(plan, reportingScan).length == expectedSorts, ordering)
+        }
+      }
+    }
+  }
+
   test("SPARK-59721: a reported partition key that cannot be converted still fails") {
     val cases = Seq(
       (plusOneKey("id"), "id + 1"),
@@ -4093,6 +4175,19 @@ class KeyGroupedPartitioningSuite
           parameters = Map("expr" -> expr))
       }
     }
+  }
+
+  test("SPARK-59948: a scan's reported ordering on a nested field") {
+    val nestedItems = "nested_items"
+    createTable(nestedItems, Array(Column.create("id", LongType),
+      Column.create("s", new StructType().add("x", LongType))), Array.empty,
+      ordering = Array(sort(column("s.x"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)))
+    sql(s"INSERT INTO testcat.ns.$nestedItems VALUES " +
+      "(1, named_struct('x', 1L)), (2, named_struct('x', 2L))")
+
+    val df = sql(s"SELECT * FROM testcat.ns.$nestedItems SORT BY s.x")
+    assert(collect(df.queryExecution.executedPlan) { case s: SortExec => s }.isEmpty)
+    checkAnswer(df, Seq(Row(1L, Row(1L)), Row(2L, Row(2L))))
   }
 
   test("SPARK-47094: SPJ: Support compatible buckets") {
@@ -6576,24 +6671,28 @@ class KeyGroupedPartitioningSuite
   test("SPARK-59995: a scan's output ordering drops sort orders that hold a partition transform") {
     // `t1` reports a transform in the middle, so the leading run of its ordering stops there.
     // `t2` reports a transform key first. Each split holds a single key, so the sort order on `id`
-    // after it still holds. `t3` reports no ordering, so the scan derives one from its keys. In
-    // each case a sort on `id` right above the scan needs no `SortExec`. A `GROUP BY id` plans a
-    // `SortAggregateExec`. The query selects `ts`, so the transform's column stays in the scan
-    // output. Otherwise SPARK-59899's pruned-column handling would give the same orderings even
-    // without this fix.
+    // after it still holds. `t3` reports no ordering, so the scan derives one from its keys. `t4`
+    // reports only a transform key. Nothing of the report is left, so the scan falls back to its
+    // keys (SPARK-59981). In each case a sort on `id` right above the scan needs no `SortExec`. A
+    // `GROUP BY id` plans a `SortAggregateExec`. The query selects `ts`, so the transform's column
+    // stays in the scan output. Otherwise SPARK-59899's pruned-column handling would give the same
+    // orderings even without this fix.
     val table1 = "transform_order_t1"
     val table2 = "transform_order_t2"
     val table3 = "transform_order_t3"
+    val table4 = "transform_order_t4"
     def asc(expr: Expression): SortOrder = sort(expr, SortDirection.ASCENDING)
     createTable(table1, columns, Array(identity("id")),
       Array(asc(FieldReference("id")), asc(years("ts")), asc(FieldReference("data"))))
     createTable(table2, columns, Array(years("ts"), identity("id")),
       Array(asc(years("ts")), asc(FieldReference("id"))))
     createTable(table3, columns, Array(days("ts"), identity("id")))
+    createTable(table4, columns, Array(years("ts"), identity("id")),
+      Array(asc(years("ts"))))
     withSQLConf(
         SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "true",
         SQLConf.REPLACE_HASH_WITH_SORT_AGG_ENABLED.key -> "true") {
-      Seq(table1, table2, table3).foreach { table =>
+      Seq(table1, table2, table3, table4).foreach { table =>
         sql(s"INSERT INTO testcat.ns.$table VALUES (1, 'aa', cast('2020-01-01' as timestamp))")
         val df = sql(s"SELECT id, data, ts FROM testcat.ns.$table")
         val scan = collectScans(df.queryExecution.executedPlan).head
@@ -6638,7 +6737,7 @@ class KeyGroupedPartitioningSuite
     assert(merging.length == 1, "expected one k-way merge")
     assert(merging.head.child.output.exists(_.name == "arrive_time"),
       "test setup: arrive_time stays in the scan output")
-    assert(merging.head.child.outputOrdering.map(_.child.sql) == expectedOrdering)
+    assert(merging.head.outputOrdering.map(_.child.sql) == expectedOrdering)
     assert(merging.head.execute().isInstanceOf[SortedMergeCoalescedRDD[_]])
   }
 
@@ -6777,7 +6876,8 @@ class KeyGroupedPartitioningSuite
 
         // Flip only the ordering config. The plan above is already committed.
         withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "false") {
-          checkAnswer(df, orderedIdJoinRows)
+          // Without `checkToRDD`, so only the committed plan runs, not a newly planned one.
+          QueryTest.checkAnswer(df, orderedIdJoinRows, checkToRDD = false)
           // Re-collected, because under AQE `executedPlan` only reaches the final plan's nodes
           // once the query has run.
           val executed =
@@ -6790,6 +6890,91 @@ class KeyGroupedPartitioningSuite
           }
         }
       }
+    }
+  }
+
+  /**
+   * The setup of the SPARK-60044 tests. Creates `items`, which reports no ordering, so the scan
+   * derives [id, name] from its partition keys and drops the transform between them. The splits
+   * are sorted by the full key, so within id 1 the 'bb' split comes before the 'aa' one. Returns a
+   * window query that groups by id and orders by name. Under `kWayMergeWindowConfs` a k-way merge
+   * delivers that ordering, so EnsureRequirements adds no SortExec. The query selects
+   * `arrive_time`, so the transform's column stays in the scan output.
+   */
+  private def createKWayMergeWindowQuery(): String = {
+    createTable(items, itemsColumns, Array(identity("id"), days("arrive_time"), identity("name")))
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'bb', 10.0, cast('2021-01-01' as timestamp)), " +
+      "(1, 'aa', 20.0, cast('2022-01-01' as timestamp)), " +
+      "(2, 'cc', 30.0, cast('2021-01-01' as timestamp))")
+    s"""SELECT id, name, arrive_time, ROW_NUMBER() OVER (PARTITION BY id ORDER BY name) AS rn
+       |FROM testcat.ns.$items
+       |""".stripMargin
+  }
+
+  private val kWayMergeWindowConfs = Seq(
+    SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+    SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "true",
+    SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true")
+
+  private val kWayMergeWindowRows = Seq(
+    Row(1, "aa", Timestamp.valueOf("2022-01-01 00:00:00"), 1),
+    Row(1, "bb", Timestamp.valueOf("2021-01-01 00:00:00"), 2),
+    Row(2, "cc", Timestamp.valueOf("2021-01-01 00:00:00"), 1))
+
+  test("SPARK-60044: a planned k-way merge keeps its ordering after a later config change") {
+    // Turning partitionKeyOrdering off after planning empties the scan's ordering. The planned
+    // merge must still merge by [id, name]. Otherwise the window numbers the rows of id 1 in split
+    // order.
+    //
+    // Both AQE modes are covered, see the SPARK-59279 test above.
+    val query = createKWayMergeWindowQuery()
+    Seq(true, false).foreach { aqeEnabled =>
+      val confs = (SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled.toString) +:
+        kWayMergeWindowConfs
+      withSQLConf(confs: _*) {
+        val df = sql(query)
+        // Force the plan without executing it, so the k-way merge is decided under this config.
+        val plan = df.queryExecution.executedPlan
+        val merging = collectAllGroupPartitions(plan).filter(_.enableSortedMerge)
+        assert(merging.length == 1, "expected one k-way merge")
+        assert(merging.head.outputOrdering.map(_.child.sql) == Seq("id", "name"))
+        assert(collect(plan) { case s: SortExec => s }.isEmpty,
+          "the k-way merge satisfies the window's ordering, so no SortExec should be added")
+
+        // Flip only the key ordering config. The plan above is already committed.
+        withSQLConf(SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "false") {
+          assert(merging.head.child.outputOrdering.isEmpty,
+            "test setup: the scan no longer derives an ordering from its keys")
+          // Without `checkToRDD`, so only the committed plan runs, not a newly planned one.
+          QueryTest.checkAnswer(df, kWayMergeWindowRows, checkToRDD = false)
+          // Re-collected, because under AQE `executedPlan` only reaches the final plan's nodes
+          // once the query has run.
+          val executed = collectAllGroupPartitions(df.queryExecution.executedPlan)
+          assert(executed.map(_.outputOrdering.map(_.child.sql)) == Seq(Seq("id", "name")),
+            "the planned k-way merge must keep the ordering it was planned with")
+        }
+      }
+    }
+  }
+
+  test("SPARK-60044: the debug() helper runs a planned k-way merge") {
+    // Without AQE, `debug()` wraps every node of the executed plan in a `DebugExec`, including the
+    // nodes under a merging `GroupPartitionsExec`. That wrapper must not stop the planned merge.
+    import org.apache.spark.sql.execution.debug._
+    val query = createKWayMergeWindowQuery()
+    val confs = (SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") +: kWayMergeWindowConfs
+    withSQLConf(confs: _*) {
+      val df = sql(query)
+      val plan = df.queryExecution.executedPlan
+      assert(collectAllGroupPartitions(plan).exists(_.enableSortedMerge),
+        "test setup: the plan has a k-way merge")
+      df.debug()
+
+      // `debug()` returns nothing, so the merge is also checked under a `DebugExec` child.
+      val planned = collectAllGroupPartitions(plan).filter(_.enableSortedMerge).head
+      val wrapped = planned.withNewChildren(Seq(DebugExec(planned.child)))
+      assert(wrapped.execute().isInstanceOf[SortedMergeCoalescedRDD[_]])
     }
   }
 

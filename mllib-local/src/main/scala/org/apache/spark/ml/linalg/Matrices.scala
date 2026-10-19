@@ -21,6 +21,7 @@ import java.util.{Arrays, Random}
 
 import scala.collection.immutable
 import scala.collection.mutable.{ArrayBuffer, ArrayBuilder => MArrayBuilder, HashSet => MHashSet}
+import scala.util.hashing.MurmurHash3
 
 import breeze.linalg.{CSCMatrix => BSM, DenseMatrix => BDM, Matrix => BM}
 
@@ -332,7 +333,20 @@ class DenseMatrix @Since("2.0.0") (
   }
 
   override def hashCode: Int = {
-    Seq(numRows, numCols, toArray).##
+    // Matches SparseMatrix.hashCode (Breeze's QuasiTensor.hashCode) so that equal dense and
+    // sparse matrices have the same hash code. The values are visited in column major order
+    // and those with a zero hash code, such as 0.0 and -0.0, are skipped.
+    val data = if (isTransposed) toArray else values
+    var hash = 43
+    var i = 0
+    while (i < data.length) {
+      val valueHash = data(i).##
+      if (valueHash != 0) {
+        hash = MurmurHash3.mix(hash, valueHash)
+      }
+      i += 1
+    }
+    hash
   }
 
   private[ml] def asBreeze: BM[Double] = {
@@ -358,7 +372,7 @@ class DenseMatrix @Since("2.0.0") (
     values(index(i, j)) = v
   }
 
-  override def copy: DenseMatrix = new DenseMatrix(numRows, numCols, values.clone())
+  override def copy: DenseMatrix = new DenseMatrix(numRows, numCols, values.clone(), isTransposed)
 
   private[spark] def map(f: Double => Double) = new DenseMatrix(numRows, numCols, values.map(f),
     isTransposed)
@@ -697,7 +711,7 @@ class SparseMatrix @Since("2.0.0") (
   }
 
   override def copy: SparseMatrix = {
-    new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values.clone())
+    new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values.clone(), isTransposed)
   }
 
   private[spark] def map(f: Double => Double) =
