@@ -87,4 +87,15 @@ class CollationAggregationSuite
       }
     }
   }
+
+  test("SPARK-60309: mode folds a collated struct with a binary field by content") {
+    // (X'01', 'a') and (X'01', 'A') fold into one group (4) that outvotes (X'02', 'z') (3). The
+    // group keeps whichever of 'a' and 'A' it saw first, so only the binary field is checked.
+    checkAnswer(
+      sql(
+        """SELECT hex(mode(named_struct('b', b, 's', c COLLATE UTF8_LCASE)).b)
+          |FROM VALUES (X'01', 'a'), (X'01', 'a'), (X'01', 'A'), (X'01', 'A'),
+          |  (X'02', 'z'), (X'02', 'z'), (X'02', 'z') AS t(b, c)""".stripMargin),
+      Row("01"))
+  }
 }
