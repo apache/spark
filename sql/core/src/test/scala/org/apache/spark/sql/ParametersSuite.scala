@@ -547,6 +547,15 @@ class ParametersSuite extends SharedSparkSession {
         """EXECUTE IMMEDIATE 'SELECT ? = \'12:00:00.100000001\''
           |USING TIME '12:00:00.100000000'""".stripMargin),
       Row(false))
+    // Nested values are rendered element by element, so they keep the precision as well.
+    Seq(
+      "array(TIME '12:00:00.100000000')" -> "array<time(9)>",
+      "named_struct('f', TIME '12:00:00.100000000')" -> "struct<f:time(9)>",
+      "map(1, TIME '12:00:00.100000000')" -> "map<int,time(9)>"
+    ).foreach { case (arg, expected) =>
+      val df = spark.sql("SELECT :c", args = Map("c" -> expr(arg)))
+      assert(df.schema.head.dataType.simpleString === expected)
+    }
   }
 
   test("unused positional arguments") {

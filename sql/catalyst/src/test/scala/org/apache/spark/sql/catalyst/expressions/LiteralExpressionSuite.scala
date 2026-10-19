@@ -731,6 +731,16 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         assert(lit.sql === s"TIME '$str'")
       }
     }
+
+    // A value with more fractional digits than the precision is truncated to the precision.
+    val nanos = DateTimeUtils.localTimeToNanos(LocalTime.of(23, 59, 59, 123456789))
+    Seq(7, 8).foreach { p =>
+      val str = "23:59:59.123456789".take(9 + p)
+      val lit = Literal(nanos, TimeType(p))
+      assert(lit.sql === s"TIME '$str'")
+      assert(Literal.fromSQL(lit.sql) ===
+        Literal(DateTimeUtils.localTimeToNanos(LocalTime.parse(str)), TimeType(p)))
+    }
   }
 
   test("context independent foldable literals") {

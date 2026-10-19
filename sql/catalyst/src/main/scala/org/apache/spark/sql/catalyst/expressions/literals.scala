@@ -642,10 +642,9 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
       ts + "." + "0" * precision
     } else {
       val fracLen = ts.length - dotIdx - 1
-      // fracLen can never exceed precision for the nanosecond timestamps: formatNanos/
-      // formatWithoutTimeZoneNanos truncate the value to `precision` digits before formatting,
-      // and the fractionFormatter only strips trailing zeros (never adds digits). A TIME value
-      // is formatted without truncation, so the else branch keeps a longer fraction as is.
+      // fracLen can never exceed precision: formatNanos/formatWithoutTimeZoneNanos truncate
+      // the value to `precision` digits before formatting, and the fractionFormatter only
+      // strips trailing zeros (never adds digits); the else branch handles fracLen == precision.
       if (fracLen < precision) ts + "0" * (precision - fracLen) else ts
     }
   }
@@ -689,10 +688,12 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
     case (v: Decimal, t: DecimalType) => s"${v}BD"
     case (v: Int, DateType) =>
       s"DATE '$toString'"
-    // toString strips trailing zeros, but the parser derives TIME(7)..TIME(9) from the number of
-    // fractional digits (6 or fewer give TIME(6)), so pad back to exactly `precision` digits.
-    case (_: Long, t: TimeType) if t.precision > TimeType.MICROS_PRECISION =>
-      s"TIME '${padToNanosPrecision(toString, t.precision)}'"
+    // The parser derives TIME(7)..TIME(9) from the number of fractional digits (6 or fewer give
+    // TIME(6)), so render exactly `precision` digits: truncate the value like formatNanos does
+    // for the nanosecond timestamps, and pad back the trailing zeros the formatter strips.
+    case (v: Long, t: TimeType) if t.precision > TimeType.MICROS_PRECISION =>
+      val truncated = DateTimeUtils.truncateTimeToPrecision(v, t.precision)
+      s"TIME '${padToNanosPrecision(new FractionTimeFormatter().format(truncated), t.precision)}'"
     case (_: Long, _: TimeType) =>
       s"TIME '$toString'"
     case (v: Long, TimestampType) =>
