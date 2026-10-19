@@ -314,19 +314,49 @@ less. Check that the one you pick supports what you need before building on it.
 ## Running a job
 
 There is no separate submit step for a Spark Connect job. Your program is the job, and running it
-sends the work:
+sends the work. The machine that runs it needs the client library and the server's address, not a
+Spark download, a JVM (for Python and Rust) or access to the cluster manager. The program's exit
+status is the job's status: an unhandled Spark error ends the process with a non-zero exit code,
+which is what a scheduler or CI step checks.
 
 ```bash
-export SPARK_REMOTE="sc://localhost:15002"
-python my_pipeline.py
+export SPARK_REMOTE="sc://spark-connect.example.com:15002"
+
+python my_pipeline.py          # Python: the client package only
+java -jar my-pipeline.jar      # Scala or Java: a jar built against spark-connect-client-jvm
+./target/release/my-pipeline   # Rust: a plain binary
 ```
+
+The Python client reads `SPARK_REMOTE` when the builder does not call `remote()`, so a program
+that builds its session with a plain `SparkSession.builder.getOrCreate()` runs as a Spark Connect
+client when the variable is set and as a classic job when it is not. The Scala client reads the
+variable too, and also the `spark.remote` system property. The Rust client takes the address from
+the builder only.
 
 Deployment settings that used to be `spark-submit` flags move elsewhere: `--py-files`, `--jars`
 and `--files` become `addArtifact` calls in the application (see
 [Shipping code and files](#shipping-code-and-files)), while `--master`, `--packages`,
 `--driver-memory` and `--conf` for static settings become part of the server's startup command.
-Where a scheduler expects `spark-submit`, `spark-submit --remote sc://host:15002 app.py` starts the
-client and nothing else.
+
+### Where a scheduler expects spark-submit
+
+`spark-submit` from a Spark download can start the client for you. It cannot take `--master` or
+`--deploy-mode` together with `--remote`; the server already made those choices.
+
+```bash
+spark-submit --remote sc://spark-connect.example.com:15002 --class Main my-pipeline.jar
+spark-submit --remote sc://spark-connect.example.com:15002 --conf spark.api.mode=connect my_pipeline.py
+```
+
+For a Python file the `spark.api.mode=connect` setting is required: without it `spark-submit`
+starts the program as a classic job, which fails with `MASTER_URL_NOT_SET` because there is no
+master. Setting `SPARK_REMOTE` in the environment instead of passing `--remote` has the same
+effect, since the Python process inherits it. For a jar, `--remote` alone is enough; do not add
+`spark.api.mode=connect` there, because for JVM programs that setting starts (or reuses) a local
+server instead of connecting to the one in `--remote`.
+
+Each run of `spark-submit` still launches a JVM on the submitting machine, so a plain
+`python my_pipeline.py` with `SPARK_REMOTE` set is lighter and needs no Spark download.
 
 ### An existing job, almost unchanged
 
