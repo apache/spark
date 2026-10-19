@@ -28,7 +28,7 @@ import org.scalatest.GivenWhenThen
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{BroadcastValueProjection,
-  DynamicPruningExpression, DynamicPruningSubquery, Expression}
+  DynamicPruningExpression, DynamicPruningSubquery, Expression, Literal}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.optimizer.BuildRight
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, Inner, LeftAnti}
@@ -2115,19 +2115,26 @@ abstract class DynamicPartitionPruningDataSourceSuiteBase
 
   test("RUNTIME_FILTER hint never prunes the hinted side") {
     // Both tables are partitioned by `store_id`, so DPP could prune either; the hint decides
-    // which one it prunes, and it is never the hinted side.
+    // which one it prunes, and it is never the hinted side. A DPP filter planned as `true` prunes
+    // nothing, so it is not counted.
+    def isPruning(e: Expression): Boolean = e match {
+      case DynamicPruningExpression(Literal.TrueLiteral) => false
+      case _: DynamicPruningExpression => true
+      case _ => false
+    }
     def prunedTables(df: DataFrame): Seq[String] = {
       df.collect()
       collect(df.queryExecution.executedPlan) {
-        case s: FileSourceScanExec
-            if s.partitionFilters.exists(_.isInstanceOf[DynamicPruningExpression]) =>
+        case s: FileSourceScanExec if s.partitionFilters.exists(isPruning) =>
           s.tableIdentifier.map(_.table).getOrElse("")
-        case b: BatchScanExec
-            if b.runtimeFilters.exists(_.isInstanceOf[DynamicPruningExpression]) =>
+        case b: BatchScanExec if b.runtimeFilters.exists(isPruning) =>
           b.table.name().split('.').last
       }
     }
+    // Without a broadcast to reuse, an unhinted DPP filter is planned only when it may re-execute
+    // the filtering side.
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       val expected = sql(
         "SELECT f.date_id, c.code FROM fact_sk f JOIN code_stats c ON f.store_id = c.store_id")
@@ -2150,12 +2157,12 @@ abstract class DynamicPartitionPruningDataSourceSuiteBase
         ("fact_sk f JOIN code_stats c ON f.store_id = c.store_id WHERE c.code < 40",
           "RUNTIME_FILTER(f)", Seq("fact_sk"), Seq("code_stats")),
         // A left outer join cannot prune its left side, leaving only the hinted right side.
-        ("fact_sk f LEFT JOIN code_stats c ON f.store_id = c.store_id WHERE f.units_sold = 50",
-          "RUNTIME_FILTER(c)", Seq("code_stats"), Nil)
+        ("dim_stats s LEFT JOIN fact_stats f ON s.store_id = f.store_id WHERE s.country = 'DE'",
+          "RUNTIME_FILTER(f)", Seq("fact_stats"), Nil)
       ).foreach { case (from, hint, unhintedPruned, hintedPruned) =>
-        val unhinted = sql(s"SELECT f.date_id, c.code FROM $from")
+        val unhinted = sql(s"SELECT * FROM $from")
         assert(prunedTables(unhinted) == unhintedPruned)
-        val hinted = sql(s"SELECT /*+ $hint */ f.date_id, c.code FROM $from")
+        val hinted = sql(s"SELECT /*+ $hint */ * FROM $from")
         assert(prunedTables(hinted) == hintedPruned)
         checkAnswer(hinted, unhinted.collect().toSeq)
       }

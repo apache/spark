@@ -102,8 +102,8 @@ case class HintInfo(
    * both have a strategy defined but the join strategies are different.
    *
    * A runtime filter hint is not a join strategy, so it composes with one rather than overriding
-   * it: the merged [[HintInfo]] is a runtime filter source if either side is. Only the strategy
-   * is reported as overridden, since only the strategy is.
+   * it: the merged [[HintInfo]] is a runtime filter source if either side is, and only a strategy
+   * conflict is reported.
    */
   def merge(other: HintInfo, hintErrorHandler: HintErrorHandler): HintInfo = {
     if (this.strategy.isDefined &&
@@ -263,8 +263,8 @@ trait HintErrorHandler {
   def joinNotFoundForJoinHint(hint: HintInfo): Unit
 
   /**
-   * Callback for a join hint specified on a join that doesn't support this build side or
-   * doesn't have equi-join keys for equi-join.
+   * Callback for a join hint that cannot be applied to its join, e.g. one that doesn't support
+   * this build side or doesn't have equi-join keys, with `reason` naming why.
    */
   def joinHintNotSupported(hint: HintInfo, reason: String): Unit
 
