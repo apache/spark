@@ -674,7 +674,65 @@ object VectorAvg {
         newCount: Long): Unit = {
       // Update running average: new_avg = old_avg + (new_value - old_avg) / new_count
       val invCount = 1.0f / newCount
+      if (dim < 8) {
+        updateRemainingElements(accBytes, inputArray, 0, dim, invCount)
+      } else {
+        updateElementsInBlocks(accBytes, inputArray, dim, invCount)
+      }
+    }
+
+    private def updateElementsInBlocks(
+        accBytes: Array[Byte],
+        inputArray: ArrayData,
+        dim: Int,
+        invCount: Float): Unit = {
       var i = 0
+      while (i <= dim - 8) {
+        val off = Platform.BYTE_ARRAY_OFFSET + i.toLong * 4
+        val oldAvg0 = Platform.getFloat(accBytes, off)
+        val delta0 = inputArray.getFloat(i) - oldAvg0
+        val oldAvg1 = Platform.getFloat(accBytes, off + 4)
+        val delta1 = inputArray.getFloat(i + 1) - oldAvg1
+        val oldAvg2 = Platform.getFloat(accBytes, off + 8)
+        val delta2 = inputArray.getFloat(i + 2) - oldAvg2
+        val oldAvg3 = Platform.getFloat(accBytes, off + 12)
+        val delta3 = inputArray.getFloat(i + 3) - oldAvg3
+        val oldAvg4 = Platform.getFloat(accBytes, off + 16)
+        val delta4 = inputArray.getFloat(i + 4) - oldAvg4
+        val oldAvg5 = Platform.getFloat(accBytes, off + 20)
+        val delta5 = inputArray.getFloat(i + 5) - oldAvg5
+        val oldAvg6 = Platform.getFloat(accBytes, off + 24)
+        val delta6 = inputArray.getFloat(i + 6) - oldAvg6
+        val oldAvg7 = Platform.getFloat(accBytes, off + 28)
+        val delta7 = inputArray.getFloat(i + 7) - oldAvg7
+        val deltaSum = ((delta0 + delta1) + (delta2 + delta3)) +
+          ((delta4 + delta5) + (delta6 + delta7))
+        if (!java.lang.Float.isFinite(deltaSum)) {
+          updateRemainingElements(accBytes, inputArray, i, dim, invCount)
+          return
+        }
+        Platform.putFloat(accBytes, off, oldAvg0 + delta0 * invCount)
+        Platform.putFloat(accBytes, off + 4, oldAvg1 + delta1 * invCount)
+        Platform.putFloat(accBytes, off + 8, oldAvg2 + delta2 * invCount)
+        Platform.putFloat(accBytes, off + 12, oldAvg3 + delta3 * invCount)
+        Platform.putFloat(accBytes, off + 16, oldAvg4 + delta4 * invCount)
+        Platform.putFloat(accBytes, off + 20, oldAvg5 + delta5 * invCount)
+        Platform.putFloat(accBytes, off + 24, oldAvg6 + delta6 * invCount)
+        Platform.putFloat(accBytes, off + 28, oldAvg7 + delta7 * invCount)
+        i += 8
+      }
+      if (i < dim) {
+        updateRemainingElements(accBytes, inputArray, i, dim, invCount)
+      }
+    }
+
+    private def updateRemainingElements(
+        accBytes: Array[Byte],
+        inputArray: ArrayData,
+        start: Int,
+        dim: Int,
+        invCount: Float): Unit = {
+      var i = start
       while (i < dim) {
         val off = Platform.BYTE_ARRAY_OFFSET + i.toLong * 4
         val oldAvg = Platform.getFloat(accBytes, off)
