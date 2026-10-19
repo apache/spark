@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftOuter, RightOuter}
+import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertIntoDir, InsertIntoStatement, LogicalPlan, Project, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, StreamingSourceIdentifyingName, Unassigned}
@@ -544,6 +544,8 @@ object DataSourceStrategy
       case Inner => Some(V2JoinType.INNER_JOIN)
       case LeftOuter => Some(V2JoinType.LEFT_OUTER_JOIN)
       case RightOuter => Some(V2JoinType.RIGHT_OUTER_JOIN)
+      case LeftSemi => Some(V2JoinType.LEFT_SEMI_JOIN)
+      case LeftAnti => Some(V2JoinType.LEFT_ANTI_JOIN)
       case _ => None
     }
   }
