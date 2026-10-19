@@ -22,7 +22,8 @@ import at runtime, as elsewhere in the worker.
 """
 
 from collections.abc import Callable, Iterator
-from typing import TYPE_CHECKING, Any, NamedTuple, Protocol, TypeVar
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 
 if TYPE_CHECKING:
     import pyarrow as pa
@@ -39,7 +40,8 @@ InputBatch = TypeVar("InputBatch")
 OutputBatch = TypeVar("OutputBatch")
 
 
-class UDF(NamedTuple):
+@dataclass(frozen=True)
+class UDF:
     """One UDF as read by ``read_single_udf``; each handler takes the fields it needs."""
 
     # The chained function wrapped for profiling and, for most eval types, in
@@ -62,7 +64,8 @@ class UDTFInstance(Protocol):
     def eval(self, *args: Any, **kwargs: Any) -> Any: ...
 
 
-class UDTF(NamedTuple):
+@dataclass(frozen=True)
+class UDTF:
     """The UDTF as read by ``read_single_udtf``."""
 
     # Wrapped in the handler's partition_wrapper when its TABLE argument has PARTITION BY
