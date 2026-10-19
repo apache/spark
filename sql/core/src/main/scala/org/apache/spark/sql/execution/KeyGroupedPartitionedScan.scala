@@ -18,13 +18,35 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.RowOrdering
+import org.apache.spark.sql.catalyst.expressions.{Expression, RowOrdering}
 import org.apache.spark.sql.catalyst.plans.physical.{KeyGroupedPartitioning, KeyGroupedShuffleSpec}
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.execution.joins.StoragePartitionJoinParams
 
 /** Base trait for a data source scan capable of producing a key-grouped output. */
 trait KeyGroupedPartitionedScan[T] {
+  private def joinKeyPositionsForOutput(
+      spjParams: StoragePartitionJoinParams): Option[Seq[Int]] = {
+    if (spjParams.preserveFullOutputPartitioning) None else spjParams.joinKeyPositions
+  }
+
+  private def projectCommonPartitionValuesIfNeeded(
+      commonPartValues: Seq[(InternalRow, Int)],
+      baseExpressions: Seq[Expression],
+      joinKeyPositions: Option[Seq[Int]]): Seq[(InternalRow, Int)] = {
+    joinKeyPositions match {
+      case Some(projectionPositions) =>
+        commonPartValues.map { case (partValue, numSplits) =>
+          if (partValue.numFields == baseExpressions.length) {
+            (KeyGroupedPartitioning.project(baseExpressions, projectionPositions, partValue),
+              numSplits)
+          } else {
+            (partValue, numSplits)
+          }
+        }
+      case None => commonPartValues
+    }
+  }
   /**
    * The output partitioning of this scan after applying any pushed-down SPJ parameters.
    *
@@ -34,7 +56,8 @@ trait KeyGroupedPartitionedScan[T] {
   def getOutputKeyGroupedPartitioning(
       basePartitioning: KeyGroupedPartitioning,
       spjParams: StoragePartitionJoinParams): KeyGroupedPartitioning = {
-    val projectedExpressions = spjParams.joinKeyPositions match {
+    val outputJoinKeyPositions = joinKeyPositionsForOutput(spjParams)
+    val projectedExpressions = outputJoinKeyPositions match {
       case Some(projectionPositions) =>
         projectionPositions.map(i => basePartitioning.expressions(i))
       case _ => basePartitioning.expressions
@@ -43,12 +66,15 @@ trait KeyGroupedPartitionedScan[T] {
     val newPartValues = spjParams.commonPartitionValues match {
       case Some(commonPartValues) =>
         // We allow duplicated partition values if
-        // `spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled` is true
-         commonPartValues.flatMap {
+        // `spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled` is true.
+        // Project common values when join keys are a subset of the partition keys.
+        val projectedCommonPartValues = projectCommonPartitionValuesIfNeeded(
+          commonPartValues, basePartitioning.expressions, outputJoinKeyPositions)
+         projectedCommonPartValues.flatMap {
            case (partValue, numSplits) => Seq.fill(numSplits)(partValue)
          }
       case None =>
-        spjParams.joinKeyPositions match {
+        outputJoinKeyPositions match {
           case Some(projectionPositions) => basePartitioning.partitionValues.map { r =>
             val projectedRow = KeyGroupedPartitioning.project(basePartitioning.expressions,
               projectionPositions, r)
@@ -59,7 +85,7 @@ trait KeyGroupedPartitionedScan[T] {
     }
     basePartitioning.copy(expressions = projectedExpressions, numPartitions = newPartValues.length,
       partitionValues = newPartValues,
-      originalPartitionValues = spjParams.joinKeyPositions match {
+      originalPartitionValues = outputJoinKeyPositions match {
         case Some(projectionPositions) => basePartitioning.originalPartitionValues.map(
           KeyGroupedPartitioning.project(basePartitioning.expressions, projectionPositions, _))
         case None => basePartitioning.originalPartitionValues
@@ -122,8 +148,9 @@ trait KeyGroupedPartitionedScan[T] {
     if (spjParams.commonPartitionValues.isDefined && spjParams.applyPartialClustering) {
       // A mapping from the common partition values to how many splits the partition
       // should contain.
-      val commonPartValuesMap = spjParams.commonPartitionValues
-          .get
+      val commonPartValuesForGrouping = projectCommonPartitionValuesIfNeeded(
+        spjParams.commonPartitionValues.get, expressions, spjParams.joinKeyPositions)
+      val commonPartValuesMap = commonPartValuesForGrouping
           .map(t => (InternalRowComparableWrapper(t._1, partExpressions), t._2))
           .toMap
       val filteredGroupedPartitions = finalGroupedPartitions.filter {
@@ -154,7 +181,9 @@ trait KeyGroupedPartitionedScan[T] {
 
       // Now fill missing partition keys with empty partitions
       val partitionMapping = nestGroupedPartitions.toMap
-      spjParams.commonPartitionValues.get.flatMap {
+      val commonPartValues = projectCommonPartitionValuesIfNeeded(
+        spjParams.commonPartitionValues.get, expressions, spjParams.joinKeyPositions)
+      commonPartValues.flatMap {
         case (partValue, numSplits) =>
           // Use empty partition for those partition values that are not present.
           partitionMapping.getOrElse(
