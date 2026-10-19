@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.streaming
 
+import java.io.File
+
 import org.apache.hadoop.fs.Path
 import org.scalatest.Tag
 
 import org.apache.spark.SparkIllegalArgumentException
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
 import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinExec
@@ -31,6 +34,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.util.Utils
 
 /**
  * Trait that overrides test execution to run with state format version 4.
@@ -542,7 +546,73 @@ class StreamingInnerJoinV4Suite
 @SlowSQLTest
 class StreamingOuterJoinV4Suite
   extends StreamingOuterJoinBase
-  with TestWithV4StateFormat
+  with TestWithV4StateFormat {
+
+  import testImplicits._
+
+  for (history <- Seq("continuous", "restart", "old checkpoint")) {
+    test(s"V4 eviction includes newly admitted rows below the previous bound, $history") {
+      val leftInput = MemoryStream[(Int, Int)]
+      val rightInput = MemoryStream[(Int, Int)]
+      val left = leftInput.toDF().toDF("leftKey", "time")
+        .select($"leftKey", timestamp_seconds($"time").as("leftTime"))
+        .withWatermark("leftTime", "0 seconds")
+      val right = rightInput.toDF().toDF("rightKey", "time")
+        .select($"rightKey", timestamp_seconds($"time").as("rightTime"))
+        .withWatermark("rightTime", "0 seconds")
+      val joined = left.join(right,
+        expr("leftKey = rightKey AND leftTime > rightTime + INTERVAL 5 SECONDS"),
+        "left_outer")
+        .select($"leftKey", $"rightKey", $"leftTime".cast("long"), $"rightTime".cast("long"))
+
+      withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+        withTempDir { checkpointDir =>
+          val start = StartStream(checkpointLocation = checkpointDir.getCanonicalPath)
+          val setup = if (history == "old checkpoint") {
+            // Written by 2dad66372a4 with this query and one shuffle partition, after the
+            // three input batches below. The old code leaves (1, 12) in state without output.
+            Utils.unpack(new File(getClass.getResource(
+              "/structured-streaming/v4-join-skipped-row-checkpoint.zip").toURI), checkpointDir)
+            // Only relocate the fixture's schema path; keep saved rows and offsets unchanged.
+            val statePath = new Path(checkpointDir.getCanonicalPath, "state/0")
+            val metadataPath = new Path(statePath, "_metadata/v2/0")
+            val fm = CheckpointFileManager.create(statePath, spark.sessionState.newHadoopConf())
+            val metadata = OperatorStateMetadataUtils.readMetadata(fm.open(metadataPath), 2)
+              .get.asInstanceOf[OperatorStateMetadataV2]
+            val relocated = metadata.copy(stateStoreInfo = metadata.stateStoreInfo.map { store =>
+              store.copy(stateSchemaFilePaths = store.stateSchemaFilePaths.map { path =>
+                new Path(checkpointDir.getCanonicalPath, path).toString
+              })
+            })
+            OperatorStateMetadataUtils.writeMetadata(
+              fm.createAtomic(metadataPath, overwriteIfPossible = true), relocated, metadataPath)
+            leftInput.addData((9, 20))
+            rightInput.addData((9, 10))
+            rightInput.addData((2, 20))
+            leftInput.addData((1, 12))
+            rightInput.addData((2, 30))
+            Seq(start)
+          } else {
+            val initial = Seq(start,
+              MultiAddData(leftInput, (9, 20))(rightInput, (9, 10)),
+              CheckNewAnswer(Row(9, 9, 20, 10)),
+              AddData(rightInput, (2, 20)), CheckNewAnswer())
+            initial ++ (if (history == "restart") Seq(StopStream, start) else Nil)
+          }
+          // The row at 12 seconds was admitted above the 10-second late-event watermark,
+          // but below the previous state cutoff of 15 seconds. It still needs finalization.
+          val trigger = if (history == "old checkpoint") {
+            AddData(rightInput, (2, 40))
+          } else {
+            MultiAddData(leftInput, (1, 12))(rightInput, (2, 30))
+          }
+          testStream(joined)((setup ++ Seq(trigger, CheckNewAnswer(Row(1, null, 12, null)),
+            AddData(rightInput, (2, 50)), CheckNewAnswer(), StopStream)): _*)
+        }
+      }
+    }
+  }
+}
 
 @SlowSQLTest
 class StreamingFullOuterJoinV4Suite

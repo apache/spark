@@ -251,12 +251,14 @@ object StreamingSymmetricHashJoinHelper extends Logging {
           attributesWithEventWatermark = AttributeSet(otherSideInputAttributes),
           condition,
           eventTimeWatermarkForEviction)
-        val prevStateValueWatermark = eventTimeWatermarkForLateEvents.flatMap { _ =>
+        // A cutoff ahead of the late-event watermark can skip newly admitted rows. Scan from
+        // the beginning in that case, including rows skipped by older code in a checkpoint.
+        val prevStateValueWatermark = eventTimeWatermarkForLateEvents.flatMap { lateWatermark =>
           StreamingJoinHelper.getStateValueWatermark(
             attributesToFindStateWatermarkFor = AttributeSet(oneSideInputAttributes),
             attributesWithEventWatermark = AttributeSet(otherSideInputAttributes),
             condition,
-            eventTimeWatermarkForLateEvents)
+            eventTimeWatermarkForLateEvents).filter(_ <= lateWatermark)
         }
         val inputAttributeWithWatermark = oneSideInputAttributes.find(_.metadata.contains(delayKey))
         val expr = watermarkExpression(inputAttributeWithWatermark, stateValueWatermark)
