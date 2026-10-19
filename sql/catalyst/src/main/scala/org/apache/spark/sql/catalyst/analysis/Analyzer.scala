@@ -4120,10 +4120,12 @@ class Analyzer(
         (attributeName, keyName) => resolver(attributeName, keyName)
       )
 
+    val join = Join(left, right, joinType, newCondition, hint)
     NaturalAndUsingJoinResolution.buildUsingJoinProject(
       projectList,
       hiddenList,
-      Join(left, right, joinType, newCondition, hint))
+      join,
+      join.metadataOutput)
   }
 
   /**

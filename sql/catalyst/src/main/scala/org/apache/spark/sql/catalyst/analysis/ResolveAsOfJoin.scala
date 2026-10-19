@@ -106,7 +106,11 @@ object ResolveAsOfJoin extends Rule[LogicalPlan] with SQLConfHelper {
       }
       usingProjection match {
         case Some((projectList, hiddenList)) =>
-          NaturalAndUsingJoinResolution.buildUsingJoinProject(projectList, hiddenList, resolvedJoin)
+          NaturalAndUsingJoinResolution.buildUsingJoinProject(
+            projectList,
+            hiddenList,
+            resolvedJoin,
+            resolvedJoin.metadataOutput)
         case None => resolvedJoin
       }
   }

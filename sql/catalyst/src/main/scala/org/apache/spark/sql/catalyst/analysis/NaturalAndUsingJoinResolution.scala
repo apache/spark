@@ -87,17 +87,19 @@ object NaturalAndUsingJoinResolution extends DataTypeErrorsBase with SQLConfHelp
 
   /**
    * Wraps a NATURAL or USING join in a [[Project]] that hides `hiddenList` (the duplicate join
-   * keys). It also passes up the hidden columns of nested NATURAL and USING joins.
+   * keys). It also passes up the hidden columns of nested NATURAL and USING joins, taken from
+   * `joinHiddenOutput`.
    */
   def buildUsingJoinProject(
       projectList: Seq[NamedExpression],
       hiddenList: Seq[Attribute],
-      join: LogicalPlan): Project = {
+      join: LogicalPlan,
+      joinHiddenOutput: Seq[Attribute]): Project = {
     val project = Project(projectList, join)
     project.setTagValue(
       Project.hiddenOutputTag,
       hiddenList.map(_.markAsQualifiedAccessOnly()) ++
-        join.metadataOutput.filter(_.qualifiedAccessOnly))
+        joinHiddenOutput.filter(_.qualifiedAccessOnly))
     project
   }
 
