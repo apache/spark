@@ -1180,7 +1180,11 @@ object SQLConf {
         "join, every clustering key must be covered by some partition key, rather than matching " +
         "the partition keys positionally, so a column partitioned by more than one transform " +
         "does not prevent shuffle elimination; hash partitioning deliberately keeps the " +
-        "positional match.")
+        "positional match. The same coverage rule applies when " +
+        "spark.sql.sources.v2.bucketing.shuffle.enabled shuffles only one side onto the " +
+        "partition keys of the other. Both storage-partitioned cases read " +
+        "spark.sql.sources.v2.bucketing.requireAllClusterKeysForCoPartition.enabled, which " +
+        "defaults to this config.")
       .version("3.3.0")
       .booleanConf
       .createWithDefault(true)
@@ -2583,6 +2587,18 @@ object SQLConf {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
+
+  val V2_BUCKETING_REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION =
+    buildConf("spark.sql.sources.v2.bucketing.requireAllClusterKeysForCoPartition.enabled")
+      .doc("When true, a storage-partitioned join, or the one-side shuffle of " +
+        s"${V2_BUCKETING_SHUFFLE_ENABLED.key}, runs on the partition keys only if they cover " +
+        "every join, cogroup or MERGE key. Set it to false to also allow partition keys that " +
+        "cover only some of those keys, at the risk of data skew and reduced parallelism from " +
+        "the coarser storage partitioning. Hash partitionings still follow " +
+        s"${REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key}. Defaults to that config.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .fallbackConf(REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION)
 
    val V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS =
     buildConf("spark.sql.sources.v2.bucketing.allowKeysSubsetOfPartitionKeys.enabled")
@@ -9635,6 +9651,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def v2BucketingShuffleEnabled: Boolean =
     getConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED)
+
+  def v2BucketingRequireAllClusterKeysForCoPartition: Boolean =
+    getConf(SQLConf.V2_BUCKETING_REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION)
 
   def v2BucketingAllowKeysSubsetOfPartitionKeys: Boolean =
     getConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS)
