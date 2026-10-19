@@ -143,7 +143,7 @@ class RangeIndexSuite extends SparkFunSuite {
     // If build() captured keys or rows by reference instead of copying them, every stored
     // entry would collapse to the iterator's last value once the shared buffer is mutated
     // again after the build-side iterator is drained -- exactly what a broadcast's row
-    // iterator does once BroadcastExchangeExec finishes feeding it to RangeBroadcastMode.
+    // iterator does once BroadcastExchangeExec finishes feeding it to RangeRelationBroadcastMode.
     val n = 50
     val buildKeys = Seq(
       BoundReference(0, IntegerType, nullable = true),
@@ -182,7 +182,7 @@ class RangeIndexSuite extends SparkFunSuite {
 
   test("an inverted build interval reaches the windows the condition accepts") {
     // Int keys route to the long index, so this also pins swap normalization there.
-    val index = RangeBroadcastMode(
+    val index = RangeRelationBroadcastMode(
       Seq(BoundReference(0, IntegerType, nullable = true),
         BoundReference(1, IntegerType, nullable = true)),
       IntervalIndexKind)
@@ -551,11 +551,11 @@ class RangeIndexSuite extends SparkFunSuite {
       // reader answers every family.
       val interval = buildIntervals(dt, Seq((lo, hi, row(5)), (hi, lo, row(6))))
       val point = buildPoints(dt, Seq((probe, row(7))))
-      val routedInterval = RangeBroadcastMode(
+      val routedInterval = RangeRelationBroadcastMode(
         Seq(BoundReference(1, dt, nullable = true), BoundReference(2, dt, nullable = true)),
         IntervalIndexKind)
         .transform(Array(InternalRow(5, lo, hi), InternalRow(6, hi, lo)))
-      val routedPoint = RangeBroadcastMode(
+      val routedPoint = RangeRelationBroadcastMode(
         Seq(BoundReference(1, dt, nullable = true)), PointIndexKind)
         .transform(Array(InternalRow(7, probe)))
 
@@ -659,29 +659,40 @@ class RangeIndexSuite extends SparkFunSuite {
 
   test("broadcast modes route fixed-width keys to the long indexes") {
     // Both build keys are long-convertible: the long interval index.
-    assert(RangeBroadcastMode(
+    assert(RangeRelationBroadcastMode(
       Seq(BoundReference(0, IntegerType, nullable = true),
         BoundReference(1, IntegerType, nullable = true)),
       IntervalIndexKind)
       .transform(Array(InternalRow(0, 10, 1))).isInstanceOf[LongIntervalIndex])
-    assert(RangeBroadcastMode(
+    assert(RangeRelationBroadcastMode(
       Seq(BoundReference(0, IntegerType, nullable = true)), PointIndexKind)
       .transform(Array(InternalRow(5, 1))).isInstanceOf[LongPointIndex])
     // Floating point has no bit-preserving SQL order, and strings are not one long.
-    assert(RangeBroadcastMode(
+    assert(RangeRelationBroadcastMode(
       Seq(BoundReference(0, FloatType, nullable = true)), PointIndexKind)
       .transform(Array(InternalRow(1.0f, 1))).isInstanceOf[PointIndex])
-    assert(RangeBroadcastMode(
+    assert(RangeRelationBroadcastMode(
       Seq(BoundReference(0, StringType, nullable = true),
         BoundReference(1, StringType, nullable = true)),
       IntervalIndexKind)
       .transform(Array(InternalRow(
         UTF8String.fromString("a"), UTF8String.fromString("b"), 1))).isInstanceOf[IntervalIndex])
+    // A compact decimal (precision <= 18) is representable as a scaled long.
+    assert(RangeRelationBroadcastMode(
+      Seq(BoundReference(0, DecimalType(10, 2), nullable = true)), PointIndexKind)
+      .transform(Array(InternalRow(Decimal(1.0), 1))).isInstanceOf[LongPointIndex])
+    assert(RangeRelationBroadcastMode(
+      Seq(BoundReference(0, DecimalType(18, 2), nullable = true)), PointIndexKind)
+      .transform(Array(InternalRow(Decimal(1.0), 1))).isInstanceOf[LongPointIndex])
+    // Precision above 18 cannot be read back as an unscaled long: stays boxed.
+    assert(RangeRelationBroadcastMode(
+      Seq(BoundReference(0, DecimalType(19, 2), nullable = true)), PointIndexKind)
+      .transform(Array(InternalRow(Decimal(1.0), 1))).isInstanceOf[PointIndex])
   }
 
   test("the long interval index answers the same windows as the generic one") {
     def longIndex(spans: Seq[(Any, Any, InternalRow)]): LongIntervalIndex =
-      RangeBroadcastMode(
+      RangeRelationBroadcastMode(
         Seq(BoundReference(0, IntegerType, nullable = true),
           BoundReference(1, IntegerType, nullable = true)),
         IntervalIndexKind)
@@ -736,7 +747,7 @@ class RangeIndexSuite extends SparkFunSuite {
       (true: Any, true: Any, row(1)),
       (null, true: Any, row(2)))
     val generic = buildIntervals(BooleanType, spans.toSeq)
-    val longIdx = RangeBroadcastMode(
+    val longIdx = RangeRelationBroadcastMode(
       Seq(BoundReference(0, BooleanType, nullable = true),
         BoundReference(1, BooleanType, nullable = true)),
       IntervalIndexKind)
@@ -755,7 +766,7 @@ class RangeIndexSuite extends SparkFunSuite {
 
   test("the long point index answers the same bounds as the generic one") {
     def longIndex(keyed: Seq[(Any, InternalRow)]): LongPointIndex =
-      RangeBroadcastMode(
+      RangeRelationBroadcastMode(
         Seq(BoundReference(0, IntegerType, nullable = true)), PointIndexKind)
         .transform(keyed.map(t => InternalRow(t._1, t._2.getInt(0))).toArray)
         .asInstanceOf[LongPointIndex]
@@ -798,7 +809,7 @@ class RangeIndexSuite extends SparkFunSuite {
       BoundReference(0, IntegerType, nullable = true),
       BoundReference(1, IntegerType, nullable = true))
     val (shared, rows) = reusingRowIterator(fields = 3, n)
-    val index = RangeBroadcastMode(buildKeys, IntervalIndexKind)
+    val index = RangeRelationBroadcastMode(buildKeys, IntervalIndexKind)
       .transform(rows, Some(n)).asInstanceOf[LongIntervalIndex]
 
     shared.update(0, -1)

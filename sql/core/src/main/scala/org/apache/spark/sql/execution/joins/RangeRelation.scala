@@ -20,9 +20,11 @@ package org.apache.spark.sql.execution.joins
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Expression, InterpretedProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, Expression, InterpretedProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.optimizer.{IntervalOverlapJoin, PartialRangeJoin, PointInRangeJoin, RangeJoin}
+import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
-import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DateType, Decimal, IntegerType, LongType, ShortType, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DateType, Decimal, DecimalType, IntegerType, LongType, ShortType, TimestampNTZType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.KnownSizeEstimation
 
@@ -32,14 +34,36 @@ import org.apache.spark.util.KnownSizeEstimation
  * candidates. Keys that map to one order-preserving long are stored raw and
  * compared unboxed ([[LongIntervalIndex]], [[LongPointIndex]]); every other
  * supported type is compared as boxed values ([[IntervalIndex]],
- * [[PointIndex]]). [[RangeBroadcastMode]] picks the family from the build
- * keys' data types.
+ * [[PointIndex]]). [[RangeRelationBroadcastMode]] picks the family from the
+ * build keys' data types.
  *
  *  - The interval indexes answer "which ranges overlap this window?"
  *  - The point indexes answer "which points lie on this side of a bound?"
  */
 private[execution] sealed trait RangeRelation extends KnownSizeEstimation with Serializable {
   def keyType: DataType
+}
+
+/**
+ * Which [[RangeRelation]] a broadcast materializes.
+ *
+ * A point index has no direction, so one broadcast of a column serves both
+ * `<` and `>`. The join records which side holds the lower bound and scans
+ * accordingly.
+ */
+private[execution] sealed abstract class RangeIndexKind {
+  def matches(rangeJoin: RangeJoin): Boolean = RangeIndexKind(rangeJoin) == this
+}
+
+private[execution] case object IntervalIndexKind extends RangeIndexKind
+
+private[execution] case object PointIndexKind extends RangeIndexKind
+
+private[execution] object RangeIndexKind {
+  def apply(rangeJoin: RangeJoin): RangeIndexKind = rangeJoin match {
+    case PointInRangeJoin | IntervalOverlapJoin => IntervalIndexKind
+    case _: PartialRangeJoin => PointIndexKind
+  }
 }
 
 /**
@@ -131,12 +155,17 @@ private[joins] object RangeIndex {
         Some(key((r, o) => r.getInt(o).toLong, v => v.asInstanceOf[Int].toLong))
       case _: LongType | _: TimestampType | _: TimestampNTZType =>
         Some(key((r, o) => r.getLong(o), v => v.asInstanceOf[Long]))
+      case d: DecimalType if d.precision <= Decimal.MAX_LONG_DIGITS =>
+        Some(LongKey(
+          (r, o) => r.getDecimal(o, d.precision, d.scale).toUnscaledLong,
+          v => v.asInstanceOf[Decimal].toUnscaledLong,
+          v => s"$v.toUnscaledLong()"))
       case _ => None
     }
   }
 
   /**
-   * Every key maps to one order-preserving long. [[RangeBroadcastMode]] picks
+   * Every key maps to one order-preserving long. [[RangeRelationBroadcastMode]] picks
    * the index family by this test and [[BroadcastRangeJoinExec]] picks its probe
    * code by the same one, so the two cannot drift apart. `RangePredicate` gives
    * both sides of a range predicate one type after analysis, so testing the
@@ -319,9 +348,9 @@ private[joins] class OverlapIterator(
     probeHigh: Any) extends Iterator[InternalRow] {
 
   private[this] val depth = 32 - java.lang.Integer.numberOfLeadingZeros(intervals.length)
-  private[joins] var stackStart = new Array[Int](math.max(8, depth * 3))
-  private[joins] var stackEnd = new Array[Int](math.max(8, depth * 3))
-  private[joins] var stackTop = 0
+  private[this] var stackStart = new Array[Int](math.max(8, depth * 3))
+  private[this] var stackEnd = new Array[Int](math.max(8, depth * 3))
+  private[this] var stackTop = 0
   private[joins] var steps = 0
   private[this] var nextRow: InternalRow = null
 
@@ -474,7 +503,7 @@ private[joins] object PointIndex {
 // types: the tree walk and the binary searches compare raw longs, and generated
 // probe code passes long keys without boxing. Types that cannot be one long, or
 // whose SQL equality has no bit mapping (floating point), stay on `IntervalIndex`
-// and `PointIndex`. `RangeBroadcastMode` picks between the two families once,
+// and `PointIndex`. `RangeRelationBroadcastMode` picks between the two families once,
 // from the build keys' data types.
 
 private[joins] class LongIntervalIndex private (
@@ -598,9 +627,9 @@ private[joins] class LongOverlapIterator(
     probeHigh: Long) extends Iterator[InternalRow] {
 
   private[this] val depth = 32 - java.lang.Integer.numberOfLeadingZeros(lows.length)
-  private[joins] var stackStart = new Array[Int](math.max(8, depth * 3))
-  private[joins] var stackEnd = new Array[Int](math.max(8, depth * 3))
-  private[joins] var stackTop = 0
+  private[this] var stackStart = new Array[Int](math.max(8, depth * 3))
+  private[this] var stackEnd = new Array[Int](math.max(8, depth * 3))
+  private[this] var stackTop = 0
   private[joins] var steps = 0
   private[this] var nextRow: InternalRow = null
 
@@ -731,5 +760,68 @@ private[joins] object LongPointIndex {
       i += 1
     }
     new LongPointIndex(keyType, keys, rowArr)
+  }
+}
+
+/**
+ * A [[BroadcastMode]] that materializes the build side into a [[RangeRelation]].
+ *
+ * Symmetric with `HashedRelationBroadcastMode`. `buildKeys` are bound to the
+ * build row, so the index does not depend on attribute ids. Which join input is
+ * broadcast, and the original join condition, live on [[BroadcastRangeJoinExec]].
+ * Under AQE, `LogicalQueryStageStrategy` checks that this mode's bound keys are
+ * the keys `ExtractRangeJoinKeys` finds.
+ *
+ * Bound keys are stored with nullability forced on. AQE can rewrite a stage's
+ * nullability, and [[org.apache.spark.sql.catalyst.plans.physical.BroadcastPartitioning]]
+ * decides reuse with `==`. Forcing it here keeps that check aligned with the
+ * strategy, which compares modes the same way. The index already treats a null
+ * key as non-matching.
+ */
+private[execution] case class RangeRelationBroadcastMode private (
+    buildKeys: Seq[Expression],
+    indexKind: RangeIndexKind)
+  extends BroadcastMode with Serializable {
+
+  override def transform(rows: Array[InternalRow]): RangeRelation =
+    transform(rows.iterator, Some(rows.length))
+
+  override def transform(
+      rows: Iterator[InternalRow],
+      sizeHint: Option[Long]): RangeRelation = {
+    val longKeys = RangeIndex.canMapKeysToLong(buildKeys)
+    indexKind match {
+      case IntervalIndexKind =>
+        require(buildKeys.nonEmpty && buildKeys.length <= 2,
+          "An interval index expects (low, high), or one point used as both ends.")
+        if (longKeys) {
+          LongIntervalIndex.build(buildKeys.head.dataType, buildKeys, rows, sizeHint)
+        } else {
+          IntervalIndex.build(buildKeys.head.dataType, buildKeys, rows, sizeHint)
+        }
+
+      case PointIndexKind =>
+        require(buildKeys.length == 1, "A point index expects one build key.")
+        if (longKeys) {
+          LongPointIndex.build(buildKeys.head.dataType, buildKeys, rows, sizeHint)
+        } else {
+          PointIndex.build(buildKeys.head.dataType, buildKeys, rows, sizeHint)
+        }
+    }
+  }
+
+  override lazy val canonicalized: RangeRelationBroadcastMode =
+    RangeRelationBroadcastMode(buildKeys.map(_.canonicalized), indexKind)
+}
+
+private[execution] object RangeRelationBroadcastMode {
+
+  def apply(buildKeys: Seq[Expression], indexKind: RangeIndexKind): RangeRelationBroadcastMode = {
+    val normalizedKeys = buildKeys.map { key =>
+      key.transform {
+        case b: BoundReference => b.copy(nullable = true)
+      }
+    }
+    new RangeRelationBroadcastMode(normalizedKeys, indexKind)
   }
 }

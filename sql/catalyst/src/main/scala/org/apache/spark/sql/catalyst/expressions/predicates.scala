@@ -1101,6 +1101,23 @@ object Equality {
   }
 }
 
+/**
+ * Normalizes `<`, `<=`, `>`, `>=` to `(low.dataType, low, high)`, with `>` and
+ * `>=` reordered so the lower bound leads. Inclusivity stays on the original
+ * predicate, which execution evaluates as-is.
+ */
+object RangePredicate {
+  def unapply(expression: Expression): Option[(DataType, Expression, Expression)] = {
+    expression match {
+      case LessThan(low, high) => Some((low.dataType, low, high))
+      case LessThanOrEqual(low, high) => Some((low.dataType, low, high))
+      case GreaterThan(high, low) => Some((low.dataType, low, high))
+      case GreaterThanOrEqual(high, low) => Some((low.dataType, low, high))
+      case _ => None
+    }
+  }
+}
+
 // TODO: although map type is not orderable, technically map type should be able to be used
 // in equality comparison
 @ExpressionDescription(

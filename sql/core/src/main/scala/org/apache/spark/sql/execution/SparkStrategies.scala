@@ -403,13 +403,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
          * cannot build. Both sides qualify: the smaller one.
          */
         def broadcastSide(
-            hintOnly: Boolean,
+            onlyLookingAtHint: Boolean,
             allowed: BuildSide => Boolean): Option[BuildSide] = {
           def qualifies(
               plan: LogicalPlan,
               broadcastHint: Boolean,
               blocked: Boolean): Boolean = {
-            if (hintOnly) {
+            if (onlyLookingAtHint) {
               broadcastHint
             } else {
               canBroadcastBySize(plan, conf) && !blocked
@@ -445,14 +445,14 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           }
         }
 
-        def createRangeJoin(hintOnly: Boolean) = {
+        def createRangeJoin(onlyLookingAtHint: Boolean) = {
           if (!conf.broadcastRangeJoinEnabled) {
             None
           } else {
             plan match {
               case ExtractRangeJoinKeys(_, _, leftKeys, rightKeys, _, rangeJoin) =>
                 val allowed = BroadcastRangeJoinExec.supports(joinType, _: BuildSide)
-                broadcastSide(hintOnly, allowed).map { buildSide =>
+                broadcastSide(onlyLookingAtHint, allowed).map { buildSide =>
                   Seq(BroadcastRangeJoinExec(
                     planLater(left), planLater(right), buildSide, joinType,
                     leftKeys, rightKeys, condition, rangeJoin))
@@ -463,7 +463,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         }
 
         def createJoinWithoutHint() = {
-          createRangeJoin(hintOnly = false)
+          createRangeJoin(onlyLookingAtHint = false)
             .orElse(createBroadcastNLJoin(false))
             .orElse(createCartesianProduct())
             .getOrElse {
@@ -480,7 +480,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         if (hint.isEmpty) {
           createJoinWithoutHint()
         } else {
-          createRangeJoin(hintOnly = true)
+          createRangeJoin(onlyLookingAtHint = true)
             .orElse(createBroadcastNLJoin(true))
             .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
             .getOrElse(createJoinWithoutHint())

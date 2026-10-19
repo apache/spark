@@ -19,8 +19,7 @@ package org.apache.spark.sql.execution.bucketing
 
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, GreaterThanOrEqual, LessThanOrEqual}
-import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
-import org.apache.spark.sql.catalyst.planning.PointInRangeJoin
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide, PointInRangeJoin}
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{BinaryExecNode, FileSourceScanExec, LocalTableScanExec, SparkPlan}

@@ -1221,6 +1221,7 @@ object SQLConf {
     .createWithDefaultString("10MB")
 
   val BROADCAST_RANGE_JOIN_ENABLED = buildConf("spark.sql.join.broadcastRangeJoin.enabled")
+    .internal()
     .doc("When true, a join whose condition is a range predicate is planned as a " +
       "broadcast range join instead of a broadcast nested loop join, provided that a " +
       "supported build side qualifies for broadcast by size or by a BROADCAST hint. " +
