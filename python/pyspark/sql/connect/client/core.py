@@ -2606,12 +2606,8 @@ class SparkConnectClient(object):
             return []
 
     def _on_exit(self) -> None:
-        # Skip all cleanup RPCs unless this client may still own a live server-side session:
-        # - Closed or released: the server-side resources are already gone. Reissuing the RPCs
-        #   is wasted work and, if the server is unreachable, can block process exit on gRPC.
-        # - No server-side session ID observed: there is nothing to clean up, and the cleanup
-        #   RPC would itself create a server-side session. The ID may be "" (a response without
-        #   one), so test truthiness rather than None.
+        # Skip cleanup RPCs if the session is already closed or released, or was never
+        # established. The server-side session ID may be "" rather than None.
         if self._closed or self._session_released or not self._server_session_id:
             return
 
