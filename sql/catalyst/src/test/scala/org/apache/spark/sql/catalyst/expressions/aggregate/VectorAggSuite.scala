@@ -446,6 +446,78 @@ class VectorAggSuite extends SparkFunSuite {
     }
   }
 
+  test("VectorAvg - finite elements around non-finite deltas") {
+    val first = Array(1.0f, Float.MaxValue, 3.0f, Float.PositiveInfinity, 5.0f,
+      Float.NegativeInfinity, 7.0f, Float.PositiveInfinity, 9.0f, Float.NaN, 11.0f)
+    val second = Array(3.0f, -Float.MaxValue, 5.0f, 1.0f, 7.0f, 1.0f, 9.0f,
+      Float.NegativeInfinity, 11.0f, 2.0f, 13.0f)
+    val expected = Array(2.0f, 0.0f, 4.0f, Float.PositiveInfinity, 6.0f,
+      Float.NegativeInfinity, 8.0f, Float.NaN, 10.0f, Float.NaN, 12.0f)
+
+    Seq(false, true).foreach { useGenericArray =>
+      val (agg, buffer, _) = createVectorAvg()
+      Seq(first, second).foreach { values =>
+        val array = if (useGenericArray) {
+          new GenericArrayData(values)
+        } else {
+          ArrayData.toArrayData(values)
+        }
+        agg.update(buffer, InternalRow(array))
+      }
+      assertResult(expected.map(java.lang.Float.floatToIntBits))(
+        evalAsFloatArray(agg, buffer).map(java.lang.Float.floatToIntBits))
+    }
+  }
+
+  test("VectorAvg - finite updates preserve running-average rounding") {
+    Seq(false, true).foreach { includeInfinity =>
+      val (agg, buffer, _) = createVectorAvg()
+      val first = Array.tabulate(17)(i => if (i % 2 == 0) 1.0f else -1.0f)
+      val last = first.map(-_)
+      val expected = Array.tabulate(17)(i => if (i % 2 == 0) 0x3eaaaaaa else 0xbeaaaaaa)
+      if (includeInfinity) {
+        first(8) = Float.PositiveInfinity
+        last(8) = 1.0f
+        expected(8) = 0x7f800000
+      }
+      agg.update(buffer, createInputRow(first))
+      agg.update(buffer, createInputRow(first))
+      agg.update(buffer, createInputRow(last))
+      assertResult(expected)(
+        evalAsFloatArray(agg, buffer).map(java.lang.Float.floatToRawIntBits))
+    }
+  }
+
+  test("VectorAvg - non-finite deltas at different positions") {
+    val cases = Seq(
+      (Float.MaxValue, -Float.MaxValue, 0.0f),
+      (Float.PositiveInfinity, 1.0f, Float.PositiveInfinity),
+      (Float.PositiveInfinity, Float.PositiveInfinity, Float.PositiveInfinity))
+    for {
+      dim <- Seq(1, 7, 8, 9, 17)
+      index <- 0 until dim
+      (oldAvg, value, expectedValue) <- cases
+      useGenericArray <- Seq(false, true)
+    } {
+      val (agg, buffer, _) = createVectorAvg()
+      val first = Array.fill(dim)(1.0f)
+      val second = Array.fill(dim)(3.0f)
+      val expected = Array.fill(dim)(2.0f)
+      first(index) = oldAvg
+      second(index) = value
+      expected(index) = expectedValue
+      Seq(first, second).foreach { values =>
+        val array = if (useGenericArray) {
+          new GenericArrayData(values)
+        } else {
+          ArrayData.toArrayData(values)
+        }
+        agg.update(buffer, InternalRow(array))
+      }
+      assertResult(expected)(evalAsFloatArray(agg, buffer))
+    }
+  }
+
   test("VectorAvg - numerical stability with running average") {
     val (agg, buffer, _) = createVectorAvg()
     // Add many vectors to test numerical stability of running average
