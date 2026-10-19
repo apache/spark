@@ -183,7 +183,8 @@ trait MasterSuiteBase extends SparkFunSuite
     html should not include ("""src="/static""")
     html should include (s"""src="$proxyUrl/static""")
     // other site-relative links, e.g. "Back to Master", must not bypass the proxy either
-    (SITE_RELATIVE_LINK_RE findAllMatchIn html).foreach(_.group(1) should startWith (proxyUrl))
+    (SITE_RELATIVE_LINK_RE findAllMatchIn html).map(_.group(1))
+      .filterNot(_.startsWith(proxyUrl)).toSeq shouldBe empty
   }
 
   protected def verifyDrivers(

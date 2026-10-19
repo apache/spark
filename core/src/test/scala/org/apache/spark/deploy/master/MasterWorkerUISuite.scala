@@ -136,7 +136,9 @@ class MasterWorkerUISuite extends MasterSuiteBase {
         Seq("environment/", "logPage/?self&logType=out").foreach { path =>
           val pageHtml = Utils
             .tryWithResource(Source.fromURL(s"$masterUrl/$path"))(_.getLines().mkString("\n"))
-          verifyStaticResourcesServedByProxy(pageHtml, reverseProxyUrl)
+          withClue(s"$path: ") {
+            verifyStaticResourcesServedByProxy(pageHtml, reverseProxyUrl)
+          }
         }
         verifyWorkerUI(html, masterUrl, reverseProxyUrl)
       }
