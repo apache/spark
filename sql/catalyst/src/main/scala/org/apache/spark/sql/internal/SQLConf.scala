@@ -839,6 +839,20 @@ object SQLConf {
       .booleanConf
       .createWithDefaultFunction(() => Utils.isTesting)
 
+  val FILE_TYPE_ENABLED =
+    buildConf("spark.sql.fileType.enabled")
+      .internal()
+      .doc("When true, the FILE data type is supported. This is a preview feature under " +
+        "SPARK-59132 and may change in future releases. The default is false in production; " +
+        "tests enable it by default via Utils.isTesting. Enabling this flag does not " +
+        "guarantee full SQL support: the physical representation, casts, Parquet read and " +
+        "write, and other operations may still fail until their respective features are " +
+        "implemented.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefaultFunction(() => Utils.isTesting)
+
   val EXTENDED_EXPLAIN_PROVIDERS = buildConf("spark.sql.extendedExplainProviders")
     .doc("A comma-separated list of classes that implement the" +
       " org.apache.spark.sql.ExtendedExplainGenerator trait. If provided, Spark will print" +
@@ -9048,6 +9062,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def geospatialEnabled: Boolean = getConf(GEOSPATIAL_ENABLED)
 
   def timestampNanosTypesEnabled: Boolean = getConf(TIMESTAMP_NANOS_TYPES_ENABLED)
+
+  override def isFileTypeEnabled: Boolean = getConf(FILE_TYPE_ENABLED)
 
   def dataSourceV2JoinPushdown: Boolean = getConf(DATA_SOURCE_V2_JOIN_PUSHDOWN)
 
