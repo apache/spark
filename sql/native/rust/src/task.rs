@@ -14,7 +14,8 @@
 // limitations under the License.
 
 use std::marker::PhantomData;
-use std::mem::offset_of;
+use std::mem::size_of;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::abi::{self, Interrupted, SparkDsTaskContext};
 use crate::Result;
@@ -32,16 +33,26 @@ use crate::Result;
 ///     task
 /// }
 /// ```
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct TaskContext<'task> {
-    pointer: *const SparkDsTaskContext,
-    stage_id: Option<i32>,
-    stage_attempt_number: Option<i32>,
-    partition_id: Option<i32>,
-    attempt_number: Option<i32>,
-    task_attempt_id: Option<i64>,
-    interrupted: Option<Interrupted>,
-    lifetime: PhantomData<&'task SparkDsTaskContext>,
+    stage_id: i32,
+    stage_attempt_number: i32,
+    partition_id: i32,
+    attempt_number: i32,
+    task_attempt_id: i64,
+    interruption: Interruption<'task>,
+}
+
+/// Where a task learns that Spark killed it.
+#[derive(Debug, Clone, Copy)]
+enum Interruption<'task> {
+    Never,
+    Host {
+        context: *const SparkDsTaskContext,
+        callback: Interrupted,
+        lifetime: PhantomData<&'task SparkDsTaskContext>,
+    },
+    Flag(&'task AtomicBool),
 }
 
 // The C ABI permits task callbacks from any thread. The lifetime prevents use after the
@@ -50,83 +61,156 @@ unsafe impl Send for TaskContext<'_> {}
 unsafe impl Sync for TaskContext<'_> {}
 
 impl TaskContext<'static> {
-    /// A context without Spark task metadata, for testing a reader or writer directly.
-    pub fn detached() -> Self {
-        Self {
-            pointer: std::ptr::null(),
-            stage_id: None,
-            stage_attempt_number: None,
-            partition_id: None,
-            attempt_number: None,
-            task_attempt_id: None,
-            interrupted: None,
-            lifetime: PhantomData,
+    /// Starts a context for testing a reader or writer outside Spark. Its IDs are 0
+    /// unless set, and it is never interrupted unless it is given a flag.
+    pub fn for_testing() -> TaskContextBuilder<'static> {
+        TaskContextBuilder {
+            context: TaskContext {
+                stage_id: 0,
+                stage_attempt_number: 0,
+                partition_id: 0,
+                attempt_number: 0,
+                task_attempt_id: 0,
+                interruption: Interruption::Never,
+            },
         }
     }
 }
 
 impl<'task> TaskContext<'task> {
-    /// Wraps a host context without reading fields beyond its declared size.
+    /// Wraps a host context, which has every field of version 1 of the ABI.
     ///
     /// # Safety
     /// The host must keep the context and its callbacks valid for `'task`, including calls from
     /// other threads. Spark keeps it alive until the Arrow stream is released or
     /// data writer closes.
-    #[doc(hidden)]
-    pub unsafe fn from_raw(pointer: *const SparkDsTaskContext) -> Result<Self> {
+    pub(crate) unsafe fn from_raw(pointer: *const SparkDsTaskContext) -> Result<Self> {
         let size = unsafe { abi::struct_size(pointer)? };
-        let bytes = pointer.cast();
+        // Fields are only appended to the structure, so every host has those of version 1.
+        if size < size_of::<SparkDsTaskContext>() as i64 {
+            return Err(format!(
+                "the task context has {size} bytes, fewer than in version 1 of the native ABI"
+            )
+            .into());
+        }
+        let context = unsafe { pointer.read_unaligned() };
         Ok(Self {
-            pointer,
-            stage_id: unsafe { abi::field(bytes, size, offset_of!(SparkDsTaskContext, stage_id)) },
-            stage_attempt_number: unsafe {
-                abi::field(
-                    bytes,
-                    size,
-                    offset_of!(SparkDsTaskContext, stage_attempt_number),
-                )
+            stage_id: context.stage_id,
+            stage_attempt_number: context.stage_attempt_number,
+            partition_id: context.partition_id,
+            attempt_number: context.attempt_number,
+            task_attempt_id: context.task_attempt_id,
+            interruption: match context.is_interrupted {
+                Some(callback) => Interruption::Host {
+                    context: pointer,
+                    callback,
+                    lifetime: PhantomData,
+                },
+                None => Interruption::Never,
             },
-            partition_id: unsafe {
-                abi::field(bytes, size, offset_of!(SparkDsTaskContext, partition_id))
-            },
-            attempt_number: unsafe {
-                abi::field(bytes, size, offset_of!(SparkDsTaskContext, attempt_number))
-            },
-            task_attempt_id: unsafe {
-                abi::field(bytes, size, offset_of!(SparkDsTaskContext, task_attempt_id))
-            },
-            interrupted: unsafe {
-                abi::field(bytes, size, offset_of!(SparkDsTaskContext, is_interrupted))
-            }
-            .flatten(),
-            lifetime: PhantomData,
         })
     }
 
-    pub fn stage_id(&self) -> Option<i32> {
+    /// The ID of the stage of the task.
+    pub fn stage_id(&self) -> i32 {
         self.stage_id
     }
 
-    pub fn stage_attempt_number(&self) -> Option<i32> {
+    /// The attempt number of the stage of the task.
+    pub fn stage_attempt_number(&self) -> i32 {
         self.stage_attempt_number
     }
 
-    pub fn partition_id(&self) -> Option<i32> {
+    /// The partition that the task reads or writes.
+    pub fn partition_id(&self) -> i32 {
         self.partition_id
     }
 
-    pub fn attempt_number(&self) -> Option<i32> {
+    /// The attempt number of the task.
+    pub fn attempt_number(&self) -> i32 {
         self.attempt_number
     }
 
-    pub fn task_attempt_id(&self) -> Option<i64> {
+    /// The ID of the task attempt, unique within the Spark application but not across
+    /// applications.
+    pub fn task_attempt_id(&self) -> i64 {
         self.task_attempt_id
     }
 
-    /// Whether Spark killed this task. Older contexts without the callback return false.
+    /// Whether Spark killed this task, read from Spark each time.
     pub fn is_interrupted(&self) -> bool {
-        self.interrupted
-            .is_some_and(|callback| unsafe { callback(self.pointer) })
+        match self.interruption {
+            Interruption::Never => false,
+            Interruption::Host {
+                context, callback, ..
+            } => unsafe { callback(context) },
+            Interruption::Flag(flag) => flag.load(Ordering::SeqCst),
+        }
+    }
+}
+
+/// Builds a [`TaskContext`] for testing a reader or writer outside Spark.
+#[derive(Debug, Clone, Copy)]
+pub struct TaskContextBuilder<'task> {
+    context: TaskContext<'task>,
+}
+
+impl<'task> TaskContextBuilder<'task> {
+    #[must_use]
+    pub fn stage_id(mut self, stage_id: i32) -> Self {
+        self.context.stage_id = stage_id;
+        self
+    }
+
+    #[must_use]
+    pub fn stage_attempt_number(mut self, stage_attempt_number: i32) -> Self {
+        self.context.stage_attempt_number = stage_attempt_number;
+        self
+    }
+
+    #[must_use]
+    pub fn partition_id(mut self, partition_id: i32) -> Self {
+        self.context.partition_id = partition_id;
+        self
+    }
+
+    #[must_use]
+    pub fn attempt_number(mut self, attempt_number: i32) -> Self {
+        self.context.attempt_number = attempt_number;
+        self
+    }
+
+    #[must_use]
+    pub fn task_attempt_id(mut self, task_attempt_id: i64) -> Self {
+        self.context.task_attempt_id = task_attempt_id;
+        self
+    }
+
+    /// Reports the task as interrupted whenever `flag` is true.
+    #[must_use]
+    pub fn interrupted_by<'flag>(self, flag: &'flag AtomicBool) -> TaskContextBuilder<'flag> {
+        let TaskContext {
+            stage_id,
+            stage_attempt_number,
+            partition_id,
+            attempt_number,
+            task_attempt_id,
+            ..
+        } = self.context;
+        TaskContextBuilder {
+            context: TaskContext {
+                stage_id,
+                stage_attempt_number,
+                partition_id,
+                attempt_number,
+                task_attempt_id,
+                interruption: Interruption::Flag(flag),
+            },
+        }
+    }
+
+    pub fn build(self) -> TaskContext<'task> {
+        self.context
     }
 }
 
@@ -164,11 +248,11 @@ mod tests {
             interrupted: AtomicBool::new(false),
         };
         let context = unsafe { TaskContext::from_raw(&host.task) }.unwrap();
-        assert_eq!(context.stage_id(), Some(3));
-        assert_eq!(context.stage_attempt_number(), Some(4));
-        assert_eq!(context.partition_id(), Some(5));
-        assert_eq!(context.attempt_number(), Some(6));
-        assert_eq!(context.task_attempt_id(), Some(7));
+        assert_eq!(context.stage_id(), 3);
+        assert_eq!(context.stage_attempt_number(), 4);
+        assert_eq!(context.partition_id(), 5);
+        assert_eq!(context.attempt_number(), 6);
+        assert_eq!(context.task_attempt_id(), 7);
         assert!(!context.is_interrupted());
         host.interrupted.store(true, Ordering::SeqCst);
         std::thread::scope(|scope| {
@@ -177,13 +261,42 @@ mod tests {
     }
 
     #[test]
-    fn only_reads_fields_present_in_the_declared_prefix() {
+    fn rejects_a_context_without_every_field_of_version_1() {
         let prefix = size_of::<i64>() as i64;
         let pointer = (&prefix as *const i64).cast::<SparkDsTaskContext>();
-        let context = unsafe { TaskContext::from_raw(pointer) }.unwrap();
-        assert_eq!(context.stage_id(), None);
-        assert_eq!(context.task_attempt_id(), None);
+        let error = unsafe { TaskContext::from_raw(pointer) }.unwrap_err();
+        assert!(error.to_string().contains("version 1"), "{error}");
+        assert!(unsafe { TaskContext::from_raw(std::ptr::null()) }.is_err());
+    }
+
+    #[test]
+    fn test_contexts_carry_ids_and_an_optional_interruption_flag() {
+        let context = TaskContext::for_testing()
+            .stage_id(1)
+            .stage_attempt_number(2)
+            .partition_id(3)
+            .attempt_number(4)
+            .task_attempt_id(5)
+            .build();
+        assert_eq!(
+            (
+                context.stage_id(),
+                context.stage_attempt_number(),
+                context.partition_id(),
+                context.attempt_number(),
+                context.task_attempt_id()
+            ),
+            (1, 2, 3, 4, 5)
+        );
         assert!(!context.is_interrupted());
-        assert!(!TaskContext::detached().is_interrupted());
+        let flag = AtomicBool::new(false);
+        let context = TaskContext::for_testing()
+            .partition_id(8)
+            .interrupted_by(&flag)
+            .build();
+        assert_eq!(context.partition_id(), 8);
+        assert!(!context.is_interrupted());
+        flag.store(true, Ordering::SeqCst);
+        assert!(context.is_interrupted());
     }
 }

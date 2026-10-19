@@ -26,8 +26,9 @@ pub use arrow_array::ffi_stream::FFI_ArrowArrayStream as ArrowArrayStream;
 pub use arrow_schema::ffi::FFI_ArrowSchema as ArrowSchema;
 use arrow_schema::{Schema, SchemaRef};
 
-use crate::bridge::panic_message;
-use crate::{FilterSupport, Options, Result, WriteMode};
+use crate::bridge::{describe, panic_message};
+use crate::host::{self, LogFunction};
+use crate::{CreateInfo, FilterSupport, HostInfo, Options, Result, WriteMode};
 
 pub const ABI_VERSION: i32 = 1;
 pub const BATCH_READ: u64 = 1;
@@ -43,7 +44,7 @@ pub struct SparkDsHost {
     pub size: i64,
     pub abi_version: i32,
     pub spark_version: *const c_char,
-    pub log: Option<unsafe extern "C" fn(i32, *const c_char)>,
+    pub log: Option<LogFunction>,
 }
 
 #[repr(C)]
@@ -161,7 +162,7 @@ thread_local! {
 /// Converts provider failures and unwinding panics into the C error convention.
 pub fn call(action: impl FnOnce() -> Result<()>) -> c_int {
     LAST_ERROR.with(|error| *error.borrow_mut() = None);
-    let message = match catch_unwind(AssertUnwindSafe(|| action().map_err(|e| e.to_string()))) {
+    let message = match catch_unwind(AssertUnwindSafe(|| action().map_err(|e| describe(&*e)))) {
         Ok(Ok(())) => return 0,
         Ok(Err(message)) => message,
         Err(payload) => panic_message(payload),
@@ -216,29 +217,45 @@ pub fn require_output<T>(pointer: *mut T) -> Result<()> {
     Ok(())
 }
 
+/// Negotiates the ABI version, installs the host's log, and runs the source's `init`.
+///
 /// # Safety
 /// `host` and `output` must follow the `spark_ds_init` contract of the C header.
 pub unsafe fn initialize(
     host: *const SparkDsHost,
     output: *mut *const SparkDsLibrary,
     library: &'static SparkDsLibrary,
+    init: fn(&HostInfo) -> Result<()>,
 ) -> c_int {
     let result = call(|| {
         require_output(output)?;
         unsafe { output.write(std::ptr::null()) };
         let size = unsafe { struct_size(host)? };
-        let version: i32 =
-            unsafe { field(host.cast(), size, offset_of!(SparkDsHost, abi_version)) }
-                .ok_or("host does not provide an ABI version")?;
+        let pointer = host.cast();
+        let version: i32 = unsafe { field(pointer, size, offset_of!(SparkDsHost, abi_version)) }
+            .ok_or("host does not provide an ABI version")?;
         if version < ABI_VERSION {
             return Err(format!("host ABI {version} does not support ABI {ABI_VERSION}").into());
         }
+        let log: Option<Option<LogFunction>> =
+            unsafe { field(pointer, size, offset_of!(SparkDsHost, log)) };
+        host::install(log.flatten());
+        let spark_version: Option<*const c_char> =
+            unsafe { field(pointer, size, offset_of!(SparkDsHost, spark_version)) };
+        let spark_version = spark_version
+            .filter(|version| !version.is_null())
+            .and_then(|version| unsafe { CStr::from_ptr(version) }.to_str().ok())
+            .map(str::to_owned);
+        init(&HostInfo {
+            abi_version: version,
+            spark_version,
+        })?;
         unsafe { output.write(library) };
         Ok(())
     });
     if result != 0 {
         if let Ok(size) = unsafe { struct_size(host) } {
-            let log: Option<Option<unsafe extern "C" fn(i32, *const c_char)>> =
+            let log: Option<Option<LogFunction>> =
                 unsafe { field(host.cast(), size, offset_of!(SparkDsHost, log)) };
             if let Some(Some(log)) = log {
                 unsafe { log(LOG_ERROR, last_error()) };
@@ -281,19 +298,26 @@ pub unsafe fn strings(data: *const *const c_char, length: i64) -> Result<Vec<Str
 
 /// # Safety
 /// `info` must follow the `create` contract of the C header.
-pub unsafe fn options(info: *const SparkDsCreateInfo) -> Result<Options> {
+pub unsafe fn create_info(info: *const SparkDsCreateInfo) -> Result<CreateInfo> {
     let size = unsafe { struct_size(info)? };
     let pointer = info.cast();
+    let name: *const c_char = unsafe { field(pointer, size, offset_of!(SparkDsCreateInfo, name)) }
+        .ok_or("create info does not provide a name")?;
+    if name.is_null() {
+        return Err("create info has a null name".into());
+    }
+    let name = unsafe { CStr::from_ptr(name) }.to_str()?.to_owned();
     let keys = unsafe { field(pointer, size, offset_of!(SparkDsCreateInfo, option_keys)) }
         .ok_or("create info does not provide option keys")?;
     let values = unsafe { field(pointer, size, offset_of!(SparkDsCreateInfo, option_values)) }
         .ok_or("create info does not provide option values")?;
     let count = unsafe { field(pointer, size, offset_of!(SparkDsCreateInfo, num_options)) }
         .ok_or("create info does not provide an option count")?;
-    Ok(unsafe { strings(keys, count)? }
+    let options: Options = unsafe { strings(keys, count)? }
         .into_iter()
         .zip(unsafe { strings(values, count)? })
-        .collect())
+        .collect();
+    Ok(CreateInfo::new(name, options))
 }
 
 /// # Safety
@@ -412,7 +436,28 @@ mod tests {
         assert!(unsafe { strings(std::ptr::null(), 0) }.unwrap().is_empty());
         let prefix = size_of::<i64>() as i64;
         let info = (&prefix as *const i64).cast::<SparkDsCreateInfo>();
-        assert!(unsafe { options(info) }.is_err());
+        assert!(unsafe { create_info(info) }.is_err());
+    }
+
+    #[test]
+    fn create_info_carries_the_source_name_and_options() {
+        let keys = [c"path".as_ptr()];
+        let values = [c"/tmp/data".as_ptr()];
+        let mut info = SparkDsCreateInfo {
+            size: size_of::<SparkDsCreateInfo>() as i64,
+            name: c"my_source".as_ptr(),
+            option_keys: keys.as_ptr(),
+            option_values: values.as_ptr(),
+            num_options: 1,
+        };
+        let created = unsafe { create_info(&info) }.unwrap();
+        assert_eq!(created.name, "my_source");
+        assert_eq!(
+            created.options,
+            Options::from([("path".into(), "/tmp/data".into())])
+        );
+        info.name = std::ptr::null();
+        assert!(unsafe { create_info(&info) }.is_err());
     }
 
     #[test]

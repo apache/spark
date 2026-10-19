@@ -80,7 +80,7 @@ static bool unavailable_callback(const SparkDsTaskContext* task) {
   return false;
 }
 
-static SparkDsTaskContext task_context(bool short_context) {
+static SparkDsTaskContext task_context(void) {
   SparkDsTaskContext task = {
     .size = sizeof(SparkDsTaskContext),
     .stage_id = 71,
@@ -90,10 +90,6 @@ static SparkDsTaskContext task_context(bool short_context) {
     .task_attempt_id = INT64_C(12345678901),
     .is_interrupted = is_interrupted
   };
-  if (short_context) {
-    task.size = offsetof(SparkDsTaskContext, is_interrupted);
-    task.is_interrupted = unavailable_callback;
-  }
   return task;
 }
 
@@ -288,11 +284,10 @@ static void consume_plan(
     int64_t first_id,
     int64_t expected_rows,
     const char* const* columns,
-    int64_t column_count,
-    bool short_context) {
+    int64_t column_count) {
   int64_t rows = 0;
   for (size_t partition = 0; partition < plan->partitions.length; partition++) {
-    SparkDsTaskContext task = task_context(short_context);
+    SparkDsTaskContext task = task_context();
     expected_task = &task;
     interrupted = false;
     struct ArrowArrayStream stream = open_stream(plan, partition, &task);
@@ -364,15 +359,15 @@ static void check_independent_planners(
   Plan second_plan = finish_plan(second);
 
   /* Both driver planners are already closed; executor reads only get the copied bytes. */
-  consume_plan(&second_plan, 13, 12, id_only, 1, false);
-  consume_plan(&first_plan, 10, 12, label_only, 1, false);
+  consume_plan(&second_plan, 13, 12, id_only, 1);
+  consume_plan(&first_plan, 10, 12, label_only, 1);
   free_plan(&second_plan);
   free_plan(&first_plan);
 }
 
 static void check_cancellation(const Plan* plan) {
   CHECK(plan->partitions.length == 1, "Cancellation test requires one partition");
-  SparkDsTaskContext task = task_context(false);
+  SparkDsTaskContext task = task_context();
   expected_task = &task;
   interrupted = false;
   interruption_checks = 0;
@@ -446,8 +441,22 @@ static void stream_call_on_thread(StreamCall* call) {
   CHECK(pthread_join(thread, NULL) == 0, "Cannot join a stream callback thread");
 }
 
+/* Every host has the fields of version 1: a shorter context is an error, not partly read. */
+static void check_short_task_context(const Plan* plan) {
+  SparkDsTaskContext task = task_context();
+  task.size = offsetof(SparkDsTaskContext, is_interrupted);
+  task.is_interrupted = unavailable_callback;
+  struct ArrowArrayStream stream = {0};
+  const Bytes* bytes = &plan->partitions.values[0];
+  CHECK(library->read(&task, plan->state.data, plan->state.length, bytes->data, bytes->length,
+      &stream) != 0, "A task context shorter than version 1 must be rejected");
+  const char* error = library->last_error();
+  CHECK(error != NULL && strstr(error, "version 1") != NULL, "Missing task context error");
+  CHECK(stream.release == NULL, "A failed read must not initialize the stream");
+}
+
 static void check_cross_thread_stream(const Plan* plan) {
-  SparkDsTaskContext task = task_context(false);
+  SparkDsTaskContext task = task_context();
   expected_task = &task;
   interrupted = false;
   interruption_checks = 0;
@@ -570,26 +579,27 @@ int main(int argc, char** argv) {
   check_independent_planners(keys, values, 4, lower, upper);
 
   Plan filtered = plan_scan(keys, values, 4, predicates, uses, 2, -1, reordered, 2);
-  consume_plan(&filtered, 13, 9, reordered, 2, false);
+  consume_plan(&filtered, 13, 9, reordered, 2);
   free_plan(&filtered);
 
   Plan residual = plan_scan(keys, values, 4, predicates, uses, 3, -1, id_only, 1);
-  consume_plan(&residual, 13, 9, id_only, 1, false);
+  consume_plan(&residual, 13, 9, id_only, 1);
   free_plan(&residual);
 
   Plan limited = plan_scan(keys, values, 4, NULL, NULL, 0, 5, id_only, 1);
-  consume_plan(&limited, 10, 5, id_only, 1, false);
+  consume_plan(&limited, 10, 5, id_only, 1);
   free_plan(&limited);
 
   const char* short_keys[] = {"end", "numpartitions", "batchsize"};
   const char* short_values[] = {"7", "2", "2"};
   Plan empty = plan_scan(short_keys, short_values, 3, NULL, NULL, 0, -1, NULL, 0);
-  consume_plan(&empty, 0, 7, NULL, 0, false);
+  consume_plan(&empty, 0, 7, NULL, 0);
   free_plan(&empty);
 
   const char* one_partition[] = {"20", "1", "2"};
   Plan cancellable = plan_scan(short_keys, one_partition, 3, NULL, NULL, 0, -1, NULL, -1);
-  consume_plan(&cancellable, 0, 20, original, 2, true);
+  consume_plan(&cancellable, 0, 20, original, 2);
+  check_short_task_context(&cancellable);
   check_cancellation(&cancellable);
   check_cross_thread_stream(&cancellable);
   free_plan(&cancellable);

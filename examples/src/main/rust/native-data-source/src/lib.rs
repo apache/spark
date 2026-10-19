@@ -24,8 +24,9 @@ use arrow_array::{ArrayRef, Int64Array, RecordBatch, RecordBatchIterator, Record
 use arrow_schema::{ArrowError, DataType, Field, Schema, SchemaRef};
 use serde::{Deserialize, Serialize};
 use spark_native_source::{
-    BatchReader, BatchReaderFactory, BatchSource, DataSource, FilterSupport, LimitSupport, Options,
-    Predicate, Result, ScanBuilder, ScanPlan, TaskContext,
+    BatchReadSource, CreateInfo, DataSource, FilterSupport, LimitSupport, LiteralValue, Options,
+    PartitionReader, PartitionReaderFactory, Predicate, ReaderContext, Result, ScanBuilder,
+    ScanPlan,
 };
 
 pub struct RangeSource {
@@ -40,13 +41,14 @@ pub struct RangeScan {
     upper: i128,
     num_partitions: usize,
     limit: Option<usize>,
+    columns: Vec<String>,
     factory: RangeReaderFactory,
 }
 
 /// Reader configuration travels to each executor; it contains no live objects.
+/// The SDK passes the negotiated columns to the reader, so the factory omits them.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RangeReaderFactory {
-    columns: Vec<String>,
     batch_size: usize,
 }
 
@@ -57,7 +59,8 @@ pub struct RangePartition {
 }
 
 impl DataSource for RangeSource {
-    fn new(options: Options) -> Result<Self> {
+    fn new(info: CreateInfo) -> Result<Self> {
+        let options = info.options;
         for key in options.keys() {
             if !matches!(
                 key.as_str(),
@@ -89,10 +92,10 @@ impl DataSource for RangeSource {
     }
 }
 
-impl BatchSource for RangeSource {
-    type Scan = RangeScan;
+impl BatchReadSource for RangeSource {
+    type ScanBuilder = RangeScan;
 
-    fn scan(&self, schema: SchemaRef) -> Result<Self::Scan> {
+    fn new_scan(&self, schema: SchemaRef) -> Result<Self::ScanBuilder> {
         let columns: Vec<String> = schema.fields().iter().map(|f| f.name().clone()).collect();
         let expected = output_schema(&columns)?;
         for (field, expected) in schema.fields().iter().zip(expected.fields()) {
@@ -110,27 +113,32 @@ impl BatchSource for RangeSource {
             upper: i128::from(self.end),
             num_partitions: self.num_partitions,
             limit: None,
+            columns,
             factory: RangeReaderFactory {
-                columns,
                 batch_size: self.batch_size,
             },
         })
     }
 }
 
-impl BatchReaderFactory for RangeReaderFactory {
+impl PartitionReaderFactory for RangeReaderFactory {
     type Partition = RangePartition;
 
     fn open<'task>(
         &self,
         partition: RangePartition,
-        task: TaskContext<'task>,
-    ) -> Result<BatchReader<'task>> {
-        let factory = self.clone();
-        if factory.batch_size == 0 || partition.start > partition.end {
+        context: ReaderContext<'task>,
+    ) -> Result<PartitionReader<'task>> {
+        let batch_size = self.batch_size;
+        if batch_size == 0 || partition.start > partition.end {
             return Err("Invalid serialized range plan".into());
         }
-        let schema = output_schema(&factory.columns)?;
+        // The negotiated schema has the requested columns in order, with the types
+        // that the scan validated.
+        let schema = context.schema;
+        let columns: Vec<String> = schema.fields().iter().map(|f| f.name().clone()).collect();
+        output_schema(&columns)?;
+        let task = context.task;
         let batch_schema = Arc::clone(&schema);
         let mut current = partition.start;
         let batches = std::iter::from_fn(move || {
@@ -143,11 +151,10 @@ impl BatchReaderFactory for RangeReaderFactory {
                     "Range read was cancelled".into(),
                 )));
             }
-            let next = (i128::from(current) + factory.batch_size as i128)
-                .min(i128::from(partition.end)) as i64;
+            let next =
+                (i128::from(current) + batch_size as i128).min(i128::from(partition.end)) as i64;
             let num_rows = (i128::from(next) - i128::from(current)) as usize;
-            let columns: Vec<ArrayRef> = factory
-                .columns
+            let arrays: Vec<ArrayRef> = columns
                 .iter()
                 .map(|column| match column.as_str() {
                     "id" => Arc::new(Int64Array::from_iter_values(current..next)) as ArrayRef,
@@ -161,7 +168,7 @@ impl BatchReaderFactory for RangeReaderFactory {
             // Explicit row counts also preserve COUNT(*) with a zero-column projection.
             Some(RecordBatch::try_new_with_options(
                 Arc::clone(&batch_schema),
-                columns,
+                arrays,
                 &RecordBatchOptions::new().with_row_count(Some(num_rows)),
             ))
         });
@@ -193,14 +200,11 @@ impl ScanBuilder for RangeScan {
     }
 
     fn prune_columns(&mut self, columns: &[String]) -> Result<bool> {
-        if columns
-            .iter()
-            .any(|column| !self.factory.columns.contains(column))
-        {
+        if columns.iter().any(|column| !self.columns.contains(column)) {
             return Err("Projection contains a column outside the read schema".into());
         }
         output_schema(columns)?;
-        self.factory.columns = columns.to_vec();
+        self.columns = columns.to_vec();
         Ok(true)
     }
 
@@ -225,10 +229,7 @@ impl ScanBuilder for RangeScan {
                 start = end;
             }
         }
-        Ok(ScanPlan {
-            factory: self.factory,
-            partitions,
-        })
+        Ok(ScanPlan::new(self.factory, partitions))
     }
 }
 
@@ -308,39 +309,36 @@ fn is_id(predicate: &Predicate) -> bool {
     matches!(predicate, Predicate::Column { name } if name.len() == 1 && name[0] == "id")
 }
 
+/// A non-null tinyint, smallint, int, or bigint literal, decoded by the SDK.
 fn integer_literal(predicate: &Predicate) -> Option<i64> {
-    let Predicate::Literal { data_type, value } = predicate else {
-        return None;
-    };
-    let value = value.as_i64()?;
-    match data_type.as_str() {
-        "tinyint" if i8::try_from(value).is_ok() => Some(value),
-        "smallint" if i16::try_from(value).is_ok() => Some(value),
-        "int" if i32::try_from(value).is_ok() => Some(value),
-        "bigint" => Some(value),
+    match predicate.literal_value()? {
+        LiteralValue::Integer(value) => Some(value),
         _ => None,
     }
 }
 
-spark_native_source::export_data_source!(RangeSource);
+spark_native_source::export_data_source!(RangeSource, batch_read);
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+    use spark_native_source::TaskContext;
+
+    fn info(values: &[(&str, &str)]) -> CreateInfo {
+        let options: Options = values
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        CreateInfo::new("rust_sdk_range", options)
+    }
 
     fn source(values: &[(&str, &str)]) -> RangeSource {
-        RangeSource::new(
-            values
-                .iter()
-                .map(|(k, v)| (k.to_string(), v.to_string()))
-                .collect(),
-        )
-        .unwrap()
+        RangeSource::new(info(values)).unwrap()
     }
 
     fn scan(source: &RangeSource) -> RangeScan {
-        source.scan(source.schema().unwrap()).unwrap()
+        source.new_scan(source.schema().unwrap()).unwrap()
     }
 
     fn comparison(name: &str, value: i64, reversed: bool) -> Predicate {
@@ -362,18 +360,27 @@ mod tests {
         }
     }
 
-    fn read(plan: ScanPlan<RangeReaderFactory>) -> Vec<RecordBatch> {
+    /// Reads every partition with the schema that the SDK negotiated for `columns`.
+    fn read(plan: ScanPlan<RangeReaderFactory>, columns: &[&str]) -> Vec<RecordBatch> {
+        let columns: Vec<String> = columns.iter().map(|column| column.to_string()).collect();
+        let schema = output_schema(&columns).unwrap();
         plan.partitions
             .into_iter()
-            .flat_map(|partition| {
+            .enumerate()
+            .flat_map(|(index, partition)| {
+                let task = TaskContext::for_testing()
+                    .partition_id(index as i32)
+                    .build();
                 plan.factory
-                    .open(partition, TaskContext::detached())
+                    .open(partition, ReaderContext::new(schema.clone(), task))
                     .unwrap()
                     .map(|batch| batch.unwrap())
                     .collect::<Vec<_>>()
             })
             .collect()
     }
+
+    const ALL: &[&str] = &["id", "label"];
 
     fn ids(batches: &[RecordBatch]) -> Vec<i64> {
         batches
@@ -409,7 +416,7 @@ mod tests {
         assert!(scan.prune_columns(&["label".into(), "id".into()]).unwrap());
         let plan = scan.plan().unwrap();
         assert_eq!(plan.partitions.len(), 3);
-        let batches = read(plan);
+        let batches = read(plan, &["label", "id"]);
         assert_eq!(ids(&batches), (13..18).collect::<Vec<_>>());
         for batch in &batches {
             assert!(batch.num_rows() <= 2);
@@ -456,7 +463,7 @@ mod tests {
                             })
                             .collect();
                         assert_eq!(
-                            ids(&read(scan.plan().unwrap())),
+                            ids(&read(scan.plan().unwrap(), ALL)),
                             expected,
                             "range={start}..{end}, op={op}, value={literal}, reverse={reversed}"
                         );
@@ -499,7 +506,7 @@ mod tests {
             vec![FilterSupport::Unsupported; 4]
         );
         assert_eq!(
-            ids(&read(scan.plan().unwrap())),
+            ids(&read(scan.plan().unwrap(), ALL)),
             (0..10).collect::<Vec<_>>()
         );
     }
@@ -516,7 +523,7 @@ mod tests {
             first.push_filters(&[and]).unwrap(),
             vec![FilterSupport::Exact]
         );
-        assert_eq!(ids(&read(first.plan().unwrap())), vec![3, 4, 5, 6]);
+        assert_eq!(ids(&read(first.plan().unwrap(), ALL)), vec![3, 4, 5, 6]);
         let mut empty = scan(&source);
         empty
             .push_filters(&[comparison(">", 5, false), comparison("<", 3, false)])
@@ -538,10 +545,7 @@ mod tests {
                 serde_json::from_slice(&serde_json::to_vec(partition).unwrap()).unwrap()
             })
             .collect();
-        let batches = read(ScanPlan {
-            factory,
-            partitions,
-        });
+        let batches = read(ScanPlan::new(factory, partitions), &[]);
         assert_eq!(
             batches
                 .iter()
@@ -563,7 +567,7 @@ mod tests {
         limited.push_limit(5).unwrap();
         let plan = limited.plan().unwrap();
         assert_eq!(plan.partitions.len(), 2);
-        assert_eq!(ids(&read(plan)), vec![0, 1]);
+        assert_eq!(ids(&read(plan, ALL)), vec![0, 1]);
         let empty = source(&[("start", "5"), ("end", "5")]);
         assert!(scan(&empty).plan().unwrap().partitions.is_empty());
     }
@@ -578,13 +582,13 @@ mod tests {
             ("start", "not-an-integer"),
             ("unknown", "1"),
         ] {
-            assert!(RangeSource::new([(key.into(), value.into())].into()).is_err());
+            assert!(RangeSource::new(info(&[(key, value)])).is_err());
         }
         let source = source(&[]);
         let invalid = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
-        assert!(source.scan(invalid).is_err());
+        assert!(source.new_scan(invalid).is_err());
         let labels = output_schema(&["label".into()]).unwrap();
-        let mut scan = source.scan(labels).unwrap();
+        let mut scan = source.new_scan(labels).unwrap();
         assert!(scan.prune_columns(&["id".into()]).is_err());
         assert!(output_schema(&["id".into(), "id".into()]).is_err());
     }
@@ -598,9 +602,11 @@ mod tests {
             ("batchsize", "2"),
         ]);
         let plan = scan(&source).plan().unwrap();
+        let context =
+            ReaderContext::new(source.schema().unwrap(), TaskContext::for_testing().build());
         let mut reader = plan
             .factory
-            .open(plan.partitions[0].clone(), TaskContext::detached())
+            .open(plan.partitions[0].clone(), context)
             .unwrap();
         let first = reader.next().unwrap().unwrap();
         let second = reader.next().unwrap().unwrap();

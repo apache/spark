@@ -26,8 +26,9 @@ use arrow_schema::{Schema, SchemaRef};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use crate::{
-    BatchReaderFactory, DataSource, FilterSupport, LimitSupport, Options, Predicate, Result,
-    ScanBuilder, SourceCapability, TaskContext, WriteMode,
+    Capabilities, CreateInfo, DataSource, FilterSupport, LimitSupport, LogLevel,
+    PartitionReaderFactory, Predicate, ReaderContext, Result, ScanBuilder, SourceCapability,
+    TaskContext, WriteInfo, WriteMode,
 };
 
 use crate::provider::Provider;
@@ -45,8 +46,8 @@ type HandleMap<T> = Mutex<HashMap<i64, Arc<Mutex<T>>>>;
 pub struct Bridge<P: Provider> {
     next_handle: AtomicI64,
     sources: HandleMap<SourceState<P::Source>>,
-    planners: HandleMap<Planner<P::Scan>>,
-    writers: HandleMap<DriverWriter<P::Write>>,
+    planners: HandleMap<Planner<P::ScanBuilder>>,
+    writers: HandleMap<DriverWriter<P::BatchWrite>>,
 }
 
 impl<P: Provider> Default for Bridge<P> {
@@ -70,26 +71,15 @@ impl<P: Provider> Bridge<P> {
         Ok(handle)
     }
 
-    pub fn create(&self, options: Options) -> Result<(i64, u64)> {
-        self.register_source(P::Source::new(options)?)
+    pub fn create(&self, info: CreateInfo) -> Result<(i64, u64)> {
+        self.register_source(P::Source::new(info)?)
     }
 
     fn register_source(&self, source: P::Source) -> Result<(i64, u64)> {
-        let mut capabilities = 0;
-        for capability in source.capabilities(P::CAPABILITIES) {
-            if !P::CAPABILITIES.contains(&capability) {
-                return Err(format!("capability {capability:?} is not registered").into());
-            }
-            capabilities |= match capability {
-                SourceCapability::BatchRead => crate::abi::BATCH_READ,
-                SourceCapability::BatchWrite => crate::abi::BATCH_WRITE,
-                SourceCapability::Truncate => crate::abi::TRUNCATE,
-                _ => return Err(format!("capability {capability:?} is not implemented").into()),
-            };
-        }
-        if capabilities & crate::abi::TRUNCATE != 0 && capabilities & crate::abi::BATCH_WRITE == 0 {
-            return Err("Truncate requires BatchWrite".into());
-        }
+        // Keep only registered operations: a source can narrow them but never add one.
+        let capabilities = source
+            .capabilities(P::CAPABILITIES)
+            .intersection(P::CAPABILITIES);
         let handle = self.insert(
             &self.sources,
             SourceState {
@@ -97,7 +87,7 @@ impl<P: Provider> Bridge<P> {
                 capabilities,
             },
         )?;
-        Ok((handle, capabilities))
+        Ok((handle, capabilities.bits()))
     }
 
     pub fn schema(&self, handle: i64) -> Result<SchemaRef> {
@@ -112,28 +102,40 @@ impl<P: Provider> Bridge<P> {
         let source = get(&self.sources, handle)?;
         let builder = {
             let source = lock(&source);
-            if source.capabilities & crate::abi::BATCH_READ == 0 {
+            if !source.capabilities.contains(SourceCapability::BatchRead) {
                 return Err("source does not support batch reads".into());
             }
-            P::scan(&source.source, schema.clone())?
+            P::new_scan(&source.source, schema.clone())?
         };
         self.insert(&self.planners, Planner::new(builder, schema))
     }
 
+    /// Pushes parsed predicates; None stands for one that did not parse, which the
+    /// connector receives as Unknown and which stays unsupported whatever it returns.
     pub fn push_predicates(
         &self,
         handle: i64,
-        predicates: &[Predicate],
+        predicates: Vec<Option<Predicate>>,
     ) -> Result<Vec<FilterSupport>> {
         let reader = get(&self.planners, handle)?;
         let mut reader = lock(&reader);
-        let support = reader.negotiate(|builder| {
-            let support = builder.push_filters(predicates)?;
+        let parsed: Vec<bool> = predicates.iter().map(Option::is_some).collect();
+        let predicates: Vec<Predicate> = predicates
+            .into_iter()
+            .map(|predicate| predicate.unwrap_or(Predicate::Unknown))
+            .collect();
+        let mut support = reader.negotiate(|builder| {
+            let support = builder.push_filters(&predicates)?;
             if support.len() != predicates.len() {
                 return Err("push_filters must return one result per predicate".into());
             }
             Ok(support)
         })?;
+        for (support, parsed) in support.iter_mut().zip(parsed) {
+            if !parsed {
+                *support = FilterSupport::Unsupported;
+            }
+        }
         reader.has_residual |= support.iter().any(|s| *s != FilterSupport::Exact);
         Ok(support)
     }
@@ -172,20 +174,23 @@ impl<P: Provider> Bridge<P> {
         result
     }
 
-    pub fn create_writer(&self, handle: i64, schema: SchemaRef, mode: WriteMode) -> Result<i64> {
-        stream::validate_schema(&schema)?;
+    pub fn create_writer(&self, handle: i64, info: WriteInfo) -> Result<i64> {
+        stream::validate_schema(&info.schema)?;
         let source = get(&self.sources, handle)?;
-        let writer = {
+        let schema = info.schema.clone();
+        let plan = {
             let source = lock(&source);
-            if source.capabilities & crate::abi::BATCH_WRITE == 0 {
+            if !source.capabilities.contains(SourceCapability::BatchWrite) {
                 return Err("source does not support batch writes".into());
             }
-            if mode == WriteMode::Truncate && source.capabilities & crate::abi::TRUNCATE == 0 {
+            if info.mode == WriteMode::Truncate
+                && !source.capabilities.contains(SourceCapability::Truncate)
+            {
                 return Err("source does not support truncate".into());
             }
-            P::write(&source.source, schema.clone(), mode)?
+            P::new_write(&source.source, info)?
         };
-        self.insert(&self.writers, DriverWriter::new(writer, schema))
+        self.insert(&self.writers, DriverWriter::new(plan, schema))
     }
 
     pub fn serialized_writer(&self, handle: i64) -> Result<Arc<Vec<u8>>> {
@@ -229,15 +234,16 @@ impl<P: Provider> Bridge<P> {
 /// `task` must satisfy TaskContext::from_raw and remain valid until the
 /// returned stream is released. The stream's consumer must follow the
 /// Arrow C Stream ownership protocol and keep the plugin loaded.
-pub unsafe fn open_reader<F: BatchReaderFactory>(
+pub unsafe fn open_reader<F: PartitionReaderFactory>(
     task: *const crate::abi::SparkDsTaskContext,
     state: &[u8],
     partition: &[u8],
 ) -> Result<FFI_ArrowArrayStream> {
-    let state: ReaderState<F> = decode(state)?;
+    let ReaderState { factory, schema }: ReaderState<F> = decode(state)?;
+    let schema = Arc::new(schema);
     let task = unsafe { TaskContext::from_raw(task)? };
-    let reader = state.factory.open(decode(partition)?, task)?;
-    unsafe { stream::export(reader, &Arc::new(state.schema)) }
+    let reader = factory.open(decode(partition)?, ReaderContext::new(schema.clone(), task))?;
+    unsafe { stream::export(reader, &schema) }
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -262,7 +268,7 @@ fn remove<T>(handles: &HandleMap<T>, handle: i64) {
 
 struct SourceState<S> {
     source: S,
-    capabilities: u64,
+    capabilities: Capabilities,
 }
 
 struct Planner<B: ScanBuilder> {
@@ -380,9 +386,25 @@ pub(crate) fn provider_call<T>(
     action: impl FnOnce() -> Result<T>,
 ) -> std::result::Result<T, String> {
     catch_unwind(AssertUnwindSafe(|| {
-        action().map_err(|error| error.to_string())
+        action().map_err(|error| describe(&*error))
     }))
     .unwrap_or_else(|payload| Err(panic_message(payload)))
+}
+
+/// The message of an error followed by those of its sources, which `Display` of many
+/// errors, such as those with added context, omits.
+pub(crate) fn describe(error: &(dyn std::error::Error + 'static)) -> String {
+    let mut message = error.to_string();
+    let mut source = error.source();
+    while let Some(cause) = source {
+        let cause_message = cause.to_string();
+        if !message.contains(&cause_message) {
+            message.push_str(": ");
+            message.push_str(&cause_message);
+        }
+        source = cause.source();
+    }
+    message
 }
 
 pub(crate) fn panic_message(payload: Box<dyn Any + Send>) -> String {
@@ -398,10 +420,21 @@ pub(crate) fn panic_message(payload: Box<dyn Any + Send>) -> String {
     format!("native provider panicked: {message}")
 }
 
-pub fn parse_predicates(predicates: &[String]) -> Result<Vec<Predicate>> {
+/// Parses each predicate on its own. One that does not parse, for example because a
+/// later Spark encodes it differently, stays unused instead of failing the scan.
+pub fn parse_predicates(predicates: &[String]) -> Vec<Option<Predicate>> {
     predicates
         .iter()
-        .map(|text| Ok(serde_json::from_str(text)?))
+        .map(|text| match serde_json::from_str(text) {
+            Ok(predicate) => Some(predicate),
+            Err(error) => {
+                crate::log(
+                    LogLevel::Warn,
+                    &format!("Leaving unused a predicate that cannot be parsed ({error}): {text}"),
+                );
+                None
+            }
+        })
         .collect()
 }
 
@@ -415,7 +448,7 @@ mod tests {
 
     use super::*;
     use crate::provider::ReadOnly;
-    use crate::{BatchReader, BatchSource, ScanPlan};
+    use crate::{BatchReadSource, PartitionReader, ScanPlan};
 
     #[derive(Clone, Copy)]
     enum FailureMode {
@@ -467,7 +500,7 @@ mod tests {
     }
 
     impl DataSource for Source {
-        fn new(_: Options) -> Result<Self> {
+        fn new(_: CreateInfo) -> Result<Self> {
             Ok(Self {
                 builds: Arc::default(),
                 limits: Arc::default(),
@@ -484,10 +517,10 @@ mod tests {
         }
     }
 
-    impl BatchSource for Source {
-        type Scan = Builder;
+    impl BatchReadSource for Source {
+        type ScanBuilder = Builder;
 
-        fn scan(&self, _: SchemaRef) -> Result<Builder> {
+        fn new_scan(&self, _: SchemaRef) -> Result<Builder> {
             Ok(Builder {
                 builds: self.builds.clone(),
                 limits: self.limits.clone(),
@@ -503,10 +536,15 @@ mod tests {
     #[derive(Serialize, Deserialize)]
     struct Factory(u64);
 
-    impl BatchReaderFactory for Factory {
+    impl PartitionReaderFactory for Factory {
         type Partition = u64;
 
-        fn open<'task>(&self, partition: u64, _: TaskContext<'task>) -> Result<BatchReader<'task>> {
+        // Ignores the negotiated schema of the context, to test that the SDK checks it.
+        fn open<'task>(
+            &self,
+            partition: u64,
+            _: ReaderContext<'task>,
+        ) -> Result<PartitionReader<'task>> {
             let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int64, false)]));
             let values = Arc::new(Int64Array::from(vec![(self.0 + partition) as i64]));
             let batch = RecordBatch::try_new(schema.clone(), vec![values])?;
@@ -532,11 +570,12 @@ mod tests {
         fn plan(self) -> Result<ScanPlan<Factory>> {
             self.builds.fetch_add(1, Ordering::SeqCst);
             self.failure.fail("planning failed")?;
-            Ok(ScanPlan {
-                factory: Factory(self.value),
-                partitions: vec![2, 7],
-            })
+            Ok(ScanPlan::new(Factory(self.value), vec![2, 7]))
         }
+    }
+
+    fn info() -> CreateInfo {
+        CreateInfo::new("bridge_test", Default::default())
     }
 
     fn error_message<T>(result: Result<T>) -> String {
@@ -549,7 +588,7 @@ mod tests {
     #[test]
     fn source_can_close_before_planning_and_plan_is_built_once() {
         let bridge = Bridge::<ReadOnly<Source>>::default();
-        let source = Source::new(Options::new()).unwrap();
+        let source = Source::new(info()).unwrap();
         let builds = source.builds.clone();
         let drops = source.drops.clone();
         let (handle, _) = bridge.register_source(source).unwrap();
@@ -581,7 +620,7 @@ mod tests {
     fn residual_filters_prevent_calling_the_providers_limit_method() {
         for support in [FilterSupport::PruningOnly, FilterSupport::Unsupported] {
             let bridge = Bridge::<ReadOnly<Source>>::default();
-            let mut source = Source::new(Options::new()).unwrap();
+            let mut source = Source::new(info()).unwrap();
             source.filter_support = support;
             source.limit_support = LimitSupport::Global;
             let limits = source.limits.clone();
@@ -591,7 +630,7 @@ mod tests {
                 .unwrap();
             assert_eq!(
                 bridge
-                    .push_predicates(reader, &[Predicate::Unknown])
+                    .push_predicates(reader, vec![Some(Predicate::Unknown)])
                     .unwrap(),
                 vec![support]
             );
@@ -601,10 +640,42 @@ mod tests {
     }
 
     #[test]
+    fn predicates_that_do_not_parse_stay_unsupported_and_residual() {
+        let bridge = Bridge::<ReadOnly<Source>>::default();
+        let mut source = Source::new(info()).unwrap();
+        source.filter_support = FilterSupport::Exact;
+        source.limit_support = LimitSupport::Global;
+        let limits = source.limits.clone();
+        let (handle, _) = bridge.register_source(source).unwrap();
+        let reader = bridge
+            .create_reader(handle, bridge.schema(handle).unwrap())
+            .unwrap();
+        let predicates = parse_predicates(&[
+            r#"{"type":"function","name":"IS_NULL","children":[{"type":"column","name":"id"}]}"#
+                .into(),
+            r#"{"type":"function","name":"IS_NULL","children":[
+                {"type":"column","name":["id"]}]}"#
+                .into(),
+        ]);
+        assert!(
+            predicates[0].is_none(),
+            "a column name must be an array of parts"
+        );
+        assert!(predicates[1].is_some());
+        // The connector reports every predicate as exact, including the Unknown placeholder.
+        assert_eq!(
+            bridge.push_predicates(reader, predicates).unwrap(),
+            vec![FilterSupport::Unsupported, FilterSupport::Exact]
+        );
+        assert!(!bridge.push_limit(reader, 1).unwrap());
+        assert_eq!(limits.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
     fn only_global_limits_return_true_to_the_abi() {
-        for support in [LimitSupport::PerPartition, LimitSupport::Global] {
+        for support in [LimitSupport::Unsupported, LimitSupport::Global] {
             let bridge = Bridge::<ReadOnly<Source>>::default();
-            let mut source = Source::new(Options::new()).unwrap();
+            let mut source = Source::new(info()).unwrap();
             source.limit_support = support;
             let limits = source.limits.clone();
             let (handle, _) = bridge.register_source(source).unwrap();
@@ -629,7 +700,7 @@ mod tests {
             ),
         ] {
             let bridge = Bridge::<ReadOnly<Source>>::default();
-            let mut source = Source::new(Options::new()).unwrap();
+            let mut source = Source::new(info()).unwrap();
             source.failure = failure;
             let builds = source.builds.clone();
             let drops = source.builder_drops.clone();
@@ -659,7 +730,7 @@ mod tests {
             ),
         ] {
             let bridge = Bridge::<ReadOnly<Source>>::default();
-            let mut source = Source::new(Options::new()).unwrap();
+            let mut source = Source::new(info()).unwrap();
             source.failure = failure;
             let builds = source.builds.clone();
             let limits = source.limits.clone();
@@ -671,7 +742,10 @@ mod tests {
 
             assert_eq!(error_message(bridge.push_limit(reader, 5)), expected);
             assert_eq!(error_message(bridge.push_limit(reader, 1)), expected);
-            assert_eq!(error_message(bridge.push_predicates(reader, &[])), expected);
+            assert_eq!(
+                error_message(bridge.push_predicates(reader, vec![])),
+                expected
+            );
             assert_eq!(error_message(bridge.planned(reader)), expected);
             assert_eq!(limits.load(Ordering::SeqCst), 1);
             assert_eq!(builds.load(Ordering::SeqCst), 0);
@@ -684,7 +758,7 @@ mod tests {
     #[test]
     fn scans_of_one_source_keep_pushdown_and_cached_plans_independent() {
         let bridge = Bridge::<ReadOnly<Source>>::default();
-        let mut source = Source::new(Options::new()).unwrap();
+        let mut source = Source::new(info()).unwrap();
         source.filter_support = FilterSupport::PruningOnly;
         source.limit_support = LimitSupport::Global;
         let builds = source.builds.clone();
@@ -699,7 +773,7 @@ mod tests {
         bridge.close_source(handle).unwrap();
 
         bridge
-            .push_predicates(second, &[Predicate::Unknown])
+            .push_predicates(second, vec![Some(Predicate::Unknown)])
             .unwrap();
         assert!(bridge.push_limit(first, 5).unwrap());
         assert!(!bridge.push_limit(second, 1).unwrap());
@@ -730,7 +804,7 @@ mod tests {
     #[test]
     fn executor_retries_use_only_serialized_values_after_the_driver_is_dropped() {
         let bridge = Bridge::<ReadOnly<Source>>::default();
-        let source = Source::new(Options::new()).unwrap();
+        let source = Source::new(info()).unwrap();
         let builds = source.builds.clone();
         let source_drops = source.drops.clone();
         let builder_drops = source.builder_drops.clone();
@@ -778,7 +852,7 @@ mod tests {
     #[test]
     fn executor_rejects_a_factory_schema_different_from_the_negotiated_schema() {
         let bridge = Bridge::<ReadOnly<Source>>::default();
-        let (handle, _) = bridge.create(Options::new()).unwrap();
+        let (handle, _) = bridge.create(info()).unwrap();
         let reader = bridge
             .create_reader(handle, bridge.schema(handle).unwrap())
             .unwrap();
@@ -802,6 +876,67 @@ mod tests {
             open_reader::<Factory>(&task, &plan.state, &plan.partitions[0])
         });
         assert!(error.contains("schema"), "{error}");
+    }
+
+    #[test]
+    fn capabilities_keep_only_registered_operations() {
+        struct Narrowing(Capabilities);
+
+        impl DataSource for Narrowing {
+            fn new(_: CreateInfo) -> Result<Self> {
+                unreachable!("registered directly")
+            }
+
+            fn capabilities(&self, _: Capabilities) -> Capabilities {
+                self.0
+            }
+        }
+
+        impl BatchReadSource for Narrowing {
+            type ScanBuilder = Builder;
+
+            fn new_scan(&self, _: SchemaRef) -> Result<Builder> {
+                Err("not scanned".into())
+            }
+        }
+
+        let bridge = Bridge::<ReadOnly<Narrowing>>::default();
+        for (declared, expected) in [
+            (Capabilities::all(), crate::abi::BATCH_READ),
+            (Capabilities::empty(), 0),
+            (Capabilities::all().without(SourceCapability::BatchRead), 0),
+        ] {
+            let (handle, mask) = bridge.register_source(Narrowing(declared)).unwrap();
+            assert_eq!(mask, expected, "{declared:?}");
+            bridge.close_source(handle).unwrap();
+        }
+    }
+
+    #[test]
+    fn error_messages_include_their_sources_once() {
+        #[derive(Debug)]
+        struct Context(std::io::Error);
+
+        impl std::fmt::Display for Context {
+            fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("cannot open the table")
+            }
+        }
+
+        impl std::error::Error for Context {
+            fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+                Some(&self.0)
+            }
+        }
+
+        let cause = std::io::Error::new(std::io::ErrorKind::NotFound, "no such file");
+        let error: crate::Error = Box::new(Context(cause));
+        assert_eq!(describe(&*error), "cannot open the table: no such file");
+        let error = provider_call::<()>(|| Err(Box::new(Context(std::io::Error::other("io")))));
+        assert_eq!(error.unwrap_err(), "cannot open the table: io");
+        // A message that already contains its source is not repeated.
+        let arrow = arrow_schema::ArrowError::ExternalError(Box::new(std::io::Error::other("io")));
+        assert_eq!(describe(&arrow), arrow.to_string());
     }
 
     #[test]

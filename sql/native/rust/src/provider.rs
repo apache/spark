@@ -21,87 +21,75 @@ use arrow_schema::SchemaRef;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    BatchReader, BatchReaderFactory, BatchSource, BatchWrite, BatchWriteSource, DataSource,
-    DataWriterFactory, Result, ScanBuilder, ScanPlan, SourceCapability, TaskContext, TaskWriter,
-    WriteMode,
+    BatchReadSource, BatchWrite, BatchWriteSource, Capabilities, DataSource, DataWriterFactory,
+    PartitionReader, PartitionReaderFactory, PartitionWriter, ReaderContext, Result, ScanBuilder,
+    ScanPlan, WriteInfo, WritePlan, WriterContext,
 };
 
 pub trait Provider: Send + 'static {
     type Source: DataSource;
-    type Scan: ScanBuilder;
-    type Write: BatchWrite;
+    type ScanBuilder: ScanBuilder;
+    type BatchWrite: BatchWrite;
     const READ: bool;
     const WRITE: bool;
-    const CAPABILITIES: &'static [SourceCapability];
+    const CAPABILITIES: Capabilities;
 
-    fn scan(source: &Self::Source, schema: SchemaRef) -> Result<Self::Scan>;
-    fn write(source: &Self::Source, schema: SchemaRef, mode: WriteMode) -> Result<Self::Write>;
+    fn new_scan(source: &Self::Source, schema: SchemaRef) -> Result<Self::ScanBuilder>;
+    fn new_write(source: &Self::Source, info: WriteInfo) -> Result<WritePlan<Self::BatchWrite>>;
 }
 
 pub struct ReadOnly<S>(PhantomData<S>);
-pub struct WriteOnly<S, const TRUNCATE: bool>(PhantomData<S>);
-pub struct ReadWrite<S, const TRUNCATE: bool>(PhantomData<S>);
+pub struct WriteOnly<S>(PhantomData<S>);
+pub struct ReadWrite<S>(PhantomData<S>);
 
-impl<S: BatchSource> Provider for ReadOnly<S> {
+impl<S: BatchReadSource> Provider for ReadOnly<S> {
     type Source = S;
-    type Scan = S::Scan;
-    type Write = Unavailable;
+    type ScanBuilder = S::ScanBuilder;
+    type BatchWrite = Unavailable;
     const READ: bool = true;
     const WRITE: bool = false;
-    const CAPABILITIES: &'static [SourceCapability] = &[SourceCapability::BatchRead];
+    const CAPABILITIES: Capabilities = Capabilities::registered(true, false, false);
 
-    fn scan(source: &S, schema: SchemaRef) -> Result<Self::Scan> {
-        source.scan(schema)
+    fn new_scan(source: &S, schema: SchemaRef) -> Result<Self::ScanBuilder> {
+        source.new_scan(schema)
     }
 
-    fn write(_: &S, _: SchemaRef, _: WriteMode) -> Result<Self::Write> {
+    fn new_write(_: &S, _: WriteInfo) -> Result<WritePlan<Self::BatchWrite>> {
         Err("batch writes are not registered".into())
     }
 }
 
-impl<S: BatchWriteSource, const TRUNCATE: bool> Provider for WriteOnly<S, TRUNCATE> {
+impl<S: BatchWriteSource> Provider for WriteOnly<S> {
     type Source = S;
-    type Scan = Unavailable;
-    type Write = S::Write;
+    type ScanBuilder = Unavailable;
+    type BatchWrite = S::BatchWrite;
     const READ: bool = false;
     const WRITE: bool = true;
-    const CAPABILITIES: &'static [SourceCapability] = if TRUNCATE {
-        &[SourceCapability::BatchWrite, SourceCapability::Truncate]
-    } else {
-        &[SourceCapability::BatchWrite]
-    };
+    const CAPABILITIES: Capabilities = Capabilities::registered(false, true, S::SUPPORTS_TRUNCATE);
 
-    fn scan(_: &S, _: SchemaRef) -> Result<Self::Scan> {
+    fn new_scan(_: &S, _: SchemaRef) -> Result<Self::ScanBuilder> {
         Err("batch reads are not registered".into())
     }
 
-    fn write(source: &S, schema: SchemaRef, mode: WriteMode) -> Result<Self::Write> {
-        source.write(schema, mode)
+    fn new_write(source: &S, info: WriteInfo) -> Result<WritePlan<Self::BatchWrite>> {
+        source.new_write(info)
     }
 }
 
-impl<S: BatchSource + BatchWriteSource, const TRUNCATE: bool> Provider for ReadWrite<S, TRUNCATE> {
+impl<S: BatchReadSource + BatchWriteSource> Provider for ReadWrite<S> {
     type Source = S;
-    type Scan = S::Scan;
-    type Write = S::Write;
+    type ScanBuilder = <S as BatchReadSource>::ScanBuilder;
+    type BatchWrite = <S as BatchWriteSource>::BatchWrite;
     const READ: bool = true;
     const WRITE: bool = true;
-    const CAPABILITIES: &'static [SourceCapability] = if TRUNCATE {
-        &[
-            SourceCapability::BatchRead,
-            SourceCapability::BatchWrite,
-            SourceCapability::Truncate,
-        ]
-    } else {
-        &[SourceCapability::BatchRead, SourceCapability::BatchWrite]
-    };
+    const CAPABILITIES: Capabilities = Capabilities::registered(true, true, S::SUPPORTS_TRUNCATE);
 
-    fn scan(source: &S, schema: SchemaRef) -> Result<Self::Scan> {
-        source.scan(schema)
+    fn new_scan(source: &S, schema: SchemaRef) -> Result<Self::ScanBuilder> {
+        source.new_scan(schema)
     }
 
-    fn write(source: &S, schema: SchemaRef, mode: WriteMode) -> Result<Self::Write> {
-        source.write(schema, mode)
+    fn new_write(source: &S, info: WriteInfo) -> Result<WritePlan<Self::BatchWrite>> {
+        source.new_write(info)
     }
 }
 
@@ -118,20 +106,16 @@ impl ScanBuilder for Unavailable {
     }
 }
 
-impl BatchReaderFactory for Unavailable {
+impl PartitionReaderFactory for Unavailable {
     type Partition = ();
 
-    fn open<'task>(&self, _: (), _: TaskContext<'task>) -> Result<BatchReader<'task>> {
+    fn open<'task>(&self, _: (), _: ReaderContext<'task>) -> Result<PartitionReader<'task>> {
         Err("batch reads are not registered".into())
     }
 }
 
 impl BatchWrite for Unavailable {
     type Factory = Self;
-
-    fn factory(&mut self) -> Result<Self> {
-        Err("batch writes are not registered".into())
-    }
 
     fn commit(&mut self, _: Vec<()>) -> Result<()> {
         Err("batch writes are not registered".into())
@@ -145,7 +129,7 @@ impl BatchWrite for Unavailable {
 impl DataWriterFactory for Unavailable {
     type Message = ();
 
-    fn open<'task>(&self, _: TaskContext<'task>) -> Result<TaskWriter<'task, ()>> {
+    fn open<'task>(&self, _: WriterContext<'task>) -> Result<PartitionWriter<'task, ()>> {
         Err("batch writes are not registered".into())
     }
 }

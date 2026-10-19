@@ -19,7 +19,7 @@ limitations under the License.
 
 This experimental SDK implements **batch reads and writes** over the C ABI proposed in
 [Spark PR #59424](https://github.com/apache/spark/pull/59424), pinned to commit
-`534dfca15723c7208061b1e9e4d80c5757360a2a`. Spark calls the library through the
+`74aa0dffc53463034fa6549796c4dd599e9705de`. Spark calls the library through the
 Java Foreign Function and Memory (FFM) API. This PR contains the SDK and example,
 not the Spark framework; running the Spark example requires that framework and
 Java 22 or newer on the driver and executors.
@@ -37,20 +37,26 @@ to include the example.
 ## Connector API and lifecycle
 
 A connector implements [`DataSource`](src/lib.rs) for construction, schema discovery,
-and optional capability restrictions. Spark can create and immediately drop a source
-just to discover capabilities; schema inference or an operation need not follow.
+and optional capability restrictions. `DataSource::new` receives a `CreateInfo` with
+the name of the data source and its options. Spark can create and immediately drop a
+source just to discover capabilities; schema inference or an operation need not follow.
 
 Read support uses three traits:
 
-* `BatchSource`: create an independent scan builder.
+* `BatchReadSource`: create an independent scan builder with `new_scan`.
 * `ScanBuilder`: negotiate predicates, limit, and projection, then consume itself
   in `plan()` to return a typed `ScanPlan<Factory>`.
-* `BatchReaderFactory`: serialize executor configuration and open one lazy Arrow
-  reader from a typed partition and a borrowed `TaskContext`.
+* `PartitionReaderFactory`: serialize executor configuration and open one lazy Arrow
+  reader from a typed partition and a `ReaderContext`, which carries the negotiated
+  schema and a borrowed `TaskContext`.
 
 Write support is independent: a write-only connector implements `BatchWriteSource`,
 `BatchWrite`, `DataWriterFactory`, and `DataWriter`, without implementing reads.
 The write lifecycle is described below.
+
+The inputs of these methods are `#[non_exhaustive]` structs (`CreateInfo`, `WriteInfo`,
+`ReaderContext`, and `WriterContext`), and the plans (`ScanPlan` and `WritePlan`) have
+constructors, so that new ABI fields can reach connectors without breaking them.
 
 The factory and partition types implement `Serialize` and `Deserialize`.
 Connections, pointers, and open readers remain in their creating process.
@@ -59,12 +65,12 @@ must read the same snapshot. Multiple task attempts open independent readers.
 
 ```text
 Driver:
-  BatchSource -> ScanBuilder -> ScanPlan { factory, partitions }
-                     |                   |
-              mutable negotiation   immutable serialized descriptors
-                                         |
-Executor, per task:                       v
-  restored factory + partition + TaskContext -> Arrow reader -> Arrow C Stream
+  BatchReadSource -> ScanBuilder -> ScanPlan { factory, partitions }
+                         |                   |
+                  mutable negotiation   immutable serialized descriptors
+                                             |
+Executor, per task:                          v
+  restored factory + partition + ReaderContext -> Arrow reader -> Arrow C Stream
 ```
 
 The Rust API maps to the framework's driver-only `ColumnarBatchPlanner` and its
@@ -83,29 +89,49 @@ panic. Batch planner creation remains lazy for scans that do not read in batch.
 
 The JVM's `NativePartitionReaderFactory` carries only the library location,
 source name, read schema, and serialized state. The native executor `read` entry
-point restores the Rust factory from those bytes without creating or accessing
-the driver registry. Closing the driver handles cannot invalidate factory or
-partition bytes already copied to Spark, including for retried tasks.
+point restores the Rust factory and the negotiated schema from those bytes without
+creating or accessing the driver registry, and passes the schema to the reader in
+`ReaderContext`. Closing the driver handles cannot invalidate factory or partition
+bytes already copied to Spark, including for retried tasks.
 
 The reader owns its executor resources and cannot borrow its temporary factory.
-It may borrow `TaskContext` until the returned Arrow stream is released. Task IDs
-are optional for compatibility with shorter ABI structures. `is_interrupted()`
-checks Spark's live cancellation callback, not a snapshot of its initial value.
-Check it during long operations; blocking I/O still requires timeouts.
+It may borrow `TaskContext` until the returned Arrow stream is released. Every host
+provides the task IDs of version 1 of the ABI, so the SDK rejects a shorter task
+context. `is_interrupted()` checks Spark's live cancellation callback, not a snapshot
+of its initial value. Check it during long operations; blocking I/O still requires
+timeouts. `TaskContext::for_testing()` builds a context with chosen IDs and an
+optional interruption flag for tests outside Spark.
 
 Register one provider in the connector's `cdylib` crate:
 
 ```rust
-spark_native_source::export_data_source!(RangeSource);
+spark_native_source::export_data_source!(RangeSource, batch_read);
 ```
 
 The macro exports only `spark_ds_init` and returns Spark's versioned function
 table. The connector uses safe Rust traits without C pointers. Rust trait objects
 never cross the binary boundary between libraries.
 
+`DataSource::init` runs once in each JVM when Spark loads the library, with the
+Spark version in `HostInfo`; a failure prevents Spark from using the library and is
+logged. `spark_native_source::log` writes to the driver or executor log through
+Spark from any thread, and drops messages outside Spark, such as in unit tests.
+
+A source that cannot infer its schema, such as a sink of any input, sets
+`DataSource::INFERS_SCHEMA` to false. The SDK then leaves the native `schema`
+function unset, so Spark requires a user-specified schema and reports its standard
+error without one.
+
+A library that implements several data sources is installed or listed in its
+package under each of their names. Spark passes the name in `CreateInfo::name`, so
+one registered `DataSource` can choose the source to create; the macro registers a
+single Rust type per library.
+
 The implementation separates public connector traits, driver handle/planning
 state in `bridge.rs`, Arrow ownership in `stream.rs`, and C bindings/adapters in
-`abi.rs` and `export.rs`. It does not change Spark's native ABI or JVM classes.
+`abi.rs` and `export.rs`. The macro reaches them through a hidden `__private`
+module, which is not part of the API. It does not change Spark's native ABI or JVM
+classes.
 
 ## Source capabilities
 
@@ -114,42 +140,47 @@ installs their native callbacks and derives the default capability set:
 
 ```rust
 export_data_source!(RangeSource, batch_read);
-export_data_source!(FileSink, batch_write, truncate);
+export_data_source!(FileSink, batch_write);
 export_data_source!(ReadWriteSource, batch_read, batch_write);
 ```
 
-These are alternative registrations; invoke the macro only once per library.
-The one-argument form is shorthand for `batch_read`. `truncate` is optional and
-requires `batch_write`; without it the source supports only append writes.
+These are alternative registrations; invoke the macro only once per library, with
+its operations in any order. A `BatchWriteSource` opts into overwrite support with
+`const SUPPORTS_TRUNCATE: bool = true`, next to the `new_write` that handles
+`WriteMode::Truncate`; without it the source supports only append writes.
 Unregistered operation families have null native callbacks. The registration
-requires the corresponding Rust traits at compile time.
+requires the corresponding Rust traits at compile time. The macro also rejects a
+library built with `panic = "abort"`, because the SDK can report a panic as an error
+only when it unwinds.
 
 Most connectors do not implement `capabilities`. A connector can restrict the
 registered set for the current options by overriding this `DataSource` method:
 
 ```rust
-fn capabilities(&self, supported: &[SourceCapability]) -> Vec<SourceCapability> {
-    supported.iter().copied().filter(|capability| {
-        !self.read_only || !matches!(capability,
-            SourceCapability::BatchWrite | SourceCapability::Truncate)
-    }).collect()
+fn capabilities(&self, registered: Capabilities) -> Capabilities {
+    if self.read_only {
+        // Also removes Truncate, which requires batch writes.
+        registered.without(SourceCapability::BatchWrite)
+    } else {
+        registered
+    }
 }
 ```
 
-The SDK evaluates this once during `create`, validates the declaration, and returns
-its native flag mask. Duplicate entries are ignored. Enabling an unregistered
-operation is an error; `Truncate` also requires `BatchWrite`. An empty set permits
-schema discovery and close, but rejects operation creation before calling the
-connector. The declaration stays fixed for that instance. Streaming capabilities
-are not supported yet. Predicate, limit, and projection support remain per-scan
-contracts.
+The SDK evaluates this once during `create` and keeps only registered operations,
+so a source can narrow its capabilities but never enable an unregistered operation.
+An empty set permits schema discovery and close, but rejects operation creation
+before calling the connector. The declaration stays fixed for that instance.
+`Capabilities::all()` exists to test this method outside Spark. Streaming
+capabilities are not supported yet. Predicate, limit, and projection support remain
+per-scan contracts.
 
 Spark also calls `create` and `close` during query analysis to discover table
 capabilities. A probe uses the table's options, while an operation may override
 them with query options and checks capabilities again on a new source instance.
 Keep `DataSource::new` and `capabilities` lightweight and safe to drop
-immediately; do not assume that `schema` or `scan` will follow. Executor resources
-belong in `BatchReaderFactory::open`.
+immediately; do not assume that `schema` or `new_scan` will follow. Executor
+resources belong in `PartitionReaderFactory::open`.
 
 The pinned framework propagates native `BATCH_WRITE` and `TRUNCATE` flags to
 `Table.capabilities()`, so a read-only source rejects batch writes during
@@ -162,36 +193,39 @@ flags are not a literal copy of the native mask declared by the Rust source.
 
 ```text
 Driver:
-  DataSource + BatchWriteSource -> BatchWrite coordinator
-                                   | factory()         | commit(messages) / abort(messages)
-                                   v                   ^
-                          serialized factory + schema  | typed messages
-                                   |                   |
-Executor, per task attempt:         v                   |
-                          DataWriterFactory::open(TaskContext)
+  DataSource + BatchWriteSource -> WritePlan { coordinator, factory }
+                                        |             ^ commit(messages) / abort(messages)
+                       serialized factory + schema    | typed messages
+                                        |             |
+Executor, per task attempt:             v             |
+                          DataWriterFactory::open(WriterContext)
                                    -> DataWriter::write(RecordBatch)*
                                    -> commit() / abort() -> Drop
 ```
 
-`BatchWriteSource::write(schema, mode)` validates the input and returns an
-independent driver coordinator. `BatchWrite::factory()` produces serializable
-executor configuration; the SDK caches the encoded factory and input schema,
-including a terminal error if creation or serialization fails. Restoring an
-executor writer uses only those bytes, without creating a driver registry.
+`BatchWriteSource::new_write(WriteInfo)` validates the input schema and returns a
+`WritePlan`: an independent driver coordinator and the serializable executor
+configuration of its task writers. The SDK encodes the factory and input schema
+once, including a terminal error if serialization fails. Restoring an executor
+writer uses only those bytes, without creating a driver registry.
 
-Each `DataWriterFactory::open` returns a task-bound writer. `write` takes ownership
-of a `RecordBatch`, so its Arrow buffers can be retained after the callback. The
-SDK moves the incoming Arrow array and schema, checks the schema against the
-negotiated input, and releases imported resources on failures. Input slices need
-not have zero offsets; the zero-offset restriction applies to arrays exported to
-Spark by readers. Check cancellation during lengthy writes and use I/O timeouts.
+Each `DataWriterFactory::open` receives a `WriterContext` with the input schema and
+the task, and returns a task-bound writer. `write` takes ownership of a
+`RecordBatch`, so its Arrow buffers can be retained after the callback. The SDK
+moves the incoming Arrow array and schema, checks the schema against the negotiated
+input, and releases imported resources on failures. Input slices need not have zero
+offsets; the zero-offset restriction applies to arrays exported to Spark by readers.
+Check cancellation during lengthy writes and use I/O timeouts.
 
 Task `commit()` returns a typed, serde-serializable message. Driver `commit`
-receives one winning message per partition; driver `abort` receives
-`Vec<Option<Message>>`, preserving missing-task positions. A failed task or driver
-commit leaves the same object available for abort. The SDK prevents further writes
-after a failure or successful commit, caches successful task commit messages, and
-avoids repeating successful commit/abort callbacks. Drop only releases resources.
+receives one winning message per partition, at the position of its partition;
+driver `abort` receives `Vec<Option<Message>>`, with `None` for a partition whose
+message did not arrive or cannot be decoded, so a corrupted message cannot prevent
+cleanup. A failed task or driver commit leaves the same object available for abort.
+A task commit whose message cannot be serialized counts as failed, so `abort` can
+follow a `commit` that returned a message. The SDK prevents further writes after a
+failure or successful commit, caches successful task commit messages, and avoids
+repeating successful commit/abort callbacks. Drop only releases resources.
 Connectors therefore do not need to track their own phase; the `# Lifecycle`
 sections of `BatchWrite` and `DataWriter` list the exact call-order guarantees.
 
@@ -203,11 +237,12 @@ including after task commit, so connectors need a strategy for orphaned data.
 Spark provides no batch query ID: generate and serialize an operation identity
 when needed. Task-attempt IDs alone are not globally unique across applications.
 
-Spark may close a coordinator without commit/abort if factory serialization fails.
-It also creates writers late, after prerequisite AQE shuffle stages, but input
-computation can still fail during write tasks. Constructors must therefore avoid
-irreversible changes. This API is batch-only: non-null streaming query IDs and
-epoch IDs other than `-1` are rejected.
+Spark closes a coordinator without commit or abort if factory serialization fails,
+so Drop must also release what only that write staged. It also creates writers
+late, after prerequisite AQE shuffle stages, but input computation can still fail
+during write tasks. Constructors must therefore avoid irreversible changes. This
+API is batch-only: non-null streaming query IDs and epoch IDs other than `-1` are
+rejected.
 
 The [file sink][sink] demonstrates append/truncate using staged JSONL files and
 atomic publication of a manifest on a local or shared filesystem. Its documented
@@ -216,10 +251,11 @@ not transaction guarantees provided by the SDK.
 
 ## Arrow contract
 
-`BatchReaderFactory::open` returns a lifetime-bound `Box<dyn RecordBatchReader +
-Send>`. Return fixed-schema batches lazily with bounded memory. Exported arrays
-own their buffers independently of the reader: Spark may release a stream before
-releasing its previously returned batches.
+`PartitionReaderFactory::open` returns a lifetime-bound `PartitionReader`, a
+`Box<dyn RecordBatchReader + Send>`. Return fixed-schema batches lazily with bounded
+memory, with the columns of `ReaderContext::schema`. Exported arrays own their
+buffers independently of the reader: Spark may release a stream before releasing
+its previously returned batches.
 
 Stream callbacks, including release, may run on different threads, but never
 concurrently. Readers must be `Send`; they do not need to be `Sync` or tied to
@@ -232,13 +268,18 @@ logical types, ignoring nullability and Arrow metadata, accepting the supported
 string/binary encodings and equivalent timestamp time zones. It rejects
 unsupported types, schema drift, and nonzero array offsets with explicit errors.
 It does not silently copy arrays, cast types, or expand dictionary encoding.
+Batches must also respect the nullability of the negotiated schema: as Spark does,
+the SDK rejects a null in a column, field, element, or map value that the schema
+declares not nullable, unless its parent value is null.
 
-Supported types include signed integers, float32/64, boolean, strings and binary
-(including Large and View variants), decimal128 up to precision 38, date32,
-microsecond timestamps, supported Spark intervals, null, structs, lists, and
-maps. Dictionary encoding, unsigned integers, decimal256, large/fixed-size
-lists, and non-microsecond timestamps are outside this prototype's contract.
-Normalize sliced arrays when necessary before returning them.
+The supported types are those of version 1 of the ABI: signed integers,
+float32/64, boolean, strings and binary (including Large and View variants), decimal128
+up to precision 38, date32, microsecond timestamps with or without a time zone,
+structs, lists, and maps. Spark rejects other Spark types, such as intervals,
+variant, time, and the null type, before it passes a schema to the library.
+Dictionary encoding, unsigned integers, decimal256, large/fixed-size lists, and
+non-microsecond timestamps are outside this prototype's contract. Normalize sliced
+arrays when necessary before returning them.
 
 An empty projection must retain the number of rows even with no columns. The
 [Range implementation][range-source] demonstrates this together with bounded
@@ -256,15 +297,20 @@ Results correspond to input predicates in order:
 | `Unsupported` | `SPARK_DS_PREDICATE_UNUSED` | No evaluation |
 
 The pinned framework rechecks **all** filters, including `Exact`. Unknown
-expression names and unsupported types must remain unsupported. The SDK
-preserves literal JSON values, including exact 64-bit integers, rather than
-converting all numbers to floating point. It is not a generic Spark expression
-evaluator; connectors remain responsible for Spark SQL semantics.
+expression names and unsupported types must remain unsupported. The SDK parses
+each predicate on its own: one that it cannot parse, for example because a later
+Spark encodes it differently, reaches `push_filters` as `Predicate::Unknown` and
+stays unsupported instead of failing the scan. The SDK preserves literal JSON
+values, including exact 64-bit integers, rather than converting all numbers to
+floating point. `Predicate::literal_value` decodes a literal by its Spark SQL type:
+integers within the range of their type, exact floats, strings, base64 binary,
+plain decimal strings, dates, and timestamps. A literal that it does not decode
+returns `None`; keep its predicate unsupported. The SDK is not a generic Spark
+expression evaluator; connectors remain responsible for Spark SQL semantics.
 
 | Limit result | ABI boolean | Meaning |
 | --- | --- | --- |
-| `Unsupported` | `false` | No limit applied |
-| `PerPartition` | `false` | A local cap; the total may exceed the limit |
+| `Unsupported` | `false` | No promise; a connector may still cap each partition on its own |
 | `Global` | `true` | The entire scan returns at most the limit |
 
 Spark retains its final limit and currently pushes a limit only when the scan
@@ -294,21 +340,23 @@ The harness compiles against the unmodified framework header in
 [`tests/fixtures/spark_datasource.h`](tests/fixtures/spark_datasource.h), copied
 from the pinned commit above. It calls the actual function table and validates
 capability-only source discovery and optional slots, independent driver planners,
-pushdown and planning, serialized executor reads, cancellation, sequential
-cross-thread stream callbacks, and Arrow buffers surviving stream release.
-This checks the C boundary without requiring Java; it does not substitute for
-Spark planner and task-lifecycle testing.
+pushdown and planning, serialized executor reads, rejection of task contexts shorter
+than version 1, cancellation, sequential cross-thread stream callbacks, and Arrow
+buffers surviving stream release. This checks the C boundary without requiring
+Java; it does not substitute for Spark planner and task-lifecycle testing.
 
 Rust tests additionally exercise the exported function table with option-dependent
-capabilities, empty and duplicate declarations, and unsupported declarations or
-panics during capability discovery. They also cover terminal planning
-failures, retries after the driver registry is dropped, schema/layout validation,
-sized ABI structures, task-context lifetimes, integer boundaries, projections,
-and deterministic partition plans. Write ABI tests cover typed factory/message
-round trips, retained Arrow buffers, cancellation, failed writes and commits,
-serialization failures, missing abort messages, and repeated callbacks. The sink
-tests cover append/truncate publication, losing attempts, and cleanup after failed
-publication while preserving the previous manifest.
+capabilities, narrowed and unregistered declarations, the source name, library
+initialization and logging, and panics during capability discovery. They also
+cover terminal planning failures, predicates that do not parse, typed literals,
+retries after the driver registry is dropped, schema, layout, and nullability
+validation, sized ABI structures, task-context lifetimes, integer boundaries,
+projections, and deterministic partition plans. Write ABI tests cover typed
+factory/message round trips, retained Arrow buffers, cancellation, failed writes and
+commits, serialization failures, missing and undecodable messages, and repeated
+callbacks. The sink tests cover append/truncate publication, losing attempts,
+messages at the wrong partition position, and cleanup after failed publication while
+preserving the previous manifest.
 
 ## Package and run with Spark
 
@@ -327,11 +375,11 @@ analysis-time rejection for a source instance with writes disabled.
 ## Scope and limitations
 
 Native sources run trusted code in the driver and executors. The SDK translates
-provider errors and unwinding panics into C/Arrow errors. Process aborts,
-allocation failure, double panics during unwinding, or panics in custom Arrow
-buffer destructors cannot be recovered. A reader's or writer's background work
-must stop before its task context expires. Native memory is not reserved through
-Spark's memory manager.
+provider errors, with the messages of their sources, and unwinding panics into
+C/Arrow errors. Process aborts, allocation failure, double panics during unwinding,
+or panics in custom Arrow buffer destructors cannot be recovered. A reader's or
+writer's background work must stop before its task context expires. Native memory
+is not reserved through Spark's memory manager.
 
 This prototype does not include Structured Streaming, nested projection,
 custom metrics, memory accounting, a generic filter evaluator, C++ bindings, or

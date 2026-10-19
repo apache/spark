@@ -19,18 +19,18 @@ limitations under the License.
 
 This example implements batch reads using the [Rust native data source SDK][sdk].
 The connector in [src/lib.rs](src/lib.rs) exports `rust_sdk_range` through the SDK's
-`export_data_source!` macro. The macro exports the C entry point `spark_ds_init`; the connector
-does not use JNI, raw pointers, or unsafe code.
+`export_data_source!(RangeSource, batch_read)` macro. The macro exports the C entry point
+`spark_ds_init`; the connector does not use JNI, raw pointers, or unsafe code.
 
 The example targets C ABI version 1 from [Spark PR #59424][native-source-pr], pinned to commit
-`534dfca15723c7208061b1e9e4d80c5757360a2a`. The SDK and example build without Spark or a JVM.
+`74aa0dffc53463034fa6549796c4dd599e9705de`. The SDK and example build without Spark or a JVM.
 Running the Spark smoke script requires a distribution built with that native data source
 framework and Java 22 or later on the driver and executors. The JNI SDK prototype in PR #59442
 targets a different interface.
 
-Registering the source for batch reads derives `SourceCapability::BatchRead` and the native
+Registering the source for batch reads derives the `BatchRead` capability and the native
 mask `SPARK_DS_BATCH_READ` (`1`); the connector does not maintain a separate capability list.
-Connectors can restrict registered operations through `DataSource::capabilities()` based on
+Connectors can narrow registered operations through `DataSource::capabilities()` based on
 options. This example does not implement writes or Structured Streaming. The companion
 [file sink](../native-data-sink/README.md) demonstrates batch append and overwrite.
 During analysis, Spark creates and closes a source with the table options to inspect its
@@ -58,9 +58,10 @@ options. A source created just for capability discovery is closed without creati
 Spark normalizes option names to lower case. Unknown options are rejected.
 
 The source evaluates `=`, `<=>`, `<`, `<=`, `>`, and `>=` comparisons between `id` and non-null
-integer literals, including conjunctions of supported predicates. It reports these predicates
-as `Exact`; Spark still evaluates all predicates again after reading. Unknown expressions and
-unsupported literal types remain `Unsupported`.
+integer literals, which `Predicate::literal_value` decodes and checks against the range of their
+type, including conjunctions of supported predicates. It reports these predicates as `Exact`;
+Spark still evaluates all predicates again after reading. Unknown expressions and unsupported
+literal types remain `Unsupported`.
 
 Spark pushes a limit only when no residual filter remains, which excludes filtered scans in
 the pinned framework. The connector can apply a global limit by shortening the selected range
@@ -69,11 +70,14 @@ zero-column batches for operations such as `COUNT(*)`.
 
 ## Planning and reading
 
-`RangeSource` creates a driver-side `RangeScan`. Pushdown methods update that builder, and
-`plan(self)` consumes it to produce a `ScanPlan<RangeReaderFactory>`. The plan contains:
+`RangeSource::new_scan` creates a driver-side `RangeScan`. Pushdown methods update that builder,
+and `plan(self)` consumes it to produce a `ScanPlan<RangeReaderFactory>`. The plan contains:
 
-- a serializable `RangeReaderFactory` with output columns and batch size;
+- a serializable `RangeReaderFactory` with the batch size;
 - disjoint `RangePartition` values with inclusive starts and exclusive ends.
+
+The SDK serializes the negotiated schema with the factory, so the reader takes its output
+columns, in order, from `ReaderContext::schema` instead of carrying them in the factory.
 
 This API matches the framework's separation of driver planning and executor reading. Spark's
 `NativeBatchPlanner` owns the native handle; its `NativePartitionReaderFactory` carries the
@@ -83,8 +87,9 @@ native `partitions` and then `serialize_reader`, which share the SDK's cached pl
 closes the native driver handle. The Rust API and C ABI layout remain unchanged.
 
 The SDK serializes this data for the executors. Each factory opens a lazy Arrow reader using a
-partition and a lifetime-bound `TaskContext`. The example checks task cancellation before
-generating each batch and keeps memory bounded by the configured batch size. Neither the factory
+partition and a `ReaderContext`, which carries the negotiated schema and a lifetime-bound
+`TaskContext`. The example checks task cancellation before generating each batch and keeps
+memory bounded by the configured batch size. Neither the factory
 nor a partition contains a driver handle or open connection. A storage connector can also put a
 snapshot identifier in its factory to make retried reads refer to the same data.
 

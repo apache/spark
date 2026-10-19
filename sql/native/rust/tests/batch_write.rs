@@ -23,13 +23,14 @@ use arrow_array::ffi::to_ffi;
 use arrow_array::{Array, Int32Array, Int64Array, RecordBatch, StructArray};
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use serde::{Deserialize, Serialize, Serializer};
-use spark_native_source::abi::{
+use spark_native_source::__private::abi::{
     ArrowSchema, SparkDsCreateInfo, SparkDsHost, SparkDsLibrary, SparkDsTaskContext,
     SparkDsWriteInfo, ABI_VERSION,
 };
 use spark_native_source::{
-    BatchWrite, BatchWriteSource, DataSource, DataWriter, DataWriterFactory, Options, Result,
-    SourceCapability, TaskContext, TaskWriter, WriteMode,
+    BatchWrite, BatchWriteSource, Capabilities, CreateInfo, DataSource, DataWriter,
+    DataWriterFactory, PartitionWriter, Result, SourceCapability, TaskContext, WriteInfo,
+    WriteMode, WritePlan, WriterContext,
 };
 
 // Each test exercises the actual exported table; this lock isolates fixture observations.
@@ -39,7 +40,6 @@ static EVENTS: Mutex<Vec<Event>> = Mutex::new(Vec::new());
 #[derive(Clone, Debug, PartialEq)]
 enum Event {
     WriteCreated(bool),
-    Factory,
     Batch(usize),
     TaskCommit,
     TaskAbort(bool),
@@ -70,37 +70,46 @@ struct Source {
 }
 
 impl DataSource for Source {
-    fn new(options: Options) -> Result<Self> {
+    // A sink of any input: Spark requires a user-specified schema to read it.
+    const INFERS_SCHEMA: bool = false;
+
+    fn new(info: CreateInfo) -> Result<Self> {
         Ok(Self {
-            failure: options.get("failure").cloned().unwrap_or_default(),
-            capabilities: options.get("capabilities").cloned().unwrap_or_default(),
+            failure: info.options.get("failure").cloned().unwrap_or_default(),
+            capabilities: info
+                .options
+                .get("capabilities")
+                .cloned()
+                .unwrap_or_default(),
         })
     }
 
-    fn schema(&self) -> Result<SchemaRef> {
-        Ok(schema())
-    }
-
-    fn capabilities(&self, supported: &[SourceCapability]) -> Vec<SourceCapability> {
+    fn capabilities(&self, registered: Capabilities) -> Capabilities {
         match self.capabilities.as_str() {
-            "none" => vec![],
-            "append" => vec![SourceCapability::BatchWrite],
-            _ => supported.to_vec(),
+            "none" => Capabilities::empty(),
+            "append" => registered.without(SourceCapability::Truncate),
+            _ => registered,
         }
     }
 }
 
 impl BatchWriteSource for Source {
-    type Write = Driver;
+    type BatchWrite = Driver;
 
-    fn write(&self, input: SchemaRef, mode: WriteMode) -> Result<Driver> {
-        if input != schema() {
+    const SUPPORTS_TRUNCATE: bool = true;
+
+    fn new_write(&self, info: WriteInfo) -> Result<WritePlan<Driver>> {
+        if info.schema != schema() {
             return Err("unsupported input schema".into());
         }
-        record(Event::WriteCreated(matches!(mode, WriteMode::Truncate)));
-        Ok(Driver {
+        record(Event::WriteCreated(info.mode == WriteMode::Truncate));
+        let driver = Driver {
             failure: self.failure.clone(),
-        })
+        };
+        let factory = Factory {
+            failure: self.failure.clone(),
+        };
+        Ok(WritePlan::new(driver, factory))
     }
 }
 
@@ -110,13 +119,6 @@ struct Driver {
 
 impl BatchWrite for Driver {
     type Factory = Factory;
-
-    fn factory(&mut self) -> Result<Factory> {
-        record(Event::Factory);
-        Ok(Factory {
-            failure: self.failure.clone(),
-        })
-    }
 
     fn commit(&mut self, messages: Vec<Message>) -> Result<()> {
         record(Event::DriverCommit(messages));
@@ -172,9 +174,15 @@ fn serialize_message_mode<S: Serializer>(
 impl DataWriterFactory for Factory {
     type Message = Message;
 
-    fn open<'task>(&self, task: TaskContext<'task>) -> Result<TaskWriter<'task, Message>> {
+    fn open<'task>(
+        &self,
+        context: WriterContext<'task>,
+    ) -> Result<PartitionWriter<'task, Message>> {
+        if context.schema != schema() {
+            return Err("the writer context lost the input schema".into());
+        }
         Ok(Box::new(Writer {
-            task,
+            task: context.task,
             failure: self.failure.clone(),
             batches: vec![],
         }))
@@ -226,8 +234,8 @@ impl DataWriter for Writer<'_> {
             })
             .collect();
         Ok(Message {
-            partition: self.task.partition_id().unwrap(),
-            attempt: self.task.task_attempt_id().unwrap(),
+            partition: self.task.partition_id(),
+            attempt: self.task.task_attempt_id(),
             values,
             batches: self.batches.len(),
             failure: self.failure.clone(),
@@ -247,21 +255,22 @@ impl Drop for Writer<'_> {
     }
 }
 
-spark_native_source::export_data_source!(Source, batch_write, truncate);
+spark_native_source::export_data_source!(Source, batch_write);
 
 extern "C" {
     fn spark_ds_init(host: *const SparkDsHost, library: *mut *const SparkDsLibrary) -> c_int;
 }
 
 fn library() -> &'static SparkDsLibrary {
-    let host = SparkDsHost {
+    // Spark's host structure stays valid until the JVM exits.
+    let host = Box::leak(Box::new(SparkDsHost {
         size: size_of::<SparkDsHost>() as i64,
         abi_version: ABI_VERSION,
         spark_version: c"test".as_ptr(),
         log: None,
-    };
+    }));
     let mut table = ptr::null();
-    assert_eq!(unsafe { spark_ds_init(&host, &mut table) }, 0);
+    assert_eq!(unsafe { spark_ds_init(host, &mut table) }, 0);
     assert!(!table.is_null());
     unsafe { &*table }
 }
@@ -492,6 +501,10 @@ fn write_registration_and_options_control_capabilities() {
     let _guard = TEST_LOCK.lock().unwrap();
     EVENTS.lock().unwrap().clear();
     let library = library();
+    assert!(
+        library.schema.is_none(),
+        "INFERS_SCHEMA = false leaves schema inference to Spark's error"
+    );
     assert!(library.create_reader.is_none());
     assert!(library.read.is_none());
     assert!(library.create_stream_reader.is_none());
@@ -573,7 +586,6 @@ fn serialized_factory_and_messages_roundtrip_without_driver_source_or_input_buff
         events(),
         vec![
             Event::WriteCreated(true),
-            Event::Factory,
             Event::Batch(3),
             Event::Batch(0),
             Event::TaskCommit,
@@ -676,6 +688,8 @@ fn task_failures_and_message_serialization_failures_remain_abortable() {
             before_retry,
             "failed commit cannot run provider commit twice"
         );
+        // A commit whose message cannot be serialized counts as failed, so abort follows
+        // a provider commit that returned a message.
         success(library, unsafe {
             library.abort_data_writer.unwrap()(task.pointer)
         });
@@ -757,10 +771,35 @@ fn factory_serialization_failure_is_cached_and_driver_can_abort() {
     success(library, driver_finish(&driver, true, &[]));
     assert_eq!(
         events(),
-        vec![
-            Event::WriteCreated(false),
-            Event::Factory,
-            Event::DriverAbort(vec![])
-        ],
+        vec![Event::WriteCreated(false), Event::DriverAbort(vec![])],
     );
+}
+
+#[test]
+fn undecodable_messages_fail_commit_but_abort_still_cleans_up() {
+    let _guard = TEST_LOCK.lock().unwrap();
+    EVENTS.lock().unwrap().clear();
+    let library = library();
+    let (source, _) = source(library, "", "");
+    let driver = driver(&source, 0);
+    let task = task(library, &state(&driver), 2);
+    success(library, write(&task, batch(vec![6])));
+    let message = task_message(&task);
+    drop(task);
+
+    let garbage = b"not a commit message";
+    assert_ne!(driver_finish(&driver, false, &[Some(garbage)]), 0);
+    assert!(!events()
+        .iter()
+        .any(|event| matches!(event, Event::DriverCommit(_))));
+    let aborted = [Some(&garbage[..]), Some(message.as_slice()), None];
+    success(library, driver_finish(&driver, true, &aborted));
+    let expected = Message {
+        partition: 2,
+        attempt: 102,
+        values: vec![6],
+        batches: 1,
+        failure: String::new(),
+    };
+    assert!(events().contains(&Event::DriverAbort(vec![None, Some(expected), None])));
 }

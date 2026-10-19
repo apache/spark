@@ -30,11 +30,12 @@ use arrow_array::{Array, Int64Array, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use serde::{Deserialize, Serialize};
 use spark_native_source::{
-    BatchWrite, BatchWriteSource, DataSource, DataWriter, DataWriterFactory, Options, Result,
-    SourceCapability, TaskContext, TaskWriter, WriteMode,
+    BatchWrite, BatchWriteSource, Capabilities, CreateInfo, DataSource, DataWriter,
+    DataWriterFactory, PartitionWriter, Result, SourceCapability, TaskContext, WriteInfo,
+    WriteMode, WritePlan, WriterContext,
 };
 
-spark_native_source::export_data_source!(JsonSink, batch_write, truncate);
+spark_native_source::export_data_source!(JsonSink, batch_write);
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(0);
 
@@ -45,7 +46,8 @@ pub struct JsonSink {
 }
 
 impl DataSource for JsonSink {
-    fn new(mut options: Options) -> Result<Self> {
+    fn new(info: CreateInfo) -> Result<Self> {
+        let mut options = info.options;
         let path = PathBuf::from(
             options
                 .remove("path")
@@ -71,24 +73,29 @@ impl DataSource for JsonSink {
         Ok(sink_schema())
     }
 
-    fn capabilities(&self, supported: &[SourceCapability]) -> Vec<SourceCapability> {
+    fn capabilities(&self, registered: Capabilities) -> Capabilities {
         if self.readonly {
-            Vec::new()
+            // Also removes Truncate, which requires batch writes.
+            registered.without(SourceCapability::BatchWrite)
         } else {
-            supported.to_vec()
+            registered
         }
     }
 }
 
 impl BatchWriteSource for JsonSink {
-    type Write = JsonWrite;
+    type BatchWrite = JsonWrite;
 
-    fn write(&self, schema: SchemaRef, mode: WriteMode) -> Result<Self::Write> {
+    const SUPPORTS_TRUNCATE: bool = true;
+
+    fn new_write(&self, info: WriteInfo) -> Result<WritePlan<JsonWrite>> {
         if self.readonly {
             return Err("This sink is readonly".into());
         }
-        validate_schema(&schema)?;
-        JsonWrite::new(self.path.clone(), mode)
+        validate_schema(&info.schema)?;
+        let write = JsonWrite::new(self.path.clone(), info.mode)?;
+        let factory = write.writer_factory();
+        Ok(WritePlan::new(write, factory))
     }
 }
 
@@ -221,20 +228,28 @@ impl JsonWrite {
         })
     }
 
+    fn writer_factory(&self) -> JsonWriterFactory {
+        JsonWriterFactory {
+            staging: self.staging.clone(),
+            operation: self.operation.clone(),
+        }
+    }
+
     fn publish(&mut self, messages: Vec<CommitMessage>) -> Result<()> {
         let mut filenames = BTreeSet::new();
         let mut partitions = BTreeSet::new();
-        for message in &messages {
+        for (index, message) in messages.iter().enumerate() {
             if message.operation != self.operation
                 || !is_filename(&message.filename)
                 || !filenames.insert(message.filename.clone())
             {
                 return Err("Invalid or duplicate task commit message".into());
             }
-            if let Some(partition) = message.partition {
-                if !partitions.insert(partition) {
-                    return Err("More than one winning attempt for the same partition".into());
-                }
+            // Spark passes the message of partition i at position i.
+            if usize::try_from(message.partition).ok() != Some(index)
+                || !partitions.insert(message.partition)
+            {
+                return Err("A commit message does not match its partition".into());
             }
             if !self.staging.join(&message.filename).is_file() {
                 return Err("A winning task's staged file is missing".into());
@@ -312,13 +327,6 @@ impl JsonWrite {
 impl BatchWrite for JsonWrite {
     type Factory = JsonWriterFactory;
 
-    fn factory(&mut self) -> Result<Self::Factory> {
-        Ok(JsonWriterFactory {
-            staging: self.staging.clone(),
-            operation: self.operation.clone(),
-        })
-    }
-
     fn commit(&mut self, messages: Vec<CommitMessage>) -> Result<()> {
         self.publish(messages)
     }
@@ -330,6 +338,8 @@ impl BatchWrite for JsonWrite {
     }
 }
 
+// Spark can close a write without abort, for example when serializing its factory
+// fails, so an unfinished write also cleans up here.
 impl Drop for JsonWrite {
     fn drop(&mut self) {
         if !self.committed {
@@ -349,14 +359,20 @@ pub struct JsonWriterFactory {
 pub struct CommitMessage {
     operation: String,
     filename: String,
-    partition: Option<i32>,
+    partition: i32,
     rows: u64,
 }
 
 impl DataWriterFactory for JsonWriterFactory {
     type Message = CommitMessage;
 
-    fn open<'task>(&self, task: TaskContext<'task>) -> Result<TaskWriter<'task, Self::Message>> {
+    fn open<'task>(
+        &self,
+        context: WriterContext<'task>,
+    ) -> Result<PartitionWriter<'task, Self::Message>> {
+        // The SDK checks that each batch has this schema, so the writer checks it once.
+        validate_schema(&context.schema)?;
+        let task = context.task;
         if task.is_interrupted() {
             return Err("Task cancelled before opening the sink".into());
         }
@@ -365,8 +381,8 @@ impl DataWriterFactory for JsonWriterFactory {
         for _ in 0..16 {
             let filename = format!(
                 "part-{}-attempt-{}-{}.jsonl",
-                task.partition_id().unwrap_or(-1),
-                task.task_attempt_id().unwrap_or(-1),
+                task.partition_id(),
+                task.task_attempt_id(),
                 unique_id()?
             );
             let path = self.staging.join(&filename);
@@ -423,18 +439,17 @@ impl DataWriter for JsonTaskWriter<'_> {
     type Message = CommitMessage;
 
     fn write(&mut self, batch: RecordBatch) -> Result<()> {
-        validate_schema(batch.schema().as_ref())?;
         let writer = self.writer.as_mut().ok_or("The task writer is closed")?;
         let ids = batch
             .column(0)
             .as_any()
             .downcast_ref::<Int64Array>()
-            .unwrap();
+            .ok_or("The id column must be an Arrow int64 array")?;
         let labels = batch
             .column(1)
             .as_any()
             .downcast_ref::<StringArray>()
-            .unwrap();
+            .ok_or("The label column must be an Arrow utf8 array")?;
         for index in 0..batch.num_rows() {
             if index % 1024 == 0 && self.task.is_interrupted() {
                 return Err("Task cancelled while writing the sink".into());
@@ -523,11 +538,7 @@ mod tests {
         }
 
         fn source(&self) -> JsonSink {
-            JsonSink::new(Options::from([(
-                "path".to_owned(),
-                self.0.to_str().unwrap().to_owned(),
-            )]))
-            .unwrap()
+            JsonSink::new(info(&[("path", self.0.to_str().unwrap())])).unwrap()
         }
     }
 
@@ -535,6 +546,29 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    fn info(options: &[(&str, &str)]) -> CreateInfo {
+        let options = options
+            .iter()
+            .map(|(key, value)| (key.to_string(), value.to_string()))
+            .collect();
+        CreateInfo::new("rust_sdk_sink", options)
+    }
+
+    fn new_write(source: &JsonSink, mode: WriteMode) -> Result<(JsonWrite, JsonWriterFactory)> {
+        let plan = source.new_write(WriteInfo::new(sink_schema(), mode))?;
+        Ok((plan.coordinator, plan.factory))
+    }
+
+    fn open(
+        factory: &JsonWriterFactory,
+        partition: i32,
+    ) -> PartitionWriter<'static, CommitMessage> {
+        let task = TaskContext::for_testing().partition_id(partition).build();
+        factory
+            .open(WriterContext::new(sink_schema(), task))
+            .unwrap()
     }
 
     fn batch(ids: Vec<Option<i64>>) -> RecordBatch {
@@ -552,11 +586,11 @@ mod tests {
         .unwrap()
     }
 
-    fn stage(factory: &JsonWriterFactory, ids: Vec<Option<i64>>) -> CommitMessage {
+    fn stage(factory: &JsonWriterFactory, partition: i32, ids: Vec<Option<i64>>) -> CommitMessage {
         // Executors reconstruct the factory without the source or driver write.
         let factory: JsonWriterFactory =
             serde_json::from_slice(&serde_json::to_vec(factory).unwrap()).unwrap();
-        let mut writer = factory.open(TaskContext::detached()).unwrap();
+        let mut writer = open(&factory, partition);
         writer.write(batch(ids)).unwrap();
         let message = writer.commit().unwrap();
         serde_json::from_slice(&serde_json::to_vec(&message).unwrap()).unwrap()
@@ -580,8 +614,8 @@ mod tests {
     }
 
     fn commit_ids(source: &JsonSink, mode: WriteMode, ids: Vec<Option<i64>>) {
-        let mut write = source.write(sink_schema(), mode).unwrap();
-        let message = stage(&write.factory().unwrap(), ids);
+        let (mut write, factory) = new_write(source, mode).unwrap();
+        let message = stage(&factory, 0, ids);
         write.commit(vec![message]).unwrap();
     }
 
@@ -622,14 +656,10 @@ mod tests {
     #[test]
     fn driver_publishes_only_winning_attempts_and_removes_unreported_files() {
         let directory = TempDirectory::new();
-        let mut write = directory
-            .source()
-            .write(sink_schema(), WriteMode::Append)
-            .unwrap();
-        let factory = write.factory().unwrap();
-        let winning = stage(&factory, vec![Some(1)]);
-        let _losing = stage(&factory, vec![Some(2)]);
-        let _missing_message = stage(&factory, vec![Some(3)]);
+        let (mut write, factory) = new_write(&directory.source(), WriteMode::Append).unwrap();
+        let winning = stage(&factory, 0, vec![Some(1)]);
+        let _losing = stage(&factory, 0, vec![Some(2)]);
+        let _missing_message = stage(&factory, 1, vec![Some(3)]);
         assert_eq!(fs::read_dir(&write.staging).unwrap().count(), 3);
         write.commit(vec![winning]).unwrap();
         assert!(!write.staging.exists());
@@ -638,7 +668,19 @@ mod tests {
             committed_rows(&directory.0),
             vec![serde_json::json!({"id": 1, "label": "row-1"})]
         );
-        assert!(factory.open(TaskContext::detached()).is_err());
+        let task = TaskContext::for_testing().build();
+        assert!(factory
+            .open(WriterContext::new(sink_schema(), task))
+            .is_err());
+    }
+
+    #[test]
+    fn commit_rejects_a_message_at_the_position_of_another_partition() {
+        let directory = TempDirectory::new();
+        let (mut write, factory) = new_write(&directory.source(), WriteMode::Append).unwrap();
+        let message = stage(&factory, 1, vec![Some(1)]);
+        assert!(write.commit(vec![message]).is_err());
+        assert!(!directory.0.join("manifest.json").exists());
     }
 
     #[test]
@@ -647,11 +689,10 @@ mod tests {
         let source = directory.source();
         commit_ids(&source, WriteMode::Append, vec![Some(1)]);
         let before = fs::read(directory.0.join("manifest.json")).unwrap();
-        let mut write = source.write(sink_schema(), WriteMode::Truncate).unwrap();
-        let factory = write.factory().unwrap();
-        let message = stage(&factory, vec![Some(2)]);
-        let _missing = stage(&factory, vec![Some(3)]);
-        let mut incomplete = factory.open(TaskContext::detached()).unwrap();
+        let (mut write, factory) = new_write(&source, WriteMode::Truncate).unwrap();
+        let message = stage(&factory, 0, vec![Some(2)]);
+        let _missing = stage(&factory, 1, vec![Some(3)]);
+        let mut incomplete = open(&factory, 2);
         incomplete.write(batch(vec![Some(4)])).unwrap();
         write.abort(vec![Some(message), None]).unwrap();
         assert!(!write.staging.exists());
@@ -659,7 +700,10 @@ mod tests {
         assert!(!directory.0.join(".write-lock").exists());
         assert_eq!(fs::read(directory.0.join("manifest.json")).unwrap(), before);
         assert_eq!(committed_rows(&directory.0).len(), 1);
-        assert!(factory.open(TaskContext::detached()).is_err());
+        let task = TaskContext::for_testing().build();
+        assert!(factory
+            .open(WriterContext::new(sink_schema(), task))
+            .is_err());
     }
 
     #[test]
@@ -668,8 +712,8 @@ mod tests {
         let source = directory.source();
         commit_ids(&source, WriteMode::Append, vec![Some(1)]);
         let before = fs::read(directory.0.join("manifest.json")).unwrap();
-        let mut write = source.write(sink_schema(), WriteMode::Truncate).unwrap();
-        let message = stage(&write.factory().unwrap(), vec![Some(2)]);
+        let (mut write, factory) = new_write(&source, WriteMode::Truncate).unwrap();
+        let message = stage(&factory, 0, vec![Some(2)]);
         // Force create_new to fail after the operation directory has been sealed.
         fs::write(&write.temporary_manifest, b"publication failure").unwrap();
         assert!(write.commit(vec![message]).is_err());
@@ -685,29 +729,29 @@ mod tests {
     fn concurrent_write_is_rejected_and_drop_releases_staging_and_lock() {
         let directory = TempDirectory::new();
         let source = directory.source();
-        let mut write = source.write(sink_schema(), WriteMode::Append).unwrap();
-        let _message = stage(&write.factory().unwrap(), vec![Some(1)]);
+        let (write, factory) = new_write(&source, WriteMode::Append).unwrap();
+        let _message = stage(&factory, 0, vec![Some(1)]);
         let staging = write.staging.clone();
-        assert!(source.write(sink_schema(), WriteMode::Append).is_err());
+        assert!(new_write(&source, WriteMode::Append).is_err());
         drop(write);
         assert!(!staging.exists());
         assert!(!directory.0.join(".write-lock").exists());
-        assert!(source.write(sink_schema(), WriteMode::Append).is_ok());
+        assert!(new_write(&source, WriteMode::Append).is_ok());
     }
 
     #[test]
     fn readonly_removes_all_write_capabilities_without_creating_files() {
         let directory = TempDirectory::new();
         let path = directory.0.join("not-created");
-        let source = JsonSink::new(Options::from([
-            ("path".to_owned(), path.to_str().unwrap().to_owned()),
-            ("readonly".to_owned(), "true".to_owned()),
+        let source = JsonSink::new(info(&[
+            ("path", path.to_str().unwrap()),
+            ("readonly", "true"),
         ]))
         .unwrap();
-        assert!(source
-            .capabilities(&[SourceCapability::BatchWrite, SourceCapability::Truncate])
-            .is_empty());
-        assert!(source.write(sink_schema(), WriteMode::Append).is_err());
+        let capabilities = source.capabilities(Capabilities::all());
+        assert!(!capabilities.contains(SourceCapability::BatchWrite));
+        assert!(!capabilities.contains(SourceCapability::Truncate));
+        assert!(new_write(&source, WriteMode::Append).is_err());
         assert!(!path.exists());
     }
 }

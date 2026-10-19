@@ -19,12 +19,13 @@ limitations under the License.
 
 This write-only example implements `DataSource`, `BatchWriteSource`, `BatchWrite`,
 `DataWriterFactory`, and `DataWriter` from the [Rust native data source SDK][sdk].
-It registers `export_data_source!(JsonSink, batch_write, truncate)` and implements
+It registers `export_data_source!(JsonSink, batch_write)`, declares overwrite support
+with `const SUPPORTS_TRUNCATE: bool = true` in `BatchWriteSource`, and implements
 no read traits. The SDK supplies the C ABI entry point, typed factory and commit
 message serialization, Arrow batch import, capability checks, and error handling.
 
 The example targets C ABI version 1 from [Spark PR #59424][native-source-pr], pinned
-to `534dfca15723c7208061b1e9e4d80c5757360a2a`. Running it in Spark requires that
+to `74aa0dffc53463034fa6549796c4dd599e9705de`. Running it in Spark requires that
 framework and Java 22 or later on the driver and executors. The standalone Rust
 tests do not need Spark or a JVM.
 
@@ -53,9 +54,10 @@ Each task attempt exclusively creates its own file, writes Arrow batches, flushe
 syncs the file, then returns a typed message containing its operation, file, partition,
 and row count. Task commit alone does not publish data.
 
-The driver receives the winning attempt messages. It validates those messages and
-renames the entire staging directory to `objects/<operation>`, preventing new tasks
-from opening files for that operation. It removes every file not named by a winning
+The driver receives the winning attempt messages, the message of partition `i` at
+position `i`. It validates those messages and renames the entire staging directory
+to `objects/<operation>`, preventing new tasks from opening files for that
+operation. It removes every file not named by a winning
 message, including speculative attempts and attempts whose messages never arrived.
 It then writes and syncs a new manifest and atomically renames it to `manifest.json`.
 That one manifest replacement is the commit point:

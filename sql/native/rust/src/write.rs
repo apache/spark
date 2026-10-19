@@ -25,8 +25,11 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use crate::abi::{self, ArrowArray, ArrowSchema, SparkDsTaskContext};
 use crate::bridge::stream::{canonical_fields, validate_schema};
-use crate::bridge::{decode, encode, panic_message, provider_call};
-use crate::{BatchWrite, DataWriterFactory, Result, TaskContext, TaskWriter};
+use crate::bridge::{decode, describe, encode, panic_message, provider_call};
+use crate::{
+    BatchWrite, DataWriterFactory, LogLevel, PartitionWriter, Result, TaskContext, WritePlan,
+    WriterContext,
+};
 
 type Cached<T> = std::result::Result<T, String>;
 
@@ -60,16 +63,18 @@ struct WriterState<F> {
 
 /// The driver keeps this coordinator until close, including after a failed commit.
 pub struct DriverWriter<W: BatchWrite> {
-    writer: Option<W>,
+    coordinator: Option<W>,
+    factory: Option<W::Factory>,
     schema: SchemaRef,
     serialized: Option<Cached<Arc<Vec<u8>>>>,
     phase: Phase<()>,
 }
 
 impl<W: BatchWrite> DriverWriter<W> {
-    pub fn new(writer: W, schema: SchemaRef) -> Self {
+    pub fn new(plan: WritePlan<W>, schema: SchemaRef) -> Self {
         Self {
-            writer: Some(writer),
+            coordinator: Some(plan.coordinator),
+            factory: Some(plan.factory),
             schema,
             serialized: None,
             phase: Phase::Active,
@@ -83,9 +88,8 @@ impl<W: BatchWrite> DriverWriter<W> {
         self.phase.active()?;
         let result = provider_call(|| {
             validate_schema(&self.schema)?;
-            let factory = self.writer.as_mut().expect("writer is present").factory()?;
             Ok(Arc::new(encode(&WriterState {
-                factory,
+                factory: self.factory.as_ref().expect("factory is present"),
                 schema: self.schema.as_ref().clone(),
             })?))
         });
@@ -110,9 +114,9 @@ impl<W: BatchWrite> DriverWriter<W> {
                 .iter()
                 .map(|message| decode(message.ok_or("missing committed task message")?))
                 .collect::<Result<Vec<_>>>()?;
-            self.writer
+            self.coordinator
                 .as_mut()
-                .expect("writer is present")
+                .expect("coordinator is present")
                 .commit(messages)
         });
         self.phase = match &result {
@@ -129,13 +133,29 @@ impl<W: BatchWrite> DriverWriter<W> {
             Phase::Active | Phase::Failed(_) => {}
         }
         let result = provider_call(|| {
+            // Abort is the cleanup path: a message that cannot be decoded is passed as
+            // None instead of preventing the coordinator from cleaning up.
             let messages = messages
                 .iter()
-                .map(|message| message.map(decode).transpose())
-                .collect::<Result<Vec<_>>>()?;
-            self.writer
+                .enumerate()
+                .map(|(partition, message)| match decode((*message)?) {
+                    Ok(message) => Some(message),
+                    Err(error) => {
+                        crate::log(
+                            LogLevel::Warn,
+                            &format!(
+                                "Aborting a write without the commit message of partition \
+                                 {partition}, which cannot be decoded: {}",
+                                describe(&*error)
+                            ),
+                        );
+                        None
+                    }
+                })
+                .collect();
+            self.coordinator
                 .as_mut()
-                .expect("writer is present")
+                .expect("coordinator is present")
                 .abort(messages)
         });
         self.phase = Phase::Aborted(result.clone());
@@ -145,14 +165,17 @@ impl<W: BatchWrite> DriverWriter<W> {
 
 impl<W: BatchWrite> Drop for DriverWriter<W> {
     fn drop(&mut self) {
-        if let Some(writer) = self.writer.take() {
-            drop_provider(writer);
+        if let Some(coordinator) = self.coordinator.take() {
+            drop_provider(coordinator);
+        }
+        if let Some(factory) = self.factory.take() {
+            drop_provider(factory);
         }
     }
 }
 
 struct TaskState<'task, M> {
-    writer: Option<TaskWriter<'task, M>>,
+    writer: Option<PartitionWriter<'task, M>>,
     schema: SchemaRef,
     phase: Phase<Arc<Vec<u8>>>,
 }
@@ -186,7 +209,8 @@ pub unsafe fn open<F: DataWriterFactory>(
     let schema = Arc::new(schema);
     validate_schema(&schema)?;
     let task = unsafe { TaskContext::from_raw(task)? };
-    let (writer, open_error) = match provider_call(|| factory.open(task)) {
+    let context = WriterContext::new(schema.clone(), task);
+    let (writer, open_error) = match provider_call(|| factory.open(context)) {
         Ok(writer) => (Some(writer), None),
         Err(message) => (None, Some(message)),
     };
