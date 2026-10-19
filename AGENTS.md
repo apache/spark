@@ -101,7 +101,7 @@ These are combined with a base above rather than used on their own:
 
 ## Build and Test
 
-Build and tests can take a long time. If the user explicitly asked to run tests, run them. Otherwise (you are running tests on your own to verify a change), first ask the user if they have more changes to make.
+Build and tests can take a long time, so prefer the narrowest relevant build or test command.
 
 For build and test setup, including how to run tests and troubleshoot common
 local failures, see `docs/building-spark.md`.

@@ -18,8 +18,10 @@
 import array
 import ctypes
 import datetime
+import json
 import os
 import pickle
+import re
 import sys
 import unittest
 from dataclasses import asdict, dataclass
@@ -657,6 +659,150 @@ class TypesTestsMixin:
         self.assertEqual(StringType("UTF8_LCASE").simpleString(), "string collate UTF8_LCASE")
         self.assertEqual(StringType("UNICODE").simpleString(), "string collate UNICODE")
 
+    def test_char_varchar_type_collations(self):
+        from pyspark.sql.types import _parse_datatype_json_string
+
+        self.assertEqual(CharType(4).simpleString(), "char(4)")
+        self.assertEqual(CharType(4, "UTF8_LCASE").simpleString(), "char(4) collate UTF8_LCASE")
+        self.assertEqual(VarcharType(6).simpleString(), "varchar(6)")
+        self.assertEqual(
+            VarcharType(6, "UNICODE_CI").simpleString(), "varchar(6) collate UNICODE_CI"
+        )
+
+        data_types = [
+            CharType(4),
+            CharType(4, "UTF8_BINARY"),
+            CharType(4, "UTF8_LCASE"),
+            VarcharType(6),
+            VarcharType(6, "UTF8_BINARY"),
+            VarcharType(6, "UNICODE_CI"),
+            StructType(
+                [
+                    StructField("c", CharType(4, "UTF8_LCASE")),
+                    StructField("v", ArrayType(VarcharType(6, "UNICODE_CI"))),
+                ]
+            ),
+            StructType(
+                [
+                    StructField(
+                        "mixed",
+                        MapType(
+                            CharType(4, "UTF8_BINARY"),
+                            VarcharType(6, "UNICODE_CI"),
+                        ),
+                    )
+                ]
+            ),
+            StructType([StructField("", ArrayType(CharType(4, "UTF8_LCASE")))]),
+            StructType(
+                [
+                    StructField(
+                        "",
+                        MapType(
+                            CharType(4, "UTF8_BINARY"),
+                            VarcharType(6, "UNICODE_CI"),
+                        ),
+                    )
+                ]
+            ),
+        ]
+        for data_type in data_types:
+            self.assertEqual(data_type, _parse_datatype_json_string(data_type.json()))
+
+        compatibility_schema = StructType(
+            [
+                StructField("plain", CharType(3)),
+                StructField("binary", CharType(4, "UTF8_BINARY")),
+                StructField(
+                    "nested",
+                    ArrayType(VarcharType(6, "UNICODE_CI")),
+                ),
+            ]
+        )
+        self.assertEqual(
+            compatibility_schema.jsonValue(),
+            {
+                "type": "struct",
+                "fields": [
+                    {
+                        "name": "plain",
+                        "type": "char(3)",
+                        "nullable": True,
+                        "metadata": {},
+                    },
+                    {
+                        "name": "binary",
+                        "type": "char(4)",
+                        "nullable": True,
+                        "metadata": {
+                            "__CHAR_VARCHAR_COLLATIONS": {"binary": "spark.UTF8_BINARY"},
+                        },
+                    },
+                    {
+                        "name": "nested",
+                        "type": {
+                            "type": "array",
+                            "elementType": "varchar(6)",
+                            "containsNull": True,
+                        },
+                        "nullable": True,
+                        "metadata": {
+                            "__CHAR_VARCHAR_COLLATIONS": {"nested.element": "icu.UNICODE_CI"},
+                        },
+                    },
+                ],
+            },
+        )
+
+        mixed_field = StructField(
+            "mixed",
+            MapType(StringType("UTF8_LCASE"), CharType(4, "UNICODE_CI")),
+        )
+        self.assertEqual(
+            mixed_field.getCollationMetadata(),
+            {"mixed.key": "spark.UTF8_LCASE"},
+        )
+        self.assertEqual(
+            mixed_field.getCharVarcharCollationMetadata(),
+            {"mixed.value": "icu.UNICODE_CI"},
+        )
+        mixed_metadata = mixed_field.jsonValue()["metadata"]
+        self.assertEqual(
+            mixed_field.getCollationsMap(mixed_metadata),
+            {"mixed.key": "UTF8_LCASE"},
+        )
+        self.assertEqual(
+            mixed_field.getCharVarcharCollationsMap(mixed_metadata),
+            {"mixed.value": "UNICODE_CI"},
+        )
+
+    def test_standalone_collated_char_varchar_json_is_current_reader_only(self):
+        from pyspark.sql.types import _parse_datatype_json_string
+
+        standalone = CharType(4, "UTF8_LCASE")
+        self.assertEqual(standalone.jsonValue(), "char(4) collate UTF8_LCASE")
+        self.assertEqual(_parse_datatype_json_string(standalone.json()), standalone)
+
+        field_json = StructType([StructField("c", standalone)]).jsonValue()["fields"][0]
+        self.assertEqual(field_json["type"], "char(4)")
+        self.assertEqual(
+            field_json["metadata"]["__CHAR_VARCHAR_COLLATIONS"],
+            {"c": "spark.UTF8_LCASE"},
+        )
+
+    def test_char_varchar_json_rejects_trailing_tokens(self):
+        from pyspark.sql.types import _parse_datatype_json_string
+
+        for data_type in [
+            "char(4) collate UTF8_LCASE junk",
+            "varchar(6) collate UNICODE_CI junk",
+        ]:
+            with self.subTest(data_type=data_type):
+                self.assertRaises(
+                    PySparkValueError,
+                    lambda: _parse_datatype_json_string(json.dumps(data_type)),
+                )
+
     def test_schema_with_collations_json_ser_de(self):
         from pyspark.sql.types import _parse_datatype_json_string
 
@@ -762,6 +908,231 @@ class TypesTestsMixin:
             python_datatype = _parse_datatype_json_string(scala_datatype.json())
             assert schema == python_datatype
             assert schema == _parse_datatype_json_string(schema.json())
+
+    def test_schema_rejects_inline_and_metadata_collations(self):
+        from pyspark.sql.types import (
+            _CHAR_VARCHAR_COLLATIONS_METADATA_KEY,
+            _COLLATIONS_METADATA_KEY,
+            _parse_datatype_json_string,
+        )
+
+        for data_type, metadata_collation in [
+            ("char(4) collate UTF8_LCASE", "spark.UTF8_LCASE"),
+            ("varchar(6) collate UTF8_LCASE", "icu.UNICODE_CI"),
+        ]:
+            schema_json = {
+                "type": "struct",
+                "fields": [
+                    {
+                        "name": "c",
+                        "type": data_type,
+                        "nullable": True,
+                        "metadata": {
+                            _CHAR_VARCHAR_COLLATIONS_METADATA_KEY: {"c": metadata_collation},
+                        },
+                    }
+                ],
+            }
+            self.assertRaises(
+                PySparkTypeError,
+                lambda: _parse_datatype_json_string(json.dumps(schema_json)),
+            )
+
+        collations_on_char_json = {
+            "type": "struct",
+            "fields": [
+                {
+                    "name": "c",
+                    "type": "char(4)",
+                    "nullable": True,
+                    "metadata": {
+                        _COLLATIONS_METADATA_KEY: {"c": "spark.UTF8_LCASE"},
+                    },
+                }
+            ],
+        }
+        self.assertRaises(
+            PySparkTypeError,
+            lambda: _parse_datatype_json_string(json.dumps(collations_on_char_json)),
+        )
+
+        char_varchar_collations_on_decimal_json = {
+            "type": "struct",
+            "fields": [
+                {
+                    "name": "d",
+                    "type": "decimal(10,2)",
+                    "nullable": True,
+                    "metadata": {
+                        _CHAR_VARCHAR_COLLATIONS_METADATA_KEY: {"d": "spark.UTF8_LCASE"},
+                    },
+                }
+            ],
+        }
+        self.assertRaises(
+            PySparkTypeError,
+            lambda: _parse_datatype_json_string(
+                json.dumps(char_varchar_collations_on_decimal_json)
+            ),
+        )
+
+    def test_char_varchar_collation_metadata_key_collision_is_rejected(self):
+        from pyspark.sql.types import _CHAR_VARCHAR_COLLATIONS_METADATA_KEY
+
+        field = StructField(
+            "c",
+            CharType(4, "UTF8_LCASE"),
+            metadata={_CHAR_VARCHAR_COLLATIONS_METADATA_KEY: {"caller": "value"}},
+        )
+        with self.assertRaises(PySparkTypeError) as pe:
+            field.jsonValue()
+        self.check_error(
+            exception=pe.exception,
+            errorClass="INVALID_CHAR_VARCHAR_COLLATION_METADATA.RESERVED_METADATA_KEY",
+            messageParameters={"metadataKey": _CHAR_VARCHAR_COLLATIONS_METADATA_KEY},
+        )
+
+    def test_schema_rejects_malformed_char_varchar_collation_metadata(self):
+        from pyspark.sql.types import (
+            _CHAR_VARCHAR_COLLATIONS_METADATA_KEY,
+            _parse_datatype_json_string,
+        )
+
+        def schema_json(metadata_value):
+            return json.dumps(
+                {
+                    "type": "struct",
+                    "fields": [
+                        {
+                            "name": "c",
+                            "type": "char(4)",
+                            "nullable": True,
+                            "metadata": {
+                                _CHAR_VARCHAR_COLLATIONS_METADATA_KEY: metadata_value,
+                            },
+                        }
+                    ],
+                }
+            )
+
+        cases = [
+            (
+                "caller",
+                "INVALID_CHAR_VARCHAR_COLLATION_METADATA.INVALID_VALUE",
+                {"value": '"caller"'},
+            ),
+            (
+                {"c": 1},
+                "INVALID_CHAR_VARCHAR_COLLATION_METADATA.INVALID_VALUE",
+                {"value": "1"},
+            ),
+            (
+                {"c": "spark."},
+                "INVALID_CHAR_VARCHAR_COLLATION_METADATA.INVALID_VALUE",
+                {"value": '"spark."'},
+            ),
+            (
+                {"c": ".UTF8_LCASE"},
+                "INVALID_CHAR_VARCHAR_COLLATION_METADATA.INVALID_VALUE",
+                {"value": '".UTF8_LCASE"'},
+            ),
+            (
+                {"c": "spark.UTF8_LCASE", "typo": "spark.UTF8_LCASE"},
+                "INVALID_CHAR_VARCHAR_COLLATION_METADATA.UNRECOGNIZED_PATH",
+                {"fieldPath": "typo"},
+            ),
+        ]
+        for metadata_value, error_class, message_parameters in cases:
+            with self.assertRaises(PySparkTypeError) as pe:
+                _parse_datatype_json_string(schema_json(metadata_value))
+            self.check_error(
+                exception=pe.exception,
+                errorClass=error_class,
+                messageParameters=message_parameters,
+            )
+
+    def test_preceding_reader_retains_unknown_char_varchar_collation_metadata(self):
+        # Reduced independent reader copied from the relevant parser branches at base
+        # 389de941f002a5c92e22dc3ed0f65af602a174db. It intentionally does not use any
+        # current parsing helper, so unknown metadata exercises the preceding-reader contract.
+        def preceding_read_type(value):
+            if isinstance(value, str):
+                if match := re.fullmatch(r"char\((\d+)\)", value):
+                    return CharType(int(match.group(1)))
+                if match := re.fullmatch(r"varchar\((\d+)\)", value):
+                    return VarcharType(int(match.group(1)))
+                raise AssertionError(f"unsupported pinned-reader type: {value}")
+
+            if value["type"] == "array":
+                return ArrayType(preceding_read_type(value["elementType"]), value["containsNull"])
+            if value["type"] == "map":
+                return MapType(
+                    preceding_read_type(value["keyType"]),
+                    preceding_read_type(value["valueType"]),
+                    value["valueContainsNull"],
+                )
+            if value["type"] == "struct":
+                return StructType([preceding_read_field(field) for field in value["fields"]])
+            raise AssertionError(f"unsupported pinned-reader type: {value}")
+
+        def preceding_read_field(value):
+            return StructField(
+                value["name"],
+                preceding_read_type(value["type"]),
+                value.get("nullable", True),
+                value.get("metadata"),
+            )
+
+        schema = StructType(
+            [
+                StructField("c", CharType(4, "UTF8_LCASE")),
+                StructField("nested", ArrayType(VarcharType(6, "UNICODE_CI"))),
+                StructField(
+                    "mapped",
+                    MapType(
+                        CharType(3, "UTF8_BINARY"),
+                        VarcharType(5, "UTF8_LCASE"),
+                    ),
+                ),
+                StructField(
+                    "nestedStruct",
+                    StructType([StructField("c", CharType(2, "UNICODE_CI"))]),
+                ),
+            ]
+        )
+        preceding_schema = preceding_read_type(json.loads(schema.json()))
+        self.assertEqual(preceding_schema["c"].dataType, CharType(4))
+        self.assertEqual(
+            preceding_schema["nested"].dataType,
+            ArrayType(VarcharType(6)),
+        )
+        self.assertEqual(
+            preceding_schema["mapped"].dataType,
+            MapType(CharType(3), VarcharType(5)),
+        )
+        nested_struct = preceding_schema["nestedStruct"].dataType
+        self.assertEqual(nested_struct["c"].dataType, CharType(2))
+
+        metadata_key = "__CHAR_VARCHAR_COLLATIONS"
+        self.assertEqual(
+            preceding_schema["c"].metadata[metadata_key],
+            {"c": "spark.UTF8_LCASE"},
+        )
+        self.assertEqual(
+            preceding_schema["nested"].metadata[metadata_key],
+            {"nested.element": "icu.UNICODE_CI"},
+        )
+        self.assertEqual(
+            preceding_schema["mapped"].metadata[metadata_key],
+            {
+                "mapped.key": "spark.UTF8_BINARY",
+                "mapped.value": "spark.UTF8_LCASE",
+            },
+        )
+        self.assertEqual(
+            nested_struct["c"].metadata[metadata_key],
+            {"c": "icu.UNICODE_CI"},
+        )
 
     def test_schema_with_collations_on_non_string_types(self):
         from pyspark.sql.types import _COLLATIONS_METADATA_KEY, _parse_datatype_json_string
@@ -943,8 +1314,8 @@ class TypesTestsMixin:
             ("geography(SRID:ANY)", GeographyType("ANY")),
             ("geography(srid:any)", GeographyType("ANY")),
         ]
-        for json, expected in valid_test_cases:
-            python_datatype = _parse_datatype_json_value(json)
+        for json_value, expected in valid_test_cases:
+            python_datatype = _parse_datatype_json_value(json_value)
             self.assertEqual(python_datatype, expected)
             self.assertEqual(expected, _parse_datatype_json_string(expected.json()))
 
@@ -976,9 +1347,9 @@ class TypesTestsMixin:
             "geography(SRID0)",
             "geography(SRID:4326, ALG)",
         ]
-        for json in invalid_test_cases:
+        for json_value in invalid_test_cases:
             with self.assertRaises(Exception):
-                _parse_datatype_json_value(json)
+                _parse_datatype_json_value(json_value)
 
     def test_geometry_json_serde(self):
         from pyspark.sql.types import _parse_datatype_json_string, _parse_datatype_json_value
@@ -989,8 +1360,8 @@ class TypesTestsMixin:
             ("geometry(SRID:ANY)", GeometryType("ANY")),
             ("geometry(srid:any)", GeometryType("ANY")),
         ]
-        for json, expected in valid_test_cases:
-            python_datatype = _parse_datatype_json_value(json)
+        for json_value, expected in valid_test_cases:
+            python_datatype = _parse_datatype_json_value(json_value)
             self.assertEqual(python_datatype, expected)
             self.assertEqual(expected, _parse_datatype_json_string(expected.json()))
 
@@ -1020,9 +1391,9 @@ class TypesTestsMixin:
             "geometry(SRID:0,)",
             "geometry(SRID0)",
         ]
-        for json in invalid_test_cases:
+        for json_value in invalid_test_cases:
             with self.assertRaises(Exception):
-                _parse_datatype_json_value(json)
+                _parse_datatype_json_value(json_value)
 
     def test_udt(self):
         from pyspark.sql.types import _infer_type, _make_type_verifier, _parse_datatype_json_string
@@ -2068,7 +2439,11 @@ class TypesTestsMixin:
             StringType("UNICODE"),
             StringType("UNICODE_CI"),
             CharType(10),
+            CharType(10, "UTF8_BINARY"),
+            CharType(10, "UTF8_LCASE"),
             VarcharType(10),
+            VarcharType(10, "UTF8_BINARY"),
+            VarcharType(10, "UNICODE_CI"),
             BinaryType(),
             BooleanType(),
             DateType(),
@@ -2744,9 +3119,9 @@ class TypesTestsMixin:
         )
 
         # check parse_json
-        for key, json, obj in expected_values:
-            self.assertEqual(VariantVal.parseJson(json).toJson(), json)
-            self.assertEqual(VariantVal.parseJson(json).toPython(), obj)
+        for key, json_value, obj in expected_values:
+            self.assertEqual(VariantVal.parseJson(json_value).toJson(), json_value)
+            self.assertEqual(VariantVal.parseJson(json_value).toPython(), obj)
 
         # compare the parse_json in Spark vs python. `json_str` contains all of `expected_values`.
         parse_json_spark_output = variants[0]
@@ -3236,6 +3611,24 @@ class TypesTestsMixin:
 
 
 class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
+    def test_from_json_does_not_mutate_collation_metadata(self):
+        import copy
+
+        for data_type in [
+            StringType("UTF8_LCASE"),
+            ArrayType(StringType("UNICODE_CI")),
+            MapType(StringType("UTF8_LCASE"), StringType("UNICODE_CI")),
+            StructType([StructField("nested", StringType("UTF8_LCASE"))]),
+        ]:
+            with self.subTest(data_type=data_type):
+                schema = StructType([StructField("s", data_type, metadata={"comment": "keep"})])
+                payload = schema.jsonValue()
+                original = copy.deepcopy(payload)
+                self.assertEqual(StructType.fromJson(payload), schema)
+                self.assertEqual(payload, original)
+                self.assertEqual(StructType.fromJson(payload), schema)
+                self.assertEqual(payload, original)
+
     # regression test for SPARK-6055
     def test_data_type_eq(self):
         lt = LongType()

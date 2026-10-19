@@ -173,19 +173,8 @@ case class TransformExpression(
     isSameFunction(other) || reducers(other).isDefined || other.reducers(this).isDefined
 
   /**
-   * Re-targets this partition transform expression at `attr`. A partition transform expression
-   * has a single leaf attribute (`KeyedPartitioning.supportsExpressions`), so this replaces that
-   * attribute and keeps the rest of the expression: any field path above the leaf comes from this
-   * expression, not from the re-targeted key. Re-targeting is therefore only faithful when the
-   * source and the target key expressions have the same path shape.
-   */
-  def withReference(attr: Attribute): TransformExpression =
-    transform { case _: AttributeReference => attr }.asInstanceOf[TransformExpression]
-
-  /**
    * Rewrites this transform's column arguments with `rewriteColumn`, leaving its literal parameters
-   * untouched. Unlike [[withReference]], which swaps the attribute *inside* a column argument (so a
-   * `GetStructField` path above it is kept), this replaces the whole argument.
+   * untouched.
    *
    * Since literal parameters (the bucket count, the truncate width) live in `children` rather than
    * in a field of their own, any path that rewrites a transform's children has to skip them. A
@@ -228,12 +217,9 @@ case class TransformExpression(
    * match is exact by design: any mismatch (including cosmetic ones like Array `containsNull` or
    * Decimal precision/scale) fails safe to a shuffle. See the two predicates below for the callers.
    *
-   * Reading `dataType` can throw rather than answer. [[withReference]] retargets a transform at
-   * another key, and a [[GetStructField]] column slot retargeted at a non-struct attribute -- an
-   * `identity` column on the other side of a join, say -- leaves `GetStructField(intCol, 0)`, whose
-   * `dataType` raises `INTERNAL_ERROR: GetStructField requires a StructType child`. Both callers
-   * are gates that must answer "not reducible" rather than fail the query, so a child whose type
-   * cannot be read is treated as not matching.
+   * Reading `dataType` can throw rather than answer, e.g. for a `GetStructField` over a non-struct
+   * column. Both callers are gates that must answer "not reducible" rather than fail the query, so
+   * a child whose type cannot be read is treated as not matching.
    */
   private def inputTypesMatch(select: Expression => Boolean): Boolean = {
     val declaredTypes = function.inputTypes()

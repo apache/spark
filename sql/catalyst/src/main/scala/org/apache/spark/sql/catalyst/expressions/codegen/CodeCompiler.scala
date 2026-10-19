@@ -319,6 +319,55 @@ object CodeCompiler extends Logging {
   }
 
   /**
+   * Whether this JVM leaves a method past HotSpot's size limit to the interpreter: HotSpot's
+   * `-XX:+DontCompileHugeMethods`, on by default. False when it is off, or when the JVM is not
+   * HotSpot and has no such option.
+   */
+  private lazy val jitSkipsHugeMethods: Boolean =
+    Utils.getVMOptionValue("DontCompileHugeMethods").contains("true")
+
+  /** Generated methods that run once per class or per partition, not per row. */
+  private val runOnceMethods = Set("<init>", "<clinit>", "init")
+
+  private val hugeMethodWarned = new java.util.concurrent.atomic.AtomicBoolean(false)
+
+  /** Lets a test see the first warning again. */
+  private[catalyst] def resetHugeMethodWarning(): Unit = hugeMethodWarned.set(false)
+
+  /**
+   * Reports a generated method whose bytecode is past HotSpot's JIT limit
+   * ([[CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT]]). The first time in the driver that such a
+   * method will run interpreted on every row of a whole-stage codegen stage, the report is a
+   * warning that names the remedy: the JVM skips huge methods, the method is not one that runs
+   * once, and `spark.sql.codegen.hugeMethodLimit` does not already make the stage fall back.
+   * Every other report is INFO: every one after that first warning, every one from a generated
+   * class outside whole-stage codegen, where the setting does not apply, and every one on an
+   * executor, since the driver compiles each stage before its tasks do and has reported it.
+   */
+  private[catalyst] def logHugeMethod(className: String, methodName: String, size: Int): Unit = {
+    val limit = CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT
+    val wholeStage = className.contains("GeneratedIteratorForCodegenStage")
+    // `WholeStageCodegenExec` falls back on the largest method of the stage, so with a limit
+    // between 8000 and 65535 another method can make the stage fall back while this one is under
+    // the limit. At the default and at the recommended 8000 the two checks agree.
+    val interpretedPerRow = jitSkipsHugeMethods && wholeStage && TaskContext.get() == null &&
+      !runOnceMethods.contains(methodName) && size <= SQLConf.get.hugeMethodLimit
+    if (interpretedPerRow && hugeMethodWarned.compareAndSet(false, true)) {
+      logWarning(log"Generated method too long to be JIT compiled: " +
+        log"${MDC(LogKeys.CLASS_NAME, className)}.${MDC(LogKeys.METHOD_NAME, methodName)} is " +
+        log"${MDC(LogKeys.BYTECODE_SIZE, size)} bytes, so it runs interpreted on every row. " +
+        log"Setting " +
+        log"${MDC(LogKeys.CONFIG, SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key)} to " +
+        log"${MDC(LogKeys.HUGE_METHOD_LIMIT, limit)} runs such stages without whole-stage " +
+        log"codegen instead. Further methods over the limit are logged at INFO.")
+    } else {
+      logInfo(log"Generated method too long to be JIT compiled: " +
+        log"${MDC(LogKeys.CLASS_NAME, className)}.${MDC(LogKeys.METHOD_NAME, methodName)} is " +
+        log"${MDC(LogKeys.BYTECODE_SIZE, size)} bytes")
+    }
+  }
+
+  /**
    * Compute bytecode statistics for a set of compiled classes. Both backends
    * produce the same map shape (className -> classfile bytes), so the analysis is
    * shared. This is the only piece of code that depends on Janino's
@@ -338,10 +387,7 @@ object CodeCompiler extends Logging {
             val byteCodeSize = attr.code.length
             CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(byteCodeSize)
             if (byteCodeSize > CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT) {
-              logInfo(log"Generated method too long to be JIT compiled: " +
-                log"${MDC(LogKeys.CLASS_NAME, cf.getThisClassName)}." +
-                log"${MDC(LogKeys.METHOD_NAME, method.getName)} is " +
-                log"${MDC(LogKeys.BYTECODE_SIZE, byteCodeSize)} bytes")
+              logHugeMethod(cf.getThisClassName, method.getName, byteCodeSize)
             }
             byteCodeSize
           }

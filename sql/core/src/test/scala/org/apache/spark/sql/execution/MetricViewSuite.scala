@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.metricview.serde.{AssetSource, Column, DimensionExpression, MeasureExpression, MetricView, MetricViewFactory, SQLSource}
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -78,6 +79,54 @@ abstract class MetricViewSuite extends QueryTest {
     createMetricView(viewName, metricViewDefinition)
     withView(viewName) {
       body
+    }
+  }
+
+  test("metric view SQL source rejects a temporary variable read via an IDENTIFIER clause") {
+    // A variable read via an IDENTIFIER clause in the metric-view SQL source is absent from the
+    // analyzed plan, so it is captured during analysis and must be rejected for a persisted metric
+    // view, unless `spark.sql.legacy.allowSessionVariableInPersistedView` is enabled.
+    val metricView = MetricView(
+      "0.1",
+      SQLSource("SELECT region, count FROM IDENTIFIER(mv_ident_source)"),
+      None,
+      Seq(
+        Column("region", DimensionExpression("region"), 0),
+        Column("count_sum", MeasureExpression("sum(count)"), 1)))
+    sql(s"DECLARE OR REPLACE VARIABLE mv_ident_source STRING DEFAULT '$testTableName'")
+    try {
+      val ex = intercept[AnalysisException] {
+        createMetricView("mv_ident_metric_view", metricView)
+      }
+      assert(ex.getCondition == "INVALID_TEMP_OBJ_REFERENCE")
+
+      // With the legacy flag enabled, creation is allowed (the flag does not persist the variable).
+      withSQLConf(SQLConf.VARIABLES_UNDER_IDENTIFIER_IN_VIEW.key -> "true") {
+        withView("mv_ident_metric_view") {
+          createMetricView("mv_ident_metric_view", metricView)
+        }
+      }
+    } finally {
+      sql("DROP TEMPORARY VARIABLE mv_ident_source")
+    }
+  }
+
+  test("metric view creation preserves configured analyzer routing under forced single-pass") {
+    // `MetricViewPlaceholder` is explicitly unsupported by the single-pass resolver. Metric-view
+    // creation analyzes the source through `executeAndCheckReferredTempVariablesUnderIdentifier`,
+    // which must route through HybridAnalyzer when single-pass is forced on so that incompatibility
+    // surfaces, rather than silently analyzing through fixed-point.
+    val metricView = MetricView(
+      "0.1",
+      SQLSource("SELECT region, count FROM test_table"),
+      None,
+      Seq(
+        Column("region", DimensionExpression("region"), 0),
+        Column("count_sum", MeasureExpression("sum(count)"), 1)))
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+      intercept[Exception] {
+        createMetricView("mv_single_pass_view", metricView)
+      }
     }
   }
 

@@ -1380,7 +1380,10 @@ class AstBuilder extends DataTypeAstBuilder
         excludeColumns = params.excludeColumns,
         storedAsScdType = params.storedAsScdType,
         trackHistoryColumns = params.trackHistoryColumns,
-        trackHistoryExceptColumns = params.trackHistoryExceptColumns)
+        trackHistoryExceptColumns = params.trackHistoryExceptColumns,
+        ignoreNullUpdates = params.ignoreNullUpdates,
+        ignoreNullUpdatesColumns = params.ignoreNullUpdatesColumns,
+        ignoreNullUpdatesExceptColumns = params.ignoreNullUpdatesExceptColumns)
     }
 
   protected def parseAutoCdcParams(params: AutoCdcParametersContext): AutoCdcParams =
@@ -1405,6 +1408,7 @@ class AstBuilder extends DataTypeAstBuilder
       checkDuplicateClauses(params.autoCdcColumnsClause(), "COLUMNS", params)
       checkDuplicateClauses(params.autoCdcStoredAsClause(), "STORED AS SCD TYPE", params)
       checkDuplicateClauses(params.autoCdcTrackHistoryClause(), "TRACK HISTORY ON", params)
+      checkDuplicateClauses(params.autoCdcIgnoreNullClause(), "IGNORE NULL UPDATES", params)
 
       val deleteCondition = params.autoCdcDeleteClause().asScala.headOption
         .map(c => expression(c.deleteCondition))
@@ -1453,6 +1457,21 @@ class AstBuilder extends DataTypeAstBuilder
           visitIdentifierSeq(c.nonTrackCols).map(UnresolvedAttribute.quoted)
       }
 
+      // IGNORE NULL UPDATES [ON (cols) | ON * EXCEPT (cols)]. The bare clause ignores nulls on all
+      // columns; the two subset forms are mutually exclusive by construction. `ignoreNullUpdates`
+      // records whether the clause is present at all, which distinguishes "ignore nulls on all
+      // columns" (present, no subset) from "off" (absent) when both column lists are empty.
+      val ignoreNullClause = params.autoCdcIgnoreNullClause().asScala.headOption
+      val ignoreNullUpdates = ignoreNullClause.isDefined
+      val ignoreNullUpdatesColumns = ignoreNullClause.collect {
+        case c if c.ignoreNullCols != null =>
+          visitIdentifierSeq(c.ignoreNullCols).map(UnresolvedAttribute.quoted)
+      }
+      val ignoreNullUpdatesExceptColumns = ignoreNullClause.collect {
+        case c if c.ignoreNullExceptCols != null =>
+          visitIdentifierSeq(c.ignoreNullExceptCols).map(UnresolvedAttribute.quoted)
+      }
+
       AutoCdcParams(
         source = source,
         keys = keys,
@@ -1462,7 +1481,10 @@ class AstBuilder extends DataTypeAstBuilder
         excludeColumns = excludeColumns,
         storedAsScdType = storedAsScdType,
         trackHistoryColumns = trackHistoryColumns,
-        trackHistoryExceptColumns = trackHistoryExceptColumns)
+        trackHistoryExceptColumns = trackHistoryExceptColumns,
+        ignoreNullUpdates = ignoreNullUpdates,
+        ignoreNullUpdatesColumns = ignoreNullUpdatesColumns,
+        ignoreNullUpdatesExceptColumns = ignoreNullUpdatesExceptColumns)
     }
 
   /**
@@ -8407,4 +8429,7 @@ case class AutoCdcParams(
     excludeColumns: Option[Seq[UnresolvedAttribute]],
     storedAsScdType: Int,
     trackHistoryColumns: Option[Seq[UnresolvedAttribute]],
-    trackHistoryExceptColumns: Option[Seq[UnresolvedAttribute]])
+    trackHistoryExceptColumns: Option[Seq[UnresolvedAttribute]],
+    ignoreNullUpdates: Boolean,
+    ignoreNullUpdatesColumns: Option[Seq[UnresolvedAttribute]],
+    ignoreNullUpdatesExceptColumns: Option[Seq[UnresolvedAttribute]])

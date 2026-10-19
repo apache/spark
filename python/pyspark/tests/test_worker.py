@@ -31,7 +31,7 @@ except ImportError:
 from py4j.protocol import Py4JJavaError
 
 from pyspark import SparkConf, SparkContext
-from pyspark.testing.utils import PySparkTestCase, QuietTest, ReusedPySparkTestCase, eventually
+from pyspark.testing.utils import QuietTest, ReusedPySparkTestCase, eventually
 
 
 class WorkerTests(ReusedPySparkTestCase):
@@ -145,6 +145,26 @@ class WorkerTests(ReusedPySparkTestCase):
         self.assertEqual(sum(range(100)), acc2.value)
         self.assertEqual(sum(range(100)), acc1.value)
 
+    def test_worker_metrics_include_spills(self):
+        accumulator = self.sc.accumulator(0)
+
+        def increment(value):
+            from pyspark import TaskContext, shuffle
+
+            # Supply known spill totals to check their transport into JVM task metrics.
+            shuffle.MemoryBytesSpilled += 7
+            shuffle.DiskBytesSpilled += 9
+            accumulator.add(1)
+            return TaskContext.get().stageId(), value + 1
+
+        result = self.sc.parallelize([1, 2], 1).map(increment).collect()
+        self.assertEqual([value for _, value in result], [2, 3])
+        self.assertEqual(accumulator.value, 2)
+        self.sc._jsc.sc().listenerBus().waitUntilEmpty(10000)
+        stage = self.sc._jsc.sc().statusStore().lastStageAttempt(result[0][0])
+        self.assertEqual(stage.memoryBytesSpilled(), 14)
+        self.assertEqual(stage.diskBytesSpilled(), 18)
+
     def test_reuse_worker_after_take(self):
         rdd = self.sc.parallelize(range(100000), 1)
         self.assertEqual(0, rdd.first())
@@ -185,7 +205,19 @@ class WorkerTests(ReusedPySparkTestCase):
             self.assertRegex(str(e), "exception with 中")
 
 
-class WorkerReuseTest(PySparkTestCase):
+class WorkerReuseTest(ReusedPySparkTestCase):
+    @classmethod
+    def conf(cls):
+        # Pin spark.python.use.daemon=true. Worker reuse (hence stable worker PIDs) only
+        # happens on the daemon path; the simple-worker path spawns a fresh process per
+        # task. Sibling suites here run with use.daemon=false and, because all suites in
+        # this file share one gateway JVM, whichever launches it first leaks its conf into
+        # the JVM system properties (SPARK-59885). Pinning it keeps this reuse assertion
+        # independent of test ordering.
+        conf = super().conf()
+        conf.set("spark.python.use.daemon", "true")
+        return conf
+
     @eventually(catch_assertions=True)
     def test_reuse_worker_of_parallelize_range(self):
         rdd = self.sc.parallelize(range(20), 8)
@@ -204,6 +236,9 @@ class WorkerMemoryTest(unittest.TestCase):
     def setUp(self):
         class_name = self.__class__.__name__
         conf = SparkConf().set("spark.executor.pyspark.memory", "2g")
+        # Pin spark.task.cpus so a fractional value leaked from another suite via JVM system
+        # properties (shared gateway JVM) cannot split the worker memory limit and flake this.
+        conf = conf.set("spark.task.cpus", "1")
         self.sc = SparkContext("local[4]", class_name, conf=conf)
 
     def test_memory_limit(self):
@@ -284,7 +319,15 @@ class WorkerSegfaultNonDaemonTest(WorkerSegfaultTest):
         return _conf
 
 
-class WorkerPoolCrashTest(PySparkTestCase):
+class WorkerPoolCrashTest(ReusedPySparkTestCase):
+    @classmethod
+    def conf(cls):
+        # Pin daemon so worker reuse (stable PIDs) is independent of test ordering; see
+        # WorkerReuseTest.conf for the shared-gateway leak rationale (SPARK-59885).
+        conf = super().conf()
+        conf.set("spark.python.use.daemon", "true")
+        return conf
+
     def test_worker_crash(self):
         # SPARK-47565: Kill a worker that is currently idling
         rdd = self.sc.parallelize(range(20), 4)

@@ -111,10 +111,6 @@ class TransformExpressionSuite extends SparkFunSuite {
     assert(!left.hasSameReducedKeys(b12), "an unreduced side never shares one")
     assert(!b12.hasSameReducedKeys(left))
     assert(!b12.hasSameReducedKeys(b8), "nor do two unreduced ones")
-
-    // The marker rides on the expression, so it survives the attribute rewrites a projection and
-    // `GroupPartitionsExec` apply to a reported partitioning.
-    assert(left.hasSameReducedKeys(left.withReference(b)))
   }
 
   test("SPARK-50593: hasSameReducedKeys discriminates non-bucket (truncate-style) reductions") {
@@ -179,11 +175,10 @@ class TransformExpressionSuite extends SparkFunSuite {
       "a non-reference slot is not comparable, so not the same function")
   }
 
-  test("SPARK-50593: a retargeted struct-field column slot is not reducible, and does not throw") {
-    // `withReference` retargets a transform at the other side's key. A GetStructField column slot
-    // retargeted at a non-struct attribute leaves GetStructField(intCol, 0), whose `dataType`
-    // raises INTERNAL_ERROR rather than answering. `argsMatchInputTypes` is a gate -- it has to
-    // report "not reducible" and let the join shuffle, not fail the query.
+  test("SPARK-50593: an argument whose type cannot be read is not reducible, and does not throw") {
+    // GetStructField over a non-struct column raises INTERNAL_ERROR from `dataType` rather than
+    // answering. `argsMatchInputTypes` is a gate -- it has to report "not reducible" and let the
+    // join shuffle, not fail the query.
     val structAttr = AttributeReference("s", StructType(Seq(StructField("f", IntegerType))))()
     val sf = GetStructField(structAttr, 0)
     // Two declared input types, so the arity short-circuit does not hide the dataType read.
@@ -193,16 +188,13 @@ class TransformExpressionSuite extends SparkFunSuite {
       override def name(): String = "test.truncate2"
       override def canonicalName(): String = name()
     }
-    val t = TransformExpression(fn, Seq(sf, Literal(3)))
-    val retargeted = t.withReference(AttributeReference("id", IntegerType)())
-
-    assert(!retargeted.argsMatchInputTypes,
+    val unreadable = TransformExpression(fn,
+      Seq(GetStructField(AttributeReference("id", IntegerType)(), 0), Literal(3)))
+    assert(!unreadable.argsMatchInputTypes,
       "an unreadable child type must read as not matching, not raise")
 
-    // The same slot retargeted at a compatible struct still matches.
-    val otherStruct = AttributeReference("s2", StructType(Seq(StructField("f", IntegerType))))()
-    assert(t.withReference(otherStruct).argsMatchInputTypes,
-      "a compatible retarget still matches")
+    // A readable struct field of the declared type still matches.
+    assert(TransformExpression(fn, Seq(sf, Literal(3))).argsMatchInputTypes)
   }
 
   test("SPARK-50593: hasSameReducedKeys tells nested transforms apart, like isSameFunction") {
@@ -220,7 +212,8 @@ class TransformExpressionSuite extends SparkFunSuite {
       .hasSameReducedKeys(overDays.reducedTogetherWith(partner)),
       "a different nested transform is a different reduced key space")
     assert(overYears.reducedTogetherWith(partner)
-      .hasSameReducedKeys(overYears.withReference(b).reducedTogetherWith(partner)),
+      .hasSameReducedKeys(TransformExpression(outer,
+        Seq(Literal(4), TransformExpression(years, Seq(b)))).reducedTogetherWith(partner)),
       "the same nested transform over another column is the same key space")
   }
 

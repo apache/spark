@@ -803,6 +803,15 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       "STRUCT<col: BIGINT>")
   }
 
+  test("schema_of_json and from_json trim CHAR padding") {
+    val document = """{"col":1}   """
+    val input = Literal.create(document, CharType(document.length, "UTF8_LCASE"))
+    val schema = new StructType().add("col", LongType)
+
+    checkEvaluation(SchemaOfJson(input, Map.empty), "STRUCT<col: BIGINT>")
+    checkEvaluation(JsonToStructs(schema, Map.empty, input, UTC_OPT), InternalRow(1L))
+  }
+
   test("parse date with locale") {
     Seq("en-US", "ru-RU").foreach { langTag =>
       val locale = Locale.forLanguageTag(langTag)

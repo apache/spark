@@ -88,6 +88,17 @@ abstract class TimestampNanosWideningSuiteBase extends SharedSparkSession {
       .union(single(TimestampNTZNanosType(7), ldtB))
     assert(withDate.schema("c").dataType === TimestampNTZNanosType(7))
     assert(withDate.count() === 2)
+
+    // The p=8 boundary: nanos(7) <-> nanos(8) widens to 8, and nanos(8) <-> nanos(9) widens to 9.
+    val ltz78 =
+      single(TimestampLTZNanosType(7), instantA).union(single(TimestampLTZNanosType(8), instantB))
+    assert(ltz78.schema("c").dataType === TimestampLTZNanosType(8))
+    assert(ltz78.count() === 2)
+
+    val ntz89 =
+      single(TimestampNTZNanosType(8), ldtA).union(single(TimestampNTZNanosType(9), ldtB))
+    assert(ntz89.schema("c").dataType === TimestampNTZNanosType(9))
+    assert(ntz89.count() === 2)
   }
 
   test("SPARK-57454: coalesce widens nanosecond timestamps") {
@@ -98,6 +109,15 @@ abstract class TimestampNanosWideningSuiteBase extends SharedSparkSession {
     val ntz = twoCols(TimestampNTZType, ldtA, TimestampNTZNanosType(8), ldtB)
     val ntzRes = ntz.select(coalesce(col("a"), col("b")).as("c"))
     assert(ntzRes.schema("c").dataType === TimestampNTZNanosType(8))
+
+    // The p=8 boundary: nanos(7) <-> nanos(8) -> 8, nanos(8) <-> nanos(9) -> 9.
+    val ntz78 = twoCols(TimestampNTZNanosType(7), ldtA, TimestampNTZNanosType(8), ldtB)
+    assert(ntz78.select(coalesce(col("a"), col("b")).as("c"))
+      .schema("c").dataType === TimestampNTZNanosType(8))
+
+    val ltz89 = twoCols(TimestampLTZNanosType(8), instantA, TimestampLTZNanosType(9), instantB)
+    assert(ltz89.select(coalesce(col("a"), col("b")).as("c"))
+      .schema("c").dataType === TimestampLTZNanosType(9))
   }
 
   test("SPARK-57454: CASE WHEN widens nanosecond timestamps") {
@@ -165,6 +185,14 @@ abstract class TimestampNanosWideningSuiteBase extends SharedSparkSession {
 
     val ntzEq = twoCols(TimestampNTZType, ldtA, TimestampNTZNanosType(9), ldtA)
     checkAnswer(ntzEq.selectExpr("a = b", "a < b"), Row(true, false))
+
+    // The p=8 boundary: comparison across nanos(7)/nanos(8) and nanos(8)/nanos(9) resolves through
+    // the widened type. instantA (2020) precedes instantB (2021), so a < b.
+    val ntz78 = twoCols(TimestampNTZNanosType(7), ldtA, TimestampNTZNanosType(8), ldtB)
+    checkAnswer(ntz78.selectExpr("a = b", "a < b"), Row(false, true))
+
+    val ltz89 = twoCols(TimestampLTZNanosType(8), instantA, TimestampLTZNanosType(9), instantB)
+    checkAnswer(ltz89.selectExpr("a = b", "a < b"), Row(false, true))
   }
 
   test("SPARK-57811: string operand coerces to the nanosecond timestamp type") {

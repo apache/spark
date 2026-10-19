@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.python
 
+import scala.concurrent.duration._
+
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, Row}
 import org.apache.spark.sql.functions.{aggregate, array, avg, col, count, lit, transform}
 import org.apache.spark.sql.internal.SQLConf
@@ -218,6 +220,34 @@ class PythonUDFSuite extends SharedSparkSession {
     // Python total time should also be non-zero and >= processing time
     assert(pythonTotalTime > 0 && pythonTotalTime >= processingTime,
       s"pythonTotalTime should be > 0, but was $pythonTotalTime")
+  }
+
+  test("reused Python worker initialization excludes pre-task idle time") {
+    assume(shouldTestPythonUDFs)
+
+    def executePythonUDF(): BatchEvalPythonExec = {
+      val result = spark.range(1).coalesce(1).select(pythonTestUDF(col("id")))
+      result.collect()
+      result.queryExecution.executedPlan.collectFirst {
+        case exec: BatchEvalPythonExec => exec
+      }.getOrElse {
+        fail("Expected BatchEvalPythonExec in executed plan")
+      }
+    }
+
+    executePythonUDF()
+
+    eventually(timeout(10.seconds), interval(100.milliseconds)) {
+      Thread.sleep(1000L)
+      val pythonExec = executePythonUDF()
+      val bootTime = pythonExec.metrics("pythonBootTime").value
+      val initTime = pythonExec.metrics("pythonInitTime").value
+      val totalTime = pythonExec.metrics("pythonTotalTime").value
+
+      assert(bootTime === 0L, s"expected a reused Python worker, but boot time was $bootTime ms")
+      assert(initTime <= totalTime,
+        s"initialization time $initTime ms exceeded total worker time $totalTime ms")
+    }
   }
 
   test("SPARK-55046:pythonProcessingTime metric for ArrowEvalPythonExec") {

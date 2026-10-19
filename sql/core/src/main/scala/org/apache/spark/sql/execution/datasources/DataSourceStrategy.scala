@@ -573,10 +573,13 @@ object DataSourceStrategy
   protected[sql] def normalizeExprs(
       exprs: Seq[Expression],
       attributes: Seq[Attribute]): Seq[Expression] = {
+    if (exprs.isEmpty) return exprs
+
+    val attributeMap = AttributeMap(attributes.reverse.map(a => a -> a.name))
     exprs.map { e =>
       e transform {
         case a: AttributeReference =>
-          a.withName(attributes.find(_.semanticEquals(a)).getOrElse(a).name)
+          a.withName(attributeMap.getOrElse(a, a.name))
       }
     }
   }

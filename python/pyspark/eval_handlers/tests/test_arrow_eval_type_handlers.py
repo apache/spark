@@ -22,36 +22,66 @@ same wire format the serializers produce, so every test constructs its input the
 same way: ``run(0, <input>)`` and assert on the output batches.
 """
 
+import os
 import unittest
+from unittest.mock import patch
 
 from pyspark.errors import PySparkRuntimeError
 from pyspark.eval_handlers._base import get_eval_type_handler
+from pyspark.eval_handlers.utils import hashable_grouping_key
 from pyspark.sql.pandas.serializers import ArrowStreamCoGroupSerializer, ArrowStreamSerializer
-from pyspark.sql.types import LongType, StructField, StructType
+from pyspark.sql.types import DoubleType, LongType, StructField, StructType
 from pyspark.testing.utils import have_pyarrow, pyarrow_requirement_message
 from pyspark.util import PythonEvalType
+
+with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
+    from pyspark.worker_util import EvalConf, RunnerConf
 
 if have_pyarrow:
     import pyarrow as pa
 
     from pyspark.eval_handlers._arrow import (
         ArrowCoGroupedMapUDFHandler,
+        ArrowGroupedAggIncrementalFinalUDFHandler,
+        ArrowGroupedAggIncrementalPartialUDFHandler,
+        ArrowGroupedAggIterUDFHandler,
+        ArrowGroupedAggUDFHandler,
         ArrowGroupedMapIterUDFHandler,
         ArrowGroupedMapUDFHandler,
         ArrowMapUDFHandler,
         ArrowScalarIterUDFHandler,
         ArrowScalarUDFHandler,
+        ArrowWindowAggIncrementalUDFHandler,
+        ArrowWindowAggUDFHandler,
     )
     from pyspark.sql.conversion import ArrowBatchTransformer
 
 
-class _RunnerConf:
-    """Minimal stand-in for the worker's RunnerConf, exposing only the fields
-    the handlers under test read."""
+class _SumAggregator:
+    """Incremental ``Aggregator`` stub: sums non-null inputs, with a ``(sum, count)`` buffer.
 
-    use_large_var_types = False
-    assign_cols_by_name = True
-    map_in_batch_legacy_accept_any_iterable = False
+    ``reduce_calls`` counts ``reduce`` invocations so tests can assert how a window frame was
+    folded (extended vs refolded from ``zero``).
+    """
+
+    bufferSchema = StructType([StructField("s", LongType()), StructField("c", LongType())])
+
+    def __init__(self):
+        self.reduce_calls = 0
+
+    def zero(self):
+        return (0, 0)
+
+    def reduce(self, buffer, values):
+        self.reduce_calls += 1
+        (v,) = values
+        return buffer if v is None else (buffer[0] + v, buffer[1] + 1)
+
+    def merge(self, left, right):
+        return (left[0] + right[0], left[1] + right[1])
+
+    def finish(self, buffer):
+        return buffer[0]
 
 
 def _batch(**columns):
@@ -95,7 +125,9 @@ def _scalar_handler(handler_cls, udf):
 
     The scalar UDF tuple is ``(func, args_offsets, kwargs_offsets, return_type)``.
     """
-    return handler_cls(udfs=[(udf, [0], {}, LongType())], runner_conf=_RunnerConf(), eval_conf=None)
+    return handler_cls(
+        udfs=[(udf, [0], {}, LongType())], runner_conf=RunnerConf({}), eval_conf=None
+    )
 
 
 def _grouped_handler(handler_cls, udf, arg_offsets, num_udf_args):
@@ -105,7 +137,7 @@ def _grouped_handler(handler_cls, udf, arg_offsets, num_udf_args):
     """
     return handler_cls(
         udfs=[(udf, arg_offsets, _RETURN_TYPE, num_udf_args)],
-        runner_conf=_RunnerConf(),
+        runner_conf=RunnerConf({}),
         eval_conf=None,
     )
 
@@ -120,7 +152,7 @@ _RETURN_TYPE = StructType([StructField("v", LongType())])
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class ArrowEvalTypeHandlerRegistrationTests(unittest.TestCase):
     def test_arrow_eval_types_are_registered(self):
-        # Every migrated Arrow map/iter eval type dispatches to its handler by lookup.
+        # Every migrated Arrow eval type dispatches to its handler by lookup.
         for eval_type, handler_cls in (
             (PythonEvalType.SQL_SCALAR_ARROW_UDF, ArrowScalarUDFHandler),
             (PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF, ArrowScalarIterUDFHandler),
@@ -128,6 +160,21 @@ class ArrowEvalTypeHandlerRegistrationTests(unittest.TestCase):
             (PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF, ArrowGroupedMapUDFHandler),
             (PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF, ArrowGroupedMapIterUDFHandler),
             (PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF, ArrowCoGroupedMapUDFHandler),
+            (PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF, ArrowGroupedAggUDFHandler),
+            (PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF, ArrowGroupedAggIterUDFHandler),
+            (PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF, ArrowWindowAggUDFHandler),
+            (
+                PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF,
+                ArrowGroupedAggIncrementalPartialUDFHandler,
+            ),
+            (
+                PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF,
+                ArrowGroupedAggIncrementalFinalUDFHandler,
+            ),
+            (
+                PythonEvalType.SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF,
+                ArrowWindowAggIncrementalUDFHandler,
+            ),
         ):
             self.assertIs(get_eval_type_handler(eval_type), handler_cls)
 
@@ -184,7 +231,7 @@ class ArrowMapUDFHandlerTests(unittest.TestCase):
                 yield _batch(v=[c.as_py() * 2 for c in batch.column("v")])
 
         handler = ArrowMapUDFHandler(
-            udfs=[(double_v, None, None, None)], runner_conf=_RunnerConf(), eval_conf=None
+            udfs=[(double_v, None, None, None)], runner_conf=RunnerConf({}), eval_conf=None
         )
         out = list(handler.run(0, iter([_struct_batch(v=[1, 2, 3])])))
         self.assertEqual(out[0].column(0).field("v").to_pylist(), [2, 4, 6])
@@ -253,6 +300,227 @@ class ArrowCoGroupedMapUDFHandlerTests(unittest.TestCase):
         handler = _grouped_handler(ArrowCoGroupedMapUDFHandler, cogrouped_udf, _COGROUP_OFFSETS, 3)
         out = list(handler.run(0, _one_cogroup(_batch(k=[5], v=[10]), _batch(k=[5], v=[20]))))
         self.assertEqual(out[0].column(0).field("v").to_pylist(), [35])
+
+
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+class ArrowGroupedAggUDFHandlerTests(unittest.TestCase):
+    # Grouped-agg batches arrive un-wrapped (flat columns); the UDF reads columns by offset and
+    # returns one scalar, emitted as a single-row batch per group.
+    def test_reduces_group_to_one_row(self):
+        def sum_udf(col):
+            return sum(c.as_py() for c in col)
+
+        handler = ArrowGroupedAggUDFHandler(
+            udfs=[(sum_udf, [0], {}, LongType())], runner_conf=RunnerConf({}), eval_conf=None
+        )
+        out = list(handler.run(0, _one_group(_batch(v=[1, 2, 3]), _batch(v=[4]))))
+        self.assertEqual(out[0].column("_0").to_pylist(), [10])
+
+
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+class ArrowGroupedAggIterUDFHandlerTests(unittest.TestCase):
+    # The UDF receives the group's input columns as an iterator and returns one scalar.
+    def test_reduces_group_to_one_row(self):
+        def sum_iter_udf(col_iter):
+            return sum(c.as_py() for col in col_iter for c in col)
+
+        handler = ArrowGroupedAggIterUDFHandler(
+            udfs=[(sum_iter_udf, [0], {}, LongType())], runner_conf=RunnerConf({}), eval_conf=None
+        )
+        out = list(handler.run(0, _one_group(_batch(v=[10]), _batch(v=[20]))))
+        self.assertEqual(out[0].column("_0").to_pylist(), [30])
+
+
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+class ArrowWindowAggUDFHandlerTests(unittest.TestCase):
+    # One output value per input row over the UDF's window frame.
+    def test_unbounded_frame_repeats_one_value(self):
+        def sum_udf(col):
+            return sum(c.as_py() for c in col)
+
+        handler = ArrowWindowAggUDFHandler(
+            udfs=[(sum_udf, [0], {}, LongType())],
+            runner_conf=RunnerConf({"window_bound_types": "unbounded"}),
+            eval_conf=None,
+        )
+        out = list(handler.run(0, _one_group(_batch(v=[1, 2, 3]))))
+        self.assertEqual(out[0].column("_0").to_pylist(), [6, 6, 6])
+
+    def test_bounded_frame_slices_per_row(self):
+        # args_offsets = [begin_col, end_col, *value_cols]; each row's frame is ``[begin, end)``.
+        def sum_udf(col):
+            return sum(c.as_py() for c in col)
+
+        handler = ArrowWindowAggUDFHandler(
+            udfs=[(sum_udf, [0, 1, 2], {}, LongType())],
+            runner_conf=RunnerConf({"window_bound_types": "bounded"}),
+            eval_conf=None,
+        )
+        # Row 0 frame [0, 1) -> [10]; row 1 frame [0, 2) -> [10, 20].
+        out = list(handler.run(0, _one_group(_batch(begin=[0, 0], end=[1, 2], v=[10, 20]))))
+        self.assertEqual(out[0].column("_0").to_pylist(), [10, 30])
+
+
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+class ArrowGroupedAggIncrementalPartialUDFHandlerTests(unittest.TestCase):
+    # Input columns are ``[k, v]``: the leading grouping key, then the aggregator input. Output
+    # is one row per key: ``k_0`` followed by the ``_0`` buffer struct.
+    _KEY_SCHEMA = StructType([StructField("k", LongType())])
+
+    def _handler(self, cap=10000):
+        return ArrowGroupedAggIncrementalPartialUDFHandler(
+            udfs=[(_SumAggregator(), [1], {}, LongType())],
+            runner_conf=RunnerConf({"spark.sql.execution.arrow.maxRecordsPerBatch": str(cap)}),
+            eval_conf=EvalConf({"grouping_key_schema": self._KEY_SCHEMA.json()}),
+        )
+
+    @staticmethod
+    def _rows(out):
+        return [
+            (k, buf["s"], buf["c"])
+            for b in out
+            for k, buf in zip(b.column("k_0").to_pylist(), b.column("_0").to_pylist())
+        ]
+
+    def test_combines_rows_per_key_across_batches(self):
+        out = list(
+            self._handler().run(0, iter([_batch(k=[1, 2, 1], v=[1, 2, 3]), _batch(k=[2], v=[4])]))
+        )
+        self.assertEqual(len(out), 1)
+        self.assertEqual(sorted(self._rows(out)), [(1, 4, 2), (2, 6, 2)])
+
+    def test_empty_partition_emits_nothing(self):
+        self.assertEqual(list(self._handler().run(0, iter([]))), [])
+
+    def test_flushes_when_key_count_reaches_cap(self):
+        # cap=2: the check runs after each input batch. The first batch brings the map to exactly
+        # 2 keys, so it flushes (>= cap); key 1 then reappears in a fresh map, and the FINAL stage
+        # merges the duplicate downstream. A mid-stream flush is not chunked, so the second batch
+        # flushes all 3 of its keys at once.
+        out = list(
+            self._handler(cap=2).run(
+                0, iter([_batch(k=[1, 2], v=[1, 2]), _batch(k=[1, 3, 4], v=[10, 3, 4])])
+            )
+        )
+        self.assertEqual([b.num_rows for b in out], [2, 3])
+        self.assertEqual(sorted(self._rows(out[:1])), [(1, 1, 1), (2, 2, 1)])
+        self.assertEqual(sorted(self._rows(out[1:])), [(1, 10, 1), (3, 3, 1), (4, 4, 1)])
+
+    def test_below_cap_is_not_flushed(self):
+        out = list(
+            self._handler(cap=3).run(0, iter([_batch(k=[1, 2], v=[1, 2]), _batch(k=[1], v=[5])]))
+        )
+        self.assertEqual([b.num_rows for b in out], [2])
+        self.assertEqual(sorted(self._rows(out)), [(1, 6, 2), (2, 2, 1)])
+
+    def test_non_positive_cap_is_unbounded(self):
+        out = list(self._handler(cap=0).run(0, iter([_batch(k=[1, 2, 3], v=[1, 2, 3])])))
+        self.assertEqual([b.num_rows for b in out], [3])
+
+    def test_nan_keys_are_combined(self):
+        batch = pa.RecordBatch.from_arrays(
+            [pa.array([float("nan"), float("nan")]), pa.array([1, 2], type=pa.int64())],
+            ["k", "v"],
+        )
+        handler = ArrowGroupedAggIncrementalPartialUDFHandler(
+            udfs=[(_SumAggregator(), [1], {}, LongType())],
+            runner_conf=RunnerConf({}),
+            eval_conf=EvalConf(
+                {"grouping_key_schema": StructType([StructField("k", DoubleType())]).json()}
+            ),
+        )
+        out = list(handler.run(0, iter([batch])))
+        self.assertEqual(out[0].num_rows, 1)
+        self.assertEqual(out[0].column("_0").to_pylist(), [{"s": 3, "c": 2}])
+
+
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+class ArrowGroupedAggIncrementalFinalUDFHandlerTests(unittest.TestCase):
+    # Each group's rows carry one partial-buffer struct column; the handler merges them and
+    # emits one ``finish`` value per group.
+    _BUFFER_TYPE = pa.struct([("s", pa.int64()), ("c", pa.int64())]) if have_pyarrow else None
+
+    def _buffers(self, buffers):
+        return pa.RecordBatch.from_arrays([pa.array(buffers, type=self._BUFFER_TYPE)], ["buf"])
+
+    def _handler(self):
+        return ArrowGroupedAggIncrementalFinalUDFHandler(
+            udfs=[(_SumAggregator(), [0], {}, LongType())],
+            runner_conf=RunnerConf({}),
+            eval_conf=None,
+        )
+
+    def test_merges_partial_buffers_per_group(self):
+        groups = iter(
+            [
+                iter([self._buffers([{"s": 1, "c": 1}]), self._buffers([{"s": 2, "c": 1}])]),
+                iter([self._buffers([{"s": 10, "c": 2}])]),
+            ]
+        )
+        out = list(self._handler().run(0, groups))
+        self.assertEqual([b.column("_0").to_pylist() for b in out], [[3], [10]])
+
+    def test_null_buffers_are_skipped(self):
+        # An all-null buffer group (the operator's empty global aggregation) finishes ``zero``.
+        out = list(self._handler().run(0, _one_group(self._buffers([None]))))
+        self.assertEqual(out[0].column("_0").to_pylist(), [0])
+        out = list(self._handler().run(0, _one_group(self._buffers([None, {"s": 5, "c": 1}]))))
+        self.assertEqual(out[0].column("_0").to_pylist(), [5])
+
+
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+class ArrowWindowAggIncrementalUDFHandlerTests(unittest.TestCase):
+    def _handler(self, agg, bound_type, args_offsets):
+        return ArrowWindowAggIncrementalUDFHandler(
+            udfs=[(agg, args_offsets, {}, LongType())],
+            runner_conf=RunnerConf({"window_bound_types": bound_type}),
+            eval_conf=None,
+        )
+
+    def test_unbounded_frame_repeats_one_value(self):
+        handler = self._handler(_SumAggregator(), "unbounded", [0])
+        out = list(handler.run(0, _one_group(_batch(v=[1, 2]), _batch(v=[3]))))
+        self.assertEqual(out[0].column("_0").to_pylist(), [6, 6, 6])
+
+    def test_growing_frame_extends_running_buffer(self):
+        # rowsBetween(unboundedPreceding, currentRow): same lower bound, growing upper bound,
+        # so each row folds only its newly-included row.
+        agg = _SumAggregator()
+        handler = self._handler(agg, "bounded", [0, 1, 2])
+        batch = _batch(begin=[0, 0, 0, 0], end=[1, 2, 3, 4], v=[1, 2, 3, 4])
+        out = list(handler.run(0, _one_group(batch)))
+        self.assertEqual(out[0].column("_0").to_pylist(), [1, 3, 6, 10])
+        self.assertEqual(agg.reduce_calls, 4)
+
+    def test_sliding_frame_refolds_from_zero(self):
+        # rowsBetween(-1, currentRow): the lower bound advances, so each frame refolds.
+        agg = _SumAggregator()
+        handler = self._handler(agg, "bounded", [0, 1, 2])
+        batch = _batch(begin=[0, 0, 1, 2], end=[1, 2, 3, 4], v=[1, 2, 3, 4])
+        out = list(handler.run(0, _one_group(batch)))
+        self.assertEqual(out[0].column("_0").to_pylist(), [1, 3, 5, 7])
+        self.assertEqual(agg.reduce_calls, 1 + 1 + 2 + 2)
+
+    def test_invalid_bound_type_raises(self):
+        handler = self._handler(_SumAggregator(), "bogus", [0])
+        with self.assertRaises(PySparkRuntimeError):
+            list(handler.run(0, _one_group(_batch(v=[1]))))
+
+
+class HashableGroupingKeyTests(unittest.TestCase):
+    def test_nested_values_hash_by_value(self):
+        self.assertEqual(
+            hashable_grouping_key(([1, [2]], {"a": 1})), hashable_grouping_key(([1, [2]], {"a": 1}))
+        )
+
+    def test_nan_values_collapse(self):
+        self.assertEqual(
+            hashable_grouping_key((float("nan"), [float("nan")])),
+            hashable_grouping_key((float("nan"), [float("nan")])),
+        )
+
+    def test_unhashable_value_gets_a_unique_key(self):
+        self.assertNotEqual(hashable_grouping_key(({1},)), hashable_grouping_key(({1},)))
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)

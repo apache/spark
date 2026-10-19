@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connect.planner
 
 import java.util.{HashMap, Properties, UUID}
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -59,7 +60,7 @@ import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.classic.{Catalog, DataFrameWriter, Dataset, MergeIntoWriter, RelationalGroupedDataset, SparkSession, TypedAggUtils, UserDefinedFunctionUtils}
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
-import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket, UdfSerialization}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.ml.MLHandler
 import org.apache.spark.sql.connect.pipelines.PipelinesHandler
@@ -1517,7 +1518,10 @@ class SparkConnectPlanner(
       if (schema == null) {
         throw InvalidInputErrors.schemaRequiredForLocalRelation()
       }
-      LocalRelation(schema)
+      val physicalSchema = DataType
+        .replaceCharVarcharWithCollationPreservingString(normalizeLocalRelationType(schema))
+        .asInstanceOf[StructType]
+      buildLocalRelationFromRows(Iterator.empty, physicalSchema, Some(schema))
     }
   }
 
@@ -1597,6 +1601,59 @@ class SparkConnectPlanner(
     case d => StructType(Seq(StructField("value", d)))
   }
 
+  private def normalizeLocalRelationType(dt: DataType): DataType = dt match {
+    case udt: UserDefinedType[_] => normalizeLocalRelationType(udt.sqlType)
+    case StructType(fields) =>
+      val newFields = fields.zipWithIndex.map {
+        case (StructField(_, dataType, nullable, metadata), i) =>
+          StructField(s"col_$i", normalizeLocalRelationType(dataType), nullable, metadata)
+      }
+      StructType(newFields)
+    case ArrayType(elementType, containsNull) =>
+      ArrayType(normalizeLocalRelationType(elementType), containsNull)
+    case MapType(keyType, valueType, valueContainsNull) =>
+      MapType(
+        normalizeLocalRelationType(keyType),
+        normalizeLocalRelationType(valueType),
+        valueContainsNull)
+    case _ => dt
+  }
+
+  /**
+   * Restores requested logical wrappers that remain compatible after local-data reconciliation.
+   *
+   * For example, `createDataFrame(rows, schemaWithChar)` produces CHAR under standard semantics,
+   * STRING under legacy-as-string, and is rejected by the default policy. Existing UDT wrappers
+   * are retained without extending CHAR/VARCHAR reconciliation into their storage types.
+   */
+  private def restoreRequestedLogicalType(actual: DataType, requested: DataType): DataType =
+    (actual, requested) match {
+      case (_, requestedUdt: UserDefinedType[_]) => requestedUdt
+      case (actualString: StringType, requestedString: StringType)
+          if !actualString.isInstanceOf[CharType] &&
+            !actualString.isInstanceOf[VarcharType] &&
+            !requestedString.isInstanceOf[CharType] &&
+            !requestedString.isInstanceOf[VarcharType] &&
+            DataType.equalsIgnoreCompatibleCollation(actualString, requestedString) =>
+        requestedString
+      case (StructType(actualFields), StructType(requestedFields)) =>
+        StructType(actualFields.zip(requestedFields).map { case (actualField, requestedField) =>
+          actualField.copy(
+            name = requestedField.name,
+            dataType = restoreRequestedLogicalType(actualField.dataType, requestedField.dataType))
+        })
+      case (ArrayType(actualElement, containsNull), ArrayType(requestedElement, _)) =>
+        ArrayType(restoreRequestedLogicalType(actualElement, requestedElement), containsNull)
+      case (
+            MapType(actualKey, actualValue, valueContainsNull),
+            MapType(requestedKey, requestedValue, _)) =>
+        MapType(
+          restoreRequestedLogicalType(actualKey, requestedKey),
+          restoreRequestedLogicalType(actualValue, requestedValue),
+          valueContainsNull)
+      case _ => actual
+    }
+
   private def buildLocalRelationFromRows(
       rows: Iterator[InternalRow],
       structType: StructType,
@@ -1613,37 +1670,28 @@ class SparkConnectPlanner(
       case None =>
         logical.LocalRelation(attributes, data.map(_.copy()).toArray.toImmutableArraySeq)
       case Some(schema) =>
-        def normalize(dt: DataType): DataType = dt match {
-          case udt: UserDefinedType[_] => normalize(udt.sqlType)
-          case StructType(fields) =>
-            val newFields = fields.zipWithIndex.map {
-              case (StructField(_, dataType, nullable, metadata), i) =>
-                StructField(s"col_$i", normalize(dataType), nullable, metadata)
-            }
-            StructType(newFields)
-          case ArrayType(elementType, containsNull) =>
-            ArrayType(normalize(elementType), containsNull)
-          case MapType(keyType, valueType, valueContainsNull) =>
-            MapType(normalize(keyType), normalize(valueType), valueContainsNull)
-          case _ => dt
-        }
-
-        val normalized = normalize(schema).asInstanceOf[StructType]
+        val normalized = normalizeLocalRelationType(schema).asInstanceOf[StructType]
 
         import org.apache.spark.util.ArrayImplicits._
         val project = Dataset
           .ofRows(
             session,
-            logicalPlan = logical.LocalRelation(normalize(structType).asInstanceOf[StructType]))
+            logicalPlan = logical.LocalRelation(
+              normalizeLocalRelationType(structType).asInstanceOf[StructType]))
           .toDF(normalized.names.toImmutableArraySeq: _*)
           .to(normalized)
           .logicalPlan
           .asInstanceOf[Project]
 
         val proj = UnsafeProjection.create(project.projectList, project.child.output)
-        logical.LocalRelation(
-          DataTypeUtils.toAttributes(schema),
-          data.map(proj).map(_.copy()).toSeq)
+        val output = project.output.zip(schema.fields).map { case (attribute, field) =>
+          AttributeReference(
+            field.name,
+            restoreRequestedLogicalType(attribute.dataType, field.dataType),
+            attribute.nullable,
+            field.metadata)()
+        }
+        logical.LocalRelation(output, data.map(proj).map(_.copy()).toSeq)
     }
   }
 
@@ -2104,10 +2152,11 @@ class SparkConnectPlanner(
     unpackScalaUDF[ForeachWriterPacket](fun)
   }
 
-  private def unpackScalaUDF[T](fun: proto.ScalarScalaUDF): T = {
+  private[connect] def unpackScalaUDF[T](fun: proto.ScalarScalaUDF): T = {
     try {
       logDebug(s"Unpack using class loader: ${Utils.getContextOrSparkClassLoader}")
-      Utils.deserialize[T](fun.getPayload.toByteArray, Utils.getContextOrSparkClassLoader)
+      UdfSerialization
+        .deserialize[T](fun.getPayload.toByteArray, Utils.getContextOrSparkClassLoader)
     } catch {
       case t: Throwable =>
         Utils.getRootCause(t) match {
@@ -3557,22 +3606,28 @@ class SparkConnectPlanner(
       }
     }
 
-    // This is filled when a foreach batch runner started for Python.
+    // This is filled when a foreachBatch runner is started (Python or Scala).
     var foreachBatchRunnerCleaner: Option[AutoCloseable] = None
+    // Filled when foreachBatch is used, to set query id after query starts.
+    var foreachBatchQueryIdRef: Option[AtomicReference[String]] = None
 
     if (writeOp.hasForeachBatch) {
       val foreachBatchFn = writeOp.getForeachBatch.getFunctionCase match {
         case StreamingForeachFunction.FunctionCase.PYTHON_FUNCTION =>
           val pythonFn = transformPythonFunction(writeOp.getForeachBatch.getPythonFunction)
-          val (fn, cleaner) =
+          val (fn, cleaner, queryIdRef) =
             StreamingForeachBatchHelper.pythonForeachBatchWrapper(pythonFn, sessionHolder)
           foreachBatchRunnerCleaner = Some(cleaner)
+          foreachBatchQueryIdRef = Some(queryIdRef)
           fn
 
         case StreamingForeachFunction.FunctionCase.SCALA_FUNCTION =>
-          StreamingForeachBatchHelper.scalaForeachBatchWrapper(
+          val (fn, cleaner, queryIdRef) = StreamingForeachBatchHelper.scalaForeachBatchWrapper(
             writeOp.getForeachBatch.getScalaFunction.getPayload.toByteArray,
             sessionHolder)
+          foreachBatchRunnerCleaner = Some(cleaner)
+          foreachBatchQueryIdRef = Some(queryIdRef)
+          fn
 
         case other =>
           throw InvalidInputErrors.invalidOneOfField(
@@ -3599,18 +3654,23 @@ class SparkConnectPlanner(
           throw ex
       }
 
+    // Set the query id so the sanity check in dataFrameCachingWrapper can use it.
+    foreachBatchQueryIdRef.foreach(_.set(query.id.toString))
+    // Register the cleaner with the query if foreachBatch is used. Do this before
+    // registerNewStreamingQuery so that if that call throws, the cleaner is already wired to reap
+    // the cloned SessionHolder a batch may have created (it never expires by inactivity, so an
+    // unregistered one would leak until server shutdown).
+    foreachBatchRunnerCleaner.foreach { cleaner =>
+      sessionHolder.streamingForeachBatchRunnerCleanerCache.registerCleanerForQuery(
+        query,
+        cleaner)
+    }
     // Register the new query so that its reference is cached and is stopped on session timeout.
     SparkConnectService.streamingSessionManager.registerNewStreamingQuery(
       sessionHolder,
       query,
       executeHolder.sparkSessionTags,
       executeHolder.operationId)
-    // Register the runner with the query if Python foreachBatch is enabled.
-    foreachBatchRunnerCleaner.foreach { cleaner =>
-      sessionHolder.streamingForeachBatchRunnerCleanerCache.registerCleanerForQuery(
-        query,
-        cleaner)
-    }
     executeHolder.eventsManager.postFinished()
 
     val resultBuilder = WriteStreamOperationStartResult

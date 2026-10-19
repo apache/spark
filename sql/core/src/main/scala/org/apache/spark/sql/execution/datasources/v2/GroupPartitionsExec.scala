@@ -405,6 +405,64 @@ case class GroupPartitionsExec(
     }
   }
 
+  /**
+   * A node over `newChild`, with the key positions this one projects moved to where the expressions
+   * they name sit there, or `None` when this one may not be rebuilt over it.
+   *
+   * `EnsureRequirements` computed `joinKeyPositions` against the child this node was planned for,
+   * whose partitioning is that child's projected down to the positions the operator above keeps, so
+   * the positions name a key space `newChild` need not share. The projected expressions are the
+   * planned child's own, which makes moving them a lookup; a child that does not hold one is turned
+   * away. The projection keeps them so (`AliasAwareOutputExpression.projectKeyedPartitionings`):
+   * with no aliases it has nothing to trade them for, and a partial aggregate has none, its
+   * `resultExpressions` being `groupingAttributes ++ bufferAttributes`.
+   *
+   * The node comes back through the factory rather than `copy`: `grouping` and
+   * `plannedPartitioning` are decided for one child's partitioning, so a node handed another has to
+   * be decided again over it.
+   *
+   * Rebuilding is all this does: what the operator above reads, the ordering it was planned
+   * against included, is the caller's to hold, since nothing here knows what that operator
+   * requires.
+   */
+  def withKeyPositionsFor(newChild: SparkPlan): Option[GroupPartitionsExec] = {
+    // An aligned node's slot order comes from the parent distribution rather than the child, so the
+    // factory cannot re-decide it for `newChild`.
+    if (expectedKeyCount.isDefined) {
+      return None
+    }
+    // `grouping` indexes the partitions of the child this node was decided for, and the positions
+    // below name keys in that child's space. A child that no longer reports it is what
+    // `outputPartitioning` gives up the claim for and `checkChildStillMatches` refuses at
+    // execution, so there is nothing here to move them into: they would be read against a key
+    // space this node was not decided for.
+    if (child.outputPartitioning != childPartitioning) {
+      return None
+    }
+    // The member of each child's partitioning this reads has to be the one `grouping` reads, since
+    // the positions are only meaningful for that member. `representativeOf` answers as the lookup
+    // there does: the first keyed member, nested collections included.
+    val childKeyed = PartitioningCollection.representativeOf(childPartitioning)
+    val newChildKeyed = PartitioningCollection.representativeOf(newChild.outputPartitioning)
+    (childKeyed, newChildKeyed) match {
+      case (Some(childKp), Some(newChildKp)) =>
+        val plannedInNewChild = childKp.expressions.map(newChildKp.expressions.indexOf)
+        if (plannedInNewChild.exists(_ < 0)) {
+          return None
+        }
+        val positions = joinKeyPositions.fold(plannedInNewChild)(_.map(plannedInNewChild))
+        val regrouped = GroupPartitionsExec(
+          child = newChild,
+          joinKeyPositions = Option.when(positions != newChildKp.expressions.indices)(positions),
+          reducers = reducers,
+          distributePartitions = distributePartitions,
+          enableSortedMerge = enableSortedMerge)
+        regrouped.copyTagsFrom(this)
+        Some(regrouped)
+      case _ => None
+    }
+  }
+
   override def simpleString(maxFields: Int): String = {
     s"$nodeName${planSummaryParts(maxFields).map(" " + _).mkString("")}"
   }
@@ -512,8 +570,8 @@ private[sql] object GroupPartitionsExec {
     // can only differ in `expressions`, since they share one `KeyLayout` (enforced by
     // `PartitioningCollection`). So the grouping is computed once, and the layout it describes
     // is shared by the members below.
-    // When reducers are applied, the stored reduced expressions are re-targeted at each
-    // `KeyedPartitioning`'s own key attribute and reported instead of the original ones. Their
+    // When reducers are applied, the stored reduced expressions are rebuilt over each
+    // `KeyedPartitioning`'s own argument and reported instead of the original ones. Their
     // data types match the reduced partition keys for the identity-vs-transform and
     // single-side-transform reducers; for the both-sides-reduce shape no single transform
     // describes the keys, so the reduce marks it (see `KeyedShuffleSpec.reducersBothWays`).
@@ -546,8 +604,15 @@ private[sql] object GroupPartitionsExec {
                   // `reduced` came from the one member `checkKeyGroupCompatible` paired
                   // this side on, which need not be the member being rewritten. The keys are
                   // reduced once, from the shared key rows, so `reduced` describes them
-                  // whichever member this is, and only the key attribute is re-targeted.
-                  reduced.withReference(expr.references.head)
+                  // whichever member this is. Only its function says that, so the member's own
+                  // argument takes the place of `reduced`'s. A side shuffled onto this layout
+                  // reports `bucket(8, b + 1)` next to `bucket(8, id)`, or `b + 1` next to an
+                  // identity `id`.
+                  val argument = expr match {
+                    case t: TransformExpression => t.children
+                    case e => Seq(e)
+                  }
+                  reduced.copy(children = argument)
                 case (expr, None) => expr
               }
             case None => projectedExpressions
