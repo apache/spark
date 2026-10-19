@@ -1391,6 +1391,97 @@ trait MergeIntoSchemaEvolutionColumnOrderTests extends MergeIntoSchemaEvolutionS
     confs = preserveOrderConfs
   )
 
+  testNestedStructsEvolution("preserve order - two argument transform over " +
+      "array element field in assignment")(
+    target = Seq(
+      """{ "pk": 1, "arr": [ { "a": 1, "c": 9 } ], "dep": "hr" }""",
+      """{ "pk": 2, "arr": [ { "a": 2, "c": 3 } ], "dep": "software" }"""
+    ),
+    source = Seq(
+      """{ "pk": 2, "arr": [ { "a": 3, "b": 10, "c": 5 } ], "dep": "finance" }"""
+    ),
+    targetSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("arr", ArrayType(StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("c", IntegerType)
+      )))),
+      StructField("dep", StringType)
+    )),
+    sourceSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("arr", ArrayType(StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("b", IntegerType),
+        StructField("c", IntegerType)
+      )))),
+      StructField("dep", StringType)
+    )),
+    clauses = Seq(
+      update(set = "dep = transform(t.arr, (x, i) -> CAST(x.c + i AS STRING))[0], arr = s.arr")),
+    result = Seq(
+      """{ "pk": 1, "arr": [ { "a": 1, "c": 9 } ], "dep": "hr" }""",
+      """{ "pk": 2, "arr": [ { "a": 3, "b": 10, "c": 5 } ], "dep": "3" }"""
+    ),
+    resultSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("arr", ArrayType(StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("b", IntegerType),
+        StructField("c", IntegerType)
+      )))),
+      StructField("dep", StringType)
+    )),
+    expectErrorWithoutEvolutionContains = "Cannot write extra fields",
+    confs = preserveOrderConfs
+  )
+
+  testNestedStructsEvolution("preserve order - aggregate over array element " +
+      "field in assignment")(
+    target = Seq(
+      """{ "pk": 1, "arr": [ { "a": 1, "c": 9 } ], "dep": "hr" }""",
+      """{ "pk": 2, "arr": [ { "a": 2, "c": 3 } ], "dep": "software" }"""
+    ),
+    source = Seq(
+      """{ "pk": 2, "arr": [ { "a": 3, "b": 10, "c": 5 } ], "dep": "finance" }"""
+    ),
+    targetSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("arr", ArrayType(StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("c", IntegerType)
+      )))),
+      StructField("dep", StringType)
+    )),
+    sourceSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("arr", ArrayType(StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("b", IntegerType),
+        StructField("c", IntegerType)
+      )))),
+      StructField("dep", StringType)
+    )),
+    clauses = Seq(
+      update(set = "dep = CAST(aggregate(t.arr, 0, (acc, x) -> acc + x.c) " +
+        "AS STRING), arr = s.arr")),
+    result = Seq(
+      """{ "pk": 1, "arr": [ { "a": 1, "c": 9 } ], "dep": "hr" }""",
+      """{ "pk": 2, "arr": [ { "a": 3, "b": 10, "c": 5 } ], "dep": "3" }"""
+    ),
+    resultSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("arr", ArrayType(StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("b", IntegerType),
+        StructField("c", IntegerType)
+      )))),
+      StructField("dep", StringType)
+    )),
+    expectErrorWithoutEvolutionContains = "Cannot write extra fields",
+    confs = preserveOrderConfs
+  )
+
   testNestedStructsEvolution("preserve order - transform_values over map " +
       "value struct field in assignment")(
     target = Seq(
