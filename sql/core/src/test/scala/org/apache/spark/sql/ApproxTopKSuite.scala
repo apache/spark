@@ -1383,6 +1383,29 @@ class ApproxTopKSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-59818: combine of an INT sketch with widened BIGINT NULL states is independent " +
+    "of partition placement") {
+    withTempView("combine_widened_null_partitions") {
+      // The UNION widens the state's item type to BIGINT, while the real sketch still records INT
+      // (SPARK-58164). Partial aggregates that see only NULL rows must stay type-neutral instead
+      // of taking the widened type, which would not match the real sketch at the final merge.
+      sql("SELECT approx_top_k_accumulate(expr) AS state FROM VALUES 0, 1, 1 AS tab(expr)")
+        .union(
+          spark.range(200).selectExpr(
+            """CAST(NULL AS STRUCT<sketch: BINARY, maxItemsTracked: INT,
+              |  itemDataType: BIGINT, itemDataTypeDDL: STRING>) AS state""".stripMargin))
+        .createOrReplaceTempView("combine_widened_null_partitions")
+      Seq("1", "8", "64").foreach { partitions =>
+        withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> partitions) {
+          val res = sql(
+            """SELECT approx_top_k_estimate(approx_top_k_combine(state), 2)
+              |FROM combine_widened_null_partitions""".stripMargin)
+          checkAnswer(res, Row(Seq(Row(1L, 2L), Row(0L, 1L))))
+        }
+      }
+    }
+  }
+
   test("SPARK-59818: combine over only NULL sketches keeps usable state metadata") {
     withTempView("combine_all_null") {
       spark.range(4).selectExpr(s"$nullSketchState AS state")
