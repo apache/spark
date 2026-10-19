@@ -21,6 +21,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.util.Try
 
+import org.apache.logging.log4j.Level
+
 import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkThrowable}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.resolver.ResolverGuard
@@ -3949,9 +3951,9 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
   }
 
   test("SPARK-60243: standardSemantics ignores readSideCharPadding=false") {
-    // The override warning is once-per-JVM (AtomicBoolean). Reset so this test observes it.
+    // The override warning is once-per-JVM (AtomicBoolean). Reset immediately before
+    // the padded scan so setup statements do not consume it.
     val warned = readSidePaddingOverrideWarned()
-    warned.set(false)
     withSQLConf(
         SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
         SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
@@ -3960,13 +3962,22 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         sql("SELECT 'ab' AS c").write.mode("overwrite").parquet(path)
         withTable("std_read_pad_override") {
           sql(s"CREATE TABLE std_read_pad_override (c CHAR(4)) USING parquet LOCATION '$path'")
-          checkAnswer(
-            sql("SELECT concat('<', c, '>') FROM std_read_pad_override"),
-            Row("<ab  >"))
+          warned.set(false)
+          val logAppender = new LogAppender("readSideCharPadding override warning")
+          withLogAppender(logAppender) {
+            checkAnswer(
+              sql("SELECT concat('<', c, '>') FROM std_read_pad_override"),
+              Row("<ab  >"))
+          }
+          assert(logAppender.loggingEvents.exists { e =>
+            val msg = e.getMessage.getFormattedMessage
+            e.getLevel == Level.WARN &&
+              msg.contains(SQLConf.READ_SIDE_CHAR_PADDING.key) &&
+              msg.contains(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key)
+          })
         }
       }
     }
-    assert(warned.get(), "warnReadSidePaddingOverride should fire when padding is forced on")
   }
 
   test("SPARK-60243: deep nested CHAR/VARCHAR file round-trips under standardSemantics") {
