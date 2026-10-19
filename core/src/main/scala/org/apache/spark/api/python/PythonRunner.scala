@@ -1215,7 +1215,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       TaskContext.setTaskContext(context)
       InputFileBlockHolder.setThreadLocalValue(parentInputFileBlockHolder)
       val bufferStream = new DirectByteBufferOutputStream(bufferSize)
-      val dataOut = new DataOutputStream(bufferStream)
+      var dataOut = new DataOutputStream(bufferStream)
       try {
         // Write command/metadata (partition index, task context, broadcasts, UDF definition).
         writer.open(dataOut)
@@ -1230,6 +1230,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
               writer.close(dataOut)
             }
             flushToSocket(bufferStream)
+            // Like ReaderInputStream, use a new stream for every buffer. The writers measure
+            // pythonDataSent with DataOutputStream.size(), which saturates at Int.MaxValue.
+            dataOut = new DataOutputStream(bufferStream)
           }
         }
       } catch {

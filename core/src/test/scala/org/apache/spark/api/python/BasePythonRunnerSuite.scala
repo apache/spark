@@ -17,11 +17,18 @@
 
 package org.apache.spark.api.python
 
+import java.io.DataOutputStream
+import java.net.{InetAddress, InetSocketAddress}
+import java.nio.ByteBuffer
+import java.nio.channels.{Channels, ServerSocketChannel, SocketChannel}
+import java.util.Collections
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import scala.collection.mutable.ArrayBuffer
 
-class BasePythonRunnerSuite extends SparkFunSuite {
+import org.apache.spark.{SharedSparkContext, SparkEnv, SparkException, SparkFunSuite, TaskContext}
+
+class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
 
   test("SPARK-58192: pipelined writer pool admits more concurrent writers than processors") {
     // A fractional spark.task.cpus admits more concurrent tasks -- each holding one writer
@@ -45,6 +52,46 @@ class BasePythonRunnerSuite extends SparkFunSuite {
     } finally {
       release.countDown()
       futures.foreach(_.get(1, TimeUnit.MINUTES))
+    }
+  }
+
+  test("SPARK-60343: pipelined writer uses a new DataOutputStream for every buffer") {
+    val func = SimplePythonFunction(Seq.empty, Collections.emptyMap(), Collections.emptyList(),
+      "python3", "3", Collections.emptyList(), null)
+    val runner = new PythonRunner(Seq(ChainedPythonFunctions(Seq(func))), None)
+    val server = ServerSocketChannel.open()
+      .bind(new InetSocketAddress(InetAddress.getLoopbackAddress, 0))
+    val channel = SocketChannel.open(server.getLocalAddress)
+    val peer = server.accept()
+    try {
+      val worker = PythonWorker(channel)
+      val context = TaskContext.empty()
+      // The size of the stream at the start of each call. Each call writes 300 bytes.
+      val startSizes = ArrayBuffer.empty[Int]
+      val writer = new runner.Writer(SparkEnv.get, worker, Iterator.empty, 0, context) {
+        override def open(dataOut: DataOutputStream): Unit = {}
+        override protected def writeCommand(dataOut: DataOutputStream): Unit = {}
+        override def writeNextInputToStream(dataOut: DataOutputStream): Boolean = {
+          startSizes += dataOut.size()
+          dataOut.write(new Array[Byte](300))
+          startSizes.length < 20
+        }
+      }
+      new runner.PipelinedWriterRunnable(worker, writer, 1024, context).run()
+      assert(writer.exception.isEmpty)
+      // The runners measure pythonDataSent with DataOutputStream.size(), which saturates at
+      // Int.MaxValue. Like ReaderInputStream, every buffer of about 1024 bytes gets a new stream.
+      assert(startSizes.toSeq === Seq.fill(5)(Seq(0, 300, 600, 900)).flatten)
+
+      // All the data and END_OF_STREAM still reach the worker.
+      channel.shutdownOutput()
+      val sent = ByteBuffer.wrap(Channels.newInputStream(peer).readAllBytes())
+      assert(sent.limit() === 20 * 300 + 4)
+      assert(sent.getInt(sent.limit() - 4) === SpecialLengths.END_OF_STREAM)
+    } finally {
+      peer.close()
+      channel.close()
+      server.close()
     }
   }
 
