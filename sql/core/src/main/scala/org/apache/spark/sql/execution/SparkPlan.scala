@@ -280,11 +280,11 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   @transient private val prepareLock = new Object()
 
    protected def registerSubqueries(exprs: Seq[Expression]): Unit = {
-    exprs.foreach {
-      _.collect {
-        case e: ExecSubqueryExpression =>
-          e.plan.prepare()
-          runningSubqueries += e
+    prepareLock.synchronized {
+      exprs.foreach {
+        _.collect {
+          case e: ExecSubqueryExpression =>
+            e.plan.prepare()
       }
     }
   }
