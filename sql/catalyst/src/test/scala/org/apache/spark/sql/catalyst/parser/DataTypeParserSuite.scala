@@ -90,7 +90,7 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
   checkDataType("void", NullType)
   checkDataType("FILE EXTERNAL", FileType.external)
   checkDataType("file external", FileType.external)
-  // A bare FILE is the type of an expression or a UDF result, not of a column declaration.
+  // A bare FILE has the UNKNOWN mode.
   checkDataType("FILE", FileType())
   checkDataType("array<FILE EXTERNAL>", ArrayType(FileType.external))
   checkDataType("map<string, FILE EXTERNAL>", MapType(StringType, FileType.external))

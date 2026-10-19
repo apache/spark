@@ -98,11 +98,11 @@ case class StructField(
     // mode, so that a schema which carries other engine-specific metadata for it is written back
     // as it was read. Only array and map types are visited, as in `removeCollations`.
     def fileTypeJson(dt: DataType): JValue = dt match {
-      case at: ArrayType if at.existsRecursively(_.isInstanceOf[FileType]) =>
+      case at: ArrayType =>
         ("type" -> at.typeName) ~
           ("elementType" -> fileTypeJson(at.elementType)) ~
           ("containsNull" -> at.containsNull)
-      case mt: MapType if mt.existsRecursively(_.isInstanceOf[FileType]) =>
+      case mt: MapType =>
         ("type" -> mt.typeName) ~
           ("keyType" -> fileTypeJson(mt.keyType)) ~
           ("valueType" -> fileTypeJson(mt.valueType)) ~
