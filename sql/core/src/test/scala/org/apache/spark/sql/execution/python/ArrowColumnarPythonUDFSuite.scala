@@ -136,6 +136,49 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
     }
   }
 
+  test("Arrow Python UDF over many batches releases each input batch") {
+    assume(shouldTestPandasUDFs)
+    withSQLConf(
+        SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true",
+        SQLConf.ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED.key -> "true") {
+      val pandasUDF = TestScalarPandasUDF(
+        name = "arrow_release_udf", returnType = Some(StringType))
+      registerTestUDF(pandasUDF, spark)
+
+      val numRows = 50000
+      val numBatches = 500
+      // On a string column, the cast of the test UDF is removed, so the batches take the Arrow
+      // columnar path, whose output batches carry the input columns to the row conversion of
+      // ArrowEvalPythonExec, which releases them. On an expression, they take the row fallback
+      // path, which releases each batch once it has been written to Python.
+      Seq("name" -> "", "concat(name, '_')" -> "_").foreach { case (input, suffix) =>
+        val result = readArrowSource(numRows = numRows, batchSize = numRows / numBatches)
+          .selectExpr("id", "name", "value", "data", s"arrow_release_udf($input) as udf_out")
+        val arrowExec = collectNodes[ArrowEvalPythonExec](result.queryExecution.executedPlan)
+        assert(arrowExec.nonEmpty && arrowExec.head.supportsColumnar)
+
+        ArrowBackedDataSourceV2.resetBatchCounters()
+        val rows = result.collect()
+        assert(rows.map(_.getInt(0)).toSeq == (0 until numRows))
+        rows.foreach { row =>
+          val id = row.getInt(0)
+          assert(row.getString(1) == s"row_$id", s"name mismatch for id $id")
+          assert(row.getDouble(2) == id * 0.1, s"value mismatch for id $id")
+          assert(row.getString(3).length == 100, s"data mismatch for id $id")
+          assert(row.getString(4) == s"row_$id$suffix", s"UDF result mismatch for id $id")
+        }
+        // Every batch is released before the task completes. The row fallback path releases a
+        // batch before it reads the next one, while the Arrow columnar path holds the batches
+        // that it has written to Python until their results are consumed.
+        assert(ArrowBackedDataSourceV2.returnedBatches.get == numBatches)
+        assert(ArrowBackedDataSourceV2.releasedBatches.get == numBatches)
+        if (suffix.nonEmpty) {
+          assert(ArrowBackedDataSourceV2.maxUnreleasedBatches.get == 1)
+        }
+      }
+    }
+  }
+
   test("Arrow-backed source that reuses its vectors: correct with the default configuration") {
     assume(shouldTestPandasUDFs)
     // The Arrow columnar path keeps the pass-through columns of a batch until its result comes
