@@ -33,6 +33,7 @@ import org.apache.parquet.column.page.*;
 import org.apache.parquet.column.values.RequiresPreviousReader;
 import org.apache.parquet.column.values.ValuesReader;
 import org.apache.parquet.filter2.columnindex.RowRanges;
+import org.apache.parquet.io.ParquetDecodingException;
 import org.apache.parquet.schema.LogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.DateLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.DecimalLogicalTypeAnnotation;
@@ -104,9 +105,8 @@ public class VectorizedColumnReader {
   private final ParsedVersion writerVersion;
 
   /**
-   * A reader of the rows the store names, as {@code rowRanges = null} below. Nothing in Spark
-   * calls it. It is kept for code outside Spark that builds a column reader with the constructor
-   * that predates the ranges.
+   * A reader of the rows the store names, as {@code rowRanges = null} below. Kept for code outside
+   * Spark that uses the constructor that predates the ranges.
    */
   public VectorizedColumnReader(
       ColumnDescriptor descriptor,
@@ -153,6 +153,9 @@ public class VectorizedColumnReader {
         this.isCurrentPageDictionaryEncoded = true;
       } catch (IOException e) {
         throw new IOException("could not decode the dictionary for " + descriptor, e);
+      } catch (ParquetDecodingException e) {
+        throw new ParquetDecodingException(
+          "could not decode the dictionary for " + descriptor + ": " + e.getMessage(), e);
       }
     } else {
       this.dictionary = null;
@@ -254,6 +257,15 @@ public class VectorizedColumnReader {
       if (readState.valuesToReadInPage == 0) {
         int pageValueCount = readPage();
         if (pageValueCount < 0) {
+          if (readState.maxRepetitionLevel == 0) {
+            // A column without repeated values has a value, possibly null, for every row. So
+            // running out of pages with rows left to read means the column chunk holds fewer
+            // values than expected or another reader of the column took its pages, and returning
+            // would leave the rest of the vector unwritten.
+            throw new ParquetDecodingException(String.format(
+              "Column %s ran out of pages with %d of the %d rows of the batch left to read",
+              descriptor, readState.rowsToReadInBatch, total));
+          }
           // we've read all the pages; this could happen when we're reading a repeated list and we
           // don't know where the list will end until we've seen all the pages.
           break;
@@ -364,9 +376,7 @@ public class VectorizedColumnReader {
     if (dataEncoding.usesDictionary()) {
       this.dataColumn = null;
       if (dictionary == null) {
-        throw new IOException(
-            "could not read page in col " + descriptor +
-                " as the dictionary was missing for encoding " + dataEncoding);
+        throw new IOException("the dictionary was missing for encoding " + dataEncoding);
       }
       @SuppressWarnings("deprecation")
       Encoding plainDict = Encoding.PLAIN_DICTIONARY; // var to allow warning suppression
@@ -381,11 +391,9 @@ public class VectorizedColumnReader {
       this.isCurrentPageDictionaryEncoded = false;
     }
 
-    try {
-      dataColumn.initFromPage(pageValueCount, in);
-    } catch (IOException e) {
-      throw new IOException("could not read page in col " + descriptor, e);
-    }
+    // readPageV1 and readPageV2 add the page and the column to an IOException or a
+    // ParquetDecodingException thrown here.
+    dataColumn.initFromPage(pageValueCount, in);
     // for PARQUET-246 (See VectorizedDeltaByteArrayReader.setPreviousValues)
     if (CorruptDeltaByteArrays.requiresSequentialReads(writerVersion, dataEncoding) &&
         previousReader instanceof RequiresPreviousReader) {
@@ -455,6 +463,9 @@ public class VectorizedColumnReader {
       return pageValueCount;
     } catch (IOException e) {
       throw new IOException("could not read page " + page + " in col " + descriptor, e);
+    } catch (ParquetDecodingException e) {
+      throw new ParquetDecodingException(
+        "could not read page " + page + " in col " + descriptor + ": " + e.getMessage(), e);
     }
   }
 
@@ -475,6 +486,9 @@ public class VectorizedColumnReader {
       return pageValueCount;
     } catch (IOException e) {
       throw new IOException("could not read page " + page + " in col " + descriptor, e);
+    } catch (ParquetDecodingException e) {
+      throw new ParquetDecodingException(
+        "could not read page " + page + " in col " + descriptor + ": " + e.getMessage(), e);
     }
   }
 }

@@ -1549,7 +1549,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         // write through an interruptible channel, which the thread stopping this writer would
         // otherwise close, freeing the buffer while this thread still copies into it (see
         // CloseShieldOutputStream). bufferStream is closed only in the finally below.
-        val dataOut = new DataOutputStream(new CloseShieldOutputStream(bufferStream))
+        def newDataOut(): DataOutputStream =
+          new DataOutputStream(new CloseShieldOutputStream(bufferStream))
+        var dataOut = newDataOut()
 
         // Write command/metadata (partition index, task context, broadcasts, UDF definition).
         writer.open(dataOut)
@@ -1564,6 +1566,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
               writer.close(dataOut)
             }
             flushToSocket(bufferStream)
+            // Like ReaderInputStream, use a new stream for every buffer. The writers measure
+            // pythonDataSent with DataOutputStream.size(), which saturates at Int.MaxValue.
+            dataOut = newDataOut()
           }
         }
       } catch {

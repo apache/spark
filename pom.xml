@@ -187,7 +187,7 @@
     <!-- Should be consistent with SparkBuild.scala and docs -->
     <fasterxml.jackson.version>2.22.3</fasterxml.jackson.version>
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
-    <snappy.version>1.1.10.8</snappy.version>
+    <snappy.version>1.1.10.12</snappy.version>
     <netlib.ludovic.dev.version>3.2.0</netlib.ludovic.dev.version>
     <commons-codec.version>1.22.1</commons-codec.version>
     <commons-compress.version>1.28.0</commons-compress.version>
@@ -883,7 +883,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.7-16</version>
+        <version>1.5.7-23</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -1422,9 +1422,15 @@
       </dependency>
       <dependency>
         <groupId>net.snowflake</groupId>
-        <artifactId>snowflake-jdbc</artifactId>
+        <artifactId>snowflake-jdbc-thin</artifactId>
         <version>${snowflake.jdbc.version}</version>
         <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>*</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>com.teradata.jdbc</groupId>

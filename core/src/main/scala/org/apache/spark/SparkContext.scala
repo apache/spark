@@ -3144,6 +3144,9 @@ class SparkContext(config: SparkConf) extends Logging {
    * Kill and reschedule the given task attempt. Task ids can be obtained from the Spark UI
    * or through SparkListener.onTaskStart.
    *
+   * A task of a pipelined group (see [[PipelinedShuffleDependency]]) is not rescheduled: killing
+   * it fails its job, as any other failure of such a task does.
+   *
    * @param taskId the task ID to kill. This id uniquely identifies the task attempt.
    * @param interruptThread whether to interrupt the thread running the task.
    * @param reason the reason for killing the task, which should be a short string. If a task

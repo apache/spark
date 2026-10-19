@@ -1640,6 +1640,11 @@ as the activated JDBC Driver.
       <td></td>
     </tr>
     <tr>
+      <td>json</td>
+      <td>StringType</td>
+      <td>Unparsed JSON text</td>
+    </tr>
+    <tr>
       <td>rowversion</td>
       <td>BinaryType</td>
       <td></td>
