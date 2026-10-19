@@ -85,6 +85,8 @@ private[aggregate] trait ModeCollationAware { self: Expression =>
     // never stores one, so its behavior is unchanged.
     if (data == null) return null
     dataType match {
+      // Key a binary value by content (see BinaryKey), not by array reference.
+      case _ if data.isInstanceOf[Array[Byte]] => new BinaryKey(data.asInstanceOf[Array[Byte]])
       case _ if UnsafeRowUtils.isBinaryStable(dataType) => data
       case st: StructType => processStructTypeWithBuffer(data.asInstanceOf[InternalRow], st)
       case at: ArrayType => processArrayTypeWithBuffer(at, data.asInstanceOf[ArrayData])

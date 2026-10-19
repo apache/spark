@@ -1321,7 +1321,7 @@ class DataFrameAggregateSuite extends SharedSparkSession
       Row(Row(Double.NaN)))
   }
 
-  test("SPARK-XXXXX: mode compares binary values by content") {
+  test("SPARK-60309: mode compares binary values by content") {
     // X'02' occurs three times. Counting byte arrays by reference made every count 1, so mode()
     // returned an arbitrary value and mode() WITHIN GROUP the smallest one, X'01'.
     val values = Seq(2, 1, 1, 2, 2, 3).map(i => Array(i.toByte))
