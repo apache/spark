@@ -64,8 +64,9 @@ case class ParquetScanBuilder(
       val pushDownStringPredicate = sqlConf.parquetFilterPushDownStringPredicate
       val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
       val isCaseSensitive = sqlConf.caseSensitiveAnalysis
+      val readSchema = readDataSchema()
       val parquetSchema =
-        new SparkToParquetSchemaConverter(sparkSession.sessionState.conf).convert(readDataSchema())
+        new SparkToParquetSchemaConverter(sparkSession.sessionState.conf).convert(readSchema)
       // Shredded-variant predicate pushdown (SPARK-55817) is not wired here: it applies to the
       // DSv1 path only. DSv2 does rewrite variant extractions into `v.`0`` struct accesses, but
       // only in `V2ScanRelationPushDown.buildScanWithPushedVariants`, which runs *after*
@@ -86,7 +87,7 @@ case class ParquetScanBuilder(
         // The rebase mode doesn't matter here because the filters are used to determine
         // whether they is convertible.
         RebaseSpec(LegacyBehaviorPolicy.CORRECTED),
-        readSchema = Some(readDataSchema()))
+        readSchema = Some(readSchema))
       parquetFilters.convertibleFilters(dataFilters.toImmutableArraySeq).toArray
     } else {
       Array.empty[Filter]
