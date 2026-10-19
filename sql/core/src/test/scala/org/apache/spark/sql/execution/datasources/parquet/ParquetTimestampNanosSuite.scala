@@ -548,7 +548,7 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
-  test("nanosAsLong migration: BIGINT epoch nanos convert losslessly to the nanos types") {
+  test("SPARK-60334: BIGINT epoch nanos from nanosAsLong convert losslessly to nanos types") {
     // The conversions documented in the migration guide. The non-UTC session time zone shows that
     // only the TIMESTAMP_NTZ(9) cast depends on it.
     val values = Seq(Some(1230219000123456789L), Some(-1L), None)
@@ -592,7 +592,7 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
-  test("nanosAsLong migration: tables keep BIGINT, views over the files must be recreated") {
+  test("SPARK-60334: nanosAsLong tables keep BIGINT, views over the files must be recreated") {
     withNanosEnabled {
       withTempDir { dir =>
         writeForeignNanosParquet(
@@ -636,7 +636,7 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
-  test("nanosAsLong does not affect Parquet files written by Spark") {
+  test("SPARK-60334: nanosAsLong does not affect Parquet files written by Spark") {
     withNanosEnabled {
       withTempPath { dir =>
         val df = spark.sql(
@@ -655,7 +655,7 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
-  test("TIMESTAMP(NANOS) inference does not depend on inferTimestampNTZ") {
+  test("SPARK-60334: TIMESTAMP(NANOS) inference does not depend on inferTimestampNTZ") {
     withNanosEnabled {
       withSQLConf(SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key -> "false") {
         Seq(true, false).foreach { isAdjustedToUTC =>
@@ -665,6 +665,42 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
             val expected =
               if (isAdjustedToUTC) TimestampLTZNanosType(9) else TimestampNTZNanosType(9)
             assert(spark.read.parquet(file.getCanonicalPath).schema("ts").dataType === expected)
+          }
+        }
+      }
+    }
+  }
+
+  // TODO: push down bounds that account for the read precision, then expect the
+  // pushdown and no-pushdown results to match for every predicate.
+  test("SPARK-60334: pushdown under a lower-precision read schema compares raw nanoseconds") {
+    withNanosEnabled {
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        withAllParquetReaders {
+          Seq("TIMESTAMP_NTZ" -> "", "TIMESTAMP_LTZ" -> " UTC").foreach { case (typ, zone) =>
+            withTempPath { dir =>
+              val file = new File(dir, "foreign.parquet")
+              // .123456789 on disk reads as .1234567 under precision 7.
+              writeForeignNanosParquet(
+                file, isAdjustedToUTC = typ == "TIMESTAMP_LTZ", Seq(Some(123456789L)))
+              val lit = s"$typ '1970-01-01 00:00:00.1234567$zone'"
+              val other = s"$typ '1970-01-01 00:00:01$zone'"
+              def count(predicate: String, pushdown: Boolean): Long =
+                withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> pushdown.toString) {
+                  spark.read.schema(s"ts $typ(7)").parquet(file.getCanonicalPath)
+                    .filter(predicate).count()
+                }
+              // The pushed bound is compared with the raw value, so the row group is skipped.
+              Seq(s"ts = $lit", s"ts <=> $lit", s"ts IN ($lit, $other)", s"ts <= $lit")
+                .foreach { predicate =>
+                  assert(count(predicate, pushdown = false) === 1, predicate)
+                  assert(count(predicate, pushdown = true) === 0, predicate)
+                }
+              Seq(s"ts < $lit", s"ts >= $lit", s"ts > $lit").foreach { predicate =>
+                assert(count(predicate, pushdown = true) ===
+                  count(predicate, pushdown = false), predicate)
+              }
+            }
           }
         }
       }
