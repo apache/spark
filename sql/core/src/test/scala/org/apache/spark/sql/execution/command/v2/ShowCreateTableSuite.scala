@@ -254,4 +254,43 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
       }
     }
   }
+
+  test("SPARK-60344: show table constraints whose names need quoting") {
+    withNamespaceAndTable("ns", "`tbl-1`", nonPartitionCatalog) { t =>
+      withNamespaceAndTable("ns", "other_table", nonPartitionCatalog) { otherTable =>
+        sql(s"CREATE TABLE $otherTable (id STRING PRIMARY KEY) $defaultUsing")
+        sql(
+          s"""
+             |CREATE TABLE $t (
+             |  a INT,
+             |  b STRING,
+             |  c STRING,
+             |  PRIMARY KEY (a),
+             |  CONSTRAINT `uk b` UNIQUE (b),
+             |  CONSTRAINT `fk.c` FOREIGN KEY (c) REFERENCES $otherTable(id) RELY,
+             |  CONSTRAINT `c``1` CHECK (c IS NOT NULL)
+             |)
+             |$defaultUsing
+        """.stripMargin)
+        val showDDL = getShowCreateDDL(t)
+        assert(showDDL === Array(
+          s"CREATE TABLE $t (",
+          "a INT NOT NULL,",
+          "b STRING,",
+          "c STRING,",
+          // The generated name of the primary key starts with the table name.
+          "CONSTRAINT `tbl-1_pk` PRIMARY KEY (a) NOT ENFORCED NORELY,",
+          "CONSTRAINT `uk b` UNIQUE (b) NOT ENFORCED NORELY,",
+          s"CONSTRAINT `fk.c` FOREIGN KEY (c) REFERENCES $otherTable (id) NOT ENFORCED RELY,",
+          "CONSTRAINT `c``1` CHECK (c IS NOT NULL) ENFORCED NORELY)",
+          defaultUsing))
+
+        // The output can be run again.
+        val ddl = sql(s"SHOW CREATE TABLE $t").head().getString(0)
+        sql(s"DROP TABLE $t")
+        sql(ddl)
+        assert(getShowCreateDDL(t) === showDDL)
+      }
+    }
+  }
 }

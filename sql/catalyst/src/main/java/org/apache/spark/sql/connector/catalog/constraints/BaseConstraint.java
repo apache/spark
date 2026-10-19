@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector.catalog.constraints;
 
 import java.util.StringJoiner;
 
+import org.apache.spark.sql.catalyst.util.QuotingUtils;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
 abstract class BaseConstraint implements Constraint {
@@ -67,7 +68,7 @@ abstract class BaseConstraint implements Constraint {
     // the Spark SQL syntax for constraints.
     return String.format(
         "CONSTRAINT %s %s %s %s",
-        name,
+        QuotingUtils.quoteIfNeeded(name),
         definition(),
         enforced ? "ENFORCED" : "NOT ENFORCED",
         rely ? "RELY" : "NORELY");
