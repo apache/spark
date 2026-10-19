@@ -936,6 +936,46 @@ class VectorAggSuite extends SparkFunSuite {
     assertResult(Double.MaxValue)(result(2))
   }
 
+  test("VectorAvg - double: opposite extreme values do not overflow") {
+    val (agg, buffer) = createDoubleVectorAvg()
+    agg.update(buffer, createDoubleInputRow(Array(Double.MaxValue, -Double.MaxValue)))
+    agg.update(buffer, createDoubleInputRow(Array(-Double.MaxValue, Double.MaxValue)))
+    assertResult(Array(0.0, 0.0))(evalAsDoubleArray(agg, buffer))
+
+    val (_, buffer1) = createDoubleVectorAvg()
+    val (_, buffer2) = createDoubleVectorAvg()
+    agg.update(buffer1, createDoubleInputRow(Array(Double.MaxValue, -Double.MaxValue)))
+    agg.update(buffer2, createDoubleInputRow(Array(-Double.MaxValue, Double.MaxValue)))
+    agg.merge(buffer1, buffer2)
+    assertResult(Array(0.0, 0.0))(evalAsDoubleArray(agg, buffer1))
+  }
+
+  test("VectorAvg - double: non-finite results do not depend on input order") {
+    val first =
+      Array(Double.PositiveInfinity, 1.0, Double.NegativeInfinity, Double.PositiveInfinity)
+    val second = Array(1.0, Double.PositiveInfinity, 1.0, Double.NegativeInfinity)
+    def checkResult(result: Array[Double]): Unit = {
+      assertResult(Double.PositiveInfinity)(result(0))
+      assertResult(Double.PositiveInfinity)(result(1))
+      assertResult(Double.NegativeInfinity)(result(2))
+      assert(result(3).isNaN)
+    }
+
+    Seq(Seq(first, second), Seq(second, first)).foreach { vectors =>
+      val (agg, buffer) = createDoubleVectorAvg()
+      vectors.foreach(v => agg.update(buffer, createDoubleInputRow(v)))
+      agg.update(buffer, createDoubleInputRow(Array(2.0, 2.0, 2.0, 2.0)))
+      checkResult(evalAsDoubleArray(agg, buffer))
+
+      val (_, buffer1) = createDoubleVectorAvg()
+      val (_, buffer2) = createDoubleVectorAvg()
+      agg.update(buffer1, createDoubleInputRow(vectors.head))
+      agg.update(buffer2, createDoubleInputRow(vectors(1)))
+      agg.merge(buffer1, buffer2)
+      checkResult(evalAsDoubleArray(agg, buffer1))
+    }
+  }
+
   test("VectorAvg - double: dimension mismatch") {
     val (agg, buffer1) = createDoubleVectorAvg()
     val (_, buffer2) = createDoubleVectorAvg()
