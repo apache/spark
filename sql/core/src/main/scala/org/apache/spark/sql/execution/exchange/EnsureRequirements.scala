@@ -185,8 +185,9 @@ case class EnsureRequirements(
           parent.get, left, right, requiredChildDistributions)
         if (newChildren.isDefined) {
           children = newChildren.get
-          // Require matching output partition counts after SPJ pushdown; otherwise fall
-          // back to shuffle alignment.
+          // SPJ pushdown can update a nested join while the other side is still a
+          // placeholder shuffle. Fall back to the shuffle-alignment path unless both
+          // sides already report the same number of partitions.
           children.map(_.outputPartitioning.numPartitions).distinct.length == 1
         } else {
           // If key group check fails, check ShufflePartitionIdPassThrough compatibility
@@ -225,8 +226,11 @@ case class EnsureRequirements(
             // two sides agreed on.
             val bestMember = bestMemberOpt.get
             flattenSpec(specs(idx)).find(bestMember.isCompatibleWith) match {
-              // Push join-key positions into the compatible BatchScanExec so
-              // outputPartitioning matches the shuffled side.
+              // If `areChildrenCompatible` is false, we can still perform SPJ
+              // by shuffling the other side based on join keys (see the else case below).
+              // Hence we need to ensure that after this call, the outputPartitioning of the
+              // partitioned side's BatchScanExec is grouped by join keys to match,
+              // and we do that by pushing down the join keys
               case Some(KeyGroupedShuffleSpec(_, _, Some(joinKeyPositions))) =>
                 populateSpjParamsOnSide(
                   child, fromLeft = idx == childrenIndexes.head,
@@ -660,9 +664,9 @@ case class EnsureRequirements(
           }
         }
 
-        // Push common partition values and related SPJ params to each child scan. For nested
-        // joins, update only the matching inner side to avoid overwriting inner params on
-        // the other side.
+        // Now we need to push-down the common partition information to the scan in each child.
+        // When a child is itself a join, only update that join's matching side so nested SPJ
+        // parameters from an inner join are not overwritten on the inner join's other side.
         newLeft = populateSpjParamsOnSide(
           left, fromLeft = true, commonPartitionValues = Some(mergedPartValues),
           joinKeyPositions = leftSpec.joinKeyPositions, reducers = leftReducers,
@@ -706,8 +710,9 @@ case class EnsureRequirements(
   }
 
   /**
-   * Compose outer join-key positions with positions already pushed by an inner SPJ. Outer
-   * positions index the outer layout; inner positions index raw partition expressions.
+   * Compose join-key positions from an outer SPJ with positions already pushed by an inner SPJ.
+   * Outer positions index the layout the outer join sees; inner positions index the scan's raw
+   * partition expressions, so they are composed rather than replaced.
    */
   private def composeJoinKeyPositions(
       existing: Option[Seq[Int]],
@@ -742,6 +747,13 @@ case class EnsureRequirements(
     }
   }
 
+  /**
+   * Push SPJ parameters down to the scan in each child. When a child is itself a join, push to
+   * both inner sides so partition counts stay aligned, but only compose join-key positions on
+   * the side that feeds this join. When join keys are a subset of partition keys, keep the inner
+   * join's common partition values on both sides and only push join-key positions to the
+   * matching side.
+   */
   private def populateSpjParamsOnSide(
       plan: SparkPlan,
       fromLeft: Boolean,
@@ -751,9 +763,12 @@ case class EnsureRequirements(
       applyPartialClustering: Boolean = false,
       replicatePartitions: Boolean = false): SparkPlan = plan match {
     case smj: SortMergeJoinExec =>
+      // Decide per side whether to push join-key positions, common values, or retain inner
+      // SPJ metadata already pushed by a nested join below.
       val leftFlags = nestedSpjPushFlags(joinKeyPositions, isMatchingSide = fromLeft)
       val rightFlags = nestedSpjPushFlags(joinKeyPositions, isMatchingSide = !fromLeft)
       smj.copy(
+        // Pass join-key positions only to the side that feeds this join.
         left = populateSpjParams(
           smj.left, commonPartitionValues, if (fromLeft) joinKeyPositions else None,
           reducers, applyPartialClustering, replicatePartitions, leftFlags),
@@ -764,6 +779,7 @@ case class EnsureRequirements(
       val leftFlags = nestedSpjPushFlags(joinKeyPositions, isMatchingSide = fromLeft)
       val rightFlags = nestedSpjPushFlags(joinKeyPositions, isMatchingSide = !fromLeft)
       shj.copy(
+        // Pass join-key positions only to the side that feeds this join.
         left = populateSpjParams(
           shj.left, commonPartitionValues, if (fromLeft) joinKeyPositions else None,
           reducers, applyPartialClustering, replicatePartitions, leftFlags),
@@ -771,12 +787,13 @@ case class EnsureRequirements(
           shj.right, commonPartitionValues, if (!fromLeft) joinKeyPositions else None,
           reducers, applyPartialClustering, replicatePartitions, rightFlags))
     case other =>
+      // Child is a scan or unary operator; push directly without side selection.
       populateSpjParams(
         other, commonPartitionValues, joinKeyPositions, reducers,
         applyPartialClustering, replicatePartitions)
   }
 
-  // Push SPJ parameters down to scan nodes.
+  // Populate the common partition information down to the scan nodes.
   private def populateSpjParams(
       plan: SparkPlan,
       commonPartitionValues: Option[Seq[(InternalRow, Int)]],
@@ -789,15 +806,18 @@ case class EnsureRequirements(
       val existing = scan.spjParams
       scan.copy(
         spjParams = existing.copy(
+          // Overwrite common partition values only when this push targets this side.
           commonPartitionValues = commonPartitionValues match {
             case Some(values) if flags.pushCommonValues => Some(values)
             case _ => existing.commonPartitionValues
           },
+          // Compose with positions already pushed by an inner join instead of replacing them.
           joinKeyPositions = if (flags.pushJoinKeyPositions) {
             composeJoinKeyPositions(existing.joinKeyPositions, joinKeyPositions)
           } else {
             existing.joinKeyPositions
           },
+          // Keep inner reducers when the outer join does not push new ones.
           reducers = reducers.orElse(existing.reducers),
           applyPartialClustering = commonPartitionValues match {
             case Some(_) if flags.pushCommonValues => applyPartialClustering
@@ -810,6 +830,7 @@ case class EnsureRequirements(
         )
       )
     case node =>
+      // Recurse through filters, projects, and other unary nodes above the scan.
       node.mapChildren(child => populateSpjParams(
         child, commonPartitionValues, joinKeyPositions, reducers,
         applyPartialClustering, replicatePartitions, flags))
