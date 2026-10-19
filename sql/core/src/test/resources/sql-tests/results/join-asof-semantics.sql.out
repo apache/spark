@@ -723,3 +723,15 @@ struct<lts:int,k:int>
 10	1
 20	2
 30	NULL
+
+
+-- !query
+WITH c AS (SELECT * FROM using_keys)
+SELECT x.k, d.k
+FROM using_keys x
+  ASOF JOIN (using_right r LEFT JOIN c d USING (k)) MATCH_CONDITION (x.k >= d.k)
+-- !query schema
+struct<k:int,k:int>
+-- !query output
+1	1
+2	2

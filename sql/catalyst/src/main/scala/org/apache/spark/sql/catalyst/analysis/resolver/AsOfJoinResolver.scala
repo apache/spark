@@ -73,15 +73,9 @@ class AsOfJoinResolver(
       Seq(leftNameScope.output, rightNameScope.output)
     )
 
-    // MATCH_CONDITION is resolved a second time below. Keep the hidden column IDs here too, so a
-    // copy of the same table on the other side can't remap them.
-    val qualifiedAccessOnlyColumnIds =
-      (leftNameScope.hiddenOutput ++ rightNameScope.hiddenOutput)
-        .filter(_.qualifiedAccessOnly)
-        .map(_.exprId)
-    expressionIdAssigner.createMappingFromChildMappings(
-      newOutputIds =
-        leftNameScope.getOutputIds ++ rightNameScope.getOutputIds ++ qualifiedAccessOnlyColumnIds
+    mergeChildMappings(
+      leftNameScope = leftNameScope,
+      rightNameScope = rightNameScope
     )
 
     val partiallyResolved = unresolvedAsOfJoin.copy(
@@ -145,6 +139,22 @@ class AsOfJoinResolver(
           resolvedOperator = resolvedJoinWithOriginalOutput
         )
     }
+  }
+
+  /**
+   * Merges the ID mappings of both sides. It also keeps the IDs of hidden columns like `d.k`:
+   * `MATCH_CONDITION` is resolved again later, and a copy of the same table on the other side
+   * must not remap them.
+   */
+  private def mergeChildMappings(leftNameScope: NameScope, rightNameScope: NameScope): Unit = {
+    val qualifiedAccessOnlyColumnIds =
+      (leftNameScope.hiddenOutput ++ rightNameScope.hiddenOutput)
+        .filter(_.qualifiedAccessOnly)
+        .map(_.exprId)
+    expressionIdAssigner.createMappingFromChildMappings(
+      newOutputIds =
+        leftNameScope.getOutputIds ++ rightNameScope.getOutputIds ++ qualifiedAccessOnlyColumnIds
+    )
   }
 
   /**

@@ -359,3 +359,10 @@ FROM (using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
 SELECT l.lts, d.k
 FROM using_left l LEFT ASOF JOIN (using_right r JOIN using_keys d USING (k))
   MATCH_CONDITION (l.lts >= r.rts) USING (k);
+
+-- FVT-ASOF-2-050: same as FVT-ASOF-2-046, with the hidden column on the right side. The first CTE
+-- reference keeps its IDs, so the copy on the left is the one that gets new IDs.
+WITH c AS (SELECT * FROM using_keys)
+SELECT x.k, d.k
+FROM using_keys x
+  ASOF JOIN (using_right r LEFT JOIN c d USING (k)) MATCH_CONDITION (x.k >= d.k);
