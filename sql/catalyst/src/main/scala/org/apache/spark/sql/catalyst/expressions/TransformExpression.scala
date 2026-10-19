@@ -25,6 +25,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.FUNCTION_NAME
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, Reducer, ReducibleFunction, ScalarFunction}
 import org.apache.spark.sql.connector.expressions.{Literal => V2Literal, LiteralValue}
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -37,8 +38,8 @@ import org.apache.spark.sql.types.{ArrayType, DataType, IntegerType, MapType, St
  * disagree about which transforms are the same.
  *
  * It carries no exprIds (a column argument is [[TransformFunctionId.ArgumentShape.ColumnRef]], not
- * the attribute), so an expression can hold one in a plain field and expression equality still
- * answers the same after canonicalization.
+ * the attribute, and an expression argument is normalized), so an expression can hold one in a
+ * plain field and expression equality still answers the same after canonicalization.
  *
  * @param canonicalName the transform function's canonical name
  * @param argumentShapes one entry per argument, in order. Positions are part of the identity, so
@@ -62,11 +63,18 @@ object TransformFunctionId {
     case class Nested(id: TransformFunctionId) extends ArgumentShape
 
     /**
-     * A plain column reference: an [[Attribute]] or a [[GetStructField]] chain. Which column is not
-     * part of the identity -- the two sides of a join reference different columns by construction,
-     * and `KeyedShuffleSpec.keyPositions` reconciles them separately.
+     * A bare column, an [[Attribute]]. Which column is not part of the identity -- the two sides
+     * of a join reference different columns by construction, and `KeyedShuffleSpec.keyPositions`
+     * reconciles them separately.
      */
     case object ColumnRef extends ArgumentShape
+
+    /**
+     * Any other argument over one column, such as `c + 1` or a struct field `s.a`, with that column
+     * replaced by a placeholder. Two such arguments match when they are the same function of their
+     * columns, which is the shape `KeyedShuffleSpec` pairs on.
+     */
+    case class Expr(normalized: Expression) extends ArgumentShape
   }
 }
 
@@ -105,16 +113,16 @@ case class TransformExpression(
     children.collect { case l: Literal => l }
 
   /**
-   * This transform's identity, or None if some argument is not a literal, a nested transform or a
-   * column reference (e.g. `c + 1`); such a transform is not the same as any other.
+   * This transform's identity, or None if some argument references more than one column or is not
+   * deterministic (e.g. `b + c`); such a transform is not the same as any other.
    */
   lazy val functionId: Option[TransformFunctionId] = {
     import TransformFunctionId.ArgumentShape
     val shapes = children.map {
       case l: Literal => Some(ArgumentShape.Param(l))
       case t: TransformExpression => t.functionId.map(ArgumentShape.Nested(_))
-      case c if TransformExpression.isColumnRef(c) => Some(ArgumentShape.ColumnRef)
-      case _ => None
+      case _: Attribute => Some(ArgumentShape.ColumnRef)
+      case e => TransformExpression.expressionShape(e).map(ArgumentShape.Expr(_))
     }
     if (shapes.forall(_.isDefined)) {
       Some(TransformFunctionId(function.canonicalName(), shapes.flatten))
@@ -141,10 +149,12 @@ case class TransformExpression(
    *     `bucket(32, c)` is not the same as `bucket(16, c)`;
    *   - nested transform arguments must recursively be the same function, so that
    *     `bucket(4, years(c))` is not the same as `bucket(4, days(c))`;
-   *   - everything else must be a plain column reference on both sides. Column identity is
-   *     intentionally ignored (it is reconciled separately, via `keyPositions`), but a
-   *     non-reference slot such as `c + 1` or `cast(c)`, or a literal-vs-reference mismatch, is
-   *     treated as not the same.
+   *   - a bare column must face a bare column. Which column is intentionally ignored (it is
+   *     reconciled separately, via `keyPositions`);
+   *   - any other argument must be the same expression of its one column, so that
+   *     `bucket(4, c + 1)` is the same as `bucket(4, d + 1)` but not as `bucket(4, c + 2)` or
+   *     `bucket(4, c)`. An argument over several columns, or a non-deterministic one, leaves a
+   *     transform with no identity, so it is not the same as anything.
    *
    * The comparison is of [[functionId]], which is per position rather than a set of literal
    * values. Comparing only the values would make `truncate(id, 2)` and `truncate(2, store_id)` the
@@ -249,13 +259,16 @@ case class TransformExpression(
     children.length == function.inputTypes().length && inputTypesMatch(_ => true)
 
   /**
-   * Whether each position holds a literal on both sides or a column reference on both sides.
-   * Literal values and arity may differ; the connector reducer decides those.
+   * Whether each position holds a literal on both sides, a column reference on both sides, or the
+   * same expression of a column on both sides (e.g. `b + 1` and `c + 1`). Literal values and arity
+   * may differ; the connector reducer decides those.
    */
   private def sameArgumentLayout(other: TransformExpression): Boolean =
     children.zip(other.children).forall {
       case (_: Literal, _: Literal) => true
-      case (c1, c2) => TransformExpression.isColumnRef(c1) && TransformExpression.isColumnRef(c2)
+      case (c1, c2) if TransformExpression.isColumnRef(c1) && TransformExpression.isColumnRef(c2) =>
+        true
+      case (c1, c2) => TransformExpression.sameShape(c1, c2)
     }
 
   /**
@@ -405,10 +418,25 @@ case class TransformExpression(
 
 object TransformExpression {
   /**
-   * Whether `e` is a bare column reference: an [[Attribute]] or a [[GetStructField]] chain
-   * (struct-field access on a column). Shared by [[TransformExpression.isSameFunction]] and by
-   * `KeyedPartitioning.supportsExpressions`, which both decide whether a transform's single
-   * non-literal argument is a plain column.
+   * `e` with its one column replaced by a placeholder, so that `x + 1` and `y + 1` compare equal;
+   * None when `e` is unresolved, references other than one column, or is not deterministic.
+   */
+  private[sql] def expressionShape(e: Expression): Option[Expression] =
+    if (e.resolved && e.deterministic && e.references.size == 1) {
+      Some(QueryPlan.normalizeExpressions(e, e.references.toSeq))
+    } else {
+      None
+    }
+
+  /** Whether `a` and `b` are the same expression of one column each, see [[expressionShape]]. */
+  private[sql] def sameShape(a: Expression, b: Expression): Boolean =
+    expressionShape(a).exists(expressionShape(b).contains)
+
+  /**
+   * Whether `e` is a column reference: an [[Attribute]] or a [[GetStructField]] chain
+   * (struct-field access on a column). Used by `sameArgumentLayout` and by
+   * `KeyedPartitioning.supportsExpressions`, which both decide whether a transform's non-literal
+   * argument is a plain column.
    */
   @tailrec
   private[sql] def isColumnRef(e: Expression): Boolean = e match {

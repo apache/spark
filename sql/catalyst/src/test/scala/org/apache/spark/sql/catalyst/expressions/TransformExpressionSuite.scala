@@ -168,11 +168,13 @@ class TransformExpressionSuite extends SparkFunSuite {
       TransformExpression(outer, Seq(Literal(4), TransformExpression(years, Seq(b))))),
       "the same nested function over a different column is still the same function")
 
-    // A non-reference slot is never "the same", even against an identical one: `c + 1` is not a
-    // partition transform argument SPJ can reason about.
-    val plusOne = TransformExpression(outer, Seq(Literal(4), Add(a, Literal(1))))
-    assert(!plusOne.isSameFunction(TransformExpression(outer, Seq(Literal(4), Add(a, Literal(1))))),
-      "a non-reference slot is not comparable, so not the same function")
+    // An expression argument is compared by its shape: `a + 1` and `b + 1` are the same function of
+    // their columns, while `a + 1` and `a + 2`, or `a + 1` and a bare column, are not.
+    def over(arg: Expression): TransformExpression =
+      TransformExpression(outer, Seq(Literal(4), arg))
+    assert(over(Add(a, Literal(1))).isSameFunction(over(Add(b, Literal(1)))))
+    assert(!over(Add(a, Literal(1))).isSameFunction(over(Add(a, Literal(2)))))
+    assert(!over(Add(a, Literal(1))).isSameFunction(over(a)))
   }
 
   test("SPARK-50593: an argument whose type cannot be read is not reducible, and does not throw") {
@@ -217,14 +219,16 @@ class TransformExpressionSuite extends SparkFunSuite {
       "the same nested transform over another column is the same key space")
   }
 
-  test("SPARK-50593: a transform with a non-reference argument has no identity") {
+  test("SPARK-50593: a transform with an argument over two columns has no identity") {
     val fn = new NamedFunction("test.bucket")
-    val plusOne = TransformExpression(fn, Seq(Literal(4), Add(a, Literal(1))))
+    val plusOne = TransformExpression(fn, Seq(Literal(4), Add(a, b)))
     assert(plusOne.functionId.isEmpty)
     assert(!plusOne.isSameFunction(plusOne), "never the same, not even as itself")
     // Nesting one inside a transform takes the identity away from the outer one too.
-    val nested = TransformExpression(fn, Seq(Literal(4), TransformExpression(fn, Seq(Add(a, a)))))
+    val nested = TransformExpression(fn, Seq(Literal(4), TransformExpression(fn, Seq(Add(a, b)))))
     assert(nested.functionId.isEmpty)
+    // One column, however wrapped, has an identity.
+    assert(TransformExpression(fn, Seq(Literal(4), Add(a, a))).functionId.isDefined)
 
     // Recording a reduce needs an identity on both sides: reducedWith stores the partner's, and
     // silently skipping the mark would report reduced keys as raw. So it fails loudly.

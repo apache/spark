@@ -7114,11 +7114,12 @@ class KeyGroupedPartitioningSuite
       "the same nested transform over a different column is still the same function")
     assert(!bucket(4, years(a)).isSameFunction(bucket(2, years(a))), "the literal still matters")
 
-    // A value-changing slot is not comparable, so never "the same" -- not even against an
-    // identical one.
-    val add = bucket(4, Add(a, Literal(1)))
-    assert(!add.isSameFunction(bucket(4, Add(b, Literal(1)))),
-      "a non-reference slot is not a shape identity can affirm")
+    // An expression argument is compared by its shape, the same rule the join's pairing uses.
+    val ra = AttributeReference("a", IntegerType)()
+    val rb = AttributeReference("b", IntegerType)()
+    val add = bucket(4, Add(ra, Literal(1)))
+    assert(add.isSameFunction(bucket(4, Add(rb, Literal(1)))), "the same shape over another column")
+    assert(!add.isSameFunction(bucket(4, ra)), "an expression is not a bare column")
 
     // A GetStructField chain IS a column reference, so it is ignored like any other column slot.
     val s = AttributeReference("s", StructType(Seq(StructField("f", IntegerType))))()
