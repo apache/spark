@@ -40,6 +40,7 @@ module.exports = {
     "dataTables.rowsGroup.js"
   ],
   "parserOptions": {
-    "sourceType": "module"
+    "sourceType": "module",
+    "ecmaVersion": "latest"
   }
 }
