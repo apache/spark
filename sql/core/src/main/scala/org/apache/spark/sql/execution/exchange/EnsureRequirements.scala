@@ -371,7 +371,8 @@ case class EnsureRequirements(
     }
     // Choose all the children whose spec can be used to shuffle other children, each with the
     // members that can serve as the layout. Any other member would build a partitioning its own
-    // child is not laid out on, and it does not count towards the ranking below either.
+    // child is not laid out on, or is turned away by a co-partition key requirement to avoid skew.
+    // It does not count towards the ranking below either.
     val candidateSpecs = children.zip(specs).flatMap {
       case (child, Some(spec)) if !shouldConsiderMinParallelism ||
           child.outputPartitioning.numPartitions >= conf.defaultNumShufflePartitions =>
@@ -1139,15 +1140,14 @@ case class EnsureRequirements(
       partitioning: Partitioning,
       distribution: ClusteredDistribution): Seq[KeyedShuffleSpec] = {
     def tryCreate(partitioning: KeyedPartitioning): Option[KeyedShuffleSpec] = {
-      // The config requires all the cluster keys to be covered by the partition keys, to avoid
-      // the skew of joining on keys that are coarser than the join keys. Key order and duplicated
-      // cluster keys don't matter.
+      // The V2 co-partition key requirement asks for all the cluster keys to be covered by the
+      // partition keys, to avoid the skew of joining on keys that are coarser than the join keys.
+      // Key order and duplicated cluster keys don't matter.
       //
       // The coverage requirement is a comparison of expressions, while `keysMaySatisfy` can end in
       // a projection of the partition keys, so the cheap question is asked first. The requirement
       // is on by default and turns most members away.
-      if ((!SQLConf.get.v2BucketingRequireAllClusterKeysForCoPartition ||
-            partitioning.referencesAllClusterKeys(distribution)) &&
+      if (partitioning.meetsCoPartitionKeyRequirement(distribution) &&
           partitioning.keysMaySatisfy(distribution)) {
         // `toGrouped` both dedups and sorts, and only a `GroupPartitionsExec` performs either. A
         // source that already reports one partition per key gets no node, so its own key order is

@@ -983,19 +983,21 @@ case class KeyedPartitioning(
     }.to(BitSet)
 
   /**
-   * Whether every cluster key of `required` is the reference of some partition expression, in any
-   * order. This is what the co-partition key requirement of storage-partitioned layouts
-   * (`spark.sql.sources.v2.bucketing.requireAllClusterKeysForCoPartition.enabled`) asks of a layout
-   * that a co-partitioned operator runs on, both in `EnsureRequirements.createKeyedShuffleSpecs`
-   * and in `KeyedShuffleSpec.canCreatePartitioning`.
+   * Whether these keys meet the V2 co-partition key requirement
+   * (`spark.sql.sources.v2.bucketing.requireAllClusterKeysForCoPartition.enabled`), which a layout
+   * that a co-partitioned operator runs on has to meet. With the requirement on, every cluster key
+   * of `required` must be the reference of some partition expression, in any order. Both
+   * `EnsureRequirements.createKeyedShuffleSpecs` and `KeyedShuffleSpec.canCreatePartitioning` ask
+   * it, so the config and the rule stay one rule rather than two spellings.
    *
    * Only an expression over a single column covers that column. One over several, e.g. `b + c`,
    * maps to no position (`KeyedShuffleSpec.keyPositions`). The spec turns it away or projects it
    * away, so its columns are not covered. Unlike `positionsCoveringClusterKeys`, this reads the
    * references only, as `keyPositions` does.
    */
-  def referencesAllClusterKeys(required: ClusteredDistribution): Boolean =
-    required.allClusterKeysAmong(expressions.filter(_.references.size == 1).flatMap(_.references))
+  def meetsCoPartitionKeyRequirement(required: ClusteredDistribution): Boolean =
+    !SQLConf.get.v2BucketingRequireAllClusterKeysForCoPartition ||
+      required.allClusterKeysAmong(expressions.filter(_.references.size == 1).flatMap(_.references))
 
   /**
    * Whether every partition expression is a function of cluster keys alone, so that rows sharing
@@ -1135,9 +1137,9 @@ case class KeyedPartitioning(
       // What the unprojected spec is good for depends on the layout. Where every partition
       // expression covers a clustering key, so the projection would only have re-sorted, the spec
       // is usable and is what a consumer is offered: the other child is laid out on the keys in the
-      // order this one reports them. With the co-partition key requirement on (see
-      // `referencesAllClusterKeys`), `canCreatePartitioning` also asks the keys to cover every
-      // clustering key. Where the layout narrows, one `keyPositions` entry is empty, and
+      // order this one reports them. With the V2 co-partition key requirement on (see
+      // `meetsCoPartitionKeyRequirement`), `canCreatePartitioning` also asks the keys to cover
+      // every clustering key. Where the layout narrows, one `keyPositions` entry is empty, and
       // `canCreatePartitioning` and `areKeysCompatible` both turn the spec away. Nothing is lost
       // there, because `keysSatisfy` does not call such a child grouped on the operation keys
       // either.
@@ -1581,7 +1583,7 @@ object PartitioningCollection {
    * has no projection to make. Compare the planner's admission of a member
    * (`EnsureRequirements.createKeyedShuffleSpecs`): it asks the wider `keysMaySatisfy`, because
    * the node it inserts settles the member afterwards, and it additionally requires the coverage
-   * of every operation key (`KeyedPartitioning.referencesAllClusterKeys`), which this drops:
+   * of every operation key (`KeyedPartitioning.meetsCoPartitionKeyRequirement`), which this drops:
    * a skew heuristic, since a member whose partitioning keys cover only a subset of the
    * operation's keys is a sound pairing.
    */
@@ -2120,11 +2122,12 @@ case class IdentityReducer(transform: TransformExpression) extends Reducer[Any, 
  *                         refused outright, since neither narrowing nor sorting its keys leaves the
  *                         routing it promises for its undeclared rows. The first leaves a spec a
  *                         consumer can be laid out on, and so does the second where every
- *                         partition expression covers a clustering key. With the co-partition
- *                         key requirement on (see `KeyedPartitioning.referencesAllClusterKeys`),
- *                         both also need the keys to cover every clustering key. A marked claim
- *                         that narrows does not: one `keyPositions` entry is empty there, which
- *                         `canCreatePartitioning` and `areKeysCompatible` both turn away. See
+ *                         partition expression covers a clustering key. A marked claim that
+ *                         narrows does not: one `keyPositions` entry is empty there, which
+ *                         `canCreatePartitioning` and `areKeysCompatible` both turn away. With
+ *                         the V2 co-partition key requirement on (see
+ *                         `KeyedPartitioning.meetsCoPartitionKeyRequirement`), a spec that can be
+ *                         laid out on also needs the keys to cover every clustering key. See
  *                         `KeyedPartitioning.createShuffleSpec`.
  *                         The field's other producer is `PartitioningCollection.reportedSpecOf`,
  *                         and there `Some` records a projection of the *report*: a view of the
@@ -2490,10 +2493,9 @@ case class KeyedShuffleSpec(
       // for a marked narrowing projection from being chosen as the best spec.
       keyPositions.forall(_.nonEmpty) &&
       // A child lined up on these keys is co-partitioned only on the cluster keys they cover. So
-      // the co-partition key requirement applies here too. It uses the coverage rule of
-      // `referencesAllClusterKeys`, not the positional match of `HashShuffleSpec`.
-      (!SQLConf.get.v2BucketingRequireAllClusterKeysForCoPartition ||
-        partitioning.referencesAllClusterKeys(distribution)) &&
+      // the V2 co-partition key requirement applies here too. It uses a coverage rule, not the
+      // positional match of `HashShuffleSpec`.
+      partitioning.meetsCoPartitionKeyRequirement(distribution) &&
       partitioning.expressions.forall {
         case _: AttributeReference => true
         // `createPartitioning` replaces a transform's argument with the other child's cluster key,

@@ -2604,12 +2604,12 @@ object SQLConf {
     buildConf("spark.sql.sources.v2.bucketing.requireAllClusterKeysForCoPartition.enabled")
       .doc("When true, a storage-partitioned join, or the one-side shuffle of " +
         s"${V2_BUCKETING_SHUFFLE_ENABLED.key}, runs on the partition keys only if they cover " +
-        "every join or MERGE key. Set it to false to also allow partition keys that cover only " +
-        "some of those keys, at the risk of data skew and reduced parallelism from the coarser " +
-        "storage partitioning. Hash partitionings still follow " +
+        "every join, cogroup or MERGE key. Set it to false to also allow partition keys that " +
+        "cover only some of those keys, at the risk of data skew and reduced parallelism from " +
+        "the coarser storage partitioning. Hash partitionings still follow " +
         s"${REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key}. Defaults to that config.")
       .version("4.4.0")
-      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .fallbackConf(REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION)
 
    val V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS =

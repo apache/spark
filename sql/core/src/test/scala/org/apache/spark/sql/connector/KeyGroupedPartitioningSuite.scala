@@ -1615,22 +1615,35 @@ class KeyGroupedPartitioningSuite
         // one. That builds `bucket(4, y)` for `xy`, not the bucket of the same function of `y`. A
         // row with `b = y` then lands in a different bucket on each side. The join order decides
         // which of the two layouts comes first, so both orders run. Each layout covers one of the
-        // two join keys, so the co-partition key requirement is turned off.
-        withSQLConf(
-            SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
-            SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
-          Seq(
-            s"testcat.ns.plain p JOIN testcat.ns.keys k ON $key = k.id",
-            s"testcat.ns.keys k JOIN testcat.ns.plain p ON k.id = $key").foreach { firstJoin =>
-            val df = sql(
-              s"""SELECT k.id, p.b, q.x FROM $firstJoin
-                 |JOIN testcat.ns.xy q ON k.id = q.x AND p.b = q.y""".stripMargin)
-            checkAnswer(df, (0 until 8).map(b => Row(keyOf(b), b.toLong, keyOf(b))))
-            // `xy` is shuffled onto the usable layout, `bucket(4, x)`, and never onto a bucket of
-            // `y`. So `plain` and `xy` are the only sides that move.
-            val shuffles = collectShuffles(stripAQEPlan(df.queryExecution.executedPlan))
-            assert(shuffles.size == 2)
-            assert(!keyedPartitioningsOf(shuffles).exists(_.references.exists(_.name == "y")))
+        // two join keys, so the co-partition key requirement decides whether either can serve.
+        Seq("true", "false").foreach { requireAll =>
+          withSQLConf(
+              SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+              SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> requireAll) {
+            Seq(
+              s"testcat.ns.plain p JOIN testcat.ns.keys k ON $key = k.id",
+              s"testcat.ns.keys k JOIN testcat.ns.plain p ON k.id = $key").foreach { firstJoin =>
+              val df = sql(
+                s"""SELECT k.id, p.b, q.x FROM $firstJoin
+                   |JOIN testcat.ns.xy q ON k.id = q.x AND p.b = q.y""".stripMargin)
+              checkAnswer(df, (0 until 8).map(b => Row(keyOf(b), b.toLong, keyOf(b))))
+              val shuffles = collectShuffles(stripAQEPlan(df.queryExecution.executedPlan))
+              if (requireAll == "true") {
+                // Neither layout covers both keys of the second join, so both of its sides are
+                // shuffled on both of them.
+                val hashKeys = shuffles.map(_.outputPartitioning).collect {
+                  case h: physical.HashPartitioning =>
+                    h.expressions.flatMap(_.references.map(_.name))
+                }
+                assert(shuffles.size == 3 && hashKeys.toSet == Set(Seq("id", "b"), Seq("x", "y")),
+                  s"both sides of the second join are shuffled on both keys: $shuffles")
+              } else {
+                // `xy` is shuffled onto the usable layout, `bucket(4, x)`, and never onto a bucket
+                // of `y`. So `plain` and `xy` are the only sides that move.
+                assert(shuffles.size == 2)
+                assert(!keyedPartitioningsOf(shuffles).exists(_.references.exists(_.name == "y")))
+              }
+            }
           }
         }
       }
@@ -1903,8 +1916,8 @@ class KeyGroupedPartitioningSuite
 
     // Each broadcast join reports its identity side's layout over `[b + c, d]` too. A projection
     // to the join keys drops `b + c`, which maps to no position, so it does not cover `b` and `c`
-    // for `spark.sql.requireAllClusterKeysForCoPartition`. Otherwise the join on `(b, c, d)` would
-    // be paired on `d` alone.
+    // for the V2 co-partition key requirement. Otherwise the join on `(b, c, d)` would be paired
+    // on `d` alone.
     withSQLConf(
         SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
@@ -5697,7 +5710,9 @@ class KeyGroupedPartitioningSuite
       // shuffle and in the storage-partitioned join. Without the one-side shuffle, only the
       // storage-partitioned join can keep the keyed sides as they stand.
       (purchases, Seq(shuffle -> "true", requireAll -> "true", v2RequireAll -> "false"), 1),
-      (keyedPurchases, Seq(shuffle -> "false", requireAll -> "true", v2RequireAll -> "false"), 0)
+      (keyedPurchases, Seq(shuffle -> "false", requireAll -> "true", v2RequireAll -> "false"), 0),
+      // Set the other way, it keeps the requirement for the storage-partitioned join.
+      (keyedPurchases, Seq(shuffle -> "false", requireAll -> "false", v2RequireAll -> "true"), 2)
     ).foreach { case (other, confs, expectedShuffles) =>
       withSQLConf(confs: _*) {
         val df = sql(

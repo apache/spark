@@ -660,7 +660,7 @@ The following SQL properties enable Storage Partition Join in different join que
       <td><code>spark.sql.sources.v2.bucketing.requireAllClusterKeysForCoPartition.enabled</code></td>
       <td>(value of <code>spark.sql.requireAllClusterKeysForCoPartition</code>)</td>
       <td>
-        When true, a storage-partitioned join, or the one-side shuffle of <code>spark.sql.sources.v2.bucketing.shuffle.enabled</code>, runs on the partition keys only if they cover every join or MERGE key. Set to <b>false</b> to also allow partition keys that cover only some of those keys, at the risk of data skew and reduced parallelism from the coarser storage partitioning. Hash partitionings still follow <code>spark.sql.requireAllClusterKeysForCoPartition</code>.
+        When true, a storage-partitioned join, or the one-side shuffle of <code>spark.sql.sources.v2.bucketing.shuffle.enabled</code>, runs on the partition keys only if they cover every join, cogroup or MERGE key. Set to <b>false</b> to also allow partition keys that cover only some of those keys, at the risk of data skew and reduced parallelism from the coarser storage partitioning. Hash partitionings still follow <code>spark.sql.requireAllClusterKeysForCoPartition</code>.
       </td>
       <td>4.4.0</td>
     </tr>
