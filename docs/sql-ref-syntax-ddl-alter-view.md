@@ -27,9 +27,7 @@ the name of a view to a different name, set and unset the metadata of the view b
 `RENAME TO`, `SET TBLPROPERTIES` and `UNSET TBLPROPERTIES` also apply to a
 [metric view](sql-ref-syntax-ddl-create-metric-view.html). There is no `ALTER VIEW` form that changes a
 metric view's YAML definition (`ALTER VIEW ... WITH METRICS` is a syntax error); use
-`CREATE OR REPLACE VIEW ... WITH METRICS` instead. Do not use `ALTER VIEW ... AS query` on a metric view: the
-statement is accepted, but it replaces the YAML definition with the query text and the view can no longer be
-queried.
+`CREATE OR REPLACE VIEW ... WITH METRICS` instead.
 
 #### RENAME View
 Renames the existing view. If the new view name already exists in the source database, a `TableAlreadyExistsException` is thrown. This operation
