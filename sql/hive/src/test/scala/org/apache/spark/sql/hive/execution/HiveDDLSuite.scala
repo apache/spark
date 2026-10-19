@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import java.io.File
 import java.net.URI
+import java.nio.file.{Files, StandardCopyOption}
 import java.time.LocalDateTime
 import java.util.Locale
 
@@ -3248,12 +3249,11 @@ class HiveDDLSuite
     withUserDefinedFunction("f1" -> true) {
       sql("CREATE TEMPORARY FUNCTION f1 AS 'org.apache.hadoop.hive.ql.udf.UDFUUID'")
 
-      val udtfJar = TestUDTFJar.jar
+      // A copy unique to this test cannot be registered by an earlier test.
+      val udtfJar = File.createTempFile("SPARK-34261-", ".jar", Utils.createTempDir())
+      Files.copy(TestUDTFJar.jar.toPath, udtfJar.toPath, StandardCopyOption.REPLACE_EXISTING)
       val jarName = udtfJar.getName
       val jar = udtfJar.toURI.toString
-      // listJars() flattens every artifact bucket, so clear the jar from all of them.
-      spark.sparkContext.allAddedJars.keys.find(_.contains(jarName))
-        .foreach(k => spark.sparkContext.addedJars.values.foreach(_.remove(k)))
       assert(!spark.sparkContext.listJars().exists(_.contains(jarName)))
       val e = intercept[AnalysisException] {
         sql("CREATE TEMPORARY FUNCTION f1 AS " +
