@@ -24,6 +24,7 @@ import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, GenericArrayData, IntervalUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -471,6 +472,19 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     assert(row.getLong(0) === DateTimeUtils.localTimeToNanos(localTime))
     val readback = fromRow(encoder, row)
     assert(readback.get(0).equals(localTime))
+  }
+
+  test("SPARK-60346: encoding/decoding an array of TimeType(p) to/from java.time.LocalTime") {
+    val nanos = DateTimeUtils.localTimeToNanos(java.time.LocalTime.parse("20:38:45.123456789"))
+    (TimeType.MIN_PRECISION to TimeType.MAX_PRECISION).foreach { p =>
+      val schema = new StructType().add("a", ArrayType(TimeType(p)))
+      // Bind to the declared schema, as `Dataset.collect` binds to the plan output.
+      val encoder = ExpressionEncoder(schema).resolveAndBind(toAttributes(schema))
+      assert(encoder.schema === schema)
+      val time = DateTimeUtils.nanosToLocalTime(DateTimeUtils.truncateTimeToPrecision(nanos, p))
+      val row = Row(Seq(time))
+      assert(roundTrip(encoder, row) === row)
+    }
   }
 
   test("SPARK-34605: encoding/decoding DayTimeIntervalType to/from java.time.Duration") {

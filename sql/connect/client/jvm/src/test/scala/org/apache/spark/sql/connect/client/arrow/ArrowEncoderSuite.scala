@@ -19,7 +19,7 @@ package org.apache.spark.sql.connect.client.arrow
 import java.io.{ByteArrayOutputStream, File}
 import java.math.BigInteger
 import java.net.URLClassLoader
-import java.time.{Duration, Period, ZoneOffset}
+import java.time.{Duration, LocalTime, Period, ZoneOffset}
 import java.time.temporal.ChronoUnit
 import java.util
 import java.util.{Collections, Objects}
@@ -48,7 +48,7 @@ import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils._
 import org.apache.spark.sql.catalyst.util.SparkIntervalUtils._
 import org.apache.spark.sql.connect.client.arrow.FooEnum.FooEnum
 import org.apache.spark.sql.connect.test.ConnectFunSuite
-import org.apache.spark.sql.types.{ArrayType, DataType, DayTimeIntervalType, Decimal, DecimalType, Geography, Geometry, IntegerType, Metadata, SQLUserDefinedType, StringType, StructType, UserDefinedType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{ArrayType, DataType, DayTimeIntervalType, Decimal, DecimalType, Geography, Geometry, IntegerType, Metadata, SQLUserDefinedType, StringType, StructType, TimeType, UserDefinedType, YearMonthIntervalType}
 import org.apache.spark.sql.util.CloseableIterator
 import org.apache.spark.unsafe.types.VariantVal
 import org.apache.spark.util.{MaybeNull, SparkStringUtils}
@@ -306,6 +306,19 @@ class ArrowEncoderSuite extends ConnectFunSuite {
         values.iterator.map(Option(_).map(_.getBytes("utf8").toSeq)),
         binaries.map(Option(_).map(_.toSeq)))
       binaries.close()
+    }
+  }
+
+  test("SPARK-60346: TIME(p) round trip keeps the precision") {
+    val nanos = localTimeToNanos(LocalTime.parse("12:00:00.123456789"))
+    (TimeType.MIN_PRECISION to TimeType.MAX_PRECISION).foreach { p =>
+      val schema = new StructType().add("t", TimeType(p)).add("a", ArrayType(TimeType(p)))
+      val encoder = toRowEncoder(schema)
+      assert(encoder.schema === schema)
+      val time = nanosToLocalTime(truncateTimeToPrecision(nanos, p))
+      roundTripAndCheckIdentical(encoder) { () =>
+        Iterator.single(Row(time, mutable.ArraySeq.make(Array(time))))
+      }
     }
   }
 
