@@ -46,7 +46,7 @@ private[connect] class TimeTypeConnectOps(val t: TimeType) extends ConnectTypeOp
 
   override def dataType: DataType = t
 
-  override def encoder: AgnosticEncoder[_] = LocalTimeEncoder
+  override def encoder: AgnosticEncoder[_] = LocalTimeEncoder(t.precision)
 
   // ==================== Proto Conversions ====================
 
