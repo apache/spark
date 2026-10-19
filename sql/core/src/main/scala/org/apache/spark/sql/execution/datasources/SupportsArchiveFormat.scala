@@ -231,7 +231,7 @@ object SupportsArchiveFormat {
       inputPaths: Seq[FileStatus],
       decompressionCodec: Option[String]): Unit = {
     if (decompressionCodec.isDefined) {
-      inputPaths.map(_.getPath).find(isArchivePath)
+      inputPaths.iterator.map(_.getPath).find(isArchivePath)
         .foreach(checkNoDecompressionCodec(_, decompressionCodec))
     }
   }

@@ -464,6 +464,26 @@ abstract class TextSuite extends SharedSparkSession with CommonFileDataSourceSui
     }
   }
 
+  test("SPARK-60217 a forced codec that cannot be created does not leak the file stream") {
+    withTempDir { dir =>
+      val file = new File(dir, "data.txt")
+      writeCompressed(file, "a\nb", "")
+      // The codec is only created in the read task, after the file is opened. The suite checks
+      // after each test that every opened file stream was closed.
+      Seq(false, true).foreach { wholeText =>
+        val e = intercept[Exception] {
+          spark.read
+            .option("decompression", classOf[UnconstructibleDecompressionCodec].getName)
+            .option("wholetext", wholeText.toString)
+            .text(file.getCanonicalPath).collect()
+        }
+        assert(Iterator.iterate[Throwable](e)(_.getCause).takeWhile(_ != null)
+          .exists(_.getMessage == UnconstructibleDecompressionCodec.message),
+          s"wholetext=$wholeText")
+      }
+    }
+  }
+
   test("SPARK-60217 decompression option is rejected with the legacy line reader") {
     withTempPath { dir =>
       Seq("value").toDF().write.text(dir.getCanonicalPath)
@@ -556,4 +576,13 @@ class FailingDecompressionCodec extends DefaultCodec {
 
 object FailingDecompressionCodec {
   val message = "Cannot create a FailingDecompressionCodec input stream"
+}
+
+/** A codec that cannot be created, like one whose class fails to initialize on an executor. */
+class UnconstructibleDecompressionCodec extends DefaultCodec {
+  throw new UnsupportedOperationException(UnconstructibleDecompressionCodec.message)
+}
+
+object UnconstructibleDecompressionCodec {
+  val message = "Cannot create an UnconstructibleDecompressionCodec"
 }

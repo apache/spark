@@ -21,6 +21,7 @@ import java.io.InputStream
 import java.util.Locale
 
 import scala.collection.Seq
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -135,20 +136,28 @@ object HadoopCodecStreams {
     val fs = file.getFileSystem(config)
     val inputStream: InputStream = fs.open(file)
 
-    getDecompressionCodec(config, file)
-      .map { codec =>
+    try {
+      getDecompressionCodec(config, file)
+        .map { codec =>
+          try {
+            codec.createInputStream(inputStream)
+          } catch {
+            case e: RuntimeException =>
+              // createInputStream may fail for ZSTD if hadoop is not already compiled with ZSTD
+              // support. In that case, we try to use Spark's Zstandard codec.
+              createZstdInputStream(config, file, inputStream).getOrElse(throw e)
+          }
+        }.getOrElse(inputStream)
+    } catch {
+      case NonFatal(e) =>
+        // No stream wraps the file stream yet, so close it rather than leak it. This covers a
+        // forced codec that cannot be loaded or created as well as a decoder that fails.
         try {
-          codec.createInputStream(inputStream)
+          inputStream.close()
         } catch {
-          case e: RuntimeException =>
-            // createInputStream may fail for ZSTD if hadoop is not already compiled with ZSTD
-            // support. In that case, we try to use Spark's Zstandard codec.
-            createZstdInputStream(config, file, inputStream).getOrElse {
-              // Close the file stream rather than leak it, since no codec stream wraps it.
-              inputStream.close()
-              throw e
-            }
+          case NonFatal(closeError) => e.addSuppressed(closeError)
         }
-      }.getOrElse(inputStream)
+        throw e
+    }
   }
 }
