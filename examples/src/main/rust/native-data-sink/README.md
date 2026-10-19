@@ -18,7 +18,7 @@ limitations under the License.
 # Rust native batch sink
 
 This write-only example implements `DataSource`, `BatchWriteSource`, `BatchWrite`,
-`BatchWriterFactory`, and `BatchWriter` from the [Rust native data source SDK][sdk].
+`DataWriterFactory`, and `DataWriter` from the [Rust native data source SDK][sdk].
 It registers `export_data_source!(JsonSink, batch_write, truncate)` and implements
 no read traits. The SDK supplies the C ABI entry point, typed factory and commit
 message serialization, Arrow batch import, capability checks, and error handling.
@@ -67,7 +67,7 @@ That one manifest replacement is the commit point:
 - Abort removes the entire operation, including files with no commit message and
   a sealed directory whose manifest publication failed. It leaves the current
   manifest and its data unchanged. Dropping an unfinished coordinator also performs
-  best-effort cleanup. Dropping a prepared task writer leaves its file for the driver.
+  best-effort cleanup. Dropping a committed task writer leaves its file for the driver.
 
 To inspect output, read only the files listed in `manifest.json`. Recursively reading
 the destination directory would also pick up data from previous truncate operations.

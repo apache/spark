@@ -49,7 +49,7 @@ Read support uses three traits:
   reader from a typed partition and a borrowed `TaskContext`.
 
 Write support is independent: a write-only connector implements `BatchWriteSource`,
-`BatchWrite`, `BatchWriterFactory`, and `BatchWriter`, without implementing reads.
+`BatchWrite`, `DataWriterFactory`, and `DataWriter`, without implementing reads.
 The write lifecycle is described below.
 
 The factory and partition types implement `Serialize` and `Deserialize`.
@@ -168,8 +168,8 @@ Driver:
                           serialized factory + schema  | typed messages
                                    |                   |
 Executor, per task attempt:         v                   |
-                          BatchWriterFactory::open(TaskContext)
-                                   -> BatchWriter::write(RecordBatch)*
+                          DataWriterFactory::open(TaskContext)
+                                   -> DataWriter::write(RecordBatch)*
                                    -> commit() / abort() -> Drop
 ```
 
@@ -179,7 +179,7 @@ executor configuration; the SDK caches the encoded factory and input schema,
 including a terminal error if creation or serialization fails. Restoring an
 executor writer uses only those bytes, without creating a driver registry.
 
-Each `BatchWriterFactory::open` returns a task-bound writer. `write` takes ownership
+Each `DataWriterFactory::open` returns a task-bound writer. `write` takes ownership
 of a `RecordBatch`, so its Arrow buffers can be retained after the callback. The
 SDK moves the incoming Arrow array and schema, checks the schema against the
 negotiated input, and releases imported resources on failures. Input slices need
@@ -192,6 +192,8 @@ receives one winning message per partition; driver `abort` receives
 commit leaves the same object available for abort. The SDK prevents further writes
 after a failure or successful commit, caches successful task commit messages, and
 avoids repeating successful commit/abort callbacks. Drop only releases resources.
+Connectors therefore do not need to track their own phase; the `# Lifecycle`
+sections of `BatchWrite` and `DataWriter` list the exact call-order guarantees.
 
 Stage data per task attempt and publish it only at driver commit. In particular,
 `WriteMode::Truncate` must leave existing data intact until that commit. Retries

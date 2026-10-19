@@ -28,7 +28,7 @@ use spark_native_source::abi::{
     SparkDsWriteInfo, ABI_VERSION,
 };
 use spark_native_source::{
-    BatchWrite, BatchWriteSource, BatchWriter, BatchWriterFactory, DataSource, Options, Result,
+    BatchWrite, BatchWriteSource, DataSource, DataWriter, DataWriterFactory, Options, Result,
     SourceCapability, TaskContext, TaskWriter, WriteMode,
 };
 
@@ -169,7 +169,7 @@ fn serialize_message_mode<S: Serializer>(
     serializer.serialize_str(mode)
 }
 
-impl BatchWriterFactory for Factory {
+impl DataWriterFactory for Factory {
     type Message = Message;
 
     fn open<'task>(&self, task: TaskContext<'task>) -> Result<TaskWriter<'task, Message>> {
@@ -187,7 +187,7 @@ struct Writer<'task> {
     batches: Vec<RecordBatch>,
 }
 
-impl BatchWriter for Writer<'_> {
+impl DataWriter for Writer<'_> {
     type Message = Message;
 
     fn write(&mut self, batch: RecordBatch) -> Result<()> {

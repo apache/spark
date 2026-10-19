@@ -30,7 +30,7 @@ use arrow_array::{Array, Int64Array, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use serde::{Deserialize, Serialize};
 use spark_native_source::{
-    BatchWrite, BatchWriteSource, BatchWriter, BatchWriterFactory, DataSource, Options, Result,
+    BatchWrite, BatchWriteSource, DataSource, DataWriter, DataWriterFactory, Options, Result,
     SourceCapability, TaskContext, TaskWriter, WriteMode,
 };
 
@@ -177,13 +177,6 @@ impl Drop for WriteLock {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum WriteState {
-    Open,
-    Committed,
-    Aborted,
-}
-
 pub struct JsonWrite {
     root: PathBuf,
     operation: String,
@@ -191,8 +184,8 @@ pub struct JsonWrite {
     objects: PathBuf,
     temporary_manifest: PathBuf,
     previous: Manifest,
-    mode: WriteMode,
-    state: WriteState,
+    truncate: bool,
+    committed: bool,
     sealed: bool,
     lock: Option<WriteLock>,
 }
@@ -202,6 +195,11 @@ impl JsonWrite {
         if !cfg!(unix) {
             return Err("This demo requires a POSIX filesystem".into());
         }
+        let truncate = match mode {
+            WriteMode::Append => false,
+            WriteMode::Truncate => true,
+            _ => return Err("Unsupported write mode".into()),
+        };
         fs::create_dir_all(&root)?;
         let lock = WriteLock::acquire(&root)?;
         let previous = read_manifest(&root)?;
@@ -216,8 +214,8 @@ impl JsonWrite {
             operation,
             staging,
             previous,
-            mode,
-            state: WriteState::Open,
+            truncate,
+            committed: false,
             sealed: false,
             lock: Some(lock),
         })
@@ -254,9 +252,10 @@ impl JsonWrite {
             }
         }
 
-        let mut files = match self.mode {
-            WriteMode::Append => self.previous.files.clone(),
-            WriteMode::Truncate => Vec::new(),
+        let mut files = if self.truncate {
+            Vec::new()
+        } else {
+            self.previous.files.clone()
         };
         files.extend(messages.into_iter().map(|message| DataFile {
             path: format!("objects/{}/{}", self.operation, message.filename),
@@ -277,7 +276,7 @@ impl JsonWrite {
         // This single rename is the commit point. No existing data is deleted,
         // including during truncate. No fallible work follows publication.
         fs::rename(&self.temporary_manifest, self.root.join("manifest.json"))?;
-        self.state = WriteState::Committed;
+        self.committed = true;
         self.lock.take();
         Ok(())
     }
@@ -308,13 +307,12 @@ impl JsonWrite {
     }
 }
 
+// The SDK calls each method at most once, never after a successful commit or an
+// abort, so this coordinator does not track its own phase.
 impl BatchWrite for JsonWrite {
     type Factory = JsonWriterFactory;
 
     fn factory(&mut self) -> Result<Self::Factory> {
-        if self.state != WriteState::Open {
-            return Err("The write operation is no longer open".into());
-        }
         Ok(JsonWriterFactory {
             staging: self.staging.clone(),
             operation: self.operation.clone(),
@@ -322,19 +320,11 @@ impl BatchWrite for JsonWrite {
     }
 
     fn commit(&mut self, messages: Vec<CommitMessage>) -> Result<()> {
-        match self.state {
-            WriteState::Committed => Ok(()),
-            WriteState::Aborted => Err("The write operation was aborted".into()),
-            WriteState::Open => self.publish(messages),
-        }
+        self.publish(messages)
     }
 
     fn abort(&mut self, _messages: Vec<Option<CommitMessage>>) -> Result<()> {
-        if self.state == WriteState::Committed {
-            return Ok(());
-        }
         let result = self.cleanup();
-        self.state = WriteState::Aborted;
         self.lock.take();
         result
     }
@@ -342,7 +332,7 @@ impl BatchWrite for JsonWrite {
 
 impl Drop for JsonWrite {
     fn drop(&mut self) {
-        if self.state != WriteState::Committed {
+        if !self.committed {
             let _ = self.cleanup();
         }
     }
@@ -363,7 +353,7 @@ pub struct CommitMessage {
     rows: u64,
 }
 
-impl BatchWriterFactory for JsonWriterFactory {
+impl DataWriterFactory for JsonWriterFactory {
     type Message = CommitMessage;
 
     fn open<'task>(&self, task: TaskContext<'task>) -> Result<TaskWriter<'task, Self::Message>> {
@@ -392,8 +382,7 @@ impl BatchWriterFactory for JsonWriterFactory {
                             rows: 0,
                         },
                         writer: Some(BufWriter::new(file)),
-                        prepared: false,
-                        failed: false,
+                        committed: false,
                     }));
                 }
                 Err(error) if error.kind() == ErrorKind::AlreadyExists => continue,
@@ -415,8 +404,7 @@ struct JsonTaskWriter<'task> {
     path: PathBuf,
     message: CommitMessage,
     writer: Option<BufWriter<File>>,
-    prepared: bool,
-    failed: bool,
+    committed: bool,
 }
 
 impl JsonTaskWriter<'_> {
@@ -427,11 +415,14 @@ impl JsonTaskWriter<'_> {
             drop(file);
         }
     }
+}
 
-    fn write_batch(&mut self, batch: RecordBatch) -> Result<()> {
-        if self.prepared || self.failed {
-            return Err("The task writer is no longer accepting batches".into());
-        }
+// The SDK never writes after a failure, commit, or abort, commits at most once,
+// and never aborts a committed writer, so this writer does not track its phase.
+impl DataWriter for JsonTaskWriter<'_> {
+    type Message = CommitMessage;
+
+    fn write(&mut self, batch: RecordBatch) -> Result<()> {
         validate_schema(batch.schema().as_ref())?;
         let writer = self.writer.as_mut().ok_or("The task writer is closed")?;
         let ids = batch
@@ -463,13 +454,7 @@ impl JsonTaskWriter<'_> {
         Ok(())
     }
 
-    fn prepare(&mut self) -> Result<CommitMessage> {
-        if self.failed {
-            return Err("Cannot commit a failed task writer".into());
-        }
-        if self.prepared {
-            return Ok(self.message.clone());
-        }
+    fn commit(&mut self) -> Result<Self::Message> {
         if self.task.is_interrupted() {
             return Err("Task cancelled before committing the sink".into());
         }
@@ -477,30 +462,12 @@ impl JsonTaskWriter<'_> {
         writer.flush()?;
         writer.get_ref().sync_all()?;
         drop(writer);
-        self.prepared = true;
+        self.committed = true;
         Ok(self.message.clone())
-    }
-}
-
-impl BatchWriter for JsonTaskWriter<'_> {
-    type Message = CommitMessage;
-
-    fn write(&mut self, batch: RecordBatch) -> Result<()> {
-        let result = self.write_batch(batch);
-        self.failed |= result.is_err();
-        result
-    }
-
-    fn commit(&mut self) -> Result<Self::Message> {
-        let result = self.prepare();
-        self.failed |= result.is_err();
-        result
     }
 
     fn abort(&mut self) -> Result<()> {
         self.discard_buffer();
-        self.prepared = false;
-        self.failed = true;
         match fs::remove_file(&self.path) {
             Ok(()) => Ok(()),
             Err(error) if error.kind() == ErrorKind::NotFound => Ok(()),
@@ -511,7 +478,7 @@ impl BatchWriter for JsonTaskWriter<'_> {
 
 impl Drop for JsonTaskWriter<'_> {
     fn drop(&mut self) {
-        if !self.prepared {
+        if !self.committed {
             self.discard_buffer();
             let _ = fs::remove_file(&self.path);
         }

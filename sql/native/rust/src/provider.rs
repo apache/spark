@@ -21,8 +21,8 @@ use arrow_schema::SchemaRef;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    BatchReader, BatchReaderFactory, BatchSource, BatchWrite, BatchWriteSource, BatchWriterFactory,
-    DataSource, Result, ScanBuilder, ScanPlan, SourceCapability, TaskContext, TaskWriter,
+    BatchReader, BatchReaderFactory, BatchSource, BatchWrite, BatchWriteSource, DataSource,
+    DataWriterFactory, Result, ScanBuilder, ScanPlan, SourceCapability, TaskContext, TaskWriter,
     WriteMode,
 };
 
@@ -142,7 +142,7 @@ impl BatchWrite for Unavailable {
     }
 }
 
-impl BatchWriterFactory for Unavailable {
+impl DataWriterFactory for Unavailable {
     type Message = ();
 
     fn open<'task>(&self, _: TaskContext<'task>) -> Result<TaskWriter<'task, ()>> {

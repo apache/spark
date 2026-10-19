@@ -26,7 +26,7 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use crate::abi::{self, ArrowArray, ArrowSchema, SparkDsTaskContext};
 use crate::bridge::stream::{canonical_fields, validate_schema};
 use crate::bridge::{decode, encode, panic_message, provider_call};
-use crate::{BatchWrite, BatchWriterFactory, Result, TaskContext, TaskWriter};
+use crate::{BatchWrite, DataWriterFactory, Result, TaskContext, TaskWriter};
 
 type Cached<T> = std::result::Result<T, String>;
 
@@ -178,7 +178,7 @@ fn drop_provider<T>(value: T) {
 /// `task` must satisfy TaskContext::from_raw and remain valid until close_task.
 /// The returned handle must only be used with callbacks for F::Message, never
 /// concurrently, and must be closed exactly once while the plugin stays loaded.
-pub unsafe fn open<F: BatchWriterFactory>(
+pub unsafe fn open<F: DataWriterFactory>(
     task: *const SparkDsTaskContext,
     state: &[u8],
 ) -> Result<*mut c_void> {

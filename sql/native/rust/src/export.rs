@@ -55,7 +55,7 @@ macro_rules! export_data_source {
                 as $crate::ScanBuilder>::Factory;
             type WriterFactory = <<Registration as $crate::provider::Provider>::Write
                 as $crate::BatchWrite>::Factory;
-            type Message = <WriterFactory as $crate::BatchWriterFactory>::Message;
+            type Message = <WriterFactory as $crate::DataWriterFactory>::Message;
 
             fn bridge() -> &'static Bridge<Registration> {
                 static BRIDGE: std::sync::OnceLock<Bridge<Registration>> =

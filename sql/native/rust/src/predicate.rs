@@ -24,6 +24,7 @@ use serde_json::Value;
 /// Function names are extensible: unknown names must remain residual.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum Predicate {
     Column {
         name: Vec<String>,

@@ -46,7 +46,7 @@ pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub type Result<T> = std::result::Result<T, Error>;
 pub type Options = BTreeMap<String, String>;
 pub type BatchReader<'task> = Box<dyn RecordBatchReader + Send + 'task>;
-pub type TaskWriter<'task, M> = Box<dyn BatchWriter<Message = M> + 'task>;
+pub type TaskWriter<'task, M> = Box<dyn DataWriter<Message = M> + 'task>;
 
 /// Native operations supported by a source instance with its effective options.
 ///
@@ -68,6 +68,7 @@ pub enum SourceCapability {
 /// How completely a connector evaluates a pushed predicate.
 /// Spark currently rechecks all predicates, including exact ones.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum FilterSupport {
     /// Implements Spark SQL semantics and returns only matching rows.
     Exact,
@@ -79,6 +80,7 @@ pub enum FilterSupport {
 
 /// How a connector limits the rows produced by the whole scan.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum LimitSupport {
     Unsupported,
     /// Caps each partition; the ABI boolean is false because it promises a
@@ -131,7 +133,12 @@ pub trait BatchSource: DataSource {
 }
 
 /// How a batch write changes the destination.
+///
+/// New modes may be added. The SDK passes a mode only when the source instance
+/// has the matching capability, so a source never receives a mode it did not
+/// opt in to; a wildcard arm can return an error.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum WriteMode {
     Append,
     /// Replace existing data at driver commit, never at writer creation.
@@ -147,6 +154,8 @@ pub trait BatchWriteSource: DataSource {
 
     /// Validate the input schema and create an independent write coordinator.
     /// Construction may be followed only by Drop, without commit or abort.
+    /// The SDK calls this only while the instance's capabilities include
+    /// BatchWrite, and passes `Truncate` only when they include Truncate.
     fn write(&self, schema: SchemaRef, mode: WriteMode) -> Result<Self::Write>;
 }
 
@@ -154,9 +163,21 @@ pub trait BatchWriteSource: DataSource {
 ///
 /// Keep irreversible publication, including removing overwritten data, in commit.
 /// Drop releases resources; it must not publish data or perform fallible flushing.
-/// Failed commit is followed by abort on the same coordinator.
+///
+/// # Lifecycle
+///
+/// The SDK enforces the following, so implementations need not track their own
+/// phase or guard against repeated calls:
+///
+/// - `factory` runs at most once, and never after `commit` or `abort`.
+/// - `commit` runs at most once, only while no earlier call has failed. It is
+///   skipped, and the write fails, when any task message is missing.
+/// - `abort` runs at most once, never after a successful `commit`. It may follow
+///   a failed `factory` or `commit`, or run without either being called.
+/// - Drop runs exactly once, possibly without `commit` or `abort`.
+/// - A panic in any method is reported as that method's failure.
 pub trait BatchWrite: Send + 'static {
-    type Factory: BatchWriterFactory;
+    type Factory: DataWriterFactory;
 
     /// Return serializable executor configuration. The SDK caches the encoded
     /// factory and negotiated schema, including serialization failures.
@@ -167,7 +188,7 @@ pub trait BatchWrite: Send + 'static {
     /// and speculative attempts can stage other data that must not be published.
     fn commit(
         &mut self,
-        messages: Vec<<Self::Factory as BatchWriterFactory>::Message>,
+        messages: Vec<<Self::Factory as DataWriterFactory>::Message>,
     ) -> Result<()>;
 
     /// Abort after input, task, or driver commit failure. None preserves the
@@ -175,7 +196,7 @@ pub trait BatchWrite: Send + 'static {
     /// Executor loss can leave orphaned staged data; plan for its cleanup.
     fn abort(
         &mut self,
-        messages: Vec<Option<<Self::Factory as BatchWriterFactory>::Message>>,
+        messages: Vec<Option<<Self::Factory as DataWriterFactory>::Message>>,
     ) -> Result<()>;
 }
 
@@ -184,14 +205,28 @@ pub trait BatchWrite: Send + 'static {
 /// Open connections and files in open, not in the factory. A returned writer
 /// cannot borrow this temporary factory, but may retain the task context until
 /// close. Callbacks can move between threads sequentially; writers must be Send.
-pub trait BatchWriterFactory: Serialize + DeserializeOwned + Send + 'static {
+pub trait DataWriterFactory: Serialize + DeserializeOwned + Send + 'static {
     type Message: Serialize + DeserializeOwned + Send + 'static;
 
     fn open<'task>(&self, task: TaskContext<'task>) -> Result<TaskWriter<'task, Self::Message>>;
 }
 
 /// One task attempt's writer. The SDK closes it after commit or abort.
-pub trait BatchWriter: Send {
+///
+/// # Lifecycle
+///
+/// The SDK enforces the following, so implementations need not track their own
+/// phase or guard against repeated calls:
+///
+/// - `write` runs zero or more times, and never after any call has failed or
+///   after `commit` or `abort`.
+/// - `commit` runs at most once, never after a failed `write` or after `abort`.
+/// - `abort` runs at most once, never after a successful `commit`. It may follow
+///   a failed `write` or `commit`.
+/// - Drop runs exactly once when Spark closes the writer, possibly without
+///   `commit` or `abort`.
+/// - A panic in any method is reported as that method's failure.
+pub trait DataWriter: Send {
     type Message;
 
     /// Takes ownership of an imported Arrow batch, which may be retained after
