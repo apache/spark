@@ -227,6 +227,33 @@ SELECT CAST('a' AS CHAR(2)) = CAST('a ' AS VARCHAR(2));
 -- true
 ```
 
+A [string literal](sql-ref-literals.html#string-literal) is `STRING`, not `CHAR` or `VARCHAR`.
+Comparing it with `CHAR` is the same widening: the `CHAR` pad is kept, and the comparison is
+exact.
+
+```sql
+SELECT CAST('a' AS CHAR(2)) = 'a';
+-- false
+
+SELECT CAST('a' AS CHAR(2)) = 'a ';
+-- true
+```
+
+A [parameter marker](sql-ref-parameter-markers.html) bound to a string value is also `STRING`.
+The bound value is not padded unless you cast it to `CHAR`.
+
+```sql
+EXECUTE IMMEDIATE 'SELECT CAST(''a'' AS CHAR(2)) = :p' USING 'a' AS p;
+-- false
+
+EXECUTE IMMEDIATE 'SELECT CAST(''a'' AS CHAR(2)) = :p' USING 'a ' AS p;
+-- true
+
+EXECUTE IMMEDIATE
+  'SELECT CAST(''a'' AS CHAR(2)) = CAST(:p AS CHAR(2))' USING 'a' AS p;
+-- true
+```
+
 Ignoring trailing spaces is a collation property, not an implicit property of every `CHAR`
 comparison. Use an `RTRIM` collation when comparisons should ignore trailing spaces:
 

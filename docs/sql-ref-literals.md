@@ -31,7 +31,10 @@ A literal (also known as a constant) represents a fixed data value. Spark SQL su
 
 ### String Literal
 
-A string literal is used to specify a character string value.
+A string literal specifies a character string value of type `STRING`.
+`'ab'` is unbounded `STRING`, not `CHAR(2)` or `VARCHAR(2)`.
+There is no `CHAR` or `VARCHAR` literal syntax; use `CAST` to get a constrained type.
+See [Character String Types](sql-ref-character-string-types.html).
 
 #### Syntax
 
@@ -70,6 +73,25 @@ This can be useful when constructing strings that are too long to fit on a singl
 It also allows mixing of string literals and parameter marker into a single string literal.
 
 #### Examples
+
+```sql
+SELECT TYPEOF('ab') AS col;
++------+
+|   col|
++------+
+|string|
++------+
+
+SET spark.sql.charVarchar.standardSemantics.enabled = true;
+SELECT TYPEOF(CAST('ab' AS CHAR(2))) AS col;
++-------+
+|    col|
++-------+
+|char(2)|
++-------+
+```
+
+Without that preview flag, `CAST(... AS CHAR(n))` and `CAST(... AS VARCHAR(n))` are `STRING`.
 
 ```sql
 SELECT 'Hello, World!' AS col;

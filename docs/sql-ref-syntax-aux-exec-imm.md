@@ -60,6 +60,10 @@ For compatibility with other SQL dialects, `EXECUTE IMMEDIATE` also supports `US
   * **arg_expr**
 
     A constant expression that binds to a parameter marker.
+    The type of that expression is the type of the marker.
+    A [string literal](sql-ref-literals.html#string-literal) such as `'ab'` binds as
+    `STRING`; `CAST('ab' AS CHAR(2))` binds as `CHAR(2)` when
+    `spark.sql.charVarchar.standardSemantics.enabled` is true.
     If the parameter markers are unnamed, the binding is by position.
     For named parameter markers, binding is by name.
 
