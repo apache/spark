@@ -1314,22 +1314,15 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           localDateTimeToNanosVal(
             timestampNTZ(1969, 12, 31, 23, 59, 59, nanoOfSecTruncator(p)(999999999))))
 
-        // Non-string inputs ignore the format. DATE and microsecond timestamps keep their
-        // microsecond value; a nanosecond input is floored to `p`.
-        val days = DateTimeUtils.localDateToDays(LocalDate.of(2020, 1, 1))
-        checkEvaluation(
-          ltz(Literal.create(days, DateType), p, failOnError),
-          localDateTimeToNanosVal(timestampNTZ(2020, 1, 1), PST))
-        checkEvaluation(
-          ntz(Literal.create(123456L, TimestampNTZType), p, failOnError), nanosVal(123456L, 0))
-        checkEvaluation(
-          ltz(Literal.create(-123456L, TimestampType), p, failOnError), nanosVal(-123456L, 0))
-        checkEvaluation(
-          ltz(Literal.create(nanosVal(5L, 999), TimestampLTZNanosType(9)), p, failOnError),
-          nanosVal(5L, nanoOfSecTruncator(p)(999)))
-        checkEvaluation(
-          ntz(Literal.create(nanosVal(-1L, 123), TimestampNTZNanosType(9)), p, failOnError),
-          nanosVal(-1L, nanoOfSecTruncator(p)(123)))
+        // Only a string is accepted; ParseToTimestamp casts other inputs.
+        Seq(
+          Literal.create(0, DateType),
+          Literal.create(0L, TimestampType),
+          Literal.create(0L, TimestampNTZType),
+          Literal.create(nanosVal(5L, 999), TimestampLTZNanosType(9))).foreach { e =>
+          assert(ntz(e, p, failOnError).checkInputDataTypes().isFailure)
+          assert(ltz(e, p, failOnError).checkInputDataTypes().isFailure)
+        }
 
         // NULL input or format.
         checkEvaluation(ntz(Literal.create(null, StringType), p, failOnError), null)
@@ -1337,8 +1330,6 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           ltz(Literal("2020-01-01 13:24:35"), p, failOnError)
             .copy(right = Literal.create(null, StringType)),
           null)
-        checkEvaluation(
-          ltz(Literal.create(null, TimestampLTZNanosType(9)), p, failOnError), null)
 
         // Invalid input fails in ANSI mode like the microsecond path, and is NULL otherwise.
         Seq("Unparseable", "2020-01-01 13:24:35.1234567891").foreach { s =>

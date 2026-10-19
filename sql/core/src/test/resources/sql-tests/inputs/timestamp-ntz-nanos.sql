@@ -614,7 +614,8 @@ SELECT to_timestamp_ntz(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789', 'yyyy', 7
 SELECT to_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'),
   typeof(to_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'));
 SELECT to_timestamp_ntz('2020-01-01 13:24:35', 'yyyy-MM-dd HH:mm:ss', 10);
--- A DATE or timestamp input ignores the format and converts like CAST.
+-- With a nanosecond input or result, a DATE or timestamp input ignores the format and
+-- converts like CAST.
 SELECT to_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS');
 SELECT to_timestamp_ntz(DATE '2020-01-01', 'yyyy-MM-dd', 9);
 SELECT to_timestamp_ntz('2020-01-01 13:24:35', 'yyyy-MM-dd HH:mm:ss', 9, 9);

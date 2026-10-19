@@ -1971,9 +1971,8 @@ case class UnixTimestamp(
 
 /**
  * Gets a timestamp from a string or a date. For a nanosecond `TIMESTAMP_NTZ(p)` /
- * `TIMESTAMP_LTZ(p)` result `dataType`, a string is parsed with up to 9 fractional digits and a
- * nanosecond input is truncated to `p`; other inputs keep their microsecond-path value.
- * [[ParseToTimestamp]] casts non-string inputs to or from nanosecond types instead.
+ * `TIMESTAMP_LTZ(p)` result `dataType`, only a string is accepted. It is parsed with up to 9
+ * fractional digits, truncated to `p`; [[ParseToTimestamp]] casts other inputs instead.
  */
 case class GetTimestamp(
     left: Expression,
@@ -1993,23 +1992,19 @@ case class GetTimestamp(
 
   override protected def downScaleFactor: Long = 1
 
+  override def inputTypes: Seq[AbstractDataType] = nanosPrecision match {
+    case None => super.inputTypes
+    case Some(_) => Seq.fill(2)(StringTypeWithCollation(supportsTrimCollation = true))
+  }
+
   override def eval(input: InternalRow): Any = nanosPrecision match {
     case None => super.eval(input)
     case Some(precision) =>
-      val t = left.eval(input)
-      if (t == null) {
+      val str = left.eval(input)
+      if (str == null) {
         null
       } else {
-        left.dataType match {
-          case _: StringType => parseStringNanos(t.asInstanceOf[UTF8String], input, precision)
-          case _: AnyTimestampNanoType =>
-            truncateTimestampNanosToPrecision(t.asInstanceOf[TimestampNanosVal], precision)
-          // Like the micro path, DATE and micro timestamps keep their microsecond value.
-          case DateType =>
-            TimestampNanosVal.fromParts(daysToMicros(t.asInstanceOf[Int], zoneId), 0.toShort)
-          case TimestampType | TimestampNTZType =>
-            TimestampNanosVal.fromParts(t.asInstanceOf[Long], 0.toShort)
-        }
+        parseStringNanos(str.asInstanceOf[UTF8String], input, precision)
       }
   }
 
@@ -2042,68 +2037,46 @@ case class GetTimestamp(
   }
 
   private def nanosGenCode(ctx: CodegenContext, ev: ExprCode, precision: Int): ExprCode = {
-    val tnv = classOf[TimestampNanosVal].getName
-    left.dataType match {
-      case _: StringType =>
-        val utils = classOf[DateTimeExpressionUtils].getName
-        val parseMethod = if (forTimestampNTZ) "parseWithoutTimeZoneNanos" else "parseNanos"
-        def parseTimestampCode(formatterExpr: String, inputExpr: String): String = {
-          if (failOnError) {
-            s"""${ev.value} = $utils.parseToTimestampNanosExact(
-               |    $formatterExpr, $inputExpr, $precision,
-               |    $forTimestampNTZ, "$suggestedFuncOnFail");""".stripMargin
-          } else {
-            s"""
-               |try {
-               |  ${ev.value} = $formatterExpr.$parseMethod($inputExpr, $precision);
-               |} catch (java.time.DateTimeException e) {
-               |  ${ev.isNull} = true;
-               |} catch (java.text.ParseException e) {
-               |  ${ev.isNull} = true;
-               |}
-               |""".stripMargin
-          }
-        }
-        formatterOption.map { fmt =>
-          val df = classOf[TimestampFormatter].getName
-          val formatterName = ctx.addReferenceObj("formatter", fmt, df)
-          nullSafeCodeGen(ctx, ev, (datetimeStr, _) =>
-            parseTimestampCode(formatterName, s"$datetimeStr.toString()"))
-        }.getOrElse {
-          val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
-          val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
-          val ldf = LegacyDateFormats.getClass.getName.stripSuffix("$")
-          val timestampFormatter = ctx.freshName("timestampFormatter")
-          // Passes `forTimestampNTZ` like `getFormatter` in the interpreted path.
-          nullSafeCodeGen(ctx, ev, (string, format) =>
-            s"""
-               |$tf $timestampFormatter = $tf$$.MODULE$$.apply(
-               |  $format.toString(),
-               |  $zid,
-               |  $ldf$$.MODULE$$.SIMPLE_DATE_FORMAT(),
-               |  true,
-               |  $forTimestampNTZ);
-               |${parseTimestampCode(timestampFormatter, s"$string.toString()")}
-               |""".stripMargin)
-        }
-      case other =>
-        val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-        val eval1 = left.genCode(ctx)
-        val result = other match {
-          case _: AnyTimestampNanoType =>
-            s"$dtu.truncateTimestampNanosToPrecision(${eval1.value}, $precision)"
-          case DateType =>
-            val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
-            s"$tnv.fromParts($dtu.daysToMicros(${eval1.value}, $zid), (short) 0)"
-          case TimestampType | TimestampNTZType => s"$tnv.fromParts(${eval1.value}, (short) 0)"
-        }
-        ev.copy(code = code"""
-          ${eval1.code}
-          boolean ${ev.isNull} = ${eval1.isNull};
-          $tnv ${ev.value} = null;
-          if (!${ev.isNull}) {
-            ${ev.value} = $result;
-          }""")
+    val utils = classOf[DateTimeExpressionUtils].getName
+    val parseMethod = if (forTimestampNTZ) "parseWithoutTimeZoneNanos" else "parseNanos"
+    def parseTimestampCode(formatterExpr: String, inputExpr: String): String = {
+      if (failOnError) {
+        s"""${ev.value} = $utils.parseToTimestampNanosExact(
+           |    $formatterExpr, $inputExpr, $precision,
+           |    $forTimestampNTZ, "$suggestedFuncOnFail");""".stripMargin
+      } else {
+        s"""
+           |try {
+           |  ${ev.value} = $formatterExpr.$parseMethod($inputExpr, $precision);
+           |} catch (java.time.DateTimeException e) {
+           |  ${ev.isNull} = true;
+           |} catch (java.text.ParseException e) {
+           |  ${ev.isNull} = true;
+           |}
+           |""".stripMargin
+      }
+    }
+    formatterOption.map { fmt =>
+      val df = classOf[TimestampFormatter].getName
+      val formatterName = ctx.addReferenceObj("formatter", fmt, df)
+      nullSafeCodeGen(ctx, ev, (datetimeStr, _) =>
+        parseTimestampCode(formatterName, s"$datetimeStr.toString()"))
+    }.getOrElse {
+      val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
+      val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
+      val ldf = LegacyDateFormats.getClass.getName.stripSuffix("$")
+      val timestampFormatter = ctx.freshName("timestampFormatter")
+      // Passes `forTimestampNTZ` like `getFormatter` in the interpreted path.
+      nullSafeCodeGen(ctx, ev, (string, format) =>
+        s"""
+           |$tf $timestampFormatter = $tf$$.MODULE$$.apply(
+           |  $format.toString(),
+           |  $zid,
+           |  $ldf$$.MODULE$$.SIMPLE_DATE_FORMAT(),
+           |  true,
+           |  $forTimestampNTZ);
+           |${parseTimestampCode(timestampFormatter, s"$string.toString()")}
+           |""".stripMargin)
     }
   }
 
@@ -2183,8 +2156,8 @@ object ParseToTimestampNTZExpressionBuilder extends ExpressionBuilder {
     Arguments:
       * timestamp_str - A string to be parsed to timestamp with local time zone.
         An expression that evaluates to a string, date, timestamp, or numeric. A nanosecond-precision
-        timestamp keeps its precision if `precision` is omitted. With `precision`, a numeric input is
-        parsed as a string.
+        timestamp keeps its precision if `precision` is omitted. With a `precision` in [7, 9], a
+        numeric input is parsed as a string.
       * fmt - Timestamp format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
               date and time format patterns.
         An expression that evaluates to a string.
@@ -2231,8 +2204,8 @@ object ParseToTimestampLTZExpressionBuilder extends ExpressionBuilder {
     Arguments:
       * timestamp_str - A string to be parsed to timestamp.
         An expression that evaluates to a string, date, timestamp, or numeric. A nanosecond-precision
-        timestamp keeps its precision if `precision` is omitted. With `precision`, a numeric input is
-        parsed as a string.
+        timestamp keeps its precision if `precision` is omitted. With a `precision` in [7, 9], a
+        numeric input is parsed as a string.
       * fmt - Timestamp format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
               date and time format patterns.
         An expression that evaluates to a string.
@@ -2324,8 +2297,7 @@ abstract class ToTimestamp
         StringTypeWithCollation(supportsTrimCollation = true),
         DateType,
         TimestampType,
-        TimestampNTZType,
-        AnyTimestampNanoType),
+        TimestampNTZType),
       StringTypeWithCollation(supportsTrimCollation = true))
 
   override def dataType: DataType = LongType
@@ -2467,9 +2439,20 @@ abstract class ToTimestamp
 }
 
 abstract class UnixTime extends ToTimestamp {
-  // For a nanosecond-precision timestamp input the result stays whole-second BIGINT, so the
-  // sub-second digits are dropped.
   override val downScaleFactor: Long = MICROS_PER_SECOND
+
+  // In addition to the input types accepted by the base `ToTimestamp`, the timestamp-argument
+  // form of `unix_timestamp` / `to_unix_timestamp` also accepts the nanosecond-precision
+  // timestamp types. The result stays whole-second BIGINT, so the sub-second digits are dropped.
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(
+      TypeCollection(
+        StringTypeWithCollation(supportsTrimCollation = true),
+        DateType,
+        TimestampType,
+        TimestampNTZType,
+        AnyTimestampNanoType),
+      StringTypeWithCollation(supportsTrimCollation = true))
 }
 
 /**
@@ -3419,8 +3402,8 @@ object TryToDateExpressionBuilder extends ExpressionBuilder {
     Arguments:
       * timestamp_str - A string to be parsed to timestamp.
         An expression that evaluates to a string, date, timestamp, or numeric. A nanosecond-precision
-        timestamp keeps its precision if `precision` is omitted. With `precision`, a numeric input is
-        parsed as a string.
+        timestamp keeps its precision if `precision` is omitted. With a `precision` in [7, 9], a
+        numeric input is parsed as a string.
       * fmt - Timestamp format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
               date and time format patterns.
         An expression that evaluates to a string.
