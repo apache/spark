@@ -22,7 +22,7 @@ import at runtime, as elsewhere in the worker.
 """
 
 from collections.abc import Callable, Iterator
-from typing import TYPE_CHECKING, Any, NamedTuple, TypeVar
+from typing import TYPE_CHECKING, Any, NamedTuple, Protocol, TypeVar
 
 if TYPE_CHECKING:
     import pyarrow as pa
@@ -55,12 +55,19 @@ class UDF(NamedTuple):
     return_type: Any
 
 
+class UDTFInstance(Protocol):
+    """An instance of the user's UDTF class, or the PartitionedUDTF wrapping one: an object whose
+    methods are called, not a function. ``terminate`` and ``cleanup`` are optional."""
+
+    def eval(self, *args: Any, **kwargs: Any) -> Any: ...
+
+
 class UDTF(NamedTuple):
     """The UDTF as read by ``read_single_udtf``."""
 
-    # The UDTF instance, wrapped in the handler's partition_wrapper when its TABLE argument
-    # has PARTITION BY expressions.
-    udtf: Any
+    # Wrapped in the handler's partition_wrapper when its TABLE argument has PARTITION BY
+    # expressions.
+    udtf: UDTFInstance
     args_offsets: list[int]
     kwargs_offsets: dict[str, int]
     return_type: "StructType"

@@ -609,7 +609,7 @@ class UDTFEvalTypeHandler(EvalTypeHandler[InputBatch, OutputBatch]):
         udtf = udfs[0].udtf
         self._return_type = udfs[0].return_type
         self._eval_method, self._args_kwargs_offsets = wrap_kwargs_support(
-            getattr(udtf, "eval"), udfs[0].args_offsets, udfs[0].kwargs_offsets
+            udtf.eval, udfs[0].args_offsets, udfs[0].kwargs_offsets
         )
         self._terminate_method = getattr(udtf, "terminate", None)
         self._cleanup_method = getattr(udtf, "cleanup", None)
@@ -654,7 +654,7 @@ class TableUDTFHandler(EvalTypeHandler[Any, tuple]):
         self._check_output_row_against_schema = build_null_checker(return_type)
 
         eval_func_kwargs_support, self._args_kwargs_offsets = wrap_kwargs_support(
-            getattr(udtf, "eval"), udfs[0].args_offsets, udfs[0].kwargs_offsets
+            udtf.eval, udfs[0].args_offsets, udfs[0].kwargs_offsets
         )
         self._eval = self._wrap_udtf(eval_func_kwargs_support, return_type)
 
