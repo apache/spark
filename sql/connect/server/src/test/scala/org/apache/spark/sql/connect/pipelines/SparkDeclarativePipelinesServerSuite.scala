@@ -1165,14 +1165,17 @@ class SparkDeclarativePipelinesServerSuite
     }
   }
 
-  // Helper to build a SqlCommand ExecutePlanRequest with PipelineAnalysisContext.
+  // Helper to build a SqlCommand ExecutePlanRequest with PipelineAnalysisContext. A flow name
+  // marks the request as coming from inside a pipeline flow function.
   private def buildSqlCommandRequestWithPipelineContext(
       graphId: String,
-      input: proto.Relation): proto.ExecutePlanRequest = {
-    val context = proto.PipelineAnalysisContext
+      input: proto.Relation,
+      flowName: Option[String] = None): proto.ExecutePlanRequest = {
+    val contextBuilder = proto.PipelineAnalysisContext
       .newBuilder()
       .setDataflowGraphId(graphId)
-      .build()
+    flowName.foreach(contextBuilder.setFlowName)
+    val context = contextBuilder.build()
     val userContext = proto.UserContext
       .newBuilder()
       .addExtensions(com.google.protobuf.Any.pack(context))
@@ -1231,82 +1234,93 @@ class SparkDeclarativePipelinesServerSuite
     proto.Relation.newBuilder().setWithRelations(withRelationsBuilder.build()).build()
   }
 
-  test(
+  namedGridTest(
     "SPARK-57189: blockUnsupportedSqlCommand catches Command at root of WITH_RELATIONS " +
-      "without executing it") {
-    withRawBlockingStub { implicit stub =>
-      val graphId = createDataflowGraph
-      val tableName = "spark_catalog.default.test_with_relations_root_table"
-      try {
-        sql(s"DROP TABLE IF EXISTS $tableName")
-        val request = buildSqlCommandRequestWithPipelineContext(
-          graphId,
-          withRelationsRelation(
-            rootSql = s"CREATE TABLE $tableName (id INT) USING parquet",
-            refs = Seq("ref0" -> "SELECT 1 AS id")))
-        val ex = intercept[RuntimeException] {
-          stub.executePlan(request).next()
+      "without executing it")(
+    Map("outside a flow function" -> None, "inside a flow function" -> Some("flow1"))) {
+    flowName =>
+      withRawBlockingStub { implicit stub =>
+        val graphId = createDataflowGraph
+        val tableName = "spark_catalog.default.test_with_relations_root_table"
+        try {
+          sql(s"DROP TABLE IF EXISTS $tableName")
+          val request = buildSqlCommandRequestWithPipelineContext(
+            graphId,
+            flowName = flowName,
+            input = withRelationsRelation(
+              rootSql = s"CREATE TABLE $tableName (id INT) USING parquet",
+              refs = Seq("ref0" -> "SELECT 1 AS id")))
+          val ex = intercept[RuntimeException] {
+            stub.executePlan(request).next()
+          }
+          assert(ex.getMessage.contains("UNSUPPORTED_PIPELINE_SPARK_SQL_COMMAND"))
+          // Verify the guard caught the Command before any side effect could materialize.
+          assert(!spark.catalog.tableExists(tableName))
+        } finally {
+          sql(s"DROP TABLE IF EXISTS $tableName")
         }
-        assert(ex.getMessage.contains("UNSUPPORTED_PIPELINE_SPARK_SQL_COMMAND"))
-        // Verify the guard caught the Command before any side effect could materialize.
-        assert(!spark.catalog.tableExists(tableName))
-      } finally {
-        sql(s"DROP TABLE IF EXISTS $tableName")
       }
-    }
   }
 
-  test(
+  namedGridTest(
     "SPARK-57189: blockUnsupportedSqlCommand catches Command inside reference of " +
-      "WITH_RELATIONS without executing it") {
-    withRawBlockingStub { implicit stub =>
-      val graphId = createDataflowGraph
-      val tableName = "spark_catalog.default.test_with_relations_ref_table"
-      try {
-        sql(s"DROP TABLE IF EXISTS $tableName")
-        val request = buildSqlCommandRequestWithPipelineContext(
-          graphId,
-          withRelationsRelation(
-            rootSql = "SELECT * FROM ref0",
-            refs = Seq("ref0" -> s"CREATE TABLE $tableName (id INT) USING parquet")))
-        val ex = intercept[RuntimeException] {
-          stub.executePlan(request).next()
+      "WITH_RELATIONS without executing it")(
+    Map("outside a flow function" -> None, "inside a flow function" -> Some("flow1"))) {
+    flowName =>
+      withRawBlockingStub { implicit stub =>
+        val graphId = createDataflowGraph
+        val tableName = "spark_catalog.default.test_with_relations_ref_table"
+        try {
+          sql(s"DROP TABLE IF EXISTS $tableName")
+          val request = buildSqlCommandRequestWithPipelineContext(
+            graphId,
+            flowName = flowName,
+            input = withRelationsRelation(
+              rootSql = "SELECT * FROM ref0",
+              refs = Seq("ref0" -> s"CREATE TABLE $tableName (id INT) USING parquet")))
+          val ex = intercept[RuntimeException] {
+            stub.executePlan(request).next()
+          }
+          assert(ex.getMessage.contains("UNSUPPORTED_PIPELINE_SPARK_SQL_COMMAND"))
+          // Verify the Command in the reference did not execute as a side effect.
+          assert(!spark.catalog.tableExists(tableName))
+        } finally {
+          sql(s"DROP TABLE IF EXISTS $tableName")
         }
-        assert(ex.getMessage.contains("UNSUPPORTED_PIPELINE_SPARK_SQL_COMMAND"))
-        // Verify the Command in the reference did not execute as a side effect.
-        assert(!spark.catalog.tableExists(tableName))
-      } finally {
-        sql(s"DROP TABLE IF EXISTS $tableName")
       }
-    }
   }
 
-  test(
+  namedGridTest(
     "SPARK-57189: blockUnsupportedSqlCommand catches Command in a WITH_RELATIONS used as a " +
-      "reference input without executing it") {
-    withRawBlockingStub { implicit stub =>
-      val graphId = createDataflowGraph
-      val tableName = "spark_catalog.default.test_with_relations_nested_ref_table"
-      try {
-        sql(s"DROP TABLE IF EXISTS $tableName")
-        // A DataFrame from spark.sql("...", df=...) carries a WITH_RELATIONS relation, and it
-        // becomes a reference input when passed to another spark.sql call.
-        val nested = withRelationsRelation(
-          rootSql = s"CREATE TABLE $tableName (id INT) USING parquet",
-          refs = Seq("inner0" -> "SELECT 1 AS id"))
-        val request = buildSqlCommandRequestWithPipelineContext(
-          graphId,
-          withRelationsRelationOf(rootSql = "SELECT * FROM ref0", refs = Seq("ref0" -> nested)))
-        val ex = intercept[RuntimeException] {
-          stub.executePlan(request).next()
+      "reference input without executing it")(
+    Map("outside a flow function" -> None, "inside a flow function" -> Some("flow1"))) {
+    flowName =>
+      withRawBlockingStub { implicit stub =>
+        val graphId = createDataflowGraph
+        val tableName = "spark_catalog.default.test_with_relations_nested_ref_table"
+        try {
+          sql(s"DROP TABLE IF EXISTS $tableName")
+          // A DataFrame from spark.sql("...", df=...) carries a WITH_RELATIONS relation, and it
+          // becomes a reference input when passed to another spark.sql call.
+          val nested = withRelationsRelation(
+            rootSql = s"CREATE TABLE $tableName (id INT) USING parquet",
+            refs = Seq("inner0" -> "SELECT 1 AS id"))
+          val request = buildSqlCommandRequestWithPipelineContext(
+            graphId,
+            flowName = flowName,
+            input = withRelationsRelationOf(
+              rootSql = "SELECT * FROM ref0",
+              refs = Seq("ref0" -> nested)))
+          val ex = intercept[RuntimeException] {
+            stub.executePlan(request).next()
+          }
+          assert(ex.getMessage.contains("UNSUPPORTED_PIPELINE_SPARK_SQL_COMMAND"))
+          // Verify the Command in the nested WITH_RELATIONS did not execute as a side effect.
+          assert(!spark.catalog.tableExists(tableName))
+        } finally {
+          sql(s"DROP TABLE IF EXISTS $tableName")
         }
-        assert(ex.getMessage.contains("UNSUPPORTED_PIPELINE_SPARK_SQL_COMMAND"))
-        // Verify the Command in the nested WITH_RELATIONS did not execute as a side effect.
-        assert(!spark.catalog.tableExists(tableName))
-      } finally {
-        sql(s"DROP TABLE IF EXISTS $tableName")
       }
-    }
   }
 
   test(
