@@ -114,9 +114,12 @@ object LogicalQueryStageStrategy extends Strategy {
                       case BuildLeft => leftKeys
                       case BuildRight => rightKeys
                     }
-                    // Mode was bound against the physical exchange output (`bqs.output`).
-                    // Binding against `bqs.output` ensures ordinals align even when logical
-                    // projections above the stage were collapsed or eliminated.
+                    // The mode's keys are ordinals, bound at plan time against the
+                    // exchange input, which is `bqs.output`. The `LogicalQueryStage`
+                    // carries the logical fragment instead, and its output can differ
+                    // from the stage's column order after AQE re-planning, so binding
+                    // against `bqs.output` compares ordinals against the same order
+                    // the broadcast was actually keyed on.
                     val bound = BindReferences.bindReferences(buildKeys, bqs.output)
                     if (mode == RangeRelationBroadcastMode(bound, mode.indexKind)) {
                       Some(RangeBroadcastJoinMatch(

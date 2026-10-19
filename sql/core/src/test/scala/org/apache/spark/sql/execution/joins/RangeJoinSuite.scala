@@ -322,6 +322,45 @@ class RangeJoinSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("left semi and left anti lazy probes over a build with no common point") {
+    // Staggered build intervals share no common point, so the probe cannot take
+    // the all-rows shortcut and must walk the interval tree instead. With codegen
+    // both on and off, the walk is lazy: the first matching candidate ends the probe.
+    val n = 2000
+    val staggered = spark.createDataFrame(
+      sparkContext.parallelize((0 until n).map(i => Row(i, i + 100))),
+      new StructType().add("low2", IntegerType).add("high2", IntegerType))
+    val onePoint = spark.createDataFrame(
+      sparkContext.parallelize(Seq(Row(150))), new StructType().add("point", IntegerType))
+
+    val leftPlan = onePoint.queryExecution.sparkPlan
+    val rightPlan = staggered.queryExecution.sparkPlan
+    val point = leftPlan.output.head
+    val bounds = rightPlan.output
+
+    Seq(true, false).foreach { codegenEnabled =>
+      val factoryMode = if (codegenEnabled) "CODEGEN_ONLY" else "NO_CODEGEN"
+      withSQLConf(
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled.toString,
+        SQLConf.CODEGEN_FALLBACK.key -> "false",
+        SQLConf.CODEGEN_FACTORY_MODE.key -> factoryMode) {
+        Seq(LeftSemi, LeftAnti).foreach { joinType =>
+          val counter = spark.sparkContext.longAccumulator("numCandidates")
+          val baseCond =
+            pointCondition(point, bounds(0), bounds(1), lowInclusive = true, highInclusive = true)
+          val exec = rangeJoinExec(
+            leftPlan, rightPlan, BuildRight, joinType,
+            buildKeys = bounds, streamedKeys = point :: Nil,
+            condition = CountingPredicate(counter, baseCond))
+          QueryTest.executePlan(exec, spark.sqlContext)
+          assert(counter.value < n,
+            s"$joinType (codegen=$codegenEnabled) examined ${counter.value} of $n " +
+              "staggered candidates; the first candidate should have ended the probe")
+        }
+      }
+    }
+  }
+
   test("condition and keys stay on the operator") {
     val leftPlan = intervals1.queryExecution.executedPlan
     val rightPlan = points.queryExecution.executedPlan

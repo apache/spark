@@ -167,6 +167,31 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
         |""".stripMargin)
   }
 
+  /** Points and bounds for single-inequality joins on boxed key families. */
+  private def setupPartialRangeViews(): Unit = {
+    sql(
+      """
+        |CREATE OR REPLACE TEMP VIEW dbl_partial_points(d) AS VALUES
+        |  (0.5), (3.0), (6.0),
+        |  (CAST(NULL AS DOUBLE))
+        |""".stripMargin)
+    sql(
+      """
+        |CREATE OR REPLACE TEMP VIEW dbl_partial_bounds(lo) AS VALUES
+        |  (1.0), (4.0), (7.5)
+        |""".stripMargin)
+    sql(
+      """
+        |CREATE OR REPLACE TEMP VIEW str_partial_points(s) AS VALUES
+        |  ('a'), ('m'), ('z')
+        |""".stripMargin)
+    sql(
+      """
+        |CREATE OR REPLACE TEMP VIEW str_partial_bounds(lo) AS VALUES
+        |  ('b'), ('n')
+        |""".stripMargin)
+  }
+
   private def setupDateAndTimestampViews(): Unit = {
     sql(
       """
@@ -454,6 +479,7 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
     setupDecimalViews()
     setupCollatedStrings()
     setupIntervalViews()
+    setupPartialRangeViews()
     val queries = Seq(
       s"SELECT s.id, l.zip_id FROM signin_ip s JOIN ip_lookup l ON $pointCond",
       s"SELECT s.id, l.zip_id FROM signin_ip s LEFT JOIN ip_lookup l ON $pointCond",
@@ -466,7 +492,13 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
       "SELECT a.lo, a.hi, b.lo, b.hi FROM intervals_a a JOIN intervals_b b " +
         "ON a.lo < b.hi AND b.lo < a.hi",
       "SELECT a.lo, a.hi, b.lo, b.hi FROM intervals_a a LEFT JOIN intervals_b b ON a.hi < b.lo",
-      "SELECT /*+ BROADCAST(a) */ a.lo, b.hi FROM intervals_a a JOIN intervals_b b ON a.lo < b.hi")
+      "SELECT /*+ BROADCAST(a) */ a.lo, b.hi FROM intervals_a a JOIN intervals_b b ON a.lo < b.hi",
+      // Double and string keys stay on the boxed point index, so these queries
+      // reach its generated probe code, which int partial ranges never do.
+      "SELECT p.d, b.lo FROM dbl_partial_points p JOIN dbl_partial_bounds b ON p.d < b.lo",
+      "SELECT p.d, b.lo FROM dbl_partial_bounds b JOIN dbl_partial_points p ON p.d > b.lo",
+      "SELECT p.s, b.lo FROM str_partial_points p JOIN str_partial_bounds b ON p.s < b.lo",
+      "SELECT p.s, b.lo FROM str_partial_bounds b JOIN str_partial_points p ON p.s > b.lo")
     queries.foreach { query =>
       val expected = sql(query).collect()
       withRangeJoin(
@@ -487,6 +519,7 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
     setupDecimalViews()
     setupCollatedStrings()
     setupIntervalViews()
+    setupPartialRangeViews()
     val queries = Seq(
       s"SELECT s.id, l.zip_id FROM signin_ip s JOIN ip_lookup l ON $pointCond",
       s"SELECT s.id, l.zip_id FROM signin_ip s LEFT JOIN ip_lookup l ON $pointCond",
@@ -499,7 +532,13 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
       "SELECT a.lo, a.hi, b.lo, b.hi FROM intervals_a a JOIN intervals_b b " +
         "ON a.lo < b.hi AND b.lo < a.hi",
       "SELECT a.lo, a.hi, b.lo, b.hi FROM intervals_a a LEFT JOIN intervals_b b ON a.hi < b.lo",
-      "SELECT /*+ BROADCAST(a) */ a.lo, b.hi FROM intervals_a a JOIN intervals_b b ON a.lo < b.hi")
+      "SELECT /*+ BROADCAST(a) */ a.lo, b.hi FROM intervals_a a JOIN intervals_b b ON a.lo < b.hi",
+      // Boxed point-index probes: candidates() must take the PointIndex branch
+      // that int partial ranges never reach.
+      "SELECT p.d, b.lo FROM dbl_partial_points p JOIN dbl_partial_bounds b ON p.d < b.lo",
+      "SELECT p.d, b.lo FROM dbl_partial_bounds b JOIN dbl_partial_points p ON p.d > b.lo",
+      "SELECT p.s, b.lo FROM str_partial_points p JOIN str_partial_bounds b ON p.s < b.lo",
+      "SELECT p.s, b.lo FROM str_partial_bounds b JOIN str_partial_points p ON p.s > b.lo")
     queries.foreach { query =>
       val expected = sql(query).collect()
       withRangeJoin(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
