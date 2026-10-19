@@ -184,8 +184,8 @@ case class TransformExpression(
    * `KeyedPartitioning.supportsExpressions` reject the partitioning outright -- so SPJ is silently
    * lost. Use it for any retargeting of a partition transform.
    *
-   * Callers: `KeyedShuffleSpec.createPartitioning`, which retargets a transform at the other side's
-   * clustering key.
+   * Callers: `KeyedShuffleSpec.rebuiltOver`, which rebuilds a transform over the other side's key,
+   * and `GroupPartitionsExec`, which rebuilds a reduced expression over each member's argument.
    */
   def rewriteColumnSlots(rewriteColumn: Expression => Expression): TransformExpression =
     copy(children = children.map {

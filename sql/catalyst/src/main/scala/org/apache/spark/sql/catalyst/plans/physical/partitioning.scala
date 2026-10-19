@@ -2118,9 +2118,9 @@ case class KeyedShuffleSpec(
   }
 
   /**
-   * Whether every argument of `transform` is a bare column. `isExpressionCompatible` asks it of
-   * both sides before it compares anything, `canCreatePartitioning` asks it of a template, and
-   * `rebuiltOver` asserts it.
+   * Whether every argument of `transform` other than its literal parameters is a bare column.
+   * `isExpressionCompatible` asks it of both sides before it compares anything,
+   * `canCreatePartitioning` asks it of a template, and `rebuiltOver` asserts it.
    *
    * `keyPositions` pairs two sides up by the column each expression references. That pairing
    * describes one key space when the argument is the column itself. `bucket(4, b + 1)` is a
@@ -2134,28 +2134,30 @@ case class KeyedShuffleSpec(
    * can overflow.
    */
   private def argumentsAreColumns(transform: TransformExpression): Boolean =
-    transform.children.forall(_.isInstanceOf[Attribute])
+    transform.columnSlots.forall(_.isInstanceOf[Attribute])
 
   /**
-   * `transform`, whose arguments are bare columns, with each replaced by `key`, which may be any
+   * `transform`, whose arguments other than its literal parameters are bare columns, with each
+   * replaced by `key`, which may be any
    * expression. Any other argument would lose what surrounds its column, e.g. the `+ 1` of
    * `bucket(4, b + 1)`.
    */
   private def rebuiltOver(transform: TransformExpression, key: Expression)
       : TransformExpression = {
     assert(argumentsAreColumns(transform), s"Cannot rebuild $transform over $key")
-    transform.copy(children = transform.children.map(_ => key))
+    transform.rewriteColumnSlots(_ => key)
   }
 
   /**
-   * The arguments of a transform with their one column replaced by a placeholder of its type, or
+   * The arguments of a transform other than its literal parameters, with their one column replaced
+   * by a placeholder of its type, or
    * `None` when they reference other than one column or are not deterministic, or `expression` is
    * not a transform. Two transforms with the same function and shape are the same function of
    * their columns, so a join that pairs the columns up pairs the keys up too.
    */
   private def argumentShape(expression: Expression): Option[Seq[Expression]] = expression match {
     case t: TransformExpression if t.references.size == 1 && t.deterministic =>
-      Some(t.children.map(QueryPlan.normalizeExpressions(_, t.references.toSeq)))
+      Some(t.columnSlots.map(QueryPlan.normalizeExpressions(_, t.references.toSeq)))
     case _ => None
   }
 

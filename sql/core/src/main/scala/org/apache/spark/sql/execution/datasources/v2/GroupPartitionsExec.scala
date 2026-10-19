@@ -608,11 +608,13 @@ private[sql] object GroupPartitionsExec {
                   // argument takes the place of `reduced`'s. A side shuffled onto this layout
                   // reports `bucket(8, b + 1)` next to `bucket(8, id)`, or `b + 1` next to an
                   // identity `id`.
+                  // Only the column argument is replaced; `reduced` keeps its own literal
+                  // parameters, e.g. the reduced bucket count.
                   val argument = expr match {
-                    case t: TransformExpression => t.children
-                    case e => Seq(e)
+                    case t: TransformExpression => t.columnSlots.head
+                    case e => e
                   }
-                  reduced.copy(children = argument)
+                  reduced.rewriteColumnSlots(_ => argument)
                 case (expr, None) => expr
               }
             case None => projectedExpressions
