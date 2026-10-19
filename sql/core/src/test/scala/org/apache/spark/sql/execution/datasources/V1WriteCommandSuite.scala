@@ -370,20 +370,25 @@ class V1WriteCommandSuite extends SharedSparkSession with V1WriteCommandSuiteBas
     val data = Seq((0, 0.0), (1, -0.0), (2, Double.NaN), (3, 0.0), (4, negativeNaN), (5, -0.0),
       (6, 1.0))
     Seq("DOUBLE", "FLOAT").foreach { dataType =>
+      val input = data.toDF("id", "p").selectExpr("id", s"CAST(p AS $dataType) AS p").coalesce(1)
       // With 0 the rows are sorted, with 1 the concurrent writer falls back to sorting them, and
-      // with 4 they are all written by concurrent writers.
+      // with 4 they are all written by concurrent writers. Rows already sorted by p are written
+      // as they are, where 0.0 and -0.0 are still interleaved.
       Seq(0, 1, 4).foreach { maxWriters =>
-        withSQLConf(SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS.key -> maxWriters.toString) {
-          withPlannedWrite { _ =>
-            withTempPath { path =>
-              data.toDF("id", "p").selectExpr("id", s"CAST(p AS $dataType) AS p").coalesce(1)
-                .write.partitionBy("p").parquet(path.toString)
-              assert(path.listFiles().filter(_.isDirectory).map(_.getName).sorted ===
-                Array("p=0.0", "p=1.0", "p=NaN"))
-              val df = spark.read.parquet(path.toString)
-              checkAnswer(df.where("p = 0").select("id"), Seq(0, 1, 3, 5).map(Row(_)))
-              checkAnswer(df.where("isnan(p)").select("id"), Seq(2, 4).map(Row(_)))
-              checkAnswer(df.where("p = 1").select("id"), Row(6))
+        Seq(false, true).foreach { sorted =>
+          withSQLConf(SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS.key -> maxWriters.toString) {
+            withPlannedWrite { _ =>
+              withTempPath { path =>
+                (if (sorted) input.sortWithinPartitions("p") else input)
+                  .write.partitionBy("p").parquet(path.toString)
+                if (sorted) assert(FileFormatWriter.outputOrderingMatched)
+                assert(path.listFiles().filter(_.isDirectory).map(_.getName).sorted ===
+                  Array("p=0.0", "p=1.0", "p=NaN"))
+                val df = spark.read.parquet(path.toString)
+                checkAnswer(df.where("p = 0").select("id"), Seq(0, 1, 3, 5).map(Row(_)))
+                checkAnswer(df.where("isnan(p)").select("id"), Seq(2, 4).map(Row(_)))
+                checkAnswer(df.where("p = 1").select("id"), Row(6))
+              }
             }
           }
         }
