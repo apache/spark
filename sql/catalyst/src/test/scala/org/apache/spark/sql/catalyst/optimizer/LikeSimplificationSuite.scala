@@ -82,6 +82,9 @@ class LikeSimplificationSuite extends PlanTest {
     val input = Uuid(Some(0L))
     val originalQuery = testRelation.where(input like "abc%def").analyze
     comparePlans(Optimize.execute(originalQuery), originalQuery)
+    // The same holds for a pattern with escape sequences.
+    val escapedQuery = testRelation.where(input like "abc\\%%def").analyze
+    comparePlans(Optimize.execute(escapedQuery), escapedQuery)
 
     // A replacement that reads the input once is still made.
     comparePlans(

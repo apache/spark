@@ -994,7 +994,7 @@ object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
         case Seq(LikeLiteral(str)) => Some(equalToExpr(input, str))
         case Seq(LikeLiteral(prefix), LikeWildcard) => Some(startsWithExpr(input, prefix))
         case Seq(LikeWildcard, LikeLiteral(postfix)) => Some(endsWithExpr(input, postfix))
-        case Seq(LikeLiteral(prefix), LikeWildcard, LikeLiteral(postfix)) =>
+        case Seq(LikeLiteral(prefix), LikeWildcard, LikeLiteral(postfix)) if input.deterministic =>
           Some(startsAndEndsWithExpr(input, prefix, postfix))
         case Seq(LikeWildcard, LikeLiteral(infix), LikeWildcard) =>
           Some(containsExpr(input, infix))
