@@ -112,9 +112,7 @@ private[spark] class HadoopConfDriverFeatureStep(conf: KubernetesConf)
     }
   }
 
-  // SPARK-38079: this config map is mounted by the driver pod, so it must be created as a
-  // pre-resource (before the pod itself) to avoid a "configmap ... not found" mount race.
-  override def getAdditionalPreKubernetesResources(): Seq[HasMetadata] = {
+  override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
     if (confDir.isDefined) {
       val fileMap = confFiles.map { file =>
         (file.getName(), Files.readString(file.toPath))

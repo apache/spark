@@ -56,6 +56,12 @@ you may set up a test cluster on your local machine using
 * You must have appropriate permissions to list, create, edit and delete
 [pods](https://kubernetes.io/docs/concepts/workloads/pods/) in your cluster. You can verify that you can list these resources
 by running `kubectl auth can-i <list|create|edit|delete> pods`.
+  * In cluster mode, `spark-submit` also needs the `patch` verb on pods: it creates the driver pod with a
+    [scheduling gate](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-scheduling-readiness/) and removes
+    the gate once the resources the driver mounts exist. A driver pod whose template sets `spec.nodeName` is not gated.
+    A scheduler that does not honor scheduling gates may leave the gated driver pod pending; for example,
+    Apache YuniKorn supports `spec.schedulingGates` since v1.7.0. Set
+    `spark.kubernetes.submission.useDriverSchedulingGate` to `false` to skip the gate.
   * The service account credentials used by the driver pods must be allowed to create pods, services and configmaps.
 * You must have [Kubernetes DNS](https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/) configured in your cluster.
 
@@ -1333,6 +1339,17 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>2.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.submission.useDriverSchedulingGate</code></td>
+  <td><code>true</code></td>
+  <td>
+    If true, in cluster mode the driver pod is created with a scheduling gate that is removed once the
+    resources the driver mounts exist. Removing the gate needs the <code>patch</code> verb on pods, and the
+    scheduler must honor scheduling gates. If false, the driver pod can be scheduled before those resources
+    exist, so the kubelet may report transient <code>FailedMount</code> events for them.
+  </td>
+  <td>4.4.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.report.interval</code></td>
   <td><code>1s</code></td>
   <td>
@@ -2265,10 +2282,27 @@ See the below table for the full list of pod specifications that will be overwri
   </td>
 </tr>
 <tr>
+  <td>nodeName</td>
+  <td>Kept as the template sets it</td>
+  <td>
+    A driver pod whose template sets <code>nodeName</code> is created without the scheduling gate described in
+    <code>spark.kubernetes.submission.useDriverSchedulingGate</code>, because Kubernetes rejects a pod with both.
+    The kubelet can therefore try to mount the driver's resources before they exist.
+  </td>
+</tr>
+<tr>
   <td>restartPolicy</td>
   <td><code>"never"</code></td>
   <td>
     Spark assumes that both drivers and executors never restart.
+  </td>
+</tr>
+<tr>
+  <td>schedulingGates</td>
+  <td>Adds <code>spark.apache.org/driver-resources</code> to driver pods</td>
+  <td>
+    Gates the template names are kept. Spark removes only its own gate, once the resources the driver mounts
+    exist. See <code>spark.kubernetes.submission.useDriverSchedulingGate</code>.
   </td>
 </tr>
 <tr>

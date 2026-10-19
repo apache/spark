@@ -39,7 +39,7 @@ class HadoopConfDriverFeatureStepSuite extends SparkFunSuite {
     val conf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
     val step = new HadoopConfDriverFeatureStep(conf)
     checkPod(step.configurePod(SparkPod.initialPod()))
-    assert(step.getAdditionalPreKubernetesResources().isEmpty)
+    assert(step.getAdditionalKubernetesResources().isEmpty)
   }
 
   test("create hadoop config map if config dir is defined") {
@@ -56,9 +56,7 @@ class HadoopConfDriverFeatureStepSuite extends SparkFunSuite {
     val step = new HadoopConfDriverFeatureStep(conf)
     checkPod(step.configurePod(SparkPod.initialPod()))
 
-    // SPARK-38079: the Hadoop conf map is a pre-resource so that it exists before the
-    // driver pod that mounts it is created.
-    val hadoopConfMap = filter[ConfigMap](step.getAdditionalPreKubernetesResources()).head
+    val hadoopConfMap = filter[ConfigMap](step.getAdditionalKubernetesResources()).head
     assert(hadoopConfMap.getData().keySet().asScala === confFiles)
   }
 

@@ -225,10 +225,7 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
     }
   }
 
-  // SPARK-38079: the krb5 config map, keytab secret, and delegation token secret below are
-  // all mounted by the driver pod, so they must be created as pre-resources (before the pod
-  // itself) to avoid a "configmap/secret ... not found" mount race.
-  override def getAdditionalPreKubernetesResources(): Seq[HasMetadata] = {
+  override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
     val encodeToString = Base64.getEncoder().encodeToString(_)
     Seq[HasMetadata]() ++ {
       krb5File.map { path =>

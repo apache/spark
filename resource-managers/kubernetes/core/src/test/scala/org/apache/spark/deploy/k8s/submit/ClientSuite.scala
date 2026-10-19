@@ -20,14 +20,18 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
+import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.api.model.apiextensions.v1.{CustomResourceDefinition, CustomResourceDefinitionBuilder}
 import io.fabric8.kubernetes.client.{KubernetesClient, Watch}
-import io.fabric8.kubernetes.client.dsl.{NamespaceableResource, PodResource}
+import io.fabric8.kubernetes.client.dsl.PodResource
+import io.fabric8.kubernetes.client.dsl.base.{PatchContext, PatchType}
 import org.mockito.{ArgumentCaptor, ArgumentMatchers, Mock, MockitoAnnotations}
-import org.mockito.Mockito.{doThrow, inOrder, never, verify, when}
+import org.mockito.Mockito.{doAnswer, never, verify, when}
+import org.mockito.invocation.InvocationOnMock
+import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfter
 import org.scalatestplus.mockito.MockitoSugar._
 
@@ -95,16 +99,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
 
   private val KEY_TO_PATH = keyToPath(SPARK_CONF_FILE_NAME)
 
-  // SPARK-38079: configMapNameDriver is a `def`, not a `val` (see KubernetesClientUtils --
-  // this is called exactly once per real submission, into a local val run() reuses, so unlike
-  // configMapNameExecutor it has no cross-call consistency requirement to preserve). So this
-  // cannot call it again here to predict the name run() actually used -- each call returns a
-  // different random one. Instead, this takes the config map's name as a parameter, letting
-  // every caller build its "expected pod" around whatever name was actually captured from the
-  // real call, rather than around a prediction that only `val`'s caching ever made valid.
-  private def fullExpectedPod(
-      configMapName: String,
-      keyToPaths: List[KeyToPath] = List(KEY_TO_PATH)) =
+  private def fullExpectedPod(keyToPaths: List[KeyToPath] = List(KEY_TO_PATH)) =
     new PodBuilder(BUILT_DRIVER_POD)
       .editSpec()
         .addToContainers(FULL_EXPECTED_CONTAINER)
@@ -112,36 +107,20 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
           .withName(SPARK_CONF_VOLUME_DRIVER)
           .withNewConfigMap()
             .withItems(keyToPaths.asJava)
-            .withName(configMapName)
+            .withName(KubernetesClientUtils.configMapNameDriver)
             .endConfigMap()
           .endVolume()
-        .addNewSchedulingGate(PRE_RESOURCES_SCHEDULING_GATE)
+        .addNewSchedulingGate(DRIVER_RESOURCES_SCHEDULING_GATE)
         .endSpec()
       .build()
 
-  private def podWithOwnerReference(
-      configMapName: String,
-      keyToPaths: List[KeyToPath] = List(KEY_TO_PATH)) =
-    new PodBuilder(fullExpectedPod(configMapName, keyToPaths))
+  private def podWithOwnerReference(keyToPaths: List[KeyToPath] = List(KEY_TO_PATH)) =
+    new PodBuilder(fullExpectedPod(keyToPaths))
       .editMetadata()
         .withUid(DRIVER_POD_UID)
         .endMetadata()
       .withApiVersion(DRIVER_POD_API_VERSION)
       .withKind(DRIVER_POD_KIND)
-      .build()
-
-  // SPARK-38079: what the created driver pod (i.e. podWithOwnerReference()) looks like once
-  // its pre-resources scheduling gate has been removed (see run()'s "Remove the pre-resources
-  // scheduling gate" step) -- this is the pod run()'s edit() call is applied against, not the
-  // pre-creation fullExpectedPod(), so this must be based on the former to actually match what
-  // a correct edit() call produces.
-  private def fullExpectedPodGateRemoved(
-      configMapName: String,
-      keyToPaths: List[KeyToPath] = List(KEY_TO_PATH)) =
-    new PodBuilder(podWithOwnerReference(configMapName, keyToPaths))
-      .editSpec()
-        .removeMatchingFromSchedulingGates(_.getName == PRE_RESOURCES_SCHEDULING_GATE)
-        .endSpec()
       .build()
 
   private val ADDITIONAL_RESOURCES_WITH_OWNER_REFERENCES = ADDITIONAL_RESOURCES.map { secret =>
@@ -193,23 +172,34 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
   @Mock
   private var resourceList: RESOURCE_LIST = _
 
-  @Mock
-  private var namedResource: NamespaceableResource[HasMetadata] = _
-
   private var kconf: KubernetesDriverConf = _
   private var createdPodArgumentCaptor: ArgumentCaptor[Pod] = _
   private var createdResourcesArgumentCaptor: ArgumentCaptor[Array[HasMetadata]] = _
-  // SPARK-38079: configMapNameDriver is a `def`, not a `val` (see KubernetesClientUtils), so
-  // the gated pod run() actually builds for a given test carries a config map name chosen at
-  // call time -- not one this suite could predict in advance by calling that `def` again
-  // itself. Each test instead reads the actual gated pod run() built, captured here off the
-  // podsWithNamespace.resource(...) call in the `before` block below, and builds its
-  // "expected"/"created" pod variants (podWithOwnerReference(), fullExpectedPodGateRemoved(),
-  // etc.) from that captured pod's own config map name instead.
-  private var gatedPodArgumentCaptor: ArgumentCaptor[Pod] = _
-  private def gatedPod: Pod = gatedPodArgumentCaptor.getValue
-  private def gatedConfigMapName: String = gatedPod.getSpec.getVolumes.asScala
-    .find(_.getName == SPARK_CONF_VOLUME_DRIVER).get.getConfigMap.getName
+  private var patchContextCaptor: ArgumentCaptor[PatchContext] = _
+  private var patchBodyCaptor: ArgumentCaptor[String] = _
+
+  // Every call run() makes against the mocks, recorded as it happens. A resource's owner
+  // reference is read when the call is made, since run() keeps mutating the same objects.
+  private val events = mutable.ArrayBuffer.empty[String]
+  private var resourceListFor: Seq[HasMetadata] => RESOURCE_LIST = _
+
+  private def describe(resource: HasMetadata): String = {
+    val owned = Option(resource.getMetadata.getOwnerReferences).exists(!_.isEmpty)
+    s"${resource.getKind}/${resource.getMetadata.getName}${if (owned) "+owner" else ""}"
+  }
+
+  private def answer[T](body: => T): Answer[T] = new Answer[T] {
+    override def answer(invocation: InvocationOnMock): T = body
+  }
+
+  private def mountedConfigMapName: String = createdPodArgumentCaptor.getValue.getSpec.getVolumes
+    .asScala.find(_.getName == SPARK_CONF_VOLUME_DRIVER).get.getConfigMap.getName
+
+  private def newClient(): Client = new Client(
+    kconf,
+    driverBuilder,
+    kubernetesClient,
+    loggingPodStatusWatcher)
 
   before {
     MockitoAnnotations.openMocks(this).close()
@@ -220,71 +210,53 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     when(podOperations.inNamespace(kconf.namespace)).thenReturn(podsWithNamespace)
     when(podsWithNamespace.withName(POD_NAME)).thenReturn(namedPods)
 
+    events.clear()
     createdPodArgumentCaptor = ArgumentCaptor.forClass(classOf[Pod])
     createdResourcesArgumentCaptor = ArgumentCaptor.forClass(classOf[Array[HasMetadata]])
-    gatedPodArgumentCaptor = ArgumentCaptor.forClass(classOf[Pod])
-    when(podsWithNamespace.resource(gatedPodArgumentCaptor.capture())).thenReturn(namedPods)
-    // SPARK-38079: the failure-cleanup catch blocks in run() delete the *created* driver pod
-    // via kubernetesClient.pods().resource(createdDriverPod) -- note: not .inNamespace(...)
-    // first, unlike the pre-creation .resource(...) call above -- so mock that chain too,
-    // resolving to the same namedPods mock instead of null, for any created (owner-reference-
-    // carrying) pod it might be called with.
+    patchContextCaptor = ArgumentCaptor.forClass(classOf[PatchContext])
+    patchBodyCaptor = ArgumentCaptor.forClass(classOf[String])
+    when(podsWithNamespace.resource(createdPodArgumentCaptor.capture())).thenReturn(namedPods)
     when(podOperations.resource(ArgumentMatchers.any[Pod]())).thenReturn(namedPods)
     when(resourceList.forceConflicts()).thenReturn(resourceList)
-    // SPARK-38079: the pod is created still scheduling-gated (see run()); .create() returns
-    // that gated pod, with its UID already assigned by the (simulated) API server. Mockito
-    // resolves the gatedPodArgumentCaptor.capture() matcher above against whatever pod this
-    // call is actually made with, so this answer sees the real captured pod too.
-    when(namedPods.create()).thenAnswer(_ => podWithOwnerReference(gatedConfigMapName))
-    // SPARK-38079: run() removes the gate via a single .edit(UnaryOperator[Pod]) call once
-    // its pre-resources exist. Mockito can't match a lambda by its behavior, so this answers
-    // by actually invoking whatever function run() passes in -- exactly like the real
-    // fabric8 implementation does -- against the created (owner-reference-carrying) pod, so
-    // the returned pod reflects whatever edit run() actually asked for.
-    when(namedPods.edit(ArgumentMatchers.any[java.util.function.UnaryOperator[Pod]]()))
-      .thenAnswer(invocation => {
-        val editFn = invocation.getArgument[java.util.function.UnaryOperator[Pod]](0)
-        editFn.apply(podWithOwnerReference(gatedConfigMapName))
+    when(resourceList.serverSideApply()).thenAnswer(answer {
+      events += "apply"
+      java.util.Collections.emptyList[HasMetadata]()
+    })
+    when(resourceList.delete()).thenAnswer(answer {
+      events += "delete resources"
+      java.util.Collections.emptyList[StatusDetails]()
+    })
+    when(namedPods.serverSideApply()).thenReturn(podWithOwnerReference())
+    when(namedPods.create()).thenAnswer(answer {
+      events += "create pod"
+      podWithOwnerReference()
+    })
+    when(namedPods.patch(patchContextCaptor.capture(), patchBodyCaptor.capture()))
+      .thenAnswer(answer {
+        events += "remove gate"
+        podWithOwnerReference()
       })
+    when(namedPods.delete()).thenAnswer(answer {
+      events += "delete pod"
+      java.util.Collections.emptyList[StatusDetails]()
+    })
     when(namedPods.watch(loggingPodStatusWatcher)).thenReturn(mock[Watch])
     val sId = submissionId(kconf.namespace, POD_NAME)
     when(loggingPodStatusWatcher.watchOrStop(sId)).thenReturn(true)
-    doReturn(resourceList)
-      .when(kubernetesClient)
-      .resourceList(createdResourcesArgumentCaptor.capture(): _*)
-    // SPARK-38079: deletePodAndPreResources deletes each pre-resource individually, so any
-    // HasMetadata resolves to the same trackable mock here.
-    when(kubernetesClient.resource(ArgumentMatchers.any[HasMetadata]())).thenReturn(namedResource)
+    resourceListFor = _ => resourceList
+    doAnswer(new Answer[RESOURCE_LIST] {
+      override def answer(invocation: InvocationOnMock): RESOURCE_LIST = {
+        val resources = invocation.getArguments.toSeq.map(_.asInstanceOf[HasMetadata])
+        events += s"list(${resources.map(describe).mkString(",")})"
+        resourceListFor(resources)
+      }
+    }).when(kubernetesClient).resourceList(createdResourcesArgumentCaptor.capture(): _*)
   }
 
   test("The client should configure the pod using the builder.") {
-    val submissionClient = new Client(
-      kconf,
-      driverBuilder,
-      kubernetesClient,
-      loggingPodStatusWatcher)
-    submissionClient.run()
-    // SPARK-38079: the pod is created still scheduling-gated (see run()), then that gate is
-    // removed via a single edit() once its pre-resources exist. The config map name in
-    // fullExpectedPod() is taken from the actual gated pod captured above (configMapNameDriver
-    // is a `def`, so this suite cannot predict it by calling that `def` again itself).
-    assert(gatedPod === fullExpectedPod(gatedConfigMapName))
+    newClient().run()
+    assert(createdPodArgumentCaptor.getValue === fullExpectedPod())
     verify(namedPods).create()
-    val editFnCaptor = ArgumentCaptor.forClass(classOf[java.util.function.UnaryOperator[Pod]])
-    verify(namedPods).edit(editFnCaptor.capture())
-    // Actually apply the captured function to a still-gated pod and check the result, rather
-    // than only checking that some function was passed to edit() -- a no-op (or wrong-field)
-    // edit function would satisfy the verify() above without ever removing the gate.
-    assert(editFnCaptor.getValue.apply(podWithOwnerReference(gatedConfigMapName)) ===
-      fullExpectedPodGateRemoved(gatedConfigMapName))
-    // Checking each call happened is not enough to show the pod is created *before* its
-    // pre-resources, or that the gate is removed only *after* that -- independent verify()
-    // calls would still pass even if run() swapped the order of its create() and
-    // resourceList() calls. Pin down the actual order with InOrder instead.
-    val order = inOrder(namedPods, kubernetesClient)
-    order.verify(namedPods).create()
-    order.verify(kubernetesClient).resourceList(ArgumentMatchers.any[Array[HasMetadata]](): _*)
-    order.verify(namedPods).edit(ArgumentMatchers.any[java.util.function.UnaryOperator[Pod]]())
   }
 
   test("The client should create Kubernetes resources") {
@@ -295,9 +267,6 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       loggingPodStatusWatcher)
     submissionClient.run()
     val otherCreatedResources = createdResourcesArgumentCaptor.getAllValues.asScala.flatten
-    // SPARK-38079: the driver's own config map is a pre-resource, created in a single
-    // resourceList() call (with its owner reference already set -- see run()) now that the
-    // driver pod exists -- 1 for the config map, 1 for the (post-resource) secret.
     assert(otherCreatedResources.size === 2)
     val secrets = otherCreatedResources.toArray.filter(_.isInstanceOf[Secret]).toSeq
     assert(secrets === ADDITIONAL_RESOURCES_WITH_OWNER_REFERENCES)
@@ -306,214 +275,210 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     assert(secrets.nonEmpty)
     assert(configMaps.nonEmpty)
     val configMap = configMaps.head
-    // SPARK-38079: configMapNameDriver is a `def` -- see its own comment -- so this cannot
-    // compare against a freshly-generated name (that call would return a different one); it
-    // can only check the name has the shape configMapNameDriver is documented to produce.
-    assert(configMap.getMetadata.getName.matches("spark-drv-\\S+-conf-map"))
+    assert(configMap.getMetadata.getName ===
+      KubernetesClientUtils.configMapNameDriver)
+    assert(configMap.getMetadata.getName === mountedConfigMapName)
     assert(configMap.getImmutable())
     assert(configMap.getData.containsKey(SPARK_CONF_FILE_NAME))
     assert(configMap.getData.get(SPARK_CONF_FILE_NAME).contains("conf1key=conf1value"))
     assert(configMap.getData.get(SPARK_CONF_FILE_NAME).contains("conf2key=conf2value"))
   }
 
-  test("SPARK-38079: driver pod is created (still scheduling-gated) before its own config " +
-      "map, and the config map's single create call already carries the owner reference") {
-    val submissionClient = new Client(
-      kconf,
-      driverBuilder,
-      kubernetesClient,
-      loggingPodStatusWatcher)
-    submissionClient.run()
-    // The pod itself must be created before any pre-resource resourceList() call, since a
-    // pre-resource's owner reference (set below) needs the pod's UID.
-    assert(gatedPod === fullExpectedPod(gatedConfigMapName))
-    verify(namedPods).create()
+  test("SPARK-38079: the driver pod is created gated, and the gate is removed last") {
+    newClient().run()
 
-    // The (single) resourceList(...) call creating the driver's own config map must already
-    // carry the owner reference -- there is no separate, later "refresh" call. The pod stays
-    // scheduling-gated (so kubelet cannot attempt to mount it) for as long as this has not yet
-    // happened, avoiding the "configmap ... not found" mount race (SPARK-38079) without ever
-    // creating the config map ownerless.
-    val resourceListCall = createdResourcesArgumentCaptor.getAllValues.get(0)
-    val configMaps = resourceListCall
-      .filter(_.isInstanceOf[ConfigMap]).map(_.asInstanceOf[ConfigMap])
-    assert(configMaps.nonEmpty,
-      "the driver's own config map must be created as a pre-resource")
-    val ownerReferences = configMaps.head.getMetadata.getOwnerReferences
-    assert(ownerReferences.size() === 1)
-    assert(ownerReferences.get(0).getName === POD_NAME)
-    assert(ownerReferences.get(0).getUid === DRIVER_POD_UID)
-
-    // The scheduling gate must be removed only after the config map has been created.
-    verify(namedPods).edit(ArgumentMatchers.any[java.util.function.UnaryOperator[Pod]]())
+    val configMapName = KubernetesClientUtils.configMapNameDriver
+    assert(events.toSeq === Seq(
+      "list()", "apply",
+      "create pod",
+      "list()", "apply",
+      s"list(Secret/secret+owner,ConfigMap/$configMapName+owner)", "apply",
+      "remove gate"))
+    assert(createdPodArgumentCaptor.getValue.getSpec.getSchedulingGates.asScala.map(_.getName) ===
+      Seq(DRIVER_RESOURCES_SCHEDULING_GATE))
   }
 
-  // SPARK-38079: the three failure branches in run() between pod creation and gate removal --
-  // covering (a) the pod creation call itself failing, (b) the pre-resource creation call
-  // failing after the pod exists, and (c) the gate-removal call failing after pre-resources
-  // exist -- each verified against real-cluster behavior (KubernetesClientException on
-  // AlreadyExists/Invalid/NotFound) before being written as these mock-based tests.
-  test("SPARK-38079: pod creation failure propagates without attempting any pre-resource " +
-      "creation") {
-    val podCreationFailure = new RuntimeException("simulated pod creation failure")
-    doThrow(podCreationFailure).when(namedPods).create()
-    val submissionClient = new Client(
-      kconf,
-      driverBuilder,
-      kubernetesClient,
-      loggingPodStatusWatcher)
+  test("SPARK-38079: pre resources are applied before the gated pod and owned after it") {
+    val preResKconf = KubernetesTestConf.createDriverConf(
+      resourceNamePrefix = Some(KUBERNETES_RESOURCE_PREFIX))
+    when(driverBuilder.buildFromFeatures(preResKconf, kubernetesClient))
+      .thenReturn(BUILT_KUBERNETES_SPEC_WITH_PRERES)
+    kconf = preResKconf
 
-    val thrown = intercept[RuntimeException] {
-      submissionClient.run()
-    }
+    newClient().run()
 
-    assert(thrown eq podCreationFailure)
-    verify(kubernetesClient, never()).resourceList(ArgumentMatchers.any[Array[HasMetadata]](): _*)
+    val configMapName = KubernetesClientUtils.configMapNameDriver
+    assert(events.toSeq === Seq(
+      "list(CustomResourceDefinition/preCRD)", "apply",
+      "create pod",
+      "list(CustomResourceDefinition/preCRD+owner)", "apply",
+      s"list(Secret/secret+owner,ConfigMap/$configMapName+owner)", "apply",
+      "remove gate"))
   }
 
-  test("SPARK-38079: pre-resource creation failure (after the pod exists) deletes both the " +
-      "pod and the pre-resources, then propagates") {
-    val preResourceFailure = new RuntimeException("simulated pre-resource creation failure")
-    doThrow(preResourceFailure).when(resourceList).serverSideApply()
-    val submissionClient = new Client(
-      kconf,
-      driverBuilder,
-      kubernetesClient,
-      loggingPodStatusWatcher)
+  test("SPARK-38079: the gate is removed by name with an idempotent strategic merge patch") {
+    newClient().run()
 
-    val thrown = intercept[RuntimeException] {
-      submissionClient.run()
-    }
-
-    assert(thrown eq preResourceFailure)
-    // Not just "delete() was called on some mock" -- pods().resource(...) must have been
-    // called with the actual created (gated) pod, i.e. the same pod object this cleanup path
-    // is documented to delete, and each pre-resource must be deleted individually (not as a
-    // single resourceList(...).delete() call, which stops at the first failing item).
-    verify(namedPods).create()
-    verify(podOperations).resource(podWithOwnerReference(gatedConfigMapName))
-    verify(namedPods).delete()
-    verify(namedResource).delete()
-    val preResourceCalls = createdResourcesArgumentCaptor.getAllValues.asScala
-    assert(preResourceCalls.exists(_.exists(_.isInstanceOf[ConfigMap])),
-      "the failed resourceList() call must have been for the pre-resources (the driver's " +
-        "own config map among them), not some other resource set")
-    // The gate is never removed on this failure path.
-    verify(namedPods, never()).edit(ArgumentMatchers.any[java.util.function.UnaryOperator[Pod]]())
+    verify(namedPods).patch(
+      ArgumentMatchers.any[PatchContext](), ArgumentMatchers.any[String]())
+    assert(patchContextCaptor.getValue.getPatchType === PatchType.STRATEGIC_MERGE)
+    assert(patchBodyCaptor.getValue ===
+      s"""{"spec":{"schedulingGates":[{"$$patch":"delete",""" +
+        s""""name":"$DRIVER_RESOURCES_SCHEDULING_GATE"}]}}""")
   }
 
-  test("SPARK-38079: gate-removal failure (after pre-resources exist) deletes the pod and " +
-      "the pre-resources, then propagates") {
-    val gateRemovalFailure = new RuntimeException("simulated gate-removal failure")
-    doThrow(gateRemovalFailure)
-      .when(namedPods).edit(ArgumentMatchers.any[java.util.function.UnaryOperator[Pod]]())
-    val submissionClient = new Client(
-      kconf,
-      driverBuilder,
-      kubernetesClient,
-      loggingPodStatusWatcher)
-
-    val thrown = intercept[RuntimeException] {
-      submissionClient.run()
-    }
-
-    assert(thrown eq gateRemovalFailure)
-    verify(podOperations).resource(podWithOwnerReference(gatedConfigMapName))
-    verify(namedPods).delete()
-    verify(namedResource).delete()
-    val preResourceCalls = createdResourcesArgumentCaptor.getAllValues.asScala
-    assert(preResourceCalls.exists(_.exists(_.isInstanceOf[ConfigMap])),
-      "the pre-resources deleted here must be the same ones created before the gate-removal " +
-        "attempt, not some other resource set")
-  }
-
-  test("SPARK-38079: a failure deleting the pod during cleanup does not prevent the " +
-      "pre-resources from also being deleted, and the original exception still propagates") {
-    val gateRemovalFailure = new RuntimeException("simulated gate-removal failure")
-    doThrow(gateRemovalFailure)
-      .when(namedPods).edit(ArgumentMatchers.any[java.util.function.UnaryOperator[Pod]]())
-    // The pod-delete step of cleanup itself fails (e.g. a permissions or network error hitting
-    // the delete call) -- this must not mask gateRemovalFailure, nor skip deleting the
-    // pre-resources afterwards.
-    doThrow(new RuntimeException("simulated delete failure")).when(namedPods).delete()
-    val submissionClient = new Client(
-      kconf,
-      driverBuilder,
-      kubernetesClient,
-      loggingPodStatusWatcher)
-
-    val thrown = intercept[RuntimeException] {
-      submissionClient.run()
-    }
-
-    assert(thrown eq gateRemovalFailure,
-      "the original failure that triggered cleanup must still be the one that propagates, " +
-        "not a failure from within the best-effort cleanup itself")
-    verify(namedResource).delete()
-  }
-
-  test("SPARK-38079: a pod template's spec.nodeName is translated to an equivalent " +
-      "nodeSelector, since a pod cannot be created with both nodeName and (non-empty) " +
-      "schedulingGates set") {
-    val podWithPinnedNodeName = new PodBuilder(BUILT_DRIVER_POD)
+  test("SPARK-38079: gates already on the pod template are kept next to the Spark gate") {
+    val templateGate = "example.com/keep-me"
+    val podWithGate = new PodBuilder(BUILT_DRIVER_POD)
       .editSpec()
-        .withNodeName("some-specific-node")
+        .addNewSchedulingGate(templateGate)
         .endSpec()
       .build()
-    val specWithPinnedNodeName = KubernetesDriverSpec(
-      SparkPod(podWithPinnedNodeName, BUILT_DRIVER_CONTAINER),
-      Nil,
-      ADDITIONAL_RESOURCES,
-      RESOLVED_JAVA_OPTIONS)
-    when(driverBuilder.buildFromFeatures(kconf, kubernetesClient))
-      .thenReturn(specWithPinnedNodeName)
+    when(driverBuilder.buildFromFeatures(kconf, kubernetesClient)).thenReturn(
+      KubernetesDriverSpec(
+        SparkPod(podWithGate, BUILT_DRIVER_CONTAINER),
+        Nil,
+        ADDITIONAL_RESOURCES,
+        RESOLVED_JAVA_OPTIONS))
 
-    val submissionClient = new Client(
-      kconf,
-      driverBuilder,
-      kubernetesClient,
-      loggingPodStatusWatcher)
-    submissionClient.run()
+    newClient().run()
 
-    assert(gatedPod.getSpec.getNodeName === null,
-      "a gated pod must never carry spec.nodeName -- the API server rejects creating one " +
-        "with both nodeName and schedulingGates set")
-    assert(gatedPod.getSpec.getNodeSelector.get("kubernetes.io/hostname") ===
-      "some-specific-node",
-      "the pinned node must still be honored, via an equivalent nodeSelector instead")
-    assert(!gatedPod.getSpec.getSchedulingGates.isEmpty,
-      "the gate itself must still be present -- this is not a general nodeName removal")
+    assert(createdPodArgumentCaptor.getValue.getSpec.getSchedulingGates.asScala.map(_.getName) ===
+      Seq(templateGate, DRIVER_RESOURCES_SCHEDULING_GATE))
+    assert(!patchBodyCaptor.getValue.contains(templateGate))
   }
 
-  test("SPARK-38079: a pod template's spec.nodeName is discarded, not translated, if an " +
-      "explicit spark.kubernetes.driver.node.selector.kubernetes.io/hostname is already set " +
-      "-- that explicit configuration must win, not be silently overwritten") {
-    val podWithPinnedNodeNameAndExplicitSelector = new PodBuilder(BUILT_DRIVER_POD)
+  test("SPARK-38079: the gate patch leaves a gate it does not name in place") {
+    // A fake API server that applies the patch body: only the named gate may disappear.
+    val templateGate = "example.com/keep-me"
+    val podWithGate = new PodBuilder(BUILT_DRIVER_POD)
       .editSpec()
-        .withNodeName("template-pinned-node")
-        .addToNodeSelector("kubernetes.io/hostname", "explicitly-configured-node")
+        .addNewSchedulingGate(templateGate)
         .endSpec()
       .build()
-    val specWithBoth = KubernetesDriverSpec(
-      SparkPod(podWithPinnedNodeNameAndExplicitSelector, BUILT_DRIVER_CONTAINER),
-      Nil,
-      ADDITIONAL_RESOURCES,
-      RESOLVED_JAVA_OPTIONS)
-    when(driverBuilder.buildFromFeatures(kconf, kubernetesClient)).thenReturn(specWithBoth)
+    when(driverBuilder.buildFromFeatures(kconf, kubernetesClient)).thenReturn(
+      KubernetesDriverSpec(
+        SparkPod(podWithGate, BUILT_DRIVER_CONTAINER),
+        Nil,
+        ADDITIONAL_RESOURCES,
+        RESOLVED_JAVA_OPTIONS))
 
-    val submissionClient = new Client(
-      kconf,
-      driverBuilder,
-      kubernetesClient,
-      loggingPodStatusWatcher)
-    submissionClient.run()
+    newClient().run()
 
-    assert(gatedPod.getSpec.getNodeName === null)
-    assert(gatedPod.getSpec.getNodeSelector.get("kubernetes.io/hostname") ===
-      "explicitly-configured-node",
-      "the explicit spark.kubernetes.driver.node.selector.* value (applied earlier, by " +
-        "BasicDriverFeatureStep, in builder.buildFromFeatures()) must not be overwritten by " +
-        "the nodeName-derived fallback")
+    val patch = new com.fasterxml.jackson.databind.ObjectMapper()
+      .readTree(patchBodyCaptor.getValue)
+    val ops = patch.at("/spec/schedulingGates").elements().asScala.toSeq
+    assert(ops.size === 1, "the patch must name exactly one gate")
+    assert(ops.head.get("$patch").asText === "delete")
+    assert(ops.head.get("name").asText === DRIVER_RESOURCES_SCHEDULING_GATE)
+    val remaining = createdPodArgumentCaptor.getValue.getSpec.getSchedulingGates.asScala
+      .map(_.getName).filterNot(_ == ops.head.get("name").asText)
+    assert(remaining === Seq(templateGate))
+  }
+
+  test("SPARK-38079: disabling the scheduling gate keeps the previous flow and needs no patch") {
+    val sparkConf = new SparkConf(false)
+      .set(Config.USE_DRIVER_SCHEDULING_GATE, false)
+    kconf = KubernetesTestConf.createDriverConf(
+      sparkConf = sparkConf, resourceNamePrefix = Some(KUBERNETES_RESOURCE_PREFIX))
+    when(driverBuilder.buildFromFeatures(kconf, kubernetesClient)).thenReturn(BUILT_KUBERNETES_SPEC)
+
+    newClient().run()
+
+    assert(createdPodArgumentCaptor.getValue.getSpec.getSchedulingGates.isEmpty)
+    verify(namedPods, never()).patch(
+      ArgumentMatchers.any[PatchContext](), ArgumentMatchers.any[String]())
+    assert(!events.contains("remove gate"))
+  }
+
+  test("SPARK-38079: a pod pinned with spec.nodeName is neither gated nor patched") {
+    val pinnedPod = new PodBuilder(BUILT_DRIVER_POD)
+      .editSpec()
+        .withNodeName("some-node")
+        .endSpec()
+      .build()
+    when(driverBuilder.buildFromFeatures(kconf, kubernetesClient)).thenReturn(
+      KubernetesDriverSpec(
+        SparkPod(pinnedPod, BUILT_DRIVER_CONTAINER),
+        Nil,
+        ADDITIONAL_RESOURCES,
+        RESOLVED_JAVA_OPTIONS))
+
+    newClient().run()
+
+    val created = createdPodArgumentCaptor.getValue
+    assert(created.getSpec.getNodeName === "some-node")
+    assert(created.getSpec.getSchedulingGates.isEmpty)
+    verify(namedPods, never()).patch(
+      ArgumentMatchers.any[PatchContext](), ArgumentMatchers.any[String]())
+    assert(events.toSeq === Seq(
+      "list()", "apply",
+      "create pod",
+      "list()", "apply",
+      s"list(Secret/secret+owner,ConfigMap/${KubernetesClientUtils.configMapNameDriver}+owner)",
+      "apply"))
+  }
+
+  test("SPARK-38079: a failure creating the pod deletes nothing but the pre resources") {
+    val failure = new RuntimeException("create failed")
+    doAnswer(answer {
+      events += "create pod"
+      throw failure
+    }).when(namedPods).create()
+
+    val thrown = intercept[RuntimeException](newClient().run())
+
+    assert(thrown eq failure)
+    verify(namedPods, never()).delete()
+    verify(namedPods, never()).patch(
+      ArgumentMatchers.any[PatchContext](), ArgumentMatchers.any[String]())
+    assert(events.toSeq === Seq("list()", "apply", "create pod", "list()", "delete resources"))
+  }
+
+  test("SPARK-38079: a failure applying the post resources deletes only the pod") {
+    val failure = new RuntimeException("apply failed")
+    val failing = mock[RESOURCE_LIST]
+    when(failing.forceConflicts()).thenReturn(failing)
+    when(failing.serverSideApply()).thenThrow(failure)
+    resourceListFor = resources => if (resources.exists(_.isInstanceOf[Secret])) failing
+      else resourceList
+
+    val thrown = intercept[RuntimeException](newClient().run())
+
+    assert(thrown eq failure)
+    assert(events.last === "delete pod")
+    assert(!events.contains("remove gate"))
+    assert(!events.contains("delete resources"))
+    // The pod deleted is the one this submission created, not some other pod of that name.
+    val deleted = ArgumentCaptor.forClass(classOf[Pod])
+    verify(podOperations).resource(deleted.capture())
+    assert(deleted.getValue.getMetadata.getUid === DRIVER_POD_UID)
+  }
+
+  test("SPARK-38079: a failure deleting the pod does not hide the original failure") {
+    val failure = new RuntimeException("apply failed")
+    val failing = mock[RESOURCE_LIST]
+    when(failing.forceConflicts()).thenReturn(failing)
+    when(failing.serverSideApply()).thenThrow(failure)
+    resourceListFor = resources => if (resources.exists(_.isInstanceOf[Secret])) failing
+      else resourceList
+    when(namedPods.delete()).thenThrow(new RuntimeException("delete failed"))
+
+    val thrown = intercept[RuntimeException](newClient().run())
+
+    assert(thrown eq failure)
+  }
+
+  test("SPARK-38079: a failure removing the gate deletes the pod and propagates") {
+    val failure = new RuntimeException("patch failed")
+    when(namedPods.patch(ArgumentMatchers.any[PatchContext](), ArgumentMatchers.any[String]()))
+      .thenThrow(failure)
+
+    val thrown = intercept[RuntimeException](newClient().run())
+
+    assert(thrown eq failure)
+    verify(namedPods).delete()
+    verify(namedPods, never()).watch(loggingPodStatusWatcher)
   }
 
   test("SPARK-37331: The client should create Kubernetes resources with pre resources") {
@@ -537,16 +502,14 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     submissionClient.run()
     val otherCreatedResources = createdResourcesArgumentCaptor.getAllValues.asScala.flatten
 
-    // SPARK-38079: the pre-resource CRD and the driver's own config map are both created via
-    // the single (owner-reference-carrying) pre-resource resourceList() call -- 1 for the
-    // CRD, 1 for the config map -- plus 1 for the (post-resource) secret.
-    assert(otherCreatedResources.size === 3)
+    // 2 for pre-resource creation/update, 1 for resource creation, 1 for config map
+    assert(otherCreatedResources.size === 4)
     val preRes = otherCreatedResources.toArray
       .filter(_.isInstanceOf[CustomResourceDefinition]).toSeq
 
     // Make sure pre-resource creation/owner reference as expected
-    assert(preRes.size === 1)
-    assert(preRes.head === PRE_ADDITIONAL_RESOURCES_WITH_OWNER_REFERENCES.head)
+    assert(preRes.size === 2)
+    assert(preRes.last === PRE_ADDITIONAL_RESOURCES_WITH_OWNER_REFERENCES.head)
 
     // Make sure original resource and config map process are not affected
     val secrets = otherCreatedResources.toArray.filter(_.isInstanceOf[Secret]).toSeq
@@ -556,9 +519,9 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     assert(secrets.nonEmpty)
     assert(configMaps.nonEmpty)
     val configMap = configMaps.head
-    // SPARK-38079: see the comment on the earlier identical assertion -- configMapNameDriver
-    // is a `def`, so only the name's shape can be checked here, not an exact match.
-    assert(configMap.getMetadata.getName.matches("spark-drv-\\S+-conf-map"))
+    assert(configMap.getMetadata.getName ===
+      KubernetesClientUtils.configMapNameDriver)
+    assert(configMap.getMetadata.getName === mountedConfigMapName)
     assert(configMap.getImmutable())
     assert(configMap.getData.containsKey(SPARK_CONF_FILE_NAME))
     assert(configMap.getData.get(SPARK_CONF_FILE_NAME).contains("conf1key=conf1value"))
@@ -598,27 +561,26 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
 
     val (sparkConf: SparkConf, expectedConfFiles: Seq[String]) = testSetup
 
+    val expectedKeyToPaths = (expectedConfFiles.map(keyToPath).toList ++
+      List(KEY_TO_PATH)).sortBy(x => x.getKey)
+
     kconf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf,
       resourceNamePrefix = Some(KUBERNETES_RESOURCE_PREFIX))
 
     assert(kconf.sparkConf.getOption("spark.home").isDefined)
     when(driverBuilder.buildFromFeatures(kconf, kubernetesClient)).thenReturn(BUILT_KUBERNETES_SPEC)
 
-    val submissionClient = new Client(
-      kconf,
-      driverBuilder,
-      kubernetesClient,
-      loggingPodStatusWatcher)
-    submissionClient.run()
+    newClient().run()
+    assert(createdPodArgumentCaptor.getValue === fullExpectedPod(expectedKeyToPaths))
     val otherCreatedResources = createdResourcesArgumentCaptor.getAllValues.asScala.flatten
 
     val configMaps = otherCreatedResources.toArray
       .filter(_.isInstanceOf[ConfigMap]).map(_.asInstanceOf[ConfigMap])
     assert(configMaps.nonEmpty)
+    val configMapName = KubernetesClientUtils.configMapNameDriver
     val configMap: ConfigMap = configMaps.head
-    // SPARK-38079: see the comment on the earlier identical assertion -- configMapNameDriver
-    // is a `def`, so only the name's shape can be checked here, not an exact match.
-    assert(configMap.getMetadata.getName.matches("spark-drv-\\S+-conf-map"))
+    assert(configMap.getMetadata.getName == configMapName)
+    assert(configMap.getMetadata.getName == mountedConfigMapName)
     val configMapLoadedFiles = configMap.getData.keySet().asScala.toSet -
         Config.KUBERNETES_NAMESPACE.key
     assert(configMapLoadedFiles === expectedConfFiles.toSet ++ Set(SPARK_CONF_FILE_NAME))

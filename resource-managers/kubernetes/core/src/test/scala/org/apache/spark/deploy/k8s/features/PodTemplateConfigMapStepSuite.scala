@@ -36,7 +36,7 @@ class PodTemplateConfigMapStepSuite extends SparkFunSuite {
     val configuredPod = step.configurePod(initialPod)
     assert(configuredPod === initialPod)
 
-    assert(step.getAdditionalPreKubernetesResources().isEmpty)
+    assert(step.getAdditionalKubernetesResources().isEmpty)
     assert(step.getAdditionalPodSystemProperties().isEmpty)
   }
 
@@ -70,7 +70,7 @@ class PodTemplateConfigMapStepSuite extends SparkFunSuite {
     assert(volumeMount.getMountPath === Constants.EXECUTOR_POD_SPEC_TEMPLATE_MOUNTPATH)
     assert(volumeMount.getName === Constants.POD_TEMPLATE_VOLUME)
 
-    val resources = step.getAdditionalPreKubernetesResources()
+    val resources = step.getAdditionalKubernetesResources()
     assert(resources.size === 1)
     assert(resources.head.getMetadata.getName === generatedResourceName)
     assert(resources.head.isInstanceOf[ConfigMap])

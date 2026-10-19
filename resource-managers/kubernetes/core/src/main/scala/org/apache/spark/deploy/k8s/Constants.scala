@@ -92,10 +92,8 @@ object Constants {
   val ENV_HADOOP_TOKEN_FILE_LOCATION = "HADOOP_TOKEN_FILE_LOCATION"
 
   // Pod scheduling gates
-  // SPARK-38079: scheduling gate that holds the driver pod unschedulable (so kubelet cannot
-  // attempt to mount anything on it) until its pre-resources have been created -- see
-  // KubernetesClientApplication.Client.run().
-  val PRE_RESOURCES_SCHEDULING_GATE = "spark.apache.org/pre-resources"
+  // Holds the driver pod unschedulable until every resource it mounts has been created.
+  val DRIVER_RESOURCES_SCHEDULING_GATE = "spark.apache.org/driver-resources"
 
   // BINDINGS
   val ENV_PYSPARK_PYTHON = "PYSPARK_PYTHON"
