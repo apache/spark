@@ -198,6 +198,31 @@ class PartitionedWriteSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-60366: Dynamic partition overwrite with a committer that is not " +
+      "a FileOutputCommitter") {
+    // Hadoop 3.3.5+ binds `abfs` and `gs` to the manifest committer, which is not a
+    // FileOutputCommitter. Bind it to the local file system to test the same code path.
+    withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key ->
+      SQLConf.PartitionOverwriteMode.DYNAMIC.toString,
+      "mapreduce.outputcommitter.factory.scheme.file" ->
+        "org.apache.hadoop.mapreduce.lib.output.committer.manifest.ManifestCommitterFactory") {
+      Seq("json", "orc").foreach { format =>
+        withTempDir { d =>
+          withTable("t") {
+            sql(s"CREATE TABLE t(c1 INT, p1 INT) USING $format PARTITIONED BY (p1) " +
+              s"LOCATION '${d.getAbsolutePath}'")
+            sql("INSERT INTO t VALUES (1, 1), (2, 2)")
+            // Unlike FileOutputCommitter, the manifest committer writes a JSON summary.
+            assert(new File(d, "_SUCCESS").length() > 0)
+
+            sql("INSERT OVERWRITE TABLE t PARTITION(p1) SELECT 3, 1")
+            checkAnswer(spark.table("t"), Seq(Row(3, 1), Row(2, 2)))
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-37231, SPARK-37240: Dynamic writes/reads of ANSI interval partitions") {
     Seq("parquet", "json").foreach { format =>
       Seq(

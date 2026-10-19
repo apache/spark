@@ -59,6 +59,9 @@ import org.apache.spark.mapred.SparkHadoopMapRedUtil
  *                                  2. When [[FileOutputCommitter]] algorithm version set to 2,
  *                                  committing tasks directly move task attempt output files to
  *                                  /path/to/outputPath/.spark-staging-{jobId}/a=1/b=1.
+ *                                  3. When the committer is not a [[FileOutputCommitter]], task
+ *                                  attempts directly write files to
+ *                                  /path/to/outputPath/.spark-staging-{jobId}/a=1/b=1.
  *
  *                                  At the end of committing job, we move output files from
  *                                  intermediate path to final path, e.g., move files from
@@ -121,15 +124,18 @@ class HadoopMapReduceCommitProtocol(
       taskContext: TaskAttemptContext, dir: Option[String], spec: FileNameSpec): String = {
     val filename = getFilename(taskContext, spec)
 
+    if (dynamicPartitionOverwrite) {
+      assert(dir.isDefined,
+        "The dataset to be written must be partitioned when dynamicPartitionOverwrite is true.")
+      partitionPaths += dir.get
+    }
     val stagingDir: Path = committer match {
       // For FileOutputCommitter it has its own staging path called "work path".
       case f: FileOutputCommitter =>
-        if (dynamicPartitionOverwrite) {
-          assert(dir.isDefined,
-            "The dataset to be written must be partitioned when dynamicPartitionOverwrite is true.")
-          partitionPaths += dir.get
-        }
         new Path(Option(f.getWorkPath).map(_.toString).getOrElse(path))
+      // Other committers, e.g. Hadoop's ManifestCommitter, do not commit the files written here,
+      // so write them to the staging directory, from which commitJob moves them into place.
+      case _ if dynamicPartitionOverwrite => this.stagingDir
       case _ => new Path(path)
     }
 
