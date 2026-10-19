@@ -86,14 +86,16 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
       schema: MessageType,
       caseSensitive: Option[Boolean] = None,
       datetimeRebaseSpec: RebaseSpec = RebaseSpec(LegacyBehaviorPolicy.CORRECTED),
-      variantExtractionSchema: Option[StructType] = None
+      variantExtractionSchema: Option[StructType] = None,
+      readSchema: Option[StructType] = None
     ): ParquetFilters =
     new ParquetFilters(schema, conf.parquetFilterPushDownDate, conf.parquetFilterPushDownTimestamp,
       conf.parquetFilterPushDownDecimal, conf.parquetFilterPushDownStringPredicate,
       conf.parquetFilterPushDownInFilterThreshold,
       caseSensitive.getOrElse(conf.caseSensitiveAnalysis),
       datetimeRebaseSpec,
-      variantExtractionSchema = variantExtractionSchema)
+      variantExtractionSchema = variantExtractionSchema,
+      readSchema = readSchema)
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -2307,6 +2309,91 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
         }
       }
     }
+  }
+
+  test("SPARK-60358: filter pushdown - time read with a lower precision than the stored value") {
+    // A TIME(6) value 12:00:00.1005 read as TIME(3) is truncated to 12:00:00.100, while Parquet
+    // evaluates a pushed down predicate against the stored value. For example, a pushed down
+    // `t = 12:00:00.100` would skip the row group that holds the matching row.
+    import testImplicits._
+    def time(s: String): LocalTime = LocalTime.parse(s)
+    def time3(s: String): String = s"CAST('$s' AS TIME(3))"
+    def toTime3(dt: DataType): DataType = dt match {
+      case s: StructType => StructType(s.map(f => f.copy(dataType = toTime3(f.dataType))))
+      case _: TimeType => TimeType(3)
+      case other => other
+    }
+    val inputDF = Seq(Some(time("12:00:00.1005")), Some(time("12:00:01")), None).toDF()
+    withNestedDataFrame(inputDF).foreach { case (df, colName, resultFun) =>
+      withTempPath { dir =>
+        df.coalesce(1).write.parquet(dir.getCanonicalPath)
+        val readDF = spark.read.schema(toTime3(df.schema).asInstanceOf[StructType])
+          .parquet(dir.getCanonicalPath)
+        def check(condition: String, expected: Seq[String]): Unit = {
+          checkAnswer(readDF.where(condition), expected.map(s => Row(resultFun(time(s)))))
+        }
+        withAllParquetReaders {
+          check(s"$colName = ${time3("12:00:00.1")}", Seq("12:00:00.1"))
+          check(s"$colName <=> ${time3("12:00:00.1")}", Seq("12:00:00.1"))
+          check(s"$colName != ${time3("12:00:00.1")}", Seq("12:00:01"))
+          check(s"$colName < ${time3("12:00:01")}", Seq("12:00:00.1"))
+          check(s"$colName <= ${time3("12:00:00.1")}", Seq("12:00:00.1"))
+          check(s"$colName > ${time3("12:00:00.1")}", Seq("12:00:01"))
+          check(s"$colName >= ${time3("12:00:00.1")}", Seq("12:00:00.1", "12:00:01"))
+          Seq(1, 10).foreach { threshold =>
+            withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
+              check(s"$colName IN (${time3("12:00:00.1")}, ${time3("12:00:02")})",
+                Seq("12:00:00.1"))
+            }
+          }
+          checkAnswer(readDF.where(s"$colName IS NULL"), Row(resultFun(null)))
+          check(s"$colName IS NOT NULL", Seq("12:00:00.1", "12:00:01"))
+        }
+      }
+    }
+  }
+
+  test("SPARK-60358: TIME(MICROS) predicates with a value are not pushed down for TIME(0-5)") {
+    // The reader truncates TIME(MICROS) values to a read precision below 6, so only IsNull and
+    // IsNotNull are pushed down then. Both isAdjustedToUTC flags of TIME(MICROS) are covered.
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  optional int64 t(TIME(MICROS,false));
+        |  optional group s {
+        |    optional int64 t(TIME(MICROS,true));
+        |  }
+        |}""".stripMargin)
+    val noon = LocalTime.NOON
+    (TimeType.MIN_PRECISION to TimeType.MAX_PRECISION).foreach { precision =>
+      val readSchema = new StructType()
+        .add("t", TimeType(precision))
+        .add("s", new StructType().add("t", TimeType(precision)))
+      val parquetFilters = createParquetFilters(schema, readSchema = Some(readSchema))
+      Seq("t", "s.t").foreach { name =>
+        Seq(sources.IsNull(name), sources.IsNotNull(name)).foreach { filter =>
+          assert(parquetFilters.createFilter(filter).isDefined, s"$filter, TIME($precision)")
+        }
+        Seq(
+          sources.EqualTo(name, noon),
+          sources.EqualNullSafe(name, noon),
+          sources.Not(sources.EqualTo(name, noon)),
+          sources.LessThan(name, noon),
+          sources.LessThanOrEqual(name, noon),
+          sources.GreaterThan(name, noon),
+          sources.GreaterThanOrEqual(name, noon),
+          sources.In(name, Array[Any](noon))
+        ).foreach { filter =>
+          assert(parquetFilters.createFilter(filter).isDefined ===
+            (precision >= TimeType.MICROS_PRECISION), s"$filter, TIME($precision)")
+        }
+      }
+    }
+    // The read schema is resolved case-insensitively unless spark.sql.caseSensitive is true.
+    val readSchema = new StructType().add("T", TimeType(3))
+    val parquetFilters =
+      createParquetFilters(schema, caseSensitive = Some(false), readSchema = Some(readSchema))
+    assert(parquetFilters.createFilter(sources.IsNotNull("T")).isDefined)
+    assert(parquetFilters.createFilter(sources.EqualTo("T", noon)).isEmpty)
   }
 
   test("SPARK-57822: filter pushdown - nanosecond timestamps") {

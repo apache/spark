@@ -61,7 +61,8 @@ class ParquetFilters(
     pushDownInFilterThreshold: Int,
     caseSensitive: Boolean,
     datetimeRebaseSpec: RebaseSpec,
-    variantExtractionSchema: Option[StructType] = None) {
+    variantExtractionSchema: Option[StructType] = None,
+    readSchema: Option[StructType] = None) {
   // Shredded-variant physical field-name constants.
   private val TYPED_VALUE = "typed_value"
   private val VALUE = "value"
@@ -124,6 +125,27 @@ class ParquetFilters(
   private case class ParquetPrimitiveField(
       fieldNames: Array[String],
       fieldType: ParquetSchemaType)
+
+  // A map which contains the field names in `readSchema` and the Spark data types that the fields
+  // are read as, keyed like `nameToParquetField`. A data type can differ from the type that the
+  // file was written with, e.g. under a user-specified schema. Lazy because it is used only for a
+  // predicate with a value on a Types Framework field, see `valueCanMakeFilterOn`.
+  private lazy val nameToReadType: Map[String, DataType] = {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
+    def getLeafFields(
+        fields: Seq[StructField],
+        parentFieldNames: Seq[String] = Seq.empty): Seq[(String, DataType)] = {
+      fields.flatMap { f =>
+        val fieldNames = parentFieldNames :+ f.name
+        f.dataType match {
+          case s: StructType => getLeafFields(s.fields.toImmutableArraySeq, fieldNames)
+          case dataType => Seq(fieldNames.quoted -> dataType)
+        }
+      }
+    }
+    val readTypes = readSchema.toSeq.flatMap(s => getLeafFields(s.fields.toImmutableArraySeq)).toMap
+    if (caseSensitive) readTypes else CaseInsensitiveMap(readTypes)
+  }
 
   /**
    * Holds the mapping from a logical shredded-variant path (e.g. "v.`0`") to the physical
@@ -918,8 +940,15 @@ class ParquetFilters(
 
   // Parquet's type in the given file should be matched to the value's type
   // in the pushed filter in order to push down the filter to Parquet.
+  // Also, the type that a Types Framework field is read as should not make the reader change the
+  // stored values, e.g. truncate TIME(MICROS) values to TIME(3), because Parquet evaluates the
+  // pushed filter against the stored values. Otherwise, only IsNull and IsNotNull are pushed down.
   private def valueCanMakeFilterOn(name: String, value: Any): Boolean = {
-    valueMatchesParquetType(nameToParquetField(name).fieldType, value)
+    val fieldType = nameToParquetField(name).fieldType
+    valueMatchesParquetType(fieldType, value) && (value == null || (fieldType match {
+      case FrameworkFilterOps(ops) => nameToReadType.get(name).forall(ops.acceptsReadType)
+      case _ => true
+    }))
   }
 
   // The value's type must match the field's on-disk Parquet type for a filter to be pushed.
