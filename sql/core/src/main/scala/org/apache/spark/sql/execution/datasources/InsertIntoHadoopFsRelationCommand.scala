@@ -119,6 +119,7 @@ case class InsertIntoHadoopFsRelationCommand(
       outputPath = outputPath.toString,
       dynamicPartitionOverwrite = dynamicPartitionOverwrite)
 
+    var deleteMatchingOutput = false
     val doInsertion = if (mode == SaveMode.Append) {
       true
     } else {
@@ -133,7 +134,9 @@ case class InsertIntoHadoopFsRelationCommand(
             // For dynamic partition overwrite, do not delete partition directories ahead.
             true
           } else {
-            deleteMatchingPartitions(fs, qualifiedOutputPath, customPartitionLocations, committer)
+            // Deleted in `beforeSetupJob` below, so that a write that fails the driver side
+            // checks of FileFormatWriter (e.g. an invalid write option) keeps the existing data.
+            deleteMatchingOutput = true
             true
           }
         case (SaveMode.Overwrite, _) | (SaveMode.ErrorIfExists, false) =>
@@ -192,7 +195,10 @@ case class InsertIntoHadoopFsRelationCommand(
           bucketSpec = bucketSpec,
           statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
           options = options,
-          numStaticPartitionCols = staticPartitions.size)
+          numStaticPartitionCols = staticPartitions.size,
+          beforeSetupJob = () => if (deleteMatchingOutput) {
+            deleteMatchingPartitions(fs, qualifiedOutputPath, customPartitionLocations, committer)
+          })
 
 
       // update metastore partition metadata
