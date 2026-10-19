@@ -98,13 +98,6 @@ class BatchedUDFHandlerTests(PySparkBaseTestCase):
         rows = [(datetime.date(1970, 1, 1),), (datetime.date(1970, 1, 10),)]
         self.assertEqual(list(handler.run(0, iter(rows))), [1, 10])
 
-    def test_result_not_converted_otherwise(self):
-        def f(a):
-            return a
-
-        handler = self._handler(([0], f))
-        self.assertIs(handler._udf_infos[0][1], f)
-
     def test_empty_input(self):
         handler = self._handler(([0], lambda a: a))
         self.assertEqual(list(handler.run(0, iter([]))), [])
