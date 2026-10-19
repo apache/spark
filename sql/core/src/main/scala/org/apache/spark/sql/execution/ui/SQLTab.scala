@@ -40,5 +40,5 @@ class SQLTab(val sqlStore: SQLAppStatusStore, sparkUI: SparkUI)
 }
 
 object SQLTab {
-  private val STATIC_RESOURCE_DIR = "org/apache/spark/sql/execution/ui/static"
+  private[ui] val STATIC_RESOURCE_DIR = "org/apache/spark/sql/execution/ui/static"
 }
