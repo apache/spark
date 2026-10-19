@@ -148,6 +148,10 @@ object FileFormatWriter extends Logging {
         writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns
     val writeFilesOpt = V1WritesUtils.getWriteFilesOpt(plan)
 
+    // propagate the description UUID into the jobs, so that committers
+    // get an ID guaranteed to be unique.
+    job.getConfiguration.set("spark.sql.sources.writeJobUUID", description.uuid)
+
     // SPARK-56919: setupJob must run before materializeAdaptiveSparkPlan, which can throw.
     // Otherwise INSERT OVERWRITE permanently loses the table path if AQE fails.
     // setupJob is outside the try below because it only initializes the job; the try/catch
@@ -172,10 +176,6 @@ object FileFormatWriter extends Logging {
       val orderingMatched = V1WritesUtils.isOrderingMatched(requiredOrdering, actualOrdering)
 
       SQLExecution.checkSQLExecutionId(sparkSession)
-
-      // propagate the description UUID into the jobs, so that committers
-      // get an ID guaranteed to be unique.
-      job.getConfiguration.set("spark.sql.sources.writeJobUUID", description.uuid)
 
       // When `PLANNED_WRITE_ENABLED` is true, the optimizer rule V1Writes will add logical sort
       // operator based on the required ordering of the V1 write command. So the output
