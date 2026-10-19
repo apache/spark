@@ -400,7 +400,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
          * Which side to broadcast. A hint-only pass honors a BROADCAST hint.
          * Otherwise a side qualifies when it is small enough and is not marked
          * NO_BROADCAST_AND_REPLICATION. `allowed` drops a side this operator
-         * cannot build. Both sides qualify: the smaller one.
+         * cannot build. Both sides qualify: `desiredBuildSide`, which is the
+         * smaller side for inner-like and full outer joins and otherwise the
+         * join type's preferred side.
          */
         def broadcastSide(
             onlyLookingAtHint: Boolean,

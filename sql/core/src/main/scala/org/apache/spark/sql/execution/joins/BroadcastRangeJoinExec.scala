@@ -406,10 +406,11 @@ case class BroadcastRangeJoinExec(
   }
 
   /**
-   * Fixed-width keys route to the long indexes: build and probe keys then cross
-   * as raw longs, with no boxing on either side. One test picks both the
-   * `RangeRelationBroadcastMode` index family and the generated probe code, so they
-   * cannot disagree.
+   * Keys that map to one order-preserving long (`RangeIndex.longKey`) route
+   * to the long indexes: build and probe keys then cross as raw longs, with
+   * no boxing on either side, and every other supported key stays boxed.
+   * One test picks both the `RangeRelationBroadcastMode` index family and
+   * the generated probe code, so they cannot disagree.
    */
   private[this] lazy val usesLongKeys: Boolean = RangeIndex.canMapKeysToLong(buildKeys)
 

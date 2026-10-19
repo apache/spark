@@ -2910,12 +2910,13 @@ class AdaptiveQueryExecSuite
 
   test("LogicalQueryStageStrategy binds range broadcast keys to the physical stage output, " +
       "not the logical query stage output") {
-    // The exchange was planned against a projection that put `hi` before `lo`, so the
-    // mode's bound key has ordinal 1. By the time AQE replans, RemoveRedundantProjects
-    // may have dropped that reordering projection from the logical side, leaving the
-    // LogicalQueryStage wrapping the original, differently-ordered `right` relation.
-    // Binding buildKeys against that logical output (ordinal 0) instead of the physical
-    // stage's output (ordinal 1) would fail to match the mode and lose the range join.
+    // The mode's bound key is an ordinal against the exchange input, which puts
+    // `hi` before `lo` here (ordinal 1). The `LogicalQueryStage` wraps the original
+    // `right` fragment, whose output puts `lo` first (ordinal 0): the stage and the
+    // logical fragment it replaces can disagree on column order after AQE re-plans.
+    // Binding buildKeys against that logical order would fail to reproduce the mode
+    // and lose the range join, so the check binds against `bqs.output`, keeping the
+    // ordinals on the order the broadcast was actually keyed on.
     val leftAttr = AttributeReference("a", IntegerType)()
     val lo = AttributeReference("lo", IntegerType)()
     val hi = AttributeReference("hi", IntegerType)()

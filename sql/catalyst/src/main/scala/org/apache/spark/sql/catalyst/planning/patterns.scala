@@ -425,8 +425,9 @@ object ExtractSingleColumnNullAwareAntiJoin extends JoinSelectionHelper with Pre
 /**
  * Finds joins whose condition is a range predicate usable by a broadcast range join.
  *
- * Tries three shapes, each capturing more of the condition than the last, and keeps
- * the first that matches:
+ * Tries the two-predicate shapes first (point-in-range, then interval overlap),
+ * which capture more of the condition, and falls back to the single
+ * cross-side inequality: keeps the first that matches.
  *  - point-in-range: one key probed as both ends of a `(low, high)` window on the other side.
  *  - interval overlap: a `(low, high)` key on each side.
  *  - partial range: one inequality, one column per side.
