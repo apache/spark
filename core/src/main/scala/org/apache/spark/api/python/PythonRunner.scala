@@ -1069,7 +1069,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
      * Buffers data to be written to the Python worker until the socket is
      * available for write.
      * A best-effort attempt is made to not grow the buffer beyond "spark.buffer.size". See
-     * `writeAdditionalInputToPythonWorker()` for details.
+     * `writeBufferedInputToPythonWorker()` for details.
      */
     private[this] var buffer: ByteBuffer = _
     private[this] var hasInput = true
@@ -1241,9 +1241,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         case t: Throwable =>
           // Writing failed or the task was killed mid-write, so the close at the end of
           // `writeBufferedInputToPythonWorker()` is never reached. Free the buffer here, on the
-          // thread that writes into it, instead of leaving it to GC, and stop sending input so
-          // that a later call does not touch it.
-          hasInput = false
+          // thread that writes into it, instead of leaving it to GC. `buffer` may be null or
+          // still point into that memory, so replace it with an empty one: a later call then
+          // fails fast in `bufferStream` instead of touching the freed memory.
           buffer = ByteBuffer.allocate(0)
           bufferStream.close()
           throw t

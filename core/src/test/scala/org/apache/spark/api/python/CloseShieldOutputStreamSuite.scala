@@ -130,11 +130,11 @@ class CloseShieldOutputStreamSuite extends SparkFunSuite with LocalSparkContext 
       // The write into the buffer still succeeds: the buffer was not freed under the writer.
       assert(writeError === null)
       assert(error.isInstanceOf[ClosedByInterruptException])
-      // The failed write frees the buffer on the task thread instead of leaving it to GC.
-      val bufferField = input.getClass.getDeclaredField("bufferStream")
-      bufferField.setAccessible(true)
-      val bufferStream = bufferField.get(input).asInstanceOf[DirectByteBufferOutputStream]
-      val e = intercept[SparkException](bufferStream.size())
+      // The failed write frees the buffer on the task thread instead of leaving it to GC, and
+      // a later read fails instead of reusing the freed buffer. Closing the peer first makes a
+      // regression return -1 rather than wait for output.
+      accepted.close()
+      val e = intercept[SparkException](input.read(new Array[Byte](1)))
       assert(e.getMessage.contains("closed DirectByteBufferOutputStream"))
     } finally {
       // Never leave the writer spinning, even if the test failed before releasing it.
