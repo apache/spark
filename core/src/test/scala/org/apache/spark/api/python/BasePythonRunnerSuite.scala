@@ -219,12 +219,13 @@ class BasePythonRunnerSuite extends SparkFunSuite {
     context.addTaskCompletionListener[Unit] { _ =>
       interruptedInCleanup.set(Some(Thread.currentThread().isInterrupted))
     }
-    BasePythonRunner.startPipelinedWriter(writer, context)
-    assert(writer.started.await(1, TimeUnit.MINUTES))
-    val reached = addReachedListener(context)
-
-    val completion = startThread(context.markTaskCompleted(None))
+    var completion: Thread = null
     try {
+      BasePythonRunner.startPipelinedWriter(writer, context)
+      assert(writer.started.await(1, TimeUnit.MINUTES))
+      val reached = addReachedListener(context)
+
+      completion = startThread(context.markTaskCompleted(None))
       assert(reached.await(1, TimeUnit.MINUTES))
       // Interrupt the completion thread once it blocks in the wait, e.g. a task kill that lands
       // while the listeners run.
@@ -242,6 +243,53 @@ class BasePythonRunnerSuite extends SparkFunSuite {
     assert(!completion.isAlive)
     assert(cleanup.get === Some(true))
     assert(interruptedInCleanup.get === Some(false))
+  }
+
+  test("SPARK-60113: a writer started after the task completed never runs") {
+    // Like startPipelinedWriter called on a helper thread (e.g. PipedRDD's stdin writer) after
+    // the task completed: the stop listener runs at once and keeps the writer from starting.
+    val context = TaskContext.empty()
+    context.markTaskCompleted(None)
+    val ran = new CountDownLatch(1)
+    BasePythonRunner.startPipelinedWriter(() => ran.countDown(), context)
+    assert(!ran.await(500, TimeUnit.MILLISECONDS))
+  }
+
+  test("SPARK-60113: a failure to interrupt the writer does not end the wait") {
+    val writer = new UninterruptibleWriter
+    val writerTask = new BasePythonRunner.PipelinedWriterTask(
+      writer, TaskContext.empty(), "test task", warnIntervalMs = 100)
+    val interruptFailure = new IllegalStateException("cannot interrupt")
+    // The first interrupt and the ones on every warning fail.
+    val writerThread = new Thread(() => writerTask.run()) {
+      override def interrupt(): Unit = throw interruptFailure
+    }
+    writerThread.setDaemon(true)
+    writerThread.start()
+    val stopFailure = new AtomicReference[Option[Throwable]](None)
+    var stopper: Thread = null
+    try {
+      assert(writer.started.await(1, TimeUnit.MINUTES))
+      stopper = startThread {
+        try {
+          writerTask.stopAndAwaitExit()
+        } catch {
+          case t: Throwable => stopFailure.set(Some(t))
+        }
+      }
+      // Several warnings pass, and their interrupts fail, while the writer still runs.
+      stopper.join(500)
+      assert(stopper.isAlive)
+      assert(stopFailure.get.isEmpty)
+    } finally {
+      writer.release.countDown()
+    }
+    stopper.join(TimeUnit.MINUTES.toMillis(1))
+    assert(!stopper.isAlive)
+    // Thrown once the writer has exited.
+    assert(writer.exited)
+    assert(stopFailure.get === Some(interruptFailure))
+    writerThread.join(TimeUnit.MINUTES.toMillis(1))
   }
 
   test("SPARK-60113: a pipelined writer stopped before it starts never runs") {

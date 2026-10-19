@@ -141,7 +141,7 @@ private[spark] class TaskContextImpl(
 
   override private[spark] def addTaskPreCompletionListener(
       listener: TaskCompletionListener): this.type = {
-    val callListenerNow = synchronized {
+    val completedAlready = synchronized {
       // While `markTaskCompleted()` runs the pre-completion listeners, `completed` is not set yet,
       // so the new listener is queued and that thread runs it before it sets `completed`.
       if (!completed) {
@@ -149,12 +149,10 @@ private[spark] class TaskContextImpl(
       }
       completed
     }
-    if (callListenerNow) {
-      val listenerExceptions = new ArrayBuffer[Throwable](1)
-      invokeTaskPreCompletionListener(listener, listenerExceptions)
-      if (listenerExceptions.nonEmpty) {
-        throw newTaskCompletionListenerException(listenerExceptions.toSeq, None)
-      }
+    if (completedAlready) {
+      // Too late to run before the completion listeners: run it like one added now, i.e. right
+      // away, or next if the completion listeners are still running.
+      addTaskCompletionListener(listener)
     }
     this
   }
@@ -235,17 +233,19 @@ private[spark] class TaskContextImpl(
       invokeTaskPreCompletionListener(listener.get, preCompletionExceptions)
     }
 
-    val completionException = try {
+    try {
       invokeTaskCompletionListeners(error)
-      None
     } catch {
-      case e: Throwable => Some(e)
+      case e: Throwable if preCompletionExceptions.nonEmpty =>
+        // Merge the completion listeners' own failures, not the exception that wraps them.
+        preCompletionExceptions ++= (e match {
+          case wrapper: TaskCompletionListenerException => wrapper.getSuppressed.toSeq
+          case _ => Seq(e)
+        })
     }
     if (preCompletionExceptions.nonEmpty) {
-      throw newTaskCompletionListenerException(
-        preCompletionExceptions.toSeq ++ completionException, error)
+      throw newTaskCompletionListenerException(preCompletionExceptions.toSeq, error)
     }
-    completionException.foreach(e => throw e)
   }
 
   /**

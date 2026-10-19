@@ -799,11 +799,13 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
 
   test("SPARK-60113: failures of pre-completion and completion listeners are both reported") {
     val context = TaskContext.empty()
+    val post = new Exception("post")
+    val pre = new Exception("pre")
     context.addTaskCompletionListener(new TaskCompletionListener {
-      override def onTaskCompletion(context: TaskContext): Unit = throw new Exception("post")
+      override def onTaskCompletion(context: TaskContext): Unit = throw post
     })
     context.addTaskPreCompletionListener(new TaskCompletionListener {
-      override def onTaskCompletion(context: TaskContext): Unit = throw new Exception("pre")
+      override def onTaskCompletion(context: TaskContext): Unit = throw pre
     })
 
     val e = intercept[TaskCompletionListenerException] {
@@ -811,9 +813,11 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     }
     assert(e.getMessage.contains("pre"))
     assert(e.getMessage.contains("post"))
+    // The completion listener's own failure, not the exception that wraps it.
+    assert(e.getSuppressed.toSeq === Seq(pre, post))
   }
 
-  test("SPARK-60113: a pre-completion listener added after completion runs immediately") {
+  test("SPARK-60113: a pre-completion listener added after completion runs as a completion one") {
     val context = TaskContext.empty()
     val invocations = new java.util.concurrent.ConcurrentLinkedQueue[(String, Thread)]()
 
@@ -826,8 +830,8 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     context.addTaskCompletionListener(new TaskCompletionListener {
       override def onTaskCompletion(context: TaskContext): Unit = {
         invocations.add(("B", Thread.currentThread()))
-        // Added from a second thread while this thread runs the completion listeners: the task
-        // has completed, so the adding thread runs it right away.
+        // Added from a second thread while this thread runs the completion listeners: it is
+        // queued like a completion listener, and this thread runs it next, after this one.
         val thread = new Thread(() => {
           context.addTaskPreCompletionListener(makeLoggingListener("P"))
         })
@@ -835,12 +839,17 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
         thread.start()
         thread.join(TimeUnit.MINUTES.toMillis(1))
         assert(!thread.isAlive)
-        assert(invocations.asScala.toSeq === Seq(("B", Thread.currentThread()), ("P", thread)))
+        assert(invocations.asScala.toSeq === Seq(("B", Thread.currentThread())))
       }
     })
 
     context.markTaskCompleted(None)
-    assert(invocations.asScala.map(_._1).toSeq === Seq("B", "P", "A"))
+    val completing = Thread.currentThread()
+    assert(invocations.asScala.toSeq ===
+      Seq(("B", completing), ("P", completing), ("A", completing)))
+    // Added once all listeners have run: it runs right away on the adding thread.
+    context.addTaskPreCompletionListener(makeLoggingListener("Q"))
+    assert(invocations.asScala.toSeq.last === (("Q", completing)))
   }
 
   test("SPARK-60113: a failing pre-completion listener added after completion fails the task") {
