@@ -1084,3 +1084,212 @@ Project [lts#x, k#x]
                   +- View (`using_keys`, [k#x])
                      +- Project [cast(col1#x as int) AS k#x]
                         +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT l.lts, d.k
+FROM using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.lts >= r.rts) USING (k)
+-- !query analysis
+Project [lts#x, k#x]
++- Project [k#x, lts#x, rts#x, k#x]
+   +- AsOfJoin (lts#x >= rts#x), (k#x = k#x), Inner
+      :- SubqueryAlias l
+      :  +- SubqueryAlias using_left
+      :     +- View (`using_left`, [k#x, lts#x])
+      :        +- Project [cast(col1#x as int) AS k#x, cast(col2#x as int) AS lts#x]
+      :           +- LocalRelation [col1#x, col2#x]
+      +- Project [k#x, rts#x, k#x]
+         +- Join LeftOuter, (k#x = k#x)
+            :- SubqueryAlias r
+            :  +- SubqueryAlias using_right
+            :     +- View (`using_right`, [k#x, rts#x])
+            :        +- Project [cast(col1#x as int) AS k#x, cast(col2#x as int) AS rts#x]
+            :           +- LocalRelation [col1#x, col2#x]
+            +- SubqueryAlias d
+               +- SubqueryAlias using_keys
+                  +- View (`using_keys`, [k#x])
+                     +- Project [cast(col1#x as int) AS k#x]
+                        +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT d.*
+FROM using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.lts >= r.rts) USING (k)
+-- !query analysis
+Project [k#x]
++- Project [k#x, lts#x, rts#x, k#x]
+   +- AsOfJoin (lts#x >= rts#x), (k#x = k#x), Inner
+      :- SubqueryAlias l
+      :  +- SubqueryAlias using_left
+      :     +- View (`using_left`, [k#x, lts#x])
+      :        +- Project [cast(col1#x as int) AS k#x, cast(col2#x as int) AS lts#x]
+      :           +- LocalRelation [col1#x, col2#x]
+      +- Project [k#x, rts#x, k#x]
+         +- Join LeftOuter, (k#x = k#x)
+            :- SubqueryAlias r
+            :  +- SubqueryAlias using_right
+            :     +- View (`using_right`, [k#x, rts#x])
+            :        +- Project [cast(col1#x as int) AS k#x, cast(col2#x as int) AS rts#x]
+            :           +- LocalRelation [col1#x, col2#x]
+            +- SubqueryAlias d
+               +- SubqueryAlias using_keys
+                  +- View (`using_keys`, [k#x])
+                     +- Project [cast(col1#x as int) AS k#x]
+                        +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT l.lts, x.k
+FROM (using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+        MATCH_CONDITION (l.lts >= r.rts) USING (k))
+  ASOF JOIN (VALUES (1), (2)) AS x(k) MATCH_CONDITION (d.k >= x.k)
+-- !query analysis
+Project [lts#x, k#x]
++- Project [k#x, lts#x, rts#x, k#x]
+   +- AsOfJoin (k#x >= k#x), Inner
+      :- Project [k#x, lts#x, rts#x, k#x]
+      :  +- AsOfJoin (lts#x >= rts#x), (k#x = k#x), Inner
+      :     :- SubqueryAlias l
+      :     :  +- SubqueryAlias using_left
+      :     :     +- View (`using_left`, [k#x, lts#x])
+      :     :        +- Project [cast(col1#x as int) AS k#x, cast(col2#x as int) AS lts#x]
+      :     :           +- LocalRelation [col1#x, col2#x]
+      :     +- Project [k#x, rts#x, k#x]
+      :        +- Join LeftOuter, (k#x = k#x)
+      :           :- SubqueryAlias r
+      :           :  +- SubqueryAlias using_right
+      :           :     +- View (`using_right`, [k#x, rts#x])
+      :           :        +- Project [cast(col1#x as int) AS k#x, cast(col2#x as int) AS rts#x]
+      :           :           +- LocalRelation [col1#x, col2#x]
+      :           +- SubqueryAlias d
+      :              +- SubqueryAlias using_keys
+      :                 +- View (`using_keys`, [k#x])
+      :                    +- Project [cast(col1#x as int) AS k#x]
+      :                       +- LocalRelation [col1#x]
+      +- SubqueryAlias x
+         +- Project [col1#x AS k#x]
+            +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT d.k, x.k
+FROM (using_right r LEFT JOIN using_keys d USING (k))
+  ASOF JOIN using_keys x MATCH_CONDITION (d.k >= x.k)
+-- !query analysis
+Project [k#x, k#x]
++- Project [k#x, rts#x, k#x, k#x]
+   +- AsOfJoin (k#x >= k#x), Inner
+      :- Project [k#x, rts#x, k#x]
+      :  +- Join LeftOuter, (k#x = k#x)
+      :     :- SubqueryAlias r
+      :     :  +- SubqueryAlias using_right
+      :     :     +- View (`using_right`, [k#x, rts#x])
+      :     :        +- Project [cast(col1#x as int) AS k#x, cast(col2#x as int) AS rts#x]
+      :     :           +- LocalRelation [col1#x, col2#x]
+      :     +- SubqueryAlias d
+      :        +- SubqueryAlias using_keys
+      :           +- View (`using_keys`, [k#x])
+      :              +- Project [cast(col1#x as int) AS k#x]
+      :                 +- LocalRelation [col1#x]
+      +- SubqueryAlias x
+         +- SubqueryAlias using_keys
+            +- View (`using_keys`, [k#x])
+               +- Project [cast(col1#x as int) AS k#x]
+                  +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT l.lts, x.k
+FROM (using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+        MATCH_CONDITION (l.lts >= r.rts) USING (k))
+  ASOF JOIN using_keys x MATCH_CONDITION (d.k >= x.k)
+-- !query analysis
+Project [lts#x, k#x]
++- Project [k#x, lts#x, rts#x, k#x]
+   +- AsOfJoin (k#x >= k#x), Inner
+      :- Project [k#x, lts#x, rts#x, k#x]
+      :  +- AsOfJoin (lts#x >= rts#x), (k#x = k#x), Inner
+      :     :- SubqueryAlias l
+      :     :  +- SubqueryAlias using_left
+      :     :     +- View (`using_left`, [k#x, lts#x])
+      :     :        +- Project [cast(col1#x as int) AS k#x, cast(col2#x as int) AS lts#x]
+      :     :           +- LocalRelation [col1#x, col2#x]
+      :     +- Project [k#x, rts#x, k#x]
+      :        +- Join LeftOuter, (k#x = k#x)
+      :           :- SubqueryAlias r
+      :           :  +- SubqueryAlias using_right
+      :           :     +- View (`using_right`, [k#x, rts#x])
+      :           :        +- Project [cast(col1#x as int) AS k#x, cast(col2#x as int) AS rts#x]
+      :           :           +- LocalRelation [col1#x, col2#x]
+      :           +- SubqueryAlias d
+      :              +- SubqueryAlias using_keys
+      :                 +- View (`using_keys`, [k#x])
+      :                    +- Project [cast(col1#x as int) AS k#x]
+      :                       +- LocalRelation [col1#x]
+      +- SubqueryAlias x
+         +- SubqueryAlias using_keys
+            +- View (`using_keys`, [k#x])
+               +- Project [cast(col1#x as int) AS k#x]
+                  +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT l.lts, x.k
+FROM (using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+        MATCH_CONDITION (l.lts >= r.rts) USING (k))
+  JOIN (VALUES (1), (2), (8)) AS x(k) ON d.k = x.k
+-- !query analysis
+Project [lts#x, k#x]
++- Project [k#x, lts#x, rts#x, k#x]
+   +- Join Inner, (k#x = k#x)
+      :- Project [k#x, lts#x, rts#x, k#x]
+      :  +- AsOfJoin (lts#x >= rts#x), (k#x = k#x), Inner
+      :     :- SubqueryAlias l
+      :     :  +- SubqueryAlias using_left
+      :     :     +- View (`using_left`, [k#x, lts#x])
+      :     :        +- Project [cast(col1#x as int) AS k#x, cast(col2#x as int) AS lts#x]
+      :     :           +- LocalRelation [col1#x, col2#x]
+      :     +- Project [k#x, rts#x, k#x]
+      :        +- Join LeftOuter, (k#x = k#x)
+      :           :- SubqueryAlias r
+      :           :  +- SubqueryAlias using_right
+      :           :     +- View (`using_right`, [k#x, rts#x])
+      :           :        +- Project [cast(col1#x as int) AS k#x, cast(col2#x as int) AS rts#x]
+      :           :           +- LocalRelation [col1#x, col2#x]
+      :           +- SubqueryAlias d
+      :              +- SubqueryAlias using_keys
+      :                 +- View (`using_keys`, [k#x])
+      :                    +- Project [cast(col1#x as int) AS k#x]
+      :                       +- LocalRelation [col1#x]
+      +- SubqueryAlias x
+         +- Project [col1#x AS k#x]
+            +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT l.lts, d.k
+FROM using_left l LEFT ASOF JOIN (using_right r JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.lts >= r.rts) USING (k)
+-- !query analysis
+Project [lts#x, k#x]
++- Project [k#x, lts#x, rts#x, k#x]
+   +- AsOfJoin (lts#x >= rts#x), (k#x = k#x), LeftOuter
+      :- SubqueryAlias l
+      :  +- SubqueryAlias using_left
+      :     +- View (`using_left`, [k#x, lts#x])
+      :        +- Project [cast(col1#x as int) AS k#x, cast(col2#x as int) AS lts#x]
+      :           +- LocalRelation [col1#x, col2#x]
+      +- Project [k#x, rts#x, k#x]
+         +- Join Inner, (k#x = k#x)
+            :- SubqueryAlias r
+            :  +- SubqueryAlias using_right
+            :     +- View (`using_right`, [k#x, rts#x])
+            :        +- Project [cast(col1#x as int) AS k#x, cast(col2#x as int) AS rts#x]
+            :           +- LocalRelation [col1#x, col2#x]
+            +- SubqueryAlias d
+               +- SubqueryAlias using_keys
+                  +- View (`using_keys`, [k#x])
+                     +- Project [cast(col1#x as int) AS k#x]
+                        +- LocalRelation [col1#x]

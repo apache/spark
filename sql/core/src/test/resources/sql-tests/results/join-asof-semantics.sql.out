@@ -640,3 +640,86 @@ struct<lts:int,k:int>
 10	1
 20	2
 30	NULL
+
+
+-- !query
+SELECT l.lts, d.k
+FROM using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.lts >= r.rts) USING (k)
+-- !query schema
+struct<lts:int,k:int>
+-- !query output
+10	1
+20	2
+30	NULL
+
+
+-- !query
+SELECT d.*
+FROM using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.lts >= r.rts) USING (k)
+-- !query schema
+struct<k:int>
+-- !query output
+1
+2
+NULL
+
+
+-- !query
+SELECT l.lts, x.k
+FROM (using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+        MATCH_CONDITION (l.lts >= r.rts) USING (k))
+  ASOF JOIN (VALUES (1), (2)) AS x(k) MATCH_CONDITION (d.k >= x.k)
+-- !query schema
+struct<lts:int,k:int>
+-- !query output
+10	1
+20	2
+
+
+-- !query
+SELECT d.k, x.k
+FROM (using_right r LEFT JOIN using_keys d USING (k))
+  ASOF JOIN using_keys x MATCH_CONDITION (d.k >= x.k)
+-- !query schema
+struct<k:int,k:int>
+-- !query output
+1	1
+2	2
+
+
+-- !query
+SELECT l.lts, x.k
+FROM (using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+        MATCH_CONDITION (l.lts >= r.rts) USING (k))
+  ASOF JOIN using_keys x MATCH_CONDITION (d.k >= x.k)
+-- !query schema
+struct<lts:int,k:int>
+-- !query output
+10	1
+20	2
+
+
+-- !query
+SELECT l.lts, x.k
+FROM (using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+        MATCH_CONDITION (l.lts >= r.rts) USING (k))
+  JOIN (VALUES (1), (2), (8)) AS x(k) ON d.k = x.k
+-- !query schema
+struct<lts:int,k:int>
+-- !query output
+10	1
+20	2
+
+
+-- !query
+SELECT l.lts, d.k
+FROM using_left l LEFT ASOF JOIN (using_right r JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.lts >= r.rts) USING (k)
+-- !query schema
+struct<lts:int,k:int>
+-- !query output
+10	1
+20	2
+30	NULL

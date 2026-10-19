@@ -38,7 +38,8 @@ import org.apache.spark.sql.catalyst.plans.{
   LeftOuter,
   RightOuter
 }
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
 import org.apache.spark.sql.errors.{
   DataTypeErrorsBase,
   QueryCompilationErrors,
@@ -82,6 +83,22 @@ object NaturalAndUsingJoinResolution extends DataTypeErrorsBase with SQLConfHelp
       joinType
     )
     (output, hiddenOutput, newCondition)
+  }
+
+  /**
+   * Wraps a NATURAL or USING join in a [[Project]] that hides `hiddenList` (the duplicate join
+   * keys). It also passes up the hidden columns of nested NATURAL and USING joins.
+   */
+  def buildUsingJoinProject(
+      projectList: Seq[NamedExpression],
+      hiddenList: Seq[Attribute],
+      join: LogicalPlan): Project = {
+    val project = Project(projectList, join)
+    project.setTagValue(
+      Project.hiddenOutputTag,
+      hiddenList.map(_.markAsQualifiedAccessOnly()) ++
+        join.metadataOutput.filter(_.qualifiedAccessOnly))
+    project
   }
 
   /**

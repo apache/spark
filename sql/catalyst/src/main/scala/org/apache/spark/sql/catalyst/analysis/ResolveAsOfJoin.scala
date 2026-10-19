@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.{
 import org.apache.spark.sql.catalyst.expressions.AttributeSet
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, MatchComparisonOperator}
-import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.logical.AsOfJoin.MatchConditionTypes
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AS_OF_JOIN, GENERATOR}
@@ -106,11 +106,7 @@ object ResolveAsOfJoin extends Rule[LogicalPlan] with SQLConfHelper {
       }
       usingProjection match {
         case Some((projectList, hiddenList)) =>
-          val project = Project(projectList, resolvedJoin)
-          project.setTagValue(
-            Project.hiddenOutputTag,
-            hiddenList.map(_.markAsQualifiedAccessOnly()))
-          project
+          NaturalAndUsingJoinResolution.buildUsingJoinProject(projectList, hiddenList, resolvedJoin)
         case None => resolvedJoin
       }
   }

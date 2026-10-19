@@ -73,8 +73,15 @@ class AsOfJoinResolver(
       Seq(leftNameScope.output, rightNameScope.output)
     )
 
+    // MATCH_CONDITION is resolved a second time below. Keep the hidden column IDs here too, so a
+    // copy of the same table on the other side can't remap them.
+    val qualifiedAccessOnlyColumnIds =
+      (leftNameScope.hiddenOutput ++ rightNameScope.hiddenOutput)
+        .filter(_.qualifiedAccessOnly)
+        .map(_.exprId)
     expressionIdAssigner.createMappingFromChildMappings(
-      newOutputIds = leftNameScope.getOutputIds ++ rightNameScope.getOutputIds
+      newOutputIds =
+        leftNameScope.getOutputIds ++ rightNameScope.getOutputIds ++ qualifiedAccessOnlyColumnIds
     )
 
     val partiallyResolved = unresolvedAsOfJoin.copy(
