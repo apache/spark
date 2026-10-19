@@ -185,9 +185,8 @@ case class EnsureRequirements(
           parent.get, left, right, requiredChildDistributions)
         if (newChildren.isDefined) {
           children = newChildren.get
-          // SPJ pushdown can update a nested join while the other side is still a
-          // placeholder shuffle. Fall back to the shuffle-alignment path unless both
-          // sides already report the same number of partitions.
+          // Require matching output partition counts after SPJ pushdown; otherwise fall
+          // back to shuffle alignment.
           children.map(_.outputPartitioning.numPartitions).distinct.length == 1
         } else {
           // If key group check fails, check ShufflePartitionIdPassThrough compatibility
@@ -226,14 +225,12 @@ case class EnsureRequirements(
             // two sides agreed on.
             val bestMember = bestMemberOpt.get
             flattenSpec(specs(idx)).find(bestMember.isCompatibleWith) match {
-              // If `areChildrenCompatible` is false, we can still perform SPJ
-              // by shuffling the other side based on join keys (see the else case below).
-              // Hence we need to ensure that after this call, the outputPartitioning of the
-              // partitioned side's BatchScanExec is grouped by join keys to match,
-              // and we do that by pushing down the join keys
+              // Push join-key positions into the compatible BatchScanExec so
+              // outputPartitioning matches the shuffled side.
               case Some(KeyGroupedShuffleSpec(_, _, Some(joinKeyPositions))) =>
-                populateJoinKeyPositionsOnSide(
-                  child, Some(joinKeyPositions), fromLeft = idx == childrenIndexes.head)
+                populateSpjParamsOnSide(
+                  child, fromLeft = idx == childrenIndexes.head,
+                  commonPartitionValues = None, joinKeyPositions = Some(joinKeyPositions))
               case _ => child
             }
           } else {
@@ -351,8 +348,8 @@ case class EnsureRequirements(
         // Sort 'commonPartitionValues' and use this mechanism to ensure BatchScan's
         // output partitions are ordered
         val sorted = partitionValues.sorted(partitionOrdering)
-        populateCommonPartitionInfo(plan, sorted.map((_, 1)),
-          None, None, applyPartialClustering = false, replicatePartitions = false)
+        populateSpjParams(plan, Some(sorted.map((_, 1))), None,
+          applyPartialClustering = false, replicatePartitions = false)
       case _ => plan
       }
   }
@@ -663,15 +660,17 @@ case class EnsureRequirements(
           }
         }
 
-        // Now we need to push-down the common partition information to the scan in each child.
-        // When a child is itself a join, only update that join's matching side so nested SPJ
-        // parameters from an inner join are not overwritten on the inner join's other side.
-        newLeft = populateCommonPartitionInfoOnSide(left, mergedPartValues,
-          leftSpec.joinKeyPositions, leftReducers, applyPartialClustering, replicateLeftSide,
-          fromLeft = true)
-        newRight = populateCommonPartitionInfoOnSide(right, mergedPartValues,
-          rightSpec.joinKeyPositions, rightReducers, applyPartialClustering, replicateRightSide,
-          fromLeft = false)
+        // Push common partition values and related SPJ params to each child scan. For nested
+        // joins, update only the matching inner side to avoid overwriting inner params on
+        // the other side.
+        newLeft = populateSpjParamsOnSide(
+          left, fromLeft = true, commonPartitionValues = Some(mergedPartValues),
+          joinKeyPositions = leftSpec.joinKeyPositions, reducers = leftReducers,
+          applyPartialClustering = applyPartialClustering, replicatePartitions = replicateLeftSide)
+        newRight = populateSpjParamsOnSide(
+          right, fromLeft = false, commonPartitionValues = Some(mergedPartValues),
+          joinKeyPositions = rightSpec.joinKeyPositions, reducers = rightReducers,
+          applyPartialClustering = applyPartialClustering, replicatePartitions = replicateRightSide)
       }
     }
 
@@ -707,9 +706,8 @@ case class EnsureRequirements(
   }
 
   /**
-   * Compose join-key positions from an outer SPJ with positions already pushed by an inner SPJ.
-   * Outer positions index the layout the outer join sees; inner positions index the scan's raw
-   * partition expressions, so they are composed rather than replaced.
+   * Compose outer join-key positions with positions already pushed by an inner SPJ. Outer
+   * positions index the outer layout; inner positions index raw partition expressions.
    */
   private def composeJoinKeyPositions(
       existing: Option[Seq[Int]],
@@ -721,160 +719,100 @@ case class EnsureRequirements(
     }
   }
 
-  private def populateCommonPartitionInfoOnSide(
-      plan: SparkPlan,
-      values: Seq[(InternalRow, Int)],
+  /** Controls which SPJ fields are updated on a scan during pushdown. */
+  private case class SpjPushFlags(
+      pushJoinKeyPositions: Boolean = true,
+      pushCommonValues: Boolean = true)
+
+  /**
+   * Compute side-aware SPJ push flags for nested shuffle joins. With no join-key positions,
+   * push common values to both inner sides. With subset join keys, compose join-key positions
+   * on the matching side only and retain inner common-partition metadata on both sides.
+   */
+  private def nestedSpjPushFlags(
       joinKeyPositions: Option[Seq[Int]],
-      reducers: Option[Seq[Option[Reducer[_, _]]]],
-      applyPartialClustering: Boolean,
-      replicatePartitions: Boolean,
-      fromLeft: Boolean): SparkPlan = plan match {
+      isMatchingSide: Boolean): SpjPushFlags = {
+    val syncCommonValuesToBothSides = joinKeyPositions.isEmpty
+    if (joinKeyPositions.isDefined && !syncCommonValuesToBothSides) {
+      SpjPushFlags(pushJoinKeyPositions = isMatchingSide, pushCommonValues = false)
+    } else {
+      SpjPushFlags(
+        pushJoinKeyPositions = isMatchingSide || syncCommonValuesToBothSides,
+        pushCommonValues = isMatchingSide || syncCommonValuesToBothSides)
+    }
+  }
+
+  private def populateSpjParamsOnSide(
+      plan: SparkPlan,
+      fromLeft: Boolean,
+      commonPartitionValues: Option[Seq[(InternalRow, Int)]],
+      joinKeyPositions: Option[Seq[Int]],
+      reducers: Option[Seq[Option[Reducer[_, _]]]] = None,
+      applyPartialClustering: Boolean = false,
+      replicatePartitions: Boolean = false): SparkPlan = plan match {
     case smj: SortMergeJoinExec =>
-      // Push common partition info to both sides of a nested join so partition counts stay
-      // aligned, but only compose join-key positions on the side that feeds this join.
-      // When join keys are a subset of partition keys, keep the inner join's common partition
-      // values on both sides and only push join-key positions to the matching side.
-      val pushCommonValuesToOtherSide = joinKeyPositions.isEmpty
-      def pushCommonValues(isMatchingSide: Boolean): Boolean = {
-        if (joinKeyPositions.isDefined && !pushCommonValuesToOtherSide) {
-          false
-        } else {
-          isMatchingSide || pushCommonValuesToOtherSide
-        }
-      }
-      val preserveFullOutputPartitioning =
-        joinKeyPositions.isDefined && !pushCommonValuesToOtherSide
+      val leftFlags = nestedSpjPushFlags(joinKeyPositions, isMatchingSide = fromLeft)
+      val rightFlags = nestedSpjPushFlags(joinKeyPositions, isMatchingSide = !fromLeft)
       smj.copy(
-        left = populateCommonPartitionInfo(
-          smj.left, values, if (fromLeft) joinKeyPositions else None, reducers,
-          applyPartialClustering, replicatePartitions,
-          pushJoinKeyPositions = fromLeft,
-          pushCommonValues = pushCommonValues(fromLeft),
-          preserveFullOutputPartitioning = fromLeft && preserveFullOutputPartitioning),
-        right = populateCommonPartitionInfo(
-          smj.right, values, if (!fromLeft) joinKeyPositions else None, reducers,
-          applyPartialClustering, replicatePartitions,
-          pushJoinKeyPositions = !fromLeft,
-          pushCommonValues = pushCommonValues(!fromLeft),
-          preserveFullOutputPartitioning = !fromLeft && preserveFullOutputPartitioning))
+        left = populateSpjParams(
+          smj.left, commonPartitionValues, if (fromLeft) joinKeyPositions else None,
+          reducers, applyPartialClustering, replicatePartitions, leftFlags),
+        right = populateSpjParams(
+          smj.right, commonPartitionValues, if (!fromLeft) joinKeyPositions else None,
+          reducers, applyPartialClustering, replicatePartitions, rightFlags))
     case shj: ShuffledHashJoinExec =>
-      val pushCommonValuesToOtherSide = joinKeyPositions.isEmpty
-      def pushCommonValues(isMatchingSide: Boolean): Boolean = {
-        if (joinKeyPositions.isDefined && !pushCommonValuesToOtherSide) {
-          false
-        } else {
-          isMatchingSide || pushCommonValuesToOtherSide
-        }
-      }
-      val preserveFullOutputPartitioning =
-        joinKeyPositions.isDefined && !pushCommonValuesToOtherSide
+      val leftFlags = nestedSpjPushFlags(joinKeyPositions, isMatchingSide = fromLeft)
+      val rightFlags = nestedSpjPushFlags(joinKeyPositions, isMatchingSide = !fromLeft)
       shj.copy(
-        left = populateCommonPartitionInfo(
-          shj.left, values, if (fromLeft) joinKeyPositions else None, reducers,
-          applyPartialClustering, replicatePartitions,
-          pushJoinKeyPositions = fromLeft,
-          pushCommonValues = pushCommonValues(fromLeft),
-          preserveFullOutputPartitioning = fromLeft && preserveFullOutputPartitioning),
-        right = populateCommonPartitionInfo(
-          shj.right, values, if (!fromLeft) joinKeyPositions else None, reducers,
-          applyPartialClustering, replicatePartitions,
-          pushJoinKeyPositions = !fromLeft,
-          pushCommonValues = pushCommonValues(!fromLeft),
-          preserveFullOutputPartitioning = !fromLeft && preserveFullOutputPartitioning))
+        left = populateSpjParams(
+          shj.left, commonPartitionValues, if (fromLeft) joinKeyPositions else None,
+          reducers, applyPartialClustering, replicatePartitions, leftFlags),
+        right = populateSpjParams(
+          shj.right, commonPartitionValues, if (!fromLeft) joinKeyPositions else None,
+          reducers, applyPartialClustering, replicatePartitions, rightFlags))
     case other =>
-      populateCommonPartitionInfo(other, values, joinKeyPositions, reducers,
+      populateSpjParams(
+        other, commonPartitionValues, joinKeyPositions, reducers,
         applyPartialClustering, replicatePartitions)
   }
 
-  // Populate the common partition information down to the scan nodes
-  private def populateCommonPartitionInfo(
+  // Push SPJ parameters down to scan nodes.
+  private def populateSpjParams(
       plan: SparkPlan,
-      values: Seq[(InternalRow, Int)],
+      commonPartitionValues: Option[Seq[(InternalRow, Int)]],
       joinKeyPositions: Option[Seq[Int]],
-      reducers: Option[Seq[Option[Reducer[_, _]]]],
-      applyPartialClustering: Boolean,
-      replicatePartitions: Boolean,
-      pushJoinKeyPositions: Boolean = true,
-      pushCommonValues: Boolean = true,
-      preserveFullOutputPartitioning: Boolean = false): SparkPlan = plan match {
+      reducers: Option[Seq[Option[Reducer[_, _]]]] = None,
+      applyPartialClustering: Boolean = false,
+      replicatePartitions: Boolean = false,
+      flags: SpjPushFlags = SpjPushFlags()): SparkPlan = plan match {
     case scan: BatchScanExec =>
       val existing = scan.spjParams
       scan.copy(
         spjParams = existing.copy(
-          commonPartitionValues = if (pushCommonValues) {
-            Some(values)
-          } else {
-            existing.commonPartitionValues
+          commonPartitionValues = commonPartitionValues match {
+            case Some(values) if flags.pushCommonValues => Some(values)
+            case _ => existing.commonPartitionValues
           },
-          joinKeyPositions = if (pushJoinKeyPositions) {
+          joinKeyPositions = if (flags.pushJoinKeyPositions) {
             composeJoinKeyPositions(existing.joinKeyPositions, joinKeyPositions)
           } else {
             existing.joinKeyPositions
           },
           reducers = reducers.orElse(existing.reducers),
-          applyPartialClustering = if (pushCommonValues) {
-            applyPartialClustering
-          } else {
-            existing.applyPartialClustering
+          applyPartialClustering = commonPartitionValues match {
+            case Some(_) if flags.pushCommonValues => applyPartialClustering
+            case _ => existing.applyPartialClustering
           },
-          replicatePartitions = if (pushCommonValues) {
-            replicatePartitions
-          } else {
-            existing.replicatePartitions
-          },
-          preserveFullOutputPartitioning = existing.preserveFullOutputPartitioning ||
-            preserveFullOutputPartitioning
+          replicatePartitions = commonPartitionValues match {
+            case Some(_) if flags.pushCommonValues => replicatePartitions
+            case _ => existing.replicatePartitions
+          }
         )
       )
     case node =>
-      node.mapChildren(child => populateCommonPartitionInfo(
-        child, values, joinKeyPositions, reducers, applyPartialClustering, replicatePartitions,
-        pushJoinKeyPositions, pushCommonValues, preserveFullOutputPartitioning))
-  }
-
-
-  private def populateJoinKeyPositionsOnSide(
-      plan: SparkPlan,
-      joinKeyPositions: Option[Seq[Int]],
-      fromLeft: Boolean): SparkPlan = plan match {
-    case smj: SortMergeJoinExec =>
-      val preserveFull = joinKeyPositions.isDefined
-      smj.copy(
-        left = populateJoinKeyPositions(
-          smj.left, if (fromLeft) joinKeyPositions else None,
-          preserveFullOutputPartitioning = fromLeft && preserveFull),
-        right = populateJoinKeyPositions(
-          smj.right, if (!fromLeft) joinKeyPositions else None,
-          preserveFullOutputPartitioning = !fromLeft && preserveFull))
-    case shj: ShuffledHashJoinExec =>
-      val preserveFull = joinKeyPositions.isDefined
-      shj.copy(
-        left = populateJoinKeyPositions(
-          shj.left, if (fromLeft) joinKeyPositions else None,
-          preserveFullOutputPartitioning = fromLeft && preserveFull),
-        right = populateJoinKeyPositions(
-          shj.right, if (!fromLeft) joinKeyPositions else None,
-          preserveFullOutputPartitioning = !fromLeft && preserveFull))
-    case other =>
-      populateJoinKeyPositions(other, joinKeyPositions)
-  }
-
-  private def populateJoinKeyPositions(
-      plan: SparkPlan,
-      joinKeyPositions: Option[Seq[Int]],
-      preserveFullOutputPartitioning: Boolean = false): SparkPlan = plan match {
-    case scan: BatchScanExec =>
-      val existing = scan.spjParams
-      scan.copy(
-        spjParams = existing.copy(
-          joinKeyPositions = composeJoinKeyPositions(existing.joinKeyPositions, joinKeyPositions),
-          preserveFullOutputPartitioning = existing.preserveFullOutputPartitioning ||
-            preserveFullOutputPartitioning
-        )
-      )
-    case node =>
-      node.mapChildren(child => populateJoinKeyPositions(
-        child, joinKeyPositions, preserveFullOutputPartitioning))
+      node.mapChildren(child => populateSpjParams(
+        child, commonPartitionValues, joinKeyPositions, reducers,
+        applyPartialClustering, replicatePartitions, flags))
   }
 
   private def reducePartValues(
