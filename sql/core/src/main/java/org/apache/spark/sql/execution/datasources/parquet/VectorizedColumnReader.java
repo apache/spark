@@ -178,7 +178,7 @@ public class VectorizedColumnReader {
     this.dictionary = dict;
     this.isCurrentPageDictionaryEncoded = dict != null;
     if (pageReader.getTotalValueCount() == 0) {
-      throw new IOException("totalValueCount == 0");
+      throw new IOException("totalValueCount == 0 in col " + descriptor);
     }
     assert "LEGACY".equals(datetimeRebaseMode) || "EXCEPTION".equals(datetimeRebaseMode) ||
       "CORRECTED".equals(datetimeRebaseMode);

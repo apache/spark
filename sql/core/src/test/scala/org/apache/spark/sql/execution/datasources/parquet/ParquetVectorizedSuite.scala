@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.io.IOException
 import java.util.{Optional, PrimitiveIterator}
 
 import scala.collection.mutable.ArrayBuffer
@@ -580,7 +581,12 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
         BytesInput.from(Array[Byte](1, 0, 0, 0, 2, 0, 0, 0)), 2, Encoding.PLAIN_DICTIONARY)),
         Array[Byte](1, 2 << 1, 0), Encoding.RLE_DICTIONARY),
       // 2 of the 4 PLAIN values.
-      ("Failed to read 16 bytes", None, Array[Byte](1, 0, 0, 0, 2, 0, 0, 0), Encoding.PLAIN)
+      ("Failed to read 16 bytes", None, Array[Byte](1, 0, 0, 0, 2, 0, 0, 0), Encoding.PLAIN),
+      // A DELTA_BINARY_PACKED block of 128 values in 4 mini blocks, with 4 values and the first
+      // value 0, then the min delta 0 and the mini block bit widths 65, 0, 0 and 0. The second
+      // value unpacks the first mini block.
+      ("Invalid DELTA_BINARY_PACKED mini block bit width: 65 (must be at most 64)", None,
+        Array[Byte](0x80.toByte, 1, 4, 4, 0, 0, 65, 0, 0, 0), Encoding.DELTA_BINARY_PACKED)
     ).foreach { case (error, dictionaryPage, values, encoding) =>
       val e = readCorruptedPage("int32", dictionaryPage, fourNonNullValues ++ values, 4, encoding)
       assert(e.getMessage.startsWith("could not decode page Page [bytes.size="), e.getMessage)
@@ -612,7 +618,7 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-59854: invalid DELTA_BINARY_PACKED data reports the column") {
+  test("SPARK-59854: an invalid DELTA_BINARY_PACKED header reports the column") {
     // One non-null value. The header has a block of 128 values in 3 mini blocks.
     val e = readCorruptedPage("int32", None,
       Array[Byte](2, 0, 0, 0, 2, 1, 0x80.toByte, 1, 3, 1, 0), 1, Encoding.DELTA_BINARY_PACKED)
@@ -620,17 +626,24 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
       "mini block count: 3 (block size in values: 128, the mini block size must be a multiple " +
       "of 8)"), e.getMessage)
     assert(e.getCause.isInstanceOf[ParquetDecodingException], e)
+  }
 
-    // Two non-null values, so the second one unpacks the first mini block. The header has a
-    // block of 128 values in 4 mini blocks, 2 values and the first value 0. The block has the
-    // min delta 0 and the mini block bit widths 65, 0, 0 and 0.
-    val e2 = readCorruptedPage("int32", None,
-      Array[Byte](2, 0, 0, 0, 2 << 1, 1, 0x80.toByte, 1, 4, 2, 0, 0, 65, 0, 0, 0), 2,
-      Encoding.DELTA_BINARY_PACKED)
-    assert(e2.getMessage.startsWith("could not decode page Page [bytes.size="), e2.getMessage)
-    assert(e2.getMessage.contains("in col [a] optional int32 a: Invalid DELTA_BINARY_PACKED " +
-      "mini block bit width: 65 (must be at most 64)"), e2.getMessage)
-    assert(e2.getCause.isInstanceOf[ParquetDecodingException], e2)
+  test("SPARK-59854: a column chunk without values reports the column") {
+    val parquetSchema = MessageTypeParser.parseMessageType("message root { optional int32 a; }")
+    val ty = parquetSchema.asGroupType().getType("a").asPrimitiveType()
+    val memPageStore = new MemPageStore(1)
+    // The column has a page writer, so the page store has a page reader for it, but no page.
+    memPageStore.getPageWriter(new ColumnDescriptor(Array("a"), ty, 0, 1))
+    val recordReader = new VectorizedParquetRecordReader(
+      DateTimeUtils.getZoneId("EST"), "CORRECTED", "UTC", "CORRECTED", "UTC", true, 1)
+    try {
+      recordReader.initialize(parquetSchema, parquetSchema,
+        TestParquetRowGroupReader(Seq(TestPageReadStore(memPageStore, Seq(0L)))), 1)
+      val e = intercept[IOException](recordReader.nextKeyValue())
+      assert(e.getMessage == "totalValueCount == 0 in col [a] optional int32 a")
+    } finally {
+      recordReader.close()
+    }
   }
 
   truncateTypeTest("primitive type", IntegerType, LongType, IntegerType)
@@ -935,7 +948,6 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
     columnWriterStore.flush()
   }
 
-
   /**
    * Reads a row group of the optional column `a` of type `columnType`, with an optional
    * dictionary page and one data page of `valueCount` values, and returns the error of reading
@@ -966,6 +978,7 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
       recordReader.close()
     }
   }
+
   private def checkAnswer(
       totalRowCount: Int,
       fileSchema: MessageType,

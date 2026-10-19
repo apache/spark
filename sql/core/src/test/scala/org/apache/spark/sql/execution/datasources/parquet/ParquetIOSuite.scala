@@ -2590,7 +2590,8 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
           "compression" -> "zstd")
         val e = readCorruptedFile("cast(id % 10 as int) as a", options) { bytes =>
           // The first page of the only column chunk starts right after the magic number.
-          val in = new ByteArrayInputStream(bytes, ParquetFileWriter.MAGIC.length, bytes.length)
+          val start = ParquetFileWriter.MAGIC.length
+          val in = new ByteArrayInputStream(bytes, start, bytes.length - start)
           assert(Util.readPageHeader(in).getType == pageType)
           // Invert the first bytes of the page, the ZSTD frame magic number.
           val pageStart = bytes.length - in.available()
@@ -2600,7 +2601,6 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
           Option(c.getMessage).exists(_.contains("[a] optional int32 a"))), e)
     }
   }
-
 }
 
 class JobCommitFailureParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)
