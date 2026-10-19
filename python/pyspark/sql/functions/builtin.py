@@ -34830,10 +34830,13 @@ def vector_normalize(vector: "ColumnOrName", degree: Optional["ColumnOrName"] = 
 
 @_try_remote_functions
 def vector_avg(col: "ColumnOrName") -> Column:
-    """Aggregate function: returns the element-wise mean of float vectors in a group.
+    """Aggregate function: returns the element-wise mean of float or double vectors in a group.
     All vectors must have the same dimension.
 
     .. versionadded:: 4.3.0
+
+    .. versionchanged:: 4.4.0
+        Supports arrays of doubles.
 
     Parameters
     ----------
@@ -34843,7 +34846,8 @@ def vector_avg(col: "ColumnOrName") -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        the element-wise average vector as an array of floats.
+        the element-wise average vector as an array with the same element type as the input
+        (float or double).
 
     Examples
     --------
