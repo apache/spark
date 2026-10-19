@@ -24,6 +24,7 @@ import scala.util.{Left, Right}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
+import org.apache.spark.sql.catalyst.plans.ExistenceJoin
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
@@ -546,8 +547,12 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             None
           }
           if (!canPrune) {
-            blocked(s"the $sideName side of a " +
-              s"${joinType.sql.toLowerCase(Locale.ROOT)} join cannot be pruned")
+            // `ExistenceJoin.sql` throws, as the type never appears in SQL.
+            val joinDescription = joinType match {
+              case _: ExistenceJoin => "an existence"
+              case _ => s"a ${joinType.sql.toLowerCase(Locale.ROOT)}"
+            }
+            blocked(s"the $sideName side of $joinDescription join cannot be pruned")
           } else if (creationHinted ||
             !(applicationHinted || hasShuffle || probablyHasShuffle(applicationSide))) {
             None
