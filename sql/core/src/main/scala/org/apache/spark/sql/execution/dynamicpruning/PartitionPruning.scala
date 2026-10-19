@@ -23,12 +23,11 @@ import org.apache.spark.sql.catalyst.optimizer.{JoinSelectionHelper, ReusableBro
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering
 import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.v2.ExtractV2Scan
-import org.apache.spark.sql.internal.connector.SupportsRuntimeCatalystFiltering
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+
 /**
  * Dynamic partition pruning optimization is performed based on the type and
  * selectivity of the join operation. During query optimization, we insert a
@@ -79,18 +78,8 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
         } else {
           None
         }
-      case (resExp, r @ ExtractV2Scan(scan: SupportsRuntimeV2Filtering)) =>
-        val filterAttrs = V2ExpressionUtils.resolveAttributeRefs(
-          scan.filterAttributes, r.output)
-        if (resExp.references.subsetOf(filterAttrs)) {
-          Some(r)
-        } else {
-          None
-        }
-      case (resExp, r @ ExtractV2Scan(scan: SupportsRuntimeCatalystFiltering)) =>
-        val filterAttrs = V2ExpressionUtils.resolveAttributeRefs(
-          scan.filterAttributes(), r.output)
-        if (resExp.references.subsetOf(filterAttrs)) {
+      case (resExp, r: DataSourceV2ScanRelation) =>
+        if (resExp.references.subsetOf(r.runtimeFilterAttrs)) {
           Some(r)
         } else {
           None

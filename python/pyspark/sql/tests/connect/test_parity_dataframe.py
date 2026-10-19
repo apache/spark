@@ -30,6 +30,10 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_toDF_with_schema_string(self):
         super().test_toDF_with_schema_string()
 
+    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
+    def test_rdd_conversion_propagates_sql_conf(self):
+        super().test_rdd_conversion_propagates_sql_conf()
+
     @unittest.skip("This test is dedicated for classic mode.")
     def test_query_execution_unsupported_in_classic(self):
         pass

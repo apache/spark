@@ -23,6 +23,17 @@ Note that this migration guide describes the items specific to Structured Stream
 Many items of SQL migration can be applied when migrating Structured Streaming to higher versions.
 Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-guide.html).
 
+## Upgrading from Structured Streaming 4.3 to 4.4
+
+- Since Spark 4.4, streaming queries using `EXCEPT` with a streaming left input are rejected
+  because their optimizer rewrites introduce streaming aggregations after the initial
+  unsupported-operation checks. Existing queries can still restart from their persistent
+  checkpoints using the compatibility value recorded in the offset log.
+
+## Upgrading from Structured Streaming 4.2 to 4.3
+
+- Since Spark 4.3, in Spark Connect the DataFrame passed to a Python `foreachBatch` function is bound to the streaming query's own session, a clone of the session that started the query, matching classic `foreachBatch`. This runs the batch under the configuration the streaming engine pins on the clone rather than the root session's. As a result, the batch DataFrame can no longer be combined with the root session inside the function: a temporary view created from it is not visible to the root session, referencing it from `spark.sql` on the root session fails with `DATAFRAME_NOT_FOUND`, and joining it with a DataFrame captured from the root session fails with `SESSION_NOT_SAME`. Run such work through the batch DataFrame's own session (`batch_df.sparkSession`) instead, and pass results out through a table or a global temporary view rather than a session-local temporary view. To restore the previous behavior, set `spark.sql.connect.streaming.foreachBatch.useClonedSession` to `false`.
+
 ## Upgrading from Structured Streaming 4.1 to 4.2
 
 - Since Spark 4.2, restarting a streaming query from a checkpoint whose metadata file is missing while the offset or commit logs contain data fails with `STREAMING_CHECKPOINT_MISSING_METADATA_FILE`, instead of silently generating a new query ID (which can duplicate data in exactly-once sinks). Restore the metadata file or use a new checkpoint location. To restore the previous behavior, set `spark.sql.streaming.checkpoint.verifyMetadataExists.enabled` to `false`. (See [SPARK-55058](https://issues.apache.org/jira/browse/SPARK-55058) for more details.)

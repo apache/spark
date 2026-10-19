@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.k8s
 
-import io.fabric8.kubernetes.api.model.{LocalObjectReferenceBuilder, PodBuilder}
+import io.fabric8.kubernetes.api.model.{LocalObjectReferenceBuilder, Pod, PodBuilder}
 
 import org.apache.spark.{SPARK_VERSION, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config._
@@ -160,6 +160,68 @@ class KubernetesConfSuite extends SparkFunSuite {
     assert(conf.executorId === EXECUTOR_ID)
     assert(conf.driverPod.get === DRIVER_POD)
     assert(conf.resourceProfileId === DEFAULT_RESOURCE_PROFILE_ID)
+    assert(conf.authSecret.isEmpty)
+  }
+
+  test("Java-friendly KubernetesExecutorConf constructor with nullable driverPod and secret") {
+    val sparkConf = new SparkConf(false)
+    val conf = new KubernetesExecutorConf(
+      sparkConf,
+      KubernetesTestConf.APP_ID,
+      EXECUTOR_ID,
+      null: Pod,
+      DEFAULT_RESOURCE_PROFILE_ID,
+      null: String)
+    assert(conf.appId === KubernetesTestConf.APP_ID)
+    assert(conf.executorId === EXECUTOR_ID)
+    assert(conf.driverPod === None)
+    assert(conf.resourceProfileId === DEFAULT_RESOURCE_PROFILE_ID)
+    assert(conf.authSecret === None)
+
+    val confWithValues = new KubernetesExecutorConf(
+      sparkConf,
+      KubernetesTestConf.APP_ID,
+      EXECUTOR_ID,
+      DRIVER_POD,
+      3,
+      "custom-secret")
+    assert(confWithValues.driverPod === Some(DRIVER_POD))
+    assert(confWithValues.resourceProfileId === 3)
+    assert(confWithValues.authSecret === Some("custom-secret"))
+  }
+
+  test("KubernetesExecutorConf authSecret resolution.") {
+    val confWithoutSecret = KubernetesConf.createExecutorConf(
+      new SparkConf(false),
+      EXECUTOR_ID,
+      KubernetesTestConf.APP_ID,
+      Some(DRIVER_POD))
+    assert(confWithoutSecret.authSecret.isEmpty)
+
+    val confWithCustomSecret = KubernetesConf.createExecutorConf(
+      new SparkConf(false),
+      EXECUTOR_ID,
+      KubernetesTestConf.APP_ID,
+      Some(DRIVER_POD),
+      authSecret = Some("custom-secret"))
+    assert(confWithCustomSecret.authSecret === Some("custom-secret"))
+
+    val sparkConf = new SparkConf(false)
+      .set(org.apache.spark.internal.config.AUTH_SECRET, "conf-secret")
+    val confWithSparkConfSecret = KubernetesConf.createExecutorConf(
+      sparkConf,
+      EXECUTOR_ID,
+      KubernetesTestConf.APP_ID,
+      Some(DRIVER_POD))
+    assert(confWithSparkConfSecret.authSecret === Some("conf-secret"))
+
+    val confWithOverride = KubernetesConf.createExecutorConf(
+      sparkConf,
+      EXECUTOR_ID,
+      KubernetesTestConf.APP_ID,
+      Some(DRIVER_POD),
+      authSecret = Some("override-secret"))
+    assert(confWithOverride.authSecret === Some("override-secret"))
   }
 
   test("resource profile not default.") {

@@ -143,6 +143,15 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     assert(featureStep.getAdditionalPodSystemProperties() === expectedSparkConf)
   }
 
+  test("SPARK-58926: SPARK_USER reflects --proxy-user when set") {
+    val sparkConf = new SparkConf().set(CONTAINER_IMAGE, "spark-driver:latest")
+    val conf = KubernetesTestConf.createDriverConf(
+      sparkConf = sparkConf, proxyUser = Some("alice"))
+    val pod = new BasicDriverFeatureStep(conf).configurePod(SparkPod.initialPod())
+    val sparkUser = pod.container.getEnv.asScala.find(_.getName == ENV_SPARK_USER).map(_.getValue)
+    assert(sparkUser === Some("alice"))
+  }
+
   test("Set allowPrivilegeEscalation to false on the driver container by default") {
     val sparkConf = new SparkConf().set(CONTAINER_IMAGE, "spark-driver:latest")
     val conf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)

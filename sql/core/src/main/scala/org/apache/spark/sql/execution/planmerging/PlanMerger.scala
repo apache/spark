@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.{Cross, Inner, JoinType, LeftAnti, Le
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.connector.catalog.TableCapability
+import org.apache.spark.sql.execution.datasources.{DataSourceUtils, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, V2ScanPartitioningAndOrdering, V2ScanRelationPushDown}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -52,8 +53,19 @@ case class MergeResult(
  * @param merged Whether this plan is the result of merging two or more plans (true), or
  *               is an original unmerged plan (false). Merged plans typically require special
  *               handling such as wrapping in CTEs.
+ * @param projectionSensitiveReads The columns the plans behind this entry read from each
+ *                                 projection-sensitive relation, recorded when the entry was
+ *                                 first cached. Every plan merged into the entry read those same
+ *                                 columns, which is what merging one in requires, so the record
+ *                                 stays true of the entry. It cannot be re-derived from `plan`,
+ *                                 because a merge leaves projections that the `ColumnPruning`
+ *                                 rerun after this rule narrows again. See
+ *                                 `PlanMerger.collectProjectionSensitiveReads`.
  */
-case class MergedPlan(plan: LogicalPlan, merged: Boolean)
+case class MergedPlan(
+    plan: LogicalPlan,
+    merged: Boolean,
+    projectionSensitiveReads: Map[LogicalPlan, Seq[Set[String]]])
 
 object PlanMerger {
   // Marker tag placed on Filter nodes that were produced by filter propagation. Its presence
@@ -103,9 +115,6 @@ object PlanMerger {
  * result of expressions like `coalesce(col, default)` in the aggregate: an originally unmatched row
  * would have contributed `default` via `coalesce(NULL, default)`, but in the merged plan it is
  * matched, its real column value fails the filter, and `FILTER (WHERE false)` discards it entirely.
- * Propagation is also skipped when both the left and right children simultaneously produce filter
- * attributes, as combining them would require an additional AND alias above the join (not yet
- * supported).
  *
  * {{{
  *   // Input plans
@@ -162,6 +171,9 @@ class PlanMerger(
    *         - An attribute mapping for rewriting expressions
    */
   def merge(plan: LogicalPlan, subqueryPlan: Boolean): MergeResult = {
+    // Read once per call rather than once per cache entry, and empty for a plan that reads no
+    // projection-sensitive relation, which is the common case.
+    lazy val projectionSensitiveReads = collectProjectionSensitiveReads(plan)
     cache.zipWithIndex.collectFirst(Function.unlift {
       case (mp, i) =>
         checkIdenticalPlans(plan, mp.plan).map { _ =>
@@ -169,24 +181,30 @@ class PlanMerger(
           // `ReusedSubqueryExec` rule can handle them without extracting the plans to CTEs.
           // But, when a non-subquery subplan is identical to a cached plan we need to mark the plan
           // `merged` and so extract it to a CTE later.
-          val newMergedPlan = MergedPlan(mp.plan, mp.merged || !subqueryPlan)
+          val newMergedPlan = mp.copy(merged = mp.merged || !subqueryPlan)
           cache(i) = newMergedPlan
           val outputMap = AttributeMap(plan.output.zipWithIndex)
           MergeResult(newMergedPlan, i, outputMap)
         }.orElse {
-          tryMergePlans(plan, mp.plan, MergeContext(filterPropagationSupported = false)).collect {
-            case TryMergeResult(mergedPlan, npMapping, None, None, None, _) =>
-              val newMergedPlan = MergedPlan(mergedPlan, true)
-              cache(i) = newMergedPlan
-              val outputMap = AttributeMap(npMapping.iterator.map { case (origAttr, mergedAttr) =>
-                origAttr -> mergedPlan.output.indexWhere(_.exprId == mergedAttr.exprId)
-              }.toSeq)
-              MergeResult(newMergedPlan, i, outputMap)
+          if (widensProjectionSensitiveRead(projectionSensitiveReads, mp)) {
+            // Reusing the shared relation would widen a read whose rows depend on the set of
+            // columns it is asked for, see `collectProjectionSensitiveReads`.
+            None
+          } else {
+            tryMergePlans(plan, mp.plan, MergeContext(filterPropagationSupported = false)).collect {
+              case TryMergeResult(mergedPlan, npMapping, None, None, None, _) =>
+                val newMergedPlan = mp.copy(plan = mergedPlan, merged = true)
+                cache(i) = newMergedPlan
+                val outputMap = AttributeMap(npMapping.iterator.map { case (origAttr, mergedAttr) =>
+                  origAttr -> mergedPlan.output.indexWhere(_.exprId == mergedAttr.exprId)
+                }.toSeq)
+                MergeResult(newMergedPlan, i, outputMap)
+            }
           }
         }
       case _ => None
     }).getOrElse {
-      val newMergedPlan = MergedPlan(plan, false)
+      val newMergedPlan = MergedPlan(plan, false, projectionSensitiveReads)
       cache += newMergedPlan
       val outputMap = AttributeMap(plan.output.zipWithIndex)
       MergeResult(newMergedPlan, cache.length - 1, outputMap)
@@ -213,6 +231,74 @@ class PlanMerger(
   }
 
   /**
+   * The columns each projection-sensitive relation in `plan` is read with, keyed by the
+   * canonicalized relation. One entry per occurrence, in the order the relations appear, since a
+   * plan can read the same relation more than once (a self join) with a different set of columns
+   * each time, and `tryMergePlans` pairs occurrences in that same order.
+   *
+   * Top-level column pruning for a V1 file source happens in physical planning, from the attributes
+   * referenced above the relation, so two `LogicalRelation`s over the same files canonicalize equal
+   * whatever each side projects, and reusing one of them widens its read to the union of the two
+   * column sets. For most relations that only changes how much is read, but not for the ones
+   * [[DataSourceUtils.isProjectionSensitiveRead]] names, where it can change the rows themselves.
+   *
+   * Keyed by column name rather than by attribute, because the two plans that get compared were
+   * analyzed separately and carry different expression ids for the same column.
+   *
+   * Only ever called on a plan as it arrives, never on a merged one: merging rebuilds projections
+   * from a side's whole output, which for a V1 relation is its full schema, and what narrows that
+   * again is the `ColumnPruning` that `SparkOptimizer`'s `Extract Python UDFs` batch reruns, after
+   * this rule. A merged cache entry therefore carries the record taken when it was first cached,
+   * see [[MergedPlan]].
+   *
+   * This compares columns only. Symmetric filter propagation, which is off by default, can also
+   * widen the set of *files* a scan reads, by OR-ing the two sides' filters: a disjunct mixing a
+   * partition predicate with a data predicate prunes no partition at all, so the merged scan can
+   * read the whole table. Each side's own filter above the scan drops the rows that adds, so no
+   * answer changes, but a projection-sensitive read can still fail on a file neither side selected.
+   */
+  private def collectProjectionSensitiveReads(
+      plan: LogicalPlan): Map[LogicalPlan, Seq[Set[String]]] = {
+    lazy val referenced = AttributeSet(plan.flatMap(_.references)) ++ AttributeSet(plan.output)
+    plan.collect {
+      case l: LogicalRelation if DataSourceUtils.isProjectionSensitiveRead(l.relation) =>
+        l.canonicalized -> readColumnNames(referenced, l)
+    }.groupMap(_._1)(_._2)
+  }
+
+  /**
+   * Whether merging a plan whose projection-sensitive reads are `reads` into `cachedPlan` could
+   * change what either of them reads. The two records have to match exactly: a relation read a
+   * different number of times, or with a different set of columns, or read by only one of the two,
+   * all count, and a plan that reads a strict subset counts too, because after the merge the entry
+   * would read more than that plan asked for.
+   *
+   * Only [[tryMergePlans]] needs this. Reuse of an identical plan cannot widen a read, because the
+   * two whole plans are canonically equal there, so everything above the relation references the
+   * same columns. The relation's own output says nothing about that: on the V1 path it is the full
+   * schema whatever each side projects, which is what makes this check necessary in the first
+   * place.
+   */
+  private def widensProjectionSensitiveRead(
+      reads: Map[LogicalPlan, Seq[Set[String]]],
+      cachedPlan: MergedPlan): Boolean = reads != cachedPlan.projectionSensitiveReads
+
+  /**
+   * Which of `relation`'s columns `referenced` covers, by name. `referenced` is every attribute the
+   * plan refers to plus its own output, since a merged plan is extracted to a CTE and everything
+   * the CTE outputs is read. Partition columns are left out, because their values come from the
+   * path rather than from the file, so referencing one does not widen what the reader parses.
+   */
+  private def readColumnNames(
+      referenced: AttributeSet, relation: LogicalRelation): Set[String] = {
+    val partitionColumns = relation.relation match {
+      case hs: HadoopFsRelation => hs.partitionSchema.fieldNames.toSet
+      case _ => Set.empty[String]
+    }
+    referenced.filter(relation.outputSet.contains).map(_.name).toSet -- partitionColumns
+  }
+
+  /**
    * Result of a successful [[tryMergePlans]] call.
    *
    * @param mergedPlan The combined logical plan.
@@ -222,12 +308,11 @@ class PlanMerger(
    * @param newPlanFilter A boolean [[Attribute]] in the merged plan that encodes the filter
    *                      condition from the new plan's side, to be applied as an aggregate
    *                      `FILTER (WHERE ...)` clause when the propagation reaches an enclosing
-   *                      [[Aggregate]] node. The boolean component is `true` if the attribute was
-   *                      freshly aliased and must be appended to enclosing [[Project]] nodes, or
-   *                      `false` if it was reused from an existing alias already present in the
-   *                      merged plan. `None` when no differing filter was propagated.
+   *                      [[Aggregate]] node. It can be an alias reused from a previous merge
+   *                      round. Such an alias may be missing from an enclosing [[Project]], which
+   *                      then has to append it. `None` when no differing filter was propagated.
    * @param cachedPlanFilter Like `newPlanFilter` but for the cached plan's side. Always a freshly
-   *                         created alias when present, so no `isNew` flag is needed.
+   *                         created alias when present, never a reused one.
    * @param dsv2Merged Whether an (equal-strict) DSv2 scan merge occurred anywhere in this merged
    *                   subtree. Unlike `dsv2DeferredScan` (consumed at the enclosing Filter that
    *                   builds the scan), this fact is propagated all the way up: it lets a Filter
@@ -238,7 +323,7 @@ class PlanMerger(
   case class TryMergeResult(
       mergedPlan: LogicalPlan,
       newPlanMapping: AttributeMap[Attribute],
-      newPlanFilter: Option[(Attribute, Boolean)] = None,
+      newPlanFilter: Option[Attribute] = None,
       cachedPlanFilter: Option[Attribute] = None,
       dsv2DeferredScan: Option[DSv2DeferredScan] = None,
       dsv2Merged: Boolean = false)
@@ -310,7 +395,7 @@ class PlanMerger(
    *   support the same aggregate implementation (hash/object-hash/sort-based)
    * - Filter nodes: Only if filter conditions are identical
    * - Join nodes: Requires identical join type, hints, and conditions; filter propagation is
-   *   forwarded into the join's children so a filter difference on one child can still be merged
+   *   forwarded into the join's children so filter differences on either or both children can merge
    *
    * @param newPlan The plan to merge into the cached plan.
    * @param cachedPlan The cached plan to merge with.
@@ -397,12 +482,13 @@ class PlanMerger(
 
               // Apply each propagated boolean attribute as a FILTER (WHERE ...) clause on the
               // corresponding side's aggregate expressions.
-              // A None filter means the side's aggregate expressions already carry their individual
-              // FILTER attributes from a previous merge round and should be left unchanged.
+              // A None filter leaves the side's aggregate expressions unchanged, e.g. ones that
+              // already carry their individual FILTER attributes from a previous merge round. A
+              // Some filter is ANDed with any FILTER they carry, e.g. a cpFilter from a filter
+              // below a merged Filter, which those attributes don't include.
               // Filter propagation is consumed here and not passed further up.
-              val filteredNPAggregateExpressions = npFilterOpt.fold(np.aggregateExpressions) {
-                case (f, _) => applyFilterToAggregateExpressions(np.aggregateExpressions, f)
-              }
+              val filteredNPAggregateExpressions = npFilterOpt.fold(np.aggregateExpressions)(
+                applyFilterToAggregateExpressions(np.aggregateExpressions, _))
               val filteredCPAggregateExpressions = cpFilterOpt.fold(cp.aggregateExpressions)(
                 applyFilterToAggregateExpressions(cp.aggregateExpressions, _))
               val (mergedAggregateExpressions, newNPMapping) =
@@ -450,27 +536,30 @@ class PlanMerger(
                   // merge rather than fail, keeping the merge best-effort.
                   mergedChild match {
                     case childProject: Project =>
-                      val newNPCondition = npFilter.fold(mappedNPCondition) {
-                        case (f, _) => And(f, mappedNPCondition)
-                      }
+                      val newNPCondition =
+                        npFilter.fold(mappedNPCondition)(And(_, mappedNPCondition))
                       // If newNPCondition is already aliased in the child Project (e.g. a third
                       // subplan whose filter matches one from a previous merge round), reuse the
-                      // existing attribute instead of creating a redundant alias.
+                      // existing attribute instead of creating a redundant alias. Only the aliases
+                      // the OR condition references are filter sides. A computed column with the
+                      // same expression is not one, because the OR doesn't keep its rows.
                       val existingNPFilter = childProject.projectList.collectFirst {
-                        case a: Alias if a.child.canonicalized == newNPCondition.canonicalized =>
+                        case a: Alias if cp.condition.references.contains(a.toAttribute) &&
+                            a.child.canonicalized == newNPCondition.canonicalized =>
                           a.toAttribute
                       }
                       val (newProjectList, newCondition, newNPFilterOut) =
                         existingNPFilter match {
                           case Some(reusedFilter) =>
                             // np matches an existing side: no new alias, OR condition unchanged.
-                            (childProject.projectList, cp.condition, (reusedFilter, false))
+                            (childProject.projectList, cp.condition, reusedFilter)
                           case None =>
                             val newNPFilterAlias =
                               Alias(newNPCondition, s"propagatedFilter_${PlanMerger.newId}")()
+                            val newNPFilter = newNPFilterAlias.toAttribute
                             (childProject.projectList :+ newNPFilterAlias,
-                              Or(cp.condition, newNPFilterAlias.toAttribute): Expression,
-                              (newNPFilterAlias.toAttribute, true))
+                              Or(cp.condition, newNPFilter): Expression,
+                              newNPFilter)
                         }
                       // Phase 2: the leaf re-merge rebuilt the scan with strict filters only,
                       // dropping the OR best-effort filter established in earlier rounds, so
@@ -487,7 +576,9 @@ class PlanMerger(
                             projectList = newProjectList, child = prunedChild)
                           val newFilter = Filter(newCondition, newProject)
                           newFilter.copyTagsFrom(cp)
-                          TryMergeResult(newFilter, npMapping, Some(newNPFilterOut), None,
+                          // The child's cpFilter is a filter below this one that np lacks. The
+                          // OR's aliases don't include it, so pass it up to cp's aggregates.
+                          TryMergeResult(newFilter, npMapping, Some(newNPFilterOut), cpFilter,
                             dsv2Merged = dsv2Merged)
                         }
                     case _ =>
@@ -500,8 +591,7 @@ class PlanMerger(
                   // Note: the new Project always uses mergedChild as its child (rather than
                   // flattening into an existing Project below) because mergedChild.output may
                   // contain previously-propagated filter attributes that cp.condition references.
-                  val newNPCondition =
-                    npFilter.fold(mappedNPCondition) { case (f, _) => And(f, mappedNPCondition) }
+                  val newNPCondition = npFilter.fold(mappedNPCondition)(And(_, mappedNPCondition))
                   val newCPCondition = cpFilter.fold(cp.condition)(And(_, cp.condition))
                   // The OR-widen moves both conditions into a boolean Project above the merged
                   // scan, so the scan itself would read the full table. Build the deferred scan
@@ -523,7 +613,7 @@ class PlanMerger(
                       val newFilter = Filter(Or(newNPFilter, newCPFilter), project)
                       newFilter.copyTagsFrom(cp)
                       newFilter.setTagValue(PlanMerger.MERGED_FILTER_TAG, ())
-                      TryMergeResult(newFilter, npMapping, Some((newNPFilter, true)),
+                      TryMergeResult(newFilter, npMapping, Some(newNPFilter),
                         Some(newCPFilter), dsv2Merged = dsv2Merged)
                     }
                 }
@@ -539,16 +629,14 @@ class PlanMerger(
             case TryMergeResult(mergedChild, npMapping, npFilter, cpFilter, _, dsv2Merged)
                 if cpFilter.isEmpty || symmetricFilterPropagationEnabled =>
               val mappedNPCondition = mapAttributes(np.condition, npMapping)
-              val newNPCondition = npFilter.fold(mappedNPCondition) {
-                case (f, _) => And(f, mappedNPCondition)
-              }
+              val newNPCondition = npFilter.fold(mappedNPCondition)(And(_, mappedNPCondition))
               val newNPFilterAlias =
                 Alias(newNPCondition, s"propagatedFilter_${PlanMerger.newId}")()
               val newNPFilter = newNPFilterAlias.toAttribute
               val project = Project(
                 mergedChild.output.toList :+ newNPFilterAlias,
                 mergedChild)
-              TryMergeResult(project, npMapping, Some((newNPFilter, true)), cpFilter,
+              TryMergeResult(project, npMapping, Some(newNPFilter), cpFilter,
                 dsv2Merged = dsv2Merged)
           }
         case (np, cp: Filter) if context.filterPropagationSupported =>
@@ -564,9 +652,10 @@ class PlanMerger(
                 // restrict each aggregation to its originating side. Synthesising a new cpFilter
                 // alias for cp.condition would just produce `FILTER AND(OR(pf_0, pf_1, ...), pf_i)`
                 // upstream, which simplifies to `FILTER pf_i` -- wasted work and plan bloat.
-                // Drop cp's Filter and let the recursion's result flow up with cpFilter = None so
-                // cp's aggregates are left untouched.
-                TryMergeResult(mergedChild, npMapping, npFilter, None, dsv2Merged = dsv2Merged)
+                // Drop cp's Filter and let the recursion's result flow up as is. A cpFilter in it
+                // is a filter below cp's that np lacks, which the pf_i don't include, so cp's
+                // aggregates still need it.
+                TryMergeResult(mergedChild, npMapping, npFilter, cpFilter, dsv2Merged = dsv2Merged)
               } else {
                 val newCPCondition = cpFilter.fold(cp.condition)(And(_, cp.condition))
                 val newCPFilterAlias =
@@ -587,11 +676,7 @@ class PlanMerger(
               tryMergePlans(np.right, cp.right, context.copy(filterAboveScan = false)).flatMap {
                 case TryMergeResult(mergedRight, rightNPMapping, rightNPFilter, rightCPFilter, _,
                     rightDsv2Merged)
-                    // If both children independently propagate filter attributes we would need to
-                    // AND them into a new alias above the join, which is not yet supported.
-                    if !(leftNPFilter.isDefined && rightNPFilter.isDefined) &&
-                       !(leftCPFilter.isDefined && rightCPFilter.isDefined) &&
-                       // Gate join-crossing filter propagation behind its own config flag.
+                    if // Gate join-crossing filter propagation behind its own config flag.
                        // When no filter attributes are in play the merge is unconditionally safe.
                        (leftNPFilter.isEmpty && leftCPFilter.isEmpty &&
                            rightNPFilter.isEmpty && rightCPFilter.isEmpty ||
@@ -601,7 +686,7 @@ class PlanMerger(
                        // rows are NULL-padded so f=NULL, causing FILTER (WHERE f) to incorrectly
                        // exclude rows that should contribute to the aggregate. Right-side
                        // attributes are also absent from semi/anti join output.
-                       (leftNPFilter.isEmpty && leftCPFilter.isEmpty  ||
+                       (leftNPFilter.isEmpty && leftCPFilter.isEmpty ||
                            filterSafeForJoin(fromLeft = true, cp.joinType)) &&
                        (rightNPFilter.isEmpty && rightCPFilter.isEmpty ||
                            filterSafeForJoin(fromLeft = false, cp.joinType)) =>
@@ -609,11 +694,35 @@ class PlanMerger(
                   val mappedNPCondition = np.condition.map(mapAttributes(_, npMapping))
                   // Comparing the canonicalized form is required to ignore different forms of the
                   // same expression and `AttributeReference.qualifier`s in `cp.condition`.
-                  if (mappedNPCondition.map(_.canonicalized) == cp.condition.map(_.canonicalized)) {
-                    val npFilter = leftNPFilter.orElse(rightNPFilter)
-                    val cpFilter = leftCPFilter.orElse(rightCPFilter)
-                    Some(TryMergeResult(cp.withNewChildren(Seq(mergedLeft, mergedRight)), npMapping,
-                      npFilter, cpFilter, dsv2Merged = leftDsv2Merged || rightDsv2Merged))
+                  if (mappedNPCondition.map(_.canonicalized) ==
+                      cp.condition.map(_.canonicalized)) {
+                    val mergedJoin = cp.withNewChildren(Seq(mergedLeft, mergedRight))
+                    val (npFilter, npAlias) = (leftNPFilter, rightNPFilter) match {
+                      case (Some(left), Some(right)) =>
+                        val alias = Alias(
+                          And(left, right), s"propagatedFilter_${PlanMerger.newId}")()
+                        (Some(alias.toAttribute), Some(alias))
+                      case (filter @ Some(_), None) => (filter, None)
+                      case (None, filter @ Some(_)) => (filter, None)
+                      case _ => (None, None)
+                    }
+                    val (cpFilter, cpAlias) = (leftCPFilter, rightCPFilter) match {
+                      case (Some(left), Some(right)) =>
+                        val alias = Alias(
+                          And(left, right), s"propagatedFilter_${PlanMerger.newId}")()
+                        (Some(alias.toAttribute), Some(alias))
+                      case (filter @ Some(_), None) => (filter, None)
+                      case (None, filter @ Some(_)) => (filter, None)
+                      case _ => (None, None)
+                    }
+                    val aliases = Seq(npAlias, cpAlias).flatten
+                    val mergedPlan = if (aliases.nonEmpty) {
+                      Project(mergedJoin.output.toList ++ aliases, mergedJoin)
+                    } else {
+                      mergedJoin
+                    }
+                    Some(TryMergeResult(mergedPlan, npMapping, npFilter, cpFilter,
+                      dsv2Merged = leftDsv2Merged || rightDsv2Merged))
                   } else {
                     None
                   }
@@ -891,12 +1000,13 @@ class PlanMerger(
   // Only the reported EXPRESSIONS are compared, which is all a DataSourceV2ScanRelation carries;
   // the merged scan's split count and partition values can still differ from an input's, since it
   // may push a different best-effort filter and so prune differently. And a report the merged scan
-  // GAINS is not a degradation either. For partitioning that is because an input dropped its own
-  // only where a pruned column left the expressions inexpressible over that scan's output
-  // (V2ScanPartitioningAndOrdering's partitioning pass is reference-subset guarded), not because
+  // GAINS is not a degradation either. Both V2ScanPartitioningAndOrdering passes drop a report
+  // that references a column the relation cannot resolve, but that does not depend on pruning.
+  // Beyond that, an input dropped its partitioning only where none of its keys survived in that
+  // scan's output (the partitioning pass keeps the report whenever any key survives), not because
   // the source stopped reporting; the ordering pass has no such guard, so an ordering report is
-  // never dropped by pruning and a gained one can only come from the source. Either way, keeping it
-  // is exactly the win this merge is after.
+  // never dropped by pruning and a gained one can only come from the source. Either way, keeping
+  // it is exactly the win this merge is after.
   private def mergeDegradesReporting(
       merged: DataSourceV2ScanRelation,
       requiredKeyGroupedPartitioning: Seq[Expression],
@@ -958,14 +1068,16 @@ class PlanMerger(
   // non-matching expression from one side evaluates to null for rows that belong to the other side,
   // which is safe for aggregate FILTER (WHERE ...) semantics and avoids computing values for
   // irrelevant rows. The filter attributes themselves are appended to the merged expression list so
-  // they remain visible to the enclosing Aggregate that will consume them. A newPlanFilter with
-  // isNew=false was reused from a previous merge round and is already present in the merged child
-  // output, so it is not appended again.
+  // they remain visible to the enclosing Aggregate that will consume them. A newPlanFilter reused
+  // from a previous merge round can already be in the list, so it is appended only when missing.
+  // It can be missing, because an earlier round may have folded it into another filter alias and
+  // carried only that alias up. A cachedPlanFilter is always a fresh alias, so it is always
+  // appended.
   private def mergeNamedExpressions(
       newPlanExpressions: Seq[NamedExpression],
       cachedPlanExpressions: Seq[NamedExpression],
       newPlanMapping: AttributeMap[Attribute],
-      newPlanFilter: Option[(Attribute, Boolean)] = None,
+      newPlanFilter: Option[Attribute] = None,
       cachedPlanFilter: Option[Attribute] = None) = {
     val mergedExpressions = mutable.ArrayBuffer[NamedExpression](cachedPlanExpressions: _*)
     val matchedCachedIndices = mutable.HashSet.empty[Int]
@@ -988,7 +1100,7 @@ class PlanMerger(
         // is only computed for rows that belong to the new plan side. Plain attribute references
         // are not wrapped since reading a column value is free.
         val wrappedExpr: NamedExpression = newPlanFilter match {
-          case Some((f, _)) if !withoutAlias.isInstanceOf[Attribute] =>
+          case Some(f) if !withoutAlias.isInstanceOf[Attribute] =>
             Alias(If(f, withoutAlias, Literal(null, withoutAlias.dataType)), mapped.name)()
           case _ => mapped
         }
@@ -1015,9 +1127,8 @@ class PlanMerger(
       }
     }
 
-    newPlanFilter.foreach {
-      case (f, true) => mergedExpressions += f
-      case _ =>
+    newPlanFilter.foreach { f =>
+      if (!mergedExpressions.exists(_.exprId == f.exprId)) mergedExpressions += f
     }
     cachedPlanFilter.foreach(mergedExpressions += _)
 

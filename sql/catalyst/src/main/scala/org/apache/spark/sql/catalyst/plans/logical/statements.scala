@@ -20,10 +20,10 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.connector.catalog.ColumnDefaultValue
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.DataType
-import org.apache.spark.util.collection.BitSet
 
 /**
  * A logical plan node that contains exactly what was parsed from SQL.
@@ -158,7 +158,56 @@ case class QualifiedColType(
 }
 
 /**
- * An INSERT INTO statement, as parsed from SQL.
+ * An INSERT statement as parsed from SQL.
+ *
+ * The target is exposed as a child until the analyzer converts this node to the unary
+ * [[InsertIntoStatement]]. A static target is represented by `UnresolvedInsertTarget`, while a
+ * dynamic target keeps its identifier expression in `PlanWithUnresolvedIdentifier` until that
+ * expression is resolved.
+ */
+case class UnresolvedInsert(
+    table: LogicalPlan,
+    partitionSpec: Map[String, Option[String]],
+    userSpecifiedCols: Seq[String],
+    query: LogicalPlan,
+    overwrite: Boolean,
+    ifPartitionNotExists: Boolean,
+    byName: Boolean = false,
+    replaceCriteriaOpt: Option[InsertReplaceCriteria] = None,
+    withSchemaEvolution: Boolean = false)
+  extends ParsedStatement with TransactionalWrite {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_INSERT)
+
+  override def children: Seq[LogicalPlan] = Seq(table, query)
+
+  override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
+    copy(query = WithCTE(query, cteDefs))
+  }
+
+  def toInsertIntoStatement(target: LogicalPlan): InsertIntoStatement = {
+    val statement = InsertIntoStatement(
+      table = target,
+      partitionSpec = partitionSpec,
+      userSpecifiedCols = userSpecifiedCols,
+      query = query,
+      overwrite = overwrite,
+      ifPartitionNotExists = ifPartitionNotExists,
+      byName = byName,
+      replaceCriteriaOpt = replaceCriteriaOpt,
+      withSchemaEvolution = withSchemaEvolution)
+    statement.copyTagsFrom(this)
+    statement
+  }
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): UnresolvedInsert = {
+    copy(table = newChildren(0), query = newChildren(1))
+  }
+}
+
+/**
+ * An INSERT INTO statement whose target identifier is ready for relation resolution.
  *
  * @param table                the logical plan representing the table.
  * @param userSpecifiedCols    the user specified list of columns that belong to the table.
@@ -212,18 +261,6 @@ case class InsertIntoStatement(
   override def child: LogicalPlan = query
   override protected def withNewChildInternal(newChild: LogicalPlan): InsertIntoStatement =
     copy(query = newChild)
-
-  // `table` is a non-child LogicalPlan slot (`child = query`), so the default tree-pattern
-  // propagation in TreeNode/QueryPlan does not see patterns inside it. Add `table`'s bits here
-  // so that `containsPattern(...)` pruning correctly reports patterns living in `table`
-  // (e.g. `PARAMETER`, `PLAN_WITH_UNRESOLVED_IDENTIFIER`). The REPLACE criteria condition is an
-  // `Expression` child (`InsertReplaceCriteria` extends `Expression`), so its bits already
-  // propagate through the normal expression traversal.
-  override protected def getDefaultTreePatternBits: BitSet = {
-    val bits = super.getDefaultTreePatternBits
-    bits.union(table.treePatternBits)
-    bits
-  }
 }
 
 sealed abstract class InsertReplaceCriteria extends Expression with Unevaluable {

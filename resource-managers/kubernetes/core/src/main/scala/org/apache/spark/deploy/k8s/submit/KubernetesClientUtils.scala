@@ -26,7 +26,7 @@ import scala.collection.mutable
 import scala.io.{Codec, Source}
 import scala.jdk.CollectionConverters._
 
-import io.fabric8.kubernetes.api.model.{ConfigMap, ConfigMapBuilder, KeyToPath}
+import io.fabric8.kubernetes.api.model.{ConfigMap, ConfigMapBuilder, KeyToPath, KeyToPathBuilder}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.{DeveloperApi, Since, Stable}
@@ -113,7 +113,11 @@ object KubernetesClientUtils extends Logging {
     confFilesMap.map {
       case (fileName: String, _: String) =>
         val filePermissionMode = 420  // 420 is decimal for octal literal 0644.
-        new KeyToPath(fileName, filePermissionMode, fileName)
+        new KeyToPathBuilder()
+          .withKey(fileName)
+          .withMode(filePermissionMode)
+          .withPath(fileName)
+          .build()
     }.toList.sortBy(x => x.getKey) // List is sorted to make mocking based tests work
   }
 

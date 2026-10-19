@@ -26,6 +26,7 @@ import concurrent.futures
 import copy
 import logging
 import os
+import pickle
 import platform
 import sys
 import threading
@@ -64,7 +65,7 @@ import pyspark
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 import pyspark.sql.connect.types as types
-from pyspark.accumulators import SpecialAccumulatorIds, pickleSer
+from pyspark.accumulators import SpecialAccumulatorIds, specialAccumulatorSer
 from pyspark.errors import (
     PySparkAssertionError,
     PySparkNotImplementedError,
@@ -141,8 +142,8 @@ class RpcDeadlines:
     Note on ``reattachable_execute_plan`` and ``reattach_execute``: these timeouts apply to each
     individual gRPC stream segment, not to the overall query execution lifetime. When a deadline
     fires, the server-side operation continues running; the client opens a new ReattachExecute
-    stream to resume receiving results. Non-reattachable ExecutePlan has no deadline because a
-    timeout there would kill the execution with no recovery path.
+    stream to resume receiving results. Non-reattachable query ExecutePlan calls have no deadline
+    because a timeout there would kill the execution with no recovery path.
 
     Note on ``release_relation``: the RemoveRemoteCachedRelation cleanup command is sent over a
     blocking, non-reattachable ExecutePlan call issued from
@@ -160,11 +161,11 @@ class RpcDeadlines:
     config: Optional[float] = 10 * 60  # 10 min
     interrupt: Optional[float] = 10 * 60  # 10 min
     release_session: Optional[float] = 10 * 60  # 10 min
-    release_relation: Optional[float] = 60  # 1 min; short: per-batch finalizer
     artifact_status: Optional[float] = 10 * 60  # 10 min
     clone_session: Optional[float] = 10 * 60  # 10 min
     get_status: Optional[float] = 10 * 60  # 10 min
     fetch_error_details: Optional[float] = 10 * 60  # 10 min
+    release_relation: Optional[float] = 60  # 1 min; short: per-batch finalizer
 
     def __post_init__(self) -> None:
         for field in fields(self):
@@ -191,11 +192,11 @@ class RpcDeadlines:
             config=None,
             interrupt=None,
             release_session=None,
-            release_relation=None,
             artifact_status=None,
             clone_session=None,
             get_status=None,
             fetch_error_details=None,
+            release_relation=None,
         )
 
 
@@ -692,6 +693,16 @@ class PlanObservedMetrics(ObservedMetrics):
             "keys": self._keys,
             "pairs": self.pairs,
         }
+
+
+_ExecutePlanResponseItem = Union[
+    "pa.RecordBatch",
+    StructType,
+    PlanMetrics,
+    PlanObservedMetrics,
+    Dict[str, Any],
+    any_pb2.Any,
+]
 
 
 class AnalyzeResult:
@@ -1447,9 +1458,11 @@ class SparkConnectClient(object):
 
     def execute_command_as_iterator(
         self, command: pb2.Command, observations: Optional[Dict[str, Observation]] = None
-    ) -> Iterator[Dict[str, Any]]:
+    ) -> Iterator[_ExecutePlanResponseItem]:
         """
-        Execute given command. Similar to execute_command, but the value is returned using yield.
+        Execute given command, yielding each decoded response as it arrives.
+
+        Callers are responsible for handling the response types relevant to their command.
         """
         if logger.isEnabledFor(logging.DEBUG):
             # inside an if statement to not incur a performance cost converting proto to string
@@ -1459,16 +1472,7 @@ class SparkConnectClient(object):
             )
         req = self._execute_plan_request_with_metadata()
         self._set_command_in_plan(req.plan, command)
-        for response in self._execute_and_fetch_as_iterator(req, observations or {}):
-            if isinstance(response, dict):
-                yield response
-            else:
-                raise PySparkValueError(
-                    errorClass="UNKNOWN_RESPONSE",
-                    messageParameters={
-                        "response": str(response),
-                    },
-                )
+        yield from self._execute_and_fetch_as_iterator(req, observations or {})
 
     def same_semantics(self, plan: pb2.Plan, other: pb2.Plan) -> bool:
         """
@@ -1749,15 +1753,7 @@ class SparkConnectClient(object):
         req: pb2.ExecutePlanRequest,
         observations: Dict[str, Observation],
         progress: Optional["Progress"] = None,
-    ) -> Iterator[
-        Union[
-            "pa.RecordBatch",
-            StructType,
-            PlanMetrics,
-            PlanObservedMetrics,
-            Dict[str, Any],
-        ]
-    ]:
+    ) -> Iterator[_ExecutePlanResponseItem]:
         if logger.isEnabledFor(logging.DEBUG):
             # inside an if statement to not incur a performance cost converting proto to string
             # when not at debug log level.
@@ -1772,16 +1768,7 @@ class SparkConnectClient(object):
 
         def handle_response(
             b: pb2.ExecutePlanResponse,
-        ) -> Iterator[
-            Union[
-                "pa.RecordBatch",
-                StructType,
-                PlanMetrics,
-                PlanObservedMetrics,
-                Dict[str, Any],
-                any_pb2.Any,
-            ]
-        ]:
+        ) -> Iterator[_ExecutePlanResponseItem]:
             nonlocal num_records
             # The session ID is the local session ID and should match what we expect.
             self._verify_response_integrity(b)
@@ -1808,7 +1795,15 @@ class SparkConnectClient(object):
                     else:
                         if observed_metrics.name == "__python_accumulator__":
                             for metric in observed_metrics.metrics:
-                                aid, update = pickleSer.loads(LiteralExpression._to_value(metric))
+                                try:
+                                    aid, update = specialAccumulatorSer.loads(
+                                        LiteralExpression._to_value(metric)
+                                    )
+                                except pickle.UnpicklingError as e:
+                                    # We found unexpected class/function in the accumulator metric.
+                                    # We will ignore this metric and continue.
+                                    logger.warning(f"Error unpickling accumulator metric: {e}")
+                                    continue
                                 if aid == SpecialAccumulatorIds.SQL_UDF_PROFIER_V2:
                                     self._profiler_collector._update(update)
                         elif observed_metrics.name in observations:
@@ -2014,7 +2009,7 @@ class SparkConnectClient(object):
                     raise PySparkValueError(
                         errorClass="UNKNOWN_RESPONSE",
                         messageParameters={
-                            "response": response,
+                            "response": str(response),
                         },
                     )
 

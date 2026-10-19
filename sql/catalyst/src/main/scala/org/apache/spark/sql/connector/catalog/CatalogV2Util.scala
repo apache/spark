@@ -475,9 +475,24 @@ private[sql] object CatalogV2Util {
       ident: Identifier,
       timeTravelSpec: Option[TimeTravelSpec] = None,
       writePrivilegesString: Option[String] = None,
-      options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()): Option[Table] =
+      options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()): Option[Table] = {
+    val stateOptions = extractTableStateOptions(catalog, options)
+    loadTableWithStateOptions(
+      catalog, ident, stateOptions, timeTravelSpec, writePrivilegesString)
+  }
+
+  /**
+   * Loads a table using table-state options already projected by the caller.
+   */
+  def loadTableWithStateOptions(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      stateOptions: CaseInsensitiveStringMap,
+      timeTravelSpec: Option[TimeTravelSpec] = None,
+      writePrivilegesString: Option[String] = None): Option[Table] =
     try {
-      Option(getTable(catalog, ident, timeTravelSpec, writePrivilegesString, options))
+      Option(getTableWithStateOptions(
+        catalog, ident, stateOptions, timeTravelSpec, writePrivilegesString))
     } catch {
       case _: NoSuchTableException => None
       case _: NoSuchDatabaseException => None
@@ -490,11 +505,26 @@ private[sql] object CatalogV2Util {
   def extractTableStateOptions(
       catalog: CatalogPlugin,
       options: CaseInsensitiveStringMap): CaseInsensitiveStringMap = {
-    val stateKeys = catalog.asTableCatalog.tableStateOptionKeys.asScala
-      .map(_.toLowerCase(Locale.ROOT))
-      .toSet
+    extractStateOptions(catalog.asTableCatalog.tableStateOptionKeys, options)
+  }
+
+  /**
+   * Extracts the options passed to `loadChangelog`. Together with the changelog context, these
+   * options identify changelog state independently of the complete options used to plan each scan.
+   */
+  def extractChangelogStateOptions(
+      catalog: CatalogPlugin,
+      options: CaseInsensitiveStringMap): CaseInsensitiveStringMap = {
+    extractStateOptions(catalog.asTableCatalog.changelogStateOptionKeys, options)
+  }
+
+  private def extractStateOptions(
+      keys: util.Set[String],
+      options: CaseInsensitiveStringMap): CaseInsensitiveStringMap = {
+    val stateKeys = keys.asScala.map(_.toLowerCase(Locale.ROOT)).toSet
+    // Preserve the effective value even if differently cased aliases have different values.
     val projected = options.asCaseSensitiveMap().asScala.collect {
-      case (key, value) if stateKeys.contains(key.toLowerCase(Locale.ROOT)) => key -> value
+      case (key, _) if stateKeys.contains(key.toLowerCase(Locale.ROOT)) => key -> options.get(key)
     }.toMap
     new CaseInsensitiveStringMap(projected.asJava)
   }
@@ -510,13 +540,26 @@ private[sql] object CatalogV2Util {
       timeTravelSpec: Option[TimeTravelSpec] = None,
       writePrivilegesString: Option[String] = None,
       options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()): Table = {
+    val stateOptions = extractTableStateOptions(catalog, options)
+    getTableWithStateOptions(
+      catalog, ident, stateOptions, timeTravelSpec, writePrivilegesString)
+  }
+
+  /**
+   * Loads a table using table-state options already projected by the caller.
+   */
+  def getTableWithStateOptions(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      stateOptions: CaseInsensitiveStringMap,
+      timeTravelSpec: Option[TimeTravelSpec] = None,
+      writePrivilegesString: Option[String] = None): Table = {
     val timeTravel: TimeTravel = timeTravelSpec match {
       case Some(v: AsOfVersion) => new TimeTravel.AsOfVersion(v.version)
       case Some(ts: AsOfTimestamp) => new TimeTravel.AsOfTimestamp(ts.timestamp)
       case None => null
     }
     val context = new TableContext(timeTravel, parseWritePrivileges(writePrivilegesString))
-    val stateOptions = extractTableStateOptions(catalog, options)
     catalog.asTableCatalog.loadTable(ident, context, stateOptions)
   }
 
@@ -604,18 +647,22 @@ private[sql] object CatalogV2Util {
     loadTable(catalog, ident).map(DataSourceV2Relation.create(_, Some(catalog), Some(ident)))
   }
 
-  def lookupCachedRelation(
+  /**
+   * Looks up a cached relation using table-state options already projected by the caller.
+   * Reusing the projection keeps table pinning and shared-cache lookup on the same state key.
+   */
+  def lookupCachedRelationWithStateOptions(
       cache: RelationCache,
       catalog: CatalogPlugin,
       ident: Identifier,
       table: Table,
-      options: CaseInsensitiveStringMap,
+      stateOptions: CaseInsensitiveStringMap,
       conf: SQLConf): Option[DataSourceV2Relation] = {
     cache.lookup(
       catalog,
       ident,
       Some(table.id),
-      extractTableStateOptions(catalog, options),
+      stateOptions,
       conf.resolver).collect { case r: DataSourceV2Relation => r }
   }
 

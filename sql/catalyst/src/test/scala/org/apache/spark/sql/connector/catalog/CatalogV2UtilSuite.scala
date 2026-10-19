@@ -17,14 +17,17 @@
 
 package org.apache.spark.sql.connector.catalog
 
+import scala.collection.mutable
+
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.{any, eq => mockEq}
 import org.mockito.Mockito.{mock, verify, when}
+import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{
-  AsOfTimestamp, AsOfVersion, TimeTravelSpec, UnresolvedRelation}
+  AsOfTimestamp, AsOfVersion, TableCacheKey, TimeTravelSpec, UnresolvedRelation}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StructType}
@@ -197,6 +200,68 @@ class CatalogV2UtilSuite extends SparkFunSuite {
       mockEq(expected))
   }
 
+  test("getTableWithStateOptions rejects catalog mutation of a retained cache key") {
+    val catalog = mock(classOf[TableCatalog])
+    val ident = Identifier.of(Array("ns"), "table")
+    val table = mock(classOf[Table])
+    var catalogOptions: CaseInsensitiveStringMap = null
+    var mutationBlocked = false
+    when(catalog.loadTable(any[Identifier], any[TableContext], any[CaseInsensitiveStringMap]))
+      .thenAnswer((invocation: InvocationOnMock) => {
+        catalogOptions = invocation.getArgument[CaseInsensitiveStringMap](2)
+        intercept[UnsupportedOperationException] {
+          catalogOptions.entrySet().iterator().next().setValue("s2")
+        }
+        mutationBlocked = true
+        table
+      })
+    val stateOptions =
+      new CaseInsensitiveStringMap(java.util.Map.of("SnApShOt", "s1"))
+    val retainedKey = TableCacheKey(catalog, ident, None, stateOptions)
+
+    val loaded = CatalogV2Util.getTableWithStateOptions(catalog, ident, stateOptions)
+    val tableCache = mutable.Map(retainedKey -> loaded)
+    val sameStateKey = TableCacheKey(
+      catalog,
+      ident,
+      None,
+      new CaseInsensitiveStringMap(java.util.Map.of("snapshot", "s1")))
+    val differentStateKey = TableCacheKey(
+      catalog,
+      ident,
+      None,
+      new CaseInsensitiveStringMap(java.util.Map.of("snapshot", "s2")))
+
+    assert(mutationBlocked, "the catalog fixture did not attempt to mutate its map")
+    assert(catalogOptions.get("snapshot") == "s1")
+    assert(catalogOptions.asCaseSensitiveMap().containsKey("SnApShOt"))
+    assert(tableCache.get(sameStateKey).contains(table))
+    assert(!tableCache.contains(differentStateKey))
+  }
+
+  test("getTableWithStateOptions preserves effective values for duplicate-case keys") {
+    val catalog = mock(classOf[TableCatalog])
+    val ident = Identifier.of(Array("ns"), "table")
+    val table = mock(classOf[Table])
+    var catalogOptions: CaseInsensitiveStringMap = null
+    when(catalog.loadTable(any[Identifier], any[TableContext], any[CaseInsensitiveStringMap]))
+      .thenAnswer((invocation: InvocationOnMock) => {
+        catalogOptions = invocation.getArgument[CaseInsensitiveStringMap](2)
+        table
+      })
+    val options = new java.util.LinkedHashMap[String, String]()
+    options.put("snapshot", "lower-value")
+    options.put("SNAPSHOT", "upper-value")
+    val stateOptions = new CaseInsensitiveStringMap(options)
+
+    CatalogV2Util.getTableWithStateOptions(catalog, ident, stateOptions)
+
+    assert(stateOptions.asCaseSensitiveMap().size() == 2)
+    assert(stateOptions.get("snapshot") == "upper-value")
+    assert(catalogOptions.get("snapshot") == stateOptions.get("snapshot"))
+    assert(catalogOptions.asCaseSensitiveMap() == stateOptions.asCaseSensitiveMap())
+  }
+
   test("getTable forwards no options when a catalog declares no table-state options") {
     val catalog = mock(classOf[TableCatalog])
     when(catalog.tableStateOptionKeys()).thenCallRealMethod()
@@ -260,6 +325,91 @@ class CatalogV2UtilSuite extends SparkFunSuite {
     val stateOptions = CatalogV2Util.extractTableStateOptions(catalog, options)
 
     assert(stateOptions.isEmpty)
+  }
+
+  gridTest("state option projection preserves effective values for duplicate-case keys")(
+      Seq("table", "changelog")) { kind =>
+    val catalog = catalogWithStateOptions(java.util.Set.of("SnApShOt"))
+    when(catalog.changelogStateOptionKeys()).thenCallRealMethod()
+    val entries = Seq("snapshot" -> "lower-value", "SNAPSHOT" -> "upper-value")
+    Seq(entries, entries.reverse).foreach { orderedEntries =>
+      val original = new java.util.LinkedHashMap[String, String]()
+      orderedEntries.foreach { case (key, value) => original.put(key, value) }
+      original.put("split-size", "5")
+      val options = new CaseInsensitiveStringMap(original)
+
+      val projected = if (kind == "table") {
+        CatalogV2Util.extractTableStateOptions(catalog, options)
+      } else {
+        CatalogV2Util.extractChangelogStateOptions(catalog, options)
+      }
+
+      assert(options.get("snapshot") == orderedEntries.last._2)
+      assert(projected.size() == 1)
+      assert(projected.get("snapshot") == options.get("snapshot"))
+      assert(projected.asCaseSensitiveMap().containsKey("snapshot"))
+      assert(projected.asCaseSensitiveMap().containsKey("SNAPSHOT"))
+    }
+  }
+
+  test("extractChangelogStateOptions defaults to table state keys") {
+    val catalog = catalogWithStateOptions(java.util.Set.of("BrAnCh"))
+    when(catalog.changelogStateOptionKeys()).thenCallRealMethod()
+    val options = new CaseInsensitiveStringMap(java.util.Map.of(
+      "BRANCH", "Main", "split-size", "5", "startingVersion", "1"))
+
+    val stateOptions = CatalogV2Util.extractChangelogStateOptions(catalog, options)
+
+    assert(stateOptions == new CaseInsensitiveStringMap(java.util.Map.of("branch", "Main")))
+    assert(stateOptions.asCaseSensitiveMap().containsKey("BRANCH"))
+    assert(options.size() == 3)
+  }
+
+  test("extractChangelogStateOptions allows independent changelog state keys") {
+    val catalog = catalogWithStateOptions(java.util.Set.of("branch"))
+    when(catalog.changelogStateOptionKeys()).thenReturn(java.util.Set.of("schemaVersion"))
+    val options = new CaseInsensitiveStringMap(java.util.Map.of(
+      "branch", "Main", "SCHEMAVERSION", "10", "split-size", "5"))
+
+    val changelogOptions = CatalogV2Util.extractChangelogStateOptions(catalog, options)
+    val tableOptions = CatalogV2Util.extractTableStateOptions(catalog, options)
+
+    assert(changelogOptions ==
+      new CaseInsensitiveStringMap(java.util.Map.of("schemaVersion", "10")))
+    assert(tableOptions == new CaseInsensitiveStringMap(java.util.Map.of("branch", "Main")))
+  }
+
+  test("extractChangelogStateOptions allows an empty override of table state keys") {
+    val catalog = catalogWithStateOptions(java.util.Set.of("branch"))
+    when(catalog.changelogStateOptionKeys()).thenReturn(java.util.Set.of[String]())
+    val options = new CaseInsensitiveStringMap(java.util.Map.of("branch", "Main"))
+
+    assert(CatalogV2Util.extractChangelogStateOptions(catalog, options).isEmpty)
+  }
+
+  test("extractChangelogStateOptions returns no options by default") {
+    val catalog = mock(classOf[TableCatalog])
+    when(catalog.tableStateOptionKeys()).thenCallRealMethod()
+    when(catalog.changelogStateOptionKeys()).thenCallRealMethod()
+    val options = new CaseInsensitiveStringMap(
+      java.util.Map.of("branch", "Main", "split-size", "5"))
+
+    assert(CatalogV2Util.extractChangelogStateOptions(catalog, options).isEmpty)
+  }
+
+  test("extractChangelogStateOptions compares keys case-insensitively and values sensitively") {
+    val catalog = mock(classOf[TableCatalog])
+    when(catalog.changelogStateOptionKeys()).thenReturn(java.util.Set.of("BrAnCh"))
+    val lowerCaseKey = CatalogV2Util.extractChangelogStateOptions(
+      catalog, new CaseInsensitiveStringMap(java.util.Map.of("branch", "Main")))
+    val upperCaseKey = CatalogV2Util.extractChangelogStateOptions(
+      catalog, new CaseInsensitiveStringMap(java.util.Map.of("BRANCH", "Main")))
+    val lowerCaseValue = CatalogV2Util.extractChangelogStateOptions(
+      catalog, new CaseInsensitiveStringMap(java.util.Map.of("branch", "main")))
+
+    assert(lowerCaseKey == upperCaseKey)
+    assert(lowerCaseKey.hashCode() == upperCaseKey.hashCode())
+    assert(lowerCaseKey != lowerCaseValue)
   }
 
   test("viewInfoBuilderFrom preserves the dependency list") {

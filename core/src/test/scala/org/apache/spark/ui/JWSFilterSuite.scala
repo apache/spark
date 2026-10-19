@@ -93,6 +93,25 @@ class JWSFilterSuite extends SparkFunSuite {
     verify(chain, times(1)).doFilter(any(), any())
   }
 
+  test("Should reject a token without expiration when requireExpiration is set") {
+    val req = mockRequest()
+    val res = mock(classOf[HttpServletResponse])
+    val chain = mock(classOf[FilterChain])
+
+    val filter = new JWSFilter()
+    val params = new JHashMap[String, String]
+    params.put("secretKey", TEST_KEY)
+    params.put("requireExpiration", "true")
+    filter.init(new DummyFilterConfig(params))
+
+    // TOKEN has an empty payload, so it carries no expiration.
+    when(req.getHeader("Authorization")).thenReturn(s"Bearer $TOKEN")
+    filter.doFilter(req, res, chain)
+    verify(res).sendError(meq(HttpServletResponse.SC_FORBIDDEN),
+      meq("Authorization token does not carry a required expiration."))
+    verify(chain, times(0)).doFilter(any(), any())
+  }
+
   private def mockRequest(params: Map[String, Array[String]] = Map()): HttpServletRequest = {
     val req = mock(classOf[HttpServletRequest])
     when(req.getParameterMap()).thenReturn(params.asJava)

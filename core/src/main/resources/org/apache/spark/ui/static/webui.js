@@ -121,19 +121,11 @@ $(function() {
     $(this).closest("tr").nextAll("tr.sub-execution-list").first().toggleClass("collapsed");
   });
 
-  // kill links with confirmation
-  $(document).on("click", "a.kill-link[data-kill-message]", function(e) {
-    if (!window.confirm($(this).data("kill-message"))) {
-      e.preventDefault();
-    } else if ($(this).closest("form").length > 0) {
-      e.preventDefault();
-      $(this).closest("form").submit();
-    }
-  });
-
-  // generic links guarded by a confirmation prompt before navigating
-  $(document).on("click", "a.confirm-link[data-confirm-message]", function(e) {
-    if (!window.confirm($(this).data("confirm-message"))) {
+  // controls guarded by a confirmation prompt before they act: a link navigates and a submit
+  // button posts its form. "data-kill-message" is the older spelling of "data-confirm-message".
+  $(document).on("click", "[data-kill-message], [data-confirm-message]", function(e) {
+    var message = $(this).data("kill-message") || $(this).data("confirm-message");
+    if (!window.confirm(message)) {
       e.preventDefault();
     }
   });

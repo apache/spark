@@ -148,15 +148,18 @@ $(document).ready(function() {
         attempt["startTime"] = formatTimeMillis(attempt["startTimeEpoch"]);
         attempt["endTime"] = formatTimeMillis(attempt["endTimeEpoch"]);
         attempt["lastUpdated"] = formatTimeMillis(attempt["lastUpdatedEpoch"]);
-        attempt["log"] = uiRoot + "/api/v1/applications/" + id + "/" +
-          (attempt.hasOwnProperty("attemptId") ? attempt["attemptId"] + "/" : "") + "logs";
+        // Ids are log-derived; encode/escape them like the name/user/logSource columns below.
+        attempt["log"] = uiRoot + "/api/v1/applications/" + encodeURIComponent(id) + "/" +
+          (attempt.hasOwnProperty("attemptId") ?
+            encodeURIComponent(attempt["attemptId"]) + "/" : "") + "logs";
         attempt["durationMillisec"] = attempt["duration"];
         attempt["duration"] = formatDuration(attempt["duration"]);
         attempt["id"] = id;
         attempt["name"] = escapeHtml(name);
         attempt["version"] = version;
-        attempt["attemptUrl"] = uiRoot + "/history/" + id + "/" +
-          (attempt.hasOwnProperty("attemptId") ? attempt["attemptId"] + "/" : "") + "jobs/";
+        attempt["attemptUrl"] = uiRoot + "/history/" + encodeURIComponent(id) + "/" +
+          (attempt.hasOwnProperty("attemptId") ?
+            encodeURIComponent(attempt["attemptId"]) + "/" : "") + "jobs/";
         array.push(attempt);
       }
       /* eslint-enable no-prototype-builtins */
@@ -177,12 +180,13 @@ $(document).ready(function() {
       var conf = {
         "data": array,
         "columns": [
-          {name: 'version', data: 'version' },
+          {name: 'version', data: 'version', render: (version) => escapeHtml(version) },
           {
             name: 'appId',
             type: "appid-numeric",
             data: 'id',
-            render: (id, type, row) => `<span title="${id}"><a href="${row.attemptUrl}">${id}</a></span>`
+            render: (id, type, row) =>
+              `<span title="${escapeHtml(id)}"><a href="${row.attemptUrl}">${escapeHtml(id)}</a></span>`
           },
           {
             name: 'appName',
@@ -204,7 +208,8 @@ $(document).ready(function() {
           {
             name: attemptIdColumnName,
             data: 'attemptId',
-            render: (attemptId, type, row) => (attemptId ? `<a href="${row.attemptUrl}">${attemptId}</a>` : '')
+            render: (attemptId, type, row) =>
+              (attemptId ? `<a href="${row.attemptUrl}">${escapeHtml(attemptId)}</a>` : '')
           },
           {name: startedColumnName, data: 'startTime' },
           {name: completedColumnName, data: 'endTime' },
@@ -223,7 +228,8 @@ $(document).ready(function() {
           {
             name: 'eventLog',
             data: 'log',
-            render: (log, _ignored_type, _ignored_row) => `<a href="${log}" class="btn btn-info btn-mini">Download</a>`
+            render: (log, _ignored_type, _ignored_row) =>
+              `<a href="${log}" class="btn btn-sm btn-outline-secondary">Download</a>`
           },
         ],
         "aoColumnDefs": [

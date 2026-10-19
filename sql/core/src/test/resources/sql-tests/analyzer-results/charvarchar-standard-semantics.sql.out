@@ -93,7 +93,7 @@ Project [CASE WHEN true THEN cast(cast(abcdef as varchar(2)) as varchar(4)) ELSE
 -- !query
 SELECT CAST('abcdef' AS VARCHAR(2)) IN (CAST('ab' AS VARCHAR(4)))
 -- !query analysis
-Project [cast(cast(abcdef as varchar(2)) as varchar(4)) IN (cast(cast(ab as varchar(4)) as varchar(4))) AS (CAST(abcdef AS VARCHAR(2)) IN (CAST(ab AS VARCHAR(4))))#x]
+Project [cast(cast(abcdef as varchar(2)) as varchar(4)) IN (cast(ab as varchar(4))) AS (CAST(abcdef AS VARCHAR(2)) IN (CAST(ab AS VARCHAR(4))))#x]
 +- OneRowRelation
 
 
@@ -166,7 +166,7 @@ Project [typeof(CASE WHEN true THEN cast(cast(a as char(2)) as char(4)) ELSE cas
 -- !query
 SELECT cast('a' AS CHAR(2)) IN (cast('a ' AS CHAR(2)), cast('bbb' AS VARCHAR(3)))
 -- !query analysis
-Project [cast(cast(a as char(2)) as varchar(3)) IN (cast(cast(a  as char(2)) as varchar(3)),cast(cast(bbb as varchar(3)) as varchar(3))) AS (CAST(a AS CHAR(2)) IN (CAST(a  AS CHAR(2)), CAST(bbb AS VARCHAR(3))))#x]
+Project [cast(cast(a as char(2)) as varchar(3)) IN (cast(cast(a  as char(2)) as varchar(3)),cast(bbb as varchar(3))) AS (CAST(a AS CHAR(2)) IN (CAST(a  AS CHAR(2)), CAST(bbb AS VARCHAR(3))))#x]
 +- OneRowRelation
 
 
@@ -174,7 +174,7 @@ Project [cast(cast(a as char(2)) as varchar(3)) IN (cast(cast(a  as char(2)) as 
 SELECT typeof(c) FROM (SELECT cast('a' AS CHAR(2)) AS c) t WHERE c IN ('a ', 'b')
 -- !query analysis
 Project [typeof(c#x) AS typeof(c)#x]
-+- Filter cast(c#x as string collate UTF8_BINARY) IN (cast(a  as string collate UTF8_BINARY),cast(b as string collate UTF8_BINARY))
++- Filter cast(c#x as string collate UTF8_BINARY) IN (a ,b)
    +- SubqueryAlias t
       +- Project [cast(a as char(2)) AS c#x]
          +- OneRowRelation
@@ -703,35 +703,35 @@ Project [(cast(cast(a as char(2) collate UTF8_BINARY_RTRIM) as char(4) collate U
 -- !query
 SELECT cast('a' AS CHAR(2)) IN (cast('a' AS CHAR(4)))
 -- !query analysis
-Project [cast(cast(a as char(2)) as char(4)) IN (cast(cast(a as char(4)) as char(4))) AS (CAST(a AS CHAR(2)) IN (CAST(a AS CHAR(4))))#x]
+Project [cast(cast(a as char(2)) as char(4)) IN (cast(a as char(4))) AS (CAST(a AS CHAR(2)) IN (CAST(a AS CHAR(4))))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT cast('a' AS CHAR(2)) IN (cast('a' AS VARCHAR(2)))
 -- !query analysis
-Project [cast(cast(a as char(2)) as varchar(2)) IN (cast(cast(a as varchar(2)) as varchar(2))) AS (CAST(a AS CHAR(2)) IN (CAST(a AS VARCHAR(2))))#x]
+Project [cast(cast(a as char(2)) as varchar(2)) IN (cast(a as varchar(2))) AS (CAST(a AS CHAR(2)) IN (CAST(a AS VARCHAR(2))))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT cast('a' AS CHAR(2)) IN (cast('a ' AS VARCHAR(2)))
 -- !query analysis
-Project [cast(cast(a as char(2)) as varchar(2)) IN (cast(cast(a  as varchar(2)) as varchar(2))) AS (CAST(a AS CHAR(2)) IN (CAST(a  AS VARCHAR(2))))#x]
+Project [cast(cast(a as char(2)) as varchar(2)) IN (cast(a  as varchar(2))) AS (CAST(a AS CHAR(2)) IN (CAST(a  AS VARCHAR(2))))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT cast('a' AS CHAR(2)) IN ('a', 'b')
 -- !query analysis
-Project [cast(cast(a as char(2)) as string collate UTF8_BINARY) IN (cast(a as string collate UTF8_BINARY),cast(b as string collate UTF8_BINARY)) AS (CAST(a AS CHAR(2)) IN (a, b))#x]
+Project [cast(cast(a as char(2)) as string collate UTF8_BINARY) IN (a,b) AS (CAST(a AS CHAR(2)) IN (a, b))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT cast('a' AS CHAR(2)) IN ('a ', 'b')
 -- !query analysis
-Project [cast(cast(a as char(2)) as string collate UTF8_BINARY) IN (cast(a  as string collate UTF8_BINARY),cast(b as string collate UTF8_BINARY)) AS (CAST(a AS CHAR(2)) IN (a , b))#x]
+Project [cast(cast(a as char(2)) as string collate UTF8_BINARY) IN (a ,b) AS (CAST(a AS CHAR(2)) IN (a , b))#x]
 +- OneRowRelation
 
 

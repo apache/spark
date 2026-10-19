@@ -32,6 +32,7 @@ import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, Proced
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
 import org.apache.spark.sql.connector.read.{LocalScan, Scan}
+import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig
 import org.apache.spark.sql.types.{DataTypes, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -193,12 +194,39 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     InMemoryTableCatalog.maybeSimulateFailedTableCreation(properties)
 
     val tableName = s"$name.${ident.quoted}"
-    val table = new InMemoryTable(tableName, columns, partitions, properties, constraints,
-      distribution, ordering, requiredNumPartitions, advisoryPartitionSize,
-      distributionStrictlyRequired, numRowsPerSplit)
+    val table = newInMemoryTable(
+      tableName, columns, partitions, properties, constraints, distribution, ordering,
+      requiredNumPartitions, advisoryPartitionSize, distributionStrictlyRequired, numRowsPerSplit,
+      util.UUID.randomUUID().toString)
     tables.put(ident, table)
     namespaces.putIfAbsent(ident.namespace.toList, Map())
     table
+  }
+
+  /**
+   * Builds the in-memory table this catalog serves. Subclasses that expose a specialized table
+   * type must override this so both CREATE and ALTER reconstruct the same class.
+   */
+  // scalastyle:off argcount
+  protected def newInMemoryTable(
+      name: String,
+      columns: Array[Column],
+      partitioning: Array[Transform],
+      properties: util.Map[String, String],
+      constraints: Array[Constraint],
+      distribution: Distribution,
+      ordering: Array[SortOrder],
+      requiredNumPartitions: Option[Int],
+      advisoryPartitionSize: Option[Long],
+      distributionStrictlyRequired: Boolean,
+      numRowsPerSplit: Int,
+      id: String,
+      schemaAlignmentConfig: SchemaAlignmentConfig = SchemaAlignmentConfig.DEFAULT
+  ): InMemoryBaseTable = {
+    // scalastyle:on argcount
+    new InMemoryTable(name, columns, partitioning, properties, constraints, distribution,
+      ordering, requiredNumPartitions, advisoryPartitionSize, distributionStrictlyRequired,
+      numRowsPerSplit, id, schemaAlignmentConfig)
   }
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
@@ -238,22 +266,13 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     val currentVersion = table.version()
     val columnsWithIds = InMemoryBaseTable.assignMissingIds(
       CatalogV2Util.structTypeToV2Columns(schema))
+    val reconstructedId = Option(table.id()).getOrElse(util.UUID.randomUUID().toString)
     val newTable = table match {
-      case _: InMemoryTable =>
-        new InMemoryTable(
-          name = table.name,
-          columns = columnsWithIds,
-          partitioning = finalPartitioning,
-          properties = properties,
-          constraints = constraints,
-          id = table.id)
-          .alterTableWithData(table.data, schemaAfterDrops)
-      case _: InMemoryTableWithV2Filter =>
-        new InMemoryTableWithV2Filter(
-          name = table.name,
-          columns = columnsWithIds,
-          partitioning = finalPartitioning,
-          properties = properties)
+      case _: InMemoryTable | _: InMemoryTableWithV2Filter =>
+        newInMemoryTable(
+          table.name, columnsWithIds, finalPartitioning, properties, constraints,
+          table.distribution, table.ordering, table.numPartitions, table.advisoryPartitionSize,
+          table.isDistributionStrictlyRequired, table.numRowsPerSplit, reconstructedId)
           .alterTableWithData(table.data, schemaAfterDrops)
       case other =>
         throw new UnsupportedOperationException(

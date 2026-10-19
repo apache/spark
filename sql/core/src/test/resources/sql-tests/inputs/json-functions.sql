@@ -285,3 +285,29 @@ select json_query('{"a":[1,2]}', '$.a[*]');
 select json_query('{"a":1}', '$.a' RETURNING INT);
 -- invalid: OMIT QUOTES combined with an array wrapper
 select json_query('{"name":"Ada"}', '$.name' WITH ARRAY WRAPPER OMIT QUOTES);
+
+-- JSON_ARRAY: construct a JSON array from an argument list
+select json_array(1, 'x', true);
+-- default ABSENT ON NULL drops NULL elements
+select json_array(1, NULL, 3);
+-- NULL ON NULL keeps NULL elements
+select json_array(1, NULL, 3 NULL ON NULL);
+-- empty array
+select json_array();
+-- decimals and dates render via the JSON generator
+select json_array(CAST(1.50 AS DECIMAL(5,2)), DATE'2020-01-02');
+-- nested JSON_ARRAY is spliced raw, not re-quoted (implicit FORMAT JSON)
+select json_array(json_array(1, 2), 3);
+-- a plain string is quoted; FORMAT JSON splices already-JSON text verbatim
+select json_array('[1,2]');
+select json_array('[1,2]' FORMAT JSON);
+select json_array('{"a":1}' FORMAT JSON, 'x');
+-- FORMAT JSON requires a string argument
+select json_array(123 FORMAT JSON);
+-- FORMAT JSON requires the string to be exactly one well-formed JSON value
+select json_array('1,2' FORMAT JSON);
+-- an untyped NULL under FORMAT JSON is allowed and follows ON NULL handling
+select json_array(NULL FORMAT JSON);
+select json_array(NULL FORMAT JSON NULL ON NULL);
+-- values accept unparenthesized predicate expressions
+select json_array(1 IS NULL, 2 > 1);

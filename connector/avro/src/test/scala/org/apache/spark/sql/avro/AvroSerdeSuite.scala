@@ -229,7 +229,8 @@ object AvroSerdeSuite {
         new NoopFilters,
         false,
         "",
-        -1)
+        -1,
+        dataSchema = None)
   }
 
   /**

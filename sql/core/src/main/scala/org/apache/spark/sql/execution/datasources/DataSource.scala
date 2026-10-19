@@ -889,7 +889,7 @@ object DataSource extends Logging {
   def validateSchema(formatName: String, schema: StructType, conf: SQLConf): Unit = {
     val shouldAllowEmptySchema = conf.getConf(SQLConf.ALLOW_EMPTY_SCHEMAS_FOR_WRITES)
     def hasEmptySchema(schema: StructType): Boolean = {
-      schema.size == 0 || schema.exists {
+      schema.isEmpty || schema.exists {
         case StructField(_, b: StructType, _, _) => hasEmptySchema(b)
         case _ => false
       }

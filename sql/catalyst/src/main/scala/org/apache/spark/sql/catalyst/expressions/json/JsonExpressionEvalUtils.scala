@@ -119,7 +119,8 @@ case class JsonToStructsEvaluator(
     nullableSchema: DataType,
     nameOfCorruptRecord: String,
     timeZoneId: Option[String],
-    variantAllowDuplicateKeys: Boolean) {
+    variantAllowDuplicateKeys: Boolean,
+    charVarcharStandardSemantics: Boolean) {
 
   // This converts parsed rows to the desired output by the given schema.
   @transient
@@ -149,7 +150,8 @@ case class JsonToStructsEvaluator(
         (StructType(Array(StructField("value", other))), other)
     }
 
-    val rawParser = new JacksonParser(actualSchema, parsedOptions, allowArrayAsStructs = false)
+    val rawParser = new JacksonParser(actualSchema, parsedOptions, allowArrayAsStructs = false,
+      charVarcharStandardSemanticsOverride = Some(charVarcharStandardSemantics))
     val createParser = CreateJacksonParser.utf8String _
 
     new FailureSafeParser[UTF8String](
@@ -177,14 +179,14 @@ case class StructsToJsonEvaluator(
   private lazy val gen = new JacksonGenerator(
     inputSchema, writer, new JSONOptions(options, timeZoneId.get))
 
-  // This converts rows to the JSON output according to the given schema.
+  // This converts rows to the JSON output (as a Java String) according to the given schema.
   @transient
-  private lazy val converter: Any => UTF8String = {
-    def getAndReset(): UTF8String = {
+  private lazy val converter: Any => String = {
+    def getAndReset(): String = {
       gen.flush()
       val json = writer.toString
       writer.reset()
-      UTF8String.fromString(json)
+      json
     }
 
     inputSchema match {
@@ -208,6 +210,12 @@ case class StructsToJsonEvaluator(
   }
 
   final def evaluate(value: Any): Any = {
+    UTF8String.fromString(converter(value))
+  }
+
+  // Serializes `value` to its JSON text as a Java String, letting callers that need a String skip
+  // the `UTF8String` round trip that `evaluate` performs.
+  final def evaluateString(value: Any): String = {
     converter(value)
   }
 }

@@ -16,6 +16,7 @@
  */
 package org.apache.spark.ml.feature
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
@@ -211,6 +212,25 @@ class CountVectorizerSuite extends MLTest with DefaultReadWriteTest {
     cvModel2.transform(df).select("features", "expected").collect().foreach {
       case Row(features: Vector, expected: Vector) =>
         assert(features ~== expected absTol 1e-14)
+    }
+  }
+
+  test("CountVectorizer validates mixed minDF and maxDF") {
+    val df = Seq(Seq("a"), Seq("b"), Seq("c"), Seq("d")).toDF("words")
+
+    Seq((0.75, 2.0), (3.0, 0.5)).foreach { case (minDf, maxDf) =>
+      val error = intercept[SparkRuntimeException] {
+        new CountVectorizer()
+          .setInputCol("words")
+          .setOutputCol("features")
+          .setMinDF(minDf)
+          .setMaxDF(maxDf)
+          .fit(df)
+      }
+      checkError(
+        exception = error,
+        condition = "USER_RAISED_EXCEPTION",
+        parameters = Map("errorMessage" -> "maxDF must be >= minDF."))
     }
   }
 

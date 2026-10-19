@@ -1158,6 +1158,8 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
     assert(flow.changeArgs.storedAsScdType == ScdType.Type1)
     assert(flow.changeArgs.deleteCondition.isEmpty)
     assert(flow.changeArgs.columnSelection.isEmpty)
+    // No IGNORE NULL UPDATES clause leaves ignore-null updates off.
+    assert(flow.changeArgs.ignoreNullSelection.isEmpty)
   }
 
   test("CREATE FLOW AS AUTO CDC INTO registers an AutoCDC flow targeting a streaming table") {
@@ -1275,6 +1277,62 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
     flow.changeArgs.trackHistorySelection match {
       case Some(ColumnSelection.ExcludeColumns(cols)) => assert(cols.map(_.name) == Seq("id"))
       case other => fail(s"Expected ExcludeColumns(id), got $other")
+    }
+  }
+
+  test("AUTO CDC IGNORE NULL UPDATES (all columns) maps onto ChangeArgs") {
+    val graph = unresolvedDataflowGraphFromSql(
+      sqlText = s"""
+                   |CREATE STREAMING TABLE st
+                   |FLOW AUTO CDC
+                   |FROM STREAM $externalTable1Ident
+                   |KEYS (id)
+                   |SEQUENCE BY id
+                   |IGNORE NULL UPDATES
+                   |""".stripMargin
+    )
+
+    // "All columns" is an ExcludeColumns selection with an empty list, distinct from the absent
+    // clause (None).
+    autoCdcFlowFor(graph, "st").changeArgs.ignoreNullSelection match {
+      case Some(ColumnSelection.ExcludeColumns(cols)) => assert(cols.isEmpty)
+      case other => fail(s"Expected ExcludeColumns(empty), got $other")
+    }
+  }
+
+  test("AUTO CDC IGNORE NULL UPDATES ON include list maps onto ChangeArgs") {
+    val graph = unresolvedDataflowGraphFromSql(
+      sqlText = s"""
+                   |CREATE STREAMING TABLE st
+                   |FLOW AUTO CDC
+                   |FROM STREAM $externalTable1Ident
+                   |KEYS (id)
+                   |SEQUENCE BY id
+                   |IGNORE NULL UPDATES ON (value)
+                   |""".stripMargin
+    )
+
+    autoCdcFlowFor(graph, "st").changeArgs.ignoreNullSelection match {
+      case Some(ColumnSelection.IncludeColumns(cols)) => assert(cols.map(_.name) == Seq("value"))
+      case other => fail(s"Expected IncludeColumns(value), got $other")
+    }
+  }
+
+  test("AUTO CDC IGNORE NULL UPDATES ON * EXCEPT maps onto ChangeArgs") {
+    val graph = unresolvedDataflowGraphFromSql(
+      sqlText = s"""
+                   |CREATE STREAMING TABLE target;
+                   |CREATE FLOW f AS AUTO CDC INTO target
+                   |FROM STREAM $externalTable1Ident
+                   |KEYS (id)
+                   |SEQUENCE BY id
+                   |IGNORE NULL UPDATES ON * EXCEPT (value)
+                   |""".stripMargin
+    )
+
+    autoCdcFlowFor(graph, "f").changeArgs.ignoreNullSelection match {
+      case Some(ColumnSelection.ExcludeColumns(cols)) => assert(cols.map(_.name) == Seq("value"))
+      case other => fail(s"Expected ExcludeColumns(value), got $other")
     }
   }
 

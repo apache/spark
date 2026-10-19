@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.json
 
 import java.io.{ByteArrayOutputStream, CharConversionException}
 import java.nio.charset.MalformedInputException
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -28,6 +29,7 @@ import com.fasterxml.jackson.core._
 import org.apache.hadoop.fs.PositionedReadable
 
 import org.apache.spark.SparkUpgradeException
+import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions._
@@ -49,7 +51,14 @@ class JacksonParser(
     schema: DataType,
     val options: JSONOptions,
     allowArrayAsStructs: Boolean,
-    filters: Seq[Filter] = Seq.empty) extends Logging {
+    filters: Seq[Filter] = Seq.empty,
+    // `spark.sql.charVarchar.standardSemantics.enabled` has PERSISTED binding, so for `from_json`
+    // it must be captured when the expression is analyzed (see `JsonToStructs`) rather than read
+    // live here, otherwise a view created under the flag would skip the CHAR/VARCHAR map-key check
+    // when queried from a session with the flag off. `None` falls back to the live conf: JSON
+    // file scans build the parser with `None`, so the key check follows the executing session's
+    // flag like other scan-time options (a scan under a persisted view resolves it the same way).
+    charVarcharStandardSemanticsOverride: Option[Boolean] = None) extends Logging {
 
   import JacksonUtils._
   import com.fasterxml.jackson.core.JsonToken._
@@ -58,8 +67,18 @@ class JacksonParser(
   // to a value in a field for `InternalRow`.
   private type ValueConverter = JsonParser => AnyRef
 
+  // CHAR/VARCHAR JSON map keys are length-checked without pad or trim under this flag. Lazy so
+  // its value is independent of field declaration order: `makeMapKeyChecker` reads it while the
+  // converters below are built, and an eager val read before its own initializer would silently
+  // see `false` and disable the check.
+  private lazy val charVarcharStandardSemantics =
+    charVarcharStandardSemanticsOverride.getOrElse(SQLConf.get.charVarcharStandardSemantics)
+
   // `ValueConverter`s for the root schema for all fields in the schema
   private val rootConverter = makeRootConverter(schema)
+
+  // Lazy: a schema that is not a struct never reaches either top-level-array path.
+  private lazy val arrayElementConverter = makeConverter(schema)
 
   private val factory = options.buildJsonFactory()
 
@@ -148,7 +167,6 @@ class JacksonParser(
   }
 
   private def makeStructRootConverter(st: StructType): JsonParser => Iterable[InternalRow] = {
-    val elementConverter = makeConverter(st)
     val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
     val jsonFilters = if (SQLConf.get.jsonFilterPushDown) {
       new JsonFilters(filters, st)
@@ -171,7 +189,8 @@ class JacksonParser(
         // List([str_a_2,null], [null,str_b_3])
         //
       case START_ARRAY if allowArrayAsStructs =>
-        val array = convertArray(parser, elementConverter, isRoot = true, arrayAsStructs = true)
+        val array =
+          convertArray(parser, arrayElementConverter, isRoot = true, arrayAsStructs = true)
         // Here, as we support reading top level JSON arrays and take every element
         // in such an array as a row, this case is possible.
         if (array.numElements() == 0) {
@@ -186,8 +205,9 @@ class JacksonParser(
 
   private def makeMapRootConverter(mt: MapType): JsonParser => Iterable[InternalRow] = {
     val fieldConverter = makeConverter(mt.valueType)
+    val keyChecker = makeMapKeyChecker(mt.keyType)
     (parser: JsonParser) => parseJsonToken[Iterable[InternalRow]](parser, mt) {
-      case START_OBJECT => Some(InternalRow(convertMap(parser, fieldConverter)))
+      case START_OBJECT => Some(InternalRow(convertMap(parser, fieldConverter, keyChecker)))
     }
   }
 
@@ -302,7 +322,7 @@ class JacksonParser(
           }
       }
 
-    case _: StringType => (parser: JsonParser) => {
+    case dt: StringType => (parser: JsonParser) => {
       // This must be enabled if we will retrieve the bytes directly from the raw content:
       val oldFeature = parser.getFeatureMask
       val featureToAdd = JsonParser.Feature.INCLUDE_SOURCE_IN_LOCATION.getMask
@@ -356,7 +376,7 @@ class JacksonParser(
       // to be reset. This ensures that every feature is restored to its previous
       // state as defined by `oldFeature`.
       parser.overrideStdFeatures(oldFeature, ~0)
-      result
+      CharVarcharUtils.applyTextParseSemantics(result, dt)
     }
 
     case TimestampType =>
@@ -479,8 +499,9 @@ class JacksonParser(
 
     case mt: MapType =>
       val valueConverter = makeConverter(mt.valueType)
+      val keyChecker = makeMapKeyChecker(mt.keyType)
       (parser: JsonParser) => parseJsonToken[MapData](parser, dataType) {
-        case START_OBJECT => convertMap(parser, valueConverter)
+        case START_OBJECT => convertMap(parser, valueConverter, keyChecker)
       }
 
     case udt: UserDefinedType[_] =>
@@ -573,6 +594,7 @@ class JacksonParser(
       fieldConverters: Array[ValueConverter],
       structFilters: StructFilters = new NoopFilters(),
       isRoot: Boolean = false): Option[InternalRow] = {
+    val containerDepth = parser.getParsingContext.getNestingDepth
     val row = new GenericInternalRow(schema.length)
     var badRecordException: Option[Throwable] = None
     var skipRow = false
@@ -597,6 +619,9 @@ class JacksonParser(
             case NonFatal(e) if isRoot || enablePartialResults =>
               badRecordException = badRecordException.orElse(Some(e))
               parser.skipChildren()
+            case NonFatal(e) =>
+              // Nested non-partial: drain before rethrow so parent fields stay aligned.
+              skipRestAndRethrow(parser, JsonToken.END_OBJECT, containerDepth, e)
           }
         case None =>
           parser.skipChildren()
@@ -613,37 +638,118 @@ class JacksonParser(
   }
 
   /**
-   * Parse an object as a Map, preserving all fields.
+   * Parse an object as a Map.
+   *
+   * JSON object names used as CHAR/VARCHAR keys are length-checked without rewriting (see
+   * `makeMapKeyChecker`): CHAR keys must already be exactly n characters, and VARCHAR keys
+   * must already be at most n characters. Padding, trimming, and `mapKeyDedupPolicy` are not
+   * applied, and duplicate names are kept, exactly as for STRING keys. CHAR/VARCHAR keys thus
+   * handle duplicates the same way STRING keys do in each format: JSON keeps every pair, while
+   * XML (SPARK-60103) keeps the last.
+   *
+   * A rejected key is treated like a failed value, regardless of `enablePartialResults`: the
+   * cause is recorded and the parser steps past the value so the loop still consumes the map's
+   * END_OBJECT, leaving the key unpaired. The check must not surface its result while the parser
+   * is still on the FIELD_NAME, or an enclosing struct would misread the map's remaining entries
+   * as its own sibling fields (SPARK-60108). STRING keys have no checker and take the fast path.
    */
   private def convertMap(
       parser: JsonParser,
-      fieldConverter: ValueConverter): MapData = {
+      fieldConverter: ValueConverter,
+      keyChecker: Option[UTF8String => Option[Throwable]]): MapData = {
+    val containerDepth = parser.getParsingContext.getNestingDepth
     val keys = ArrayBuffer.empty[UTF8String]
     val values = ArrayBuffer.empty[Any]
     var badRecordException: Option[Throwable] = None
 
     while (nextUntil(parser, JsonToken.END_OBJECT)) {
-      keys += UTF8String.fromString(parser.currentName)
-      try {
-        values += fieldConverter.apply(parser)
-      } catch {
-        case err: PartialValueException if enablePartialResults =>
-          badRecordException = badRecordException.orElse(Some(err.cause))
-          values += err.partialResult
-        case NonFatal(e) if enablePartialResults =>
+      val key = UTF8String.fromString(parser.currentName)
+      keys += key
+      // Avoid allocating a closure per entry on the common no-checker path. Only run the check
+      // while the parser is on a FIELD_NAME: if a nested value failed and escaped non-partially,
+      // the loop can resume mid-value on a non-field token whose `currentName` is null, which
+      // would otherwise NPE in the check.
+      val keyRejection = keyChecker match {
+        case Some(check) if parser.currentToken == JsonToken.FIELD_NAME => check(key)
+        case _ => None
+      }
+      keyRejection match {
+        case Some(e) =>
           badRecordException = badRecordException.orElse(Some(e))
+          parser.nextToken() // step from FIELD_NAME onto the value
           parser.skipChildren()
+        case None =>
+          try {
+            values += fieldConverter.apply(parser)
+          } catch {
+            case err: PartialValueException if enablePartialResults =>
+              badRecordException = badRecordException.orElse(Some(err.cause))
+              values += err.partialResult
+            case NonFatal(e) if enablePartialResults =>
+              badRecordException = badRecordException.orElse(Some(e))
+              parser.skipChildren()
+            case NonFatal(e) =>
+              // Nested non-partial: drain before rethrow so parent fields stay aligned.
+              skipRestAndRethrow(parser, JsonToken.END_OBJECT, containerDepth, e)
+          }
       }
     }
 
-    // The JSON map will never have null or duplicated map keys, it's safe to create a
-    // ArrayBasedMapData directly here.
+    // A rejected key or a failed value leaves the key recorded without a value. Rethrow the
+    // real cause instead of building an unbalanced ArrayBasedMapData, whose cardinality
+    // `require` would otherwise mask it, and let the enclosing converter decide containment: a
+    // struct nulls just this field, while an array, a map, or the root propagates it. Balanced
+    // partial results from nested struct, array, or map values still flow through
+    // PartialMapDataResultException below.
+    if (keys.length != values.length) {
+      throw badRecordException.get
+    }
+
+    // The JSON map keeps every parsed pair, including exact duplicate names.
     val mapData = ArrayBasedMapData(keys.toArray, values.toArray)
 
     if (badRecordException.isEmpty) {
       mapData
     } else {
       throw PartialMapDataResultException(mapData, badRecordException.get)
+    }
+  }
+
+  /**
+   * Builds the length check applied to this map's CHAR/VARCHAR keys, or `None` when the keys
+   * need no check (STRING keys, or standard semantics are off). Built once per map converter so
+   * the per-entry loop in `convertMap` does not re-inspect the key type. The check never pads or
+   * trims; it returns the rejection cause (with the actual key type, collation included, so the
+   * message is accurate) rather than throwing, so `convertMap` keeps full control of the parser
+   * position when a key is rejected.
+   */
+  private def makeMapKeyChecker(keyType: DataType): Option[UTF8String => Option[Throwable]] = {
+    if (!charVarcharStandardSemantics) {
+      None
+    } else {
+      keyType match {
+        case c: CharType => Some(checkCharJsonMapKey(_, c))
+        case v: VarcharType => Some(checkVarcharJsonMapKey(_, v))
+        case _ => None
+      }
+    }
+  }
+
+  // A CHAR(n) JSON object name is never padded: it must already be exactly n characters.
+  private def checkCharJsonMapKey(key: UTF8String, keyType: CharType): Option[Throwable] = {
+    if (key.numChars() != keyType.length) {
+      Some(QueryExecutionErrors.unsupportedJsonCharVarcharMapKey(key, keyType))
+    } else {
+      None
+    }
+  }
+
+  // A VARCHAR(n) JSON object name is never trimmed: it must already be at most n characters.
+  private def checkVarcharJsonMapKey(key: UTF8String, keyType: VarcharType): Option[Throwable] = {
+    if (key.numChars() > keyType.length) {
+      Some(QueryExecutionErrors.unsupportedJsonCharVarcharMapKey(key, keyType))
+    } else {
+      None
     }
   }
 
@@ -655,6 +761,7 @@ class JacksonParser(
       fieldConverter: ValueConverter,
       isRoot: Boolean = false,
       arrayAsStructs: Boolean = false): ArrayData = {
+    val containerDepth = parser.getParsingContext.getNestingDepth
     val values = ArrayBuffer.empty[Any]
     var badRecordException: Option[Throwable] = None
 
@@ -667,6 +774,9 @@ class JacksonParser(
         case err: PartialValueException if enablePartialResults =>
           badRecordException = badRecordException.orElse(Some(err.cause))
           values += err.partialResult
+        case NonFatal(e) if !isRoot && !enablePartialResults =>
+          // Nested non-partial: drain before rethrow so parent fields stay aligned.
+          skipRestAndRethrow(parser, JsonToken.END_ARRAY, containerDepth, e)
       }
     }
 
@@ -683,6 +793,47 @@ class JacksonParser(
   }
 
   /**
+   * Drain this object or array through its own END token and rethrow `cause`. A child can fail
+   * below this container (VARIANT_DUPLICATE_KEY at an inner END_OBJECT), so stopping at the
+   * first matching END would leave remaining siblings unconsumed. Unwind to `containerDepth`
+   * captured at this container's START, then skip remaining siblings. Compare nesting depth,
+   * not context identity: Jackson recycles child context objects. Skip failures are suppressed
+   * on `cause` so the original error is preserved.
+   */
+  private def skipRestAndRethrow(
+      parser: JsonParser,
+      stopOn: JsonToken,
+      containerDepth: Int,
+      cause: Throwable): Nothing = {
+    try {
+      var eof = false
+      while (!eof && {
+        val ctx = parser.getParsingContext
+        ctx != null && ctx.getNestingDepth > containerDepth
+      }) {
+        parser.skipChildren()
+        eof = parser.nextToken() == null
+      }
+      // An inner END token pops to this container, so the current token can already be
+      // END_OBJECT/END_ARRAY of a child. Only skip remaining siblings when we are still
+      // inside this container; our own END pops to the parent (depth < containerDepth).
+      if (!eof) {
+        val ctx = parser.getParsingContext
+        if (ctx != null && ctx.getNestingDepth == containerDepth) {
+          parser.skipChildren()
+          while (nextUntil(parser, stopOn)) {
+            parser.skipChildren()
+          }
+        }
+      }
+    } catch {
+      case NonFatal(skipErr) =>
+        cause.addSuppressed(skipErr)
+    }
+    throw cause
+  }
+
+  /**
    * Converts the non-stacktrace exceptions to user-friendly QueryExecutionErrors.
    */
   private def convertCauseForPartialResult(err: Throwable): Throwable = err match {
@@ -692,6 +843,34 @@ class JacksonParser(
       QueryExecutionErrors.emptyJsonFieldValueError(dataType)
     case _ => err
   }
+
+  private def badRecord(error: Throwable, recordLiteral: () => UTF8String): BadRecordException =
+    error match {
+      case e: SparkUpgradeException => throw e
+      case e: CharConversionException if options.encoding.isEmpty =>
+        val msg =
+          """JSON parser cannot handle a character in its input.
+            |Specifying encoding as an input option explicitly might help to resolve the issue.
+            |""".stripMargin + e.getMessage
+        val wrappedCharException = new CharConversionException(msg)
+        wrappedCharException.initCause(e)
+        BadRecordException(recordLiteral, () => Array.empty, wrappedCharException)
+      case PartialResultException(row, cause) =>
+        BadRecordException(recordLiteral, () => Array(row), convertCauseForPartialResult(cause))
+      case PartialResultArrayException(rows, cause) =>
+        BadRecordException(recordLiteral, () => rows, cause)
+      case PartialArrayDataResultException(arrayData, cause) =>
+        BadRecordException(
+          recordLiteral,
+          () => Array(InternalRow(arrayData)),
+          convertCauseForPartialResult(cause))
+      case PartialMapDataResultException(mapData, cause) =>
+        BadRecordException(
+          recordLiteral,
+          () => Array(InternalRow(mapData)),
+          convertCauseForPartialResult(cause))
+      case e => BadRecordException(recordLiteral, () => Array.empty, e)
+    }
 
   /**
    * Parse the JSON input to the set of [[InternalRow]]s.
@@ -717,43 +896,131 @@ class JacksonParser(
       }
     } catch {
       case e: SparkUpgradeException => throw e
-      case e @ (_: RuntimeException | _: JsonProcessingException | _: MalformedInputException) =>
-        // JSON parser currently doesn't support partial results for corrupted records.
-        // For such records, all fields other than the field configured by
-        // `columnNameOfCorruptRecord` are set to `null`.
-        throw BadRecordException(() => recordLiteral(record), () => Array.empty, e)
       case e: CharConversionException if options.encoding.isEmpty =>
-        val msg =
-          """JSON parser cannot handle a character in its input.
-            |Specifying encoding as an input option explicitly might help to resolve the issue.
-            |""".stripMargin + e.getMessage
-        val wrappedCharException = new CharConversionException(msg)
-        wrappedCharException.initCause(e)
-        throw BadRecordException(() => recordLiteral(record), () => Array.empty,
-          wrappedCharException)
-      case PartialResultException(row, cause) =>
-        throw BadRecordException(
-          record = () => recordLiteral(record),
-          partialResults = () => Array(row),
-          convertCauseForPartialResult(cause))
-      case PartialResultArrayException(rows, cause) =>
-        throw BadRecordException(
-          record = () => recordLiteral(record),
-          partialResults = () => rows,
-          cause)
-      // These exceptions should never be thrown outside of JacksonParser.
-      // They are used for the control flow in the parser. We add them here for completeness
-      // since they also indicate a bad record.
-      case PartialArrayDataResultException(arrayData, cause) =>
-        throw BadRecordException(
-          record = () => recordLiteral(record),
-          partialResults = () => Array(InternalRow(arrayData)),
-          convertCauseForPartialResult(cause))
-      case PartialMapDataResultException(mapData, cause) =>
-        throw BadRecordException(
-          record = () => recordLiteral(record),
-          partialResults = () => Array(InternalRow(mapData)),
-          convertCauseForPartialResult(cause))
+        throw badRecord(e, () => recordLiteral(record))
+      case e @ (_: RuntimeException | _: JsonProcessingException | _: MalformedInputException |
+          _: PartialResultException | _: PartialResultArrayException |
+          _: PartialArrayDataResultException | _: PartialMapDataResultException) =>
+        throw badRecord(e, () => recordLiteral(record))
+    }
+  }
+
+  private[sql] def parseIterator[T](
+      record: T,
+      createParser: (JsonFactory, T) => JsonParser,
+      recordLiteral: T => UTF8String): Iterator[InternalRow] = {
+    val streamArray = allowArrayAsStructs && schema.isInstanceOf[StructType] &&
+      options.singleVariantColumn.isEmpty && options.explodeEmbeddedArray.isEmpty
+    val jsonParser = try {
+      createParser(factory, record)
+    } catch {
+      case e: SparkUpgradeException => throw e
+      case e: CharConversionException if options.encoding.isEmpty =>
+        throw badRecord(e, () => recordLiteral(record))
+      case e @ (_: RuntimeException | _: JsonProcessingException | _: MalformedInputException |
+          _: PartialResultException | _: PartialResultArrayException |
+          _: PartialArrayDataResultException | _: PartialMapDataResultException) =>
+        throw badRecord(e, () => recordLiteral(record))
+    }
+    // An archive read builds one parser per entry inside a single task, so a closed parser left
+    // reachable from the completion listener keeps its entry's buffer alive for the rest of the
+    // task. Every close path takes the parser out of this cell first, so exactly one of them closes
+    // it and the listener stops retaining it as soon as one does.
+    val openParser = new AtomicReference(jsonParser)
+    def takeParser(): Option[JsonParser] = Option(openParser.getAndSet(null))
+    // Cleanup must not fail a read that already emitted rows, nor a task whose iterator was
+    // abandoned, so the paths that can still succeed close the way `tryWithResource` does: quietly.
+    def closeParser(): Unit = takeParser().foreach(parser => Utils.closeQuietly(parser))
+    def fail(error: Throwable): Nothing = {
+      try takeParser().foreach(_.close()) catch {
+        case NonFatal(closeError) => error.addSuppressed(closeError)
+      }
+      throw badRecord(error, () => recordLiteral(record))
+    }
+    // Resuming is only safe where the parser cannot have moved past the element that failed. A
+    // scalar element leaves it on that scalar's own token, and `convertObject` consumes through
+    // END_OBJECT before raising `PartialResultException`; any other container failure can have
+    // stopped anywhere inside the element.
+    def resumableAfter(error: Throwable, elementStart: Option[JsonToken]): Boolean =
+      options.parseMode != FailFastMode && (elementStart match {
+        case Some(START_OBJECT) | Some(START_ARRAY) => error.isInstanceOf[PartialResultException]
+        case Some(_) => error.isInstanceOf[RuntimeException]
+        case None => false
+      })
+    def handleFailure[R](elementStart: Option[JsonToken])(operation: => R): R = {
+      try operation catch {
+        case e: SparkUpgradeException => fail(e)
+        case e: CharConversionException if options.encoding.isEmpty => fail(e)
+        case e @ (_: RuntimeException | _: JsonProcessingException | _: MalformedInputException |
+            _: PartialResultException | _: PartialResultArrayException |
+            _: PartialArrayDataResultException | _: PartialMapDataResultException) =>
+          if (resumableAfter(e, elementStart)) {
+            throw badRecord(e, () => recordLiteral(record)).copy(recoverable = true)
+          } else {
+            fail(e)
+          }
+        // Anything else, such as a raw `IOException` off the underlying stream, is not a malformed
+        // record and so propagates unwrapped -- but it still has to close what the eager path's
+        // `tryWithResource` would have, rather than leaving it to task completion.
+        case other: Throwable =>
+          closeParser()
+          throw other
+      }
+    }
+
+    handleFailure(elementStart = None)(jsonParser.nextToken()) match {
+      case null =>
+        closeParser()
+        Iterator.empty
+      case START_ARRAY if streamArray =>
+        // Abandoning the iterator before END_ARRAY (e.g. a LIMIT) reaches no eager close.
+        Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => closeParser()))
+        new Iterator[InternalRow] {
+          private var nextRow: InternalRow = _
+          private var prepared = false
+          private var finished = false
+
+          override def hasNext: Boolean = {
+            prepare()
+            !finished
+          }
+
+          override def next(): InternalRow = {
+            prepare()
+            if (finished) throw new NoSuchElementException("next on empty iterator")
+            prepared = false
+            nextRow
+          }
+
+          private def prepare(): Unit = {
+            if (prepared || finished) return
+            handleFailure(elementStart = None)(jsonParser.nextToken()) match {
+              case END_ARRAY => finish()
+              // Unreachable today: jackson-core signals end of input inside an open array by
+              // throwing JsonEOFException, which handleFailure turns into a malformed record.
+              // Kept so a backend that returns null cannot fall through with no current token.
+              case null =>
+                fail(new JsonParseException(jsonParser, "Unexpected end of top-level array"))
+              case elementStart =>
+                nextRow = handleFailure(Some(elementStart)) {
+                  val row = arrayElementConverter(jsonParser).asInstanceOf[InternalRow]
+                  if (row == null) throw QueryExecutionErrors.rootConverterReturnNullError()
+                  row
+                }
+                prepared = true
+            }
+          }
+
+          private def finish(): Unit = {
+            finished = true
+            closeParser()
+          }
+        }
+      case _ =>
+        val rows = handleFailure(elementStart = None)(rootConverter(jsonParser))
+        if (rows == null) fail(QueryExecutionErrors.rootConverterReturnNullError())
+        closeParser()
+        rows.iterator
     }
   }
 }

@@ -20,11 +20,14 @@ package org.apache.spark.sql
 import java.sql.Timestamp
 import java.time.{LocalDateTime, ZoneId, ZoneOffset}
 
-import org.apache.spark.SparkThrowable
+import org.apache.spark.{SparkArithmeticException, SparkThrowable}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.execution.BinByExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class BinBySuite extends QueryTest with SharedSparkSession {
+  import testImplicits._
 
   private def tsAt(s: String, zone: ZoneId = ZoneOffset.UTC): Timestamp =
     Timestamp.from(LocalDateTime.parse(s.replace(' ', 'T')).atZone(zone).toInstant)
@@ -33,6 +36,41 @@ class BinBySuite extends QueryTest with SharedSparkSession {
 
   private def ratio(overlapMicros: Long, totalMicros: Long): Double =
     overlapMicros.toDouble / totalMicros.toDouble
+
+  private def checkBinByDatetimeOverflow(
+      rangeStart: LocalDateTime,
+      rangeEnd: LocalDateTime,
+      binWidthSql: String,
+      originSql: String): Unit = {
+    withSQLConf(SQLConf.BIN_BY_ENABLED.key -> "true") {
+      withTempView("bin_by_overflow") {
+        Seq((rangeStart, rangeEnd, 1.0d))
+          .toDF("ts_start", "ts_end", "value")
+          .createOrReplaceTempView("bin_by_overflow")
+
+        checkError(
+          exception = intercept[SparkArithmeticException] {
+            spark.sql(
+              s"""SELECT * FROM bin_by_overflow
+                 |BIN BY (
+                 |  RANGE ts_start TO ts_end BIN WIDTH $binWidthSql
+                 |  ALIGN TO $originSql
+                 |  DISTRIBUTE UNIFORM (value))""".stripMargin).collect()
+          },
+          condition = "DATETIME_OVERFLOW",
+          parameters = Map("operation" -> "compute BIN BY bucket boundaries"))
+      }
+    }
+  }
+
+  private def binByExecArgs(sqlText: String): String = {
+    val plan = spark.sql(sqlText).queryExecution.executedPlan
+    val binByExec = plan.collectFirst {
+      case b: BinByExec => b
+    }.getOrElse(fail(s"No BinByExec in plan:\n$plan"))
+    // exprIds are non-deterministic; normalize them to #x as the golden files do.
+    binByExec.simpleString(SQLConf.get.maxToStringFields).replaceAll("#\\d+", "#x")
+  }
 
   test("BIN BY is rejected when the operator is disabled") {
     withSQLConf(SQLConf.BIN_BY_ENABLED.key -> "false") {
@@ -418,6 +456,56 @@ class BinBySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("BIN BY raises DATETIME_OVERFLOW when the next bin index is not representable") {
+    val maxTimestamp = DateTimeUtils.microsToLocalDateTime(Long.MaxValue)
+    checkBinByDatetimeOverflow(
+      rangeStart = maxTimestamp,
+      rangeEnd = maxTimestamp,
+      binWidthSql = "INTERVAL '0.000001' SECOND",
+      originSql = "TIMESTAMP_NTZ '1970-01-01 00:00:00'")
+  }
+
+  test("BIN BY raises DATETIME_OVERFLOW when the range duration is not representable") {
+    checkBinByDatetimeOverflow(
+      rangeStart = DateTimeUtils.microsToLocalDateTime(Long.MinValue),
+      rangeEnd = DateTimeUtils.microsToLocalDateTime(Long.MaxValue),
+      binWidthSql = "INTERVAL '1' SECOND",
+      originSql = "TIMESTAMP_NTZ '1970-01-01 00:00:00'")
+  }
+
+  test("BIN BY raises DATETIME_OVERFLOW when locating a zero-length range bin overflows") {
+    val maxTimestamp = DateTimeUtils.microsToLocalDateTime(Long.MaxValue)
+    checkBinByDatetimeOverflow(
+      rangeStart = maxTimestamp,
+      rangeEnd = maxTimestamp,
+      binWidthSql = "INTERVAL '1' DAY",
+      originSql = "TIMESTAMP_NTZ '1969-12-31 23:59:59.999999'")
+  }
+
+  test("BIN BY raises DATETIME_OVERFLOW when locating a non-empty range bin overflows") {
+    checkBinByDatetimeOverflow(
+      rangeStart = DateTimeUtils.microsToLocalDateTime(Long.MaxValue - 1L),
+      rangeEnd = DateTimeUtils.microsToLocalDateTime(Long.MaxValue),
+      binWidthSql = "INTERVAL '1' DAY",
+      originSql = "TIMESTAMP_NTZ '1969-12-31 23:59:59.999998'")
+  }
+
+  test("BIN BY raises DATETIME_OVERFLOW when advancing a bin index overflows") {
+    checkBinByDatetimeOverflow(
+      rangeStart = DateTimeUtils.microsToLocalDateTime(Long.MaxValue - 1L),
+      rangeEnd = DateTimeUtils.microsToLocalDateTime(Long.MaxValue),
+      binWidthSql = "INTERVAL '0.000001' SECOND",
+      originSql = "TIMESTAMP_NTZ '1969-12-31 23:59:59.999999'")
+  }
+
+  test("BIN BY raises DATETIME_OVERFLOW when a multi-day bin boundary overflows") {
+    checkBinByDatetimeOverflow(
+      rangeStart = ntz("2020-01-01 00:00:00"),
+      rangeEnd = ntz("2020-01-02 00:00:00"),
+      binWidthSql = "INTERVAL '106751990' DAY",
+      originSql = "TIMESTAMP_NTZ '2000-01-01 00:00:00'")
+  }
+
   test("BIN BY raises BIN_BY_INVALID_RANGE for an inverted range") {
     withSQLConf(
         SQLConf.BIN_BY_ENABLED.key -> "true",
@@ -565,6 +653,48 @@ class BinBySuite extends QueryTest with SharedSparkSession {
           spark.sql(s"SELECT bin_start, _metadata.file_size > 0 FROM $binBy"),
           Seq(Row(tsAt("2024-01-01 00:00:00"), true), Row(tsAt("2024-01-01 00:05:00"), true)))
       }
+    }
+  }
+
+  test("EXPLAIN for LTZ BIN BY") {
+    withSQLConf(
+        SQLConf.BIN_BY_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val rendered = binByExecArgs(
+        """SELECT * FROM VALUES
+          |  (TIMESTAMP '2024-01-01 00:00:00', TIMESTAMP '2024-01-01 00:05:00', 100.0D)
+          |  AS t(ts_start, ts_end, value)
+          |BIN BY (
+          |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '5' MINUTE
+          |  ALIGN TO TIMESTAMP '2024-01-01 00:00:00' DISTRIBUTE UNIFORM (value))""".stripMargin)
+      assert(rendered ==
+        "BinBy range=[ts_start#x: timestamp, ts_end#x: timestamp], " +
+          "binWidth=INTERVAL '0 00:05:00' DAY TO SECOND, alignTo=2024-01-01 00:00:00, " +
+          "distribute=[value#x: double], scaledDistribute=[value#x: double], " +
+          "appends=[bin_start#x: timestamp, bin_end#x: timestamp, " +
+          "bin_distribute_ratio#x: double], zone=America/Los_Angeles")
+    }
+  }
+
+  test("EXPLAIN for TIMESTAMP_NTZ BIN BY") {
+    withSQLConf(
+        SQLConf.BIN_BY_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val rendered = binByExecArgs(
+        """SELECT * FROM VALUES
+          |  (TIMESTAMP_NTZ '2024-01-01 00:00:00', TIMESTAMP_NTZ '2024-01-01 00:05:00', 100.0D)
+          |  AS t(ts_start, ts_end, value)
+          |BIN BY (
+          |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '5' MINUTE
+          |  ALIGN TO TIMESTAMP_NTZ '2024-01-01 00:00:00'
+          |  DISTRIBUTE UNIFORM (value))""".stripMargin)
+      assert(rendered ==
+        "BinBy range=[ts_start#x: timestamp_ntz, ts_end#x: timestamp_ntz], " +
+          "binWidth=INTERVAL '0 00:05:00' DAY TO SECOND, alignTo=2024-01-01 00:00:00, " +
+          "distribute=[value#x: double], scaledDistribute=[value#x: double], " +
+          "appends=[bin_start#x: timestamp_ntz, bin_end#x: timestamp_ntz, " +
+          "bin_distribute_ratio#x: double]")
     }
   }
 }

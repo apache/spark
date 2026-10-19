@@ -78,4 +78,26 @@ select RTRIM(utf8_binary collate utf8_binary_rtrim, utf8_lcase collate utf8_bina
 select RTRIM('ABc', utf8_binary), RTRIM('ABc', utf8_lcase) from t1;
 select RTRIM('ABc' collate utf8_lcase, utf8_binary), RTRIM('AAa' collate utf8_binary, utf8_lcase) from t1;
 
+-- Unary trim uses collation-aware space matching (SPARK-59633).
+-- Under UNICODE_CI, NBSP (chr(160)) compares as equal to ASCII space, so unary trim removes it
+-- and agrees with the explicit two-argument form. Under UNICODE (case-sensitive) it is preserved.
+-- The trim string is the first argument: trim(trimStr, srcStr) removes trimStr from srcStr,
+-- so the unary form below is equivalent to trim(' ', value). length/octet_length of the trimmed
+-- result disambiguate NBSP (2 UTF-8 bytes) from ASCII space, which look identical in the output.
+select trim(s), length(trim(s)), octet_length(trim(s))
+  from (select concat(chr(160), 'abc', chr(160)) collate unicode_ci as s);
+select trim(' ' collate unicode_ci, s), length(trim(' ' collate unicode_ci, s)),
+       octet_length(trim(' ' collate unicode_ci, s))
+  from (select concat(chr(160), 'abc', chr(160)) collate unicode_ci as s);
+select ltrim(s), length(ltrim(s)), octet_length(ltrim(s))
+  from (select concat(chr(160), 'abc', chr(160)) collate unicode_ci as s);
+select rtrim(s), length(rtrim(s)), octet_length(rtrim(s))
+  from (select concat(chr(160), 'abc', chr(160)) collate unicode_ci as s);
+select trim(s), length(trim(s)), octet_length(trim(s))
+  from (select concat(chr(160), 'abc', chr(160)) collate unicode as s);
+select ltrim(s), length(ltrim(s)), octet_length(ltrim(s))
+  from (select concat(chr(160), 'abc', chr(160)) collate unicode as s);
+select rtrim(s), length(rtrim(s)), octet_length(rtrim(s))
+  from (select concat(chr(160), 'abc', chr(160)) collate unicode as s);
+
 drop table t1;

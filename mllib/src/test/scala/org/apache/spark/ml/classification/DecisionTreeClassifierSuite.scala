@@ -359,6 +359,33 @@ class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
     }
   }
 
+  test("leaf indices are correct after training, loading, and conversion from old API") {
+    val rdd = TreeTests.getTreeReadWriteData(sc)
+    val categoricalFeatures = Map(0 -> 2, 1 -> 3)
+    val numClasses = 2
+    val data = TreeTests.setMetadata(rdd, categoricalFeatures, numClasses)
+    val dt = new DecisionTreeClassifier().setMaxDepth(2)
+    val trainedModel = dt.fit(data)
+
+    assert(trainedModel.numLeaves > 1)
+    TreeTests.checkLeafIndices(trainedModel.rootNode)
+
+    withTempDir { dir =>
+      val path = s"${dir.getAbsolutePath}/model"
+      trainedModel.write.save(path)
+      val loadedModel = DecisionTreeClassificationModel.load(path)
+      assert(loadedModel.numLeaves > 1)
+      TreeTests.checkLeafIndices(loadedModel.rootNode)
+    }
+
+    val oldStrategy = dt.getOldStrategy(categoricalFeatures, numClasses)
+    val oldTree = OldDecisionTree.train(rdd.map(OldLabeledPoint.fromML), oldStrategy)
+    val convertedModel = DecisionTreeClassificationModel.fromOld(
+      oldTree, dt, categoricalFeatures)
+    assert(convertedModel.numLeaves > 1)
+    TreeTests.checkLeafIndices(convertedModel.rootNode)
+  }
+
   test("should support all NumericType labels and not support other types") {
     val dt = new DecisionTreeClassifier().setMaxDepth(1)
     MLTestingUtils.checkNumericTypes[DecisionTreeClassificationModel, DecisionTreeClassifier](
@@ -490,7 +517,8 @@ private[ml] object DecisionTreeClassifierSuite extends SparkFunSuite {
       dt: DecisionTreeClassifier,
       categoricalFeatures: Map[Int, Int],
       numClasses: Int): Unit = {
-    val numFeatures = data.first().features.size
+    val vec = data.first().features
+    val numFeatures = vec.size
     val oldStrategy = dt.getOldStrategy(categoricalFeatures, numClasses)
     val oldTree = OldDecisionTree.train(data.map(OldLabeledPoint.fromML), oldStrategy)
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses)
@@ -499,6 +527,7 @@ private[ml] object DecisionTreeClassifierSuite extends SparkFunSuite {
     val oldTreeAsNew = DecisionTreeClassificationModel.fromOld(
       oldTree, newTree.parent.asInstanceOf[DecisionTreeClassifier], categoricalFeatures)
     TreeTests.checkEqual(oldTreeAsNew, newTree)
+    assert(oldTreeAsNew.predictLeaf(vec) === newTree.predictLeaf(vec))
     assert(newTree.numFeatures === numFeatures)
   }
 }

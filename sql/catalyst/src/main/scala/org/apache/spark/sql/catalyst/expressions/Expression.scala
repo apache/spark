@@ -519,6 +519,8 @@ trait NonSQLExpression extends Expression {
       case a: Attribute => new PrettyAttribute(a)
       case a: Alias => PrettyAttribute(a.sql, a.dataType)
       case p: PythonFuncExpression => PrettyPythonUDF(p.name, p.dataType, p.children)
+      case udf: ExternalUserDefinedFunction =>
+        PrettyPythonUDF(udf.name.getOrElse(udf.prettyName), udf.dataType, udf.children)
       // Render a transpiled UDF like the UDF it wraps (options must not leak
       // into user-visible strings).
       case t: TranspiledPythonUDF => PrettyPythonUDF(t.name, t.dataType, t.pythonUDFExpr.children)

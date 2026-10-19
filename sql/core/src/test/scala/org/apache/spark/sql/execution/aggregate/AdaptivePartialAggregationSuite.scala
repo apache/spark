@@ -340,6 +340,27 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     }
   }
 
+  test("collation-equivalent keys across the bypass cutoff stay in one group") {
+    forEachCodegenAndMap() { clue =>
+      // The first eight rows are distinct, so the eighth row flips pass-through on. Its key is
+      // already in the frozen map when the equivalent spelling on the ninth row bypasses it.
+      val df = () => spark.range(0, 200, 1, 1)
+        .selectExpr(
+          """CAST(CASE
+            |  WHEN id = 7 THEN 'COLLATED'
+            |  WHEN id = 8 THEN 'collated'
+            |  ELSE CONCAT('key-', id)
+            |END AS STRING COLLATE UTF8_LCASE) AS k""".stripMargin,
+          "id AS v")
+        .groupBy($"k")
+        .agg(sum($"v") as "s", count(lit(1)) as "c")
+      withClue(clue) {
+        assert(numBypassingRows(df) > 0,
+          "expected the equivalent spelling after the cutoff to bypass partial aggregation")
+      }
+    }
+  }
+
   test("results unchanged with nullable grouping keys") {
     // Nulls are sparse enough (1 in 40) that the keys stay close to unique and the input really
     // does bypass; a denser null key would lift the compaction ratio above the threshold and the

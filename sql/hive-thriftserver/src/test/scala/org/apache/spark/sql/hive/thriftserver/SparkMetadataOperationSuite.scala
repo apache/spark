@@ -38,7 +38,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
       val expected = dbNames.iterator
       while (rs.next() || expected.hasNext) {
         assert(rs.getString("TABLE_SCHEM") === expected.next())
-        assert(rs.getString("TABLE_CATALOG") === "spark_catalog")
+        assert(rs.getString("TABLE_CATALOG").isEmpty)
       }
       // Make sure there are no more elements
       assert(!rs.next())
@@ -250,20 +250,17 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
     withJdbcStatement() { statement =>
       val metaData = statement.getConnection.getMetaData
       val rs = metaData.getCatalogs
-      // With catalog metadata enabled (default), getCatalogs returns loaded catalogs
-      assert(rs.next())
-      assert(rs.getString("TABLE_CAT") === "spark_catalog")
       assert(!rs.next())
     }
   }
 
-  test("GetCatalogsOperation with catalog metadata disabled") {
+  test("GetCatalogsOperation with catalog metadata enabled") {
     withJdbcStatement() { statement =>
-      statement.execute(
-        "SET spark.sql.thriftServer.catalogMetadata.enabled=false")
+      statement.execute("SET spark.sql.thriftServer.catalogMetadata.enabled=true")
       val metaData = statement.getConnection.getMetaData
       val rs = metaData.getCatalogs
-      // Legacy behavior: empty result set
+      assert(rs.next())
+      assert(rs.getString("TABLE_CAT") === "spark_catalog")
       assert(!rs.next())
     }
   }
@@ -330,7 +327,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
       var pos = 0
 
       while (rowSet.next()) {
-        assert(rowSet.getString("TABLE_CAT") === "spark_catalog")
+        assert(rowSet.getString("TABLE_CAT") === null)
         assert(rowSet.getString("TABLE_SCHEM") === schemaName)
         assert(rowSet.getString("TABLE_NAME") === tableName)
         assert(rowSet.getString("COLUMN_NAME") === schema(pos).name)
@@ -411,7 +408,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
       val data = statement.getConnection.getMetaData
       val rowSet = data.getColumns("", "global_temp", viewName, null)
       while (rowSet.next()) {
-        assert(rowSet.getString("TABLE_CAT") === "spark_catalog")
+        assert(rowSet.getString("TABLE_CAT") === null)
         assert(rowSet.getString("TABLE_SCHEM") === "global_temp")
         assert(rowSet.getString("TABLE_NAME") === viewName)
         assert(rowSet.getString("COLUMN_NAME") === "i")
@@ -439,7 +436,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
       val data = statement.getConnection.getMetaData
       val rowSet = data.getColumns("", "global_temp", viewName1, null)
       while (rowSet.next()) {
-        assert(rowSet.getString("TABLE_CAT") === "spark_catalog")
+        assert(rowSet.getString("TABLE_CAT") === null)
         assert(rowSet.getString("TABLE_SCHEM") === "global_temp")
         assert(rowSet.getString("TABLE_NAME") === viewName1)
         assert(rowSet.getString("COLUMN_NAME") === "i")
@@ -465,7 +462,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
       val data = statement.getConnection.getMetaData
       val rowSet = data.getColumns("", "global_temp", viewName2, null)
       while (rowSet.next()) {
-        assert(rowSet.getString("TABLE_CAT") === "spark_catalog")
+        assert(rowSet.getString("TABLE_CAT") === null)
         assert(rowSet.getString("TABLE_SCHEM") === "global_temp")
         assert(rowSet.getString("TABLE_NAME") === viewName2)
         assert(rowSet.getString("COLUMN_NAME") === "i")
@@ -492,7 +489,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
       val data = statement.getConnection.getMetaData
       val rowSet = data.getColumns("", "global_temp", viewName, "n")
       while (rowSet.next()) {
-        assert(rowSet.getString("TABLE_CAT") === "spark_catalog")
+        assert(rowSet.getString("TABLE_CAT") === null)
         assert(rowSet.getString("TABLE_SCHEM") === "global_temp")
         assert(rowSet.getString("TABLE_NAME") === viewName)
         assert(rowSet.getString("COLUMN_NAME") === "n")
@@ -765,6 +762,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
 
   test("SPARK-57518: getCatalogs with DSv2 catalog returns all loaded catalogs sorted") {
     withJdbcStatement() { statement =>
+      statement.execute("SET spark.sql.thriftServer.catalogMetadata.enabled=true")
       // Configure and load a DSv2 catalog
       statement.execute(
         "SET spark.sql.catalog.testcat=" +
@@ -787,6 +785,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
 
   test("SPARK-57518: getSchemas with null catalog returns current catalog schemas only") {
     withJdbcStatement() { statement =>
+      statement.execute("SET spark.sql.thriftServer.catalogMetadata.enabled=true")
       // Configure and load a DSv2 catalog
       statement.execute(
         "SET spark.sql.catalog.testcat=" +
@@ -813,6 +812,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
 
   test("SPARK-57518: getSchemas returns schemas from current catalog when set to DSv2 catalog") {
     withJdbcStatement() { statement =>
+      statement.execute("SET spark.sql.thriftServer.catalogMetadata.enabled=true")
       statement.execute(
         "SET spark.sql.catalog.testcat=" +
           "org.apache.spark.sql.connector.catalog.InMemoryTableCatalog")
@@ -835,6 +835,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
 
   test("SPARK-57518: getTables returns TABLE_CAT with current catalog name") {
     withJdbcStatement("dsv2_table") { statement =>
+      statement.execute("SET spark.sql.thriftServer.catalogMetadata.enabled=true")
       statement.execute("CREATE TABLE dsv2_table(id INT, name STRING)")
 
       val metaData = statement.getConnection.getMetaData
@@ -849,6 +850,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
 
   test("SPARK-57518: getColumns returns TABLE_CAT with current catalog name") {
     withJdbcStatement("dsv2_col_table") { statement =>
+      statement.execute("SET spark.sql.thriftServer.catalogMetadata.enabled=true")
       statement.execute("CREATE TABLE dsv2_col_table(id INT, name STRING)")
 
       val metaData = statement.getConnection.getMetaData
@@ -912,6 +914,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
     // listed rows belong to spark_catalog, not the DSv2 catalog. They stay legacy empty/null
     // here; DSv2 routing for getTables/getColumns is a follow-up.
     withJdbcStatement("v1_table") { statement =>
+      statement.execute("SET spark.sql.thriftServer.catalogMetadata.enabled=true")
       statement.execute("CREATE TABLE v1_table(id INT, name STRING)")
       statement.execute(
         "SET spark.sql.catalog.testcat=" +
