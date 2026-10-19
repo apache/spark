@@ -149,7 +149,9 @@ INSERT INTO orders VALUES
     ('west', DATE'2026-01-03', 3, 300.00, false),
     ('west', DATE'2026-01-04', 3,  60.00, false),
     ('west', DATE'2026-01-04', 4,  99.99, true),
-    ('west', DATE'2026-01-05', 5,  10.00, false);
+    ('west', DATE'2026-01-05', 5,  10.00, false),
+    ('west', DATE'2026-01-05', 6,  40.00, false),
+    ('west', DATE'2026-01-05', 3,  25.00, false);
 
 -- A metric view over `orders` with two dimensions and four measures.
 CREATE VIEW order_metrics
@@ -221,7 +223,7 @@ FROM order_metrics;
 +-----------+-------+---------+
 |order_count|revenue|customers|
 +-----------+-------+---------+
-|7          |715.49 |5        |
+|9          |780.49 |6        |
 +-----------+-------+---------+
 
 -- The same measures, once per region. ORDER BY refers to the measure's alias.
@@ -235,7 +237,7 @@ ORDER BY revenue DESC;
 +------+-------+---------+-----------+
 |region|revenue|customers|return_rate|
 +------+-------+---------+-----------+
-|west  |469.99 |3        |0.25       |
+|west  |534.99 |4        |0.17       |
 |east  |245.50 |2        |0.33       |
 +------+-------+---------+-----------+
 
@@ -250,7 +252,7 @@ ORDER BY order_date;
 +----------+---------+
 |2026-01-03|1        |
 |2026-01-04|2        |
-|2026-01-05|1        |
+|2026-01-05|3        |
 +----------+---------+
 
 -- A SQL query as the source, with a filter applied to every query.
@@ -283,7 +285,7 @@ ORDER BY region, size;
 |east  |large|120.00 |
 |east  |small|45.50  |
 |west  |large|300.00 |
-|west  |small|70.00  |
+|west  |small|135.00 |
 +------+-----+-------+
 
 -- IF NOT EXISTS keeps the existing definition.

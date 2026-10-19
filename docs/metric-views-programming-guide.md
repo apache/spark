@@ -51,7 +51,9 @@ INSERT INTO orders VALUES
     ('west', DATE'2026-01-03', 3, 300.00, false),
     ('west', DATE'2026-01-04', 3,  60.00, false),
     ('west', DATE'2026-01-04', 4,  99.99, true),
-    ('west', DATE'2026-01-05', 5,  10.00, false);
+    ('west', DATE'2026-01-05', 5,  10.00, false),
+    ('west', DATE'2026-01-05', 6,  40.00, false),
+    ('west', DATE'2026-01-05', 3,  25.00, false);
 
 CREATE VIEW order_metrics
     WITH METRICS
@@ -83,7 +85,7 @@ SELECT MEASURE(revenue) AS revenue, MEASURE(customers) AS customers FROM order_m
 +-------+---------+
 |revenue|customers|
 +-------+---------+
-|715.49 |5        |
+|780.49 |6        |
 +-------+---------+
 ```
 
@@ -98,7 +100,7 @@ ORDER BY region;
 |region|revenue|customers|
 +------+-------+---------+
 |east  |245.50 |2        |
-|west  |469.99 |3        |
+|west  |534.99 |4        |
 +------+-------+---------+
 ```
 
@@ -115,11 +117,11 @@ ORDER BY order_date;
 +----------+-------+---------+
 |2026-01-03|300.00 |1        |
 |2026-01-04|159.99 |2        |
-|2026-01-05|10.00  |1        |
+|2026-01-05|75.00  |3        |
 +----------+-------+---------+
 ```
 
-Customer 3 ordered on both the 3rd and the 4th. The daily counts each count them once, and the regional count of 3 counts them once, because each query evaluates `COUNT(DISTINCT customer_id)` over its own groups.
+Customer 3 ordered on each of the three days. Each daily count counts them once, and the regional count of 4 counts them once, because each query evaluates `COUNT(DISTINCT customer_id)` over its own groups.
 
 ## Key Concepts
 
@@ -153,14 +155,14 @@ AdaptiveSparkPlan isFinalPlan=false
          +- FileScan parquet spark_catalog.default.orders[region#22,amount#25] ...
 ```
 
-This is what makes non-additive measures safe to ask for at any grain. The distinct customer count over all orders is 5:
+This is what makes non-additive measures safe to ask for at any grain. The distinct customer count over all orders is 6:
 
 ```sql
 SELECT MEASURE(customers) AS customers FROM order_metrics;
 +---------+
 |customers|
 +---------+
-|5        |
+|6        |
 +---------+
 ```
 
@@ -174,7 +176,7 @@ FROM (SELECT order_date, MEASURE(customers) AS customers
 +----------------------+
 |summed_daily_customers|
 +----------------------+
-|7                     |
+|9                     |
 +----------------------+
 ```
 
@@ -189,7 +191,7 @@ ORDER BY region;
 |region|return_rate|
 +------+-----------+
 |east  |0.33       |
-|west  |0.25       |
+|west  |0.17       |
 +------+-----------+
 
 SELECT ROUND(AVG(return_rate), 2) AS average_of_region_rates
@@ -199,18 +201,18 @@ FROM (SELECT region, MEASURE(return_rate) AS return_rate
 +-----------------------+
 |average_of_region_rates|
 +-----------------------+
-|0.29                   |
+|0.25                   |
 +-----------------------+
 ```
 
-On this data the average of the two regional rates happens to round to the same value as the overall rate, because the regions are close in size; with unequal regions the two diverge. The rule is the same either way: ask for a measure at the grain you report, rather than computing it at a finer grain and aggregating the results.
+The average of the two regional rates is 0.25. The overall rate is 0.22, two returned orders out of nine, because west has twice as many orders as east and its lower rate carries more weight. The average of rates is a different number from the rate, so ask for a measure at the grain you report, rather than computing it at a finer grain and aggregating the results.
 
 ```sql
 SELECT ROUND(MEASURE(return_rate), 2) AS return_rate FROM order_metrics;
 +-----------+
 |return_rate|
 +-----------+
-|0.29       |
+|0.22       |
 +-----------+
 ```
 
@@ -280,7 +282,7 @@ ORDER BY region, size;
 |east  |large|120.00 |
 |east  |small|45.50  |
 |west  |large|300.00 |
-|west  |small|70.00  |
+|west  |small|135.00 |
 +------+-----+-------+
 ```
 
@@ -327,7 +329,7 @@ SELECT sales_region, MEASURE(orders) AS orders FROM sales_metrics GROUP BY sales
 |sales_region|orders|
 +------------+------+
 |east        |3     |
-|west        |4     |
+|west        |6     |
 +------------+------+
 ```
 
@@ -354,7 +356,7 @@ ORDER BY revenue DESC;
 +------+-------+
 |region|revenue|
 +------+-------+
-|west  |469.99 |
+|west  |534.99 |
 +------+-------+
 
 -- WHERE on a source column that is not a dimension.
@@ -377,7 +379,7 @@ ORDER BY r.region;
 |region|revenue|customer_id|
 +------+-------+-----------+
 |east  |245.50 |2          |
-|west  |469.99 |4          |
+|west  |534.99 |4          |
 +------+-------+-----------+
 
 -- Dimensions alone, and the source row count.
@@ -393,7 +395,7 @@ SELECT COUNT(*) AS source_rows FROM order_metrics;
 +-----------+
 |source_rows|
 +-----------+
-|7          |
+|9          |
 +-----------+
 ```
 
@@ -416,14 +418,14 @@ metrics.groupBy("region").agg(
 # |region|revenue|customers|
 # +------+-------+---------+
 # |east  |245.50 |2        |
-# |west  |469.99 |3        |
+# |west  |534.99 |4        |
 # +------+-------+---------+
 
 metrics.selectExpr("MEASURE(revenue) AS revenue", "MEASURE(customers) AS customers").show()
 # +-------+---------+
 # |revenue|customers|
 # +-------+---------+
-# |715.49 |5        |
+# |780.49 |6        |
 # +-------+---------+
 
 # A dimension filter before the aggregation.
@@ -435,7 +437,7 @@ metrics.where(F.col("region") == "west").groupBy("order_date").agg(
 # +----------+-------+
 # |2026-01-03|300.00 |
 # |2026-01-04|159.99 |
-# |2026-01-05|10.00  |
+# |2026-01-05|75.00  |
 # +----------+-------+
 
 # A measure filter after the aggregation, on the alias.
@@ -443,11 +445,11 @@ metrics.groupBy("region").agg(F.expr("MEASURE(revenue)").alias("revenue")).where
 # +------+-------+
 # |region|revenue|
 # +------+-------+
-# |west  |469.99 |
+# |west  |534.99 |
 # +------+-------+
 
 metrics.count()
-# 7
+# 9
 ```
 
 `metrics.show()` and `metrics.select("revenue")` fail, as `SELECT *` and a bare measure do in SQL, and `metrics.filter(F.expr("MEASURE(revenue) > 300"))` is rejected with `INVALID_WHERE_CONDITION`.
@@ -501,7 +503,7 @@ ORDER BY region;
 |region|avg_order_value|revenue_per_customer|
 +------+---------------+--------------------+
 |east  |81.83          |122.75              |
-|west  |117.50         |156.66              |
+|west  |89.17          |133.75              |
 +------+---------------+--------------------+
 ```
 
@@ -519,7 +521,7 @@ ORDER BY weekday;
 +-------+------+---------------+
 |weekday|orders|avg_order_value|
 +-------+------+---------------+
-|Mon    |1     |10.00          |
+|Mon    |3     |25.00          |
 |Sat    |3     |166.67         |
 |Sun    |3     |68.50          |
 +-------+------+---------------+
@@ -530,7 +532,7 @@ GROUP BY order_month;
 +-----------+-------+--------------------+
 |order_month|revenue|revenue_per_customer|
 +-----------+-------+--------------------+
-|2026-01    |715.49 |143.10              |
+|2026-01    |780.49 |130.08              |
 +-----------+-------+--------------------+
 ```
 
@@ -568,7 +570,7 @@ FROM region_metrics;
 +-------+------------------+--------------------+
 |regions|avg_region_revenue|max_region_customers|
 +-------+------------------+--------------------+
-|2      |357.75            |3                   |
+|2      |390.25            |4                   |
 +-------+------------------+--------------------+
 ```
 
@@ -633,7 +635,7 @@ SELECT region, MEASURE(revenue) AS revenue FROM order_metrics_2026 GROUP BY regi
 |region|revenue|
 +------+-------+
 |east  |245.50 |
-|west  |469.99 |
+|west  |534.99 |
 +------+-------+
 
 SHOW VIEWS;
