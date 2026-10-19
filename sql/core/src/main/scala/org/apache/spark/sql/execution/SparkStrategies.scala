@@ -387,8 +387,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       //      side for a right join, and the right side for a left join.
       case j @ logical.Join(left, right, joinType, condition, hint) =>
         checkHintNonEquiJoin(hint)
-
-        def createRangeJoin(hintOnly: Boolean) = {
+        def createRangeJoin(onlyLookingAtHint: Boolean) = {
           /**
            * Which side to broadcast for the range join. A hint-only pass honors a
            * BROADCAST hint. Otherwise a side qualifies when it is small enough and
@@ -400,7 +399,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
                 plan: LogicalPlan,
                 broadcastHint: Boolean,
                 blocked: Boolean): Boolean = {
-              if (hintOnly) {
+              if (onlyLookingAtHint) {
                 broadcastHint
               } else {
                 canBroadcastBySize(plan, conf) && !blocked
@@ -446,9 +445,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         }
 
         if (hint.isEmpty) {
-          createRangeJoin(hintOnly = false).getOrElse(createNonEquiJoin())
+          createRangeJoin(onlyLookingAtHint = false).getOrElse(createNonEquiJoin())
         } else {
-          createRangeJoin(hintOnly = true).getOrElse(createNonEquiJoin())
+          createRangeJoin(onlyLookingAtHint = true).getOrElse(createNonEquiJoin())
         }
 
       // --- Cases where this strategy does not apply ---------------------------------------------

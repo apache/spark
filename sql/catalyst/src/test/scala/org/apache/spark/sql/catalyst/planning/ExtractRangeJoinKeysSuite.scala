@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.planning
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.optimizer.{GreaterPartialRangeJoin, IntervalOverlapJoin, LessPartialRangeJoin, PointInRangeJoin, RangeJoin}
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Join, JoinHint, LocalRelation}
 import org.apache.spark.sql.types.{DayTimeIntervalType, DoubleType, IntegerType}
@@ -185,7 +186,7 @@ class ExtractRangeJoinKeysSuite extends PlanTest {
     val interval = DayTimeIntervalType()
     val left = LocalRelation(AttributeReference("x", interval)())
     val right = LocalRelation(AttributeReference("y", interval)())
-    assert(!RangePredicate.supportedType(interval))
+    assert(!ExtractRangeJoinKeys.supportedType(interval))
     assertUnrecognized(Join(left, right, Inner,
       Some(LessThan(left.output.head, right.output.head)), JoinHint.NONE))
   }

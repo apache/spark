@@ -22,8 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{And, Expression, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
-import org.apache.spark.sql.catalyst.planning.{GreaterPartialRangeJoin, IntervalOverlapJoin, LessPartialRangeJoin, PointInRangeJoin, RangeJoin}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide, GreaterPartialRangeJoin, IntervalOverlapJoin, LessPartialRangeJoin, PointInRangeJoin, RangeJoin}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.internal.SQLConf
@@ -287,7 +286,7 @@ class RangeJoinSuite extends QueryTest with SharedSparkSession {
     // Every build row is the same fully-overlapping interval, so every one of them
     // satisfies the point-in-range condition. Iterator.exists is then guaranteed,
     // deterministically, to stop at the first candidate it pulls from the index -
-    // this is the mechanism existenceJoin relies on for its early exit.
+    // this is the mechanism leftExistenceJoin relies on for its early exit.
     val n = 2000
     val overlapping = spark.createDataFrame(
       sparkContext.parallelize((0 until n).map(_ => Row(0, 100))),

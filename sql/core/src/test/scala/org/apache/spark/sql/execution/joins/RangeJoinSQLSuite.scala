@@ -15,15 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
-import org.apache.spark.sql.catalyst.planning.{IntervalOverlapJoin, LessPartialRangeJoin}
+import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, IntervalOverlapJoin, LessPartialRangeJoin}
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti, LeftOuter, LeftSemi}
-import org.apache.spark.sql.execution.{InputAdapter, ReusedSubqueryExec, ScalarSubquery, SparkPlan, SubqueryExec, WholeStageCodegenExec}
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.joins.{BroadcastNestedLoopJoinExec, BroadcastRangeJoinExec, CartesianProductExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -482,7 +481,7 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
 
   test("interpreted execution covers each range-join probe") {
     // Mirrors "whole-stage codegen covers each range-join probe" with codegen off, so the
-    // interpreted paths (innerJoin/outerJoin/existenceJoin) are exercised for every key
+    // interpreted paths (innerJoin/outerJoin/leftExistenceJoin) are exercised for every key
     // family, not just the Long-specialized one the earlier codegen-only tests happen to hit.
     setupIpLookupViews()
     setupDecimalViews()

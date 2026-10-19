@@ -21,7 +21,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.optimizer.JoinSelectionHelper
+import org.apache.spark.sql.catalyst.optimizer.{GreaterPartialRangeJoin, IntervalOverlapJoin, JoinSelectionHelper, LessPartialRangeJoin, PointInRangeJoin, RangeJoin}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.Table
@@ -442,8 +442,7 @@ object ExtractRangeJoinKeys extends PredicateHelper {
     case Join(left, right, joinType, Some(condition), _) =>
       val predicates = splitConjunctivePredicates(condition)
       val rangePreds = predicates.collect {
-        case RangePredicate(dt, low, high) if RangePredicate.supportedType(dt) =>
-          (dt, low, high)
+        case RangePredicate(dt, low, high) if supportedType(dt) => (dt, low, high)
       }
       if (rangePreds.isEmpty) {
         None
@@ -453,6 +452,17 @@ object ExtractRangeJoinKeys extends PredicateHelper {
           .orElse(partialRange(rangePreds, left, right, joinType))
       }
     case _ => None
+  }
+
+  /**
+   * Types supported as range keys by the broadcast range index.
+   * Other orderable types (arrays, intervals, timestamp-with-nanos, UDTs) stay a nested loop join.
+   */
+  def supportedType(dataType: DataType): Boolean = dataType match {
+    case BooleanType | ByteType | ShortType | IntegerType | LongType |
+         FloatType | DoubleType | BinaryType | DateType | TimestampType |
+         TimestampNTZType | _: StringType | _: DecimalType => true
+    case _ => false
   }
 
   /**
@@ -533,7 +543,7 @@ object ExtractRangeJoinKeys extends PredicateHelper {
   private def supportedKeys(keys: Seq[Expression]*): Boolean = {
     keys.flatten.forall { key =>
       key.references.nonEmpty && key.deterministic &&
-        !SubqueryExpression.hasSubquery(key) && RangePredicate.supportedType(key.dataType)
+        !SubqueryExpression.hasSubquery(key) && supportedType(key.dataType)
     }
   }
 
@@ -559,68 +569,6 @@ object ExtractRangeJoinKeys extends PredicateHelper {
       }
     }.nextOption()
   }
-}
-
-/**
- * Normalizes `<`, `<=`, `>`, `>=` to `(low.dataType, low, high)`.
- * Inclusivity stays on the original predicate, which execution evaluates as-is.
- */
-object RangePredicate {
-  /**
-   * Types supported as range keys by the broadcast range index.
-   * Other orderable types (arrays, intervals, timestamp-with-nanos, UDTs) stay a nested loop join.
-   */
-  def supportedType(dataType: DataType): Boolean = dataType match {
-    case BooleanType | ByteType | ShortType | IntegerType | LongType |
-         FloatType | DoubleType | BinaryType | DateType | TimestampType |
-         TimestampNTZType | _: StringType | _: DecimalType => true
-    case _ => false
-  }
-
-  def unapply(expression: Expression): Option[(DataType, Expression, Expression)] = {
-    expression match {
-      case LessThan(low, high) => Some((low.dataType, low, high))
-      case LessThanOrEqual(low, high) => Some((low.dataType, low, high))
-      case GreaterThan(high, low) => Some((low.dataType, low, high))
-      case GreaterThanOrEqual(high, low) => Some((low.dataType, low, high))
-      case _ => None
-    }
-  }
-}
-
-/**
- * Tags the shape of a range-predicate join recognized by [[ExtractRangeJoinKeys]].
- * Point-in-range and interval overlap both probe an interval index.
- * A partial range is one inequality; Less vs Greater records which side holds
- * the lower bound.
- */
-sealed abstract class RangeJoin
-
-/** A point-in-range join: a value from one side falls within a `[low, high]` range on the other. */
-case object PointInRangeJoin extends RangeJoin
-
-/**
- * An interval-overlap join: `(low, high)` on each side. The build side is an
- * interval index and the stream side probes it with `overlapping(low, high)`.
- */
-case object IntervalOverlapJoin extends RangeJoin
-
-/**
- * A partial-range join: one inequality, one column per side.
- * `leftIsLower` says which child holds the lower bound.
- */
-sealed abstract class PartialRangeJoin extends RangeJoin {
-  def leftIsLower: Boolean
-}
-
-/** A `low <[=] high` partial-range join where the left side is the low bound. */
-case object LessPartialRangeJoin extends PartialRangeJoin {
-  override def leftIsLower: Boolean = true
-}
-
-/** A `low <[=] high` partial-range join where the left side is the high bound. */
-case object GreaterPartialRangeJoin extends PartialRangeJoin {
-  override def leftIsLower: Boolean = false
 }
 
 /**
