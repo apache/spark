@@ -60,7 +60,7 @@ case class Mode(
     val key = child.eval(input)
 
     if (key != null) {
-      buffer.changeValue(InternalRow.copyValue(key).asInstanceOf[AnyRef], 1L, _ + 1L)
+      buffer.changeValue(toBufferKey(InternalRow.copyValue(key)), 1L, _ + 1L)
     }
     buffer
   }
@@ -93,6 +93,8 @@ case class Mode(
 
   protected[sql] def collationAwareTransform(data: AnyRef, dataType: DataType): AnyRef = {
     dataType match {
+      // Key a binary value by content (see BinaryKey), not by array reference.
+      case _ if data.isInstanceOf[Array[Byte]] => new BinaryKey(data.asInstanceOf[Array[Byte]])
       case _ if UnsafeRowUtils.isBinaryStable(dataType) => data
       case st: StructType =>
         processStructTypeWithBuffer(data.asInstanceOf[InternalRow].toSeq(st).zip(st.fields))
@@ -151,7 +153,10 @@ case class Mode(
     // The new map is then used in the rest of the Mode evaluation logic.
     //
     // It is expected to work for all simple and complex types with collated fields.
+    //
+    // Unwrap binary keys (see `toBufferKey`) before they are ordered or returned.
     val collationAwareBuffer = getCollationAwareBuffer(child.dataType, buffer)
+      .view.map { case (key, count) => (fromBufferKey(key), count) }
 
     reverseOpt.map { reverse =>
       val defaultKeyOrdering = if (reverse) {
@@ -305,7 +310,7 @@ case class PandasMode(
     val key = child.eval(input)
 
     if (key != null) {
-      buffer.changeValue(InternalRow.copyValue(key).asInstanceOf[AnyRef], 1L, _ + 1L)
+      buffer.changeValue(toBufferKey(InternalRow.copyValue(key)), 1L, _ + 1L)
     } else if (!ignoreNA) {
       buffer.changeValue(null, 1L, _ + 1L)
     }
@@ -339,7 +344,8 @@ case class PandasMode(
         modes.append(key)
       }
     }
-    new GenericArrayData(modes)
+    // Unwrap binary keys (see `toBufferKey`) before they are returned.
+    new GenericArrayData(modes.map(fromBufferKey))
   }
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): PandasMode =
