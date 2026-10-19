@@ -1120,6 +1120,30 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     }
   }
 
+  test("Runtime bloom filter join: add bloom filter if the dpp filter cannot reach the scan") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
+      spark.udf.register("bf_nondeterministic_true", udf((_: Int) => true).asNondeterministic())
+      // The non-deterministic filter keeps the DPP filter from being pushed to the scan, so it is
+      // dropped before this rule runs, and the key is left to a Bloom filter.
+      val query = "select * from (select * from bf5part where bf_nondeterministic_true(f5)) f " +
+        "join bf2 on f.f5 = bf2.c2 where bf2.a2 = 62"
+      assertRewroteWithBloomFilter(query)
+      assert(!hasDynamicPruning(query))
+    }
+  }
+
+  test("Runtime bloom filter join: do not add bloom filter if dpp filter exists " +
+    "on the same column through a renaming projection") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
+      val query = "select * from (select f5 as k from bf5part) f join bf2 on f.k = bf2.c2 " +
+        "where bf2.a2 = 62"
+      assertDidNotRewriteWithBloomFilter(query)
+      assert(hasDynamicPruning(query))
+    }
+  }
+
   test("Runtime bloom filter join: BF rewrite triggering threshold test") {
     // Filter creation side data size is 3409 bytes. On the filter application side, an individual
     // scan's byte size is 3362.
@@ -2114,6 +2138,26 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
         assertHintNotApplied(
           "select /*+ RUNTIME_FILTER(bf2) */ * from bf4 join bf2 on bf4.c4 = bf2.c2",
           s"${SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key} is false")
+      }
+    }
+  }
+
+  test("RUNTIME_FILTER hint on a subquery planned as an existence join is reported") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // Under OR, the subquery becomes an existence join whose hinted right side would filter
+      // the left side, which an existence join cannot prune.
+      Seq(
+        "SELECT * FROM bf4 WHERE bf4.c4 IN " +
+          "(SELECT /*+ RUNTIME_FILTER(bf2) */ c2 FROM bf2 WHERE a2 = 62) OR bf4.a4 > 90",
+        "SELECT * FROM bf4 WHERE EXISTS " +
+          "(SELECT /*+ RUNTIME_FILTER(bf2) */ * FROM bf2 WHERE bf2.c2 = bf4.c4 AND a2 = 62) " +
+          "OR bf4.a4 > 90"
+      ).foreach { query =>
+        assertNoBloomFilters(query)
+        assertHintNotApplied(query, "the left side of an existence join cannot be pruned")
+        checkAnswer(sql(query),
+          sql(query.replace("/*+ RUNTIME_FILTER(bf2) */", "")).collect().toSeq)
       }
     }
   }

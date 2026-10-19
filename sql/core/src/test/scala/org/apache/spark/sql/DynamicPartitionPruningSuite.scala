@@ -2143,6 +2143,22 @@ abstract class DynamicPartitionPruningDataSourceSuiteBase
       checkPartitionPruningPredicate(hintedCode, withSubquery = true, withBroadcast = false)
       assert(prunedTables(hintedCode) == Seq("fact_sk"))
       checkAnswer(hintedCode, expected.collect().toSeq)
+
+      // With a selective predicate on the non-hinted side, DPP prunes the hinted side on its own
+      // estimates, so the hint is what keeps that side unpruned.
+      Seq(
+        ("fact_sk f JOIN code_stats c ON f.store_id = c.store_id WHERE c.code < 40",
+          "RUNTIME_FILTER(f)", Seq("fact_sk"), Seq("code_stats")),
+        // A left outer join cannot prune its left side, leaving only the hinted right side.
+        ("fact_sk f LEFT JOIN code_stats c ON f.store_id = c.store_id WHERE f.units_sold = 50",
+          "RUNTIME_FILTER(c)", Seq("code_stats"), Nil)
+      ).foreach { case (from, hint, unhintedPruned, hintedPruned) =>
+        val unhinted = sql(s"SELECT f.date_id, c.code FROM $from")
+        assert(prunedTables(unhinted) == unhintedPruned)
+        val hinted = sql(s"SELECT /*+ $hint */ f.date_id, c.code FROM $from")
+        assert(prunedTables(hinted) == hintedPruned)
+        checkAnswer(hinted, unhinted.collect().toSeq)
+      }
     }
   }
 

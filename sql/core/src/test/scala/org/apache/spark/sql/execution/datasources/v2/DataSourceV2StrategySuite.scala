@@ -1625,6 +1625,29 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     }, s"inferred filters must not survive variant pushdown:\n$pushedPlan")
   }
 
+  test("SPARK-59345: a variant-pushdown scan with a pushed limit is not repeatable") {
+    val schema = StructType(Seq(
+      StructField("id", LongType, nullable = false),
+      StructField("v", VariantType, nullable = true)))
+    def pushedScan(withLimit: Boolean): DataSourceV2ScanRelation = {
+      val table = new VariantPushdownTable(schema,
+        GreaterThanOrEqual(AttributeReference("id", LongType)(), Literal(0L)),
+        supportsLimit = true)
+      val relation = DataSourceV2Relation.create(table, None, None, CaseInsensitiveStringMap.empty)
+      val variant = relation.output.find(_.name == "v").get
+      val extracted = VariantGet(variant, Literal("$.a"), IntegerType, failOnError = true,
+        timeZoneId = Some("UTC"))
+      val project = Project(Seq(Alias(extracted, "a")()), relation)
+      val pushedPlan =
+        V2ScanRelationPushDown(if (withLimit) Limit(Literal(1), project) else project)
+      assert(table.builder.variantPushed)
+      pushedPlan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
+    }
+    // The source returns whichever rows come first, possibly different ones on each scan.
+    assert(pushedScan(withLimit = false).repeatableScan)
+    assert(!pushedScan(withLimit = true).repeatableScan)
+  }
+
   private def newPushdownRelation(
       inferredColumn: String = "id"): (PushdownTable, DataSourceV2Relation) = {
     val schema = StructType(Seq(
@@ -1849,7 +1872,8 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
 
   private class VariantPushdownTable(
       tableSchema: StructType,
-      inferredFilter: Expression) extends Table with SupportsRead {
+      inferredFilter: Expression,
+      supportsLimit: Boolean = false) extends Table with SupportsRead {
 
     var builder: VariantPushdownScanBuilder = _
 
@@ -1861,7 +1885,13 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       EnumSet.of(TableCapability.BATCH_READ)
 
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-      builder = new VariantPushdownScanBuilder(tableSchema, inferredFilter)
+      builder = if (supportsLimit) {
+        new VariantPushdownScanBuilder(tableSchema, inferredFilter) with SupportsPushDownLimit {
+          override def pushLimit(limit: Int): Boolean = true
+        }
+      } else {
+        new VariantPushdownScanBuilder(tableSchema, inferredFilter)
+      }
       builder
     }
   }

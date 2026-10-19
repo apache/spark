@@ -3,8 +3,8 @@
 -- Covers the two families of hints Spark SQL understands:
 --   * Partitioning hints: COALESCE, REPARTITION, REPARTITION_BY_RANGE, REBALANCE and
 --     REBALANCE_BY_SIZE. These are resolved by ResolveHints.ResolveCoalesceHints.
---   * Join strategy hints: BROADCAST, MERGE, SHUFFLE_HASH and SHUFFLE_REPLICATE_NL (with their
---     aliases). These are resolved by ResolveHints.ResolveJoinHints.
+--   * Join hints: BROADCAST, MERGE, SHUFFLE_HASH and SHUFFLE_REPLICATE_NL (with their aliases),
+--     and RUNTIME_FILTER. These are resolved by ResolveHints.ResolveJoinHints.
 --
 -- Hint names are case-insensitive. Unrecognized hints, and hints that reference a relation not
 -- present in the query, are dropped during analysis (a warning is logged) and leave the plan
