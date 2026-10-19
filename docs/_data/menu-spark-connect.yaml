@@ -17,6 +17,21 @@
       url: spark-connect-setup.html#client-application-authentication
     - text: Routing through a shared ingress
       url: spark-connect-setup.html#routing-through-a-shared-ingress-or-reverse-proxy
+- text: Spark Connect Programming Guide
+  url: spark-connect-programming-guide.html
+  subitems:
+    - text: Quick Start
+      url: spark-connect-programming-guide.html#quick-start
+    - text: Key Concepts
+      url: spark-connect-programming-guide.html#key-concepts
+    - text: Writing Applications
+      url: spark-connect-programming-guide.html#writing-applications
+    - text: Migrating from Spark Classic
+      url: spark-connect-programming-guide.html#migrating-from-spark-classic
+    - text: Compatibility
+      url: spark-connect-programming-guide.html#compatibility
+    - text: Debugging
+      url: spark-connect-programming-guide.html#debugging
 - text: "Eager vs Lazy: Spark Connect vs Spark Classic"
   url: spark-connect-gotchas.html
 - text: Extending Spark with Spark Server Libraries
