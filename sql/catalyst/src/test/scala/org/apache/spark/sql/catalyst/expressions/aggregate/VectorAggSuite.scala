@@ -405,6 +405,47 @@ class VectorAggSuite extends SparkFunSuite {
     assert(result(1) === 3.0f)
   }
 
+  test("VectorAvg - opposite extreme values do not overflow") {
+    val (agg, buffer, _) = createVectorAvg()
+    agg.update(buffer, createInputRow(Array(Float.MaxValue, -Float.MaxValue)))
+    agg.update(buffer, createInputRow(Array(-Float.MaxValue, Float.MaxValue)))
+    assertResult(Array(0.0f, 0.0f))(evalAsFloatArray(agg, buffer))
+
+    val (_, buffer1, _) = createVectorAvg()
+    val (_, buffer2, _) = createVectorAvg()
+    agg.update(buffer1, createInputRow(Array(Float.MaxValue, -Float.MaxValue)))
+    agg.update(buffer2, createInputRow(Array(-Float.MaxValue, Float.MaxValue)))
+    agg.merge(buffer1, buffer2)
+    assertResult(Array(0.0f, 0.0f))(evalAsFloatArray(agg, buffer1))
+  }
+
+  test("VectorAvg - non-finite results do not depend on input order") {
+    val first =
+      Array(Float.PositiveInfinity, 1.0f, Float.NegativeInfinity, Float.PositiveInfinity)
+    val second = Array(1.0f, Float.PositiveInfinity, 1.0f, Float.NegativeInfinity)
+    def checkResult(result: Array[Float]): Unit = {
+      assertResult(Float.PositiveInfinity)(result(0))
+      assertResult(Float.PositiveInfinity)(result(1))
+      assertResult(Float.NegativeInfinity)(result(2))
+      assert(result(3).isNaN)
+    }
+
+    Seq(Seq(first, second), Seq(second, first)).foreach { vectors =>
+      val (agg, buffer, _) = createVectorAvg()
+      vectors.foreach(v => agg.update(buffer, createInputRow(v)))
+      checkResult(evalAsFloatArray(agg, buffer))
+      agg.update(buffer, createInputRow(Array(2.0f, 2.0f, 2.0f, 2.0f)))
+      checkResult(evalAsFloatArray(agg, buffer))
+
+      val (_, buffer1, _) = createVectorAvg()
+      val (_, buffer2, _) = createVectorAvg()
+      agg.update(buffer1, createInputRow(vectors.head))
+      agg.update(buffer2, createInputRow(vectors(1)))
+      agg.merge(buffer1, buffer2)
+      checkResult(evalAsFloatArray(agg, buffer1))
+    }
+  }
+
   test("VectorAvg - numerical stability with running average") {
     val (agg, buffer, _) = createVectorAvg()
     // Add many vectors to test numerical stability of running average

@@ -678,7 +678,16 @@ object VectorAvg {
       while (i < dim) {
         val off = Platform.BYTE_ARRAY_OFFSET + i.toLong * 4
         val oldAvg = Platform.getFloat(accBytes, off)
-        Platform.putFloat(accBytes, off, oldAvg + (inputArray.getFloat(i) - oldAvg) * invCount)
+        val value = inputArray.getFloat(i)
+        val delta = value - oldAvg
+        val newAvg = if (java.lang.Float.isFinite(delta)) {
+          oldAvg + delta * invCount
+        } else if (java.lang.Float.isFinite(oldAvg) && java.lang.Float.isFinite(value)) {
+          oldAvg + (value * invCount - oldAvg * invCount)
+        } else {
+          oldAvg + value
+        }
+        Platform.putFloat(accBytes, off, newAvg)
         i += 1
       }
     }
