@@ -21,7 +21,9 @@ license: |
 
 ### Description
 
-`SHOW CREATE TABLE` returns the [CREATE TABLE statement](sql-ref-syntax-ddl-create-table.html) or [CREATE VIEW statement](sql-ref-syntax-ddl-create-view.html) that was used to create a given table or view. `SHOW CREATE TABLE` on a non-existent table or a temporary view throws an exception.
+`SHOW CREATE TABLE` returns the [CREATE TABLE statement](sql-ref-syntax-ddl-create-table.html) or [CREATE VIEW statement](sql-ref-syntax-ddl-create-view.html) that was used to create a given table or view. `SHOW CREATE TABLE` on a non-existent table or a temporary view throws an exception. It is not supported on a
+[metric view](sql-ref-syntax-ddl-create-metric-view.html) (`UNSUPPORTED_SHOW_CREATE_TABLE.ON_METRIC_VIEW`);
+use `DESCRIBE TABLE EXTENDED` to read a metric view's definition.
 
 ### Syntax
 
@@ -84,3 +86,4 @@ SHOW CREATE TABLE test AS SERDE;
 
 * [CREATE TABLE](sql-ref-syntax-ddl-create-table.html)
 * [CREATE VIEW](sql-ref-syntax-ddl-create-view.html)
+* [CREATE METRIC VIEW](sql-ref-syntax-ddl-create-metric-view.html)

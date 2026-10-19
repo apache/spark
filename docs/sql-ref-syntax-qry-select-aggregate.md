@@ -43,6 +43,31 @@ aggregate_function(input1 [, input2, ...]) FILTER (WHERE boolean_expression)
 
 Please refer to the [Built-in Aggregation Functions](sql-ref-functions-builtin.html#aggregate-functions) document for all the examples of Spark aggregate functions.
 
+### MEASURE
+
+`MEASURE(measure_name)` reads a measure of a [metric view](sql-ref-syntax-ddl-create-metric-view.html). It is
+accepted only in the `SELECT` list of a query over a metric view, where Spark replaces it with the measure's
+aggregate expression, evaluated at the grain of the query's `GROUP BY`. It may be nested inside other
+expressions in the `SELECT` list, but it is not resolved in `WHERE`, `HAVING` or `ORDER BY`; alias the measure in
+the `SELECT` list and refer to the alias there. `MEASURE()` cannot be applied to a column of a table or an
+ordinary view.
+
+#### Syntax
+
+```sql
+MEASURE(measure_name)
+```
+
+#### Examples
+
+```sql
+SELECT region, MEASURE(revenue) AS revenue
+FROM order_metrics
+GROUP BY region
+HAVING revenue > 300
+ORDER BY revenue DESC;
+```
+
 ### Ordered-Set Aggregate Functions
 
 These aggregate Functions use different syntax than the other aggregate functions so that to specify an expression (typically a column name) by which to order the values.
