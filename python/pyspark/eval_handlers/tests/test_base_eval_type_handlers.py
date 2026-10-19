@@ -22,8 +22,10 @@ Handler-flavor tests live alongside their module, e.g. the Arrow handlers in
 """
 
 import os
+from types import SimpleNamespace
 from unittest.mock import patch
 
+from pyspark.errors import PySparkRuntimeError
 from pyspark.eval_handlers._base import (
     BatchEvalTypeHandler,
     CoGroupedEvalTypeHandler,
@@ -32,15 +34,28 @@ from pyspark.eval_handlers._base import (
     _eval_type_handlers,
     get_eval_type_handler,
 )
+from pyspark.eval_handlers._typing import UDF
+from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.pandas.serializers import (
     ArrowStreamCoGroupSerializer,
     ArrowStreamGroupSerializer,
     ArrowStreamSerializer,
 )
+from pyspark.sql.types import LongType, StringType
 from pyspark.testing.utils import PySparkBaseTestCase
+from pyspark.util import PythonEvalType
+from pyspark.worker_message import UDFInfo
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
-    from pyspark.worker_util import RunnerConf
+    from pyspark.worker import read_single_udf
+    from pyspark.worker_util import RunnerConf, pickleSer
+
+
+class _Aggregator:
+    """Stands in for an incremental Aggregator: an object with methods, not a function."""
+
+    def zero(self):
+        return 0
 
 
 class EvalTypeHandlerTests(PySparkBaseTestCase):
@@ -262,6 +277,66 @@ class EvalTypeHandlerTests(PySparkBaseTestCase):
         self.assertRaises(AssertionError, _define_conf_only)
         self.assertRaises(AssertionError, _define_value_only)
         self.assertNotIn(unused_eval_type, _eval_type_handlers)
+
+
+class ReadSingleUDFTests(PySparkBaseTestCase):
+    @staticmethod
+    def _read(*commands, eval_type=PythonEvalType.SQL_BATCHED_UDF, args=(0,), kwargs=None):
+        """Read ``(func, return_type)`` commands as one chained UDF for ``eval_type``."""
+        udf_info = UDFInfo(
+            udfs=[CloudPickleSerializer().dumps(c) for c in commands],
+            args=list(args),
+            kwargs=kwargs or {},
+            result_id=0,
+        )
+        # read_single_udf only reads these two attributes of the handler class.
+        handler_cls = SimpleNamespace(eval_type=eval_type, is_iter_based=False)
+        return read_single_udf(pickleSer, udf_info, handler_cls, RunnerConf({}))
+
+    @staticmethod
+    def _stop(x):
+        raise StopIteration(x)
+
+    def test_returns_udf_record(self):
+        udf = self._read((lambda x: x + 1, LongType()), args=(1,), kwargs={"y": 2})
+        self.assertIsInstance(udf, UDF)
+        self.assertEqual(udf.args_offsets, [1])
+        self.assertEqual(udf.kwargs_offsets, {"y": 2})
+        self.assertEqual(udf.return_type, LongType())
+        self.assertEqual(udf.func(1), 2)
+        self.assertEqual(udf.raw_func(1), 2)
+
+    def test_func_fails_on_stop_iteration_and_raw_func_does_not(self):
+        udf = self._read((self._stop, LongType()))
+        self.assertIsNot(udf.func, udf.raw_func)
+        with self.assertRaises(PySparkRuntimeError):
+            udf.func(1)
+        with self.assertRaises(StopIteration):
+            udf.raw_func(1)
+
+    def test_func_is_unwrapped_for_exempt_eval_types(self):
+        for eval_type in (
+            PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+            PythonEvalType.SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF,
+            PythonEvalType.SQL_ARROW_BATCHED_UDF,
+        ):
+            with self.subTest(eval_type=eval_type):
+                udf = self._read((self._stop, LongType()), eval_type=eval_type)
+                self.assertIs(udf.func, udf.raw_func)
+
+    def test_chains_functions_with_last_return_type(self):
+        udf = self._read((lambda x: x + 1, LongType()), (lambda x: str(x * 10), StringType()))
+        self.assertEqual(udf.raw_func(1), "20")
+        self.assertEqual(udf.func(1), "20")
+        self.assertEqual(udf.return_type, StringType())
+
+    def test_raw_func_keeps_pickled_object(self):
+        udf = self._read(
+            (_Aggregator(), LongType()),
+            eval_type=PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF,
+        )
+        self.assertIsInstance(udf.raw_func, _Aggregator)
+        self.assertNotIsInstance(udf.func, _Aggregator)
 
 
 if __name__ == "__main__":

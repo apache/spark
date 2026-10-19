@@ -21,11 +21,13 @@ The Arrow element types are forward refs so pyarrow stays a type-checking-only
 import at runtime, as elsewhere in the worker.
 """
 
-from collections.abc import Iterator
-from typing import TYPE_CHECKING, TypeVar
+from collections.abc import Callable, Iterator
+from typing import TYPE_CHECKING, Any, NamedTuple, TypeVar
 
 if TYPE_CHECKING:
     import pyarrow as pa
+
+    from pyspark.sql.types import StructType
 
 # Grouped-category input element, matching what the serializer yields: a group
 # serializer yields a lazy iterator; a co-group serializer materializes each side.
@@ -35,3 +37,30 @@ CoGroupedBatch = tuple[list["pa.RecordBatch"], list["pa.RecordBatch"]]
 # Handler input and output stream element types.
 InputBatch = TypeVar("InputBatch")
 OutputBatch = TypeVar("OutputBatch")
+
+
+class UDF(NamedTuple):
+    """One UDF as read by ``read_single_udf``; each handler takes the fields it needs."""
+
+    # The chained function wrapped for profiling and, for most eval types, in
+    # fail_on_stopiteration.
+    func: Callable[..., Any]
+    # The chained function before any wrapping, for handlers that need the pickled object
+    # itself (an incremental Aggregator) or its signature.
+    raw_func: Any
+    args_offsets: list[int]
+    kwargs_offsets: dict[str, int]
+    # The DataType of the last function in the chain; a StructType for the eval types that
+    # return rows.
+    return_type: Any
+
+
+class UDTF(NamedTuple):
+    """The UDTF as read by ``read_single_udtf``."""
+
+    # The UDTF instance, wrapped in the handler's partition_wrapper when its TABLE argument
+    # has PARTITION BY expressions.
+    udtf: Any
+    args_offsets: list[int]
+    kwargs_offsets: dict[str, int]
+    return_type: "StructType"

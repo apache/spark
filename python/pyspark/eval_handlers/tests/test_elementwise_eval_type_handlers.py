@@ -29,6 +29,7 @@ from unittest.mock import patch
 
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.eval_handlers._base import get_eval_type_handler
+from pyspark.eval_handlers._typing import UDF
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 from pyspark.sql.types import ArrayType, LongType, StringType, StructField, StructType
 from pyspark.testing.utils import (
@@ -99,7 +100,16 @@ class ElementwiseEvalTypeHandlerTestCase(PySparkBaseTestCase):
         if nesting is not None:
             eval_conf["elementwise_nesting"] = ",".join(map(str, nesting))
         return handler_cls(
-            udfs=list(udfs),
+            udfs=[
+                UDF(
+                    func=func,
+                    raw_func=func,
+                    args_offsets=args_offsets,
+                    kwargs_offsets=kwargs_offsets,
+                    return_type=return_type,
+                )
+                for func, args_offsets, kwargs_offsets, return_type in udfs
+            ],
             runner_conf=RunnerConf(runner_conf or {"spark.sql.session.timeZone": "UTC"}),
             eval_conf=EvalConf(eval_conf),
         )
