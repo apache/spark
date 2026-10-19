@@ -3251,8 +3251,9 @@ class HiveDDLSuite
       val udtfJar = TestUDTFJar.jar
       val jarName = udtfJar.getName
       val jar = udtfJar.toURI.toString
+      // listJars() flattens every artifact bucket, so clear the jar from all of them.
       spark.sparkContext.allAddedJars.keys.find(_.contains(jarName))
-        .foreach(k => spark.sparkContext.addedJars.get("default").foreach(_.remove(k)))
+        .foreach(k => spark.sparkContext.addedJars.values.foreach(_.remove(k)))
       assert(!spark.sparkContext.listJars().exists(_.contains(jarName)))
       val e = intercept[AnalysisException] {
         sql("CREATE TEMPORARY FUNCTION f1 AS " +
