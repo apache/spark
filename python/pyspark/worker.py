@@ -24,9 +24,8 @@ import inspect
 import json
 import os
 import sys
-import time
 import warnings
-from typing import Any, BinaryIO, Optional
+from typing import BinaryIO
 
 from pyspark import shuffle
 from pyspark.accumulators import (

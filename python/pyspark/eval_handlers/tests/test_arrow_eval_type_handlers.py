@@ -33,6 +33,7 @@ from pyspark.sql.pandas.serializers import ArrowStreamCoGroupSerializer, ArrowSt
 from pyspark.sql.types import DoubleType, LongType, StringType, StructField, StructType
 from pyspark.testing.utils import PySparkBaseTestCase, have_pyarrow, pyarrow_requirement_message
 from pyspark.util import PythonEvalType
+from pyspark.worker_metrics import WorkerMetrics
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
     from pyspark.worker_util import EvalConf, RunnerConf
@@ -200,6 +201,40 @@ class ArrowBatchedUDFArrowHandlerTests(ArrowEvalTypeHandlerTestCase):
     def test_serializer(self):
         handler = self._handler((lambda a: a, [0], {}, LongType()))
         self.assertIsInstance(handler.serializer, ArrowStreamSerializer)
+
+    def test_detailed_timing_uses_handler_gate(self):
+        metrics = WorkerMetrics()
+        self.addCleanup(metrics.reset)
+        timing_conf = "spark.sql.execution.pythonUDF.detailedTiming.enabled"
+        for enabled in (False, True):
+            with self.subTest(enabled=enabled):
+                metrics.reset()
+                handler = self._handler(
+                    (lambda a: a + 1, [0], {}, LongType()),
+                    (lambda a, b: a * b, [0, 1], {}, LongType()),
+                    runner_conf=RunnerConf({timing_conf: str(enabled).lower()}),
+                )
+                self.assertEqual(handler.serializer._collect_timing, enabled)
+                output = list(
+                    handler.run(
+                        0,
+                        iter([self._batch(a=[1, 2], b=[10, 20]), self._batch(a=[3], b=[4])]),
+                    )
+                )
+                self.assertEqual([batch.num_rows for batch in output], [2, 1])
+                report = metrics.to_dict()
+                if enabled:
+                    self.assertEqual(report["pythonNumTimingReports"], 1)
+                    self.assertEqual(report["pythonNumTimedBatches"], 2)
+                    for name in (
+                        "pythonInputPreparationTime",
+                        "pythonUDFExecutionTime",
+                        "pythonOutputPreparationTime",
+                    ):
+                        self.assertIn(name, report)
+                else:
+                    self.assertNotIn("pythonNumTimingReports", report)
+                    self.assertNotIn("pythonInputPreparationTime", report)
 
     def test_invokes_udf_per_row(self):
         handler = self._handler(

@@ -28,6 +28,7 @@ unregistered.
 from __future__ import annotations
 
 import itertools
+import time
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any
 
@@ -56,10 +57,12 @@ from pyspark.sql.conversion import (
     ArrowTableToRowsConversion,
     LocalDataToArrowConversion,
 )
+from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type
 from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 from pyspark.sql.types import StructField, StructType
 from pyspark.util import PythonEvalType, fail_on_stopiteration
+from pyspark.worker_metrics import WorkerMetrics
 
 if TYPE_CHECKING:
     import pyarrow as pa
@@ -855,6 +858,7 @@ class ArrowBatchedUDFArrowHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
                     ),
                 )
             )
+        assert self._udf_infos, "At least one Arrow UDF expected here."
         self._col_names = [f"_{i}" for i in range(len(udfs))]
 
         # --- Input preparation ---
@@ -865,10 +869,28 @@ class ArrowBatchedUDFArrowHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
             for f in eval_conf.input_type  # type: ignore[union-attr]
         ]
 
+    @property
+    def serializer(self) -> ArrowStreamSerializer:
+        return ArrowStreamSerializer(
+            write_start_stream=True,
+            collect_timing=self._runner_conf.detailed_timing_enabled,
+        )
+
     def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
         import pyarrow as pa
 
         runner_conf = self._runner_conf
+        metrics = WorkerMetrics()
+        if runner_conf.detailed_timing_enabled:
+            phase_timers = (
+                metrics.measure("pythonInputPreparationTime"),
+                metrics.measure("pythonUDFExecutionTime"),
+                metrics.measure("pythonOutputPreparationTime"),
+            )
+            metrics.set("pythonNumTimingReports", 1)
+            metrics.set("pythonNumTimedBatches", 0)
+        else:
+            phase_timers = None
 
         @fail_on_stopiteration
         def _evaluate_batch_udf(udf_func: Any, rows: list[tuple]) -> list[Any]:
@@ -879,42 +901,75 @@ class ArrowBatchedUDFArrowHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
             with ThreadPoolExecutor(max_workers=runner_conf.arrow_concurrency_level) as pool:
                 return list(pool.map(lambda row: udf_func(*row), rows))
 
-        for input_batch in data:
-            num_rows = input_batch.num_rows
+        # Keep phase totals local so each metric is updated once instead of per batch.
+        input_duration_ns = 0
+        udf_duration_ns = 0
+        output_duration_ns = 0
+        clock = time.perf_counter_ns
+        num_udfs = len(self._udf_infos)
+        try:
+            for input_batch in data:
+                if phase_timers is not None:
+                    input_start_ns = clock()
+                    metrics.increment("pythonNumTimedBatches")
+                num_rows = input_batch.num_rows
 
-            # --- Input: Arrow -> Python columns ---
-            columns = [
-                (
-                    [conv(v) for v in ArrowTableToRowsConversion._to_pylist(col)]
-                    if conv is not None
-                    else ArrowTableToRowsConversion._to_pylist(col)
-                )
-                for col, conv in zip(input_batch.itercolumns(), self._arrow_to_py_converters)
-            ]
-            if not columns:
-                columns = [[_NoValue] * num_rows]
-
-            # --- Process: evaluate each UDF row-by-row ---
-            output_arrays = []
-            for udf_func, offsets, zero_arg, arrow_return_type, result_conv in self._udf_infos:
-                rows = (
-                    [() for _ in range(num_rows)]
-                    if zero_arg
-                    else list(zip(*[columns[o] for o in offsets]))
-                )
-                results = _evaluate_batch_udf(udf_func, rows)
-                verify_result_row_count(len(results), num_rows)
-
-                # --- Output: Python -> Arrow ---
-                converted = (
-                    [result_conv(r) for r in results] if result_conv is not None else results
-                )
-                try:
-                    arr = pa.array(converted, type=arrow_return_type)
-                except pa.lib.ArrowInvalid:
-                    arr = pa.array(converted).cast(
-                        target_type=arrow_return_type, safe=runner_conf.safecheck
+                # --- Input: Arrow -> Python columns ---
+                columns = [
+                    (
+                        [conv(v) for v in ArrowTableToRowsConversion._to_pylist(col)]
+                        if conv is not None
+                        else ArrowTableToRowsConversion._to_pylist(col)
                     )
-                output_arrays.append(arr)
+                    for col, conv in zip(input_batch.itercolumns(), self._arrow_to_py_converters)
+                ]
+                if not columns:
+                    columns = [[_NoValue] * num_rows]
 
-            yield pa.RecordBatch.from_arrays(output_arrays, self._col_names)
+                # --- Process: evaluate each UDF row-by-row ---
+                output_arrays: list[pa.Array] = []
+                for udf_func, offsets, zero_arg, arrow_return_type, result_conv in self._udf_infos:
+                    if phase_timers is not None and output_arrays:
+                        # Reuse the batch start for the first UDF, avoiding another clock read.
+                        # Later UDFs start input after the loop transition.
+                        input_start_ns = clock()
+                    rows = (
+                        [() for _ in range(num_rows)]
+                        if zero_arg
+                        else list(zip(*[columns[o] for o in offsets]))
+                    )
+                    if phase_timers is not None:
+                        udf_start_ns = clock()
+                        input_duration_ns += udf_start_ns - input_start_ns
+                    results = _evaluate_batch_udf(udf_func, rows)
+                    if phase_timers is not None:
+                        output_start_ns = clock()
+                        udf_duration_ns += output_start_ns - udf_start_ns
+                    verify_result_row_count(len(results), num_rows)
+
+                    # --- Output: Python -> Arrow ---
+                    converted = (
+                        [result_conv(r) for r in results] if result_conv is not None else results
+                    )
+                    try:
+                        arr = pa.array(converted, type=arrow_return_type)
+                    except pa.lib.ArrowInvalid:
+                        arr = pa.array(converted).cast(
+                            target_type=arrow_return_type, safe=runner_conf.safecheck
+                        )
+                    output_arrays.append(arr)
+                    # All UDF results for this batch are ready; time its assembly as output.
+                    if len(output_arrays) == num_udfs:
+                        output_batch = pa.RecordBatch.from_arrays(output_arrays, self._col_names)
+                    if phase_timers is not None:
+                        output_duration_ns += clock() - output_start_ns
+
+                yield output_batch
+                del output_batch
+        finally:
+            # Flush completed intervals if the generator closes early or raises.
+            if phase_timers is not None:
+                input_timer, udf_timer, output_timer = phase_timers
+                input_timer.add_duration_ns(input_duration_ns)
+                udf_timer.add_duration_ns(udf_duration_ns)
+                output_timer.add_duration_ns(output_duration_ns)
