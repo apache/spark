@@ -54,6 +54,9 @@ abstract class BaseArrowPythonRunner[IN, OUT <: AnyRef](
     sessionUUID.foreach { uuid =>
       envVars.put("PYSPARK_SPARK_SESSION_UUID", uuid)
     }
+    // Stream timers must be installed before buffering starts. Use the plan's captured gate.
+    envVars.put("SPARK_PYTHON_UDF_DETAILED_TIMING",
+      pythonMetrics.contains("pythonNumTimingReports").toString)
     envVars
   }
   override val pythonExec: String =

@@ -78,13 +78,13 @@ object PythonSQLMetrics {
 
   val pythonPhaseTimingMetricsDesc: Map[String, String] = {
     Map(
-      "pythonDataReceiveTime" -> "time to read Python input from the buffered stream",
-      "pythonArrowDeserializationTime" -> "time to deserialize Arrow IPC outside stream I/O",
+      "pythonDataReceiveTime" -> "time in raw socket reads during Arrow input",
+      "pythonArrowDeserializationTime" -> "time to deserialize Arrow IPC outside raw socket I/O",
       "pythonInputPreparationTime" -> "time to prepare Python UDF input",
       "pythonUDFExecutionTime" -> "time to evaluate Python UDFs",
       "pythonOutputPreparationTime" -> "time to prepare Python UDF output",
-      "pythonArrowSerializationTime" -> "time to serialize Arrow IPC outside stream I/O",
-      "pythonDataSendTime" -> "time to write Python output to the buffered stream")
+      "pythonArrowSerializationTime" -> "time to serialize Arrow IPC outside raw socket I/O",
+      "pythonDataSendTime" -> "time in raw socket writes during Arrow output")
   }
 
   val pythonPhaseCountMetricsDesc: Map[String, String] = {
