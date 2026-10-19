@@ -901,17 +901,18 @@ class ArrowBatchedUDFArrowHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
             with ThreadPoolExecutor(max_workers=runner_conf.arrow_concurrency_level) as pool:
                 return list(pool.map(lambda row: udf_func(*row), rows))
 
-        # Keep phase totals local so each metric is updated once instead of per batch.
+        # Keep phase totals and the batch count local, then publish them once per task.
         input_duration_ns = 0
         udf_duration_ns = 0
         output_duration_ns = 0
+        num_timed_batches = 0
         clock = time.perf_counter_ns
         num_udfs = len(self._udf_infos)
         try:
             for input_batch in data:
                 if phase_timers is not None:
                     input_start_ns = clock()
-                    metrics.increment("pythonNumTimedBatches")
+                    num_timed_batches += 1
                 num_rows = input_batch.num_rows
 
                 # --- Input: Arrow -> Python columns ---
@@ -967,8 +968,9 @@ class ArrowBatchedUDFArrowHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
                 yield output_batch
                 del output_batch
         finally:
-            # Flush completed intervals if the generator closes early or raises.
+            # Publish the count and completed intervals if the generator closes early or raises.
             if phase_timers is not None:
+                metrics.set("pythonNumTimedBatches", num_timed_batches)
                 input_timer, udf_timer, output_timer = phase_timers
                 input_timer.add_duration_ns(input_duration_ns)
                 udf_timer.add_duration_ns(udf_duration_ns)
