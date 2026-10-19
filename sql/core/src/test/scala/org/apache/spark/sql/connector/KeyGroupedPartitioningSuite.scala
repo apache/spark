@@ -2980,6 +2980,238 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     }
   }
 
+  test("SPARK-60232: nested SPJ preserves inner join key positions") {
+    val cols = Array(
+      Column.create("store_id", IntegerType),
+      Column.create("dept_id", IntegerType),
+      Column.create("data", StringType))
+    // t4 is partitioned by (store_id, dept_id) and joins on dept_id only. The inner join
+    // pushes joinKeyPositions [1] into the t4 scan. The outer join must not overwrite that
+    // with [0] against the already projected dept_id, or t4 is grouped by store_id and
+    // the three-way join returns no rows.
+    createTable("t4", cols, Array(identity("store_id"), identity("dept_id")))
+    sql("INSERT INTO testcat.ns.t4 VALUES (1, 2, 'a'), (2, 3, 'b'), (3, 1, 'c')")
+
+    createTable("t5", cols, Array(identity("dept_id")))
+    sql("INSERT INTO testcat.ns.t5 VALUES (0, 1, 'x1'), (0, 2, 'x2'), (0, 3, 'x3')")
+
+    createTable("t6", cols, Array(identity("dept_id")))
+    sql("INSERT INTO testcat.ns.t6 VALUES (0, 1, 'x1'), (0, 2, 'x2'), (0, 3, 'x3')")
+
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+        SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
+        val df = sql(
+          """
+            |SELECT /*+ MERGE(t4, t5, t6) */
+            |  t4.store_id, t4.dept_id, t4.data, t5.data, t6.data
+            |FROM testcat.ns.t4
+            |JOIN testcat.ns.t5 ON t4.dept_id = t5.dept_id
+            |JOIN testcat.ns.t6 ON t4.dept_id = t6.dept_id
+            |ORDER BY t4.store_id, t4.dept_id
+            |""".stripMargin)
+
+        val plan = df.queryExecution.executedPlan
+        assert(collectShuffles(plan).isEmpty, "SPJ should be triggered for both joins")
+        val t4Scan = collectScans(plan).find(_.spjParams.joinKeyPositions.isDefined).get
+        assert(t4Scan.spjParams.joinKeyPositions.contains(Seq(1)),
+          "t4 scan should keep the inner join's key position [1], not [0]")
+        checkAnswer(df, Seq(
+          Row(1, 2, "a", "x2", "x2"),
+          Row(2, 3, "b", "x3", "x3"),
+          Row(3, 1, "c", "x1", "x1")))
+      }
+    }
+  }
+
+  test("SPARK-60232: nested SPJ with mixed partition key types preserves key positions") {
+    val cols = Array(
+      Column.create("id", StringType),
+      Column.create("date", StringType),
+      Column.create("data", StringType))
+    // Same nested join-key overwrite as above, but the leading partition key has a different
+    // type than the bucket join key. Without the fix this shape throws ClassCastException in
+    // connectors such as Iceberg; here the in-memory source only misaligns values.
+    createTable("t1", cols,
+      Array(identity("date"), bucket(32, "id"), bucket(32, "data")))
+    sql("INSERT INTO testcat.ns.t1 VALUES " +
+        "('a', '2026-05-01', 'aa'), " +
+        "('a', '2026-05-02', 'cc'), " +
+        "('b', '2026-05-01', 'bb')")
+
+    createTable("t2", cols, Array(bucket(32, "id")))
+    sql("INSERT INTO testcat.ns.t2 VALUES " +
+        "('a', '2026-05-01', 'xx'), " +
+        "('b', '2026-05-01', 'yy')")
+
+    createTable("t3", cols, Array(bucket(32, "id")))
+    sql("INSERT INTO testcat.ns.t3 VALUES " +
+        "('a', '2026-05-01', 'xx'), " +
+        "('b', '2026-05-01', 'yy')")
+
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+        SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
+        val df = sql(
+          """
+            |SELECT /*+ MERGE(t1, t2, t3) */
+            |  t1.id, t1.date, t1.data, t2.data, t3.data
+            |FROM testcat.ns.t1
+            |JOIN testcat.ns.t2 ON t1.id = t2.id
+            |JOIN testcat.ns.t3 ON t1.id = t3.id
+            |ORDER BY t1.id, t1.date, t1.data
+            |""".stripMargin)
+
+        val plan = df.queryExecution.executedPlan
+        assert(collectShuffles(plan).isEmpty, "SPJ should be triggered for both joins")
+        val t1Scan = collectScans(plan).find(_.spjParams.joinKeyPositions.isDefined).get
+        assert(t1Scan.spjParams.joinKeyPositions.contains(Seq(1)),
+          "t1 scan should keep the inner join's key position [1], not [0]")
+        checkAnswer(df, Seq(
+          Row("a", "2026-05-01", "aa", "xx", "xx"),
+          Row("a", "2026-05-02", "cc", "xx", "xx"),
+          Row("b", "2026-05-01", "bb", "yy", "yy")))
+      }
+    }
+  }
+
+  test("SPARK-60232: nested SPJ preserves inner join reducers") {
+    val idCols = Array(Column.create("id", IntegerType))
+    createTable("b4", idCols, Array(bucket(4, "id")))
+    sql("INSERT INTO testcat.ns.b4 VALUES (4)")
+
+    createTable("b12", idCols, Array(bucket(12, "id")))
+    sql("INSERT INTO testcat.ns.b12 VALUES (4)")
+
+    createTable("b8", idCols, Array(bucket(8, "id")))
+    sql("INSERT INTO testcat.ns.b8 VALUES (1), (4)")
+
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        val df = sql(
+          """
+            |SELECT /*+ MERGE(b4, b12, b8) */ b4.id, b12.id, b8.id
+            |FROM testcat.ns.b4
+            |JOIN testcat.ns.b12 ON b4.id = b12.id
+            |JOIN testcat.ns.b8 ON b4.id = b8.id
+            |""".stripMargin)
+
+        val plan = df.queryExecution.executedPlan
+        assert(collectShuffles(plan).isEmpty, "SPJ should be triggered for both joins")
+        val b12Scan = collectScans(plan).find(_.table.name().endsWith("b12")).get
+        assert(b12Scan.spjParams.reducers.nonEmpty,
+          "b12 scan should keep the inner join's reducers onto bucket(4, id)")
+        checkAnswer(df, Seq(Row(4, 4, 4)))
+      }
+    }
+  }
+
+  test("SPARK-60232: nested SPJ preserves join key positions over common partition values") {
+    val items2 = "items2"
+    val itemsPartitions = Array(identity("id"), identity("name"))
+
+    val inserts = Seq(
+      s"INSERT INTO testcat.ns.$items VALUES " +
+        "(1, 'aa', 10.0, cast('2020-01-01' as timestamp)), " +
+        "(2, 'bb', 20.0, cast('2020-01-01' as timestamp))",
+      s"INSERT INTO testcat.ns.$items2 VALUES " +
+        "(1, 'aa', 10.0, cast('2020-01-01' as timestamp)), " +
+        "(2, 'bb', 20.0, cast('2020-01-01' as timestamp))",
+      "INSERT INTO testcat.ns.purchases VALUES " +
+        "(1, 100.0, cast('2020-01-01' as timestamp)), " +
+        "(2, 200.0, cast('2020-01-01' as timestamp))")
+    val expected = Seq(Row(1, "aa", 10.0, 100.0), Row(2, "bb", 20.0, 200.0))
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
+        catalog.clearTables()
+        createTable(items, itemsColumns, itemsPartitions)
+        createTable(items2, itemsColumns, itemsPartitions)
+        createTable(purchases, purchasesColumns, Array.empty)
+        inserts.foreach(sql)
+
+        val df = sql(
+          s"""
+             |SELECT /*+ MERGE(i, j, p) */ i.id, i.name, i.price, p.price
+             |FROM testcat.ns.$items i JOIN testcat.ns.$items2 j
+             |ON i.id = j.id AND i.name = j.name
+             |JOIN testcat.ns.$purchases p ON i.id = p.item_id
+             |ORDER BY i.id, i.name
+             |""".stripMargin)
+
+        val plan = df.queryExecution.executedPlan
+        assert(collectShuffles(plan).size == 1,
+          "only the unpartitioned purchases side should shuffle")
+        val itemsScan = collectScans(plan).find(_.table.name().endsWith(items)).get
+        assert(itemsScan.spjParams.commonPartitionValues.nonEmpty,
+          "inner join should push common partition values into the items scan")
+        assert(itemsScan.spjParams.joinKeyPositions.contains(Seq(0)),
+          "outer join should project common partition values down to the id join key")
+        checkAnswer(df, expected)
+      }
+    }
+  }
+
+  // Aligning partition counts when one id maps to multiple names needs GroupPartitionsExec
+  // (4.2+, SPARK-55535). The minimal 4.1 fix covers the other JIRA shapes only.
+  ignore("SPARK-60232: nested SPJ with multiple names per id over common partition values") {
+    val items2 = "items2"
+    val itemsPartitions = Array(identity("id"), identity("name"))
+    val inserts = Seq(
+      s"INSERT INTO testcat.ns.$items VALUES " +
+        "(1, 'aa', 10.0, cast('2020-01-01' as timestamp)), " +
+        "(1, 'bb', 20.0, cast('2020-01-02' as timestamp))",
+      s"INSERT INTO testcat.ns.$items2 VALUES " +
+        "(1, 'aa', 10.0, cast('2020-01-01' as timestamp)), " +
+        "(1, 'bb', 20.0, cast('2020-01-02' as timestamp))",
+      "INSERT INTO testcat.ns.purchases VALUES " +
+        "(1, 100.0, cast('2020-01-01' as timestamp))")
+    val expected = Seq(Row(1, "aa", 10.0, 100.0), Row(1, "bb", 20.0, 100.0))
+    Seq(true, false).foreach { aqe =>
+        catalog.clearTables()
+        createTable(items, itemsColumns, itemsPartitions)
+        createTable(items2, itemsColumns, itemsPartitions)
+        createTable(purchases, purchasesColumns, Array.empty)
+        inserts.foreach(sql)
+
+        withSQLConf(
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+          SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
+          val df = sql(
+            s"""
+               |SELECT /*+ MERGE(i, j, p) */ i.id, i.name, i.price, p.price
+               |FROM testcat.ns.$items i JOIN testcat.ns.$items2 j
+               |ON i.id = j.id AND i.name = j.name
+               |JOIN testcat.ns.$purchases p ON i.id = p.item_id
+               |ORDER BY i.id, i.name
+               |""".stripMargin)
+
+          val plan = df.queryExecution.executedPlan
+          assert(collectShuffles(plan).size == 1,
+            "only the unpartitioned purchases side should shuffle")
+          checkAnswer(df, expected)
+        }
+    }
+  }
+
   test("SPARK-48012: one-side shuffle with partition transforms") {
     val items_partitions = Array(bucket(2, "id"), identity("arrive_time"))
     val items_partitions2 = Array(identity("arrive_time"), bucket(2, "id"))
