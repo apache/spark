@@ -2933,6 +2933,18 @@ class DatasetSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-60247: UDF DataFrame query context points to the user call site") {
+    withSQLConf(SQLConf.DATA_FRAME_QUERY_CONTEXT_ENABLED.key -> "true") {
+      val myUdf = udf((i: Int) => i)
+      // Typed/UDF columns are constructed via UserDefinedFunction.apply; the captured query
+      // context should skip that internal frame and point at this test (user code) rather than
+      // at UserDefinedFunction.apply.
+      val callSite = myUdf(lit(1)).node.origin.getQueryContext.head.callSite()
+      assert(callSite.contains("DatasetSuite"), s"unexpected call site: $callSite")
+      assert(!callSite.contains("UserDefinedFunction"), s"unexpected call site: $callSite")
+    }
+  }
+
   test("SPARK-51312: createDataFrame should work with both Date and LocalDate") {
     for (confVal <- Seq("true", "false")) {
       withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> confVal) {
@@ -3083,6 +3095,22 @@ class DatasetSuite extends SharedSparkSession
         result.write.parquet(path.getAbsolutePath)
       }
       assert(ex.getCondition == "COLUMN_ALREADY_EXISTS")
+    }
+  }
+
+  test("SPARK-59682: RemoveRedundantAliases cannot be excluded via excludedRules") {
+    // RemoveRedundantAliases must stay in nonExcludableRules: excluding it lets the
+    // exprId-preserving Alias that EliminateSerialization inserts around a collapsed
+    // DeserializeToObject/SerializeFromObject pair leak into execution as an unsupported
+    // ObjectType projection, which fails in both codegen and the interpreted fallback.
+    withSQLConf(
+        "spark.sql.optimizer.excludedRules" ->
+          "org.apache.spark.sql.catalyst.optimizer.RemoveRedundantAliases") {
+      val grouped = Seq(ClassData("a", 1), ClassData("a", 2), ClassData("b", 3)).toDS()
+        .groupByKey(_.a)
+        .mapGroups { (k: String, it: Iterator[ClassData]) => ClassData(k, it.map(_.b).sum) }
+      val result = grouped.mapPartitions(iter => iter).collect()
+      assert(result.toSet == Set(ClassData("a", 3), ClassData("b", 3)))
     }
   }
 }

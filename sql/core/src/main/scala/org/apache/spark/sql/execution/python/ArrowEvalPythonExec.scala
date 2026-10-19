@@ -106,7 +106,10 @@ case class ArrowEvalPythonExec(
   override def supportsRowBased: Boolean = true
 
   override protected def doExecute(): RDD[InternalRow] = {
-    if (child.supportsColumnar) {
+    // Checks the configuration too, through `supportsColumnar`: a child that also returns rows,
+    // such as the scan of the Arrow cache, gets no ColumnarToRowExec when columnar input is
+    // disabled, and still supports columnar.
+    if (supportsColumnar) {
       // Columnar path: delegate to doExecuteColumnar, flatten to
       // UnsafeRow. ColumnarBatchRow from rowIterator() is NOT
       // UnsafeRow, and downstream operators (e.g., outer

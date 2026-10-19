@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connect.planner
 
 import java.util.{HashMap, Properties, UUID}
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -1050,7 +1051,8 @@ class SparkConnectPlanner(
       val analyzed = session.sessionState.executePlan(logicalPlan).analyzed
 
       assertPlan(groupingExprs.size() == 1)
-      val groupFunc = TypedScalaUdf(groupingExprs.get(0), Some(analyzed.output))
+      val groupFunc =
+        TypedScalaUdf(groupingExprs.get(0), Some(analyzed.output), Some("Dataset.groupByKey"))
       val vEnc = groupFunc.inEnc
       val kEnc = groupFunc.outEnc
 
@@ -1089,9 +1091,18 @@ class SparkConnectPlanner(
 
   private object TypedScalaUdf {
     def apply(expr: proto.Expression, inputAttrs: Option[Seq[Attribute]]): TypedScalaUdf = {
+      apply(expr, inputAttrs, None)
+    }
+
+    def apply(
+        expr: proto.Expression,
+        inputAttrs: Option[Seq[Attribute]],
+        operation: Option[String]): TypedScalaUdf = {
       if (expr.hasCommonInlineUserDefinedFunction
         && expr.getCommonInlineUserDefinedFunction.hasScalarScalaUdf) {
-        apply(expr.getCommonInlineUserDefinedFunction, inputAttrs)
+        withExpressionOrigin(expr) {
+          apply(unpackUdf(expr.getCommonInlineUserDefinedFunction, operation), inputAttrs)
+        }
       } else {
         throw InvalidInputErrors.expectingScalaUdfButGot(expr.getExprTypeCase)
       }
@@ -1835,7 +1846,7 @@ class SparkConnectPlanner(
     val baseRel = transformRelation(rel.getInput)
     val cond = rel.getCondition
     if (isTypedScalaUdfExpr(cond)) {
-      transformTypedFilter(cond.getCommonInlineUserDefinedFunction, baseRel)
+      transformTypedFilter(cond, baseRel)
     } else {
       logical.Filter(condition = transformExpression(cond), child = baseRel)
     }
@@ -1855,11 +1866,9 @@ class SparkConnectPlanner(
     }
   }
 
-  private def transformTypedFilter(
-      fun: proto.CommonInlineUserDefinedFunction,
-      child: LogicalPlan): TypedFilter = {
+  private def transformTypedFilter(expr: proto.Expression, child: LogicalPlan): TypedFilter = {
     val analyzed = session.sessionState.executePlan(child).analyzed
-    val udf = TypedScalaUdf(fun, Some(analyzed.output))
+    val udf = TypedScalaUdf(expr, Some(analyzed.output), Some("Dataset.filter"))
     TypedFilter(udf.function, analyzed)(udf.inEnc)
   }
 
@@ -1922,6 +1931,21 @@ class SparkConnectPlanner(
     } else {
       doTransformExpression(exp, baseRelationOpt)
     }
+  }
+
+  /**
+   * Installs the origin carried by `expr` (if any) as the current origin while `f` runs. Typed
+   * UDFs are decoded directly instead of going through `transformExpression`, so without this the
+   * expression's query context would be lost and unpacking failures would surface only internal
+   * planner frames. Falls back to the current origin when `expr` carries none.
+   */
+  private def withExpressionOrigin[T](expr: proto.Expression)(f: => T): T = {
+    val origin = if (expr.hasCommon && expr.getCommon.hasOrigin) {
+      transformOrigin(expr.getCommon.getOrigin)
+    } else {
+      CurrentOrigin.get
+    }
+    CurrentOrigin.withOrigin(origin)(f)
   }
 
   private def transformOrigin(origin: proto.Origin): Origin = {
@@ -2143,15 +2167,19 @@ class SparkConnectPlanner(
     NamedArgumentExpression(namedArg.getKey, transformExpression(namedArg.getValue))
   }
 
-  private def unpackUdf(fun: proto.CommonInlineUserDefinedFunction): UdfPacket = {
-    unpackScalaUDF[UdfPacket](fun.getScalarScalaUdf)
+  private def unpackUdf(
+      fun: proto.CommonInlineUserDefinedFunction,
+      operation: Option[String] = None): UdfPacket = {
+    unpackScalaUDF[UdfPacket](fun.getScalarScalaUdf, operation)
   }
 
   private def unpackForeachWriter(fun: proto.ScalarScalaUDF): ForeachWriterPacket = {
     unpackScalaUDF[ForeachWriterPacket](fun)
   }
 
-  private[connect] def unpackScalaUDF[T](fun: proto.ScalarScalaUDF): T = {
+  private[connect] def unpackScalaUDF[T](
+      fun: proto.ScalarScalaUDF,
+      operation: Option[String] = None): T = {
     try {
       logDebug(s"Unpack using class loader: ${Utils.getContextOrSparkClassLoader}")
       UdfSerialization
@@ -2173,7 +2201,16 @@ class SparkConnectPlanner(
                 "message" -> (s"Failed to load class: ${cnf.getMessage}. " +
                   "Make sure the artifact where the class is defined is installed by calling" +
                   " session.addArtifact.")))
-          case _ => throw SparkException.internalError("Failed to unpack scala udf.", t)
+          case _ =>
+            val context = CurrentOrigin.get.getQueryContext
+            val operationContext = operation.map(op => s" for $op").getOrElse("")
+            throw new SparkException(
+              errorClass = "INTERNAL_ERROR",
+              messageParameters = Map(
+                "message" -> s"Failed to unpack scala udf$operationContext."),
+              cause = t,
+              context = context,
+              summary = context.map(_.summary()).mkString("\n"))
         }
     }
   }
@@ -2840,7 +2877,9 @@ class SparkConnectPlanner(
       case collection.Seq(e)
           if e.hasCommonInlineUserDefinedFunction &&
             e.getCommonInlineUserDefinedFunction.hasScalarScalaUdf =>
-        unpackUdf(e.getCommonInlineUserDefinedFunction)
+        withExpressionOrigin(e) {
+          unpackUdf(e.getCommonInlineUserDefinedFunction, Some("Dataset.reduce"))
+        }
       case other =>
         throw InvalidInputErrors.reduceShouldCarryScalarScalaUdf(other)
     }
@@ -3605,22 +3644,28 @@ class SparkConnectPlanner(
       }
     }
 
-    // This is filled when a foreach batch runner started for Python.
+    // This is filled when a foreachBatch runner is started (Python or Scala).
     var foreachBatchRunnerCleaner: Option[AutoCloseable] = None
+    // Filled when foreachBatch is used, to set query id after query starts.
+    var foreachBatchQueryIdRef: Option[AtomicReference[String]] = None
 
     if (writeOp.hasForeachBatch) {
       val foreachBatchFn = writeOp.getForeachBatch.getFunctionCase match {
         case StreamingForeachFunction.FunctionCase.PYTHON_FUNCTION =>
           val pythonFn = transformPythonFunction(writeOp.getForeachBatch.getPythonFunction)
-          val (fn, cleaner) =
+          val (fn, cleaner, queryIdRef) =
             StreamingForeachBatchHelper.pythonForeachBatchWrapper(pythonFn, sessionHolder)
           foreachBatchRunnerCleaner = Some(cleaner)
+          foreachBatchQueryIdRef = Some(queryIdRef)
           fn
 
         case StreamingForeachFunction.FunctionCase.SCALA_FUNCTION =>
-          StreamingForeachBatchHelper.scalaForeachBatchWrapper(
+          val (fn, cleaner, queryIdRef) = StreamingForeachBatchHelper.scalaForeachBatchWrapper(
             writeOp.getForeachBatch.getScalaFunction.getPayload.toByteArray,
             sessionHolder)
+          foreachBatchRunnerCleaner = Some(cleaner)
+          foreachBatchQueryIdRef = Some(queryIdRef)
+          fn
 
         case other =>
           throw InvalidInputErrors.invalidOneOfField(
@@ -3647,18 +3692,23 @@ class SparkConnectPlanner(
           throw ex
       }
 
+    // Set the query id so the sanity check in dataFrameCachingWrapper can use it.
+    foreachBatchQueryIdRef.foreach(_.set(query.id.toString))
+    // Register the cleaner with the query if foreachBatch is used. Do this before
+    // registerNewStreamingQuery so that if that call throws, the cleaner is already wired to reap
+    // the cloned SessionHolder a batch may have created (it never expires by inactivity, so an
+    // unregistered one would leak until server shutdown).
+    foreachBatchRunnerCleaner.foreach { cleaner =>
+      sessionHolder.streamingForeachBatchRunnerCleanerCache.registerCleanerForQuery(
+        query,
+        cleaner)
+    }
     // Register the new query so that its reference is cached and is stopped on session timeout.
     SparkConnectService.streamingSessionManager.registerNewStreamingQuery(
       sessionHolder,
       query,
       executeHolder.sparkSessionTags,
       executeHolder.operationId)
-    // Register the runner with the query if Python foreachBatch is enabled.
-    foreachBatchRunnerCleaner.foreach { cleaner =>
-      sessionHolder.streamingForeachBatchRunnerCleanerCache.registerCleanerForQuery(
-        query,
-        cleaner)
-    }
     executeHolder.eventsManager.postFinished()
 
     val resultBuilder = WriteStreamOperationStartResult

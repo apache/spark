@@ -1873,13 +1873,19 @@ case class JsonToStructs(
     options: Map[String, String],
     child: Expression,
     timeZoneId: Option[String] = None,
-    variantAllowDuplicateKeys: Boolean = SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS))
+    variantAllowDuplicateKeys: Boolean = SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS),
+    // `spark.sql.charVarchar.standardSemantics.enabled` has PERSISTED binding, so it is captured
+    // here at analysis time (as the default arg, like `variantAllowDuplicateKeys`) and then
+    // threaded all the way into the parser via `charVarcharStandardSemanticsOverride`. This keeps
+    // a view's CHAR/VARCHAR map-key semantics tied to its creation-time flag rather than the
+    // caller's session setting. (`variantAllowDuplicateKeys` is only captured, not threaded: the
+    // parser still reads that one live from `SQLConf.get`.)
+    charVarcharStandardSemantics: Boolean = SQLConf.get.charVarcharStandardSemantics)
   extends UnaryExpression
   with TimeZoneAwareExpression
   with CodegenFallback
   with ExpectsInputTypes
-  with QueryErrorsBase
-  with SupportTrimmedCharInput {
+  with QueryErrorsBase {
 
   // The JSON input data might be missing certain fields. We force the nullability
   // of the user-provided schema to avoid data corruptions. In particular, the parquet-mr encoder
@@ -1936,11 +1942,12 @@ case class JsonToStructs(
 
   @transient
   private lazy val evaluator = new JsonToStructsEvaluator(
-    options, nullableSchema, nameOfCorruptRecord, timeZoneId, variantAllowDuplicateKeys)
+    options, nullableSchema, nameOfCorruptRecord, timeZoneId, variantAllowDuplicateKeys,
+    charVarcharStandardSemantics)
   override def stateful: Boolean = true
 
   override def nullSafeEval(json: Any): Any = {
-    evaluator.evaluate(trimStringInput(json.asInstanceOf[UTF8String]))
+    evaluator.evaluate(json.asInstanceOf[UTF8String])
   }
 
   override def inputTypes: Seq[AbstractDataType] =
@@ -2083,8 +2090,7 @@ case class SchemaOfJson(
   extends UnaryExpression
   with RuntimeReplaceable
   with DefaultStringProducingExpression
-  with QueryErrorsBase
-  with SupportTrimmedCharInput {
+  with QueryErrorsBase {
 
   def this(child: Expression) = this(child, Map.empty[String, String])
 
@@ -2126,8 +2132,8 @@ case class SchemaOfJson(
     Literal.create(evaluator, ObjectType(classOf[SchemaOfJsonEvaluator])),
     "evaluate",
     dataType,
-    Seq(stringInput),
-    Seq(stringInput.dataType),
+    Seq(child),
+    Seq(child.dataType),
     returnNullable = false)
 
   override def prettyName: String = "schema_of_json"

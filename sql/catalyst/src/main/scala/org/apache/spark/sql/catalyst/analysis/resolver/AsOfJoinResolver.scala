@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 import org.apache.spark.sql.catalyst.analysis.{
   AnalysisErrorAt,
   AsOfJoinMatchConditionResolution,
+  AsOfJoinValidation,
   MaterializedMatchCondition,
   NaturalAndUsingJoinResolution
 }
@@ -107,11 +108,21 @@ class AsOfJoinResolver(
       rightNameScope = rightNameScope
     )
 
+    AsOfJoinValidation.validateKeyTypes(resolvedJoin)
+
+    val resolvedJoinWithOriginalOutput = retainOriginalOutputIfHiddenColumnIsReferenced(
+      unresolvedAsOfJoin = unresolvedAsOfJoin,
+      resolvedJoin = resolvedJoin,
+      leftNameScope = leftNameScope,
+      rightNameScope = rightNameScope
+    )
+
     usingOutput match {
       case Some((outputList, hiddenList)) =>
         buildUsingProject(
           unresolvedAsOfJoin = unresolvedAsOfJoin,
           resolvedJoin = resolvedJoin,
+          child = resolvedJoinWithOriginalOutput,
           outputList = outputList,
           hiddenList = hiddenList,
           rightNameScope = rightNameScope
@@ -124,8 +135,60 @@ class AsOfJoinResolver(
         )
         cteRegistry.currentScope.tryPutWithCTE(
           unresolvedOperator = unresolvedAsOfJoin,
-          resolvedOperator = resolvedJoin
+          resolvedOperator = resolvedJoinWithOriginalOutput
         )
+    }
+  }
+
+  /**
+   * If the join references a hidden column, wraps it in a [[Project]] that restores its original
+   * output, plus the qualified-access-only columns unless the join is the top-level operator.
+   */
+  private def retainOriginalOutputIfHiddenColumnIsReferenced(
+      unresolvedAsOfJoin: AsOfJoin,
+      resolvedJoin: AsOfJoin,
+      leftNameScope: NameScope,
+      rightNameScope: NameScope): LogicalPlan = {
+    val originalOutput = AsOfJoin.computeOutput(
+      joinType = resolvedJoin.joinType,
+      leftOutput = leftNameScope.output,
+      rightOutput = rightNameScope.output
+    )
+    val originalOutputSet = AttributeSet(originalOutput)
+
+    if (resolvedJoin.references.subsetOf(originalOutputSet)) {
+      resolvedJoin
+    } else {
+      val qualifiedAccessOnlyColumns = AsOfJoin.computeOutput(
+        joinType = resolvedJoin.joinType,
+        leftOutput = leftNameScope.hiddenOutput.filter(_.qualifiedAccessOnly),
+        rightOutput = rightNameScope.hiddenOutput.filter(_.qualifiedAccessOnly)
+      )
+
+      operatorResolutionContextStack.current.baseOperator = Some(resolvedJoin)
+      Project(
+        withQualifiedAccessOnlyColumns(
+          unresolvedAsOfJoin = unresolvedAsOfJoin,
+          output = originalOutput,
+          qualifiedAccessOnlyColumns = qualifiedAccessOnlyColumns
+        ),
+        resolvedJoin
+      )
+    }
+  }
+
+  /**
+   * Appends the qualified-access-only columns for the operators above, unless the join is the top
+   * operator. [[PruneMetadataColumns]] later drops the ones they don't use.
+   */
+  private def withQualifiedAccessOnlyColumns(
+      unresolvedAsOfJoin: AsOfJoin,
+      output: Seq[NamedExpression],
+      qualifiedAccessOnlyColumns: Seq[Attribute]): Seq[NamedExpression] = {
+    if (unresolvedAsOfJoin.containsTag(ResolverTag.TOP_LEVEL_OPERATOR)) {
+      output
+    } else {
+      output ++ qualifiedAccessOnlyColumns
     }
   }
 
@@ -165,6 +228,7 @@ class AsOfJoinResolver(
   private def buildUsingProject(
       unresolvedAsOfJoin: AsOfJoin,
       resolvedJoin: AsOfJoin,
+      child: LogicalPlan,
       outputList: Seq[NamedExpression],
       hiddenList: Seq[Attribute],
       rightNameScope: NameScope): Project = {
@@ -188,15 +252,14 @@ class AsOfJoinResolver(
     )
 
     val qualifiedAccessOnlyColumns = newHiddenOutput.filter(_.qualifiedAccessOnly)
-    val projectList =
-      if (unresolvedAsOfJoin.containsTag(ResolverTag.TOP_LEVEL_OPERATOR)) {
-        resolvedOutputList
-      } else {
-        resolvedOutputList ++ qualifiedAccessOnlyColumns
-      }
+    val projectList = withQualifiedAccessOnlyColumns(
+      unresolvedAsOfJoin = unresolvedAsOfJoin,
+      output = resolvedOutputList,
+      qualifiedAccessOnlyColumns = qualifiedAccessOnlyColumns
+    )
 
     operatorResolutionContextStack.current.baseOperator = Some(resolvedJoin)
-    val project = Project(projectList, resolvedJoin)
+    val project = Project(projectList, child)
     project.setTagValue(Project.hiddenOutputTag, qualifiedAccessOnlyColumns)
     project
   }
@@ -214,10 +277,14 @@ class AsOfJoinResolver(
       case (Some(unresolvedLeftOperand), Some(operator), Some(unresolvedRightOperand)) =>
         val leftOperand = resolveExpressionInJoin(unresolvedAsOfJoin, unresolvedLeftOperand)
         val rightOperand = resolveExpressionInJoin(unresolvedAsOfJoin, unresolvedRightOperand)
+        val leftQualifiedAccessOnlyColumns =
+          leftNameScope.hiddenOutput.filter(_.qualifiedAccessOnly)
+        val rightQualifiedAccessOnlyColumns =
+          rightNameScope.hiddenOutput.filter(_.qualifiedAccessOnly)
         AsOfJoinMatchConditionResolution.materialize(
           join = partiallyResolved,
-          leftSet = AttributeSet(leftNameScope.output),
-          rightSet = AttributeSet(rightNameScope.output),
+          leftSet = AttributeSet(leftNameScope.output ++ leftQualifiedAccessOnlyColumns),
+          rightSet = AttributeSet(rightNameScope.output ++ rightQualifiedAccessOnlyColumns),
           leftOperand = leftOperand,
           operator = operator,
           rightOperand = rightOperand
@@ -260,6 +327,7 @@ class AsOfJoinResolver(
     partiallyResolved.copy(
       asOfCondition = asOfCondition,
       orderExpression = orderExpression,
+      direction = materialized.direction,
       matchLeftOperand = None,
       matchOperator = None,
       matchRightOperand = None,
