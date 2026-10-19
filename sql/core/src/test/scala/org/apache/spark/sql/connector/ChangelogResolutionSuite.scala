@@ -177,6 +177,7 @@ class ChangelogResolutionSuite extends SharedSparkSession {
     }
     catalog.setChangelogProperties(ident, ChangelogProperties(
       containsCarryoverRows = true,
+      containsIntermediateChanges = true,
       rowIdPaths = Seq(Seq("_metadata", "row_id")),
       rowVersionName = Some("_commit_version"),
       metadataColumns = Array(metadataColumn)))
@@ -185,6 +186,16 @@ class ChangelogResolutionSuite extends SharedSparkSession {
       s"$cdcCatalogName.test_table CHANGES FROM VERSION 1 TO VERSION 5"
     val starSchema = sql(s"SELECT * FROM $changes").schema
     assert(!starSchema.fieldNames.contains("_metadata"))
+
+    Seq(false, true).foreach { computeUpdates =>
+      val netChanges = spark.read
+        .option("startingVersion", "1")
+        .option("endingVersion", "5")
+        .option("deduplicationMode", "netChanges")
+        .option("computeUpdates", computeUpdates.toString)
+        .changes(s"$cdcCatalogName.test_table")
+      assert(netChanges.schema == starSchema)
+    }
 
     checkError(
       intercept[AnalysisException] {
@@ -203,6 +214,18 @@ class ChangelogResolutionSuite extends SharedSparkSession {
       },
       condition = "UNSUPPORTED_FEATURE.CHANGELOG_METADATA_COLUMN",
       parameters = Map("columnName" -> "`_metadata`"))
+
+    Seq(
+      s"SELECT (SELECT max(_metadata.row_id) FROM $changes)",
+      s"SELECT 1 WHERE EXISTS (SELECT _metadata.row_id FROM $changes)",
+      s"SELECT 1L WHERE 1L IN (SELECT _metadata.row_id FROM $changes)").foreach { query =>
+      checkError(
+        intercept[AnalysisException] {
+          sql(query).schema
+        },
+        condition = "UNSUPPORTED_FEATURE.CHANGELOG_METADATA_COLUMN",
+        parameters = Map("columnName" -> "`_metadata`"))
+    }
   }
 
   test("DataStreamReader - changes() rejects user-specified schema") {

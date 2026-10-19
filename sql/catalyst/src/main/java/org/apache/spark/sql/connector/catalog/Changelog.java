@@ -228,6 +228,8 @@ public interface Changelog {
    * the changelog schema or {@code SELECT *}. Users cannot query these columns directly.
    * <p>
    * The default implementation returns an empty array.
+   *
+   * @since 4.4.0
    */
   default MetadataColumn[] metadataColumns() {
     return new MetadataColumn[0];

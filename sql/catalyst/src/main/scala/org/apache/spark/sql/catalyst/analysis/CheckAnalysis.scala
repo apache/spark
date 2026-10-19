@@ -420,6 +420,8 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
       case _ =>
     }
 
+    ResolveChangelogTable.checkNoUserMetadataColumnAccess(plan)
+
     // We transform up and order the rules so as to catch the first possible failure instead
     // of the result of cascading resolution failures.
     plan.foreachUp {
@@ -1221,7 +1223,6 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
         }
     }
     checkCollectedMetrics(plan)
-    ResolveChangelogTable.checkNoUserMetadataColumnAccess(plan)
     extendedCheckRules.foreach(_(plan))
     plan.foreachUp {
       case o if !o.resolved =>
