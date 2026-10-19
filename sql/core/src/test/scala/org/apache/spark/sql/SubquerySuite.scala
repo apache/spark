@@ -22,9 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.{SparkArithmeticException, SparkConf, SparkRuntimeException}
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, EqualTo, Expression,
-  ExprId, GreaterThanOrEqual, Literal, NamedExpression, OuterReference, PlanExpression, Rand,
-  SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, EqualTo, Expression, ExprId, GreaterThanOrEqual, Literal, NamedExpression, OuterReference, PlanExpression, Rand, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, GeneratePredicate}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan, Project, Sort, Union}
@@ -37,8 +35,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.IntegerType
 
-class SubquerySuite extends SharedSparkSession
-  with AdaptiveSparkPlanHelper {
+class SubquerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   setupTestData()
@@ -79,8 +76,9 @@ class SubquerySuite extends SharedSparkSession
   }
 
   test("SPARK-18854 numberedTreeString for subquery") {
-    val df = sql("select * from range(10) where id not in " +
-      "(select id from range(2) union all select id from range(2))")
+    val df = sql(
+      "select * from range(10) where id not in " +
+        "(select id from range(2) union all select id from range(2))")
 
     // The depth first traversal of the plan tree
     val dfs = Seq("Project", "Filter", "Union", "Project", "Range", "Project", "Range", "Range")
@@ -101,36 +99,24 @@ class SubquerySuite extends SharedSparkSession
   }
 
   test("simple uncorrelated scalar subquery") {
-    checkAnswer(
-      sql("select (select 1 as b) as b"),
-      Array(Row(1))
-    )
+    checkAnswer(sql("select (select 1 as b) as b"), Array(Row(1)))
 
-    checkAnswer(
-      sql("select (select (select 1) + 1) + 1"),
-      Array(Row(3))
-    )
+    checkAnswer(sql("select (select (select 1) + 1) + 1"), Array(Row(3)))
 
     // string type
-    checkAnswer(
-      sql("select (select 's' as s) as b"),
-      Array(Row("s"))
-    )
+    checkAnswer(sql("select (select 's' as s) as b"), Array(Row("s")))
   }
 
   test("define CTE in CTE subquery") {
     checkAnswer(
-      sql(
-        """
+      sql("""
           | with t2 as (with t1 as (select 1 as b, 2 as c) select b, c from t1)
           | select a from (select 1 as a union all select 2 as a) t
           | where a = (select max(b) from t2)
         """.stripMargin),
-      Array(Row(1))
-    )
+      Array(Row(1)))
     checkAnswer(
-      sql(
-        """
+      sql("""
           | with t2 as (with t1 as (select 1 as b, 2 as c) select b, c from t1),
           | t3 as (
           |   with t4 as (select 1 as d, 3 as e)
@@ -139,24 +125,20 @@ class SubquerySuite extends SharedSparkSession
           | select a from (select 1 as a union all select 2 as a)
           | where a = (select max(d) from t3)
         """.stripMargin),
-      Array(Row(1))
-    )
+      Array(Row(1)))
   }
 
   test("uncorrelated scalar subquery in CTE") {
     checkAnswer(
-      sql("with t2 as (select 1 as b, 2 as c) " +
-        "select a from (select 1 as a union all select 2 as a) t " +
-        "where a = (select max(b) from t2) "),
-      Array(Row(1))
-    )
+      sql(
+        "with t2 as (select 1 as b, 2 as c) " +
+          "select a from (select 1 as a union all select 2 as a) t " +
+          "where a = (select max(b) from t2) "),
+      Array(Row(1)))
   }
 
   test("uncorrelated scalar subquery should return null if there is 0 rows") {
-    checkAnswer(
-      sql("select (select 's' as s limit 0) as b"),
-      Array(Row(null))
-    )
+    checkAnswer(sql("select (select 's' as s limit 0) as b"), Array(Row(null)))
   }
 
   test("uncorrelated scalar subquery on a DataFrame generated query") {
@@ -166,24 +148,17 @@ class SubquerySuite extends SharedSparkSession
 
       checkAnswer(
         sql("select (select key from subqueryData where key > 2 order by key limit 1) + 1"),
-        Array(Row(4))
-      )
+        Array(Row(4)))
+
+      checkAnswer(sql("select -(select max(key) from subqueryData)"), Array(Row(-3)))
+
+      checkAnswer(sql("select (select value from subqueryData limit 0)"), Array(Row(null)))
 
       checkAnswer(
-        sql("select -(select max(key) from subqueryData)"),
-        Array(Row(-3))
-      )
-
-      checkAnswer(
-        sql("select (select value from subqueryData limit 0)"),
-        Array(Row(null))
-      )
-
-      checkAnswer(
-        sql("select (select min(value) from subqueryData" +
-          " where key = (select max(key) from subqueryData) - 1)"),
-        Array(Row("two"))
-      )
+        sql(
+          "select (select min(value) from subqueryData" +
+            " where key = (select max(key) from subqueryData) - 1)"),
+        Array(Row("two")))
     }
   }
 
@@ -192,17 +167,11 @@ class SubquerySuite extends SharedSparkSession
       Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t1")
       Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t2")
 
-      checkAnswer(
-        sql("SELECT (select 1 as col) from t1"),
-        Row(1) :: Row(1) :: Nil)
+      checkAnswer(sql("SELECT (select 1 as col) from t1"), Row(1) :: Row(1) :: Nil)
 
-      checkAnswer(
-        sql("SELECT (select max(c1) from t2) from t1"),
-        Row(2) :: Row(2) :: Nil)
+      checkAnswer(sql("SELECT (select max(c1) from t2) from t1"), Row(2) :: Row(2) :: Nil)
 
-      checkAnswer(
-        sql("SELECT 1 + (select 1 as col) from t1"),
-        Row(2) :: Row(2) :: Nil)
+      checkAnswer(sql("SELECT 1 + (select 1 as col) from t1"), Row(2) :: Row(2) :: Nil)
 
       checkAnswer(
         sql("SELECT c1, (select max(c1) from t2) + c2 from t1"),
@@ -240,18 +209,20 @@ class SubquerySuite extends SharedSparkSession
     checkAnswer(
       sql("select * from l where not exists (select * from r where l.a = r.c and l.b < r.d)"),
       Row(1, 2.0) :: Row(1, 2.0) :: Row(3, 3.0) ::
-      Row(null, null) :: Row(null, 5.0) :: Row(6, null) :: Nil)
+        Row(null, null) :: Row(null, 5.0) :: Row(6, null) :: Nil)
   }
 
   test("EXISTS predicate subquery within OR") {
     checkAnswer(
-      sql("select * from l where exists (select * from r where l.a = r.c)" +
-        " or exists (select * from r where l.a = r.c)"),
+      sql(
+        "select * from l where exists (select * from r where l.a = r.c)" +
+          " or exists (select * from r where l.a = r.c)"),
       Row(2, 1.0) :: Row(2, 1.0) :: Row(3, 3.0) :: Row(6, null) :: Nil)
 
     checkAnswer(
-      sql("select * from l where not exists (select * from r where l.a = r.c and l.b < r.d)" +
-        " or not exists (select * from r where l.a = r.c)"),
+      sql(
+        "select * from l where not exists (select * from r where l.a = r.c and l.b < r.d)" +
+          " or not exists (select * from r where l.a = r.c)"),
       Row(1, 2.0) :: Row(1, 2.0) :: Row(3, 3.0) ::
         Row(null, null) :: Row(null, 5.0) :: Row(6, null) :: Nil)
   }
@@ -273,7 +244,10 @@ class SubquerySuite extends SharedSparkSession
   test("IN predicate subquery preserves its broadcast when replacing its plan") {
     val subqueryPlan = SubqueryExec("subquery", spark.range(3).queryExecution.executedPlan)
     val subquery = InSubqueryExec(
-      Literal(1L), subqueryPlan, NamedExpression.newExprId, isDynamicPruning = false)
+      Literal(1L),
+      subqueryPlan,
+      NamedExpression.newExprId,
+      isDynamicPruning = false)
     subquery.updateResult()
 
     val updatedSubquery = subquery.withNewPlan(subqueryPlan)
@@ -282,9 +256,7 @@ class SubquerySuite extends SharedSparkSession
   }
 
   test("NOT IN predicate subquery") {
-    checkAnswer(
-      sql("select * from l where a not in (select c from r)"),
-      Nil)
+    checkAnswer(sql("select * from l where a not in (select c from r)"), Nil)
 
     checkAnswer(
       sql("select * from l where a not in (select c from r where c is not null)"),
@@ -298,26 +270,26 @@ class SubquerySuite extends SharedSparkSession
     checkAnswer(
       sql("select * from l where (a, b) not in (select c, d from r where c > 10)"),
       Row(1, 2.0) :: Row(1, 2.0) :: Row(2, 1.0) :: Row(2, 1.0) ::
-      Row(3, 3.0) :: Row(null, null) :: Row(null, 5.0) :: Row(6, null) :: Nil)
+        Row(3, 3.0) :: Row(null, null) :: Row(null, 5.0) :: Row(6, null) :: Nil)
 
   }
 
   test("IN predicate subquery within OR") {
     checkAnswer(
-      sql("select * from l where l.a in (select c from r)" +
-        " or l.a in (select c from r where l.b < r.d)"),
+      sql(
+        "select * from l where l.a in (select c from r)" +
+          " or l.a in (select c from r where l.b < r.d)"),
       Row(2, 1.0) :: Row(2, 1.0) :: Row(3, 3.0) :: Row(6, null) :: Nil)
 
     checkAnswer(
-      sql("select * from l where a not in (select c from r)" +
-        " or a not in (select c from r where c is not null)"),
+      sql(
+        "select * from l where a not in (select c from r)" +
+          " or a not in (select c from r where c is not null)"),
       Row(1, 2.0) :: Row(1, 2.0) :: Nil)
   }
 
   test("complex IN predicate subquery") {
-    checkAnswer(
-      sql("select * from l where (a, b) not in (select c, d from r)"),
-      Nil)
+    checkAnswer(sql("select * from l where (a, b) not in (select c, d from r)"), Nil)
 
     checkAnswer(
       sql("select * from l where (a, b) not in (select c, d from t) and (a + b) is not null"),
@@ -327,8 +299,7 @@ class SubquerySuite extends SharedSparkSession
   test("same column in subquery and outer table") {
     checkAnswer(
       sql("select a from l l1 where a in (select a from l where a < 3 group by a)"),
-      Row(1) :: Row(1) :: Row(2) :: Row(2) :: Nil
-    )
+      Row(1) :: Row(1) :: Row(2) :: Row(2) :: Nil)
   }
 
   test("having with function in subquery") {
@@ -344,8 +315,7 @@ class SubquerySuite extends SharedSparkSession
       Seq((1, 1), (2, 2), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t3")
 
       checkAnswer(
-        sql(
-          """
+        sql("""
             | select c1 from t1
             | where c2 IN (select c2 from t2)
             |
@@ -353,35 +323,31 @@ class SubquerySuite extends SharedSparkSession
         Row(1) :: Row(2) :: Nil)
 
       checkAnswer(
-        sql(
-          """
+        sql("""
             | select c1 from t1
             | where c2 NOT IN (select c2 from t2)
             |
           """.stripMargin),
-       Nil)
+        Nil)
 
       checkAnswer(
-        sql(
-          """
+        sql("""
             | select c1 from t1
             | where EXISTS (select c2 from t2)
             |
           """.stripMargin),
         Row(1) :: Row(2) :: Nil)
 
-       checkAnswer(
-        sql(
-          """
+      checkAnswer(
+        sql("""
             | select c1 from t1
             | where NOT EXISTS (select c2 from t2)
             |
           """.stripMargin),
-      Nil)
+        Nil)
 
       checkAnswer(
-        sql(
-          """
+        sql("""
             | select c1 from t1
             | where NOT EXISTS (select c2 from t2) and
             |       c2 IN (select c2 from t3)
@@ -390,8 +356,7 @@ class SubquerySuite extends SharedSparkSession
         Nil)
 
       checkAnswer(
-        sql(
-          """
+        sql("""
             | select c1 from t1
             | where (case when c2 IN (select 1 as one) then 1
             |             else 2 end) = c1
@@ -400,8 +365,7 @@ class SubquerySuite extends SharedSparkSession
         Row(1) :: Row(2) :: Nil)
 
       checkAnswer(
-        sql(
-          """
+        sql("""
             | select c1 from t1
             | where (case when c2 IN (select 1 as one) then 1
             |             else 2 end)
@@ -411,8 +375,7 @@ class SubquerySuite extends SharedSparkSession
         Row(1) :: Row(2) :: Nil)
 
       checkAnswer(
-        sql(
-          """
+        sql("""
             | select c1 from t1
             | where (case when c2 IN (select c2 from t2) then 1
             |             else 2 end)
@@ -422,8 +385,7 @@ class SubquerySuite extends SharedSparkSession
         Row(1) :: Row(2) :: Nil)
 
       checkAnswer(
-        sql(
-          """
+        sql("""
             | select c1 from t1
             | where (case when c2 IN (select c2 from t2) then 1
             |             when c2 IN (select c2 from t3) then 2
@@ -434,8 +396,7 @@ class SubquerySuite extends SharedSparkSession
         Row(1) :: Row(2) :: Nil)
 
       checkAnswer(
-        sql(
-          """
+        sql("""
             | select c1 from t1
             | where (c1, (case when c2 IN (select c2 from t2) then 1
             |                  when c2 IN (select c2 from t3) then 2
@@ -446,8 +407,7 @@ class SubquerySuite extends SharedSparkSession
         Row(1) :: Nil)
 
       checkAnswer(
-        sql(
-          """
+        sql("""
             | select c1 from t3
             | where ((case when c2 IN (select c2 from t2) then 1 else 2 end),
             |        (case when c2 IN (select c2 from t3) then 2 else 3 end))
@@ -457,8 +417,7 @@ class SubquerySuite extends SharedSparkSession
         Row(1) :: Row(2) :: Row(1) :: Nil)
 
       checkAnswer(
-        sql(
-          """
+        sql("""
             | select c1 from t1
             | where ((case when EXISTS (select c2 from t2) then 1 else 2 end),
             |        (case when c2 IN (select c2 from t3) then 2 else 3 end))
@@ -468,8 +427,7 @@ class SubquerySuite extends SharedSparkSession
         Row(1) :: Row(2) :: Nil)
 
       checkAnswer(
-        sql(
-          """
+        sql("""
             | select c1 from t1
             | where (case when c2 IN (select c2 from t2) then 3
             |             else 2 end)
@@ -479,8 +437,7 @@ class SubquerySuite extends SharedSparkSession
         Row(1) :: Row(2) :: Nil)
 
       checkAnswer(
-        sql(
-          """
+        sql("""
             | select c1 from t1
             | where ((case when c2 IN (select c2 from t2) then 1 else 2 end),
             |        (case when NOT EXISTS (select c2 from t3) then 2
@@ -492,8 +449,7 @@ class SubquerySuite extends SharedSparkSession
         Row(1) :: Row(2) :: Nil)
 
       checkAnswer(
-        sql(
-          """
+        sql("""
             | select c1 from t1
             | where (select max(c1) from t2 where c2 IN (select c2 from t3))
             |       IN (select c2 from t2)
@@ -513,7 +469,7 @@ class SubquerySuite extends SharedSparkSession
     checkAnswer(
       sql("select a, (select sum(b) from l l2 where l2.a = l1.a) sum_b from l l1"),
       Row(1, 4.0) :: Row(1, 4.0) :: Row(2, 2.0) :: Row(2, 2.0) :: Row(3, 3.0) ::
-      Row(null, null) :: Row(null, null) :: Row(6, null) :: Nil)
+        Row(null, null) :: Row(null, null) :: Row(6, null) :: Nil)
   }
 
   test("correlated scalar subquery in select (null safe)") {
@@ -545,13 +501,10 @@ class SubquerySuite extends SharedSparkSession
     withTempView("v") {
       Seq((1, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("v")
       val exception = intercept[SparkRuntimeException] {
-        sql("select (select sum(-1) from v t2 where t1.c2 = t2.c1 group by t2.c2) sum from v t1").
-          collect()
+        sql("select (select sum(-1) from v t2 where t1.c2 = t2.c1 group by t2.c2) sum from v t1")
+          .collect()
       }
-      checkError(
-        exception,
-        condition = "SCALAR_SUBQUERY_TOO_MANY_ROWS"
-      )
+      checkError(exception, condition = "SCALAR_SUBQUERY_TOO_MANY_ROWS")
     }
   }
 
@@ -559,22 +512,25 @@ class SubquerySuite extends SharedSparkSession
     val exception1 = intercept[SparkRuntimeException] {
       sql("select a, (select b from l l2 where l2.a = l1.a) sum_b from l l1").collect()
     }
-    checkError(
-      exception1,
-      condition = "SCALAR_SUBQUERY_TOO_MANY_ROWS"
-    )
+    checkError(exception1, condition = "SCALAR_SUBQUERY_TOO_MANY_ROWS")
     checkAnswer(
       sql("select a, (select b from l l2 where l2.a = l1.a group by 1) sum_b from l l1"),
       Row(1, 2.0) :: Row(1, 2.0) :: Row(2, 1.0) :: Row(2, 1.0) :: Row(3, 3.0) ::
-        Row(null, null) :: Row(null, null) :: Row(6, null) :: Nil
-    )
+        Row(null, null) :: Row(null, null) :: Row(6, null) :: Nil)
   }
 
   test("non-equal correlated scalar subquery") {
     checkAnswer(
       sql("select a, (select sum(b) from l l2 where l2.a < l1.a) sum_b from l l1"),
-      Seq(Row(1, null), Row(1, null), Row(2, 4), Row(2, 4), Row(3, 6), Row(null, null),
-        Row(null, null), Row(6, 9)))
+      Seq(
+        Row(1, null),
+        Row(1, null),
+        Row(2, 4),
+        Row(2, 4),
+        Row(3, 6),
+        Row(null, null),
+        Row(null, null),
+        Row(6, 9)))
   }
 
   test("disjunctive correlated scalar subquery") {
@@ -602,7 +558,7 @@ class SubquerySuite extends SharedSparkSession
     // Case 3: COUNT bug without a COUNT aggregate
     checkAnswer(
       sql("select l.a from l where (select sum(r.d) is null from r where l.a = r.c)"),
-      Row(1) :: Row(1) ::Row(null) :: Row(null) :: Row(6) :: Nil)
+      Row(1) :: Row(1) :: Row(null) :: Row(null) :: Row(6) :: Nil)
   }
 
   test("SPARK-15370: COUNT bug in SELECT clause (Project)") {
@@ -614,17 +570,19 @@ class SubquerySuite extends SharedSparkSession
 
   test("SPARK-15370: COUNT bug in HAVING clause (Filter)") {
     checkAnswer(
-      sql("select l.a as grp_a from l group by l.a " +
-        "having (select count(*) from r where grp_a = r.c) = 0 " +
-        "order by grp_a"),
+      sql(
+        "select l.a as grp_a from l group by l.a " +
+          "having (select count(*) from r where grp_a = r.c) = 0 " +
+          "order by grp_a"),
       Row(null) :: Row(1) :: Nil)
   }
 
   test("SPARK-15370: COUNT bug in Aggregate") {
     checkAnswer(
-      sql("select l.a as aval, sum((select count(*) from r where l.a = r.c)) as cnt " +
-        "from l group by l.a order by aval"),
-      Row(null, 0) :: Row(1, 0) :: Row(2, 4) :: Row(3, 1) :: Row(6, 1)  :: Nil)
+      sql(
+        "select l.a as aval, sum((select count(*) from r where l.a = r.c)) as cnt " +
+          "from l group by l.a order by aval"),
+      Row(null, 0) :: Row(1, 0) :: Row(2, 4) :: Row(3, 1) :: Row(6, 1) :: Nil)
   }
 
   test("SPARK-15370: COUNT bug negative examples") {
@@ -657,16 +615,16 @@ class SubquerySuite extends SharedSparkSession
 
   test("SPARK-15370: COUNT bug with nasty predicate expr") {
     checkAnswer(
-      sql("select l.a from l where " +
-        "(select case when count(*) = 1 then null else count(*) end as cnt " +
-        "from r where l.a = r.c) = 0"),
+      sql(
+        "select l.a from l where " +
+          "(select case when count(*) = 1 then null else count(*) end as cnt " +
+          "from r where l.a = r.c) = 0"),
       Row(1) :: Row(1) :: Row(null) :: Row(null) :: Nil)
   }
 
   test("SPARK-15370: COUNT bug with attribute ref in subquery input and output ") {
     checkAnswer(
-      sql(
-        """
+      sql("""
           |select l.b, (select (min(r.c) + count(*)) is null
           |from r
           |where l.a = r.c) from l
@@ -677,8 +635,7 @@ class SubquerySuite extends SharedSparkSession
 
   test("SPARK-43098: no COUNT bug with group-by") {
     checkAnswer(
-      sql(
-        """
+      sql("""
           |select l.b, (select (r.c + count(*)) is null
           |from r
           |where l.a = r.c group by r.c) from l
@@ -692,8 +649,7 @@ class SubquerySuite extends SharedSparkSession
       Seq(1).toDF("c1").createOrReplaceTempView("onerow")
 
       checkAnswer(
-        sql(
-          """
+        sql("""
             | select c1 from onerow t1
             | where exists (select 1 from onerow t2 where t1.c1=t2.c1)
             | and   exists (select 1 from onerow LIMIT 1)""".stripMargin),
@@ -706,8 +662,7 @@ class SubquerySuite extends SharedSparkSession
       Seq(1).toDF("c1").createOrReplaceTempView("onerow")
 
       checkAnswer(
-        sql(
-          """
+        sql("""
             | select c1 from onerow t1
             | where exists (select 1
             |               from   (select c1 from onerow t2 LIMIT 1) t2
@@ -722,36 +677,33 @@ class SubquerySuite extends SharedSparkSession
       Seq(1).toDF("c2").createOrReplaceTempView("t2")
 
       checkAnswer(
-        sql(
-          """
+        sql("""
             | select *
             | from   (select t2.c2+1 as c3
             |         from   t1 left join t2 on t1.c1=t2.c2) t3
             | where  c3 not in (select c2 from t2)""".stripMargin),
         Row(2) :: Nil)
-     }
-   }
+    }
+  }
 
-   test("SPARK-17348: Correlated subqueries with non-equality predicate (good case)") {
-     withTempView("t1", "t2") {
-       Seq((1, 1)).toDF("c1", "c2").createOrReplaceTempView("t1")
-       Seq((1, 1), (2, 0)).toDF("c1", "c2").createOrReplaceTempView("t2")
+  test("SPARK-17348: Correlated subqueries with non-equality predicate (good case)") {
+    withTempView("t1", "t2") {
+      Seq((1, 1)).toDF("c1", "c2").createOrReplaceTempView("t1")
+      Seq((1, 1), (2, 0)).toDF("c1", "c2").createOrReplaceTempView("t2")
 
-       // Simple case
-       checkAnswer(
-         sql(
-           """
+      // Simple case
+      checkAnswer(
+        sql("""
              | select c1
              | from   t1
              | where  c1 in (select t2.c1
              |               from   t2
              |               where  t1.c2 >= t2.c2)""".stripMargin),
-         Row(1) :: Nil)
+        Row(1) :: Nil)
 
-       // More complex case with OR predicate
-       checkAnswer(
-         sql(
-           """
+      // More complex case with OR predicate
+      checkAnswer(
+        sql("""
              | select t1.c1
              | from   t1, t1 as t3
              | where  t1.c1 = t3.c1
@@ -760,7 +712,7 @@ class SubquerySuite extends SharedSparkSession
              |                   where  t1.c2 >= t2.c2
              |                          or t3.c2 < t2.c2)
              |         or t1.c2 >= 0)""".stripMargin),
-         Row(1) :: Nil)
+        Row(1) :: Nil)
     }
   }
 
@@ -772,8 +724,7 @@ class SubquerySuite extends SharedSparkSession
       Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t4")
 
       checkAnswer(
-        sql(
-          """
+        sql("""
             | select t1.c1
             | from   t1
             | where  t1.c1 in (select max(t2.c1)
@@ -783,8 +734,7 @@ class SubquerySuite extends SharedSparkSession
 
       // Same but with a COUNT aggregate
       checkAnswer(
-        sql(
-          """
+        sql("""
             | select t1.c1
             | from   t1
             | where  t1.c1 in (select count(t2.c1)
@@ -792,11 +742,9 @@ class SubquerySuite extends SharedSparkSession
             |                  where  t1.c2 <= t2.c2)""".stripMargin),
         Row(1) :: Nil)
 
-
       // Add a HAVING on top and augmented within an OR predicate
       checkAnswer(
-        sql(
-          """
+        sql("""
             | select t1.c1
             | from   t1
             | where  t1.c1 in (select max(t2.c1)
@@ -807,8 +755,7 @@ class SubquerySuite extends SharedSparkSession
         Row(1) :: Nil)
 
       checkAnswer(
-        sql(
-          """
+        sql("""
             | select t1.c1
             | from   t1, t1 as t3
             | where  t1.c1 = t3.c1
@@ -820,8 +767,7 @@ class SubquerySuite extends SharedSparkSession
         Row(1) :: Nil)
 
       checkAnswer(
-        sql(
-          """
+        sql("""
             | select c1
             | from   t3
             | where  c1 in (select max(t4.c1) over ()
@@ -843,8 +789,7 @@ class SubquerySuite extends SharedSparkSession
 
       // Left outer join (LOJ) in IN subquery context
       val exception1 = intercept[AnalysisException] {
-        sql(
-          """
+        sql("""
             | select t1.c1
             | from   t1
             | where  1 IN (select 1
@@ -865,8 +810,7 @@ class SubquerySuite extends SharedSparkSession
 
       // Right outer join (ROJ) in EXISTS subquery context
       val exception2 = intercept[AnalysisException] {
-        sql(
-          """
+        sql("""
             | select t1.c1
             | from   t1
             | where  exists (select 1
@@ -880,15 +824,12 @@ class SubquerySuite extends SharedSparkSession
           "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
         parameters = Map("treeNode" -> "(?s).*"),
         sqlState = None,
-        context = ExpectedContext(
-          fragment = "select c1 from t2 where t1.c1 = 2",
-          start = 75,
-          stop = 107))
+        context =
+          ExpectedContext(fragment = "select c1 from t2 where t1.c1 = 2", start = 75, stop = 107))
 
       // SPARK-18578: Full outer join (FOJ) in scalar subquery context
       val exception3 = intercept[AnalysisException] {
-        sql(
-          """
+        sql("""
             | select (select max(1)
             |         from   (select c1 from  t2 where t1.c1 = 2 and t1.c1=t2.c1) t2
             |                full join t3
@@ -929,8 +870,7 @@ class SubquerySuite extends SharedSparkSession
           | FROM t0""".stripMargin
 
       val df = sql(query)
-      checkAnswer(df,
-        Row(1, 8) :: Row(2, null) :: Nil)
+      checkAnswer(df, Row(1, 8) :: Row(2, null) :: Nil)
 
       val optimizedPlan = df.queryExecution.optimizedPlan
       val aggregate = optimizedPlan.collectFirst { case a: Aggregate => a }.get
@@ -941,19 +881,20 @@ class SubquerySuite extends SharedSparkSession
 
       withSQLConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED.key -> "false") {
         val error = intercept[AnalysisException] { sql(query) }
-        assert(error.getCondition == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
-          "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED")
+        assert(
+          error.getCondition == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+            "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED")
       }
       withSQLConf(SQLConf.DECORRELATE_SET_OPS_ENABLED.key -> "false") {
         val error = intercept[AnalysisException] { sql(query) }
-        assert(error.getCondition == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
-          "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED")
+        assert(
+          error.getCondition == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+            "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED")
       }
 
       {
         // Union with same outer refs
-        val df = sql(
-            """
+        val df = sql("""
               | SELECT t0a, (SELECT sum(t1c) FROM
               |   (SELECT t1c
               |   FROM   t1
@@ -964,8 +905,7 @@ class SubquerySuite extends SharedSparkSession
               |   WHERE  t2a = t0a)
               | )
               | FROM t0""".stripMargin)
-        checkAnswer(df,
-          Row(1, 8) :: Row(2, 7) :: Nil)
+        checkAnswer(df, Row(1, 8) :: Row(2, 7) :: Nil)
 
         val optimizedPlan = df.queryExecution.optimizedPlan
         val aggregate = optimizedPlan.collectFirst { case a: Aggregate => a }.get
@@ -1005,13 +945,13 @@ class SubquerySuite extends SharedSparkSession
           assert(aggregate.groupingExpressions.size == 2)
           if (distinctness == "DISTINCT") {
             if (setopType == "INTERSECT") {
-              val join = optimizedPlan.collectFirst {
-                case j @ Join(_, _, LeftSemi, _, _) => j
+              val join = optimizedPlan.collectFirst { case j @ Join(_, _, LeftSemi, _, _) =>
+                j
               }.get
               assert(splitConjunctivePredicates(join.condition.get).size == 3)
             } else {
-              val join = optimizedPlan.collectFirst {
-                case j @ Join(_, _, LeftAnti, _, _) => j
+              val join = optimizedPlan.collectFirst { case j @ Join(_, _, LeftAnti, _, _) =>
+                j
               }.get
               assert(splitConjunctivePredicates(join.condition.get).size == 3)
             }
@@ -1020,13 +960,15 @@ class SubquerySuite extends SharedSparkSession
 
           withSQLConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED.key -> "false") {
             val error = intercept[AnalysisException] { sql(query) }
-            assert(error.getCondition == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
-              "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED")
+            assert(
+              error.getCondition == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+                "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED")
           }
           withSQLConf(SQLConf.DECORRELATE_SET_OPS_ENABLED.key -> "false") {
             val error = intercept[AnalysisException] { sql(query) }
-            assert(error.getCondition == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
-              "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED")
+            assert(
+              error.getCondition == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+                "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED")
           }
         }
       }
@@ -1038,10 +980,10 @@ class SubquerySuite extends SharedSparkSession
     withTempView("t1", "t2") {
       Seq((1, 1), (2, 0)).toDF("c1", "c2").createOrReplaceTempView("t1")
       Seq[(Int, Array[Int])]((1, Array(1, 2)), (2, Array(-1, -3)))
-        .toDF("c1", "arr_c2").createTempView("t2")
+        .toDF("c1", "arr_c2")
+        .createTempView("t2")
       checkAnswer(
-        sql(
-          """
+        sql("""
           | SELECT c2
           | FROM t1
           | WHERE EXISTS (SELECT *
@@ -1050,8 +992,7 @@ class SubquerySuite extends SharedSparkSession
         Row(1) :: Row(0) :: Nil)
 
       val exception1 = intercept[AnalysisException] {
-        sql(
-          """
+        sql("""
             | SELECT c1
             | FROM t2
             | WHERE EXISTS (SELECT *
@@ -1066,8 +1007,7 @@ class SubquerySuite extends SharedSparkSession
         context = ExpectedContext(
           fragment = "LATERAL VIEW explode(t2.arr_c2) q AS c2",
           start = 68,
-          stop = 106)
-      )
+          stop = 106))
     }
   }
 
@@ -1100,17 +1040,11 @@ class SubquerySuite extends SharedSparkSession
       Seq(1 -> "a").toDF("i", "j").createOrReplaceTempView("v")
       val query = "SELECT (SELECT count(*) FROM v WHERE a = 1)"
       checkError(
-        exception =
-          intercept[AnalysisException](sql(query)),
+        exception = intercept[AnalysisException](sql(query)),
         condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = None,
-        parameters = Map(
-          "objectName" -> "`a`",
-          "proposal" -> "`i`, `j`"),
-        context = ExpectedContext(
-          fragment = "a",
-          start = 37,
-          stop = 37))
+        parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `j`"),
+        context = ExpectedContext(fragment = "a", start = 37, stop = 37))
     }
   }
 
@@ -1120,8 +1054,7 @@ class SubquerySuite extends SharedSparkSession
                    |    cte1 as (SELECT 1 col1),
                    |    cte2 as (SELECT (SELECT MAX(col1) FROM cte1))
                    |    SELECT * FROM cte1
-                   |""".stripMargin
-    )
+                   |""".stripMargin)
     checkAnswer(df, Row(1) :: Nil)
   }
 
@@ -1221,15 +1154,14 @@ class SubquerySuite extends SharedSparkSession
 
   private def getNumSortsInQuery(query: String): Int = {
     val plan = sql(query).queryExecution.optimizedPlan
-    getNumSorts(plan) + getSubqueryExpressions(plan).map{s => getNumSorts(s.plan)}.sum
+    getNumSorts(plan) + getSubqueryExpressions(plan).map { s => getNumSorts(s.plan) }.sum
   }
 
   private def getSubqueryExpressions(plan: LogicalPlan): Seq[SubqueryExpression] = {
     val subqueryExpressions = ArrayBuffer.empty[SubqueryExpression]
-    plan transformAllExpressions {
-      case s: SubqueryExpression =>
-        subqueryExpressions ++= (getSubqueryExpressions(s.plan) :+ s)
-        s
+    plan transformAllExpressions { case s: SubqueryExpression =>
+      subqueryExpressions ++= (getSubqueryExpressions(s.plan) :+ s)
+      s
     }
     subqueryExpressions.toSeq
   }
@@ -1265,7 +1197,6 @@ class SubquerySuite extends SharedSparkSession
            |              ORDER  BY c1)
         """.stripMargin
       assert(getNumSortsInQuery(query2) == 0)
-
 
       // nested IN
       val query3 =
@@ -1515,8 +1446,15 @@ class SubquerySuite extends SharedSparkSession
 
   test("Cannot remove sort for floating-point order-sensitive aggregates from subquery") {
     Seq("float", "double").foreach { typeName =>
-      Seq("SUM", "AVG", "KURTOSIS", "SKEWNESS", "STDDEV_POP", "STDDEV_SAMP",
-          "VAR_POP", "VAR_SAMP").foreach { aggName =>
+      Seq(
+        "SUM",
+        "AVG",
+        "KURTOSIS",
+        "SKEWNESS",
+        "STDDEV_POP",
+        "STDDEV_SAMP",
+        "VAR_POP",
+        "VAR_SAMP").foreach { aggName =>
         val query =
           s"""
             |SELECT k, $aggName(v) FROM (
@@ -1539,12 +1477,13 @@ class SubquerySuite extends SharedSparkSession
       checkAnswer(df, Seq(Row(0, 0), Row(2, 0)))
       // need to execute the query before we can examine fs.inputRDDs()
       assert(stripAQEPlan(df.queryExecution.executedPlan) match {
-        case WholeStageCodegenExec(ColumnarToRowExec(InputAdapter(
-            fs @ FileSourceScanExec(_, _, _, _, partitionFilters, _, _, _, _, _, _, _)))) =>
+        case WholeStageCodegenExec(
+              ColumnarToRowExec(InputAdapter(
+                fs @ FileSourceScanExec(_, _, _, _, partitionFilters, _, _, _, _, _, _, _)))) =>
           partitionFilters.exists(ExecSubqueryExpression.hasSubquery) &&
-            fs.inputRDDs().forall(
-              _.asInstanceOf[FileScanRDD].filePartitions.forall(
-                _.files.forall(_.urlEncodedPath.contains("p=0"))))
+          fs.inputRDDs()
+            .forall(_.asInstanceOf[FileScanRDD].filePartitions
+              .forall(_.files.forall(_.urlEncodedPath.contains("p=0"))))
         case _ => false
       })
     }
@@ -1555,8 +1494,7 @@ class SubquerySuite extends SharedSparkSession
       Seq("a" -> 2, "b" -> 1).toDF("id", "num").createTempView("a")
       Seq("a" -> 2, "b" -> 1).toDF("id", "num").createTempView("b")
 
-      val df1 = spark.sql(
-        """
+      val df1 = spark.sql("""
           |SELECT id,num,source FROM (
           |  SELECT id, num, 'a' as source FROM a
           |  UNION ALL
@@ -1564,8 +1502,7 @@ class SubquerySuite extends SharedSparkSession
           |) AS c WHERE c.id IN (SELECT id FROM b WHERE num = 2)
         """.stripMargin)
       checkAnswer(df1, Seq(Row("a", 2, "a"), Row("a", 2, "b")))
-      val df2 = spark.sql(
-        """
+      val df2 = spark.sql("""
           |SELECT id,num,source FROM (
           |  SELECT id, num, 'a' as source FROM a
           |  UNION ALL
@@ -1573,8 +1510,7 @@ class SubquerySuite extends SharedSparkSession
           |) AS c WHERE c.id NOT IN (SELECT id FROM b WHERE num = 2)
         """.stripMargin)
       checkAnswer(df2, Seq(Row("b", 1, "a"), Row("b", 1, "b")))
-      val df3 = spark.sql(
-        """
+      val df3 = spark.sql("""
           |SELECT id,num,source FROM (
           |  SELECT id, num, 'a' as source FROM a
           |  UNION ALL
@@ -1589,8 +1525,7 @@ class SubquerySuite extends SharedSparkSession
   test("SPARK-27279: Reuse Subquery", DisableAdaptiveExecution("reuse is dynamic in AQE")) {
     Seq(true, false).foreach { reuse =>
       withSQLConf(SQLConf.SUBQUERY_REUSE_ENABLED.key -> reuse.toString) {
-        val df = sql(
-          """
+        val df = sql("""
             |SELECT (SELECT avg(key) FROM testData) + (SELECT avg(key) FROM testData)
             |FROM testData
             |LIMIT 1
@@ -1612,8 +1547,7 @@ class SubquerySuite extends SharedSparkSession
           assert(countReuseSubqueryExec == 1, "Subquery reusing not working correctly")
         } else {
           assert(countSubqueryExec == 2, "expect 2 SubqueryExec when not reusing")
-          assert(countReuseSubqueryExec == 0,
-            "expect 0 ReusedSubqueryExec when not reusing")
+          assert(countReuseSubqueryExec == 0, "expect 0 ReusedSubqueryExec when not reusing")
         }
       }
     }
@@ -1627,8 +1561,9 @@ class SubquerySuite extends SharedSparkSession
         subqueryExecs += p
         s
     }
-    assert(subqueryExecs.forall(_.name.startsWith("scalar-subquery#")),
-          "SubqueryExec name should start with scalar-subquery#")
+    assert(
+      subqueryExecs.forall(_.name.startsWith("scalar-subquery#")),
+      "SubqueryExec name should start with scalar-subquery#")
   }
 
   test("SPARK-28441: COUNT bug in WHERE clause (Filter) with PythonUDF") {
@@ -1651,7 +1586,7 @@ class SubquerySuite extends SharedSparkSession
     // Case 3: COUNT bug without a COUNT aggregate
     checkAnswer(
       sql("SELECT l.a FROM l WHERE (SELECT udf(sum(r.d)) is null FROM r WHERE l.a = r.c)"),
-      Row(1) :: Row(1) ::Row(null) :: Row(null) :: Row(6) :: Nil)
+      Row(1) :: Row(1) :: Row(null) :: Row(null) :: Row(6) :: Nil)
   }
 
   test("SPARK-28441: COUNT bug in SELECT clause (Project) with PythonUDF") {
@@ -1707,7 +1642,7 @@ class SubquerySuite extends SharedSparkSession
             |    )
             |  ) AS cnt
             |FROM l GROUP BY l.a ORDER BY aval""".stripMargin),
-      Row(null, 0) :: Row(1, 0) :: Row(2, 4) :: Row(3, 1) :: Row(6, 1)  :: Nil)
+      Row(null, 0) :: Row(1, 0) :: Row(2, 4) :: Row(3, 1) :: Row(6, 1) :: Nil)
   }
 
   test("SPARK-28441: COUNT bug negative examples with PythonUDF") {
@@ -1791,8 +1726,7 @@ class SubquerySuite extends SharedSparkSession
     registerTestUDF(pythonTestUDF, spark)
 
     checkAnswer(
-      sql(
-        """
+      sql("""
           |SELECT
           |  l.b,
           |  (
@@ -1809,20 +1743,23 @@ class SubquerySuite extends SharedSparkSession
   test("SPARK-28441: COUNT bug with non-foldable expression") {
     // Case 1: Canonical example of the COUNT bug
     checkAnswer(
-      sql("SELECT l.a FROM l WHERE (SELECT count(*) + cast(rand() as int) FROM r " +
-        "WHERE l.a = r.c) < l.a"),
+      sql(
+        "SELECT l.a FROM l WHERE (SELECT count(*) + cast(rand() as int) FROM r " +
+          "WHERE l.a = r.c) < l.a"),
       Row(1) :: Row(1) :: Row(3) :: Row(6) :: Nil)
     // Case 2: count(*) = 0; could be rewritten to NOT EXISTS but currently uses
     // a rewrite that is vulnerable to the COUNT bug
     checkAnswer(
-      sql("SELECT l.a FROM l WHERE (SELECT count(*) + cast(rand() as int) FROM r " +
-        "WHERE l.a = r.c) = 0"),
+      sql(
+        "SELECT l.a FROM l WHERE (SELECT count(*) + cast(rand() as int) FROM r " +
+          "WHERE l.a = r.c) = 0"),
       Row(1) :: Row(1) :: Row(null) :: Row(null) :: Nil)
     // Case 3: COUNT bug without a COUNT aggregate
     checkAnswer(
-      sql("SELECT l.a FROM l WHERE (SELECT sum(r.d) is null from r " +
-        "WHERE l.a = r.c)"),
-      Row(1) :: Row(1) ::Row(null) :: Row(null) :: Row(6) :: Nil)
+      sql(
+        "SELECT l.a FROM l WHERE (SELECT sum(r.d) is null from r " +
+          "WHERE l.a = r.c)"),
+      Row(1) :: Row(1) :: Row(null) :: Row(null) :: Row(6) :: Nil)
   }
 
   test("SPARK-28441: COUNT bug in nested subquery with non-foldable expr") {
@@ -1884,8 +1821,8 @@ class SubquerySuite extends SharedSparkSession
             SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> enableCodegen.toString) {
 
             def findJoinExec(df: DataFrame): BaseJoinExec = {
-              df.queryExecution.sparkPlan.collectFirst {
-                case j: BaseJoinExec => j
+              df.queryExecution.sparkPlan.collectFirst { case j: BaseJoinExec =>
+                j
               }.get
             }
 
@@ -1915,8 +1852,8 @@ class SubquerySuite extends SharedSparkSession
             }
 
             // single column not in subquery -- streamedSide row is null
-            df =
-              sql("select * from l where b = 5.0 and a not in(select c from r where c is not null)")
+            df = sql(
+              "select * from l where b = 5.0 and a not in(select c from r where c is not null)")
             checkAnswer(df, Seq.empty)
             if (enableNAAJ) {
               joinExec = findJoinExec(df)
@@ -1927,8 +1864,8 @@ class SubquerySuite extends SharedSparkSession
             }
 
             // single column not in subquery -- streamedSide row is not null, match found
-            df =
-              sql("select * from l where a = 6 and a not in (select c from r where c is not null)")
+            df = sql(
+              "select * from l where a = 6 and a not in (select c from r where c is not null)")
             checkAnswer(df, Seq.empty)
             if (enableNAAJ) {
               joinExec = findJoinExec(df)
@@ -1939,8 +1876,8 @@ class SubquerySuite extends SharedSparkSession
             }
 
             // single column not in subquery -- streamedSide row is not null, match not found
-            df =
-              sql("select * from l where a = 1 and a not in (select c from r where c is not null)")
+            df = sql(
+              "select * from l where a = 1 and a not in (select c from r where c is not null)")
             checkAnswer(df, Row(1, 2.0) :: Row(1, 2.0) :: Nil)
             if (enableNAAJ) {
               joinExec = findJoinExec(df)
@@ -2002,8 +1939,7 @@ class SubquerySuite extends SharedSparkSession
         Row(0, 1, 1) :: Row(1, 2, null) :: Nil)
       // limit 1 with order by
       checkAnswer(
-        sql(
-          """
+        sql("""
             |select c1, c2, (
             |  select b from (select * from l order by a asc nulls last limit 1) where a = c2
             |) from v
@@ -2011,8 +1947,7 @@ class SubquerySuite extends SharedSparkSession
         Row(0, 1, 2.0) :: Row(1, 2, null) :: Nil)
       // limit 1 with window
       checkAnswer(
-        sql(
-          """
+        sql("""
             |select c1, c2, (
             |  select w from (
             |    select a, sum(b) over (partition by a) w from l order by a asc nulls last limit 1
@@ -2022,8 +1957,7 @@ class SubquerySuite extends SharedSparkSession
         Row(0, 1, 4.0) :: Row(1, 2, null) :: Nil)
       // set operations
       checkAnswer(
-        sql(
-          """
+        sql("""
             |select c1, c2, (
             |  select a from ((select 1 as a) intersect (select 1 as a)) where a = c2
             |) from v
@@ -2031,8 +1965,7 @@ class SubquerySuite extends SharedSparkSession
         Row(0, 1, 1) :: Row(1, 2, null) :: Nil)
       // join
       checkAnswer(
-        sql(
-          """
+        sql("""
             |select c1, c2, (
             |  select a from (select * from (select 1 as a) join (select 1 as b) on a = b)
             |  where a = c2
@@ -2052,10 +1985,10 @@ class SubquerySuite extends SharedSparkSession
   }
 
   test("Subquery reuse across the whole plan") {
-    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
       SQLConf.OPTIMIZE_ONE_ROW_RELATION_SUBQUERY.key -> "false") {
-      val df = sql(
-        """
+      val df = sql("""
           |SELECT (SELECT avg(key) FROM testData), (SELECT (SELECT avg(key) FROM testData))
           |FROM testData
           |LIMIT 1
@@ -2081,13 +2014,14 @@ class SubquerySuite extends SharedSparkSession
       val plan = df.queryExecution.executedPlan
 
       val subqueryIds = plan.collectWithSubqueries { case s: SubqueryExec => s.id }
-      val reusedSubqueryIds = plan.collectWithSubqueries {
-        case rs: ReusedSubqueryExec => rs.child.id
+      val reusedSubqueryIds = plan.collectWithSubqueries { case rs: ReusedSubqueryExec =>
+        rs.child.id
       }
 
       assert(subqueryIds.size == 2, "Whole plan subquery reusing not working correctly")
       assert(reusedSubqueryIds.size == 1, "Whole plan subquery reusing not working correctly")
-      assert(reusedSubqueryIds.forall(subqueryIds.contains(_)),
+      assert(
+        reusedSubqueryIds.forall(subqueryIds.contains(_)),
         "ReusedSubqueryExec should reuse an existing subquery")
     }
   }
@@ -2096,8 +2030,7 @@ class SubquerySuite extends SharedSparkSession
     withTable("t1", "t2") {
       sql("CREATE TABLE t1 USING parquet AS SELECT id AS a, id AS b, id AS c FROM range(10)")
       sql("CREATE TABLE t2 USING parquet AS SELECT id AS x, id AS y FROM range(8)")
-      val df = sql(
-        """
+      val df = sql("""
           |SELECT *
           |FROM   t1
           |WHERE  a IN (SELECT x
@@ -2109,8 +2042,8 @@ class SubquerySuite extends SharedSparkSession
           |""".stripMargin)
 
       df.collect()
-      val exchanges = collect(df.queryExecution.executedPlan) {
-        case s: ShuffleExchangeExec => s
+      val exchanges = collect(df.queryExecution.executedPlan) { case s: ShuffleExchangeExec =>
+        s
       }
       assert(exchanges.size === 1)
     }
@@ -2140,15 +2073,13 @@ class SubquerySuite extends SharedSparkSession
       Seq((0, 2), (0, 3)).toDF("c1", "c2").createOrReplaceTempView("t2")
       val correctAnswer = Row(0, 2, 20) :: Row(1, null, null) :: Nil
       checkAnswer(
-        sql(
-          """
+        sql("""
             |SELECT c1, s, s * 10 FROM (
             |  SELECT c1, (SELECT FIRST(c2) FROM t2 WHERE t1.c1 = t2.c1) s FROM t1)
             |""".stripMargin),
         correctAnswer)
       checkAnswer(
-        sql(
-          """
+        sql("""
             |SELECT c1, s, s * 10 FROM (
             |  SELECT c1, SUM((SELECT FIRST(c2) FROM t2 WHERE t1.c1 = t2.c1)) s
             |  FROM t1 GROUP BY c1
@@ -2177,38 +2108,38 @@ class SubquerySuite extends SharedSparkSession
   }
 
   test("SPARK-37199: deterministic in QueryPlan considers subquery") {
-    val deterministicQueryPlan = sql("select (select 1 as b) as b")
-      .queryExecution.executedPlan
+    val deterministicQueryPlan = sql("select (select 1 as b) as b").queryExecution.executedPlan
     assert(deterministicQueryPlan.deterministic)
 
-    val nonDeterministicQueryPlan = sql("select (select rand(1) as b) as b")
-      .queryExecution.executedPlan
+    val nonDeterministicQueryPlan =
+      sql("select (select rand(1) as b) as b").queryExecution.executedPlan
     assert(!nonDeterministicQueryPlan.deterministic)
   }
 
   test("SPARK-38132: Not IN subquery correctness checks") {
     val t = "test_table"
     withTable(t) {
-      Seq[(Integer, Integer)](
-        (1, 1),
-        (2, 2),
-        (3, 3),
-        (4, null),
-        (null, 0))
-        .toDF("c1", "c2").write.saveAsTable(t)
+      Seq[(Integer, Integer)]((1, 1), (2, 2), (3, 3), (4, null), (null, 0))
+        .toDF("c1", "c2")
+        .write
+        .saveAsTable(t)
       val df = spark.table(t)
 
       checkAnswer(df.where(s"(c1 NOT IN (SELECT c2 FROM $t)) = true"), Seq.empty)
-      checkAnswer(df.where(s"(c1 NOT IN (SELECT c2 FROM $t WHERE c2 IS NOT NULL)) = true"),
+      checkAnswer(
+        df.where(s"(c1 NOT IN (SELECT c2 FROM $t WHERE c2 IS NOT NULL)) = true"),
         Row(4, null) :: Nil)
       checkAnswer(df.where(s"(c1 NOT IN (SELECT c2 FROM $t)) <=> true"), Seq.empty)
-      checkAnswer(df.where(s"(c1 NOT IN (SELECT c2 FROM $t WHERE c2 IS NOT NULL)) <=> true"),
+      checkAnswer(
+        df.where(s"(c1 NOT IN (SELECT c2 FROM $t WHERE c2 IS NOT NULL)) <=> true"),
         Row(4, null) :: Nil)
       checkAnswer(df.where(s"(c1 NOT IN (SELECT c2 FROM $t)) != false"), Seq.empty)
-      checkAnswer(df.where(s"(c1 NOT IN (SELECT c2 FROM $t WHERE c2 IS NOT NULL)) != false"),
+      checkAnswer(
+        df.where(s"(c1 NOT IN (SELECT c2 FROM $t WHERE c2 IS NOT NULL)) != false"),
         Row(4, null) :: Nil)
       checkAnswer(df.where(s"NOT((c1 NOT IN (SELECT c2 FROM $t)) <=> false)"), Seq.empty)
-      checkAnswer(df.where(s"NOT((c1 NOT IN (SELECT c2 FROM $t WHERE c2 IS NOT NULL)) <=> false)"),
+      checkAnswer(
+        df.where(s"NOT((c1 NOT IN (SELECT c2 FROM $t WHERE c2 IS NOT NULL)) <=> false)"),
         Row(4, null) :: Nil)
     }
   }
@@ -2223,25 +2154,25 @@ class SubquerySuite extends SharedSparkSession
     }
   }
 
-  test("SPARK-38180, SPARK-36114: allow safe cast expressions in correlated equality conditions") {
+  test(
+    "SPARK-38180, SPARK-36114: allow safe cast expressions in correlated equality conditions") {
     withTempView("t1", "t2") {
       Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t1")
       Seq((0, 2), (0, 3)).toDF("c1", "c2").createOrReplaceTempView("t2")
-      checkAnswer(sql(
-        """
+      checkAnswer(
+        sql("""
           |SELECT (SELECT SUM(c2) FROM t2 WHERE c1 = a)
           |FROM (SELECT CAST(c1 AS DOUBLE) a FROM t1)
           |""".stripMargin),
         Row(5) :: Row(null) :: Nil)
-      checkAnswer(sql(
-        """
+      checkAnswer(
+        sql("""
           |SELECT (SELECT SUM(c2) FROM t2 WHERE CAST(c1 AS STRING) = a)
           |FROM (SELECT CAST(c1 AS STRING) a FROM t1)
           |""".stripMargin),
         Row(5) :: Row(null) :: Nil)
       // SPARK-36114: we now allow non-safe cast expressions in correlated predicates.
-      val df = sql(
-        """SELECT (SELECT SUM(c2) FROM t2 WHERE CAST(c1 AS SHORT) = a)
+      val df = sql("""SELECT (SELECT SUM(c2) FROM t2 WHERE CAST(c1 AS SHORT) = a)
           |FROM (SELECT CAST(c1 AS SHORT) a FROM t1)
           |""".stripMargin)
       checkAnswer(df, Row(5) :: Row(null) :: Nil)
@@ -2300,15 +2231,14 @@ class SubquerySuite extends SharedSparkSession
       Seq((1, 3, 5), (4, 5, 6)).toDF("a", "b", "c").createTempView("v2")
 
       def findProject(df: DataFrame): Seq[Project] = {
-        df.queryExecution.optimizedPlan.collect {
-          case p: Project => p
+        df.queryExecution.optimizedPlan.collect { case p: Project =>
+          p
         }
       }
 
       // project before filter cannot be removed since subquery has conflicting attributes
       // with outer reference
-      val df1 = sql(
-        """
+      val df1 = sql("""
          |select * from
          |(
          |select
@@ -2328,8 +2258,7 @@ class SubquerySuite extends SharedSparkSession
       assert(findProject(df1).size == 4)
 
       // project before filter can be removed when there are no conflicting attributes
-      val df2 = sql(
-        """
+      val df2 = sql("""
          |select * from
          |(
          |select
@@ -2352,23 +2281,19 @@ class SubquerySuite extends SharedSparkSession
 
   test("SPARK-40615: Check unsupported data type when decorrelating subqueries") {
     withTempView("v1", "v2") {
-      sql(
-        """
+      sql("""
           |create temp view v1(x) as values
           |from_json('{"a":1, "b":2}', 'map<string,int>') t(x)
           |""".stripMargin)
 
       // Can use non-orderable data type in one row subquery that can be collapsed.
-      checkAnswer(
-        sql("select (select a + a from (select x['a'] as a)) from v1"),
-        Row(2))
+      checkAnswer(sql("select (select a + a from (select x['a'] as a)) from v1"), Row(2))
 
       // Cannot use non-orderable data type in one row subquery that cannot be collapsed.
       // However, this case is handled by rule PullOutNestedDataOuterRefExpressions.
       // We test a non-deterministic function to prevent the expression from being collapsed, so
       // we can't checkAnswer.
-      assert(sql(
-        """select (
+      assert(sql("""select (
           |  select concat(a, a) from
           |  (select upper(x['a'] + rand()) as a)
           |) from v1
@@ -2378,13 +2303,11 @@ class SubquerySuite extends SharedSparkSession
       withSQLConf(SQLConf.PULL_OUT_NESTED_DATA_OUTER_REF_EXPRESSIONS_ENABLED.key -> "false") {
         checkError(
           exception = intercept[AnalysisException] {
-            sql(
-              """select (
+            sql("""select (
                 |  select concat(a, a) from
                 |  (select upper(x['a'] + rand()) as a)
                 |) from v1
-                |""".stripMargin
-            ).collect()
+                |""".stripMargin).collect()
           },
           condition = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
             "UNSUPPORTED_CORRELATED_REFERENCE_DATA_TYPE",
@@ -2392,8 +2315,7 @@ class SubquerySuite extends SharedSparkSession
           context = ExpectedContext(
             fragment = "(\n  select concat(a, a) from\n  (select upper(x['a'] + rand()) as a)\n)",
             start = 7,
-            stop = 75)
-        )
+            stop = 75))
       }
     }
   }
@@ -2404,8 +2326,8 @@ class SubquerySuite extends SharedSparkSession
       Seq(true, false).foreach { enabled =>
         withSQLConf(SQLConf.ALWAYS_INLINE_ONE_ROW_RELATION_SUBQUERY.key -> enabled.toString) {
           // Scalar subquery.
-          checkAnswer(sql(
-            """
+          checkAnswer(
+            sql("""
               |SELECT (
               |  SELECT array_sort(a, (i, j) -> rank[i] - rank[j])[0] AS sorted
               |  FROM (SELECT MAP('a', 1, 'b', 2) rank)
@@ -2433,8 +2355,8 @@ class SubquerySuite extends SharedSparkSession
       sql("CREATE TEMP VIEW t1 AS SELECT ARRAY('a', 'b') a")
       val func = udf(() => "a")
       spark.udf.register("func", func.asNondeterministic())
-      checkAnswer(sql(
-        """
+      checkAnswer(
+        sql("""
           |SELECT (
           |  SELECT array_sort(a, (i, j) -> rank[i] - rank[j])[0] || str AS sorted
           |  FROM (SELECT MAP('a', 1, 'b', 2) rank, func() AS str)
@@ -2445,10 +2367,10 @@ class SubquerySuite extends SharedSparkSession
   }
 
   test("SPARK-42745: Improved AliasAwareOutputExpression works with DSv2") {
-    withSQLConf(
-      SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
       withTempPath { path =>
-        spark.range(0)
+        spark
+          .range(0)
           .write
           .mode("overwrite")
           .parquet(path.getCanonicalPath)
@@ -2461,12 +2383,13 @@ class SubquerySuite extends SharedSparkSession
   }
 
   test("SPARK-42937: Outer join with subquery in condition") {
-    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
       SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
       val expected = Row(1, 2.0d, null, null) :: Row(1, 2.0d, null, null) ::
         Row(3, 3.0d, 3, 2.0d) :: Row(null, 5.0d, null, null) :: Nil
-      checkAnswer(sql(
-        """
+      checkAnswer(
+        sql("""
           |select *
           |from l
           |left outer join r
@@ -2500,9 +2423,7 @@ class SubquerySuite extends SharedSparkSession
         Seq(1, 2, 3).toDF("c1").write.format("parquet").saveAsTable("t1")
         Seq(4, 5, 6).toDF("c2").write.format("parquet").saveAsTable("t2")
 
-        checkFileSourceScan(
-          "SELECT * FROM t1 WHERE c1 > (SELECT min(c2) FROM t2)",
-          Seq.empty)
+        checkFileSourceScan("SELECT * FROM t1 WHERE c1 > (SELECT min(c2) FROM t2)", Seq.empty)
         checkFileSourceScan(
           "SELECT * FROM t1 WHERE c1 < (SELECT min(c2) FROM t2)",
           Row(1) :: Row(2) :: Row(3) :: Nil)
@@ -2512,23 +2433,22 @@ class SubquerySuite extends SharedSparkSession
 
   test("SPARK-44562: Add OptimizeOneRowRelationSubquery in batch of Subquery") {
     withTempView("v1", "v2") {
-      sql(
-        """
+      sql("""
           |CREATE temporary VIEW v1
           |AS
           |SELECT id, 'foo' AS kind FROM (SELECT 1 AS id) t
           |""".stripMargin)
-      sql(
-        """
+      sql("""
           |CREATE temporary VIEW v2
           |AS
           |SELECT * FROM v1 WHERE kind = (SELECT kind FROM v1 WHERE kind = 'foo')
           |""".stripMargin)
       val df = sql("SELECT * FROM v1 JOIN v2 ON v1.id = v2.id")
-      val filter = df.queryExecution.optimizedPlan.collectFirst {
-        case f: Filter => f
+      val filter = df.queryExecution.optimizedPlan.collectFirst { case f: Filter =>
+        f
       }
-      assert(filter.isEmpty,
+      assert(
+        filter.isEmpty,
         "Filter should be removed after OptimizeSubqueries and OptimizeOneRowRelationSubquery")
       checkAnswer(df, Row(1, "foo", 1, "foo"))
     }
@@ -2536,25 +2456,21 @@ class SubquerySuite extends SharedSparkSession
 
   test("SPARK-45584: subquery execution should not fail with ORDER BY and LIMIT") {
     withTable("t1") {
-      sql(
-        """
+      sql("""
           |CREATE TABLE t1 USING PARQUET
           |AS SELECT * FROM VALUES
           |(1, "a"),
           |(2, "a"),
           |(3, "a") t(id, value)
           |""".stripMargin)
-      val df = sql(
-        """
+      val df = sql("""
           |WITH t2 AS (
           |  SELECT * FROM t1 ORDER BY id
           |)
           |SELECT *, (SELECT COUNT(*) FROM t2) FROM t2 LIMIT 10
           |""".stripMargin)
       // This should not fail with IllegalArgumentException.
-      checkAnswer(
-        df,
-        Row(1, "a", 3) :: Row(2, "a", 3) :: Row(3, "a", 3) :: Nil)
+      checkAnswer(df, Row(1, "a", 3) :: Row(2, "a", 3) :: Row(3, "a", 3) :: Nil)
     }
   }
 
@@ -2614,31 +2530,27 @@ class SubquerySuite extends SharedSparkSession
         .createOrReplaceTempView("v2")
 
       val df1 = sql("SELECT col1, SUM(col2) IN (SELECT c3 FROM v1) FROM v2 GROUP BY col1")
-      checkAnswer(df1,
-        Row(1, false) :: Row(2, true) :: Row(3, true) :: Nil)
+      checkAnswer(df1, Row(1, false) :: Row(2, true) :: Row(3, true) :: Nil)
 
       val df2 = sql("""SELECT
                       |  col1,
                       |  SUM(col2) IN (SELECT c3 FROM v1) and SUM(col3) IN (SELECT c2 FROM v1) AS x
                       |FROM v2 GROUP BY col1
                       |ORDER BY col1""".stripMargin)
-      checkAnswer(df2,
-        Row(1, false) :: Row(2, false) :: Row(3, true) :: Nil)
+      checkAnswer(df2, Row(1, false) :: Row(2, false) :: Row(3, true) :: Nil)
 
       val df3 = sql("""SELECT col1, (SUM(col2), SUM(col3)) IN (SELECT c3, c2 FROM v1) AS x
                       |FROM v2
                       |GROUP BY col1
                       |ORDER BY col1""".stripMargin)
-      checkAnswer(df3,
-        Row(1, false) :: Row(2, false) :: Row(3, true) :: Nil)
+      checkAnswer(df3, Row(1, false) :: Row(2, false) :: Row(3, true) :: Nil)
     }
   }
 
   test("SPARK-51738: IN subquery with struct type") {
     checkAnswer(
       sql("SELECT foo IN (SELECT struct(1 a)) FROM (SELECT struct(1 b) foo)"),
-      Row(true)
-    )
+      Row(true))
 
     checkAnswer(
       sql("""
@@ -2646,15 +2558,12 @@ class SubquerySuite extends SharedSparkSession
             |FROM (SELECT struct(a, b) foo FROM l)
             |""".stripMargin),
       Row(false) :: Row(false) :: Row(false) :: Row(false) :: Row(false)
-        :: Row(true) :: Row(true) :: Row(true) :: Nil
-    )
+        :: Row(true) :: Row(true) :: Row(true) :: Nil)
   }
-
 
   test("SPARK-52896: Outer reference ExprId should match exposed attribute") {
     val plan =
-      sql(
-        """
+      sql("""
           | SELECT col1
           | FROM VALUES(1,2)
           | GROUP BY col1
@@ -2677,9 +2586,12 @@ class SubquerySuite extends SharedSparkSession
     val subqueryFilter = subquery.plan.asInstanceOf[Project].child.asInstanceOf[Filter]
 
     val exposedAttribute = subquery.getOuterAttrs.head.asInstanceOf[NamedExpression]
-    val outerReferenceAttribute = subqueryFilter.condition.asInstanceOf[EqualTo].collectFirst {
-      case outerReference: OuterReference => outerReference.e
-    }.get
+    val outerReferenceAttribute = subqueryFilter.condition
+      .asInstanceOf[EqualTo]
+      .collectFirst { case outerReference: OuterReference =>
+        outerReference.e
+      }
+      .get
 
     assert(exposedAttribute.exprId == outerReferenceAttribute.exprId)
   }
@@ -2701,7 +2613,8 @@ class SubquerySuite extends SharedSparkSession
       "Expected InSubqueryExec in the physical plan")
   }
 
-  test("SPARK-58481: InSubqueryExec nullable correctly accounts for subquery output nullability") {
+  test(
+    "SPARK-58481: InSubqueryExec nullable correctly accounts for subquery output nullability") {
     // 5 NOT IN (99, NULL) is UNKNOWN, not TRUE or FALSE.  A join condition that is not TRUE
     // matches no rows, so a FULL OUTER JOIN must emit null-padded rows for every row in each
     // side -- 3 + 3 = 6 null-padded rows -- not the full cross product (9 rows).
@@ -2719,12 +2632,18 @@ class SubquerySuite extends SharedSparkSession
 
       val query = sql(
         "SELECT t0.c0, t1.c0 FROM t1 FULL OUTER JOIN t0" +
-        " ON (5 NOT IN (SELECT t3.c0 FROM t3))")
+          " ON (5 NOT IN (SELECT t3.c0 FROM t3))")
       assertContainsInSubqueryExec(query)
       // Unmatched t1 rows null-pad t0; unmatched t0 rows null-pad t1.
-      checkAnswer(query, Seq(
-        Row(null, 10), Row(null, 20), Row(null, 30),
-        Row(1, null), Row(2, null), Row(3, null)))
+      checkAnswer(
+        query,
+        Seq(
+          Row(null, 10),
+          Row(null, 20),
+          Row(null, 30),
+          Row(1, null),
+          Row(2, null),
+          Row(3, null)))
     }
   }
 
@@ -2735,8 +2654,7 @@ class SubquerySuite extends SharedSparkSession
     // analysis applies dataSchema.asNullable regardless of DDL NOT NULL, which would defeat
     // the nullability control this test relies on.
     withSQLConf(
-      "spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled" -> "false"
-    ) {
+      "spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled" -> "false") {
       // Case A: NULL after a definitive match (null in non-head position after matching head).
       // RHS: (99,99) and (1,NULL).
       //   (1,1) vs (99,99): first field 1!=99 => FALSE.
@@ -2745,11 +2663,9 @@ class SubquerySuite extends SharedSparkSession
       //   (2,2) vs both: all FALSE => NOT IN = TRUE => joins with both rhs rows.
       withTempView("lhs", "rhs") {
         sql("CREATE TEMPORARY VIEW lhs AS SELECT * FROM VALUES (1, 1), (2, 2) AS t(a, b)")
-        sql(
-          """CREATE TEMPORARY VIEW rhs AS
+        sql("""CREATE TEMPORARY VIEW rhs AS
             |SELECT * FROM VALUES (99, 99), (1, CAST(NULL AS INT)) AS t(a, b)""".stripMargin)
-        val df = sql(
-          """SELECT lhs.a, rhs.a FROM lhs FULL OUTER JOIN rhs
+        val df = sql("""SELECT lhs.a, rhs.a FROM lhs FULL OUTER JOIN rhs
             |ON ((lhs.a, lhs.b) NOT IN (SELECT a, b FROM rhs))""".stripMargin)
         assertContainsInSubqueryExec(df)
         checkAnswer(df, Seq(Row(1, null), Row(2, 99), Row(2, 1)))
@@ -2762,14 +2678,12 @@ class SubquerySuite extends SharedSparkSession
       //   NOT IN = TRUE. A field-order regression would leave (1,1) as UNKNOWN instead.
       withTempView("lhs2", "rhs2") {
         sql("CREATE TEMPORARY VIEW lhs2 AS SELECT * FROM VALUES (1, 1) AS t(a, b)")
-        sql(
-          """CREATE TEMPORARY VIEW rhs2 AS
+        sql("""CREATE TEMPORARY VIEW rhs2 AS
             |SELECT * FROM VALUES (CAST(NULL AS INT), 99) AS t(a, b)""".stripMargin)
         // (1,1) NOT IN ((NULL,99)): second field 1!=99 makes the candidate FALSE =>
         // NOT IN = TRUE => the single lhs row joins the single one-row right side: Row(1, 1).
         // The UNKNOWN regression would instead null-pad both sides: Row(1, null), Row(null, 1).
-        val df = sql(
-          """SELECT lhs2.a, r.a FROM lhs2 FULL OUTER JOIN (SELECT 1 AS a) r
+        val df = sql("""SELECT lhs2.a, r.a FROM lhs2 FULL OUTER JOIN (SELECT 1 AS a) r
             |ON ((lhs2.a, lhs2.b) NOT IN (SELECT a, b FROM rhs2))""".stripMargin)
         assertContainsInSubqueryExec(df)
         checkAnswer(df, Seq(Row(1, 1)))
@@ -2783,12 +2697,10 @@ class SubquerySuite extends SharedSparkSession
       //   A candidate-order regression would short-circuit on UNKNOWN and miss the TRUE.
       withTempView("lhs3", "rhs3") {
         sql("CREATE TEMPORARY VIEW lhs3 AS SELECT * FROM VALUES (1, 1) AS t(a, b)")
-        sql(
-          """CREATE TEMPORARY VIEW rhs3 AS
+        sql("""CREATE TEMPORARY VIEW rhs3 AS
             |SELECT * FROM VALUES (1, CAST(NULL AS INT)), (1, 1) AS t(a, b)""".stripMargin)
         // (1,1) IN ((1,NULL),(1,1)): exact match exists => IN = TRUE => the rows join: Row(1, 1).
-        val df = sql(
-          """SELECT lhs3.a, r.a FROM lhs3 FULL OUTER JOIN (SELECT 1 AS a) r
+        val df = sql("""SELECT lhs3.a, r.a FROM lhs3 FULL OUTER JOIN (SELECT 1 AS a) r
             |ON ((lhs3.a, lhs3.b) IN (SELECT a, b FROM rhs3))""".stripMargin)
         assertContainsInSubqueryExec(df)
         checkAnswer(df, Seq(Row(1, 1)))
@@ -2803,16 +2715,14 @@ class SubquerySuite extends SharedSparkSession
     // iff the IN match succeeds, so the two single rows join into Row(1, 1); a FALSE
     // regression would null-pad both sides instead.
     withSQLConf(
-      "spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled" -> "false"
-    ) {
+      "spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled" -> "false") {
       withTable("lbin", "rbin") {
         sql("CREATE TABLE lbin(id INT NOT NULL, b BINARY NOT NULL) USING PARQUET")
         sql("INSERT INTO lbin VALUES (1, X'01')")
         sql("CREATE TABLE rbin(id INT NOT NULL, b BINARY NOT NULL) USING PARQUET")
         sql("INSERT INTO rbin VALUES (1, X'01')")
         // (1, 0x01) IN ((1, 0x01)) must be TRUE.
-        val df = sql(
-          """SELECT lbin.id, rbin.id FROM lbin FULL OUTER JOIN rbin
+        val df = sql("""SELECT lbin.id, rbin.id FROM lbin FULL OUTER JOIN rbin
             |ON ((lbin.id, lbin.b) IN (SELECT id, b FROM rbin))""".stripMargin)
         assertContainsInSubqueryExec(df)
         checkAnswer(df, Seq(Row(1, 1)))
@@ -2829,16 +2739,16 @@ class SubquerySuite extends SharedSparkSession
     // (SMALLINT vs INT, INT vs BIGINT), and the RHS contains a NULL so that the indexed
     // non-null lookup, the null-row scan and the FALSE path are all exercised on widened values.
     withSQLConf(
-      "spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled" -> "false"
-    ) {
+      "spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled" -> "false") {
       withTempView("lhs_w", "rhs_w") {
-        sql("CREATE TEMPORARY VIEW lhs_w AS SELECT * FROM VALUES " +
-          "(CAST(1 AS SMALLINT), 1), (CAST(2 AS SMALLINT), 2), (CAST(3 AS SMALLINT), 3) " +
-          "AS t(a, b)")
-        sql("CREATE TEMPORARY VIEW rhs_w AS SELECT * FROM VALUES " +
-          "(1, CAST(1 AS BIGINT)), (2, CAST(NULL AS BIGINT)) AS t(a, b)")
-        val df = sql(
-          """SELECT lhs_w.b, r.x FROM lhs_w FULL OUTER JOIN (SELECT 1 AS x) r
+        sql(
+          "CREATE TEMPORARY VIEW lhs_w AS SELECT * FROM VALUES " +
+            "(CAST(1 AS SMALLINT), 1), (CAST(2 AS SMALLINT), 2), (CAST(3 AS SMALLINT), 3) " +
+            "AS t(a, b)")
+        sql(
+          "CREATE TEMPORARY VIEW rhs_w AS SELECT * FROM VALUES " +
+            "(1, CAST(1 AS BIGINT)), (2, CAST(NULL AS BIGINT)) AS t(a, b)")
+        val df = sql("""SELECT lhs_w.b, r.x FROM lhs_w FULL OUTER JOIN (SELECT 1 AS x) r
             |ON ((lhs_w.a, lhs_w.b) NOT IN (SELECT a, b FROM rhs_w))""".stripMargin)
         assertContainsInSubqueryExec(df)
         // (1,1): exact match after widening => IN TRUE    => NOT IN FALSE   => null-padded.
@@ -2854,8 +2764,7 @@ class SubquerySuite extends SharedSparkSession
     // multi-column LHS even when individual fields are nullable. The generated NOT IN code
     // would then suppress null handling and turn UNKNOWN into TRUE, producing wrong results.
     withSQLConf(
-      "spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled" -> "false"
-    ) {
+      "spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled" -> "false") {
       // Case A: RHS is fully non-null (stored in nonNullSet). LHS (NULL, 2) vs RHS (99, 2):
       // second fields equal, first field null => UNKNOWN; exercises the nonNullSet scan with
       // a nullable LHS. Fixture: lhs.a is nullable; rhs columns are NOT NULL (VALUES-derived
@@ -2870,8 +2779,7 @@ class SubquerySuite extends SharedSparkSession
           //   => join condition not TRUE => (NULL,2) is null-padded: Row(null, null).
           // (1, 1)   NOT IN ((99,2)): first field 1!=99 => FALSE => NOT IN = TRUE
           //   => (1,1) joins with rhs(99,2): Row(1, 99). rhs matched; no null-padded rhs.
-          val df = sql(
-            """SELECT lhs.a, rhs.a FROM lhs FULL OUTER JOIN rhs
+          val df = sql("""SELECT lhs.a, rhs.a FROM lhs FULL OUTER JOIN rhs
               |ON ((lhs.a, lhs.b) NOT IN (SELECT a, b FROM rhs))""".stripMargin)
           assertContainsInSubqueryExec(df)
           checkAnswer(df, Seq(Row(1, 99), Row(null, null)))
@@ -2884,14 +2792,15 @@ class SubquerySuite extends SharedSparkSession
       // of continuing to check later fields would return UNKNOWN here instead of FALSE, causing
       // NOT IN to be UNKNOWN and both sides to be null-padded.
       withTempView("lhs_nn", "rhs_nn") {
-        sql("CREATE TEMPORARY VIEW lhs_nn AS " +
-          "SELECT * FROM VALUES (CAST(NULL AS INT), 1) AS t(a, b)")
-        sql("CREATE TEMPORARY VIEW rhs_nn AS " +
-          "SELECT * FROM VALUES (99, 2) AS t(a, b)")
+        sql(
+          "CREATE TEMPORARY VIEW lhs_nn AS " +
+            "SELECT * FROM VALUES (CAST(NULL AS INT), 1) AS t(a, b)")
+        sql(
+          "CREATE TEMPORARY VIEW rhs_nn AS " +
+            "SELECT * FROM VALUES (99, 2) AS t(a, b)")
         // (NULL, 1) NOT IN ((99, 2)): second field 1 != 2 => candidate FALSE => NOT IN TRUE
         // => the single lhs row joins the one-row right side: Row(1, 1).
-        val df = sql(
-          """SELECT lhs_nn.b, r.x FROM lhs_nn FULL OUTER JOIN (SELECT 1 AS x) r
+        val df = sql("""SELECT lhs_nn.b, r.x FROM lhs_nn FULL OUTER JOIN (SELECT 1 AS x) r
             |ON ((lhs_nn.a, lhs_nn.b) NOT IN (SELECT a, b FROM rhs_nn))
             |""".stripMargin)
         assertContainsInSubqueryExec(df)
@@ -2909,8 +2818,7 @@ class SubquerySuite extends SharedSparkSession
     // regardless of nullable (6 rows); the assertion of 9 verifies codegen ran.
     withSQLConf(
       SQLConf.LEGACY_IN_SUBQUERY_NULLABILITY.key -> "true",
-      "spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled" -> "false"
-    ) {
+      "spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled" -> "false") {
       withTable("t0", "t1", "t3") {
         sql("CREATE TABLE t0(c0 INT) USING PARQUET")
         sql("INSERT INTO t0 VALUES (1), (2), (3)")
@@ -2930,15 +2838,15 @@ class SubquerySuite extends SharedSparkSession
     }
   }
 
-  test("SPARK-58481: LEGACY_IN_SUBQUERY_NULLABILITY preserves nullable LHS fields " +
+  test(
+    "SPARK-58481: LEGACY_IN_SUBQUERY_NULLABILITY preserves nullable LHS fields " +
       "for multi-column IN subqueries") {
     // Legacy mode suppresses RHS nullability but preserves LHS field nullability.
     // With a nullable LHS field, lhsNullable=true even in legacy mode, so nullable=true.
     // Generated NOT IN code propagates UNKNOWN correctly; result is identical to non-legacy.
     withSQLConf(
       SQLConf.LEGACY_IN_SUBQUERY_NULLABILITY.key -> "true",
-      "spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled" -> "false"
-    ) {
+      "spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled" -> "false") {
       withTable("lhs", "rhs") {
         sql("CREATE TABLE lhs(a INT, b INT NOT NULL) USING PARQUET")
         sql("INSERT INTO lhs VALUES (1, 1), (NULL, 2)")
@@ -2946,8 +2854,7 @@ class SubquerySuite extends SharedSparkSession
         sql("INSERT INTO rhs VALUES (99, 2)")
         // (NULL, 2) NOT IN ((99,2)): first field null => UNKNOWN => null-padded: Row(null, null).
         // (1, 1)   NOT IN ((99,2)): 1!=99 => FALSE => NOT IN=TRUE => joins: Row(1, 99).
-        val df = sql(
-          """SELECT lhs.a, rhs.a FROM lhs FULL OUTER JOIN rhs
+        val df = sql("""SELECT lhs.a, rhs.a FROM lhs FULL OUTER JOIN rhs
             |ON ((lhs.a, lhs.b) NOT IN (SELECT a, b FROM rhs))""".stripMargin)
         assertContainsInSubqueryExec(df)
         checkAnswer(df, Seq(Row(1, 99), Row(null, null)))
@@ -2955,7 +2862,8 @@ class SubquerySuite extends SharedSparkSession
     }
   }
 
-  test("SPARK-58481: multi-column NOT IN in a code-generated residual join condition " +
+  test(
+    "SPARK-58481: multi-column NOT IN in a code-generated residual join condition " +
       "referencing both join sides") {
     // A hash join generates its residual (non-equi) condition with ctx.currentVars bound to
     // streamed ++ build variables, while ctx.INPUT_ROW is only the build-side row. The
@@ -2969,17 +2877,18 @@ class SubquerySuite extends SharedSparkSession
     //   k=3: (30, 300) mismatches both     => IN FALSE   => NOT IN TRUE    => row.
     withSQLConf(
       "spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled" -> "false",
-      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true"
-    ) {
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
       withTempView("lj", "rj", "subj") {
-        sql("CREATE TEMPORARY VIEW lj AS " +
-          "SELECT * FROM VALUES (1, 10), (2, 20), (3, 30) AS t(k, a)")
-        sql("CREATE TEMPORARY VIEW rj AS " +
-          "SELECT * FROM VALUES (1, 100), (2, 200), (3, 300) AS t(k, b)")
-        sql("CREATE TEMPORARY VIEW subj AS " +
-          "SELECT * FROM VALUES (10, 100), (20, CAST(NULL AS INT)) AS t(a, b)")
-        val df = sql(
-          """SELECT lj.k, lj.a, rj.b FROM lj JOIN rj
+        sql(
+          "CREATE TEMPORARY VIEW lj AS " +
+            "SELECT * FROM VALUES (1, 10), (2, 20), (3, 30) AS t(k, a)")
+        sql(
+          "CREATE TEMPORARY VIEW rj AS " +
+            "SELECT * FROM VALUES (1, 100), (2, 200), (3, 300) AS t(k, b)")
+        sql(
+          "CREATE TEMPORARY VIEW subj AS " +
+            "SELECT * FROM VALUES (10, 100), (20, CAST(NULL AS INT)) AS t(a, b)")
+        val df = sql("""SELECT lj.k, lj.a, rj.b FROM lj JOIN rj
             |ON lj.k = rj.k AND ((lj.a, rj.b) NOT IN (SELECT a, b FROM subj))""".stripMargin)
         checkAnswer(df, Seq(Row(3, 30, 300)))
         // Make sure the assertion above exercised the generated residual-condition path: the
@@ -2991,13 +2900,15 @@ class SubquerySuite extends SharedSparkSession
             j.condition.exists(_.exists(_.isInstanceOf[InSubqueryExec]))
           case _ => false
         })
-        assert(joinInCodegen,
+        assert(
+          joinInCodegen,
           "Expected a whole-stage code-generated join whose condition contains InSubqueryExec")
       }
     }
   }
 
-  test("SPARK-58481: multi-column IN codegen initializes Nondeterministic LHS descendants " +
+  test(
+    "SPARK-58481: multi-column IN codegen initializes Nondeterministic LHS descendants " +
       "through normal expression codegen") {
     // A join-condition IN subquery with a nondeterministic LHS is rejected by CheckAnalysis,
     // so this direct-construction test provides a focused unit check: it constructs
@@ -3017,28 +2928,31 @@ class SubquerySuite extends SharedSparkSession
     val subplanOutput = spark
       .range(0)
       .select($"id".cast(IntegerType).as("a"), ($"id" > 0).as("b"))
-      .queryExecution.executedPlan.output
-    val subplan = SubqueryExec(
-      "test_subquery",
-      LocalTableScanExec(subplanOutput, Nil, None))
+      .queryExecution
+      .executedPlan
+      .output
+    val subplan = SubqueryExec("test_subquery", LocalTableScanExec(subplanOutput, Nil, None))
     // LHS: struct of (Literal(1), Rand(42)>=0.0). Rand is always non-negative so the struct
     // always equals the single RHS row (1, true), making IN = true.
-    val lhs = CreateNamedStruct(Seq(
-      Literal("a"), Literal(1),
-      Literal("b"), GreaterThanOrEqual(Rand(42L), Literal(0.0))))
+    val lhs = CreateNamedStruct(
+      Seq(Literal("a"), Literal(1), Literal("b"), GreaterThanOrEqual(Rand(42L), Literal(0.0))))
     val expr = InSubqueryExec(
-      lhs, subplan, ExprId(99),
+      lhs,
+      subplan,
+      ExprId(99),
       isDynamicPruning = false,
       result = Array[InternalRow](InternalRow(1, true)).asInstanceOf[Array[Any]])
     // Compile to bytecode, initialize (seeds the Rand RNG), and evaluate.
     // If initialize() were skipped the Rand eval() would throw IllegalArgumentException.
     val pred = GeneratePredicate.generate(expr, useSubexprElimination = false)
     pred.initialize(0)
-    assert(pred.eval(InternalRow.empty) === true,
+    assert(
+      pred.eval(InternalRow.empty) === true,
       "Expected IN to be TRUE: (1, rand()>=0.0) IN ((1, true))")
   }
 
-  test("SPARK-58481: MultiColumnInSubqueryEvaluator evaluates correctly after a Java " +
+  test(
+    "SPARK-58481: MultiColumnInSubqueryEvaluator evaluates correctly after a Java " +
       "serialization round-trip") {
     // Generated code reaches the evaluator through WholeStageCodegenEvaluatorFactory.references,
     // which is serialized into every task closure with JavaSerializer (SparkEnv always sets
@@ -3064,7 +2978,8 @@ class SubquerySuite extends SharedSparkSession
     assert(rtEvaluator.eval(null) === null)
   }
 
-  test("SPARK-58481: multi-column IN codegen keeps nested subquery plans out of the " +
+  test(
+    "SPARK-58481: multi-column IN codegen keeps nested subquery plans out of the " +
       "generated references") {
     // A multi-column LHS may itself contain subqueries: PlanSubqueries embeds an executable
     // ScalarSubquery (e.g. (col, (SELECT max(x) FROM t)) IN (...)) or a nested InSubqueryExec
@@ -3076,10 +2991,14 @@ class SubquerySuite extends SharedSparkSession
     // plan-free membership evaluator. Otherwise every task closure would carry the driver's
     // physical subquery trees.
     val scalarSubplanOutput = spark
-      .range(0).select($"id".cast(IntegerType).as("v"))
-      .queryExecution.executedPlan.output
+      .range(0)
+      .select($"id".cast(IntegerType).as("v"))
+      .queryExecution
+      .executedPlan
+      .output
     val scalarSub = ScalarSubquery(
-      SubqueryExec("scalar_subquery",
+      SubqueryExec(
+        "scalar_subquery",
         LocalTableScanExec(scalarSubplanOutput, Seq(InternalRow(42)), None)),
       ExprId(77))
     scalarSub.updateResult()
@@ -3094,16 +3013,17 @@ class SubquerySuite extends SharedSparkSession
     val outerSubplanOutput = spark
       .range(0)
       .select($"id".cast(IntegerType).as("a"), ($"id" > 0).as("b"))
-      .queryExecution.executedPlan.output
-    val outerSubplan = SubqueryExec(
-      "outer_subquery",
-      LocalTableScanExec(outerSubplanOutput, Nil, None))
+      .queryExecution
+      .executedPlan
+      .output
+    val outerSubplan =
+      SubqueryExec("outer_subquery", LocalTableScanExec(outerSubplanOutput, Nil, None))
     // LHS: (scalarSub, nestedIn) = (42, true), which matches the single prepared RHS row.
-    val lhs = CreateNamedStruct(Seq(
-      Literal("a"), scalarSub,
-      Literal("b"), nestedIn))
+    val lhs = CreateNamedStruct(Seq(Literal("a"), scalarSub, Literal("b"), nestedIn))
     val expr = InSubqueryExec(
-      lhs, outerSubplan, ExprId(88),
+      lhs,
+      outerSubplan,
+      ExprId(88),
       isDynamicPruning = false,
       result = Array[InternalRow](InternalRow(42, true)).asInstanceOf[Array[Any]])
 
@@ -3119,13 +3039,15 @@ class SubquerySuite extends SharedSparkSession
       case e: Expression => e.exists(_.isInstanceOf[PlanExpression[_]])
       case _ => false
     }
-    assert(!ctx.references.exists(retainsDriverPlan),
+    assert(
+      !ctx.references.exists(retainsDriverPlan),
       "Generated references must not contain a SparkPlan or an expression tree that still " +
         s"holds a PlanExpression, but got: ${ctx.references.map(_.getClass.getName)}")
     // The generated predicate must still execute end to end: (42, true) IN ((42, true)).
     val pred = GeneratePredicate.generate(expr, useSubexprElimination = false)
     pred.initialize(0)
-    assert(pred.eval(InternalRow.empty) === true,
+    assert(
+      pred.eval(InternalRow.empty) === true,
       "Expected IN to be TRUE: (42, 1 IN (1)) IN ((42, true))")
   }
 
@@ -3141,8 +3063,7 @@ class SubquerySuite extends SharedSparkSession
     // via a FULL OUTER JOIN ON condition with the opt disabled, matching other tests here.
     withSQLConf(
       "spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled" -> "false",
-      SQLConf.ANSI_ENABLED.key -> "true"
-    ) {
+      SQLConf.ANSI_ENABLED.key -> "true") {
       // lhs.id=0: (1 / lhs.id) would throw DIVIDE_BY_ZERO at runtime under ANSI if the LHS
       // were evaluated. The subquery is empty so the short-circuit must fire first.
       withTable("lhs58481", "rhs58481") {
@@ -3150,8 +3071,7 @@ class SubquerySuite extends SharedSparkSession
         sql("INSERT INTO lhs58481 VALUES (0)")
         sql("CREATE TABLE rhs58481(id INT NOT NULL) USING PARQUET")
         sql("INSERT INTO rhs58481 VALUES (1)")
-        val df = sql(
-          """SELECT lhs58481.id FROM lhs58481 FULL OUTER JOIN rhs58481
+        val df = sql("""SELECT lhs58481.id FROM lhs58481 FULL OUTER JOIN rhs58481
             |ON ((1 / lhs58481.id, lhs58481.id) IN (SELECT 1, 0 WHERE false))
             |""".stripMargin)
         assertContainsInSubqueryExec(df)
@@ -3170,15 +3090,13 @@ class SubquerySuite extends SharedSparkSession
     withSQLConf(
       "spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled" -> "false",
       SQLConf.LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR.key -> "true",
-      SQLConf.ANSI_ENABLED.key -> "true"
-    ) {
+      SQLConf.ANSI_ENABLED.key -> "true") {
       withTable("lhs58481b", "rhs58481b") {
         sql("CREATE TABLE lhs58481b(id INT NOT NULL) USING PARQUET")
         sql("INSERT INTO lhs58481b VALUES (0)")
         sql("CREATE TABLE rhs58481b(id INT NOT NULL) USING PARQUET")
         sql("INSERT INTO rhs58481b VALUES (1)")
-        val df = sql(
-          """SELECT lhs58481b.id FROM lhs58481b FULL OUTER JOIN rhs58481b
+        val df = sql("""SELECT lhs58481b.id FROM lhs58481b FULL OUTER JOIN rhs58481b
             |ON ((1 / lhs58481b.id, lhs58481b.id) IN (SELECT 1, 0 WHERE false))
             |""".stripMargin)
         assertContainsInSubqueryExec(df)
@@ -3197,18 +3115,19 @@ class SubquerySuite extends SharedSparkSession
     //   short-circuits to UNKNOWN on the first null comparison would miss this mismatch and
     //   return UNKNOWN instead of FALSE for that candidate, producing wrong results.
     withSQLConf(
-      "spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled" -> "false"
-    ) {
+      "spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled" -> "false") {
       withTempView("lhs_null", "rhs_null1", "rhs_null2") {
-        sql("CREATE TEMPORARY VIEW lhs_null AS " +
-          "SELECT * FROM VALUES (CAST(NULL AS INT), 1) AS t(a, b)")
+        sql(
+          "CREATE TEMPORARY VIEW lhs_null AS " +
+            "SELECT * FROM VALUES (CAST(NULL AS INT), 1) AS t(a, b)")
 
         // (NULL,1) IN ((NULL,1)): UNKNOWN => NOT IN is UNKNOWN => FULL OUTER JOIN null-pads
         // both sides: the lhs row (b=1) is unmatched and the rhs row yields a null lhs.
-        sql("CREATE TEMPORARY VIEW rhs_null1 AS " +
-          "SELECT * FROM VALUES (CAST(NULL AS INT), 1) AS t(a, b)")
-        val unknownDf = sql(
-          """SELECT lhs_null.b, r.x FROM lhs_null FULL OUTER JOIN (SELECT 1 AS x) r
+        sql(
+          "CREATE TEMPORARY VIEW rhs_null1 AS " +
+            "SELECT * FROM VALUES (CAST(NULL AS INT), 1) AS t(a, b)")
+        val unknownDf =
+          sql("""SELECT lhs_null.b, r.x FROM lhs_null FULL OUTER JOIN (SELECT 1 AS x) r
             |ON ((lhs_null.a, lhs_null.b) NOT IN (SELECT a, b FROM rhs_null1))
             |""".stripMargin)
         assertContainsInSubqueryExec(unknownDf)
@@ -3216,10 +3135,11 @@ class SubquerySuite extends SharedSparkSession
 
         // (NULL,1) IN ((NULL,2)): second field 1 != 2 => candidate FALSE => NOT IN TRUE
         // => the single lhs row joins the one-row right side: Row(1, 1).
-        sql("CREATE TEMPORARY VIEW rhs_null2 AS " +
-          "SELECT * FROM VALUES (CAST(NULL AS INT), 2) AS t(a, b)")
-        val falseDf = sql(
-          """SELECT lhs_null.b, r.x FROM lhs_null FULL OUTER JOIN (SELECT 1 AS x) r
+        sql(
+          "CREATE TEMPORARY VIEW rhs_null2 AS " +
+            "SELECT * FROM VALUES (CAST(NULL AS INT), 2) AS t(a, b)")
+        val falseDf =
+          sql("""SELECT lhs_null.b, r.x FROM lhs_null FULL OUTER JOIN (SELECT 1 AS x) r
             |ON ((lhs_null.a, lhs_null.b) NOT IN (SELECT a, b FROM rhs_null2))
             |""".stripMargin)
         assertContainsInSubqueryExec(falseDf)
@@ -3240,8 +3160,7 @@ class SubquerySuite extends SharedSparkSession
       sql("INSERT INTO t3 VALUES (1)")
 
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
-        val df = spark.sql(
-          """
+        val df = spark.sql("""
             |SELECT *
             |FROM t1
             |JOIN t2
@@ -3253,8 +3172,8 @@ class SubquerySuite extends SharedSparkSession
 
         df.collect();
 
-        val exchanges = collect(df.queryExecution.executedPlan) {
-          case e: BroadcastExchangeExec => e
+        val exchanges = collect(df.queryExecution.executedPlan) { case e: BroadcastExchangeExec =>
+          e
         }
 
         assert(exchanges.length == 1)
