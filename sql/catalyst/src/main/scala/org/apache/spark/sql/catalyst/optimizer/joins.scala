@@ -722,7 +722,7 @@ private[optimizer] object RuntimeFilterSourceAnalysis {
   /**
    * A subquery is repeatable when its row set is, and so is whatever of its output the subquery
    * exposes: the build keys of a DPP filter, nothing but existence for EXISTS, the output columns
-   * otherwise.
+   * otherwise. A scalar subquery fails on more than one row, so its multiplicity counts too.
    */
   private def isRepeatableSubquery(s: SubqueryExpression): Boolean = {
     !s.plan.isStreaming && analyze(s.plan).exists { t =>
@@ -730,6 +730,8 @@ private[optimizer] object RuntimeFilterSourceAnalysis {
         case d: DynamicPruningSubquery =>
           d.broadcastKeyIndices.forall(i => isStable(d.buildKeys(i), t.unstable))
         case _: Exists => true
+        case _: ScalarSubquery =>
+          !t.unstableMultiplicity && s.plan.outputSet.intersect(t.unstable).isEmpty
         case _ => s.plan.outputSet.intersect(t.unstable).isEmpty
       }
     }

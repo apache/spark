@@ -64,7 +64,7 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
 * **hints**
 
     Hints can be specified to help spark optimizer make better planning decisions. Currently spark supports hints
-    that influence selection of join strategies and repartitioning of the data.
+    that influence selection of join strategies, repartitioning of the data and placement of runtime filters.
 
 * **ALL**
 

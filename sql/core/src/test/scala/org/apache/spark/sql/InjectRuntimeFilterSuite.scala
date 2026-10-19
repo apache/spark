@@ -1596,6 +1596,11 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
         "SELECT c2 FROM bf2 LATERAL VIEW explode(bf_nondeterministic_array(a2)) x AS v",
         // A key computed by a subquery whose own plan is not repeatable.
         "SELECT (SELECT max(c2) FROM bf2 TABLESAMPLE (50 PERCENT)) AS c2 FROM bf2",
+        // A scalar subquery whose row count depends on a floating point sum may return more than
+        // one row.
+        "SELECT (SELECT 1 FROM (SELECT sum(CAST(c2 AS DOUBLE)) AS x FROM bf2) s " +
+          "LATERAL VIEW OUTER explode(sequence(1, least(CAST(x AS INT), 1))) t AS v) AS c2 " +
+          "FROM bf2",
         // An outer generate keeps every row but repeats it as many times as the unstable
         // generator yields values, so an aggregate over the rows is unstable.
         "SELECT count(*) AS c2 FROM bf2 " +

@@ -29,7 +29,7 @@ trait DynamicPruning extends Predicate
 
 object DynamicPruning {
   /**
-   * Marks a [[DynamicPruningSubquery]] that honors a [[RuntimeFilterHint]] on its join, so later
+   * Marks a [[DynamicPruningSubquery]] that honors a `RuntimeFilterHint` on its join, so later
    * rules need not repeat the check on a plan that pushdown has since changed.
    */
   val HONORS_RUNTIME_FILTER_HINT: TreeNodeTag[Unit] = TreeNodeTag("honorsRuntimeFilterHint")
