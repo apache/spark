@@ -227,10 +227,7 @@ abstract class BaseSliceArrowOutputProcessor(
     val batchRoot = getRoot
 
     if (batchRoot != prevRoot) {
-      if (prevRoot != null) {
-        prevVectors.foreach(_.close())
-        prevRoot.close()
-      }
+      closePrevSlice()
       prevRoot = batchRoot
     }
 
@@ -248,11 +245,17 @@ abstract class BaseSliceArrowOutputProcessor(
     }.toArray[ColumnVector]
   }
 
-  override def close(): Unit = {
-    if (prevRoot != null) {
+  // Releases the previous output batch if it is a slice. The reader root is reused for every
+  // input batch, so it must not be closed here; `ArrowOutputProcessorImpl.close` closes it.
+  private def closePrevSlice(): Unit = {
+    if (prevRoot != null && (prevRoot ne root)) {
       prevVectors.foreach(_.close())
       prevRoot.close()
     }
+  }
+
+  override def close(): Unit = {
+    closePrevSlice()
     super.close()
   }
 }
@@ -264,7 +267,8 @@ class SliceBytesArrowOutputProcessorImpl(
   extends BaseSliceArrowOutputProcessor(reader, pythonMetrics) {
 
   protected override def getRoot: VectorSchemaRoot = {
-    if (getBatchBytes(root) < arrowMaxBytesPerOutputBatch) {
+    // Output the whole root only if no row of this batch has been output yet.
+    if (currentRowIdx == 0 && getBatchBytes(root) < arrowMaxBytesPerOutputBatch) {
       currentRowIdx = currentRowIdx + root.getRowCount
       root
     } else {
@@ -314,10 +318,11 @@ class SliceRecordsArrowOutputProcessorImpl(
 
   protected override def getRoot: VectorSchemaRoot = {
     val remainingRows = rowCount - currentRowIdx
-    val rootSlice = if (remainingRows > arrowMaxRecordsPerOutputBatch) {
-      root.slice(currentRowIdx, arrowMaxRecordsPerOutputBatch)
-    } else {
+    // Output the whole root only if no row of this batch has been output yet.
+    val rootSlice = if (currentRowIdx == 0 && remainingRows <= arrowMaxRecordsPerOutputBatch) {
       root
+    } else {
+      root.slice(currentRowIdx, math.min(remainingRows, arrowMaxRecordsPerOutputBatch))
     }
 
     currentRowIdx = currentRowIdx + rootSlice.getRowCount
