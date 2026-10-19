@@ -387,6 +387,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       //      side for a right join, and the right side for a left join.
       case j @ logical.Join(left, right, joinType, condition, hint) =>
         checkHintNonEquiJoin(hint)
+
         def createRangeJoin(onlyLookingAtHint: Boolean) = {
           /**
            * Which side to broadcast for the range join. A hint-only pass honors a

@@ -180,6 +180,33 @@ class RangeIndexSuite extends SparkFunSuite {
     }
   }
 
+  test("a one-key interval build owns a single copy of the point key") {
+    // One build key is one key used as both ends. The build must copy it once
+    // and serve both bounds from that copy, instead of copying twice.
+    val n = 50
+    val oneKey = Seq(BoundReference(0, StringType, nullable = true))
+    val (sharedBytes, rows) = reusingByteBufferStringIterator(n)
+    val index = IntervalIndex.build(StringType, oneKey, rows, Some(n))
+
+    java.util.Arrays.fill(sharedBytes, 'X'.toByte)
+
+    (0 until n).foreach { i =>
+      val key = UTF8String.fromString(f"$i%04d")
+      val matching = index.overlapping(key, key).toList
+      assert(matching.size == 1, s"interval $i was corrupted by shared buffer reuse")
+      assert(matching.head.getInt(1) == i)
+    }
+
+    // SizeEstimator's identity tracking charges the shared bounds once, so the
+    // estimate stays below the same build made from two independently copied keys.
+    val twoKeys = Seq(
+      BoundReference(0, StringType, nullable = true),
+      BoundReference(0, StringType, nullable = true))
+    val (_, moreRows) = reusingByteBufferStringIterator(n)
+    val twoCopy = IntervalIndex.build(StringType, twoKeys, moreRows, Some(n))
+    assert(index.estimatedSize < twoCopy.estimatedSize)
+  }
+
   test("an inverted build interval reaches the windows the condition accepts") {
     // Int keys route to the long index, so this also pins swap normalization there.
     val index = RangeRelationBroadcastMode(
@@ -411,7 +438,8 @@ class RangeIndexSuite extends SparkFunSuite {
     val empty = buildPoints(IntegerType, Seq.empty)
     assert(empty.upTo(1).isEmpty)
     assert(empty.from(1).isEmpty)
-    // SizeEstimator charges the empty array shell, and the five kept points on top of it.
+    // SizeEstimator charges the two empty arrays' shells, and the five kept
+    // points on top of them.
     assert(empty.estimatedSize > 0)
     assert(index.estimatedSize > empty.estimatedSize)
   }
@@ -580,6 +608,67 @@ class RangeIndexSuite extends SparkFunSuite {
     }
   }
 
+  test("restored interval indexes answer windows that need the walk") {
+    // The round-trip fixtures above place every probe inside a common core, so
+    // the restored index answers from the row slice without reading the tree
+    // state. These intervals are disjoint: each probe must walk maxima, lows,
+    // and highs on the restored index, under every serializer.
+    val serializers = Seq(
+      "Java" -> new org.apache.spark.serializer.JavaSerializer(
+        new org.apache.spark.SparkConf()).newInstance(),
+      "Kryo" -> {
+        val conf = new org.apache.spark.SparkConf()
+          .set(org.apache.spark.internal.config.Kryo.KRYO_REGISTRATION_REQUIRED, true)
+        new org.apache.spark.serializer.KryoSerializer(conf).newInstance()
+      },
+      // Reference tracking off duplicates any aliased object on the wire, so it
+      // also probes a restored graph that re-materialized every array entry.
+      "Kryo without references" -> {
+        val conf = new org.apache.spark.SparkConf()
+          .set(org.apache.spark.internal.config.Kryo.KRYO_REGISTRATION_REQUIRED, true)
+          .set(org.apache.spark.internal.config.Kryo.KRYO_REFERENCE_TRACKING, false)
+        new org.apache.spark.serializer.KryoSerializer(conf).newInstance()
+      })
+
+    def roundTrip[A <: AnyRef: scala.reflect.ClassTag](
+        ser: org.apache.spark.serializer.SerializerInstance, index: A): A =
+      ser.deserialize[A](ser.serialize(index))
+
+    val windows = Seq((5.0, 5.0, List(0)), (25.0, 25.0, List(1)), (45.0, 45.0, List(2)),
+      (5.0, 25.0, List(0, 1)), (25.0, 45.0, List(1, 2)))
+    val spans = Seq(span(0.0, 10.0, 0), span(20.0, 30.0, 1), span(40.0, 50.0, 2))
+    val boxed = buildIntervals(DoubleType, spans)
+    val longIdx = RangeRelationBroadcastMode(
+      Seq(BoundReference(1, IntegerType, nullable = true),
+        BoundReference(2, IntegerType, nullable = true)),
+      IntervalIndexKind)
+      .transform(Array(InternalRow(0, 0, 10), InternalRow(1, 20, 30), InternalRow(2, 40, 50)))
+      .asInstanceOf[LongIntervalIndex]
+
+    windows.foreach { case (low, high, expected) =>
+      assert(probeIds(boxed, low, high).sorted == expected, s"fresh boxed $low-$high")
+      assert(longIdx.overlapping(low.toLong, high.toLong).map(_.getInt(0)).toList.sorted ==
+        expected, s"fresh long $low-$high")
+    }
+
+    serializers.foreach { case (name, ser) =>
+      val restoredBoxed = roundTrip(ser, boxed)
+      val restoredLong = roundTrip(ser, longIdx)
+      windows.foreach { case (low, high, expected) =>
+        // A disjoint build has no all-covering shortcut for these windows, so
+        // the restored index must answer through a fresh walk iterator.
+        assert(restoredBoxed.overlapping(low, high).isInstanceOf[OverlapIterator],
+          s"boxed $low-$high did not walk after $name")
+        assert(restoredLong.overlapping(low.toLong, high.toLong)
+          .isInstanceOf[LongOverlapIterator], s"long $low-$high did not walk after $name")
+        assert(probeIds(restoredBoxed, low, high).sorted == expected,
+          s"boxed $low-$high via $name")
+        assert(restoredLong.overlapping(low.toLong, high.toLong)
+          .map(_.getInt(0)).toList.sorted == expected, s"long $low-$high via $name")
+      }
+    }
+  }
+
   test("overlap iterator right-sizes scratch stack to tree depth") {
     // A single-row index has a trivial core equal to its one interval, so the
     // probe deliberately lands outside it to exercise the walk's scratch stack.
@@ -613,6 +702,27 @@ class RangeIndexSuite extends SparkFunSuite {
       s"stack grew from $initialCapacity to ${iter.stackCapacity} after taking 3 of $n matches")
   }
 
+  test("long overlap traversal is lazy and supports early exit under high overlap") {
+    // The same core-free, high-overlap shape on the family int/long/date/timestamp
+    // and compact-decimal keys take: the long walk must be lazy too, and a fully
+    // eager advance would step through more than these bounds before first match.
+    val n = 10000
+    val index = RangeRelationBroadcastMode(
+      Seq(BoundReference(0, LongType, nullable = true),
+        BoundReference(1, LongType, nullable = true)),
+      IntervalIndexKind)
+      .transform((0 until n).map(i => InternalRow(i.toLong, (i + 100).toLong)).toArray)
+      .asInstanceOf[LongIntervalIndex]
+    val iter = index.overlapping(5000L, 5000L).asInstanceOf[LongOverlapIterator]
+    val initialCapacity = iter.stackCapacity
+
+    assert(iter.take(3).size == 3)
+    assert(iter.steps < 50,
+      s"lazy traversal must perform bounded steps ($n total intervals), but took ${iter.steps}")
+    assert(iter.stackCapacity == initialCapacity,
+      s"stack grew from $initialCapacity to ${iter.stackCapacity} after taking 3 of $n matches")
+  }
+
   test("overlapping uses the common-core short cut without changing the answer") {
     // [0, 10], [5, 15], and [8, 20] share the core [8, 10] (1-D Helly). Any
     // window that reaches it overlaps every interval, so the index returns
@@ -629,6 +739,37 @@ class RangeIndexSuite extends SparkFunSuite {
     assert(probeIds(index, 6, 7).sorted == List(0, 1))
     assert(probeIds(index, 11, 12).sorted == List(1, 2))
     assert(probeIds(index, 16, 30) == List(2))
+  }
+
+  test("overlapping short circuits all-covering windows over builds without a common core") {
+    // Disjoint intervals and distinct points share no core, but a window
+    // spanning max-low and min-high still covers every interval, so the
+    // direct all-rows scan answers it and no walk iterator is built. A
+    // window covering some but not all intervals keeps the walk.
+    val disjoint = buildIntervals(Seq(span(0, 10, 0), span(20, 30, 1)))
+    assert(probeIds(disjoint, -5, 35).sorted == List(0, 1))
+    assert(!disjoint.overlapping(-5, 35).isInstanceOf[OverlapIterator])
+    assert(probeIds(disjoint, 5, 25).sorted == List(0, 1))
+    assert(!disjoint.overlapping(5, 25).isInstanceOf[OverlapIterator])
+    assert(probeIds(disjoint, 5, 15) == List(0))
+    assert(disjoint.overlapping(5, 15).isInstanceOf[OverlapIterator])
+
+    val points = buildIntervals(Seq(span(1, 1, 1), span(5, 5, 5)))
+    assert(probeIds(points, 0, 6).sorted == List(1, 5))
+    assert(!points.overlapping(0, 6).isInstanceOf[OverlapIterator])
+    assert(probeIds(points, 4, 5) == List(5))
+    assert(points.overlapping(4, 5).isInstanceOf[OverlapIterator])
+
+    val longIdx = RangeRelationBroadcastMode(
+      Seq(BoundReference(0, IntegerType, nullable = true),
+        BoundReference(1, IntegerType, nullable = true)),
+      IntervalIndexKind)
+      .transform(Array(InternalRow(0, 10), InternalRow(20, 30)))
+      .asInstanceOf[LongIntervalIndex]
+    assert(longIdx.overlapping(-5L, 35L).map(_.getInt(0)).toSet == Set(0, 20))
+    assert(!longIdx.overlapping(-5L, 35L).isInstanceOf[LongOverlapIterator])
+    assert(longIdx.overlapping(5L, 15L).map(_.getInt(0)).toList == List(0))
+    assert(longIdx.overlapping(5L, 15L).isInstanceOf[LongOverlapIterator])
   }
 
   test("overlapping matches a brute-force reference across randomized interval sets") {
@@ -657,7 +798,7 @@ class RangeIndexSuite extends SparkFunSuite {
     }
   }
 
-  test("broadcast modes route fixed-width keys to the long indexes") {
+  test("broadcast modes route keys that map to one long to the long indexes") {
     // Both build keys are long-convertible: the long interval index.
     assert(RangeRelationBroadcastMode(
       Seq(BoundReference(0, IntegerType, nullable = true),

@@ -20,13 +20,12 @@ package org.apache.spark.sql.execution.joins
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, Expression, InterpretedProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, Expression, InterpretedProjection}
 import org.apache.spark.sql.catalyst.optimizer.{IntervalOverlapJoin, PartialRangeJoin, PointInRangeJoin, RangeJoin}
 import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DateType, Decimal, DecimalType, IntegerType, LongType, ShortType, TimestampNTZType, TimestampType}
-import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.KnownSizeEstimation
+import org.apache.spark.util.{KnownSizeEstimation, SizeEstimator}
 
 /**
  * Broadcast payload of a range join. An index only names candidate rows.
@@ -132,11 +131,12 @@ private[joins] object RangeIndex {
       code: String => String)
 
   /**
-   * An order-preserving long for a fixed-width key, or None when the type must
-   * stay on the generic boxed index: variable-length keys, and floating point,
-   * whose SQL equality for -0.0 and NaN has no bit-preserving order. This is
-   * the only place a key type is specialized; the long indexes and the generated
-   * probe code both consult it.
+   * An order-preserving long for a key type that has one, or None when the type
+   * must stay on the generic boxed index: variable-length keys, floating point,
+   * whose SQL equality for -0.0 and NaN has no bit-preserving order, and
+   * decimals wider than `Decimal.MAX_LONG_DIGITS`, whose unscaled value does
+   * not fit a long. This is the only place a key type is specialized; the long
+   * indexes and the generated probe code both consult it.
    */
   def longKey(dt: DataType): Option[LongKey] = {
     def key(field: (InternalRow, Int) => Long, value: Any => Long): LongKey =
@@ -179,15 +179,6 @@ private[joins] object RangeIndex {
     longKey(dt).getOrElse(
       throw new IllegalStateException(s"$dt has no order-preserving long key."))
   }
-
-  /** Estimated bytes of a row or key value, without reflection or SizeEstimator. */
-  private[joins] def valueSize(v: Any): Long = v match {
-    case u: UnsafeRow => u.getSizeInBytes.toLong
-    case s: UTF8String => s.numBytes().toLong
-    case b: Array[Byte] => b.length.toLong
-    case d: Decimal if d.precision > Decimal.MAX_LONG_DIGITS => 24L + d.precision.toLong
-    case _ => 8L
-  }
 }
 
 /**
@@ -216,56 +207,68 @@ private[joins] object RowSlice {
 // ===== Boxed-key indexes ====================================================
 //
 // Keys are the boxed values `RangeIndex.getValue` reads, compared through
-// `BoxedKeyOrdering`. Floating point, strings, binary, and decimal keys stay
-// here: their comparison has no order-preserving single-long form.
+// `BoxedKeyOrdering`. Floating point, strings, binary, and decimals wider
+// than 18 digits stay here: these types have no order-preserving
+// single-long form, which is the property that routes a key type to the
+// long indexes below (`RangeIndex.longKey`).
 
 /**
- * Augmented interval tree of build-side intervals. Entries are (low, high, row)
- * tuples sorted by low bound, with a parallel row array feeding the scan path
- * and `maxHighs(mid)` recording the maximum high bound in the span rooted at
- * mid. Subtrees whose max high is below the probe window, or whose low starts
- * after it, are pruned during search, and a window meeting the common
- * intersection skips the walk entirely.
+ * Augmented interval tree of build-side intervals. Lows and highs sit in
+ * parallel arrays sorted by low bound, with a row array in the same order
+ * feeding the scan path and `maxHighIdx(mid)` indexing the maximum high
+ * bound in the span rooted at mid. Each key and row object is owned once:
+ * the tree holds one reference per value plus the single row array, so a
+ * serialized index keeps the same object count it was built with.
+ * Subtrees whose max high is below the probe window, or whose low starts
+ * after it, are pruned during search, and a window covering every interval
+ * skips the walk entirely.
  */
 private[joins] class IntervalIndex private (
     val keyType: DataType,
-    private[this] val intervals: Array[(Any, Any, InternalRow)],
-    private[this] val maxHighs: Array[Any],
+    private[this] val lows: Array[Any],
+    private[this] val highs: Array[Any],
+    private[this] val maxHighIdx: Array[Int],
     private[this] val rows: Array[InternalRow])
   extends BoxedKeyOrdering {
 
-  // 1-D Helly: the stored intervals are null-free with lo <= hi, so they share
-  // the intersection [coreLow, coreHigh] iff coreLow <= coreHigh. `intervals`
-  // is sorted by low, so the last low bounds the core from below.
+  // All-covering window bounds. `lows` is sorted, so the last entry bounds
+  // every low from below, and coreHigh is the minimum high. A window covers
+  // every stored interval exactly when it holds probeLow <= coreHigh and
+  // probeHigh >= coreLow, whether or not the intervals share a common core.
   private[this] val coreLow: Any =
-    if (intervals.isEmpty) null else intervals(intervals.length - 1)._1
-  private[this] val coreHigh: Any =
-    if (intervals.isEmpty) null
-    else intervals.iterator.map(_._2).reduce[Any](ordering.min(_, _))
-  private[this] val hasCommonCore: Boolean =
-    coreLow != null && ordering.lteq(coreLow, coreHigh)
-
-  override def estimatedSize: Long = {
-    var size = 24L + intervals.length * 24L
-    var i = 0
-    while (i < intervals.length) {
-      val (lo, hi, row) = intervals(i)
-      size += RangeIndex.valueSize(lo) + RangeIndex.valueSize(hi) + RangeIndex.valueSize(row)
-      i += 1
+    if (lows.isEmpty) null else lows(lows.length - 1)
+  private[this] val coreHigh: Any = {
+    if (highs.isEmpty) null else {
+      var min = highs(0)
+      var i = 1
+      while (i < highs.length) {
+        if (ordering.lt(highs(i), min)) min = highs(i)
+        i += 1
+      }
+      min
     }
-    size
   }
 
+  /**
+   * Measured over the retained arrays, not the index object: SizeEstimator
+   * would consult `estimatedSize` for a KnownSizeEstimation and recurse.
+   * Its identity tracking charges a key shared by `lows` and `highs`, or
+   * aliased across indexes, exactly once.
+   */
+  override def estimatedSize: Long =
+    SizeEstimator.estimate(Array[AnyRef](lows, highs, maxHighIdx, rows))
+
   def overlapping(low: Any, high: Any): Iterator[InternalRow] = {
-    if (intervals.isEmpty || low == null || high == null) return Iterator.empty
+    if (lows.isEmpty || low == null || high == null) return Iterator.empty
     val ord = ordering
     val (probeLow, probeHigh) = if (ord.lteq(low, high)) (low, high) else (high, low)
-    // A window that meets the core overlaps every interval, and the walk below
-    // would return every row anyway: return them without visiting the tree.
-    if (hasCommonCore && ord.lteq(probeLow, coreHigh) && ord.gteq(probeHigh, coreLow)) {
+    // A window that covers every interval gets every row the walk would
+    // return, without visiting the tree. The comparison above is exact for
+    // windows on its own, so a disjoint build qualifies too.
+    if (ord.lteq(probeLow, coreHigh) && ord.gteq(probeHigh, coreLow)) {
       return new RowSlice(rows, 0, rows.length)
     }
-    new OverlapIterator(intervals, rows, maxHighs, ord, probeLow, probeHigh)
+    new OverlapIterator(lows, highs, maxHighIdx, rows, ord, probeLow, probeHigh)
   }
 }
 
@@ -280,32 +283,37 @@ private[joins] object IntervalIndex {
     val buffer = new ArrayBuffer[(Any, Any, InternalRow)](initialCapacity)
     val projection = new InterpretedProjection(buildKeys)
     val lowOf = RangeIndex.getValue(buildKeys.head.dataType, 0)
-    val highOf =
-      if (buildKeys.length == 1) lowOf else RangeIndex.getValue(buildKeys(1).dataType, 1)
     val ordering = PhysicalDataType.ordering(keyType)
 
-    while (rows.hasNext) {
-      val r = rows.next()
-      val p = projection(r)
-      normalizedInterval(ordering, lowOf(p), highOf(p), r, buffer)
+    if (buildKeys.length == 1) {
+      // A point build key is one key used as both ends, so it is copied once
+      // and serves as both bounds, matching `LongIntervalIndex.build`.
+      while (rows.hasNext) {
+        val r = rows.next()
+        val p = projection(r)
+        val rawLo = lowOf(p)
+        if (rawLo != null) {
+          val key = InternalRow.copyValue(rawLo)
+          buffer += ((key, key, r.copy()))
+        }
+      }
+    } else {
+      val highOf = RangeIndex.getValue(buildKeys(1).dataType, 1)
+      while (rows.hasNext) {
+        val r = rows.next()
+        val p = projection(r)
+        val rawLo = lowOf(p)
+        val rawHi = highOf(p)
+        if (rawLo != null && rawHi != null) {
+          val lo = InternalRow.copyValue(rawLo)
+          val hi = InternalRow.copyValue(rawHi)
+          val (normLo, normHi) = if (ordering.lteq(lo, hi)) (lo, hi) else (hi, lo)
+          buffer += ((normLo, normHi, r.copy()))
+        }
+      }
     }
 
     sortAndBuild(keyType, ordering, buffer.toArray)
-  }
-
-  /** Drops a null-bounded interval; otherwise orders (lo, hi) and copies the key and row. */
-  private def normalizedInterval(
-      ordering: Ordering[Any],
-      rawLo: Any,
-      rawHi: Any,
-      r: InternalRow,
-      buffer: ArrayBuffer[(Any, Any, InternalRow)]): Unit = {
-    if (rawLo != null && rawHi != null) {
-      val lo = InternalRow.copyValue(rawLo)
-      val hi = InternalRow.copyValue(rawHi)
-      val (normLo, normHi) = if (ordering.lteq(lo, hi)) (lo, hi) else (hi, lo)
-      buffer += ((normLo, normHi, r.copy()))
-    }
   }
 
   private def sortAndBuild(
@@ -314,47 +322,56 @@ private[joins] object IntervalIndex {
       valid: Array[(Any, Any, InternalRow)]): IntervalIndex = {
     java.util.Arrays.sort(valid, Ordering.by[(Any, Any, InternalRow), Any](_._1)(ordering))
     val length = valid.length
-    val maxHighs = new Array[Any](length)
-
-    def fillMaxHigh(start: Int, end: Int): Any = {
-      if (start >= end) return null
-      val mid = (start + end) >>> 1
-      var max = valid(mid)._2
-      val left = fillMaxHigh(start, mid)
-      val right = fillMaxHigh(mid + 1, end)
-      if (left != null) max = ordering.max(max, left)
-      if (right != null) max = ordering.max(max, right)
-      maxHighs(mid) = max
-      max
-    }
-
-    fillMaxHigh(0, length)
+    val lows = new Array[Any](length)
+    val highs = new Array[Any](length)
     val rows = new Array[InternalRow](length)
     var i = 0
     while (i < length) {
+      lows(i) = valid(i)._1
+      highs(i) = valid(i)._2
       rows(i) = valid(i)._3
       i += 1
     }
-    new IntervalIndex(keyType, valid, maxHighs, rows)
+
+    // `maxHighIdx(mid)` indexes the maximum high bound in the span rooted at
+    // mid. Storing an index instead of aliasing the key keeps each key owned,
+    // and serialized, exactly once.
+    val maxHighIdx = new Array[Int](length)
+
+    def fillMaxHigh(start: Int, end: Int): Int = {
+      if (start >= end) return -1
+      val mid = (start + end) >>> 1
+      var best = mid
+      val left = fillMaxHigh(start, mid)
+      if (left >= 0 && ordering.gt(highs(left), highs(best))) best = left
+      val right = fillMaxHigh(mid + 1, end)
+      if (right >= 0 && ordering.gt(highs(right), highs(best))) best = right
+      maxHighIdx(mid) = best
+      best
+    }
+
+    fillMaxHigh(0, length)
+    new IntervalIndex(keyType, lows, highs, maxHighIdx, rows)
   }
 }
 
 private[joins] class OverlapIterator(
-    intervals: Array[(Any, Any, InternalRow)],
+    lows: Array[Any],
+    highs: Array[Any],
+    maxHighIdx: Array[Int],
     rows: Array[InternalRow],
-    maxHighs: Array[Any],
     ord: Ordering[Any],
     probeLow: Any,
     probeHigh: Any) extends Iterator[InternalRow] {
 
-  private[this] val depth = 32 - java.lang.Integer.numberOfLeadingZeros(intervals.length)
+  private[this] val depth = 32 - java.lang.Integer.numberOfLeadingZeros(lows.length)
   private[this] var stackStart = new Array[Int](math.max(8, depth * 3))
   private[this] var stackEnd = new Array[Int](math.max(8, depth * 3))
   private[this] var stackTop = 0
   private[joins] var steps = 0
   private[this] var nextRow: InternalRow = null
 
-  push(0, intervals.length)
+  push(0, lows.length)
 
   private[joins] def stackCapacity: Int = stackStart.length
 
@@ -376,17 +393,15 @@ private[joins] class OverlapIterator(
       val end = stackEnd(stackTop)
       if (start < end) {
         val mid = (start + end) >>> 1
-        if (ord.gteq(maxHighs(mid), probeLow)) {
-          if (ord.lteq(intervals(mid)._1, probeHigh)) {
+        if (ord.gteq(highs(maxHighIdx(mid)), probeLow)) {
+          if (ord.lteq(lows(mid), probeHigh)) {
             push(mid + 1, end)
           }
           push(mid, -1)
           push(start, mid)
         }
       } else if (end == -1) {
-        val lo = intervals(start)._1
-        val hi = intervals(start)._2
-        if (ord.gteq(hi, probeLow) && ord.lteq(lo, probeHigh)) {
+        if (ord.gteq(highs(start), probeLow) && ord.lteq(lows(start), probeHigh)) {
           return rows(start)
         }
       }
@@ -412,25 +427,17 @@ private[joins] class OverlapIterator(
 
 /**
  * Sorted build-side points for single cross-side inequalities (`<`, `<=`, `>`, `>=`).
+ * Keys sit beside the rows they name, one owned copy each, in key order.
  */
 private[joins] class PointIndex private (
     val keyType: DataType,
-    private[this] val points: Array[(Any, InternalRow)],
+    private[this] val keys: Array[Any],
     private[this] val rows: Array[InternalRow])
   extends BoxedKeyOrdering {
 
-  private[this] val length = points.length
+  private[this] val length = keys.length
 
-  override def estimatedSize: Long = {
-    var size = 16L + points.length * 16L
-    var i = 0
-    while (i < points.length) {
-      val (key, row) = points(i)
-      size += RangeIndex.valueSize(key) + RangeIndex.valueSize(row)
-      i += 1
-    }
-    size
-  }
+  override def estimatedSize: Long = SizeEstimator.estimate(Array[AnyRef](keys, rows))
 
   /** Points whose key is less than or equal to `value`. */
   def upTo(value: Any): Iterator[InternalRow] =
@@ -446,7 +453,7 @@ private[joins] class PointIndex private (
     var hi = length
     while (lo < hi) {
       val mid = (lo + hi) >>> 1
-      val c = ord.compare(points(mid)._1, value)
+      val c = ord.compare(keys(mid), value)
       if (c < 0 || (skipEquals && c == 0)) lo = mid + 1 else hi = mid
     }
     lo
@@ -486,25 +493,29 @@ private[joins] object PointIndex {
       ordering: Ordering[Any],
       present: Array[(Any, InternalRow)]): PointIndex = {
     java.util.Arrays.sort(present, Ordering.by[(Any, InternalRow), Any](_._1)(ordering))
-    val rows = new Array[InternalRow](present.length)
+    val length = present.length
+    val keys = new Array[Any](length)
+    val rows = new Array[InternalRow](length)
     var i = 0
-    while (i < present.length) {
+    while (i < length) {
+      keys(i) = present(i)._1
       rows(i) = present(i)._2
       i += 1
     }
-    new PointIndex(keyType, present, rows)
+    new PointIndex(keyType, keys, rows)
   }
 }
 
-// ===== Long-specialized indexes for fixed-width keys =======================
+// ===== Long-specialized indexes for keys that map to one long ==============
 //
-// Indexes for fixed-width keys, stored as order-preserving longs converted at the
-// boundary by `RangeIndex.longKey`. Once built, these structures carry no Spark
-// types: the tree walk and the binary searches compare raw longs, and generated
-// probe code passes long keys without boxing. Types that cannot be one long, or
-// whose SQL equality has no bit mapping (floating point), stay on `IntervalIndex`
-// and `PointIndex`. `RangeRelationBroadcastMode` picks between the two families once,
-// from the build keys' data types.
+// Indexes for the key types `RangeIndex.longKey` maps to one order-preserving
+// long, stored as raw longs converted at the build boundary. Once built, these
+// structures carry no Spark types: the tree walk and the binary searches
+// compare raw longs, and generated probe code passes long keys without boxing.
+// Fixed width alone is not the routed property: floating point is fixed-width
+// but stays boxed, while compact decimals route here as unscaled longs.
+// `RangeRelationBroadcastMode` picks between the two families once, from the
+// build keys' data types.
 
 private[joins] class LongIntervalIndex private (
     val keyType: DataType,
@@ -514,10 +525,10 @@ private[joins] class LongIntervalIndex private (
     private[this] val rows: Array[InternalRow])
   extends LongKeyConversion {
 
-  // 1-D Helly on raw keys: the stored intervals are null-free with lo <= hi,
-  // so they share the intersection [coreLow, coreHigh] iff coreLow <= coreHigh.
-  // A window that meets the core overlaps every interval, and the walk below
-  // would return every row anyway.
+  // All-covering window bounds on raw keys: `lows` is sorted, so the last
+  // entry bounds every low from below, and coreHigh is the minimum high.
+  // A window covers every stored interval exactly when it holds probeLow <=
+  // coreHigh and probeHigh >= coreLow, whether or not a common core exists.
   private[this] val coreLow: Long = if (lows.isEmpty) Long.MinValue else lows(lows.length - 1)
   private[this] val coreHigh: Long = {
     var min = Long.MaxValue
@@ -528,17 +539,9 @@ private[joins] class LongIntervalIndex private (
     }
     if (highs.isEmpty) Long.MinValue else min
   }
-  private[this] val hasCommonCore: Boolean = !lows.isEmpty && coreLow <= coreHigh
 
-  override def estimatedSize: Long = {
-    var size = 24L + lows.length * 24L
-    var i = 0
-    while (i < rows.length) {
-      size += RangeIndex.valueSize(rows(i))
-      i += 1
-    }
-    size
-  }
+  override def estimatedSize: Long =
+    SizeEstimator.estimate(Array[AnyRef](lows, highs, maxHighs, rows))
 
   def overlapping(low: Long, high: Long): Iterator[InternalRow] = {
     if (lows.isEmpty) return Iterator.empty
@@ -549,7 +552,10 @@ private[joins] class LongIntervalIndex private (
       probeLow = probeHigh
       probeHigh = t
     }
-    if (hasCommonCore && probeLow <= coreHigh && probeHigh >= coreLow) {
+    // A window that covers every interval gets every row the walk would
+    // return, without visiting the tree. The comparison alone is exact for
+    // windows, so a disjoint build qualifies too.
+    if (probeLow <= coreHigh && probeHigh >= coreLow) {
       return new RowSlice(rows, 0, rows.length)
     }
     new LongOverlapIterator(lows, highs, rows, maxHighs, probeLow, probeHigh)
@@ -695,15 +701,7 @@ private[joins] class LongPointIndex private (
 
   private[this] val length = keys.length
 
-  override def estimatedSize: Long = {
-    var size = 16L + keys.length * 8L
-    var i = 0
-    while (i < rows.length) {
-      size += RangeIndex.valueSize(rows(i))
-      i += 1
-    }
-    size
-  }
+  override def estimatedSize: Long = SizeEstimator.estimate(Array[AnyRef](keys, rows))
 
   /** Points whose key is less than or equal to `value`. */
   def upTo(value: Long): Iterator[InternalRow] =
