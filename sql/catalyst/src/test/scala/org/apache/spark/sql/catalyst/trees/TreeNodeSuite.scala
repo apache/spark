@@ -348,26 +348,64 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     val c2 = Literal(12)
     val c3 = Literal(13)
     val c4 = Literal(14)
-    val expression = Coalesce(Seq(c0, c1, c2, c3, c4))
+    val origin = Origin(line = Some(10))
+    val expression = CurrentOrigin.withOrigin(origin) {
+      Coalesce(Seq(c0, c1, c2, c3, c4))
+    }
+    val tag = TreeNodeTag[String]("parent")
+    expression.setTagValue(tag, "retained")
     val copy1 = Literal(11)
     val copy3 = Literal(13)
+    val visited = new ArrayBuffer[Expression]()
 
     // Keep a reference-equal prefix, retain non-adjacent equal copies, and change the last child.
-    val result = expression.mapChildren {
-      case l if l eq c0 => c0
-      case l if l eq c1 => copy1
-      case l if l eq c2 => c2
-      case l if l eq c3 => copy3
-      case l if l eq c4 => Literal(99)
-      case other => other
+    val result = CurrentOrigin.withOrigin(Origin(line = Some(20))) {
+      expression.mapChildren { child =>
+        visited += child
+        child match {
+          case l if l eq c0 => c0
+          case l if l eq c1 => copy1
+          case l if l eq c2 => c2
+          case l if l eq c3 => copy3
+          case l if l eq c4 => Literal(99)
+          case other => other
+        }
+      }
     }
 
     assert(result ne expression)
+    assert(result.origin == origin)
+    assert(result.getTagValue(tag).contains("retained"))
+    assert(visited.size == expression.children.size)
+    visited.zip(expression.children).foreach { case (actual, expected) =>
+      assert(actual eq expected)
+    }
     assert(result.children(0) eq c0)
     assert(result.children(1) eq copy1)
     assert(result.children(2) eq c2)
     assert(result.children(3) eq copy3)
     assert(result.children(4) == Literal(99))
+  }
+
+  test("mapChildren stops comparing children after a material change") {
+    var comparisons = 0
+    val last = new Literal(2, IntegerType) {
+      override def fastEquals(other: TreeNode[_]): Boolean = {
+        comparisons += 1
+        super.fastEquals(other)
+      }
+    }
+    val expression = Coalesce(Seq(Literal(1), last))
+    val replacements = Seq(Literal(3), Literal(4))
+    val result = expression.mapChildren {
+      case child if child eq last => replacements(1)
+      case _ => replacements.head
+    }
+
+    assert(comparisons == 0)
+    result.children.zip(replacements).foreach { case (actual, expected) =>
+      assert(actual eq expected)
+    }
   }
 
   test("preserves origin") {

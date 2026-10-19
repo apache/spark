@@ -57,14 +57,6 @@ import org.apache.spark.util.collection.BitSet
 /** Used by [[TreeNode.getNodeNumbered]] when traversing the tree for a given number */
 private class MutableInt(var i: Int)
 
-// A single shared identity function used as the `PartialFunction.applyOrElse` fallback during tree
-// traversal, so a fresh `identity` closure is not allocated at every node. It is typed `Any => Any`
-// and cast at the use site so one instance serves every `BaseType`; the cast is safe because
-// `identity` returns its argument unchanged regardless of type.
-private object TreeNodeIdentity {
-  val fn: Any => Any = identity
-}
-
 private object TreeNode {
   // Volatile fields provide safe publication but need compare-and-set to ensure concurrent readers
   // return the same cached instance. VarHandles avoid allocating an atomic wrapper for every node.
@@ -298,23 +290,6 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       }
     }
     value
-  }
-
-  // Applies `rule` to `node` with this node's origin active, restoring the previous origin
-  // afterward even if the rule throws. Equivalent to `CurrentOrigin.withOrigin`, but written as an
-  // explicit save/set/restore to avoid allocating that method's by-name closure at every node.
-  private def applyRule(
-      node: BaseType,
-      rule: PartialFunction[BaseType, BaseType]): BaseType = {
-    val previousOrigin = CurrentOrigin.get
-    CurrentOrigin.set(origin)
-    try {
-      rule.applyOrElse(
-        node,
-        TreeNodeIdentity.fn.asInstanceOf[BaseType => BaseType])
-    } finally {
-      CurrentOrigin.set(previousOrigin)
-    }
   }
 
   /**
@@ -558,6 +533,19 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     transformDownWithPruning(AlwaysProcess.fn, UnknownRuleId)(rule)
   }
 
+  // Avoid allocating CurrentOrigin.withOrigin's by-name closure at every node.
+  private def applyRule(
+      node: BaseType,
+      rule: PartialFunction[BaseType, BaseType]): BaseType = {
+    val previousOrigin = CurrentOrigin.get
+    CurrentOrigin.set(origin)
+    try {
+      rule.applyOrElse(node, identity[BaseType])
+    } finally {
+      CurrentOrigin.set(previousOrigin)
+    }
+  }
+
   /**
    * A variant of [[transformDown]] that retains structurally equal replacement nodes.
    */
@@ -642,13 +630,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     if (!cond.apply(this) || isRuleIneffective(ruleId)) {
       return this
     }
-    val newNode = if (this.isInstanceOf[LeafLike[_]]) {
-      applyRule(this, rule)
-    } else {
-      val afterRuleOnChildren = mapChildren(_.transformUpWithPruning(cond, ruleId)(rule))
-      val ruleInput = if (this fastEquals afterRuleOnChildren) this else afterRuleOnChildren
-      applyRule(ruleInput, rule)
-    }
+    val afterRuleOnChildren = mapChildren(_.transformUpWithPruning(cond, ruleId)(rule))
+    val ruleInput = if (this fastEquals afterRuleOnChildren) this else afterRuleOnChildren
+    val newNode = applyRule(ruleInput, rule)
     if (this eq newNode) {
       markRuleAsIneffective(ruleId)
       this
@@ -852,7 +836,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
             priorIndex += 1
           }
         }
-        if (!oldChild.fastEquals(newChild)) changed = true
+        if (!changed && !oldChild.fastEquals(newChild)) changed = true
         newChildren(index) = newChild
       } else if (newChildren ne null) {
         newChildren(index) = oldChild
