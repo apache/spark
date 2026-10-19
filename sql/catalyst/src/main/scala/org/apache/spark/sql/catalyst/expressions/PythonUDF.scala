@@ -61,9 +61,9 @@ object PythonUDF {
 
   /**
    * Whether `e` is a scalar Python UDF that runs in a Python worker, where it can be chained
-   * with the scalar Python UDFs around it. In-process UDFs never are: each one is evaluated by
-   * its own operator. Rules that keep or build such chains use this rather than
-   * [[isScalarPythonUDF]].
+   * with the scalar Python UDFs around it. In-process UDFs never are: a nested in-process call
+   * is extracted into a separate operator, although sibling calls may share one. Rules that
+   * keep or build such chains use this rather than [[isScalarPythonUDF]].
    */
   def chainsInWorker(e: Expression): Boolean = {
     isScalarPythonUDF(e) &&

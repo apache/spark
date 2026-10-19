@@ -168,9 +168,11 @@ class InProcessUDFTests(ReusedSQLTestCase):
         from pyspark.inprocess import inprocess_udf
 
         wrapper = inprocess_udf("interval year to month")(lambda x: x)
-        with self.assertRaises(PySparkNotImplementedError):
-            wrapper("id")
-        self.assertIsNone(wrapper._serialized)
+        with patch("pyspark.inprocess.udf._serialize_udf") as serialize:
+            with self.assertRaises(PySparkNotImplementedError):
+                wrapper("id")
+        serialize.assert_not_called()
+        self.assertIsNone(wrapper._jfunc)
 
     def test_worker_environment_is_rejected(self):
         from pyspark.inprocess import inprocess_udf
@@ -689,6 +691,25 @@ class BootstrapFailureProbe {
         plan = self.spark.range(1).select(identity("id"))._jdf.queryExecution().analyzed()
         self.assertFalse(plan.expressions().apply(0).deterministic())
 
+    def test_command_is_stable_after_the_first_call(self):
+        import pyarrow as pa
+
+        from pyspark.inprocess import inprocess_udf
+
+        # Like other Python UDFs, the command is serialized once, on the first call.
+        namespace = {"inprocess_udf": inprocess_udf, "pa": pa}
+        exec(
+            "@inprocess_udf('long')\n"
+            "def f(x): return pa.array([LOOKUP] * len(x), type=pa.int64())\n",
+            namespace,
+        )
+        wrapper = namespace["f"]
+        namespace["LOOKUP"] = 42
+        first = wrapper("id")
+        namespace["LOOKUP"] = 99
+        rows = self.spark.range(1).select(first, wrapper("id")).collect()
+        self.assertEqual(tuple(rows[0]), (42, 42))
+
     def test_calls_share_one_jvm_function(self):
         import copy
 
@@ -715,7 +736,6 @@ class BootstrapFailureProbe {
         # A called wrapper can still be copied; the copy creates its own function.
         copied = copy.deepcopy(double)
         self.assertIsNone(copied._jfunc)
-        self.assertIsNone(copied._serialized)
         self.assertEqual(self.spark.range(2).select(copied("id")).collect()[1][0], 2)
 
     def test_traceback_settings_are_per_registration(self):
@@ -911,9 +931,10 @@ class BootstrapFailureProbe {
             assert_released()
             # Deserialization fails before Python imports any input CDI structures.
             broken = inprocess_udf(LongType())(lambda x: x)
-            broken._serialized = b"invalid pickle"
+            with patch("pyspark.inprocess.udf._serialize_udf", return_value=b"invalid pickle"):
+                column = broken(df.id)
             with self.assertRaisesRegex(Exception, "UnpicklingError"):
-                df.select(broken(df.id)).collect()
+                df.select(column).collect()
             assert_released()
 
     def test_double_long(self):
@@ -1679,19 +1700,22 @@ class BootstrapFailureProbe {
 
         from pyspark.inprocess import inprocess_udf
 
-        # Every input column is an argument, so the output's input columns come from Arrow.
+        # Every input column is an argument of a type that reads back exactly, so the output's
+        # input columns come from Arrow.
         count = inprocess_udf("long")(lambda *cols: pa.array([len(cols)] * len(cols[0])))
         with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": "3"}):
             df = self.spark.range(10, numPartitions=2).selectExpr(
                 "IF(id % 4 = 0, NULL, CAST(id AS STRING)) AS s",
                 "IF(id = 3, CAST(X'FF' AS STRING), 'ok') AS invalid_utf8",
-                "CAST(id AS DECIMAL(20, 3)) / 7 AS d",
                 "TIMESTAMP_MICROS(id * 1000003) AS ts",
                 "CAST(TIMESTAMP_MICROS(id) AS TIMESTAMP_NTZ) AS ntz",
-                "IF(id = 5, NULL, ARRAY(CAST(id AS STRING), NULL)) AS arr",
-                "MAP('k', IF(id % 2 = 0, NULL, id)) AS m",
                 "NAMED_STRUCT('a', id, 'b', id / 3, 'c', BINARY(CAST(id AS STRING))) AS st",
             )
+            factory = self.spark._jvm.org.apache.spark.sql.execution.python
+            reads_back = factory.InProcessArrowEvalPythonEvaluatorFactory.readsBack
+            from_json = self.spark._jvm.org.apache.spark.sql.types.DataType.fromJson
+            for field in df.schema.fields:
+                self.assertTrue(reads_back(from_json(field.dataType.json())), field)
             expected = df.collect()
             rows = df.select("*", count(*[df[c] for c in df.columns]).alias("n")).collect()
         self.assertEqual([r[:-1] for r in rows], [tuple(r) for r in expected])
@@ -1702,18 +1726,24 @@ class BootstrapFailureProbe {
 
         from pyspark.inprocess import inprocess_udf
 
-        # Intervals are converted for Arrow, so these rows are buffered rather than read back.
+        # Intervals are converted for Arrow, and decimals, arrays and maps would read back only
+        # element by element, so these rows are buffered rather than read back.
         count = inprocess_udf("long")(lambda *cols: pa.array([len(cols)] * len(cols[0])))
         with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": "3"}):
             df = self.spark.range(10, numPartitions=2).selectExpr(
-                "id", "MAKE_INTERVAL(0, 1, 0, CAST(id AS INT), 0, 0, id / 1000) AS i"
+                "id",
+                "MAKE_INTERVAL(0, 1, 0, CAST(id AS INT), 0, 0, id / 1000) AS i",
+                "CAST(id AS DECIMAL(20, 3)) / 7 AS d",
+                "IF(id = 5, NULL, ARRAY(CAST(id AS STRING), NULL)) AS arr",
+                "MAP('k', IF(id % 2 = 0, NULL, id)) AS m",
             )
             # PySpark cannot collect intervals, so compare them as strings.
-            expected = df.selectExpr("id", "CAST(i AS STRING)").collect()
-            result = df.select("*", count(df.id, df.i).alias("n"))
-            rows = result.selectExpr("id", "CAST(i AS STRING)", "n").collect()
+            columns = ["id", "CAST(i AS STRING)", "d", "arr", "m"]
+            expected = df.selectExpr(*columns).collect()
+            result = df.select("*", count(*[df[c] for c in df.columns]).alias("n"))
+            rows = result.selectExpr(*columns, "n").collect()
         self.assertEqual([r[:-1] for r in rows], [tuple(r) for r in expected])
-        self.assertEqual({r.n for r in rows}, {2})
+        self.assertEqual({r.n for r in rows}, {len(df.columns)})
 
     def test_full_validation_can_be_disabled(self):
         import pyarrow.compute as pc

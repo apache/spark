@@ -91,6 +91,15 @@ class InProcessUDFWrapper:
     def __init__(
         self, func: Callable, returnType: Union[DataType, str], deterministic: bool = True
     ) -> None:
+        if not callable(func):
+            raise PySparkTypeError(
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "function",
+                    "arg_name": "f",
+                    "arg_type": type(func).__name__,
+                },
+            )
         _check_return_type_argument(returnType)
         self._return_type = returnType
         self._parsed_return_type: Optional[DataType] = None
@@ -107,7 +116,6 @@ class InProcessUDFWrapper:
                 messageParameters={"detail": "0-arg inprocess_udfs are not supported."},
             )
         self._func = func
-        self._serialized: Optional[bytes] = None
         # The JVM-side function, created once so that calls do not resend the command.
         self._jfunc: Optional["JavaObject"] = None
         update_wrapper(self, func, updated=())
@@ -142,20 +150,17 @@ class InProcessUDFWrapper:
         return self
 
     def __getstate__(self) -> Dict[str, Any]:
-        # The JVM-side function holds the py4j gateway, which cannot be pickled or copied, and
-        # the serialized command is labeled with the version of the process that sends it, so
-        # a copy, possibly in another Python, serializes the function and creates its own.
+        # The JVM-side function holds the py4j gateway, which cannot be pickled or copied. A
+        # copy, possibly in another Python, serializes the function and creates its own.
         state = self.__dict__.copy()
         state["_jfunc"] = None
-        state["_serialized"] = None
         return state
 
     def _serialize(self) -> bytes:
-        if self._serialized is None:
-            # Validate before caching the command, including driver-only UDT definitions.
-            self.returnType
-            self._serialized = _serialize_udf(self._func)
-        return self._serialized
+        # Validate first, including driver-only UDT definitions. The command is not kept: the
+        # JVM-side function, created once, holds it.
+        self.returnType
+        return _serialize_udf(self._func)
 
     def __call__(self, *cols: Union[Column, str], **kwargs: Union[Column, str]) -> Column:
         """
@@ -253,8 +258,9 @@ def inprocess_udf(
 
     Returns
     -------
-    ``InProcessUDFWrapper`` if ``f`` is a function, otherwise a decorator that wraps a
-    function as one.
+    :class:`InProcessUDFWrapper` or function
+        The wrapper if ``f`` is a function, otherwise a decorator that wraps a function as
+        one.
 
     Examples
     --------

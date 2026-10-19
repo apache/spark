@@ -32,7 +32,7 @@ private[python] object InProcessEvaluatorTestUtils {
   /** Every metric that an evaluator may update, as `InProcessArrowEvalPythonExec` creates. */
   def allMetrics(): Map[String, SQLMetric] =
     (InProcessArrowEvalPythonExec.sizeMetricsDesc ++
-      InProcessArrowEvalPythonExec.timingMetricsDesc ++
+      InProcessArrowEvalPythonExec.nanoTimingMetricsDesc ++
       InProcessArrowEvalPythonExec.otherMetricsDesc).keys.map(_ -> new SQLMetric("sum", 0L)).toMap
 
   def thread(body: => Unit): Thread = {

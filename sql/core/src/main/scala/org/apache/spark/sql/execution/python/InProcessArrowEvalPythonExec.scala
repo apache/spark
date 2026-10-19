@@ -21,6 +21,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, PythonUDF}
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
 
 /** Row-based CDI execution, sharing the standard Python UDF evaluator contracts. */
@@ -30,13 +31,17 @@ case class InProcessArrowEvalPythonExec(
     child: SparkPlan) extends EvalPythonExec with PythonSQLMetrics {
 
   // The keys of `PythonSQLMetrics` without `pythonBootTime`, since there are no workers to
-  // start, and with descriptions of in-process execution.
+  // start, and with descriptions of in-process execution. Times are summed in nanoseconds
+  // across tasks, since a registration or a batch can take less than a millisecond.
   override protected def sizeMetricsDesc: Map[String, String] =
     InProcessArrowEvalPythonExec.sizeMetricsDesc
-  override protected def timingMetricsDesc: Map[String, String] =
-    InProcessArrowEvalPythonExec.timingMetricsDesc
+  override protected def timingMetricsDesc: Map[String, String] = Map.empty
   override protected def otherMetricsDesc: Map[String, String] =
     InProcessArrowEvalPythonExec.otherMetricsDesc
+  override protected def additionalMetrics: Map[String, SQLMetric] =
+    InProcessArrowEvalPythonExec.nanoTimingMetricsDesc.map { case (k, v) =>
+      k -> SQLMetrics.createNanoTimingMetric(sparkContext, v)
+    }
 
   override protected def doExecute(): RDD[InternalRow] = {
     InProcessPythonUDFBuilder.checkConfiguration(conf)
@@ -64,7 +69,7 @@ object InProcessArrowEvalPythonExec {
     "pythonDataSent" -> "data exported to in-process Python",
     "pythonDataReceived" -> "data returned from in-process Python")
 
-  private[python] val timingMetricsDesc: Map[String, String] = Map(
+  private[python] val nanoTimingMetricsDesc: Map[String, String] = Map(
     "pythonInitTime" -> "time to register UDFs in in-process Python",
     "pythonTotalTime" -> "total time of in-process UDF evaluation, including reading its input",
     "pythonProcessingTime" -> "time to execute Python code")

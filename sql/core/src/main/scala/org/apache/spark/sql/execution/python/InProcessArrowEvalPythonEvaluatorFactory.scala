@@ -30,11 +30,12 @@ import scala.jdk.CollectionConverters._
 import com.google.common.util.concurrent.Uninterruptibles
 import org.apache.arrow.c.{ArrowArray, ArrowSchema, BaseStruct}
 import org.apache.arrow.util.AutoCloseables
-import org.apache.arrow.vector.VectorSchemaRoot
+import org.apache.arrow.vector.{BaseLargeVariableWidthVector, BaseVariableWidthVector, DensityAwareVector, VectorSchemaRoot}
 
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.api.python.ChainedPythonFunctions
 import org.apache.spark.memory.MemoryConsumer
+import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, JoinedRow, PythonUDF, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.execution.arrow.ArrowWriter
@@ -132,10 +133,6 @@ class InProcessArrowEvalPythonEvaluatorFactory(
     val expectedFields = udfs.map { udf =>
       ArrowUtils.toArrowField("result", udf.dataType, true, timeZoneId, largeVarTypes)
     }
-    val processingTime = new InProcessArrowEvalPythonEvaluatorFactory.NanosecondTimer(
-      metrics("pythonProcessingTime"))
-    val initTime = new InProcessArrowEvalPythonEvaluatorFactory.NanosecondTimer(
-      metrics("pythonInitTime"))
     val arrowSchema = ArrowUtils.toArrowSchema(inputSchema, timeZoneId, largeVarTypes)
     // Capture before consuming input: an old task must never join a later context's session.
     val runtime = runtimeSession
@@ -147,27 +144,45 @@ class InProcessArrowEvalPythonEvaluatorFactory(
     @volatile var spillDir: File = null
     // Guarded by the queue's monitor.
     var queueAbandoned = false
+    // Only the consumer holding the iterator's lock adds and removes rows.
+    class InProcessRowQueue(localDir: File, serializerManager: SerializerManager)
+      extends HybridRowQueue(context.taskMemoryManager(), localDir, childOutput.length,
+        serializerManager, lockFree = true) {
+
+      override protected def createDiskQueue(): RowQueue = synchronized {
+        if (spillDir == null) {
+          spillDir = Files.createTempDirectory(localDir.toPath, "inprocess-udf-").toFile
+        }
+        DiskRowQueue(Files.createTempFile(spillDir.toPath, "buffer", "").toFile,
+          childOutput.length, serializerManager)
+      }
+
+      // Once task completion leaves the queue to the executor, it must not spill for other
+      // consumers into a directory that nothing deletes.
+      override def spill(size: Long, trigger: MemoryConsumer): Long = synchronized {
+        if (queueAbandoned) 0L else super.spill(size, trigger)
+      }
+
+      /**
+       * Leaves the queue to the executor: closes its disk queues, which hold no task memory
+       * but open streams, and deletes their directory. The consumer no longer uses the
+       * queue, and its last changes are visible, since it marked a read afterwards.
+       */
+      def abandon(): Unit = synchronized {
+        queueAbandoned = true
+        Utils.tryWithSafeFinally {
+          (queues.asScala ++ Option(reading)).filterNot(isInMemoryQueue).foreach { q =>
+            Utils.tryLogNonFatalError(q.close())
+          }
+        } {
+          Utils.deleteQuietly(spillDir)
+        }
+      }
+    }
     val (queue, projection) = joinInput match {
       case Buffered(projection) =>
-        val localDir = new File(Utils.getLocalDir(SparkEnv.get.conf))
-        val serializerManager = SparkEnv.get.serializerManager
-        // Only the consumer holding the iterator's lock adds and removes rows.
-        val queue = new HybridRowQueue(context.taskMemoryManager(), localDir,
-            childOutput.length, serializerManager, lockFree = true) {
-          override protected def createDiskQueue(): RowQueue = synchronized {
-            if (spillDir == null) {
-              spillDir = Files.createTempDirectory(localDir.toPath, "inprocess-udf-").toFile
-            }
-            DiskRowQueue(Files.createTempFile(spillDir.toPath, "buffer", "").toFile,
-              childOutput.length, serializerManager)
-          }
-
-          // Once task completion leaves the queue to the executor, it must not spill for other
-          // consumers into a directory that nothing deletes.
-          override def spill(size: Long, trigger: MemoryConsumer): Long = synchronized {
-            if (queueAbandoned) 0L else super.spill(size, trigger)
-          }
-        }
+        val queue = new InProcessRowQueue(
+          new File(Utils.getLocalDir(SparkEnv.get.conf)), SparkEnv.get.serializerManager)
         (queue, projection.orNull)
       case ReadBack => (null, null)
     }
@@ -194,13 +209,8 @@ class InProcessArrowEvalPythonEvaluatorFactory(
       releaseTaskMemory = () => if (queue != null) {
         Utils.tryWithSafeFinally(queue.close())(Utils.deleteQuietly(spillDir))
       },
-      abandonTaskMemory = () => if (queue != null) {
-        queue.synchronized {
-          queueAbandoned = true
-          Utils.deleteQuietly(spillDir)
-        }
-      },
-      recordTime = nanos => metrics("pythonTotalTime") += nanos / 1000000,
+      abandonTaskMemory = () => if (queue != null) queue.abandon(),
+      recordTime = nanos => metrics("pythonTotalTime") += nanos,
       releaseOthers = () => {
         Utils.tryWithSafeFinally {
           closeBatch()
@@ -268,12 +278,12 @@ class InProcessArrowEvalPythonEvaluatorFactory(
         }
       }
 
-      // Runs Python without the lock unless task completion already happened, adds the time
-      // it took, and ends the input if task completion happened meanwhile.
-      private def python(timer: InProcessArrowEvalPythonEvaluatorFactory.NanosecondTimer)(
-          body: => Long): Unit = {
+      // Runs Python without the lock unless task completion already happened, adds the
+      // nanoseconds it took to `metric`, and ends the input if task completion happened
+      // meanwhile.
+      private def python(metric: SQLMetric)(body: => Long): Unit = {
         if (resources.isClosed) endOfInput
-        timer.add(resources.withoutLock(body))
+        metric += resources.withoutLock(body)
         if (resources.isClosed) endOfInput
       }
 
@@ -302,8 +312,26 @@ class InProcessArrowEvalPythonEvaluatorFactory(
 
       // Called with the lock held.
       private def nextBatch(): Unit = {
+        // Each batch needs buffers of its own, which Python may retain, but sizing them like
+        // the previous batch's avoids growing them from Arrow's defaults row by row.
+        val capacities = if (writer == null) Seq.empty else {
+          writer.root.getFieldVectors.asScala.map { v =>
+            val density = v match {
+              case v: BaseVariableWidthVector => v.getDensity
+              case v: BaseLargeVariableWidthVector => v.getDensity
+              case _ => 0.0
+            }
+            (v.getValueCount, density)
+          }.toSeq
+        }
         closeBatch()
         val root = VectorSchemaRoot.create(arrowSchema, ArrowUtils.rootAllocator)
+        capacities.zip(root.getFieldVectors.asScala).foreach { case ((count, density), v) =>
+          if (count > 0) v match {
+            case v: DensityAwareVector if density > 0 => v.setInitialCapacity(count, density)
+            case v => v.setInitialCapacity(count)
+          }
+        }
         writer = try {
           ArrowWriter.create(root)
         } catch {
@@ -324,7 +352,7 @@ class InProcessArrowEvalPythonEvaluatorFactory(
           registered = true
           functions.indices.foreach { i =>
             val func = functions(i)
-            python(initTime)(runtime.register(handles(i), func.command.toArray,
+            python(metrics("pythonInitTime"))(runtime.register(handles(i), func.command.toArray,
               expectedFields(i), func.pythonVer, hideTraceback, simplifiedTraceback,
               tracebackWithLocals, fullValidation))
           }
@@ -355,7 +383,7 @@ class InProcessArrowEvalPythonEvaluatorFactory(
               InProcessArrowBridge.exportColumn(
                 writer.root.getVector(ordinals(i)), inArrays(i), inSchemas(i))
             }
-            python(processingTime)(runtime.invoke(
+            python(metrics("pythonProcessingTime"))(runtime.invoke(
               handle,
               inArrays.map(_.memoryAddress()).toArray,
               inSchemas.map(_.memoryAddress()).toArray,
@@ -567,15 +595,4 @@ private[python] object InProcessArrowEvalPythonEvaluatorFactory {
   private val TaskMemoryHeld = 0
   private val TaskMemoryReleased = 1
   private val TaskMemoryAbandoned = 2
-
-  /** Carry sub-millisecond time between batches instead of dropping it on every invocation. */
-  class NanosecondTimer(metric: SQLMetric) {
-    private var remainder = 0L
-
-    def add(nanos: Long): Unit = {
-      val elapsed = remainder + nanos
-      metric += elapsed / 1000000L
-      remainder = elapsed % 1000000L
-    }
-  }
 }

@@ -128,8 +128,12 @@ flags from the environment (including `PYTHONFAULTHANDLER` and `PYTHONDEVMODE`).
 explicitly restores its Python distribution paths and the executor process `PYTHONPATH`
 before configured `sitePackages` paths. This also supports YARN's localized Python archives
 when `SPARK_HOME` is absent. Python modules must not install process-wide signal handlers
-that replace the JVM's handlers. JEP's automatic Java package discovery is disabled so
-Java packages do not shadow Python packages.
+that replace the JVM's handlers. UDF code should not start processes, e.g. with
+`multiprocessing`, `concurrent.futures.ProcessPoolExecutor`, joblib or a PyTorch
+`DataLoader` with `num_workers > 0`: a forked child copies the multi-threaded executor JVM,
+and a spawned one runs `sys.executable`, which is not a Python interpreter under JEP unless
+the code first calls `multiprocessing.set_executable`. JEP's automatic Java package discovery
+is disabled so Java packages do not shadow Python packages.
 
 Executors must start with a UTF-8 locale, for example `LC_ALL=C.UTF-8` on systems that
 provide it. Isolated initialization ignores `PYTHONUTF8` and `PYTHONIOENCODING` and does

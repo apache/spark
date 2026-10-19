@@ -29,7 +29,6 @@ import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, Simp
 import org.apache.spark.internal.config.Python.{IN_PROCESS_PATH_RULE, IN_PROCESS_SITE_PACKAGES}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.PythonUDF
-import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 
@@ -136,15 +135,6 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
       runtime.requireRunning()
     }
     assert(stopping.getMessage.contains("still stopping"))
-  }
-
-  test("sub-millisecond invocations accumulate in processing metrics") {
-    val metric = new SQLMetric("timing", 0L)
-    val timer = new InProcessArrowEvalPythonEvaluatorFactory.NanosecondTimer(metric)
-    (1 to 25).foreach(_ => timer.add(100000L))
-    assert(metric.value == 2L)
-    timer.add(500000L)
-    assert(metric.value == 3L)
   }
 
   test("unused evaluator iterators do not charge Python total time") {

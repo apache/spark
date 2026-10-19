@@ -94,6 +94,9 @@ class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
     assert(metrics.keySet == Set("pythonDataSent", "pythonDataReceived", "pythonInitTime",
       "pythonTotalTime", "pythonProcessingTime", "pythonNumRowsReceived"))
     assert(!metrics.values.exists(_.name.exists(_.contains("worker"))))
+    // Times are summed in nanoseconds, so sub-millisecond registrations and batches count.
+    assert(Seq("pythonInitTime", "pythonTotalTime", "pythonProcessingTime")
+      .forall(metrics(_).metricType == "nsTiming"))
   }
 
   test("a committed write that invalidates a cached in-process plan does not fail") {
@@ -145,6 +148,15 @@ class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
           parameters = Map("config" -> key))
       } finally {
         SparkEnv.get.conf.remove(key)
+      }
+      // As in PySpark, other values leave the profiler off, without failing to parse.
+      for (value <- Seq("True", "0", "off")) {
+        SparkEnv.get.conf.set(key, value)
+        try {
+          InProcessPythonUDFBuilder.checkConfiguration(spark.sessionState.conf)
+        } finally {
+          SparkEnv.get.conf.remove(key)
+        }
       }
     }
   }

@@ -79,9 +79,9 @@ def _inprocess_register(
         embedded_version = "%d.%d" % sys.version_info[:2]
         if python_version != embedded_version:
             raise PySparkRuntimeError(
-                errorClass="PYTHON_VERSION_MISMATCH",
+                errorClass="IN_PROCESS_PYTHON_VERSION_MISMATCH",
                 messageParameters={
-                    "worker_version": embedded_version,
+                    "embedded_version": embedded_version,
                     "driver_version": python_version,
                 },
             )

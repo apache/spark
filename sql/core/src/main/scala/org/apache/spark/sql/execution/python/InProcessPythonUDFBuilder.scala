@@ -92,8 +92,9 @@ object InProcessPythonUDFBuilder {
   private[sql] def checkConfiguration(conf: SQLConf): Unit = {
     val sparkConf = Option(SparkEnv.get).map(_.conf)
     // The legacy profilers wrap the function with an accumulator, which is not supported.
+    // PySpark enables them only for exactly "true", e.g. not for "True" or "1".
     val legacyProfilers = Seq("spark.python.profile", "spark.python.profile.memory")
-      .filter(key => sparkConf.exists(_.getBoolean(key, false)))
+      .filter(key => sparkConf.exists(_.get(key, "false") == "true"))
     val unsupported = Seq(
       Option.when(PythonWorkerEnvironment.read(conf).nonEmpty)("spark.pythonWorkerEnv.*"),
       conf.pythonUDFProfiler.map(_ => SQLConf.PYTHON_UDF_PROFILER.key),
