@@ -843,6 +843,20 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     assert(invocations.asScala.map(_._1).toSeq === Seq("B", "P", "A"))
   }
 
+  test("SPARK-60113: a failing pre-completion listener added after completion fails the task") {
+    val context = TaskContext.empty()
+    context.markTaskCompleted(None)
+    val error = new Exception("late pre-completion listener")
+    val e = intercept[TaskCompletionListenerException] {
+      context.addTaskPreCompletionListener(new TaskCompletionListener {
+        override def onTaskCompletion(context: TaskContext): Unit = throw error
+      })
+    }
+    assert(e.getMessage.contains("late pre-completion listener"))
+    assert(e.getSuppressed.toSeq === Seq(error))
+    assert(context.isFailed())
+  }
+
   test("SPARK-60113: listeners added while pre-completion listeners run are queued") {
     val context = TaskContext.empty()
     val invocations = new java.util.concurrent.ConcurrentLinkedQueue[(String, Thread)]()
