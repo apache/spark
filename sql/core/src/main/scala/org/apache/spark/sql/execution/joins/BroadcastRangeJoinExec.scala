@@ -22,8 +22,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
-import org.apache.spark.sql.catalyst.planning.{PartialRangeJoin, RangeJoin}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide, PartialRangeJoin, RangeJoin}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, Partitioning, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{CodegenSupport, ExplainUtils, SparkPlan}
@@ -59,7 +58,7 @@ case class BroadcastRangeJoinExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override lazy val requiredChildDistribution: Seq[Distribution] = {
-    val mode = RangeBroadcastMode(
+    val mode = RangeRelationBroadcastMode(
       BindReferences.bindReferences(buildKeys, buildOutput),
       RangeIndexKind(rangeJoin))
     buildSide match {
@@ -88,10 +87,6 @@ case class BroadcastRangeJoinExec(
 
   // The preserved side is streamed, so its partitioning and ordering pass through.
   override def outputPartitioning: Partitioning = streamedPlan.outputPartitioning
-
-  // Output columns are not expressions, so `references` would drop a streamed column
-  // that the join returns but the condition does not read.
-  override def usedInputs: AttributeSet = AttributeSet(streamedPlan.output)
 
   override def outputOrdering: Seq[SortOrder] = streamedPlan.outputOrdering
 
@@ -165,19 +160,19 @@ case class BroadcastRangeJoinExec(
   }
 
   /**
-   * Broadcast index, bound probe keys, and the original condition for one
+   * Broadcast relation, bound probe keys, and the original condition for one
    * streamed partition. The joined row is reused; the caller copies it.
    */
-  private class Partition(
+  private class ProbeContext(
       val stream: Iterator[InternalRow],
-      index: RangeRelation,
+      relation: RangeRelation,
       keys: Seq[Expression],
       val condition: InternalRow => Boolean,
       joinedRow: JoinedRow,
       val nullBuild: InternalRow) {
 
     def candidates(row: InternalRow): Iterator[InternalRow] =
-      BroadcastRangeJoinExec.this.candidates(index, keys, row)
+      BroadcastRangeJoinExec.this.candidates(relation, keys, row)
 
     def join(streamRow: InternalRow, buildRow: InternalRow): InternalRow = buildSide match {
       case BuildRight => joinedRow(streamRow, buildRow)
@@ -187,13 +182,13 @@ case class BroadcastRangeJoinExec(
 
   private def perPartition(
       relation: Broadcast[RangeRelation])(
-      f: Partition => Iterator[InternalRow]): RDD[InternalRow] = {
+      f: ProbeContext => Iterator[InternalRow]): RDD[InternalRow] = {
     val boundStreamKeys = BindReferences.bindReferences(streamedKeys, streamedOutput)
     val cond = condition.get
     val schema = left.output ++ right.output
     val numBuildFields = buildPlan.output.length
     streamedPlan.execute().mapPartitionsInternal { stream =>
-      f(new Partition(
+      f(new ProbeContext(
         stream,
         relation.value,
         boundStreamKeys,
@@ -267,7 +262,7 @@ case class BroadcastRangeJoinExec(
   }
 
   /** Semi keeps a stream row that matches. Anti keeps one that does not. */
-  private def existenceJoin(
+  private def leftExistenceJoin(
       relation: Broadcast[RangeRelation],
       exists: Boolean): RDD[InternalRow] = {
     perPartition(relation) { p =>
@@ -295,8 +290,8 @@ case class BroadcastRangeJoinExec(
     val joined = joinType match {
       case _: InnerLike => innerJoin(relation)
       case LeftOuter | RightOuter => outerJoin(relation)
-      case LeftSemi => existenceJoin(relation, exists = true)
-      case LeftAnti => existenceJoin(relation, exists = false)
+      case LeftSemi => leftExistenceJoin(relation, exists = true)
+      case LeftAnti => leftExistenceJoin(relation, exists = false)
       case t =>
         throw new IllegalArgumentException(
           s"BroadcastRangeJoin should not take $t as the JoinType")
@@ -345,7 +340,7 @@ case class BroadcastRangeJoinExec(
     }
   }
 
-  private def addRelation(ctx: CodegenContext): String = {
+  private def prepareBroadcast(ctx: CodegenContext): String = {
     val broadcast = buildPlan.executeBroadcast[RangeRelation]()
     val broadcastTerm = ctx.addReferenceObj("broadcast", broadcast)
     val cls = classOf[RangeRelation].getName
@@ -413,7 +408,7 @@ case class BroadcastRangeJoinExec(
   /**
    * Fixed-width keys route to the long indexes: build and probe keys then cross
    * as raw longs, with no boxing on either side. One test picks both the
-   * `RangeBroadcastMode` index family and the generated probe code, so they
+   * `RangeRelationBroadcastMode` index family and the generated probe code, so they
    * cannot disagree.
    */
   private[this] lazy val usesLongKeys: Boolean = RangeIndex.canMapKeysToLong(buildKeys)
@@ -470,7 +465,7 @@ case class BroadcastRangeJoinExec(
    * streamed probe keys, and opens the candidate iterator over it.
    */
   private def prepareProbe(ctx: CodegenContext, input: Seq[ExprCode]): (String, String, String) = {
-    val relationTerm = addRelation(ctx)
+    val relationTerm = prepareBroadcast(ctx)
     if (usesLongKeys) {
       val (keyCode, keyVars, nullVars) = genLongProbeKeys(ctx, input)
       val (matches, iteratorCode) =
