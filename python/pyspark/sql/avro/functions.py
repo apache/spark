@@ -60,6 +60,11 @@ def from_avro(
     Avro is built-in but external data source module since Spark 2.4. Please deploy the
     application as per the deployment section of "Apache Avro Data Source Guide".
 
+    CHAR/VARCHAR assignment and map-key checks require the preview flag
+    ``spark.sql.charVarchar.standardSemantics.enabled``. STRING values are then
+    assigned to CHAR/VARCHAR. ENUM symbols are not assigned. CHAR/VARCHAR map
+    keys are length-checked without padding or trimming.
+
     Examples
     --------
     >>> from pyspark.sql import Row
@@ -133,6 +138,9 @@ def to_avro(data: "ColumnOrName", jsonFormatSchema: str = "") -> Column:
     -----
     Avro is built-in but external data source module since Spark 2.4. Please deploy the
     application as per the deployment section of "Apache Avro Data Source Guide".
+
+    ``to_avro`` serializes the current string content. It does not pad CHAR values
+    or trim VARCHAR values.
 
     Examples
     --------

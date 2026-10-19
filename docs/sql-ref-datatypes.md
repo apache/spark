@@ -35,15 +35,24 @@ Spark SQL and DataFrames support the following data types:
   - `FloatType`: Represents 4-byte single-precision floating point numbers.
   - `DoubleType`: Represents 8-byte double-precision floating point numbers.
   - `DecimalType`: Represents arbitrary-precision signed decimal numbers. Backed internally by `java.math.BigDecimal`. A `BigDecimal` consists of an arbitrary precision integer unscaled value and a 32-bit integer scale.
-* Character string types
-  - `CharType(length)`: Represents fixed-length character string values. Values shorter than
-  `length` are padded on the right with spaces.
-  - `VarcharType(length)`: Represents character string values of at most `length` characters.
-  - `StringType`: Represents character string values without a declared length limit.
+* String type
+  - `StringType`: Represents character string values.
+  - `VarcharType(length)`: A length-limited overlay on `StringType` used in table schemas.
+    Inserts fail with `EXCEED_LIMIT_LENGTH` if non-space content exceeds `length`; excess
+    trailing spaces are trimmed. By default this type is not first-class: analyzed plans and
+    DataFrame schemas rewrite it to `STRING` (with type metadata on table columns). `CAST` to
+    `VARCHAR` is treated as `CAST` to `STRING`. Function schemas, `createDataFrame`, and
+    `read.schema` raise `UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING`.
+  - `CharType(length)`: A fixed-length overlay on `VarcharType(length)`. With
+    `spark.sql.readSideCharPadding` (default `true`), reads pad values to `length` characters.
+    Comparisons of CHAR columns pad the shorter operand to the longer length.
 
-  `CHAR`, `VARCHAR`, and `STRING` form one character string type family, with precedence
-  `CHAR -> VARCHAR -> STRING`. See [Character String Types](sql-ref-character-string-types.html)
-  for length, cast, assignment, comparison, and least-common-type semantics.
+  Preview: set `spark.sql.charVarchar.standardSemantics.enabled` to `true` to treat `CHAR`,
+  `VARCHAR`, and `STRING` as a first-class type family (`CHAR -> VARCHAR -> STRING`) in schemas
+  and query plans. This is a preview feature and may change in future releases. Enable it with
+  `SET spark.sql.charVarchar.standardSemantics.enabled=true;` before relying on CAST targets,
+  least-common-type, function schemas, or Dataset APIs that keep CHAR/VARCHAR. See
+  [Character String Types](sql-ref-character-string-types.html).
 * Binary type
   - `BinaryType`: Represents byte sequence values.
 * Boolean type

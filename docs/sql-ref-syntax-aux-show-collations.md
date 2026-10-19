@@ -108,4 +108,4 @@ SHOW COLLATIONS LIKE 'UNICODE|UTF8_BINARY';
 
 ### Related Statements
 
-* [CHARACTER STRING TYPES](sql-ref-character-string-types.html)
+* [CHARACTER STRING TYPES (PREVIEW)](sql-ref-character-string-types.html)

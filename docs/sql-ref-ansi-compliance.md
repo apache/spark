@@ -109,8 +109,9 @@ Besides, the ANSI SQL mode disallows the following type conversions which are al
 
  The valid combinations of source and target data type in a `CAST` expression are given by the following table.
 “Y” indicates that the combination is syntactically valid without restriction and “N” indicates that the combination is not valid.
-The String row represents the character string type family. For the length and padding behavior
-of casts among CHAR, VARCHAR, and STRING, see
+The String row represents STRING. With the preview flag
+`spark.sql.charVarchar.standardSemantics.enabled`, it also covers the CHAR/VARCHAR/STRING
+family. For length and padding of casts among CHAR, VARCHAR, and STRING, see
 [Character String Types](sql-ref-character-string-types.html#casts).
 
 | Source\Target | Numeric                              | String                               | Date                                 | Time | Timestamp                            | Timestamp_NTZ                        | Interval                             | Boolean                              | Binary | Array                                | Map                                  | Struct                               |
@@ -201,7 +202,10 @@ While casting of a decimal with a fraction to an interval type with SECOND as th
 
 ### Store assignment
 As mentioned at the beginning, when `spark.sql.storeAssignmentPolicy` is set to `ANSI`(which is the default value), Spark SQL complies with the ANSI store assignment rules on table insertions. The valid combinations of source and target data type in table insertions are given by the following table.
-For CHAR and VARCHAR length checks, trailing-space handling, and CHAR padding, see
+Table CHAR/VARCHAR columns apply length checks, trailing-space trimming, and CHAR padding on
+insert in the default overlay. First-class CAST vs assignment, and CHAR/VARCHAR that survive
+in query plans, require the preview flag
+`spark.sql.charVarchar.standardSemantics.enabled`. See
 [Character String Types](sql-ref-character-string-types.html#assignment-and-reading).
 
 | Source\Target | Numeric | String | Date | Time | Timestamp | Timestamp_NTZ | Interval | Boolean | Binary | Array | Map | Struct |
@@ -264,7 +268,8 @@ At the heart of this conflict resolution is the Type Precedence List which defin
 
 \*\*\* For a complex type, the precedence rule applies recursively to its component elements.
 
-\*\*\*\* CHAR, VARCHAR, and STRING form the character string type family. After CHAR or VARCHAR
+\*\*\*\* Preview (`spark.sql.charVarchar.standardSemantics.enabled`). Without that flag, CHAR
+and VARCHAR are rewritten to STRING and this row does not apply. After CHAR or VARCHAR
 reaches STRING, the STRING precedence branches also apply. See
 [Character String Types](sql-ref-character-string-types.html).
 
@@ -292,10 +297,12 @@ More precisely, a least common type between `decimal(p1, s1)` and `decimal(p2, s
 However, decimal types in Spark have a maximum precision: 38. If the final decimal type need more precision, we must do truncation.
 Since the digits in the integral part are more significant, Spark truncates the digits in the fractional part first. For example, `decimal(48, 20)` will be reduced to `decimal(38, 10)`.
 
-CHAR and VARCHAR also have a type parameter: length. When
-`spark.sql.charVarchar.standardSemantics.enabled` is `true`, least common type resolution uses the
-widest input length. The least common type of two CHAR types is `CHAR(max(n, m))`; a VARCHAR input
-makes the result `VARCHAR(max(n, m))`; and a STRING input makes the result STRING.
+CHAR and VARCHAR also have a type parameter: length. This length-aware least common type is
+part of the preview flag `spark.sql.charVarchar.standardSemantics.enabled`. When that flag is
+`true`, least common type resolution uses the widest input length. The least common type of two
+CHAR types is `CHAR(max(n, m))`; a VARCHAR input makes the result `VARCHAR(max(n, m))`; and a
+STRING input makes the result STRING. Without the flag, CHAR and VARCHAR are STRING and this
+paragraph does not apply.
 
 Note, arithmetic operations have special rules to calculate the least common type for decimal inputs:
 

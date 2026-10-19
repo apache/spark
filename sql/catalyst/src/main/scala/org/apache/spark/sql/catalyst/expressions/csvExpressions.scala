@@ -55,6 +55,14 @@ import org.apache.spark.unsafe.types.UTF8String
       > SELECT _FUNC_('26/08/2015', 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy'));
        {"time":2015-08-26 00:00:00}
   """,
+  note = """
+    A CHAR `csvStr` is not rtrimmed. Padding is parsed as trailing spaces and can create
+    extra fields or attach to the last unquoted field; use ignoreTrailingWhiteSpace to trim
+    the last field. When the preview flag spark.sql.charVarchar.standardSemantics.enabled
+    is true, CHAR/VARCHAR fields in `schema` are assigned (CHAR padded; overflow is a bad
+    record). Without the flag, CHAR/VARCHAR in `schema` raises
+    UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING.
+  """,
   since = "3.0.0",
   group = "csv_funcs")
 // scalastyle:on line.size.limit
@@ -151,6 +159,10 @@ case class CsvToStructs(
     Examples:
       > SELECT _FUNC_('1,abc');
        STRUCT<_c0: INT, _c1: STRING>
+  """,
+  note = """
+    A CHAR `csv` argument is not rtrimmed. Padding can change the inferred field count and
+    types; for example CAST('1' AS CHAR(3)) infers DOUBLE with the default comma delimiter.
   """,
   since = "3.0.0",
   group = "csv_funcs")

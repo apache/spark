@@ -7818,13 +7818,15 @@ object SQLConf {
 
   val CHAR_VARCHAR_STANDARD_SEMANTICS =
     buildConf("spark.sql.charVarchar.standardSemantics.enabled")
-      .doc("When true, treat CHAR, VARCHAR, and STRING as a character string type family with " +
-        "the precedence CHAR -> VARCHAR -> STRING. CHAR and VARCHAR remain first-class types in " +
-        "schemas and CAST targets; least-common-type for COALESCE/CASE/UNION may return " +
-        "CHAR/VARCHAR; transforming string functions and operators return STRING. This differs " +
-        "from preserveCharVarcharTypeInfo, which keeps Char/Varchar through transforms. " +
-        "Storage types stay with the data source: native ORC CHAR/VARCHAR keep ORC " +
-        "enforcement; STRING columns with a Spark CHAR/VARCHAR schema are checked by Spark.")
+      .doc("Preview feature: when true, treat CHAR, VARCHAR, and STRING as a character string " +
+        "type family with the precedence CHAR -> VARCHAR -> STRING. This may change in future " +
+        "releases. CHAR and VARCHAR remain first-class types in schemas and CAST targets; " +
+        "least-common-type for COALESCE/CASE/UNION may return CHAR/VARCHAR; transforming " +
+        "string functions and operators return STRING. The default (false) keeps the Spark 3.1 " +
+        "table-schema overlay on STRING. This differs from preserveCharVarcharTypeInfo, which " +
+        "keeps Char/Varchar through transforms. Storage types stay with the data source: " +
+        "native ORC CHAR/VARCHAR keep ORC enforcement; STRING columns with a Spark " +
+        "CHAR/VARCHAR schema are checked by Spark.")
       .version("4.4.0")
       // PERSISTED, like ANSI mode: the flag decides the types a view body resolves to, so a view
       // created under standard semantics must keep computing CHAR/VARCHAR regardless of the

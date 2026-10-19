@@ -58,6 +58,10 @@ import org.apache.spark.util.Utils
     is undefined: it may fail or return arbitrary result.
     To deserialize the data with a compatible and evolved schema, the expected Avro schema can be
     set via the corresponding option.
+    CHAR/VARCHAR assignment and map-key checks require the preview flag
+    spark.sql.charVarchar.standardSemantics.enabled. Then STRING values are assigned to
+    CHAR/VARCHAR (CHAR padded; overflow raises EXCEED_LIMIT_LENGTH). Avro ENUM symbols are
+    not assigned. CHAR/VARCHAR map keys are length-checked without padding or trimming.
   """,
   group = "avro_funcs",
   since = "4.0.0"
@@ -191,6 +195,10 @@ case class FromAvro(
        [true]
       > SELECT _FUNC_(s) IS NULL FROM (SELECT NULL AS s);
        [true]
+  """,
+  note = """
+    `_FUNC_` serializes the current string content. It does not pad CHAR values or trim
+    VARCHAR values.
   """,
   group = "avro_funcs",
   since = "4.0.0"

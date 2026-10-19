@@ -111,7 +111,7 @@
     - text: Data Types
       url: sql-ref-datatypes.html
       subitems:
-        - text: Character String Types
+        - text: Character String Types (Preview)
           url: sql-ref-character-string-types.html
     - text: Datetime Pattern
       url: sql-ref-datetime-pattern.html

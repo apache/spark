@@ -1926,6 +1926,14 @@ object JsonExistsExpressionBuilder extends JsonPathExpressionBuilder {
       > SELECT _FUNC_('{"teacher": "Alice", "student": [{"name": "Bob", "rank": 1}, {"name": "Charlie", "rank": 2}]}', 'STRUCT<teacher: STRING, student: ARRAY<STRUCT<name: STRING, rank: INT>>>');
        {"teacher":"Alice","student":[{"name":"Bob","rank":1},{"name":"Charlie","rank":2}]}
   """,
+  note = """
+    A CHAR `jsonStr` is not rtrimmed; padding is parsed as trailing whitespace in the JSON
+    text. CHAR/VARCHAR in `schema` requires the preview flag
+    spark.sql.charVarchar.standardSemantics.enabled: fields are assigned (CHAR padded;
+    overflow is a bad record) and map keys are length-checked without padding or trimming.
+    Without the flag, CHAR/VARCHAR in `schema` raises
+    UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING.
+  """,
   group = "json_funcs",
   since = "2.2.0")
 // scalastyle:on line.size.limit
@@ -2142,6 +2150,10 @@ case class StructsToJson(
        ARRAY<STRUCT<col: BIGINT>>
       > SELECT _FUNC_('[{"col":01}]', map('allowNumericLeadingZeros', 'true'));
        ARRAY<STRUCT<col: BIGINT>>
+  """,
+  note = """
+    A CHAR `json` argument is not rtrimmed. Padding is trailing whitespace in the sample
+    document; JSON inference ignores it.
   """,
   group = "json_funcs",
   since = "2.4.0")
