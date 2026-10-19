@@ -62,7 +62,7 @@ private[ui] class EnvironmentPage(
 
     val content =
       <div>
-        <p><a href="/">Back to Master</a></p>
+        <p><a href={UIUtils.prependBaseUri(request, "/")}>Back to Master</a></p>
       </div>
       <span>
         <span class="collapse-aggregated-runtimeInformation collapse-table"
