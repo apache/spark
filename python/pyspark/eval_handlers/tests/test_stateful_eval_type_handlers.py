@@ -65,17 +65,6 @@ if have_pandas and have_pyarrow:
 _missing_message = pandas_requirement_message or pyarrow_requirement_message
 
 
-def _udf(func, args_offsets, return_type):
-    """A ``UDF`` record; stateful UDFs take no keyword arguments."""
-    return UDF(
-        func=func,
-        raw_func=func,
-        args_offsets=args_offsets,
-        kwargs_offsets={},
-        return_type=return_type,
-    )
-
-
 class TransformWithStateHandlerTestCase(PySparkBaseTestCase):
     """Builders for the transformWithState handlers. ``StatefulProcessorApiClient`` is patched
     out, as it connects to the JVM state server at construction."""
@@ -128,7 +117,15 @@ class TransformWithStateHandlerTestCase(PySparkBaseTestCase):
     @classmethod
     def _handler(cls, handler_cls, udf, arg_offsets, runner_conf=None):
         return handler_cls(
-            udfs=[_udf(udf, arg_offsets, cls._RETURN_TYPE)],
+            udfs=[
+                UDF(
+                    func=udf,
+                    raw_func=udf,
+                    args_offsets=arg_offsets,
+                    kwargs_offsets={},
+                    return_type=cls._RETURN_TYPE,
+                )
+            ],
             runner_conf=runner_conf or RunnerConf({}),
             eval_conf=cls._eval_conf(),
         )
@@ -238,7 +235,15 @@ class PandasGroupedMapWithStateUDFHandlerTests(PySparkBaseTestCase):
     @classmethod
     def _handler(cls, udf, runner_conf=None):
         return PandasGroupedMapWithStateUDFHandler(
-            udfs=[_udf(udf, cls._ARG_OFFSETS, cls._RETURN_TYPE)],
+            udfs=[
+                UDF(
+                    func=udf,
+                    raw_func=udf,
+                    args_offsets=cls._ARG_OFFSETS,
+                    kwargs_offsets={},
+                    return_type=cls._RETURN_TYPE,
+                )
+            ],
             runner_conf=runner_conf or RunnerConf({}),
             eval_conf=EvalConf({"state_value_schema": cls._STATE_SCHEMA.json()}),
         )
