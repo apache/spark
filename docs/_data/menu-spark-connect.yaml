@@ -20,16 +20,24 @@
 - text: Spark Connect Programming Guide
   url: spark-connect-programming-guide.html
   subitems:
-    - text: Quick Start
-      url: spark-connect-programming-guide.html#quick-start
-    - text: Key Concepts
-      url: spark-connect-programming-guide.html#key-concepts
-    - text: Writing Applications
-      url: spark-connect-programming-guide.html#writing-applications
-    - text: Migrating from Spark Classic
-      url: spark-connect-programming-guide.html#migrating-from-spark-classic
-    - text: Compatibility
-      url: spark-connect-programming-guide.html#compatibility
+    - text: What is Spark Connect?
+      url: spark-connect-programming-guide.html#what-is-spark-connect
+    - text: Getting a server
+      url: spark-connect-programming-guide.html#getting-a-spark-connect-server
+    - text: Connecting from Python
+      url: spark-connect-programming-guide.html#connecting-from-python
+    - text: Connecting from Scala
+      url: spark-connect-programming-guide.html#connecting-from-scala
+    - text: Connecting from Rust
+      url: spark-connect-programming-guide.html#connecting-from-rust
+    - text: Running a job
+      url: spark-connect-programming-guide.html#running-a-job
+    - text: Configuring the session
+      url: spark-connect-programming-guide.html#configuring-the-session
+    - text: Shipping code and files
+      url: spark-connect-programming-guide.html#shipping-code-and-files
+    - text: Migrating existing code
+      url: spark-connect-programming-guide.html#migrating-existing-code
     - text: Debugging
       url: spark-connect-programming-guide.html#debugging
 - text: "Eager vs Lazy: Spark Connect vs Spark Classic"
