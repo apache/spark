@@ -22,7 +22,6 @@ import os
 import subprocess
 import sys
 from collections.abc import Sequence
-from pathlib import Path
 
 from sparktestsupport import modules
 from sparktestsupport.shellutils import run_cmd
