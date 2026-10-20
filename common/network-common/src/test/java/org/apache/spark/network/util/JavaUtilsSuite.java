@@ -18,12 +18,15 @@ package org.apache.spark.network.util;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.nio.file.Files;
+import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 public class JavaUtilsSuite {
 
@@ -89,5 +92,30 @@ public class JavaUtilsSuite {
     Files.createSymbolicLink(symlink.toPath(), dir.toPath());
     assertEquals(1, JavaUtils.listFiles(symlink).size());
     assertEquals(1, JavaUtils.listPaths(symlink).size());
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void testIsTestingReadsSparkTestingEnvOnce() throws Exception {
+    // sbt and Maven run tests with SPARK_TESTING set.
+    assumeTrue(System.getenv("SPARK_TESTING") != null);
+    assertTrue(JavaUtils.isTesting());
+
+    Map<String, String> env = System.getenv();
+    Field field = env.getClass().getDeclaredField("m");
+    field.setAccessible(true);
+    Map<String, String> writableEnv = (Map<String, String>) field.get(env);
+    String envValue = writableEnv.remove("SPARK_TESTING");
+    String propValue = System.clearProperty("spark.testing");
+    try {
+      assertNull(System.getenv("SPARK_TESTING"));
+      // The env lookup is cached at class initialization, so it is unaffected.
+      assertTrue(JavaUtils.isTesting());
+    } finally {
+      writableEnv.put("SPARK_TESTING", envValue);
+      if (propValue != null) {
+        System.setProperty("spark.testing", propValue);
+      }
+    }
   }
 }
