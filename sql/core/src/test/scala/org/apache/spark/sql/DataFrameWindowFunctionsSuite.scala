@@ -467,6 +467,20 @@ class DataFrameWindowFunctionsSuite extends SharedSparkSession
       Seq(Row("a", 6, 9), Row("b", 9, 6)))
   }
 
+  test("SPARK-59175: window expression with grouped DataFrame key") {
+    val df = Seq("us", "US", "us", "ca", "CA", "mx", "br").toDF("country")
+    val key = upper($"country")
+    val window = Window.orderBy(count(lit(1)).desc)
+
+    Seq(key, key.as("key")).foreach { groupKey =>
+      val grouped = df.groupBy(groupKey).agg(
+        when(row_number().over(window) <= 2, key).otherwise("Other").as("bucket"),
+        count(lit(1)).as("events"))
+      checkAnswer(grouped.groupBy("bucket").agg(sum("events")),
+        Seq(Row("US", 3L), Row("CA", 2L), Row("Other", 2L)))
+    }
+  }
+
   test("SPARK-16195 empty over spec") {
     withTempView("window_table") {
       val df = Seq(("a", 1), ("a", 1), ("a", 2), ("b", 2)).
