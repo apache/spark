@@ -58,10 +58,13 @@ import org.apache.spark.util.Utils
     is undefined: it may fail or return arbitrary result.
     To deserialize the data with a compatible and evolved schema, the expected Avro schema can be
     set via the corresponding option.
-    CHAR/VARCHAR assignment and map-key checks require the preview flag
-    spark.sql.charVarchar.standardSemantics.enabled. Then STRING values are assigned to
-    CHAR/VARCHAR (CHAR padded; overflow raises EXCEED_LIMIT_LENGTH). Avro ENUM symbols are
-    not assigned. CHAR/VARCHAR map keys are length-checked without padding or trimming.
+    CHAR/VARCHAR assignment is accepted when CHAR/VARCHAR are first-class (this flag or
+    spark.sql.preserveCharVarcharTypeInfo). Then STRING values are assigned (CHAR padded).
+    Overflow is a malformed record: FAILFAST fails with EXCEED_LIMIT_LENGTH as the cause;
+    PERMISSIVE returns a null record. spark.sql.legacy.charVarcharAsString reads the
+    schema as STRING. Otherwise the schema raises UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING.
+    Avro ENUM symbols are not assigned. CHAR/VARCHAR map-key length checks require this
+    flag and do not pad or trim.
   """,
   group = "avro_funcs",
   since = "4.0.0"

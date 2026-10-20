@@ -91,7 +91,7 @@ SELECT TYPEOF(CAST('ab' AS CHAR(2))) AS col;
 +-------+
 ```
 
-Without that preview flag, `CAST(... AS CHAR(n))` and `CAST(... AS VARCHAR(n))` are `STRING`.
+By default, `CAST(... AS CHAR(n))` and `CAST(... AS VARCHAR(n))` are `STRING`.
 
 ```sql
 SELECT 'Hello, World!' AS col;

@@ -23124,8 +23124,12 @@ def from_json(
     * ``spark.sql.session.timeZone``
     * ``spark.sql.timestampType``
     * ``spark.sql.charVarchar.standardSemantics.enabled`` (preview): CHAR
-      arguments are not rtrimmed; CHAR/VARCHAR in the schema requires this flag
-      (otherwise ``UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING``).
+      arguments are not rtrimmed. CHAR/VARCHAR in the schema is accepted when
+      types are first-class (this flag or
+      ``spark.sql.preserveCharVarcharTypeInfo``);
+      ``spark.sql.legacy.charVarcharAsString`` reads them as STRING; otherwise
+      ``UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING``. Map-key length checks require
+      this flag.
 
     Examples
     --------
@@ -24529,8 +24533,12 @@ def from_xml(
     * ``spark.sql.timestampType``
     * ``spark.sql.xml.variant.respectInferSchema``
     * ``spark.sql.charVarchar.standardSemantics.enabled`` (preview): CHAR
-      arguments are not rtrimmed; CHAR/VARCHAR in the schema requires this flag
-      (otherwise ``UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING``).
+      arguments are not rtrimmed. CHAR/VARCHAR in the schema is accepted when
+      types are first-class (this flag or
+      ``spark.sql.preserveCharVarcharTypeInfo``);
+      ``spark.sql.legacy.charVarcharAsString`` reads them as STRING; otherwise
+      ``UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING``. Map-key length checks require
+      this flag.
 
     Examples
     --------
@@ -24814,8 +24822,8 @@ def schema_of_csv(csv: Union[Column, str], options: Optional[Mapping[str, str]] 
 
     * ``spark.sql.timestampType``
     * ``spark.sql.charVarchar.standardSemantics.enabled`` (preview): CHAR
-      arguments are not rtrimmed; padding can change inferred field count and
-      types.
+      arguments are not rtrimmed. When CHAR is first-class, padding can change
+      inferred field count and types.
 
     Examples
     --------
@@ -26472,7 +26480,11 @@ def from_csv(
     * ``spark.sql.session.timeZone``
     * ``spark.sql.timestampType``
     * ``spark.sql.charVarchar.standardSemantics.enabled`` (preview): CHAR
-      arguments are not rtrimmed; CHAR/VARCHAR in the schema requires this flag.
+      arguments are not rtrimmed. CHAR/VARCHAR in the schema is accepted when
+      types are first-class (this flag or
+      ``spark.sql.preserveCharVarcharTypeInfo``);
+      ``spark.sql.legacy.charVarcharAsString`` reads them as STRING; otherwise
+      ``UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING``.
 
     Examples
     --------

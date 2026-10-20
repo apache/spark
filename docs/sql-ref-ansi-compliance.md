@@ -301,8 +301,8 @@ CHAR and VARCHAR also have a type parameter: length. This length-aware least com
 part of the preview flag `spark.sql.charVarchar.standardSemantics.enabled`. When that flag is
 `true`, least common type resolution uses the widest input length. The least common type of two
 CHAR types is `CHAR(max(n, m))`; a VARCHAR input makes the result `VARCHAR(max(n, m))`; and a
-STRING input makes the result STRING. Without the flag, CHAR and VARCHAR are STRING and this
-paragraph does not apply.
+STRING input makes the result STRING. By default, CHAR and VARCHAR are rewritten to STRING
+and this paragraph does not apply.
 
 Note, arithmetic operations have special rules to calculate the least common type for decimal inputs:
 

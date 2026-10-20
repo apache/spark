@@ -1928,11 +1928,11 @@ object JsonExistsExpressionBuilder extends JsonPathExpressionBuilder {
   """,
   note = """
     A CHAR `jsonStr` is not rtrimmed; padding is parsed as trailing whitespace in the JSON
-    text. CHAR/VARCHAR in `schema` requires the preview flag
-    spark.sql.charVarchar.standardSemantics.enabled: fields are assigned (CHAR padded;
-    overflow is a bad record) and map keys are length-checked without padding or trimming.
-    Without the flag, CHAR/VARCHAR in `schema` raises
-    UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING.
+    text. CHAR/VARCHAR in `schema` is accepted when CHAR/VARCHAR are first-class (this flag
+    or spark.sql.preserveCharVarcharTypeInfo): fields are assigned (CHAR padded; overflow
+    is a bad record). spark.sql.legacy.charVarcharAsString reads them as STRING. Otherwise
+    the schema raises UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING. Map-key length checks require
+    this flag.
   """,
   group = "json_funcs",
   since = "2.2.0")

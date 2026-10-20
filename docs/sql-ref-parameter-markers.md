@@ -36,12 +36,13 @@ bound value:
   A [string literal](sql-ref-literals.html#string-literal) such as `'ab'` is `STRING`.
   Use a typed literal (`5L`, `DATE '2024-01-01'`) or `CAST` to choose another type.
 * In Python, Scala, or Java `spark.sql(..., args)`, Spark infers the type from the host
-  value. A Python or Java `str` / `String` is `STRING`. You may pass a constant `Column`,
-  including `lit('ab').cast('CHAR(2)')`.
+  value. A Python or Java `str` / `String` is `STRING`. Host args must be literal-like
+  constants: literals, or array/map/struct constructors of them. A `Column` such as
+  `lit('ab').cast('CHAR(2)')` is rejected with `INVALID_SQL_ARG`.
 
-To convert after binding, wrap the marker: `CAST(:p AS CHAR(2))` or `CAST(? AS INT)`.
-`CHAR`/`VARCHAR` targets require the preview flag
-`spark.sql.charVarchar.standardSemantics.enabled`. See
+To convert after binding, wrap the marker in the SQL text: `CAST(:p AS CHAR(2))` or
+`CAST(? AS INT)`. By default those CHAR/VARCHAR casts are `STRING`; they stay
+`CHAR`/`VARCHAR` when types are first-class. See
 [Character String Types](sql-ref-character-string-types.html).
 
 To parameterize identifiers (such as table or column names), use the [`IDENTIFIER` clause](sql-ref-identifier-clause.html).
@@ -96,8 +97,7 @@ spark.sql("SELECT TYPEOF(:p)", args={"p": "ab"}).show()
 # string
 
 spark.sql("SET spark.sql.charVarchar.standardSemantics.enabled = true")
-from pyspark.sql.functions import lit
-spark.sql("SELECT TYPEOF(:p)", args={"p": lit("ab").cast("CHAR(2)")}).show()
+spark.sql("SELECT TYPEOF(CAST(:p AS CHAR(2)))", args={"p": "ab"}).show()
 # char(2)
 ```
 
@@ -195,8 +195,9 @@ Each occurrence of an unnamed parameter marker consumes a value provided by the 
 If no value has been bound to the parameter marker, an `UNBOUND_SQL_PARAMETER` error is raised.
 You are not required to consume all provided values.
 
-The type rules are the same as for named markers: bind a typed `USING` expression, pass a
-typed host value, or `CAST` the `?` in the statement.
+The type rules are the same as for named markers: bind a typed `USING` expression, or
+`CAST` the `?` in the statement. Host `spark.sql(..., args)` values must be literal-like
+constants; they cannot be a `cast` `Column`.
 
 ```sql
 > EXECUTE IMMEDIATE 'SELECT TYPEOF(?)' USING 'ab';

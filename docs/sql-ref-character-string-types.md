@@ -28,7 +28,7 @@ Enable the preview feature before using the behavior below:
 SET spark.sql.charVarchar.standardSemantics.enabled = true;
 ```
 
-Without the flag, `CHAR` and `VARCHAR` are table-schema overlays on `STRING`. DataFrame schemas
+By default, `CHAR` and `VARCHAR` are table-schema overlays on `STRING`. DataFrame schemas
 show `STRING`, `CAST(... AS CHAR(n))` is `STRING`, and function schemas raise
 `UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING`. See [Data Types](sql-ref-datatypes.html).
 
@@ -282,24 +282,29 @@ SELECT from_json(CAST('{"a":1}' AS CHAR(12)), 'a INT');
 
 JSON and XML ignore that trailing whitespace. CSV can tokenize it: with a space delimiter, padding
 becomes extra empty fields; with the default comma delimiter, padding lands on the last unquoted
-field. `schema_of_csv(CAST('1' AS CHAR(3)))` infers `STRUCT<_c0: DOUBLE>` because the padded last
-field is not a clean integer. `map('ignoreTrailingWhiteSpace', 'true')` restores a trimmed
-last-field parse.
+field. When CHAR is first-class, `schema_of_csv(CAST('1' AS CHAR(3)))` infers
+`STRUCT<_c0: DOUBLE>` because the padded last field is not a clean integer. Under default
+settings that CAST is STRING and the inferred field is INT.
+`map('ignoreTrailingWhiteSpace', 'true')` restores a trimmed last-field parse.
 
 `from_avro` takes binary Avro, not a character document, so CHAR padding of a SQL string does not
 apply there.
 
 ### Parsed values
 
-With a reader schema that declares `CHAR`/`VARCHAR` fields, parsed string values are assigned:
-`CHAR(n)` is padded, and an over-length value is a bad record (`EXCEED_LIMIT_LENGTH` in
-`FAILFAST`; `PERMISSIVE` nulls the failed field). CSV field overflow follows the CSV parse mode
-the same way.
+With a reader schema that declares `CHAR`/`VARCHAR` fields, parsed string values are assigned
+when CHAR/VARCHAR are first-class (this preview flag or
+`spark.sql.preserveCharVarcharTypeInfo`): `CHAR(n)` is padded, and an over-length value is a
+bad record. For `from_json`, `from_csv`, and `from_xml`, `FAILFAST` raises
+`EXCEED_LIMIT_LENGTH` and `PERMISSIVE` nulls the failed field. CSV field overflow follows the
+CSV parse mode the same way.
 
 `from_avro` assigns STRING values only. Avro ENUM symbols are not padded or length-checked, so a
-padded CHAR cannot invent a symbol. Avro file scans leave CHAR padding of STRING values to
-read-side CHAR padding rather than assigning in the deserializer. `to_json`, `to_csv`, `to_xml`,
-and `to_avro` serialize the current string content; `to_avro` does not itself pad or trim.
+padded CHAR cannot invent a symbol. Overflow is a malformed record handled by the `mode`
+option: `FAILFAST` fails with `EXCEED_LIMIT_LENGTH` as the cause; `PERMISSIVE` returns a null
+record. Avro file scans leave CHAR padding of STRING values to read-side CHAR padding rather
+than assigning in the deserializer. `to_json`, `to_csv`, `to_xml`, and `to_avro` serialize the
+current string content; `to_avro` does not itself pad or trim.
 
 ### Map keys
 
