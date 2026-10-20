@@ -548,8 +548,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
           case _ => // OK
         }
 
-        // Drop the existing table
-        catalog.dropTable(qualifiedIdent, ignoreIfNotExists = true, purge = false)
+        // The CTAS replaces the existing table. It drops the table as late as it can, so that a
+        // write that fails its checks keeps the table.
         createTable(qualifiedIdent)
         // Refresh the cache of the table in the catalog.
         catalog.refreshTable(qualifiedIdent)
