@@ -1110,20 +1110,22 @@ case class StreamingSymmetricHashJoinExec(
       Nil
     }
 
-  // This operator will evict based on the state watermark on both side of inputs; we would like
-  // to let users leverage both sides of event time column for output of join, so the watermark
-  // must be lower bound of both sides of event time column. The lower bound of event time column
-  // for each side is determined by state watermark, hence we take a minimum of (left state
-  // watermark, right state watermark, input watermark) to decide the output watermark.
+  // The output watermark bounds the event-time columns emitted by the join. State watermarks
+  // bound buffered rows that can still be emitted, and the input watermark bounds new rows.
+  // Joins emitting both sides take the minimum of both state watermarks and the input watermark.
   override def produceOutputWatermark(inputWatermarkMs: Long): Option[Long] = {
     val (leftStateWatermark, rightStateWatermark) =
       StreamingSymmetricHashJoinHelper.getStateWatermark(
         left.output, right.output, leftKeys, rightKeys, condition.full, Some(inputWatermarkMs),
         !allowMultipleStatefulOperators)
 
-    if (joinType == LeftSemi && leftStateWatermark.isDefined) {
-      // Right timestamps are not output. Keep the existing fallback if no left bound is known.
-      Some((leftStateWatermark ++ Some(inputWatermarkMs)).min)
+    if (joinType == LeftSemi) {
+      // Only left columns are output. Without a watermarked left column, the watermark is lost;
+      // the right state watermark cannot replace it or constrain the emitted left event time.
+      WatermarkSupport.findEventTimeColumn(output,
+        allowMultipleEventTimeColumns = !allowMultipleStatefulOperators).map { _ =>
+        (leftStateWatermark ++ Some(inputWatermarkMs)).min
+      }
     } else {
       Some((leftStateWatermark ++ rightStateWatermark ++ Some(inputWatermarkMs)).min)
     }

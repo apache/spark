@@ -887,6 +887,47 @@ class MultiStatefulOperatorsSuite
     testOutputWatermarkInJoin(join3, input1, -40L * 1000 - 1)
   }
 
+  for (leftWatermark <- Seq(false, true); joinOnTime <- Seq(false, true)) {
+    test(s"left semi output watermark follows output event time: " +
+        s"left watermark=$leftWatermark, equality=$joinOnTime") {
+      val leftInput = MemoryStream[(Int, Int)]
+      val rightInput = MemoryStream[(Int, Int)]
+      val leftWithoutWatermark = leftInput.toDF()
+        .select($"_1".as("leftKey"), timestamp_seconds($"_2").as("leftTime"))
+      val left = if (leftWatermark) {
+        leftWithoutWatermark.withWatermark("leftTime", "0 seconds")
+      } else {
+        leftWithoutWatermark
+      }
+      val right = rightInput.toDF()
+        .select($"_1".as("rightKey"), timestamp_seconds($"_2").as("rightTime"))
+        .withWatermark("rightTime", "0 seconds")
+      val timeCondition = if (joinOnTime) {
+        "leftTime = rightTime"
+      } else {
+        "leftTime > rightTime - INTERVAL 5 SECONDS AND " +
+          "leftTime < rightTime + INTERVAL 30 SECONDS"
+      }
+      val joined = left.join(right, expr(s"leftKey = rightKey AND $timeCondition"), "left_semi")
+        .select($"leftKey", $"leftTime".cast("int"))
+      val expectedWatermark = if (leftWatermark) {
+        Some(if (joinOnTime) 120000L else 115000L)
+      } else {
+        None
+      }
+
+      testStream(joined)(
+        MultiAddData(leftInput, (1, 5))(rightInput, (1, 5)),
+        CheckNewAnswer((1, 5)),
+        Execute { query =>
+          val joinOperator = query.lastExecution.executedPlan.collect {
+            case j: StreamingSymmetricHashJoinExec => j
+          }.head
+          assert(joinOperator.produceOutputWatermark(120000L) === expectedWatermark)
+        })
+    }
+  }
+
   test("SPARK-49829 time window agg per each source followed by stream-stream join") {
     val inputStream1 = MemoryStream[Long]
     val inputStream2 = MemoryStream[Long]
