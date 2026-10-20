@@ -192,6 +192,31 @@ the reason. When Spark declines the hint, it does not build a filter in the othe
     values, whenever it is evaluated; its other columns may differ. `RUNTIME_FILTER` can be combined
     with a join strategy hint.
 
+    For a Bloom filter, the hint overrides
+    `spark.sql.optimizer.runtime.bloomFilter.creationSideThreshold`,
+    `spark.sql.optimizer.runtime.bloomFilter.applicationSideScanSizeThreshold`, and the requirements
+    that the hinted side have a selective predicate and that the join involve a shuffle. It still
+    obeys `spark.sql.optimizer.runtime.bloomFilter.enabled` and
+    `spark.sql.optimizer.runtimeFilter.number.threshold`, requires simple join keys, and the filter
+    stays capped by `spark.sql.optimizer.runtime.bloomFilter.maxNumItems` and
+    `spark.sql.optimizer.runtime.bloomFilter.maxNumBits`. For dynamic partition pruning, the hint
+    overrides the pruning benefit estimate and
+    `spark.sql.optimizer.dynamicPartitionPruning.reuseBroadcastOnly`; it still obeys
+    `spark.sql.optimizer.dynamicPartitionPruning.enabled` and requires the pruned side to scan a
+    table that supports pruning on the join key.
+
+    Like a join strategy hint, `RUNTIME_FILTER` fixes the join order around the hinted relation:
+    Spark does not reorder a join that carries it. Place the hinted relation where it joins the
+    side to prune on the join key.
+
+    The hinted side is evaluated again to build the filter, so its cost is paid twice. A Bloom
+    filter is merged in a single task from one partial filter per task that reads the hinted side,
+    and it prunes well only while the hinted side's distinct keys fit
+    `spark.sql.optimizer.runtime.bloomFilter.maxNumItems`. For dynamic partition pruning without a
+    broadcast to reuse, the hinted side's distinct join keys are collected to the driver and count
+    toward `spark.driver.maxResultSize`. Hint a side whose size and distinct key count stay within
+    these limits.
+
 #### Examples
 
 ```sql
