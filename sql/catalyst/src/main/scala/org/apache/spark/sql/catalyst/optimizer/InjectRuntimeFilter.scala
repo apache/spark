@@ -97,8 +97,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     val creationSideSize = filterCreationSide.materializedSizeInBytes
       .getOrElse(filterCreationSidePlan.stats.sizeInBytes)
     // Skip if the filter creation side is too big. This estimates whether the filter is worth its
-    // cost, which a hint asserts, and the filter's size is bounded by the max number of bits
-    // regardless, so a hinted creation side is not subject to it.
+    // cost, which a hint asserts, so a hinted creation side is not subject to it.
     if (!filterCreationSide.hinted && creationSideSize > creationSideThreshold) {
       return Left(s"the creation side ($creationSideSize bytes) exceeds " +
         s"${creationSideThresholdConf.key} ($creationSideThreshold bytes)")

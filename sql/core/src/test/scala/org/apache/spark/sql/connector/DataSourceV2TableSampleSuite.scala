@@ -235,11 +235,14 @@ class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
     registerCatalog(joinSampleCatalog, classOf[InMemoryTableWithJoinAndSampleCatalog])
     val t1 = s"$joinSampleCatalog.ns.t1"
     val t2 = s"$joinSampleCatalog.ns.t2"
+    val t3 = s"$joinSampleCatalog.ns.t3"
     sql(s"CREATE TABLE $t1 (id bigint, data string) USING _")
     sql(s"CREATE TABLE $t2 (id bigint, data string) USING _")
+    sql(s"CREATE TABLE $t3 (id bigint, data string) USING _")
     try {
       sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
       sql(s"INSERT INTO $t2 VALUES (2, 'x'), (3, 'y'), (4, 'z')")
+      sql(s"INSERT INTO $t3 VALUES (3, 'p'), (4, 'q'), (5, 'r')")
       withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
         def repeatableScans(df: DataFrame): Seq[Boolean] = {
           checkJoinPushed(df)
@@ -255,10 +258,16 @@ class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
         ).foreach { query =>
           assert(repeatableScans(sql(query)) == Seq(false))
         }
+        // In a cascaded join, a sample on the innermost side is nested two joins down.
+        def cascade(t1Sample: String): String =
+          s"SELECT * FROM $t1 $t1Sample JOIN $t2 ON $t1.id = $t2.id JOIN $t3 ON $t2.id = $t3.id"
+        assert(repeatableScans(sql(cascade(""))) == Seq(true))
+        assert(repeatableScans(sql(cascade("TABLESAMPLE SYSTEM (50 PERCENT)"))) == Seq(false))
       }
     } finally {
       sql(s"DROP TABLE IF EXISTS $t1")
       sql(s"DROP TABLE IF EXISTS $t2")
+      sql(s"DROP TABLE IF EXISTS $t3")
     }
   }
 
