@@ -225,11 +225,8 @@ abstract class BaseSliceArrowOutputProcessor(
 
   override def produceBatch(): ColumnarBatch = {
     val batchRoot = getRoot
-
-    if (batchRoot != prevRoot) {
-      closePrevSlice()
-      prevRoot = batchRoot
-    }
+    closePrevSlice()
+    prevRoot = batchRoot
 
     val vectors = getVectors(batchRoot)
     prevVectors = vectors
@@ -317,13 +314,9 @@ class SliceRecordsArrowOutputProcessorImpl(
   extends BaseSliceArrowOutputProcessor(reader, pythonMetrics) {
 
   protected override def getRoot: VectorSchemaRoot = {
-    val remainingRows = rowCount - currentRowIdx
-    // Output the whole root only if no row of this batch has been output yet.
-    val rootSlice = if (currentRowIdx == 0 && remainingRows <= arrowMaxRecordsPerOutputBatch) {
-      root
-    } else {
-      root.slice(currentRowIdx, math.min(remainingRows, arrowMaxRecordsPerOutputBatch))
-    }
+    val numRows = math.min(rowCount - currentRowIdx, arrowMaxRecordsPerOutputBatch)
+    // Output the whole root only if this chunk is the whole batch.
+    val rootSlice = if (numRows == rowCount) root else root.slice(currentRowIdx, numRows)
 
     currentRowIdx = currentRowIdx + rootSlice.getRowCount
 
