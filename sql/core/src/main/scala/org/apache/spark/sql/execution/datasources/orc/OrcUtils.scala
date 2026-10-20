@@ -134,48 +134,48 @@ object OrcUtils extends Logging {
     }
   }
 
-  def toCatalystSchema(schema: TypeDescription): StructType = {
+  private def toCatalystType(orcType: TypeDescription): DataType = {
     import TypeDescription.Category
 
-    def toCatalystType(orcType: TypeDescription): DataType = {
-      orcType.getCategory match {
-        case Category.STRUCT => toStructType(orcType)
-        case Category.LIST => toArrayType(orcType)
-        case Category.MAP => toMapType(orcType)
-        case _ =>
-          val catalystTypeAttrValue = orcType.getAttributeValue(CATALYST_TYPE_ATTRIBUTE_NAME)
-          if (catalystTypeAttrValue != null) {
-            CatalystSqlParser.parseDataType(catalystTypeAttrValue)
-          } else {
-            CatalystSqlParser.parseDataType(orcType.toString)
-          }
-      }
+    orcType.getCategory match {
+      case Category.STRUCT => toStructType(orcType)
+      case Category.LIST => toArrayType(orcType)
+      case Category.MAP => toMapType(orcType)
+      case _ =>
+        val catalystTypeAttrValue = orcType.getAttributeValue(CATALYST_TYPE_ATTRIBUTE_NAME)
+        if (catalystTypeAttrValue != null) {
+          CatalystSqlParser.parseDataType(catalystTypeAttrValue)
+        } else {
+          CatalystSqlParser.parseDataType(orcType.toString)
+        }
     }
+  }
 
-    def toStructType(orcType: TypeDescription): StructType = {
-      val fieldNames = orcType.getFieldNames.asScala
-      val fieldTypes = orcType.getChildren.asScala
-      val fields = new ArrayBuffer[StructField]()
-      fieldNames.zip(fieldTypes).foreach {
-        case (fieldName, fieldType) =>
-          val catalystType = toCatalystType(fieldType)
-          fields += StructField(fieldName, catalystType)
-      }
-      StructType(fields.toArray)
+  private def toStructType(orcType: TypeDescription): StructType = {
+    val fieldNames = orcType.getFieldNames.asScala
+    val fieldTypes = orcType.getChildren.asScala
+    val fields = new ArrayBuffer[StructField]()
+    fieldNames.zip(fieldTypes).foreach {
+      case (fieldName, fieldType) =>
+        val catalystType = toCatalystType(fieldType)
+        fields += StructField(fieldName, catalystType)
     }
+    StructType(fields.toArray)
+  }
 
-    def toArrayType(orcType: TypeDescription): ArrayType = {
-      val elementType = orcType.getChildren.get(0)
-      ArrayType(toCatalystType(elementType))
-    }
+  private def toArrayType(orcType: TypeDescription): ArrayType = {
+    val elementType = orcType.getChildren.get(0)
+    ArrayType(toCatalystType(elementType))
+  }
 
-    def toMapType(orcType: TypeDescription): MapType = {
-      val Seq(keyType, valueType) = orcType.getChildren.asScala.toSeq
-      val catalystKeyType = toCatalystType(keyType)
-      val catalystValueType = toCatalystType(valueType)
-      MapType(catalystKeyType, catalystValueType)
-    }
+  private def toMapType(orcType: TypeDescription): MapType = {
+    val Seq(keyType, valueType) = orcType.getChildren.asScala.toSeq
+    val catalystKeyType = toCatalystType(keyType)
+    val catalystValueType = toCatalystType(valueType)
+    MapType(catalystKeyType, catalystValueType)
+  }
 
+  def toCatalystSchema(schema: TypeDescription): StructType = {
     // Annotate metadata for the legacy path; under charVarcharFirstClassTypes the constrained
     // types are kept so ORC catalyst attributes / native char/varchar round-trip as first-class.
     CharVarcharUtils.replaceCharVarcharWithStringInSchema(toStructType(schema))
@@ -343,7 +343,10 @@ object OrcUtils extends Logging {
           throw QueryExecutionErrors.cannotConvertOrcTimestampNTZToTimestampLTZError()
         case (o, d) if isOrcTimestamp(o) && isOrcTimestamp(d) && !timestampReadCompatible(o, d) =>
           throw QueryExecutionErrors.cannotCastOrcTimestampError(o, d)
-        case (o: StructType, d: StructType) => checkTimestampCompatibility(o, d)
+        case (o: StructType, d: StructType) =>
+          o.fields.zip(d.fields).foreach { case (of, df) =>
+            checkTypeCompatibility(of.dataType, df.dataType)
+          }
         case (ArrayType(o, _), ArrayType(d, _)) => checkTypeCompatibility(o, d)
         case (MapType(ok, ov, _), MapType(dk, dv, _)) =>
           checkTypeCompatibility(ok, dk)
@@ -351,13 +354,16 @@ object OrcUtils extends Logging {
         case _ =>
       }
 
-    def checkTimestampCompatibility(orcCatalystSchema: StructType, dataSchema: StructType): Unit = {
-      orcCatalystSchema.fields.map(_.dataType).zip(dataSchema.fields.map(_.dataType)).foreach {
-        case (orcType, dataType) => checkTypeCompatibility(orcType, dataType)
+    // Only a field whose read type has a timestamp can fail this check, so only those file
+    // columns are converted. This avoids a SQL type parse per file column on every split.
+    // Char/varchar replacement is skipped because it cannot change timestamp leaves. File
+    // columns read without a timestamp are not converted at all, so an ORC type the SQL parser
+    // can't handle is only rejected here when its read type contains a timestamp.
+    orcSchema.getChildren.asScala.zip(dataSchema.fields).foreach { case (orcType, field) =>
+      if (field.dataType.existsRecursively(isOrcTimestamp)) {
+        checkTypeCompatibility(toCatalystType(orcType), field.dataType)
       }
     }
-
-    checkTimestampCompatibility(toCatalystSchema(orcSchema), dataSchema)
     val orcFieldNames = orcSchema.getFieldNames.asScala
     val forcePositionalEvolution = OrcConf.FORCE_POSITIONAL_EVOLUTION.getBoolean(conf)
     if (orcFieldNames.isEmpty) {
