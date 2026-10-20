@@ -218,7 +218,7 @@ class HistogramNumericSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("SPARK-57826: HistogramNumeric rejects nanosecond timestamps") {
+  test("SPARK-60337: HistogramNumeric rejects nanosecond timestamps") {
     // The histogram holds doubles, so a nanosecond timestamp is rejected rather than implicitly
     // cast to DATE.
     for {

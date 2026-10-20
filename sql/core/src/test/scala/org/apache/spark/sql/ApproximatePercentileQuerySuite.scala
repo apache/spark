@@ -596,7 +596,7 @@ class ApproximatePercentileQuerySuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-57826: percentile_approx rejects nanosecond timestamps") {
+  test("SPARK-60337: percentile_approx rejects nanosecond timestamps") {
     // The sketch holds doubles, which can't represent nanosecond timestamps exactly, so they are
     // rejected rather than implicitly cast to DATE.
     for {

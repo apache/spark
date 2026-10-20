@@ -155,7 +155,7 @@ class ApproximatePercentileSuite extends SparkFunSuite with SQLHelper {
     assert(Math.abs(result.asInstanceOf[Long] - 500L) < 5L)
   }
 
-  test("SPARK-57826: ApproximatePercentile rejects nanosecond timestamps") {
+  test("SPARK-60337: ApproximatePercentile rejects nanosecond timestamps") {
     // The sketch holds doubles, so a nanosecond timestamp is rejected rather than implicitly
     // cast to DATE.
     for {

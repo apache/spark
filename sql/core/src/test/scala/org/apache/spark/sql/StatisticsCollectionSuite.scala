@@ -666,7 +666,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
-  test("SPARK-57826: no histogram for nanosecond timestamp columns") {
+  test("SPARK-60337: no histogram for nanosecond timestamp columns") {
     withSQLConf(SQLConf.HISTOGRAM_ENABLED.key -> "true") {
       withTempView("nanos") {
         sql(

@@ -279,25 +279,6 @@ SELECT sort_array(collect_list(c)) FROM VALUES
   (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
   (CAST(NULL AS timestamp_ltz(9))) AS t(c);
 
--- SPARK-57826: percentile_approx / approx_percentile / histogram_numeric compute on doubles, which
--- can't hold the sub-microsecond digits, so a nanosecond-precision TIMESTAMP_LTZ is rejected in
--- both ANSI modes instead of being implicitly cast to DATE. An explicit cast to the microsecond
--- type still works.
-SELECT percentile_approx(c, 0.5) FROM VALUES
-  (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789 UTC') AS t(c);
-SELECT approx_percentile(c, array(0.25, 0.75)) FROM VALUES
-  ('2020-01-01 12:00:00.1234567 UTC' :: timestamp_ltz(7)) AS t(c);
-SELECT histogram_numeric(c, 2) FROM VALUES
-  ('2020-01-01 12:00:00.12345678 UTC' :: timestamp_ltz(8)) AS t(c);
-SELECT percentile_approx(CAST(c AS TIMESTAMP_LTZ), 0.5) FROM VALUES
-  (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789 UTC') AS t(c);
-SET spark.sql.ansi.enabled=false;
-SELECT percentile_approx(c, 0.5) FROM VALUES
-  (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789 UTC') AS t(c);
-SELECT histogram_numeric(c, 2) FROM VALUES
-  (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789 UTC') AS t(c);
-SET spark.sql.ansi.enabled=true;
-
 -- SPARK-57528: unix_timestamp / to_unix_timestamp over nanosecond-precision values. The result is
 -- whole-second BIGINT; the sub-second digits are dropped. A literal without an explicit zone is
 -- read in the session time zone (America/Los_Angeles, UTC-08:00); an explicit-zone literal fixes

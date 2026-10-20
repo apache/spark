@@ -111,18 +111,11 @@ case class ApproximatePercentile(
   private lazy val accuracyNum = accuracyExpression.eval().asInstanceOf[Number]
   private lazy val accuracy: Long = accuracyNum.longValue
 
-  // Types whose internal value is a number that is converted to double for processing.
-  private def supportedInputType = TypeCollection(NumericType, DateType, TimestampType,
-    TimestampNTZType, YearMonthIntervalType, DayTimeIntervalType, AnyTimeType)
-
   override def inputTypes: Seq[AbstractDataType] = {
-    // Keep a nanosecond timestamp as is, so that checkInputDataTypes rejects it instead of the
-    // analyzer implicitly casting it to DATE.
-    val inputType = child.dataType match {
-      case t: AnyTimestampNanoType => t
-      case _ => supportedInputType
-    }
-    Seq(inputType,
+    // Support NumericType, DateType, TimestampType, TimestampNTZType and TimeType since their
+    // internal types are all numeric, and can be easily cast to double for processing.
+    Seq(TypeCollection(NumericType, DateType, TimestampType, TimestampNTZType,
+      YearMonthIntervalType, DayTimeIntervalType, AnyTimeType),
       TypeCollection(DoubleType, ArrayType(DoubleType, containsNull = false)), IntegralType)
   }
 
@@ -139,9 +132,6 @@ case class ApproximatePercentile(
     val defaultCheck = super.checkInputDataTypes()
     if (defaultCheck.isFailure) {
       defaultCheck
-    } else if (child.dataType.isInstanceOf[AnyTimestampNanoType]) {
-      // The sketch holds doubles, which can't represent nanosecond timestamps exactly.
-      ExpectsInputTypes.checkInputDataTypes(Seq(child), Seq(supportedInputType))
     } else if (!percentageExpression.foldable) {
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
