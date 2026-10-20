@@ -839,6 +839,20 @@ object SQLConf {
       .booleanConf
       .createWithDefaultFunction(() => Utils.isTesting)
 
+  val FILE_TYPE_ENABLED =
+    buildConf("spark.sql.fileType.enabled")
+      .internal()
+      .doc("When true, the FILE data type is supported. This is a preview feature under " +
+        "SPARK-59132 and may change in future releases. The default is false in production; " +
+        "tests enable it by default via Utils.isTesting. Enabling this flag does not " +
+        "guarantee full SQL support: the physical representation, casts, Parquet read and " +
+        "write, and other operations may still fail until their respective features are " +
+        "implemented.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefaultFunction(() => Utils.isTesting)
+
   val EXTENDED_EXPLAIN_PROVIDERS = buildConf("spark.sql.extendedExplainProviders")
     .doc("A comma-separated list of classes that implement the" +
       " org.apache.spark.sql.ExtendedExplainGenerator trait. If provided, Spark will print" +
@@ -1180,7 +1194,11 @@ object SQLConf {
         "join, every clustering key must be covered by some partition key, rather than matching " +
         "the partition keys positionally, so a column partitioned by more than one transform " +
         "does not prevent shuffle elimination; hash partitioning deliberately keeps the " +
-        "positional match.")
+        "positional match. The same coverage rule applies when " +
+        "spark.sql.sources.v2.bucketing.shuffle.enabled shuffles only one side onto the " +
+        "partition keys of the other. Both storage-partitioned cases read " +
+        "spark.sql.sources.v2.bucketing.requireAllClusterKeysForCoPartition.enabled, which " +
+        "defaults to this config.")
       .version("3.3.0")
       .booleanConf
       .createWithDefault(true)
@@ -2624,6 +2642,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val V2_BUCKETING_REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION =
+    buildConf("spark.sql.sources.v2.bucketing.requireAllClusterKeysForCoPartition.enabled")
+      .doc("When true, a storage-partitioned join, or the one-side shuffle of " +
+        s"${V2_BUCKETING_SHUFFLE_ENABLED.key}, runs on the partition keys only if they cover " +
+        "every join, cogroup or MERGE key. Set it to false to also allow partition keys that " +
+        "cover only some of those keys, at the risk of data skew and reduced parallelism from " +
+        "the coarser storage partitioning. Hash partitionings still follow " +
+        s"${REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key}. Defaults to that config.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .fallbackConf(REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION)
+
    val V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS =
     buildConf("spark.sql.sources.v2.bucketing.allowKeysSubsetOfPartitionKeys.enabled")
       .withAlternative("spark.sql.sources.v2.bucketing.allowJoinKeysSubsetOfPartitionKeys.enabled")
@@ -2680,11 +2710,13 @@ object SQLConf {
   val V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED =
     buildConf("spark.sql.sources.v2.bucketing.partitionKeyOrdering.enabled")
       .doc("When enabled, Spark derives output ordering from the partition key expressions of " +
-        "a V2 data source that reports a KeyedPartitioning but does not report explicit ordering " +
-        "via SupportsReportOrdering, or reports one that Spark ignores because it references a " +
-        "column that cannot be resolved. Within a single partition all rows share the same key " +
-        "value, so the data is trivially sorted by those expressions. Partition transforms such " +
-        "as `days(ts)` or `bucket(8, id)` are left out of the ordering. Requires " +
+        "a V2 data source that reports a KeyedPartitioning and no ordering that Spark keeps for " +
+        "the scan output. For example, the source reports none, an empty one, or one that " +
+        "starts with a sort order on a column pruned from the scan output or on a partition " +
+        "transform and has no later sort order on a partition key other than a transform. " +
+        "Within a single partition all rows share the same key value, so the data is trivially " +
+        "sorted by those expressions. Partition transforms such as `days(ts)` or `bucket(8, id)` " +
+        "are left out of the ordering. Requires " +
         s"${V2_BUCKETING_ENABLED.key} to be enabled.")
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
@@ -5030,6 +5062,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val WINDOW_MONOTONIC_DEQUE_ENABLED =
+    buildConf("spark.sql.window.monotonicDeque.enabled")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .doc("Use O(N) monotonic deque for sliding window MIN/MAX. Applies only when the " +
+        "moving frame contains exclusively Min/Max aggregates with no FILTER clauses. " +
+        "It replaces the O(N * W) naive loop and O(N log W) segment tree with an " +
+        "optimized ring-buffer deque.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val WINDOW_SEGMENT_TREE_ENABLED =
     buildConf("spark.sql.window.segmentTree.enabled")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
@@ -5514,11 +5557,14 @@ object SQLConf {
         "Arrow-backed ColumnarBatch (e.g., DataSource V2 connectors), " +
         "bypassing the ColumnarToRow and ArrowWriter conversion. " +
         "This optimization reduces data transfer overhead between " +
-        "the JVM and Python worker processes.")
+        "the JVM and Python worker processes. It keeps the columns that the UDFs pass " +
+        "through until the results of their batch come back from Python, so it requires " +
+        "an upstream operator whose batches stay valid until then, which a columnar " +
+        "reader does not promise.")
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val ARROW_CACHE_PREFETCH_ENABLED =
     buildConf("spark.sql.execution.arrow.cache.prefetch.enabled")
@@ -9069,6 +9115,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def timestampNanosTypesEnabled: Boolean = getConf(TIMESTAMP_NANOS_TYPES_ENABLED)
 
+  override def isFileTypeEnabled: Boolean = getConf(FILE_TYPE_ENABLED)
+
   def dataSourceV2JoinPushdown: Boolean = getConf(DATA_SOURCE_V2_JOIN_PUSHDOWN)
 
   def dynamicPartitionPruningEnabled: Boolean = getConf(DYNAMIC_PARTITION_PRUNING_ENABLED)
@@ -9678,6 +9726,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def v2BucketingShuffleEnabled: Boolean =
     getConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED)
 
+  def v2BucketingRequireAllClusterKeysForCoPartition: Boolean =
+    getConf(SQLConf.V2_BUCKETING_REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION)
+
   def v2BucketingAllowKeysSubsetOfPartitionKeys: Boolean =
     getConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS)
 
@@ -9806,6 +9857,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def windowExecBufferSpillSizeThreshold: Long = getConf(WINDOW_EXEC_BUFFER_SIZE_SPILL_THRESHOLD)
 
   def windowGroupLimitThreshold: Int = getConf(WINDOW_GROUP_LIMIT_THRESHOLD)
+
+  def windowMonotonicDequeEnabled: Boolean = getConf(WINDOW_MONOTONIC_DEQUE_ENABLED)
 
   def windowSegmentTreeEnabled: Boolean = getConf(WINDOW_SEGMENT_TREE_ENABLED)
 

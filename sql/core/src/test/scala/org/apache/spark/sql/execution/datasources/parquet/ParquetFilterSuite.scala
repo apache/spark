@@ -2958,6 +2958,37 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
         |  optional int64 t(TIME(MICROS,true));
         |}""".stripMargin))
   }
+
+  test("SPARK-60355: filter pushdown - time compared with a time of a larger precision") {
+    // Comparing a TIME(6) column with a TIME(9) literal casts the column to TIME(9).
+    // UnwrapCastInBinaryComparison moves the cast to the literal side, so the comparison is pushed
+    // down. A literal with sub-microsecond digits is truncated to TIME(6) and the comparison is
+    // adjusted, e.g. `t < 12:00:00.100000001` is pushed as `t <= 12:00:00.1`.
+    def time(s: String): LocalTime = LocalTime.parse(s)
+    def time9(s: String): Literal = Literal(time(s).toNanoOfDay, TimeType(9))
+    val data = Seq("12:00:00.099999", "12:00:00.1", "12:00:00.100001").map(s => Tuple1(time(s)))
+    withNestedParquetDataFrame(data) { case (inputDF, colName, resultFun) =>
+      implicit val df: DataFrame = inputDF
+
+      val tAttr = df(colName).expr
+      assert(df(colName).expr.dataType === TimeType())
+
+      checkFilterPredicate(tAttr === time9("12:00:00.1"), classOf[Eq[_]],
+        resultFun(time("12:00:00.1")))
+      checkFilterPredicate(tAttr <=> time9("12:00:00.1"), classOf[Eq[_]],
+        resultFun(time("12:00:00.1")))
+      checkFilterPredicate(time9("12:00:00.1") < tAttr, classOf[Gt[_]],
+        resultFun(time("12:00:00.100001")))
+      checkFilterPredicate(tAttr > time9("12:00:00.100000001"), classOf[Gt[_]],
+        resultFun(time("12:00:00.100001")))
+      checkFilterPredicate(tAttr < time9("12:00:00.100000001"), classOf[LtEq[_]],
+        Seq("12:00:00.099999", "12:00:00.1").map(s => Row(resultFun(time(s)))))
+      checkFilterPredicate(
+        In(tAttr, Seq("12:00:00.1", "12:00:00.100000001", "12:00:00.100001").map(time9)),
+        classOf[Operators.Or],
+        Seq("12:00:00.1", "12:00:00.100001").map(s => Row(resultFun(time(s)))))
+    }
+  }
 }
 
 @ExtendedSQLTest

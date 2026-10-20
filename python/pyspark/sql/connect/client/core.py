@@ -1378,7 +1378,7 @@ class SparkConnectClient(object):
                 if descriptor.type == descriptor.TYPE_MESSAGE:
                     if allowed_recursion_depth == 0:
                         p2.ClearField(field_name)
-                    elif descriptor.label == descriptor.LABEL_REPEATED:
+                    elif descriptor.is_repeated:
                         p2.ClearField(field_name)
                         getattr(p2, field_name).extend(
                             [self._truncate(v, allowed_recursion_depth - 1) for v in value]
@@ -1389,14 +1389,14 @@ class SparkConnectClient(object):
                         )
 
                 elif descriptor.type == descriptor.TYPE_STRING:
-                    if descriptor.label == descriptor.LABEL_REPEATED:
+                    if descriptor.is_repeated:
                         p2.ClearField(field_name)
                         getattr(p2, field_name).extend([truncate_str(v) for v in value])
                     else:
                         setattr(p2, field_name, truncate_str(value))
 
                 elif descriptor.type == descriptor.TYPE_BYTES:
-                    if descriptor.label == descriptor.LABEL_REPEATED:
+                    if descriptor.is_repeated:
                         p2.ClearField(field_name)
                         getattr(p2, field_name).extend([truncate_bytes(v) for v in value])
                     else:
