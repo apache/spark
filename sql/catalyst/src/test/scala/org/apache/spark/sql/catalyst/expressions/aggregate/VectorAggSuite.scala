@@ -419,6 +419,20 @@ class VectorAggSuite extends SparkFunSuite {
     assertResult(Array(0.0f, 0.0f))(evalAsFloatArray(agg, buffer1))
   }
 
+  test("VectorAvg - finite overflow preserves cumulative weights") {
+    val (agg, buffer, _) = createVectorAvg()
+    val first = Array(Float.MaxValue, -Float.MaxValue)
+    agg.update(buffer, createInputRow(first))
+    agg.update(buffer, createInputRow(first))
+    // The third update overflows the delta. An unweighted midpoint would incorrectly return zero.
+    agg.update(buffer, createInputRow(first.map(-_)))
+    val expected = (Float.MaxValue.toDouble / 3).toFloat
+    assertFloatArrayEquals(
+      evalAsFloatArray(agg, buffer),
+      Array(expected, -expected),
+      tolerance = math.ulp(expected) * 2)
+  }
+
   test("VectorAvg - non-finite results do not depend on input order") {
     val first =
       Array(Float.PositiveInfinity, 1.0f, Float.NegativeInfinity, Float.PositiveInfinity)
