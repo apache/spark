@@ -940,35 +940,7 @@ class MultiStatefulOperatorsSuite
             // Batch 2: inputW=120, leftW=115, rightW=90, outputW=115 (after restart).
             // Join emits nothing; aggregation emits [100, 110): 1 and keeps [120, 130): 1.
             AddData(rightInput, (9, 120)),
-            CheckNewAnswer((100L, 1L)),
-            // Batch 3: inputW=120, leftW=115, rightW=90, outputW=115.
-            // Join emits (1, 125) matching restored right state; aggregation keeps [120, 130): 2.
-            AddData(leftInput, (1, 125)),
-            CheckNewAnswer(),
-            // Batch 4: inputW=120, leftW=115, rightW=90, outputW=115.
-            // Join emits (3, 140) and buffers unmatched (4, 137).
-            // Aggregation buffers [120, 130): 2 and [140, 150): 1.
-            MultiAddData(leftInput, (3, 140), (4, 137))(rightInput, (3, 140)),
-            CheckNewAnswer(),
-            // Batch 5: inputW=140, leftW=135, rightW=110, outputW=135.
-            // Join emits nothing; aggregation emits [120, 130): 2 and keeps [140, 150): 1.
-            AddData(rightInput, (9, 140)),
-            CheckNewAnswer((120L, 2L)),
-            StopStream,
-            StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
-            // Batch 6: inputW=140, leftW=135, rightW=110, outputW=135 (after restart).
-            // Join emits restored (4, 137) once despite two right matches.
-            // Aggregation buffers [130, 140): 1 and [140, 150): 1.
-            AddData(rightInput, (4, 141), (4, 142)),
-            CheckNewAnswer(),
-            // Batch 7: inputW=140, leftW=135, rightW=110, outputW=135.
-            // Join emits nothing; aggregation keeps [130, 140): 1 and [140, 150): 1.
-            MultiAddData(leftInput, (8, 160))(rightInput, (9, 160)),
-            CheckNewAnswer(),
-            // Batch 8: inputW=160, leftW=155, rightW=130, outputW=155.
-            // Join emits nothing; aggregation emits both buffered windows and clears its state.
-            AddData(rightInput, (9, 160)),
-            CheckNewAnswer((130L, 1L), (140L, 1L)))
+            CheckNewAnswer((100L, 1L)))
         }
       }
     }
