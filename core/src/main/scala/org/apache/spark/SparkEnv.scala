@@ -131,8 +131,12 @@ class SparkEnv (
     Option(_blockingShuffleManager).map(_.shuffleBlockResolver)
 
   /**
-   * Returns the shuffle manager for regular, materialized shuffle dependencies.
+   * Retained for binary compatibility; returns the blocking manager. Prefer `shuffleManagerFor`
+   * (route a shuffle by its dependency) or `blockingShuffleManager` (the blocking manager
+   * explicitly), so the routing decision is explicit at the call site.
    */
+  @deprecated("use shuffleManagerFor(dependency) to route a shuffle by type, or " +
+    "blockingShuffleManager for the blocking manager explicitly", "4.3.0")
   def shuffleManager: ShuffleManager = _blockingShuffleManager
 
   /**
