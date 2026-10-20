@@ -4100,8 +4100,10 @@ class Analyzer(
           val cleanedTable = v2Write.table match {
             case r: DataSourceV2Relation =>
               val cleaned = r.output.map(CharVarcharUtils.cleanAttrMetadata)
-              r.copy(output =
+              val cleanedRelation = r.copy(output =
                 GeneratedColumn.markAutoFilledGeneratedColumns(cleaned, autoFilledGenCols))
+              cleanedRelation.copyTagsFrom(r)
+              cleanedRelation
             case other => other
           }
           v2Write.withNewQuery(projection).withNewTable(cleanedTable)
