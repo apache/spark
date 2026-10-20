@@ -52,13 +52,14 @@ case class ShowCreateTableExec(
     val quotedName = resolvedTable.name
     val schema = table.columns.asSchema
     val partitioning = table.partitioning
-    val provider = Option(table.properties.get(TableCatalog.PROP_PROVIDER))
+    val properties = table.properties
+    val provider = Option(properties.get(TableCatalog.PROP_PROVIDER))
     builder ++= s"CREATE TABLE ${quotedName} "
 
     showTableDataColumns(table, schema, builder)
     showTableUsing(provider, builder)
 
-    val tableOptions = table.properties.asScala
+    val tableOptions = properties.asScala
       .filter { case (k, _) => k.startsWith(TableCatalog.OPTION_PREFIX) }.map {
         case (k, v) => k.drop(TableCatalog.OPTION_PREFIX.length) -> v
       }.toMap
