@@ -1233,10 +1233,9 @@ object SQLConf {
       "A non-deterministic expression is not used as a range key. " +
       "Measured at least an order of magnitude faster than the nested loop " +
       "join it replaces when probes are selective, at parity for probed sides " +
-      "of only a few rows and for partial ranges at the median bound, and " +
-      "slower on unselective builds: about 0.9X for fully overlapping ranges, " +
-      "0.6X where most, but not all, build intervals overlap each probe on " +
-      "long keys, and 0.4X on boxed keys. Off by default.")
+      "of only a few rows, for partial ranges at the median bound, and for " +
+      "fully overlapping ranges, and slower when most, but not all, build intervals overlap " +
+      "each probe: about 0.7X on long keys and 0.6X on boxed keys. Off by default.")
     .version("4.4.0")
     .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .booleanConf
