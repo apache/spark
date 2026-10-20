@@ -4095,8 +4095,10 @@ class Analyzer(
           val cleanedTable = v2Write.table match {
             case r: DataSourceV2Relation =>
               val cleaned = r.output.map(CharVarcharUtils.cleanAttrMetadata)
-              r.copy(output =
+              val cleanedRelation = r.copy(output =
                 GeneratedColumn.markAutoFilledGeneratedColumns(cleaned, autoFilledGenCols))
+              cleanedRelation.copyTagsFrom(r)
+              cleanedRelation
             case other => other
           }
           v2Write.withNewQuery(projection).withNewTable(cleanedTable)
@@ -4120,8 +4122,6 @@ class Analyzer(
       joinNames: Seq[String],
       condition: Option[Expression],
       hint: JoinHint): LogicalPlan = {
-    import org.apache.spark.sql.catalyst.util._
-
     val (projectList, hiddenList, newCondition) =
       NaturalAndUsingJoinResolution.computeJoinOutputsAndNewCondition(
         left,
@@ -4134,14 +4134,12 @@ class Analyzer(
         (attributeName, keyName) => resolver(attributeName, keyName)
       )
 
-    // use Project to hide duplicated common keys
-    // propagate hidden columns from nested USING/NATURAL JOINs
-    val project = Project(projectList, Join(left, right, joinType, newCondition, hint))
-    project.setTagValue(
-      Project.hiddenOutputTag,
-      hiddenList.map(_.markAsQualifiedAccessOnly()) ++
-        project.child.metadataOutput.filter(_.qualifiedAccessOnly))
-    project
+    val join = Join(left, right, joinType, newCondition, hint)
+    NaturalAndUsingJoinResolution.buildUsingJoinProject(
+      projectList,
+      hiddenList,
+      join,
+      join.metadataOutput)
   }
 
   /**
