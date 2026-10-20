@@ -671,8 +671,8 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
-  // TODO: push down bounds that account for the read precision, then expect the
-  // pushdown and no-pushdown results to match for every predicate.
+  // TODO(SPARK-60380): make pushdown respect the read precision, then expect the pushdown and
+  // no-pushdown results to match for every predicate.
   test("SPARK-60334: pushdown under a lower-precision read schema compares raw nanoseconds") {
     withNanosEnabled {
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
