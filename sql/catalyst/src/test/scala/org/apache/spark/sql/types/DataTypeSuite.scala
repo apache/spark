@@ -373,6 +373,11 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
   checkDataTypeFromJson(VarcharType(10))
   checkDataTypeFromDDL(VarcharType(11))
 
+  checkDataTypeFromJson(StringType("UTF8_LCASE"))
+  checkDataTypeFromJson(StringType("UNICODE_CI"))
+  checkDataTypeFromJson(CharType(1, "UNICODE"))
+  checkDataTypeFromJson(VarcharType(10, "UNICODE_CI"))
+
   // GEOMETRY type with default fixed SRID.
   checkDataTypeFromJson(GeometryType(GeometryType.GEOMETRY_DEFAULT_SRID))
   checkDataTypeFromDDL(GeometryType(GeometryType.GEOMETRY_DEFAULT_SRID))
