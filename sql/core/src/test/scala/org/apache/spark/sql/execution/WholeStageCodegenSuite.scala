@@ -30,8 +30,11 @@ import org.apache.spark.SparkException
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.rdd.MapPartitionsWithEvaluatorRDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SaveMode}
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, Cast, CodegenObjectFactoryMode, Expression, IsNotNull, With}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, Cast, CodegenObjectFactoryMode, Expression, IsNotNull, Literal, With}
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodegenContext, CodeGenerator, WholeStageSplit, WholeStageSplitKey}
+import org.apache.spark.sql.catalyst.plans.logical.MergeRows
+import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Keep, Update}
+import org.apache.spark.sql.classic
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
@@ -2811,6 +2814,68 @@ class WholeStageCodegenSuite extends SharedSparkSession
       checkAnswer(df, withoutWholeStage(df))
       withSQLConf(SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS.key -> "false") {
         assert(genCode(df).exists(c => stringParameter.findFirstIn(c.body).nonEmpty))
+      }
+    }
+  }
+
+  test("SPARK-60403: full outer joins compile with their functions spilled to nested classes") {
+    // A full outer join outputs its rows through a function of its own, and generates the code of
+    // the operators above it, for the body of that function, before adding the function: here a
+    // CASE WHEN of 2000 branches, split into methods (SPARK-33301) that take the class past
+    // `CodeGenerator.GENERATED_CLASS_SIZE_THRESHOLD`, so `addNewFunction` puts the join's
+    // functions into a nested class. A call from outside of such a class has to go through its
+    // instance, as the name `addNewFunction` returns does; by the bare name it failed to compile.
+    // The join loop in `processNext` of the outer class makes these calls: to `findNextJoinRows`
+    // and `consumeFullOuterJoinRow` in a sort merge join, and to `consumeOuterJoinRow` in a
+    // shuffled hash join.
+    withSplitAlways {
+      withTempView("l", "r") {
+        spark.range(0, 10).selectExpr("id AS k").createOrReplaceTempView("l")
+        spark.range(5, 15).selectExpr("id AS k").createOrReplaceTempView("r")
+        Seq("MERGE" -> "findNextJoinRows", "SHUFFLE_HASH" -> "consumeOuterJoinRow").foreach {
+          case (hint, function) =>
+            val query = s"SELECT /*+ $hint(r) */ l.k, r.k, ${largeCaseWhen("l.k", 2000)} AS v " +
+              "FROM l FULL OUTER JOIN r ON l.k = r.k"
+            val code = genCode(sql(query))
+            code.foreach(CodeGenerator.compile)
+            val qualifiedCall = s"\\w*nestedClassInstance_\\d+\\.\\w*${function}_\\d+\\(".r
+            assert(code.exists(c => qualifiedCall.findFirstIn(c.body).nonEmpty), hint)
+            checkAnswer(sql(query), withoutWholeStage(sql(query)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-60403: MergeRows compiles with its function spilled to a nested class") {
+    // `MergeRowsExec` processes each row in a function of its own, and generates the code of the
+    // operators above it, for the body of that function, before adding the function: here a CASE
+    // WHEN of 2000 branches, split into methods (SPARK-33301) that take the class past
+    // `CodeGenerator.GENERATED_CLASS_SIZE_THRESHOLD`, so the function goes into a nested class.
+    // With the consume code of the operators not split into functions, the call to it is in
+    // `processNext` of the outer class, where by the bare name it failed to compile. Split, the
+    // call is in a consume function added right after it, into the same nested class unless that
+    // class fills up in between. The MergeRows node is built as in `MergeRowsExecBenchmark`,
+    // matching every row.
+    val source = spark.range(10).selectExpr("CAST(id AS INT) AS t", "CAST(id AS INT) AS s")
+    val attrs = source.queryExecution.analyzed.output
+    val mergeRows = MergeRows(
+      isSourceRowPresent = Literal.TrueLiteral,
+      isTargetRowPresent = Literal.TrueLiteral,
+      matchedInstructions = Seq(Keep(Update, Literal.TrueLiteral, attrs)),
+      notMatchedInstructions = Nil,
+      notMatchedBySourceInstructions = Nil,
+      checkCardinality = false,
+      output = attrs.map(_.newInstance()),
+      child = source.queryExecution.analyzed)
+    def df: DataFrame =
+      classic.Dataset.ofRows(spark, mergeRows).selectExpr(s"${largeCaseWhen("s", 2000)} AS v")
+    withSplitAlways {
+      withSQLConf(SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> "false") {
+        val code = genCode(df)
+        code.foreach(CodeGenerator.compile)
+        val qualifiedCall = "\\w*nestedClassInstance_\\d+\\.\\w*mergeProcessRow_\\d+\\(".r
+        assert(code.exists(c => qualifiedCall.findFirstIn(c.body).nonEmpty))
+        checkAnswer(df, withoutWholeStage(df))
       }
     }
   }
