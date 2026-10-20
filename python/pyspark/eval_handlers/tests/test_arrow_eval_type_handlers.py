@@ -237,18 +237,44 @@ class ArrowBatchedUDFArrowHandlerTests(ArrowEvalTypeHandlerTestCase):
                     self.assertNotIn("pythonNumTimingReports", report)
                     self.assertNotIn("pythonInputPreparationTime", report)
 
-    def test_write_timing_excludes_udf_execution(self):
+    def test_phase_timing_boundaries(self):
         metrics = WorkerMetrics()
         metrics.reset()
         self.addCleanup(metrics.reset)
         clock_ns = 0
         udf_rows = 0
+        input_ns = 0
+        output_ns = 0
+
+        class TimedBatch:
+            def __init__(self, batch):
+                self.batch = batch
+
+            @property
+            def num_rows(self):
+                return self.batch.num_rows
+
+            def itercolumns(self):
+                nonlocal clock_ns, input_ns
+                clock_ns += 3_000_000
+                input_ns += 3_000_000
+                return self.batch.itercolumns()
+
+        class TimedInt:
+            def __init__(self, value):
+                self.value = value
+
+            def __index__(self):
+                nonlocal clock_ns, output_ns
+                clock_ns += 5_000_000
+                output_ns += 5_000_000
+                return self.value
 
         def udf(value):
             nonlocal clock_ns, udf_rows
             clock_ns += 100_000_000
             udf_rows += 1
-            return value + 1
+            return TimedInt(value + 1)
 
         class OutputStream(BytesIO):
             write_ns = 0
@@ -270,16 +296,25 @@ class ArrowBatchedUDFArrowHandlerTests(ArrowEvalTypeHandlerTestCase):
         )
         output = OutputStream()
         batches = [self._batch(a=[1, 2], b=[10, 20]), self._batch(a=[3], b=[30])]
+
+        def input_batches():
+            nonlocal clock_ns
+            for batch in batches:
+                clock_ns += 100_000_000
+                yield TimedBatch(batch)
+
         with patch("pyspark.eval_handlers._arrow.time.perf_counter_ns", new=lambda: clock_ns):
-            handler.serializer.dump_stream(handler.run(0, iter(batches)), output)
+            handler.serializer.dump_stream(handler.run(0, input_batches()), output)
 
         report = metrics.to_dict()
         self.assertEqual(output.rows_at_write, 2)
         self.assertEqual(report["pythonNumTimedBatches"], 2)
+        self.assertGreater(input_ns, 0)
+        self.assertEqual(report["pythonInputPreparationTime"], input_ns // 1_000_000)
         self.assertEqual(report["pythonUDFExecutionTime"], 300)
+        self.assertGreater(output_ns, 0)
+        self.assertEqual(report["pythonOutputPreparationTime"], output_ns // 1_000_000)
         self.assertEqual(report["pythonDataWriteTime"], output.write_ns // 1_000_000)
-        self.assertEqual(report["pythonInputPreparationTime"], 0)
-        self.assertEqual(report["pythonOutputPreparationTime"], 0)
 
     def test_invokes_udf_per_row(self):
         handler = self._handler(

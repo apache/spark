@@ -603,6 +603,9 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
                     )
                     phases = [metrics.apply(name).value() for name in phase_names]
                     self.assertTrue(all(value >= 0 for value in phases))
+                    if num_rows:
+                        for name in phase_names:
+                            self.assertFalse(metrics.apply(name).isZero(), name)
                     if num_rows and concurrency == 0:
                         self.assertGreaterEqual(phases[2], 2 * num_rows)
                     elif num_rows:

@@ -481,7 +481,7 @@ private[spark] object BasePythonRunner extends Logging {
     .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
     .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
 
-  /** Decode all numeric fields after METRICS_DATA without knowing their metric names. */
+  /** Decode every METRICS_DATA field as a named int64; reject other values. */
   private[python] def readWorkerMetrics(stream: DataInputStream): Map[String, Long] = {
     val length = stream.readInt()
     if (length <= 0) {
