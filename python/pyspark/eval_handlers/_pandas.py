@@ -149,6 +149,7 @@ class PandasScalarIterUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     Arrow<->pandas conversions in ``pyspark.sql.conversion`` directly."""
 
     eval_type = PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
+    _iter_based = True
 
     def __init__(
         self, udfs: list[tuple[Any, ...]], runner_conf: "RunnerConf", eval_conf: "EvalConf"
@@ -220,6 +221,7 @@ class PandasMapUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     RecordBatch each. The pandas counterpart of ArrowMapUDFHandler."""
 
     eval_type = PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
+    _iter_based = True
 
     def __init__(
         self, udfs: list[tuple[Any, ...]], runner_conf: "RunnerConf", eval_conf: "EvalConf"
@@ -369,6 +371,7 @@ class PandasGroupedMapIterUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
     pandas counterpart of ArrowGroupedMapIterUDFHandler."""
 
     eval_type = PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF
+    _iter_based = True
 
     def __init__(
         self, udfs: list[tuple[Any, ...]], runner_conf: "RunnerConf", eval_conf: "EvalConf"

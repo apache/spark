@@ -533,14 +533,25 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     transformDownWithPruning(AlwaysProcess.fn, UnknownRuleId)(rule)
   }
 
+  // Avoid allocating CurrentOrigin.withOrigin's by-name closure at every node.
+  private def applyRule(
+      node: BaseType,
+      rule: PartialFunction[BaseType, BaseType]): BaseType = {
+    val previousOrigin = CurrentOrigin.get
+    CurrentOrigin.set(origin)
+    try {
+      rule.applyOrElse(node, identity[BaseType])
+    } finally {
+      CurrentOrigin.set(previousOrigin)
+    }
+  }
+
   /**
    * A variant of [[transformDown]] that retains structurally equal replacement nodes.
    */
   private[sql] def transformDownWithReferenceEquality(
       rule: PartialFunction[BaseType, BaseType]): BaseType = {
-    val afterRule = CurrentOrigin.withOrigin(origin) {
-      rule.applyOrElse(this, identity[BaseType])
-    }
+    val afterRule = applyRule(this, rule)
     if (this eq afterRule) {
       mapChildrenWithReferenceEquality(_.transformDownWithReferenceEquality(rule))
     } else {
@@ -569,9 +580,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     if (!cond.apply(this) || isRuleIneffective(ruleId)) {
       return this
     }
-    val afterRule = CurrentOrigin.withOrigin(origin) {
-      rule.applyOrElse(this, identity[BaseType])
-    }
+    val afterRule = applyRule(this, rule)
 
     // Check if unchanged and then possibly return old copy to avoid gc churn.
     if (this fastEquals afterRule) {
@@ -622,15 +631,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       return this
     }
     val afterRuleOnChildren = mapChildren(_.transformUpWithPruning(cond, ruleId)(rule))
-    val newNode = if (this fastEquals afterRuleOnChildren) {
-      CurrentOrigin.withOrigin(origin) {
-        rule.applyOrElse(this, identity[BaseType])
-      }
-    } else {
-      CurrentOrigin.withOrigin(origin) {
-        rule.applyOrElse(afterRuleOnChildren, identity[BaseType])
-      }
-    }
+    val ruleInput = if (this fastEquals afterRuleOnChildren) this else afterRuleOnChildren
+    val newNode = applyRule(ruleInput, rule)
     if (this eq newNode) {
       markRuleAsIneffective(ruleId)
       this
@@ -807,10 +809,53 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
    * Returns a copy of this node where `f` has been applied to all the nodes in `children`.
    */
   def mapChildren(f: BaseType => BaseType): BaseType = {
-    if (containsChild.nonEmpty) {
-      withNewChildren(children.map(f))
-    } else {
+    val oldChildren = children
+    if (oldChildren.isEmpty) return this
+
+    // Invoke `f` once per child and defer allocating the replacement array until `f` returns a
+    // distinct instance. Backfill the reference-equal prefix when that first happens. `changed`
+    // records whether any change was material (`!fastEquals`). If no child changed materially we
+    // return `this` and drop the array -- an equal-but-distinct replacement alone does not require
+    // rebuilding the parent.
+    var newChildren: Array[BaseType] = null
+    var changed = false
+    var index = 0
+    val childIterator = oldChildren.iterator
+    while (childIterator.hasNext) {
+      val oldChild = childIterator.next()
+      val newChild = f(oldChild)
+      if (oldChild ne newChild) {
+        if (newChildren eq null) {
+          // First distinct replacement: allocate the result array and backfill the
+          // reference-equal prefix.
+          newChildren = new Array[TreeNode[_]](oldChildren.size).asInstanceOf[Array[BaseType]]
+          val originalIterator = oldChildren.iterator
+          var priorIndex = 0
+          while (priorIndex < index) {
+            newChildren(priorIndex) = originalIterator.next()
+            priorIndex += 1
+          }
+        }
+        if (!changed && !oldChild.fastEquals(newChild)) changed = true
+        newChildren(index) = newChild
+      } else if (newChildren ne null) {
+        newChildren(index) = oldChild
+      }
+      index += 1
+    }
+    if (!changed) {
+      // Every distinct replacement was only equal-but-distinct, so the parent is unchanged --
+      // matching `withNewChildren(children.map(f))`, which also returns `this` here.
       this
+    } else {
+      // A child changed materially; rebuild. Call `withNewChildrenInternal` directly (as the
+      // arity traits do) rather than `withNewChildren`, whose size-assert and `childrenFastEquals`
+      // recheck are redundant here.
+      CurrentOrigin.withOrigin(origin) {
+        val res = withNewChildrenInternal(newChildren.toImmutableArraySeq)
+        res.copyTagsFrom(this)
+        res
+      }
     }
   }
 

@@ -1399,6 +1399,11 @@ private[spark] class DAGScheduler(
    *    yet built (it needs multicast to N live readers), so it is rejected for now. A
    *    PipelinedShuffleDependency's producer is `dep.rdd`; a "consumer" is any RDD that lists that
    *    dependency. More than one distinct consumer RDD for the same pipelined shuffle is fan-out.
+   *  - Repeated reads: a single consumer RDD can still read a transient shuffle partition more
+   *    than once, for example through C.zipPartitions(C). Follow narrow partition dependencies
+   *    from each stage root, preserving multiplicity, and reject repeated reads before scheduling.
+   *    Shuffle boundaries start independent producer stages, rather than propagating consumer
+   *    multiplicity into shared, materialized ancestry.
    *  - Reliable RDD checkpoint in a group member's within-stage chain (producer OR consumer side):
    *    a reliable `checkpoint()` writes a durable, lineage-truncated snapshot, which both
    *    reintroduces cross-time reuse of a transient edge and requires a post-success recompute
@@ -1427,6 +1432,9 @@ private[spark] class DAGScheduler(
     // member stages), and every reliably-checkpointed RDD (to locate ones inside a member stage).
     val consumersByShuffleId = new HashMap[Int, HashSet[Int]]
     val producerRoots = new HashSet[RDD[_]]           // RDDs that WRITE a pipelined shuffle
+    val shuffleRoots = new HashMap[Int, RDD[_]]       // one execution root per shuffle stage
+    val consumerRDDs = new HashSet[RDD[_]]            // RDDs that READ a pipelined shuffle
+    val narrowChildren = new HashMap[RDD[_], ListBuffer[RDD[_]]]
     val reliablyCheckpointed = new HashSet[RDD[_]]     // RDDs with a reliable checkpoint pending
     var hasNonDefaultResourceProfile = false          // any member RDD with a non-default RP
     traverseRDDGraph(finalRDD) { (rdd, enqueue) =>
@@ -1445,7 +1453,16 @@ private[spark] class DAGScheduler(
         case pd: PipelinedShuffleDependency[_, _, _] =>
           consumersByShuffleId.getOrElseUpdate(pd.shuffleId, new HashSet[Int]) += rdd.id
           producerRoots += pd.rdd
+          shuffleRoots.getOrElseUpdate(pd.shuffleId, pd.rdd)
+          consumerRDDs += rdd
           enqueue(pd.rdd)
+        case sd: ShuffleDependency[_, _, _] =>
+          shuffleRoots.getOrElseUpdate(sd.shuffleId, sd.rdd)
+          enqueue(sd.rdd)
+        case nd: NarrowDependency[_] =>
+          val parent = nd.rdd
+          narrowChildren.getOrElseUpdate(parent, new ListBuffer[RDD[_]]) += rdd
+          enqueue(parent)
         case dep =>
           enqueue(dep.rdd)
       }
@@ -1494,7 +1511,78 @@ private[spark] class DAGScheduler(
       throw pipelinedUnsupportedError(
         "a reliable RDD checkpoint in a pipelined-group member's within-stage chain")
     }
+    checkPipelinedShuffleRepeatedReads(
+      finalRDD, partitions, shuffleRoots.values, consumerRDDs, narrowChildren)
     checkPipelinedStageCreation(finalRDD, partitions, jobId)
+  }
+
+  /**
+   * Count potential reads of each transient shuffle partition through narrow dependencies. Only
+   * RDDs downstream of a pipelined reader are relevant; a materialized prefix is not expanded.
+   * Each (RDD, partition) is propagated at most twice, since two reads already violate the
+   * single-reader contract. Work is linear in the reachable partition-dependency graph, without
+   * enumerating paths through shared ancestry. This runs only for native pipelined jobs.
+   * A cache declaration is not a boundary: evicted or unstored partitions still compute lineage.
+   */
+  private def checkPipelinedShuffleRepeatedReads(
+      finalRDD: RDD[_],
+      partitions: Array[Int],
+      shuffleRoots: Iterable[RDD[_]],
+      consumerRDDs: Iterable[RDD[_]],
+      narrowChildren: HashMap[RDD[_], ListBuffer[RDD[_]]]): Unit = {
+    val relevantRDDs = new HashSet[RDD[_]]
+    val descendants = new ListBuffer[RDD[_]]
+    descendants ++= consumerRDDs
+    while (descendants.nonEmpty) {
+      val rdd = descendants.remove(0)
+      if (relevantRDDs.add(rdd)) {
+        narrowChildren.get(rdd).foreach(descendants ++= _)
+      }
+    }
+
+    val counts = new HashMap[(RDD[_], Int), Int]
+    val pending = new ListBuffer[(RDD[_], Int)]
+    // A known mapping identifies a reduce partition; an unknown one identifies a reader-RDD
+    // partition. The distinct-consumer check above ensures there is only one such RDD per shuffle.
+    val reads = new HashSet[(Int, Option[Int], Int)]
+    def enqueue(rdd: RDD[_], partition: Int): Unit = {
+      if (relevantRDDs.contains(rdd)) {
+        val key: (RDD[_], Int) = (rdd, partition)
+        val count = counts.getOrElse(key, 0)
+        if (count < 2) {
+          counts(key) = count + 1
+          pending += key
+        }
+      }
+    }
+    partitions.foreach(enqueue(finalRDD, _))
+    shuffleRoots.foreach { rdd =>
+      if (relevantRDDs.contains(rdd)) {
+        rdd.partitions.foreach(partition => enqueue(rdd, partition.index))
+      }
+    }
+    while (pending.nonEmpty) {
+      val entry = pending.remove(0)
+      val rdd = entry._1
+      val partition = entry._2
+      rdd.dependencies.foreach {
+        case pd: PipelinedShuffleDependency[_, _, _] =>
+          val reducePartition = rdd match {
+            case mapping: ShuffleReducePartitionMapping => mapping.reducePartitionIndex(partition)
+            case _ => None
+          }
+          val readerPartition = if (reducePartition.isDefined) -1 else partition
+          if (!reads.add((pd.shuffleId, reducePartition, readerPartition))) {
+            throw pipelinedUnsupportedError(
+              "a pipelined producer with more than one consumer invocation for transient " +
+                s"shuffle ${pd.shuffleId} partition ${reducePartition.getOrElse(partition)} " +
+                "(repeated consumption)")
+          }
+        case nd: NarrowDependency[_] =>
+          nd.getParents(partition).foreach(enqueue(nd.rdd, _))
+        case _ => // Each shuffle producer is seeded once, independently of its consumer paths.
+      }
+    }
   }
 
   /** Validate the stages a pipelined result job would create, without registering them. */

@@ -120,6 +120,13 @@ class _EvalTypeHandlerMeta(ABCMeta):
             _eval_type_handlers[eval_type] = (conf_name, variants)
         return cls
 
+    _iter_based: bool
+
+    @property
+    def is_iter_based(cls) -> bool:
+        """Whether the handler's UDFs return an iterator."""
+        return cls._iter_based
+
 
 class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandlerMeta):
     """Base class for the UDF execution model.
@@ -138,6 +145,8 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
     # the value of it this handler serves; None when the eval type has a single handler.
     variant_conf: ClassVar[Optional[str]] = None
     variant_value: ClassVar[Any] = None
+    # Whether the handler's UDFs return an iterator.
+    _iter_based: ClassVar[bool] = False
 
     def __init__(
         self, udfs: list[tuple[Any, ...]], runner_conf: "RunnerConf", eval_conf: "EvalConf"
