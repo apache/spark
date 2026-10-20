@@ -213,13 +213,18 @@ private[spark] object BasePythonRunner extends Logging {
    */
   private[python] def startPipelinedWriter(writer: Runnable, context: TaskContext): Unit = {
     val writerTask = new PipelinedWriterTask(writer, context, taskIdentifier(context))
-    // Registered before the writer is submitted: if the task completes in between (e.g. when
-    // this runs on a helper thread such as PipedRDD's stdin writer), the listener runs at once
-    // and keeps the writer from ever starting, instead of letting it start after completion.
+    // The writer is submitted only if the task has not completed once the listener is added,
+    // which can happen when this runs on a helper thread such as PipedRDD's stdin writer.
+    // `completed` is set only after the pre-completion listeners have run, so if it is still
+    // false here, the listener is a pre-completion one and stops the writer before any completion
+    // listener runs. Otherwise the writer never starts: the listener may then only be queued
+    // behind completion listeners that another thread is running, and would come too late.
     context.addTaskPreCompletionListener(new TaskCompletionListener {
       override def onTaskCompletion(context: TaskContext): Unit = writerTask.stopAndAwaitExit()
     })
-    pipelinedWriterThreadPool.submit(writerTask)
+    if (!context.isCompleted()) {
+      pipelinedWriterThreadPool.submit(writerTask)
+    }
   }
 
   /** The state of a [[PipelinedWriterTask]]. */
@@ -337,9 +342,7 @@ private[spark] object BasePythonRunner extends Logging {
               log"for the writer to exit, which may lead to a use-after-free.",
               new Exception("Stack trace of the pipelined Python writer thread"))
           } else {
-            // Wait first: orElse would not evaluate awaitExit if the interrupt failed.
-            val waitFailure = awaitExit(thread)
-            failure = failure.orElse(waitFailure)
+            failure = awaitExit(thread, failure)
           }
         }
         failure.foreach(e => throw e)
@@ -352,10 +355,10 @@ private[spark] object BasePythonRunner extends Logging {
     }
 
     /**
-     * Waits until the writer running on `thread` has exited. Returns the first failure of the
-     * periodic warnings and interrupts, which do not end the wait.
+     * Waits until the writer running on `thread` has exited. Returns `firstFailure` if defined,
+     * else the first failure of the periodic warnings and interrupts, which do not end the wait.
      */
-    private def awaitExit(thread: Thread): Option[Throwable] = {
+    private def awaitExit(thread: Thread, firstFailure: Option[Throwable]): Option[Throwable] = {
       // Wait without a time bound. The completion listeners that run next free memory that
       // the writer may still access: even a writer blocked in upstream I/O that ignores
       // interrupts adds the row it gets next to the HybridRowQueue. Giving up here would allow
@@ -376,7 +379,7 @@ private[spark] object BasePythonRunner extends Logging {
       val startNs = System.nanoTime()
       var nextWarningNs = startNs + intervalNs
       var warned = false
-      var failure: Option[Throwable] = None
+      var failure = firstFailure
       while (exited.getCount > 0) {
         try {
           val remainingNs = nextWarningNs - System.nanoTime()
@@ -384,10 +387,16 @@ private[spark] object BasePythonRunner extends Logging {
             exited.await(remainingNs, TimeUnit.NANOSECONDS)
           } else {
             // Best effort: a failure here, e.g. an OutOfMemoryError while logging, must not end
-            // the wait. The wait itself is not covered, so that a lasting failure does not spin.
+            // the wait, and a failing warning must not skip the interrupt. The wait itself is not
+            // covered, so that a lasting failure does not spin.
             try {
               warnStillWaiting(thread, startNs, withStackTrace = !warned)
               warned = true
+            } catch {
+              case t: Throwable if !t.isInstanceOf[InterruptedException] =>
+                failure = failure.orElse(Some(t))
+            }
+            try {
               val interruptFailure = synchronized {
                 state match {
                   case PipelinedWriterRunning(_) => interruptWriter(thread)
@@ -1571,9 +1580,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         // write through an interruptible channel, which the thread stopping this writer would
         // otherwise close, freeing the buffer while this thread still copies into it (see
         // CloseShieldOutputStream). bufferStream is closed only in the finally below.
-        def newDataOut(): DataOutputStream =
-          new DataOutputStream(new CloseShieldOutputStream(bufferStream))
-        var dataOut = newDataOut()
+        val writerStream = new CloseShieldOutputStream(bufferStream)
+        var dataOut = new DataOutputStream(writerStream)
 
         // Write command/metadata (partition index, task context, broadcasts, UDF definition).
         writer.open(dataOut)
@@ -1590,7 +1598,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
             flushToSocket(bufferStream)
             // Like ReaderInputStream, use a new stream for every buffer. The writers measure
             // pythonDataSent with DataOutputStream.size(), which saturates at Int.MaxValue.
-            dataOut = newDataOut()
+            dataOut = new DataOutputStream(writerStream)
           }
         }
       } catch {

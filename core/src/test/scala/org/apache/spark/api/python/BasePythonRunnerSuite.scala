@@ -22,19 +22,19 @@ import java.net.{InetAddress, InetSocketAddress}
 import java.nio.ByteBuffer
 import java.nio.channels.{Channels, ClosedByInterruptException, ServerSocketChannel, SocketChannel}
 import java.nio.charset.StandardCharsets
-import java.util.{ArrayList => JArrayList, Collections, HashMap => JHashMap}
+import java.util.Collections
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 
+import com.google.common.util.concurrent.Uninterruptibles
 import org.apache.logging.log4j.Level
 import org.scalatest.concurrent.Eventually.{eventually, timeout}
 
 import org.apache.spark.{SharedSparkContext, SparkEnv, SparkException, SparkFunSuite, TaskContext}
-import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.util.{DirectByteBufferOutputStream, TaskCompletionListener}
+import org.apache.spark.util.TaskCompletionListener
 
 class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
 
@@ -86,14 +86,15 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   /** Waits for `latch`, ignoring interrupts like a writer in the middle of a row copy. */
-  private def awaitIgnoringInterrupts(latch: CountDownLatch): Unit = {
-    var done = false
-    while (!done) {
-      try {
-        done = latch.await(1, TimeUnit.MINUTES)
-      } catch {
-        case _: InterruptedException => // keep going
-      }
+  private def awaitIgnoringInterrupts(latch: CountDownLatch): Unit =
+    Uninterruptibles.awaitUninterruptibly(latch)
+
+  /** Blocks until this thread is interrupted, like a writer that exits on an interrupt. */
+  private def awaitInterrupt(): Unit = {
+    try {
+      new CountDownLatch(1).await()
+    } catch {
+      case _: InterruptedException =>
     }
   }
 
@@ -256,6 +257,22 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
     assert(!ran.await(500, TimeUnit.MILLISECONDS))
   }
 
+  test("SPARK-60113: a writer started while another thread runs the listeners never runs") {
+    // Like startPipelinedWriter called on a helper thread (e.g. PipedRDD's stdin writer) after
+    // the task completed, while the completing thread runs the completion listeners: the stop
+    // listener is then only queued, so the writer must not be submitted at all.
+    val context = TaskContext.empty()
+    val ran = new CountDownLatch(1)
+    context.addTaskCompletionListener[Unit] { _ =>
+      val helper =
+        startThread(BasePythonRunner.startPipelinedWriter(() => ran.countDown(), context))
+      helper.join(TimeUnit.MINUTES.toMillis(1))
+      assert(!helper.isAlive)
+    }
+    context.markTaskCompleted(None)
+    assert(!ran.await(500, TimeUnit.MILLISECONDS))
+  }
+
   test("SPARK-60113: a failure to interrupt the writer does not end the wait") {
     val writer = new UninterruptibleWriter
     val writerTask = new BasePythonRunner.PipelinedWriterTask(
@@ -351,7 +368,13 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
     writerTask.stopAndAwaitExit()
   }
 
-  test("SPARK-60113: the writer is interrupted again if it consumed the interrupt") {
+  /**
+   * Runs a writer that consumes the first interrupt and stops at the second one, on a thread made
+   * by `newThread`, stops it, and returns the failure that stopping threw, if any. Fails if
+   * stopping does not return.
+   */
+  private def stopWriterThatConsumesAnInterrupt(
+      newThread: Runnable => Thread): (Int, Option[Throwable]) = {
     val interrupts = new AtomicInteger(0)
     val writerTask = new BasePythonRunner.PipelinedWriterTask(() => {
       // Like upstream code that catches the first InterruptedException and carries on, and then
@@ -367,16 +390,43 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
         }
       }
     }, TaskContext.empty(), "test task", warnIntervalMs = 100)
-    val writerThread = startThread(writerTask.run())
+    val writerThread = newThread(() => writerTask.run())
+    writerThread.setDaemon(true)
+    writerThread.start()
     eventually(timeout(1.minute)) {
       assert(writerThread.getState == Thread.State.WAITING)
     }
 
-    val stopper = startThread(writerTask.stopAndAwaitExit())
+    val stopFailure = new AtomicReference[Option[Throwable]](None)
+    val stopper = startThread {
+      try {
+        writerTask.stopAndAwaitExit()
+      } catch {
+        case t: Throwable => stopFailure.set(Some(t))
+      }
+    }
     stopper.join(TimeUnit.MINUTES.toMillis(1))
     assert(!stopper.isAlive)
-    assert(interrupts.get >= 2)
     writerThread.join(TimeUnit.MINUTES.toMillis(1))
+    (interrupts.get, stopFailure.get)
+  }
+
+  test("SPARK-60113: the writer is interrupted again if it consumed the interrupt") {
+    val (interrupts, stopFailure) = stopWriterThatConsumesAnInterrupt(new Thread(_))
+    assert(interrupts >= 2)
+    assert(stopFailure.isEmpty)
+  }
+
+  test("SPARK-60113: a failing warning does not skip the repeated interrupt") {
+    // The warning fails on every tick, since it takes the writer thread's stack trace.
+    val warningFailure = new IllegalStateException("cannot take the stack trace")
+    val (interrupts, stopFailure) = stopWriterThatConsumesAnInterrupt { runnable =>
+      new Thread(runnable) {
+        override def getStackTrace: Array[StackTraceElement] = throw warningFailure
+      }
+    }
+    assert(interrupts >= 2)
+    assert(stopFailure === Some(warningFailure))
   }
 
   test("SPARK-60113: an interrupt pending before stopping the writer is kept") {
@@ -385,11 +435,7 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
       new BasePythonRunner.PipelinedWriterTask(() => (), TaskContext.empty(), "test task")
     // The writer runs and exits once interrupted.
     val running = new BasePythonRunner.PipelinedWriterTask(() => {
-      try {
-        new CountDownLatch(1).await()
-      } catch {
-        case _: InterruptedException =>
-      }
+      awaitInterrupt()
     }, TaskContext.empty(), "test task")
     val writerThread = startThread(running.run())
     eventually(timeout(1.minute)) {
@@ -413,11 +459,7 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
     // A writer that exits once interrupted, with no warning (and so no repeated interrupt)
     // before the test times out.
     val writerTask = new BasePythonRunner.PipelinedWriterTask(() => {
-      try {
-        new CountDownLatch(1).await()
-      } catch {
-        case _: InterruptedException =>
-      }
+      awaitInterrupt()
     }, TaskContext.empty(), "test task", warnIntervalMs = TimeUnit.MINUTES.toMillis(10))
     val writerThread = startThread(writerTask.run())
     eventually(timeout(1.minute)) {
@@ -475,11 +517,7 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
         }
       }
       // Then blocks until it is interrupted.
-      try {
-        new CountDownLatch(1).await()
-      } catch {
-        case _: InterruptedException =>
-      }
+      awaitInterrupt()
     }, context, "test task", warnIntervalMs = 100)
     val writerThread = startThread(writerTask.run())
     var stopper: Thread = null
@@ -498,44 +536,20 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
     writerThread.join(TimeUnit.MINUTES.toMillis(1))
   }
 
-  test("SPARK-60113: an interrupted channel write does not free the writer's buffer") {
-    val bufferStream = new DirectByteBufferOutputStream(16)
-    try {
-      val channel =
-        Channels.newChannel(new DataOutputStream(new CloseShieldOutputStream(bufferStream)))
-      // An interrupt during the write closes the channel and its stream, like one from the
-      // thread that stops the writer, which the JDK runs on that thread.
-      Thread.currentThread().interrupt()
-      try {
-        intercept[ClosedByInterruptException] {
-          channel.write(ByteBuffer.wrap(Array[Byte](1, 2)))
-        }
-      } finally {
-        Thread.interrupted()
-      }
-      // The JDK closes the stream before it copies the bytes, and throws only after that copy,
-      // so the copy and later writes must still find the buffer: freeing it is left to its
-      // owner.
-      bufferStream.write(3)
-      assert(bufferStream.size() === 3)
-    } finally {
-      bufferStream.close()
-    }
-  }
-
   /**
    * Runs a real `PipelinedWriterRunnable` whose input is written by `writeNextInput`, against a
-   * socket pair standing in for the Python worker, using the suite's shared SparkContext, and
-   * calls `check` with the writer and the Python side of the socket afterwards. `run` runs the
-   * runnable and may expect it to throw.
+   * socket pair standing in for the Python worker, using the suite's shared SparkContext. Reads
+   * from the Python side of the socket through its input stream time out after a minute. Then
+   * calls `check` with the writer and the Python side of the socket. `run` runs the runnable and
+   * may expect it to throw.
    */
   private def withPipelinedWriterRunnable(
       writeNextInput: DataOutputStream => Boolean)(
       run: Runnable => Unit)(
       check: (BasePythonRunner[Array[Byte], Array[Byte]]#Writer, SocketChannel) => Unit): Unit = {
     val func = SimplePythonFunction(
-      Seq.empty, new JHashMap[String, String](), new JArrayList[String](), "python3", "3",
-      new JArrayList[Broadcast[PythonBroadcast]](), null)
+      Seq.empty, Collections.emptyMap(), Collections.emptyList(), "python3", "3",
+      Collections.emptyList(), null)
     val runner = new PythonRunner(Seq(ChainedPythonFunctions(Seq(func))), None)
     val server = ServerSocketChannel.open()
     try {
@@ -543,6 +557,8 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
       val channel = SocketChannel.open(server.getLocalAddress)
       val pythonSide = server.accept()
       try {
+        // So that reads through the socket adaptor fail instead of blocking forever.
+        pythonSide.socket().setSoTimeout(TimeUnit.MINUTES.toMillis(1).toInt)
         val context = TaskContext.empty()
         val worker = PythonWorker(channel)
         val writer = new runner.Writer(SparkEnv.get, worker, Iterator.empty, 0, context) {
@@ -563,12 +579,6 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
     }
   }
 
-  /** Reads one byte from the Python side of the socket, failing instead of blocking forever. */
-  private def readFromPythonSide(pythonSide: SocketChannel): Int = {
-    pythonSide.socket().setSoTimeout(TimeUnit.MINUTES.toMillis(1).toInt)
-    pythonSide.socket().getInputStream.read()
-  }
-
   test("SPARK-60113: a fatal error of the pipelined writer is passed to the reader") {
     withPipelinedWriterRunnable { _ =>
       // scalastyle:off throwerror
@@ -582,33 +592,40 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
       // The reader rethrows the error instead of waiting for the Python worker, which sees the
       // end of its input.
       assert(writer.exception.map(_.getMessage) === Some("fatal writer error"))
-      assert(readFromPythonSide(pythonSide) === -1)
+      assert(pythonSide.socket().getInputStream.read() === -1)
     }
   }
 
   test("SPARK-60113: an interrupted Arrow-style write leaves the writer's buffer usable") {
+    var calls = 0
     withPipelinedWriterRunnable { dataOut =>
-      // Like an Arrow writer, which writes through Channels.newChannel(dataOut), interrupted by
-      // the thread that stops the writer.
-      Thread.currentThread().interrupt()
-      try {
-        Channels.newChannel(dataOut).write(ByteBuffer.wrap(Array[Byte](1, 2)))
-      } catch {
-        case _: ClosedByInterruptException =>
-      } finally {
-        Thread.interrupted()
+      calls += 1
+      if (calls == 1) {
+        // Fills the first buffer, so that the interrupted write below goes through the stream
+        // that the writer creates after flushing it.
+        dataOut.write(new Array[Byte](2000))
+        true
+      } else {
+        // Like an Arrow writer, which writes through Channels.newChannel(dataOut), interrupted by
+        // the thread that stops the writer.
+        Thread.currentThread().interrupt()
+        try {
+          Channels.newChannel(dataOut).write(ByteBuffer.wrap(Array[Byte](1, 2)))
+        } catch {
+          case _: ClosedByInterruptException =>
+        } finally {
+          Thread.interrupted()
+        }
+        // Fails if the interrupt freed the buffer behind dataOut.
+        dataOut.writeInt(42)
+        false
       }
-      // Fails if the interrupt freed the buffer behind dataOut.
-      dataOut.writeInt(42)
-      false
     } { runnable =>
       runnable.run()
     } { (writer, pythonSide) =>
       assert(writer.exception.isEmpty)
-      val input = {
-        pythonSide.socket().setSoTimeout(TimeUnit.MINUTES.toMillis(1).toInt)
-        new DataInputStream(pythonSide.socket().getInputStream)
-      }
+      val input = new DataInputStream(pythonSide.socket().getInputStream)
+      input.readFully(new Array[Byte](2000))
       // The bytes copied by the interrupted write, which the JDK copies after closing the
       // stream, and then the next write.
       assert(input.readByte() === 1)

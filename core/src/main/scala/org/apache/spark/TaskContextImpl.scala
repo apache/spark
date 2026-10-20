@@ -221,7 +221,7 @@ private[spark] class TaskContextImpl(
     def nextPreCompletionListener(): Option[TaskCompletionListener] = synchronized {
       if (onPreCompleteCallbacks.empty()) {
         // Set together with finding no more pre-completion listeners, so that one added later
-        // is called immediately instead of being left in the stack.
+        // is handed to `addTaskCompletionListener` instead of being left in the stack.
         completed = true
         None
       } else {
@@ -236,16 +236,19 @@ private[spark] class TaskContextImpl(
     try {
       invokeTaskCompletionListeners(error)
     } catch {
-      case e: Throwable if preCompletionExceptions.nonEmpty =>
-        // Merge the completion listeners' own failures, not the exception that wraps them.
-        preCompletionExceptions ++= (e match {
-          case wrapper: TaskCompletionListenerException => wrapper.getSuppressed.toSeq
-          case _ => Seq(e)
-        })
+      case e: TaskCompletionListenerException if preCompletionExceptions.nonEmpty =>
+        // Merge the completion listeners' own failures, not the exception that wraps them. Any
+        // other error comes from invokeListeners itself (e.g. an OutOfMemoryError) and is left
+        // to propagate, so that the executor still sees a fatal one.
+        preCompletionExceptions ++= e.getSuppressed.toSeq
     }
     if (preCompletionExceptions.nonEmpty) {
       throw newTaskCompletionListenerException(preCompletionExceptions.toSeq, error)
     }
+  }
+
+  private[spark] override def getTaskFailure: Option[Throwable] = {
+    failureCauseOpt
   }
 
   /**
@@ -275,10 +278,6 @@ private[spark] class TaskContextImpl(
     val exception = new TaskCompletionListenerException(listenerExceptions.map(_.getMessage), error)
     listenerExceptions.foreach(exception.addSuppressed)
     exception
-  }
-
-  private[spark] override def getTaskFailure: Option[Throwable] = {
-    failureCauseOpt
   }
 
   private def invokeTaskCompletionListeners(error: Option[Throwable]): Unit = {
