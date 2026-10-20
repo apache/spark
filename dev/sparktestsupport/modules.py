@@ -19,6 +19,7 @@ import itertools
 import os
 import re
 import sys
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
 from functools import total_ordering
@@ -174,7 +175,7 @@ class Module(object):
         environ=None,
         sbt_test_goals=(),
         python_test_goals=(),
-        shell_script_test_goals=(),
+        shell_script_test_goals: Sequence[ShellScriptTestGoal] = (),
         excluded_python_implementations=(),
         test_tags=(),
         should_run_r_tests=False,
@@ -210,8 +211,21 @@ class Module(object):
             ...
         ValueError: module name 'core' is already in use
 
-        A plain-string goal fails here, not later as an AttributeError:
+        A plain string is not a sequence of goals:
 
+        >>> Module("string-goals", [], [], shell_script_test_goals="dev/lint-java")
+        Traceback (most recent call last):
+            ...
+        TypeError: string-goals: shell_script_test_goals must be a sequence
+        >>> Module("single-goal", [], [], shell_script_test_goals=ShellScriptTestGoal("dev/lint"))
+        Traceback (most recent call last):
+            ...
+        TypeError: single-goal: shell_script_test_goals must be a sequence
+        >>> Module("generator-goals", [], [], shell_script_test_goals=(
+        ...     goal for goal in [ShellScriptTestGoal("dev/lint")]))
+        Traceback (most recent call last):
+            ...
+        TypeError: generator-goals: shell_script_test_goals must be a sequence
         >>> Module("bad-goal", [], [], shell_script_test_goals=["dev/lint-java"])
         Traceback (most recent call last):
             ...
@@ -219,6 +233,12 @@ class Module(object):
         """
         if any(module.name == name for module in all_modules):
             raise ValueError(f"module name {name!r} is already in use")
+        if isinstance(shell_script_test_goals, (str, bytes)) or not isinstance(
+            shell_script_test_goals, Sequence
+        ):
+            raise TypeError(
+                f"{name}: shell_script_test_goals must be a sequence"
+            )
         for goal in shell_script_test_goals:
             if not isinstance(goal, ShellScriptTestGoal):
                 raise TypeError(f"{name}: expected ShellScriptTestGoal, got {goal!r}")
