@@ -17,7 +17,12 @@
 
 package org.apache.spark.sql.execution.joins
 
+import java.io.{Externalizable, ObjectInput, ObjectOutput}
+
 import scala.collection.mutable.ArrayBuffer
+
+import com.esotericsoftware.kryo.{Kryo, KryoSerializable}
+import com.esotericsoftware.kryo.io.{Input, Output}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, Expression, InterpretedProjection}
@@ -25,7 +30,7 @@ import org.apache.spark.sql.catalyst.optimizer.{IntervalOverlapJoin, PartialRang
 import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DateType, Decimal, DecimalType, IntegerType, LongType, ShortType, TimestampNTZType, TimestampType}
-import org.apache.spark.util.{KnownSizeEstimation, SizeEstimator}
+import org.apache.spark.util.{KnownSizeEstimation, SizeEstimator, Utils}
 
 /**
  * Broadcast payload of a range join. An index only names candidate rows.
@@ -224,30 +229,25 @@ private[joins] object RowSlice {
  * skips the walk entirely.
  */
 private[joins] class IntervalIndex private (
-    val keyType: DataType,
-    private[this] val lows: Array[Any],
-    private[this] val highs: Array[Any],
-    private[this] val maxHighIdx: Array[Int],
-    private[this] val rows: Array[InternalRow])
-  extends BoxedKeyOrdering {
+    private[this] var _keyType: DataType,
+    private[this] var lows: Array[Any],
+    private[this] var highs: Array[Any],
+    private[this] var maxHighIdx: Array[Int],
+    private[this] var rows: Array[InternalRow])
+  extends BoxedKeyOrdering with Externalizable with KryoSerializable {
+
+  // Needed for Java/Kryo deserialization; see readExternal/read below.
+  def this() = this(null, null, null, null, null)
+
+  def keyType: DataType = _keyType
 
   // All-covering window bounds. `lows` is sorted, so the last entry bounds
   // every low from below, and coreHigh is the minimum high. A window covers
   // every stored interval exactly when it holds probeLow <= coreHigh and
   // probeHigh >= coreLow, whether or not the intervals share a common core.
-  private[this] val coreLow: Any =
-    if (lows.isEmpty) null else lows(lows.length - 1)
-  private[this] val coreHigh: Any = {
-    if (highs.isEmpty) null else {
-      var min = highs(0)
-      var i = 1
-      while (i < highs.length) {
-        if (ordering.lt(highs(i), min)) min = highs(i)
-        i += 1
-      }
-      min
-    }
-  }
+  // Recomputed in `read` too, since `lows`/`highs` are reassigned there.
+  private[this] var coreLow: Any = IntervalIndex.coreLow(lows)
+  private[this] var coreHigh: Any = IntervalIndex.coreHigh(highs, ordering)
 
   /**
    * Measured over the retained arrays, not the index object: SizeEstimator
@@ -270,9 +270,104 @@ private[joins] class IntervalIndex private (
     }
     new OverlapIterator(lows, highs, maxHighIdx, rows, ord, probeLow, probeHigh)
   }
+
+  override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
+    write(out.writeUTF, out.writeInt, (o: Any) => out.writeObject(o.asInstanceOf[AnyRef]))
+  }
+
+  override def write(kryo: Kryo, out: Output): Unit = Utils.tryOrIOException {
+    write(out.writeString, out.writeInt,
+      (o: Any) => kryo.writeClassAndObject(out, o.asInstanceOf[AnyRef]))
+  }
+
+  private def write(
+      writeString: String => Unit,
+      writeInt: Int => Unit,
+      writeObj: Any => Unit): Unit = {
+    writeString(keyType.json)
+    val n = lows.length
+    writeInt(n)
+    var i = 0
+    while (i < n) {
+      writeObj(lows(i))
+      writeObj(highs(i))
+      i += 1
+    }
+    i = 0
+    while (i < n) {
+      writeInt(maxHighIdx(i))
+      i += 1
+    }
+    i = 0
+    while (i < n) {
+      writeObj(rows(i))
+      i += 1
+    }
+  }
+
+  override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
+    read(() => in.readUTF(), () => in.readInt(), () => in.readObject())
+  }
+
+  override def read(kryo: Kryo, in: Input): Unit = Utils.tryOrIOException {
+    read(() => in.readString(), () => in.readInt(), () => kryo.readClassAndObject(in))
+  }
+
+  private def read(
+      readString: () => String,
+      readInt: () => Int,
+      readObj: () => AnyRef): Unit = {
+    _keyType = DataType.fromJson(readString())
+    val n = readInt()
+    lows = new Array[Any](n)
+    highs = new Array[Any](n)
+    maxHighIdx = new Array[Int](n)
+    rows = new Array[InternalRow](n)
+    var i = 0
+    while (i < n) {
+      lows(i) = readObj()
+      highs(i) = readObj()
+      i += 1
+    }
+    i = 0
+    while (i < n) {
+      maxHighIdx(i) = readInt()
+      i += 1
+    }
+    i = 0
+    while (i < n) {
+      rows(i) = readObj().asInstanceOf[InternalRow]
+      i += 1
+    }
+    coreLow = IntervalIndex.coreLow(lows)
+    coreHigh = IntervalIndex.coreHigh(highs, ordering)
+  }
 }
 
 private[joins] object IntervalIndex {
+
+  // Shared by the primary constructor and `read`, which recomputes these
+  // caches after reassigning `lows`/`highs` on deserialization. `lows`/
+  // `highs` are null right after the zero-arg constructor runs, before
+  // `readExternal`/`read` populate them.
+  private[joins] def coreLow(lows: Array[Any]): Any =
+    if (lows == null || lows.isEmpty) null else lows(lows.length - 1)
+
+  // `ordering` is by-name: the zero-arg constructor calls this with `highs ==
+  // null`, before `keyType` is set, and forcing `ordering` eagerly would
+  // throw trying to derive an ordering for a not-yet-known key type.
+  private[joins] def coreHigh(highs: Array[Any], ordering: => Ordering[Any]): Any = {
+    if (highs == null || highs.isEmpty) null else {
+      val ord = ordering
+      var min = highs(0)
+      var i = 1
+      while (i < highs.length) {
+        if (ord.lt(highs(i), min)) min = highs(i)
+        i += 1
+      }
+      min
+    }
+  }
 
   def build(
       keyType: DataType,
@@ -430,12 +525,17 @@ private[joins] class OverlapIterator(
  * Keys sit beside the rows they name, one owned copy each, in key order.
  */
 private[joins] class PointIndex private (
-    val keyType: DataType,
-    private[this] val keys: Array[Any],
-    private[this] val rows: Array[InternalRow])
-  extends BoxedKeyOrdering {
+    private[this] var _keyType: DataType,
+    private[this] var keys: Array[Any],
+    private[this] var rows: Array[InternalRow])
+  extends BoxedKeyOrdering with Externalizable with KryoSerializable {
 
-  private[this] val length = keys.length
+  // Needed for Java/Kryo deserialization; see readExternal/read below.
+  def this() = this(null, null, null)
+
+  def keyType: DataType = _keyType
+
+  private[this] def length: Int = keys.length
 
   override def estimatedSize: Long = SizeEstimator.estimate(Array[AnyRef](keys, rows))
 
@@ -460,6 +560,62 @@ private[joins] class PointIndex private (
   }
 
   private def slice(from: Int, until: Int): Iterator[InternalRow] = new RowSlice(rows, from, until)
+
+  override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
+    write(out.writeUTF, out.writeInt, (o: Any) => out.writeObject(o.asInstanceOf[AnyRef]))
+  }
+
+  override def write(kryo: Kryo, out: Output): Unit = Utils.tryOrIOException {
+    write(out.writeString, out.writeInt,
+      (o: Any) => kryo.writeClassAndObject(out, o.asInstanceOf[AnyRef]))
+  }
+
+  private def write(
+      writeString: String => Unit,
+      writeInt: Int => Unit,
+      writeObj: Any => Unit): Unit = {
+    writeString(keyType.json)
+    val n = keys.length
+    writeInt(n)
+    var i = 0
+    while (i < n) {
+      writeObj(keys(i))
+      i += 1
+    }
+    i = 0
+    while (i < n) {
+      writeObj(rows(i))
+      i += 1
+    }
+  }
+
+  override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
+    read(() => in.readUTF(), () => in.readInt(), () => in.readObject())
+  }
+
+  override def read(kryo: Kryo, in: Input): Unit = Utils.tryOrIOException {
+    read(() => in.readString(), () => in.readInt(), () => kryo.readClassAndObject(in))
+  }
+
+  private def read(
+      readString: () => String,
+      readInt: () => Int,
+      readObj: () => AnyRef): Unit = {
+    _keyType = DataType.fromJson(readString())
+    val n = readInt()
+    keys = new Array[Any](n)
+    rows = new Array[InternalRow](n)
+    var i = 0
+    while (i < n) {
+      keys(i) = readObj()
+      i += 1
+    }
+    i = 0
+    while (i < n) {
+      rows(i) = readObj().asInstanceOf[InternalRow]
+      i += 1
+    }
+  }
 }
 
 private[joins] object PointIndex {
@@ -518,27 +674,25 @@ private[joins] object PointIndex {
 // build keys' data types.
 
 private[joins] class LongIntervalIndex private (
-    val keyType: DataType,
-    private[this] val lows: Array[Long],
-    private[this] val highs: Array[Long],
-    private[this] val maxHighs: Array[Long],
-    private[this] val rows: Array[InternalRow])
-  extends LongKeyConversion {
+    private[this] var _keyType: DataType,
+    private[this] var lows: Array[Long],
+    private[this] var highs: Array[Long],
+    private[this] var maxHighs: Array[Long],
+    private[this] var rows: Array[InternalRow])
+  extends LongKeyConversion with Externalizable with KryoSerializable {
+
+  // Needed for Java/Kryo deserialization; see readExternal/read below.
+  def this() = this(null, null, null, null, null)
+
+  def keyType: DataType = _keyType
 
   // All-covering window bounds on raw keys: `lows` is sorted, so the last
   // entry bounds every low from below, and coreHigh is the minimum high.
   // A window covers every stored interval exactly when it holds probeLow <=
   // coreHigh and probeHigh >= coreLow, whether or not a common core exists.
-  private[this] val coreLow: Long = if (lows.isEmpty) Long.MinValue else lows(lows.length - 1)
-  private[this] val coreHigh: Long = {
-    var min = Long.MaxValue
-    var i = 0
-    while (i < highs.length) {
-      if (highs(i) < min) min = highs(i)
-      i += 1
-    }
-    if (highs.isEmpty) Long.MinValue else min
-  }
+  // Recomputed in `read` too, since `lows`/`highs` are reassigned there.
+  private[this] var coreLow: Long = LongIntervalIndex.coreLow(lows)
+  private[this] var coreHigh: Long = LongIntervalIndex.coreHigh(highs)
 
   override def estimatedSize: Long =
     SizeEstimator.estimate(Array[AnyRef](lows, highs, maxHighs, rows))
@@ -560,9 +714,96 @@ private[joins] class LongIntervalIndex private (
     }
     new LongOverlapIterator(lows, highs, rows, maxHighs, probeLow, probeHigh)
   }
+
+  override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
+    write(out.writeUTF, out.writeInt, out.writeLong,
+      (o: Any) => out.writeObject(o.asInstanceOf[AnyRef]))
+  }
+
+  override def write(kryo: Kryo, out: Output): Unit = Utils.tryOrIOException {
+    write(out.writeString, out.writeInt, out.writeLong,
+      (o: Any) => kryo.writeClassAndObject(out, o.asInstanceOf[AnyRef]))
+  }
+
+  private def write(
+      writeString: String => Unit,
+      writeInt: Int => Unit,
+      writeLong: Long => Unit,
+      writeObj: Any => Unit): Unit = {
+    writeString(keyType.json)
+    val n = lows.length
+    writeInt(n)
+    var i = 0
+    while (i < n) {
+      writeLong(lows(i))
+      writeLong(highs(i))
+      writeLong(maxHighs(i))
+      i += 1
+    }
+    i = 0
+    while (i < n) {
+      writeObj(rows(i))
+      i += 1
+    }
+  }
+
+  override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
+    read(() => in.readUTF(), () => in.readInt(), () => in.readLong(), () => in.readObject())
+  }
+
+  override def read(kryo: Kryo, in: Input): Unit = Utils.tryOrIOException {
+    read(() => in.readString(), () => in.readInt(), () => in.readLong(),
+      () => kryo.readClassAndObject(in))
+  }
+
+  private def read(
+      readString: () => String,
+      readInt: () => Int,
+      readLong: () => Long,
+      readObj: () => AnyRef): Unit = {
+    _keyType = DataType.fromJson(readString())
+    val n = readInt()
+    lows = new Array[Long](n)
+    highs = new Array[Long](n)
+    maxHighs = new Array[Long](n)
+    rows = new Array[InternalRow](n)
+    var i = 0
+    while (i < n) {
+      lows(i) = readLong()
+      highs(i) = readLong()
+      maxHighs(i) = readLong()
+      i += 1
+    }
+    i = 0
+    while (i < n) {
+      rows(i) = readObj().asInstanceOf[InternalRow]
+      i += 1
+    }
+    coreLow = LongIntervalIndex.coreLow(lows)
+    coreHigh = LongIntervalIndex.coreHigh(highs)
+  }
 }
 
 private[joins] object LongIntervalIndex {
+
+  // Shared by the primary constructor and `read`, which recomputes these
+  // caches after reassigning `lows`/`highs` on deserialization. `lows`/
+  // `highs` are null right after the zero-arg constructor runs, before
+  // `readExternal`/`read` populate them.
+  private[joins] def coreLow(lows: Array[Long]): Long =
+    if (lows == null || lows.isEmpty) Long.MinValue else lows(lows.length - 1)
+
+  private[joins] def coreHigh(highs: Array[Long]): Long = {
+    if (highs == null || highs.isEmpty) Long.MinValue else {
+      var min = Long.MaxValue
+      var i = 0
+      while (i < highs.length) {
+        if (highs(i) < min) min = highs(i)
+        i += 1
+      }
+      min
+    }
+  }
 
   def build(
       keyType: DataType,
@@ -694,12 +935,17 @@ private[joins] class LongOverlapIterator(
 }
 
 private[joins] class LongPointIndex private (
-    val keyType: DataType,
-    private[this] val keys: Array[Long],
-    private[this] val rows: Array[InternalRow])
-  extends LongKeyConversion {
+    private[this] var _keyType: DataType,
+    private[this] var keys: Array[Long],
+    private[this] var rows: Array[InternalRow])
+  extends LongKeyConversion with Externalizable with KryoSerializable {
 
-  private[this] val length = keys.length
+  // Needed for Java/Kryo deserialization; see readExternal/read below.
+  def this() = this(null, null, null)
+
+  def keyType: DataType = _keyType
+
+  private[this] def length: Int = keys.length
 
   override def estimatedSize: Long = SizeEstimator.estimate(Array[AnyRef](keys, rows))
 
@@ -722,6 +968,66 @@ private[joins] class LongPointIndex private (
       if (c < 0 || (skipEquals && c == 0)) lo = mid + 1 else hi = mid
     }
     lo
+  }
+
+  override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
+    write(out.writeUTF, out.writeInt, out.writeLong,
+      (o: Any) => out.writeObject(o.asInstanceOf[AnyRef]))
+  }
+
+  override def write(kryo: Kryo, out: Output): Unit = Utils.tryOrIOException {
+    write(out.writeString, out.writeInt, out.writeLong,
+      (o: Any) => kryo.writeClassAndObject(out, o.asInstanceOf[AnyRef]))
+  }
+
+  private def write(
+      writeString: String => Unit,
+      writeInt: Int => Unit,
+      writeLong: Long => Unit,
+      writeObj: Any => Unit): Unit = {
+    writeString(keyType.json)
+    val n = keys.length
+    writeInt(n)
+    var i = 0
+    while (i < n) {
+      writeLong(keys(i))
+      i += 1
+    }
+    i = 0
+    while (i < n) {
+      writeObj(rows(i))
+      i += 1
+    }
+  }
+
+  override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
+    read(() => in.readUTF(), () => in.readInt(), () => in.readLong(), () => in.readObject())
+  }
+
+  override def read(kryo: Kryo, in: Input): Unit = Utils.tryOrIOException {
+    read(() => in.readString(), () => in.readInt(), () => in.readLong(),
+      () => kryo.readClassAndObject(in))
+  }
+
+  private def read(
+      readString: () => String,
+      readInt: () => Int,
+      readLong: () => Long,
+      readObj: () => AnyRef): Unit = {
+    _keyType = DataType.fromJson(readString())
+    val n = readInt()
+    keys = new Array[Long](n)
+    rows = new Array[InternalRow](n)
+    var i = 0
+    while (i < n) {
+      keys(i) = readLong()
+      i += 1
+    }
+    i = 0
+    while (i < n) {
+      rows(i) = readObj().asInstanceOf[InternalRow]
+      i += 1
+    }
   }
 }
 
