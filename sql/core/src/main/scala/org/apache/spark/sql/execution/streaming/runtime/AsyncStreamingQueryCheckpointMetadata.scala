@@ -30,13 +30,17 @@ import org.apache.spark.util.Clock
  * @param asyncWritesExecutorService The executor service for async writes
  * @param asyncProgressTrackingCheckpointingIntervalMs The interval for async progress
  * @param triggerClock The clock to use for trigger time
+ * @param errorNotifier Shared error sink between the offset and commit logs. Once a
+ *                      first error is recorded, subsequent async write tasks short-circuit
+ *                      with that error instead of writing to durable storage.
  */
 class AsyncStreamingQueryCheckpointMetadata(
     sparkSession: SparkSession,
     resolvedCheckpointRoot: String,
     asyncWritesExecutorService: ThreadPoolExecutor,
     asyncProgressTrackingCheckpointingIntervalMs: Long,
-    triggerClock: Clock)
+    triggerClock: Clock,
+    errorNotifier: ErrorNotifier)
   extends StreamingQueryCheckpointMetadata(sparkSession, resolvedCheckpointRoot) {
 
   override lazy val offsetLog = new AsyncOffsetSeqLog(
@@ -44,13 +48,15 @@ class AsyncStreamingQueryCheckpointMetadata(
     checkpointFile(StreamingCheckpointConstants.DIR_NAME_OFFSETS),
     asyncWritesExecutorService,
     asyncProgressTrackingCheckpointingIntervalMs,
-    clock = triggerClock
+    clock = triggerClock,
+    errorNotifier = errorNotifier
   )
 
   override lazy val commitLog = new AsyncCommitLog(
     sparkSession,
     checkpointFile(StreamingCheckpointConstants.DIR_NAME_COMMITS),
-    asyncWritesExecutorService
+    asyncWritesExecutorService,
+    errorNotifier = errorNotifier
   )
 
 }
