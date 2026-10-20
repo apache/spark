@@ -42,6 +42,7 @@ import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulia
 import org.apache.spark.sql.execution.datasources.parquet.types.ops.{ParquetFilterOps, ParquetTypeOps}
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy
 import org.apache.spark.sql.sources
+import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 
@@ -56,7 +57,8 @@ class ParquetFilters(
     pushDownStringPredicate: Boolean,
     pushDownInFilterThreshold: Int,
     caseSensitive: Boolean,
-    datetimeRebaseSpec: RebaseSpec) {
+    datetimeRebaseSpec: RebaseSpec,
+    readSchema: Option[StructType] = None) {
   // A map which contains parquet field name and data type, if predicate push down applies.
   //
   // Each key in `nameToParquetField` represents a column; `dots` are used as separators for
@@ -127,6 +129,35 @@ class ParquetFilters(
   private case class ParquetPrimitiveField(
       fieldNames: Array[String],
       fieldType: ParquetSchemaType)
+
+  // A map which contains the field names in `readSchema` and the Spark data types that the fields
+  // are read as, keyed like `nameToParquetField`. A data type can differ from the type that the
+  // file was written with, e.g. under a user-specified schema. Lazy because it is used only for a
+  // predicate with a value on a Types Framework field, see `valueCanMakeFilterOn`.
+  private lazy val nameToReadType: Map[String, DataType] = {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
+    def getLeafFields(
+        fields: Seq[StructField],
+        parentFieldNames: Seq[String] = Seq.empty): Seq[(String, DataType)] = {
+      fields.flatMap { f =>
+        val fieldNames = parentFieldNames :+ f.name
+        f.dataType match {
+          case s: StructType => getLeafFields(s.fields.toImmutableArraySeq, fieldNames)
+          case dataType => Seq(fieldNames.quoted -> dataType)
+        }
+      }
+    }
+    val readTypes = readSchema.toSeq.flatMap(s => getLeafFields(s.fields.toImmutableArraySeq))
+    if (caseSensitive) {
+      readTypes.toMap
+    } else {
+      // Skip the names that are ambiguous in case-insensitive mode, like `nameToParquetField`.
+      CaseInsensitiveMap(readTypes
+        .groupBy(_._1.toLowerCase(Locale.ROOT))
+        .filter(_._2.size == 1)
+        .transform((_, v) => v.head._2))
+    }
+  }
 
   private case class ParquetSchemaType(
       logicalTypeAnnotation: LogicalTypeAnnotation,
@@ -667,7 +698,12 @@ class ParquetFilters(
         value.isInstanceOf[Date] || value.isInstanceOf[LocalDate]
       case ParquetTimestampMicrosType | ParquetTimestampMillisType =>
         value.isInstanceOf[Timestamp] || value.isInstanceOf[Instant]
-      case FrameworkFilterOps(ops) => ops.acceptsValue(value)
+      // The type that a Types Framework field is read as should not make the reader change the
+      // stored values, e.g. truncate TIME(MICROS) values to TIME(3), because Parquet evaluates the
+      // pushed filter against the stored values. A field without a known read type is not pushed
+      // down either. Otherwise, only IsNull and IsNotNull, whose value is null, are pushed down.
+      case FrameworkFilterOps(ops) =>
+        ops.acceptsValue(value) && nameToReadType.get(name).exists(ops.acceptsReadType)
       case ParquetSchemaType(decimalType: DecimalLogicalTypeAnnotation, INT32, _) =>
         isDecimalMatched(value, decimalType)
       case ParquetSchemaType(decimalType: DecimalLogicalTypeAnnotation, INT64, _) =>
