@@ -193,6 +193,21 @@ class HadoopMapReduceCommitProtocol(
       val (allAbsPathFiles, allPartitionPaths) =
         taskCommits.map(_.obj.asInstanceOf[(Map[String, String], Set[String])]).unzip
       val fs = stagingDir.getFileSystem(jobContext.getConfiguration)
+      val partitionPaths = allPartitionPaths.foldLeft(Set[String]())(_ ++ _)
+
+      if (dynamicPartitionOverwrite && !committer.isInstanceOf[FileOutputCommitter]) {
+        // Other committers may delete their output directory, which is the staging directory
+        // here, on job commit, e.g. S3A's directory committer in the replace conflict mode.
+        // Check the staged partitions before deleting any destination partition.
+        for (part <- partitionPaths) {
+          val stagingPartPath = new Path(stagingDir, part)
+          if (!fs.exists(stagingPartPath)) {
+            throw new IOException(s"Failed to overwrite dynamic partitions because " +
+              s"$stagingPartPath does not exist after the job commit of " +
+              s"${committer.getClass.getName}. No destination partition was changed.")
+          }
+        }
+      }
 
       val filesToMove = allAbsPathFiles.foldLeft(Map[String, String]())(_ ++ _)
       logDebug(s"Committing files staged for absolute locations $filesToMove")
@@ -211,7 +226,6 @@ class HadoopMapReduceCommitProtocol(
       }
 
       if (dynamicPartitionOverwrite) {
-        val partitionPaths = allPartitionPaths.foldLeft(Set[String]())(_ ++ _)
         logDebug(s"Clean up default partition directories for overwriting: $partitionPaths")
         for (part <- partitionPaths) {
           val finalPartPath = new Path(path, part)
