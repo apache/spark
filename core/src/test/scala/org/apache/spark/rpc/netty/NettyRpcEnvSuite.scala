@@ -19,7 +19,7 @@ package org.apache.spark.rpc.netty
 
 import java.io.{File, IOException}
 import java.nio.ByteBuffer
-import java.nio.channels.Channels
+import java.nio.channels.{Channels, ClosedChannelException, ReadableByteChannel}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.Files
 import java.util.UUID
@@ -28,6 +28,7 @@ import java.util.concurrent.ExecutionException
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 
+import org.apache.logging.log4j.Level
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.{any, anyInt, eq => meq}
 import org.mockito.Mockito.{verify, when}
@@ -37,6 +38,7 @@ import org.scalatestplus.mockito.MockitoSugar
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.network.client.{StreamCallback, TransportClient, TransportClientFactory}
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rpc._
 import org.apache.spark.util.{SslTestUtils, ThreadUtils, Utils}
 
@@ -243,7 +245,7 @@ class NettyRpcEnvSuite extends RpcEnvSuite with MockitoSugar with TimeLimits {
     }
   }
 
-  test("a failed file fetch must not leave its download channel open") {
+  test("SPARK-60246: a failed file fetch must not leave its download channel open") {
     withFileDownloadEnv { d =>
       // The target directory is missing, e.g. because it was deleted concurrently, so the
       // fetch fails creating its temp file after the download channel was already opened.
@@ -255,7 +257,8 @@ class NettyRpcEnvSuite extends RpcEnvSuite with MockitoSugar with TimeLimits {
     }
   }
 
-  test("a download reader closing early must not fail other downloads on the connection") {
+  test("SPARK-60246: a download reader closing early must not fail other downloads on the " +
+      "connection") {
     withFileDownloadEnv { d =>
       // Open both downloads before the first reader goes away, so the second one is already in
       // flight on the same connection when the file-download thread finds the first reader gone.
@@ -269,7 +272,8 @@ class NettyRpcEnvSuite extends RpcEnvSuite with MockitoSugar with TimeLimits {
     }
   }
 
-  test("a file fetch failing after the download keeps its error and the connection usable") {
+  test("SPARK-60246: a file fetch failing after the download keeps its error and the " +
+      "connection usable") {
     withFileDownloadEnv { d =>
       withTempDir { conflictDir =>
         // A different file with the same name already exists and spark.files.overwrite is off,
@@ -284,8 +288,10 @@ class NettyRpcEnvSuite extends RpcEnvSuite with MockitoSugar with TimeLimits {
     }
   }
 
-  test("a download reader closing while the callback is writing must not fail the callback") {
-    val downloadEnv = createRpcEnv(createSparkConf(), "file-download-callback", 0)
+  test("SPARK-60246: a download reader closing while the callback is writing must not fail " +
+      "the callback") {
+    val downloadEnv =
+      createRpcEnv(createSparkConf(), "file-download-callback", 0, clientMode = true)
     try {
       // Capture the real FileDownloadCallback without a server, so the test controls exactly when
       // data arrives. The client and its factory are mocked because the callback can only be
@@ -297,35 +303,49 @@ class NettyRpcEnvSuite extends RpcEnvSuite with MockitoSugar with TimeLimits {
       factoryField.setAccessible(true)
       factoryField.set(downloadEnv, factory)
 
-      val source = downloadEnv.openChannel("spark://localhost:12345/jars/big.jar")
-      val callbackCaptor = ArgumentCaptor.forClass(classOf[StreamCallback])
-      verify(client).stream(meq("/jars/big.jar"), callbackCaptor.capture())
-      val callback = callbackCaptor.getValue
-
-      // Much larger than an OS pipe buffer, so onData blocks in the pipe write until the reader
-      // reads or closes its end.
-      val buf = ByteBuffer.allocate(4 * 1024 * 1024)
-      val writer = Future(callback.onData("big", buf))(ExecutionContext.global)
-
-      // Reading a byte proves onData is writing. It cannot have written the whole buffer into the
-      // pipe, so it is still blocked writing when the reader closes its end below.
-      val firstByte = ByteBuffer.allocate(1)
-      failAfter(60.seconds) {
-        while (firstByte.hasRemaining) {
-          assert(source.read(firstByte) >= 0)
-        }
+      def openDownload(path: String): (ReadableByteChannel, StreamCallback) = {
+        val source = downloadEnv.openChannel(s"spark://localhost:12345$path")
+        val callbackCaptor = ArgumentCaptor.forClass(classOf[StreamCallback])
+        verify(client).stream(meq(path), callbackCaptor.capture())
+        (source, callbackCaptor.getValue)
       }
-      assert(buf.hasRemaining)
-      source.close()
+      val (source, callback) = openDownload("/jars/big.jar")
+      val (otherSource, otherCallback) = openDownload("/jars/other.jar")
 
-      // The callback must discard the rest of the buffer instead of throwing, since throwing
-      // would close the connection shared with other downloads.
-      ThreadUtils.awaitResult(writer, 60.seconds)
-      assert(!buf.hasRemaining)
-      // Later data for the same stream is dropped too.
-      val more = ByteBuffer.allocate(1024)
-      callback.onData("big", more)
-      callback.onComplete("big")
+      // The callbacks run on the connection's event loop, so they must not log (SPARK-38446).
+      val logAppender = new LogAppender("file download callbacks")
+      logAppender.setThreshold(Level.DEBUG)
+      withLogAppender(logAppender, loggerNames = Seq(classOf[NettyRpcEnv].getName),
+          level = Some(Level.DEBUG)) {
+        // Much larger than an OS pipe buffer, so onData blocks in the pipe write until the
+        // reader reads or closes its end.
+        val buf = ByteBuffer.allocate(4 * 1024 * 1024)
+        val writer = Future(callback.onData("big", buf))(ExecutionContext.global)
+
+        // Reading a byte proves onData is writing. It cannot have written the whole buffer into
+        // the pipe, so it is still blocked writing when the reader closes its end below.
+        failAfter(60.seconds) {
+          JavaUtils.readFully(source, ByteBuffer.allocate(1))
+        }
+        assert(buf.hasRemaining)
+        source.close()
+
+        // The callback must discard the rest of the buffer instead of throwing, since throwing
+        // would close the connection shared with other downloads.
+        ThreadUtils.awaitResult(writer, 60.seconds)
+        // Later data for the same stream must not throw either.
+        callback.onData("big", ByteBuffer.allocate(1024))
+        callback.onComplete("big")
+
+        // A write that fails while the reader is still open is a real failure and must
+        // propagate, so the reader sees an error instead of a silently truncated download.
+        otherCallback.onComplete("other")
+        intercept[ClosedChannelException] {
+          otherCallback.onData("other", ByteBuffer.allocate(1024))
+        }
+        otherSource.close()
+      }
+      assert(logAppender.loggingEvents.isEmpty)
     } finally {
       downloadEnv.shutdown()
     }

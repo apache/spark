@@ -442,6 +442,12 @@ private[netty] class NettyRpcEnv(
 
   }
 
+  /**
+   * These callbacks run on the connection's event loop, so they must not log (SPARK-38446).
+   * Log4j may load classes through this thread's context class loader, e.g. to print a logged
+   * exception's stack trace. That loader can be an ExecutorClassLoader whose lock is held by a
+   * task thread waiting for a class download that this event loop serves.
+   */
   private class FileDownloadCallback(
       sink: WritableByteChannel,
       source: FileDownloadChannel,
@@ -450,8 +456,7 @@ private[netty] class NettyRpcEnv(
     override def onData(streamId: String, buf: ByteBuffer): Unit = {
       // If the reader already closed its end (e.g. the fetch failed before reading), drop the
       // rest of this stream. Failing here would close the shared connection and fail every
-      // other download on it. This runs on the connection's event loop, so it does not log:
-      // logging there can block on a class loader that is itself waiting on this event loop.
+      // other download on it.
       if (source.isOpen()) {
         try {
           while (buf.remaining() > 0) {
