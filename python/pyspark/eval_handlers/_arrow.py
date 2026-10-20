@@ -911,8 +911,8 @@ class ArrowBatchedUDFArrowHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         try:
             for input_batch in data:
                 if phase_timers is not None:
-                    input_start_ns = clock()
                     num_timed_batches += 1
+                    input_start_ns = clock()
                 num_rows = input_batch.num_rows
 
                 # --- Input: Arrow -> Python columns ---

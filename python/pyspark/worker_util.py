@@ -22,12 +22,11 @@ Util functions for workers.
 import importlib
 import json
 import os
-import socket
 import sys
 import warnings
 from contextlib import contextmanager
 from inspect import currentframe, getframeinfo
-from typing import IO, Any, Callable, Generator, Literal, Optional, Union, overload
+from typing import IO, Any, Generator, Optional, Union, overload
 
 from pyspark.messages import ZeroCopyByteStream
 
@@ -245,17 +244,7 @@ def get_sock_file_to_executor(timeout: Optional[int] = -1) -> Generator[IO, None
         "PYTHON_WORKER_FACTORY_SOCK_PATH", int(os.environ.get("PYTHON_WORKER_FACTORY_PORT", -1))
     )
     auth_secret = os.environ.get("PYTHON_WORKER_FACTORY_SECRET")
-    sockfile_factory: Callable = socket.socket.makefile
-    if os.environ.get("SPARK_PYTHON_UDF_DETAILED_TIMING") == "true":
-        from pyspark.worker_metrics import _create_timed_stream
-
-        def timed_sockfile(sock: socket.socket, mode: Literal["rwb"], buffer_size: int) -> IO:
-            return _create_timed_stream(sock.makefile(mode, 0), buffer_size)
-
-        sockfile_factory = timed_sockfile
-    sock_file, sock = local_connect_and_auth(
-        conn_info, auth_secret, sockfile_factory=sockfile_factory
-    )
+    sock_file, sock = local_connect_and_auth(conn_info, auth_secret)
     if timeout is None or timeout > 0:
         sock.settimeout(timeout)
     # TODO: Remove the following two lines and use `Process.pid()` when we drop JDK 8.

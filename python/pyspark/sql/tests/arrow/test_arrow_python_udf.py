@@ -19,6 +19,7 @@ import time
 import unittest
 from decimal import Decimal
 from io import BufferedReader, BufferedWriter, BytesIO
+from itertools import product
 from unittest.mock import patch
 
 from pyspark.errors import AnalysisException, PySparkNotImplementedError, PythonException
@@ -48,7 +49,7 @@ from pyspark.testing.utils import (
     pyarrow_requirement_message,
 )
 from pyspark.util import PythonEvalType
-from pyspark.worker_metrics import WorkerMetrics, _create_timed_stream
+from pyspark.worker_metrics import WorkerMetrics
 
 if have_pandas:
     import pandas as pd
@@ -557,13 +558,11 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
 
         constant = udf(lambda: 7, "long", useArrow=True)
         phase_names = (
-            "pythonDataReceiveTime",
-            "pythonArrowDeserializationTime",
+            "pythonDataReadTime",
             "pythonInputPreparationTime",
             "pythonUDFExecutionTime",
             "pythonOutputPreparationTime",
-            "pythonArrowSerializationTime",
-            "pythonDataSendTime",
+            "pythonDataWriteTime",
         )
         with self.sql_conf(
             {
@@ -607,9 +606,9 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
                     if num_rows and concurrency == 0:
                         self.assertGreaterEqual(phases[3], 2 * num_rows)
                     elif num_rows:
-                        self.assertGreater(phases[3], 0)
+                        self.assertGreater(phases[2], 0)
                     else:
-                        self.assertEqual(phases[2:5], [0, 0, 0])
+                        self.assertEqual(phases[1:4], [0, 0, 0])
                     self.assertLessEqual(sum(phases), metrics.apply("pythonProcessingTime").value())
 
     def test_phase_metrics_disabled_by_default(self):
@@ -632,13 +631,11 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
             metrics = run()
 
         detailed_metrics = (
-            "pythonDataReceiveTime",
-            "pythonArrowDeserializationTime",
+            "pythonDataReadTime",
             "pythonInputPreparationTime",
             "pythonUDFExecutionTime",
             "pythonOutputPreparationTime",
-            "pythonArrowSerializationTime",
-            "pythonDataSendTime",
+            "pythonDataWriteTime",
             "pythonNumTimingReports",
             "pythonNumTimedBatches",
         )
@@ -669,7 +666,7 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class ArrowStreamTimingTests(unittest.TestCase):
-    def test_io_timers_exclude_batch_producer_and_consumer(self):
+    def test_timing_excludes_producer_consumer_and_owner_flush(self):
         import pyarrow as pa
 
         metrics = WorkerMetrics()
@@ -681,59 +678,94 @@ class ArrowStreamTimingTests(unittest.TestCase):
             return clock_ns
 
         class DelayedStream(BytesIO):
-            receive_ns = 0
-            send_ns = 0
+            read_ns = 0
+            write_ns = 0
 
-            def readinto(self, data):
+            def read(self, size=-1):
                 nonlocal clock_ns
                 clock_ns += 3_000_000
-                self.receive_ns += 3_000_000
-                return super().readinto(data)
+                self.read_ns += 3_000_000
+                return super().read(size)
 
             def write(self, data):
                 nonlocal clock_ns
                 clock_ns += 5_000_000
-                self.send_ns += 5_000_000
+                self.write_ns += 5_000_000
                 return super().write(data)
+
+            def flush(self):
+                nonlocal clock_ns
+                clock_ns += 7_000_000
+                self.write_ns += 7_000_000
+                return super().flush()
 
         def produce():
             nonlocal clock_ns
             for _ in range(2):
                 clock_ns += 100_000_000
                 yield batch
+            clock_ns += 100_000_000
 
-        for flush_per_batch in (False, True):
-            with self.subTest(flush_per_batch=flush_per_batch):
+        for write_start_stream, flush_per_batch, close_early in product((False, True), repeat=3):
+            with self.subTest(
+                write_start_stream=write_start_stream,
+                flush_per_batch=flush_per_batch,
+                close_early=close_early,
+            ):
                 metrics.reset()
                 serializer = ArrowStreamSerializer(
-                    write_start_stream=True,
+                    write_start_stream=write_start_stream,
                     flush_per_batch=flush_per_batch,
                     collect_timing=True,
                 )
-                with patch("pyspark.worker_metrics.time.perf_counter_ns", side_effect=clock):
+                with patch(
+                    "pyspark.sql.pandas.serializers.time.perf_counter_ns", side_effect=clock
+                ):
                     output = DelayedStream()
-                    writer = _create_timed_stream(output, 64)
-                    serializer.dump_stream(produce(), writer)
-                    send_ns = output.send_ns
-                    # The owner's final flush is outside the reported Arrow intervals.
-                    writer.flush()
+                    serializer.dump_stream(produce(), output)
+                    # Include the start marker and writer close, but not the owner's flush.
+                    write_ns = output.write_ns
+                    output.flush()
                     source = DelayedStream(output.getvalue())
-                    reader = _create_timed_stream(source, 64)
-                    self.assertEqual(read_int(reader), SpecialLengths.START_ARROW_STREAM)
-                    # Reading the marker can prefetch Arrow bytes before timing starts.
-                    source.receive_ns = 0
-                    for actual in serializer.load_stream(reader):
+                    if write_start_stream:
+                        self.assertEqual(read_int(source), SpecialLengths.START_ARROW_STREAM)
+                    source.read_ns = 0
+                    reader = serializer.load_stream(source)
+                    for actual in reader:
                         clock_ns += 100_000_000
                         self.assertTrue(actual.equals(batch))
+                        if close_early:
+                            reader.close()
+                            break
 
-                # All simulated time inside IPC is stream I/O; producer/consumer time is excluded.
+                # Only stream operations advance the clock inside the Arrow intervals.
                 report = metrics.to_dict()
-                self.assertEqual(report["pythonDataReceiveTime"], source.receive_ns // 1_000_000)
-                self.assertEqual(report["pythonDataSendTime"], send_ns // 1_000_000)
-                self.assertEqual(report["pythonArrowDeserializationTime"], 0)
-                self.assertEqual(report["pythonArrowSerializationTime"], 0)
-                reader.close()
-                writer.close()
+                self.assertEqual(
+                    report,
+                    {
+                        "pythonDataReadTime": source.read_ns // 1_000_000,
+                        "pythonDataWriteTime": write_ns // 1_000_000,
+                    },
+                )
+
+    def test_disabled_timing_does_not_read_clock(self):
+        import pyarrow as pa
+
+        metrics = WorkerMetrics()
+        metrics.reset()
+        self.addCleanup(metrics.reset)
+        batch = pa.record_batch([[1, 2]], names=["value"])
+        serializer = ArrowStreamSerializer(write_start_stream=True)
+        with patch(
+            "pyspark.sql.pandas.serializers.time.perf_counter_ns",
+            side_effect=AssertionError("timing is disabled"),
+        ):
+            stream = BytesIO()
+            serializer.dump_stream(iter([batch]), stream)
+            stream.seek(0)
+            self.assertEqual(read_int(stream), SpecialLengths.START_ARROW_STREAM)
+            self.assertTrue(list(serializer.load_stream(stream))[0].equals(batch))
+        self.assertEqual(metrics.to_dict(), {})
 
     def test_timing_preserves_stream_operations(self):
         import pyarrow as pa
@@ -780,11 +812,7 @@ class ArrowStreamTimingTests(unittest.TestCase):
                     raise RuntimeError("batch producer failed")
 
             raw_output = RecordedStream(b"", "wb")
-            stream = (
-                _create_timed_stream(raw_output, buffer_size)
-                if timed
-                else BufferedWriter(raw_output, buffer_size)
-            )
+            stream = BufferedWriter(raw_output, buffer_size)
             serializer = ArrowStreamSerializer(
                 write_start_stream=write_start_stream,
                 flush_per_batch=flush_per_batch,
@@ -795,16 +823,10 @@ class ArrowStreamTimingTests(unittest.TestCase):
                     serializer.dump_stream(produce(), stream)
             else:
                 serializer.dump_stream(produce(), stream)
-            if timed:
-                self.assertFalse(stream._timing.time_writes)
             stream.flush()
             data = raw_output.getvalue()
             raw_input = RecordedStream(data, "rb")
-            reader = (
-                _create_timed_stream(raw_input, buffer_size)
-                if timed
-                else BufferedReader(raw_input, buffer_size)
-            )
+            reader = BufferedReader(raw_input, buffer_size)
             if num_batches:
                 if write_start_stream:
                     self.assertEqual(read_int(reader), SpecialLengths.START_ARROW_STREAM)
@@ -812,8 +834,6 @@ class ArrowStreamTimingTests(unittest.TestCase):
                     events.append(("consume",))
                     self.assertTrue(actual.equals(batch))
             self.assertFalse(stream.closed)
-            if timed:
-                self.assertFalse(reader._timing.time_reads)
             reader.close()
             stream.close()
             return data, events

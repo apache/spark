@@ -58,14 +58,8 @@ def worker(sock: socket.socket, authenticated: bool) -> int:
     # seems to be very slow; note that we need to dup() the file descriptor because
     # otherwise writes also cause a seek that makes us miss data on the read side.
     buffer_size = int(os.environ.get("SPARK_BUFFER_SIZE", 65536))
-    if os.environ.get("SPARK_PYTHON_UDF_DETAILED_TIMING") == "true":
-        from pyspark.worker_metrics import _create_timed_stream
-
-        infile = _create_timed_stream(os.fdopen(os.dup(sock.fileno()), "rb", 0), buffer_size)
-        outfile = _create_timed_stream(os.fdopen(os.dup(sock.fileno()), "wb", 0), buffer_size)
-    else:
-        infile = os.fdopen(os.dup(sock.fileno()), "rb", buffer_size)
-        outfile = os.fdopen(os.dup(sock.fileno()), "wb", buffer_size)
+    infile = os.fdopen(os.dup(sock.fileno()), "rb", buffer_size)
+    outfile = os.fdopen(os.dup(sock.fileno()), "wb", buffer_size)
 
     if not authenticated:
         client_secret = UTF8Deserializer().loads(infile)

@@ -18,10 +18,9 @@
 
 """Shared metrics and reusable timers for a Python worker process."""
 
-import io
 import threading
 import time
-from typing import IO, Any, ClassVar, Optional, cast
+from typing import Any, ClassVar, Optional
 
 
 class _WorkerTimer:
@@ -133,70 +132,3 @@ class WorkerMetrics:
             **self._values_in_report_units,
             **{name: duration // 1_000_000 for name, duration in self._duration_totals_ns.items()},
         }
-
-
-class _TimedRawIO(io.RawIOBase):
-    """Time raw worker I/O beneath its buffer, only while Arrow timing is active."""
-
-    def __init__(self, raw: io.RawIOBase) -> None:
-        self._raw = raw
-        self._clock = time.perf_counter_ns
-        self.time_reads = False
-        self.time_writes = False
-        self.read_duration_ns = 0
-        self.write_duration_ns = 0
-
-    def readable(self) -> bool:
-        return self._raw.readable()
-
-    def writable(self) -> bool:
-        return self._raw.writable()
-
-    def fileno(self) -> int:
-        return self._raw.fileno()
-
-    def flush(self) -> None:
-        if not self._raw.closed:
-            self._raw.flush()
-
-    def readinto(self, data: Any) -> Optional[int]:
-        if not self.time_reads:
-            return self._raw.readinto(data)
-        start_ns = self._clock()
-        result = self._raw.readinto(data)
-        self.read_duration_ns += self._clock() - start_ns
-        return result
-
-    def write(self, data: Any) -> Optional[int]:
-        if not self.time_writes:
-            return self._raw.write(data)
-        start_ns = self._clock()
-        result = self._raw.write(data)
-        self.write_duration_ns += self._clock() - start_ns
-        return result
-
-    def close(self) -> None:
-        try:
-            self._raw.close()
-        finally:
-            super().close()
-
-
-def _create_timed_stream(raw: io.RawIOBase, buffer_size: int) -> IO[bytes]:
-    """Keep one Python buffer and expose its raw timer to the Arrow serializer."""
-    timed_raw = _TimedRawIO(raw)
-    stream: Any
-    if buffer_size == 0:
-        stream = timed_raw
-    else:
-        if buffer_size < 0:
-            buffer_size = io.DEFAULT_BUFFER_SIZE
-        if raw.readable() and raw.writable():
-            stream = io.BufferedRWPair(timed_raw, timed_raw, buffer_size)
-        elif raw.readable():
-            stream = io.BufferedReader(timed_raw, buffer_size)
-        else:
-            stream = io.BufferedWriter(timed_raw, buffer_size)
-    # BufferedRWPair has no .raw property; expose the same handle for all stream types.
-    stream._timing = timed_raw
-    return cast(IO[bytes], stream)

@@ -832,10 +832,7 @@ def _local_iterator_from_socket(sock_info: "JavaArray", serializer: "Serializer"
 
 
 def local_connect_and_auth(
-    conn_info: Optional[Union[str, int]],
-    auth_secret: Optional[str],
-    *,
-    sockfile_factory: Callable = socket.socket.makefile,
+    conn_info: Optional[Union[str, int]], auth_secret: Optional[str]
 ) -> Tuple:
     """
     Connect to local host, authenticate with it, and return a (sockfile,sock) for that connection.
@@ -860,9 +857,7 @@ def local_connect_and_auth(
             sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             sock.settimeout(int(os.environ.get("SPARK_AUTH_SOCKET_TIMEOUT", 15)))
             sock.connect(sock_path)
-            sockfile = sockfile_factory(
-                sock, "rwb", int(os.environ.get("SPARK_BUFFER_SIZE", 65536))
-            )
+            sockfile = sock.makefile("rwb", int(os.environ.get("SPARK_BUFFER_SIZE", 65536)))
             return (sockfile, sock)
         except socket.error as e:
             if sock is not None:
@@ -887,9 +882,7 @@ def local_connect_and_auth(
             sock = socket.socket(af, socktype, proto)
             sock.settimeout(int(os.environ.get("SPARK_AUTH_SOCKET_TIMEOUT", 15)))
             sock.connect(sa)
-            sockfile = sockfile_factory(
-                sock, "rwb", int(os.environ.get("SPARK_BUFFER_SIZE", 65536))
-            )
+            sockfile = sock.makefile("rwb", int(os.environ.get("SPARK_BUFFER_SIZE", 65536)))
             assert isinstance(auth_secret, str)
             _do_server_auth(sockfile, auth_secret)
             return (sockfile, sock)
