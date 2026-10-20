@@ -296,7 +296,8 @@ class BarrierTaskContext private[spark] (
     taskContext.createResourceUninterruptibly(resourceBuilder)
   }
 
-  override def addPostStatusUpdateListener(listener: PostStatusUpdateListener): TaskContext = {
+  override private[spark] def addPostStatusUpdateListener(
+      listener: PostStatusUpdateListener): TaskContext = {
     taskContext.addPostStatusUpdateListener(listener)
     this
   }
