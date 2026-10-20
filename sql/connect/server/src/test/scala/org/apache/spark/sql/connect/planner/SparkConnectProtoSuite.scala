@@ -17,6 +17,7 @@
 package org.apache.spark.sql.connect.planner
 
 import java.nio.file.{Files, Paths}
+import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.jdk.CollectionConverters._
 
@@ -26,6 +27,7 @@ import org.apache.spark.{SparkClassNotFoundException, SparkException, SparkIlleg
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression
 import org.apache.spark.connect.proto.Join.JoinType
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql.{AnalysisException, Column, Observation, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, UnresolvedInSubqueryPlanId, UnsafeProjection}
@@ -43,6 +45,7 @@ import org.apache.spark.sql.connect.dsl.plans._
 import org.apache.spark.sql.connector.catalog.{Column => ColumnV2, Identifier, InMemoryTableCatalog, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.execution.arrow.ArrowConverters
+import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -1121,6 +1124,73 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
             .setDirection("backward"))
         .build()
     }
+  }
+
+  // Transforms `rel` and returns the SQL executions started meanwhile.
+  private def sqlExecutionsStartedDuring(rel: proto.Relation): (LogicalPlan, Seq[String]) = {
+    val started = new ConcurrentLinkedQueue[String]()
+    val listener = new SparkListener {
+      override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
+        case e: SparkListenerSQLExecutionStart => started.add(e.description)
+        case _ =>
+      }
+    }
+    spark.sparkContext.listenerBus.waitUntilEmpty()
+    spark.sparkContext.addSparkListener(listener)
+    try {
+      val plan = transform(rel)
+      spark.sparkContext.listenerBus.waitUntilEmpty()
+      (plan, started.asScala.toSeq)
+    } finally {
+      spark.sparkContext.removeSparkListener(listener)
+    }
+  }
+
+  test("SPARK-60096: withColumns with an attached subquery does not analyze eagerly") {
+    // withColumns(x = <scalar subquery on plan id>) cannot be analyzed before WithRelations
+    // substitutes the plan id. A failed eager attempt would post a failed SQL execution.
+    val planId = 9L
+    val scalarSubquery = Expression
+      .newBuilder()
+      .setSubqueryExpression(
+        proto.SubqueryExpression
+          .newBuilder()
+          .setPlanId(planId)
+          .setSubqueryType(proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_SCALAR))
+      .build()
+    val withColumns = proto.Relation
+      .newBuilder()
+      .setWithColumns(
+        proto.WithColumns
+          .newBuilder()
+          .setInput(connectTestRelation)
+          .addAliases(Expression.Alias.newBuilder().addName("x").setExpr(scalarSubquery)))
+      .build()
+
+    val (plan, started) = sqlExecutionsStartedDuring(withAttachedRange(withColumns, planId))
+    assert(started.isEmpty)
+    val analyzed = spark.sessionState.executePlan(plan).analyzed
+    assert(analyzed.output.map(_.name) == Seq("id", "name", "x"))
+  }
+
+  test("SPARK-60096: withColumnsRenamed over an attached subquery does not analyze eagerly") {
+    // withColumnsRenamed over filter(id IN <plan id>) cannot be analyzed before WithRelations
+    // substitutes the plan id. A failed eager attempt would post a failed SQL execution.
+    val planId = 10L
+    val renamed = proto.Relation
+      .newBuilder()
+      .setWithColumnsRenamed(
+        proto.WithColumnsRenamed
+          .newBuilder()
+          .setInput(connectTestRelation.where(inSubqueryProto(planId)))
+          .addRenames(
+            proto.WithColumnsRenamed.Rename.newBuilder().setColName("id").setNewColName("id2")))
+      .build()
+
+    val (plan, started) = sqlExecutionsStartedDuring(withAttachedRange(renamed, planId))
+    assert(started.isEmpty)
+    val analyzed = spark.sessionState.executePlan(plan).analyzed
+    assert(analyzed.output.map(_.name) == Seq("id2", "name"))
   }
 
   test("Test cast") {
