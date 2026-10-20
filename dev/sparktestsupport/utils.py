@@ -165,6 +165,7 @@ def determine_shell_script_test_goals(
     Goals are returned in the order determined by the modules passed in,
     preserving each module's declaration order. Each goal is returned only once:
 
+    >>> from pathlib import Path
     >>> goals = determine_shell_script_test_goals(
     ...     [modules.root], modules.TestStage.PRE_BUILD)
     >>> [g.path for g in goals].count(Path("dev/test-dependencies.sh"))
