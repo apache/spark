@@ -236,9 +236,7 @@ class Module(object):
         if isinstance(shell_script_test_goals, (str, bytes)) or not isinstance(
             shell_script_test_goals, Sequence
         ):
-            raise TypeError(
-                f"{name}: shell_script_test_goals must be a sequence"
-            )
+            raise TypeError(f"{name}: shell_script_test_goals must be a sequence")
         for goal in shell_script_test_goals:
             if not isinstance(goal, ShellScriptTestGoal):
                 raise TypeError(f"{name}: expected ShellScriptTestGoal, got {goal!r}")
