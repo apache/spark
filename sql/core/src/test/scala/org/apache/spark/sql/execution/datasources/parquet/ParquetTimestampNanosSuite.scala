@@ -548,7 +548,7 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
-  test("SPARK-60334: BIGINT epoch nanos from nanosAsLong convert losslessly to nanos types") {
+  test("nanosAsLong migration: BIGINT epoch nanos convert losslessly to the nanos types") {
     // The conversions documented in the migration guide. The non-UTC session time zone shows that
     // only the TIMESTAMP_NTZ(9) cast depends on it.
     val values = Seq(Some(1230219000123456789L), Some(-1L), None)
@@ -592,7 +592,7 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
-  test("SPARK-60334: nanosAsLong tables keep BIGINT, views over the files must be recreated") {
+  test("nanosAsLong migration: tables keep BIGINT, views over the files must be recreated") {
     withNanosEnabled {
       withTempDir { dir =>
         writeForeignNanosParquet(
@@ -636,7 +636,7 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
-  test("SPARK-60334: nanosAsLong does not affect Parquet files written by Spark") {
+  test("nanosAsLong does not affect Parquet files written by Spark") {
     withNanosEnabled {
       withTempPath { dir =>
         val df = spark.sql(
@@ -655,7 +655,7 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
-  test("SPARK-60334: TIMESTAMP(NANOS) inference does not depend on inferTimestampNTZ") {
+  test("TIMESTAMP(NANOS) inference does not depend on inferTimestampNTZ") {
     withNanosEnabled {
       withSQLConf(SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key -> "false") {
         Seq(true, false).foreach { isAdjustedToUTC =>
@@ -673,7 +673,7 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
 
   // TODO(SPARK-60380): make pushdown respect the read precision, then expect the pushdown and
   // no-pushdown results to match for every predicate.
-  test("SPARK-60334: pushdown under a lower-precision read schema compares raw nanoseconds") {
+  test("filter pushdown under a lower-precision read schema compares raw nanoseconds") {
     withNanosEnabled {
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
         withAllParquetReaders {
