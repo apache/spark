@@ -1936,6 +1936,64 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       condition = "AMBIGUOUS_COLUMN_REFERENCE",
       parameters = Map("name" -> "\"b\""))
   }
+
+  test("SPARK-59146: merge hidden and visible output for a qualified star") {
+    // Compares instances, so that the qualifier and metadata of every position are checked too.
+    def checkMerge(
+        hidden: Seq[Attribute],
+        visible: Seq[Attribute],
+        expected: Seq[Attribute]): Unit = {
+      val merged = UnresolvedStarBase.mergeHiddenAndVisibleOutput(hidden, visible)
+      assert(merged.length == expected.length, merged)
+      merged.zip(expected).foreach { case (actual, instance) =>
+        assert(actual eq instance, s"$actual in $merged is not the instance $instance")
+      }
+    }
+    def attributes(qualifier: String, names: String*): Seq[AttributeReference] =
+      names.map(name => AttributeReference(name, IntegerType)(qualifier = Seq(qualifier)))
+
+    // Disjoint, as for the join key that a USING join hides: the hidden output goes first.
+    val Seq(lk, x) = attributes("l", "k", "x")
+    val Seq(rk, y) = attributes("r", "k", "y")
+    val hiddenKey = rk.markAsQualifiedAccessOnly()
+    checkMerge(Seq(hiddenKey), Seq(lk, x, y), Seq(hiddenKey, lk, x, y))
+    checkMerge(Nil, Seq(lk, x, y), Seq(lk, x, y))
+
+    // Overlapping, as for pipe SET: the hidden source row pins the position of every visible
+    // attribute, which is emitted in place of its hidden copy.
+    val Seq(a, b, c) = attributes("t", "a", "b", "c")
+    val assigned = AttributeReference("b", IntegerType)()
+    val row = Seq(a, b, c).map(_.markAsQualifiedAccessOnly())
+    checkMerge(row, Seq(a, c, assigned), Seq(a, row(1), c, assigned))
+
+    // Repeated, as for `SELECT a, a, b`: the occurrences share an ExprId, and are told apart here
+    // by their qualifier. A hidden occurrence consumes the first unconsumed visible one, so every
+    // position is kept exactly once.
+    val repeatedA = a.withQualifier(Seq("u"))
+    val repeatedRow = Seq(a, repeatedA, b).map(_.markAsQualifiedAccessOnly())
+    checkMerge(
+      repeatedRow, Seq(a, repeatedA, assigned), Seq(a, repeatedA, repeatedRow(2), assigned))
+    checkMerge(Seq(row(1), row(0)), Seq(a, repeatedA), Seq(row(1), a, repeatedA))
+    checkMerge(repeatedRow.take(2), Seq(a), Seq(a, repeatedRow(1)))
+  }
+
+  test("SPARK-59146: a qualified star after repeated pipe SETs returns the original row") {
+    // The second SET sees the hidden output of the first one overlap its visible output.
+    def set(column: String, child: LogicalPlan): LogicalPlan = Project(
+      Seq(UnresolvedStarExceptOrReplace(
+        target = None,
+        excepts = Seq(Seq(column)),
+        replacements = Some(Seq(Alias(Literal("x"), column)())),
+        retainExceptedColumnsAsHidden = true)),
+      child)
+    val plan = Project(
+      Seq(UnresolvedStar(Some(Seq("t")))),
+      set("a", set("c", testRelation2.subquery("t"))))
+
+    val output = getAnalyzer.execute(plan).output
+    assert(output.map(_.exprId) == testRelation2.output.map(_.exprId), output)
+    assert(output.forall(_.qualifier == Seq("t")), output)
+  }
 }
 
 /**

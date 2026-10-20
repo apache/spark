@@ -1081,26 +1081,32 @@ class Analyzer(
     }
 
     private def getMetadataAttributes(plan: LogicalPlan): Seq[Attribute] = {
+      val childrenMetadataOutput = childrenMetadataOutputById(plan)
       plan.expressions.flatMap(_.collect {
         case a: Attribute if a.isMetadataCol => a
-        case a: Attribute
-          if plan.children.exists(c => c.metadataOutput.exists(_.exprId == a.exprId)) =>
-          plan.children.collectFirst {
-            case c if c.metadataOutput.exists(_.exprId == a.exprId) =>
-              c.metadataOutput.find(_.exprId == a.exprId).get
-          }.get
+        case a: Attribute if childrenMetadataOutput.contains(a.exprId) =>
+          childrenMetadataOutput(a.exprId)
       })
     }
 
     private def hasMetadataCol(plan: LogicalPlan): Boolean = {
+      lazy val childrenMetadataOutput = childrenMetadataOutputById(plan)
       plan.expressions.exists(_.exists {
         case a: Attribute =>
           // If an attribute is resolved before being labeled as metadata
           // (i.e. from the originating Dataset), we check with expression ID
-          a.isMetadataCol ||
-            plan.children.exists(c => c.metadataOutput.exists(_.exprId == a.exprId))
+          a.isMetadataCol || childrenMetadataOutput.contains(a.exprId)
         case _ => false
       })
+    }
+
+    // The metadata output of the children, keeping the first attribute for each expression ID.
+    // Looking attributes up by ID keeps this rule linear when a child's metadata output is as wide
+    // as its output, as the hidden source row of the SQL pipe SET operator is.
+    private def childrenMetadataOutputById(plan: LogicalPlan): collection.Map[ExprId, Attribute] = {
+      val byId = mutable.HashMap.empty[ExprId, Attribute]
+      plan.children.foreach(_.metadataOutput.foreach(a => byId.getOrElseUpdate(a.exprId, a)))
+      byId
     }
 
     private def addMetadataCol(
@@ -2097,7 +2103,7 @@ class Analyzer(
      * The hidden output holds the whole qualified source row, with every position in its original
      * order, not just the excluded attributes, because a qualified star expands hidden output
      * ahead of the visible output. Retaining only the excluded attributes would move them to the
-     * front, so that `VALUES (1, 2, 3) AS t(a, b, c) |> SET b = 20 |> SELECT t.*` returned
+     * front, so that `VALUES (1, 2, 3) AS t(a, b, c) |> SET b = 20 |> SELECT t.*` would return
      * `(b, a, c)`. Attributes that are also visible are emitted once by the star expansion, in
      * their hidden position.
      */

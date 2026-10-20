@@ -644,16 +644,33 @@ object UnresolvedStarBase {
    * most one visible occurrence, which is emitted in the hidden attribute's place, because a
    * projection may repeat the same attribute. Visible attributes that no hidden attribute
    * consumed keep their relative order, after the hidden output.
+   *
+   * Both outputs can be as wide as the source row, for example under a wide USING join or a pipe
+   * SET, so the merge runs in time linear in their combined size.
    */
   def mergeHiddenAndVisibleOutput(
       hiddenOutput: Seq[Attribute],
       visibleOutput: Seq[Attribute]): Seq[Attribute] = {
-    val unconsumed = visibleOutput.to(mutable.ArrayBuffer)
-    val merged = hiddenOutput.map { hidden =>
-      val visible = unconsumed.indexWhere(_.exprId == hidden.exprId)
-      if (visible >= 0) unconsumed.remove(visible) else hidden
+    if (hiddenOutput.isEmpty) return visibleOutput
+    val visible = visibleOutput.toIndexedSeq
+    // The positions of the occurrences of each visible attribute, in order. Built back to front so
+    // that every list is in ascending order and its head is the first unconsumed occurrence.
+    val occurrences = mutable.HashMap.empty[ExprId, List[Int]]
+    visible.indices.reverseIterator.foreach { i =>
+      val exprId = visible(i).exprId
+      occurrences(exprId) = i :: occurrences.getOrElse(exprId, Nil)
     }
-    merged ++ unconsumed.toSeq
+    val consumed = new Array[Boolean](visible.length)
+    val merged = hiddenOutput.map { hidden =>
+      occurrences.get(hidden.exprId) match {
+        case Some(i :: remaining) =>
+          occurrences(hidden.exprId) = remaining
+          consumed(i) = true
+          visible(i)
+        case _ => hidden
+      }
+    }
+    merged ++ visible.indices.collect { case i if !consumed(i) => visible(i) }
   }
 }
 
