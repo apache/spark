@@ -23129,7 +23129,7 @@ def from_json(
       ``spark.sql.preserveCharVarcharTypeInfo``);
       ``spark.sql.legacy.charVarcharAsString`` reads them as STRING; otherwise
       ``UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING``. Map-key length checks require
-      this flag.
+      ``spark.sql.charVarchar.standardSemantics.enabled``.
 
     Examples
     --------
@@ -24538,7 +24538,7 @@ def from_xml(
       ``spark.sql.preserveCharVarcharTypeInfo``);
       ``spark.sql.legacy.charVarcharAsString`` reads them as STRING; otherwise
       ``UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING``. Map-key length checks require
-      this flag.
+      ``spark.sql.charVarchar.standardSemantics.enabled``.
 
     Examples
     --------

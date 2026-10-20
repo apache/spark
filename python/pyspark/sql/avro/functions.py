@@ -60,13 +60,17 @@ def from_avro(
     Avro is built-in but external data source module since Spark 2.4. Please deploy the
     application as per the deployment section of "Apache Avro Data Source Guide".
 
-    CHAR/VARCHAR assignment is accepted when types are first-class (the preview
-    flag or ``spark.sql.preserveCharVarcharTypeInfo``). STRING values are then
-    assigned. Overflow is a malformed record: FAILFAST fails with
-    ``EXCEED_LIMIT_LENGTH`` as the cause; PERMISSIVE returns a null record.
-    ``spark.sql.legacy.charVarcharAsString`` reads the schema as STRING.
-    ENUM symbols are not assigned. Map-key length checks require the preview
-    flag and do not pad or trim.
+    CHAR/VARCHAR come from the ``spark.sql.catalyst.type`` property on Avro
+    string fields. Assignment is accepted when types are first-class
+    (``spark.sql.charVarchar.standardSemantics.enabled`` or
+    ``spark.sql.preserveCharVarcharTypeInfo``). STRING values are then assigned.
+    Overflow is a malformed record: FAILFAST fails with
+    ``EXCEED_LIMIT_LENGTH`` as the cause; PERMISSIVE returns a struct with every
+    field NULL (NULL for a non-struct schema). When CHAR/VARCHAR are not
+    first-class, CHAR/VARCHAR in the Avro schema are read as STRING without
+    padding or length checks. ENUM symbols are not assigned. Map-key length
+    checks require ``spark.sql.charVarchar.standardSemantics.enabled`` and do
+    not pad or trim.
 
     Examples
     --------

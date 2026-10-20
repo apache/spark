@@ -7820,7 +7820,7 @@ object SQLConf {
     buildConf("spark.sql.charVarchar.standardSemantics.enabled")
       .doc("Preview feature: when true, treat CHAR, VARCHAR, and STRING as a character string " +
         "type family with the precedence CHAR -> VARCHAR -> STRING. This may change in future " +
-        "releases. CHAR and VARCHAR remain first-class types in schemas and CAST targets; " +
+        "releases. CHAR and VARCHAR are first-class types in schemas and CAST targets; " +
         "least-common-type for COALESCE/CASE/UNION may return CHAR/VARCHAR; transforming " +
         "string functions and operators return STRING. The default (false) keeps the Spark 3.1 " +
         "table-schema overlay on STRING. This differs from preserveCharVarcharTypeInfo, which " +

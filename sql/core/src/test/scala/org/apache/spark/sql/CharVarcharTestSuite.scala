@@ -1849,6 +1849,21 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-58942: CHAR column vs string literal under standardSemantics") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withTable("contacts") {
+        sql("CREATE TABLE contacts (code CHAR(4), name VARCHAR(10)) USING parquet")
+        sql("INSERT INTO contacts VALUES ('ab', 'Ada')")
+        checkAnswer(sql("SELECT name FROM contacts WHERE code = 'ab'"), Seq.empty)
+        checkAnswer(sql("SELECT name FROM contacts WHERE code = 'ab  '"), Row("Ada"))
+        checkAnswer(
+          sql("SELECT name FROM contacts WHERE code COLLATE UTF8_BINARY_RTRIM = " +
+            "'ab' COLLATE UTF8_BINARY_RTRIM"),
+          Row("Ada"))
+      }
+    }
+  }
+
   test("SPARK-58794: language surfaces keep CHAR/VARCHAR under standardSemantics") {
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
       // CTAS / CREATE VIEW inherit projected CHAR/VARCHAR.

@@ -204,8 +204,8 @@ While casting of a decimal with a fraction to an interval type with SECOND as th
 As mentioned at the beginning, when `spark.sql.storeAssignmentPolicy` is set to `ANSI`(which is the default value), Spark SQL complies with the ANSI store assignment rules on table insertions. The valid combinations of source and target data type in table insertions are given by the following table.
 Table CHAR/VARCHAR columns apply length checks, trailing-space trimming, and CHAR padding on
 insert in the default overlay. First-class CAST vs assignment, and CHAR/VARCHAR that survive
-in query plans, require the preview flag
-`spark.sql.charVarchar.standardSemantics.enabled`. See
+in query plans, require first-class CHAR/VARCHAR types (the preview flag or
+`spark.sql.preserveCharVarcharTypeInfo`). See
 [Character String Types](sql-ref-character-string-types.html#assignment-and-reading).
 
 | Source\Target | Numeric | String | Date | Time | Timestamp | Timestamp_NTZ | Interval | Boolean | Binary | Array | Map | Struct |
@@ -268,7 +268,7 @@ At the heart of this conflict resolution is the Type Precedence List which defin
 
 \*\*\* For a complex type, the precedence rule applies recursively to its component elements.
 
-\*\*\*\* Preview (`spark.sql.charVarchar.standardSemantics.enabled`). Without that flag, CHAR
+\*\*\*\* Preview (`spark.sql.charVarchar.standardSemantics.enabled`). By default, CHAR
 and VARCHAR are rewritten to STRING and this row does not apply. After CHAR or VARCHAR
 reaches STRING, the STRING precedence branches also apply. See
 [Character String Types](sql-ref-character-string-types.html).

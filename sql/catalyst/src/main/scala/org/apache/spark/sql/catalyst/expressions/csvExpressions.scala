@@ -59,9 +59,10 @@ import org.apache.spark.unsafe.types.UTF8String
     A CHAR `csvStr` is not rtrimmed. Padding is parsed as trailing spaces and can create
     extra fields or attach to the last unquoted field; use ignoreTrailingWhiteSpace to trim
     the last field. CHAR/VARCHAR in `schema` is accepted when CHAR/VARCHAR are first-class
-    (this flag or spark.sql.preserveCharVarcharTypeInfo): fields are assigned (CHAR padded;
-    overflow is a bad record). spark.sql.legacy.charVarcharAsString reads them as STRING.
-    Otherwise the schema raises UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING.
+    (spark.sql.charVarchar.standardSemantics.enabled or
+    spark.sql.preserveCharVarcharTypeInfo): fields are assigned (CHAR padded; overflow is
+    a bad record). spark.sql.legacy.charVarcharAsString reads them as STRING. Otherwise
+    the schema raises UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING.
   """,
   since = "3.0.0",
   group = "csv_funcs")

@@ -93,12 +93,12 @@ The mandatory preceding `:` (colon) differentiates the namespace of named parame
 ```
 
 ```python
-spark.sql("SELECT TYPEOF(:p)", args={"p": "ab"}).show()
-# string
+spark.sql("SELECT TYPEOF(:p)", args={"p": "ab"}).first()[0]
+# 'string'
 
 spark.sql("SET spark.sql.charVarchar.standardSemantics.enabled = true")
-spark.sql("SELECT TYPEOF(CAST(:p AS CHAR(2)))", args={"p": "ab"}).show()
-# char(2)
+spark.sql("SELECT TYPEOF(CAST(:p AS CHAR(2)))", args={"p": "ab"}).first()[0]
+# 'char(2)'
 ```
 
 ##### Examples

@@ -45,15 +45,16 @@ the same family; `CHAR` and `VARCHAR` are not special uses of `STRING`.
 
 ## Related settings
 
-The preview flag is persisted with view definitions, so a view continues to use the semantics
-under which it was created.
+The preview flag is persisted with view definitions for analysis of the view body, so a view
+continues to use the semantics under which it was created. `from_json` and `from_avro` capture
+the flag at analysis. JSON file scans and `from_xml` read the executing session's flag.
 
 The older `spark.sql.preserveCharVarcharTypeInfo` setting is an experimental compatibility mode.
 It preserves type information, but does not apply all the type precedence and expression-result
 rules described here. Standard semantics take precedence over
 `spark.sql.legacy.charVarcharAsString` when both settings are `true`.
 
-Two other settings still apply when standard semantics are on:
+Two other settings interact with standard semantics:
 
 * `spark.sql.charAsVarchar` still rewrites `CHAR` to `VARCHAR` in `CREATE`/`REPLACE`/`ALTER TABLE`.
   `CAST(... AS CHAR(n))` stays `CHAR(n)`.
@@ -101,7 +102,9 @@ inputs. Within the character string family, Spark uses these rules:
 
 These rules apply recursively to arrays, maps, and structs. They are used by expressions and
 operations such as `CASE`, `COALESCE`, `IN`, `UNION`, `INTERSECT`, `EXCEPT`, multi-row `VALUES`,
-and collection constructors.
+and collection constructors. The least common type is computed across all inputs together.
+Adding a `VARCHAR` input can change equality: `CHAR` vs `CHAR` pads, but widening to
+`VARCHAR` keeps each original pad.
 
 ```sql
 SELECT typeof(coalesce(
@@ -117,7 +120,14 @@ SELECT typeof(coalesce(
 SELECT typeof(coalesce(
   CAST('a' AS VARCHAR(4)),
   CAST('unbounded' AS STRING)));
--- string
+-- string collate UTF8_BINARY
+
+SELECT CAST('a' AS CHAR(2)) IN (CAST('a' AS CHAR(4)));
+-- true
+
+SELECT CAST('a' AS CHAR(2)) IN (
+  CAST('a' AS CHAR(4)), CAST('b' AS VARCHAR(3)));
+-- false  (all widen to VARCHAR(4): 'a ' vs 'a   ')
 ```
 
 Collation is also part of a character string type. The least-common-type rules above apply after
@@ -197,7 +207,8 @@ least common type rules above.
 
 An expression that transforms character content returns `STRING`, because its result length is
 not constrained by an input declaration. This includes string functions and operators such as
-`upper`, `lower`, `substring`, `concat`, `||`, `regexp_replace`, `trim`, `split`, and `mask`.
+`upper`, `lower`, `substring`, `concat`, `||`, `regexp_replace`, `trim`, and `mask`.
+`split` returns `ARRAY<STRING>`.
 
 ```sql
 SELECT typeof(upper(CAST('ab' AS CHAR(2))));
@@ -237,6 +248,20 @@ SELECT CAST('a' AS CHAR(2)) = 'a';
 
 SELECT CAST('a' AS CHAR(2)) = 'a ';
 -- true
+```
+
+The same widening applies to a `CHAR` table column. By default the column is typed `STRING`, so
+Spark pads the literal to the column length and `WHERE code = 'ab'` matches. Under the preview
+the column is `CHAR(n)`, the comparison casts the column to `STRING`, and the literal is not
+padded, so a stored `'ab  '` does not match `'ab'`. The same applies to `IN ('ab', ...)` and
+to predicates on CHAR partition columns.
+
+```sql
+SELECT name FROM contacts WHERE code = 'ab';
+-- no rows
+
+SELECT name FROM contacts WHERE code = 'ab  ';
+-- Ada
 ```
 
 A [parameter marker](sql-ref-parameter-markers.html) bound to a string value is also `STRING`.
@@ -295,16 +320,17 @@ apply there.
 With a reader schema that declares `CHAR`/`VARCHAR` fields, parsed string values are assigned
 when CHAR/VARCHAR are first-class (this preview flag or
 `spark.sql.preserveCharVarcharTypeInfo`): `CHAR(n)` is padded, and an over-length value is a
-bad record. For `from_json`, `from_csv`, and `from_xml`, `FAILFAST` raises
-`EXCEED_LIMIT_LENGTH` and `PERMISSIVE` nulls the failed field. CSV field overflow follows the
-CSV parse mode the same way.
+bad record. For `from_json`, `from_csv`, and `from_xml`, `FAILFAST` fails with
+`MALFORMED_RECORD_IN_PARSING` caused by `EXCEED_LIMIT_LENGTH`, and `PERMISSIVE` nulls the
+failed field. CSV field overflow follows the CSV parse mode the same way.
 
 `from_avro` assigns STRING values only. Avro ENUM symbols are not padded or length-checked, so a
 padded CHAR cannot invent a symbol. Overflow is a malformed record handled by the `mode`
-option: `FAILFAST` fails with `EXCEED_LIMIT_LENGTH` as the cause; `PERMISSIVE` returns a null
-record. Avro file scans leave CHAR padding of STRING values to read-side CHAR padding rather
-than assigning in the deserializer. `to_json`, `to_csv`, `to_xml`, and `to_avro` serialize the
-current string content; `to_avro` does not itself pad or trim.
+option: `FAILFAST` fails with `EXCEED_LIMIT_LENGTH` as the cause; `PERMISSIVE` returns a
+struct with every field NULL (NULL for a non-struct schema). Avro file scans leave CHAR
+padding of STRING values to read-side CHAR padding rather than assigning in the deserializer.
+`to_json`, `to_csv`, `to_xml`, and `to_avro` serialize the current string content; `to_avro`
+does not itself pad or trim.
 
 ### Map keys
 
@@ -324,16 +350,20 @@ key would change its identity and could silently merge distinct keys.
   (default `_VALUE`) when mixed text is present. Exact repeated names last-win.
   `spark.sql.mapKeyDedupPolicy` is not applied. Empty, attribute-only, and text-only map elements
   stay SQL NULL or a malformed record; they do not become an empty map or a `valueTag` entry.
-  When standard semantics are off and `spark.sql.preserveCharVarcharTypeInfo` is on, short CHAR
+  Unlike `from_json`, `from_xml` reads the executing session's flag, so a persisted view created
+  with the flag on uses pad-and-`EXCEED_LIMIT_LENGTH` for a caller with the flag off. When
+  standard semantics are off and `spark.sql.preserveCharVarcharTypeInfo` is on, short CHAR
   keys are padded and over-length keys raise `EXCEED_LIMIT_LENGTH`.
 * Avro (`from_avro` and Avro scans): `UNSUPPORTED_AVRO_CHAR_VARCHAR_MAP_KEY`. `from_avro`
-  PERMISSIVE nulls that malformed record; Avro file scans do not wrap per-row PERMISSIVE around
-  the error.
+  PERMISSIVE returns a struct with every field NULL (NULL for a non-struct schema); Avro file
+  scans do not wrap per-row PERMISSIVE around the error.
 * CSV has no object-name map keys; `from_csv` schemas are structs of fields.
 
-`PERMISSIVE` sets the nearest enclosing field to `null`; `FAILFAST` fails with the error above as
-the cause of `MALFORMED_RECORD_IN_PARSING`. `variant_get` and `to_variant_object` reject
-CHAR/VARCHAR map keys at analysis.
+For JSON and XML, `PERMISSIVE` sets the nearest enclosing field to `null`; `FAILFAST` fails
+with the error above as the cause of `MALFORMED_RECORD_IN_PARSING`. `from_avro` FAILFAST
+throws a malformed-record `SparkException` with no error class. `variant_get`,
+`to_variant_object`, and `CAST(... AS VARIANT)` reject CHAR/VARCHAR anywhere in the type,
+not only as map keys.
 
 ## Schema propagation
 
@@ -358,18 +388,20 @@ schema inference, support depends on the format:
 
 | Data source | Behavior |
 |-------------|----------|
-| Parquet catalog table | Uses the catalog schema to retain the declared type. |
+| Parquet | Stores logical type metadata so file-only schema inference can restore `CHAR` and `VARCHAR`, same as ORC. |
 | ORC | Stores logical type metadata on physical string fields so schema inference can restore `CHAR` and `VARCHAR`. |
 | Avro | Stores logical type metadata on string fields and map keys so schema inference can restore `CHAR` and `VARCHAR`. |
 | JSON, CSV, and XML | Apply `CHAR` and `VARCHAR` semantics when the reader is given an explicit schema; text inference alone does not infer a length constraint. See [Parsing functions and map keys](#parsing-functions-and-map-keys) for map-key handling. CSV overflow is a bad record under the CSV parse mode. |
 
-When standard semantics are disabled, file-only inference reads the constrained fields as
-`STRING`.
+By default, when CHAR/VARCHAR are not first-class, file-only inference reads the constrained
+fields as `STRING`.
 
 ### Client metadata
 
 Spark Connect and the Spark Thrift Server expose the declared character string type and length to
 clients. JDBC metadata reports `java.sql.Types.CHAR` or `java.sql.Types.VARCHAR`, the declared
 length as the precision, and four times the declared length as `CHAR_OCTET_LENGTH`, reflecting the
-maximum UTF-8 bytes per character. PySpark Arrow conversion at the Python host rejects CHAR and
-VARCHAR; convert to STRING in Spark before collecting through Arrow.
+maximum UTF-8 bytes per character. Spark Connect `collect()` returns CHAR/VARCHAR values.
+Classic `toPandas()` and `createDataFrame` from pandas fall back off Arrow by default when
+Python's `CharType` cannot convert; Python UDF return types, UDAF buffer schemas, and UDTF
+return types raise `CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON`.
