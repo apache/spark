@@ -110,7 +110,7 @@ class CloseShieldOutputStreamSuite extends SparkFunSuite with LocalSparkContext 
           false
         }
       }
-      val input = new runner.ReaderInputStream(worker, writer, None, 0, false, null)
+      val input = new runner.ReaderInputStream(worker, writer, None, false, 0, false, null)
       @volatile var error: Throwable = null
       val taskThread = new Thread(() => {
         try {
