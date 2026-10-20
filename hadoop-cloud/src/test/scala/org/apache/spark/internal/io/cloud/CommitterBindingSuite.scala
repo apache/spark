@@ -29,6 +29,8 @@ import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.io.{FileCommitProtocol, FileNameSpec}
 import org.apache.spark.internal.io.cloud.PathOutputCommitProtocol.{CAPABILITY_DYNAMIC_PARTITIONING, OUTPUTCOMMITTER_FACTORY_SCHEME}
+import org.apache.spark.sql.{LocalSparkSession, SparkSession}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Subclass that exposes the protected `partitionPaths` field so tests can
@@ -318,12 +320,12 @@ class CommitterBindingSuite extends SparkFunSuite {
   }
 
   /**
-   * A cloud committer that handles dynamic partitioning natively (via StreamCapabilities) must NOT
-   * have its partitions tracked in Spark's partitionPaths set: the committer takes care of
-   * overwriting itself, and the commitJob rename loop must not interfere.
+   * A cloud committer that declares dynamic partitioning support (via StreamCapabilities) does not
+   * delete the existing partitions itself. It must be bound to the staging directory, and the
+   * partitions must be tracked, so that commitJob can replace them in the destination.
    */
-  test("SPARK-56588: Cloud committer with dynamic partition support does not track partitions in " +
-      "partitionPaths") {
+  test("SPARK-60366: Cloud committer with dynamic partition support stages output and tracks " +
+      "partitions") {
     val path = new Path("http://example/data")
     val job = newJob(path)
     val conf = job.getConfiguration
@@ -337,16 +339,44 @@ class CommitterBindingSuite extends SparkFunSuite {
 
     val tempPath = committer.newTaskTempFile(tContext, Some("a=1"), FileNameSpec("", ".parquet"))
 
-    // The temp file must be under the committer's own work dir (path/_temporary),
-    // not written directly to the final output location.
-    val expectedWorkDir = path.toUri.toString.stripSuffix("/") + "/_temporary"
+    // The temp file must be under the work dir of the committer bound to the staging directory.
+    val expectedWorkDir = new Path(FileCommitProtocol.getStagingDir(path.toString, jobId),
+      StubPathOutputCommitterBinding.TEMP_DIR_NAME).toString
     assert(tempPath.startsWith(expectedWorkDir),
       s"Expected temp path under committer work dir ($expectedWorkDir), got: $tempPath")
 
-    assert(committer.capturedPartitionPaths.isEmpty,
-      s"partitionPaths must stay empty for cloud committers that handle " +
-        s"dynamic partition overwrite natively, " +
-        s"got: ${committer.capturedPartitionPaths}")
+    assert(committer.capturedPartitionPaths === Set("a=1"),
+      s"Expected partitionPaths = {a=1}, got: ${committer.capturedPartitionPaths}")
+  }
+
+  /**
+   * Dynamic partition overwrite through the manifest committer, which Hadoop 3.3.5+ uses for
+   * `abfs` and `gs`, must replace the written partitions instead of appending to them.
+   */
+  test("SPARK-60366: Dynamic partition overwrite through the manifest committer") {
+    withTempDir { dir =>
+      LocalSparkSession.withSparkSession(SparkSession.builder()
+          .master("local[2]")
+          .appName("manifest-committer-dynamic-partition-overwrite")
+          .config(SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key, pathCommitProtocolClassname)
+          .config(SQLConf.PARTITION_OVERWRITE_MODE.key, "dynamic")
+          .config(s"spark.hadoop.$OUTPUTCOMMITTER_FACTORY_SCHEME.file",
+            "org.apache.hadoop.mapreduce.lib.output.committer.manifest.ManifestCommitterFactory")
+          .getOrCreate()) { spark =>
+        import spark.implicits._
+        Seq("json", "parquet").foreach { format =>
+          val path = new File(dir, format).getCanonicalPath
+          Seq((1, 1), (2, 2)).toDF("c", "p").write.partitionBy("p").format(format).save(path)
+          // Unlike FileOutputCommitter, the manifest committer writes a JSON summary.
+          assert(new File(path, "_SUCCESS").length() > 0)
+
+          Seq((3, 1)).toDF("c", "p").write.partitionBy("p").mode("overwrite").format(format)
+            .save(path)
+          val rows = spark.read.schema("c INT, p INT").format(format).load(path).collect()
+          assert(rows.map(r => (r.getInt(0), r.getInt(1))).sorted.toSeq === Seq((2, 2), (3, 1)))
+        }
+      }
+    }
   }
 
   /**
