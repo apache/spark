@@ -42,6 +42,10 @@ private[python] object InProcessPythonRuntime extends Logging {
   private var mainConfigured = false
   @volatile private var sharedConfigured = false
   @volatile private var bootstrappedSitePackages: Option[Seq[String]] = None
+  // Every sitePackages given to JEP. JEP adds them to sys.path before it imports its package,
+  // so a failed configuration leaves them there, and the bootstrap of a retry removes them.
+  // Guarded by the object's monitor.
+  private var configuredSitePackages = Seq.empty[String]
 
   private[python] class LifecycleException(message: String) extends IllegalStateException(message)
 
@@ -59,6 +63,7 @@ private[python] object InProcessPythonRuntime extends Logging {
       if (!sharedConfigured) {
         // JEP imports its Python package during construction, before our bootstrap runs.
         SharedInterpreter.setConfig(interpreterConfig(sitePackages))
+        configuredSitePackages = (configuredSitePackages ++ sitePackages).distinct
       }
     }
 
@@ -103,7 +108,8 @@ private[python] object InProcessPythonRuntime extends Logging {
       active.requireRunning()
     } else {
       InterpreterConfiguration.configure(sitePackages)
-      val candidate = new InterpreterSession(sitePackages)
+      val candidate = new InterpreterSession(
+        sitePackages, configuredSitePackages.filterNot(sitePackages.contains))
       try {
         candidate.initialize()
         active = candidate
@@ -140,7 +146,13 @@ private[python] object InProcessPythonRuntime extends Logging {
    * Tasks retain this generation, so stale tasks cannot enter a later SparkContext's interpreter.
    * Lifecycle operations only hold the monitor while enqueueing work, never while running Python.
    */
-  private[python] class InterpreterSession(val sitePackages: Seq[String] = Seq.empty) {
+  /**
+   * @param stalePaths include paths of earlier, failed JEP configurations, which are removed
+   *                   from sys.path unless `sitePackages` configures them again
+   */
+  private[python] class InterpreterSession(
+      val sitePackages: Seq[String] = Seq.empty,
+      stalePaths: Seq[String] = Seq.empty) {
     // CPython native calls need more stack than the usual JVM thread default. This is a
     // platform-dependent size request, not protection against arbitrary native crashes.
     private val executor = Executors.newSingleThreadExecutor(new ThreadFactory {
@@ -231,6 +243,7 @@ private[python] object InProcessPythonRuntime extends Logging {
       bootstrappedSitePackages = Some(sitePackages)
       try {
         candidate.set("_site_packages", sitePackages.asJava)
+        candidate.set("_stale_paths", stalePaths.asJava)
         val sparkPaths = PythonUtils.mergePythonPaths(
           PythonUtils.sparkPythonPath, sys.env.getOrElse("PYTHONPATH", ""))
           .split(File.pathSeparator).filter(_.nonEmpty)
@@ -238,6 +251,8 @@ private[python] object InProcessPythonRuntime extends Logging {
         candidate.exec(bootstrapScript(
           """import os, site, sys
             |_configured = [os.path.abspath(p) for p in _site_packages]
+            |_stale = {os.path.abspath(p) for p in _stale_paths} - set(_configured)
+            |sys.path[:] = [p for p in sys.path if os.path.abspath(p) not in _stale]
             |_before = set(sys.path)
             |for _path in _configured:
             |    site.addsitedir(_path)
@@ -250,7 +265,8 @@ private[python] object InProcessPythonRuntime extends Logging {
             |if locale.getencoding().lower() in ('ascii', 'ansi_x3.4-1968', 'us-ascii'):
             |    warnings.warn('In-process Python requires a UTF-8 locale; '
             |                  'set LC_ALL=C.UTF-8 before starting the executor')
-            |del _site_packages, _spark_paths, _configured, _before, _added, _preferred
+            |del _site_packages, _stale_paths, _stale, _spark_paths, _configured, _before
+            |del _added, _preferred
             |""".stripMargin))
         candidate.exec(bootstrapScript(
           "from pyspark.sql.pandas.utils import require_minimum_pyarrow_version\n" +

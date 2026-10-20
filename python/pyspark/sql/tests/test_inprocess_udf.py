@@ -442,6 +442,8 @@ class MissingJepProbe {
                     "'pyspark.zip' in __import__('pyspark').__file__ and "
                     "__import__('sys').stdout.line_buffering and "
                     "__import__('sys').stdout.write_through and "
+                    "__import__('importlib.util', fromlist=['find_spec'])"
+                    ".find_spec('only_in_failed_config') is None and "
                     "(print('SHUTDOWN_FLUSH', end='') or (lambda x: x))) or "
                     "(_ for _ in ()).throw(AssertionError('unexpected bootstrap state'))",
                 )
@@ -490,6 +492,9 @@ class BootstrapProbe {
             clean_python = Path(directory) / "python"
             venv.EnvBuilder(with_pip=False).create(clean_python)
             env["PATH"] = str(clean_python / "bin") + os.pathsep + os.defpath
+            # A module that only the failed configuration's directory has, which the retried
+            # configuration must not import.
+            (Path(directory) / "only_in_failed_config.py").write_text("")
             source_file = Path(directory) / "BootstrapProbe.java"
             source_file.write_text(source)
             command_file = Path(directory) / "command.pickle"
