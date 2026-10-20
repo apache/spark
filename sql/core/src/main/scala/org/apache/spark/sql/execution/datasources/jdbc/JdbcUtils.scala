@@ -301,7 +301,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
   /**
    * Takes a [[ResultSet]] and returns its Catalyst schema.
    *
-   * @param options The JDBC options of the read, which control how column types are mapped.
+   * @param options The JDBC options, which control how column types are mapped.
    * @param alwaysNullable If true, all the columns are nullable.
    * @return A [[StructType]] giving the Catalyst schema.
    * @throws SQLException if the schema contains an unsupported type.
