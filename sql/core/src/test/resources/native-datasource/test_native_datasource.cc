@@ -35,9 +35,14 @@
 //                   to, although its buffers hold them all: "id" shortens the column id,
 //                   "entries" the entries of the map and their fields, and "values" the values
 //                   of the entries. "children" exports the batches without their columns, with
-//                   n_children = 0. With the option "wait_for_interrupt", the stream of a
-//                   partition creates the file <wait_for_interrupt>.waiting, waits until its task
-//                   is killed, and then creates the file <wait_for_interrupt> and fails.
+//                   n_children = 0. With the option "null_rows", the struct of a batch has a
+//                   validity buffer that marks its first row as null, and a null_count of 1 for
+//                   "count" or -1 for "unknown"; "unknown_valid" has one without nulls and a
+//                   null_count of -1, and "no_buffer" a null_count of -1 without a validity
+//                   buffer. "column" gives the first column, which has no validity buffer, a
+//                   null_count of -1 instead. With the option "wait_for_interrupt", the stream
+//                   of a partition creates the file <wait_for_interrupt>.waiting, waits until its
+//                   task is killed, and then creates the file <wait_for_interrupt> and fails.
 //   native_sink     Writes the rows as CSV files under the directory in the option "path". With
 //                   the option "commit_messages", a data writer passes its commit message that
 //                   many times. Creating and closing a data writer create a file named after
@@ -445,6 +450,22 @@ void exportBatch(const std::vector<std::string>& columns, int64_t lo, int64_t hi
   if (short_array == "children") out->n_children = 0;
 }
 
+// Sets the nulls of the struct of a batch, as the option "null_rows".
+void setBatchNulls(const std::string& null_rows, ArrowArray* batch) {
+  if (null_rows.empty()) return;
+  if (null_rows == "column") {
+    batch->children[0]->null_count = -1;  // Its column has no nulls, so no validity buffer.
+    return;
+  }
+  batch->null_count = null_rows == "count" ? 1 : -1;
+  if (null_rows == "no_buffer") return;
+  // Every row is valid, but the first one for "count" and "unknown".
+  auto* data = static_cast<ArrayData*>(batch->private_data);
+  data->buffers[0].assign((batch->length + 7) / 8, 0xFF);
+  if (null_rows != "unknown_valid" && !data->buffers[0].empty()) data->buffers[0][0] = 0xFE;
+  data->buffer_pointers[0] = data->buffers[0].data();
+}
+
 // ---------------------------------------------------------------------------------------------
 // A minimal JSON parser, for the predicates and the offsets
 // ---------------------------------------------------------------------------------------------
@@ -745,6 +766,7 @@ struct Stream {
   bool fail;
   bool slice;
   std::string short_array;
+  std::string null_rows;
   const SparkDsTaskContext* task;
   std::string wait_for_interrupt;
   std::string last_error;
@@ -779,6 +801,7 @@ int streamGetNext(ArrowArrayStream* stream, ArrowArray* out) {
   }
   int64_t hi = std::min(state->end, state->next + state->batch_size);
   exportBatch(state->columns, state->next, hi, state->slice, state->short_array, out);
+  setBatchNulls(state->null_rows, out);
   state->next = hi;
   return 0;
 }
@@ -944,8 +967,8 @@ int createReader(void* handle, struct ArrowSchema* schema, void** out) {
     reader->state["hi"] = get(source->options, "end", "10");
     reader->state["partitions"] = get(source->options, "partitions", "2");
     reader->state["batch_size"] = get(source->options, "batch_size", "1000");
-    for (const char* option : {"fail", "slice", "short", "claim_predicates", "predicate_use",
-                               "wait_for_interrupt", "task_path"}) {
+    for (const char* option : {"fail", "slice", "short", "null_rows", "claim_predicates",
+                               "predicate_use", "wait_for_interrupt", "task_path"}) {
       reader->state[option] = get(source->options, option, "");
     }
     *out = reader;
@@ -1153,7 +1176,8 @@ int readPartition(const SparkDsTaskContext* task, const uint8_t* reader_state,
                                       std::stoll(bounds[1]), getLong(state, "batch_size", 1000),
                                       get(state, "fail", "") == "read",
                                       get(state, "slice", "") == "true", get(state, "short", ""),
-                                      task, get(state, "wait_for_interrupt", ""), ""};
+                                      get(state, "null_rows", ""), task,
+                                      get(state, "wait_for_interrupt", ""), ""};
   });
 }
 

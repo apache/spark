@@ -717,6 +717,11 @@ class NativePartitionReader(
    *    a map as many as its last offset says. Arrow Java would extend a shorter array with nulls.
    *    Only the lengths that the library exported show this: the import sets the length of each
    *    array to what its parent refers to.
+   *  - An array without a validity buffer has a null_count of 0, as the C data interface requires:
+   *    Arrow Java fails to import it otherwise.
+   *  - The batch itself has no null rows. Arrow Java ignores the validity of the struct of the
+   *    batch, so it would read a null row as a row of the values of its columns. As in Arrow C++,
+   *    which also rejects them, the nulls are counted when the library did not count them.
    * The buffers are not checked, since the C data interface does not carry their sizes: Arrow
    * Java takes them from the lengths, so the library must export buffers that hold every value.
    */
@@ -749,6 +754,19 @@ class NativePartitionReader(
       }
       if (offsets == 0) 0 else Platform.getInt(null, offsets + 4L * array.length)
     }
+    // The validity buffer of an array, its first buffer, or 0 if it has none.
+    def validity(array: ArrowArray.Snapshot): Long = {
+      if (array.n_buffers >= 1 && array.buffers != 0) Platform.getLong(null, array.buffers) else 0L
+    }
+    // The C data interface only allows an array of values without a validity buffer if its
+    // null_count is 0. Arrow Java takes another null_count as a mix of nulls and values, and then
+    // fails to load the missing buffer.
+    def checkValidity(array: ArrowArray.Snapshot, owner: String): Unit = {
+      if (array.null_count != 0 && array.length > 0 && validity(array) == 0) {
+        throw error(name, "read", s"$owner has a null_count of ${array.null_count} but no " +
+          "validity buffer, which the C data interface only allows with a null_count of 0.")
+      }
+    }
     // The number of values that an array refers to in each of its children.
     def referenced(array: ArrowArray.Snapshot, arrowType: ArrowType): Long = arrowType match {
       case _: ArrowType.Struct => array.length
@@ -761,6 +779,7 @@ class NativePartitionReader(
         throw error(name, "read", s"The column $column has an offset of ${array.offset}, but " +
           "Spark only reads arrays with an offset of 0. Copy sliced arrays before exporting them.")
       }
+      checkValidity(array, s"The column $column")
       val length = referenced(array, field.getType)
       val fields = field.getChildren.size
       children(array, fields, s"An array of the column $column", s"its type has $fields")
@@ -775,6 +794,30 @@ class NativePartitionReader(
     if (batch.offset != 0) {
       throw error(name, "read", s"The batch has an offset of ${batch.offset}, but Spark only " +
         "reads arrays with an offset of 0. Copy sliced arrays before exporting them.")
+    }
+    checkValidity(batch, "The batch")
+    val nullRows = batch.null_count match {
+      // The library did not count the nulls, so they are counted from the validity buffer, which
+      // holds a bit for each row since the offset is 0. A batch without one has no rows here.
+      case -1 =>
+        val bitmap = validity(batch)
+        var nulls = 0L
+        var i = 0L
+        while (bitmap != 0 && i < batch.length) {
+          val bits = math.min(8L, batch.length - i).toInt
+          val valid = Platform.getByte(null, bitmap + i / 8) & ((1 << bits) - 1)
+          nulls += bits - Integer.bitCount(valid)
+          i += 8
+        }
+        nulls
+      case n if n < -1 =>
+        throw error(name, "read", s"The batch has an invalid null_count of $n.")
+      case n => n
+    }
+    if (nullRows != 0) {
+      throw error(name, "read", s"The struct of the batch marks $nullRows of its rows as null, " +
+        "but Spark only reads batches without null rows: mark the values of the columns as null " +
+        "instead.")
     }
     val columns = root.getSchema.getFields.size
     children(batch, columns, "The batch", s"the schema has $columns columns")
@@ -791,13 +834,17 @@ class NativePartitionReader(
 
   override def close(): Unit = {
     Utils.tryWithSafeFinally {
-      if (root != null) {
-        root.close()
+      Utils.tryWithSafeFinally {
+        if (root != null) {
+          root.close()
+        }
+        dictionaries.close()
+      } {
+        // Releases the stream of the library, unless it was not exported, even if closing the
+        // vectors failed: the library may use the task until the stream is released.
+        stream.release()
+        stream.close()
       }
-      dictionaries.close()
-      // Releases the stream of the library, unless it was not exported.
-      stream.release()
-      stream.close()
     } {
       if (task != null) {
         task.close()

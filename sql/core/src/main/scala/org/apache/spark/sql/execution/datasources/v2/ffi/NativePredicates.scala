@@ -46,6 +46,13 @@ object NativePredicates {
     "STARTS_WITH", "ENDS_WITH", "CONTAINS", "AND", "OR", "NOT")
 
   /**
+   * The comparisons, which are only passed on values that are not arrays, maps or structs: Spark
+   * compares those with other rules than the ones of `push_predicates`, for example with the
+   * nulls in them equal to each other.
+   */
+  private val COMPARISONS: Set[String] = Set("=", "<>", "<=>", "<", "<=", ">", ">=", "IN")
+
+  /**
    * Returns the JSON of the predicate on the columns of the given schema, or None if it cannot
    * be expressed in JSON with the functions in [[FUNCTION_NAMES]].
    */
@@ -61,7 +68,9 @@ object NativePredicates {
       case literal: Literal[_] =>
         encodeLiteral(literal.value(), literal.dataType())
 
-      case function: GeneralScalarExpression if FUNCTION_NAMES.contains(function.name()) =>
+      case function: GeneralScalarExpression if FUNCTION_NAMES.contains(function.name()) &&
+          !(COMPARISONS.contains(function.name()) &&
+            function.children().exists(isNested(_, schema))) =>
         val children = function.children().map(encode(_, schema))
         if (children.forall(_.isDefined)) {
           val node = mapper.createObjectNode()
@@ -96,6 +105,16 @@ object NativePredicates {
       reference.fieldNames().foreach(name.add)
       Some(node)
     }
+  }
+
+  /** Whether the expression is a column, or a nested field, of an array, map or struct type. */
+  private def isNested(expression: Expression, schema: StructType): Boolean = expression match {
+    case reference: NamedReference =>
+      columnType(reference.fieldNames().toSeq, schema).exists {
+        case _: ArrayType | _: MapType | _: StructType => true
+        case _ => false
+      }
+    case _ => false
   }
 
   /** The type of the column or the nested field with the given name parts. */

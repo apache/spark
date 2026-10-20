@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution.datasources.v2.ffi
 
 import java.io.{File, FileInputStream, IOException}
 import java.nio.charset.StandardCharsets
-import java.nio.file.{Files, StandardCopyOption}
+import java.nio.file.{Files, Paths, StandardCopyOption}
 import java.nio.file.attribute.BasicFileAttributes
 import java.security.MessageDigest
 import java.util.{HexFormat, Locale}
@@ -30,6 +30,7 @@ import scala.util.{Failure, Try}
 
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import com.google.common.cache.{Cache, CacheBuilder}
+import org.apache.arrow.c.jni.JniLoader
 
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.internal.Logging
@@ -290,10 +291,30 @@ object InstalledNativeLibrary {
 
 /** The platform names used in [[NativeDataSourceManifest.libraries]]. */
 object NativePlatform {
-  /** The platform of this JVM, such as `linux-x86_64`, `linux-aarch64` or `osx-aarch64`. */
-  lazy val current: String = name(System.getProperty("os.name"), System.getProperty("os.arch"))
+  /**
+   * The platform of this JVM, such as `linux-x86_64`, `linux-aarch64` or `osx-aarch64`. `linux` is
+   * Linux with glibc: with musl, as on Alpine Linux, the platform ends with `-musl`, such as
+   * `linux-x86_64-musl`, since a library built for one does not load with the other.
+   */
+  lazy val current: String = {
+    val osName = System.getProperty("os.name")
+    val linux = osName.toLowerCase(Locale.ROOT).startsWith("linux")
+    name(osName, System.getProperty("os.arch"), musl = linux && usesMusl(processMaps()))
+  }
 
-  private[ffi] def name(osName: String, osArch: String): String = {
+  /** The libraries mapped in this process, as listed in `/proc/self/maps`, if it can be read. */
+  private def processMaps(): Seq[String] = {
+    try {
+      Files.readAllLines(Paths.get("/proc/self/maps")).asScala.toSeq
+    } catch {
+      case _: IOException => Nil
+    }
+  }
+
+  /** Whether the C library of a process is musl, which it maps as `ld-musl-<arch>.so.1`. */
+  private[ffi] def usesMusl(maps: Seq[String]): Boolean = maps.exists(_.contains("/ld-musl-"))
+
+  private[ffi] def name(osName: String, osArch: String, musl: Boolean = false): String = {
     val os = osName.toLowerCase(Locale.ROOT) match {
       case n if n.startsWith("linux") => "linux"
       case n if n.startsWith("mac") || n.startsWith("darwin") => "osx"
@@ -305,7 +326,7 @@ object NativePlatform {
       case "aarch64" | "arm64" => "aarch64"
       case a => a
     }
-    s"$os-$arch"
+    if (os == "linux" && musl) s"$os-$arch-musl" else s"$os-$arch"
   }
 }
 
@@ -330,7 +351,25 @@ object NativeLibraries extends Logging {
       throw QueryExecutionErrors.nativeDataSourceUnsupportedJavaVersionError(
         NativeLibrary.MINIMUM_JAVA_VERSION, Runtime.version().feature())
     }
+    checkCDataInterface()
     getSupported(location)
+  }
+
+  /**
+   * Fails unless the JNI library of the C data interface of Arrow Java, with which Spark exchanges
+   * the data, loads on this platform. Arrow Java ships it for Linux with glibc and macOS on x86_64
+   * and aarch64, and for Windows on x86_64; elsewhere, its own error does not say what it is for.
+   */
+  private[ffi] def checkCDataInterface(load: => Unit = JniLoader.get().ensureLoaded()): Unit = {
+    try {
+      load
+    } catch {
+      // Arrow Java does not have the library for the architecture, or the library does not link,
+      // as with musl.
+      case e @ (_: IllegalStateException | _: LinkageError) =>
+        throw QueryExecutionErrors.nativeDataSourceUnsupportedPlatformError(
+          NativePlatform.current, e)
+    }
   }
 
   private def getSupported(location: NativeLibraryLocation): NativeLibrary = location match {

@@ -1,15 +1,15 @@
 {
-  "description": "Predicates as Spark passes them to push_predicates of spark_datasource.h, with the ids of the rows of the table for which they are true. A case lists the predicates that Spark pushes for the filter in its SQL, which are combined with AND. A row has a value for each column of the schema; NaN and infinite doubles are strings, and floats are written as the doubles of the same values.",
-  "schema": "id INT,i INT,d DOUBLE,s STRING,f FLOAT",
+  "description": "Predicates as Spark passes them to push_predicates of spark_datasource.h, with the ids of the rows of the table for which they are true. A case lists the predicates that Spark pushes for the filter in its SQL, which are combined with AND. A row has a value for each column of the schema; NaN and infinite doubles are strings, floats are written as the doubles of the same values, and binary values are base64 strings.",
+  "schema": "id INT,i INT,d DOUBLE,s STRING,f FLOAT,b BINARY",
   "rows": [
-    [0, 1, 0.0, "a", 0.10000000149011612],
-    [1, 2, -0.0, "", 1.5],
-    [2, null, "NaN", "\u00E9", null],
-    [3, 3, "Infinity", "\uD83D\uDE00", 0.10000000149011612],
-    [4, 1, "-Infinity", null, 0.5],
-    [5, null, 1.5, "ab", 2.0],
-    [6, 2, null, "b\u00E9", 0.25],
-    [7, 4, 2.5, "\uFFFD", 3.0]
+    [0, 1, 0.0, "a", 0.10000000149011612, "AA=="],
+    [1, 2, -0.0, "", 1.5, "fw=="],
+    [2, null, "NaN", "\u00E9", null, "gA=="],
+    [3, 3, "Infinity", "\uD83D\uDE00", 0.10000000149011612, "/w=="],
+    [4, 1, "-Infinity", null, 0.5, "fwA="],
+    [5, null, 1.5, "ab", 2.0, ""],
+    [6, 2, null, "b\u00E9", 0.25, null],
+    [7, 4, 2.5, "\uFFFD", 3.0, "AQI="]
   ],
   "cases": [
     {"sql": "d = 0.0D", "predicates": [{"type":"function","name":"=","children":[{"type":"column","name":["d"]},{"type":"literal","dataType":"double","value":0.0}]}], "rows": [0, 1]},
@@ -42,6 +42,8 @@
     {"sql": "s IN ('', '\u00E9')", "predicates": [{"type":"function","name":"IN","children":[{"type":"column","name":["s"]},{"type":"literal","dataType":"string","value":""},{"type":"literal","dataType":"string","value":"\u00E9"}]}], "rows": [1, 2]},
     {"sql": "f = CAST(0.1 AS FLOAT)", "predicates": [{"type":"function","name":"=","children":[{"type":"column","name":["f"]},{"type":"literal","dataType":"float","value":0.10000000149011612}]}], "rows": [0, 3]},
     {"sql": "f > CAST(0.1 AS FLOAT)", "predicates": [{"type":"function","name":">","children":[{"type":"column","name":["f"]},{"type":"literal","dataType":"float","value":0.10000000149011612}]}], "rows": [1, 4, 5, 6, 7]},
+    {"sql": "b > X'7F'", "predicates": [{"type":"function","name":">","children":[{"type":"column","name":["b"]},{"type":"literal","dataType":"binary","value":"fw=="}]}], "rows": [2, 3, 4]},
+    {"sql": "b < X'80'", "predicates": [{"type":"function","name":"<","children":[{"type":"column","name":["b"]},{"type":"literal","dataType":"binary","value":"gA=="}]}], "rows": [0, 1, 4, 5, 7]},
     {"sql": "(id > 3) = (id < 3)", "predicates": [{"type":"function","name":"=","children":[{"type":"function","name":">","children":[{"type":"column","name":["id"]},{"type":"literal","dataType":"int","value":3}]},{"type":"function","name":"<","children":[{"type":"column","name":["id"]},{"type":"literal","dataType":"int","value":3}]}]}], "rows": [3]}
   ]
 }

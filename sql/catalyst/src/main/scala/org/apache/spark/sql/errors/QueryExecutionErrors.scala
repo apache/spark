@@ -853,6 +853,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("required" -> required.toString, "current" -> current.toString))
   }
 
+  def nativeDataSourceUnsupportedPlatformError(
+      platform: String, cause: Throwable): SparkUnsupportedOperationException = {
+    val e = new SparkUnsupportedOperationException(
+      errorClass = "NATIVE_DATA_SOURCE_UNSUPPORTED_PLATFORM",
+      messageParameters = Map("platform" -> platform, "reason" -> cause.toString))
+    e.initCause(cause)
+    e
+  }
+
   def removedClassInSpark2Error(className: String, e: Throwable): SparkClassNotFoundException = {
     new SparkClassNotFoundException(
       errorClass = "_LEGACY_ERROR_TEMP_2052",

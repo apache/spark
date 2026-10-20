@@ -20,11 +20,13 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.vector.VectorSchemaRoot
 
+import org.apache.spark.{SparkContext, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.metric.CustomTaskMetric
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.execution.arrow.ArrowWriter
+import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
@@ -63,6 +65,7 @@ class ColumnarWrite(
 
   override def toStreaming: StreamingWrite = {
     new ColumnarStreamingWrite(
+      shortName,
       () => createDataSource().streamWriter(info.schema(), overwrite, info.queryId()),
       info.schema())
   }
@@ -101,14 +104,26 @@ class ColumnarBatchWrite(createWriter: () => ColumnarWriter, schema: StructType)
  * with the writer factory, right before the tasks of the micro-batch start. A stateful
  * micro-batch runs without adaptive query execution, so all its stages, as those of any write
  * without it, run after the writer is created.
+ *
+ * Continuous processing is not supported: its tasks do not commit or abort the data writers of
+ * the last epoch when the query stops, so it fails before a writer is created.
  */
-class ColumnarStreamingWrite(createWriter: () => ColumnarStreamWriter, schema: StructType)
+class ColumnarStreamingWrite(
+    description: String,
+    createWriter: () => ColumnarStreamWriter,
+    schema: StructType)
   extends StreamingWrite {
 
   private var writer: ColumnarStreamWriter = _
 
   override def createStreamingWriterFactory(
       info: PhysicalWriteInfo): StreamingDataWriterFactory = {
+    // Continuous processing sets this property before it runs the write, and only it does.
+    if (SparkContext.getActive.exists(
+        _.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY) != null)) {
+      throw new SparkUnsupportedOperationException(
+        "DATA_SOURCE_CONTINUOUS_WRITE_NOT_SUPPORTED", Map("description" -> description))
+    }
     if (writer == null) {
       writer = createWriter()
     }

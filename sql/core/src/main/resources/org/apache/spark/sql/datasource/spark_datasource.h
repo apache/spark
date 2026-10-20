@@ -96,7 +96,8 @@
  *   the same destination. A micro-batch streaming query creates a new stream writer for each
  *   micro-batch, and Spark closes the previous stream writer of the query when the query creates a
  *   new one. Spark is not told when a streaming query stops, so it closes the last stream writer of
- *   the query once the writer is no longer referenced, or when the query is restarted.
+ *   the query once the writer is no longer referenced, or when the query is restarted. Streaming
+ *   writes are micro-batch only: a query with continuous processing fails before create_writer.
  *
  * Conventions
  * -----------
@@ -132,9 +133,12 @@
  *   must have an offset of 0, at every level: Arrow Java ignores the offsets of the arrays it
  *   imports, so Spark rejects an array with another offset, such as a zero-copy slice. Copy a
  *   sliced array before exporting it. Spark also rejects an array with fewer values than its
- *   parent refers to, such as a column shorter than its batch. The buffers of an array must hold
- *   all of its values, as the C data interface requires: it does not carry the sizes of the
- *   buffers, so Spark cannot check them, and reads past the end of a buffer that is too short.
+ *   parent refers to, such as a column shorter than its batch, and a batch with null rows, since
+ *   Arrow Java ignores the validity of the struct of a batch: mark the values of its columns as
+ *   null instead. As the C data interface requires, an array without a validity buffer must have
+ *   a null_count of 0, and the buffers of an array must hold all of its values: the interface
+ *   does not carry the sizes of the buffers, so Spark cannot check them, and reads past the end
+ *   of a buffer that is too short.
  * - Schemas. These are the types of version 1, with their Arrow types and the formats of the C
  *   data interface: boolean is bool (b), tinyint, smallint, int and bigint are int8 (c), int16
  *   (s), int32 (i) and int64 (l), float and double are float32 (f) and float64 (g), decimal(p, s)
@@ -466,10 +470,13 @@ typedef struct SparkDsLibrary {
    *   literals or predicates.
    * Spark does not pass predicates that it cannot express this way, such as predicates that use
    * arithmetic or other functions, nor predicates on columns that contain strings with a
-   * non-binary collation, such as UTF8_LCASE: strings are compared by their UTF-8 bytes. A later
-   * version of Spark may pass predicates with other names without changing SPARK_DS_ABI_VERSION,
-   * so a reader must ignore a predicate that contains a name that it does not know, or a data
-   * type that it does not support.
+   * non-binary collation, such as UTF8_LCASE: strings are compared by their UTF-8 bytes. Nor does
+   * it pass comparisons and IN on arrays, maps or structs, whose values Spark compares with other
+   * rules, for example with the nulls in them equal to each other, but only on values of the
+   * other types, such as a field of a struct that is an int. IS_NULL and IS_NOT_NULL apply to
+   * columns of any type. A later version of Spark may pass predicates with other names without
+   * changing SPARK_DS_ABI_VERSION, so a reader must ignore a predicate that contains a name that
+   * it does not know, or a data type that it does not support.
    *
    * Spark evaluates all the predicates again after reading, so a reader may use them only to skip
    * data, for example the files whose statistics show that no row matches. But it must never drop
@@ -484,6 +491,8 @@ typedef struct SparkDsLibrary {
    *   example, NOT (i IN (1, NULL)) matches no row.
    * - Strings are compared by their UTF-8 bytes, which order the characters outside the Basic
    *   Multilingual Plane after all the others, unlike comparisons of UTF-16 strings.
+   * - Binary values are compared as unsigned bytes, in lexicographic order: X'80' is greater than
+   *   X'7F', and a value is greater than its prefixes.
    * - To use only a part of a predicate, a reader may take a part that it does not support as
    *   true, but only when every function between that part and the root of the predicate is AND
    *   or OR. Under any other function, such as NOT, or = and <=> between two predicates, that
