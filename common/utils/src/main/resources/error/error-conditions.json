@@ -5826,6 +5826,12 @@
     ],
     "sqlState" : "2203G"
   },
+  "JSON_OBJECT_NULL_KEY" : {
+    "message" : [
+      "JSON_OBJECT key must be a non-null string, but got a null key."
+    ],
+    "sqlState" : "22004"
+  },
   "JSON_QUERY_ON_ERROR" : {
     "message" : [
       "<functionName> could not extract a value at path <path>."
@@ -9508,6 +9514,12 @@
         ]
       }
     },
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_FILE_TYPE" : {
+    "message" : [
+      "The data type FILE is not supported."
+    ],
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_GENERATOR" : {
