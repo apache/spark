@@ -25,7 +25,7 @@ import org.apache.hadoop.hive.ql.exec.{UDAF, UDF}
 import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, GenericUDF, GenericUDTF}
 
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, InvokeProcedures, ReplaceCharWithVarchar, ResolveDataSource, ResolveEventTimeWatermark, ResolveExecuteImmediate, ResolveMetricView, ResolveSessionCatalog, ResolveTranspose}
-import org.apache.spark.sql.catalyst.analysis.resolver.ResolverExtension
+import org.apache.spark.sql.catalyst.analysis.resolver.{DropTableResolver, ResolverExtension}
 import org.apache.spark.sql.catalyst.catalog.{ExternalCatalogWithListener, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExtractSemiStructuredFields}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -89,6 +89,7 @@ class HiveSessionStateBuilder(
       customHintResolutionRules
 
     override val singlePassResolverExtensions: Seq[ResolverExtension] = Seq(
+      new DropTableResolver(session),
       new LogicalRelationResolver,
       new HiveTableRelationNoopResolver
     )

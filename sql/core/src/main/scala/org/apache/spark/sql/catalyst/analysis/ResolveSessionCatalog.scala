@@ -51,6 +51,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import org.apache.spark.sql.connector.catalog.CatalogV2Util._
   import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
+  import ResolveSessionCatalog.ResolvedV1Identifier
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
     case a @ AddColumns(ResolvedV1TableIdentifier(ident), cols)
@@ -352,12 +353,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       CreateTableLikeCommand(
         targetIdent, sourceIdent, fileFormat, provider, properties, ifNotExists)
 
-    case DropTable(ResolvedV1Identifier(ident), ifExists, purge) if conf.useV1Command =>
-      DropTableCommand(ident, ifExists, isView = false, purge = purge)
-
-    // v1 DROP TABLE supports temp view.
-    case DropTable(ResolvedIdentifier(FakeSystemCatalog, ident), _, _) =>
-      DropTempViewCommand(ident)
+    case dropTable @ DropTable(_: ResolvedIdentifier, _, _) =>
+      DropTableHelper.rewrite(dropTable)
 
     // Session-qualified temp view: same execution path as FakeSystemCatalog DROP VIEW.
     case DropView(ResolvedTempView(ident, _), ifExists) =>
@@ -893,14 +890,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     }
   }
 
-  object ResolvedV1Identifier {
-    def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
-      case ResolvedIdentifier(catalog, ident) if supportsV1Command(catalog) =>
-        Some(ident.asTableIdentifier.copy(catalog = Some(catalog.name)))
-      case _ => None
-    }
-  }
-
   private object CreateViewInSessionCatalog
     extends ResolvedIdentifierInSessionCatalog("CREATE", "VIEW")
   private object DropViewInSessionCatalog
@@ -1013,11 +1002,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     }
   }
 
-  private def supportsV1Command(catalog: CatalogPlugin): Boolean = {
-    isSessionCatalog(catalog) && (
-      SQLConf.get.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION) == "builtin" ||
-        catalog.isInstanceOf[CatalogExtension])
-  }
+  private def supportsV1Command(catalog: CatalogPlugin): Boolean =
+    ResolveSessionCatalog.supportsV1Command(catalog)
 
   // True when the ALTER COLUMN specs only change comments (set or drop, no type / nullability /
   // position / default changes) and, taken together, touch multiple columns or a nested field.
@@ -1033,4 +1019,24 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     commentOnly && (specs.size > 1 || specs.exists(_.column.name.length > 1))
   }
 
+}
+
+object ResolveSessionCatalog {
+  /** Whether commands on `catalog` can be converted to V1 session-catalog commands. */
+  def supportsV1Command(catalog: CatalogPlugin): Boolean = {
+    CatalogV2Util.isSessionCatalog(catalog) && (
+      SQLConf.get.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION) == "builtin" ||
+        catalog.isInstanceOf[CatalogExtension])
+  }
+
+  /** Extracts a V1 identifier, rejecting namespaces that cannot be represented in V1. */
+  object ResolvedV1Identifier {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+    def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
+      case ResolvedIdentifier(catalog, ident) if supportsV1Command(catalog) =>
+        Some(ident.asTableIdentifier.copy(catalog = Some(catalog.name)))
+      case _ => None
+    }
+  }
 }
