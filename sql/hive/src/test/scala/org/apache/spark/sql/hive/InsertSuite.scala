@@ -26,6 +26,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.{QueryTest, _}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.Hex
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.hive.execution.HiveTempPath
@@ -52,6 +53,27 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     hiveContext.reset()
     // Creates a temporary view with testData, which will be used in all tests.
     testData.createOrReplaceTempView("testData")
+  }
+
+  test("SPARK-60366: Dynamic partition overwrite of a converted Hive ORC table with a " +
+      "committer that is not a FileOutputCommitter") {
+    // Hadoop 3.3.5+ binds `abfs` and `gs` to the manifest committer. Converted Hive ORC tables
+    // always use dynamic partition overwrite.
+    withSQLConf(
+        "mapreduce.outputcommitter.factory.scheme.file" ->
+          "org.apache.hadoop.mapreduce.lib.output.committer.manifest.ManifestCommitterFactory",
+        "hive.exec.dynamic.partition.mode" -> "nonstrict") {
+      withTable("t") {
+        sql("CREATE TABLE t (c1 INT) PARTITIONED BY (p1 INT) STORED AS ORC")
+        sql("INSERT INTO t PARTITION (p1) VALUES (1, 1), (2, 2)")
+        val location = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t")).location
+        // Unlike FileOutputCommitter, the manifest committer writes a JSON summary.
+        assert(new File(location.getPath, "_SUCCESS").length() > 0)
+
+        sql("INSERT OVERWRITE TABLE t PARTITION (p1) SELECT 3, 1")
+        checkAnswer(spark.table("t"), Seq(Row(3, 1), Row(2, 2)))
+      }
+    }
   }
 
   test("insertInto() HiveTable") {
