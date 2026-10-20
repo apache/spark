@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.planmerging
 
 import java.util.OptionalLong
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Alias, And, Ascending, Attribute, AttributeReference, CreateNamedStruct, Expression, ExpressionSet, ExprId, GetStructField, GreaterThan, If, LessThan, Literal, Or, ScalarSubquery, SortOrder, TransformExpression}
@@ -31,7 +33,7 @@ import org.apache.spark.sql.connector.catalog.{FunctionCatalog, Identifier, Supp
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.connector.expressions.{Expressions, FieldReference, SortDirection => V2SortDirection, SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, Statistics => V2Statistics, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters, SupportsReportOrdering, SupportsReportPartitioning, SupportsReportStatistics}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, ScanBuilderInfo, Statistics => V2Statistics, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters, SupportsReportOrdering, SupportsReportPartitioning, SupportsReportStatistics}
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning => V2KeyGroupedPartitioning, Partitioning => V2Partitioning, UnknownPartitioning => V2UnknownPartitioning}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, V2ScanPartitioningAndOrdering, V2ScanRelationPushDown}
 import org.apache.spark.sql.internal.SQLConf
@@ -2525,6 +2527,38 @@ class MergeSubplansSuite extends PlanTest {
         extractorExpression(0, analyzedMergedSubquery.output, 1)),
       Seq(definitionNode(analyzedMergedSubquery, 0)))
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+  }
+
+  test("merged DSv2 scans receive subquery context for main-query aggregates") {
+    val scanContexts = ArrayBuffer.empty[Boolean]
+    val table = new TestV2Table(StructType(Seq(
+      StructField("a", IntegerType), StructField("b", IntegerType)))) {
+      override def newScanBuilder(
+          info: ScanBuilderInfo,
+          options: CaseInsensitiveStringMap): ScanBuilder = {
+        scanContexts += info.isInSubquery()
+        super.newScanBuilder(options)
+      }
+    }
+
+    def aggregate(column: String): LogicalPlan = {
+      val relation = DataSourceV2Relation.create(table, None, None)
+      val attribute = relation.output.find(_.name == column).get
+      val pushed = V2ScanRelationPushDown(Project(Seq(attribute), relation))
+      pushed.groupBy()(sum(attribute).as(s"sum_$column"))
+    }
+
+    val originalQuery = aggregate("a").join(aggregate("b")).analyze
+    assert(scanContexts.toSeq == Seq(false, false))
+    scanContexts.clear()
+
+    // Merging moves these aggregates into scalar subqueries and rebuilds their shared scan.
+    val optimized = Optimize.execute(originalQuery)
+    assert(optimized.isInstanceOf[WithCTE])
+    val scans = v2Scans(optimized)
+    assert(scans.size == 1, s"expected the scans to merge:\n$optimized")
+    assert(scans.head.output.map(_.name).toSet == Set("a", "b"))
+    assert(scanContexts.nonEmpty && scanContexts.forall(identity))
   }
 
   gridTest("SPARK-58892: inferred filters survive rebuilding a merged scan")(
