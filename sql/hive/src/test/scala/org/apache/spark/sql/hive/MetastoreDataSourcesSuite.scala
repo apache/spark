@@ -1305,7 +1305,7 @@ class MetastoreDataSourcesSuite extends QueryTest
   Seq(
     // Rejected by the write option check of ParquetFileFormat.prepareWrite.
     ("parquet", "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
-      () => spark.range(5).write.option("compression", "bogus")),
+      () => spark.range(5).write.format("parquet").option("compression", "bogus")),
     // Rejected by the analysis of the Hive CTAS.
     ("hive", "COLUMN_NOT_DEFINED_IN_TABLE",
       () => spark.range(5).write.format("hive").partitionBy("nonexistent"))

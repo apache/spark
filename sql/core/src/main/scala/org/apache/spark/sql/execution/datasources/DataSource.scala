@@ -41,8 +41,8 @@ import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.catalog.TableProvider
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.execution.command.DataWritingCommand
+import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
+import org.apache.spark.sql.execution.command.{DataWritingCommand, DataWritingCommandExec}
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
@@ -530,7 +530,9 @@ case class DataSource(
    * @param outputColumnNames The original output column names of the input query plan. The
    *                          optimizer may not preserve the output column's names' case, so we need
    *                          this parameter instead of `data.output`.
-   * @param beforeWrite Called right before writing, after the write passes its driver side checks.
+   * @param beforeWrite Called right before writing. For a [[FileFormat]], it runs after the driver
+   *                    side checks of the write. For a [[CreatableRelationProvider]], it runs
+   *                    before `createRelation`, which checks the write itself.
    */
   def writeAndRead(
       mode: SaveMode,
@@ -554,7 +556,18 @@ case class DataSource(
           outputColumns.toStructType.asNullable, format.toString, forbidAnsiIntervals = false)
         val cmd = planForWritingFileFormat(format, mode, data)
         cmd.setTagValue(InsertIntoHadoopFsRelationCommand.BEFORE_WRITE_JOB, beforeWrite)
-        QueryExecution.runCommand(sparkSession, cmd, "file source write")
+        // An extension can replace the command in the physical plan (e.g. with a native writer),
+        // and then nothing calls `beforeWrite` during the write. Call it before such a write.
+        val callBeforeWriteIfReplaced = (plan: SparkPlan) => {
+          val runsCommand = plan.exists {
+            case DataWritingCommandExec(c, _) =>
+              c.getTagValue(InsertIntoHadoopFsRelationCommand.BEFORE_WRITE_JOB).isDefined
+            case _ => false
+          }
+          if (!runsCommand) beforeWrite()
+        }
+        QueryExecution.runCommand(
+          sparkSession, cmd, "file source write", beforeExecution = callBeforeWriteIfReplaced)
         // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring
         copy(userSpecifiedSchema = Some(outputColumns.toStructType.asNullable)).resolveRelation()
       case _ => throw SparkException.internalError(

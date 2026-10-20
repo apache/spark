@@ -40,9 +40,9 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression}
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
-import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkStrategy}
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
-import org.apache.spark.sql.execution.datasources.{DataSourceUtils, HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{DataSourceUtils, HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
@@ -1027,7 +1027,7 @@ class DataFrameReaderWriterSuite extends SharedSparkSession with BeforeAndAfter 
       () => Seq(1 -> Map("a" -> 1)).toDF("id", "m").write.format("csv")),
     // Rejected by the write option check of ParquetFileFormat.prepareWrite.
     ("an invalid write option", "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
-      () => spark.range(5).write.option("compression", "bogus"))
+      () => spark.range(5).write.format("parquet").option("compression", "bogus"))
   ).foreach { case (reason, condition, newWriter) =>
     test(s"SPARK-60387: saveAsTable with mode Overwrite keeps the existing table when it fails " +
         s"on $reason") {
@@ -1059,6 +1059,30 @@ class DataFrameReaderWriterSuite extends SharedSparkSession with BeforeAndAfter 
       }
       assert(e.getCondition === "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE")
       assert(spark.catalog.tableExists("t"))
+    }
+  }
+
+  test("SPARK-60387: saveAsTable with mode Overwrite replaces the table when the planned " +
+      "write does not run the callback") {
+    // Plans the write command without its tags, like an extension that replaces the command.
+    object PlanWriteWithoutTags extends SparkStrategy {
+      override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+        case c: InsertIntoHadoopFsRelationCommand
+            if c.getTagValue(InsertIntoHadoopFsRelationCommand.BEFORE_WRITE_JOB).isDefined =>
+          DataWritingCommandExec(c.copy(), planLater(c.query)) :: Nil
+        case _ => Nil
+      }
+    }
+    withTable("t") {
+      spark.range(3).write.saveAsTable("t")
+      val originalStrategies = spark.experimental.extraStrategies
+      try {
+        spark.experimental.extraStrategies = PlanWriteWithoutTags +: originalStrategies
+        spark.range(5, 7).write.mode(SaveMode.Overwrite).saveAsTable("t")
+      } finally {
+        spark.experimental.extraStrategies = originalStrategies
+      }
+      checkAnswer(spark.table("t"), spark.range(5, 7).toDF())
     }
   }
 
