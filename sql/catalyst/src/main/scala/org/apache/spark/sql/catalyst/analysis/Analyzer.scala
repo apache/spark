@@ -4122,8 +4122,6 @@ class Analyzer(
       joinNames: Seq[String],
       condition: Option[Expression],
       hint: JoinHint): LogicalPlan = {
-    import org.apache.spark.sql.catalyst.util._
-
     val (projectList, hiddenList, newCondition) =
       NaturalAndUsingJoinResolution.computeJoinOutputsAndNewCondition(
         left,
@@ -4136,14 +4134,12 @@ class Analyzer(
         (attributeName, keyName) => resolver(attributeName, keyName)
       )
 
-    // use Project to hide duplicated common keys
-    // propagate hidden columns from nested USING/NATURAL JOINs
-    val project = Project(projectList, Join(left, right, joinType, newCondition, hint))
-    project.setTagValue(
-      Project.hiddenOutputTag,
-      hiddenList.map(_.markAsQualifiedAccessOnly()) ++
-        project.child.metadataOutput.filter(_.qualifiedAccessOnly))
-    project
+    val join = Join(left, right, joinType, newCondition, hint)
+    NaturalAndUsingJoinResolution.buildUsingJoinProject(
+      projectList,
+      hiddenList,
+      join,
+      join.metadataOutput)
   }
 
   /**
