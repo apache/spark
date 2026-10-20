@@ -32,7 +32,7 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.Type.Repetition
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkContext, SparkException, SparkIllegalArgumentException, TestUtils}
+import org.apache.spark.{SparkContext, SparkException, SparkIllegalArgumentException, SparkThrowable, TestUtils}
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
@@ -1015,6 +1015,50 @@ class DataFrameReaderWriterSuite extends SharedSparkSession with BeforeAndAfter 
         checkAnswer(spark.table("same_name"), spark.range(10).toDF())
         checkAnswer(spark.table("default.same_name"), spark.range(20).toDF())
       }
+    }
+  }
+
+  Seq(
+    // Rejected by the analysis of the CTAS.
+    ("a nonexistent partition column", "COLUMN_NOT_DEFINED_IN_TABLE",
+      () => spark.range(5).write.partitionBy("nonexistent")),
+    // Rejected by the data schema check of FileFormatWriter.
+    ("an unsupported data type", "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+      () => Seq(1 -> Map("a" -> 1)).toDF("id", "m").write.format("csv")),
+    // Rejected by the write option check of ParquetFileFormat.prepareWrite.
+    ("an invalid write option", "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
+      () => spark.range(5).write.option("compression", "bogus"))
+  ).foreach { case (reason, condition, newWriter) =>
+    test(s"SPARK-60387: saveAsTable with mode Overwrite keeps the existing table when it fails " +
+        s"on $reason") {
+      withTempPath { path =>
+        // A managed table and an external table
+        Seq(Map.empty[String, String], Map("path" -> path.getCanonicalPath)).foreach { options =>
+          withTable("t") {
+            Seq((1, 1), (2, 2)).toDF("i", "p").write.options(options).partitionBy("p")
+              .saveAsTable("t")
+            val e = intercept[SparkThrowable] {
+              newWriter().mode(SaveMode.Overwrite).options(options).saveAsTable("t")
+            }
+            assert(e.getCondition === condition)
+            checkAnswer(spark.table("t"), Seq(Row(1, 1), Row(2, 2)))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60387: saveAsTable with mode Overwrite keeps the existing table when " +
+      "a CreatableRelationProvider rejects the data type") {
+    val format = classOf[DefaultSource].getName
+    withTable("t") {
+      spark.range(3).write.format(format).saveAsTable("t")
+      val e = intercept[SparkThrowable] {
+        sql("SELECT INTERVAL '1' DAY AS a").write.mode(SaveMode.Overwrite).format(format)
+          .saveAsTable("t")
+      }
+      assert(e.getCondition === "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE")
+      assert(spark.catalog.tableExists("t"))
     }
   }
 
