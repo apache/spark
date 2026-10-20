@@ -30,7 +30,7 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.jdbc.MsSqlServerDialect.{GEOGRAPHY, GEOMETRY}
+import org.apache.spark.sql.jdbc.MsSqlServerDialect.{GEOGRAPHY, GEOMETRY, JSON}
 import org.apache.spark.sql.types._
 
 
@@ -166,6 +166,7 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
       case java.sql.Types.REAL if !SQLConf.get.legacyMsSqlServerNumericMappingEnabled =>
         Some(FloatType)
       case GEOMETRY | GEOGRAPHY => Some(BinaryType)
+      case JSON => Some(StringType)
       case _ => None
     }
   }
@@ -304,7 +305,8 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
 
 private object MsSqlServerDialect {
   // Special JDBC types in Microsoft SQL Server.
-  // https://github.com/microsoft/mssql-jdbc/blob/v9.4.1/src/main/java/microsoft/sql/Types.java
+  // https://github.com/microsoft/mssql-jdbc/blob/v13.2.1/src/main/java/microsoft/sql/Types.java
   final val GEOMETRY = -157
   final val GEOGRAPHY = -158
+  final val JSON = -159
 }

@@ -2477,6 +2477,11 @@ class CollectionExpressionsSuite
         assert(ElementAt(array, Literal(-1)).nullable)
         assert(!ElementAt(array, Subtract(Literal(2), Literal(1))).nullable)
         assert(ElementAt(array, AttributeReference("ordinal", IntegerType)()).nullable)
+        // A null ordinal returns null even when neither the array nor its elements can be null.
+        val nonNullArray = CreateArray(a :: Nil)
+        assert(ElementAt(nonNullArray, AttributeReference("ordinal", IntegerType)()).nullable)
+        assert(ElementAt(nonNullArray,
+          AttributeReference("ordinal", IntegerType, nullable = false)()).nullable == !ansiEnabled)
 
         // CreateArray case invalid indices
         assert(!ElementAt(array, Literal(0)).nullable)

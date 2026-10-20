@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql
 
+import java.util.concurrent.atomic.AtomicBoolean
+
 import scala.util.Try
+
+import org.apache.logging.log4j.Level
 
 import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkThrowable}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
@@ -35,8 +39,10 @@ import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.SchemaRequiredDataSource
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, InMemoryPartitionTableCatalog}
-import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.{ApplyCharTypePadding, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.v2.{
+  DataSourceV2Relation, DataSourceV2ScanRelation, PushDownUtils
+}
 import org.apache.spark.sql.functions
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.SimpleInsertSource
@@ -1044,6 +1050,28 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       parameters = Map("limit" -> expectedLimit))
   }
 
+  private def assertUnsupportedJsonMapKey(
+      query: String, key: String, dataTypeSql: String): Unit = {
+    assertUnsupportedJsonMapKeyError(sql(query).collect(), key, dataTypeSql)
+  }
+
+  private def assertUnsupportedJsonMapKeyError(
+      body: => Any, key: String, dataTypeSql: String): Unit = {
+    val error = intercept[Exception] { body }
+    val cause = Iterator.iterate[Throwable](error)(_.getCause)
+      .takeWhile(_ != null)
+      .collectFirst {
+        case e: SparkRuntimeException
+          if e.getCondition == "UNSUPPORTED_JSON_CHAR_VARCHAR_MAP_KEY" => e
+      }
+      .getOrElse(fail("expected UNSUPPORTED_JSON_CHAR_VARCHAR_MAP_KEY cause", error))
+    checkError(
+      exception = cause,
+      condition = "UNSUPPORTED_JSON_CHAR_VARCHAR_MAP_KEY",
+      sqlState = "0A000",
+      parameters = Map("key" -> s"'$key'", "dataType" -> s""""$dataTypeSql""""))
+  }
+
   private def assertUnsupportedXmlMapKey(
       query: String, key: String, dataTypeSql: String): Unit = {
     assertUnsupportedXmlMapKeyError(sql(query).collect(), key, dataTypeSql)
@@ -1143,6 +1171,14 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         condition = "EXCEED_LIMIT_LENGTH",
         parameters = Map("limit" -> "4")
       )
+
+      // CAST CHAR to VARCHAR keeps the pad; CAST VARCHAR to CHAR pads to the target.
+      checkAnswer(
+        sql("SELECT concat('<', CAST(CAST('a' AS CHAR(2)) AS VARCHAR(2)), '>')"),
+        Row("<a >"))
+      checkAnswer(
+        sql("SELECT concat('<', CAST(CAST('a' AS VARCHAR(2)) AS CHAR(4)), '>')"),
+        Row("<a   >"))
     }
   }
 
@@ -1499,16 +1535,18 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     "any_value", "approx_top_k", "approx_top_k_accumulate", "array", "array_agg", "array_compact",
     "array_distinct", "array_max", "array_min", "array_repeat", "array_sort", "arrays_zip",
     "coalesce", "collect_list", "collect_set", "collect_union", "concat", "explode",
-    "explode_outer", "first", "first_value", "flatten", "get", "greatest", "ifnull", "last",
-    "last_value", "least", "map", "map_concat", "map_entries", "map_keys", "map_values", "max",
-    "max_by", "measure", "min", "min_by", "mode", "named_struct", "nullif", "nullifzero", "nvl",
-    "nvl2", "reverse", "shuffle", "sort_array", "struct", "trim_array", "when")
+    "explode_outer", "filter", "first", "first_value", "flatten", "get", "greatest", "ifnull",
+    "lag", "last", "last_value", "lead", "least", "map", "map_concat", "map_entries",
+    "map_filter", "map_keys", "map_values", "map_zip_with", "max", "max_by", "measure", "min",
+    "min_by", "mode", "named_struct", "nth_value", "nullif", "nullifzero", "nvl", "nvl2",
+    "reverse", "shuffle", "sort_array", "struct", "transform", "transform_keys",
+    "transform_values", "trim_array", "when", "zip_with")
 
   // String-transforming shapes of otherwise pass-through functions. These must reduce to
   // unconstrained STRING even though the same function keeps CHAR on collection inputs.
   private val charVarcharTransformingCalls = Set(
     "concat(c)", "concat(c, c)", "concat(c, c, c)", "concat(c, 'x')", "concat('x', c)",
-    "reverse(c)")
+    "reverse(c)", "transform(array(c), x -> reverse(x))")
 
   private val inventoryScalarShapes = Seq(
     "%s(c)", "%s(c, c)", "%s(c, 'x')", "%s('x', c)", "%s(c, 1)", "%s(array(c))",
@@ -1517,6 +1555,39 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
   private val inventoryNestedShapes = Seq(
     "%s(c, c, c)", "%s(array(array(c)))", "%s(named_struct('x', c))",
     "%s(map(c, 1))", "%s(map(1, c))")
+
+  // HOF lambdas and window OVER are the shapes the scalar/nested templates
+  // never typecheck. Nested already has "%s(c, c, c)" (translate, and overlay /
+  // split_part / substring_index via ANSI cast of the third arg to INT) and
+  // scalar already has "%s('x', c)" (format_string / printf). The other
+  // templates here add literal argument positions (translate's from/to,
+  // overlay / split_part / substring_index's count) and a format string that
+  // actually consumes c ('%%s' survives String.format as '%s').
+  private val inventoryGatedShapes = Seq(
+    "%s(c, 'x', 1)", "%s(c, '-', 1)", "%s(c, c, 1)", "%s(c, 'ab', 'xy')",
+    "%s('%%s', c)", "%s(array(c), x -> x)", "%s(array(c), x -> reverse(x))",
+    "%s(c) OVER (ORDER BY 1)", "%s(c, 1) OVER (ORDER BY 1)")
+
+  // These must typecheck (not Try.toOption), including on UTF8_LCASE:
+  // StringTypeNonCSAICollation rejects only case-sensitive accent-insensitive
+  // collations (e.g. UNICODE_AI), not UTF8_LCASE.
+  private val requiredTransformingCalls = Seq(
+    "translate(c, 'ab', 'xy')",
+    "overlay(c, 'x', 1)",
+    "overlay(c PLACING 'x' FROM 1)",
+    "format_string('%s', c)",
+    "printf('%s', c)",
+    "split_part(c, '-', 1)",
+    "substring_index(c, '-', 1)",
+    "transform(array(c), x -> reverse(x))[0]")
+
+  private val requiredPassThroughCalls = Seq(
+    "transform(array(c), x -> x)[0]",
+    "filter(array(c), x -> true)[0]",
+    "lag(c) OVER (ORDER BY 1)",
+    "lead(c) OVER (ORDER BY 1)",
+    "nth_value(c, 1) OVER (ORDER BY 1)",
+    "first_value(c) OVER (ORDER BY 1)")
 
   private def assertNoInventoriedCharVarcharLeaks(argumentShapes: Seq[String]): Unit = {
     val (passThroughLeaks, transformingLeaks) =
@@ -1542,9 +1613,30 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         "plain STRING: " + transformingLeaks.map(_._2).mkString(", "))
   }
 
-  test("SPARK-58794: inventoried shapes do not leak CHAR/VARCHAR under standardSemantics") {
+  private def assertRequiredInventoryCalls(
+      transforming: Seq[String],
+      passThrough: Seq[String]): Unit = {
+    transforming.foreach { call =>
+      val dt = sql(s"SELECT $call AS r FROM std_inventory").schema.head.dataType
+      assert(!CharVarcharUtils.hasCharVarchar(dt),
+        s"$call typechecked but returned $dt; expected plain STRING")
+    }
+    passThrough.foreach { call =>
+      val dt = sql(s"SELECT $call AS r FROM std_inventory").schema.head.dataType
+      assert(CharVarcharUtils.hasCharVarchar(dt),
+        s"$call typechecked but returned $dt; expected CHAR/VARCHAR")
+    }
+  }
+
+  private def withInventoryCol(colDdl: String)(body: => Unit): Unit = {
     withTable("std_inventory") {
-      sql("CREATE TABLE std_inventory (c CHAR(5)) USING parquet")
+      sql(s"CREATE TABLE std_inventory ($colDdl) USING parquet")
+      body
+    }
+  }
+
+  test("SPARK-58794: inventoried shapes do not leak CHAR/VARCHAR under standardSemantics") {
+    withInventoryCol("c CHAR(5)") {
       withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
         assertNoInventoriedCharVarcharLeaks(inventoryScalarShapes)
       }
@@ -1552,10 +1644,38 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
   }
 
   test("SPARK-59016: nested inventoried shapes do not leak CHAR/VARCHAR") {
-    withTable("std_inventory") {
-      sql("CREATE TABLE std_inventory (c CHAR(5)) USING parquet")
+    withInventoryCol("c CHAR(5)") {
       withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
         assertNoInventoriedCharVarcharLeaks(inventoryNestedShapes)
+      }
+    }
+  }
+
+  test("SPARK-59016: gated inventoried shapes do not leak CHAR/VARCHAR") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      Seq(
+        "c CHAR(5)",
+        "c VARCHAR(5)",
+        "c CHAR(5) COLLATE UTF8_LCASE",
+        "c VARCHAR(5) COLLATE UNICODE").foreach { colDdl =>
+        withInventoryCol(colDdl) {
+          assertNoInventoriedCharVarcharLeaks(inventoryGatedShapes)
+        }
+      }
+    }
+  }
+
+  test("SPARK-59016: typecheck-gated transforming calls return STRING") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      Seq(
+        "c CHAR(5)",
+        "c VARCHAR(5)",
+        "c CHAR(5) COLLATE UNICODE",
+        "c CHAR(5) COLLATE UTF8_LCASE").foreach { colDdl =>
+        withInventoryCol(colDdl) {
+          assertRequiredInventoryCalls(
+            requiredTransformingCalls, requiredPassThroughCalls)
+        }
       }
     }
   }
@@ -2212,6 +2332,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       withTempPath { file =>
         val ser = new org.apache.spark.sql.avro.AvroSerializer(
           nestedSchema, nestedAvro, nullable = false)
+        // File-scan deserializers do not assign CHAR padding; values are stored padded.
         val row = org.apache.spark.sql.catalyst.InternalRow(
           org.apache.spark.unsafe.types.UTF8String.fromString("ab  "),
           org.apache.spark.sql.catalyst.InternalRow(
@@ -2248,6 +2369,73 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         } finally {
           reader.close()
         }
+      }
+
+      // SPARK-60242: from_avro-equivalent decode assigns CHAR/VARCHAR STRING values.
+      // File-scan deserializers (default) and to_avro encoding do not.
+      Seq(CharType(4), VarcharType(4)).foreach { dt =>
+        val avro = converters.toAvroType(dt, nullable = false)
+        val fromAvroDeser = new org.apache.spark.sql.avro.AvroDeserializer(
+          avro, dt, "CORRECTED", false, "", -1,
+          applyCharVarcharAssignment = true,
+          charVarcharStandardSemanticsOverride = None)
+        val scanDeser = new org.apache.spark.sql.avro.AvroDeserializer(
+          avro, dt, "CORRECTED", false, "", -1)
+        val padded = dt match {
+          case _: CharType => "ab  "
+          case _ => "ab"
+        }
+        assert(
+          fromAvroDeser.deserialize(new org.apache.avro.util.Utf8("ab")).get.toString === padded,
+          s"from_avro-equivalent decode should assign $dt")
+        assert(
+          scanDeser.deserialize(new org.apache.avro.util.Utf8("ab")).get.toString === "ab",
+          s"file-scan decode should not assign $dt")
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            fromAvroDeser.deserialize(new org.apache.avro.util.Utf8("abcde"))
+          },
+          condition = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "4"))
+        val ser = new org.apache.spark.sql.avro.AvroSerializer(dt, avro, nullable = false)
+        val encoded = ser.serialize(
+          org.apache.spark.unsafe.types.UTF8String.fromString("ab"))
+          .asInstanceOf[org.apache.avro.util.Utf8]
+        assert(encoded.toString === "ab", s"to_avro-equivalent encode should not assign $dt")
+      }
+
+      val enumSchema = org.apache.avro.Schema.createEnum(
+        "Spark60242Enum", "", "", java.util.Arrays.asList("ab", "cd"))
+      val enumVal = new org.apache.avro.generic.GenericData.EnumSymbol(enumSchema, "ab")
+      val enumDeser = new org.apache.spark.sql.avro.AvroDeserializer(
+        enumSchema, CharType(4), "CORRECTED", false, "", -1,
+        applyCharVarcharAssignment = true,
+        charVarcharStandardSemanticsOverride = None)
+      assert(
+        enumDeser.deserialize(enumVal).get.toString === "ab",
+        "ENUM symbols must not be CHAR-padded")
+
+      val mapDt = MapType(CharType(2), IntegerType)
+      val mapAvro = converters.toAvroType(mapDt, nullable = false)
+      val shortKeyMap = new java.util.HashMap[AnyRef, AnyRef]()
+      shortKeyMap.put(new org.apache.avro.util.Utf8("a"), Integer.valueOf(1))
+      withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+        val captured = new org.apache.spark.sql.avro.AvroDeserializer(
+          mapAvro, mapDt, "CORRECTED", false, "", -1,
+          applyCharVarcharAssignment = false,
+          charVarcharStandardSemanticsOverride = Some(true))
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            captured.deserialize(shortKeyMap)
+          },
+          condition = "UNSUPPORTED_AVRO_CHAR_VARCHAR_MAP_KEY",
+          sqlState = "0A000",
+          parameters = Map("key" -> "'a'", "dataType" -> "\"CHAR(2)\""))
+        val live = new org.apache.spark.sql.avro.AvroDeserializer(
+          mapAvro, mapDt, "CORRECTED", false, "", -1)
+        val liveMap = live.deserialize(shortKeyMap).get
+          .asInstanceOf[org.apache.spark.sql.catalyst.util.MapData]
+        assert(liveMap.keyArray().getUTF8String(0).toString === "a")
       }
 
       // JSON has no embedded schema, so a user-specified schema supplies the logical type.
@@ -2659,6 +2847,19 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           val df = spark.read.schema("value VARCHAR(5)").text(path)
           assert(df.schema.head.dataType === VarcharType(5))
           checkAnswer(df, Row("cd"))
+        }
+        // Oversize non-blank text values fail on scan, matching parquet/orc/avro.
+        Seq("CHAR", "VARCHAR").foreach { typ =>
+          withTempPath { dir =>
+            val path = dir.getCanonicalPath
+            sql("SELECT 'abcdef' AS value").write.mode("overwrite").text(path)
+            checkError(
+              exception = intercept[SparkRuntimeException] {
+                spark.read.schema(s"value $typ(2)").text(path).collect()
+              },
+              condition = "EXCEED_LIMIT_LENGTH",
+              parameters = Map("limit" -> "2"))
+          }
         }
       }
     }
@@ -3213,6 +3414,389 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-60108: JSON CHAR/VARCHAR map keys are not padded or trimmed") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      // Exact CHAR and within-limit VARCHAR names are accepted as-is: the trailing space in
+      // "ab " is preserved for CHAR(3) and not trimmed for VARCHAR(3).
+      checkAnswer(
+        sql("""SELECT from_json('{"ab ": 1}', 'MAP<CHAR(3), INT>')"""),
+        Row(Map("ab " -> 1)))
+      checkAnswer(
+        sql("""SELECT from_json('{"ab": 1}', 'MAP<VARCHAR(3), INT>')"""),
+        Row(Map("ab" -> 1)))
+      // Binary-distinct names ("ab" vs "ab ") are both kept.
+      checkAnswer(
+        sql("""SELECT map_entries(from_json('{"ab": 1, "ab ": 2}', 'MAP<VARCHAR(3), INT>'))"""),
+        Row(Seq(Row("ab", 1), Row("ab ", 2))))
+      // Duplicate names are kept, exactly as for STRING keys; mapKeyDedupPolicy is not applied.
+      // checkAnswer alone would collapse the duplicates when it builds a Scala Map, so pin the
+      // behavior with size and map_entries.
+      checkAnswer(
+        sql("""SELECT size(from_json('{"abc": 1, "abc": 2}', 'MAP<CHAR(3), INT>'))"""),
+        Row(2))
+      checkAnswer(
+        sql("""SELECT map_entries(from_json('{"abc": 1, "abc": 2}', 'MAP<CHAR(3), INT>'))"""),
+        Row(Seq(Row("abc", 1), Row("abc", 2))))
+      // Length counts characters (code points), not UTF-16 units or bytes: one non-BMP code
+      // point is exactly CHAR(1) and is kept verbatim, and the same name is rejected by CHAR(2).
+      // scalastyle:off nonascii (the \u escape is decoded before the nonascii check runs)
+      val nonBmp = "\uD83D\uDE00" // U+1F600, one code point stored as a UTF-16 surrogate pair
+      // scalastyle:on nonascii
+      checkAnswer(
+        sql(s"""SELECT map_keys(from_json('{"$nonBmp": 1}', 'MAP<CHAR(1), INT>'))[0]"""),
+        Row(nonBmp))
+      checkAnswer(sql(s"""SELECT from_json('{"$nonBmp": 1}', 'MAP<CHAR(2), INT>')"""), Row(null))
+
+      // Length-0 boundary: CHAR(0)/VARCHAR(0) accept only the empty-string name, and any
+      // non-empty name is rejected (the empty key is still kept as a real map entry).
+      checkAnswer(
+        sql("""SELECT from_json('{"": 1}', 'MAP<CHAR(0), INT>')"""),
+        Row(Map("" -> 1)))
+      checkAnswer(
+        sql("""SELECT from_json('{"": 1}', 'MAP<VARCHAR(0), INT>')"""),
+        Row(Map("" -> 1)))
+      checkAnswer(sql("""SELECT from_json('{"a": 1}', 'MAP<CHAR(0), INT>')"""), Row(null))
+      checkAnswer(sql("""SELECT from_json('{"a": 1}', 'MAP<VARCHAR(0), INT>')"""), Row(null))
+      assertUnsupportedJsonMapKey(
+        """SELECT from_json('{"a": 1}', 'MAP<CHAR(0), INT>', map('mode', 'FAILFAST'))""",
+        key = "a",
+        dataTypeSql = "CHAR(0)")
+      assertUnsupportedJsonMapKey(
+        """SELECT from_json('{"a": 1}', 'MAP<VARCHAR(0), INT>', map('mode', 'FAILFAST'))""",
+        key = "a",
+        dataTypeSql = "VARCHAR(0)")
+
+      // A key longer than the 128-character echo cap is truncated with a trailing "..." in the
+      // error so a huge JSON object name does not bloat the message.
+      val longKey = "a" * 200
+      assertUnsupportedJsonMapKey(
+        s"""SELECT from_json('{"$longKey": 1}', 'MAP<CHAR(3), INT>', map('mode', 'FAILFAST'))""",
+        key = "a" * 128 + "...",
+        dataTypeSql = "CHAR(3)")
+
+      // Valid keys inside nested containers.
+      checkAnswer(
+        sql("""SELECT from_json('{"outer": {"xy ": 1}}',
+          |  'MAP<STRING, MAP<CHAR(3), INT>>')""".stripMargin),
+        Row(Map("outer" -> Map("xy " -> 1))))
+      checkAnswer(
+        sql("""SELECT from_json('[{"ab ": 1}]', 'ARRAY<MAP<CHAR(3), INT>>')"""),
+        Row(Seq(Map("ab " -> 1))))
+
+      // A rejected key makes the row a bad record: null in PERMISSIVE (not EXCEED_LIMIT_LENGTH),
+      // and in FAILFAST the UNSUPPORTED_JSON_CHAR_VARCHAR_MAP_KEY cause is surfaced.
+      checkAnswer(sql("""SELECT from_json('{"a": 1}', 'MAP<CHAR(3), INT>')"""), Row(null))
+      checkAnswer(sql("""SELECT from_json('{"abcd": 1}', 'MAP<CHAR(3), INT>')"""), Row(null))
+      checkAnswer(sql("""SELECT from_json('{"abcd": 1}', 'MAP<VARCHAR(3), INT>')"""), Row(null))
+      checkAnswer(sql("""SELECT from_json('{"ab ": 1}', 'MAP<VARCHAR(2), INT>')"""), Row(null))
+      assertUnsupportedJsonMapKey(
+        """SELECT from_json('{"a": 1}', 'MAP<CHAR(3), INT>', map('mode', 'FAILFAST'))""",
+        key = "a",
+        dataTypeSql = "CHAR(3)")
+      assertUnsupportedJsonMapKey(
+        """SELECT from_json('{"abcd": 1}', 'MAP<CHAR(3), INT>', map('mode', 'FAILFAST'))""",
+        key = "abcd",
+        dataTypeSql = "CHAR(3)")
+      assertUnsupportedJsonMapKey(
+        """SELECT from_json('{"abcd": 1}', 'MAP<VARCHAR(3), INT>', map('mode', 'FAILFAST'))""",
+        key = "abcd",
+        dataTypeSql = "VARCHAR(3)")
+      // A rejected key inside a nested container is surfaced too (not swallowed).
+      assertUnsupportedJsonMapKey(
+        """SELECT from_json('{"outer": {"a": 1}}',
+          |  'MAP<STRING, MAP<CHAR(3), INT>>', map('mode', 'FAILFAST'))""".stripMargin,
+        key = "a",
+        dataTypeSql = "CHAR(3)")
+      assertUnsupportedJsonMapKey(
+        """SELECT from_json('[{"a": 1}]',
+          |  'ARRAY<MAP<CHAR(3), INT>>', map('mode', 'FAILFAST'))""".stripMargin,
+        key = "a",
+        dataTypeSql = "CHAR(3)")
+
+      // The DataFrame functions.from_json path constructs JsonToStructs the same way and must
+      // behave identically: accepted key kept, rejected key null in PERMISSIVE and surfaced in
+      // FAILFAST.
+      checkAnswer(
+        spark.range(1).select(
+          functions.from_json(
+            functions.lit("""{"ab ": 1}"""), "MAP<CHAR(3), INT>", Map.empty[String, String])),
+        Row(Map("ab " -> 1)))
+      checkAnswer(
+        spark.range(1).select(
+          functions.from_json(
+            functions.lit("""{"a": 1}"""), "MAP<CHAR(3), INT>", Map.empty[String, String])),
+        Row(null))
+      assertUnsupportedJsonMapKeyError(
+        spark.range(1).select(
+          functions.from_json(
+            functions.lit("""{"a": 1}"""),
+            "MAP<CHAR(3), INT>",
+            Map("mode" -> "FAILFAST"))).collect(),
+        key = "a",
+        dataTypeSql = "CHAR(3)")
+
+      // SPARK-60108: a rejected key must not corrupt a sibling field of an enclosing struct.
+      // The map becomes null but the following `tail` field is still parsed, and an inner name
+      // ("tail") is not mistaken for the outer field. This holds in both partial-results modes.
+      Seq(true, false).foreach { partial =>
+        withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> partial.toString) {
+          val schema = "m MAP<CHAR(3), INT>, tail INT"
+          checkAnswer(
+            sql(s"""SELECT from_json('{"m":{"a":1},"tail":1}', '$schema')"""),
+            Row(Row(null, 1)))
+          checkAnswer(
+            sql(s"""SELECT from_json('{"m":{"a":1,"tail":5},"tail":1}', '$schema')"""),
+            Row(Row(null, 1)))
+          assertUnsupportedJsonMapKey(
+            s"""SELECT from_json('{"m":{"a":1},"tail":1}', '$schema',
+               |  map('mode', 'FAILFAST'))""".stripMargin,
+            key = "a",
+            dataTypeSql = "CHAR(3)")
+        }
+      }
+
+      // A rejected key whose value is an object or array exercises skipChildren(): the entire
+      // nested value is consumed so the map is nulled and the sibling `tail` field survives, and
+      // in FAILFAST the key is still surfaced. This holds in both partial-results modes.
+      Seq(true, false).foreach { partial =>
+        withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> partial.toString) {
+          checkAnswer(
+            sql("""SELECT from_json('{"m":{"a":{"x":1}},"tail":2}',
+              |  'm MAP<CHAR(3), STRUCT<x: INT>>, tail INT')""".stripMargin),
+            Row(Row(null, 2)))
+          checkAnswer(
+            sql("""SELECT from_json('{"m":{"a":[1,2,3]},"tail":2}',
+              |  'm MAP<CHAR(3), ARRAY<INT>>, tail INT')""".stripMargin),
+            Row(Row(null, 2)))
+          assertUnsupportedJsonMapKey(
+            """SELECT from_json('{"a":{"x":1}}',
+              |  'MAP<CHAR(3), STRUCT<x: INT>>', map('mode', 'FAILFAST'))""".stripMargin,
+            key = "a",
+            dataTypeSql = "CHAR(3)")
+          assertUnsupportedJsonMapKey(
+            """SELECT from_json('{"a":[1,2,3]}',
+              |  'MAP<CHAR(3), ARRAY<INT>>', map('mode', 'FAILFAST'))""".stripMargin,
+            key = "a",
+            dataTypeSql = "CHAR(3)")
+        }
+      }
+
+      // SPARK-60108: a value that fails non-partially inside a CHAR/VARCHAR-keyed map (here an
+      // array element that is not an INT) must not let the map loop resume on a non-field token
+      // and NPE in the key check. The key "k" is a valid CHAR(1), so the key check is a no-op and
+      // the result must match the STRING-keyed baseline, in both partial-results modes.
+      Seq(true, false).foreach { partial =>
+        withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> partial.toString) {
+          val json = """{"m":{"k":["x",2]},"tail":1}"""
+          val stringBaseline =
+            sql(s"SELECT from_json('$json', 'm MAP<STRING, ARRAY<INT>>, tail INT')")
+              .collect().toSeq
+          checkAnswer(
+            sql(s"SELECT from_json('$json', 'm MAP<CHAR(1), ARRAY<INT>>, tail INT')"),
+            stringBaseline)
+        }
+      }
+
+      // SPARK-60108: in PERMISSIVE mode a rejected key inside an array of maps nulls the whole
+      // array (array containment), dropping the otherwise-valid first element.
+      checkAnswer(
+        sql("""SELECT from_json('[{"abc":1},{"a":2}]', 'ARRAY<MAP<CHAR(3), INT>>')"""),
+        Row(null))
+
+      // multiLine + streaming top-level array: a bad key in one element must not add spurious
+      // rows. Two elements in, two rows out, with the bad element reported in _corrupt_record.
+      withTempPath { file =>
+        val document = """[{"m":{"a":1}},{"m":{"abc":2}}]"""
+        java.nio.file.Files.write(file.toPath,
+          document.getBytes(java.nio.charset.StandardCharsets.UTF_8))
+        val df = spark.read
+          .schema("m MAP<CHAR(3), INT>, _corrupt_record STRING")
+          .option("multiLine", true)
+          .option("enableStreamingTopLevelArray", true)
+          .json(file.getCanonicalPath)
+        checkAnswer(df, Seq(Row(null, document), Row(Map("abc" -> 2), null)))
+      }
+
+      withTempPath { path =>
+        Seq("""{"m":{"ab ":1}}""", """{"m":{"a":1}}""").toDS()
+          .repartition(1)
+          .write.text(path.getCanonicalPath)
+        val schema = "m MAP<CHAR(3), INT>"
+        val permissive = spark.read.schema(schema).json(path.getCanonicalPath)
+        checkAnswer(permissive, Seq(Row(Map("ab " -> 1)), Row(null)))
+        val failFast = spark.read.option("mode", "FAILFAST").schema(schema)
+          .json(path.getCanonicalPath)
+        assertUnsupportedJsonMapKeyError(failFast.collect(), key = "a", dataTypeSql = "CHAR(3)")
+      }
+
+      // SPARK-60108: a catalog JSON table keeps its MAP<CHAR(n), _> key type to the scan under
+      // standard semantics, so the scan runs the same key check (an off-width key is a bad
+      // record, nulled by the default PERMISSIVE mode) and, unlike `from_json`, rebuilds the map
+      // read-side, so `mapKeyDedupPolicy` applies and a duplicate name raises DUPLICATED_MAP_KEY
+      // under the default EXCEPTION policy.
+      withTable("t_spark_60108") {
+        withTempPath { path =>
+          Seq("""{"m":{"ab ":1}}""", """{"m":{"a":1}}""").toDS()
+            .repartition(1).write.text(path.getCanonicalPath)
+          sql(s"""CREATE TABLE t_spark_60108 (m MAP<CHAR(3), INT>)
+                 |USING json OPTIONS (path '${path.getCanonicalPath}')""".stripMargin)
+          checkAnswer(spark.table("t_spark_60108"), Seq(Row(Map("ab " -> 1)), Row(null)))
+        }
+      }
+      withTable("t_spark_60108_dup") {
+        withTempPath { path =>
+          Seq("""{"m":{"abc":1,"abc":2}}""").toDS()
+            .repartition(1).write.text(path.getCanonicalPath)
+          sql(s"""CREATE TABLE t_spark_60108_dup (m MAP<CHAR(3), INT>)
+                 |USING json OPTIONS (path '${path.getCanonicalPath}')""".stripMargin)
+          val error = intercept[Exception](spark.table("t_spark_60108_dup").collect())
+          val cause = Iterator.iterate[Throwable](error)(_.getCause)
+            .takeWhile(_ != null)
+            .collectFirst {
+              case e: SparkRuntimeException if e.getCondition == "DUPLICATED_MAP_KEY" => e
+            }
+            .getOrElse(fail("expected DUPLICATED_MAP_KEY cause", error))
+          checkError(
+            exception = cause,
+            condition = "DUPLICATED_MAP_KEY",
+            parameters = Map(
+              "key" -> "abc",
+              "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\""))
+        }
+      }
+
+      // mapKeyDedupPolicy is not applied: EXCEPTION does not raise DUPLICATED_MAP_KEY, the
+      // duplicate names are simply kept, like STRING keys in JSON (XML, in contrast, keeps the
+      // last, matching STRING keys in XML).
+      withSQLConf(
+          SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.EXCEPTION.toString) {
+        checkAnswer(
+          sql("""SELECT map_entries(from_json('{"abc": 1, "abc": 2}', 'MAP<VARCHAR(3), INT>'))"""),
+          Row(Seq(Row("abc", 1), Row("abc", 2))))
+      }
+
+      // Collation is not consulted: binary-distinct names are both kept, and the collation is
+      // reported in the error message rather than dropped.
+      withSQLConf(SQLConf.ALLOW_COLLATIONS_IN_MAP_KEYS.key -> "true") {
+        checkAnswer(
+          sql("""SELECT map_entries(from_json('{"ab": 1, "AB": 2}',
+            |  'MAP<VARCHAR(2) COLLATE UTF8_LCASE, INT>'))""".stripMargin),
+          Row(Seq(Row("ab", 1), Row("AB", 2))))
+        assertUnsupportedJsonMapKey(
+          """SELECT from_json('{"abc": 1}',
+            |  'MAP<VARCHAR(2) COLLATE UTF8_LCASE, INT>', map('mode', 'FAILFAST'))""".stripMargin,
+          key = "abc",
+          dataTypeSql = "VARCHAR(2) COLLATE UTF8_LCASE")
+      }
+    }
+
+    // The flag has PERSISTED binding, so a view created under standard semantics keeps the
+    // key check when queried from a session with the flag off (SPARK-60108, review follow-up).
+    withView("v_spark_60108") {
+      withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+        sql("""CREATE VIEW v_spark_60108 AS
+          |SELECT from_json('{"a": 1}', 'MAP<CHAR(3), INT>', map('mode', 'FAILFAST')) AS m"""
+          .stripMargin)
+      }
+      withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+        assertUnsupportedJsonMapKeyError(
+          sql("SELECT * FROM v_spark_60108").collect(), key = "a", dataTypeSql = "CHAR(3)")
+      }
+    }
+
+    // With the flag off the new key check is not applied: a name that FAILFAST rejects under
+    // standard semantics is accepted, and from_json leaves the raw object name in place. (Any
+    // CHAR padding seen when the result is collected comes from the CHAR encoder, not from_json,
+    // so to_json is used here to observe exactly what from_json produced.)
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      checkAnswer(
+        sql("""SELECT to_json(from_json('{"a": 1}',
+          |  'MAP<CHAR(3), INT>', map('mode', 'FAILFAST')))""".stripMargin),
+        Row("""{"a":1}"""))
+      checkAnswer(
+        sql("""SELECT to_json(from_json('{"abcd": 1}',
+          |  'MAP<VARCHAR(3), INT>', map('mode', 'FAILFAST')))""".stripMargin),
+        Row("""{"abcd":1}"""))
+    }
+  }
+
+  test("SPARK-60229: from_json(to_json) keeps CHAR/VARCHAR map key check") {
+    Seq(
+      ("CHAR(3)", "a", "t_spark_60229_char"),
+      ("VARCHAR(3)", "abcd", "t_spark_60229_varchar")
+    ).foreach { case (keyType, badKey, viewName) =>
+      withView(viewName) {
+        withSQLConf(
+            SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+            SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+          sql(s"""CREATE TEMPORARY VIEW $viewName AS
+            |SELECT from_json('{"$badKey":1}', 'MAP<$keyType, INT>') AS m""".stripMargin)
+        }
+        withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+          checkAnswer(
+            sql(s"SELECT from_json(to_json(m), 'MAP<$keyType, INT>') FROM $viewName"),
+            Row(null))
+          assertUnsupportedJsonMapKey(
+            s"""SELECT from_json(to_json(m), 'MAP<$keyType, INT>', map('mode', 'FAILFAST'))
+               |FROM $viewName""".stripMargin,
+            key = badKey,
+            dataTypeSql = keyType)
+        }
+      }
+    }
+  }
+
+  test("SPARK-60229: nested struct map key rejection does not steal sibling fields") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val schema = "s STRUCT<m MAP<CHAR(3), INT>, tail INT>, tail INT"
+      // Inner tail after the map: without draining s, the parent can take inner tail=5
+      // and then hit s's END_OBJECT, never seeing outer tail=1.
+      val jsonAfter = """{"s":{"m":{"a":1},"tail":5},"tail":1}"""
+      // Inner tail after an already-parsed outer tail: without draining s, inner
+      // tail=5 overwrites the sibling that was already 1.
+      val jsonBefore = """{"tail":1,"s":{"m":{"a":1},"tail":5}}"""
+      Seq(true, false).foreach { partial =>
+        withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> partial.toString) {
+          val expected = if (partial) {
+            Row(Row(Row(null, 5), 1))
+          } else {
+            Row(Row(null, 1))
+          }
+          Seq(jsonAfter, jsonBefore).foreach { json =>
+            checkAnswer(sql(s"SELECT from_json('$json', '$schema')"), expected)
+            assertUnsupportedJsonMapKey(
+              s"""SELECT from_json('$json', '$schema', map('mode', 'FAILFAST'))""",
+              key = "a",
+              dataTypeSql = "CHAR(3)")
+          }
+        }
+      }
+
+      // A failing array element must not leak inner field names to the parent, and
+      // later siblings must still be parsed.
+      val arrayJson = """{"tail":1,"arr":[{"m":{"a":1},"tail":5}],"after":2}"""
+      val arraySchema =
+        "tail INT, arr ARRAY<STRUCT<m MAP<CHAR(3), INT>, tail INT>>, after INT"
+      Seq(true, false).foreach { partial =>
+        withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> partial.toString) {
+          val expected = if (partial) {
+            Row(Row(1, Seq(Row(null, 5)), 2))
+          } else {
+            Row(Row(1, null, 2))
+          }
+          checkAnswer(sql(s"SELECT from_json('$arrayJson', '$arraySchema')"), expected)
+          assertUnsupportedJsonMapKey(
+            s"""SELECT from_json('$arrayJson', '$arraySchema',
+               |  map('mode', 'FAILFAST'))""".stripMargin,
+            key = "a",
+            dataTypeSql = "CHAR(3)")
+        }
+      }
+    }
+  }
+
   test("SPARK-59274: JSON map value overflow keeps EXCEED_LIMIT_LENGTH") {
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
       val json = """{"m":{"k":"abcdef"},"tail":1}"""
@@ -3223,11 +3807,9 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         Seq(true, false).foreach { partial =>
           withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> partial.toString) {
             withClue(s"$valueType partial=$partial") {
-              if (partial) {
-                checkAnswer(sql(fromJson), Row(Row(null, 1)))
-              } else {
-                checkAnswer(sql(fromJson), Row(Row(null, null)))
-              }
+              // SPARK-60229: a nested map value failure consumes the map object, so
+              // sibling `tail` is parsed in both partial-results modes.
+              checkAnswer(sql(fromJson), Row(Row(null, 1)))
               assertParseExceedLimit(
                 s"SELECT from_json('$json', '$schema', map('mode', 'FAILFAST'))",
                 expectedLimit = "2")
@@ -3238,11 +3820,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
                   .write.text(path.getCanonicalPath)
                 val fileSchema = schema
                 val permissive = spark.read.schema(fileSchema).json(path.getCanonicalPath)
-                if (partial) {
-                  checkAnswer(permissive, Seq(Row(null, 1), Row(Map("k" -> "ab"), 2)))
-                } else {
-                  checkAnswer(permissive, Seq(Row(null, null), Row(Map("k" -> "ab"), 2)))
-                }
+                checkAnswer(permissive, Seq(Row(null, 1), Row(Map("k" -> "ab"), 2)))
                 val failFast = spark.read
                   .option("mode", "FAILFAST")
                   .schema(fileSchema)
@@ -3346,6 +3924,99 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         Row(Map("ab" -> 1, "AB" -> 2)))
     }
   }
+
+  test("SPARK-60243: charAsVarchar still rewrites DDL under standardSemantics") {
+    // charAsVarchar is a CREATE/ALTER rewrite; standardSemantics does not disable it.
+    // CAST remains first-class CHAR even when both flags are on.
+    withSQLConf(
+        SQLConf.CHAR_AS_VARCHAR.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val castDf = sql("SELECT CAST('ab' AS CHAR(5)) AS c")
+      assert(castDf.schema.head.dataType === CharType(5))
+      checkAnswer(castDf.selectExpr("concat('<', c, '>')"), Row("<ab   >"))
+
+      withTable("std_char_as_varchar") {
+        sql("CREATE TABLE std_char_as_varchar (c CHAR(5)) USING parquet")
+        assert(spark.table("std_char_as_varchar").schema.head.dataType === VarcharType(5))
+        sql("INSERT INTO std_char_as_varchar VALUES ('ab')")
+        checkAnswer(spark.table("std_char_as_varchar"), Row("ab"))
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            sql("INSERT INTO std_char_as_varchar VALUES ('abcdef')")
+          },
+          condition = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "5"))
+      }
+    }
+  }
+
+  test("SPARK-60243: standardSemantics ignores readSideCharPadding=false") {
+    // The override warning is once-per-JVM (AtomicBoolean). Reset immediately before
+    // the padded scan so setup statements do not consume it.
+    val warned = readSidePaddingOverrideWarned()
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        sql("SELECT 'ab' AS c").write.mode("overwrite").parquet(path)
+        withTable("std_read_pad_override") {
+          sql(s"CREATE TABLE std_read_pad_override (c CHAR(4)) USING parquet LOCATION '$path'")
+          warned.set(false)
+          val logAppender = new LogAppender("readSideCharPadding override warning")
+          withLogAppender(logAppender) {
+            checkAnswer(
+              sql("SELECT concat('<', c, '>') FROM std_read_pad_override"),
+              Row("<ab  >"))
+          }
+          assert(logAppender.loggingEvents.exists { e =>
+            val msg = e.getMessage.getFormattedMessage
+            e.getLevel == Level.WARN &&
+              msg.contains(SQLConf.READ_SIDE_CHAR_PADDING.key) &&
+              msg.contains(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key)
+          })
+        }
+      }
+    }
+  }
+
+  test("SPARK-60243: deep nested CHAR/VARCHAR file round-trips under standardSemantics") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val nestedTypes = Seq(
+        ("CHAR(4)", CharType(4), "c", "<ab  >", "<xy  >"),
+        ("VARCHAR(4)", VarcharType(4), "v", "<ab>", "<xy>"))
+      Seq("parquet", "orc").foreach { fmt =>
+        nestedTypes.foreach { case (ddl, dt, field, arrExpected, structExpected) =>
+          withTempPath { dir =>
+            val path = dir.getCanonicalPath
+            sql(s"SELECT array(array(cast('ab' AS $ddl))) AS a")
+              .write.mode("overwrite").format(fmt).save(path)
+            val df = spark.read.format(fmt).load(path)
+            assert(df.schema.head.dataType === ArrayType(ArrayType(dt)), s"$fmt $ddl array")
+            checkAnswer(df.selectExpr("concat('<', a[0][0], '>')"), Row(arrExpected))
+          }
+          withTempPath { dir =>
+            val path = dir.getCanonicalPath
+            sql(s"SELECT array(named_struct('$field', cast('xy' AS $ddl))) AS a")
+              .write.mode("overwrite").format(fmt).save(path)
+            val df = spark.read.format(fmt).load(path)
+            assert(df.schema.head.dataType ===
+              ArrayType(StructType(Seq(StructField(field, dt, nullable = true)))),
+              s"$fmt $ddl struct")
+            checkAnswer(
+              df.selectExpr(s"concat('<', a[0].$field, '>')"),
+              Row(structExpected))
+          }
+        }
+      }
+    }
+  }
+
+  private def readSidePaddingOverrideWarned(): AtomicBoolean = {
+    val field = ApplyCharTypePadding.getClass.getDeclaredField("readSidePaddingOverrideWarned")
+    field.setAccessible(true)
+    field.get(ApplyCharTypePadding).asInstanceOf[AtomicBoolean]
+  }
 }
 
 class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSparkSession {
@@ -3371,6 +4042,29 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
           sql("SELECT '123456' as col").write.format(format).save(dir.toString)
           sql(s"CREATE TABLE t (col $typ(2)) using $format LOCATION '$dir'")
           checkAnswer(sql("select * from t"), Row("123456"))
+        }
+      }
+    }
+  }
+
+  test("SPARK-60243: read-side overflow on pre-existing CHAR/VARCHAR partitions") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      Seq("CHAR", "VARCHAR").foreach { typ =>
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          sql("SELECT 1 AS id, 'abcdef' AS p")
+            .write.mode("overwrite").partitionBy("p").format(format).save(path)
+          withTable("std_part_oversize") {
+            sql(
+              s"""CREATE TABLE std_part_oversize (id INT, p $typ(2))
+                 |USING $format LOCATION '$path'""".stripMargin)
+            checkError(
+              exception = intercept[SparkRuntimeException] {
+                sql("SELECT * FROM std_part_oversize").collect()
+              },
+              condition = "EXCEED_LIMIT_LENGTH",
+              parameters = Map("limit" -> "2"))
+          }
         }
       }
     }
@@ -3666,6 +4360,99 @@ class DSV2CharVarcharTestSuite extends CharVarcharTestSuite
         sql(s"CREATE TABLE t(m MAP<INT, STRUCT<n_c: $typ, n_i: INT>>) USING $format")
         val inputDF = sql("SELECT map(1, named_struct('n_i', 1, 'n_c', '123456')) AS m")
         assertLengthCheckFailure(() => inputDF.writeTo("t").append())
+      }
+    }
+  }
+
+  private def withPrunedV2CharRelation(body: (DataFrame, DataSourceV2Relation) => Unit): Unit = {
+    withTable("std_v2_prune") {
+      sql(s"CREATE TABLE std_v2_prune (c CHAR(5), extra INT) USING $format")
+      sql("INSERT INTO std_v2_prune VALUES ('ab', 1)")
+      val df = sql("SELECT c FROM std_v2_prune")
+      val rel = df.queryExecution.analyzed.collect {
+        case r: DataSourceV2Relation => r
+      }.head
+      body(df, rel)
+    }
+  }
+
+  private def attrsFromCharReadSchema(rel: DataSourceV2Relation) =
+    PushDownUtils.toOutputAttrs(new StructType().add("c", CharType(5)), rel)
+
+  private def assertPrunedScanCharMarker(df: DataFrame, expectMarker: Boolean): Unit = {
+    val scans = df.queryExecution.optimizedPlan.collect {
+      case s: DataSourceV2ScanRelation => s
+    }
+    assert(scans.nonEmpty)
+    scans.foreach { s =>
+      s.output.filter(_.name == "c").foreach { a =>
+        val raw = CharVarcharUtils.getRawType(a.metadata)
+        if (expectMarker) {
+          assert(raw.isDefined, s"pruned scan ${a.name} dropped the CHAR breadcrumb")
+        } else {
+          assert(raw.isEmpty, s"pruned scan ${a.name} re-stamped the CHAR breadcrumb")
+        }
+      }
+    }
+  }
+
+  test("SPARK-59016: V2 column prune does not re-stamp CHAR padding breadcrumb") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withPrunedV2CharRelation { (df, rel) =>
+        val cAttr = rel.output.find(_.name == "c").get
+        assert(CharVarcharUtils.getRawType(cAttr.metadata).isEmpty,
+          "ApplyCharTypePadding should have cleaned the relation breadcrumb")
+        assert(CharVarcharUtils.getRawType(attrsFromCharReadSchema(rel).head.metadata).isEmpty,
+          "toOutputAttrs must not re-stamp CHAR metadata on a padded relation")
+        assertPrunedScanCharMarker(df, expectMarker = false)
+        checkAnswer(df, Row("ab   "))
+      }
+    }
+  }
+
+  test("SPARK-59016: standard-semantics V2 prune still pads with read-side padding off") {
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+      withPrunedV2CharRelation { (df, rel) =>
+        val cAttr = rel.output.find(_.name == "c").get
+        assert(CharVarcharUtils.getRawType(cAttr.metadata).isEmpty,
+          "standard semantics should still pad and clean when read-side padding is off")
+        assert(CharVarcharUtils.getRawType(attrsFromCharReadSchema(rel).head.metadata).isEmpty,
+          "toOutputAttrs must drop the marker on a cleaned standard-semantics relation")
+        assertPrunedScanCharMarker(df, expectMarker = false)
+        checkAnswer(df, Row("ab   "))
+      }
+    }
+  }
+
+  test("SPARK-59016: default-mode padded V2 prune does not re-stamp CHAR breadcrumb") {
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "true") {
+      withPrunedV2CharRelation { (df, rel) =>
+        val cAttr = rel.output.find(_.name == "c").get
+        assert(CharVarcharUtils.getRawType(cAttr.metadata).isEmpty,
+          "default read-side padding should have cleaned the relation breadcrumb")
+        assert(CharVarcharUtils.getRawType(attrsFromCharReadSchema(rel).head.metadata).isEmpty,
+          "toOutputAttrs must drop the marker on a padded default-mode relation")
+        assertPrunedScanCharMarker(df, expectMarker = false)
+        checkAnswer(df, Row("ab   "))
+      }
+    }
+  }
+
+  test("SPARK-59016: unpadded default-mode V2 prune keeps CHAR breadcrumb") {
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+      withPrunedV2CharRelation { (df, rel) =>
+        val cAttr = rel.output.find(_.name == "c").get
+        assert(CharVarcharUtils.getRawType(cAttr.metadata).isDefined,
+          "disabled read-side padding should leave the relation stamped")
+        assert(CharVarcharUtils.getRawType(attrsFromCharReadSchema(rel).head.metadata).isDefined,
+          "toOutputAttrs must keep the marker on a still-stamped relation")
+        assertPrunedScanCharMarker(df, expectMarker = true)
       }
     }
   }
