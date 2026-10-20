@@ -17,7 +17,6 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
-import scala.util.Try
 
 import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.api.python.PythonEvalType
@@ -29,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression,
 import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, PLAN_EXPRESSION, UNRESOLVED_WINDOW_EXPRESSION}
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils, TypeUtils, WriteDistributionAndOrdering}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog, SupportsPartitionManagement}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
@@ -1007,12 +1006,9 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             }
 
             // PreprocessTableCreation keeps a reference to a missing column as is, so this is the
-            // only check that rejects it, also for analyzers that do not run that rule. A path
-            // through a non-struct field is missing too, although findNestedField throws for it.
-            val badOrderingReferences = create.writeOrdering
-              .flatMap(_.expression().references().map(_.fieldNames().toImmutableArraySeq))
-              .distinct
-              .filter(c => Try(create.tableSchema.findNestedField(c)).toOption.flatten.isEmpty)
+            // only check that rejects it, also for analyzers that do not run that rule.
+            val badOrderingReferences = WriteDistributionAndOrdering.unknownReferences(
+              create.tableSchema, create.writeOrdering)
 
             if (badOrderingReferences.nonEmpty) {
               create.failAnalysis(

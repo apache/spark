@@ -773,6 +773,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     val defaultHiveStorage = HiveSerDe.getDefaultStorage(conf).copy(
       locationUri = location.map(CatalogUtils.stringToURI),
       properties = options)
+    val tableProvider = DataSourceV2Utils.createTableProvider(
+      provider, maybeSerdeInfo.isDefined, ctas, conf)
 
     if (provider.isDefined) {
       // The parser guarantees that USING and STORED AS/ROW FORMAT won't co-exist.
@@ -781,7 +783,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
           s"Cannot create table with both USING ${provider.get} and " +
             s"${maybeSerdeInfo.get.describe}")
       }
-      (nonHiveStorageFormat, provider.get)
+      (nonHiveStorageFormat, tableProvider)
     } else if (maybeSerdeInfo.isDefined) {
       val serdeInfo = maybeSerdeInfo.get
       SerdeInfo.checkSerdePropMerging(serdeInfo.serdeProperties, defaultHiveStorage.properties)
@@ -806,20 +808,20 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
           serde = serdeInfo.serde.orElse(defaultHiveStorage.serde),
           properties = serdeInfo.serdeProperties ++ defaultHiveStorage.properties)
       }
-      (storageFormat, DDLUtils.HIVE_PROVIDER)
+      (storageFormat, tableProvider)
     } else {
       // If neither USING nor STORED AS/ROW FORMAT is specified, we create native data source
       // tables if:
       //   1. `LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT` is false, or
       //   2. It's a CTAS and `conf.convertCTAS` is true.
       if (!DataSourceV2Utils.createsHiveTableByDefault(ctas, conf)) {
-        (nonHiveStorageFormat, conf.defaultDataSourceName)
+        (nonHiveStorageFormat, tableProvider)
       } else {
         logWarning(log"A Hive serde table will be created as there is no table provider " +
           log"specified. You can set " +
           log"${MDC(CONFIG, SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT.key)} to false so that " +
           log"native data source table will be created instead.")
-        (defaultHiveStorage, DDLUtils.HIVE_PROVIDER)
+        (defaultHiveStorage, tableProvider)
       }
     }
   }

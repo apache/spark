@@ -121,8 +121,8 @@ public interface Table extends Relation {
 
   /**
    * Returns the write ordering this table declares as the default for writes into it, or an empty
-   * array, never null, if it declares none. Its keys take the shape described in
-   * {@link TableInfo#writeOrdering()}. See {@link #writeDistributionMode()}.
+   * array, never null, if it declares none. Its elements must not be null either, and its keys take
+   * the shape described in {@link TableInfo#writeOrdering()}. See {@link #writeDistributionMode()}.
    *
    * @since 4.4.0
    */

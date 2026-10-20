@@ -23,12 +23,14 @@ import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.expressions.{Literal => CatalystLiteral}
+import org.apache.spark.sql.catalyst.parser.ParserInterface
+import org.apache.spark.sql.catalyst.plans.logical.CreateTable
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog, TableCatalogCapability, WriteDistributionMode}
 import org.apache.spark.sql.connector.expressions.{Expression, GeneralScalarExpression, GetArrayItem, IdentityTransform, Literal, NamedReference, SortOrder, Transform, VariantGet}
 import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.connector.{ExpressionWithToString, ToStringSQLBuilder}
-import org.apache.spark.sql.types.{FloatType, StructType, TimestampLTZNanosType, TimestampType, TimeType}
+import org.apache.spark.sql.types.{FloatType, StructType, TimestampLTZNanosType, TimestampType}
 import org.apache.spark.unsafe.types.TimestampNanosVal
 import org.apache.spark.util.ArrayImplicits._
 
@@ -60,6 +62,12 @@ object WriteDistributionAndOrdering {
     partitioning.exists(_.name != "cluster_by")
   }
 
+  /** True when `catalog` accepts a create-time write distribution and ordering. */
+  def supportsWriteDistributionAndOrdering(catalog: TableCatalog): Boolean = {
+    catalog.capabilities().contains(
+      TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_WRITE_DISTRIBUTION_AND_ORDERING)
+  }
+
   /**
    * Rejects a create-time write distribution or ordering that the catalog has not advertised
    * support for, before anything is created or dropped.
@@ -71,24 +79,28 @@ object WriteDistributionAndOrdering {
       writeDistributionMode: WriteDistributionMode,
       writeOrdering: Seq[SortOrder]): Unit = {
     if (isRequested(writeDistributionMode, writeOrdering) &&
-        !catalog.capabilities().contains(
-          TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_WRITE_DISTRIBUTION_AND_ORDERING)) {
+        !supportsWriteDistributionAndOrdering(catalog)) {
       throw QueryCompilationErrors.unsupportedTableOperationError(
         catalog, ident, s"$operation ... $CLAUSES")
     }
   }
 
-  /** Renders a requested sort key as SQL, for DESCRIBE. */
-  def describeSortOrder(sortOrder: SortOrder): String = sortOrderToSQL(sortOrder, quoteIfNeeded)
+  /**
+   * Renders a requested sort key as SQL, for DESCRIBE, or with its `describe` when a connector
+   * expression in it fails to render.
+   */
+  def describeSortOrder(sortOrder: SortOrder): String = {
+    Try(sortOrderToSQL(sortOrder, quoteIfNeeded)).getOrElse(sortOrder.describe)
+  }
 
   /**
    * Renders the declared write distribution and ordering as `DISTRIBUTED BY PARTITION`,
    * `[LOCALLY] ORDERED BY` or `UNORDERED` clauses for SHOW CREATE TABLE. Returns None when the
-   * pair has no clause form, such as `HASH` without partitioning, or when `replay`, which parses
-   * [[replayStatement]] for the clauses and returns the pair it declares, does not give back the
+   * pair has no clause form, such as `HASH` without partitioning, when a connector expression in
+   * the ordering fails to render, or when `replay`, such as [[replayWith]], does not give back the
    * same pair with every referenced column in `schema`. Names are quoted only where needed, and on
-   * a second try all of them, which reserved keywords under
-   * `spark.sql.ansi.enforceReservedKeywords` need.
+   * a second try all of them, which a name that is a reserved keyword under
+   * `spark.sql.ansi.enforceReservedKeywords` needs.
    */
   def writeClausesSQL(
       writeDistributionMode: WriteDistributionMode,
@@ -98,42 +110,58 @@ object WriteDistributionAndOrdering {
       replay: String => Option[(WriteDistributionMode, Seq[SortOrder])]): Option[String] = {
     lazy val partitioned = hasPartitioning(partitioning)
     Seq[String => String](quoteIfNeeded, quoteIdentifier).iterator.flatMap { quote =>
-      val orderBy = if (writeOrdering.nonEmpty) {
-        Some(writeOrdering.map(sortOrderToSQL(_, quote)).mkString("ORDERED BY (", ", ", ")"))
-      } else {
-        None
-      }
-      (writeDistributionMode, orderBy) match {
-        case (WriteDistributionMode.HASH, Some(o)) if partitioned =>
-          Some(s"DISTRIBUTED BY PARTITION $o")
-        case (WriteDistributionMode.HASH, None) if partitioned => Some("DISTRIBUTED BY PARTITION")
-        case (WriteDistributionMode.RANGE, Some(o)) => Some(o)
-        case (WriteDistributionMode.NONE, Some(o)) => Some(s"LOCALLY $o")
-        case (WriteDistributionMode.NONE, None) => Some("UNORDERED")
-        case _ => None
-      }
+      Try {
+        val orderBy = if (writeOrdering.nonEmpty) {
+          Some(writeOrdering.map(sortOrderToSQL(_, quote)).mkString("ORDERED BY (", ", ", ")"))
+        } else {
+          None
+        }
+        (writeDistributionMode, orderBy) match {
+          case (WriteDistributionMode.HASH, Some(o)) if partitioned =>
+            Some(s"DISTRIBUTED BY PARTITION $o")
+          case (WriteDistributionMode.HASH, None) if partitioned =>
+            Some("DISTRIBUTED BY PARTITION")
+          case (WriteDistributionMode.RANGE, Some(o)) => Some(o)
+          case (WriteDistributionMode.NONE, Some(o)) => Some(s"LOCALLY $o")
+          case (WriteDistributionMode.NONE, None) => Some("UNORDERED")
+          case _ => None
+        }
+      }.toOption.flatten
     }.find { clauses =>
       replay(clauses).exists { case (mode, ordering) =>
         mode == writeDistributionMode && sameSortOrders(ordering, writeOrdering) &&
-          referencesExist(schema, ordering)
+          unknownReferences(schema, ordering).isEmpty
       }
     }
   }
 
   /**
-   * A minimal statement whose parse depends only on `clauses`. The partitioning is there only so
-   * that the parser accepts `DISTRIBUTED BY PARTITION`.
+   * Parses `clauses` with `parser` in a minimal statement whose parse depends only on them, and
+   * returns the write distribution and ordering it declares, or None when it does not parse. The
+   * statement's partitioning is there only so that the parser accepts `DISTRIBUTED BY PARTITION`.
    */
-  def replayStatement(clauses: String): String =
-    s"CREATE TABLE t USING foo PARTITIONED BY (p) $clauses"
-
-  // Checks the parsed ordering exactly, which is at least as strict as CheckAnalysis on the
-  // replayed statement.
-  private def referencesExist(schema: StructType, writeOrdering: Seq[SortOrder]): Boolean = {
-    writeOrdering.flatMap(_.expression().references()).forall { ref =>
-      ref.fieldNames().nonEmpty &&
-        Try(schema.findNestedField(ref.fieldNames().toImmutableArraySeq)).toOption.flatten.isDefined
+  def replayWith(parser: ParserInterface)(
+      clauses: String): Option[(WriteDistributionMode, Seq[SortOrder])] = {
+    try {
+      parser.parsePlan(s"CREATE TABLE t USING foo PARTITIONED BY (p) $clauses") match {
+        case c: CreateTable => Some((c.writeDistributionMode, c.writeOrdering))
+        case _ => None
+      }
+    } catch {
+      case NonFatal(_) => None
     }
+  }
+
+  /**
+   * The columns that the keys of a CREATE/REPLACE TABLE write ordering reference but `schema`
+   * does not have, once each and in declaration order. A path through a field that is not a
+   * struct is not in the schema either.
+   */
+  def unknownReferences(schema: StructType, writeOrdering: Seq[SortOrder]): Seq[Seq[String]] = {
+    writeOrdering
+      .flatMap(_.expression().references().map(_.fieldNames().toImmutableArraySeq))
+      .distinct
+      .filter(column => Try(schema.findNestedField(column)).toOption.flatten.isEmpty)
   }
 
   // True when two orderings declare the same keys: the same column names, transform names and
@@ -147,7 +175,7 @@ object WriteDistributionAndOrdering {
 
   // A plain column is a key's reference itself or, only at the top of a key, `identity(col)`.
   private def sortKey(e: Expression): Expression = e match {
-    case t: IdentityTransform => t.ref
+    case IdentityTransform(ref) => ref
     case other => other
   }
 
@@ -178,8 +206,7 @@ object WriteDistributionAndOrdering {
     case o: SortOrder => sortOrderToSQL(o, quote)
     case t: Transform =>
       t.arguments().map(toSQL(_, quote)).mkString(s"${quote(t.name)}(", ", ", ")")
-    case _: ExpressionWithToString =>
-      Try(new DescribingSQLBuilder(quote).build(e)).getOrElse(childrenToSQL(e, quote))
+    case _: ExpressionWithToString => new DescribingSQLBuilder(quote).build(e)
     case other => Try(other.describe).getOrElse(childrenToSQL(other, quote))
   }
 
@@ -191,12 +218,18 @@ object WriteDistributionAndOrdering {
     e.children().map(toSQL(_, quote)).mkString(s"$name(", ", ", ")")
   }
 
-  // Renders literals and references with `toSQL`, so that they keep their type and quoting, and
-  // renders the children of `GetArrayItem` and `VariantGet` itself rather than through their
-  // `toString`. An expression `ToStringSQLBuilder` does not know is rendered from its children, and
-  // so is a `PartitionPredicate`, whose `describe` defaults to a `toString` that renders through
-  // this builder again.
+  // `ToStringSQLBuilder` renders literals and references with their `toString`, which does not
+  // keep a literal's type and, for a connector's own reference, may not quote a name. It renders
+  // the children of `GetArrayItem` and `VariantGet` through their `toString` too. This builder
+  // renders all of them with `toSQL`, and a transform, which `ToStringSQLBuilder` does not know,
+  // as `toSQL` does. A node it cannot render, including a `PartitionPredicate` whose `describe` is
+  // the default `toString` that recurses in `ToStringSQLBuilder`, is rendered from its children,
+  // so that a parent keeps its own rendering.
   private class DescribingSQLBuilder(quote: String => String) extends ToStringSQLBuilder {
+    override def build(expr: Expression): String = {
+      if (expr == null) "null" else Try(super.build(expr)).getOrElse(childrenToSQL(expr, quote))
+    }
+
     override protected def visitLiteral(literal: Literal[_]): String = toSQL(literal, quote)
 
     override protected def visitNamedReference(ref: NamedReference): String = toSQL(ref, quote)
@@ -208,7 +241,8 @@ object WriteDistributionAndOrdering {
     override protected def visitVariantGet(variantGet: VariantGet): String = {
       val funcName = if (variantGet.failOnError()) "variant_get" else "try_variant_get"
       val tz = Option(variantGet.timeZoneId()).map(z => s", tz=$z").getOrElse("")
-      s"$funcName(${build(variantGet.child())}, '${variantGet.path()}', " +
+      s"$funcName(${build(variantGet.child())}, " +
+        s"'${Option(variantGet.path()).map(escapeSingleQuotedString).orNull}', " +
         s"${variantGet.targetType().catalogString}$tz)"
     }
 
@@ -216,8 +250,9 @@ object WriteDistributionAndOrdering {
       childrenToSQL(predicate, quote)
     }
 
-    override protected def visitUnexpectedExpr(expr: Expression): String = {
-      childrenToSQL(expr, quote)
+    override protected def visitUnexpectedExpr(expr: Expression): String = expr match {
+      case t: Transform => toSQL(t, quote)
+      case _ => childrenToSQL(expr, quote)
     }
   }
 
@@ -230,28 +265,16 @@ object WriteDistributionAndOrdering {
 
   // Catalyst renders a FLOAT as a CAST, which the parser does not accept here, so a finite FLOAT
   // is rendered as `<v>F`. A TIMESTAMP and a nanosecond TIMESTAMP_LTZ are rendered in UTC with an
-  // explicit offset, so that they do not depend on the session time zone or timestamp type. The
-  // parser takes the precision of a TIME from its fraction digits, so a TIME with more than
-  // microsecond precision keeps its trailing zeros.
+  // explicit offset, so that they do not depend on the session time zone or timestamp type.
   private def literalToSQL(l: CatalystLiteral): String = (l.value, l.dataType) match {
     case (f: Float, FloatType) if java.lang.Float.isFinite(f) => s"${f}F"
     case (micros: Long, TimestampType) =>
       s"TIMESTAMP_LTZ '${utcFormatter.format(micros)}Z'"
     case (nanos: TimestampNanosVal, t: TimestampLTZNanosType) =>
-      val utc = padFraction(utcFormatter.formatNanos(nanos, t.precision), t.precision)
-      s"TIMESTAMP_LTZ '${utc}Z'"
-    case (nanos: Long, t: TimeType) if t.precision > TimeType.MICROS_PRECISION =>
-      s"TIME '${padFraction(new FractionTimeFormatter().format(nanos), t.precision)}'"
+      val utc = utcFormatter.formatNanos(nanos, t.precision)
+      s"TIMESTAMP_LTZ '${CatalystLiteral.padToNanosPrecision(utc, t.precision)}Z'"
     case _ => l.sql
   }
 
   private def utcFormatter = TimestampFormatter.getFractionFormatter(ZoneOffset.UTC)
-
-  private def padFraction(s: String, precision: Int): String = {
-    val digits = s.indexOf('.') match {
-      case -1 => 0
-      case dot => s.length - dot - 1
-    }
-    (if (digits == 0) s"$s." else s) + "0" * (precision - digits)
-  }
 }

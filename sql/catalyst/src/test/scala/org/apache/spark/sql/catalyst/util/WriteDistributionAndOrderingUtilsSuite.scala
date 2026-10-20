@@ -21,16 +21,15 @@ import java.math.BigDecimal
 import java.nio.ByteBuffer
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, LocalTime, Period}
 
-import scala.util.Try
-
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Literal => CatalystLiteral}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.catalyst.plans.logical.CreateTable
 import org.apache.spark.sql.connector.catalog.WriteDistributionMode
 import org.apache.spark.sql.connector.expressions.{Cast, Expression, Expressions, Extract, FieldReference, GeneralScalarExpression, GetArrayItem, IdentityTransform, NamedReference, NullOrdering, SortDirection, SortOrder, Transform, UserDefinedScalarFunc, VariantGet}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.{apply => transform, literal, sort}
+import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -51,10 +50,7 @@ class WriteDistributionAndOrderingUtilsSuite extends SparkFunSuite with SQLHelpe
   private val schema = StructType.fromDDL(
     "id INT, `order` INT, `order-id` INT, s STRUCT<x: INT>, a ARRAY<STRUCT<x: INT>>")
 
-  private def replay(clauses: String): Option[(WriteDistributionMode, Seq[SortOrder])] = {
-    Try(CatalystSqlParser.parsePlan(replayStatement(clauses))).toOption
-      .collect { case c: CreateTable => (c.writeDistributionMode, c.writeOrdering) }
-  }
+  private val replay = replayWith(CatalystSqlParser) _
 
   private def emitted(e: Expression): Option[String] = {
     writeClausesSQL(WriteDistributionMode.RANGE, Seq(key(e)), Seq.empty, schema, replay)
@@ -65,6 +61,7 @@ class WriteDistributionAndOrderingUtilsSuite extends SparkFunSuite with SQLHelpe
     "nested field" -> FieldReference(Seq("s", "x")),
     "connector reference" -> transform("f", new ConnectorReference("order-id")),
     "identity" -> IdentityTransform(id),
+    "identity by name" -> transform("identity", id),
     "byte" -> f(literal(1.toByte)),
     "short" -> f(literal(1.toShort)),
     "int" -> f(literal(1)),
@@ -83,6 +80,7 @@ class WriteDistributionAndOrderingUtilsSuite extends SparkFunSuite with SQLHelpe
     "time(9) with trailing zeros" -> f(literal(LocalTime.of(12, 0, 0, 100000000), TimeType(9))),
     "time(9) without trailing zeros" ->
       f(literal(LocalTime.of(12, 0, 0, 123456789), TimeType(9))),
+    "time(7) at a whole second" -> f(literal(LocalTime.of(12, 0), TimeType(7))),
     "day-time interval" -> f(literal(Duration.ofHours(1))),
     "year-month interval" -> f(literal(Period.ofMonths(14))),
     "bucket" -> transform("bucket", literal(16), id),
@@ -216,6 +214,11 @@ class WriteDistributionAndOrderingUtilsSuite extends SparkFunSuite with SQLHelpe
       assert(emitted(e) ===
         Some("ORDERED BY (f(id, TIMESTAMP_LTZ '2020-11-01 09:30:00.123456789Z') ASC NULLS FIRST)"))
 
+      val wholeSecond = CatalystSqlParser.parseExpression(
+        "TIMESTAMP_LTZ '2020-11-01 01:30:00.000000000-08:00'").asInstanceOf[CatalystLiteral]
+      assert(emitted(f(literal(wholeSecond.value, wholeSecond.dataType))) ===
+        Some("ORDERED BY (f(id, TIMESTAMP_LTZ '2020-11-01 09:30:00.000000000Z') ASC NULLS FIRST)"))
+
       val ntz = CatalystSqlParser.parseExpression("TIMESTAMP_NTZ '2020-01-01 10:00:00.100000000'")
         .asInstanceOf[CatalystLiteral]
       assert(emitted(f(literal(ntz.value, ntz.dataType))).isDefined)
@@ -244,11 +247,17 @@ class WriteDistributionAndOrderingUtilsSuite extends SparkFunSuite with SQLHelpe
       s"f(id, $buffer) ASC NULLS FIRST")
   }
 
-  test("DESCRIBE renders a connector expression as describe does") {
+  test("DESCRIBE renders a connector expression in its SQL form") {
     Seq(
       new Extract("YEAR", id) -> "EXTRACT(YEAR FROM id)",
       new UserDefinedScalarFunc("my_udf", "my_udf", Array[Expression](id)) -> "my_udf(id)",
-      new GeneralScalarExpression("+", Array[Expression](id, literal(1))) -> "id + 1"
+      new GeneralScalarExpression("+", Array[Expression](id, literal(1))) -> "id + 1",
+      new GeneralScalarExpression("+", Array[Expression](IdentityTransform(id), literal(1))) ->
+        "identity(id) + 1",
+      new Cast(Expressions.bucket(16, "id"), StringType) -> "CAST(bucket(16, id) AS string)",
+      new UserDefinedScalarFunc("zorder_key", "zorder_key", Array[Expression](
+        transform("zorder", id, FieldReference("b")))) -> "zorder_key(zorder(id, b))",
+      new VariantGet(id, null, IntegerType, true, null) -> "variant_get(id, 'null', int)"
     ).foreach { case (e, rendered) =>
       assert(describeSortOrder(key(transform("f", e))) === s"f($rendered) ASC NULLS FIRST")
     }
@@ -266,10 +275,46 @@ class WriteDistributionAndOrderingUtilsSuite extends SparkFunSuite with SQLHelpe
         "variant_get(DATE_TRUNC(id), '$.a', int)",
       sort(truncated, SortDirection.ASCENDING, NullOrdering.NULLS_FIRST) ->
         "DATE_TRUNC(id) ASC NULLS FIRST",
-      new GeneralScalarExpression("+", Array[Expression](id, null)) -> "+(id, null)"
+      new GeneralScalarExpression("+", Array[Expression](id, null)) -> "+(id, null)",
+      new UserDefinedScalarFunc("my_udf", "my_udf", Array[Expression](
+        new GeneralScalarExpression("+", Array[Expression](id, null)))) -> "my_udf(+(id, null))",
+      new Cast(new GeneralScalarExpression("+", Array[Expression](id, null)), IntegerType) ->
+        "CAST(+(id, null) AS integer)"
     ).foreach { case (e, rendered) =>
       assert(describeSortOrder(key(transform("f", e))) === s"f($rendered) ASC NULLS FIRST")
       assert(emitted(transform("f", e)).isEmpty, rendered)
+    }
+  }
+
+  test("a connector expression that fails to render is described, and has no clause form") {
+    val broken = new Transform {
+      override def name(): String = "broken"
+      override def references(): Array[NamedReference] = Array.empty
+      override def arguments(): Array[Expression] = throw new IllegalStateException("broken")
+      override def toString: String = "broken()"
+    }
+    assert(describeSortOrder(key(broken)) === "broken() ASC NULLS FIRST")
+    assert(emitted(broken).isEmpty)
+  }
+
+  test("DESCRIBE renders the children of a connector expression with their type and quoting") {
+    val connector = new ConnectorReference("order-id")
+    val date = literal(LocalDate.of(1970, 1, 1))
+    val partitionPredicate = new PartitionPredicate {
+      override def references(): Array[NamedReference] = Array(id)
+      override def eval(partitionKey: InternalRow): Boolean = true
+    }
+    Seq(
+      new GeneralScalarExpression("+", Array[Expression](connector, literal(1))) ->
+        "`order-id` + 1",
+      new GetArrayItem(connector, literal(0), true) -> "`order-id`[0]",
+      new VariantGet(connector, "$['a']", IntegerType, true, null) ->
+        "variant_get(`order-id`, '$[\\'a\\']', int)",
+      sort(date, SortDirection.ASCENDING, NullOrdering.NULLS_FIRST) ->
+        "DATE '1970-01-01' ASC NULLS FIRST",
+      partitionPredicate -> "PARTITION_PREDICATE()"
+    ).foreach { case (e, rendered) =>
+      assert(describeSortOrder(key(transform("f", e))) === s"f($rendered) ASC NULLS FIRST")
     }
   }
 

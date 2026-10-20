@@ -108,7 +108,17 @@ public enum TableCatalogCapability {
    * Their default implementations drop the request, so a catalog that reports this capability must
    * override each one it can be reached through. A {@link StagingTableCatalog} needs all four,
    * because a {@code CREATE TABLE} without {@code AS SELECT} is not staged and arrives at
-   * {@code createTable}.
+   * {@code createTable}. For a {@link TransactionalCatalogPlugin}, a
+   * {@code CREATE TABLE ... AS SELECT} or {@code REPLACE TABLE ... AS SELECT} is checked against
+   * and created through
+   * {@link org.apache.spark.sql.connector.catalog.transactions.Transaction#catalog()}, and is
+   * staged only if that catalog is a {@link StagingTableCatalog}.
+   * <p>
+   * A catalog may reject a request it cannot honor from these overloads. A catalog that is not a
+   * {@link StagingTableCatalog} sees a {@code REPLACE TABLE} or {@code CREATE OR REPLACE TABLE}
+   * in {@code createTable} only after Spark has dropped the existing table, so a catalog that has
+   * to reject a replacement without losing the table should implement
+   * {@link StagingTableCatalog}.
    * <p>
    * {@link DelegatingCatalogExtension} does not forward this capability from its delegate, because
    * it does not override {@code createTable(Identifier, TableInfo)}. A subclass that overrides the
@@ -117,9 +127,12 @@ public enum TableCatalogCapability {
    * Without this capability, such a statement fails with
    * {@code UNSUPPORTED_FEATURE.TABLE_OPERATION} before anything is created or dropped.
    * <p>
-   * The request may be combined with {@code CLUSTER BY}. Spark passes the clustering columns and
-   * the requested distribution and ordering to the catalog without reconciling them, so the
-   * catalog interprets the combination or rejects it.
+   * {@code ORDERED BY}, {@code LOCALLY ORDERED BY} and {@code UNORDERED} may be combined with
+   * {@code CLUSTER BY}; Spark passes the clustering columns and the requested distribution and
+   * ordering to the catalog without reconciling them, so the catalog interprets the combination or
+   * rejects it. {@code DISTRIBUTED BY PARTITION} may not be combined with {@code CLUSTER BY}, so a
+   * {@link WriteDistributionMode#HASH} request always comes with a partition transform that is
+   * not {@code cluster_by}.
    * <p>
    * A {@link DelegatingTable} reports the declared distribution and ordering, but Spark reads and
    * writes it through the v1 path, which does not apply them.
