@@ -1,2 +1,0 @@
-v2
-{"operatorInfo":{"operatorId":0,"operatorName":"symmetricHashJoin"},"stateStoreInfo":[{"storeName":"default","numColsPrefixKey":0,"numPartitions":1,"stateSchemaFilePaths":["state/0/_stateSchema/default/0_70ac3b9d-68dc-41be-9e08-2e679322d969"]}],"operatorPropertiesJson":"{\"useVirtualColumnFamilies\":true}"}
