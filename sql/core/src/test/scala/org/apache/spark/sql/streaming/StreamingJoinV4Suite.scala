@@ -565,16 +565,24 @@ class StreamingOuterJoinV4Suite
       withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
         withTempDir { checkpointDir =>
           val start = StartStream(checkpointLocation = checkpointDir.getCanonicalPath)
+          // All watermarks below are in seconds. inputW is the minimum of the two sides'
+          // maximum event times before the batch and drives eviction. Late input uses the
+          // previous batch's inputW. The condition gives leftStateW = inputW + 5, but no
+          // rightStateW: old right rows can still match future left rows.
           val setup = Seq(start,
+            // Batch 1: inputW = 0, leftStateW = 5, rightStateW = None.
             MultiAddData(leftInput, (9, 20))(rightInput, (9, 10)),
             CheckNewAnswer(Row(9, 9, 20, 10)),
+            // Batch 2: inputW = 10, leftStateW = 15, rightStateW = None.
             AddData(rightInput, (2, 20)), CheckNewAnswer()) ++
             (if (history == "restart") Seq(StopStream, start) else Nil)
-          // The row at 12 seconds is admitted above the 10-second late-event watermark,
-          // but below the previous state cutoff of 15 seconds. It still needs finalization.
+          // Batch 3: inputW = 20, leftStateW = 25, rightStateW = None.
+          // Late input uses inputW = 10 from batch 2, so the 12-second row is accepted.
+          // The old scan started above batch 2's leftStateW = 15, skipping this row.
           testStream(joined)((setup ++ Seq(
             MultiAddData(leftInput, (1, 12))(rightInput, (2, 30)),
             CheckNewAnswer(Row(1, null, 12, null)),
+            // Batch 4: inputW = 20, leftStateW = 25, rightStateW = None. No duplicate output.
             AddData(rightInput, (2, 50)), CheckNewAnswer(), StopStream)): _*)
         }
       }
