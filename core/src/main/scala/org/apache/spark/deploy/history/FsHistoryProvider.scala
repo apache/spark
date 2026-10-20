@@ -19,6 +19,7 @@ package org.apache.spark.deploy.history
 
 import java.io.{ByteArrayInputStream, File, FileNotFoundException, InputStream, IOException, SequenceInputStream}
 import java.lang.{Long => JLong}
+import java.nio.charset.CharacterCodingException
 import java.util.{Date, NoSuchElementException, ServiceLoader}
 import java.util.concurrent.{ConcurrentHashMap, ExecutorService, TimeUnit}
 import java.util.zip.ZipOutputStream
@@ -1179,7 +1180,18 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
                 info.lastEvaluatedForCompaction.get < lastIndex) {
               // haven't tried compaction for this index, do compaction
               val compactor = fileCompactors(logDirForPath(reader.rootPath))
-              compactor.compact(reader.listEventLogFiles)
+              try {
+                compactor.compact(reader.listEventLogFiles)
+              } catch {
+                case e: CharacterCodingException =>
+                  // rewrite() only runs after initializeBuilders has replayed every file to compact
+                  // without error, so no files have been written or deleted at this point.
+                  // Only rolled event log files are compacted and they are no longer modified,
+                  // so retrying would fail the same way. Record this index as evaluated to
+                  // avoid replaying the same files on every scan.
+                  logWarning(log"Skipping compaction for ${MDC(PATH, rootPath)} as the event " +
+                    log"log files contain malformed input", e)
+              }
               listing.write(info.copy(lastEvaluatedForCompaction = Some(lastIndex)))
             }
           } catch {
