@@ -1327,3 +1327,66 @@ WithCTE
                +- SubqueryAlias d
                   +- SubqueryAlias c
                      +- CTERelationRef xxxx, true, [k#x], false, false
+
+
+-- !query
+SELECT d.k, z.k
+FROM ((using_right r LEFT JOIN using_keys d USING (k)) JOIN using_keys y ON y.k = 1)
+  ASOF JOIN (VALUES (1), (2)) AS z(k) MATCH_CONDITION (d.k >= z.k)
+-- !query analysis
+Project [k#x, k#x]
++- Project [k#x, rts#x, k#x, k#x, k#x]
+   +- AsOfJoin (k#x >= k#x), Inner
+      :- Join Inner, (k#x = 1)
+      :  :- Project [k#x, rts#x, k#x]
+      :  :  +- Join LeftOuter, (k#x = k#x)
+      :  :     :- SubqueryAlias r
+      :  :     :  +- SubqueryAlias using_right
+      :  :     :     +- View (`using_right`, [k#x, rts#x])
+      :  :     :        +- Project [cast(col1#x as int) AS k#x, cast(col2#x as int) AS rts#x]
+      :  :     :           +- LocalRelation [col1#x, col2#x]
+      :  :     +- SubqueryAlias d
+      :  :        +- SubqueryAlias using_keys
+      :  :           +- View (`using_keys`, [k#x])
+      :  :              +- Project [cast(col1#x as int) AS k#x]
+      :  :                 +- LocalRelation [col1#x]
+      :  +- SubqueryAlias y
+      :     +- SubqueryAlias using_keys
+      :        +- View (`using_keys`, [k#x])
+      :           +- Project [cast(col1#x as int) AS k#x]
+      :              +- LocalRelation [col1#x]
+      +- SubqueryAlias z
+         +- Project [col1#x AS k#x]
+            +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT z.k, d.k
+FROM (VALUES (1), (2)) AS z(k)
+  ASOF JOIN ((using_right r LEFT JOIN using_keys d USING (k)) JOIN using_keys y ON y.k = 1)
+  MATCH_CONDITION (z.k >= d.k)
+-- !query analysis
+Project [k#x, k#x]
++- Project [k#x, k#x, rts#x, k#x, k#x]
+   +- AsOfJoin (k#x >= k#x), Inner
+      :- SubqueryAlias z
+      :  +- Project [col1#x AS k#x]
+      :     +- LocalRelation [col1#x]
+      +- Join Inner, (k#x = 1)
+         :- Project [k#x, rts#x, k#x]
+         :  +- Join LeftOuter, (k#x = k#x)
+         :     :- SubqueryAlias r
+         :     :  +- SubqueryAlias using_right
+         :     :     +- View (`using_right`, [k#x, rts#x])
+         :     :        +- Project [cast(col1#x as int) AS k#x, cast(col2#x as int) AS rts#x]
+         :     :           +- LocalRelation [col1#x, col2#x]
+         :     +- SubqueryAlias d
+         :        +- SubqueryAlias using_keys
+         :           +- View (`using_keys`, [k#x])
+         :              +- Project [cast(col1#x as int) AS k#x]
+         :                 +- LocalRelation [col1#x]
+         +- SubqueryAlias y
+            +- SubqueryAlias using_keys
+               +- View (`using_keys`, [k#x])
+                  +- Project [cast(col1#x as int) AS k#x]
+                     +- LocalRelation [col1#x]

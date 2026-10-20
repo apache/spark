@@ -735,3 +735,26 @@ struct<k:int,k:int>
 -- !query output
 1	1
 2	2
+
+
+-- !query
+SELECT d.k, z.k
+FROM ((using_right r LEFT JOIN using_keys d USING (k)) JOIN using_keys y ON y.k = 1)
+  ASOF JOIN (VALUES (1), (2)) AS z(k) MATCH_CONDITION (d.k >= z.k)
+-- !query schema
+struct<k:int,k:int>
+-- !query output
+1	1
+2	2
+
+
+-- !query
+SELECT z.k, d.k
+FROM (VALUES (1), (2)) AS z(k)
+  ASOF JOIN ((using_right r LEFT JOIN using_keys d USING (k)) JOIN using_keys y ON y.k = 1)
+  MATCH_CONDITION (z.k >= d.k)
+-- !query schema
+struct<k:int,k:int>
+-- !query output
+1	1
+2	2

@@ -366,3 +366,14 @@ WITH c AS (SELECT * FROM using_keys)
 SELECT x.k, d.k
 FROM using_keys x
   ASOF JOIN (using_right r LEFT JOIN c d USING (k)) MATCH_CONDITION (x.k >= d.k);
+
+-- FVT-ASOF-2-051: a hidden MATCH_CONDITION column meets a copy of its table in a JOIN below
+SELECT d.k, z.k
+FROM ((using_right r LEFT JOIN using_keys d USING (k)) JOIN using_keys y ON y.k = 1)
+  ASOF JOIN (VALUES (1), (2)) AS z(k) MATCH_CONDITION (d.k >= z.k);
+
+-- FVT-ASOF-2-052: same as FVT-ASOF-2-051, with that JOIN on the right side
+SELECT z.k, d.k
+FROM (VALUES (1), (2)) AS z(k)
+  ASOF JOIN ((using_right r LEFT JOIN using_keys d USING (k)) JOIN using_keys y ON y.k = 1)
+  MATCH_CONDITION (z.k >= d.k);

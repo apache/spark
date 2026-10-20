@@ -142,22 +142,6 @@ class AsOfJoinResolver(
   }
 
   /**
-   * Merges the ID mappings of both sides. It also keeps the IDs of hidden columns like `d.k`:
-   * `MATCH_CONDITION` is resolved again later, and a copy of the same table on the other side
-   * must not remap them.
-   */
-  private def mergeChildMappings(leftNameScope: NameScope, rightNameScope: NameScope): Unit = {
-    val qualifiedAccessOnlyColumnIds =
-      (leftNameScope.hiddenOutput ++ rightNameScope.hiddenOutput)
-        .filter(_.qualifiedAccessOnly)
-        .map(_.exprId)
-    expressionIdAssigner.createMappingFromChildMappings(
-      newOutputIds =
-        leftNameScope.getOutputIds ++ rightNameScope.getOutputIds ++ qualifiedAccessOnlyColumnIds
-    )
-  }
-
-  /**
    * If the join references a hidden column, wraps it in a [[Project]] that restores its original
    * output, plus the qualified-access-only columns unless the join is the top-level operator.
    */
