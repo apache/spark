@@ -1741,6 +1741,33 @@ class WholeStageCodegenSuite extends SharedSparkSession
       "sinh(v) should be evaluated only once per input row without function splitting")
   }
 
+  test("SPARK-60398: Expand compiles with its switch case functions spilled to nested classes") {
+    // A sliding window has its Expand generate a row for each window a time can fall in: 360 rows
+    // for a window of an hour sliding by 10 seconds. Without subexpression elimination the code
+    // of each case computes the window in full and goes into a function of its own (SPARK-35329),
+    // and the 360 functions, about 2.5 million characters of code, take the class past
+    // `CodeGenerator.GENERATED_CLASS_SIZE_THRESHOLD`, so `addNewFunction` puts the later ones into
+    // nested classes. A call from outside of such a class has to go through its instance, as the
+    // name `addNewFunction` returns does; by the bare name it failed to compile, and the stage ran
+    // without whole stage codegen. The calls come from `expand_doConsume_0`, added after the
+    // functions into a later nested class, and, where the consume code of the operators is not
+    // split into functions, from `processNext` of the outer class.
+    val qualifiedCall = "\\w*nestedClassInstance_\\d+\\.\\w*switchCaseCode_\\d+\\(".r
+    def check(df: => DataFrame): Unit = {
+      val code = genCode(df)
+      code.foreach(CodeGenerator.compile)
+      assert(code.exists(c => qualifiedCall.findFirstIn(c.body).nonEmpty))
+      checkAnswer(df, withoutWholeStage(df))
+    }
+    def times: DataFrame = spark.range(10).selectExpr("timestamp_seconds(id) AS ts")
+    withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "false") {
+      check(times.groupBy(window($"ts", "1 hour", "10 seconds")).count())
+      withSQLConf(SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> "false") {
+        check(times.select(window($"ts", "1 hour", "10 seconds")))
+      }
+    }
+  }
+
   test("SPARK-59295: a nested With in a branch is emitted once per scope under whole-stage") {
     // A whole-stage `Project` passes its input as local variables, which is where
     // `CommonExprSlots.fill` could not put a definition in a method before. Both `nullif`s survive
