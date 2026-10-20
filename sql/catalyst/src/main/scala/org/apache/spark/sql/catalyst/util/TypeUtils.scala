@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.catalyst.analysis.{AnalysisErrorAt, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.{Expression, RowOrdering}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, RowOrdering}
 import org.apache.spark.sql.catalyst.expressions.st.STExpressionUtils.isGeoSpatialType
 import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalNumericType}
 import org.apache.spark.sql.errors.{DataTypeErrors, QueryCompilationErrors, QueryErrorsBase}
@@ -70,7 +70,8 @@ object TypeUtils extends QueryErrorsBase {
   }
 
   def checkForMapKeyType(keyType: DataType): TypeCheckResult = {
-    if (keyType.existsRecursively(dt => dt.isInstanceOf[MapType] || dt.isInstanceOf[VariantType])) {
+    if (keyType.existsRecursively(dt => dt.isInstanceOf[MapType] || dt.isInstanceOf[VariantType] ||
+      dt.isInstanceOf[FileType])) {
       DataTypeMismatch(
         errorSubClass = "INVALID_MAP_KEY_TYPE",
         messageParameters = Map(
@@ -160,6 +161,85 @@ object TypeUtils extends QueryErrorsBase {
       throw new org.apache.spark.sql.AnalysisException(
         errorClass = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED",
         messageParameters = scala.collection.immutable.Map.empty)
+    }
+  }
+
+  private def containsUnknownFileType(dataType: DataType): Boolean = {
+    dataType.existsRecursively {
+      case ft: FileType => ft.mode == FileTypeMode.UNKNOWN
+      case _ => false
+    }
+  }
+
+  /**
+   * Fails if a FILE in `dataType`, at any nesting depth, has no qualifier, as a FILE in a table
+   * column definition must be declared `FILE EXTERNAL`.
+   */
+  def checkFileTypeHasQualifier(dataType: DataType): Unit = {
+    if (containsUnknownFileType(dataType)) {
+      throw QueryCompilationErrors.fileTypeMissingQualifierError()
+    }
+  }
+
+  /**
+   * Fails if any of `columns`, which a write such as CREATE TABLE AS SELECT stores in a table,
+   * holds a FILE without a qualifier, as a table cannot store one.
+   */
+  def checkNoUnknownFileTypeWrite(columns: Seq[Attribute]): Unit = {
+    val unknownCols = columns.filter(c => containsUnknownFileType(c.dataType))
+    if (unknownCols.nonEmpty) {
+      throw QueryCompilationErrors.fileTypeUnknownWriteError(unknownCols.map(_.name))
+    }
+  }
+
+  /**
+   * Fails if a FILE in the parameter or return types of a routine has a qualifier. Routines
+   * declare a plain FILE; a FILE of any mode can still be passed to them.
+   */
+  def checkNoQualifierInRoutineSignature(
+      dataTypes: Seq[DataType],
+      routineType: String,
+      routineName: String): Unit = {
+    val hasQualified = dataTypes.exists(_.existsRecursively {
+      case ft: FileType => ft.mode != FileTypeMode.UNKNOWN
+      case _ => false
+    })
+    if (hasQualified) {
+      throw QueryCompilationErrors.fileTypeInRoutineSignatureUnsupportedQualifierError(
+        routineType, routineName)
+    }
+  }
+
+  /**
+   * Fails if the return type of a function holds a FILE in a map key. Map construction already
+   * rejects such a key through [[checkForMapKeyType]].
+   */
+  def checkNoFileTypeMapKeyInReturnType(returnType: DataType, routineName: String): Unit = {
+    def fileTypeInMapKey(dt: DataType): Boolean = dt match {
+      case mt: MapType =>
+        mt.keyType.existsRecursively(_.isInstanceOf[FileType]) || fileTypeInMapKey(mt.valueType)
+      case at: ArrayType => fileTypeInMapKey(at.elementType)
+      case st: StructType => st.fields.exists(f => fileTypeInMapKey(f.dataType))
+      case _ => false
+    }
+    if (fileTypeInMapKey(returnType)) {
+      throw QueryCompilationErrors.fileTypeInRoutineSignatureUnsupportedMapKeyError(
+        "function", routineName)
+    }
+  }
+
+  /**
+   * Checks the return type of a function that is not created by SQL DDL, for example a UDF
+   * registered through `spark.udf.register`, as [[checkNoQualifierInRoutineSignature]] and
+   * [[checkNoFileTypeMapKeyInReturnType]] do for SQL functions. Does nothing when the FILE type
+   * is disabled.
+   */
+  def checkNoQualifierInRegisteredRoutineReturnType(
+      returnType: DataType,
+      routineName: String): Unit = {
+    if (SQLConf.get.isFileTypeEnabled) {
+      checkNoQualifierInRoutineSignature(Seq(returnType), "function", routineName)
+      checkNoFileTypeMapKeyInReturnType(returnType, routineName)
     }
   }
 }

@@ -26,11 +26,14 @@ import org.apache.spark.sql
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.JavaTypeInference
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.classic.UserDefinedFunctionUtils.toScalaUDF
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, ScalaUDAF}
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.expressions.{SparkUserDefinedFunction, UserDefinedAggregateFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.types.DataType
 
@@ -61,6 +64,8 @@ class UDFRegistration private[sql] (session: SparkSession, functionRegistry: Fun
         | udfDeterministic: ${udf.udfDeterministic}
       """.stripMargin)
 
+    // A FILE in the return type cannot have a qualifier.
+    TypeUtils.checkNoQualifierInRegisteredRoutineReturnType(udf.dataType, name)
     functionRegistry.createOrReplaceTempFunction(name, udf.builder, "python_udf")
   }
 
@@ -78,6 +83,8 @@ class UDFRegistration private[sql] (session: SparkSession, functionRegistry: Fun
   @deprecated("Aggregator[IN, BUF, OUT] should now be registered as a UDF" +
     " via the functions.udaf(agg) method.", "3.0.0")
   def register(name: String, udaf: UserDefinedAggregateFunction): UserDefinedAggregateFunction = {
+    // A FILE in the return type cannot have a qualifier.
+    TypeUtils.checkNoQualifierInRegisteredRoutineReturnType(udaf.dataType, name)
     def builder(children: Seq[Expression]) = ScalaUDAF(children, udaf, udafName = Some(name))
     functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     udaf
@@ -89,6 +96,16 @@ class UDFRegistration private[sql] (session: SparkSession, functionRegistry: Fun
       source: String,
       validateParameterCount: Boolean): UserDefinedFunction = {
     val named = udf.withName(name)
+    // A FILE in the return type cannot have a qualifier. For a typed Aggregator the return type is
+    // carried by its output encoder rather than a `dataType` field.
+    if (SQLConf.get.isFileTypeEnabled) {
+      val returnType: DataType = named match {
+        case udaf: UserDefinedAggregator[_, _, _] =>
+          encoderFor(udaf.aggregator.outputEncoder).objSerializer.dataType
+        case f: SparkUserDefinedFunction => f.dataType
+      }
+      TypeUtils.checkNoQualifierInRegisteredRoutineReturnType(returnType, name)
+    }
     val builder: Seq[Expression] => Expression = named match {
       case udaf: UserDefinedAggregator[_, _, _] =>
         ScalaAggregator(udaf, _)

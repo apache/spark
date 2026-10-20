@@ -271,6 +271,7 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
           "Schema may not be specified in a Create Table As Select (CTAS) statement")
 
         val analyzedQuery = query.get
+        checkNoUnknownFileTypeWrite(analyzedQuery.output)
         val normalizedTable = normalizeCatalogTable(analyzedQuery.schema, tableDesc)
 
         DDLUtils.checkTableColumns(tableDesc.copy(schema = analyzedQuery.schema))
@@ -293,6 +294,7 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
 
         c.copy(tableDesc = normalizedTable, query = Some(reorderedQuery))
       } else {
+        checkFileTypeHasQualifier(tableDesc.schema)
         DDLUtils.checkTableColumns(tableDesc)
 
         val normalizedTable = normalizeCatalogTable(tableDesc.schema, tableDesc)

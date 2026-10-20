@@ -450,6 +450,17 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
+  def unsupportedSetOperationOnFileType(fileCol: Attribute, origin: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_FILE_TYPE",
+      messageParameters = Map(
+        "colName" -> toSQLId(fileCol.name),
+        "dataType" -> toSQLType(fileCol.dataType)
+      ),
+      origin = origin
+    )
+  }
+
   def nonPartitionColError(partitionName: String): Throwable = {
     new AnalysisException(
       errorClass = "NON_PARTITION_COLUMN",
@@ -5171,6 +5182,29 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "UNSUPPORTED_FILE_TYPE",
       messageParameters = Map.empty)
+  }
+
+  def fileTypeUnknownWriteError(colNames: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "FILE_TYPE_UNKNOWN_WRITE",
+      messageParameters = Map(
+        "colNames" -> colNames.map(quoteIdentifier).mkString("[", ", ", "]")))
+  }
+
+  def fileTypeInRoutineSignatureUnsupportedQualifierError(
+      routineType: String,
+      routineName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_QUALIFIER",
+      messageParameters = Map("routineType" -> routineType, "routineName" -> routineName))
+  }
+
+  def fileTypeInRoutineSignatureUnsupportedMapKeyError(
+      routineType: String,
+      routineName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_MAP_KEY",
+      messageParameters = Map("routineType" -> routineType, "routineName" -> routineName))
   }
 
   def unsupportedTimeTypeError(): Throwable = {

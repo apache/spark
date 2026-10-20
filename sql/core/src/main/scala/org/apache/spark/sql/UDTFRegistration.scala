@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis.TableFunctionRegistry
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.execution.python.UserDefinedPythonTableFunction
 
 /**
@@ -44,6 +45,9 @@ private[sql] class UDTFRegistration private[sql] (tableFunctionRegistry: TableFu
          | udfDeterministic: ${udtf.udfDeterministic}
       """.stripMargin)
 
+    // A FILE in the return type cannot have a qualifier. A UDTF with an analyze method has no
+    // static return type here; the analyzer checks it instead.
+    udtf.returnType.foreach(TypeUtils.checkNoQualifierInRegisteredRoutineReturnType(_, name))
     tableFunctionRegistry.createOrReplaceTempFunction(
       name, udtf.builder(_, SparkSession.getActiveSession.get.sessionState.sqlParser),
       source = "python_udtf")

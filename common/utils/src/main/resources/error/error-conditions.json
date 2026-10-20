@@ -2012,6 +2012,11 @@
           "Filter expression <filter> of type <type> is not a boolean."
         ]
       },
+      "HASH_FILE_TYPE" : {
+        "message" : [
+          "The function <functionName> does not support elements of the \"FILE\" type."
+        ]
+      },
       "HASH_MAP_TYPE" : {
         "message" : [
           "Input to the function <functionName> cannot contain elements of the \"MAP\" type. In Spark, same maps may have different hashcode, thus hash expressions are prohibited on \"MAP\" elements. To restore previous behavior set \"spark.sql.legacy.allowHashOnMapType\" to \"true\"."
@@ -3007,6 +3012,30 @@
       "No such struct field <fieldName> in <fields>."
     ],
     "sqlState" : "42704"
+  },
+  "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_MAP_KEY" : {
+    "message" : [
+      "The FILE type cannot be a map key in the return type of <routineType> <routineName>. Use FILE only as a map value, array element, or struct field."
+    ],
+    "sqlState" : "42601"
+  },
+  "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_QUALIFIER" : {
+    "message" : [
+      "The FILE type in <routineType> <routineName> does not support the EXTERNAL qualifier. Use FILE without a qualifier."
+    ],
+    "sqlState" : "42601"
+  },
+  "FILE_TYPE_MISSING_QUALIFIER" : {
+    "message" : [
+      "FILE type requires the EXTERNAL qualifier in a column definition. Use FILE EXTERNAL."
+    ],
+    "sqlState" : "42601"
+  },
+  "FILE_TYPE_UNKNOWN_WRITE" : {
+    "message" : [
+      "Column(s) <colNames> have an ambiguous FILE type. Declare the columns as FILE EXTERNAL in the target table before writing."
+    ],
+    "sqlState" : "42K01"
   },
   "FLATMAPGROUPSWITHSTATE_USER_FUNCTION_ERROR" : {
     "message" : [
@@ -9281,6 +9310,11 @@
           "Parameter markers are not allowed in <statement>."
         ]
       },
+      "PARTITION_BY_FILE" : {
+        "message" : [
+          "Cannot use FILE type expressions to partition a DataFrame, but the type of expression <expr> is <dataType>."
+        ]
+      },
       "PARTITION_BY_VARIANT" : {
         "message" : [
           "Cannot use VARIANT producing expressions to partition a DataFrame, but the type of expression <expr> is <dataType>."
@@ -9351,6 +9385,11 @@
       "SET_NAMESPACE_PROPERTY" : {
         "message" : [
           "<property> is a reserved namespace property, <msg>."
+        ]
+      },
+      "SET_OPERATION_ON_FILE_TYPE" : {
+        "message" : [
+          "Cannot have FILE type columns in a DataFrame that calls set operations (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
         ]
       },
       "SET_OPERATION_ON_MAP_TYPE" : {

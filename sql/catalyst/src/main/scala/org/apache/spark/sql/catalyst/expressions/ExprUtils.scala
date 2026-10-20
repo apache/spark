@@ -225,8 +225,10 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
           messageParameters = Map("sqlExpr" -> expr.sql))
       }
 
-      // Check if the data type of expr is orderable.
-      if (expr.dataType.existsRecursively(_.isInstanceOf[VariantType])) {
+      // Check if the data type of expr is orderable. FILE has no defined ordering either, so it
+      // can never be a grouping key.
+      if (expr.dataType.existsRecursively(
+        t => t.isInstanceOf[VariantType] || t.isInstanceOf[FileType])) {
         expr.failAnalysis(
           errorClass = "GROUP_EXPRESSION_TYPE_IS_NOT_ORDERABLE",
           messageParameters = Map(
