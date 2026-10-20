@@ -80,6 +80,9 @@ object FileFormatWriter extends Logging {
    *    thrown during job commitment, also aborts the job.
    * 5. If the job is successfully committed, perform post-commit operations such as
    *    processing statistics.
+   * @param beforeSetupJob called right before the committer sets up the job, after the
+   *                       driver side checks of the write (e.g. data schema and write options)
+   *                       pass.
    * @return The set of all partition paths that were updated during this write job.
    */
   def write(
@@ -93,7 +96,8 @@ object FileFormatWriter extends Logging {
       bucketSpec: Option[BucketSpec],
       statsTrackers: Seq[WriteJobStatsTracker],
       options: Map[String, String],
-      numStaticPartitionCols: Int = 0)
+      numStaticPartitionCols: Int = 0,
+      beforeSetupJob: () => Unit = () => ())
     : Set[String] = {
     require(partitionColumns.size >= numStaticPartitionCols)
 
@@ -164,6 +168,10 @@ object FileFormatWriter extends Logging {
     // propagate the description UUID into the jobs, so that committers
     // get an ID guaranteed to be unique.
     job.getConfiguration.set("spark.sql.sources.writeJobUUID", description.uuid)
+
+    // Called only after the checks above pass, so that a static-mode overwrite, which deletes
+    // the existing data here, keeps it when the write fails one of them.
+    beforeSetupJob()
 
     // When `PLANNED_WRITE_ENABLED` is true, the optimizer rule V1Writes will add logical sort
     // operator based on the required ordering of the V1 write command. So the output
