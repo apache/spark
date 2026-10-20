@@ -88,11 +88,16 @@ class AsyncProgressTrackingMicroBatchExecution(
     checkpointFile("offsets"),
     asyncWritesExecutorService,
     asyncProgressTrackingCheckpointingIntervalMs,
-    clock = triggerClock
+    clock = triggerClock,
+    errorNotifier = errorNotifier
   )
 
-  override val commitLog =
-    new AsyncCommitLog(sparkSession, checkpointFile("commits"), asyncWritesExecutorService)
+  override val commitLog = new AsyncCommitLog(
+    sparkSession,
+    checkpointFile("commits"),
+    asyncWritesExecutorService,
+    errorNotifier = errorNotifier
+  )
 
   // perform quick validation to fail faster
   validateAndGetTrigger()

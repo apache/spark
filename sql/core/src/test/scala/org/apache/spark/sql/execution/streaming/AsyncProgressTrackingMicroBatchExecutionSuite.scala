@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.io.File
-import java.util.concurrent.{CountDownLatch, Semaphore, TimeUnit}
+import java.util.concurrent.{CountDownLatch, ExecutionException, Semaphore, TimeUnit}
 
 import scala.collection.mutable.ListBuffer
 
@@ -35,7 +35,7 @@ import org.apache.spark.sql.functions.{column, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryException, StreamTest, Trigger}
 import org.apache.spark.sql.streaming.util.StreamManualClock
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 class AsyncProgressTrackingMicroBatchExecutionSuite
   extends StreamTest with BeforeAndAfter with Matchers {
@@ -748,7 +748,7 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
               val e = intercept[StreamingQueryException] {
                 q.processAllAvailable()
               }
-              e.getCause.getCause.getMessage should include("Permission denied")
+              TestUtils.assertExceptionMsg(e, "Permission denied")
             }
         }
       )
@@ -771,6 +771,53 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
   test("bubble up async commit log write errors 2" +
     ": commit file already exists for a batch") {
     testAsyncWriteErrorsPermissionsIssue("/commits")
+  }
+
+  test("async log writes record first error and gate subsequent writes") {
+    val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
+    val offsetsDir = new File(checkpointLocation + "/offsets")
+    val commitsDir = checkpointLocation + "/commits"
+    offsetsDir.mkdirs()
+
+    val executor = ThreadUtils.newDaemonSingleThreadExecutor("async-log-write-test")
+    try {
+      val sharedNotifier = new ErrorNotifier()
+      val offsetLog = new AsyncOffsetSeqLog(
+        spark, offsetsDir.getAbsolutePath, executor, offsetCommitIntervalMs = 0,
+        errorNotifier = sharedNotifier)
+      val commitLog = new AsyncCommitLog(
+        spark, commitsDir, executor, errorNotifier = sharedNotifier)
+
+      offsetsDir.setReadOnly()
+      try {
+        val firstFuture = offsetLog.addAsync(0L, OffsetSeq.fill(LongOffset(0)))
+        val firstEx = intercept[ExecutionException] {
+          firstFuture.get(5, TimeUnit.SECONDS)
+        }
+        // In production this is done by the `.exceptionally` chain in
+        // AsyncProgressTrackingMicroBatchExecution.
+        sharedNotifier.markError(firstEx.getCause)
+        val firstError = sharedNotifier.getError().get
+
+        val commitFuture = commitLog.addAsync(0L, CommitMetadata())
+        val commitEx = intercept[ExecutionException] {
+          commitFuture.get(5, TimeUnit.SECONDS)
+        }
+        assert(commitEx.getCause eq firstError)
+        assert(getListOfFiles(commitsDir).isEmpty)
+
+        val secondOffsetFuture = offsetLog.addAsync(1L, OffsetSeq.fill(LongOffset(1)))
+        val secondOffsetEx = intercept[ExecutionException] {
+          secondOffsetFuture.get(5, TimeUnit.SECONDS)
+        }
+        assert(secondOffsetEx.getCause eq firstError)
+        assert(sharedNotifier.getError().contains(firstError))
+      } finally {
+        offsetsDir.setWritable(true)
+      }
+    } finally {
+      executor.shutdownNow()
+    }
   }
 
   test("commit intervals happy path") {
