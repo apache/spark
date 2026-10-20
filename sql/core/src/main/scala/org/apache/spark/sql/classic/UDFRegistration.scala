@@ -33,8 +33,8 @@ import org.apache.spark.sql.classic.UserDefinedFunctionUtils.toScalaUDF
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, ScalaUDAF}
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.expressions.{SparkUserDefinedFunction, UserDefinedAggregateFunction, UserDefinedAggregator, UserDefinedFunction}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
 
 /**
