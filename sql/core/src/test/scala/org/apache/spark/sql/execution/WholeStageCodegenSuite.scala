@@ -26,7 +26,7 @@ import scala.util.{Failure, Success, Try}
 import org.apache.logging.log4j.Level
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkArithmeticException, SparkException}
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkNumberFormatException}
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.rdd.MapPartitionsWithEvaluatorRDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SaveMode}
@@ -2970,7 +2970,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
       // after a NULL conjunct it has to be generated before the conjuncts it precedes.
       //
       // The common `b * 2` takes the CSE path of FilterExec. The overflowing `y + 1` is not
-      // common because the interpreted predicate evaluates its common subexpressions up front.
+      // common because `GeneratePredicate` (codegen off) evaluates common subexpressions first.
       val cseQuery = "SELECT a FROM t WHERE x IS NOT NULL AND NOT (a > 0 AND b > 0) AND " +
         "y + 1 > 0 AND b * 2 > 0 AND b * 2 > -1"
       def multiplyExactCount(filterExecCSE: Boolean): Int = {
@@ -3014,6 +3014,61 @@ class WholeStageCodegenSuite extends SharedSparkSession
           sql("SELECT count(1) FILTER (WHERE x IS NOT NULL AND NOT (a > 0 AND b > 0) AND " +
             "y + 1 > 0) FROM t"),
           Row(1))
+      }
+    }
+  }
+
+  test("SPARK-60315: a filter checks IS NOT NULL on an expression after the conjunct it follows") {
+    withNullConjunctTable(Int.MaxValue) {
+      // `cast(s AS INT)` raises on the first row. With codegen on, a check on an expression is
+      // generated just before the first conjunct that contains the expression (SPARK-51356),
+      // even when it is written after that conjunct. After a NULL conjunct, it has to stay after
+      // the conjunct, as with codegen off: `coalesce(b, cast(s AS INT)) < 0` is FALSE on the row
+      // and drops it before the check raises, while `coalesce(b, cast(s AS INT)) < 2` is TRUE and
+      // the check raises after it. The second row passes the latter condition.
+      //
+      // The common `b * 2` takes the CSE path of FilterExec.
+      def query(conjunct: String, cse: Boolean): String = {
+        val common = if (cse) "b * 2 > 0 AND b * 2 > -1 AND " else ""
+        s"SELECT a FROM t WHERE NOT (a > 0 AND b > 0) AND $common$conjunct AND " +
+          "cast(s AS INT) IS NOT NULL"
+      }
+      def multiplyExactCount(filterExecCSE: Boolean): Int = {
+        withSQLConf(
+            SQLConf.ANSI_ENABLED.key -> "true",
+            SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> filterExecCSE.toString) {
+          val plan = sql(query("coalesce(b, cast(s AS INT)) < 0", cse = true)).queryExecution
+          "multiplyExact".r.findAllIn(codegenString(plan.executedPlan)).length
+        }
+      }
+      assert(multiplyExactCount(filterExecCSE = true) < multiplyExactCount(filterExecCSE = false))
+
+      Seq(true, false).foreach { cse =>
+        withNullConjunctConfs(
+            SQLConf.ANSI_ENABLED.key -> "true",
+            SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> cse.toString) {
+          skipsAtNull =>
+            checkAnswer(sql(query("coalesce(b, cast(s AS INT)) < 0", cse)), Seq.empty)
+            val raising = query("coalesce(b, cast(s AS INT)) < 2", cse)
+            if (skipsAtNull) {
+              checkAnswer(sql(raising), Row(0))
+            } else {
+              checkError(
+                exception = intercept[SparkNumberFormatException] {
+                  sql(raising).collect()
+                },
+                condition = "CAST_INVALID_INPUT",
+                parameters = Map(
+                  "expression" -> "'x'",
+                  "sourceType" -> "\"STRING\"",
+                  "targetType" -> "\"INT\"",
+                  "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+                context = ExpectedContext(
+                  fragment = "cast(s AS INT)",
+                  start = raising.lastIndexOf("cast(s AS INT)"),
+                  stop = raising.lastIndexOf("cast(s AS INT)") + 13))
+            }
+        }
       }
     }
   }

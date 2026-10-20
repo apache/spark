@@ -142,7 +142,7 @@ trait GeneratePredicateHelper extends PredicateHelper {
     val nonNullAttrExprIds = notNullPreds.flatMap(_.references).distinct.map(_.exprId)
     val outputAttrs = outputWithNullability(inputAttrs, nonNullAttrExprIds)
     generatePredicateCode(
-      ctx, inputAttrs, inputExprCode, outputAttrs, notNullPreds, otherPreds,
+      ctx, inputAttrs, inputExprCode, notNullPreds, otherPreds,
       otherPreds.map(BindReferences.bindReference(_, outputAttrs)), precedingNotNulls,
       nonNullAttrExprIds)
   }
@@ -224,6 +224,11 @@ trait GeneratePredicateHelper extends PredicateHelper {
    * drops the row before an error a later conjunct raises on it (SPARK-60315). `afterNullable`
    * is set once a conjunct that can be NULL has been generated. The conjuncts before it are
    * never reached after a NULL conjunct, so the checks before them keep the lazy placement.
+   *
+   * The one exception to the order is a check on a column that a later conjunct references: it
+   * is generated before that conjunct even when it is written after it, since the conjunct is
+   * bound with the column non-nullable. The check is never NULL, so it only drops a row that
+   * `And.eval` drops too, unless the conjunct raises an error on the row first.
    */
   protected def precedingNotNullChecks(
       notNullPreds: Seq[Expression],
@@ -246,14 +251,14 @@ trait GeneratePredicateHelper extends PredicateHelper {
       ctx: CodegenContext,
       inputAttrs: Seq[Attribute],
       inputExprCode: Seq[ExprCode],
-      outputAttrs: Seq[Attribute],
       notNullPreds: Seq[Expression],
       otherPreds: Seq[Expression],
       boundOtherPreds: Seq[Expression],
       precedingNotNulls: Seq[Int],
       nonNullAttrExprIds: Seq[ExprId]): String = {
-    // The IsNotNull checks are never NULL, so only `otherPreds`, bound against `outputAttrs` in
-    // `boundOtherPreds`, can need the flag.
+    // The IsNotNull checks are never NULL, so only `otherPreds` can need the flag. The caller
+    // binds them against the output with the checked columns tightened to non-nullable, in
+    // `boundOtherPreds`.
     val nullFlag = nullConjunctFlag(ctx, boundOtherPreds)
 
     /**
@@ -287,7 +292,8 @@ trait GeneratePredicateHelper extends PredicateHelper {
     // This is very perf sensitive.
     // With the NULL-conjunct flag, once a predicate that can be NULL is generated, the IsNotNull
     // checks that precede a later predicate in the condition are generated before it, see
-    // `precedingNotNullChecks`.
+    // `precedingNotNullChecks`, and a check on an expression that is written after the predicate
+    // is not generated before it, see the nested checks below.
     // NOTE: `FilterExec.doConsume`'s CSE branch inlines the same interleaving so it can
     // emit CSE state precomputes between the IsNotNull checks and each otherPred body.
     // Any change to this algorithm must be mirrored there (and vice versa).
@@ -296,8 +302,9 @@ trait GeneratePredicateHelper extends PredicateHelper {
     val extraIsNotNullAttrs = mutable.Set[Attribute]()
     var nullableSeen = false
     val generated = otherPreds.zip(boundOtherPreds).zipWithIndex.map { case ((c, bound), k) =>
+      val afterNullable = nullFlag.isDefined && nullableSeen
       val precedingChecks = precedingNotNullChecks(
-        notNullPreds, precedingNotNulls, k, nullFlag.isDefined && nullableSeen,
+        notNullPreds, precedingNotNulls, k, afterNullable,
         generatedIsNotNullChecks).map(genNotNull).mkString("\n").trim
       nullableSeen ||= bound.nullable
 
@@ -318,7 +325,13 @@ trait GeneratePredicateHelper extends PredicateHelper {
         }
       }.mkString("\n").trim
 
-      val nestedNullChecks = notNullPreds.zipWithIndex.collect {
+      // A check on an expression that the predicate contains is generated before the predicate
+      // (SPARK-51356). After a predicate that can be NULL, the checks written before this one
+      // are generated above, and a check written after it is left to the remaining checks, as
+      // `And.eval` evaluates it after the predicate, so that it does not raise an error on a
+      // row that the predicate drops. The columns of the expression are covered by the checks
+      // above.
+      val nestedNullChecks = if (afterNullable) "" else notNullPreds.zipWithIndex.collect {
         case (p @ IsNotNull(n), idx)
             if !generatedIsNotNullChecks(idx) && !n.isInstanceOf[Attribute] &&
               c.exists(_.semanticEquals(n)) =>
@@ -424,7 +437,9 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     //       got synthetic coverage) emit after all otherPreds. With the NULL-conjunct
     //       flag, once an otherPred that can be NULL is emitted, the notNullPreds that
     //       precede a later otherPred in the condition are emitted before it first
-    //       (`precedingNotNullChecks`), as in the non-CSE branch (SPARK-60315).
+    //       (`precedingNotNullChecks`), and a complex `IsNotNull(expr)` written after the
+    //       otherPred is left to the remaining notNullPreds, so it does not raise on a row
+    //       the otherPred rejects, as in the non-CSE branch (SPARK-60315).
     //   (c) CSE state materialization: binding otherPreds (and the CSE analysis)
     //       against `output` (with `notNullAttributes` tightened to non-nullable)
     //       requires that the matching IsNotNull has already short-circuited -- else
@@ -511,8 +526,9 @@ case class FilterExec(condition: Expression, child: SparkPlan)
           ctx.withSubExprEliminationExprs(subExprs.states) {
             otherPreds.zip(boundOtherPreds).zipWithIndex.foreach {
               case ((orig, bound), idx) =>
+                val afterNullable = nullFlag.isDefined && nullableSeen
                 precedingNotNullChecks(
-                    notNullPreds, precedingNotNulls, idx, nullFlag.isDefined && nullableSeen,
+                    notNullPreds, precedingNotNulls, idx, afterNullable,
                     generatedIsNotNullChecks).foreach { p =>
                   // The inner expression of a check is evaluated with no CSE state, as below.
                   var checkCode: String = null
@@ -540,19 +556,22 @@ case class FilterExec(condition: Expression, child: SparkPlan)
                     parts.append('\n')
                   }
                 }
-                notNullPreds.zipWithIndex.foreach {
-                  case (p @ IsNotNull(n), ni)
-                      if !generatedIsNotNullChecks(ni) && !n.isInstanceOf[Attribute] &&
-                        orig.exists(_.semanticEquals(n)) =>
-                    generatedIsNotNullChecks(ni) = true
-                    var checkCode: String = null
-                    ctx.withSubExprEliminationExprs(Map.empty) {
-                      checkCode = genNotNull(p)
-                      Seq.empty
-                    }
-                    parts.append(checkCode)
-                    parts.append('\n')
-                  case _ =>
+                // A complex `IsNotNull(expr)` is skipped after a nullable otherPred, see (b).
+                if (!afterNullable) {
+                  notNullPreds.zipWithIndex.foreach {
+                    case (p @ IsNotNull(n), ni)
+                        if !generatedIsNotNullChecks(ni) && !n.isInstanceOf[Attribute] &&
+                          orig.exists(_.semanticEquals(n)) =>
+                      generatedIsNotNullChecks(ni) = true
+                      var checkCode: String = null
+                      ctx.withSubExprEliminationExprs(Map.empty) {
+                        checkCode = genNotNull(p)
+                        Seq.empty
+                      }
+                      parts.append(checkCode)
+                      parts.append('\n')
+                    case _ =>
+                  }
                 }
                 statesByFirstUse.get(idx).foreach { states =>
                   parts.append(ctx.evaluateSubExprEliminationState(states))
@@ -581,7 +600,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
         (inputVarsEvalCode, withNullConjunctFlag(predCode + "\n" + leftoverNotNull, nullFlag))
       } else {
         ("", generatePredicateCode(
-          ctx, child.output, input, output, notNullPreds, otherPreds, boundOtherPreds,
+          ctx, child.output, input, notNullPreds, otherPreds, boundOtherPreds,
           precedingNotNulls, notNullAttributes))
       }
 
