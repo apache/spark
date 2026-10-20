@@ -26,12 +26,11 @@ use arrow_schema::{Schema, SchemaRef};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use crate::{
-    Capabilities, CreateInfo, DataSource, FilterSupport, LimitSupport, LogLevel,
+    BatchWrite, Capabilities, CreateInfo, DataSource, FilterSupport, LimitSupport, LogLevel,
     PartitionReaderFactory, Predicate, ReaderContext, Result, ScanBuilder, SourceCapability,
     TaskContext, WriteInfo, WriteMode,
 };
 
-use crate::provider::Provider;
 use crate::write::DriverWriter;
 
 #[path = "stream.rs"]
@@ -43,14 +42,14 @@ type HandleMap<T> = Mutex<HashMap<i64, Arc<Mutex<T>>>>;
 
 /// One registry per loaded plugin. Provider code runs under a per-handle lock,
 /// so independent sources and scans do not serialize behind a global lock.
-pub struct Bridge<P: Provider> {
+pub struct Bridge<S: DataSource> {
     next_handle: AtomicI64,
-    sources: HandleMap<SourceState<P::Source>>,
-    planners: HandleMap<Planner<P::ScanBuilder>>,
-    writers: HandleMap<DriverWriter<P::BatchWrite>>,
+    sources: HandleMap<SourceState<S>>,
+    planners: HandleMap<Planner<S::ScanBuilder>>,
+    writers: HandleMap<DriverWriter<S::BatchWrite>>,
 }
 
-impl<P: Provider> Default for Bridge<P> {
+impl<S: DataSource> Default for Bridge<S> {
     fn default() -> Self {
         Self {
             next_handle: AtomicI64::new(1),
@@ -61,7 +60,16 @@ impl<P: Provider> Default for Bridge<P> {
     }
 }
 
-impl<P: Provider> Bridge<P> {
+impl<S: DataSource> Bridge<S> {
+    /// Whether the source implements batch reads, whose native callbacks the SDK installs.
+    pub const READ: bool = <S::ScanBuilder as ScanBuilder>::SUPPORTED;
+
+    /// Whether the source implements batch writes, whose native callbacks the SDK installs.
+    pub const WRITE: bool = <S::BatchWrite as BatchWrite>::SUPPORTED;
+
+    const CAPABILITIES: Capabilities =
+        Capabilities::implemented(Self::READ, Self::WRITE, S::SUPPORTS_TRUNCATE);
+
     fn insert<T>(&self, handles: &HandleMap<T>, value: T) -> Result<i64> {
         let handle = self
             .next_handle
@@ -72,14 +80,14 @@ impl<P: Provider> Bridge<P> {
     }
 
     pub fn create(&self, info: CreateInfo) -> Result<(i64, u64)> {
-        self.register_source(P::Source::new(info)?)
+        self.register_source(S::new(info)?)
     }
 
-    fn register_source(&self, source: P::Source) -> Result<(i64, u64)> {
-        // Keep only registered operations: a source can narrow them but never add one.
+    fn register_source(&self, source: S) -> Result<(i64, u64)> {
+        // Keep only implemented operations: a source can narrow them but never add one.
         let capabilities = source
-            .capabilities(P::CAPABILITIES)
-            .intersection(P::CAPABILITIES);
+            .capabilities(Self::CAPABILITIES)
+            .intersection(Self::CAPABILITIES);
         let handle = self.insert(
             &self.sources,
             SourceState {
@@ -105,7 +113,7 @@ impl<P: Provider> Bridge<P> {
             if !source.capabilities.contains(SourceCapability::BatchRead) {
                 return Err("source does not support batch reads".into());
             }
-            P::new_scan(&source.source, schema.clone())?
+            source.source.new_scan(schema.clone())?
         };
         self.insert(&self.planners, Planner::new(builder, schema))
     }
@@ -188,7 +196,7 @@ impl<P: Provider> Bridge<P> {
             {
                 return Err("source does not support truncate".into());
             }
-            P::new_write(&source.source, info)?
+            source.source.new_write(info)?
         };
         self.insert(&self.writers, DriverWriter::new(plan, schema))
     }
@@ -447,8 +455,7 @@ mod tests {
     use arrow_schema::{DataType, Field};
 
     use super::*;
-    use crate::provider::ReadOnly;
-    use crate::{BatchReadSource, PartitionReader, ScanPlan};
+    use crate::{PartitionReader, ScanPlan, Unsupported};
 
     #[derive(Clone, Copy)]
     enum FailureMode {
@@ -500,6 +507,9 @@ mod tests {
     }
 
     impl DataSource for Source {
+        type ScanBuilder = Builder;
+        type BatchWrite = Unsupported;
+
         fn new(_: CreateInfo) -> Result<Self> {
             Ok(Self {
                 builds: Arc::default(),
@@ -515,10 +525,6 @@ mod tests {
         fn schema(&self) -> Result<SchemaRef> {
             Ok(Arc::new(Schema::empty()))
         }
-    }
-
-    impl BatchReadSource for Source {
-        type ScanBuilder = Builder;
 
         fn new_scan(&self, _: SchemaRef) -> Result<Builder> {
             Ok(Builder {
@@ -587,7 +593,7 @@ mod tests {
 
     #[test]
     fn source_can_close_before_planning_and_plan_is_built_once() {
-        let bridge = Bridge::<ReadOnly<Source>>::default();
+        let bridge = Bridge::<Source>::default();
         let source = Source::new(info()).unwrap();
         let builds = source.builds.clone();
         let drops = source.drops.clone();
@@ -619,7 +625,7 @@ mod tests {
     #[test]
     fn residual_filters_prevent_calling_the_providers_limit_method() {
         for support in [FilterSupport::PruningOnly, FilterSupport::Unsupported] {
-            let bridge = Bridge::<ReadOnly<Source>>::default();
+            let bridge = Bridge::<Source>::default();
             let mut source = Source::new(info()).unwrap();
             source.filter_support = support;
             source.limit_support = LimitSupport::Global;
@@ -641,7 +647,7 @@ mod tests {
 
     #[test]
     fn predicates_that_do_not_parse_stay_unsupported_and_residual() {
-        let bridge = Bridge::<ReadOnly<Source>>::default();
+        let bridge = Bridge::<Source>::default();
         let mut source = Source::new(info()).unwrap();
         source.filter_support = FilterSupport::Exact;
         source.limit_support = LimitSupport::Global;
@@ -674,7 +680,7 @@ mod tests {
     #[test]
     fn only_global_limits_return_true_to_the_abi() {
         for support in [LimitSupport::Unsupported, LimitSupport::Global] {
-            let bridge = Bridge::<ReadOnly<Source>>::default();
+            let bridge = Bridge::<Source>::default();
             let mut source = Source::new(info()).unwrap();
             source.limit_support = support;
             let limits = source.limits.clone();
@@ -699,7 +705,7 @@ mod tests {
                 "native provider panicked: planning failed",
             ),
         ] {
-            let bridge = Bridge::<ReadOnly<Source>>::default();
+            let bridge = Bridge::<Source>::default();
             let mut source = Source::new(info()).unwrap();
             source.failure = failure;
             let builds = source.builds.clone();
@@ -729,7 +735,7 @@ mod tests {
                 "native provider panicked: negotiation failed",
             ),
         ] {
-            let bridge = Bridge::<ReadOnly<Source>>::default();
+            let bridge = Bridge::<Source>::default();
             let mut source = Source::new(info()).unwrap();
             source.failure = failure;
             let builds = source.builds.clone();
@@ -757,7 +763,7 @@ mod tests {
 
     #[test]
     fn scans_of_one_source_keep_pushdown_and_cached_plans_independent() {
-        let bridge = Bridge::<ReadOnly<Source>>::default();
+        let bridge = Bridge::<Source>::default();
         let mut source = Source::new(info()).unwrap();
         source.filter_support = FilterSupport::PruningOnly;
         source.limit_support = LimitSupport::Global;
@@ -803,7 +809,7 @@ mod tests {
 
     #[test]
     fn executor_retries_use_only_serialized_values_after_the_driver_is_dropped() {
-        let bridge = Bridge::<ReadOnly<Source>>::default();
+        let bridge = Bridge::<Source>::default();
         let source = Source::new(info()).unwrap();
         let builds = source.builds.clone();
         let source_drops = source.drops.clone();
@@ -851,7 +857,7 @@ mod tests {
 
     #[test]
     fn executor_rejects_a_factory_schema_different_from_the_negotiated_schema() {
-        let bridge = Bridge::<ReadOnly<Source>>::default();
+        let bridge = Bridge::<Source>::default();
         let (handle, _) = bridge.create(info()).unwrap();
         let reader = bridge
             .create_reader(handle, bridge.schema(handle).unwrap())
@@ -879,10 +885,13 @@ mod tests {
     }
 
     #[test]
-    fn capabilities_keep_only_registered_operations() {
+    fn capabilities_keep_only_implemented_operations() {
         struct Narrowing(Capabilities);
 
         impl DataSource for Narrowing {
+            type ScanBuilder = Builder;
+            type BatchWrite = Unsupported;
+
             fn new(_: CreateInfo) -> Result<Self> {
                 unreachable!("registered directly")
             }
@@ -892,15 +901,7 @@ mod tests {
             }
         }
 
-        impl BatchReadSource for Narrowing {
-            type ScanBuilder = Builder;
-
-            fn new_scan(&self, _: SchemaRef) -> Result<Builder> {
-                Err("not scanned".into())
-            }
-        }
-
-        let bridge = Bridge::<ReadOnly<Narrowing>>::default();
+        let bridge = Bridge::<Narrowing>::default();
         for (declared, expected) in [
             (Capabilities::all(), crate::abi::BATCH_READ),
             (Capabilities::empty(), 0),

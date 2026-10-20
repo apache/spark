@@ -15,10 +15,11 @@
 
 //! Experimental batch data source SDK for the C ABI proposed in Spark PR #59424.
 //!
-//! Implement [`DataSource`] and the batch-read or batch-write traits, then invoke
-//! [`export_data_source!`] once in a `cdylib` crate. The SDK owns handles,
-//! plan/message serialization, C ABI adaptation, and Arrow import/export. Rust traits
-//! stay inside the plugin; they are not an ABI between dynamic libraries.
+//! Implement [`DataSource`], naming its [`ScanBuilder`] for batch reads and its
+//! [`BatchWrite`] for batch writes, or [`Unsupported`] for an operation that it does
+//! not implement. Then invoke [`export_data_source!`] once in a `cdylib` crate. The SDK
+//! owns handles, plan/message serialization, C ABI adaptation, and Arrow import/export.
+//! Rust traits stay inside the plugin; they are not an ABI between dynamic libraries.
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -26,14 +27,13 @@ use std::fmt;
 use arrow_array::{RecordBatch, RecordBatchReader};
 use arrow_schema::SchemaRef;
 use serde::de::DeserializeOwned;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 mod abi;
 mod bridge;
 mod export;
 mod host;
 mod predicate;
-mod provider;
 mod task;
 mod write;
 
@@ -46,10 +46,6 @@ pub mod __private {
 
     pub mod bridge {
         pub use crate::bridge::{open_reader, parse_predicates, Bridge};
-    }
-
-    pub mod provider {
-        pub use crate::provider::*;
     }
 
     pub mod write {
@@ -96,9 +92,10 @@ impl SourceCapability {
 
 /// The native operations that a source instance supports with its effective options.
 ///
-/// Registration determines the operations of a library. [`DataSource::capabilities`]
-/// receives them and can only remove some, so a source cannot enable an operation
-/// that it did not register. Removing `BatchWrite` also removes `Truncate`.
+/// A source implements the operations whose types in [`DataSource`] are not
+/// [`Unsupported`]. [`DataSource::capabilities`] receives them and can only remove some,
+/// so a source cannot enable an operation that it does not implement. Removing
+/// `BatchWrite` also removes `Truncate`.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Capabilities(u64);
 
@@ -109,7 +106,7 @@ impl Capabilities {
     }
 
     /// Every operation that this SDK implements, to test [`DataSource::capabilities`].
-    /// The SDK keeps only the operations that the library registers.
+    /// The SDK keeps only the operations that the source implements.
     pub const fn all() -> Self {
         Self(abi::BATCH_READ | abi::BATCH_WRITE | abi::TRUNCATE)
     }
@@ -132,8 +129,8 @@ impl Capabilities {
         Self(self.0 & !removed)
     }
 
-    /// The operations that registering batch reads, batch writes, and truncation enables.
-    pub(crate) const fn registered(read: bool, write: bool, truncate: bool) -> Self {
+    /// The operations of a source that implements batch reads, batch writes, and truncation.
+    pub(crate) const fn implemented(read: bool, write: bool, truncate: bool) -> Self {
         let mut bits = 0;
         if read {
             bits |= abi::BATCH_READ;
@@ -223,16 +220,43 @@ impl CreateInfo {
     }
 }
 
-/// Driver-side source configuration, schema discovery, and capability restrictions.
+/// Driver-side source configuration, schema discovery, and the operations of a source.
+///
+/// The two associated types name the operations that the source implements, and
+/// [`Unsupported`] stands for one that it does not implement:
+///
+/// ```rust,ignore
+/// impl DataSource for RangeSource {
+///     type ScanBuilder = RangeScan;
+///     type BatchWrite = Unsupported;
+///     ...
+/// }
+/// ```
+///
+/// The SDK installs native callbacks and reports capabilities only for the implemented
+/// operations, and calls [`new_scan`](Self::new_scan) or [`new_write`](Self::new_write)
+/// only for them.
 ///
 /// Spark creates a source for each schema inference, scan, and write, and may create
 /// one only to inspect its capabilities, then drop it. Keep construction lightweight.
 /// Scan builders and writes cannot borrow their source, which Spark drops first.
 pub trait DataSource: Send + Sized + 'static {
+    /// The scan builder of batch reads, which [`new_scan`](Self::new_scan) creates, or
+    /// [`Unsupported`].
+    type ScanBuilder: ScanBuilder;
+
+    /// The coordinator of batch writes, which [`new_write`](Self::new_write) creates, or
+    /// [`Unsupported`].
+    type BatchWrite: BatchWrite;
+
     /// Whether [`schema`](Self::schema) infers the schema of the data. When false, the
     /// SDK leaves the native function unset: Spark then requires a user-specified
     /// schema, reports its standard error without one, and never calls `schema`.
     const INFERS_SCHEMA: bool = true;
+
+    /// Whether [`new_write`](Self::new_write) supports [`WriteMode::Truncate`], which
+    /// adds the `Truncate` capability to batch writes.
+    const SUPPORTS_TRUNCATE: bool = false;
 
     /// Called once in each JVM when Spark loads the library, before it creates any
     /// source. On failure, Spark does not use the library, and the error is logged.
@@ -242,12 +266,12 @@ pub trait DataSource: Send + Sized + 'static {
 
     fn new(info: CreateInfo) -> Result<Self>;
 
-    /// Returns the operations of this instance, a subset of the registered ones. Override
-    /// this to restrict an instance, for example for a read-only destination. The SDK
-    /// evaluates it once when Spark creates the source. An instance without operations
-    /// still supports schema discovery.
-    fn capabilities(&self, registered: Capabilities) -> Capabilities {
-        registered
+    /// Returns the operations of this instance, a subset of the implemented ones.
+    /// Override this to restrict an instance, for example for a read-only destination.
+    /// The SDK evaluates it once when Spark creates the source. An instance without
+    /// operations still supports schema discovery.
+    fn capabilities(&self, supported: Capabilities) -> Capabilities {
+        supported
     }
 
     /// Returns the schema of the data, when the user does not specify one.
@@ -258,19 +282,34 @@ pub trait DataSource: Send + Sized + 'static {
                 .into(),
         )
     }
-}
-
-/// Driver-side entry point for batch reads.
-///
-/// Register with `export_data_source!(Source, batch_read)`. Metadata and construction
-/// belong to [`DataSource`].
-pub trait BatchReadSource: DataSource {
-    type ScanBuilder: ScanBuilder;
 
     /// Creates an independent scan of the schema to read, which the user may have
     /// specified; reject unsupported schemas.
-    fn new_scan(&self, schema: SchemaRef) -> Result<Self::ScanBuilder>;
+    fn new_scan(&self, _schema: SchemaRef) -> Result<Self::ScanBuilder> {
+        Err(
+            "DataSource::new_scan is not implemented: implement it, or set \
+             DataSource::ScanBuilder to Unsupported"
+                .into(),
+        )
+    }
+
+    /// Validate the input schema and create an independent write. Construction may be
+    /// followed only by Drop, without commit or abort, so it must not make irreversible
+    /// changes. The SDK calls this only while the instance's capabilities include
+    /// BatchWrite, and passes `Truncate` only when they include Truncate.
+    fn new_write(&self, _info: WriteInfo) -> Result<WritePlan<Self::BatchWrite>> {
+        Err(
+            "DataSource::new_write is not implemented: implement it, or set \
+             DataSource::BatchWrite to Unsupported"
+                .into(),
+        )
+    }
 }
+
+/// The type of an operation that a source does not implement, as in
+/// `type BatchWrite = Unsupported;`. It has no values.
+#[derive(Debug, Serialize, Deserialize)]
+pub enum Unsupported {}
 
 /// Mutable driver-side negotiation, followed by immutable planning.
 ///
@@ -282,6 +321,10 @@ pub trait BatchReadSource: DataSource {
 /// planner calls `partitions`, then `serialize_reader`, then closes the handle.
 pub trait ScanBuilder: Send + Sized + 'static {
     type Factory: PartitionReaderFactory;
+
+    /// False only for [`Unsupported`], from which the SDK derives the capabilities.
+    #[doc(hidden)]
+    const SUPPORTED: bool = true;
 
     /// Return one result per input predicate in order. Unknown functions and
     /// types must not be reported as exact. Spark currently rechecks all filters.
@@ -403,24 +446,6 @@ impl WriteInfo {
     }
 }
 
-/// Driver-side entry point for batch writes, independent of read support.
-///
-/// Register with `export_data_source!(Source, batch_write)`. The SDK derives native
-/// capabilities and callbacks from registration, then applies instance restrictions.
-pub trait BatchWriteSource: DataSource {
-    type BatchWrite: BatchWrite;
-
-    /// Whether [`new_write`](Self::new_write) supports [`WriteMode::Truncate`], which
-    /// registers the `Truncate` capability.
-    const SUPPORTS_TRUNCATE: bool = false;
-
-    /// Validate the input schema and create an independent write. Construction may be
-    /// followed only by Drop, without commit or abort, so it must not make irreversible
-    /// changes. The SDK calls this only while the instance's capabilities include
-    /// BatchWrite, and passes `Truncate` only when they include Truncate.
-    fn new_write(&self, info: WriteInfo) -> Result<WritePlan<Self::BatchWrite>>;
-}
-
 /// A driver coordinator and the serializable configuration of its task writers.
 ///
 /// The SDK serializes the factory once, with the schema of the input, and caches the
@@ -466,6 +491,10 @@ impl<W: BatchWrite> WritePlan<W> {
 /// Message `i` of `commit` and `abort` belongs to input partition `i`.
 pub trait BatchWrite: Send + 'static {
     type Factory: DataWriterFactory;
+
+    /// False only for [`Unsupported`], from which the SDK derives the capabilities.
+    #[doc(hidden)]
+    const SUPPORTED: bool = true;
 
     /// Publish only the winning attempt from each input partition. Task retries
     /// and speculative attempts can stage other data that must not be published.
@@ -545,4 +574,46 @@ pub trait DataWriter: Send {
     fn commit(&mut self) -> Result<Self::Message>;
 
     fn abort(&mut self) -> Result<()>;
+}
+
+// Unsupported has no values, so none of these methods can be called.
+
+impl ScanBuilder for Unsupported {
+    type Factory = Self;
+
+    const SUPPORTED: bool = false;
+
+    fn plan(self) -> Result<ScanPlan<Self>> {
+        match self {}
+    }
+}
+
+impl PartitionReaderFactory for Unsupported {
+    type Partition = Self;
+
+    fn open<'task>(&self, _: Self, _: ReaderContext<'task>) -> Result<PartitionReader<'task>> {
+        match *self {}
+    }
+}
+
+impl BatchWrite for Unsupported {
+    type Factory = Self;
+
+    const SUPPORTED: bool = false;
+
+    fn commit(&mut self, _: Vec<Self>) -> Result<()> {
+        match *self {}
+    }
+
+    fn abort(&mut self, _: Vec<Option<Self>>) -> Result<()> {
+        match *self {}
+    }
+}
+
+impl DataWriterFactory for Unsupported {
+    type Message = Self;
+
+    fn open<'task>(&self, _: WriterContext<'task>) -> Result<PartitionWriter<'task, Self>> {
+        match *self {}
+    }
 }

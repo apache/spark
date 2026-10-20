@@ -25,8 +25,9 @@ use spark_native_source::__private::abi::{
     ArrowSchema, SparkDsCreateInfo, SparkDsHost, SparkDsLibrary, ABI_VERSION,
 };
 use spark_native_source::{
-    BatchReadSource, Capabilities, CreateInfo, DataSource, HostInfo, LogLevel, PartitionReader,
+    Capabilities, CreateInfo, DataSource, HostInfo, LogLevel, PartitionReader,
     PartitionReaderFactory, ReaderContext, Result, ScanBuilder, ScanPlan, SourceCapability,
+    Unsupported,
 };
 
 static DECLARATIONS: AtomicUsize = AtomicUsize::new(0);
@@ -41,6 +42,9 @@ struct Source {
 }
 
 impl DataSource for Source {
+    type ScanBuilder = Builder;
+    type BatchWrite = Unsupported;
+
     fn init(host: &HostInfo) -> Result<()> {
         INITIALIZED.lock().unwrap().push(host.spark_version.clone());
         if host.spark_version.as_deref() == Some("unsupported") {
@@ -59,13 +63,13 @@ impl DataSource for Source {
         })
     }
 
-    fn capabilities(&self, registered: Capabilities) -> Capabilities {
+    fn capabilities(&self, supported: Capabilities) -> Capabilities {
         DECLARATIONS.fetch_add(1, Ordering::SeqCst);
         match self.mode.as_str() {
             "empty" => Capabilities::empty(),
-            "registered" => registered,
-            "without_read" => registered.without(SourceCapability::BatchRead),
-            // Operations that the library did not register are dropped.
+            "supported" => supported,
+            "without_read" => supported.without(SourceCapability::BatchRead),
+            // Operations that the source does not implement are dropped.
             "all" => Capabilities::all(),
             "panic" => panic!("capability discovery failed"),
             other => panic!("unexpected test mode: {other}"),
@@ -76,10 +80,6 @@ impl DataSource for Source {
         SCHEMAS.fetch_add(1, Ordering::SeqCst);
         Ok(Arc::new(Schema::empty()))
     }
-}
-
-impl BatchReadSource for Source {
-    type ScanBuilder = Builder;
 
     fn new_scan(&self, _: SchemaRef) -> Result<Builder> {
         SCANS.fetch_add(1, Ordering::SeqCst);
@@ -114,7 +114,7 @@ impl PartitionReaderFactory for Factory {
     }
 }
 
-spark_native_source::export_data_source!(Source, batch_read);
+spark_native_source::export_data_source!(Source);
 
 extern "C" {
     fn spark_ds_init(host: *const SparkDsHost, library: *mut *const SparkDsLibrary) -> c_int;
@@ -213,7 +213,7 @@ fn initialization_logging_and_capabilities_follow_the_source_lifecycle() {
     );
 
     // Analysis can ask only for capabilities, then close without schema or scan discovery.
-    let (status, mask, pointer) = create(library, "capability_test", "registered");
+    let (status, mask, pointer) = create(library, "capability_test", "supported");
     assert_eq!(status, 0);
     assert_eq!(mask, 1);
     assert!(!pointer.is_null());
@@ -226,7 +226,7 @@ fn initialization_logging_and_capabilities_follow_the_source_lifecycle() {
     // Keep all instances alive together: the last declaration must not affect earlier sources.
     let sources: Vec<_> = [
         ("empty", 0),
-        ("registered", 1),
+        ("supported", 1),
         ("all", 1),
         ("without_read", 0),
     ]
@@ -269,7 +269,7 @@ fn initialization_logging_and_capabilities_follow_the_source_lifecycle() {
     assert_eq!(DROPS.load(Ordering::SeqCst), 5);
 
     // The source receives the name that Spark passes, so it can reject other names.
-    let (status, mask, source) = create(library, "other_source", "registered");
+    let (status, mask, source) = create(library, "other_source", "supported");
     assert_ne!(status, 0);
     assert_eq!(error(library), "unexpected source name other_source");
     assert_eq!(mask, 0);

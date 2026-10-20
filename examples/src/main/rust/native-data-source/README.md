@@ -19,7 +19,7 @@ limitations under the License.
 
 This example implements batch reads using the [Rust native data source SDK][sdk].
 The connector in [src/lib.rs](src/lib.rs) exports `rust_sdk_range` through the SDK's
-`export_data_source!(RangeSource, batch_read)` macro. The macro exports the C entry point
+`export_data_source!(RangeSource)` macro. The macro exports the C entry point
 `spark_ds_init`; the connector does not use JNI, raw pointers, or unsafe code.
 
 The example targets C ABI version 1 from [Spark PR #59424][native-source-pr], pinned to commit
@@ -28,11 +28,12 @@ Running the Spark smoke script requires a distribution built with that native da
 framework and Java 22 or later on the driver and executors. The JNI SDK prototype in PR #59442
 targets a different interface.
 
-Registering the source for batch reads derives the `BatchRead` capability and the native
-mask `SPARK_DS_BATCH_READ` (`1`); the connector does not maintain a separate capability list.
-Connectors can narrow registered operations through `DataSource::capabilities()` based on
-options. This example does not implement writes or Structured Streaming. The companion
-[file sink](../native-data-sink/README.md) demonstrates batch append and overwrite.
+Naming `RangeScan` as the `ScanBuilder`, with `type BatchWrite = Unsupported`, derives the
+`BatchRead` capability and the native mask `SPARK_DS_BATCH_READ` (`1`); the connector does not
+maintain a separate capability list. Connectors can narrow their operations through
+`DataSource::capabilities()` based on options. This example does not implement writes or
+Structured Streaming. The companion [file sink](../native-data-sink/README.md) demonstrates batch
+append and overwrite.
 During analysis, Spark creates and closes a source with the table options to inspect its
 capabilities. It exposes `BATCH_WRITE` and `TRUNCATE` to Data Source V2 only
 when declared, so this example rejects batch append and overwrite before evaluating their input.

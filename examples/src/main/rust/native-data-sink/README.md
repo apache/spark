@@ -17,11 +17,11 @@ limitations under the License.
 
 # Rust native batch sink
 
-This write-only example implements `DataSource`, `BatchWriteSource`, `BatchWrite`,
-`DataWriterFactory`, and `DataWriter` from the [Rust native data source SDK][sdk].
-It registers `export_data_source!(JsonSink, batch_write)`, declares overwrite support
-with `const SUPPORTS_TRUNCATE: bool = true` in `BatchWriteSource`, and implements
-no read traits. The SDK supplies the C ABI entry point, typed factory and commit
+This write-only example implements `DataSource`, `BatchWrite`, `DataWriterFactory`,
+and `DataWriter` from the [Rust native data source SDK][sdk]. Its `DataSource` sets
+`type ScanBuilder = Unsupported` and declares overwrite support with
+`const SUPPORTS_TRUNCATE: bool = true`; it exports `export_data_source!(JsonSink)` and
+implements no read traits. The SDK supplies the C ABI entry point, typed factory and commit
 message serialization, Arrow batch import, capability checks, and error handling.
 
 The example targets C ABI version 1 from [Spark PR #59424][native-source-pr], pinned

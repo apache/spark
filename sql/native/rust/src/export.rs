@@ -15,53 +15,21 @@
 
 /// Exports a data source through version 1 of Spark's C data source ABI.
 ///
-/// Call this macro once in a cdylib with the operations that the source implements,
-/// in any order:
+/// Call this macro once in a cdylib:
 ///
 /// ```rust,ignore
-/// export_data_source!(RangeSource, batch_read);
-/// export_data_source!(FileSink, batch_write);
-/// export_data_source!(ReadWriteSource, batch_read, batch_write);
+/// export_data_source!(RangeSource);
 /// ```
 ///
-/// `batch_read` requires [`BatchReadSource`](crate::BatchReadSource), and `batch_write`
-/// requires [`BatchWriteSource`](crate::BatchWriteSource), whose `SUPPORTS_TRUNCATE`
-/// registers truncation. Registration generates the default capabilities and installs
-/// matching callbacks; unsupported operation families have null callbacks. The only
-/// exported symbol is `spark_ds_init`; sources implement the safe Rust traits and do not
-/// handle C pointers. The library must be built with `panic = "unwind"`, so that the SDK
-/// can report a panic as an error.
+/// The associated types of [`DataSource`](crate::DataSource) determine the operations:
+/// the SDK installs the native callbacks of each operation whose type is not
+/// [`Unsupported`](crate::Unsupported), and leaves the others null. The only exported
+/// symbol is `spark_ds_init`; sources implement the safe Rust traits and do not handle
+/// C pointers. The library must be built with `panic = "unwind"`, so that the SDK can
+/// report a panic as an error.
 #[macro_export]
 macro_rules! export_data_source {
-    (@parse $source:ty; [$read:tt $write:tt]; batch_read $($rest:ident)*) => {
-        $crate::export_data_source!(@parse $source; [true $write]; $($rest)*);
-    };
-    (@parse $source:ty; [$read:tt $write:tt]; batch_write $($rest:ident)*) => {
-        $crate::export_data_source!(@parse $source; [$read true]; $($rest)*);
-    };
-    (@parse $source:ty; [$read:tt $write:tt]; truncate $($rest:ident)*) => {
-        compile_error!(
-            "truncate is not an operation: set `const SUPPORTS_TRUNCATE: bool = true` in the \
-             BatchWriteSource implementation"
-        );
-    };
-    (@parse $source:ty; [$read:tt $write:tt]; $other:ident $($rest:ident)*) => {
-        compile_error!(concat!(
-            "unknown operation `",
-            stringify!($other),
-            "`: expected batch_read or batch_write"
-        ));
-    };
-    (@parse $source:ty; [true false];) => {
-        $crate::export_data_source!(@provider $crate::__private::provider::ReadOnly<$source>);
-    };
-    (@parse $source:ty; [false true];) => {
-        $crate::export_data_source!(@provider $crate::__private::provider::WriteOnly<$source>);
-    };
-    (@parse $source:ty; [true true];) => {
-        $crate::export_data_source!(@provider $crate::__private::provider::ReadWrite<$source>);
-    };
-    (@provider $provider:ty) => {
+    ($source:ty $(,)?) => {
         #[cfg(panic = "abort")]
         compile_error!(
             "spark_native_source requires panic = \"unwind\": with panic = \"abort\", a panic \
@@ -76,28 +44,22 @@ macro_rules! export_data_source {
             };
             use $crate::__private::bridge::{open_reader, parse_predicates, Bridge};
 
-            use $crate::__private::provider::Provider as _;
-
-            // Prefixed so that they cannot capture the name of the registered source type.
-            type __SparkRegistration = $provider;
-            type __SparkSource =
-                <__SparkRegistration as $crate::__private::provider::Provider>::Source;
-            type __SparkReaderFactory = <<__SparkRegistration
-                as $crate::__private::provider::Provider>::ScanBuilder
-                as $crate::ScanBuilder>::Factory;
-            type __SparkWriterFactory = <<__SparkRegistration
-                as $crate::__private::provider::Provider>::BatchWrite
-                as $crate::BatchWrite>::Factory;
+            // Prefixed so that they cannot capture the name of the exported source type.
+            type __SparkSource = $source;
+            type __SparkScanBuilder = <__SparkSource as $crate::DataSource>::ScanBuilder;
+            type __SparkBatchWrite = <__SparkSource as $crate::DataSource>::BatchWrite;
+            type __SparkReaderFactory = <__SparkScanBuilder as $crate::ScanBuilder>::Factory;
+            type __SparkWriterFactory = <__SparkBatchWrite as $crate::BatchWrite>::Factory;
             type __SparkMessage = <__SparkWriterFactory as $crate::DataWriterFactory>::Message;
 
-            fn bridge() -> &'static Bridge<__SparkRegistration> {
-                static BRIDGE: std::sync::OnceLock<Bridge<__SparkRegistration>> =
+            fn bridge() -> &'static Bridge<__SparkSource> {
+                static BRIDGE: std::sync::OnceLock<Bridge<__SparkSource>> =
                     std::sync::OnceLock::new();
                 BRIDGE.get_or_init(Bridge::default)
             }
 
-            const READ: bool = __SparkRegistration::READ;
-            const WRITE: bool = __SparkRegistration::WRITE;
+            const READ: bool = Bridge::<__SparkSource>::READ;
+            const WRITE: bool = Bridge::<__SparkSource>::WRITE;
 
             static LIBRARY: SparkDsLibrary = SparkDsLibrary {
                 size: std::mem::size_of::<SparkDsLibrary>() as i64,
@@ -130,9 +92,17 @@ macro_rules! export_data_source {
                 commit: if WRITE { Some(commit) } else { None },
                 abort: if WRITE { Some(abort) } else { None },
                 close_writer: if WRITE { Some(close_writer) } else { None },
-                create_data_writer: if WRITE { Some(create_data_writer) } else { None },
+                create_data_writer: if WRITE {
+                    Some(create_data_writer)
+                } else {
+                    None
+                },
                 write: if WRITE { Some(write) } else { None },
-                commit_data_writer: if WRITE { Some(commit_data_writer) } else { None },
+                commit_data_writer: if WRITE {
+                    Some(commit_data_writer)
+                } else {
+                    None
+                },
                 abort_data_writer: if WRITE { Some(abort_data_writer) } else { None },
                 close_data_writer: if WRITE { Some(close_data_writer) } else { None },
             };
@@ -389,9 +359,8 @@ macro_rules! export_data_source {
             ) -> c_int {
                 abi::call(|| {
                     sink.ok_or("null result sink")?;
-                    let message = unsafe {
-                        $crate::__private::write::commit_task::<__SparkMessage>(writer)?
-                    };
+                    let message =
+                        unsafe { $crate::__private::write::commit_task::<__SparkMessage>(writer)? };
                     unsafe { abi::emit(sink, data, &message) }
                 })
             }
@@ -408,13 +377,5 @@ macro_rules! export_data_source {
                 });
             }
         }
-    };
-    ($source:ty, $($operation:ident),+ $(,)?) => {
-        $crate::export_data_source!(@parse $source; [false false]; $($operation)+);
-    };
-    ($source:ty $(,)?) => {
-        compile_error!(
-            "name the operations of the source, such as export_data_source!(MySource, batch_read)"
-        );
     };
 }

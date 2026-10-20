@@ -24,9 +24,8 @@ use arrow_array::{ArrayRef, Int64Array, RecordBatch, RecordBatchIterator, Record
 use arrow_schema::{ArrowError, DataType, Field, Schema, SchemaRef};
 use serde::{Deserialize, Serialize};
 use spark_native_source::{
-    BatchReadSource, CreateInfo, DataSource, FilterSupport, LimitSupport, LiteralValue, Options,
-    PartitionReader, PartitionReaderFactory, Predicate, ReaderContext, Result, ScanBuilder,
-    ScanPlan,
+    CreateInfo, DataSource, FilterSupport, LimitSupport, LiteralValue, Options, PartitionReader,
+    PartitionReaderFactory, Predicate, ReaderContext, Result, ScanBuilder, ScanPlan, Unsupported,
 };
 
 pub struct RangeSource {
@@ -59,6 +58,10 @@ pub struct RangePartition {
 }
 
 impl DataSource for RangeSource {
+    type ScanBuilder = RangeScan;
+    // A read-only source.
+    type BatchWrite = Unsupported;
+
     fn new(info: CreateInfo) -> Result<Self> {
         let options = info.options;
         for key in options.keys() {
@@ -90,10 +93,6 @@ impl DataSource for RangeSource {
     fn schema(&self) -> Result<SchemaRef> {
         output_schema(&["id".into(), "label".into()])
     }
-}
-
-impl BatchReadSource for RangeSource {
-    type ScanBuilder = RangeScan;
 
     fn new_scan(&self, schema: SchemaRef) -> Result<Self::ScanBuilder> {
         let columns: Vec<String> = schema.fields().iter().map(|f| f.name().clone()).collect();
@@ -317,7 +316,7 @@ fn integer_literal(predicate: &Predicate) -> Option<i64> {
     }
 }
 
-spark_native_source::export_data_source!(RangeSource, batch_read);
+spark_native_source::export_data_source!(RangeSource);
 
 #[cfg(test)]
 mod tests {

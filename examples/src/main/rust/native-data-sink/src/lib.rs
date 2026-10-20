@@ -30,12 +30,12 @@ use arrow_array::{Array, Int64Array, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use serde::{Deserialize, Serialize};
 use spark_native_source::{
-    BatchWrite, BatchWriteSource, Capabilities, CreateInfo, DataSource, DataWriter,
-    DataWriterFactory, PartitionWriter, Result, SourceCapability, TaskContext, WriteInfo,
-    WriteMode, WritePlan, WriterContext,
+    BatchWrite, Capabilities, CreateInfo, DataSource, DataWriter, DataWriterFactory,
+    PartitionWriter, Result, SourceCapability, TaskContext, Unsupported, WriteInfo, WriteMode,
+    WritePlan, WriterContext,
 };
 
-spark_native_source::export_data_source!(JsonSink, batch_write);
+spark_native_source::export_data_source!(JsonSink);
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(0);
 
@@ -46,6 +46,12 @@ pub struct JsonSink {
 }
 
 impl DataSource for JsonSink {
+    // A write-only sink, which also supports overwrites.
+    type ScanBuilder = Unsupported;
+    type BatchWrite = JsonWrite;
+
+    const SUPPORTS_TRUNCATE: bool = true;
+
     fn new(info: CreateInfo) -> Result<Self> {
         let mut options = info.options;
         let path = PathBuf::from(
@@ -73,20 +79,14 @@ impl DataSource for JsonSink {
         Ok(sink_schema())
     }
 
-    fn capabilities(&self, registered: Capabilities) -> Capabilities {
+    fn capabilities(&self, supported: Capabilities) -> Capabilities {
         if self.readonly {
             // Also removes Truncate, which requires batch writes.
-            registered.without(SourceCapability::BatchWrite)
+            supported.without(SourceCapability::BatchWrite)
         } else {
-            registered
+            supported
         }
     }
-}
-
-impl BatchWriteSource for JsonSink {
-    type BatchWrite = JsonWrite;
-
-    const SUPPORTS_TRUNCATE: bool = true;
 
     fn new_write(&self, info: WriteInfo) -> Result<WritePlan<JsonWrite>> {
         if self.readonly {

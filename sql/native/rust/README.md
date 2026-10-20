@@ -37,22 +37,34 @@ to include the example.
 ## Connector API and lifecycle
 
 A connector implements [`DataSource`](src/lib.rs) for construction, schema discovery,
-and optional capability restrictions. `DataSource::new` receives a `CreateInfo` with
-the name of the data source and its options. Spark can create and immediately drop a
-source just to discover capabilities; schema inference or an operation need not follow.
+its operations, and optional capability restrictions. `DataSource::new` receives a
+`CreateInfo` with the name of the data source and its options. Spark can create and
+immediately drop a source just to discover capabilities; schema inference or an
+operation need not follow.
 
-Read support uses three traits:
+Two associated types name the operations that the source implements, and
+`Unsupported` stands for one that it does not implement:
 
-* `BatchReadSource`: create an independent scan builder with `new_scan`.
+```rust
+impl DataSource for RangeSource {
+    type ScanBuilder = RangeScan; // batch reads, created by new_scan
+    type BatchWrite = Unsupported; // no batch writes
+    // new, schema, and new_scan
+}
+```
+
+Read support uses three pieces:
+
+* `DataSource::new_scan`: create an independent scan builder.
 * `ScanBuilder`: negotiate predicates, limit, and projection, then consume itself
   in `plan()` to return a typed `ScanPlan<Factory>`.
 * `PartitionReaderFactory`: serialize executor configuration and open one lazy Arrow
   reader from a typed partition and a `ReaderContext`, which carries the negotiated
   schema and a borrowed `TaskContext`.
 
-Write support is independent: a write-only connector implements `BatchWriteSource`,
-`BatchWrite`, `DataWriterFactory`, and `DataWriter`, without implementing reads.
-The write lifecycle is described below.
+Write support is independent: a write-only connector sets `ScanBuilder` to
+`Unsupported` and implements `DataSource::new_write`, `BatchWrite`,
+`DataWriterFactory`, and `DataWriter`. The write lifecycle is described below.
 
 The inputs of these methods are `#[non_exhaustive]` structs (`CreateInfo`, `WriteInfo`,
 `ReaderContext`, and `WriterContext`), and the plans (`ScanPlan` and `WritePlan`) have
@@ -65,11 +77,11 @@ must read the same snapshot. Multiple task attempts open independent readers.
 
 ```text
 Driver:
-  BatchReadSource -> ScanBuilder -> ScanPlan { factory, partitions }
-                         |                   |
-                  mutable negotiation   immutable serialized descriptors
-                                             |
-Executor, per task:                          v
+  DataSource::new_scan -> ScanBuilder -> ScanPlan { factory, partitions }
+                              |                   |
+                       mutable negotiation   immutable serialized descriptors
+                                                  |
+Executor, per task:                               v
   restored factory + partition + ReaderContext -> Arrow reader -> Arrow C Stream
 ```
 
@@ -102,10 +114,10 @@ of its initial value. Check it during long operations; blocking I/O still requir
 timeouts. `TaskContext::for_testing()` builds a context with chosen IDs and an
 optional interruption flag for tests outside Spark.
 
-Register one provider in the connector's `cdylib` crate:
+Export the source from the connector's `cdylib` crate:
 
 ```rust
-spark_native_source::export_data_source!(RangeSource, batch_read);
+spark_native_source::export_data_source!(RangeSource);
 ```
 
 The macro exports only `spark_ds_init` and returns Spark's versioned function
@@ -124,7 +136,7 @@ error without one.
 
 A library that implements several data sources is installed or listed in its
 package under each of their names. Spark passes the name in `CreateInfo::name`, so
-one registered `DataSource` can choose the source to create; the macro registers a
+one exported `DataSource` can choose the source to create; the macro exports a
 single Rust type per library.
 
 The implementation separates public connector traits, driver handle/planning
@@ -135,40 +147,33 @@ classes.
 
 ## Source capabilities
 
-Registration determines which operation traits the connector implements. The SDK
-installs their native callbacks and derives the default capability set:
-
-```rust
-export_data_source!(RangeSource, batch_read);
-export_data_source!(FileSink, batch_write);
-export_data_source!(ReadWriteSource, batch_read, batch_write);
-```
-
-These are alternative registrations; invoke the macro only once per library, with
-its operations in any order. A `BatchWriteSource` opts into overwrite support with
+The associated types of `DataSource` determine the operations of the source: batch
+reads unless `ScanBuilder` is `Unsupported`, and batch writes unless `BatchWrite` is
+`Unsupported`. The SDK installs the native callbacks of these operations, leaves the
+others null, and derives the default capability set from them, so the macro takes
+only the source type. A source opts into overwrite support with
 `const SUPPORTS_TRUNCATE: bool = true`, next to the `new_write` that handles
-`WriteMode::Truncate`; without it the source supports only append writes.
-Unregistered operation families have null native callbacks. The registration
-requires the corresponding Rust traits at compile time. The macro also rejects a
-library built with `panic = "abort"`, because the SDK can report a panic as an error
-only when it unwinds.
+`WriteMode::Truncate`; without it the source supports only append writes. The macro
+also rejects a library built with `panic = "abort"`, because the SDK can report a
+panic as an error only when it unwinds.
 
 Most connectors do not implement `capabilities`. A connector can restrict the
-registered set for the current options by overriding this `DataSource` method:
+supported set for the current options by overriding this `DataSource` method:
 
 ```rust
-fn capabilities(&self, registered: Capabilities) -> Capabilities {
+fn capabilities(&self, supported: Capabilities) -> Capabilities {
     if self.read_only {
         // Also removes Truncate, which requires batch writes.
-        registered.without(SourceCapability::BatchWrite)
+        supported.without(SourceCapability::BatchWrite)
     } else {
-        registered
+        supported
     }
 }
 ```
 
-The SDK evaluates this once during `create` and keeps only registered operations,
-so a source can narrow its capabilities but never enable an unregistered operation.
+The SDK evaluates this once during `create` and keeps only implemented operations,
+so a source can narrow its capabilities but never enable one that it does not
+implement.
 An empty set permits schema discovery and close, but rejects operation creation
 before calling the connector. The declaration stays fixed for that instance.
 `Capabilities::all()` exists to test this method outside Spark. Streaming
@@ -193,17 +198,17 @@ flags are not a literal copy of the native mask declared by the Rust source.
 
 ```text
 Driver:
-  DataSource + BatchWriteSource -> WritePlan { coordinator, factory }
-                                        |             ^ commit(messages) / abort(messages)
-                       serialized factory + schema    | typed messages
-                                        |             |
-Executor, per task attempt:             v             |
+  DataSource::new_write -> WritePlan { coordinator, factory }
+                                 |             ^ commit(messages) / abort(messages)
+                serialized factory + schema    | typed messages
+                                 |             |
+Executor, per task attempt:      v             |
                           DataWriterFactory::open(WriterContext)
                                    -> DataWriter::write(RecordBatch)*
                                    -> commit() / abort() -> Drop
 ```
 
-`BatchWriteSource::new_write(WriteInfo)` validates the input schema and returns a
+`DataSource::new_write(WriteInfo)` validates the input schema and returns a
 `WritePlan`: an independent driver coordinator and the serializable executor
 configuration of its task writers. The SDK encodes the factory and input schema
 once, including a terminal error if serialization fails. Restoring an executor
@@ -346,7 +351,7 @@ buffers surviving stream release. This checks the C boundary without requiring
 Java; it does not substitute for Spark planner and task-lifecycle testing.
 
 Rust tests additionally exercise the exported function table with option-dependent
-capabilities, narrowed and unregistered declarations, the source name, library
+capabilities, narrowed and unimplemented declarations, the source name, library
 initialization and logging, and panics during capability discovery. They also
 cover terminal planning failures, predicates that do not parse, typed literals,
 retries after the driver registry is dropped, schema, layout, and nullability

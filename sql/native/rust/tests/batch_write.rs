@@ -28,9 +28,9 @@ use spark_native_source::__private::abi::{
     SparkDsWriteInfo, ABI_VERSION,
 };
 use spark_native_source::{
-    BatchWrite, BatchWriteSource, Capabilities, CreateInfo, DataSource, DataWriter,
-    DataWriterFactory, PartitionWriter, Result, SourceCapability, TaskContext, WriteInfo,
-    WriteMode, WritePlan, WriterContext,
+    BatchWrite, Capabilities, CreateInfo, DataSource, DataWriter, DataWriterFactory,
+    PartitionWriter, Result, SourceCapability, TaskContext, Unsupported, WriteInfo, WriteMode,
+    WritePlan, WriterContext,
 };
 
 // Each test exercises the actual exported table; this lock isolates fixture observations.
@@ -70,8 +70,13 @@ struct Source {
 }
 
 impl DataSource for Source {
+    type ScanBuilder = Unsupported;
+    type BatchWrite = Driver;
+
     // A sink of any input: Spark requires a user-specified schema to read it.
     const INFERS_SCHEMA: bool = false;
+
+    const SUPPORTS_TRUNCATE: bool = true;
 
     fn new(info: CreateInfo) -> Result<Self> {
         Ok(Self {
@@ -84,19 +89,13 @@ impl DataSource for Source {
         })
     }
 
-    fn capabilities(&self, registered: Capabilities) -> Capabilities {
+    fn capabilities(&self, supported: Capabilities) -> Capabilities {
         match self.capabilities.as_str() {
             "none" => Capabilities::empty(),
-            "append" => registered.without(SourceCapability::Truncate),
-            _ => registered,
+            "append" => supported.without(SourceCapability::Truncate),
+            _ => supported,
         }
     }
-}
-
-impl BatchWriteSource for Source {
-    type BatchWrite = Driver;
-
-    const SUPPORTS_TRUNCATE: bool = true;
 
     fn new_write(&self, info: WriteInfo) -> Result<WritePlan<Driver>> {
         if info.schema != schema() {
@@ -255,7 +254,7 @@ impl Drop for Writer<'_> {
     }
 }
 
-spark_native_source::export_data_source!(Source, batch_write);
+spark_native_source::export_data_source!(Source);
 
 extern "C" {
     fn spark_ds_init(host: *const SparkDsHost, library: *mut *const SparkDsLibrary) -> c_int;
@@ -497,7 +496,7 @@ fn driver_finish(driver: &Handle, abort: bool, messages: &[Option<&[u8]>]) -> c_
 }
 
 #[test]
-fn write_registration_and_options_control_capabilities() {
+fn write_types_and_options_control_capabilities() {
     let _guard = TEST_LOCK.lock().unwrap();
     EVENTS.lock().unwrap().clear();
     let library = library();
