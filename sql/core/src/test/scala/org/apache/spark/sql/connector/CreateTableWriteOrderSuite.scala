@@ -24,11 +24,12 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
+import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, CreateTableAsSelect, LogicalPlan, ReplaceTable, ReplaceTableAsSelect, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, RangePartitioning}
-import org.apache.spark.sql.connector.catalog.{Column, DelegatingCatalogExtension, DelegatingTable, Identifier, InMemoryTable, InMemoryTableCatalog, StagedTable, StagingInMemoryTableCatalog, Table, TableCatalogCapability, TableInfo, WriteDistributionMode}
+import org.apache.spark.sql.connector.catalog.{Column, DelegatingCatalogExtension, DelegatingTable, Identifier, InMemoryRowLevelOperationTableCatalog, InMemoryTable, InMemoryTableCatalog, StagedTable, StagingInMemoryTableCatalog, Table, TableCatalogCapability, TableInfo, WriteDistributionMode}
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.WriteDistributionMode.{HASH, NONE, RANGE}
 import org.apache.spark.sql.connector.distributions.Distributions
@@ -73,6 +74,25 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
     Seq("DISTRIBUTED BY", "ORDERED BY", "LOCALLY ORDERED BY", "UNORDERED").exists(line.startsWith)
   }
 
+  private def checkUnknownColumns(stmt: String, cols: String): Unit = {
+    checkError(
+      exception = intercept[AnalysisException](analyze(stmt)),
+      condition = "WRITE_ORDERING_WITH_UNKNOWN_COLUMN",
+      sqlState = "42703",
+      parameters = Map("cols" -> cols),
+      context = ExpectedContext(stmt, 0, stmt.length - 1))
+  }
+
+  private def checkUnsupported(stmt: String, tableName: String, operation: String): Unit = {
+    checkError(
+      exception = intercept[AnalysisException](sql(stmt)),
+      condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      sqlState = "0A000",
+      parameters = Map(
+        "tableName" -> tableName,
+        "operation" -> s"$operation ... DISTRIBUTED BY/ORDERED BY/UNORDERED"))
+  }
+
   private def loadTable(catalogName: String, name: String): Table =
     spark.sessionState.catalogManager.catalog(catalogName).asTableCatalog
       .loadTable(Identifier.of(Array.empty, name))
@@ -96,43 +116,39 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("bare ORDERED BY implies range, LOCALLY implies none, UNORDERED implies none") {
+  test("each combination of the write clauses parses to its distribution and ordering") {
     Seq(
+      ("", null, 0),
       ("ORDERED BY id", RANGE, 1),
       ("LOCALLY ORDERED BY id", NONE, 1),
-      ("UNORDERED", NONE, 0)
-    ).foreach { case (clause, expectedMode, expectedOrderingSize) =>
-      parse(s"CREATE TABLE t (id INT) USING foo $clause") match {
+      ("UNORDERED", NONE, 0),
+      ("PARTITIONED BY (c) DISTRIBUTED BY PARTITION", HASH, 0),
+      ("PARTITIONED BY (c) DISTRIBUTED BY PARTITION ORDERED BY id", HASH, 1),
+      ("PARTITIONED BY (c) DISTRIBUTED BY PARTITION LOCALLY ORDERED BY id", HASH, 1),
+      ("PARTITIONED BY (c) DISTRIBUTED BY PARTITION UNORDERED", HASH, 0),
+      ("ORDERED BY id PARTITIONED BY (c) DISTRIBUTED BY PARTITION", HASH, 1),
+      ("DISTRIBUTED BY PARTITION PARTITIONED BY (c) LOCALLY ORDERED BY id", HASH, 1),
+      ("PARTITIONED BY (c) ORDERED BY id COMMENT 'a table' DISTRIBUTED BY PARTITION", HASH, 1)
+    ).foreach { case (clauses, mode, orderingSize) =>
+      parse(s"CREATE TABLE t (id INT, c STRING) USING foo $clauses") match {
         case c: CreateTable =>
-          assert(c.writeDistributionMode === expectedMode, s"for $clause")
-          assert(c.writeOrdering.length === expectedOrderingSize, s"for $clause")
-        case other => fail(s"unexpected plan for $clause: $other")
+          assert(c.writeDistributionMode === mode, s"for [$clauses]")
+          assert(c.writeOrdering.length === orderingSize, s"for [$clauses]")
+        case other => fail(s"unexpected plan for [$clauses]: $other")
       }
     }
   }
 
-  test("an explicit DISTRIBUTED BY PARTITION decides the distribution on its own") {
-    Seq(
-      ("ORDERED BY id", 1),
-      ("LOCALLY ORDERED BY id", 1),
-      ("UNORDERED", 0)
-    ).foreach { case (clause, expectedOrderingSize) =>
-      parse(s"CREATE TABLE t (id INT, c STRING) USING foo PARTITIONED BY (c) " +
-        s"DISTRIBUTED BY PARTITION $clause") match {
-        case c: CreateTable =>
-          assert(c.writeDistributionMode === HASH, s"for $clause")
-          assert(c.writeOrdering.length === expectedOrderingSize, s"for $clause")
-        case other => fail(s"unexpected plan for $clause: $other")
-      }
-    }
-  }
-
-  test("no clause leaves the mode unset (null), distinct from an explicit none") {
-    parse("CREATE TABLE t (id INT) USING foo") match {
+  test("a column written as identity(col) reaches the catalog as a plain column") {
+    parse("CREATE TABLE t (id INT) USING foo ORDERED BY identity(id)") match {
       case c: CreateTable =>
-        assert(c.writeDistributionMode === null)
-        assert(c.writeOrdering.isEmpty)
+        assert(c.writeOrdering.map(_.expression()) === Seq(FieldReference("id")))
       case other => fail(s"unexpected plan: $other")
+    }
+    withSQLConf("spark.sql.catalog.testcat" -> classOf[RecordingInMemoryTableCatalog].getName) {
+      assert(orderingOf(analyze(
+        "CREATE TABLE testcat.t (id INT) USING foo ORDERED BY identity(ID)")) ===
+        Seq("id ASC NULLS FIRST"))
     }
   }
 
@@ -175,21 +191,6 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
           assert(WriteSpecCall.render(c.writeOrdering) ===
             Seq("id DESC NULLS LAST", "c ASC NULLS FIRST"), s"for $clause")
         case other => fail(s"unexpected plan for $clause: $other")
-      }
-    }
-  }
-
-  test("the write clauses may appear in any position among the other create-table clauses") {
-    Seq(
-      "ORDERED BY id PARTITIONED BY (c) DISTRIBUTED BY PARTITION",
-      "DISTRIBUTED BY PARTITION PARTITIONED BY (c) LOCALLY ORDERED BY id",
-      "PARTITIONED BY (c) ORDERED BY id COMMENT 'a table' DISTRIBUTED BY PARTITION"
-    ).foreach { clauses =>
-      parse(s"CREATE TABLE t (id INT, c STRING) USING foo $clauses") match {
-        case c: CreateTable =>
-          assert(c.writeDistributionMode === HASH, s"for $clauses")
-          assert(c.writeOrdering.length === 1, s"for $clauses")
-        case other => fail(s"unexpected plan for $clauses: $other")
       }
     }
   }
@@ -242,21 +243,11 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
       assert(orderingOf(analyze("CREATE TABLE testcat.t (ID INT) USING foo " +
         "ORDERED BY truncate(4, ID)")) === Seq("truncate(4, ID) ASC NULLS FIRST"))
       val truncate = "CREATE TABLE testcat.t (ID INT) USING foo ORDERED BY truncate(4, id)"
-      checkError(
-        exception = intercept[AnalysisException](analyze(truncate)),
-        condition = "WRITE_ORDERING_WITH_UNKNOWN_COLUMN",
-        sqlState = "42703",
-        parameters = Map("cols" -> "`id`"),
-        context = ExpectedContext(truncate, 0, truncate.length - 1))
+      checkUnknownColumns(truncate, "`id`")
 
       // references are normalized independently, so only the unresolvable one is reported
       val multi = "CREATE TABLE testcat.t (ID INT) USING foo ORDERED BY bucket(4, id, nope)"
-      checkError(
-        exception = intercept[AnalysisException](analyze(multi)),
-        condition = "WRITE_ORDERING_WITH_UNKNOWN_COLUMN",
-        sqlState = "42703",
-        parameters = Map("cols" -> "`nope`"),
-        context = ExpectedContext(multi, 0, multi.length - 1))
+      checkUnknownColumns(multi, "`nope`")
     }
   }
 
@@ -277,12 +268,7 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
       assert(orderingOf(analyze("CREATE TABLE testcat.t (ID INT) USING foo ORDERED BY ID")) ===
         Seq("ID ASC NULLS FIRST"))
       val stmt = "CREATE TABLE testcat.t (ID INT) USING foo ORDERED BY id"
-      checkError(
-        exception = intercept[AnalysisException](analyze(stmt)),
-        condition = "WRITE_ORDERING_WITH_UNKNOWN_COLUMN",
-        sqlState = "42703",
-        parameters = Map("cols" -> "`id`"),
-        context = ExpectedContext(stmt, 0, stmt.length - 1))
+      checkUnknownColumns(stmt, "`id`")
     }
   }
 
@@ -292,12 +278,7 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
         Seq("id ASC NULLS FIRST"))
 
       val ordered = "CREATE TABLE testcat.t (id INT) USING foo ORDERED BY truncate(4, ID)"
-      checkError(
-        exception = intercept[AnalysisException](analyze(ordered)),
-        condition = "WRITE_ORDERING_WITH_UNKNOWN_COLUMN",
-        sqlState = "42703",
-        parameters = Map("cols" -> "`ID`"),
-        context = ExpectedContext(ordered, 0, ordered.length - 1))
+      checkUnknownColumns(ordered, "`ID`")
 
       val partitioned =
         "CREATE TABLE testcat.t (id INT) USING foo PARTITIONED BY (truncate(4, ID))"
@@ -313,12 +294,7 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
         Seq("days(ts) ASC NULLS FIRST", "bucket(4, id) ASC NULLS FIRST"))
       Seq("DAYS(TS)" -> "`TS`", "BUCKET(4, ID)" -> "`ID`").foreach { case (key, cols) =>
         val stmt = s"CREATE TABLE testcat.t (id INT, ts TIMESTAMP) USING foo ORDERED BY $key"
-        checkError(
-          exception = intercept[AnalysisException](analyze(stmt)),
-          condition = "WRITE_ORDERING_WITH_UNKNOWN_COLUMN",
-          sqlState = "42703",
-          parameters = Map("cols" -> cols),
-          context = ExpectedContext(stmt, 0, stmt.length - 1))
+        checkUnknownColumns(stmt, cols)
       }
     }
   }
@@ -348,24 +324,14 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
         "CREATE TABLE testcat.t (id INT) USING foo ORDERED BY truncate(4, nope)",
         "CREATE TABLE testcat.t USING foo ORDERED BY nope AS SELECT 1 AS id"
       ).foreach { stmt =>
-        checkError(
-          exception = intercept[AnalysisException](analyze(stmt)),
-          condition = "WRITE_ORDERING_WITH_UNKNOWN_COLUMN",
-          sqlState = "42703",
-          parameters = Map("cols" -> "`nope`"),
-          context = ExpectedContext(stmt, 0, stmt.length - 1))
+        checkUnknownColumns(stmt, "`nope`")
       }
 
       // a nested struct field resolves
       analyze("CREATE TABLE testcat.t (p STRUCT<x: INT>) USING foo ORDERED BY p.x")
 
       val throughInt = "CREATE TABLE testcat.t (id INT) USING foo ORDERED BY id.x"
-      checkError(
-        exception = intercept[AnalysisException](analyze(throughInt)),
-        condition = "WRITE_ORDERING_WITH_UNKNOWN_COLUMN",
-        sqlState = "42703",
-        parameters = Map("cols" -> "`id`.`x`"),
-        context = ExpectedContext(throughInt, 0, throughInt.length - 1))
+      checkUnknownColumns(throughInt, "`id`.`x`")
     }
   }
 
@@ -373,12 +339,7 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
     withSQLConf("spark.sql.catalog.testcat" -> classOf[RecordingInMemoryTableCatalog].getName) {
       val stmt = "CREATE TABLE testcat.t (id INT) USING foo " +
         "ORDERED BY e, d, bucket(4, c, a), id, b, days(f), d"
-      checkError(
-        exception = intercept[AnalysisException](analyze(stmt)),
-        condition = "WRITE_ORDERING_WITH_UNKNOWN_COLUMN",
-        sqlState = "42703",
-        parameters = Map("cols" -> "`e`, `d`, `c`, `a`, `b`, `f`"),
-        context = ExpectedContext(stmt, 0, stmt.length - 1))
+      checkUnknownColumns(stmt, "`e`, `d`, `c`, `a`, `b`, `f`")
     }
   }
 
@@ -554,14 +515,30 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("a catalog that does not advertise the capability fails loudly") {
+  test("a transactional catalog gets them through the catalog of its transaction") {
+    val catalogClass = classOf[RecordingTransactionalTableCatalog].getName
+    withSQLConf("spark.sql.catalog.txncat" -> catalogClass) {
+      sql("CREATE TABLE txncat.t USING foo ORDERED BY id AS SELECT 1 AS id")
+
+      val catalog = spark.sessionState.catalogManager.catalog("txncat")
+        .asInstanceOf[RecordingTransactionalTableCatalog]
+      assert(catalog.observedTransactions.size === 1)
+      assert(calls("txncat") ===
+        Seq(WriteSpecCall("createTable", "t", RANGE, Seq("id ASC NULLS FIRST"))))
+    }
+  }
+
+  test("a catalog that does not advertise the capability fails before creating or dropping") {
     withSQLConf("spark.sql.catalog.testcat" -> classOf[InMemoryTableCatalog].getName) {
       sql("CREATE TABLE testcat.plain (id INT) USING foo")
+      sql("INSERT INTO testcat.plain VALUES (1)")
       assert(sql("SHOW TABLES IN testcat").count() === 1)
 
       Seq(
         ("CREATE TABLE testcat.ordered (id INT) USING foo LOCALLY ORDERED BY id",
           "ordered", "CREATE TABLE"),
+        ("CREATE TABLE testcat.unordered (id INT) USING foo UNORDERED",
+          "unordered", "CREATE TABLE"),
         ("CREATE TABLE testcat.dist (id INT, c STRING) USING foo PARTITIONED BY (c) " +
           "DISTRIBUTED BY PARTITION", "dist", "CREATE TABLE"),
         ("CREATE TABLE testcat.ctas USING foo ORDERED BY id AS SELECT 1 AS id",
@@ -571,77 +548,25 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
         ("REPLACE TABLE testcat.plain USING foo ORDERED BY id AS SELECT 1 AS id",
           "plain", "REPLACE TABLE AS SELECT")
       ).foreach { case (stmt, table, operation) =>
-        checkError(
-          exception = intercept[AnalysisException](sql(stmt)),
-          condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
-          sqlState = "0A000",
-          parameters = Map(
-            "tableName" -> s"`testcat`.`$table`",
-            "operation" -> s"$operation ... DISTRIBUTED BY/ORDERED BY/UNORDERED"))
+        checkUnsupported(stmt, s"`testcat`.`$table`", operation)
       }
 
       assert(sql("SHOW TABLES IN testcat").count() === 1)
-    }
-  }
-
-  test("UNORDERED is a request too, not a no-op") {
-    withSQLConf("spark.sql.catalog.testcat" -> classOf[InMemoryTableCatalog].getName) {
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql("CREATE TABLE testcat.unordered (id INT) USING foo UNORDERED")
-        },
-        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
-        sqlState = "0A000",
-        parameters = Map(
-          "tableName" -> "`testcat`.`unordered`",
-          "operation" -> "CREATE TABLE ... DISTRIBUTED BY/ORDERED BY/UNORDERED"))
-      assert(sql("SHOW TABLES IN testcat").count() === 0)
-    }
-  }
-
-  test("REPLACE TABLE is rejected before the existing table is dropped") {
-    withSQLConf("spark.sql.catalog.testcat" -> classOf[InMemoryTableCatalog].getName) {
-      sql("CREATE TABLE testcat.t (id INT) USING foo")
-      sql("INSERT INTO testcat.t VALUES (1)")
-
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql("REPLACE TABLE testcat.t (id INT) USING foo ORDERED BY id")
-        },
-        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
-        sqlState = "0A000",
-        parameters = Map(
-          "tableName" -> "`testcat`.`t`",
-          "operation" -> "REPLACE TABLE ... DISTRIBUTED BY/ORDERED BY/UNORDERED"))
-      checkAnswer(sql("SELECT * FROM testcat.t"), Row(1))
+      checkAnswer(sql("SELECT * FROM testcat.plain"), Row(1))
     }
   }
 
   test("the v1 session-catalog path also fails loudly instead of dropping the clause") {
     Seq("ORDERED BY id", "LOCALLY ORDERED BY id", "UNORDERED").foreach { clause =>
       withTable("v1_ordered") {
-        checkError(
-          exception = intercept[AnalysisException] {
-            sql(s"CREATE TABLE v1_ordered (id INT) USING parquet $clause")
-          },
-          condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
-          sqlState = "0A000",
-          parameters = Map(
-            "tableName" -> "`spark_catalog`.`default`.`v1_ordered`",
-            "operation" -> "CREATE TABLE ... DISTRIBUTED BY/ORDERED BY/UNORDERED"))
+        checkUnsupported(s"CREATE TABLE v1_ordered (id INT) USING parquet $clause",
+          "`spark_catalog`.`default`.`v1_ordered`", "CREATE TABLE")
       }
     }
 
     withTable("v1_ctas") {
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql("CREATE TABLE v1_ctas USING parquet ORDERED BY id AS SELECT 1 AS id")
-        },
-        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
-        sqlState = "0A000",
-        parameters = Map(
-          "tableName" -> "`spark_catalog`.`default`.`v1_ctas`",
-          "operation" -> "CREATE TABLE AS SELECT ... DISTRIBUTED BY/ORDERED BY/UNORDERED"))
+      checkUnsupported("CREATE TABLE v1_ctas USING parquet ORDERED BY id AS SELECT 1 AS id",
+        "`spark_catalog`.`default`.`v1_ctas`", "CREATE TABLE AS SELECT")
     }
   }
 
@@ -658,15 +583,8 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
         catalog.capabilities.asScala.toSet === delegate.capabilities.asScala.toSet - capability)
       assert(catalog.capabilities.contains(TableCatalogCapability.SUPPORT_TABLE_CONSTRAINT))
 
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql("CREATE TABLE delegatingcat.t (id INT) USING foo ORDERED BY id")
-        },
-        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
-        sqlState = "0A000",
-        parameters = Map(
-          "tableName" -> "`delegatingcat`.`t`",
-          "operation" -> "CREATE TABLE ... DISTRIBUTED BY/ORDERED BY/UNORDERED"))
+      checkUnsupported("CREATE TABLE delegatingcat.t (id INT) USING foo ORDERED BY id",
+        "`delegatingcat`.`t`", "CREATE TABLE")
       assert(delegate.recordedCalls.isEmpty)
       assert(sql("SHOW TABLES IN delegatingcat").count() === 0)
     }
@@ -704,7 +622,7 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
     assert(plain.writeOrdering().isEmpty)
   }
 
-  test("TableInfo.Builder rejects a null write ordering") {
+  test("TableInfo.Builder rejects a null write ordering or a null element") {
     val e = intercept[NullPointerException] {
       new TableInfo.Builder()
         .withColumns(Array(Column.create("id", IntegerType)))
@@ -712,6 +630,14 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
         .build()
     }
     assert(e.getMessage === "writeOrdering should not be null")
+
+    val element = intercept[NullPointerException] {
+      new TableInfo.Builder()
+        .withColumns(Array(Column.create("id", IntegerType)))
+        .withWriteOrdering(Array[SortOrder](null))
+        .build()
+    }
+    assert(element.getMessage === "writeOrdering should not contain null")
   }
 
   test("SHOW CREATE TABLE keeps the types of literals in a sort key") {
@@ -790,6 +716,24 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
       val described = sql("DESCRIBE TABLE EXTENDED spark_catalog.default.t").collect()
         .map(r => r.getString(0) -> r.getString(1)).toMap
       assert(described.get("Ordering") === Some("id ASC NULLS FIRST"))
+
+      checkUnsupported("CREATE TABLE spark_catalog.default.u (id INT) USING parquet ORDERED BY id",
+        "`spark_catalog`.`default`.`u`", "CREATE TABLE")
+      assert(calls(SESSION_CATALOG_NAME).isEmpty)
+    }
+  }
+
+  test("SHOW CREATE TABLE does not fail on a provider that cannot be found or linked") {
+    Seq(
+      classOf[MissingProviderSessionCatalog] -> MissingProviderSessionCatalog.PROVIDER,
+      classOf[UnlinkableProviderSessionCatalog] -> classOf[UnlinkableProvider].getName
+    ).foreach { case (catalogClass, provider) =>
+      withSQLConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key -> catalogClass.getName) {
+        spark.sessionState.catalogManager.reset()
+        val ddl = sql("SHOW CREATE TABLE spark_catalog.default.t").head().getString(0)
+        assert(ddl.split("\n").contains(s"USING $provider"), ddl)
+        assert(writeClauseLines(ddl).isEmpty, ddl)
+      }
     }
   }
 
@@ -805,6 +749,16 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
           val ddl = sql("SHOW CREATE TABLE spark_catalog.default.t").head().getString(0)
           assert(!ddl.contains("USING"), ddl)
           assert(writeClauseLines(ddl) === clauses, s"hiveByDefault=$hiveByDefault: $ddl")
+
+          val create = "CREATE TABLE spark_catalog.default.u (id INT) ORDERED BY id"
+          if (hiveByDefault) {
+            checkUnsupported(create, "`spark_catalog`.`default`.`u`", "CREATE TABLE")
+            assert(calls(SESSION_CATALOG_NAME).isEmpty)
+          } else {
+            sql(create)
+            assert(calls(SESSION_CATALOG_NAME) ===
+              Seq(WriteSpecCall("createTable", "u", RANGE, Seq("id ASC NULLS FIRST"))))
+          }
         }
     }
   }
@@ -833,14 +787,28 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SHOW CREATE TABLE quotes a reserved keyword when the session reserves it") {
-    withSQLConf(
-        "spark.sql.catalog.reportcat" -> classOf[ReportingInMemoryTableCatalog].getName,
-        SQLConf.ANSI_ENABLED.key -> "true",
-        SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
-      withTable("reportcat.t") {
-        sql("CREATE TABLE reportcat.t (`order` INT) USING foo ORDERED BY `order`")
-        val ddl = sql("SHOW CREATE TABLE reportcat.t").head().getString(0)
-        assert(writeClauseLines(ddl) === Seq("ORDERED BY (`order` ASC NULLS FIRST)"), ddl)
+    val enforced = Seq(
+      SQLConf.ANSI_ENABLED.key -> "true",
+      SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true")
+    withSQLConf("spark.sql.catalog.reportcat" -> classOf[ReportingInMemoryTableCatalog].getName) {
+      Seq(
+        ("(`order` INT) USING foo ORDERED BY `order`",
+          "ORDERED BY (`order` ASC NULLS FIRST)", false),
+        ("(id INT) USING foo ORDERED BY `select`(id)",
+          "ORDERED BY (`select`(`id`) ASC NULLS FIRST)", true)
+      ).foreach { case (definition, clause, replaysWhereReserved) =>
+        withTable("reportcat.t") {
+          val ddl = withSQLConf(enforced: _*) {
+            sql(s"CREATE TABLE reportcat.t $definition")
+            sql("SHOW CREATE TABLE reportcat.t").head().getString(0)
+          }
+          assert(writeClauseLines(ddl) === Seq(clause), ddl)
+          val before = loadTable("reportcat", "t").writeOrdering().toSeq
+
+          sql("DROP TABLE reportcat.t")
+          if (replaysWhereReserved) withSQLConf(enforced: _*)(sql(ddl)) else sql(ddl)
+          assert(loadTable("reportcat", "t").writeOrdering().toSeq === before, ddl)
+        }
       }
     }
   }
@@ -886,18 +854,24 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
         assert(writeClauseLines(ddl).isEmpty, ddl)
       }
 
-      withTable("reportcat.t") {
-        sql("CREATE TABLE reportcat.t (id INT, c STRING) USING foo " +
-          "PARTITIONED BY (c) DISTRIBUTED BY PARTITION ORDERED BY (id DESC)")
-        val described = sql("DESCRIBE TABLE EXTENDED reportcat.t").collect()
-          .map(r => r.getString(0) -> r.getString(1)).toMap
-        assert(described.get("Distribution") === Some("hash"))
-        assert(described.get("Ordering") === Some("id DESC NULLS LAST"))
-      }
-      withTable("reportcat.plain") {
-        sql("CREATE TABLE reportcat.plain (id INT) USING foo")
-        val described = sql("DESCRIBE TABLE EXTENDED reportcat.plain").collect().map(_.getString(0))
-        assert(!described.contains("# Write Distribution and Ordering"))
+      Seq(
+        ("PARTITIONED BY (c) DISTRIBUTED BY PARTITION ORDERED BY (id DESC)",
+          Some("hash"), Some("id DESC NULLS LAST")),
+        ("PARTITIONED BY (c) DISTRIBUTED BY PARTITION", Some("hash"), None),
+        ("UNORDERED", Some("none"), None),
+        (s"TBLPROPERTIES ('${ReportingInMemoryTable.ORDERING_OVERRIDE}' = 'missing')",
+          None, Some("missing ASC NULLS FIRST")),
+        ("", None, None)
+      ).foreach { case (clauses, distribution, ordering) =>
+        withTable("reportcat.t") {
+          sql(s"CREATE TABLE reportcat.t (id INT, c STRING) USING foo $clauses")
+          val described = sql("DESCRIBE TABLE EXTENDED reportcat.t").collect()
+            .map(r => r.getString(0) -> r.getString(1))
+          assert(described.exists(_._1 == "# Write Distribution and Ordering") ===
+            (distribution.isDefined || ordering.isDefined), clauses)
+          assert(described.toMap.get("Distribution") === distribution, clauses)
+          assert(described.toMap.get("Ordering") === ordering, clauses)
+        }
       }
     }
   }
@@ -931,7 +905,8 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
         ("range", "bucketswapped"),
         ("range", "daystz"),
         ("range", "missing"),
-        ("range", "nestedmissing")
+        ("range", "nestedmissing"),
+        ("range", "broken")
       ).foreach { case (mode, key) =>
         withTable("reportcat.t") {
           sql(s"CREATE TABLE reportcat.t (id INT) USING foo TBLPROPERTIES (" +
@@ -946,14 +921,19 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
         }
       }
 
-      withTable("reportcat.t") {
-        sql("CREATE TABLE reportcat.t (id INT) USING foo TBLPROPERTIES (" +
-          s"'${ReportingInMemoryTable.MODE_OVERRIDE}' = 'range', " +
-          s"'${ReportingInMemoryTable.ORDERING_OVERRIDE}' = 'nan')")
-        val described = sql("DESCRIBE TABLE EXTENDED reportcat.t").collect()
-          .map(r => r.getString(0) -> r.getString(1)).toMap
-        assert(described.get("Distribution") === Some("range"))
-        assert(described.get("Ordering") === Some("f(id, CAST('NaN' AS FLOAT)) ASC NULLS FIRST"))
+      Seq(
+        "nan" -> "f(id, CAST('NaN' AS FLOAT)) ASC NULLS FIRST",
+        "broken" -> "f(id, broken) ASC NULLS FIRST"
+      ).foreach { case (key, ordering) =>
+        withTable("reportcat.t") {
+          sql("CREATE TABLE reportcat.t (id INT) USING foo TBLPROPERTIES (" +
+            s"'${ReportingInMemoryTable.MODE_OVERRIDE}' = 'range', " +
+            s"'${ReportingInMemoryTable.ORDERING_OVERRIDE}' = '$key')")
+          val described = sql("DESCRIBE TABLE EXTENDED reportcat.t").collect()
+            .map(r => r.getString(0) -> r.getString(1)).toMap
+          assert(described.get("Distribution") === Some("range"))
+          assert(described.get("Ordering") === Some(ordering))
+        }
       }
     }
   }
@@ -1135,6 +1115,22 @@ class RecordingStagingInMemoryTableCatalog
 }
 
 /** A DelegatingCatalogExtension over a delegate that reports the capability. */
+/**
+ * A transactional catalog that supports the clauses and records them. Its transaction's catalog
+ * reports the same capabilities and creates tables through this catalog's `createTable`.
+ */
+class RecordingTransactionalTableCatalog
+  extends InMemoryRowLevelOperationTableCatalog with RecordsWriteSpecs {
+
+  override def capabilities: util.Set[TableCatalogCapability] =
+    WriteSpecCapability.add(super.capabilities)
+
+  override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
+    record("createTable", ident, tableInfo)
+    super.createTable(ident, tableInfo)
+  }
+}
+
 class DelegatingWriteSpecCatalog extends DelegatingCatalogExtension {
 
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
@@ -1180,7 +1176,7 @@ class ReportingInMemoryTable(tableName: String, tableInfo: TableInfo)
   // has a literal with no constant form; `bucketswapped` and `daystz` have an argument shape the
   // parser rejects for their name; `missing` and `nestedmissing` reference a column the table does
   // not have, the second inside an identity transform; `string` has a `java.lang.String` literal;
-  // and `connectorref` has a connector's own column reference.
+  // `connectorref` has a connector's own column reference; and `broken` has one that throws.
   override def writeOrdering(): Array[SortOrder] = {
     def f(arg: Expression): Transform = LogicalExpressions.apply("f", FieldReference("id"), arg)
     val key = Option(tableInfo.properties().get(ReportingInMemoryTable.ORDERING_OVERRIDE)).map {
@@ -1196,6 +1192,10 @@ class ReportingInMemoryTable(tableName: String, tableInfo: TableInfo)
       case "daystz" => LogicalExpressions.apply("days", FieldReference("id"), literal("UTC"))
       case "connectorref" => LogicalExpressions.apply("f", new NamedReference {
         override def fieldNames(): Array[String] = Array("order-id")
+      })
+      case "broken" => f(new NamedReference {
+        override def fieldNames(): Array[String] = throw new IllegalStateException("broken")
+        override def describe(): String = "broken"
       })
     }
     key.map(k =>
@@ -1262,27 +1262,56 @@ class GenericClusterByTableCatalog extends ReportingInMemoryTableCatalog {
 }
 
 /**
- * A session catalog extension that reports the capability and loads every table as one with a
- * v1 provider, `parquet`, and a declared range ordering on `id`.
+ * A session catalog extension that reports the capability and records the request it receives.
+ * It loads `t` and `plain` as tables with a v1 provider, `parquet`; `t` declares a range ordering
+ * on `id`, and `plain` declares nothing.
  */
-class V1ProviderSessionCatalog extends DelegatingCatalogExtension {
+class V1ProviderSessionCatalog extends DelegatingCatalogExtension with RecordsWriteSpecs {
 
   protected def provider: Option[String] = Some("parquet")
 
   override def capabilities: util.Set[TableCatalogCapability] =
     WriteSpecCapability.add(super.capabilities)
 
+  override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
+    record("createTable", ident, tableInfo)
+    new DelegatingTable(tableInfo, ident.name)
+  }
+
+  override def tableExists(ident: Identifier): Boolean = Set("t", "plain").contains(ident.name)
+
   override def loadTable(ident: Identifier): Table = {
+    if (!tableExists(ident)) throw new NoSuchTableException(ident)
     val builder = new TableInfo.Builder()
     provider.foreach(builder.withProvider)
-    val info = builder
-      .withColumns(Array(Column.create("id", IntegerType)))
-      .withWriteDistributionMode(RANGE)
-      .withWriteOrdering(Array(LogicalExpressions.sort(
+    builder.withColumns(Array(Column.create("id", IntegerType)))
+    if (ident.name == "t") {
+      builder.withWriteDistributionMode(RANGE).withWriteOrdering(Array(LogicalExpressions.sort(
         FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)))
-      .build()
-    new DelegatingTable(info, ident.name)
+    }
+    new DelegatingTable(builder.build(), ident.name)
   }
+}
+
+/** The same session catalog, for tables whose provider does not exist. */
+class MissingProviderSessionCatalog extends V1ProviderSessionCatalog {
+  override protected def provider: Option[String] = Some(MissingProviderSessionCatalog.PROVIDER)
+}
+
+object MissingProviderSessionCatalog {
+  val PROVIDER = "org.example.NoSuchProvider"
+}
+
+/** A provider that cannot be linked, as when a class it depends on is missing. */
+class UnlinkableProvider {
+  // scalastyle:off throwerror
+  throw new NoClassDefFoundError("org/example/MissingSuperclass")
+  // scalastyle:on throwerror
+}
+
+/** The same session catalog, for tables whose provider cannot be linked. */
+class UnlinkableProviderSessionCatalog extends V1ProviderSessionCatalog {
+  override protected def provider: Option[String] = Some(classOf[UnlinkableProvider].getName)
 }
 
 /** The same, for tables that report no provider. */
@@ -1291,12 +1320,9 @@ class NoProviderSessionCatalog extends V1ProviderSessionCatalog {
 }
 
 /** A staging catalog that supports the clauses but rejects `CLUSTER BY` with `UNORDERED`. */
-class ClusterByUnorderedRejectingCatalog extends StagingInMemoryTableCatalog {
+class ClusterByUnorderedRejectingCatalog extends RecordingStagingInMemoryTableCatalog {
 
-  override def capabilities: util.Set[TableCatalogCapability] =
-    WriteSpecCapability.add(super.capabilities)
-
-  private def check(tableInfo: TableInfo): Unit = {
+  override protected def record(method: String, ident: Identifier, tableInfo: TableInfo): Unit = {
     val clustered = tableInfo.partitions().exists {
       case ClusterByTransform(_) => true
       case _ => false
@@ -1305,26 +1331,7 @@ class ClusterByUnorderedRejectingCatalog extends StagingInMemoryTableCatalog {
         tableInfo.writeOrdering().isEmpty) {
       throw new IllegalArgumentException(ClusterByUnorderedRejectingCatalog.MESSAGE)
     }
-  }
-
-  override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
-    check(tableInfo)
-    super.createTable(ident, tableInfo)
-  }
-
-  override def stageCreate(ident: Identifier, tableInfo: TableInfo): StagedTable = {
-    check(tableInfo)
-    super.stageCreate(ident, tableInfo)
-  }
-
-  override def stageReplace(ident: Identifier, tableInfo: TableInfo): StagedTable = {
-    check(tableInfo)
-    super.stageReplace(ident, tableInfo)
-  }
-
-  override def stageCreateOrReplace(ident: Identifier, tableInfo: TableInfo): StagedTable = {
-    check(tableInfo)
-    super.stageCreateOrReplace(ident, tableInfo)
+    super.record(method, ident, tableInfo)
   }
 }
 

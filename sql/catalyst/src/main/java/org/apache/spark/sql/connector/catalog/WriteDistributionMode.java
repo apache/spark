@@ -29,7 +29,8 @@ import org.apache.spark.annotation.Evolving;
 public enum WriteDistributionMode {
   /**
    * Requested with {@code DISTRIBUTED BY PARTITION}: cluster each write by the table's
-   * partitioning.
+   * partitioning. Spark requests it only for a table whose partitioning has a transform that is
+   * not {@code cluster_by}, so never for a table that uses only {@code CLUSTER BY}.
    */
   HASH,
   /**

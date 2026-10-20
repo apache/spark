@@ -171,10 +171,12 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
     What the catalog records is a *default* for later writes, not a statement about the data
     already in the table: an individual write may override it, and rewriting existing data to match
     a newly requested layout is a separate operation. `SHOW CREATE TABLE` reproduces the clauses
-    only when the catalog accepts them, every column they reference exists, and parsing them in
-    the current session gives back the same pair. A sort key with a `TRUE`, `FALSE` or `NULL`
-    argument, for example, is read back as a column reference when that keyword is not reserved,
-    so it is not reproduced. `DESCRIBE TABLE EXTENDED` reports both values in every case.
+    only when the catalog accepts them, the statement would not create a v1 table, every column
+    they reference exists, and parsing them in the current session gives back the same pair. A
+    sort key with a `TRUE`, `FALSE` or `NULL` argument, for example, is read back as a column
+    reference when that keyword is not reserved, so it is not reproduced.
+    `DESCRIBE TABLE EXTENDED` reports the requested values whether or not `SHOW CREATE TABLE` can
+    reproduce them.
 
 * **AS select_statement**
 

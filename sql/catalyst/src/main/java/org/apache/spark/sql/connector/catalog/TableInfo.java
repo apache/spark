@@ -55,6 +55,9 @@ public class TableInfo {
     this.writeDistributionMode = builder.writeDistributionMode;
     this.writeOrdering =
       Objects.requireNonNull(builder.writeOrdering, "writeOrdering should not be null");
+    for (SortOrder sortOrder : writeOrdering) {
+      Objects.requireNonNull(sortOrder, "writeOrdering should not contain null");
+    }
   }
 
   public Column[] columns() {
@@ -97,22 +100,28 @@ public class TableInfo {
    * <p>
    * Only catalogs that report
    * {@link TableCatalogCapability#SUPPORTS_CREATE_TABLE_WITH_WRITE_DISTRIBUTION_AND_ORDERING} see a
-   * request; for any other catalog, Spark rejects the statement.
+   * request; for any other catalog, Spark rejects the statement. A
+   * {@link WriteDistributionMode#HASH} request always comes with a partition in
+   * {@link #partitions()} that is not {@code cluster_by}.
    * <p>
    * Spark passes the request only to the {@code TableInfo} overloads of
    * {@link TableCatalog#createTable(Identifier, TableInfo)} and of the {@link StagingTableCatalog}
    * methods {@code stageCreate}, {@code stageReplace} and {@code stageCreateOrReplace}. Their
    * default implementations drop it, so a catalog that reports the capability must override each
-   * one it can be reached through. {@link TableCatalog#createTableLike} never gets a request: Spark
-   * does not copy the source table's write distribution and ordering into its {@code TableInfo}.
+   * one it can be reached through. For a {@link TransactionalCatalogPlugin}, a
+   * {@code CREATE TABLE ... AS SELECT} or {@code REPLACE TABLE ... AS SELECT} reaches the catalog
+   * of its {@link org.apache.spark.sql.connector.catalog.transactions.Transaction} instead.
+   * {@link TableCatalog#createTableLike} never gets a request: Spark does not copy the source
+   * table's write distribution and ordering into its {@code TableInfo}.
    *
    * @since 4.4.0
    */
   public WriteDistributionMode writeDistributionMode() { return writeDistributionMode; }
 
   /**
-   * The requested write ordering; never null, and empty when none was requested. Gated on the
-   * same capability and delivered the same way as {@link #writeDistributionMode()}.
+   * The requested write ordering; never null, without null elements, and empty when none was
+   * requested. Gated on the same capability and delivered the same way as
+   * {@link #writeDistributionMode()}.
    * <p>
    * A plain column is a {@link org.apache.spark.sql.connector.expressions.NamedReference}; any
    * other key is a {@link Transform}, such as {@code bucket(16, id)}. Spark checks that each column
@@ -120,7 +129,9 @@ public class TableInfo {
    * lowercase {@code bucket}, {@code years}, {@code months}, {@code days} and {@code hours}. It
    * does not check that a key is orderable, that a bucket count is positive or that it lists a
    * column, or the arguments of any other transform, so a catalog must reject a key it cannot
-   * honor.
+   * honor. A catalog that is not a {@link StagingTableCatalog} sees a {@code REPLACE TABLE} only
+   * after Spark has dropped the existing table; see
+   * {@link TableCatalogCapability#SUPPORTS_CREATE_TABLE_WITH_WRITE_DISTRIBUTION_AND_ORDERING}.
    *
    * @since 4.4.0
    */
