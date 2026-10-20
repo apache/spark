@@ -89,7 +89,8 @@ abstract class InMemoryBaseTable(
   }
 
   override def displayProperties(): util.Map[String, String] = {
-    Option(tableDisplayProperties).getOrElse(super.displayProperties())
+    Option(tableDisplayProperties).map(util.Collections.unmodifiableMap(_))
+      .getOrElse(super.displayProperties())
   }
 
   def setDisplayProperties(displayProperties: util.Map[String, String]): Unit = {

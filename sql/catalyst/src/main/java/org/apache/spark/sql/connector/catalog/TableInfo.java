@@ -25,7 +25,8 @@ import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.types.StructType;
 
 /**
- * Metadata describing a data-source table: its columns, properties, partitioning and constraints.
+ * Metadata describing a data-source table: its columns, stored and display-only properties,
+ * partitioning and constraints.
  * Spark realizes a {@code TableInfo} into a {@link Table} via {@link DelegatingTable}; a catalog
  * that has its own {@link Table} object returns that instead. Views are described by the sibling
  * {@link View}, which -- unlike a table -- is itself a {@link Relation} because Spark never builds
@@ -66,9 +67,11 @@ public class TableInfo {
    * Returns the additional display-only properties described by {@link Table#displayProperties()}.
    *
    * <p>These properties describe metadata returned by a catalog. Spark leaves them empty when
-   * calling {@code TableCatalog.createTable},
-   * {@code TableCatalog.createTableLike}, {@code StagingTableCatalog.stageCreate},
-   * {@code StagingTableCatalog.stageReplace}, and {@code StagingTableCatalog.stageCreateOrReplace}.
+   * calling {@link TableCatalog#createTable(Identifier, TableInfo)},
+   * {@link TableCatalog#createTableLike(Identifier, TableInfo, Table)},
+   * {@link StagingTableCatalog#stageCreate(Identifier, TableInfo)},
+   * {@link StagingTableCatalog#stageReplace(Identifier, TableInfo)}, and
+   * {@link StagingTableCatalog#stageCreateOrReplace(Identifier, TableInfo)}.
    *
    * @since 4.4.0
    */
@@ -94,7 +97,7 @@ public class TableInfo {
      * Sets additional display-only properties.
      *
      * @param displayProperties a non-null map with non-null keys and values
-     * @see Table#displayProperties()
+     * @see TableInfo#displayProperties()
      * @since 4.4.0
      */
     public Builder withDisplayProperties(Map<String, String> displayProperties) {

@@ -278,6 +278,10 @@ ALTER TABLE table_identifier SET TBLPROPERTIES ( key1 = val1, key2 = val2, ... )
 
 `ALTER TABLE UNSET` command is used to drop the table property.
 
+For V2 tables, catalogs may supply display-only properties in metadata commands such as
+`SHOW TBLPROPERTIES`. This command does not remove those entries. Unsetting a stored
+non-reserved property exposes any display-only value with the same key.
+
 **Note:** If the specified property key does not exist, whether specify `IF EXISTS` or not, the command will ignore it and finally succeed.
 
 ##### Syntax

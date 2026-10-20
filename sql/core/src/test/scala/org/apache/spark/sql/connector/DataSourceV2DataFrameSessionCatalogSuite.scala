@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.connector
 
-import java.util
 import java.util.Locale
 
 import org.scalatest.BeforeAndAfter
@@ -60,13 +59,16 @@ class DataSourceV2DataFrameSessionCatalogSuite
       sql(s"CREATE TABLE $t (id bigint) USING $v2Format")
       val table = sessionCatalog.loadTable(Identifier.of(Array("default"), t))
         .asInstanceOf[InMemoryTable]
-      table.setDisplayProperties(util.Map.of("catalog-label", "catalog-value"))
+      table.setDisplayProperties(java.util.Map.of("catalog-label", "catalog-value"))
 
       sql(s"ALTER TABLE $t SET TBLPROPERTIES ('k' = 'v')")
       checkAnswer(sql(s"SHOW TBLPROPERTIES $t"),
         Seq(Row("catalog-label", "catalog-value"), Row("k", "v")))
       checkAnswer(sql(s"DESCRIBE TABLE EXTENDED $t").where("col_name = 'Table Properties'"),
         Row("Table Properties", "[catalog-label=catalog-value,k=v]", ""))
+
+      assert(!sql(s"SHOW TABLE EXTENDED LIKE '$t'")
+        .head().getString(3).contains("catalog-label"))
 
       sql(s"ALTER TABLE $t UNSET TBLPROPERTIES ('k')")
       checkAnswer(sql(s"SHOW TBLPROPERTIES $t"), Row("catalog-label", "catalog-value"))

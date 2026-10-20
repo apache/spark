@@ -24,6 +24,11 @@ license: |
 This statement returns the value of a table property given an optional value for
 a property key. If no key is specified then all the properties are returned. 
 
+For V2 tables, the output may also include display-only properties supplied by the catalog.
+`ALTER TABLE ... UNSET TBLPROPERTIES` does not remove these entries, and `SHOW CREATE TABLE`
+does not include them. Stored properties take precedence over display-only entries with the
+same key; unsetting a stored non-reserved property exposes the display-only value if present.
+
 ### Syntax
 
 ```sql

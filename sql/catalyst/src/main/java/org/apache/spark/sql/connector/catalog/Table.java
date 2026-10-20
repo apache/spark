@@ -100,11 +100,11 @@ public interface Table extends Relation {
    *
    * <p>Spark adds these entries to the non-reserved properties displayed by V2 table metadata
    * commands and {@code Catalog.getTableProperties}. Entries in {@link #properties()} take
-   * precedence, and reserved keys such as {@link TableCatalog#PROP_EXTERNAL} and
-   * {@link TableCatalog#PROP_LOCATION} are ignored in this map. Table type and other reserved
-   * metadata are read from {@code properties()}.
-   * After a stored property is removed, Spark displays the entry for that key if it remains in
-   * this map.
+   * precedence, and reserved keys such as {@link TableCatalog#PROP_EXTERNAL},
+   * {@link TableCatalog#PROP_LOCATION}, and {@link TableCatalog#PROP_COMMENT} are ignored in
+   * this map. Table type and other reserved metadata are read from {@code properties()}.
+   * After a stored non-reserved property is removed, Spark displays the entry for that key if
+   * it remains in this map. Spark redacts these entries in the same way as stored properties.
    *
    * <p>Spark passes {@code ALTER TABLE ... SET/UNSET TBLPROPERTIES} to
    * {@link TableCatalog#alterTable} without consulting this map. Catalogs should apply these
@@ -113,8 +113,12 @@ public interface Table extends Relation {
    * <p>For now, {@code SHOW TABLE EXTENDED} omits these entries for the built-in session catalog
    * and its {@link CatalogExtension}s.
    *
-   * <p>These entries may be transient and are excluded from {@code SHOW CREATE TABLE}. The
-   * default implementation returns an empty map.
+   * <p>These entries may be transient and are excluded from {@code SHOW CREATE TABLE}.
+   * Implementations of {@link TableCatalog#createTableLike(Identifier, TableInfo, Table)} should
+   * not copy them from the source table. Spark reads these entries only to display table
+   * metadata, so implementations may compute them on demand.
+   *
+   * <p>The default implementation returns an empty map.
    *
    * @return a non-null map with non-null keys and values
    * @since 4.4.0

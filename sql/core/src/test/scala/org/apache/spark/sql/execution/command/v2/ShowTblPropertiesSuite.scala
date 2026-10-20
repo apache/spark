@@ -26,9 +26,7 @@ import org.apache.spark.sql.execution.command
 class ShowTblPropertiesSuite extends command.ShowTblPropertiesSuiteBase with CommandSuiteBase {
   test("display properties supplement current properties and exclude reserved keys") {
     withNamespaceAndTable("ns", "table") { tbl =>
-      sql(s"CREATE TABLE $tbl (id bigint) $defaultUsing " +
-        "TBLPROPERTIES ('persisted' = 'stored')")
-      setDisplayProperties(loadTable(catalog, "ns", "table"))
+      createTableWithDisplayProperties("ns", "table")
 
       checkAnswer(sql(s"SHOW TBLPROPERTIES $tbl"),
         Seq(Row("catalog-label", "catalog-value"), Row("password", "*********(redacted)"),
@@ -38,6 +36,9 @@ class ShowTblPropertiesSuite extends command.ShowTblPropertiesSuiteBase with Com
         Row("catalog-label", "catalog-value"))
       checkAnswer(sql(s"SHOW TBLPROPERTIES $tbl ('password')"),
         Row("password", "*********(redacted)"))
+
+      checkAnswer(sql(s"SHOW TBLPROPERTIES $tbl ('location')"),
+        Row("location", s"Table $tbl does not have property: location"))
 
       sql(s"ALTER TABLE $tbl SET TBLPROPERTIES ('persisted' = 'updated')")
       checkAnswer(sql(s"SHOW TBLPROPERTIES $tbl"),

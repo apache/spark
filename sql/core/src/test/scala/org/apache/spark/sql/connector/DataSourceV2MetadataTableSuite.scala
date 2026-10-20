@@ -143,7 +143,9 @@ class DataSourceV2MetadataTableSuite extends SharedSparkSession {
 /**
  * A read-only [[TableCatalog]] that returns [[DelegatingTable]] for a small set of canned
  * table fixtures. Used to drive the data-source-table read path (file source + v2 provider)
- * through Spark's V1 data-source machinery.
+ * through Spark's V1 data-source machinery. The table
+ * `display_properties.test_display_properties` backs the V2 metadata-command test and is the
+ * only table returned by `listTables`.
  */
 class TestingDataSourceTableCatalog extends TableCatalog {
   override def loadTable(ident: Identifier): Table = ident.name() match {
@@ -191,9 +193,10 @@ class TestingDataSourceTableCatalog extends TableCatalog {
     throw new RuntimeException("shouldn't be called")
   override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit =
     throw new RuntimeException("shouldn't be called")
-  override def listTables(namespace: Array[String]): Array[Identifier] = {
-    assert(namespace.toSeq == Seq("display_properties"))
-    Array(Identifier.of(namespace, "test_display_properties"))
+  override def listTables(namespace: Array[String]): Array[Identifier] = namespace match {
+    case Array("display_properties") =>
+      Array(Identifier.of(namespace, "test_display_properties"))
+    case _ => throw new RuntimeException("shouldn't be called")
   }
 
   private var catalogName = ""

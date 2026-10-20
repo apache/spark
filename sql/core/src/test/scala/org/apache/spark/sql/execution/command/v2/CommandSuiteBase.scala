@@ -86,19 +86,21 @@ trait CommandSuiteBase extends SharedSparkSession {
       external: Boolean = false,
       withLocation: Boolean = false): Unit = {
     val location = if (withLocation) "LOCATION 'file:/tmp/display-properties' " else ""
-    sql(s"CREATE TABLE $catalog.$namespace.$table (id bigint) $defaultUsing " +
+    val tableType = if (external) "EXTERNAL " else ""
+    sql(s"CREATE ${tableType}TABLE $catalog.$namespace.$table (id bigint) $defaultUsing " +
       s"COMMENT 'table comment' $location" +
       "TBLPROPERTIES ('persisted' = 'stored')")
-    setDisplayProperties(loadTable(catalog, namespace, table), external)
+    val tableCatalog = spark.sessionState.catalogManager.catalog(catalog)
+      .asInstanceOf[BasicInMemoryTableCatalog]
+    val liveTable = tableCatalog.liveTable(Identifier.of(Array(namespace), table))
+      .asInstanceOf[InMemoryTable]
+    setDisplayProperties(liveTable, external)
   }
 
   /**
-   * Sets display-only test metadata. When external is true, also marks the stored table external.
+   * Sets display-only test metadata.
    */
   def setDisplayProperties(table: InMemoryTable, external: Boolean = false): Unit = {
-    if (external) {
-      table.properties.put(TableCatalog.PROP_EXTERNAL, "true")
-    }
     val reserved = CatalogV2Util.TABLE_RESERVED_PROPERTIES.map(key => key -> s"display-$key")
     table.setDisplayProperties((reserved.toMap ++ Map(
       "catalog-label" -> "catalog-value",
