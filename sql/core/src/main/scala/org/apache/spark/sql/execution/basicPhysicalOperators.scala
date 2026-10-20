@@ -1114,7 +1114,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
    * child with no member left reports `UnknownPartitioning`. A partitioning that references no
    * attribute, such as `SinglePartition`, passes through.
    */
-  private def prepareOutputPartitioning(): Seq[Partitioning] = {
+  private[execution] def prepareOutputPartitioning(): Seq[Partitioning] = {
     // Map every child's partitioning attributes to this union's output attributes, so all
     // partitionings are expressed in the same attribute space before comparison. A child's
     // `outputPartitioning` may reference attributes that differ from its own `output` in any
