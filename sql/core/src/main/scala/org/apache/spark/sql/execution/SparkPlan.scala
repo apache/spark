@@ -283,15 +283,22 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /**
    * Finds scalar subquery expressions in this plan node and starts evaluating them.
    */
-  protected def prepareSubqueries(): Unit = {
-    expressions.foreach {
-      _.collect {
-        case e: ExecSubqueryExpression =>
+  protected def registerSubqueries(exprs: Seq[Expression]): Unit = {
+    prepareLock.synchronized {
+      exprs.foreach {
+        _.collect { case e: ExecSubqueryExpression =>
           e.plan.prepare()
-          runningSubqueries += e
+        }
       }
     }
   }
+
+   /**
+   * Finds scalar subquery expressions in this plan node and starts evaluating them.
+   */
+   protected def prepareSubqueries(): Unit = {
+      registerSubqueries(expressions)
+   }
 
   /**
    * Blocks the thread until all subqueries finish evaluation and update the results.
