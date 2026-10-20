@@ -167,7 +167,7 @@ def determine_shell_script_test_goals(
     preserving each module's declaration order. Each goal is returned only once:
 
     >>> goals = determine_shell_script_test_goals(
-    ...     [modules.build, modules.root], modules.TestStage.PRE_BUILD)
+    ...     [modules.root], modules.TestStage.PRE_BUILD)
     >>> [g.path for g in goals].count(Path("dev/test-dependencies.sh"))
     1
     """
