@@ -628,6 +628,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
         client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
         client._release_session_on_exit = True
         client._session_released = True
+        client._server_session_id = "server-session-id"
 
         call_tracker = {"cleanup_ml_cache": 0, "release_session": 0, "close": 0}
 
@@ -649,12 +650,11 @@ class SparkConnectClientTestCase(unittest.TestCase):
         self.assertEqual(call_tracker["release_session"], 0)
         self.assertEqual(call_tracker["close"], 0)
 
-    def test_on_exit_does_not_call_without_server_session(self):
-        """Test _on_exit sends no RPCs when no server-side session was ever observed."""
+    def test_on_exit_skips_ml_cleanup_without_server_session(self):
+        """Test _on_exit skips only ML cache cleanup when no server-side session ID was seen."""
         for server_session_id in [None, ""]:
             with self.subTest(server_session_id=server_session_id):
                 client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
-                client._release_session_on_exit = True
                 client._server_session_id = server_session_id
 
                 call_tracker = {"cleanup_ml_cache": 0, "release_session": 0, "close": 0}
@@ -671,19 +671,26 @@ class SparkConnectClientTestCase(unittest.TestCase):
                 client._cleanup_ml_cache = mock_cleanup_ml_cache
                 client.release_session = mock_release_session
                 client.close = mock_close
-                client._on_exit()
 
+                # Release disabled: no RPCs.
+                client._release_session_on_exit = False
+                client._on_exit()
                 self.assertEqual(call_tracker["cleanup_ml_cache"], 0)
                 self.assertEqual(call_tracker["release_session"], 0)
                 self.assertEqual(call_tracker["close"], 0)
 
-                # Once a server-side session has been observed, cleanup runs as before.
-                client._server_session_id = "server-session-id"
+                # Release enabled: release and close, but skip ML cleanup.
+                client._release_session_on_exit = True
                 client._on_exit()
-
-                self.assertEqual(call_tracker["cleanup_ml_cache"], 1)
+                self.assertEqual(call_tracker["cleanup_ml_cache"], 0)
                 self.assertEqual(call_tracker["release_session"], 1)
                 self.assertEqual(call_tracker["close"], 1)
+
+                # Server-side session ID seen: ML cleanup runs.
+                client._server_session_id = "server-session-id"
+                client._release_session_on_exit = False
+                client._on_exit()
+                self.assertEqual(call_tracker["cleanup_ml_cache"], 1)
 
     def test_on_exit_does_not_call_when_release_disabled(self):
         """Test _on_exit does nothing when _release_session_on_exit is False."""
@@ -713,6 +720,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
         client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
         client._release_session_on_exit = True
         client._closed = True
+        client._server_session_id = "server-session-id"
 
         call_tracker = {"cleanup_ml_cache": 0, "release_session": 0, "close": 0}
 

@@ -2606,12 +2606,13 @@ class SparkConnectClient(object):
             return []
 
     def _on_exit(self) -> None:
-        # Skip cleanup RPCs if the session is already closed or released, or was never
-        # established. The server-side session ID may be "" rather than None.
-        if self._closed or self._session_released or not self._server_session_id:
+        # Skip cleanup RPCs if the session is already closed or released.
+        if self._closed or self._session_released:
             return
 
-        self._cleanup_ml_cache()
+        # No server-side session ID (None or "") means no ML cache to clean.
+        if self._server_session_id:
+            self._cleanup_ml_cache()
         if self._release_session_on_exit:
             try:
                 self.release_session()
