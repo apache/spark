@@ -2416,56 +2416,50 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
     withSQLConf(
         SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
         SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> "1") {
-      // The columns are read with precision 9. A lower read precision truncates the values, so
-      // only IsNull and IsNotNull are pushed down then.
-      Seq(7, 8, 9).foreach { p =>
-        // NTZ column: filter values are LocalDateTime. Use a sub-microsecond fraction so the
-        // epoch-nanos encoding (not truncated micros) is exercised.
-        val ntzReadSchema = new StructType().add("c", TimestampNTZNanosType(9))
-        val ntzSchema = new SparkToParquetSchemaConverter(conf)
-          .convert(new StructType().add("c", TimestampNTZNanosType(p)))
-        val ntzFilters = createParquetFilters(ntzSchema, readSchema = Some(ntzReadSchema))
-        val ntz = LocalDateTime.parse("2020-01-01T12:34:56.000000123")
-        val ntzHi = LocalDateTime.parse("2020-01-01T12:34:57.000000123")
-        assert(ntzFilters.createFilter(sources.IsNull("c")).exists(_.isInstanceOf[Eq[_]]))
-        assert(ntzFilters.createFilter(sources.IsNotNull("c")).exists(_.isInstanceOf[NotEq[_]]))
-        assert(ntzFilters.createFilter(sources.EqualTo("c", ntz)).exists(_.isInstanceOf[Eq[_]]))
-        assert(ntzFilters.createFilter(sources.EqualNullSafe("c", ntz))
-          .exists(_.isInstanceOf[Eq[_]]))
-        assert(ntzFilters.createFilter(sources.Not(sources.EqualTo("c", ntz)))
-          .exists(_.isInstanceOf[NotEq[_]]))
-        assert(ntzFilters.createFilter(sources.LessThan("c", ntz)).exists(_.isInstanceOf[Lt[_]]))
-        assert(ntzFilters.createFilter(sources.LessThanOrEqual("c", ntz))
-          .exists(_.isInstanceOf[LtEq[_]]))
-        assert(ntzFilters.createFilter(sources.GreaterThan("c", ntz)).exists(_.isInstanceOf[Gt[_]]))
-        assert(ntzFilters.createFilter(sources.GreaterThanOrEqual("c", ntz))
-          .exists(_.isInstanceOf[GtEq[_]]))
-        assert(ntzFilters.createFilter(sources.In("c", Array[Any](ntz, ntzHi)))
-          .exists(_.isInstanceOf[FilterIn[_]]))
+      // NTZ column: filter values are LocalDateTime. Use a sub-microsecond fraction so the
+      // epoch-nanos encoding (not truncated micros) is exercised.
+      val ntzReadSchema = new StructType().add("c", TimestampNTZNanosType(9))
+      val ntzSchema = new SparkToParquetSchemaConverter(conf).convert(ntzReadSchema)
+      val ntzFilters = createParquetFilters(ntzSchema, readSchema = Some(ntzReadSchema))
+      val ntz = LocalDateTime.parse("2020-01-01T12:34:56.000000123")
+      val ntzHi = LocalDateTime.parse("2020-01-01T12:34:57.000000123")
+      assert(ntzFilters.createFilter(sources.IsNull("c")).exists(_.isInstanceOf[Eq[_]]))
+      assert(ntzFilters.createFilter(sources.IsNotNull("c")).exists(_.isInstanceOf[NotEq[_]]))
+      assert(ntzFilters.createFilter(sources.EqualTo("c", ntz)).exists(_.isInstanceOf[Eq[_]]))
+      assert(ntzFilters.createFilter(sources.EqualNullSafe("c", ntz))
+        .exists(_.isInstanceOf[Eq[_]]))
+      assert(ntzFilters.createFilter(sources.Not(sources.EqualTo("c", ntz)))
+        .exists(_.isInstanceOf[NotEq[_]]))
+      assert(ntzFilters.createFilter(sources.LessThan("c", ntz)).exists(_.isInstanceOf[Lt[_]]))
+      assert(ntzFilters.createFilter(sources.LessThanOrEqual("c", ntz))
+        .exists(_.isInstanceOf[LtEq[_]]))
+      assert(ntzFilters.createFilter(sources.GreaterThan("c", ntz)).exists(_.isInstanceOf[Gt[_]]))
+      assert(ntzFilters.createFilter(sources.GreaterThanOrEqual("c", ntz))
+        .exists(_.isInstanceOf[GtEq[_]]))
+      assert(ntzFilters.createFilter(sources.In("c", Array[Any](ntz, ntzHi)))
+        .exists(_.isInstanceOf[FilterIn[_]]))
 
-        // LTZ column: filter values are Instant.
-        val ltzReadSchema = new StructType().add("c", TimestampLTZNanosType(9))
-        val ltzSchema = new SparkToParquetSchemaConverter(conf)
-          .convert(new StructType().add("c", TimestampLTZNanosType(p)))
-        val ltzFilters = createParquetFilters(ltzSchema, readSchema = Some(ltzReadSchema))
-        val ltz = Instant.parse("2020-01-01T12:34:56.000000123Z")
-        val ltzHi = Instant.parse("2020-01-01T12:34:57.000000123Z")
-        assert(ltzFilters.createFilter(sources.IsNull("c")).exists(_.isInstanceOf[Eq[_]]))
-        assert(ltzFilters.createFilter(sources.IsNotNull("c")).exists(_.isInstanceOf[NotEq[_]]))
-        assert(ltzFilters.createFilter(sources.EqualTo("c", ltz)).exists(_.isInstanceOf[Eq[_]]))
-        assert(ltzFilters.createFilter(sources.EqualNullSafe("c", ltz))
-          .exists(_.isInstanceOf[Eq[_]]))
-        assert(ltzFilters.createFilter(sources.Not(sources.EqualTo("c", ltz)))
-          .exists(_.isInstanceOf[NotEq[_]]))
-        assert(ltzFilters.createFilter(sources.LessThan("c", ltz)).exists(_.isInstanceOf[Lt[_]]))
-        assert(ltzFilters.createFilter(sources.LessThanOrEqual("c", ltz))
-          .exists(_.isInstanceOf[LtEq[_]]))
-        assert(ltzFilters.createFilter(sources.GreaterThan("c", ltz)).exists(_.isInstanceOf[Gt[_]]))
-        assert(ltzFilters.createFilter(sources.GreaterThanOrEqual("c", ltz))
-          .exists(_.isInstanceOf[GtEq[_]]))
-        assert(ltzFilters.createFilter(sources.In("c", Array[Any](ltz, ltzHi)))
-          .exists(_.isInstanceOf[FilterIn[_]]))
-      }
+      // LTZ column: filter values are Instant.
+      val ltzReadSchema = new StructType().add("c", TimestampLTZNanosType(9))
+      val ltzSchema = new SparkToParquetSchemaConverter(conf).convert(ltzReadSchema)
+      val ltzFilters = createParquetFilters(ltzSchema, readSchema = Some(ltzReadSchema))
+      val ltz = Instant.parse("2020-01-01T12:34:56.000000123Z")
+      val ltzHi = Instant.parse("2020-01-01T12:34:57.000000123Z")
+      assert(ltzFilters.createFilter(sources.IsNull("c")).exists(_.isInstanceOf[Eq[_]]))
+      assert(ltzFilters.createFilter(sources.IsNotNull("c")).exists(_.isInstanceOf[NotEq[_]]))
+      assert(ltzFilters.createFilter(sources.EqualTo("c", ltz)).exists(_.isInstanceOf[Eq[_]]))
+      assert(ltzFilters.createFilter(sources.EqualNullSafe("c", ltz))
+        .exists(_.isInstanceOf[Eq[_]]))
+      assert(ltzFilters.createFilter(sources.Not(sources.EqualTo("c", ltz)))
+        .exists(_.isInstanceOf[NotEq[_]]))
+      assert(ltzFilters.createFilter(sources.LessThan("c", ltz)).exists(_.isInstanceOf[Lt[_]]))
+      assert(ltzFilters.createFilter(sources.LessThanOrEqual("c", ltz))
+        .exists(_.isInstanceOf[LtEq[_]]))
+      assert(ltzFilters.createFilter(sources.GreaterThan("c", ltz)).exists(_.isInstanceOf[Gt[_]]))
+      assert(ltzFilters.createFilter(sources.GreaterThanOrEqual("c", ltz))
+        .exists(_.isInstanceOf[GtEq[_]]))
+      assert(ltzFilters.createFilter(sources.In("c", Array[Any](ltz, ltzHi)))
+        .exists(_.isInstanceOf[FilterIn[_]]))
     }
   }
 
@@ -2577,27 +2571,31 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
           sql(s"SELECT CAST(c AS $tsType(9)) AS ts FROM VALUES " +
             "('1970-01-01 00:00:00.123456789'), ('1970-01-01 00:00:01'), (NULL) AS t(c)")
             .coalesce(1).write.parquet(dir.getCanonicalPath)
-          val readDF = spark.read.schema(s"ts $tsType(7)").parquet(dir.getCanonicalPath)
-          def ts7(s: String): String = s"CAST('1970-01-01 $s' AS $tsType(7))"
-          def check(condition: String, expected: Seq[String]): Unit = {
-            checkAnswer(readDF.where(condition), expected.map(s => Row(toValue(s))))
-          }
-          withAllParquetReaders {
-            check(s"ts = ${ts7("00:00:00.1234567")}", Seq("00:00:00.1234567"))
-            check(s"ts <=> ${ts7("00:00:00.1234567")}", Seq("00:00:00.1234567"))
-            check(s"ts != ${ts7("00:00:00.1234567")}", Seq("00:00:01"))
-            check(s"ts < ${ts7("00:00:01")}", Seq("00:00:00.1234567"))
-            check(s"ts <= ${ts7("00:00:00.1234567")}", Seq("00:00:00.1234567"))
-            check(s"ts > ${ts7("00:00:00.1234567")}", Seq("00:00:01"))
-            check(s"ts >= ${ts7("00:00:00.1234567")}", Seq("00:00:00.1234567", "00:00:01"))
-            Seq(1, 10).foreach { threshold =>
-              withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
-                check(s"ts IN (${ts7("00:00:00.1234567")}, ${ts7("00:00:02")})",
-                  Seq("00:00:00.1234567"))
-              }
+          Seq(7, 8).foreach { p =>
+            val readDF = spark.read.schema(s"ts $tsType($p)").parquet(dir.getCanonicalPath)
+            // The stored 00:00:00.123456789 is read as `v`, e.g. 00:00:00.1234567 for p = 7.
+            val v = "00:00:00." + "123456789".take(p)
+            def lit(s: String): String = s"CAST('1970-01-01 $s' AS $tsType($p))"
+            def check(condition: String, expected: Seq[String]): Unit = {
+              checkAnswer(readDF.where(condition), expected.map(s => Row(toValue(s))))
             }
-            checkAnswer(readDF.where("ts IS NULL"), Row(null))
-            check("ts IS NOT NULL", Seq("00:00:00.1234567", "00:00:01"))
+            withAllParquetReaders {
+              check(s"ts = ${lit(v)}", Seq(v))
+              check(s"ts <=> ${lit(v)}", Seq(v))
+              check(s"ts != ${lit(v)}", Seq("00:00:01"))
+              check(s"ts < ${lit("00:00:01")}", Seq(v))
+              check(s"ts <= ${lit(v)}", Seq(v))
+              check(s"ts > ${lit(v)}", Seq("00:00:01"))
+              check(s"ts >= ${lit(v)}", Seq(v, "00:00:01"))
+              Seq(1, 10).foreach { threshold =>
+                withSQLConf(
+                    SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
+                  check(s"ts IN (${lit(v)}, ${lit("00:00:02")})", Seq(v))
+                }
+              }
+              checkAnswer(readDF.where("ts IS NULL"), Row(null))
+              check("ts IS NOT NULL", Seq(v, "00:00:01"))
+            }
           }
         }
       }
