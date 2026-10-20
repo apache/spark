@@ -24,7 +24,7 @@ import java.util.Locale
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.{QueryTest, _}
 import org.apache.spark.sql.catalyst.expressions.Hex
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -925,6 +925,22 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "true",
       SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "true") {
       testDefaultColumn
+    }
+  }
+
+  test("SPARK-60360: INSERT OVERWRITE into a converted table keeps the existing data when " +
+      "it fails on an invalid write option") {
+    Seq("parquet" -> "parquet.compression", "orc" -> "orc.compress").foreach {
+      case (format, compressionProperty) =>
+        withTable("t") {
+          sql(s"CREATE TABLE t (id INT) STORED AS $format")
+          sql("INSERT INTO t VALUES (1)")
+          sql(s"ALTER TABLE t SET TBLPROPERTIES ('$compressionProperty' = 'bogus')")
+          assert(intercept[SparkThrowable](sql("INSERT OVERWRITE TABLE t SELECT 2"))
+            .getCondition === "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION")
+          sql(s"ALTER TABLE t UNSET TBLPROPERTIES ('$compressionProperty')")
+          checkAnswer(spark.table("t"), Row(1))
+        }
     }
   }
 }
