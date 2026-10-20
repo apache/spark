@@ -44,10 +44,10 @@ from pyspark.sql.pandas.serializers import (
 from pyspark.sql.types import LongType
 from pyspark.testing.utils import PySparkBaseTestCase
 from pyspark.util import PythonEvalType
-from pyspark.worker_message import UDFInfo
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
     from pyspark.worker import read_single_udf
+    from pyspark.worker_message import UDFInfo
     from pyspark.worker_util import RunnerConf, pickleSer
 
 
