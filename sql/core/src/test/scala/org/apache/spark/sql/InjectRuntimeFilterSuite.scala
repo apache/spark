@@ -21,6 +21,7 @@ import java.io.File
 
 import org.apache.logging.log4j.Level
 
+import org.apache.spark.sql.catalyst.analysis.HintErrorLogger
 import org.apache.spark.sql.catalyst.expressions.{Alias, BloomFilterMightContain, DynamicPruningSubquery, Literal, NamedExpression, ScalarSubquery, XxHash64}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, BloomFilterAggregate}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan, SHUFFLE_MERGE}
@@ -351,7 +352,9 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     withLogAppender(logAppender, level = Some(Level.WARN)) {
       sql(query).queryExecution.optimizedPlan
     }
-    logAppender.loggingEvents.map(_.getMessage.getFormattedMessage).toSeq
+    val hintLogger = HintErrorLogger.getClass.getName.stripSuffix("$")
+    logAppender.loggingEvents.filter(_.getLoggerName == hintLogger)
+      .map(_.getMessage.getFormattedMessage).toSeq
   }
 
   def assertHintNotApplied(query: String, reason: String): Unit = {
@@ -1449,15 +1452,6 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
         """.stripMargin
       assertDidNotRewriteWithBloomFilter(s"SELECT * $distinctSource")
       assertHintedRewrite(s"SELECT /*+ RUNTIME_FILTER(t) */ * $distinctSource")
-      // Likewise for a `Limit` the search does not descend through, here a top-n of grouping
-      // keys, whose order is total because the keys are unique.
-      assertHintedRewrite(
-        """
-          |SELECT /*+ RUNTIME_FILTER(t) */ *
-          |FROM   bf4
-          |       JOIN (SELECT c2 FROM bf2 WHERE a2 = 5 GROUP BY c2 ORDER BY c2 LIMIT 5) t
-          |       ON bf4.c4 = t.c2
-        """.stripMargin)
     }
   }
 
@@ -1579,10 +1573,15 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       Seq(
         // A non-deterministic expression.
         "SELECT c2 FROM bf2 WHERE rand() < 0.5",
-        // A limit keeps whichever rows arrive first: unordered, or ordered on a key that is not
-        // unique, so that ties at the cutoff can be resolved differently.
+        // A limit or an offset keeps whichever rows arrive first, even over a total order: the
+        // planner keeps the sort order only in a take-ordered shape, which a bare offset or a
+        // column-pruned copy of a top-n does not have.
         "SELECT c2 FROM bf2 WHERE a2 = 62 LIMIT 5",
         "SELECT c2 FROM bf2 WHERE a2 = 62 ORDER BY c2 LIMIT 5",
+        "SELECT c2 FROM bf2 GROUP BY c2 ORDER BY c2 LIMIT 5",
+        "SELECT c2, max(a2) AS m FROM bf2 GROUP BY c2 ORDER BY c2 LIMIT 5",
+        "SELECT c2 FROM bf2 GROUP BY c2 ORDER BY c2 OFFSET 2",
+        "SELECT c2 FROM bf2 GROUP BY c2 ORDER BY c2 LIMIT 10 OFFSET 2",
         // A sample draws a different sample per evaluation without a seed, and per partition
         // with one, while each evaluation chooses its own partitioning.
         "SELECT c2 FROM bf2 TABLESAMPLE (50 PERCENT)",
@@ -1913,7 +1912,6 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       Seq(
         "SELECT c2 FROM bf2 UNION ALL SELECT c3 FROM bf3",
         "SELECT c2, b2, count(*) AS n FROM bf2 GROUP BY GROUPING SETS ((c2), (c2, b2))",
-        "SELECT c2 FROM bf2 GROUP BY c2 ORDER BY c2 LIMIT 10 OFFSET 2",
         "SELECT /*+ REPARTITION(3) */ c2 FROM bf2",
         "SELECT /*+ REPARTITION(3, c2) */ c2 FROM bf2",
         "SELECT /*+ REPARTITION_BY_RANGE(3, c2) */ c2 FROM bf2",
@@ -1924,7 +1922,7 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       Seq(
         // An unstable row set in one branch.
         "SELECT c2 FROM bf2 UNION ALL SELECT c3 FROM bf3 WHERE rand() < 0.5",
-        // An offset over rows in no total order skips whichever rows arrive first.
+        // An offset skips whichever rows arrive first.
         "SELECT c2 FROM bf2 OFFSET 2",
         // Unstable multiplicity carried through a union, a join and grouping sets.
         s"SELECT count(*) AS c2 FROM (SELECT b2 FROM bf2 $outerExplode " +

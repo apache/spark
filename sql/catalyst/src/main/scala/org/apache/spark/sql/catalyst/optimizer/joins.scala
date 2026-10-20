@@ -658,10 +658,10 @@ trait JoinSelectionHelper extends Logging {
  *   aggregate or distinct over an unstable value, causes and which makes every aggregate over the
  *   rows unstable.
  * The plan is rejected outright when its row set is unstable (a filter or join condition consumes
- * an unstable attribute, an inner generate uses an unstable generator, a limit is over anything
- * but a total order, any sample), when a leaf cannot promise the same rows again, and, each with
- * its own reason, when it calls a function the filter subquery cannot evaluate, when an operator
- * would duplicate an observation or is not analyzed. The source qualifies when the key references
+ * an unstable attribute, an inner generate uses an unstable generator, any limit, offset or
+ * sample), when a leaf cannot promise the same rows again, and, each with its own reason, when it
+ * calls a function the filter subquery cannot evaluate, when an operator would duplicate an
+ * observation or is not analyzed. The source qualifies when the key references
  * no unstable attribute. Values that are unstable but only carried to the output (a `first(name)`
  * next to a `GROUP BY id`, a row number next to the key) do not disqualify it.
  */
@@ -671,13 +671,8 @@ private[optimizer] object RuntimeFilterSourceAnalysis {
    * @param unstable output attributes whose values depend on evaluation order or on chance.
    * @param unstableMultiplicity whether rows may be repeated a different number of times per
    *                             evaluation, while each row stays present.
-   * @param totallyOrdered whether the rows are in a total order on stable keys, so that a limit
-   *                       over them keeps the same rows every time.
    */
-  private case class Taint(
-      unstable: AttributeSet,
-      unstableMultiplicity: Boolean = false,
-      totallyOrdered: Boolean = false)
+  private case class Taint(unstable: AttributeSet, unstableMultiplicity: Boolean = false)
 
   private val NotRepeatable =
     "the hinted side may produce different rows or join keys when evaluated again"
@@ -803,8 +798,7 @@ private[optimizer] object RuntimeFilterSourceAnalysis {
         !stablePartitions || t.unstableMultiplicity || !isStable(e, t.unstable) ||
           !isOrderIrrelevantWindow(e)
       }
-      t.copy(unstable = t.unstable ++ AttributeSet(unstable.map(_.toAttribute)),
-        totallyOrdered = false)
+      t.copy(unstable = t.unstable ++ AttributeSet(unstable.map(_.toAttribute)))
     }
 
     case u: Union =>
@@ -825,7 +819,7 @@ private[optimizer] object RuntimeFilterSourceAnalysis {
     // times as the generator yields values, so an unstable one changes the multiplicity.
     case g: Generate => analyze(g.child).flatMap { t =>
       if (isStable(g.generator, t.unstable)) {
-        Right(t.copy(totallyOrdered = false))
+        Right(t)
       } else if (g.outer) {
         Right(Taint(t.unstable ++ AttributeSet(g.generatorOutput), unstableMultiplicity = true))
       } else {
@@ -840,19 +834,10 @@ private[optimizer] object RuntimeFilterSourceAnalysis {
       Taint(AttributeSet(unstable), t.unstableMultiplicity)
     }
 
-    // The order is total when the sort keys cover a set of columns the rows are unique on.
-    case s: Sort => analyze(s.child).map { t =>
-      val sortKeys = s.order.map(_.child)
-      val stableOrder = sortKeys.forall(isStable(_, t.unstable))
-      t.copy(totallyOrdered = s.global && stableOrder && !t.unstableMultiplicity &&
-        s.child.distinctKeys.exists(_.subsetOf(ExpressionSet(sortKeys))))
-    }
-
-    // A limit keeps whichever rows arrive first unless the order is total.
-    case l @ (_: GlobalLimit | _: LocalLimit | _: Offset | _: Tail) =>
-      analyze(l.children.head).flatMap { t =>
-        if (t.totallyOrdered) Right(t) else Left(NotRepeatable)
-      }
+    // A limit or an offset keeps whichever rows arrive first. Even over a total order, rows arrive
+    // in sort order only in the take-ordered shapes the planner picks for each copy of the side
+    // separately, and a single-partition shuffle reads the sorted partitions in any order.
+    case _: GlobalLimit | _: LocalLimit | _: Offset | _: Tail => Left(NotRepeatable)
 
     // A sample draws a fresh seed per evaluation unless one is given, and even a seeded one draws
     // per partition, while each evaluation chooses its own partitioning.
@@ -868,9 +853,10 @@ private[optimizer] object RuntimeFilterSourceAnalysis {
         unstableMultiplicity = d.outputSet.intersect(t.unstable).nonEmpty)
     }
 
-    // The rows and their values are unchanged; a shuffle loses the order.
-    case _: SubqueryAlias | _: Repartition | _: RepartitionByExpression | _: RebalancePartitions =>
-      analyze(plan.children.head).map(t => t.copy(totallyOrdered = false))
+    // The rows and their values are unchanged.
+    case _: Sort | _: SubqueryAlias | _: Repartition | _: RepartitionByExpression |
+        _: RebalancePartitions =>
+      analyze(plan.children.head)
 
     // The filter would evaluate the observation a second time under the same name.
     case _: CollectMetrics =>
