@@ -5328,10 +5328,9 @@ class AdaptiveQueryExecSuite
     // `EnsureRequirements` asks a `UnionExec` what it reports, and `StampUnionDecisions` freezes
     // that answer so every rule below it and the execution read what the exchanges were planned
     // against. `SnapshotUnionPreparationConf` has to run first, or the value the stamp reads
-    // is whatever `conf` says by then rather than the one `EnsureRequirements` saw. The two sit
-    // next to `EnsureRequirements` with nothing in between, and nothing at the list itself says the
-    // three have to stay contiguous: an injected rule cannot land between them, since those are
-    // appended at the tail, but an edit to the list can. AQE builds its own list, and
+    // is whatever `conf` says by then rather than the one `EnsureRequirements` saw. Shuffle
+    // push-down runs under that snapshot before the stamp fixes the rebuilt unions. An injected
+    // rule cannot land between these preparation rules. AQE builds its own list, and
     // `UnionCodegenSuite` covers the one `QueryExecution` builds when AQE is off.
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
       // The repartition exchanges are what bring AQE in, with the aggregate's distribution
@@ -5356,8 +5355,11 @@ class AdaptiveQueryExecSuite
       assert(snapshot >= 0 && snapshot == ensureRequirements - 1,
         s"expected the conf snapshot right before EnsureRequirements at $ensureRequirements, " +
           s"got $snapshot")
-      assert(stamps.headOption.contains(ensureRequirements + 1),
-        s"expected the stamp right behind EnsureRequirements at $ensureRequirements, got $stamps")
+      val pushDown = rules.indexWhere(_.isInstanceOf[PushDownShuffleExchangeThroughUnion])
+      assert(pushDown == ensureRequirements + 1,
+        s"expected shuffle push-down after EnsureRequirements, got $pushDown")
+      assert(stamps.headOption.contains(pushDown + 1),
+        s"expected the union stamp after shuffle push-down at $pushDown, got $stamps")
       assert(stamps.last == rules.length - 1,
         s"expected the trailing stamp last of ${rules.length} rules, got $stamps")
     }

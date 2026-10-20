@@ -8526,6 +8526,36 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED =
+    buildConf("spark.sql.optimizer.pushDownShuffleThroughUnion.enabled")
+      .internal()
+      .doc("When set to true, during AQE query stage preparation a ShuffleExchangeExec with " +
+        "hash partitioning added by EnsureRequirements on top of a UnionExec is pushed down " +
+        "below the union, shuffling only the children that do not already produce the required " +
+        "partitioning. The operator above then runs with the picked layout's partition count. " +
+        "Join push-down removes the direct shuffle stage on the union side, which AQE skew " +
+        "handling and join conversion do not look through. Requires " +
+        "spark.sql.unionOutputPartitioning to be enabled.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
+  val PUSH_DOWN_SHUFFLE_THROUGH_UNION_LOOK_THROUGH_OPERATORS_ENABLED =
+    buildConf("spark.sql.optimizer.pushDownShuffleThroughUnion.lookThroughOperators.enabled")
+      .internal()
+      .doc("When set to true, the shuffle push-down through a union may look through the " +
+        "operators between the shuffle and the union: a project, a local sort, a filter, a " +
+        "partial aggregate and a partial window group limit. A filter, a partial aggregate and " +
+        "a partial window group limit reduce the data on their way, so the child is then " +
+        "shuffled before the reduction, which can send more data than the single shuffle it " +
+        "replaces. Requires " +
+        s"${PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key} to be enabled.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val SINGLE_TASK_EXECUTION_ENABLED =
     buildConf("spark.sql.optimizer.singleTaskExecution.enabled")
       .doc("When true, eligible query fragments that read a small single-partition scan can run " +

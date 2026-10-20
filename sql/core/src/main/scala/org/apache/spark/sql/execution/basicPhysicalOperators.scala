@@ -920,7 +920,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
    * Returns the output partitionings of the children, with the attributes converted to this
    * union's output attributes at the same position.
    */
-  private def prepareOutputPartitioning(): Seq[Partitioning] = {
+  private[execution] def prepareOutputPartitioning(): Seq[Partitioning] = {
     // Map every child's partitioning attributes to this union's output attributes, so all
     // partitionings are expressed in the same attribute space before comparison. A child's
     // `outputPartitioning` may reference attributes that differ from its own `output` in any
