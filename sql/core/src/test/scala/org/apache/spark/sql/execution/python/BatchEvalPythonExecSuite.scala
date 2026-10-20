@@ -119,7 +119,9 @@ class BatchEvalPythonExecSuite extends SharedSparkSession
     val estimate = BatchEvalPythonExec
       .projectedInputPayloadSizeEstimator(Seq(StringType))
       .get
+    // scalastyle:off nonascii
     assert(estimate(InternalRow(UTF8String.fromString("\u20ac" * 1000))) === 3000L)
+    // scalastyle:on nonascii
   }
 
   test("SPARK-59824: pickle UDF row-size guard rejects a computed projected argument") {
