@@ -5191,6 +5191,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "colNames" -> colNames.map(quoteIdentifier).mkString("[", ", ", "]")))
   }
 
+  def fileTypeUnsupportedColumnUsageError(field: StructField, usage: String): Throwable = {
+    new AnalysisException(
+      errorClass = s"FILE_TYPE_UNSUPPORTED_COLUMN_USAGE.$usage",
+      messageParameters = Map(
+        "colName" -> toSQLId(field.name),
+        "dataType" -> toSQLType(field.dataType)))
+  }
+
   def fileTypeInRoutineSignatureUnsupportedQualifierError(
       routineType: String,
       routineName: String): Throwable = {

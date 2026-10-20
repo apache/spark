@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, PLAN_EXPRESSION, UNRESOLVED_WINDOW_EXPRESSION}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog, SupportsPartitionManagement}
+import org.apache.spark.sql.connector.expressions.ClusterByTransform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -1025,11 +1026,15 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 TypeUtils.checkFileTypeHasQualifier(create.tableSchema)
             }
             // FILE has no defined ordering, so it cannot be a partition or clustering column.
-            references.foreach { ref =>
-              create.tableSchema.findNestedField(ref.fieldNames.toImmutableArraySeq).foreach {
-                case (_, field) if hasFileType(field.dataType) =>
-                  throw QueryCompilationErrors.invalidPartitionColumnDataTypeError(field)
-                case _ =>
+            create.partitioning.foreach { transform =>
+              val usage = transform match {
+                case _: ClusterByTransform => "CLUSTERING_COLUMN"
+                case _ => "PARTITION_COLUMN"
+              }
+              transform.references.foreach { ref =>
+                create.tableSchema.findNestedField(ref.fieldNames.toImmutableArraySeq).foreach {
+                  case (_, field) => TypeUtils.checkNoFileTypeInColumnUsage(field, usage)
+                }
               }
             }
 
@@ -1463,6 +1468,16 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               }
             }
           case _ =>
+        }
+
+      // FILE has no defined ordering, so it cannot be a clustering column.
+      case AlterTableClusterBy(table: ResolvedTable, Some(clusterBySpec)) =>
+        clusterBySpec.columnNames.foreach { ref =>
+          table.schema.findNestedField(ref.fieldNames.toImmutableArraySeq,
+              resolver = alter.conf.resolver)
+            .foreach { case (_, field) =>
+              TypeUtils.checkNoFileTypeInColumnUsage(field, "CLUSTERING_COLUMN")
+            }
         }
       case _ =>
     }

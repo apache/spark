@@ -193,6 +193,16 @@ object TypeUtils extends QueryErrorsBase {
   }
 
   /**
+   * Fails if `field` holds a FILE, as FILE has no defined ordering and so cannot be a partition
+   * column (`usage` is `PARTITION_COLUMN`) or a clustering column (`CLUSTERING_COLUMN`).
+   */
+  def checkNoFileTypeInColumnUsage(field: StructField, usage: String): Unit = {
+    if (field.dataType.existsRecursively(_.isInstanceOf[FileType])) {
+      throw QueryCompilationErrors.fileTypeUnsupportedColumnUsageError(field, usage)
+    }
+  }
+
+  /**
    * Fails if a FILE in the parameter or return types of a routine has a qualifier. Routines
    * declare a plain FILE; a FILE of any mode can still be passed to them.
    */

@@ -272,6 +272,7 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
 
         val analyzedQuery = query.get
         checkNoUnknownFileTypeWrite(analyzedQuery.output)
+        checkNoFileTypePartitionOrClusteringColumn(analyzedQuery.schema, tableDesc)
         val normalizedTable = normalizeCatalogTable(analyzedQuery.schema, tableDesc)
 
         DDLUtils.checkTableColumns(tableDesc.copy(schema = analyzedQuery.schema))
@@ -295,6 +296,7 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
         c.copy(tableDesc = normalizedTable, query = Some(reorderedQuery))
       } else {
         checkFileTypeHasQualifier(tableDesc.schema)
+        checkNoFileTypePartitionOrClusteringColumn(tableDesc.schema, tableDesc)
         DDLUtils.checkTableColumns(tableDesc)
 
         val normalizedTable = normalizeCatalogTable(tableDesc.schema, tableDesc)
@@ -355,6 +357,20 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
       case f: FileDataSourceV2 => f.fallbackFileFormat
       case _ => cls
     }
+
+  // FILE has no defined ordering, so it cannot be a partition or clustering column.
+  private def checkNoFileTypePartitionOrClusteringColumn(
+      schema: StructType,
+      table: CatalogTable): Unit = {
+    table.partitionColumnNames.foreach { name =>
+      schema.find(f => conf.resolver(f.name, name))
+        .foreach(checkNoFileTypeInColumnUsage(_, "PARTITION_COLUMN"))
+    }
+    table.clusterBySpec.foreach(_.columnNames.foreach { ref =>
+      schema.findNestedField(ref.fieldNames.toImmutableArraySeq, resolver = conf.resolver)
+        .foreach { case (_, field) => checkNoFileTypeInColumnUsage(field, "CLUSTERING_COLUMN") }
+    })
+  }
 
   private def normalizeCatalogTable(schema: StructType, table: CatalogTable): CatalogTable = {
     SchemaUtils.checkSchemaColumnNameDuplication(

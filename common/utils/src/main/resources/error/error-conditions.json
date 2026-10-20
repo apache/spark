@@ -3037,6 +3037,24 @@
     ],
     "sqlState" : "42K01"
   },
+  "FILE_TYPE_UNSUPPORTED_COLUMN_USAGE" : {
+    "message" : [
+      "The column <colName> of type <dataType> holds a FILE, which has no defined ordering."
+    ],
+    "subClass" : {
+      "CLUSTERING_COLUMN" : {
+        "message" : [
+          "It cannot be a clustering column."
+        ]
+      },
+      "PARTITION_COLUMN" : {
+        "message" : [
+          "It cannot be a partition column."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
   "FLATMAPGROUPSWITHSTATE_USER_FUNCTION_ERROR" : {
     "message" : [
       "An error occurred in the user provided function in flatMapGroupsWithState. Reason: <reason>"

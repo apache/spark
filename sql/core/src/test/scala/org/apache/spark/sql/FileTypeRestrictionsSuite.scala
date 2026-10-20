@@ -106,14 +106,44 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("a FILE column cannot be a partition or clustering column") {
-    Seq("PARTITIONED BY (f)", "CLUSTER BY (f)").foreach { clause =>
-      withTable("testcat.t") {
-        checkError(
-          exception = intercept[AnalysisException] {
-            sql(s"CREATE TABLE testcat.t (id INT, f FILE EXTERNAL) $clause")
-          },
-          condition = "INVALID_PARTITION_COLUMN_DATA_TYPE",
-          parameters = Map("type" -> "\"FILE EXTERNAL\""))
+    Seq(
+      ("PARTITIONED BY (f)", "PARTITION_COLUMN"),
+      ("PARTITIONED BY (bucket(4, f))", "PARTITION_COLUMN"),
+      ("CLUSTER BY (f)", "CLUSTERING_COLUMN")).foreach { case (clause, usage) =>
+      Seq("testcat.t", "t").foreach { table =>
+        // Bucketing is only a V2 transform.
+        if (table.startsWith("testcat") || !clause.contains("bucket")) {
+          val provider = if (table.startsWith("testcat")) "" else "USING parquet"
+          withTable(table) {
+            checkError(
+              exception = intercept[AnalysisException] {
+                sql(s"CREATE TABLE $table (id INT, f FILE EXTERNAL) $provider $clause")
+              },
+              condition = s"FILE_TYPE_UNSUPPORTED_COLUMN_USAGE.$usage",
+              parameters = Map("colName" -> "`f`", "dataType" -> "\"FILE EXTERNAL\""))
+          }
+        }
+      }
+    }
+    withTable("testcat.t") {
+      sql("CREATE TABLE testcat.t (id INT, f FILE EXTERNAL) CLUSTER BY (id)")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("ALTER TABLE testcat.t CLUSTER BY (f)")
+        },
+        condition = "FILE_TYPE_UNSUPPORTED_COLUMN_USAGE.CLUSTERING_COLUMN",
+        parameters = Map("colName" -> "`f`", "dataType" -> "\"FILE EXTERNAL\""))
+    }
+  }
+
+  test("a column cannot be altered to a FILE") {
+    withTable("testcat.t") {
+      sql("CREATE TABLE testcat.t (id INT, s STRING, f FILE EXTERNAL)")
+      Seq("s", "f").foreach { column =>
+        val e = intercept[AnalysisException] {
+          sql(s"ALTER TABLE testcat.t ALTER COLUMN $column TYPE FILE")
+        }
+        assert(e.getCondition === "NOT_SUPPORTED_CHANGE_COLUMN")
       }
     }
   }
@@ -143,6 +173,7 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
     Seq(
       s"$externalFile INTERSECT $externalFile",
       s"$externalFile EXCEPT $externalFile",
+      s"$externalFile UNION $externalFile",
       s"SELECT DISTINCT f FROM ($externalFile)").foreach { query =>
       checkError(
         exception = intercept[AnalysisException](sql(query)),
@@ -169,6 +200,17 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
       condition = "DATATYPE_MISMATCH.HASH_FILE_TYPE",
       parameters = Map("sqlExpr" -> "\"hash(f)\"", "functionName" -> "`hash`"),
       context = ExpectedContext(fragment = "hash(f)", start = 7, stop = 13))
+  }
+
+  test("a FILE cannot be sorted or be a window partition") {
+    Seq(
+      s"SELECT f FROM ($externalFile) ORDER BY f" -> "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+      s"SELECT row_number() OVER (ORDER BY f) FROM ($externalFile)" ->
+        "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+      s"SELECT count(*) OVER (PARTITION BY f) FROM ($externalFile)" ->
+        "EXPRESSION_TYPE_IS_NOT_ORDERABLE").foreach { case (query, condition) =>
+      assert(intercept[AnalysisException](sql(query)).getCondition === condition, query)
+    }
   }
 
   test("a FILE cannot be compared, so it cannot be a join key") {
