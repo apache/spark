@@ -24,8 +24,8 @@ import org.apache.spark.sql.types.{DataType, IntegerType, LongType}
  * A partition transform on a long key that reduces itself: `reducer` returns a merging reducer
  * (x -> x % 2) when the other side is this same function. The both-sides reduce contract
  * r1(f(x)) = r2(f(x)) is vacuous when the two sides share the function, so any merging reducer is
- * admitted. It exercises the partial-clustering path where the spread side's keys are reduced,
- * which no in-tree reducible function reaches (SPARK-59234).
+ * admitted. No in-tree reducible function reduces itself. This one lets a test check that a
+ * same-function pair is not reduced under partial clustering (SPARK-59234).
  *
  * Like [[FlipLowBitFunction]], it lives in catalyst's test sources so `InMemoryBaseTable` can
  * compute its partition keys by calling `produceResult` here instead of repeating the arithmetic.
