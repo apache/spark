@@ -1059,16 +1059,22 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     private[this] var writerIfbhThreadLocalValue: Object = null
     private[this] val temp = new Array[Byte](1)
     private[this] val bufferStream = new DirectByteBufferOutputStream()
+    // The writer gets `bufferStream` only through this stream. Arrow writers write through an
+    // interruptible channel, so a task kill that interrupts this thread closes the stream they
+    // write to on the killing thread; that must not free `bufferStream` under the writer. It is
+    // freed only on this thread, by `writeAdditionalInputToPythonWorker()`, once all input is
+    // sent or when writing fails. See `CloseShieldOutputStream`.
+    private[this] val writerStream = new CloseShieldOutputStream(bufferStream)
     /**
      * Buffers data to be written to the Python worker until the socket is
      * available for write.
      * A best-effort attempt is made to not grow the buffer beyond "spark.buffer.size". See
-     * `writeAdditionalInputToPythonWorker()` for details.
+     * `writeBufferedInputToPythonWorker()` for details.
      */
     private[this] var buffer: ByteBuffer = _
     private[this] var hasInput = true
 
-    writer.open(new DataOutputStream(bufferStream))
+    writer.open(new DataOutputStream(writerStream))
     buffer = bufferStream.toByteBuffer
 
     override def read(): Int = {
@@ -1228,11 +1234,27 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       }
     }
 
+    private def writeAdditionalInputToPythonWorker(): Unit = {
+      try {
+        writeBufferedInputToPythonWorker()
+      } catch {
+        case t: Throwable =>
+          // Writing failed or the task was killed mid-write, so the close at the end of
+          // `writeBufferedInputToPythonWorker()` is never reached. Free the buffer here, on the
+          // thread that writes into it, instead of leaving it to GC. `buffer` may be null or
+          // still point into that memory, so replace it with an empty one: a later call then
+          // fails fast in `bufferStream` instead of touching the freed memory.
+          buffer = ByteBuffer.allocate(0)
+          bufferStream.close()
+          throw t
+      }
+    }
+
     /**
      * Reads input data from `writer.inputIterator` into `buffer` and writes the buffer to the
      * Python worker if the socket is available for writing.
      */
-    private def writeAdditionalInputToPythonWorker(): Unit = {
+    private def writeBufferedInputToPythonWorker(): Unit = {
       var acceptsInput = true
       while (acceptsInput && (hasInput || buffer.hasRemaining)) {
         if (!buffer.hasRemaining && hasInput) {
@@ -1241,7 +1263,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
           // Set the `buffer` to null to make it eligible for GC
           buffer = null
 
-          val dataOut = new DataOutputStream(bufferStream)
+          val dataOut = new DataOutputStream(writerStream)
           // Try not to grow the buffer much beyond `bufferSize`. This is inevitable for large
           // input rows.
           while (bufferStream.size() < bufferSize && hasInput && !shouldFlush()) {
