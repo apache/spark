@@ -2416,11 +2416,14 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
     withSQLConf(
         SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
         SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> "1") {
+      // The columns are read with precision 9. A lower read precision truncates the values, so
+      // only IsNull and IsNotNull are pushed down then.
       Seq(7, 8, 9).foreach { p =>
         // NTZ column: filter values are LocalDateTime. Use a sub-microsecond fraction so the
         // epoch-nanos encoding (not truncated micros) is exercised.
-        val ntzReadSchema = new StructType().add("c", TimestampNTZNanosType(p))
-        val ntzSchema = new SparkToParquetSchemaConverter(conf).convert(ntzReadSchema)
+        val ntzReadSchema = new StructType().add("c", TimestampNTZNanosType(9))
+        val ntzSchema = new SparkToParquetSchemaConverter(conf)
+          .convert(new StructType().add("c", TimestampNTZNanosType(p)))
         val ntzFilters = createParquetFilters(ntzSchema, readSchema = Some(ntzReadSchema))
         val ntz = LocalDateTime.parse("2020-01-01T12:34:56.000000123")
         val ntzHi = LocalDateTime.parse("2020-01-01T12:34:57.000000123")
@@ -2441,8 +2444,9 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
           .exists(_.isInstanceOf[FilterIn[_]]))
 
         // LTZ column: filter values are Instant.
-        val ltzReadSchema = new StructType().add("c", TimestampLTZNanosType(p))
-        val ltzSchema = new SparkToParquetSchemaConverter(conf).convert(ltzReadSchema)
+        val ltzReadSchema = new StructType().add("c", TimestampLTZNanosType(9))
+        val ltzSchema = new SparkToParquetSchemaConverter(conf)
+          .convert(new StructType().add("c", TimestampLTZNanosType(p)))
         val ltzFilters = createParquetFilters(ltzSchema, readSchema = Some(ltzReadSchema))
         val ltz = Instant.parse("2020-01-01T12:34:56.000000123Z")
         val ltzHi = Instant.parse("2020-01-01T12:34:57.000000123Z")
@@ -2553,6 +2557,86 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
         assert(ltzFilters.createFilter(sources.In("c", Array[Any](
           Instant.parse("2020-01-01T00:00:00Z"),
           Instant.parse("2021-01-01T00:00:00Z")))).isDefined)
+      }
+    }
+  }
+
+  test("SPARK-60380: filter pushdown - nanosecond timestamp read with a lower precision") {
+    // A TIMESTAMP(9) value 1970-01-01 00:00:00.123456789 read as TIMESTAMP(7) is truncated to
+    // 00:00:00.1234567, while Parquet evaluates a pushed down predicate against the stored value.
+    // For example, a pushed down `ts = 1970-01-01 00:00:00.1234567` would skip the row group that
+    // holds the matching row.
+    withSQLConf(
+        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      Seq(
+        "TIMESTAMP_LTZ" -> ((s: String) => Instant.parse(s"1970-01-01T${s}Z")),
+        "TIMESTAMP_NTZ" -> ((s: String) => LocalDateTime.parse(s"1970-01-01T$s"))
+      ).foreach { case (tsType, toValue) =>
+        withTempPath { dir =>
+          sql(s"SELECT CAST(c AS $tsType(9)) AS ts FROM VALUES " +
+            "('1970-01-01 00:00:00.123456789'), ('1970-01-01 00:00:01'), (NULL) AS t(c)")
+            .coalesce(1).write.parquet(dir.getCanonicalPath)
+          val readDF = spark.read.schema(s"ts $tsType(7)").parquet(dir.getCanonicalPath)
+          def ts7(s: String): String = s"CAST('1970-01-01 $s' AS $tsType(7))"
+          def check(condition: String, expected: Seq[String]): Unit = {
+            checkAnswer(readDF.where(condition), expected.map(s => Row(toValue(s))))
+          }
+          withAllParquetReaders {
+            check(s"ts = ${ts7("00:00:00.1234567")}", Seq("00:00:00.1234567"))
+            check(s"ts <=> ${ts7("00:00:00.1234567")}", Seq("00:00:00.1234567"))
+            check(s"ts != ${ts7("00:00:00.1234567")}", Seq("00:00:01"))
+            check(s"ts < ${ts7("00:00:01")}", Seq("00:00:00.1234567"))
+            check(s"ts <= ${ts7("00:00:00.1234567")}", Seq("00:00:00.1234567"))
+            check(s"ts > ${ts7("00:00:00.1234567")}", Seq("00:00:01"))
+            check(s"ts >= ${ts7("00:00:00.1234567")}", Seq("00:00:00.1234567", "00:00:01"))
+            Seq(1, 10).foreach { threshold =>
+              withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
+                check(s"ts IN (${ts7("00:00:00.1234567")}, ${ts7("00:00:02")})",
+                  Seq("00:00:00.1234567"))
+              }
+            }
+            checkAnswer(readDF.where("ts IS NULL"), Row(null))
+            check("ts IS NOT NULL", Seq("00:00:00.1234567", "00:00:01"))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60380: TIMESTAMP(NANOS) predicates with a value are not pushed down below " +
+      "precision 9") {
+    // The reader truncates TIMESTAMP(NANOS) values to a read precision below 9, so only IsNull and
+    // IsNotNull are pushed down then. Both LTZ (isAdjustedToUTC=true) and NTZ are covered.
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  optional int64 ltz(TIMESTAMP(NANOS,true));
+        |  optional int64 ntz(TIMESTAMP(NANOS,false));
+        |}""".stripMargin)
+    val ltz = Instant.parse("1970-01-01T00:00:00.1234567Z")
+    val ntz = LocalDateTime.parse("1970-01-01T00:00:00.1234567")
+    Seq(7, 8, 9).foreach { p =>
+      val readSchema = new StructType()
+        .add("ltz", TimestampLTZNanosType(p))
+        .add("ntz", TimestampNTZNanosType(p))
+      val parquetFilters = createParquetFilters(schema, readSchema = Some(readSchema))
+      Seq[(String, Any)]("ltz" -> ltz, "ntz" -> ntz).foreach { case (name, value) =>
+        Seq(sources.IsNull(name), sources.IsNotNull(name)).foreach { filter =>
+          assert(parquetFilters.createFilter(filter).isDefined, s"$filter, precision $p")
+        }
+        Seq(
+          sources.EqualTo(name, value),
+          sources.EqualNullSafe(name, value),
+          sources.Not(sources.EqualTo(name, value)),
+          sources.LessThan(name, value),
+          sources.LessThanOrEqual(name, value),
+          sources.GreaterThan(name, value),
+          sources.GreaterThanOrEqual(name, value),
+          sources.In(name, Array[Any](value))
+        ).foreach { filter =>
+          assert(parquetFilters.createFilter(filter).isDefined === (p == 9),
+            s"$filter, precision $p")
+        }
       }
     }
   }
