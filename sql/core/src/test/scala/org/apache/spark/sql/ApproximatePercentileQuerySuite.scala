@@ -596,6 +596,36 @@ class ApproximatePercentileQuerySuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-60337: percentile_approx rejects nanosecond timestamps") {
+    // The sketch holds doubles, which can't represent nanosecond timestamps exactly, so they are
+    // rejected rather than implicitly cast to DATE.
+    for {
+      ansiEnabled <- Seq("true", "false")
+      family <- Seq("TIMESTAMP_NTZ", "TIMESTAMP_LTZ")
+      precision <- 7 to 9
+      (func, percentage) <- Seq(
+        "percentile_approx" -> "0.5", "approx_percentile" -> "array(0.25, 0.75)")
+    } {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled) {
+        val call = s"$func(c, $percentage)"
+        val query = s"SELECT $call FROM VALUES " +
+          s"(CAST('2020-01-01 12:00:00.123456789' AS $family($precision))) AS t(c)"
+        checkError(
+          exception = intercept[AnalysisException](sql(query)),
+          condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+          parameters = Map(
+            "sqlExpr" -> s"\"$func(c, $percentage, 10000)\"",
+            "paramIndex" -> "first",
+            "requiredType" -> ("(\"NUMERIC\" or \"DATE\" or \"TIMESTAMP\" or \"TIMESTAMP_NTZ\" " +
+              "or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\" or \"TIME\")"),
+            "inputSql" -> "\"c\"",
+            "inputType" -> s"\"$family($precision)\""),
+          context = ExpectedContext(
+            call, query.indexOf(call), query.indexOf(call) + call.length - 1))
+      }
+    }
+  }
+
   test("percentile_approx, multiple records with the minimum value in a partition") {
     withTempView(table) {
       spark.sparkContext.makeRDD(Seq(1, 1, 2, 1, 1, 3, 1, 1, 4, 1, 1, 5), 4).toDF("col")
