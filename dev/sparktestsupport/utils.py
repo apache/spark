@@ -169,16 +169,18 @@ def determine_shell_script_test_goals(
     >>> shared = Goal("dev/shared")
     >>> first = SimpleNamespace(shell_script_test_goals=[shared, Goal("dev/first")])
     >>> second = SimpleNamespace(shell_script_test_goals=[Goal("dev/second"), shared])
-    >>> [g.path for g in determine_shell_script_test_goals([first, second], Stage.PRE_BUILD)]
-    ['dev/shared', 'dev/first', 'dev/second']
+    >>> [g.path for g in determine_shell_script_test_goals(
+    ...     [first, second], Stage.PRE_BUILD)]
+    [PosixPath('dev/shared'), PosixPath('dev/first'), PosixPath('dev/second')]
 
     Goals for another stage are left out. The stand-in is not a ShellScriptTestGoal
     because that type only accepts a stage defined on the enum:
 
     >>> other = SimpleNamespace(path="dev/later", stage="other")
     >>> later = SimpleNamespace(shell_script_test_goals=[other])
-    >>> [g.path for g in determine_shell_script_test_goals([first, later], Stage.PRE_BUILD)]
-    ['dev/shared', 'dev/first']
+    >>> [g.path for g in determine_shell_script_test_goals(
+    ...     [first, later], Stage.PRE_BUILD)]
+    [PosixPath('dev/shared'), PosixPath('dev/first')]
     """
     declared_goals = itertools.chain.from_iterable(m.shell_script_test_goals for m in test_modules)
     stage_goals = (goal for goal in declared_goals if goal.stage == stage)

@@ -129,6 +129,11 @@ class ShellScriptTestGoal:
         ...
     TypeError: Unsupported test stage: 'post_build'
 
+    The path may be a `str` or `Path`, and is normalized:
+
+    >>> ShellScriptTestGoal(Path("./dev//example")) == ShellScriptTestGoal("dev/example")
+    True
+
     The path is a repository-relative script:
 
     >>> ShellScriptTestGoal("/tmp/example")
@@ -137,15 +142,18 @@ class ShellScriptTestGoal:
     ValueError: Shell script path must be relative to repo root: '/tmp/example'
     """
 
-    path: str
+    path: str | Path
     stage: TestStage = TestStage.PRE_BUILD
 
     def __post_init__(self) -> None:
         if not isinstance(self.stage, TestStage):
             raise TypeError(f"Unsupported test stage: {self.stage!r}")
-        parts = PurePath(self.path).parts
-        if not self.path or not self.path.strip() or os.path.isabs(self.path) or ".." in parts:
-            raise ValueError(f"Shell script path must be relative to repo root: {self.path!r}")
+        # `Path` rejects non-path types and normalizes spellings like "./dev//x".
+        path = Path(self.path)
+        # We have to call `object.__setattr__` because the class is frozen.
+        object.__setattr__(self, "path", path)
+        if path == Path() or path.is_absolute() or ".." in path.parts:
+            raise ValueError(f"Shell script path must be relative to repo root: {str(path)!r}")
 
 
 @total_ordering
