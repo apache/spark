@@ -288,10 +288,12 @@ class NettyRpcEnvSuite extends RpcEnvSuite with MockitoSugar with TimeLimits {
     }
   }
 
-  test("SPARK-60246: a download reader closing while the callback is writing must not fail " +
-      "the callback") {
+  test("SPARK-60246: download callbacks drop data for a closed reader, report other failures, " +
+      "and do not log") {
     val downloadEnv =
       createRpcEnv(createSparkConf(), "file-download-callback", 0, clientMode = true)
+    val writerThreadName = "file-download-writer"
+    val writerPool = ThreadUtils.newDaemonSingleThreadExecutor(writerThreadName)
     try {
       // Capture the real FileDownloadCallback without a server, so the test controls exactly when
       // data arrives. The client and its factory are mocked because the callback can only be
@@ -311,42 +313,61 @@ class NettyRpcEnvSuite extends RpcEnvSuite with MockitoSugar with TimeLimits {
       }
       val (source, callback) = openDownload("/jars/big.jar")
       val (otherSource, otherCallback) = openDownload("/jars/other.jar")
+      val (failedSource, failedCallback) = openDownload("/jars/failed.jar")
+      try {
+        // The callbacks run on the connection's event loop, so they must not log (SPARK-38446).
+        // Here they run only on this thread and the writer thread, so only events from those
+        // count; the suite's shared env logs under the same logger name.
+        val callbackThreads = Set(Thread.currentThread.getName, writerThreadName)
+        val logAppender = new LogAppender("file download callbacks")
+        logAppender.setThreshold(Level.DEBUG)
+        withLogAppender(logAppender, loggerNames = Seq(classOf[NettyRpcEnv].getName),
+            level = Some(Level.DEBUG)) {
+          // Much larger than an OS pipe buffer, so onData blocks in the pipe write until the
+          // reader reads or closes its end.
+          val buf = ByteBuffer.allocate(4 * 1024 * 1024)
+          val writer = Future(callback.onData("big", buf))(
+            ExecutionContext.fromExecutorService(writerPool))
 
-      // The callbacks run on the connection's event loop, so they must not log (SPARK-38446).
-      val logAppender = new LogAppender("file download callbacks")
-      logAppender.setThreshold(Level.DEBUG)
-      withLogAppender(logAppender, loggerNames = Seq(classOf[NettyRpcEnv].getName),
-          level = Some(Level.DEBUG)) {
-        // Much larger than an OS pipe buffer, so onData blocks in the pipe write until the
-        // reader reads or closes its end.
-        val buf = ByteBuffer.allocate(4 * 1024 * 1024)
-        val writer = Future(callback.onData("big", buf))(ExecutionContext.global)
+          // Reading a byte proves onData is writing. It cannot have written the whole buffer
+          // into the pipe, so it is still blocked writing when the reader closes its end below.
+          failAfter(60.seconds) {
+            JavaUtils.readFully(source, ByteBuffer.allocate(1))
+          }
+          assert(buf.hasRemaining)
+          source.close()
 
-        // Reading a byte proves onData is writing. It cannot have written the whole buffer into
-        // the pipe, so it is still blocked writing when the reader closes its end below.
-        failAfter(60.seconds) {
-          JavaUtils.readFully(source, ByteBuffer.allocate(1))
+          // The callback must discard the rest of the buffer instead of throwing, since
+          // throwing would close the connection shared with other downloads.
+          ThreadUtils.awaitResult(writer, 60.seconds)
+          // Later data for the same stream must not throw either.
+          callback.onData("big", ByteBuffer.allocate(1024))
+          callback.onComplete("big")
+
+          // A write that fails while the reader is still open is a real failure and must
+          // propagate, so the reader sees an error instead of a silently truncated download.
+          otherCallback.onComplete("other")
+          intercept[ClosedChannelException] {
+            otherCallback.onData("other", ByteBuffer.allocate(1024))
+          }
+
+          // A stream failure must reach the reader as the same exception.
+          val cause = new IOException("Stream failed")
+          failedCallback.onFailure("failed", cause)
+          assert(intercept[IOException](failedSource.read(ByteBuffer.allocate(1))) eq cause)
         }
-        assert(buf.hasRemaining)
-        source.close()
-
-        // The callback must discard the rest of the buffer instead of throwing, since throwing
-        // would close the connection shared with other downloads.
-        ThreadUtils.awaitResult(writer, 60.seconds)
-        // Later data for the same stream must not throw either.
-        callback.onData("big", ByteBuffer.allocate(1024))
+        val callbackEvents =
+          logAppender.loggingEvents.filter(e => callbackThreads.contains(e.getThreadName))
+        assert(callbackEvents.isEmpty)
+      } finally {
+        // Closing an already closed channel is a no-op, and onComplete closes each sink.
+        Seq(source, otherSource, failedSource).foreach(_.close())
         callback.onComplete("big")
-
-        // A write that fails while the reader is still open is a real failure and must
-        // propagate, so the reader sees an error instead of a silently truncated download.
         otherCallback.onComplete("other")
-        intercept[ClosedChannelException] {
-          otherCallback.onData("other", ByteBuffer.allocate(1024))
-        }
-        otherSource.close()
+        failedCallback.onComplete("failed")
       }
-      assert(logAppender.loggingEvents.isEmpty)
     } finally {
+      ThreadUtils.shutdown(writerPool)
       downloadEnv.shutdown()
     }
   }
