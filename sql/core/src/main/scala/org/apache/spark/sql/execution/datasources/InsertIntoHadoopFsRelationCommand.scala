@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -196,8 +197,11 @@ case class InsertIntoHadoopFsRelationCommand(
           statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
           options = options,
           numStaticPartitionCols = staticPartitions.size,
-          beforeSetupJob = () => if (deleteMatchingOutput) {
-            deleteMatchingPartitions(fs, qualifiedOutputPath, customPartitionLocations, committer)
+          beforeSetupJob = () => {
+            getTagValue(InsertIntoHadoopFsRelationCommand.BEFORE_WRITE_JOB).foreach(_())
+            if (deleteMatchingOutput) {
+              deleteMatchingPartitions(fs, qualifiedOutputPath, customPartitionLocations, committer)
+            }
           })
 
 
@@ -291,4 +295,14 @@ case class InsertIntoHadoopFsRelationCommand(
 
   override protected def withNewChildInternal(
     newChild: LogicalPlan): InsertIntoHadoopFsRelationCommand = copy(query = newChild)
+}
+
+object InsertIntoHadoopFsRelationCommand {
+
+  /**
+   * A callback that runs right before the write job starts, after the write passes the driver
+   * side checks of [[FileFormatWriter]]. A CTAS that replaces an existing table drops the table
+   * there, so that a write that fails these checks keeps the table.
+   */
+  val BEFORE_WRITE_JOB = TreeNodeTag[() => Unit]("before_write_job")
 }

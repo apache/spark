@@ -1017,8 +1017,8 @@ private[sql] case class SaveAsV1TableCommand(
           case _ => // OK
         }
 
-        // Drop the existing table
-        catalog.dropTable(qualifiedIdent, ignoreIfNotExists = true, purge = false)
+        // The CTAS replaces the existing table. It drops the table as late as it can, so that a
+        // write that fails its checks keeps the table.
         runCommand(sparkSession, CreateTable(tableDescWithQualifiedIdent, mode, Some(query)))
         // Refresh the cache of the table in the catalog.
         catalog.refreshTable(qualifiedIdent)
