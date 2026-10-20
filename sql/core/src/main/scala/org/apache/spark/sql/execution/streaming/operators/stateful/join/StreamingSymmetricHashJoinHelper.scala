@@ -251,8 +251,10 @@ object StreamingSymmetricHashJoinHelper extends Logging {
           attributesWithEventWatermark = AttributeSet(otherSideInputAttributes),
           condition,
           eventTimeWatermarkForEviction)
-        // A cutoff ahead of the late-event watermark can skip newly admitted rows. Scan from
-        // the beginning in that case, including rows skipped by older code in a checkpoint.
+        // A row can pass late-input filtering but already be eligible for eviction in this batch.
+        // When the previous join-derived state cutoff is ahead of the late-input watermark, a new
+        // row can fall at or below that cutoff. V4 must scan from the beginning to find such rows,
+        // including rows stranded in existing checkpoints by the old lower-bound scan.
         val prevStateValueWatermark = eventTimeWatermarkForLateEvents.flatMap { lateWatermark =>
           StreamingJoinHelper.getStateValueWatermark(
             attributesToFindStateWatermarkFor = AttributeSet(oneSideInputAttributes),
