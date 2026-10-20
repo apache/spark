@@ -1625,6 +1625,30 @@ abstract class Dataset[T] extends Serializable {
   }
 
   /**
+   * Splits timestamp ranges across fixed bins and proportionally scales selected FLOAT or DOUBLE
+   * columns. The result includes all input columns and three appended columns: `bin_start`,
+   * `bin_end`, and `bin_distribute_ratio`. The builder can rename the appended columns.
+   *
+   * The bin width must be a positive, constant day-time interval. The optional alignment origin
+   * must be constant and have the same timestamp type as the range columns.
+   *
+   * {{{
+   *   df.binBy.range(col("start"), col("end"))
+   *     .binWidth(expr("INTERVAL 5 MINUTES"))
+   *     .distributeUniform(col("value"))
+   *     .build()
+   * }}}
+   *
+   * This operation requires `spark.sql.binByRelationOperator.enabled` to be true.
+   *
+   * @group untypedrel
+   * @since 4.4.0
+   */
+  def binBy: BinByBuilder = new BinByBuilder(this)
+
+  private[sql] def binBy(spec: BinBySpec): DataFrame
+
+  /**
    * Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns
    * set. This is the reverse to `groupBy(...).pivot(...).agg(...)`, except for the aggregation,
    * which cannot be reversed.

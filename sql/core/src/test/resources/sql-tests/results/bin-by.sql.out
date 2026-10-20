@@ -119,3 +119,51 @@ org.apache.spark.sql.AnalysisException
     "columnType" : "\"DOUBLE\""
   }
 }
+
+
+-- !query
+SELECT * FROM metrics BIN BY (
+  RANGE missing TO ts_end
+  BIN WIDTH INTERVAL '5' MINUTE
+  DISTRIBUTE UNIFORM (value)
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`missing`",
+    "proposal" : "`ts_end`, `value`, `ts_start`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 23,
+    "stopIndex" : 119,
+    "fragment" : "BIN BY (\n  RANGE missing TO ts_end\n  BIN WIDTH INTERVAL '5' MINUTE\n  DISTRIBUTE UNIFORM (value)\n)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM (
+  SELECT named_struct('start', ts_start) AS s, ts_end, value FROM metrics
+) BIN BY (
+  RANGE s.start TO ts_end
+  BIN WIDTH INTERVAL '5' MINUTE
+  DISTRIBUTE UNIFORM (value)
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "BIN_BY_REQUIRES_TOP_LEVEL_COLUMN",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "columnName" : "\"s.start\""
+  }
+}

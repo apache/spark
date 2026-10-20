@@ -4344,6 +4344,80 @@ class DataFrame:
         ...
 
     @dispatch_df_method
+    def binBy(
+        self,
+        rangeStart: "ColumnOrName",
+        rangeEnd: "ColumnOrName",
+        binWidth: Column,
+        distributeUniform: Union[List["ColumnOrName"], Tuple["ColumnOrName", ...]],
+        *,
+        alignTo: Optional[Column] = None,
+        binStartName: Optional[str] = None,
+        binEndName: Optional[str] = None,
+        binDistributeRatioName: Optional[str] = None,
+    ) -> "DataFrame":
+        """Split timestamp ranges across fixed bins and proportionally scale selected columns.
+
+        .. versionadded:: 4.4.0
+
+        Supports Spark Connect.
+
+        Parameters
+        ----------
+        rangeStart : :class:`Column` or str
+            Timestamp column for the inclusive range start.
+        rangeEnd : :class:`Column` or str
+            Timestamp column for the exclusive range end.
+            Both range columns must have the same timestamp type.
+        binWidth : :class:`Column`
+            Positive, constant day-time interval expression,
+            for example ``sf.expr("INTERVAL 5 MINUTES")``.
+        distributeUniform : list or tuple
+            Nonempty collection of FLOAT or DOUBLE columns to scale.
+            Each entry is a :class:`Column` or a column name.
+        alignTo : :class:`Column`, optional
+            Constant alignment origin with the same timestamp type as the range columns.
+            The default is 1970-01-01 00:00:00, in the session time zone for TIMESTAMP.
+        binStartName : str, optional
+            Name for the appended bin-start column. The default is ``bin_start``.
+        binEndName : str, optional
+            Name for the appended bin-end column. The default is ``bin_end``.
+        binDistributeRatioName : str, optional
+            Name for the appended overlap-ratio column.
+            The default is ``bin_distribute_ratio``.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Input columns with the selected values scaled, followed by the three bin columns.
+
+        Notes
+        -----
+        This operation requires ``spark.sql.binByRelationOperator.enabled`` to be true.
+        Each selected value must represent the change over its input range.
+        The ratio uses the real elapsed time that overlaps each bin.
+        TIMESTAMP bins use the session time zone for widths of at least one day.
+        TIMESTAMP_NTZ bins and sub-day widths use UTC arithmetic.
+
+        A zero-length range produces one row with a ratio of 1.0.
+        An inverted range raises an error.
+        A NULL range bound produces one row with NULL bin columns and NULL scaled values.
+
+        Examples
+        --------
+        >>> from pyspark.sql import functions as sf
+        >>> spark.conf.set("spark.sql.binByRelationOperator.enabled", "true")
+        >>> df = spark.sql("SELECT TIMESTAMP_NTZ '2024-01-01 00:00:00' AS start, "
+        ...                "TIMESTAMP_NTZ '2024-01-01 00:10:00' AS end, 100.0D AS value")
+        >>> df.binBy("start", "end", sf.expr("INTERVAL 5 MINUTES"), ["value"]).select(
+        ...     "value", "bin_distribute_ratio"
+        ... ).collect()
+        [Row(value=50.0, bin_distribute_ratio=0.5), Row(value=50.0, bin_distribute_ratio=0.5)]
+        >>> spark.conf.unset("spark.sql.binByRelationOperator.enabled")
+        """
+        ...
+
+    @dispatch_df_method
     def unpivot(
         self,
         ids: Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]],

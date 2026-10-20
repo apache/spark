@@ -108,6 +108,48 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         plan = self.connect.sql("SELECT 1")._plan.to_proto(self.connect)
         self.assertEqual(plan.root.sql.query, "SELECT 1")
 
+    def test_bin_by(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+        result = df.binBy("start", "end", lit(datetime.timedelta(minutes=5)), ["value"])
+        plan = result._plan.to_proto(self.connect)
+        node = plan.root.bin_by
+        self.assertEqual(node.input.read.named_table.unparsed_identifier, self.tbl_name)
+        self.assertEqual(node.range_start.unresolved_attribute.unparsed_identifier, "start")
+        self.assertEqual(node.range_end.unresolved_attribute.unparsed_identifier, "end")
+        self.assertEqual(node.bin_width.literal.day_time_interval, 300000000)
+        self.assertEqual(len(node.distribute_uniform), 1)
+        self.assertEqual(
+            node.distribute_uniform[0].unresolved_attribute.unparsed_identifier, "value"
+        )
+        self.assertFalse(node.HasField("align_to"))
+        self.assertFalse(node.HasField("bin_start_name"))
+        self.assertFalse(node.HasField("bin_end_name"))
+        self.assertFalse(node.HasField("bin_distribute_ratio_name"))
+
+    def test_bin_by_optional_fields_and_bound_columns(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+        result = df.binBy(
+            df["start"],
+            df["end"],
+            lit(datetime.timedelta(minutes=5)),
+            (df["value"], df["value2"]),
+            alignTo=lit(None).cast("timestamp"),
+            binStartName="bin.start",
+            binEndName="bin`end",
+            binDistributeRatioName="",
+        )
+        plan = result._plan.to_proto(self.connect)
+        node = plan.root.bin_by
+        for expression in [node.range_start, node.range_end, *node.distribute_uniform]:
+            self.assertEqual(expression.unresolved_attribute.plan_id, df._plan._plan_id)
+        self.assertEqual(len(node.distribute_uniform), 2)
+        self.assertTrue(node.HasField("align_to"))
+        self.assertTrue(node.align_to.cast.expr.literal.HasField("null"))
+        self.assertEqual(node.bin_start_name, "bin.start")
+        self.assertEqual(node.bin_end_name, "bin`end")
+        self.assertTrue(node.HasField("bin_distribute_ratio_name"))
+        self.assertEqual(node.bin_distribute_ratio_name, "")
+
     def test_simple_project(self):
         plan = self.connect.readTable(table_name=self.tbl_name)._plan.to_proto(self.connect)
         self.assertIsNotNone(plan.root, "Root relation must be set")

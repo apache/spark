@@ -1219,6 +1219,73 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         jgd = self._jdf.groupingSets(jgrouping_sets, self._jcols_ordinal(*cols))
         return GroupedData(jgd, self)
 
+    def binBy(
+        self,
+        rangeStart: "ColumnOrName",
+        rangeEnd: "ColumnOrName",
+        binWidth: Column,
+        distributeUniform: Union[List["ColumnOrName"], Tuple["ColumnOrName", ...]],
+        *,
+        alignTo: Optional[Column] = None,
+        binStartName: Optional[str] = None,
+        binEndName: Optional[str] = None,
+        binDistributeRatioName: Optional[str] = None,
+    ) -> ParentDataFrame:
+        expressions = {"binWidth": binWidth}
+        if alignTo is not None:
+            expressions["alignTo"] = alignTo
+        for arg_name, expression in expressions.items():
+            if not isinstance(expression, Column):
+                raise PySparkTypeError(
+                    errorClass="NOT_EXPECTED_TYPE",
+                    messageParameters={
+                        "arg_name": arg_name,
+                        "expected_type": "Column",
+                        "arg_type": type(expression).__name__,
+                    },
+                )
+
+        if not isinstance(distributeUniform, (list, tuple)):
+            raise PySparkTypeError(
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "distributeUniform",
+                    "expected_type": "list or tuple",
+                    "arg_type": type(distributeUniform).__name__,
+                },
+            )
+        aliases = {
+            "binStartName": binStartName,
+            "binEndName": binEndName,
+            "binDistributeRatioName": binDistributeRatioName,
+        }
+        for arg_name, name in aliases.items():
+            if name is not None and not isinstance(name, str):
+                raise PySparkTypeError(
+                    errorClass="NOT_EXPECTED_TYPE",
+                    messageParameters={
+                        "arg_name": arg_name,
+                        "expected_type": "str",
+                        "arg_type": type(name).__name__,
+                    },
+                )
+
+        builder = (
+            self._jdf.binBy()
+            .range(_to_java_column(rangeStart), _to_java_column(rangeEnd))
+            .binWidth(_to_java_column(binWidth))
+        )
+        if alignTo is not None:
+            builder = builder.alignTo(_to_java_column(alignTo))
+        builder = builder.distributeUniform(self._jcols(distributeUniform))
+        if binStartName is not None:
+            builder = builder.renameBinStart(binStartName)
+        if binEndName is not None:
+            builder = builder.renameBinEnd(binEndName)
+        if binDistributeRatioName is not None:
+            builder = builder.renameBinDistributeRatio(binDistributeRatioName)
+        return DataFrame(builder.build(), self.sparkSession)
+
     def unpivot(
         self,
         ids: Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]],

@@ -32,6 +32,7 @@ import org.junit.jupiter.api.*;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.BinByWithDistribute;
 import org.apache.spark.sql.Column;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Encoders;
@@ -127,6 +128,38 @@ public class JavaDataFrameSuite {
     Dataset<Row> df = spark.table("testData");
     df.show();
     df.show(1000);
+  }
+
+  @Test
+  public void testBinBy() {
+    spark.conf().set("spark.sql.binByRelationOperator.enabled", "true");
+    Dataset<Row> input = spark.sql(
+      "SELECT TIMESTAMP_NTZ '2024-01-01 00:00:00' AS start, " +
+      "TIMESTAMP_NTZ '2024-01-01 00:10:00' AS end, 100.0D AS value, 20.0F AS value2");
+    Dataset<Row> result = input.binBy().range(input.col("start"), input.col("end"))
+      .binWidth(expr("INTERVAL 5 MINUTES"))
+      .alignTo(expr("TIMESTAMP_NTZ '2024-01-01 00:00:00'"))
+      .distributeUniform(input.col("value"), input.col("value2"))
+      .renameBinStart("lower").renameBinEnd("upper").renameBinDistributeRatio("ratio")
+      .build();
+    Assertions.assertArrayEquals(
+      new String[] {"start", "end", "value", "value2", "lower", "upper", "ratio"},
+      result.columns());
+    Assertions.assertEquals(
+      Arrays.asList(RowFactory.create(50.0, 10.0f, 0.5), RowFactory.create(50.0, 10.0f, 0.5)),
+      result.select("value", "value2", "ratio").collectAsList());
+
+    Column[] distributeColumns = {input.col("value")};
+    BinByWithDistribute builder = input.binBy().range(input.col("start"), input.col("end"))
+      .binWidth(expr("INTERVAL 5 MINUTES"))
+      .distributeUniform(distributeColumns);
+
+    distributeColumns[0] = input.col("value2");
+    Dataset<Row> snapshotResult = builder.build();
+
+    Assertions.assertEquals(
+      Arrays.asList(RowFactory.create(50.0, 20.0f), RowFactory.create(50.0, 20.0f)),
+      snapshotResult.select("value", "value2").collectAsList());
   }
 
   public static class Bean implements Serializable {

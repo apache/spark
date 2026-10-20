@@ -31,7 +31,7 @@ import org.apache.spark.api.java.function._
 import org.apache.spark.connect.proto
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql
-import org.apache.spark.sql.{functions, AnalysisException, Column, Encoder, Observation, Row, TypedColumn}
+import org.apache.spark.sql.{functions, AnalysisException, BinBySpec, Column, Encoder, Observation, Row, TypedColumn}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
@@ -672,6 +672,23 @@ class Dataset[T] private[sql] (
       cols,
       proto.Aggregate.GroupType.GROUP_TYPE_GROUPING_SETS,
       groupingSets = Some(groupingSetMsgs))
+  }
+
+  private[sql] override def binBy(spec: BinBySpec): DataFrame = {
+    val columns = Seq(spec.rangeStart, spec.rangeEnd, spec.binWidth) ++
+      spec.distributeColumns ++ spec.origin
+    sparkSession.newDataFrame(columns) { builder =>
+      val binBy = builder.getBinByBuilder
+        .setInput(plan.getRoot)
+        .setRangeStart(toExpr(spec.rangeStart))
+        .setRangeEnd(toExpr(spec.rangeEnd))
+        .setBinWidth(toExpr(spec.binWidth))
+      spec.origin.foreach(origin => binBy.setAlignTo(toExpr(origin)))
+      spec.distributeColumns.foreach(col => binBy.addDistributeUniform(toExpr(col)))
+      spec.binStartName.foreach(binBy.setBinStartName)
+      spec.binEndName.foreach(binBy.setBinEndName)
+      spec.binDistributeRatioName.foreach(binBy.setBinDistributeRatioName)
+    }
   }
 
   /** @inheritdoc */

@@ -37,7 +37,7 @@ import org.apache.spark.api.r.RRDD
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.resource.ResourceProfile
-import org.apache.spark.sql.{AnalysisException, Column, Encoder, Encoders, Observation, Row, SQLContext, TableArg, TypedColumn}
+import org.apache.spark.sql.{AnalysisException, BinBySpec, Column, Encoder, Encoders, Observation, Row, SQLContext, TableArg, TypedColumn}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, QueryPlanningTracker, ScalaReflection, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
@@ -1070,6 +1070,20 @@ class Dataset[T] private[sql](
       executed,
       logicalPlan.output,
       withGroupingKey.newColumns)
+  }
+
+  private[sql] override def binBy(spec: BinBySpec): DataFrame = withPlan {
+    UnresolvedBinBy(
+      binWidthExpr = spec.binWidth.expr,
+      rangeStartCol = spec.rangeStart.expr,
+      rangeEndCol = spec.rangeEnd.expr,
+      originExpr = spec.origin.map(_.expr),
+      distributeColumns = spec.distributeColumns.map(_.expr),
+      outputAliases = BinByOutputAliases(
+        binStart = spec.binStartName,
+        binEnd = spec.binEndName,
+        binRatio = spec.binDistributeRatioName),
+      child = logicalPlan)
   }
 
   /** @inheritdoc */

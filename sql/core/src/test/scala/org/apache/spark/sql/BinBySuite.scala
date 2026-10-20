@@ -23,6 +23,7 @@ import java.time.{LocalDateTime, ZoneId, ZoneOffset}
 import org.apache.spark.{SparkArithmeticException, SparkThrowable}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.BinByExec
+import org.apache.spark.sql.functions.{col, expr, lit}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -62,6 +63,10 @@ class BinBySuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
+  private def apiInput: DataFrame = spark.sql(
+    """SELECT TIMESTAMP '2024-01-01 00:00:00' AS start,
+      |  TIMESTAMP '2024-01-01 00:10:00' AS end, 100.0D AS value""".stripMargin)
 
   private def binByExecArgs(sqlText: String): String = {
     val plan = spark.sql(sqlText).queryExecution.executedPlan
@@ -695,6 +700,109 @@ class BinBySuite extends QueryTest with SharedSparkSession {
           "distribute=[value#x: double], scaledDistribute=[value#x: double], " +
           "appends=[bin_start#x: timestamp_ntz, bin_end#x: timestamp_ntz, " +
           "bin_distribute_ratio#x: double]")
+    }
+  }
+
+  test("BIN BY DataFrame API origin and aliases do not mutate reused builders") {
+    withSQLConf(
+        SQLConf.BIN_BY_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val input = apiInput
+      val width = input.binBy.range(input("start"), input("end"))
+        .binWidth(expr("INTERVAL 5 MINUTES"))
+      val distribute = width.distributeUniform(input("value"))
+      val renamed = distribute.renameBinStart("bin.start").renameBinEnd("bin`end")
+        .renameBinDistributeRatio("ratio")
+      assert(renamed.build().columns.toSeq ==
+        Seq("start", "end", "value", "bin.start", "bin`end", "ratio"))
+      assert(distribute.build().columns.toSeq ==
+        Seq("start", "end", "value", "bin_start", "bin_end", "bin_distribute_ratio"))
+
+      val aligned = width.alignTo(expr("TIMESTAMP '2024-01-01 00:02:00'"))
+        .distributeUniform(col("value")).build()
+      checkAnswer(aligned.select("value", "bin_start", "bin_distribute_ratio"), Seq(
+        Row(20.0, tsAt("2023-12-31 23:57:00"), 0.2),
+        Row(50.0, tsAt("2024-01-01 00:02:00"), 0.5),
+        Row(30.0, tsAt("2024-01-01 00:07:00"), 0.3)))
+      val result = width.distributeUniform(input("value")).build()
+      checkAnswer(result.select("value", "bin_start", "bin_end", "bin_distribute_ratio"), Seq(
+        Row(50.0, tsAt("2024-01-01 00:00:00"), tsAt("2024-01-01 00:05:00"), 0.5),
+        Row(50.0, tsAt("2024-01-01 00:05:00"), tsAt("2024-01-01 00:10:00"), 0.5)))
+    }
+  }
+
+  test("BIN BY DataFrame API rejects null output column names") {
+    val builder = apiInput.binBy.range(col("start"), col("end"))
+      .binWidth(expr("INTERVAL 5 MINUTES")).distributeUniform(col("value"))
+    Seq(
+      builder.renameBinStart _,
+      builder.renameBinEnd _,
+      builder.renameBinDistributeRatio _
+    ).foreach { rename =>
+      val error = intercept[IllegalArgumentException] { rename(null) }
+      assert(error.getMessage == "requirement failed: Column name cannot be null")
+    }
+  }
+
+  test("BIN BY DataFrame API validates column inputs and an explicit NULL origin") {
+    withSQLConf(SQLConf.BIN_BY_ENABLED.key -> "true") {
+      val input = apiInput
+      val width = input.binBy.range(col("start"), col("end"))
+        .binWidth(expr("INTERVAL 5 MINUTES"))
+      checkError(
+        exception = intercept[AnalysisException] { width.distributeUniform().build() },
+        condition = "BIN_BY_MISSING_DISTRIBUTE",
+        parameters = Map.empty)
+      checkError(
+        exception = intercept[AnalysisException] {
+          width.distributeUniform(col("value"), input("value")).build()
+        },
+        condition = "BIN_BY_DUPLICATE_DISTRIBUTE_COLUMN",
+        parameters = Map("columnName" -> "`value`"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          width.distributeUniform(col("value") + 1).build()
+        },
+        condition = "BIN_BY_REQUIRES_TOP_LEVEL_COLUMN",
+        parameters = Map("columnName" -> "\"(value + 1)\""))
+      checkError(
+        exception = intercept[AnalysisException] {
+          width.distributeUniform(col("value").as("v")).build()
+        },
+        condition = "BIN_BY_REQUIRES_TOP_LEVEL_COLUMN",
+        parameters = Map("columnName" -> "\"value AS v\""))
+      checkError(
+        exception = intercept[AnalysisException] {
+          input.binBy.range(col("start").as("s"), col("end"))
+            .binWidth(expr("INTERVAL 5 MINUTES")).distributeUniform(col("value")).build()
+        },
+        condition = "BIN_BY_REQUIRES_TOP_LEVEL_COLUMN",
+        parameters = Map("columnName" -> "\"start AS s\""))
+      checkError(
+        exception = intercept[AnalysisException] {
+          input.binBy.range(col("start").cast("timestamp_ntz"), col("end"))
+            .binWidth(expr("INTERVAL 5 MINUTES")).distributeUniform(col("value")).build()
+        },
+        condition = "BIN_BY_REQUIRES_TOP_LEVEL_COLUMN",
+        parameters = Map("columnName" -> "\"CAST(start AS TIMESTAMP_NTZ)\""))
+      checkError(
+        exception = intercept[AnalysisException] {
+          width.alignTo(lit(null).cast("timestamp")).distributeUniform(col("value")).build()
+        },
+        condition = "BIN_BY_NULL_ARGUMENT",
+        parameters = Map("clause" -> "ALIGN TO"))
+    }
+  }
+
+  test("BIN BY DataFrame API respects the feature gate") {
+    withSQLConf(SQLConf.BIN_BY_ENABLED.key -> "false") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          apiInput.binBy.range(col("start"), col("end"))
+            .binWidth(expr("INTERVAL 5 MINUTES")).distributeUniform(col("value")).build()
+        },
+        condition = "UNSUPPORTED_FEATURE.BIN_BY",
+        parameters = Map.empty)
     }
   }
 }

@@ -610,6 +610,39 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     simple.selectExpr("rand(123) BETWEEN 0.1 AND 0.2")
   }
 
+  test("binBy") {
+    val input = session
+      .range(1)
+      .selectExpr(
+        "TIMESTAMP_NTZ '2024-01-01 00:00:00' AS start",
+        "TIMESTAMP_NTZ '2024-01-01 00:10:00' AS end",
+        "100.0D AS value")
+    input.binBy
+      .range(input("start"), input("end"))
+      .binWidth(fn.expr("INTERVAL 5 MINUTES"))
+      .distributeUniform(input("value"))
+      .build()
+  }
+
+  test("binBy all_options") {
+    val input = session
+      .range(1)
+      .selectExpr(
+        "TIMESTAMP_NTZ '2024-01-01 00:00:00' AS start",
+        "TIMESTAMP_NTZ '2024-01-01 00:10:00' AS end",
+        "100.0D AS value",
+        "20.0F AS value2")
+    input.binBy
+      .range(input("start"), input("end"))
+      .binWidth(fn.expr("INTERVAL 5 MINUTES"))
+      .alignTo(fn.expr("TIMESTAMP_NTZ '2024-01-01 00:02:00'"))
+      .distributeUniform(input("value"), input("value2"))
+      .renameBinStart("window_start")
+      .renameBinEnd("window_end")
+      .renameBinDistributeRatio("ratio")
+      .build()
+  }
+
   test("unpivot values") {
     simple.unpivot(
       ids = Array(fn.col("id"), fn.col("a")),

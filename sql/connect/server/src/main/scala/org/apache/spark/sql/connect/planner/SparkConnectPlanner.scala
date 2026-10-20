@@ -52,7 +52,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.parser.{NamedParameterContext, ParameterContext, ParseException, ParserUtils, PositionalParameterContext}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, CoGroup, CollectMetrics, CommandResult, DeduplicateAllColumnsAsKey, DeduplicateKeyColumns, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TimeModes, TransformWithState, TypedFilter, Union, Unpivot, UnresolvedHint, UpdateAction, UpdateEventTimeWatermarkColumn, UpdateStarAction}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, BinByOutputAliases, CoGroup, CollectMetrics, CommandResult, DeduplicateAllColumnsAsKey, DeduplicateKeyColumns, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TimeModes, TransformWithState, TypedFilter, Union, Unpivot, UnresolvedBinBy, UnresolvedHint, UpdateAction, UpdateEventTimeWatermarkColumn, UpdateStarAction}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -206,6 +206,7 @@ class SparkConnectPlanner(
           transformChunkedCachedLocalRelation(rel.getChunkedCachedLocalRelation)
         case proto.Relation.RelTypeCase.HINT => transformHint(rel.getHint)
         case proto.Relation.RelTypeCase.UNPIVOT => transformUnpivot(rel.getUnpivot)
+        case proto.Relation.RelTypeCase.BIN_BY => transformBinBy(rel.getBinBy)
         case proto.Relation.RelTypeCase.TRANSPOSE => transformTranspose(rel.getTranspose)
         case proto.Relation.RelTypeCase.UNRESOLVED_TABLE_VALUED_FUNCTION =>
           transformUnresolvedTableValuedFunction(rel.getUnresolvedTableValuedFunction)
@@ -1407,6 +1408,21 @@ class SparkConnectPlanner(
     UnresolvedTableValuedFunction(
       rel.getFunctionName,
       rel.getArgumentsList.asScala.map(transformExpression).toSeq)
+  }
+
+  private def transformBinBy(rel: proto.BinBy): LogicalPlan = {
+    UnresolvedBinBy(
+      binWidthExpr = transformExpression(rel.getBinWidth),
+      rangeStartCol = transformExpression(rel.getRangeStart),
+      rangeEndCol = transformExpression(rel.getRangeEnd),
+      originExpr = if (rel.hasAlignTo) Some(transformExpression(rel.getAlignTo)) else None,
+      distributeColumns = rel.getDistributeUniformList.asScala.map(transformExpression).toSeq,
+      outputAliases = BinByOutputAliases(
+        binStart = if (rel.hasBinStartName) Some(rel.getBinStartName) else None,
+        binEnd = if (rel.hasBinEndName) Some(rel.getBinEndName) else None,
+        binRatio =
+          if (rel.hasBinDistributeRatioName) Some(rel.getBinDistributeRatioName) else None),
+      child = transformRelation(rel.getInput))
   }
 
   private def transformUnpivot(rel: proto.Unpivot): LogicalPlan = {

@@ -84,6 +84,7 @@ message Relation {
     RelationChanges relation_changes = 46;
     NearestByJoin nearest_by_join = 47;
     Zip zip = 48;
+    BinBy bin_by = 49;
 
     // NA functions
     NAFill fill_na = 90;
@@ -967,6 +968,30 @@ message Hint {
 
   // (Optional) Hint parameters.
   repeated Expression parameters = 3;
+}
+
+// Splits timestamp ranges across fixed bins and scales selected FLOAT or DOUBLE columns.
+message BinBy {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) Timestamp columns that define the half-open input range.
+  Expression range_start = 2;
+  Expression range_end = 3;
+
+  // (Required) A positive, constant day-time interval expression.
+  Expression bin_width = 4;
+
+  // (Optional) A constant origin with the same timestamp type as the range columns.
+  Expression align_to = 5;
+
+  // (Required) At least one FLOAT or DOUBLE column to scale.
+  repeated Expression distribute_uniform = 6;
+
+  // (Optional) Names for the three appended output columns.
+  optional string bin_start_name = 7;
+  optional string bin_end_name = 8;
+  optional string bin_distribute_ratio_name = 9;
 }
 
 // Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns set.

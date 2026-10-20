@@ -44,6 +44,7 @@ import org.apache.spark.sql.connector.catalog.{Column => ColumnV2, Identifier, I
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -1015,6 +1016,56 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
 
   test("Test Hint") {
     comparePlans(connectTestRelation.hint("COALESCE", 3), sparkTestRelation.hint("COALESCE", 3))
+  }
+
+  test("Test BIN BY") {
+    withSQLConf(SQLConf.BIN_BY_ENABLED.key -> "true") {
+      val schema = new StructType()
+        .add("start", TimestampNTZType)
+        .add("end", TimestampNTZType)
+        .add("value", DoubleType)
+        .add("value2", FloatType)
+      val input = createLocalRelationProto(DataTypeUtils.toAttributes(schema), Seq.empty)
+      val classic = spark.createDataFrame(new java.util.ArrayList[Row](), schema)
+      val binBy = proto.BinBy
+        .newBuilder()
+        .setInput(input)
+        .setRangeStart("start".protoAttr)
+        .setRangeEnd("end".protoAttr)
+        .setBinWidth(
+          proto.Expression
+            .newBuilder()
+            .setExpressionString(
+              proto.Expression.ExpressionString.newBuilder().setExpression("INTERVAL 5 MINUTES")))
+        .addDistributeUniform("value".protoAttr)
+        .addDistributeUniform("value2".protoAttr)
+      val builder = classic.binBy
+        .range(col("start"), col("end"))
+        .binWidth(expr("INTERVAL 5 MINUTES"))
+      comparePlans(
+        proto.Relation.newBuilder().setBinBy(binBy).build(),
+        builder.distributeUniform(col("value"), col("value2")).build())
+
+      val origin = "TIMESTAMP_NTZ '2024-01-01 00:02:00'"
+      binBy
+        .setAlignTo(
+          proto.Expression
+            .newBuilder()
+            .setExpressionString(
+              proto.Expression.ExpressionString.newBuilder().setExpression(origin)))
+        .setBinStartName("bin.start")
+        .setBinEndName("bin`end")
+        .setBinDistributeRatioName("")
+      comparePlans(
+        proto.Relation.newBuilder().setBinBy(binBy).build(),
+        builder
+          .alignTo(expr(origin))
+          .distributeUniform(col("value"), col("value2"))
+          .renameBinStart("bin.start")
+          .renameBinEnd("bin`end")
+          .renameBinDistributeRatio("")
+          .build())
+    }
   }
 
   test("Test Unpivot") {
