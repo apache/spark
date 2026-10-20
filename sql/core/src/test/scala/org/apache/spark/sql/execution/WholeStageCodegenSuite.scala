@@ -2818,7 +2818,8 @@ class WholeStageCodegenSuite extends SharedSparkSession
 
   // A Parquet table, so that the filter is not evaluated by the optimizer on a local relation.
   // On the first row `NOT (a > 0 AND b > 0)` is NULL, and no `isnotnull(a)` is inferred from it.
-  // The second row passes every condition of the tests below, except `b < 0`. The rows can be
+  // The second row passes every condition of the tests below, except `b < 0`, `(a > 0 OR b < 0)`
+  // and `coalesce(b, cast(s AS INT)) < 0`. The rows can be
   // written to different files, so the filter is not pushed down, which would skip the first
   // row's file by its statistics.
   private def withNullConjunctTable(y: Int)(f: => Unit): Unit = {
@@ -2847,6 +2848,21 @@ class WholeStageCodegenSuite extends SharedSparkSession
         fragment = "y + 1",
         start = query.indexOf("y + 1"),
         stop = query.indexOf("y + 1") + 4))
+  }
+
+  private def checkCastInvalidInput(query: String): Unit = {
+    val start = query.lastIndexOf("cast(s AS INT)")
+    checkError(
+      exception = intercept[SparkNumberFormatException] {
+        sql(query).collect()
+      },
+      condition = "CAST_INVALID_INPUT",
+      parameters = Map(
+        "expression" -> "'x'",
+        "sourceType" -> "\"STRING\"",
+        "targetType" -> "\"INT\"",
+        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      context = ExpectedContext(fragment = "cast(s AS INT)", start = start, stop = start + 13))
   }
 
   // Runs `f` with whole-stage codegen on and off and with the legacy behavior on and off, and
@@ -2955,10 +2971,22 @@ class WholeStageCodegenSuite extends SharedSparkSession
           sql("SELECT a FROM t WHERE NOT (a > 0 AND b > 0) AND b < 0 AND y + 1 > 0"),
           Seq.empty)
       }
+      def hasNullConjunctFlag(query: String): Boolean =
+        genCode(sql(query)).exists(_.body.contains("nullConjunct"))
       // `b > 0` cannot be NULL after the inferred `isnotnull(b)`, so no flag is generated.
-      val df = sql("SELECT a FROM t WHERE b > 0 AND y > -1")
-      checkAnswer(df, Seq(Row(null), Row(0)))
-      assert(!codegenString(df.queryExecution.executedPlan).contains("nullConjunct"))
+      val noNullConjunct = "SELECT a FROM t WHERE b > 0 AND y > -1"
+      checkAnswer(sql(noNullConjunct), Seq(Row(null), Row(0)))
+      assert(!hasNullConjunctFlag(noNullConjunct))
+      // `a > 0 OR b > 0` can be NULL, but neither the conjuncts after it nor the inferred checks
+      // can raise an error, so the evaluation after a NULL conjunct is not observable and no
+      // flag is generated either: the generated code is the one of the legacy behavior.
+      val noRaise = "SELECT a FROM t WHERE (a > 0 OR b > 0) AND x = 1 AND y = 0"
+      checkAnswer(sql(noRaise), Row(0))
+      assert(!hasNullConjunctFlag(noRaise))
+      // `y + 1 > 0` can raise, so the flag is generated.
+      val raise = "SELECT a FROM t WHERE (a > 0 OR b > 0) AND x = 1 AND y + 1 > 0"
+      checkAnswer(sql(raise), Row(0))
+      assert(hasNullConjunctFlag(raise))
     }
   }
 
@@ -3005,6 +3033,15 @@ class WholeStageCodegenSuite extends SharedSparkSession
               checkAnswer(sql(checkAfter), Row(0))
             } else {
               checkArithmeticOverflow(checkAfter)
+            }
+            // The same through the CSE branch of FilterExec, which generates the pending checks
+            // before `y + 1 > 0`, the first conjunct after the NULL one that can raise, and not
+            // before the conjuncts after it.
+            val checkAfterCSE = checkAfter + " AND b * 2 > 0 AND b * 2 > -1"
+            if (skipsAtNull) {
+              checkAnswer(sql(checkAfterCSE), Row(0))
+            } else {
+              checkArithmeticOverflow(checkAfterCSE)
             }
         }
       }
@@ -3053,21 +3090,22 @@ class WholeStageCodegenSuite extends SharedSparkSession
             if (skipsAtNull) {
               checkAnswer(sql(raising), Row(0))
             } else {
-              checkError(
-                exception = intercept[SparkNumberFormatException] {
-                  sql(raising).collect()
-                },
-                condition = "CAST_INVALID_INPUT",
-                parameters = Map(
-                  "expression" -> "'x'",
-                  "sourceType" -> "\"STRING\"",
-                  "targetType" -> "\"INT\"",
-                  "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
-                context = ExpectedContext(
-                  fragment = "cast(s AS INT)",
-                  start = raising.lastIndexOf("cast(s AS INT)"),
-                  stop = raising.lastIndexOf("cast(s AS INT)") + 13))
+              checkCastInvalidInput(raising)
             }
+        }
+      }
+      // The placement of the checks is decided at code generation, so once a conjunct can be
+      // NULL, the checks after it are evaluated in the order of the condition on every row. Here
+      // the check written first is generated before `y < 0` and raises on the first row, as with
+      // codegen off, although `a > 0 OR b > 0` is TRUE on the row. The legacy behavior evaluates
+      // `y < 0` first, which is FALSE on both rows, and never reaches the check.
+      val checkFirst =
+        "SELECT a FROM t WHERE cast(s AS INT) IS NOT NULL AND (a > 0 OR b > 0) AND y < 0"
+      withNullConjunctConfs(SQLConf.ANSI_ENABLED.key -> "true") { skipsAtNull =>
+        if (skipsAtNull) {
+          checkAnswer(sql(checkFirst), Seq.empty)
+        } else {
+          checkCastInvalidInput(checkFirst)
         }
       }
     }

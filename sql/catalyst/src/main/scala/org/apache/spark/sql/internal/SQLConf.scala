@@ -1753,7 +1753,10 @@ object SQLConf {
         "to NULL without evaluating the remaining conjuncts, so an error that one of them " +
         "would raise on that row is not raised. When false, only a FALSE conjunct stops the " +
         "evaluation, as the SQL standard requires and as the interpreted evaluation does, and " +
-        "the row is dropped after the remaining conjuncts are evaluated.")
+        "the row is dropped after the remaining conjuncts are evaluated. Once a condition has " +
+        "a conjunct that can be NULL, the IS NOT NULL checks after that conjunct are then " +
+        "evaluated in the order of the condition on every row, not only on rows where a " +
+        "conjunct is NULL.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
