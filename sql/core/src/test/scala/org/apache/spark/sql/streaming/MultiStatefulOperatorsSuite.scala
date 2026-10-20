@@ -922,42 +922,51 @@ class MultiStatefulOperatorsSuite
           SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
         withTempDir { checkpointDir =>
           // Watermarks below are in seconds and describe the bounds used in each batch.
-          // Input is the join's eviction watermark; left/right are its state bounds;
-          // output is the downstream aggregation's eviction watermark.
+          // inputW is the join's eviction watermark; leftW/rightW are its state bounds;
+          // outputW is the downstream aggregation's eviction watermark.
+          // Join rows are (key, event time); aggregation state is [window start, end): count.
           testStream(result)(
             StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
-            // Batch 0: input=0, left=-5, right=-30; propagation starts at output=0.
+            // Batch 0: inputW=0, leftW=-5, rightW=-30; propagation starts at outputW=0.
+            // Join emits (1, 105); aggregation buffers [100, 110): 1.
             MultiAddData(leftInput, (1, 105))(rightInput, (1, 105)),
             CheckNewAnswer(),
-            // Batch 1: input=105, left=100, right=75, output=100.
+            // Batch 1: inputW=105, leftW=100, rightW=75, outputW=100.
+            // Join emits (2, 120); aggregation buffers [100, 110): 1 and [120, 130): 1.
             MultiAddData(leftInput, (2, 120))(rightInput, (2, 120)),
             CheckNewAnswer(),
             StopStream,
             StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
-            // Batch 2: input=120, left=115, right=90, output=115 (after restart).
+            // Batch 2: inputW=120, leftW=115, rightW=90, outputW=115 (after restart).
+            // Join emits nothing; aggregation emits [100, 110): 1 and keeps [120, 130): 1.
             AddData(rightInput, (9, 120)),
-            // Left state is bounded at 115 seconds; right state at 90 seconds is not output.
             CheckNewAnswer((100L, 1L)),
-            // A new left row can still match restored old right state.
-            // Batch 3: input=120, left=115, right=90, output=115.
+            // Batch 3: inputW=120, leftW=115, rightW=90, outputW=115.
+            // Join emits (1, 125) matching restored right state; aggregation keeps [120, 130): 2.
             AddData(leftInput, (1, 125)),
             CheckNewAnswer(),
-            // Batch 4: input=120, left=115, right=90, output=115.
+            // Batch 4: inputW=120, leftW=115, rightW=90, outputW=115.
+            // Join emits (3, 140) and buffers unmatched (4, 137).
+            // Aggregation buffers [120, 130): 2 and [140, 150): 1.
             MultiAddData(leftInput, (3, 140), (4, 137))(rightInput, (3, 140)),
             CheckNewAnswer(),
-            // Batch 5: input=140, left=135, right=110, output=135.
+            // Batch 5: inputW=140, leftW=135, rightW=110, outputW=135.
+            // Join emits nothing; aggregation emits [120, 130): 2 and keeps [140, 150): 1.
             AddData(rightInput, (9, 140)),
             CheckNewAnswer((120L, 2L)),
             StopStream,
             StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
-            // Restored buffered left state is emitted only once despite two right matches.
-            // Batch 6: input=140, left=135, right=110, output=135 (after restart).
+            // Batch 6: inputW=140, leftW=135, rightW=110, outputW=135 (after restart).
+            // Join emits restored (4, 137) once despite two right matches.
+            // Aggregation buffers [130, 140): 1 and [140, 150): 1.
             AddData(rightInput, (4, 141), (4, 142)),
             CheckNewAnswer(),
-            // Batch 7: input=140, left=135, right=110, output=135.
+            // Batch 7: inputW=140, leftW=135, rightW=110, outputW=135.
+            // Join emits nothing; aggregation keeps [130, 140): 1 and [140, 150): 1.
             MultiAddData(leftInput, (8, 160))(rightInput, (9, 160)),
             CheckNewAnswer(),
-            // Batch 8: input=160, left=155, right=130, output=155.
+            // Batch 8: inputW=160, leftW=155, rightW=130, outputW=155.
+            // Join emits nothing; aggregation emits both buffered windows and clears its state.
             AddData(rightInput, (9, 160)),
             CheckNewAnswer((130L, 1L), (140L, 1L)))
         }
