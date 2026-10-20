@@ -25,7 +25,7 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.execution.streaming.operators.stateful.StateStoreSaveExec
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinExec
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
-import org.apache.spark.sql.execution.streaming.state.StateStore
+import org.apache.spark.sql.execution.streaming.state.{HDFSBackedStateStoreProvider, RocksDBStateStoreProvider, StateStore}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.tags.SlowSQLTest
@@ -887,44 +887,81 @@ class MultiStatefulOperatorsSuite
     testOutputWatermarkInJoin(join3, input1, -40L * 1000 - 1)
   }
 
-  for (leftWatermark <- Seq(false, true); joinOnTime <- Seq(false, true)) {
-    test(s"left semi output watermark follows output event time: " +
-        s"left watermark=$leftWatermark, equality=$joinOnTime") {
+  Seq(
+    (2, classOf[HDFSBackedStateStoreProvider], false),
+    (2, classOf[RocksDBStateStoreProvider], false),
+    (3, classOf[RocksDBStateStoreProvider], false),
+    (3, classOf[RocksDBStateStoreProvider], true),
+    (4, classOf[RocksDBStateStoreProvider], false),
+    (4, classOf[RocksDBStateStoreProvider], true)
+  ).foreach { case (stateFormatVersion, provider, changelogEnabled) =>
+    test("left semi output watermark closes downstream windows across restart: " +
+        s"state format=$stateFormatVersion, ${provider.getSimpleName}, " +
+        s"changelog=$changelogEnabled") {
       val leftInput = MemoryStream[(Int, Int)]
       val rightInput = MemoryStream[(Int, Int)]
-      val leftWithoutWatermark = leftInput.toDF()
+      val left = leftInput.toDF()
         .select($"_1".as("leftKey"), timestamp_seconds($"_2").as("leftTime"))
-      val left = if (leftWatermark) {
-        leftWithoutWatermark.withWatermark("leftTime", "0 seconds")
-      } else {
-        leftWithoutWatermark
-      }
+        .withWatermark("leftTime", "0 seconds")
       val right = rightInput.toDF()
         .select($"_1".as("rightKey"), timestamp_seconds($"_2").as("rightTime"))
         .withWatermark("rightTime", "0 seconds")
-      val timeCondition = if (joinOnTime) {
-        "leftTime = rightTime"
-      } else {
-        "leftTime > rightTime - INTERVAL 5 SECONDS AND " +
-          "leftTime < rightTime + INTERVAL 30 SECONDS"
-      }
-      val joined = left.join(right, expr(s"leftKey = rightKey AND $timeCondition"), "left_semi")
-        .select($"leftKey", $"leftTime".cast("int"))
-      val expectedWatermark = if (leftWatermark) {
-        Some(if (joinOnTime) 120000L else 115000L)
-      } else {
-        None
-      }
+      val result = left.join(right, expr(
+        "leftKey = rightKey AND leftTime > rightTime - INTERVAL 5 SECONDS AND " +
+          "leftTime < rightTime + INTERVAL 30 SECONDS"), "left_semi")
+        .groupBy(window($"leftTime", "10 seconds"))
+        .count()
+        .select($"window.start".cast("long"), $"count")
 
-      testStream(joined)(
-        MultiAddData(leftInput, (1, 5))(rightInput, (1, 5)),
-        CheckNewAnswer((1, 5)),
-        Execute { query =>
-          val joinOperator = query.lastExecution.executedPlan.collect {
-            case j: StreamingSymmetricHashJoinExec => j
-          }.head
-          assert(joinOperator.produceOutputWatermark(120000L) === expectedWatermark)
-        })
+      withSQLConf(
+          SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> stateFormatVersion.toString,
+          SQLConf.STATE_STORE_PROVIDER_CLASS.key -> provider.getName,
+          "spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled" ->
+            changelogEnabled.toString,
+          SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "true",
+          SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+        withTempDir { checkpointDir =>
+          // Watermarks below are in seconds and describe the bounds used in each batch.
+          // Input is the join's eviction watermark; left/right are its state bounds;
+          // output is the downstream aggregation's eviction watermark.
+          testStream(result)(
+            StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+            // Batch 0: input=0, left=-5, right=-30; propagation starts at output=0.
+            MultiAddData(leftInput, (1, 105))(rightInput, (1, 105)),
+            CheckNewAnswer(),
+            // Batch 1: input=105, left=100, right=75, output=100.
+            MultiAddData(leftInput, (2, 120))(rightInput, (2, 120)),
+            CheckNewAnswer(),
+            StopStream,
+            StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+            // Batch 2: input=120, left=115, right=90, output=115 (after restart).
+            AddData(rightInput, (9, 120)),
+            // Left state is bounded at 115 seconds; right state at 90 seconds is not output.
+            CheckNewAnswer((100L, 1L)),
+            // A new left row can still match restored old right state.
+            // Batch 3: input=120, left=115, right=90, output=115.
+            AddData(leftInput, (1, 125)),
+            CheckNewAnswer(),
+            // Batch 4: input=120, left=115, right=90, output=115.
+            MultiAddData(leftInput, (3, 140), (4, 137))(rightInput, (3, 140)),
+            CheckNewAnswer(),
+            // Batch 5: input=140, left=135, right=110, output=135.
+            AddData(rightInput, (9, 140)),
+            CheckNewAnswer((120L, 2L)),
+            StopStream,
+            StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+            // Restored buffered left state is emitted only once despite two right matches.
+            // Batch 6: input=140, left=135, right=110, output=135 (after restart).
+            AddData(rightInput, (4, 141), (4, 142)),
+            CheckNewAnswer(),
+            // Batch 7: input=140, left=135, right=110, output=135.
+            MultiAddData(leftInput, (8, 160))(rightInput, (9, 160)),
+            CheckNewAnswer(),
+            // Batch 8: input=160, left=155, right=130, output=155.
+            AddData(rightInput, (9, 160)),
+            CheckNewAnswer((130L, 1L), (140L, 1L)))
+        }
+      }
     }
   }
 
