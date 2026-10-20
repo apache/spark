@@ -28,9 +28,10 @@ import org.apache.spark.internal.Logging
  *
  * A background thread records the first error via [[markError]] rather than failing the task
  * directly; the owning thread polls [[throwErrorIfExists]] (or [[getError]]) at a safe point and
- * re-throws on its own thread. This avoids a race where calling `TaskContext.markTaskFailed` from
- * a background thread can run concurrently with the task thread's `markTaskCompleted` and silently
- * skip completion listeners (including cleanup), leading to thread leaks.
+ * re-throws on its own thread. Calling `TaskContext.markTaskFailed` from a background thread
+ * instead runs the failure listeners on that thread, and a concurrent `markTaskCompleted` on the
+ * task thread then blocks until they finish before it runs the completion listeners (including
+ * cleanup).
  *
  * Shared by the streaming shuffle and the streaming-query async checkpointing paths.
  */
