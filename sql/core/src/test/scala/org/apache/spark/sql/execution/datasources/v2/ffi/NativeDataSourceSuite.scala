@@ -50,7 +50,7 @@ import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchScan
 import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, UserDefinedPythonDataSource}
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
-import org.apache.spark.sql.streaming.StreamingQuery
+import org.apache.spark.sql.streaming.{StreamingQuery, Trigger}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -75,6 +75,9 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     compile("test_native_datasource_ro", "-DREAD_ONLY", "-DNAME_PREFIX=\"ro_\"")
   private lazy val negatingLibrary =
     compile("test_native_datasource_b", "-DNAME_PREFIX=\"b_\"", "-DID_SIGN=-1")
+  // Implements the data sources of the test library, as another version of it would.
+  private lazy val renamedNegatingLibrary =
+    compile("test_native_datasource_negating", "-DID_SIGN=-1")
   private lazy val abiV2Library =
     compile("test_native_datasource_v2", "-DABI_VERSION=2", "-DNAME_PREFIX=\"v2_\"")
   private lazy val noLastErrorLibrary =
@@ -187,8 +190,38 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(NativePlatform.name("Mac OS X", "aarch64") == "osx-aarch64")
     assert(NativePlatform.name("Mac OS X", "x86_64") == "osx-x86_64")
     assert(NativePlatform.name("Windows 11", "amd64") == "windows-x86_64")
+    // Linux with musl, as on Alpine Linux, which maps its C library as the loader of musl.
+    assert(NativePlatform.name("Linux", "amd64", musl = true) == "linux-x86_64-musl")
+    assert(NativePlatform.name("Linux", "aarch64", musl = true) == "linux-aarch64-musl")
+    assert(NativePlatform.usesMusl(Seq(
+      "7f00a000-7f00b000 r-xp 00000000 08:01 123 /usr/lib/jvm/lib/server/libjvm.so",
+      "7f00c000-7f00d000 r-xp 00000000 08:01 456 /lib/ld-musl-x86_64.so.1")))
+    assert(!NativePlatform.usesMusl(Seq(
+      "7f00c000-7f00d000 r-xp 00000000 08:01 456 /usr/lib/x86_64-linux-gnu/libc.so.6")))
+    // The tests run on glibc, macOS or Windows.
     assert(NativePlatform.current == NativePlatform.name(
       System.getProperty("os.name"), System.getProperty("os.arch")))
+  }
+
+  test("fail clearly where the C data interface of Arrow Java does not load") {
+    // Arrow Java fails like this without a library for the architecture, such as ppc64le, or
+    // with one that does not link, such as on musl.
+    Seq(
+      new IllegalStateException("error loading native libraries: java.io.FileNotFoundException: " +
+        "arrow_cdata_jni/ppc64le/libarrow_cdata_jni.so"),
+      new UnsatisfiedLinkError("libarrow_cdata_jni.so: Error relocating: symbol not found")
+    ).foreach { cause =>
+      val e = intercept[SparkUnsupportedOperationException] {
+        NativeLibraries.checkCDataInterface(throw cause)
+      }
+      checkError(
+        exception = e,
+        condition = "NATIVE_DATA_SOURCE_UNSUPPORTED_PLATFORM",
+        parameters = Map("platform" -> NativePlatform.current, "reason" -> cause.toString))
+      assert(e.getCause eq cause)
+    }
+    // It loads where the tests run.
+    NativeLibraries.checkCDataInterface()
   }
 
   test("native library path") {
@@ -295,18 +328,19 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
    * `SPARK_GENERATE_GOLDEN_FILES=1`.
    */
   test("predicate cases") {
-    val schema = StructType.fromDDL("id INT, i INT, d DOUBLE, s STRING, f FLOAT")
+    val schema = StructType.fromDDL("id INT, i INT, d DOUBLE, s STRING, f FLOAT, b BINARY")
     def char(codePoint: Int): String = new String(Character.toChars(codePoint))
     val (emoji, eAcute, replacement) = (char(0x1F600), char(0xE9), char(0xFFFD))
+    def bytes(values: Int*): Array[Byte] = values.map(_.toByte).toArray
     val rows = Seq(
-      Row(0, 1, 0.0, "a", 0.1f),
-      Row(1, 2, -0.0, "", 1.5f),
-      Row(2, null, Double.NaN, eAcute, null),
-      Row(3, 3, Double.PositiveInfinity, emoji, 0.1f),
-      Row(4, 1, Double.NegativeInfinity, null, 0.5f),
-      Row(5, null, 1.5, "ab", 2.0f),
-      Row(6, 2, null, "b" + eAcute, 0.25f),
-      Row(7, 4, 2.5, replacement, 3.0f))
+      Row(0, 1, 0.0, "a", 0.1f, bytes(0x00)),
+      Row(1, 2, -0.0, "", 1.5f, bytes(0x7F)),
+      Row(2, null, Double.NaN, eAcute, null, bytes(0x80)),
+      Row(3, 3, Double.PositiveInfinity, emoji, 0.1f, bytes(0xFF)),
+      Row(4, 1, Double.NegativeInfinity, null, 0.5f, bytes(0x7F, 0x00)),
+      Row(5, null, 1.5, "ab", 2.0f, bytes()),
+      Row(6, 2, null, "b" + eAcute, 0.25f, null),
+      Row(7, 4, 2.5, replacement, 3.0f, bytes(0x01, 0x02)))
     val filters = Seq(
       // NaN is equal to NaN and greater than any other value, and -0.0 is equal to 0.0.
       "d = 0.0D", "d = -0.0D", "d < 0.0D", "d > 1.0D", "d >= 2.5D", "d <> 0.0D", "d <=> 0.0D",
@@ -320,6 +354,9 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       s"endswith(s, '$eAcute')", s"contains(s, '$emoji')", s"s IN ('', '$eAcute')",
       // A float literal is the exact value of the float, which a double holds.
       "f = CAST(0.1 AS FLOAT)", "f > CAST(0.1 AS FLOAT)",
+      // Binary values are compared as unsigned bytes: X'80', X'FF' and X'7F00', which starts with
+      // X'7F', are greater than X'7F'.
+      "b > X'7F'", "b < X'80'",
       // Taking a part of a predicate under = as true would drop the row whose id is 3.
       "(id > 3) = (id < 3)")
 
@@ -356,7 +393,8 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         "spark_datasource.h, with the ids of the rows of the table for which they are true. A " +
         "case lists the predicates that Spark pushes for the filter in its SQL, which are " +
         "combined with AND. A row has a value for each column of the schema; NaN and infinite " +
-        "doubles are strings, and floats are written as the doubles of the same values.")},
+        "doubles are strings, floats are written as the doubles of the same values, and binary " +
+        "values are base64 strings.")},
          |  "schema": ${json(schema.toDDL)},
          |  "rows": [
          |${rows.map(row => row.toSeq.map(jsonValue).mkString("    [", ", ", "]")).mkString(",\n")}
@@ -379,6 +417,29 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     // The file is in the jar of Spark SQL.
     assert(getClass.getClassLoader.getResource(
       "org/apache/spark/sql/datasource/predicate-cases.json") != null)
+  }
+
+  test("comparisons and IN on arrays and structs are not pushed") {
+    val schema = StructType.fromDDL(
+      "a ARRAY<INT>, a2 ARRAY<INT>, s STRUCT<x: INT>, s2 STRUCT<x: INT>")
+    val df = spark.createDataFrame(Seq.empty[Row].asJava, schema)
+    def toJson(filter: String): Option[String] = {
+      val condition = df.where(filter).queryExecution.analyzed.collectFirst {
+        case Filter(condition, _) => condition
+      }.get
+      val predicate = DataSourceV2Strategy.translateFilterV2(condition)
+        .getOrElse(fail(s"$filter is not a Data Source V2 predicate"))
+      NativePredicates.toJson(predicate, schema)
+    }
+    // Spark compares these values with other rules than push_predicates describes, for example
+    // with the nulls in them equal to each other: array(1, null) = array(1, null) is true.
+    Seq("a = a2", "a < a2", "a IN (a2)", "s = s2", "s <=> s2").foreach { filter =>
+      assert(toJson(filter).isEmpty, s"$filter is pushed down")
+    }
+    // Null checks apply to any type, and a field of a struct has its own type.
+    Seq("a IS NULL", "s IS NOT NULL", "s.x = 1", "s.x IN (1, 2)").foreach { filter =>
+      assert(toJson(filter).isDefined, s"$filter is not pushed down")
+    }
   }
 
   test("tell missing functions from link errors") {
@@ -706,6 +767,22 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     check("The column id has a length of 1, but the batch has a length of 2.", "short" -> "id")
     // Arrow Java would import the missing columns as nulls.
     check("The batch has 0 child arrays, but the schema has 7 columns.", "short" -> "children")
+    // Arrow Java would read a null row of a batch as a row of the values of its columns. The
+    // nulls are counted when the library did not count them.
+    Seq("count", "unknown").foreach { nullRows =>
+      check("The struct of the batch marks 1 of its rows as null, but Spark only reads batches " +
+        "without null rows: mark the values of the columns as null instead.",
+        "null_rows" -> nullRows)
+    }
+    // The C data interface only allows an array without a validity buffer if its null_count is
+    // 0, and Arrow Java would fail to import it.
+    check("The batch has a null_count of -1 but no validity buffer, which the C data interface " +
+      "only allows with a null_count of 0.", "null_rows" -> "no_buffer")
+    check("The column id has a null_count of -1 but no validity buffer, which the C data " +
+      "interface only allows with a null_count of 0.", "null_rows" -> "column")
+    // A batch without null rows is read, also when the library did not count its nulls.
+    checkRows(range(newSession(defaultPackage), "end" -> "4", "null_rows" -> "unknown_valid"),
+      (0L until 4L).map(expectedRow))
     Seq("entries", "values").foreach { array =>
       check("The column m contains an array with a length of 1, but its parent refers to 2 " +
         "values.", "extra" -> "map", "short" -> array)
@@ -901,6 +978,36 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     // Spark aborted the first epoch, with a null message for its task, which did not commit.
     assert(Files.readString(new File(dir, "_ABORTED_0").toPath) == "1")
     assert(!new File(dir, "_EPOCH_0").exists())
+  }
+
+  nativeTest("continuous processing fails with a native data source") {
+    val session = newSession(defaultPackage)
+    val dir = Utils.createTempDir()
+    val e = intercept[Exception] {
+      val query = session.readStream.format("rate").load()
+        .writeStream
+        .format("native_sink")
+        .option("path", dir.getPath)
+        .option("checkpointLocation", Utils.createTempDir().getPath)
+        .trigger(Trigger.Continuous("1 second"))
+        .start()
+      try query.awaitTermination(60000) finally query.stop()
+    }
+    checkError(
+      exception = findError(e, "DATA_SOURCE_CONTINUOUS_WRITE_NOT_SUPPORTED"),
+      condition = "DATA_SOURCE_CONTINUOUS_WRITE_NOT_SUPPORTED",
+      parameters = Map("description" -> "native_sink"))
+    // The query failed before Spark created a writer in the library.
+    assert(!new File(dir, "_CREATED").exists())
+    // A native scan does not report continuous reads, so Spark rejects them when it starts.
+    val readError = intercept[Exception] {
+      session.readStream.format("native_counter").load()
+        .writeStream.format("noop").trigger(Trigger.Continuous("1 second")).start()
+    }
+    checkError(
+      exception = findError(readError, "_LEGACY_ERROR_TEMP_2253"),
+      condition = "_LEGACY_ERROR_TEMP_2253",
+      parameters = Map("sourceName" -> "native_counter"))
   }
 
   nativeTest("streaming read and write") {
@@ -1658,6 +1765,32 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     val session = newSession(first)
     session.addArtifact(first.getPath)
     checkRows(range(session, "end" -> "2"), Seq(expectedRow(0L), expectedRow(1L)))
+  }
+
+  nativeTest("the package that a session added last replaces the other packages") {
+    // A session cannot remove an artifact, nor add another file with the same name, so it
+    // upgrades a package by adding the new version under another file name.
+    val session = newSession(defaultPackage)
+    def ids(): DataFrame = range(session, "end" -> "3").select("id")
+    checkRows(ids(), Seq(Row(0L), Row(1L), Row(2L)))
+    val appender = new LogAppender("replaced packages")
+    withLogAppender(appender) {
+      // It replaces the configured package...
+      val negating = createPackage(renamedNegatingLibrary, dataSources(""),
+        fileName = "range-1.0.sparkpkg")
+      session.addArtifact(negating.getPath)
+      checkRows(ids(), Seq(Row(0L), Row(-1L), Row(-2L)))
+      checkRows(ids(), Seq(Row(0L), Row(-1L), Row(-2L)))
+      // ... and the packages that the session added before.
+      session.addArtifact(createPackage(library, dataSources(""),
+        fileName = "range-1.1.sparkpkg").getPath)
+      checkRows(ids(), Seq(Row(0L), Row(1L), Row(2L)))
+    }
+    // Each replacement is logged once.
+    val logged = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+      .filter(_.contains("which the session added last"))
+    assert(logged.size == 2, logged)
+    assert(logged.forall(_.contains("for the data source native_range")), logged)
   }
 
   nativeTest("Java data sources take precedence") {

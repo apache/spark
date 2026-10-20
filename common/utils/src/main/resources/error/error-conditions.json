@@ -2326,6 +2326,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "DATA_SOURCE_CONTINUOUS_WRITE_NOT_SUPPORTED" : {
+    "message" : [
+      "<description>: Continuous write is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
   "DATA_SOURCE_DELTA_BATCH_WRITE_NOT_SUPPORTED" : {
     "message" : [
       "<description>: Delta batch write is not supported."
@@ -6375,7 +6381,7 @@
   },
   "NATIVE_DATA_SOURCE_PACKAGE_CONFLICT" : {
     "message" : [
-      "More than one native data source package provides the data source <name>: <packages>. Remove all but one of them."
+      "More than one native data source package under `spark.sql.dataSource.native.paths` provides the data source <name>: <packages>. Remove all but one of them."
     ],
     "sqlState" : "42710"
   },
@@ -6388,6 +6394,12 @@
   "NATIVE_DATA_SOURCE_UNSUPPORTED_JAVA_VERSION" : {
     "message" : [
       "Native data sources require Java <required> or later, but Spark runs on Java <current>."
+    ],
+    "sqlState" : "0A000"
+  },
+  "NATIVE_DATA_SOURCE_UNSUPPORTED_PLATFORM" : {
+    "message" : [
+      "Native data sources are not supported on the platform <platform>: the JNI library of the C data interface of Arrow Java, with which Spark exchanges their data, failed to load: <reason>"
     ],
     "sqlState" : "0A000"
   },

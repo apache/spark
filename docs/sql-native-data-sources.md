@@ -43,7 +43,11 @@ Spark calls native data sources with the
 [Foreign Function and Memory API](https://openjdk.org/jeps/454) of Java, which is final from Java
 22, so they require Java 22 or later on the driver and the executors. With an earlier version of
 Java, a query that uses a native data source fails with
-`NATIVE_DATA_SOURCE_UNSUPPORTED_JAVA_VERSION`.
+`NATIVE_DATA_SOURCE_UNSUPPORTED_JAVA_VERSION`. Spark exchanges the data with the C data interface
+of Arrow Java, whose JNI library is available for Linux with glibc and macOS on x86_64 and aarch64,
+and for Windows on x86_64. On other platforms, such as Linux on ppc64le or s390x, or Linux with
+musl, as Alpine Linux, a query that uses a native data source fails with
+`NATIVE_DATA_SOURCE_UNSUPPORTED_PLATFORM`.
 
 ### When to Use a Native Data Source
 
@@ -156,9 +160,11 @@ plan of the query, and evaluates all the pushed predicates again after reading e
 library can use them to skip data, for example files or row groups whose statistics show that no
 row matches, but it must never skip a row for which the predicates are true under the semantics of
 Spark SQL: NaN values are equal to each other and greater than any other value, `-0.0` is equal to
-`0.0`, comparisons with null are null, and strings compare by their UTF-8 bytes. The comparisons of
-IEEE 754 and the total orders of Arrow libraries, such as the comparison kernels of arrow-rs,
-differ for some of these values. The jar of Spark SQL contains test cases for a library,
+`0.0`, comparisons with null are null, strings compare by their UTF-8 bytes, and binary values by
+their unsigned bytes. The comparisons of IEEE 754 and the total orders of Arrow libraries, such as
+the comparison kernels of arrow-rs, differ for some of these values. Spark does not pass
+comparisons and `IN` on arrays, maps and structs, which it compares with other rules, such as the
+nulls in them equal to each other. The jar of Spark SQL contains test cases for a library,
 `org/apache/spark/sql/datasource/predicate-cases.json`: predicates as Spark pushes them, with the
 rows of a table for which they are true:
 
@@ -167,10 +173,12 @@ unzip -p "$SPARK_HOME"/jars/spark-sql_*.jar org/apache/spark/sql/datasource/pred
 ```
 
 The arrays that a library exports must have an offset of 0: copy a sliced array, such as the
-result of `RecordBatch::slice` in arrow-rs, before exporting it. Spark also checks that each array
-has at least as many values as its parent refers to, but it cannot check that the buffers of the
-arrays hold those values, because the C data interface does not carry the sizes of buffers: a
-library that exports a buffer that is too short makes Spark read past its end.
+result of `RecordBatch::slice` in arrow-rs, before exporting it. A batch must have no null rows,
+since Arrow Java ignores the validity of the struct of a batch: mark the values of its columns as
+null instead. Spark also checks that each array has at least as many values as its parent refers
+to, but it cannot check that the buffers of the arrays hold those values, because the C data
+interface does not carry the sizes of buffers: a library that exports a buffer that is too short
+makes Spark read past its end.
 
 `read` and `create_data_writer` get a `SparkDsTaskContext`, with the IDs of the task, and its
 partition and attempt, and an `is_interrupted` function that returns whether the task was killed,
@@ -211,8 +219,9 @@ later as functions or fields appended to the structs of the interface:
   hint. Adaptive query execution can still broadcast it at run time, from the size of a shuffle of
   the scan;
 - custom metrics, shown in the Spark UI;
-- admission control for streaming reads, such as a maximum number of rows for each micro-batch,
-  and continuous streaming;
+- admission control for streaming reads, such as a maximum number of rows for each micro-batch;
+- continuous processing (`Trigger.Continuous`): a continuous query that reads from or writes to a
+  native data source fails when it starts;
 - the pushdown of aggregates and of top-N queries (`ORDER BY` with `LIMIT`), and reporting the
   partitioning and the sort order of the data, with which Spark avoids shuffles and sorts, as in
   storage-partitioned joins;
@@ -315,7 +324,9 @@ is a zip file with the extension `.sparkpkg`, which contains a manifest named
 - `dataSources` lists the names of the data sources that the library implements. The names are
   case-insensitive, and Spark passes the name to `create`.
 - `libraries` maps each platform, `<os>-<arch>` with an `os` of `linux`, `osx` or `windows` and an
-  `arch` of `x86_64` or `aarch64`, to the path of the library in the package.
+  `arch` of `x86_64` or `aarch64`, to the path of the library in the package. `linux` is Linux with
+  glibc: Linux with musl, as Alpine Linux, is `linux-<arch>-musl`, such as `linux-x86_64-musl`, on
+  which native data sources do not run yet.
 
 A session finds the packages in two places, and the executors get them automatically:
 
@@ -331,11 +342,14 @@ A session finds the packages in two places, and the executors get them automatic
   directories it lists, on the driver. A package can be replaced in place: the next queries use
   the new version.
 
-The packages of a session take precedence over the installed libraries. Give packages distinct
-file names, for example with their version: sessions that are not isolated share the files they
-add. Spark ignores, and logs, a package that it cannot read or whose version it does not
-support, unless its manifest lists the data source that a query uses and no other package or
-installed library provides it.
+The packages of a session take precedence over the installed libraries, and the package that a
+session added last over its other packages, also the configured ones: a session cannot remove an
+artifact, or add a file with the same name again, so it upgrades a package by adding the new
+version under another file name, such as `rust_range-1.1.sparkpkg`. Distinct file names are also
+needed because the sessions that are not isolated share the files they add. A query fails if more
+than one configured package provides its data source. Spark ignores, and logs, a package that it
+cannot read or whose version it does not support, unless its manifest lists the data source that a
+query uses and no other package or installed library provides it.
 
 ## Example in Rust
 

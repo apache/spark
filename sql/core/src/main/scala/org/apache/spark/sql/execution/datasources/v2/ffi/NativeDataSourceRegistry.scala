@@ -19,10 +19,11 @@ package org.apache.spark.sql.execution.datasources.v2.ffi
 import java.io.File
 import java.nio.file.Paths
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark.{SparkEnv, SparkFiles}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.PATH
+import org.apache.spark.internal.LogKeys.{DATA_SOURCE, PATH, PATHS}
 import org.apache.spark.sql.Artifact
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -35,7 +36,8 @@ import org.apache.spark.util.Utils
  * automatically, by their file name: the library `spark_datasource_<name>`, such as
  * `libspark_datasource_my_source.so` on Linux, implements the data source `<name>`. The active
  * session can also add packages with `spark.addArtifact`, or with
- * `spark.sql.dataSource.native.paths`, which take precedence over the installed libraries.
+ * `spark.sql.dataSource.native.paths`, which take precedence over the installed libraries. The
+ * package that the session added last takes precedence over the other packages.
  */
 object NativeDataSourceRegistry extends Logging {
 
@@ -57,14 +59,19 @@ object NativeDataSourceRegistry extends Logging {
     if (!conf.getConf(StaticSQLConf.NATIVE_DATA_SOURCE_ENABLED)) {
       return None
     }
-    val (invalid, valid) = (configuredPackageFiles(conf) ++ artifactPackageFiles())
+    val artifacts = artifactPackageFiles()
+    val (invalid, valid) = (configuredPackageFiles(conf) ++ artifacts)
       .map(NativeDataSourcePackage.tryRead).partitionMap(identity)
     // A package of a version of the interface that Spark does not support is unusable too.
     val (unsupported, usable) = valid.partitionMap { pkg =>
       // The version of a package is the oldest that its library implements.
       if (pkg.manifest.abiVersion <= NativeLibrary.ABI_VERSION) Right(pkg) else Left(pkg)
     }
-    lookupPackage(name, usable)
+    // The packages are read from their canonical paths, in the order that the session added them.
+    val addedPaths = artifacts.map(_.getCanonicalPath).toSet
+    val (added, configured) = usable.partition(pkg => addedPaths.contains(pkg.path))
+    lookupAddedPackage(name, added, configured)
+      .orElse(lookupPackage(name, configured))
       .orElse(lookupInstalledLibrary(name))
       .orElse {
         // An unusable package is only reported when no other package or installed library
@@ -105,6 +112,34 @@ object NativeDataSourceRegistry extends Logging {
 
   /** Forgets the result of the last [[lookupForProvider]] on this thread. */
   def clearLookup(): Unit = lastLookup.remove()
+
+  /**
+   * Finds the package that the session added last among those that provide the data source. As
+   * a Python data source that is registered again, it replaces the packages that the session
+   * added before, and the configured ones: a session cannot remove its artifacts, so it upgrades
+   * a package by adding the new version under another file name.
+   */
+  private def lookupAddedPackage(
+      name: String,
+      added: Seq[NativeDataSourcePackage],
+      configured: Seq[NativeDataSourcePackage]): Option[(String, NativeDataSourcePackage)] = {
+    def providers(packages: Seq[NativeDataSourcePackage]): Seq[NativeDataSourcePackage] = {
+      packages.filter(_.manifest.dataSources.exists(_.equalsIgnoreCase(name)))
+    }
+    providers(added).lastOption.map { pkg =>
+      val replaced = (providers(added) ++ providers(configured))
+        .filter(_.sha256 != pkg.sha256).map(_.path).distinct
+      if (replaced.nonEmpty && loggedReplacements.add(pkg.path -> name.toLowerCase(Locale.ROOT))) {
+        logWarning(log"The native data source package ${MDC(PATH, pkg.path)}, which the " +
+          log"session added last, replaces ${MDC(PATHS, replaced.mkString(", "))} for the data " +
+          log"source ${MDC(DATA_SOURCE, name)}.")
+      }
+      pkg.manifest.dataSources.find(_.equalsIgnoreCase(name)).get -> pkg
+    }
+  }
+
+  // The packages that were logged as replacing others for a data source, to only log it once.
+  private val loggedReplacements = ConcurrentHashMap.newKeySet[(String, String)]()
 
   private def lookupPackage(
       name: String,
