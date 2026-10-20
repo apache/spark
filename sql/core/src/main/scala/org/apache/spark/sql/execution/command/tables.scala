@@ -55,6 +55,7 @@ import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.PartitioningUtils
 import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.unsafe.types.TimestampNanosVal
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -915,6 +916,16 @@ case class DescribeColumnCommand(
           .getTimestampFormatter(
             isParsing = false, format = "yyyy-MM-dd HH:mm:ss.SSSSSS Z", zoneId = curZoneId)
           .format(internalValue.asInstanceOf[Long])
+      case t: TimestampLTZNanosType =>
+        // Same rationale as the TimestampType case above: catalog storage is always UTC, so
+        // convert to internal value first, then format in the current session time zone.
+        val internalValue =
+          CatalogColumnStat.fromExternalString(valueStr, name, dataType, CatalogColumnStat.VERSION)
+        val curZoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
+        CatalogColumnStat
+          .getTimestampFormatter(
+            isParsing = false, format = "yyyy-MM-dd HH:mm:ss.SSSSSSSSS Z", zoneId = curZoneId)
+          .formatNanos(internalValue.asInstanceOf[TimestampNanosVal], t.precision)
       case _ =>
         valueStr
     }
