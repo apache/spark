@@ -90,7 +90,8 @@ object WriteDistributionAndOrdering {
    * expression in it fails to render.
    */
   def describeSortOrder(sortOrder: SortOrder): String = {
-    Try(sortOrderToSQL(sortOrder, quoteIfNeeded)).getOrElse(sortOrder.describe)
+    Try(sortOrderToSQL(sortOrder, quoteIfNeeded)).orElse(Try(sortOrder.describe))
+      .getOrElse(sortOrder.getClass.getName)
   }
 
   /**

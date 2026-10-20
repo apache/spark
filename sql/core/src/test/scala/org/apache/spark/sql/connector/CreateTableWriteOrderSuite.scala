@@ -28,10 +28,11 @@ import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlread
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, CreateTableAsSelect, LogicalPlan, ReplaceTable, ReplaceTableAsSelect, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, RangePartitioning}
-import org.apache.spark.sql.connector.catalog.{Column, DelegatingCatalogExtension, DelegatingTable, Identifier, InMemoryRowLevelOperationTableCatalog, InMemoryTable, InMemoryTableCatalog, StagedTable, StagingInMemoryTableCatalog, Table, TableCatalogCapability, TableInfo, WriteDistributionMode}
+import org.apache.spark.sql.connector.catalog.{Column, DelegatingCatalogExtension, DelegatingTable, Identifier, InMemoryRowLevelOperationTableCatalog, InMemoryTable, InMemoryTableCatalog, StagedTable, StagingInMemoryTableCatalog, Table, TableCatalogCapability, TableInfo, Txn, TxnTableCatalog, WriteDistributionMode}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.WriteDistributionMode.{HASH, NONE, RANGE}
+import org.apache.spark.sql.connector.catalog.transactions.{Transaction, TransactionInfo}
 import org.apache.spark.sql.connector.distributions.Distributions
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, Expression, FieldReference, LogicalExpressions, NamedReference, NullOrdering, SortDirection, SortOrder, Transform}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.literal
@@ -525,6 +526,17 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
       assert(catalog.observedTransactions.size === 1)
       assert(calls("txncat") ===
         Seq(WriteSpecCall("createTable", "t", RANGE, Seq("id ASC NULLS FIRST"))))
+    }
+  }
+
+  test("a transactional catalog is checked through the catalog of its transaction") {
+    val catalogClass = classOf[TxnCatalogWithoutCapability].getName
+    withSQLConf("spark.sql.catalog.txncat" -> catalogClass) {
+      checkUnsupported(
+        "CREATE TABLE txncat.t USING foo ORDERED BY id AS SELECT 1 AS id",
+        "`txncat`.`t`",
+        "CREATE TABLE AS SELECT")
+      assert(calls("txncat").isEmpty)
     }
   }
 
@@ -1128,6 +1140,24 @@ class RecordingTransactionalTableCatalog
   override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
     record("createTable", ident, tableInfo)
     super.createTable(ident, tableInfo)
+  }
+}
+
+/**
+ * The same, but the catalog of its transaction does not report the capability, so only a check
+ * made through that catalog rejects a request.
+ */
+class TxnCatalogWithoutCapability extends RecordingTransactionalTableCatalog {
+
+  override def beginTransaction(info: TransactionInfo): Transaction = {
+    val txn = new Txn(new TxnTableCatalog(this) {
+      override def capabilities: util.Set[TableCatalogCapability] = {
+        (super.capabilities.asScala.toSet -
+          TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_WRITE_DISTRIBUTION_AND_ORDERING).asJava
+      }
+    })
+    transaction = txn
+    txn
   }
 }
 
