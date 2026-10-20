@@ -23,7 +23,7 @@ import java.time.{Duration, Period}
 
 import org.apache.hadoop.fs.{FileAlreadyExistsException, FSDataOutputStream, Path, RawLocalFileSystem}
 
-import org.apache.spark.{SparkArithmeticException, SparkException, SparkRuntimeException}
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkRuntimeException, SparkThrowable}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
@@ -3117,6 +3117,52 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         // The table path must survive a failed overwrite.
         assert(new java.io.File(tablePath).exists(),
           "Table path should not be permanently lost after a failed INSERT OVERWRITE")
+      }
+    }
+  }
+
+  Seq(
+    // Rejected by the data schema check of FileFormatWriter.
+    ("an unsupported data type", "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+      (dir: String) => Seq(1 -> Map("a" -> 1)).toDF("id", "m").write.mode("overwrite").csv(dir)),
+    // Rejected by the write option check of ParquetFileFormat.prepareWrite.
+    ("an invalid write option", "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
+      (dir: String) =>
+        spark.range(5).write.mode("overwrite").option("compression", "bogus").parquet(dir)),
+    ("an invalid INSERT OVERWRITE DIRECTORY option",
+      "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
+      (dir: String) => sql(s"INSERT OVERWRITE DIRECTORY '$dir' USING parquet " +
+        "OPTIONS (compression 'bogus') SELECT 5L AS id")),
+    // Rejected by BinaryFileFormat.prepareWrite, as the format does not support writes.
+    ("a format that does not support writes", "UNSUPPORTED_FEATURE.WRITE_FOR_BINARY_SOURCE",
+      (dir: String) => spark.range(5).write.mode("overwrite").format("binaryFile").save(dir))
+  ).foreach { case (reason, condition, overwrite) =>
+    test(s"SPARK-60360: overwrite keeps the existing data when it fails on $reason") {
+      withTempPath { path =>
+        val dir = path.getCanonicalPath
+        spark.range(3).write.parquet(dir)
+        assert(intercept[SparkThrowable](overwrite(dir)).getCondition === condition)
+        checkAnswer(spark.read.parquet(dir), spark.range(3).toDF())
+      }
+    }
+  }
+
+  test("SPARK-60360: INSERT OVERWRITE keeps the existing partitions when it fails on " +
+      "an invalid write option") {
+    withTable("t") {
+      sql("CREATE TABLE t (i INT, p INT) USING parquet PARTITIONED BY (p)")
+      sql("INSERT INTO t VALUES (1, 1), (2, 2)")
+      Seq(PartitionOverwriteMode.STATIC, PartitionOverwriteMode.DYNAMIC).foreach { mode =>
+        withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> mode.toString) {
+          Seq(
+            "INSERT OVERWRITE t WITH ('compression' = 'bogus') PARTITION (p = 1) SELECT 3",
+            "INSERT OVERWRITE t WITH ('compression' = 'bogus') SELECT 3, 1"
+          ).foreach { insert =>
+            assert(intercept[SparkThrowable](sql(insert)).getCondition ===
+              "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION")
+            checkAnswer(spark.table("t"), Seq(Row(1, 1), Row(2, 2)))
+          }
+        }
       }
     }
   }
