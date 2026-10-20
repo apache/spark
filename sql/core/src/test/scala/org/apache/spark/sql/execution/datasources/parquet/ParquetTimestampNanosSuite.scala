@@ -315,7 +315,7 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
     // scan reads more than the matching rows but fewer than all rows) and (b) the full query result
     // equals reading the same predicate with pushdown disabled. Record-level filtering is disabled
     // so ONLY row-group-level skipping is exercised; the non-vectorized reader is used so
-    // `stripSparkFilter` reflects exactly what Parquet returned.
+    // `stripSparkFilter` reflects exactly what Parquet returned. (a) holds only for precision 9.
     withNanosEnabled {
       Seq(7, 8, 9).foreach { p =>
         val frac = "000000123".take(p)
@@ -341,15 +341,20 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
 
             // Row-group-level skipping: with record filtering off, a stripped scan returns whole
             // surviving row groups. Fewer than all rows (skipping happened) but more than the one
-            // matching row (record filtering is off).
+            // matching row (record filtering is off). Below precision 9, the filter is not pushed
+            // down because the reader truncates the stored values to the read precision.
             withSQLConf(
               SQLConf.PARQUET_RECORD_FILTER_ENABLED.key -> "false",
               SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
               SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
               val df = spark.read.parquet(path).filter(predicate)
               val actual = stripSparkFilter(df).collect().length
-              assert(actual > 1 && actual < 1024,
-                s"Expected row-group skipping (p=$p, $kind) but scanned $actual of 1024 rows.")
+              if (p == 9) {
+                assert(actual > 1 && actual < 1024,
+                  s"Expected row-group skipping (p=$p, $kind) but scanned $actual of 1024 rows.")
+              } else {
+                assert(actual === 1024, s"Expected no row-group skipping (p=$p, $kind).")
+              }
             }
 
             // Results must be identical whether or not the filter is pushed to Parquet.
