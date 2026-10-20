@@ -436,8 +436,8 @@ object ExtractSingleColumnNullAwareAntiJoin extends JoinSelectionHelper with Pre
  * per candidate.
  */
 object ExtractRangeJoinKeys extends PredicateHelper {
-  type ReturnType = (LogicalPlan, LogicalPlan, Seq[Expression], Seq[Expression],
-    JoinType, RangeJoin)
+  type ReturnType = (JoinType, Seq[Expression], Seq[Expression],
+    RangeJoin, LogicalPlan, LogicalPlan)
 
   def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
     case Join(left, right, joinType, Some(condition), _) =>
@@ -485,7 +485,7 @@ object ExtractRangeJoinKeys extends PredicateHelper {
           place(keysA, keysB, left, right).filter { case (l, r) =>
             supportedKeys(l, r)
           }.map { case (leftKeys, rightKeys) =>
-            (left, right, leftKeys, rightKeys, joinType, rangeJoin)
+            (joinType, leftKeys, rightKeys, rangeJoin, left, right)
           }
         }
       case _ => None
@@ -565,7 +565,7 @@ object ExtractRangeJoinKeys extends PredicateHelper {
           } else {
             GreaterPartialRangeJoin
           }
-          (left, right, leftKeys, rightKeys, joinType, rangeJoin)
+          (joinType, leftKeys, rightKeys, rangeJoin, left, right)
         }
       }
     }.nextOption()

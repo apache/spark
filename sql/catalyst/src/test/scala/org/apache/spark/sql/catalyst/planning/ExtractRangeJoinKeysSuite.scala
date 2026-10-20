@@ -54,7 +54,7 @@ class ExtractRangeJoinKeysSuite extends PlanTest {
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression]): Unit = {
     join(left, right, cond) match {
-      case ExtractRangeJoinKeys(_, _, actualLeft, actualRight, _, rangeJoin) =>
+      case ExtractRangeJoinKeys(_, actualLeft, actualRight, rangeJoin, _, _) =>
         assert(rangeJoin === expected)
         assert(actualLeft === leftKeys)
         assert(actualRight === rightKeys)
