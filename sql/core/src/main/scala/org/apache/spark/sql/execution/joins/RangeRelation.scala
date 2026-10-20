@@ -176,11 +176,11 @@ private[joins] object RangeIndex {
    * both sides of a range predicate one type after analysis, so testing the
    * build keys also settles the streamed keys.
    */
-  private[execution] def canMapKeysToLong(keys: Seq[Expression]): Boolean =
+  def canMapKeysToLong(keys: Seq[Expression]): Boolean =
     keys.forall(k => longKey(k.dataType).isDefined)
 
   /** longKey for a type the caller has routed to the long family. */
-  private[execution] def requiredLongKey(dt: DataType): LongKey = {
+  def requiredLongKey(dt: DataType): LongKey = {
     longKey(dt).getOrElse(
       throw new IllegalStateException(s"$dt has no order-preserving long key."))
   }
