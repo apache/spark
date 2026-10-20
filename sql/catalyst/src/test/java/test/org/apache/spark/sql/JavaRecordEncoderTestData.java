@@ -54,6 +54,22 @@ public class JavaRecordEncoderTestData {
   public record NonnullRecord(@Nonnull String name, @Nonnull Integer count, String note)
       implements Serializable {}
 
+  // @Nonnull on the component with an explicit accessor (`name`), and on the accessor only
+  // (`count`). Java doesn't copy component annotations onto explicit accessors.
+  public record NonnullExplicitAccessorRecord(@Nonnull String name, Integer count, String note)
+      implements Serializable {
+    @Override
+    public String name() {
+      return name;
+    }
+
+    @Override
+    @Nonnull
+    public Integer count() {
+      return count;
+    }
+  }
+
   // Only components become fields; getB() and CONSTANT are ignored.
   public record WithExtraMethods(int a) {
     public static final int CONSTANT = 1;

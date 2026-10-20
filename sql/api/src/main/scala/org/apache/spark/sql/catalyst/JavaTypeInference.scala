@@ -212,8 +212,10 @@ object JavaTypeInference {
     val fields = recordClass.getRecordComponents.map { component =>
       val accessor = component.getAccessor
       val encoder = encoderFor(component.getGenericType, seenTypeSet + recordClass, typeVariables)
-      // The existence of `javax.annotation.Nonnull` means this component is not nullable.
-      val hasNonNull = accessor.isAnnotationPresent(classOf[Nonnull])
+      // `javax.annotation.Nonnull` on the component means it is not nullable. An explicitly
+      // declared accessor can also be annotated on its own, so check it too.
+      val hasNonNull = component.isAnnotationPresent(classOf[Nonnull]) ||
+        accessor.isAnnotationPresent(classOf[Nonnull])
       EncoderField(
         component.getName,
         encoder,

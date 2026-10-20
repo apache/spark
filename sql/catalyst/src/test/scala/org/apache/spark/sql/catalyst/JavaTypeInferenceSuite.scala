@@ -365,6 +365,14 @@ class JavaTypeInferenceSuite extends SparkFunSuite {
         recordField("note", StringEncoder))))
   }
 
+  test("SPARK-55396: @Nonnull on a record component or an explicit accessor") {
+    assert(JavaTypeInference.encoderFor(classOf[NonnullExplicitAccessorRecord]) ===
+      JavaRecordEncoder(ClassTag(classOf[NonnullExplicitAccessorRecord]), Seq(
+        recordField("name", StringEncoder, nullable = Some(false)),
+        recordField("count", BoxedIntEncoder, nullable = Some(false)),
+        recordField("note", StringEncoder))))
+  }
+
   test("SPARK-55396: only record components become fields") {
     assert(JavaTypeInference.encoderFor(classOf[WithExtraMethods]) ===
       JavaRecordEncoder(ClassTag(classOf[WithExtraMethods]), Seq(

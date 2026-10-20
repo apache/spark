@@ -107,18 +107,22 @@ class JavaRecordEncoderSuite extends CodegenInterpretedPlanTest {
   }
 
   test("null in a @Nonnull reference component fails to decode") {
-    // Decode from a schema where every column is nullable, as when reading arbitrary data.
-    val encoder = encoderFor(Encoders.record(classOf[NonnullRecord]))
-    val attrs = toAttributes(encoder.schema).map(_.withNullability(true))
-    val deserializer = encoder.resolveAndBind(attrs).createDeserializer()
     val note = UTF8String.fromString("n")
-    assert(deserializer(InternalRow(UTF8String.fromString("a"), 1, null)) ===
-      new NonnullRecord("a", 1, null))
-    Seq(InternalRow(null, 1, note), InternalRow(UTF8String.fromString("a"), null, note)).foreach {
-      row =>
-        val e = intercept[SparkRuntimeException](deserializer(row))
-        assert(e.getCondition === "NOT_NULL_ASSERT_VIOLATION")
+    def check[T](cls: Class[T], valid: T): Unit = {
+      // Decode from a schema where every column is nullable, as when reading arbitrary data.
+      val encoder = encoderFor(Encoders.record(cls))
+      val attrs = toAttributes(encoder.schema).map(_.withNullability(true))
+      val deserializer = encoder.resolveAndBind(attrs).createDeserializer()
+      assert(deserializer(InternalRow(UTF8String.fromString("a"), 1, null)) === valid)
+      Seq(InternalRow(null, 1, note), InternalRow(UTF8String.fromString("a"), null, note))
+        .foreach { row =>
+          val e = intercept[SparkRuntimeException](deserializer(row))
+          assert(e.getCondition === "NOT_NULL_ASSERT_VIOLATION")
+        }
     }
+    check(classOf[NonnullRecord], new NonnullRecord("a", 1, null))
+    // @Nonnull on the component with an explicit accessor, and on an explicit accessor only.
+    check(classOf[NonnullExplicitAccessorRecord], new NonnullExplicitAccessorRecord("a", 1, null))
   }
 
   test("exceptions from the canonical constructor propagate") {
