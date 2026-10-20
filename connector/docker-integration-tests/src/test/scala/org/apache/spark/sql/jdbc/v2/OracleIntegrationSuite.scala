@@ -18,6 +18,7 @@
 package org.apache.spark.sql.jdbc.v2
 
 import java.sql.Connection
+import java.time.LocalDateTime
 import java.util.Locale
 
 import scala.util.Using
@@ -25,8 +26,10 @@ import scala.util.Using
 import org.apache.spark.{SparkConf, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.OracleDatabaseOnDocker
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
@@ -184,6 +187,19 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
 
   override def caseConvert(tableName: String): String = tableName.toUpperCase(Locale.ROOT)
 
+  test("SPARK-58876: a V2 NTZ read planned before a legacy flag flip still reads wall-clock") {
+    val table = s"$catalogName.${namespaceOpt.get}.${caseConvert("datetime")}"
+    withDefaultTimeZone(LA) {
+      val df = withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "false") {
+        sql(s"SELECT time1 FROM $table WHERE name = 'amy'")
+      }
+      assert(df.schema.head.dataType === TimestampNTZType)
+      withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
+        assert(df.collect().head.get(0) === LocalDateTime.of(2022, 5, 19, 0, 0, 0))
+      }
+    }
+  }
+
   test("SPARK-46478: Revert SPARK-43049 to use varchar(255) for string") {
     val tableName = catalogName + ".t1"
     withTable(tableName) {
@@ -230,6 +246,11 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
         "CREATE SYNONYM func_synonym FOR broken_func"),
       objectName = "FUNC_SYNONYM",
       teardown = Seq("DROP SYNONYM func_synonym", "DROP FUNCTION broken_func")),
+    "synonym -> missing target (ORA-00980)" -> NonSelectableObjectCase(
+      // Oracle does not validate the target on CREATE SYNONYM; SELECT raises ORA-00980.
+      setup = Seq("CREATE SYNONYM broken_synonym FOR non_existent_table_xyz"),
+      objectName = "BROKEN_SYNONYM",
+      teardown = Seq("DROP SYNONYM broken_synonym")),
     "invalid view (ORA-04063)" -> NonSelectableObjectCase(
       // FORCE-create a view over a missing table -> view is INVALID; SELECT raises ORA-04063.
       setup = Seq("CREATE FORCE VIEW invalid_view AS SELECT * FROM non_existent_table_xyz"),

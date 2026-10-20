@@ -16,7 +16,10 @@
  */
 package org.apache.spark.sql.execution.python
 
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util
+
+import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector._
@@ -119,9 +122,13 @@ private class ArrowBackedScanBuilder(options: CaseInsensitiveStringMap)
 
   private val columnar =
     options.getBoolean("columnar", true)
+  private val reuseVectors =
+    options.getBoolean("reuseVectors", false)
+  private val batchSize =
+    options.getInt("batchSize", ArrowBackedDataSourceV2.BATCH_SIZE)
 
   override def createReaderFactory(): PartitionReaderFactory = {
-    new ArrowBackedReaderFactory(columnar)
+    new ArrowBackedReaderFactory(columnar, reuseVectors, batchSize)
   }
 }
 
@@ -137,8 +144,11 @@ private case class ArrowPartition(start: Int, end: Int)
  *   This allows benchmarking the same data source with and without
  *   the columnar optimization.
  */
-private class ArrowBackedReaderFactory(columnar: Boolean)
-    extends PartitionReaderFactory {
+private class ArrowBackedReaderFactory(
+    columnar: Boolean,
+    reuseVectors: Boolean,
+    batchSize: Int)
+  extends PartitionReaderFactory {
 
   override def supportColumnarReads(
       partition: InputPartition): Boolean = columnar
@@ -146,7 +156,7 @@ private class ArrowBackedReaderFactory(columnar: Boolean)
   override def createReader(
       partition: InputPartition): PartitionReader[InternalRow] = {
     val ArrowPartition(start, end) = partition
-    val inner = new ArrowBackedPartitionReader(start, end)
+    val inner = new ArrowBackedPartitionReader(start, end, batchSize)
     // Wrap columnar reader as row reader.
     new PartitionReader[InternalRow] {
       private var rowIter: java.util.Iterator[InternalRow] = _
@@ -164,7 +174,58 @@ private class ArrowBackedReaderFactory(columnar: Boolean)
   override def createColumnarReader(
       partition: InputPartition): PartitionReader[ColumnarBatch] = {
     val ArrowPartition(start, end) = partition
-    new ArrowBackedPartitionReader(start, end)
+    if (reuseVectors) {
+      new ReusingArrowPartitionReader(start, end, batchSize)
+    } else {
+      new ArrowBackedPartitionReader(start, end, batchSize)
+    }
+  }
+}
+
+/**
+ * Reads the same rows as [[ArrowBackedPartitionReader]], with short values in `data`, but refills
+ * the same vectors for every batch and closes them once the reader is closed, as columnar readers
+ * may: a batch is only valid until the next one.
+ */
+private class ReusingArrowPartitionReader(start: Int, end: Int, batchSize: Int)
+    extends PartitionReader[ColumnarBatch] {
+  private var current = start
+  private val allocator = ArrowUtils.rootAllocator.newChildAllocator(
+    s"reusing-arrow-test-reader-$start", 0, Long.MaxValue)
+  private val root = VectorSchemaRoot.create(
+    ArrowUtils.toArrowSchema(ArrowBackedDataSourceV2.SCHEMA, null,
+      errorOnDuplicatedFieldNames = true, largeVarTypes = false),
+    allocator)
+  private val batch = new ColumnarBatch(
+    root.getFieldVectors.asScala.map(new ArrowColumnVector(_): ColumnVector).toArray)
+
+  override def next(): Boolean = {
+    if (current >= end) return false
+    val count = math.min(batchSize, end - current)
+    val id = root.getVector("id").asInstanceOf[IntVector]
+    val name = root.getVector("name").asInstanceOf[VarCharVector]
+    val value = root.getVector("value").asInstanceOf[Float8Vector]
+    val data = root.getVector("data").asInstanceOf[VarCharVector]
+    // Overwrites the values of the previous batch in place.
+    root.getFieldVectors.forEach(_.reset())
+    (0 until count).foreach { i =>
+      val row = current + i
+      id.setSafe(i, row)
+      name.setSafe(i, s"row_$row".getBytes(UTF_8))
+      value.setSafe(i, row * 0.1)
+      data.setSafe(i, s"data_$row".getBytes(UTF_8))
+    }
+    root.setRowCount(count)
+    batch.setNumRows(count)
+    current += count
+    true
+  }
+
+  override def get(): ColumnarBatch = batch
+
+  override def close(): Unit = {
+    root.close()
+    allocator.close()
   }
 }
 
@@ -176,10 +237,9 @@ private class ArrowBackedReaderFactory(columnar: Boolean)
  * - name (STRING): "row_<id>"
  * - value (DOUBLE): id * 0.1
  */
-private class ArrowBackedPartitionReader(start: Int, end: Int)
+private class ArrowBackedPartitionReader(start: Int, end: Int, batchSize: Int)
     extends PartitionReader[ColumnarBatch] {
 
-  private val batchSize = ArrowBackedDataSourceV2.BATCH_SIZE
   private var current = start
   private var currentBatch: ColumnarBatch = _
 

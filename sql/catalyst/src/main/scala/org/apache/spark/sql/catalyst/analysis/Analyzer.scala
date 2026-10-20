@@ -59,10 +59,10 @@ import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, ProcedureParameter, UnboundProcedure}
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation}
+import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation, ExtractV2Table}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PartitionOverwriteMode, StoreAssignmentPolicy}
-import org.apache.spark.sql.internal.connector.V1Function
+import org.apache.spark.sql.internal.connector.{SchemaAlignmentConfig, SupportsConfigurableSchemaAlignment, V1Function}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -326,13 +326,30 @@ object Analyzer {
       newConf: SQLConf,
       existingConf: SQLConf,
       createSparkVersion: String = ""): Unit = {
-    existingConf.getAllConfs.foreach { case (key, value) =>
-      if (key.startsWith("spark.sql.catalog.") || SQLConf.isSessionBindingPolicy(key)) {
-        newConf.settings.put(key, value)
+    // The retained configs are memoized on `existingConf` unless
+    // `ANALYZER_MEMOIZE_RETAINED_RESOLUTION_CONFIGS` is off, which recomputes them on every build.
+    if (existingConf.getConf(SQLConf.ANALYZER_MEMOIZE_RETAINED_RESOLUTION_CONFIGS)) {
+      newConf.settings.putAll(existingConf.retainedResolutionConfigs)
+    } else {
+      existingConf.getAllConfs.foreach { case (key, value) =>
+        if (bodyFollowsCaller(key)) {
+          newConf.settings.put(key, value)
+        }
       }
     }
 
     trySetAnsiValue(newConf, createSparkVersion)
+  }
+
+  /**
+   * True if `retainResolutionConfigsForAnalysis` overlays the caller's explicitly set value for
+   * `key` onto a view or SQL function body conf, replacing any value saved with the body. These
+   * are the catalog configs and the SQL configs bound SESSION or NOT_APPLICABLE. Keys the caller
+   * has not set keep their saved values, and confs built without that method do not consult this
+   * predicate.
+   */
+  def bodyFollowsCaller(key: String): Boolean = {
+    key.startsWith("spark.sql.catalog.") || SQLConf.isSessionBindingPolicy(key)
   }
 
   /**
@@ -3635,7 +3652,9 @@ class Analyzer(
      *          seq of non-window expressions)
      */
     private def extract(
-        expressions: Seq[NamedExpression]): (Seq[NamedExpression], Seq[NamedExpression]) = {
+        expressions: Seq[NamedExpression],
+        groupExpressions: Seq[Expression] = Nil)
+      : (Seq[NamedExpression], Seq[NamedExpression]) = {
       // First, we partition the input expressions to two part. For the first part,
       // every expression in it contain at least one WindowExpression.
       // Expressions in the second part do not have any WindowExpression.
@@ -3716,6 +3735,16 @@ class Analyzer(
           case agg: AggregateExpression if !seenWindowAggregates.contains(agg) =>
             extractedExprMap.getOrElseUpdate(agg.canonicalized,
               Alias(agg, s"_w${extractedExprMap.size}")()).toAttribute
+
+          // Extracts a non-window sub-expression that matches a grouping expression as a whole
+          // (e.g. UPPER(country) when the query groups by UPPER(country)). Without this, the
+          // transform would descend into it and extract its underlying attributes (e.g. country),
+          // which are not part of the GROUP BY clause and would make the child Aggregate invalid
+          // (SPARK-59175). Bare grouping attributes are left to the `Attribute` case below.
+          case e: Expression
+              if !e.isInstanceOf[Attribute] && !e.foldable && !hasWindowFunction(e) &&
+                groupExpressions.exists(_.semanticEquals(e)) =>
+            getOrExtract(e, e)
 
           // Extracts other attributes
           case attr: Attribute => extractExpr(attr)
@@ -3823,7 +3852,7 @@ class Analyzer(
             throw QueryCompilationErrors.lateralColumnAliasInAggWithWindowAndHavingUnsupportedError(
               lcaRef.nameParts)
         })
-        val (windowExpressions, aggregateExpressions) = extract(aggregateExprs)
+        val (windowExpressions, aggregateExpressions) = extract(aggregateExprs, groupingExprs)
         // Create an Aggregate operator to evaluate aggregation functions.
         val withAggregate = Aggregate(groupingExprs, aggregateExpressions, child)
         // Add a Filter operator for conditions in the Having clause.
@@ -3842,7 +3871,7 @@ class Analyzer(
         if hasWindowFunction(aggregateExprs) &&
           a.expressions.forall(_.resolved) &&
           !aggregateExprs.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
-        val (windowExpressions, aggregateExpressions) = extract(aggregateExprs)
+        val (windowExpressions, aggregateExpressions) = extract(aggregateExprs, groupingExprs)
         // Create an Aggregate operator to evaluate aggregation functions.
         val withAggregate = Aggregate(groupingExprs, aggregateExpressions, child)
         // Add Window operators.
@@ -4053,16 +4082,23 @@ class Analyzer(
           case r: DataSourceV2Relation => GeneratedColumn.attachGenerationExpressions(r)
           case _ => v2Write.table.output
         }
+        val schemaAlignmentConfig = v2Write.table match {
+          case ExtractV2Table(table: SupportsConfigurableSchemaAlignment) =>
+            table.schemaAlignmentConfig()
+          case _ => SchemaAlignmentConfig.DEFAULT
+        }
         val (projection, autoFilledGenCols) =
           TableOutputResolver.resolveOutputColumnsWithGeneratedInfo(
             v2Write.table.name, expected, v2Write.query, v2Write.isByName, conf,
-            defaultValueFillMode)
+            defaultValueFillMode, schemaAlignmentConfig.ansiStoreAssignmentCastCheck())
         if (projection != v2Write.query) {
           val cleanedTable = v2Write.table match {
             case r: DataSourceV2Relation =>
               val cleaned = r.output.map(CharVarcharUtils.cleanAttrMetadata)
-              r.copy(output =
+              val cleanedRelation = r.copy(output =
                 GeneratedColumn.markAutoFilledGeneratedColumns(cleaned, autoFilledGenCols))
+              cleanedRelation.copyTagsFrom(r)
+              cleanedRelation
             case other => other
           }
           v2Write.withNewQuery(projection).withNewTable(cleanedTable)
@@ -4086,8 +4122,6 @@ class Analyzer(
       joinNames: Seq[String],
       condition: Option[Expression],
       hint: JoinHint): LogicalPlan = {
-    import org.apache.spark.sql.catalyst.util._
-
     val (projectList, hiddenList, newCondition) =
       NaturalAndUsingJoinResolution.computeJoinOutputsAndNewCondition(
         left,
@@ -4100,14 +4134,12 @@ class Analyzer(
         (attributeName, keyName) => resolver(attributeName, keyName)
       )
 
-    // use Project to hide duplicated common keys
-    // propagate hidden columns from nested USING/NATURAL JOINs
-    val project = Project(projectList, Join(left, right, joinType, newCondition, hint))
-    project.setTagValue(
-      Project.hiddenOutputTag,
-      hiddenList.map(_.markAsQualifiedAccessOnly()) ++
-        project.child.metadataOutput.filter(_.qualifiedAccessOnly))
-    project
+    val join = Join(left, right, joinType, newCondition, hint)
+    NaturalAndUsingJoinResolution.buildUsingJoinProject(
+      projectList,
+      hiddenList,
+      join,
+      join.metadataOutput)
   }
 
   /**

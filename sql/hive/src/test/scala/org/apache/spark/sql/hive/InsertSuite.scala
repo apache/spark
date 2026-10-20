@@ -24,8 +24,9 @@ import java.util.Locale
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.{QueryTest, _}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.Hex
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.hive.execution.HiveTempPath
@@ -50,6 +51,27 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter {
     hiveContext.reset()
     // Creates a temporary view with testData, which will be used in all tests.
     testData.createOrReplaceTempView("testData")
+  }
+
+  test("SPARK-60366: Dynamic partition overwrite of a converted Hive ORC table with a " +
+      "committer that is not a FileOutputCommitter") {
+    // Hadoop 3.3.5+ binds `abfs` and `gs` to the manifest committer. Converted Hive ORC tables
+    // always use dynamic partition overwrite.
+    withSQLConf(
+        "mapreduce.outputcommitter.factory.scheme.file" ->
+          "org.apache.hadoop.mapreduce.lib.output.committer.manifest.ManifestCommitterFactory",
+        "hive.exec.dynamic.partition.mode" -> "nonstrict") {
+      withTable("t") {
+        sql("CREATE TABLE t (c1 INT) PARTITIONED BY (p1 INT) STORED AS ORC")
+        sql("INSERT INTO t PARTITION (p1) VALUES (1, 1), (2, 2)")
+        val location = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t")).location
+        // Unlike FileOutputCommitter, the manifest committer writes a JSON summary.
+        assert(new File(location.getPath, "_SUCCESS").length() > 0)
+
+        sql("INSERT OVERWRITE TABLE t PARTITION (p1) SELECT 3, 1")
+        checkAnswer(spark.table("t"), Seq(Row(3, 1), Row(2, 2)))
+      }
+    }
   }
 
   test("insertInto() HiveTable") {
@@ -1036,6 +1058,22 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter {
     withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "true",
       SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "true") {
       testDefaultColumn
+    }
+  }
+
+  test("SPARK-60360: INSERT OVERWRITE into a converted table keeps the existing data when " +
+      "it fails on an invalid write option") {
+    Seq("parquet" -> "parquet.compression", "orc" -> "orc.compress").foreach {
+      case (format, compressionProperty) =>
+        withTable("t") {
+          sql(s"CREATE TABLE t (id INT) STORED AS $format")
+          sql("INSERT INTO t VALUES (1)")
+          sql(s"ALTER TABLE t SET TBLPROPERTIES ('$compressionProperty' = 'bogus')")
+          assert(intercept[SparkThrowable](sql("INSERT OVERWRITE TABLE t SELECT 2"))
+            .getCondition === "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION")
+          sql(s"ALTER TABLE t UNSET TBLPROPERTIES ('$compressionProperty')")
+          checkAnswer(spark.table("t"), Row(1))
+        }
     }
   }
 }

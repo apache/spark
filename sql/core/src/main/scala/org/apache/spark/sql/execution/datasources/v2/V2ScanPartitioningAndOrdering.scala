@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, COLUMN_NAMES, RELATION_NAME}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.V2ExpressionUtils
+import org.apache.spark.sql.catalyst.expressions.{AliasHelper, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.DATA_SOURCE_V2_SCAN_RELATION
@@ -35,7 +35,7 @@ import org.apache.spark.util.collection.Utils.sequenceToOption
  * and ordering reported by data sources to their catalyst counterparts. Then, annotates the plan
  * with the partitioning and ordering result.
  */
-object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with Logging {
+object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with AliasHelper with Logging {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     val scanRules = Seq[LogicalPlan => LogicalPlan] (partitioning, ordering)
 
@@ -95,17 +95,23 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with Logging {
           log"Spark ignores the ordering reported by ${MDC(RELATION_NAME, relation.name)} " +
             log"(scan ${MDC(CLASS_NAME, scan.getClass.getName)}) because the ordering columns " +
             log"cannot be resolved: ${MDC(COLUMN_NAMES, unresolvedColumns.mkString(", "))}.")
-        // Use None, not Some(Nil): only None lets DataSourceV2ScanExecBase.outputOrdering derive an
-        // ordering from a kept key-grouped partitioning, which does not depend on the dropped
-        // report.
+        // `None` and `Some(Nil)` mean the same to DataSourceV2ScanExecBase.outputOrdering, which
+        // can still derive an ordering from a kept key-grouped partitioning.
         d.copy(ordering = None)
       } else {
         // The ordering is kept as reported, even where it references columns pruned out of the
         // scan output: truncating it here would also drop the sort orders on a partition key past a
         // pruned column, which still hold. `DataSourceV2ScanRelation.doCanonicalize` and
-        // `DataSourceV2ScanExecBase.outputOrdering` restrict it to the scan output instead.
+        // `DataSourceV2ScanExecBase.outputOrdering` restrict it to the scan output instead, by
+        // different rules. `doCanonicalize` only feeds plan equality, so a plain `takeWhile` that
+        // drops the pruned columns is enough there.
+        // A nested sort key such as `s.x` resolves to a new `Alias(GetStructField(...))` on every
+        // run of this rule. Strip the alias so repeated runs give equal plans and, when the scan
+        // reads the whole struct, the ordering can satisfy a required ordering on the same field
+        // (see SPARK-60011).
         val ordering =
           V2ExpressionUtils.toCatalystOrdering(reportedOrdering, relation, relation.funCatalog)
+            .map(o => o.copy(child = trimAliases(o.child)))
         d.copy(ordering = Some(ordering))
       }
   }

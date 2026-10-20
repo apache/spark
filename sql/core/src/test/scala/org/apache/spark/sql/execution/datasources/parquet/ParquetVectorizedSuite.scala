@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.io.IOException
 import java.util.{Optional, PrimitiveIterator}
 
 import scala.collection.mutable.ArrayBuffer
@@ -54,6 +55,11 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
   private val NUM_VALUES: Int = VALUES.length
   private val BATCH_SIZE_CONFIGS: Seq[Int] = Seq(1, 3, 5, 7, 10, 20, 40)
   private val PAGE_SIZE_CONFIGS: Seq[Seq[Int]] = Seq(Seq(6, 6, 7, 7), Seq(4, 9, 4, 9))
+  // The definition levels of 4 non-null values: the length 2, then an RLE run of 4 x 1.
+  private val fourNonNullValues = Array[Byte](2, 0, 0, 0, 4 << 1, 1)
+  // One non-null value: the definition levels (length 2, an RLE run of 1 x 1), then the
+  // dictionary ids (bit width 2, an RLE run of 1 x 0).
+  private val oneValueWithDictionaryId0 = Array[Byte](2, 0, 0, 0, 2, 1, 2, 2, 0)
 
   implicit def toStrings(ints: Seq[Int]): Seq[String] = ints.map(i => ('a' + i).toChar.toString)
 
@@ -524,6 +530,122 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-59832: a corrupted dictionary page reports the column") {
+    // A PLAIN INT32 dictionary page that declares 3 entries but holds only 2.
+    val e = readCorruptedPage("int32", Some(new DictionaryPage(
+      BytesInput.from(Array[Byte](1, 0, 0, 0, 2, 0, 0, 0)), 3, Encoding.PLAIN_DICTIONARY)),
+      oneValueWithDictionaryId0, 1, Encoding.RLE_DICTIONARY)
+    assert(e.getMessage.contains("could not decode the dictionary for [a]"), e.getMessage)
+    assert(e.getMessage.contains(e.getCause.getMessage), e.getMessage)
+    assert(e.getCause.isInstanceOf[ParquetDecodingException], e)
+  }
+
+  test("SPARK-60262: a column requested twice fails instead of leaving a vector unwritten") {
+    // The requested schema lists column `a` twice, as it would if two requested fields selected
+    // it, one by field id and one by name. Parquet's own page stores hand out a single page reader
+    // per column, which every reader of that column shares, so the reader of the first copy drains
+    // the pages and the reader of the second finds none. `MemPageStore` would give each its own.
+    val fileSchema = MessageTypeParser.parseMessageType("message root { optional int32 a; }")
+    val requestedSchema = MessageTypeParser.parseMessageType(
+      "message root { optional int32 a; optional int32 a; }")
+    val ty = fileSchema.asGroupType().getType("a").asPrimitiveType()
+    val cd = new ColumnDescriptor(Array("a"), ty, 0, 1)
+    val memPageStore = new MemPageStore(3)
+    // Three non-null values: the definition levels (length 2, an RLE run of 3 x 1), then the
+    // PLAIN int32 values 1, 2 and 3.
+    memPageStore.getPageWriter(cd).writePage(
+      BytesInput.from(Array[Byte](2, 0, 0, 0, 6, 1, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0)), 3, 3,
+      Statistics.createStats(ty), Encoding.RLE, Encoding.RLE, Encoding.PLAIN)
+    val sharedReader = memPageStore.getPageReader(cd)
+    val sharedStore = new PageReadStore {
+      override def getPageReader(descriptor: ColumnDescriptor): PageReader = sharedReader
+      override def getRowCount: Long = 3
+    }
+    val recordReader = new VectorizedParquetRecordReader(
+      DateTimeUtils.getZoneId("EST"), "CORRECTED", "UTC", "CORRECTED", "UTC", true, 3)
+    try {
+      recordReader.initialize(fileSchema, requestedSchema,
+        TestParquetRowGroupReader(Seq(TestPageReadStore(sharedStore, Seq(0L)))), 3)
+      val e = intercept[ParquetDecodingException](recordReader.nextKeyValue())
+      assert(e.getMessage.contains("ran out of pages"), e.getMessage)
+      assert(e.getMessage.contains("[a]"), e.getMessage)
+    } finally {
+      recordReader.close()
+    }
+  }
+
+  test("SPARK-59854: a decoding error in a batch reports the page and the column") {
+    Seq(
+      // Dictionary ids (bit width 1) with an RLE run of only 2 of the 4 values.
+      ("Corrupted RLE data: reading past the end of the encoded values", Some(new DictionaryPage(
+        BytesInput.from(Array[Byte](1, 0, 0, 0, 2, 0, 0, 0)), 2, Encoding.PLAIN_DICTIONARY)),
+        Array[Byte](1, 2 << 1, 0), Encoding.RLE_DICTIONARY),
+      // 2 of the 4 PLAIN values.
+      ("Failed to read 16 bytes", None, Array[Byte](1, 0, 0, 0, 2, 0, 0, 0), Encoding.PLAIN),
+      // A DELTA_BINARY_PACKED block of 128 values in 4 mini blocks, with 4 values and the first
+      // value 0, then the min delta 0 and the mini block bit widths 65, 0, 0 and 0. The second
+      // value unpacks the first mini block.
+      ("Invalid DELTA_BINARY_PACKED mini block bit width: 65 (must be at most 64)", None,
+        Array[Byte](0x80.toByte, 1, 4, 4, 0, 0, 65, 0, 0, 0), Encoding.DELTA_BINARY_PACKED)
+    ).foreach { case (error, dictionaryPage, values, encoding) =>
+      val e = readCorruptedPage("int32", dictionaryPage, fourNonNullValues ++ values, 4, encoding)
+      assert(e.getMessage.startsWith("could not decode page Page [bytes.size="), e.getMessage)
+      assert(e.getMessage.contains(s"in col [a] optional int32 a: $error"), e.getMessage)
+      assert(e.getCause.isInstanceOf[ParquetDecodingException], e)
+      assert(e.getCause.getMessage == error, e)
+    }
+  }
+
+  test("SPARK-59854: a dictionary that cannot be decoded reports the column") {
+    Seq(
+      // A PLAIN BINARY dictionary page that declares 3 entries but holds only 1, which cuts off
+      // the length of the second entry.
+      ("binary", new DictionaryPage(BytesInput.from(Array[Byte](1, 0, 0, 0, 'x')), 3,
+        Encoding.PLAIN_DICTIONARY), classOf[IndexOutOfBoundsException]),
+      // A dictionary page with a negative dictionary size.
+      ("int32", new DictionaryPage(BytesInput.from(Array[Byte](1, 0, 0, 0)), -1,
+        Encoding.PLAIN_DICTIONARY), classOf[NegativeArraySizeException]),
+      // A dictionary page with an encoding that has no dictionary.
+      ("int32", new DictionaryPage(BytesInput.from(Array[Byte](1, 0, 0, 0)), 1,
+        Encoding.DELTA_BINARY_PACKED), classOf[UnsupportedOperationException])
+    ).foreach { case (columnType, dictionaryPage, errorClass) =>
+      val e = readCorruptedPage(columnType, Some(dictionaryPage), oneValueWithDictionaryId0, 1,
+        Encoding.RLE_DICTIONARY)
+      assert(e.getMessage.startsWith(
+        s"could not decode the dictionary for [a] optional $columnType a: ${errorClass.getName}"),
+        e.getMessage)
+      assert(e.getCause.getClass == errorClass, e)
+    }
+  }
+
+  test("SPARK-59854: an invalid DELTA_BINARY_PACKED header reports the column") {
+    // One non-null value. The header has a block of 128 values in 3 mini blocks.
+    val e = readCorruptedPage("int32", None,
+      Array[Byte](2, 0, 0, 0, 2, 1, 0x80.toByte, 1, 3, 1, 0), 1, Encoding.DELTA_BINARY_PACKED)
+    assert(e.getMessage.contains("in col [a] optional int32 a: Invalid DELTA_BINARY_PACKED " +
+      "mini block count: 3 (block size in values: 128, the mini block size must be a multiple " +
+      "of 8)"), e.getMessage)
+    assert(e.getCause.isInstanceOf[ParquetDecodingException], e)
+  }
+
+  test("SPARK-59854: a column chunk without values reports the column") {
+    val parquetSchema = MessageTypeParser.parseMessageType("message root { optional int32 a; }")
+    val ty = parquetSchema.asGroupType().getType("a").asPrimitiveType()
+    val memPageStore = new MemPageStore(1)
+    // The column has a page writer, so the page store has a page reader for it, but no page.
+    memPageStore.getPageWriter(new ColumnDescriptor(Array("a"), ty, 0, 1))
+    val recordReader = new VectorizedParquetRecordReader(
+      DateTimeUtils.getZoneId("EST"), "CORRECTED", "UTC", "CORRECTED", "UTC", true, 1)
+    try {
+      recordReader.initialize(parquetSchema, parquetSchema,
+        TestParquetRowGroupReader(Seq(TestPageReadStore(memPageStore, Seq(0L)))), 1)
+      val e = intercept[IOException](recordReader.nextKeyValue())
+      assert(e.getMessage == "totalValueCount == 0 in col [a] optional int32 a")
+    } finally {
+      recordReader.close()
+    }
+  }
+
   truncateTypeTest("primitive type", IntegerType, LongType, IntegerType)
 
   truncateTypeTest("basic struct",
@@ -824,6 +946,37 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
       columnWriterStore.endRecord()
     }
     columnWriterStore.flush()
+  }
+
+  /**
+   * Reads a row group of the optional column `a` of type `columnType`, with an optional
+   * dictionary page and one data page of `valueCount` values, and returns the error of reading
+   * it with the vectorized reader.
+   */
+  private def readCorruptedPage(
+      columnType: String,
+      dictionaryPage: Option[DictionaryPage],
+      data: Array[Byte],
+      valueCount: Int,
+      valuesEncoding: Encoding): ParquetDecodingException = {
+    val parquetSchema =
+      MessageTypeParser.parseMessageType(s"message root { optional $columnType a; }")
+    val ty = parquetSchema.asGroupType().getType("a").asPrimitiveType()
+    val cd = new ColumnDescriptor(Array("a"), ty, 0, 1)
+    val memPageStore = new MemPageStore(valueCount)
+    val pageWriter = memPageStore.getPageWriter(cd)
+    dictionaryPage.foreach(pageWriter.writeDictionaryPage)
+    pageWriter.writePage(BytesInput.from(data), valueCount, valueCount,
+      Statistics.createStats(ty), Encoding.RLE, Encoding.RLE, valuesEncoding)
+    val recordReader = new VectorizedParquetRecordReader(
+      DateTimeUtils.getZoneId("EST"), "CORRECTED", "UTC", "CORRECTED", "UTC", true, valueCount)
+    try {
+      recordReader.initialize(parquetSchema, parquetSchema,
+        TestParquetRowGroupReader(Seq(TestPageReadStore(memPageStore, Seq(0L)))), valueCount)
+      intercept[ParquetDecodingException](recordReader.nextKeyValue())
+    } finally {
+      recordReader.close()
+    }
   }
 
   private def checkAnswer(

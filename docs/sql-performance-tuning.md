@@ -652,9 +652,17 @@ The following SQL properties enable Storage Partition Join in different join que
       <td><code>spark.sql.requireAllClusterKeysForCoPartition</code></td>
       <td>true</td>
       <td>
-        When true, storage-partitioned join requires every join or MERGE key to be covered by some partition key (rather than matching the partition keys positionally) to eliminate shuffle. When the partition keys cover only part of the join or MERGE keys, set to <b>false</b> to eliminate shuffle, at the risk of data skew and reduced parallelism from the coarser storage partitioning.
+        When true, storage-partitioned join requires every join or MERGE key to be covered by some partition key (rather than matching the partition keys positionally) to eliminate shuffle. The same applies when <code>spark.sql.sources.v2.bucketing.shuffle.enabled</code> shuffles only one side onto the partition keys of the other. When the partition keys cover only part of the join or MERGE keys, set to <b>false</b> to eliminate shuffle, at the risk of data skew and reduced parallelism from the coarser storage partitioning. Storage-partitioned layouts read <code>spark.sql.sources.v2.bucketing.requireAllClusterKeysForCoPartition.enabled</code>, which defaults to this config. To keep the requirement for hash partitionings, set that one to <b>false</b> instead.
       </td>
       <td>3.3.0</td>
+    </tr>
+    <tr>
+      <td><code>spark.sql.sources.v2.bucketing.requireAllClusterKeysForCoPartition.enabled</code></td>
+      <td>(value of <code>spark.sql.requireAllClusterKeysForCoPartition</code>)</td>
+      <td>
+        When true, a storage-partitioned join, or the one-side shuffle of <code>spark.sql.sources.v2.bucketing.shuffle.enabled</code>, runs on the partition keys only if they cover every join, cogroup or MERGE key. Set to <b>false</b> to also allow partition keys that cover only some of those keys, at the risk of data skew and reduced parallelism from the coarser storage partitioning. Hash partitionings still follow <code>spark.sql.requireAllClusterKeysForCoPartition</code>.
+      </td>
+      <td>4.4.0</td>
     </tr>
     <tr>
       <td><code>spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled</code></td>
@@ -708,7 +716,7 @@ The following SQL properties enable Storage Partition Join in different join que
       <td><code>spark.sql.sources.v2.bucketing.partitionKeyOrdering.enabled</code></td>
       <td>true</td>
       <td>
-        When enabled, Spark derives the output ordering of a V2 scan from its partition key expressions, if the source reports a keyed partitioning but no explicit ordering, or an ordering that Spark ignores because it references a column that cannot be resolved. All rows of such a partition share one key value, so the partition is trivially sorted by those expressions, and a sort Spark would otherwise add becomes unnecessary. This config requires <code>spark.sql.sources.v2.bucketing.enabled</code> to be true.
+        When enabled, Spark derives the output ordering of a V2 scan from its partition key expressions, if the source reports a keyed partitioning and no ordering that Spark keeps for the scan output. For example, the source reports none, an empty one, or one that starts with a sort order on a column pruned from the scan output or on a partition transform and has no later sort order on a partition key other than a transform. All rows of such a partition share one key value, so the partition is trivially sorted by those expressions, and a sort Spark would otherwise add becomes unnecessary. Partition transforms such as <code>days(ts)</code> or <code>bucket(8, id)</code> are left out of the ordering. This config requires <code>spark.sql.sources.v2.bucketing.enabled</code> to be true.
       </td>
       <td>4.2.0</td>
     </tr>
@@ -716,7 +724,7 @@ The following SQL properties enable Storage Partition Join in different join que
       <td><code>spark.sql.sources.v2.bucketing.preserveKeyOrderingOnCoalesce.enabled</code></td>
       <td>true</td>
       <td>
-        When enabled, <code>GroupPartitionsExec</code> reports sort orders over partition key expressions after coalescing several input partitions into one. The merged partitions share the same partition key value, so these orders still hold, while orders over other columns are lost by the concatenation. No order is reported when the join reduced the partition keys onto a common key space (see <code>spark.sql.sources.v2.bucketing.allowCompatibleTransforms.enabled</code>), because the merged partitions then share only the reduced key. This config requires <code>spark.sql.sources.v2.bucketing.enabled</code> to be true.
+        When enabled, <code>GroupPartitionsExec</code> reports sort orders over partition key expressions after coalescing several input partitions into one. The merged partitions share the same partition key value, so these orders still hold, while orders over other columns are lost by the concatenation. Sort orders over partition transforms such as <code>days(ts)</code> or <code>bucket(8, id)</code> are left out. No order is reported when the join reduced the partition keys onto a common key space (see <code>spark.sql.sources.v2.bucketing.allowCompatibleTransforms.enabled</code>), because the merged partitions then share only the reduced key. This config requires <code>spark.sql.sources.v2.bucketing.enabled</code> to be true.
       </td>
       <td>4.2.0</td>
     </tr>

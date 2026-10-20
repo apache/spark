@@ -36,7 +36,13 @@ from typing import Any, Callable, Iterator
 import numpy as np
 import pyarrow as pa
 from pyspark.cloudpickle import dumps as cloudpickle_dumps
-from pyspark.serializers import CPickleSerializer, SpecialLengths, write_int, write_long
+from pyspark.serializers import (
+    BatchedSerializer,
+    CPickleSerializer,
+    SpecialLengths,
+    write_int,
+    write_long,
+)
 from pyspark.sql.types import (
     BinaryType,
     BooleanType,
@@ -100,6 +106,19 @@ class MockProtocolWriter:
             for df_batches in group:
                 cls.write_data_payload(iter(df_batches), buf)
         write_int(0, buf)  # end of groups
+
+    @classmethod
+    def write_pickled_data_payload(
+        cls, rows: list[tuple], buf: io.BufferedIOBase, batch_size: int = 100
+    ) -> None:
+        """Write pickled row batches followed by ``END_OF_DATA_SECTION``.
+
+        Mirrors ``BatchEvalPythonExec.getInputIterator`` on the JVM side, which
+        pickles rows (as tuples) in batches of ``batch_size``; the worker's
+        ``BatchedSerializer`` unbatches them on read.
+        """
+        BatchedSerializer(CPickleSerializer(), batch_size).dump_stream(iter(rows), buf)
+        write_int(SpecialLengths.END_OF_DATA_SECTION, buf)
 
     @classmethod
     def write_preamble(cls, buf: io.BytesIO) -> None:
@@ -331,6 +350,23 @@ class MockDataFactory:
             ]
         )
         return batches, schema
+
+    @classmethod
+    def make_rows(
+        cls,
+        *,
+        num_rows: int,
+        num_cols: int,
+        spark_type_pool: list[tuple[Callable, Any]],
+    ) -> tuple[list[tuple], StructType]:
+        """Create Python row tuples with columns cycling through ``spark_type_pool``."""
+        batches, schema = cls.make_batches(
+            num_rows=num_rows, num_cols=num_cols, spark_type_pool=spark_type_pool
+        )
+        rows = [
+            row for batch in batches for row in zip(*(col.to_pylist() for col in batch.columns))
+        ]
+        return rows, schema
 
     @classmethod
     def make_grouped_batches(
@@ -738,6 +774,99 @@ class ArrowTableUDFTimeBench(_ArrowTableUDFBenchMixin, _TimeBenchBase):
 
 
 class ArrowTableUDFPeakmemBench(_ArrowTableUDFBenchMixin, _PeakmemBenchBase):
+    pass
+
+
+# -- SQL_TABLE_UDF ----------------------------------------------------------
+# Python UDTF (``@udtf``, useArrow=False): input rows arrive as pickled tuples and
+# each row triggers one ``eval(self, *args)`` call; yielded rows are converted
+# with ``toInternal`` and pickled back one input row at a time.
+
+
+class _TableUDFIdentity:
+    def eval(self, *args):
+        yield args
+
+
+class _TableUDFExplode:
+    def eval(self, *args):
+        for _ in range(3):
+            yield args
+
+
+class _TableUDFCount:
+    """Emits nothing per row; yields a single-row count from ``terminate``."""
+
+    def __init__(self):
+        self._count = 0
+
+    def eval(self, *args):
+        self._count += 1
+
+    def terminate(self):
+        yield (self._count,)
+
+
+class _TableUDFStringify:
+    def eval(self, *args):
+        yield tuple(str(a) for a in args)
+
+
+class _TableUDFBenchMixin:
+    """Provides ``_write_scenario`` for SQL_TABLE_UDF (pickled Python UDTF).
+
+    Every input column is passed to ``eval`` as a positional argument, so the
+    ``*_args`` scenarios scale the per-row argument count.
+    """
+
+    _scenario_configs = {
+        "few_args_ints": ("pure_ints", 50_000, 2),
+        "many_args_ints": ("pure_ints", 20_000, 20),
+        "few_args_strings": ("pure_strings", 50_000, 2),
+        "many_args_strings": ("pure_strings", 20_000, 20),
+        "mixed_types": ("mixed", 20_000, 5),
+    }
+
+    @classmethod
+    def _build_scenario(cls, name):
+        np.random.seed(42)
+        type_key, num_rows, num_cols = cls._scenario_configs[name]
+        pool = MockDataFactory.NAMED_TYPE_POOLS[type_key]
+        return MockDataFactory.make_rows(num_rows=num_rows, num_cols=num_cols, spark_type_pool=pool)
+
+    _udtfs = {
+        "identity_udtf": (_TableUDFIdentity, lambda schema: schema),
+        "explode_udtf": (_TableUDFExplode, lambda schema: schema),
+        "count_udtf": (_TableUDFCount, lambda schema: _ARROW_UDTF_COUNT_RETURN),
+        "stringify_udtf": (
+            _TableUDFStringify,
+            lambda schema: StructType([StructField(f.name, StringType()) for f in schema]),
+        ),
+    }
+    params = [list(_scenario_configs), list(_udtfs)]
+    param_names = ["scenario", "udtf"]
+
+    def _write_scenario(self, scenario, udtf_name, buf):
+        rows, schema = self._build_scenario(scenario)
+        udtf_cls, return_type_fn = self._udtfs[udtf_name]
+        return_type = return_type_fn(schema)
+        arg_offsets = list(range(len(schema)))
+
+        MockProtocolWriter.write_worker_input(
+            PythonEvalType.SQL_TABLE_UDF,
+            lambda b: MockProtocolWriter.write_arrow_udtf_payload(
+                udtf_cls, return_type, arg_offsets, b
+            ),
+            lambda b: MockProtocolWriter.write_pickled_data_payload(rows, b),
+            buf,
+        )
+
+
+class TableUDFTimeBench(_TableUDFBenchMixin, _TimeBenchBase):
+    pass
+
+
+class TableUDFPeakmemBench(_TableUDFBenchMixin, _PeakmemBenchBase):
     pass
 
 
@@ -1808,8 +1937,9 @@ class WindowAggPandasUDFPeakmemBench(_WindowAggPandasBenchMixin, _PeakmemBenchBa
 # Stateful streaming with Pandas. UDF signature is
 # ``(api_client, mode, key, pdfs)`` and returns ``Iterator[pandas.DataFrame]``.
 # The input wire stream is a single plain Arrow stream pre-sorted by the
-# grouping key column at offset 0; ``read_udfs`` in worker.py chunks rows into
-# one ``(mode, key, pdfs)`` tuple per group, then emits a phantom
+# grouping key column at offset 0; ``PandasTransformWithStateUDFHandler.run``
+# in ``pyspark/eval_handlers/_stateful.py`` chunks rows into one
+# ``(mode, key, pdfs)`` tuple per group, then emits a phantom
 # ``PROCESS_TIMER`` and ``COMPLETE`` call with an empty pdf iterator.
 # ``StatefulProcessorApiClient.__init__`` opens a real TCP socket to the JVM
 # state server; the stub listener below satisfies that connect. The benchmark
@@ -2334,9 +2464,11 @@ class TransformWithStateRowUDFPeakmemBench(_TransformWithStateRowBenchMixin, _Pe
 # Each batch carries either inputData or initState rows -- never both -- with the
 # inactive column written as an all-null struct. Matching the JVM ``initData ++
 # data`` ordering, all initial-state batches are emitted first, then all data
-# batches. ``read_udfs`` walks each batch row by row, materializing every column
-# (key included) into a ``Row`` via ``.as_py()``, then regroups consecutive rows
-# by the leading key column so each key surfaces as one
+# batches. ``RowTransformWithStateInitStateUDFHandler.run`` in
+# ``pyspark/eval_handlers/_stateful.py`` walks each batch row by row,
+# materializing every column (key included) into a ``Row`` via ``.as_py()``,
+# then regroups consecutive rows by the leading key column so each key
+# surfaces as one
 # ``(mode, key, (input_rows, init_rows))`` call. This is the
 # per-row Python object round trip the Row variant is built around, layered on
 # top of the nested-struct init-state deserialization, in contrast to the
