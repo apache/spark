@@ -456,3 +456,26 @@ WHERE b.col1
 struct<col1:boolean>
 -- !query output
 
+
+
+-- !query
+SELECT nt2.* FROM (nt1 left outer join nt2 using (k)) join nt2 x on x.v2 = 1
+-- !query schema
+struct<k:string,v2:int>
+-- !query output
+NULL	NULL
+one	1
+one	5
+two	22
+
+
+-- !query
+SELECT nt2.k, x.k FROM (nt1 left outer join nt2 using (k)) join nt2 x on nt2.k = x.k
+-- !query schema
+struct<k:string,k:string>
+-- !query output
+one	one
+one	one
+one	one
+one	one
+two	two
