@@ -45,7 +45,9 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
 import org.apache.spark.sql.catalyst.plans.physical.KeyReducer
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
-import org.apache.spark.sql.catalyst.util.{sideBySide, CharsetProvider, DateTimeUtils, FailFastMode, IntervalUtils, MapData}
+import org.apache.spark.sql.catalyst.util.{
+  sideBySide, CharsetProvider, CharVarcharUtils, DateTimeUtils, FailFastMode, IntervalUtils, MapData
+}
 import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.expressions.Transform
@@ -101,22 +103,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       context = Array.empty,
       summary = ""
     )
-  }
-
-  def cannotChangeDecimalPrecisionError(
-      value: Decimal,
-      decimalPrecision: Int,
-      decimalScale: Int,
-      context: QueryContext = null): ArithmeticException = {
-    new SparkArithmeticException(
-      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
-      messageParameters = Map(
-        "value" -> value.toPlainString,
-        "precision" -> decimalPrecision.toString,
-        "scale" -> decimalScale.toString,
-        "config" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      context = getQueryContext(context),
-      summary = getSummary(context))
   }
 
   def invalidInputSyntaxForBooleanError(
@@ -196,6 +182,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "result" -> outputType,
         "reason" -> e.toString),
       cause = e)
+  }
+
+  def pythonUDFRowSizeExceededError(
+      maxRowSize: Long, actualRowSize: Long): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "UDF_LIMITS.ROW_SIZE",
+      messageParameters = Map(
+        "maxRowSize" -> maxRowSize.toString,
+        "actualRowSize" -> actualRowSize.toString))
   }
 
   def divideByZeroError(context: QueryContext): ArithmeticException = {
@@ -463,8 +458,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     SparkException.internalError(s"Can not interpolate ${arg.getClass.getName} into code block.")
   }
 
-  def customCollectionClsNotResolvedError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_2017")
+  def customCollectionClsNotResolvedError(): SparkException = {
+    SparkException.internalError(
+      "Cannot determine the data type of an unresolved MapObjects without a collection class.")
   }
 
   def classUnsupportedByMapObjectsError(cls: Class[_]): SparkRuntimeException = {
@@ -1156,6 +1152,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "matchedFields" -> matchedFields))
   }
 
+  def parquetFieldRequestedMoreThanOnceError(
+      requestedFields: Seq[String], parquetField: String): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "PARQUET_FIELD_REQUESTED_MORE_THAN_ONCE",
+      messageParameters = Map(
+        "requestedFields" -> requestedFields.map(f => toSQLId(Seq(f))).mkString(", "),
+        "parquetField" -> toSQLId(Seq(parquetField)),
+        "fieldIdReadConf" -> toSQLConf(SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key)))
+  }
+
   def failedToMergeIncompatibleSchemasError(
       left: StructType, right: StructType, e: Throwable = null): Throwable = {
     new SparkException(
@@ -1700,6 +1706,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkRuntimeException(
       errorClass = "JSON_EXISTS_ON_ERROR",
       messageParameters = Map("functionName" -> toSQLId(functionName), "path" -> toSQLValue(path)))
+  }
+
+  // Returns the concrete `SparkRuntimeException` (not `Throwable`) so generated code can `throw` it
+  // without a checked-exception declaration (see `JsonObjectKeyGuard.doGenCode`).
+  def jsonObjectNullKeyError(): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "JSON_OBJECT_NULL_KEY",
+      messageParameters = Map.empty)
   }
 
   def invalidKerberosConfigForHiveServer2Error(): Throwable = {
@@ -2450,17 +2464,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = cause)
   }
 
-  def outputDataTypeUnsupportedByNodeWithoutSerdeError(
-      nodeName: String, dt: DataType): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2265",
-      messageParameters = Map(
-        "nodeName" -> nodeName,
-        "dt" -> dt.getClass.getSimpleName),
-      cause = null)
+  def scriptTransformWithoutSerdeUnsupportedTypeError(
+      dt: DataType): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE.TRANSFORM_WITHOUT_SERDE_TYPE",
+      messageParameters = Map("dataType" -> toSQLType(dt)))
   }
 
-  def invalidStartIndexError(numRows: Int, startIndex: Int): SparkArrayIndexOutOfBoundsException = {
+  def invalidStartIndexError(
+      numRows: Long, startIndex: Int): SparkArrayIndexOutOfBoundsException = {
     new SparkArrayIndexOutOfBoundsException(
       errorClass = "_LEGACY_ERROR_TEMP_2266",
       messageParameters = Map(
@@ -2476,6 +2488,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       errorClass = "_LEGACY_ERROR_TEMP_2267",
       messageParameters = Map(
         "className" -> className))
+  }
+
+  def windowFunctionPartitionSizeExceedsLimitError(numRows: Long): SparkException = {
+    new SparkException(
+      errorClass = "WINDOW_FUNCTION_PARTITION_SIZE_EXCEEDS_LIMIT",
+      messageParameters = Map("numRows" -> numRows.toString()),
+      cause = null)
   }
 
   def doExecuteBroadcastNotImplementedError(
@@ -2723,6 +2742,60 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       errorClass = "EXCEED_LIMIT_LENGTH",
       messageParameters = Map("limit" -> limit.toString)
     )
+  }
+
+  // SQLSTATE is 0A000 (feature-not-supported), not the 54006 of the value-side
+  // EXCEED_LIMIT_LENGTH: a too-long CHAR/VARCHAR value is truncatable overflow, but a JSON object
+  // name is a key that is never padded or trimmed, so an off-width name has no representation in
+  // a CHAR(n)/VARCHAR(n) map at all. It is a SparkRuntimeException (not
+  // SparkSQLFeatureNotSupportedException) because it is raised while parsing a row and must flow
+  // through Jackson's throw/catch parse-mode model (PERMISSIVE wraps it as a bad record, FAILFAST
+  // surfaces it).
+  def unsupportedJsonCharVarcharMapKey(
+      key: UTF8String, dataType: DataType): SparkRuntimeException = {
+    // The key is a raw JSON object name, which in map-shaped data is often user data (ids,
+    // emails) and can run up to Jackson's 50,000-character name limit, so cap what we echo.
+    val maxKeyChars = 128
+    val displayKey = if (key.numChars() > maxKeyChars) {
+      UTF8String.concat(key.substring(0, maxKeyChars), UTF8String.fromString("..."))
+    } else {
+      key
+    }
+    new SparkRuntimeException(
+      errorClass = "UNSUPPORTED_JSON_CHAR_VARCHAR_MAP_KEY",
+      messageParameters = Map(
+        "key" -> toSQLValue(displayKey, StringType),
+        "dataType" -> toSQLType(dataType)))
+  }
+
+  /**
+   * Restricting CHAR/VARCHAR XML map keys is a parser limitation (SQLSTATE 0A000),
+   * but this is a SparkRuntimeException so XML parse modes can handle it: PERMISSIVE
+   * wraps a bad record and FAILFAST surfaces the failure.
+   */
+  def unsupportedXmlCharVarcharMapKey(
+      key: UTF8String, dataType: DataType): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "UNSUPPORTED_XML_CHAR_VARCHAR_MAP_KEY",
+      messageParameters = Map(
+        "key" -> toSQLValue(key, StringType),
+        "dataType" -> toSQLType(dataType)))
+  }
+
+  /**
+   * Restricting CHAR/VARCHAR Avro map keys is a serde limitation (SQLSTATE 0A000),
+   * but this is a SparkRuntimeException so from_avro parse modes can handle it:
+   * PERMISSIVE nulls the record and FAILFAST surfaces the failure. Avro file scans
+   * do not apply per-row PERMISSIVE around this error.
+   */
+  def unsupportedAvroCharVarcharMapKey(
+      key: UTF8String, dataType: DataType): SparkRuntimeException = {
+    val displayKey = CharVarcharUtils.truncateMapKeyForError(key)
+    new SparkRuntimeException(
+      errorClass = "UNSUPPORTED_AVRO_CHAR_VARCHAR_MAP_KEY",
+      messageParameters = Map(
+        "key" -> toSQLValue(displayKey, StringType),
+        "dataType" -> toSQLType(dataType)))
   }
 
   def timestampAddOverflowError(micros: Long, amount: Long, unit: String): ArithmeticException = {
@@ -3598,5 +3671,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       errorClass = "BIN_BY_INVALID_RANGE",
       messageParameters = Map("rangeStart" -> rangeStart, "rangeEnd" -> rangeEnd)
     )
+  }
+
+  def binByOverflowError(): SparkArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map("operation" -> "compute BIN BY bucket boundaries"),
+      context = Array.empty,
+      summary = "")
   }
 }

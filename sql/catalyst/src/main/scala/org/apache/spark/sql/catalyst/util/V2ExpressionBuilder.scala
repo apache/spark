@@ -40,17 +40,8 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
 
   def buildPredicate(): Option[V2Predicate] = {
     if (isPredicate) {
-      val translated0 = build()
+      val translated = wrapBooleanExpression(e, build())
       val conf = SQLConf.get
-      val alwaysCreateV2Predicate = conf.getConf(SQLConf.DATA_SOURCE_ALWAYS_CREATE_V2_PREDICATE)
-      val translated = if (alwaysCreateV2Predicate && e.dataType == BooleanType) {
-        translated0.map {
-          case p: V2Predicate => p
-          case other => new V2Predicate("BOOLEAN_EXPRESSION", Array(other))
-        }
-      } else {
-        translated0
-      }
 
       val modifiedExprOpt = if (
         conf.getConf(SQLConf.DATA_SOURCE_DONT_ASSERT_ON_PREDICATE)
@@ -71,6 +62,26 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
       }
     } else {
       None
+    }
+  }
+
+  private def wrapBooleanExpression(
+      expr: Expression,
+      translated: Option[V2Expression]): Option[V2Expression] = {
+    if (SQLConf.get.getConf(SQLConf.DATA_SOURCE_ALWAYS_CREATE_V2_PREDICATE) &&
+        expr.dataType == BooleanType) {
+      translated.map {
+        case p: V2Predicate => p
+        case other => new V2Predicate("BOOLEAN_EXPRESSION", Array(other))
+      }
+    } else {
+      translated
+    }
+  }
+
+  private def generatePredicate(expr: Expression): Option[V2Predicate] = {
+    wrapBooleanExpression(expr, generateExpression(expr, true)).collect {
+      case p: V2Predicate => p
     }
   }
 
@@ -194,22 +205,18 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
     case _: Signum => generateExpressionWithName("SIGN", expr, isPredicate)
     case _: WidthBucket => generateExpressionWithName("WIDTH_BUCKET", expr, isPredicate)
     case and: And =>
-      // AND expects predicate
-      val l = generateExpression(and.left, true)
-      val r = generateExpression(and.right, true)
+      val l = generatePredicate(and.left)
+      val r = generatePredicate(and.right)
       if (l.isDefined && r.isDefined) {
-        assert(l.get.isInstanceOf[V2Predicate] && r.get.isInstanceOf[V2Predicate])
-        Some(new V2And(l.get.asInstanceOf[V2Predicate], r.get.asInstanceOf[V2Predicate]))
+        Some(new V2And(l.get, r.get))
       } else {
         None
       }
     case or: Or =>
-      // OR expects predicate
-      val l = generateExpression(or.left, true)
-      val r = generateExpression(or.right, true)
+      val l = generatePredicate(or.left)
+      val r = generatePredicate(or.right)
       if (l.isDefined && r.isDefined) {
-        assert(l.get.isInstanceOf[V2Predicate] && r.get.isInstanceOf[V2Predicate])
-        Some(new V2Or(l.get.asInstanceOf[V2Predicate], r.get.asInstanceOf[V2Predicate]))
+        Some(new V2Or(l.get, r.get))
       } else {
         None
       }
@@ -238,11 +245,7 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
       } else {
         None
       }
-    case Not(child) => generateExpression(child, true) // NOT expects predicate
-      .map { v =>
-        assert(v.isInstanceOf[V2Predicate])
-        new V2Not(v.asInstanceOf[V2Predicate])
-      }
+    case Not(child) => generatePredicate(child).map(new V2Not(_))
     case UnaryMinus(_, true) => generateExpressionWithName("-", expr, isPredicate)
     case _: BitwiseNot => generateExpressionWithName("~", expr, isPredicate)
     case caseWhen @ CaseWhen(branches, elseValue) =>

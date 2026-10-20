@@ -272,6 +272,17 @@ tags = Module(
     ],
 )
 
+config = Module(
+    name="config",
+    dependencies=[tags],
+    source_file_regexes=[
+        "common/config/",
+    ],
+    sbt_test_goals=[
+        "config/test",
+    ],
+)
+
 utils_java = Module(
     name="utils-java",
     dependencies=[tags],
@@ -285,7 +296,7 @@ utils_java = Module(
 
 utils = Module(
     name="utils",
-    dependencies=[tags, utils_java],
+    dependencies=[tags, utils_java, config],
     source_file_regexes=[
         "common/utils/",
     ],
@@ -721,7 +732,11 @@ pyspark_sql = Module(
         # unittests
         "pyspark.eval_handlers.tests.test_arrow_eval_type_handlers",
         "pyspark.eval_handlers.tests.test_base_eval_type_handlers",
+        "pyspark.eval_handlers.tests.test_elementwise_eval_type_handlers",
         "pyspark.eval_handlers.tests.test_pandas_eval_type_handlers",
+        "pyspark.eval_handlers.tests.test_stateful_eval_type_handlers",
+        "pyspark.eval_handlers.tests.test_udtf_eval_type_handlers",
+        "pyspark.eval_handlers.tests.test_vanilla_eval_type_handlers",
         "pyspark.sql.tests.test_artifact",
         "pyspark.sql.tests.test_catalog",
         "pyspark.sql.tests.test_column",

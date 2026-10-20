@@ -407,7 +407,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       condition = None,
       joinType = Inner,
       orderExpression = left.output.head - right.output.head,
-      toleranceAssertion = None)
+      toleranceAssertion = None,
+      direction = Backward)
   }
 
   assertSupportedInStreamingPlan(

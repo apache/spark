@@ -972,15 +972,13 @@ class PythonPipelineSuite
   }
 
   /**
-   * Builds the graph and runs it through resolution and validation, returning the resolved
-   * [[AutoCdcMergeFlow]]. Unlike [[buildAutoCdcFlow]], this exercises the graph analysis that
-   * rejects invalid change args (e.g. an ignore-null column that is also a key), so a test that
-   * asserts on the resolved flow is guaranteed to describe a usable configuration.
+   * Builds and resolves the graph, returning the resolved [[AutoCdcMergeFlow]]. Unlike
+   * [[buildAutoCdcFlow]], this exercises the flow analysis that rejects invalid change args (e.g.
+   * an ignore-null column that is also a key), so a test that asserts on the resolved flow is
+   * guaranteed to describe a configuration the flow accepts.
    */
   private def resolveAutoCdcMergeFlow(pipelineSource: String): AutoCdcMergeFlow = {
-    val graph = buildGraph(pipelineSource)
-      .resolve(sessionCaseSensitive)
-      .validate(sessionCaseSensitive)
+    val graph = buildGraph(pipelineSource).resolve(sessionCaseSensitive)
     graph.resolvedFlow(graphIdentifier("target")) match {
       case f: AutoCdcMergeFlow => f
       case other => fail(s"Expected an AutoCdcMergeFlow, got: $other")

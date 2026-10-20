@@ -115,6 +115,11 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           CollectLimitExec(limit = offset + limit, child = planLater(child), offset = offset)
         case Limit(IntegerLiteral(limit), child) =>
           CollectLimitExec(limit = limit, child = planLater(child))
+        case logical.Offset(IntegerLiteral(0), child) =>
+          // OFFSET 0 is a no-op. It is normally removed by the EliminateOffsets optimizer rule,
+          // but that rule is excludable, so handle it defensively here to avoid constructing a
+          // CollectLimitExec with no limit and a zero offset (which fails its assertion).
+          planLater(child)
         case logical.Offset(IntegerLiteral(offset), child) =>
           CollectLimitExec(child = planLater(child), offset = offset)
         case Tail(IntegerLiteral(limit), child) =>
@@ -458,7 +463,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         joins.SortMergeAsOfJoinExec(
           leftKeys, rightKeys, leftSort, rightSort,
-          j.asOfCondition, j.orderExpression, j.joinType, residual,
+          j.asOfCondition, j.direction, j.joinType, residual,
           planLater(j.left), planLater(j.right)) :: Nil
       case _ => Nil
     }
@@ -530,16 +535,32 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       expr match {
         // Backward: Subtract(leftAsOf, rightAsOf)
         // Forward: Subtract(rightAsOf, leftAsOf)
-        case Subtract(l, r, _)
+        case Subtraction(l, r)
             if l.references.subsetOf(leftAttrs) &&
               r.references.subsetOf(rightAttrs) =>
           Some((l, r))
-        case Subtract(l, r, _)
+        case Subtraction(l, r)
             if l.references.subsetOf(rightAttrs) &&
               r.references.subsetOf(leftAttrs) =>
           Some((r, l))
         // Nearest: If(GT(left, right), Sub(left, right), Sub(right, left))
-        case If(_, thenExpr, _) => findFromOrder(thenExpr, leftAttrs, rightAttrs)
+        case If(_, thenExpr, _) =>
+          findFromOrder(thenExpr, leftAttrs, rightAttrs).filter { case (l, r) =>
+            joins.SortMergeAsOfJoinScanner.supportsNearestKeys(l.dataType, r.dataType)
+          }
+        case _ => None
+      }
+    }
+
+    /**
+     * Matches the operands of a subtraction. The analyzer replaces a Subtract of DATE or
+     * TIMESTAMP operands with SubtractDates or SubtractTimestamps.
+     */
+    private object Subtraction {
+      def unapply(expr: Expression): Option[(Expression, Expression)] = expr match {
+        case Subtract(l, r, _) => Some((l, r))
+        case SubtractTimestamps(l, r, _, _) => Some((l, r))
+        case SubtractDates(l, r, _) => Some((l, r))
         case _ => None
       }
     }
@@ -1243,6 +1264,11 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.LocalLimitExec(limit, planLater(child)) :: Nil
       case logical.GlobalLimit(IntegerLiteral(limit), child) =>
         execution.GlobalLimitExec(limit, planLater(child)) :: Nil
+      case logical.Offset(IntegerLiteral(0), child) =>
+        // OFFSET 0 is a no-op; see the note in SpecialLimits. Excluding EliminateOffsets leaves
+        // the Offset node in place, so avoid building a GlobalLimitExec with no limit and a zero
+        // offset (which fails its assertion).
+        planLater(child) :: Nil
       case logical.Offset(IntegerLiteral(offset), child) =>
         GlobalLimitExec(child = planLater(child), offset = offset) :: Nil
       case union: logical.Union =>

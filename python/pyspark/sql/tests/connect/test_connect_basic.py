@@ -1619,6 +1619,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertTrue(len(proto_string_1) > 10000, len(proto_string_1))
         proto_string_truncated_1 = self.connect._client._proto_to_string(plan1, True)
         self.assertTrue(len(proto_string_truncated_1) < 4000, len(proto_string_truncated_1))
+        self.assertIn("[truncated]", proto_string_truncated_1)
 
         cdf2 = cdf1.select("a" * 4096, "a" * 4096, "a" * 4096)
         plan2 = cdf2._plan.to_proto(self.connect._client)
@@ -1627,6 +1628,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertTrue(len(proto_string_2) > 20000, len(proto_string_2))
         proto_string_truncated_2 = self.connect._client._proto_to_string(plan2, True)
         self.assertTrue(len(proto_string_truncated_2) < 8000, len(proto_string_truncated_2))
+        self.assertIn("[truncated]", proto_string_truncated_2)
 
         cdf3 = cdf1.select("a" * 4096)
         for _ in range(64):
@@ -1637,6 +1639,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertTrue(len(proto_string_3) > 128000, len(proto_string_3))
         proto_string_truncated_3 = self.connect._client._proto_to_string(plan3, True)
         self.assertTrue(len(proto_string_truncated_3) < 64000, len(proto_string_truncated_3))
+        self.assertIn("[truncated]", proto_string_truncated_3)
 
     def test_plan_compression(self):
         self.assertTrue(self.connect._client._zstd_module is not None)

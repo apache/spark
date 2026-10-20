@@ -39,7 +39,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.MutableColumnarRow
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{CalendarIntervalType, DecimalType, StringType}
+import org.apache.spark.sql.types.{CalendarIntervalType, DecimalType, StringType, UserDefinedType}
 import org.apache.spark.unsafe.KVIterator
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
@@ -507,6 +507,7 @@ case class HashAggregateExec(
   private def checkIfFastHashMapSupported(): Boolean = {
     val isSupported =
       groupingExpressions.forall(e => UnsafeRowUtils.isBinaryStable(e.dataType)) &&
+      groupingKeySchema.forall(!_.dataType.isInstanceOf[UserDefinedType[_]]) &&
       (groupingKeySchema ++ bufferSchema).forall(f => CodeGenerator.isPrimitiveType(f.dataType) ||
         f.dataType.isInstanceOf[DecimalType] || f.dataType.isInstanceOf[StringType] ||
         f.dataType.isInstanceOf[CalendarIntervalType])

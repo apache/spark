@@ -31,25 +31,35 @@ import itertools
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any
 
+from pyspark import _NoValue
 from pyspark.errors import PySparkRuntimeError
 from pyspark.eval_handlers._base import (
     BatchEvalTypeHandler,
     CoGroupedEvalTypeHandler,
     GroupedEvalTypeHandler,
 )
-from pyspark.eval_handlers.utils import extract_key_value_indexes, hashable_grouping_key
+from pyspark.eval_handlers.utils import (
+    extract_key_value_indexes,
+    hashable_grouping_key,
+    wrap_kwargs_support,
+)
 from pyspark.eval_handlers.verification import (
     verify_iter_result_row_count,
     verify_iterator_exhausted,
     verify_output_row_limit,
+    verify_result_row_count,
     verify_return_type,
     verify_scalar_result,
 )
-from pyspark.sql.conversion import ArrowBatchTransformer
+from pyspark.sql.conversion import (
+    ArrowBatchTransformer,
+    ArrowTableToRowsConversion,
+    LocalDataToArrowConversion,
+)
 from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type
 from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 from pyspark.sql.types import StructField, StructType
-from pyspark.util import PythonEvalType
+from pyspark.util import PythonEvalType, fail_on_stopiteration
 
 if TYPE_CHECKING:
     import pyarrow as pa
@@ -120,6 +130,7 @@ class ArrowGroupedMapIterUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
     to the declared schema."""
 
     eval_type = PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF
+    _iter_based = True
 
     def __init__(
         self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
@@ -670,6 +681,7 @@ class ArrowMapUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     columns on the wire and wrapped back into a single struct column."""
 
     eval_type = PythonEvalType.SQL_MAP_ARROW_ITER_UDF
+    _iter_based = True
 
     def __init__(
         self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
@@ -713,6 +725,7 @@ class ArrowScalarIterUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     result and verify the total row count matches the input."""
 
     eval_type = PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF
+    _iter_based = True
 
     def __init__(
         self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
@@ -801,3 +814,107 @@ class ArrowScalarUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
             )
             verify_scalar_result(output_batch, batch.num_rows)
             yield output_batch
+
+
+class ArrowBatchedUDFArrowHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
+    """SQL_ARROW_BATCHED_UDF (Arrow-optimized ``@udf``) with the Arrow conversion: convert each
+    input RecordBatch to Python values, invoke each UDF row by row, and convert the results
+    directly to Arrow arrays of the declared return types."""
+
+    eval_type = PythonEvalType.SQL_ARROW_BATCHED_UDF
+    variant_conf = "use_legacy_pandas_udf_conversion"
+    variant_value = False
+
+    def __init__(
+        self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
+    ) -> None:
+        require_minimum_pyarrow_version()
+        super().__init__(udfs, runner_conf, eval_conf)
+
+        # --- UDF preparation ---
+        self._udf_infos = []
+        for udf_func, udf_args_offsets, udf_kwargs_offsets, udf_return_type in udfs:
+            wrapped_func, args_kwargs_offsets = wrap_kwargs_support(
+                udf_func, udf_args_offsets, udf_kwargs_offsets
+            )
+            zero_arg = len(args_kwargs_offsets) == 0
+            self._udf_infos.append(
+                (
+                    wrapped_func,
+                    args_kwargs_offsets or (0,),
+                    zero_arg,
+                    to_arrow_type(
+                        udf_return_type,
+                        timezone="UTC",
+                        prefers_large_types=runner_conf.use_large_var_types,
+                    ),
+                    LocalDataToArrowConversion._create_converter(
+                        udf_return_type,
+                        none_on_identity=True,
+                        int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
+                    ),
+                )
+            )
+        self._col_names = [f"_{i}" for i in range(len(udfs))]
+
+        # --- Input preparation ---
+        self._arrow_to_py_converters = [
+            ArrowTableToRowsConversion._create_converter(
+                f.dataType, none_on_identity=True, binary_as_bytes=runner_conf.binary_as_bytes
+            )
+            for f in eval_conf.input_type  # type: ignore[union-attr]
+        ]
+
+    def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
+        import pyarrow as pa
+
+        runner_conf = self._runner_conf
+
+        @fail_on_stopiteration
+        def _evaluate_batch_udf(udf_func: Any, rows: list[tuple]) -> list[Any]:
+            if runner_conf.arrow_concurrency_level <= 0:
+                return [udf_func(*row) for row in rows]
+            from concurrent.futures import ThreadPoolExecutor
+
+            with ThreadPoolExecutor(max_workers=runner_conf.arrow_concurrency_level) as pool:
+                return list(pool.map(lambda row: udf_func(*row), rows))
+
+        for input_batch in data:
+            num_rows = input_batch.num_rows
+
+            # --- Input: Arrow -> Python columns ---
+            columns = [
+                (
+                    [conv(v) for v in ArrowTableToRowsConversion._to_pylist(col)]
+                    if conv is not None
+                    else ArrowTableToRowsConversion._to_pylist(col)
+                )
+                for col, conv in zip(input_batch.itercolumns(), self._arrow_to_py_converters)
+            ]
+            if not columns:
+                columns = [[_NoValue] * num_rows]
+
+            # --- Process: evaluate each UDF row-by-row ---
+            output_arrays = []
+            for udf_func, offsets, zero_arg, arrow_return_type, result_conv in self._udf_infos:
+                rows = (
+                    [() for _ in range(num_rows)]
+                    if zero_arg
+                    else list(zip(*[columns[o] for o in offsets]))
+                )
+                results = _evaluate_batch_udf(udf_func, rows)
+                verify_result_row_count(len(results), num_rows)
+
+                # --- Output: Python -> Arrow ---
+                converted = (
+                    [result_conv(r) for r in results] if result_conv is not None else results
+                )
+                try:
+                    arr = pa.array(converted, type=arrow_return_type)
+                except pa.lib.ArrowInvalid:
+                    arr = pa.array(converted).cast(
+                        target_type=arrow_return_type, safe=runner_conf.safecheck
+                    )
+                output_arrays.append(arr)
+
+            yield pa.RecordBatch.from_arrays(output_arrays, self._col_names)
