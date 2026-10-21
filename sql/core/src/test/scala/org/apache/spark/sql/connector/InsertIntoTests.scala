@@ -761,6 +761,31 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
     }
   }
 
+  Seq(false, true).foreach { schemaEvolutionEnabled =>
+    test("Insert schema evolution: column list rejects duplicate fields after positional rename - " +
+      s"schemaEvolutionEnabled=$schemaEvolutionEnabled") {
+      withSQLConf(
+          SQLConf.INSERT_COLUMN_LIST_NESTED_FIELDS_RESOLVE_BY_POSITION.key -> "true") {
+        val t1 = s"${catalogAndNamespace}tbl"
+        withTable(t1) {
+          sql(s"CREATE TABLE $t1 (s struct<x: int>) USING $v2Format")
+          val schemaEvolution = if (schemaEvolutionEnabled) "WITH SCHEMA EVOLUTION " else ""
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(
+                s"""INSERT $schemaEvolution INTO $t1 (s)
+                   |SELECT named_struct('y', 2, 'x', 3)
+                   |""".stripMargin)
+            },
+            condition = "INCOMPATIBLE_DATA_FOR_TABLE.AMBIGUOUS_COLUMN_NAME",
+            parameters = Map(
+              "tableName" -> t1.split("\\.").map(quoteIdentifier).mkString("."),
+              "colName" -> "`s`.`x`"))
+        }
+      }
+    }
+  }
+
   test("Insert schema evolution: extra column by name - different column order") {
     val t1 = s"${catalogAndNamespace}tbl"
     withTable(t1) {
