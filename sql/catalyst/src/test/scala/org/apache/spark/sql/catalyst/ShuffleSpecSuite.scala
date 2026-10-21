@@ -34,7 +34,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
 
   /** A bound function with a stable canonical name, enough to build a `TransformExpression`. */
   private object TestBucketFunction extends ScalarFunction[Int] {
-    override def inputTypes(): Array[DataType] = Array(IntegerType)
+    override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
     override def resultType(): DataType = IntegerType
     override def name(): String = "bucket"
     override def canonicalName(): String = "test.bucket"

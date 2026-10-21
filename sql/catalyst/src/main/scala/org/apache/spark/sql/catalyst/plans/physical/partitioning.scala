@@ -2581,8 +2581,10 @@ case class KeyedShuffleSpec(
         // `createPartitioning` replaces a transform's argument with the other child's cluster key,
         // which drops whatever surrounds the key, e.g. the `+ 1` of `bucket(4, b + 1)` or the `.a`
         // of `bucket(4, s.a)`. Such a spec's own child would then be laid out differently from the
-        // children shuffled onto it.
-        case t: TransformExpression => argumentsAreColumns(t)
+        // children shuffled onto it. The shuffle also evaluates the rebuilt transform per row with
+        // no cast, so its arguments must have the declared types, as for the identity reduce
+        // (`retargetForIdentity`). The key substituted at this position has this column's type.
+        case t: TransformExpression => argumentsAreColumns(t) && t.argsMatchInputTypes
         case _ => false
       } &&
       // Shuffling another child onto these keys evaluates the partition expressions per row to

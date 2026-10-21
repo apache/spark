@@ -7992,6 +7992,17 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  test("SPARK-50593: a template whose arguments do not have the declared types is not a layout " +
+      "to shuffle onto") {
+    // The one-side shuffle rebuilds the template over the other child's key and evaluates it per
+    // row with no cast, so a Short width at truncate's IntegerType slot would throw there.
+    val (_, trSpec) = mismatchedIdVsTransformSpecs()
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      assert(!trSpec.canCreatePartitioning,
+        "a template whose arguments don't match the declared types must not be shuffled onto")
+    }
+  }
+
   test("SPARK-50593: a literal param whose type differs from the declared input type is not " +
       "reducible (transform-vs-transform)") {
     // Both sides are truncate transforms whose width literal is ShortType, while the function
