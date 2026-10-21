@@ -255,6 +255,15 @@ private[hive] trait HiveClient {
       table: String,
       partialSpec: Option[TablePartitionSpec]): Seq[CatalogTablePartition]
 
+  /**
+   * Returns partition specs and locations for the given table that match the
+   * supplied partition spec.
+   */
+  def getPartitionLocations(
+      db: String,
+      table: String,
+      partialSpec: Option[TablePartitionSpec]): Seq[CatalogTablePartitionLocation]
+
   /** Returns partitions filtered by predicates for the given table. */
   def getPartitionsByFilter(
       catalogTable: RawHiveTable,

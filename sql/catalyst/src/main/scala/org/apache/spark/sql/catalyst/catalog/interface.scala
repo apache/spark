@@ -268,6 +268,44 @@ case class CatalogTablePartition(
 }
 
 /**
+ * A partition's spec and optional location URI, avoiding the memory and RPC overhead of
+ * instantiating a full [[CatalogTablePartition]].
+ *
+ * @param spec partition spec values mapping partition column names to string values
+ * @param locationUri optional partition location URI
+ */
+case class CatalogTablePartitionLocation(
+    spec: CatalogTypes.TablePartitionSpec,
+    locationUri: Option[URI] = None) extends MetadataMapSupport {
+
+  def toJsonLinkedHashMap: mutable.LinkedHashMap[String, JValue] = {
+    val map = mutable.LinkedHashMap[String, JValue]()
+    val specJson = JObject(spec.map { case (k, v) => k -> JString(v) }.toList)
+    map += ("Partition Values" -> specJson)
+    map
+  }
+
+  override def toString: String = {
+    toLinkedHashMap.map { case (key, value) =>
+      if (value.isEmpty) key else s"$key: $value"
+    }.mkString("CatalogPartitionLocation(\n\t", "\n\t", ")")
+  }
+
+  /** Readable string representation for the CatalogTablePartitionLocation. */
+  def simpleString: String = {
+    toLinkedHashMap.map { case (key, value) =>
+      if (value.isEmpty) key else s"$key: $value"
+    }.mkString("", "\n", "")
+  }
+
+  /** Return the partition location, assuming it is specified. */
+  def location: URI = locationUri.getOrElse {
+    val specString = spec.map { case (k, v) => s"$k=$v" }.mkString(", ")
+    throw QueryCompilationErrors.partitionNotSpecifyLocationUriError(specString)
+  }
+}
+
+/**
  * A container for clustering information.
  *
  * @param columnNames the names of the columns used for clustering.

@@ -19,9 +19,11 @@ package org.apache.spark.sql.hive.client
 
 import java.lang.{Boolean => JBoolean, Integer => JInteger, Long => JLong}
 import java.lang.reflect.{InvocationTargetException, Method}
+import java.net.URI
 import java.util.{ArrayList => JArrayList, List => JList, Locale, Map => JMap}
 import java.util.concurrent.TimeUnit
 
+import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
@@ -147,6 +149,11 @@ private[client] sealed abstract class Shim {
       hive: Hive,
       table: Table,
       partSpec: JMap[String, String]): Seq[Partition]
+
+  def getPartitionLocations(
+      hive: Hive,
+      table: Table,
+      partSpec: JMap[String, String]): Seq[CatalogTablePartitionLocation]
 
   def getPartitionNames(
       hive: Hive,
@@ -993,6 +1000,26 @@ private[client] class Shim_v2_0 extends Shim with Logging {
     hive.getPartitions(table, partSpec).asScala.toSeq
   }
 
+  override def getPartitionLocations(
+      hive: Hive,
+      table: Table,
+      partSpec: JMap[String, String]): Seq[CatalogTablePartitionLocation] = {
+    if (!table.isPartitioned) {
+      Seq.empty
+    } else {
+      recordHiveCall()
+      getPartitions(hive, table, partSpec).map { p =>
+        val locationUri = Option(p.getTPartition.getSd)
+          .flatMap(sd => Option(sd.getLocation))
+          .map(CatalogUtils.stringToURI)
+        CatalogTablePartitionLocation(
+          spec = Option(p.getSpec).map(_.asScala.toMap).getOrElse(Map.empty),
+          locationUri = locationUri
+        )
+      }
+    }
+  }
+
   override def getPartitionNames(
       hive: Hive,
       dbName: String,
@@ -1316,6 +1343,77 @@ private[client] class Shim_v4_0 extends Shim_v3_1 {
     "org.apache.hadoop.hive.ql.plan.LoadTableDesc")
   private lazy val clazzPartitionDetails =
     Utils.classForName("org.apache.hadoop.hive.ql.exec.Utilities$PartitionDesc")
+  private lazy val clazzGetPartitionsRequest = getClass.getClassLoader.loadClass(
+    "org.apache.hadoop.hive.metastore.api.GetPartitionsRequest")
+  private lazy val clazzGetProjectionsSpec = getClass.getClassLoader.loadClass(
+    "org.apache.hadoop.hive.metastore.api.GetProjectionsSpec")
+  private lazy val clazzGetPartitionsFilterSpec = getClass.getClassLoader.loadClass(
+    "org.apache.hadoop.hive.metastore.api.GetPartitionsFilterSpec")
+  private lazy val clazzPartitionFilterMode = getClass.getClassLoader.loadClass(
+    "org.apache.hadoop.hive.metastore.api.PartitionFilterMode")
+  private lazy val clazzGetPartitionsResponse = getClass.getClassLoader.loadClass(
+    "org.apache.hadoop.hive.metastore.api.GetPartitionsResponse")
+  private lazy val clazzPartitionSpec = getClass.getClassLoader.loadClass(
+    "org.apache.hadoop.hive.metastore.api.PartitionSpec")
+  private lazy val clazzPartitionSpecWithSharedSD = getClass.getClassLoader.loadClass(
+    "org.apache.hadoop.hive.metastore.api.PartitionSpecWithSharedSD")
+  private lazy val clazzPartitionWithoutSD = getClass.getClassLoader.loadClass(
+    "org.apache.hadoop.hive.metastore.api.PartitionWithoutSD")
+  private lazy val clazzPartitionListComposingSpec = getClass.getClassLoader.loadClass(
+    "org.apache.hadoop.hive.metastore.api.PartitionListComposingSpec")
+  private lazy val clazzMetastorePartition = getClass.getClassLoader.loadClass(
+    "org.apache.hadoop.hive.metastore.api.Partition")
+  private lazy val clazzStorageDescriptor = getClass.getClassLoader.loadClass(
+    "org.apache.hadoop.hive.metastore.api.StorageDescriptor")
+  private lazy val clazzIMetaStoreClient = getClass.getClassLoader.loadClass(
+    "org.apache.hadoop.hive.metastore.IMetaStoreClient")
+
+  private lazy val getPartitionsWithSpecsMethod =
+    findMethod(clazzIMetaStoreClient, "getPartitionsWithSpecs", clazzGetPartitionsRequest)
+
+  private lazy val setFieldListMethod =
+    findMethod(clazzGetProjectionsSpec, "setFieldList", classOf[JList[String]])
+  private lazy val setFilterModeMethod =
+    findMethod(clazzGetPartitionsFilterSpec, "setFilterMode", clazzPartitionFilterMode)
+  private lazy val setFiltersMethod =
+    findMethod(clazzGetPartitionsFilterSpec, "setFilters", classOf[JList[String]])
+  private lazy val setDbNameMethod =
+    findMethod(clazzGetPartitionsRequest, "setDbName", classOf[String])
+  private lazy val setTblNameMethod =
+    findMethod(clazzGetPartitionsRequest, "setTblName", classOf[String])
+  private lazy val setCatNameMethod =
+    findMethod(clazzGetPartitionsRequest, "setCatName", classOf[String])
+  private lazy val setProjectionSpecMethod =
+    findMethod(clazzGetPartitionsRequest, "setProjectionSpec", clazzGetProjectionsSpec)
+  private lazy val setFilterSpecMethod =
+    findMethod(clazzGetPartitionsRequest, "setFilterSpec", clazzGetPartitionsFilterSpec)
+  private lazy val getPartitionSpecMethod =
+    findMethod(clazzGetPartitionsResponse, "getPartitionSpec")
+  private lazy val getSharedSDPartitionSpecMethod =
+    findMethod(clazzPartitionSpec, "getSharedSDPartitionSpec")
+  private lazy val getPartitionListMethod =
+    findMethod(clazzPartitionSpec, "getPartitionList")
+  private lazy val getRootPathMethod =
+    findMethod(clazzPartitionSpec, "getRootPath")
+  private lazy val getSharedSDPartitionsMethod =
+    findMethod(clazzPartitionSpecWithSharedSD, "getPartitions")
+  private lazy val getPartitionWithoutSDValuesMethod =
+    findMethod(clazzPartitionWithoutSD, "getValues")
+  private lazy val getPartitionWithoutSDRelativePathMethod =
+    findMethod(clazzPartitionWithoutSD, "getRelativePath")
+  private lazy val getPartitionListPartitionsMethod =
+    findMethod(clazzPartitionListComposingSpec, "getPartitions")
+  private lazy val getPartitionValuesMethod =
+    findMethod(clazzMetastorePartition, "getValues")
+  private lazy val getPartitionSdMethod =
+    findMethod(clazzMetastorePartition, "getSd")
+  private lazy val getSdLocationMethod =
+    findMethod(clazzStorageDescriptor, "getLocation")
+
+  private lazy val filterModeByValues: AnyRef =
+    clazzPartitionFilterMode.getEnumConstants.find(_.toString == "BY_VALUES").get
+  private lazy val projectionValuesAndLocation: JList[String] =
+    java.util.Collections.unmodifiableList(java.util.Arrays.asList("values", "sd.location"))
 
   override protected lazy val wildcard: String = "%"
 
@@ -1565,6 +1663,186 @@ private[client] class Shim_v4_0 extends Shim_v3_1 {
     recordHiveCall()
     renamePartitionMethod.invoke(hive, table, oldPartSpec, newPart, writeIdInLoadTableOrPartition)
   }
+
+  /**
+   * Rebuilds a partition's absolute location from the root path and relative path returned by
+   * Hive 4.0's `get_partitions_with_specs` for a `PartitionSpecWithSharedSD` group.
+   *
+   * The metastore computes `relativePath` as `location.substring(tablePath.length())` using a
+   * plain `String.startsWith` check (see `MetaStoreServerUtils
+   * .getPartitionspecsGroupedByStorageDescriptor`), which is not path-boundary aware: a partition
+   * located under a sibling directory such as `<tablePath>_external/...` is still grouped under
+   * `tablePath`, yielding a `relativePath` with no leading separator (e.g. `_external/...`).
+   * Hive's own client-side reconstruction (`PartitionSpecWithSharedSDProxy.Iterator.getCurrent`)
+   * therefore undoes this with plain string concatenation (`rootPath + relativePath`), which this
+   * method matches.
+   *
+   * An empty `relPath` (`""`) indicates the partition sits directly at the table root. A null
+   * `relPath` means the metastore did not report a location for the partition (either the
+   * storage descriptor or the descriptor's location field was unset). In that case no location
+   * is returned, matching what the full-fetch path reports for such partitions, rather than
+   * fabricating a default partition path that no data consumer has verified.
+   */
+  private[client] def normalizeLocation(root: String, relPath: String): Option[URI] = {
+    if (relPath == null) {
+      None
+    } else {
+      val loc = if (root != null) root + relPath else relPath
+      Option(loc).map(CatalogUtils.stringToURI)
+    }
+  }
+
+  /**
+   * Issues a Hive 4.0 get_partitions_with_specs request for `table` with the given filter spec,
+   * projecting only the field paths in `fieldList`.
+   *
+   * @return the raw `PartitionSpec` results.
+   */
+  private def fetchProjectedPartitionSpecs(
+      hive: Hive,
+      table: Table,
+      filterSpec: AnyRef,
+      fieldList: JList[String]): Seq[AnyRef] = {
+    val projSpec = clazzGetProjectionsSpec.getConstructor().newInstance()
+    setFieldListMethod.invoke(projSpec, fieldList)
+
+    val req = clazzGetPartitionsRequest.getConstructor().newInstance()
+    setDbNameMethod.invoke(req, table.getDbName)
+    setTblNameMethod.invoke(req, table.getTableName)
+    Option(table.getTTable.getCatName).foreach { cat =>
+      setCatNameMethod.invoke(req, cat)
+    }
+    setProjectionSpecMethod.invoke(req, projSpec)
+    setFilterSpecMethod.invoke(req, filterSpec)
+
+    recordHiveCall()
+    val msc = getMSC(hive)
+    val response = getPartitionsWithSpecsMethod.invoke(msc, req)
+    Option(getPartitionSpecMethod.invoke(response).asInstanceOf[JList[AnyRef]])
+      .map(_.asScala.toSeq).getOrElse(Seq.empty)
+  }
+
+  /**
+   * Builds a BY_VALUES `GetPartitionsFilterSpec` for `partSpec`.
+   * Unspecified partition columns are padded with `""` (empty string) up to the full
+   * partition column list length, matching Hive's `MetaStoreUtils.getPvals` convention.
+   * In HMS `makePartNameMatcher`, `""` evaluates to a per-column wildcard (`.*`), preventing
+   * integer partition values (e.g. `p1=1`) from over-matching prefixes (e.g. `p1=10`) and
+   * enabling direct pushdown for non-prefix specs as well.
+   */
+  private def byValuesFilterSpec(
+      table: Table,
+      partSpec: JMap[String, String]): AnyRef = {
+    val lowerPartSpec = partSpec.asScala.map { case (k, v) =>
+      k.toLowerCase(Locale.ROOT) -> v
+    }
+    if (lowerPartSpec.nonEmpty) {
+      val partColNames = table.getPartCols.asScala.map(_.getName.toLowerCase(Locale.ROOT))
+      val pvals = partColNames.map(col => lowerPartSpec.getOrElse(col, "")).toSeq
+      val fs = clazzGetPartitionsFilterSpec.getConstructor().newInstance()
+      setFilterModeMethod.invoke(fs, filterModeByValues)
+      setFiltersMethod.invoke(fs, pvals.asJava)
+      fs
+    } else {
+      // Hive 4.0 HMS ObjectStore unconditionally calls filterSpec.isSetFilterMode(),
+      // so an empty GetPartitionsFilterSpec is required even when no filter is applied.
+      clazzGetPartitionsFilterSpec.getConstructor().newInstance()
+    }
+  }
+
+  private[client] def buildPartitionSpec(
+      partColNames: Array[String],
+      values: JList[String]): Map[String, String] = {
+    val len = math.min(partColNames.length, values.size())
+    val builder = Map.newBuilder[String, String]
+    builder.sizeHint(len)
+    var i = 0
+    while (i < len) {
+      builder += (partColNames(i) -> values.get(i))
+      i += 1
+    }
+    builder.result()
+  }
+
+  /**
+   * Converts raw `PartitionSpec` results from `fetchProjectedPartitionSpecs` into
+   * `CatalogTablePartitionLocation`, handling both the shared-`StorageDescriptor` and the
+   * independent-`Partition` response shapes Hive 4.0 may return.
+   */
+  private[client] def buildPartitionLocations(
+      table: Table,
+      partitionSpecs: Seq[AnyRef]): Seq[CatalogTablePartitionLocation] = {
+    val origPartColNames = table.getPartCols.asScala.map(_.getName).toArray
+    val baseTableLocation = Option(table.getSd).map(_.getLocation).orNull
+    val results = new ArrayBuffer[CatalogTablePartitionLocation]()
+
+    partitionSpecs.foreach { pSpec =>
+      val sharedSD = getSharedSDPartitionSpecMethod.invoke(pSpec)
+      val partitionList = getPartitionListMethod.invoke(pSpec)
+      val rootPath = Option(getRootPathMethod.invoke(pSpec))
+        .map(_.asInstanceOf[String]).getOrElse(baseTableLocation)
+
+      if (sharedSD != null) {
+        val parts = getSharedSDPartitionsMethod.invoke(sharedSD).asInstanceOf[JList[AnyRef]]
+        if (parts != null) {
+          val iter = parts.iterator()
+          while (iter.hasNext) {
+            val p = iter.next()
+            val values = getPartitionWithoutSDValuesMethod.invoke(p).asInstanceOf[JList[String]]
+            val spec = buildPartitionSpec(origPartColNames, values)
+            val relPath =
+              getPartitionWithoutSDRelativePathMethod.invoke(p).asInstanceOf[String]
+            val locationUri = normalizeLocation(rootPath, relPath)
+            results += CatalogTablePartitionLocation(spec, locationUri)
+          }
+        }
+      } else if (partitionList != null) {
+        val parts =
+          getPartitionListPartitionsMethod.invoke(partitionList).asInstanceOf[JList[AnyRef]]
+        if (parts != null) {
+          val iter = parts.iterator()
+          while (iter.hasNext) {
+            val p = iter.next()
+            val values = getPartitionValuesMethod.invoke(p).asInstanceOf[JList[String]]
+            val spec = buildPartitionSpec(origPartColNames, values)
+            val sd = getPartitionSdMethod.invoke(p)
+            val loc = if (sd != null) {
+              getSdLocationMethod.invoke(sd).asInstanceOf[String]
+            } else {
+              null
+            }
+            // A missing storage descriptor or location string means the metastore
+            // reports no location; keep that, like the full-fetch path, and do not
+            // fabricate a default one.
+            val locationUri = Option(loc).map(CatalogUtils.stringToURI)
+            results += CatalogTablePartitionLocation(spec, locationUri)
+          }
+        }
+      }
+    }
+    results.toSeq
+  }
+
+  override def getPartitionLocations(
+      hive: Hive,
+      table: Table,
+      partSpec: JMap[String, String]): Seq[CatalogTablePartitionLocation] = {
+    if (!table.isPartitioned) {
+      return Seq.empty
+    }
+    if (!SQLConf.get.metastorePartitionProjectionEnabled) {
+      return super.getPartitionLocations(hive, table, partSpec)
+    }
+    val filterSpec = byValuesFilterSpec(table, partSpec)
+    val partitionSpecs =
+      fetchProjectedPartitionSpecs(hive, table, filterSpec, projectionValuesAndLocation)
+    if (partitionSpecs.isEmpty) {
+      Seq.empty
+    } else {
+      buildPartitionLocations(table, partitionSpecs)
+    }
+  }
+
 }
 
 private[client] class Shim_v4_1 extends Shim_v4_0

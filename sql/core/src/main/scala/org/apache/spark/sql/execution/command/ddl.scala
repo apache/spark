@@ -956,10 +956,10 @@ case class RepairTableCommand(
   // Drops the partitions that do not exist in the file system
   private def dropPartitions(catalog: SessionCatalog, fs: FileSystem): Int = {
     val dropPartSpecs = ThreadUtils.parmap(
-      catalog.listPartitions(tableName),
+      catalog.listPartitionLocations(tableName),
       "RepairTableCommand: non-existing partitions",
       maxThreads = 8) { partition =>
-      partition.storage.locationUri.flatMap { uri =>
+      partition.locationUri.flatMap { uri =>
         if (fs.exists(new Path(uri))) None else Some(partition.spec)
       }
     }.flatten

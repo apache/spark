@@ -286,6 +286,22 @@ trait ExternalCatalog {
       partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition]
 
   /**
+   * List partition specs and locations for the specified table.
+   *
+   * @param db database name
+   * @param table table name
+   * @param partialSpec partition spec
+   */
+  def listPartitionLocations(
+      db: String,
+      table: String,
+      partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartitionLocation] = {
+    listPartitions(db, table, partialSpec).map { p =>
+      CatalogTablePartitionLocation(spec = p.spec, locationUri = p.storage.locationUri)
+    }
+  }
+
+  /**
    * List the metadata of partitions that belong to the specified table, assuming it exists, that
    * satisfy the given partition-pruning predicate expressions.
    *
