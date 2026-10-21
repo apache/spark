@@ -165,7 +165,7 @@ case class With(child: Expression, defs: Seq[CommonExpressionDef])
    * falls back (`With` is not a `CodegenFallback`, so it has to be named rather than matched). Such
    * a reference needs its cell bound and cleared; the generated code clears codegen flags instead.
    */
-  @transient private lazy val refUnderCodegenFallback: Boolean = {
+  @transient private[expressions] lazy val refUnderCodegenFallback: Boolean = {
     val ids = defs.map(_.id).toSet
     def holdsMyRef(e: Expression): Boolean = e.exists {
       case r: CommonExpressionRef => ids.contains(r.id)
