@@ -3107,9 +3107,14 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
 
         val plan = df.queryExecution.executedPlan
         assert(collectShuffles(plan).isEmpty, "SPJ should be triggered for both joins")
-        val b12Scan = collectScans(plan).find(_.table.name().endsWith("b12")).get
-        assert(b12Scan.spjParams.reducers.nonEmpty,
-          "b12 scan should keep the inner join's reducers onto bucket(4, id)")
+        val scans = collectScans(plan)
+        def reducersOf(table: String): Option[Seq[Option[Reducer[_, _]]]] =
+          scans.find(_.table.name().endsWith(s".$table")).get.spjParams.reducers
+        assert(reducersOf("b4").isEmpty, "b4 is the coarsest side and needs no reducer")
+        assert(reducersOf("b12").exists(_.length == 1) && reducersOf("b12").get.head.isDefined,
+          "b12 scan should keep the inner join's reducer onto bucket(4, id)")
+        assert(reducersOf("b8").exists(_.length == 1) && reducersOf("b8").get.head.isDefined,
+          "b8 scan should get the outer join's reducer onto bucket(4, id)")
         checkAnswer(df, Seq(Row(4, 4, 4)))
       }
     }
@@ -3382,6 +3387,101 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
               |JOIN testcat.ns.k ON i.id = k.id
               |""".stripMargin),
           Seq.empty)
+      }
+    }
+  }
+
+  test("SPARK-60232: four-way nested SPJ joining on a key dropped by an earlier join") {
+    val cols = Array(
+      Column.create("id", IntegerType),
+      Column.create("name", StringType),
+      Column.create("price", DoubleType))
+    createTable("i", cols, Array(identity("id"), identity("name")))
+    createTable("j", cols, Array(identity("id"), identity("name")))
+    createTable("k", Array(Column.create("id", IntegerType), Column.create("v", DoubleType)),
+      Array(identity("id")))
+    createTable("m", Array(Column.create("name", StringType), Column.create("w", DoubleType)),
+      Array(identity("name")))
+    sql("INSERT INTO testcat.ns.i VALUES (1, 'aa', 1.0), (2, 'bb', 2.0)")
+    sql("INSERT INTO testcat.ns.j VALUES (1, 'aa', 1.0), (2, 'bb', 2.0)")
+    sql("INSERT INTO testcat.ns.k VALUES (1, 10.0), (2, 20.0)")
+    sql("INSERT INTO testcat.ns.m VALUES ('aa', 100.0), ('bb', 200.0)")
+
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
+        val df = sql(
+          """
+            |SELECT /*+ MERGE(i, j, k, m) */ i.id, i.name, k.v, m.w
+            |FROM testcat.ns.i JOIN testcat.ns.j ON i.id = j.id AND i.name = j.name
+            |JOIN testcat.ns.k ON i.id = k.id
+            |JOIN testcat.ns.m ON i.name = m.name
+            |""".stripMargin)
+        checkAnswer(df, Seq(Row(1, "aa", 10.0, 100.0), Row(2, "bb", 20.0, 200.0)))
+      }
+    }
+  }
+
+  test("SPARK-60232: nested SPJ with compatible transforms across three bucket counts") {
+    val idCols = Array(Column.create("id", IntegerType))
+    Seq("b2" -> 2, "b4" -> 4, "b8" -> 8, "b12" -> 12, "c12" -> 12).foreach { case (t, n) =>
+      createTable(t, idCols, Array(bucket(n, "id")))
+      sql(s"INSERT INTO testcat.ns.$t SELECT id FROM range(24)")
+    }
+    val expected = (0 until 24).map(i => Row(i, i, i))
+
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        Seq(
+          ("b12", "b4", "c12"),
+          ("b4", "b12", "c12"),
+          ("b8", "b4", "b2"),
+          ("b4", "b8", "b2")).foreach { case (t1, t2, t3) =>
+          val df = sql(
+            s"""
+               |SELECT /*+ MERGE($t1, $t2, $t3) */ $t1.id, $t2.id, $t3.id
+               |FROM testcat.ns.$t1 JOIN testcat.ns.$t2 ON $t1.id = $t2.id
+               |JOIN testcat.ns.$t3 ON $t1.id = $t3.id
+               |""".stripMargin)
+          checkAnswer(df, expected)
+        }
+      }
+    }
+  }
+
+  test("SPARK-60232: nested SPJ narrows common values already projected by an inner join") {
+    val cols = Array(
+      Column.create("a", IntegerType),
+      Column.create("b", IntegerType),
+      Column.create("c", IntegerType))
+    createTable("ta", cols, Array(identity("a"), identity("b"), identity("c")))
+    createTable("tb", cols, Array(identity("b"), identity("c")))
+    createTable("tc", cols, Array.empty)
+    sql("INSERT INTO testcat.ns.ta VALUES (1, 10, 100), (2, 20, 100), (3, 30, 300)")
+    sql("INSERT INTO testcat.ns.tb VALUES (0, 10, 100), (0, 20, 100), (0, 30, 300)")
+    sql("INSERT INTO testcat.ns.tc VALUES (0, 0, 100), (0, 0, 300)")
+
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
+        val df = sql(
+          """
+            |SELECT /*+ MERGE(ta, tb, tc) */ ta.a, ta.b, ta.c, tc.c
+            |FROM testcat.ns.ta JOIN testcat.ns.tb ON ta.b = tb.b AND ta.c = tb.c
+            |JOIN testcat.ns.tc ON ta.c = tc.c
+            |""".stripMargin)
+        checkAnswer(df, Seq(Row(1, 10, 100, 100), Row(2, 20, 100, 100), Row(3, 30, 300, 300)))
       }
     }
   }
