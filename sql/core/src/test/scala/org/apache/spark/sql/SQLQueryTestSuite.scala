@@ -28,7 +28,8 @@ import scala.collection.mutable
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkConf, TestUtils}
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedIdentifier, UnresolvedInsertTarget}
+import org.apache.spark.sql.catalyst.analysis.{TableOutputResolver, UnresolvedIdentifier,
+  UnresolvedInsertTarget}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{Command, CreateFlowCommand, LogicalPlan,
@@ -527,8 +528,17 @@ class SQLQueryTestSuite extends SharedSparkSession
     require(session.catalog.tableExists(flow.targetTable),
       s"SQL golden triggered flow target table '${flow.targetTable}' does not exist.")
     val queryName = triggeredFlowQueryName(testCase, sparkConfigSet, flow.flowName)
+    val alignedQuery = TableOutputResolver.resolveOutputColumns(
+      flow.targetTable,
+      session.table(flow.targetTable).queryExecution.analyzed.output,
+      df.queryExecution.analyzed,
+      byName = true,
+      session.sessionState.conf,
+      TableOutputResolver.DefaultValueFillMode.FILL)
+    val alignedDf = classic.Dataset.ofRows(
+      session.asInstanceOf[classic.SparkSession], alignedQuery)
 
-    val writer = df.writeStream
+    val writer = alignedDf.writeStream
       .outputMode(OutputMode.Append())
       .trigger(Trigger.AvailableNow())
       .queryName(queryName)
@@ -1186,6 +1196,53 @@ class SQLQueryTestSuite extends SharedSparkSession
     }
     assert(batchFlowError.getMessage.contains("triggered flow `batch_flow`"))
     assert(!batchFlowError.getMessage.contains("REFRESH FLOW"))
+
+    withTable("by_name_source", "by_name_sink") {
+      spark.sql("CREATE TABLE by_name_source (second INT, first INT) USING parquet")
+      spark.sql("INSERT INTO by_name_source VALUES (2, 1)")
+      spark.sql("CREATE TABLE by_name_sink (first INT, second INT) USING parquet")
+      val byNameFlows = mutable.Map.empty[Seq[String], TriggeredFlow]
+      registerTriggeredFlow(
+        spark,
+        createFlowCommand(
+          """CREATE FLOW by_name_flow AS
+            |INSERT INTO by_name_sink BY NAME
+            |SELECT second, first FROM STREAM(by_name_source)
+            |""".stripMargin),
+        byNameFlows)
+      runTriggeredFlow(
+        spark,
+        Seq("by_name_flow"),
+        RegularTestCase("by-name", "", ""),
+        Nil,
+        byNameFlows)
+      checkAnswer(spark.table("by_name_sink"), Row(1, 2))
+    }
+
+    withTable("incompatible_source", "incompatible_sink") {
+      spark.sql("CREATE TABLE incompatible_source (id INT) USING parquet")
+      spark.sql("CREATE TABLE incompatible_sink (other INT) USING parquet")
+      val incompatibleFlows = mutable.Map.empty[Seq[String], TriggeredFlow]
+      registerTriggeredFlow(
+        spark,
+        createFlowCommand(
+          """CREATE FLOW incompatible_flow AS
+            |INSERT INTO incompatible_sink BY NAME
+            |SELECT id FROM STREAM(incompatible_source)
+            |""".stripMargin),
+        incompatibleFlows)
+      checkError(
+        exception = intercept[AnalysisException] {
+          runTriggeredFlow(
+            spark,
+            Seq("incompatible_flow"),
+            RegularTestCase("incompatible", "", ""),
+            Nil,
+            incompatibleFlows)
+        },
+        condition = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_COLUMNS",
+        parameters = Map("tableName" -> "`incompatible_sink`", "extraColumns" -> "`id`"))
+    }
 
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       withTable("runtime_error_source", "runtime_error_sink") {
