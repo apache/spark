@@ -137,6 +137,12 @@ object OrcUtils extends Logging {
         case Category.STRUCT => toStructType(orcType)
         case Category.LIST => toArrayType(orcType)
         case Category.MAP => toMapType(orcType)
+        // A Spark TIMESTAMP_LTZ column (catalyst type attribute `timestamp`) and a foreign ORC
+        // TIMESTAMP column (no attribute) are both read as TimestampType, so do not let the
+        // parser resolve `timestamp` by spark.sql.timestampType.
+        case Category.TIMESTAMP if Option(orcType.getAttributeValue(CATALYST_TYPE_ATTRIBUTE_NAME))
+            .forall(_ == TimestampType.typeName) =>
+          TimestampType
         case _ =>
           val catalystTypeAttrValue = orcType.getAttributeValue(CATALYST_TYPE_ATTRIBUTE_NAME)
           if (catalystTypeAttrValue != null) {
