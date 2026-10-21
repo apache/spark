@@ -34,7 +34,7 @@ use std::collections::BTreeMap;
 use arrow_array::RecordBatch;
 use arrow_schema::{ArrowError, SchemaRef};
 use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 mod abi;
 mod bridge;
@@ -43,6 +43,7 @@ mod export;
 mod host;
 mod predicate;
 mod task;
+mod unsupported;
 mod write;
 
 /// Implementation details of [`export_data_source!`] and of the SDK's own tests, not an API.
@@ -73,6 +74,7 @@ pub use host::HostInfo;
 pub use log;
 pub use predicate::{LiteralValue, Predicate};
 pub use task::TaskContext;
+pub use unsupported::Unsupported;
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub type Result<T> = std::result::Result<T, Error>;
@@ -693,95 +695,4 @@ pub trait StreamingWrite: Send + 'static {
     /// Abort the micro-batch after input, task, or driver commit failure. None stands for
     /// a partition whose commit message did not reach the driver, or cannot be decoded.
     fn abort(&mut self, epoch_id: i64, messages: Vec<Option<Self::Message>>) -> Result<()>;
-}
-
-// Unsupported operations.
-
-/// The type of an operation that a source does not implement, as in
-/// `type BatchWrite = Unsupported;`. It has no values, so none of the methods of its
-/// trait implementations can be called.
-#[derive(Debug, Serialize, Deserialize)]
-pub enum Unsupported {}
-
-impl ScanBuilder for Unsupported {
-    type Factory = Self;
-
-    const SUPPORTED: bool = false;
-
-    fn plan(self) -> Result<ScanPlan<Self>> {
-        match self {}
-    }
-}
-
-impl PartitionReaderFactory for Unsupported {
-    type Partition = Self;
-
-    fn open<'task>(&self, _: Self, _: ReaderContext<'task>) -> Result<PartitionReader<'task>> {
-        match *self {}
-    }
-}
-
-impl MicroBatchStream for Unsupported {
-    type Offset = Self;
-    type Factory = Self;
-
-    const SUPPORTED: bool = false;
-
-    fn initial_offset(&mut self) -> Result<Self> {
-        match *self {}
-    }
-
-    fn latest_offset(&mut self) -> Result<Self> {
-        match *self {}
-    }
-
-    fn plan(&mut self, _: Self, _: Self) -> Result<ScanPlan<Self>> {
-        match *self {}
-    }
-}
-
-impl BatchWrite for Unsupported {
-    type Factory = Self;
-    type Message = Self;
-
-    const SUPPORTED: bool = false;
-
-    fn writer_factory(&self) -> Result<Self> {
-        match *self {}
-    }
-
-    fn commit(&mut self, _: Vec<Self>) -> Result<()> {
-        match *self {}
-    }
-
-    fn abort(&mut self, _: Vec<Option<Self>>) -> Result<()> {
-        match *self {}
-    }
-}
-
-impl DataWriterFactory for Unsupported {
-    type Message = Self;
-
-    fn open<'task>(&self, _: WriterContext<'task>) -> Result<PartitionWriter<'task, Self>> {
-        match *self {}
-    }
-}
-
-impl StreamingWrite for Unsupported {
-    type Factory = Self;
-    type Message = Self;
-
-    const SUPPORTED: bool = false;
-
-    fn writer_factory(&self) -> Result<Self> {
-        match *self {}
-    }
-
-    fn commit(&mut self, _: i64, _: Vec<Self>) -> Result<()> {
-        match *self {}
-    }
-
-    fn abort(&mut self, _: i64, _: Vec<Option<Self>>) -> Result<()> {
-        match *self {}
-    }
 }
