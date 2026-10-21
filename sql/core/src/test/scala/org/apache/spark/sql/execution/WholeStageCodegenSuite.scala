@@ -23,8 +23,11 @@ import java.time.Duration
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.MapPartitionsWithEvaluatorRDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SaveMode}
-import org.apache.spark.sql.catalyst.expressions.{And, Cast, CodegenObjectFactoryMode, Expression, IsNotNull}
+import org.apache.spark.sql.catalyst.expressions.{And, Cast, CodegenObjectFactoryMode, Expression, IsNotNull, Literal}
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodeGenerator}
+import org.apache.spark.sql.catalyst.plans.logical.MergeRows
+import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Keep, Update}
+import org.apache.spark.sql.classic
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
@@ -1584,6 +1587,75 @@ class WholeStageCodegenSuite extends SharedSparkSession
       withSQLConf(SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> "false") {
         check(times.select(window($"ts", "1 hour", "10 seconds")))
       }
+    }
+  }
+
+  test("SPARK-60403: full outer joins compile with their functions spilled to nested classes") {
+    // A full outer join outputs its rows through a function of its own, and generates the code of
+    // the operators above it, for the body of that function, before adding the function: here
+    // the Expand of a sliding window, whose 360 switch case functions (SPARK-35329) take the class
+    // past `CodeGenerator.GENERATED_CLASS_SIZE_THRESHOLD`, so `addNewFunction` puts the join's
+    // functions into a nested class. A call from outside of such a class has to go through its
+    // instance, as the name `addNewFunction` returns does; by the bare name it failed to compile.
+    // The join loop in `processNext` of the outer class makes these calls: to `findNextJoinRows`
+    // and `consumeFullOuterJoinRow` in a sort merge join, and to `consumeOuterJoinRow` in a
+    // shuffled hash join.
+    withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "false") {
+      withTempView("l", "r") {
+        spark.range(0, 10).selectExpr("id AS k").createOrReplaceTempView("l")
+        spark.range(5, 15).selectExpr("id AS k").createOrReplaceTempView("r")
+        Seq("MERGE" -> "findNextJoinRows", "SHUFFLE_HASH" -> "consumeOuterJoinRow").foreach {
+          case (hint, function) =>
+            // The window filters out null times, which keeps the join a full outer join only
+            // when the time is not null on either side.
+            def df: DataFrame = sql(s"SELECT /*+ $hint(r) */ " +
+              "timestamp_seconds(coalesce(l.k, r.k)) AS ts FROM l FULL OUTER JOIN r ON l.k = r.k")
+              .groupBy(window($"ts", "1 hour", "10 seconds")).count()
+            val code = genCode(df)
+            code.foreach(CodeGenerator.compile)
+            val qualifiedCall = s"\\w*nestedClassInstance_\\d+\\.\\w*${function}_\\d+\\(".r
+            assert(code.exists(c => qualifiedCall.findFirstIn(c.body).nonEmpty), hint)
+            val expected = withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+              df.collect().toSeq
+            }
+            checkAnswer(df, expected)
+        }
+      }
+    }
+  }
+
+  test("SPARK-60403: MergeRows compiles with its function spilled to a nested class") {
+    // `MergeRowsExec` processes each row in a function of its own, and generates the code of the
+    // operators above it, for the body of that function, before adding the function: here the
+    // Expand of a sliding window, whose 360 switch case functions (SPARK-35329) take the class
+    // past `CodeGenerator.GENERATED_CLASS_SIZE_THRESHOLD`, so the function goes into a nested
+    // class. With the consume code of the operators not split into functions, the call to it is
+    // in `processNext` of the outer class, where by the bare name it failed to compile. The
+    // MergeRows node is built as in `MergeRowsExecBenchmark`, matching every row.
+    val source = spark.range(10).selectExpr("CAST(id AS INT) AS t", "timestamp_seconds(id) AS ts")
+    val attrs = source.queryExecution.analyzed.output
+    val mergeRows = MergeRows(
+      isSourceRowPresent = Literal.TrueLiteral,
+      isTargetRowPresent = Literal.TrueLiteral,
+      matchedInstructions = Seq(Keep(Update, Literal.TrueLiteral, attrs)),
+      notMatchedInstructions = Nil,
+      notMatchedBySourceInstructions = Nil,
+      checkCardinality = false,
+      output = attrs.map(_.newInstance()),
+      child = source.queryExecution.analyzed)
+    def df: DataFrame = classic.Dataset.ofRows(spark, mergeRows)
+      .groupBy(window($"ts", "1 hour", "10 seconds")).count()
+    withSQLConf(
+        SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "false",
+        SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> "false") {
+      val code = genCode(df)
+      code.foreach(CodeGenerator.compile)
+      val qualifiedCall = "\\w*nestedClassInstance_\\d+\\.\\w*mergeProcessRow_\\d+\\(".r
+      assert(code.exists(c => qualifiedCall.findFirstIn(c.body).nonEmpty))
+      val expected = withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+        df.collect().toSeq
+      }
+      checkAnswer(df, expected)
     }
   }
 }
