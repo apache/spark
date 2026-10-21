@@ -3212,6 +3212,180 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     }
   }
 
+  private def createNestedSpjIdTables(): Unit = {
+    val cols = Array(
+      Column.create("store", IntegerType),
+      Column.create("id", IntegerType),
+      Column.create("data", StringType))
+    Seq("e1", "e2", "e3", "e5").foreach(t => createTable(t, cols, Array(identity("id"))))
+    sql("INSERT INTO testcat.ns.e1 VALUES (0, 1, 'a'), (0, 2, 'b')")
+    sql("INSERT INTO testcat.ns.e2 VALUES (0, 1, 'a'), (0, 2, 'b')")
+    sql("INSERT INTO testcat.ns.e3 VALUES (0, 1, 'a'), (0, 2, 'b'), (0, 3, 'c')")
+    sql("INSERT INTO testcat.ns.e5 VALUES (0, 2, 'b'), (0, 3, 'c')")
+    createTable("e4", cols, Array(identity("store"), identity("id")))
+    sql("INSERT INTO testcat.ns.e4 VALUES (10, 1, 'a'), (20, 2, 'b'), (30, 3, 'c')")
+  }
+
+  test("SPARK-60232: nested SPJ pushes outer merged values into a nested join") {
+    createNestedSpjIdTables()
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+        SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true") {
+        val df = sql(
+          """
+            |SELECT /*+ MERGE(e1, e2, e5) */ e1.id, e2.id, e5.id
+            |FROM testcat.ns.e1 JOIN testcat.ns.e2 ON e1.id = e2.id
+            |RIGHT JOIN testcat.ns.e5 ON e1.id = e5.id
+            |""".stripMargin)
+        checkAnswer(df, Seq(Row(2, 2, 2), Row(null, null, 3)))
+      }
+
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+        SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+        val df = sql(
+          """
+            |SELECT /*+ MERGE(e1, e2, e3) */ e1.id, e2.id, e3.id
+            |FROM testcat.ns.e1 JOIN testcat.ns.e2 ON e1.id = e2.id
+            |JOIN testcat.ns.e3 ON e1.id = e3.id
+            |""".stripMargin)
+        assert(collectShuffles(df.queryExecution.executedPlan).isEmpty,
+          "SPJ should be triggered for both joins")
+        checkAnswer(df, Seq(Row(1, 1, 1), Row(2, 2, 2)))
+      }
+    }
+  }
+
+  test("SPARK-60232: nested SPJ with subset join keys on a two-key partitioned side") {
+    createNestedSpjIdTables()
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
+        val df = sql(
+          """
+            |SELECT /*+ MERGE(e1, e2, e4) */ e1.id, e2.id, e4.id, e4.store
+            |FROM testcat.ns.e1 JOIN testcat.ns.e2 ON e1.id = e2.id
+            |JOIN testcat.ns.e4 ON e1.id = e4.id
+            |""".stripMargin)
+        checkAnswer(df, Seq(Row(1, 1, 1, 10), Row(2, 2, 2, 20)))
+      }
+    }
+  }
+
+  test("SPARK-60232: nested SPJ on all partition keys, then on a subset") {
+    val cols = Array(
+      Column.create("store_id", IntegerType),
+      Column.create("dept_id", IntegerType),
+      Column.create("data", StringType))
+    createTable("a", cols, Array(identity("store_id"), identity("dept_id")))
+    createTable("b", cols, Array(identity("store_id"), identity("dept_id")))
+    createTable("c", cols, Array(identity("dept_id")))
+    sql("INSERT INTO testcat.ns.a VALUES (1, 2, 'a1'), (2, 2, 'a2'), (3, 1, 'a3')")
+    sql("INSERT INTO testcat.ns.b VALUES (1, 2, 'b1'), (2, 2, 'b2'), (3, 1, 'b3')")
+    sql("INSERT INTO testcat.ns.c VALUES (0, 1, 'c1'), (0, 2, 'c2'), (0, 3, 'c3')")
+
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+        SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
+        val expected = Seq(
+          Row(1, 2, "a1", 1, 2, "b1", 0, 2, "c2"),
+          Row(2, 2, "a2", 2, 2, "b2", 0, 2, "c2"),
+          Row(3, 1, "a3", 3, 1, "b3", 0, 1, "c1"))
+        Seq("a.dept_id", "b.dept_id").foreach { outerKey =>
+          val df = sql(
+            s"""
+               |SELECT /*+ MERGE(a, b, c) */ *
+               |FROM testcat.ns.a JOIN testcat.ns.b
+               |ON a.store_id = b.store_id AND a.dept_id = b.dept_id
+               |JOIN testcat.ns.c ON $outerKey = c.dept_id
+               |""".stripMargin)
+          checkAnswer(df, expected)
+        }
+      }
+    }
+  }
+
+  test("SPARK-60232: nested SPJ dedupes common values that project to the same join key") {
+    val cols = Array(
+      Column.create("store_id", IntegerType),
+      Column.create("dept_id", IntegerType),
+      Column.create("data", StringType))
+    createTable("a", cols, Array(identity("store_id"), identity("dept_id")))
+    createTable("b", cols, Array(identity("store_id"), identity("dept_id")))
+    createTable("c", cols, Array(identity("dept_id")))
+    sql("INSERT INTO testcat.ns.a VALUES (1, 2, 'a1'), (2, 2, 'a2')")
+    sql("INSERT INTO testcat.ns.b VALUES (1, 2, 'b1'), (2, 2, 'b2')")
+    sql("INSERT INTO testcat.ns.c VALUES (0, 1, 'c1'), (0, 2, 'c2'), (0, 3, 'c3')")
+
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+        SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
+        val df = sql(
+          """
+            |SELECT /*+ MERGE(a, b, c) */ a.data, b.data, c.data
+            |FROM testcat.ns.a JOIN testcat.ns.b
+            |ON a.store_id = b.store_id AND a.dept_id = b.dept_id
+            |JOIN testcat.ns.c ON a.dept_id = c.dept_id
+            |""".stripMargin)
+        checkAnswer(df, Seq(Row("a1", "b1", "c2"), Row("a2", "b2", "c2")))
+      }
+    }
+  }
+
+  test("SPARK-60232: nested SPJ with several names per id and a partitioned third side") {
+    val cols = Array(
+      Column.create("id", IntegerType),
+      Column.create("name", StringType),
+      Column.create("price", DoubleType))
+    createTable("i", cols, Array(identity("id"), identity("name")))
+    createTable("j", cols, Array(identity("id"), identity("name")))
+    createTable("k", Array(Column.create("id", IntegerType), Column.create("v", DoubleType)),
+      Array(identity("id")))
+    sql("INSERT INTO testcat.ns.i VALUES (1, 'aa', 1.0), (1, 'bb', 2.0)")
+    sql("INSERT INTO testcat.ns.j VALUES (1, 'aa', 1.0), (1, 'bb', 2.0)")
+    sql("INSERT INTO testcat.ns.k VALUES (1, 10.0), (2, 20.0)")
+
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+        SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
+        checkAnswer(
+          sql(
+            """
+              |SELECT /*+ MERGE(i, j, k) */ i.id, i.name, j.name, k.v
+              |FROM testcat.ns.i JOIN testcat.ns.j ON i.id = j.id AND i.name = j.name
+              |JOIN testcat.ns.k ON i.id = k.id
+              |""".stripMargin),
+          Seq(Row(1, "aa", "aa", 10.0), Row(1, "bb", "bb", 10.0)))
+        checkAnswer(
+          sql(
+            """
+              |SELECT /*+ MERGE(i, j, k) */ i.id, i.name, k.v
+              |FROM testcat.ns.i LEFT ANTI JOIN testcat.ns.j
+              |ON i.id = j.id AND i.name = j.name
+              |JOIN testcat.ns.k ON i.id = k.id
+              |""".stripMargin),
+          Seq.empty)
+      }
+    }
+  }
+
   test("SPARK-48012: one-side shuffle with partition transforms") {
     val items_partitions = Array(bucket(2, "id"), identity("arrive_time"))
     val items_partitions2 = Array(identity("arrive_time"), bucket(2, "id"))
