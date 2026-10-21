@@ -20,15 +20,15 @@ package org.apache.spark.sql.connector.read;
 import org.apache.spark.annotation.Evolving;
 
 /**
- * Planning information provided to a data source when creating a {@link ScanBuilder}.
+ * Planning context provided to a data source when creating a {@link ScanBuilder}.
  *
  * @since 4.4.0
  */
 @Evolving
-public class ScanBuilderInfo {
+public class ScanBuilderContext {
   private final boolean isInSubquery;
 
-  public ScanBuilderInfo(boolean isInSubquery) {
+  public ScanBuilderContext(boolean isInSubquery) {
     this.isInSubquery = isInSubquery;
   }
 

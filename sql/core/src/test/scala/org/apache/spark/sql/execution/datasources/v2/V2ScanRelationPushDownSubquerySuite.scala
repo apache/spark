@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.{GreaterThan, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project, Subquery}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable, InMemoryTableCatalog, SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
-import org.apache.spark.sql.connector.read.{Batch, Scan, ScanBuilder, ScanBuilderInfo, Statistics, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownRequiredColumns, SupportsReportStatistics}
+import org.apache.spark.sql.connector.read.{Batch, Scan, ScanBuilder, ScanBuilderContext, Statistics, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownRequiredColumns, SupportsReportStatistics}
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
@@ -57,10 +57,10 @@ class V2ScanRelationPushDownSubquerySuite extends QueryTest with SharedSparkSess
 
   private def assertContexts(expected: Set[Boolean]): Unit = {
     assert(calls.nonEmpty)
-    assert(calls.forall(_.info.isDefined))
-    assert(calls.map(_.info.get.isInSubquery()).toSet == expected)
+    assert(calls.forall(_.context.isDefined))
+    assert(calls.map(_.context.get.isInSubquery()).toSet == expected)
     calls.indices.foreach { i =>
-      (0 until i).foreach { j => assert(calls(i).info.get ne calls(j).info.get) }
+      (0 until i).foreach { j => assert(calls(i).context.get ne calls(j).context.get) }
     }
   }
 
@@ -75,7 +75,7 @@ class V2ScanRelationPushDownSubquerySuite extends QueryTest with SharedSparkSess
         super.newScanBuilder(options)
       }
     }
-    table.newScanBuilder(new ScanBuilderInfo(true), options).build()
+    table.newScanBuilder(new ScanBuilderContext(true), options).build()
     assert(receivedOptions eq options)
     assert(receivedOptions.get("mixed") == "value")
   }
@@ -85,7 +85,7 @@ class V2ScanRelationPushDownSubquerySuite extends QueryTest with SharedSparkSess
     val table = relation.table.asInstanceOf[SupportsRead]
     table.newScanBuilder(relation.options).build()
     assert(calls.size == 1)
-    assert(calls.head.info.isEmpty)
+    assert(calls.head.context.isEmpty)
     assert(calls.head.options eq relation.options)
   }
 
@@ -118,7 +118,7 @@ class V2ScanRelationPushDownSubquerySuite extends QueryTest with SharedSparkSess
     V2ScanRelationPushDown(relation)
     V2ScanRelationPushDown(Subquery(relation, correlated = false))
     V2ScanRelationPushDown(relation)
-    assert(calls.map(_.info.get.isInSubquery()).toSeq == Seq(false, true, false))
+    assert(calls.map(_.context.get.isInSubquery()).toSeq == Seq(false, true, false))
     assertContexts(Set(false, true))
     assert(calls.forall(_.options eq relation.options))
   }
@@ -130,7 +130,7 @@ class V2ScanRelationPushDownSubquerySuite extends QueryTest with SharedSparkSess
       val rebuilt = V2ScanRelationPushDown.rebuildScan(
         relation, Seq(relation.output.head), Nil, isSubquery = inSubquery)
       assert(rebuilt.isDefined)
-      assert(calls.last.info.get.isInSubquery() == inSubquery)
+      assert(calls.last.context.get.isInSubquery() == inSubquery)
       assert(calls.last.options eq relation.options)
     }
     assertContexts(Set(false, true))
@@ -220,10 +220,10 @@ object SubqueryScanTestCatalog {
 }
 
 class SubqueryScanTestCall(
-    val info: Option[ScanBuilderInfo],
+    val context: Option[ScanBuilderContext],
     val options: CaseInsensitiveStringMap) {
   val events: ArrayBuffer[String] = ArrayBuffer("select statistics")
-  val sizeInBytes: Long = if (info.exists(_.isInSubquery())) 10L else 100L
+  val sizeInBytes: Long = if (context.exists(_.isInSubquery())) 10L else 100L
   var requiredSchema: StructType = new StructType()
 }
 
@@ -239,15 +239,15 @@ class SubqueryScanTestTable(table: InMemoryTable) extends Table with SupportsRea
   }
 
   override def newScanBuilder(
-      info: ScanBuilderInfo,
+      context: ScanBuilderContext,
       options: CaseInsensitiveStringMap): ScanBuilder = {
-    newBuilder(Some(info), options)
+    newBuilder(Some(context), options)
   }
 
   private def newBuilder(
-      info: Option[ScanBuilderInfo],
+      context: Option[ScanBuilderContext],
       options: CaseInsensitiveStringMap): ScanBuilder = {
-    val call = new SubqueryScanTestCall(info, options)
+    val call = new SubqueryScanTestCall(context, options)
     SubqueryScanTestCatalog.calls += call
     val delegate = table.newScanBuilder(options)
     new ScanBuilder with SupportsPushDownRequiredColumns with SupportsPushDownFilters

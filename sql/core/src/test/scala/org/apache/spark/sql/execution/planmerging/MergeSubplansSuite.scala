@@ -33,7 +33,7 @@ import org.apache.spark.sql.connector.catalog.{FunctionCatalog, Identifier, Supp
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.connector.expressions.{Expressions, FieldReference, SortDirection => V2SortDirection, SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, ScanBuilderInfo, Statistics => V2Statistics, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters, SupportsReportOrdering, SupportsReportPartitioning, SupportsReportStatistics}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, ScanBuilderContext, Statistics => V2Statistics, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters, SupportsReportOrdering, SupportsReportPartitioning, SupportsReportStatistics}
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning => V2KeyGroupedPartitioning, Partitioning => V2Partitioning, UnknownPartitioning => V2UnknownPartitioning}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, V2ScanPartitioningAndOrdering, V2ScanRelationPushDown}
 import org.apache.spark.sql.internal.SQLConf
@@ -2534,9 +2534,9 @@ class MergeSubplansSuite extends PlanTest {
     val table = new TestV2Table(StructType(Seq(
       StructField("a", IntegerType), StructField("b", IntegerType)))) {
       override def newScanBuilder(
-          info: ScanBuilderInfo,
+          context: ScanBuilderContext,
           options: CaseInsensitiveStringMap): ScanBuilder = {
-        scanContexts += info.isInSubquery()
+        scanContexts += context.isInSubquery()
         super.newScanBuilder(options)
       }
     }
