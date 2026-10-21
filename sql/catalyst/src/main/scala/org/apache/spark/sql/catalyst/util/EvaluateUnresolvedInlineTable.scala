@@ -89,10 +89,12 @@ object EvaluateUnresolvedInlineTable extends SQLConfHelper
   /**
    * Returns whether the expression can be evaluated during the analysis phase: it must be
    * foldable, or contain CURRENT_LIKE expressions, which are replaced by literals at the end of
-   * the analysis phase. Inline tables with only such expressions are evaluated during analysis.
+   * the analysis phase, but no subqueries, which can only be evaluated when the query runs.
+   * Inline tables with only such expressions are evaluated during analysis.
    */
   private def canEvalDuringAnalysis(e: Expression): Boolean =
-    e.containsPattern(CURRENT_LIKE) || (e.resolved && trimAliases(prepareForEval(e)).foldable)
+    (e.containsPattern(CURRENT_LIKE) && !SubqueryExpression.hasSubquery(e)) ||
+      (e.resolved && trimAliases(prepareForEval(e)).foldable)
 
   /**
    * Validates the input data dimension:

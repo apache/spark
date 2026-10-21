@@ -149,6 +149,29 @@ class InlineTableNonFoldableExpressionsSuite
     }
   }
 
+  test("uncorrelated scalar subqueries with CURRENT_LIKE expressions") {
+    // The CURRENT_LIKE expressions inside and next to the subqueries share the value of the rest
+    // of the query.
+    checkAnswer(
+      sql("SELECT d = current_date() FROM VALUES ((SELECT current_date())) AS t(d)"),
+      Row(true))
+    checkAnswer(
+      sql(
+        """SELECT d = date_add(current_date(), 1)
+          |FROM VALUES (date_add(current_date(), (SELECT 1))) AS t(d)
+          |""".stripMargin),
+      Row(true))
+    withTable("t") {
+      sql("CREATE TABLE t(id INT, ts TIMESTAMP) USING parquet")
+      sql("INSERT INTO t VALUES (1, TIMESTAMP'2000-01-01 00:00:00')")
+      sql(
+        """INSERT INTO t VALUES
+          |  ((SELECT max(id) FROM t WHERE ts < current_timestamp()) + 1, current_timestamp())
+          |""".stripMargin)
+      checkAnswer(sql("SELECT id FROM t"), Seq(Row(1), Row(2)))
+    }
+  }
+
   test("correlated references and subqueries other than scalar subqueries are rejected") {
     withTempView("t") {
       sql("CREATE TEMPORARY VIEW t AS SELECT * FROM VALUES (1) AS t(a)")
@@ -161,7 +184,10 @@ class InlineTableNonFoldableExpressionsSuite
     }
     Seq(
       "SELECT * FROM VALUES (EXISTS (SELECT 1), rand())",
-      "SELECT * FROM VALUES (1 IN (SELECT 1), rand())").foreach { query =>
+      "SELECT * FROM VALUES (1 IN (SELECT 1), rand())",
+      // CURRENT_LIKE expressions don't make them evaluable during analysis.
+      "SELECT * FROM VALUES (EXISTS (SELECT current_date()))",
+      "SELECT * FROM VALUES (current_date() IN (SELECT current_date()))").foreach { query =>
       val e = intercept[AnalysisException](sql(query))
       assert(e.getCondition == "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE")
     }
@@ -262,12 +288,14 @@ class InlineTableNonFoldableExpressionsSuite
         parameters = Map("expr" -> "\"rand(5)\""),
         context = contextOf(query, "rand(5)"))
 
-      val subqueryQuery = "SELECT * FROM VALUES ((SELECT 1))"
-      checkError(
-        exception = intercept[AnalysisException](sql(subqueryQuery)),
-        condition = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.SCALAR_SUBQUERY_IN_VALUES",
-        parameters = Map.empty,
-        context = contextOf(subqueryQuery, "VALUES ((SELECT 1))"))
+      Seq("(SELECT 1)", "(SELECT current_date())").foreach { subquery =>
+        val subqueryQuery = s"SELECT * FROM VALUES ($subquery)"
+        checkError(
+          exception = intercept[AnalysisException](sql(subqueryQuery)),
+          condition = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.SCALAR_SUBQUERY_IN_VALUES",
+          parameters = Map.empty,
+          context = contextOf(subqueryQuery, s"VALUES ($subquery)"))
+      }
     }
   }
 }

@@ -34,9 +34,9 @@ VALUES ( expression [ , ... ] ) [ table_alias ]
 * **expression**
 
     Specifies a combination of one or more values, operators and SQL functions that results in a value.
-    The expression does not need to be constant: nondeterministic functions such as `rand()`,
-    Scala and Java user-defined functions, and uncorrelated scalar subqueries are evaluated when
-    the query runs. Aggregate, window and generator functions, SQL and Python user-defined
+    Since Spark 4.4, the expression does not need to be constant: nondeterministic functions such as
+    `rand()`, Scala and Java user-defined functions, and uncorrelated scalar subqueries are evaluated
+    when the query runs. Aggregate, window and generator functions, SQL and Python user-defined
     functions, other kinds of subqueries, and references to columns of an outer query are not
     supported.
 

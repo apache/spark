@@ -244,6 +244,28 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
     }
   }
 
+  test("subqueries with CURRENT_LIKE expressions are not evaluated during analysis") {
+    // The tree patterns of a subquery expression include those of its plan.
+    val currentTimestampRow = Project(Seq(Alias(CurrentTimestamp(), "ts")()), OneRowRelation())
+    Seq(
+      ScalarSubquery(currentTimestampRow),
+      CreateArray(Seq(CurrentTimestamp(), ScalarSubquery(currentTimestampRow)))
+    ).foreach { e =>
+      ResolveInlineTables(UnresolvedInlineTable(Seq("c1"), Seq(Seq(e)))) match {
+        case Expand(Seq(Seq(projection)), _, _: OneRowRelation) => assert(projection == e)
+        case other => fail(s"Expected an Expand, but got $other")
+      }
+    }
+    Seq(
+      Exists(currentTimestampRow),
+      InSubquery(Seq(CurrentTimestamp()), ListQuery(currentTimestampRow, numCols = 1))
+    ).foreach { e =>
+      val table = UnresolvedInlineTable(Seq("c1"), Seq(Seq(e)))
+      val ex = intercept[AnalysisException](ResolveInlineTables(table))
+      assert(ex.getCondition == "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE")
+    }
+  }
+
   test("evaluation errors of foldable expressions next to non-foldable expressions") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       val table = UnresolvedInlineTable(Seq("c1", "c2"),
