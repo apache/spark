@@ -116,6 +116,11 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     "collations-string-functions.sql",
     "listagg-collations.sql",
     "pipe-operators.sql",
+    // SPARK-60416: Triggered flows are implemented by SQLQueryTestSuite, not Thrift Server.
+    "streaming/available-now-stream-static-join.sql",
+    "streaming/available-now-to-table.sql",
+    "streaming/available-now-union.sql",
+    "streaming/available-now-window-aggregation.sql",
     // VARIANT type
     "variant/named-function-arguments.sql",
     "variant-field-extractions.sql"

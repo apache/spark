@@ -482,7 +482,7 @@ class SQLQueryTestSuite extends SharedSparkSession
     try {
       Some(session.sessionState.sqlParser.parsePlan(sql))
     } catch {
-      case _: ParseException => None
+      case NonFatal(_) => None
     }
   }
 
