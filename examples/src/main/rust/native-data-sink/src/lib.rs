@@ -31,8 +31,7 @@ use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use serde::{Deserialize, Serialize};
 use spark_native_source::{
     BatchWrite, Capabilities, CreateInfo, DataSource, DataWriter, DataWriterFactory,
-    PartitionWriter, Result, TaskContext, Unsupported, WriteInfo, WriteMode, WritePlan,
-    WriterContext,
+    PartitionWriter, Result, TaskContext, Unsupported, WriteInfo, WriteMode, WriterContext,
 };
 
 spark_native_source::export_data_source!(JsonSink);
@@ -46,11 +45,9 @@ pub struct JsonSink {
 }
 
 impl DataSource for JsonSink {
-    // A write-only sink, which also supports overwrites.
+    // A write-only sink.
     type ScanBuilder = Unsupported;
     type BatchWrite = JsonWrite;
-
-    const SUPPORTS_TRUNCATE: bool = true;
 
     fn new(info: CreateInfo) -> Result<Self> {
         let mut options = info.options;
@@ -79,23 +76,21 @@ impl DataSource for JsonSink {
         Ok(sink_schema())
     }
 
-    fn capabilities(&self, supported: Capabilities) -> Capabilities {
+    fn capabilities(&self) -> Capabilities {
         if self.readonly {
             // Also removes Truncate, which requires batch writes.
-            supported.without(Capabilities::BATCH_WRITE)
+            Capabilities::all().without(Capabilities::BATCH_WRITE)
         } else {
-            supported
+            Capabilities::all()
         }
     }
 
-    fn new_write(&self, info: WriteInfo) -> Result<WritePlan<JsonWrite>> {
+    fn new_write(&self, info: WriteInfo) -> Result<JsonWrite> {
         if self.readonly {
             return Err("This sink is readonly".into());
         }
         validate_schema(&info.schema)?;
-        let write = JsonWrite::new(self.path.clone(), info.mode)?;
-        let factory = write.writer_factory();
-        Ok(WritePlan::new(write, factory))
+        JsonWrite::new(self.path.clone(), info.mode)
     }
 }
 
@@ -228,13 +223,6 @@ impl JsonWrite {
         })
     }
 
-    fn writer_factory(&self) -> JsonWriterFactory {
-        JsonWriterFactory {
-            staging: self.staging.clone(),
-            operation: self.operation.clone(),
-        }
-    }
-
     fn publish(&mut self, messages: Vec<CommitMessage>) -> Result<()> {
         let mut filenames = BTreeSet::new();
         let mut partitions = BTreeSet::new();
@@ -326,6 +314,17 @@ impl JsonWrite {
 // abort, so this coordinator does not track its own phase.
 impl BatchWrite for JsonWrite {
     type Factory = JsonWriterFactory;
+    type Message = CommitMessage;
+
+    // The sink also supports overwrites.
+    const SUPPORTS_TRUNCATE: bool = true;
+
+    fn writer_factory(&self) -> Result<JsonWriterFactory> {
+        Ok(JsonWriterFactory {
+            staging: self.staging.clone(),
+            operation: self.operation.clone(),
+        })
+    }
 
     fn commit(&mut self, messages: Vec<CommitMessage>) -> Result<()> {
         self.publish(messages)
@@ -557,15 +556,16 @@ mod tests {
     }
 
     fn new_write(source: &JsonSink, mode: WriteMode) -> Result<(JsonWrite, JsonWriterFactory)> {
-        let plan = source.new_write(WriteInfo::new(sink_schema(), mode))?;
-        Ok((plan.coordinator, plan.factory))
+        let write = source.new_write(WriteInfo::new(sink_schema(), mode))?;
+        let factory = write.writer_factory()?;
+        Ok((write, factory))
     }
 
     fn open(
         factory: &JsonWriterFactory,
         partition: i32,
     ) -> PartitionWriter<'static, CommitMessage> {
-        let task = TaskContext::for_testing().partition_id(partition).build();
+        let task = TaskContext::for_testing().with_partition_id(partition);
         factory
             .open(WriterContext::new(sink_schema(), task))
             .unwrap()
@@ -668,7 +668,7 @@ mod tests {
             committed_rows(&directory.0),
             vec![serde_json::json!({"id": 1, "label": "row-1"})]
         );
-        let task = TaskContext::for_testing().build();
+        let task = TaskContext::for_testing();
         assert!(factory
             .open(WriterContext::new(sink_schema(), task))
             .is_err());
@@ -700,7 +700,7 @@ mod tests {
         assert!(!directory.0.join(".write-lock").exists());
         assert_eq!(fs::read(directory.0.join("manifest.json")).unwrap(), before);
         assert_eq!(committed_rows(&directory.0).len(), 1);
-        let task = TaskContext::for_testing().build();
+        let task = TaskContext::for_testing();
         assert!(factory
             .open(WriterContext::new(sink_schema(), task))
             .is_err());
@@ -748,7 +748,7 @@ mod tests {
             ("readonly", "true"),
         ]))
         .unwrap();
-        let capabilities = source.capabilities(Capabilities::all());
+        let capabilities = source.capabilities();
         assert!(!capabilities.contains(Capabilities::BATCH_WRITE));
         assert!(!capabilities.contains(Capabilities::TRUNCATE));
         assert!(new_write(&source, WriteMode::Append).is_err());

@@ -61,18 +61,57 @@ unsafe impl Send for TaskContext<'_> {}
 unsafe impl Sync for TaskContext<'_> {}
 
 impl TaskContext<'static> {
-    /// Starts a context for testing a reader or writer outside Spark. Its IDs are 0
-    /// unless set, and it is never interrupted unless it is given a flag.
-    pub fn for_testing() -> TaskContextBuilder<'static> {
-        TaskContextBuilder {
-            context: TaskContext {
-                stage_id: 0,
-                stage_attempt_number: 0,
-                partition_id: 0,
-                attempt_number: 0,
-                task_attempt_id: 0,
-                interruption: Interruption::Never,
-            },
+    /// A context for testing a reader or writer outside Spark. Its IDs are 0 until set
+    /// with the `with_*` methods, and it is never interrupted unless it is given a flag
+    /// with [`interrupted_by`](Self::interrupted_by).
+    pub fn for_testing() -> Self {
+        Self {
+            stage_id: 0,
+            stage_attempt_number: 0,
+            partition_id: 0,
+            attempt_number: 0,
+            task_attempt_id: 0,
+            interruption: Interruption::Never,
+        }
+    }
+
+    #[must_use]
+    pub fn with_stage_id(mut self, stage_id: i32) -> Self {
+        self.stage_id = stage_id;
+        self
+    }
+
+    #[must_use]
+    pub fn with_stage_attempt_number(mut self, stage_attempt_number: i32) -> Self {
+        self.stage_attempt_number = stage_attempt_number;
+        self
+    }
+
+    #[must_use]
+    pub fn with_partition_id(mut self, partition_id: i32) -> Self {
+        self.partition_id = partition_id;
+        self
+    }
+
+    #[must_use]
+    pub fn with_attempt_number(mut self, attempt_number: i32) -> Self {
+        self.attempt_number = attempt_number;
+        self
+    }
+
+    #[must_use]
+    pub fn with_task_attempt_id(mut self, task_attempt_id: i64) -> Self {
+        self.task_attempt_id = task_attempt_id;
+        self
+    }
+
+    /// Reports the task as interrupted whenever `flag` is true. The context borrows the
+    /// flag, so set its IDs first.
+    #[must_use]
+    pub fn interrupted_by(self, flag: &AtomicBool) -> TaskContext<'_> {
+        TaskContext {
+            interruption: Interruption::Flag(flag),
+            ..self
         }
     }
 }
@@ -149,71 +188,6 @@ impl<'task> TaskContext<'task> {
     }
 }
 
-/// Builds a [`TaskContext`] for testing a reader or writer outside Spark.
-#[derive(Debug, Clone, Copy)]
-pub struct TaskContextBuilder<'task> {
-    context: TaskContext<'task>,
-}
-
-impl<'task> TaskContextBuilder<'task> {
-    #[must_use]
-    pub fn stage_id(mut self, stage_id: i32) -> Self {
-        self.context.stage_id = stage_id;
-        self
-    }
-
-    #[must_use]
-    pub fn stage_attempt_number(mut self, stage_attempt_number: i32) -> Self {
-        self.context.stage_attempt_number = stage_attempt_number;
-        self
-    }
-
-    #[must_use]
-    pub fn partition_id(mut self, partition_id: i32) -> Self {
-        self.context.partition_id = partition_id;
-        self
-    }
-
-    #[must_use]
-    pub fn attempt_number(mut self, attempt_number: i32) -> Self {
-        self.context.attempt_number = attempt_number;
-        self
-    }
-
-    #[must_use]
-    pub fn task_attempt_id(mut self, task_attempt_id: i64) -> Self {
-        self.context.task_attempt_id = task_attempt_id;
-        self
-    }
-
-    /// Reports the task as interrupted whenever `flag` is true.
-    #[must_use]
-    pub fn interrupted_by<'flag>(self, flag: &'flag AtomicBool) -> TaskContextBuilder<'flag> {
-        let TaskContext {
-            stage_id,
-            stage_attempt_number,
-            partition_id,
-            attempt_number,
-            task_attempt_id,
-            ..
-        } = self.context;
-        TaskContextBuilder {
-            context: TaskContext {
-                stage_id,
-                stage_attempt_number,
-                partition_id,
-                attempt_number,
-                task_attempt_id,
-                interruption: Interruption::Flag(flag),
-            },
-        }
-    }
-
-    pub fn build(self) -> TaskContext<'task> {
-        self.context
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::mem::size_of;
@@ -272,12 +246,11 @@ mod tests {
     #[test]
     fn test_contexts_carry_ids_and_an_optional_interruption_flag() {
         let context = TaskContext::for_testing()
-            .stage_id(1)
-            .stage_attempt_number(2)
-            .partition_id(3)
-            .attempt_number(4)
-            .task_attempt_id(5)
-            .build();
+            .with_stage_id(1)
+            .with_stage_attempt_number(2)
+            .with_partition_id(3)
+            .with_attempt_number(4)
+            .with_task_attempt_id(5);
         assert_eq!(
             (
                 context.stage_id(),
@@ -291,9 +264,8 @@ mod tests {
         assert!(!context.is_interrupted());
         let flag = AtomicBool::new(false);
         let context = TaskContext::for_testing()
-            .partition_id(8)
-            .interrupted_by(&flag)
-            .build();
+            .with_partition_id(8)
+            .interrupted_by(&flag);
         assert_eq!(context.partition_id(), 8);
         assert!(!context.is_interrupted());
         flag.store(true, Ordering::SeqCst);

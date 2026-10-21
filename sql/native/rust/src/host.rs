@@ -16,7 +16,9 @@
 //! The Spark process that loaded the library: its version and its log.
 
 use std::ffi::{c_char, CString};
-use std::sync::{PoisonError, RwLock};
+use std::sync::{Once, PoisonError, RwLock};
+
+use log::{Level, LevelFilter, Log, Metadata, Record};
 
 pub(crate) type LogFunction = unsafe extern "C" fn(i32, *const c_char);
 
@@ -45,43 +47,46 @@ impl Default for HostInfo {
     }
 }
 
-/// The level of a message logged with [`log`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[non_exhaustive]
-pub enum LogLevel {
-    Error,
-    Warn,
-    Info,
-    Debug,
-    Trace,
-}
+/// Passes the records of the `log` crate to the log of the host, from any thread.
+/// Records are dropped until Spark initializes the library, for example in unit tests.
+struct HostLog;
 
-impl LogLevel {
-    /// The SPARK_DS_LOG_* value of this level.
-    fn code(self) -> i32 {
-        match self {
-            Self::Error => 1,
-            Self::Warn => 2,
-            Self::Info => 3,
-            Self::Debug => 4,
-            Self::Trace => 5,
+impl Log for HostLog {
+    fn enabled(&self, _: &Metadata<'_>) -> bool {
+        LOG.read().unwrap_or_else(PoisonError::into_inner).is_some()
+    }
+
+    fn log(&self, record: &Record<'_>) {
+        let function = *LOG.read().unwrap_or_else(PoisonError::into_inner);
+        if let Some(function) = function {
+            // The SPARK_DS_LOG_* value of the level.
+            let level = match record.level() {
+                Level::Error => 1,
+                Level::Warn => 2,
+                Level::Info => 3,
+                Level::Debug => 4,
+                Level::Trace => 5,
+            };
+            let message = record.args().to_string().replace('\0', "\\0");
+            let message = CString::new(message).expect("NULs removed");
+            unsafe { function(level, message.as_ptr()) };
         }
     }
+
+    fn flush(&self) {}
 }
 
-/// Logs a message in the log of the Spark driver or executor, with the path of the library.
-///
-/// Can be called from any thread. Messages are dropped until Spark initializes the
-/// library, for example in unit tests.
-pub fn log(level: LogLevel, message: &str) {
-    let function = *LOG.read().unwrap_or_else(PoisonError::into_inner);
-    if let Some(function) = function {
-        let message = CString::new(message.replace('\0', "\\0")).expect("NULs removed");
-        unsafe { function(level.code(), message.as_ptr()) };
-    }
-}
+static HOST_LOG: HostLog = HostLog;
 
 /// Installs the log of the host that initializes the library.
 pub(crate) fn install(function: Option<LogFunction>) {
     *LOG.write().unwrap_or_else(PoisonError::into_inner) = function;
+    // Only the first initialization installs the logger of the `log` crate, unless the
+    // library installed its own, and its default level, which the library may change.
+    static LOGGER: Once = Once::new();
+    LOGGER.call_once(|| {
+        if log::set_logger(&HOST_LOG).is_ok() {
+            log::set_max_level(LevelFilter::Info);
+        }
+    });
 }

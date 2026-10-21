@@ -87,10 +87,10 @@ does not call Rust `plan()`. The first request for batch partitions or a reader 
 native `partitions` and then `serialize_reader`, which share the SDK's cached plan. Spark then
 closes the native driver handle. The Rust API and C ABI layout remain unchanged.
 
-The SDK serializes this data for the executors. Each factory opens a lazy Arrow reader using a
-partition and a `ReaderContext`, which carries the negotiated schema and a lifetime-bound
-`TaskContext`. The example checks task cancellation before generating each batch and keeps
-memory bounded by the configured batch size. Neither the factory
+The SDK serializes this data for the executors. Each factory opens a lazy iterator of Arrow
+batches using a partition and a `ReaderContext`, which carries the negotiated schema and a
+lifetime-bound `TaskContext`. The example checks task cancellation before generating each batch
+and keeps memory bounded by the configured batch size. Neither the factory
 nor a partition contains a driver handle or open connection. A storage connector can also put a
 snapshot identifier in its factory to make retried reads refer to the same data.
 

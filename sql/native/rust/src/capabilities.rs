@@ -22,9 +22,9 @@ use crate::abi;
 /// The native operations that a source instance supports with its effective options.
 ///
 /// A source implements the operations whose types in [`DataSource`](crate::DataSource)
-/// are not [`Unsupported`](crate::Unsupported).
-/// [`DataSource::capabilities`](crate::DataSource::capabilities) receives them and can
-/// only remove some, so a source cannot enable an operation that it does not implement.
+/// are not [`Unsupported`](crate::Unsupported). The SDK keeps only those of
+/// [`DataSource::capabilities`](crate::DataSource::capabilities), which can therefore
+/// remove some, but cannot enable an operation that the source does not implement.
 ///
 /// These are native capabilities, not Spark's Data Source V2 routing flags or per-scan
 /// pushdown results. Streaming operations are not implemented by this SDK yet.
@@ -49,9 +49,9 @@ impl Capabilities {
         Self(0)
     }
 
-    /// Every operation that this SDK implements, to test
-    /// [`DataSource::capabilities`](crate::DataSource::capabilities). The SDK keeps only
-    /// the operations that the source implements.
+    /// Every operation of this SDK, which
+    /// [`DataSource::capabilities`](crate::DataSource::capabilities) returns by default.
+    /// The SDK keeps only the operations that the source implements.
     pub const fn all() -> Self {
         Self(abi::BATCH_READ | abi::BATCH_WRITE | abi::TRUNCATE)
     }

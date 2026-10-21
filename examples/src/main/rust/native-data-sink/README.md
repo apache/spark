@@ -19,7 +19,7 @@ limitations under the License.
 
 This write-only example implements `DataSource`, `BatchWrite`, `DataWriterFactory`,
 and `DataWriter` from the [Rust native data source SDK][sdk]. Its `DataSource` sets
-`type ScanBuilder = Unsupported` and declares overwrite support with
+`type ScanBuilder = Unsupported`, and its `BatchWrite` declares overwrite support with
 `const SUPPORTS_TRUNCATE: bool = true`; it exports `export_data_source!(JsonSink)` and
 implements no read traits. The SDK supplies the C ABI entry point, typed factory and commit
 message serialization, Arrow batch import, capability checks, and error handling.

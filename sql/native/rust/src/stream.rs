@@ -21,19 +21,57 @@ use arrow_array::ffi::FFI_ArrowArray;
 use arrow_array::ffi_stream::FFI_ArrowArrayStream;
 use arrow_array::{Array, StructArray};
 use arrow_data::ArrayData;
-use arrow_schema::{ffi::FFI_ArrowSchema, DataType, Field, Fields, Schema, SchemaRef, TimeUnit};
+use arrow_schema::{ffi::FFI_ArrowSchema, DataType, Field, Fields, SchemaRef, TimeUnit};
 
 use super::{describe, panic_message};
 use crate::{PartitionReader, Result};
 
 struct StreamState<'task> {
     reader: Option<PartitionReader<'task>>,
-    // The reader's own schema, which each batch must have.
-    schema: SchemaRef,
-    // The negotiated schema, whose nullability each batch must respect.
+    // The negotiated schema, whose Spark types and nullability each batch must respect.
     expected: SchemaRef,
+    // The schema of the stream: that of the first batch, which every batch must have, or
+    // the negotiated schema of a reader without batches. Unknown until either is read.
+    schema: Option<SchemaRef>,
+    // The first batch, when get_schema read it to learn the schema.
+    pending: Option<ArrayData>,
     last_error: Option<CString>,
     finished: bool,
+}
+
+impl StreamState<'_> {
+    /// Reads and checks the next batch. The first batch, or the end of the reader,
+    /// determines the schema of the stream.
+    fn read_next(&mut self) -> Result<Option<ArrayData>> {
+        let Some(batch) = self.reader.as_mut().expect("reader is present").next() else {
+            self.finished = true;
+            self.schema.get_or_insert_with(|| self.expected.clone());
+            return Ok(None);
+        };
+        let batch = batch?;
+        match &self.schema {
+            Some(schema) if batch.schema() != *schema => {
+                return Err("reader returned a batch with a different schema".into());
+            }
+            Some(_) => {}
+            None => {
+                if canonical_fields(batch.schema().fields())?
+                    != canonical_fields(self.expected.fields())?
+                {
+                    return Err(
+                        "executor reader schema does not match the negotiated schema".into(),
+                    );
+                }
+                self.schema = Some(batch.schema());
+            }
+        }
+        let data = StructArray::from(batch).to_data();
+        validate_layout(&data)?;
+        for (column, field) in data.child_data().iter().zip(self.expected.fields()) {
+            check_nulls(column, field, field.name(), None)?;
+        }
+        Ok(Some(data))
+    }
 }
 
 impl Drop for StreamState<'_> {
@@ -56,29 +94,22 @@ impl Drop for StreamState<'_> {
 pub(super) unsafe fn export<'task>(
     reader: PartitionReader<'task>,
     expected_schema: &SchemaRef,
-) -> Result<FFI_ArrowArrayStream> {
-    // Establish guarded destruction before calling the provider's schema().
-    let mut state = Box::new(StreamState {
+) -> FFI_ArrowArrayStream {
+    let state = Box::new(StreamState {
         reader: Some(reader),
-        schema: Arc::new(Schema::empty()),
         expected: expected_schema.clone(),
+        schema: None,
+        pending: None,
         last_error: None,
         finished: false,
     });
-    state.schema = catch_unwind(AssertUnwindSafe(|| {
-        state.reader.as_ref().expect("reader is present").schema()
-    }))
-    .map_err(panic_message)?;
-    if canonical_fields(state.schema.fields())? != canonical_fields(expected_schema.fields())? {
-        return Err("executor reader schema does not match the negotiated schema".into());
-    }
-    Ok(FFI_ArrowArrayStream {
+    FFI_ArrowArrayStream {
         get_schema: Some(get_schema),
         get_next: Some(get_next),
         get_last_error: Some(get_last_error),
         release: Some(release),
         private_data: Box::into_raw(state).cast::<c_void>(),
-    })
+    }
 }
 
 fn callback(
@@ -105,7 +136,12 @@ unsafe extern "C" fn get_schema(
 ) -> c_int {
     let state = unsafe { &mut *(*stream).private_data.cast::<StreamState<'_>>() };
     callback(state, |state| {
-        let schema = FFI_ArrowSchema::try_from(state.schema.as_ref())?;
+        // The reader does not declare a schema: read the first batch, which has it.
+        if state.schema.is_none() && !state.finished {
+            state.pending = state.read_next()?;
+        }
+        let schema = state.schema.as_ref().unwrap_or(&state.expected);
+        let schema = FFI_ArrowSchema::try_from(schema.as_ref())?;
         unsafe { output.write(schema) };
         Ok(())
     })
@@ -117,29 +153,15 @@ unsafe extern "C" fn get_next(
 ) -> c_int {
     let state = unsafe { &mut *(*stream).private_data.cast::<StreamState<'_>>() };
     callback(state, |state| {
-        if state.finished {
-            unsafe { output.write(FFI_ArrowArray::empty()) };
-            return Ok(());
-        }
-        match state.reader.as_mut().expect("reader is present").next() {
-            Some(batch) => {
-                let batch = batch?;
-                if batch.schema() != state.schema {
-                    return Err("reader returned a batch with a different schema".into());
-                }
-                let data = StructArray::from(batch).to_data();
-                validate_layout(&data)?;
-                for (column, field) in data.child_data().iter().zip(state.expected.fields()) {
-                    check_nulls(column, field, field.name(), None)?;
-                }
-                let array = FFI_ArrowArray::new(&data);
-                unsafe { output.write(array) };
-            }
-            None => {
-                state.finished = true;
-                // A null release callback denotes EOF, including for zero-column data.
-                unsafe { output.write(FFI_ArrowArray::empty()) };
-            }
+        let data = match state.pending.take() {
+            Some(data) => Some(data),
+            None if state.finished => None,
+            None => state.read_next()?,
+        };
+        match data {
+            Some(data) => unsafe { output.write(FFI_ArrowArray::new(&data)) },
+            // A null release callback denotes EOF, including for zero-column data.
+            None => unsafe { output.write(FFI_ArrowArray::empty()) },
         }
         Ok(())
     })
@@ -304,22 +326,23 @@ fn validate_layout(data: &ArrayData) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::CStr;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use arrow_array::builder::{
         BooleanBuilder, Int32Builder, ListBuilder, MapBuilder, StringBuilder, StructBuilder,
     };
     use arrow_array::ffi_stream::ArrowArrayStreamReader;
-    use arrow_array::{BooleanArray, Int32Array, Int64Array, RecordBatch, RecordBatchReader};
-    use arrow_schema::{ArrowError, DataType, Field};
+    use arrow_array::{
+        BooleanArray, Int32Array, Int64Array, LargeStringArray, RecordBatch, RecordBatchReader,
+    };
+    use arrow_schema::{ArrowError, DataType, Field, Schema};
 
     use super::*;
 
     struct Reader {
-        schema: SchemaRef,
         batches: std::vec::IntoIter<std::result::Result<RecordBatch, ArrowError>>,
         panic_next: bool,
-        panic_schema: bool,
         panic_drop: bool,
         drops: Arc<AtomicUsize>,
     }
@@ -333,13 +356,6 @@ mod tests {
         }
     }
 
-    impl RecordBatchReader for Reader {
-        fn schema(&self) -> SchemaRef {
-            assert!(!self.panic_schema, "schema failed");
-            self.schema.clone()
-        }
-    }
-
     impl Drop for Reader {
         fn drop(&mut self) {
             self.drops.fetch_add(1, Ordering::SeqCst);
@@ -347,32 +363,63 @@ mod tests {
         }
     }
 
-    fn export(reader: PartitionReader<'static>) -> Result<FFI_ArrowArrayStream> {
-        let expected = Arc::new(Schema::new(vec![Field::new("id", DataType::Int64, false)]));
-        // Test readers own all their state and cannot borrow a host context.
-        unsafe { super::export(reader, &expected) }
+    fn schema() -> SchemaRef {
+        Arc::new(Schema::new(vec![Field::new("id", DataType::Int64, false)]))
     }
 
-    fn reader() -> Reader {
-        let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int64, false)]));
-        let values = Arc::new(Int64Array::from(vec![3, 5]));
-        let batch = RecordBatch::try_new(schema.clone(), vec![values]).unwrap();
+    fn export_with(reader: Reader, expected: &SchemaRef) -> FFI_ArrowArrayStream {
+        // Test readers own all their state and cannot borrow a host context.
+        unsafe { super::export(Box::new(reader), expected) }
+    }
+
+    fn export(reader: Reader) -> FFI_ArrowArrayStream {
+        export_with(reader, &schema())
+    }
+
+    fn reader_of(batches: Vec<RecordBatch>) -> Reader {
         Reader {
-            schema,
-            batches: vec![Ok(batch)].into_iter(),
+            batches: batches.into_iter().map(Ok).collect::<Vec<_>>().into_iter(),
             panic_next: false,
-            panic_schema: false,
             panic_drop: false,
             drops: Arc::default(),
         }
+    }
+
+    fn reader() -> Reader {
+        let values = Arc::new(Int64Array::from(vec![3, 5]));
+        reader_of(vec![RecordBatch::try_new(schema(), vec![values]).unwrap()])
+    }
+
+    /// Calls get_schema, which reads the first batch, and returns its error, if any.
+    fn first_batch_error(stream: &mut FFI_ArrowArrayStream) -> Option<String> {
+        let mut schema = FFI_ArrowSchema::empty();
+        if unsafe { stream.get_schema.unwrap()(stream, &mut schema) } == 0 {
+            return None;
+        }
+        let error = unsafe { stream.get_last_error.unwrap()(stream) };
+        Some(
+            unsafe { CStr::from_ptr(error) }
+                .to_str()
+                .unwrap()
+                .to_owned(),
+        )
+    }
+
+    fn batch_error(batch: RecordBatch, expected: &SchemaRef) -> Option<String> {
+        first_batch_error(&mut export_with(reader_of(vec![batch]), expected))
+    }
+
+    fn at_end(stream: &mut FFI_ArrowArrayStream) -> bool {
+        let mut array = FFI_ArrowArray::empty();
+        let status = unsafe { stream.get_next.unwrap()(stream, &mut array) };
+        status == 0 && array.is_released()
     }
 
     #[test]
     fn imported_batch_survives_early_stream_release() {
         let reader = reader();
         let drops = reader.drops.clone();
-        let mut stream =
-            ArrowArrayStreamReader::try_new(export(Box::new(reader)).unwrap()).unwrap();
+        let mut stream = ArrowArrayStreamReader::try_new(export(reader)).unwrap();
         let batch = stream.next().unwrap().unwrap();
         drop(stream);
         assert_eq!(drops.load(Ordering::SeqCst), 1);
@@ -388,56 +435,101 @@ mod tests {
     #[test]
     fn empty_batch_is_not_eof() {
         let mut reader = reader();
-        let empty = RecordBatch::new_empty(reader.schema.clone());
-        reader.batches = vec![Ok(empty), reader.batches.next().unwrap()].into_iter();
-        let mut stream =
-            ArrowArrayStreamReader::try_new(export(Box::new(reader)).unwrap()).unwrap();
+        let first = reader.batches.next().unwrap();
+        reader.batches = vec![Ok(RecordBatch::new_empty(schema())), first].into_iter();
+        let mut stream = ArrowArrayStreamReader::try_new(export(reader)).unwrap();
         assert_eq!(stream.next().unwrap().unwrap().num_rows(), 0);
         assert_eq!(stream.next().unwrap().unwrap().num_rows(), 2);
         assert!(stream.next().is_none());
     }
 
     #[test]
-    fn iterator_panics_and_nul_errors_become_stream_errors() {
-        let mut panicking = reader();
-        panicking.panic_next = true;
-        let mut stream =
-            ArrowArrayStreamReader::try_new(export(Box::new(panicking)).unwrap()).unwrap();
-        assert!(stream
-            .next()
-            .unwrap()
-            .unwrap_err()
-            .to_string()
-            .contains("iterator failed"));
-
-        let mut failing = reader();
-        failing.batches = vec![Err(ArrowError::ComputeError("bad\0value".into()))].into_iter();
-        let mut stream =
-            ArrowArrayStreamReader::try_new(export(Box::new(failing)).unwrap()).unwrap();
-        assert!(stream
-            .next()
-            .unwrap()
-            .unwrap_err()
-            .to_string()
-            .contains("bad\\0value"));
+    fn a_reader_without_batches_has_the_negotiated_schema() {
+        let mut stream = ArrowArrayStreamReader::try_new(export(reader_of(vec![]))).unwrap();
+        assert_eq!(stream.schema(), schema());
+        assert!(stream.next().is_none());
     }
 
     #[test]
-    fn schema_and_drop_panics_do_not_escape_the_stream_boundary() {
+    fn the_first_batch_determines_the_arrow_types_of_the_stream() {
+        // The negotiated schema has a Utf8 string, which the reader returns as LargeUtf8.
+        let expected = Arc::new(Schema::new(vec![Field::new("label", DataType::Utf8, true)]));
+        let actual = Arc::new(Schema::new(vec![Field::new(
+            "label",
+            DataType::LargeUtf8,
+            true,
+        )]));
+        let labels = Arc::new(LargeStringArray::from(vec!["a", "b"]));
+        let batch = RecordBatch::try_new(actual.clone(), vec![labels]).unwrap();
+        let exported = export_with(reader_of(vec![batch]), &expected);
+        let mut stream = ArrowArrayStreamReader::try_new(exported).unwrap();
+        assert_eq!(stream.schema(), actual);
+        let batch = stream.next().unwrap().unwrap();
+        let labels = batch
+            .column(0)
+            .as_any()
+            .downcast_ref::<LargeStringArray>()
+            .unwrap();
+        assert_eq!(labels.value(1), "b");
+        assert!(stream.next().is_none());
+    }
+
+    #[test]
+    fn get_next_may_read_the_first_batch_before_get_schema() {
+        let mut stream = export(reader());
+        let mut array = FFI_ArrowArray::empty();
+        assert_eq!(
+            unsafe { stream.get_next.unwrap()(&mut stream, &mut array) },
+            0
+        );
+        assert_eq!(array.len(), 2);
+        let mut exported = FFI_ArrowSchema::empty();
+        assert_eq!(
+            unsafe { stream.get_schema.unwrap()(&mut stream, &mut exported) },
+            0
+        );
+        assert_eq!(Schema::try_from(&exported).unwrap(), *schema());
+        assert!(at_end(&mut stream));
+    }
+
+    #[test]
+    fn iterator_panics_and_nul_errors_become_stream_errors() {
+        let mut panicking = reader();
+        panicking.panic_next = true;
+        let error = first_batch_error(&mut export(panicking)).unwrap();
+        assert!(error.contains("iterator failed"), "{error}");
+
+        let mut failing = reader();
+        failing.batches = vec![Err(ArrowError::ComputeError("bad\0value".into()))].into_iter();
+        let error = first_batch_error(&mut export(failing)).unwrap();
+        assert!(error.contains("bad\\0value"), "{error}");
+
+        // The error of a later batch is reported by get_next instead.
+        let mut failing = reader();
+        let first = failing.batches.next().unwrap();
+        let late = Err(ArrowError::ComputeError("late failure".into()));
+        failing.batches = vec![first, late].into_iter();
+        let mut stream = ArrowArrayStreamReader::try_new(export(failing)).unwrap();
+        assert_eq!(stream.next().unwrap().unwrap().num_rows(), 2);
+        let error = stream.next().unwrap().unwrap_err().to_string();
+        assert!(error.contains("late failure"), "{error}");
+        assert!(stream.next().is_none());
+    }
+
+    #[test]
+    fn iterator_and_drop_panics_do_not_escape_the_stream_boundary() {
         let mut failing = reader();
         let drops = failing.drops.clone();
-        failing.panic_schema = true;
+        failing.panic_next = true;
         failing.panic_drop = true;
-        assert!(export(Box::new(failing))
-            .unwrap_err()
-            .to_string()
-            .contains("schema failed"));
+        let error = first_batch_error(&mut export(failing)).unwrap();
+        assert!(error.contains("iterator failed"), "{error}");
         assert_eq!(drops.load(Ordering::SeqCst), 1);
 
         let mut failing = reader();
         let drops = failing.drops.clone();
         failing.panic_drop = true;
-        drop(export(Box::new(failing)).unwrap());
+        drop(export(failing));
         assert_eq!(drops.load(Ordering::SeqCst), 1);
     }
 
@@ -446,12 +538,14 @@ mod tests {
         let reader = reader();
         let drops = reader.drops.clone();
         let expected = Arc::new(Schema::new(vec![Field::new("id", DataType::Utf8, false)]));
-        // The reader owns its state; no task context needs to outlive this call.
-        let result = unsafe { super::export(Box::new(reader), &expected) };
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("does not match the negotiated schema"));
+        let mut stream = export_with(reader, &expected);
+        let error = first_batch_error(&mut stream).unwrap();
+        assert!(
+            error.contains("does not match the negotiated schema"),
+            "{error}"
+        );
+        assert!(at_end(&mut stream), "a failed stream has no more batches");
+        drop(stream);
         assert_eq!(drops.load(Ordering::SeqCst), 1);
     }
 
@@ -548,32 +642,16 @@ mod tests {
             false,
         )]));
         let batch = RecordBatch::try_new(schema.clone(), vec![Arc::new(nested)]).unwrap();
-        let mut reader = reader();
-        reader.schema = schema.clone();
-        reader.batches = vec![Ok(batch)].into_iter();
+        let reader = reader_of(vec![batch]);
         let drops = reader.drops.clone();
         // All arrays are valid, owned Arrow values, without a borrowed task context.
-        let exported = unsafe { super::export(Box::new(reader), &schema) }.unwrap();
-        let mut stream = ArrowArrayStreamReader::try_new(exported).unwrap();
-        let error = stream.next().unwrap().unwrap_err().to_string();
+        let mut stream = export_with(reader, &schema);
+        let error = first_batch_error(&mut stream).unwrap();
         assert!(error.contains("zero Arrow array offsets"), "{error}");
         assert!(error.contains("offset 1"), "{error}");
-        assert!(stream.next().is_none());
+        assert!(at_end(&mut stream));
         drop(stream);
         assert_eq!(drops.load(Ordering::SeqCst), 1);
-    }
-
-    fn reader_of(schema: SchemaRef, batch: RecordBatch) -> Reader {
-        let mut reader = reader();
-        reader.schema = schema;
-        reader.batches = vec![Ok(batch)].into_iter();
-        reader
-    }
-
-    fn first_batch_error(reader: Reader, expected: &SchemaRef) -> Option<String> {
-        let exported = unsafe { super::export(Box::new(reader), expected) }.unwrap();
-        let mut stream = ArrowArrayStreamReader::try_new(exported).unwrap();
-        stream.next().unwrap().err().map(|error| error.to_string())
     }
 
     #[test]
@@ -595,12 +673,9 @@ mod tests {
         let nullable = Arc::new(Schema::new(vec![Field::new("id", DataType::Int64, true)]));
         let required = Arc::new(Schema::new(vec![Field::new("id", DataType::Int64, false)]));
         let batch = RecordBatch::try_new(nullable.clone(), vec![values]).unwrap();
-        let error = first_batch_error(reader_of(nullable.clone(), batch.clone()), &required);
+        let error = batch_error(batch.clone(), &required);
         assert!(error.unwrap().contains("The column id has a null"));
-        assert_eq!(
-            first_batch_error(reader_of(nullable.clone(), batch), &nullable),
-            None
-        );
+        assert_eq!(batch_error(batch, &nullable), None);
     }
 
     #[test]
@@ -626,7 +701,7 @@ mod tests {
             builder.append(parent_is_valid);
             let batch =
                 RecordBatch::try_new(schema(&nullable), vec![Arc::new(builder.finish())]).unwrap();
-            let error = first_batch_error(reader_of(schema(&nullable), batch), &schema(&required));
+            let error = batch_error(batch, &schema(&required));
             assert_eq!(error.is_some(), rejected, "{error:?}");
             if let Some(error) = error {
                 assert!(
@@ -656,7 +731,7 @@ mod tests {
             builder.append(false);
             let lists = Arc::new(builder.finish());
             let batch = RecordBatch::try_new(list_schema(true), vec![lists]).unwrap();
-            let error = first_batch_error(reader_of(list_schema(true), batch), &list_schema(false));
+            let error = batch_error(batch, &list_schema(false));
             assert_eq!(error.is_some(), rejected, "{error:?}");
             if let Some(error) = error {
                 assert!(
@@ -687,16 +762,13 @@ mod tests {
             true,
         )]));
         let batch = RecordBatch::try_new(actual.clone(), vec![Arc::new(map)]).unwrap();
-        let error = first_batch_error(reader_of(actual.clone(), batch.clone()), &required);
+        let error = batch_error(batch.clone(), &required);
         assert!(error.unwrap().contains("The column map.value has a null"));
-        assert_eq!(
-            first_batch_error(reader_of(actual.clone(), batch), &actual),
-            None
-        );
+        assert_eq!(batch_error(batch, &actual), None);
     }
 
     #[test]
-    fn a_batch_cannot_change_the_readers_advertised_schema() {
+    fn a_batch_cannot_change_the_schema_of_the_stream() {
         let mut reader = reader();
         let first = reader.batches.next().unwrap();
         let changed_schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
@@ -705,8 +777,7 @@ mod tests {
                 .unwrap();
         reader.batches = vec![first, Ok(changed)].into_iter();
         let drops = reader.drops.clone();
-        let mut stream =
-            ArrowArrayStreamReader::try_new(export(Box::new(reader)).unwrap()).unwrap();
+        let mut stream = ArrowArrayStreamReader::try_new(export(reader)).unwrap();
         assert_eq!(stream.next().unwrap().unwrap().num_rows(), 2);
         assert!(stream
             .next()

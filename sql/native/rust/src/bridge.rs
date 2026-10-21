@@ -26,9 +26,9 @@ use arrow_schema::{Schema, SchemaRef};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use crate::{
-    BatchWrite, Capabilities, CreateInfo, DataSource, FilterSupport, LimitSupport, LogLevel,
-    PartitionReaderFactory, Predicate, ReaderContext, Result, ScanBuilder, TaskContext, WriteInfo,
-    WriteMode,
+    BatchWrite, Capabilities, CreateInfo, DataSource, FilterSupport, LimitSupport,
+    PartitionReaderFactory, Predicate, ReaderContext, Result, ScanBuilder, ScanInfo, TaskContext,
+    WriteInfo, WriteMode,
 };
 
 use crate::write::DriverWriter;
@@ -67,8 +67,11 @@ impl<S: DataSource> Bridge<S> {
     /// Whether the source implements batch writes, whose native callbacks the SDK installs.
     pub const WRITE: bool = <S::BatchWrite as BatchWrite>::SUPPORTED;
 
-    const CAPABILITIES: Capabilities =
-        Capabilities::implemented(Self::READ, Self::WRITE, S::SUPPORTS_TRUNCATE);
+    const CAPABILITIES: Capabilities = Capabilities::implemented(
+        Self::READ,
+        Self::WRITE,
+        <S::BatchWrite as BatchWrite>::SUPPORTS_TRUNCATE,
+    );
 
     fn insert<T>(&self, handles: &HandleMap<T>, value: T) -> Result<i64> {
         let handle = self
@@ -85,9 +88,7 @@ impl<S: DataSource> Bridge<S> {
 
     fn register_source(&self, source: S) -> Result<(i64, u64)> {
         // Keep only implemented operations: a source can narrow them but never add one.
-        let capabilities = source
-            .capabilities(Self::CAPABILITIES)
-            .intersection(Self::CAPABILITIES);
+        let capabilities = source.capabilities().intersection(Self::CAPABILITIES);
         let handle = self.insert(
             &self.sources,
             SourceState {
@@ -113,7 +114,7 @@ impl<S: DataSource> Bridge<S> {
             if !source.capabilities.contains(Capabilities::BATCH_READ) {
                 return Err("source does not support batch reads".into());
             }
-            source.source.new_scan(schema.clone())?
+            source.source.new_scan(ScanInfo::new(schema.clone()))?
         };
         self.insert(&self.planners, Planner::new(builder, schema))
     }
@@ -186,7 +187,7 @@ impl<S: DataSource> Bridge<S> {
         stream::validate_schema(&info.schema)?;
         let source = get(&self.sources, handle)?;
         let schema = info.schema.clone();
-        let plan = {
+        let coordinator = {
             let source = lock(&source);
             if !source.capabilities.contains(Capabilities::BATCH_WRITE) {
                 return Err("source does not support batch writes".into());
@@ -198,7 +199,7 @@ impl<S: DataSource> Bridge<S> {
             }
             source.source.new_write(info)?
         };
-        self.insert(&self.writers, DriverWriter::new(plan, schema))
+        self.insert(&self.writers, DriverWriter::new(coordinator, schema))
     }
 
     pub fn serialized_writer(&self, handle: i64) -> Result<Arc<Vec<u8>>> {
@@ -249,9 +250,10 @@ pub unsafe fn open_reader<F: PartitionReaderFactory>(
 ) -> Result<FFI_ArrowArrayStream> {
     let ReaderState { factory, schema }: ReaderState<F> = decode(state)?;
     let schema = Arc::new(schema);
+    stream::validate_schema(&schema)?;
     let task = unsafe { TaskContext::from_raw(task)? };
     let reader = factory.open(decode(partition)?, ReaderContext::new(schema.clone(), task))?;
-    unsafe { stream::export(reader, &schema) }
+    Ok(unsafe { stream::export(reader, &schema) })
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -436,10 +438,7 @@ pub fn parse_predicates(predicates: &[String]) -> Vec<Option<Predicate>> {
         .map(|text| match serde_json::from_str(text) {
             Ok(predicate) => Some(predicate),
             Err(error) => {
-                crate::log(
-                    LogLevel::Warn,
-                    &format!("Leaving unused a predicate that cannot be parsed ({error}): {text}"),
-                );
+                log::warn!("Leaving unused a predicate that cannot be parsed ({error}): {text}");
                 None
             }
         })
@@ -451,7 +450,7 @@ mod tests {
     use std::sync::atomic::AtomicUsize;
 
     use arrow_array::ffi_stream::ArrowArrayStreamReader;
-    use arrow_array::{Int64Array, RecordBatch, RecordBatchIterator};
+    use arrow_array::{Int64Array, RecordBatch};
     use arrow_schema::{DataType, Field};
 
     use super::*;
@@ -526,7 +525,7 @@ mod tests {
             Ok(Arc::new(Schema::empty()))
         }
 
-        fn new_scan(&self, _: SchemaRef) -> Result<Builder> {
+        fn new_scan(&self, _: ScanInfo) -> Result<Builder> {
             Ok(Builder {
                 builds: self.builds.clone(),
                 limits: self.limits.clone(),
@@ -553,8 +552,8 @@ mod tests {
         ) -> Result<PartitionReader<'task>> {
             let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int64, false)]));
             let values = Arc::new(Int64Array::from(vec![(self.0 + partition) as i64]));
-            let batch = RecordBatch::try_new(schema.clone(), vec![values])?;
-            Ok(Box::new(RecordBatchIterator::new([Ok(batch)], schema)))
+            let batch = RecordBatch::try_new(schema, vec![values])?;
+            Ok(Box::new(std::iter::once(Ok(batch))))
         }
     }
 
@@ -878,10 +877,18 @@ mod tests {
         // The factory returns one id column, but the driver negotiated an empty schema.
         // The expected schema must survive serialization and the removal of driver handles.
         drop(bridge);
-        let error = error_message(unsafe {
-            open_reader::<Factory>(&task, &plan.state, &plan.partitions[0])
-        });
-        assert!(error.contains("schema"), "{error}");
+        let mut stream =
+            unsafe { open_reader::<Factory>(&task, &plan.state, &plan.partitions[0]) }.unwrap();
+        // The first batch, which get_schema reads, does not have the negotiated schema.
+        let mut schema = arrow_schema::ffi::FFI_ArrowSchema::empty();
+        assert_ne!(
+            unsafe { stream.get_schema.unwrap()(&mut stream, &mut schema) },
+            0
+        );
+        let error =
+            unsafe { std::ffi::CStr::from_ptr(stream.get_last_error.unwrap()(&mut stream)) };
+        let error = error.to_str().unwrap();
+        assert!(error.contains("negotiated schema"), "{error}");
     }
 
     #[test]
@@ -896,7 +903,7 @@ mod tests {
                 unreachable!("registered directly")
             }
 
-            fn capabilities(&self, _: Capabilities) -> Capabilities {
+            fn capabilities(&self) -> Capabilities {
                 self.0
             }
         }

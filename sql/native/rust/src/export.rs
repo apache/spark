@@ -50,7 +50,7 @@ macro_rules! export_data_source {
             type __SparkBatchWrite = <__SparkSource as $crate::DataSource>::BatchWrite;
             type __SparkReaderFactory = <__SparkScanBuilder as $crate::ScanBuilder>::Factory;
             type __SparkWriterFactory = <__SparkBatchWrite as $crate::BatchWrite>::Factory;
-            type __SparkMessage = <__SparkWriterFactory as $crate::DataWriterFactory>::Message;
+            type __SparkMessage = <__SparkBatchWrite as $crate::BatchWrite>::Message;
 
             fn bridge() -> &'static Bridge<__SparkSource> {
                 static BRIDGE: std::sync::OnceLock<Bridge<__SparkSource>> =

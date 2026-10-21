@@ -476,6 +476,7 @@ dependencies = [
  "arrow-array",
  "arrow-data",
  "arrow-schema",
+ "log",
  "serde",
  "serde_json",
 ]

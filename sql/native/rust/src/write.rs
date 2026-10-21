@@ -26,10 +26,7 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use crate::abi::{self, ArrowArray, ArrowSchema, SparkDsTaskContext};
 use crate::bridge::stream::{canonical_fields, validate_schema};
 use crate::bridge::{decode, describe, encode, panic_message, provider_call};
-use crate::{
-    BatchWrite, DataWriterFactory, LogLevel, PartitionWriter, Result, TaskContext, WritePlan,
-    WriterContext,
-};
+use crate::{BatchWrite, DataWriterFactory, PartitionWriter, Result, TaskContext, WriterContext};
 
 type Cached<T> = std::result::Result<T, String>;
 
@@ -64,23 +61,22 @@ struct WriterState<F> {
 /// The driver keeps this coordinator until close, including after a failed commit.
 pub struct DriverWriter<W: BatchWrite> {
     coordinator: Option<W>,
-    factory: Option<W::Factory>,
     schema: SchemaRef,
     serialized: Option<Cached<Arc<Vec<u8>>>>,
     phase: Phase<()>,
 }
 
 impl<W: BatchWrite> DriverWriter<W> {
-    pub fn new(plan: WritePlan<W>, schema: SchemaRef) -> Self {
+    pub fn new(coordinator: W, schema: SchemaRef) -> Self {
         Self {
-            coordinator: Some(plan.coordinator),
-            factory: Some(plan.factory),
+            coordinator: Some(coordinator),
             schema,
             serialized: None,
             phase: Phase::Active,
         }
     }
 
+    /// Creates and serializes the writer factory once, caching the result.
     pub fn serialized(&mut self) -> Result<Arc<Vec<u8>>> {
         if let Some(result) = &self.serialized {
             return cached(result);
@@ -88,8 +84,11 @@ impl<W: BatchWrite> DriverWriter<W> {
         self.phase.active()?;
         let result = provider_call(|| {
             validate_schema(&self.schema)?;
+            let coordinator = self.coordinator.as_ref().expect("coordinator is present");
+            // The factory's destructor is connector code too, so it runs in provider_call.
+            let factory = coordinator.writer_factory()?;
             Ok(Arc::new(encode(&WriterState {
-                factory: self.factory.as_ref().expect("factory is present"),
+                factory: &factory,
                 schema: self.schema.as_ref().clone(),
             })?))
         });
@@ -141,13 +140,10 @@ impl<W: BatchWrite> DriverWriter<W> {
                 .map(|(partition, message)| match decode((*message)?) {
                     Ok(message) => Some(message),
                     Err(error) => {
-                        crate::log(
-                            LogLevel::Warn,
-                            &format!(
-                                "Aborting a write without the commit message of partition \
-                                 {partition}, which cannot be decoded: {}",
-                                describe(&*error)
-                            ),
+                        log::warn!(
+                            "Aborting a write without the commit message of partition \
+                             {partition}, which cannot be decoded: {}",
+                            describe(&*error)
                         );
                         None
                     }
@@ -167,9 +163,6 @@ impl<W: BatchWrite> Drop for DriverWriter<W> {
     fn drop(&mut self) {
         if let Some(coordinator) = self.coordinator.take() {
             drop_provider(coordinator);
-        }
-        if let Some(factory) = self.factory.take() {
-            drop_provider(factory);
         }
     }
 }

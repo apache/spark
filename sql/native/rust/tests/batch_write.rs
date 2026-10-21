@@ -29,8 +29,7 @@ use spark_native_source::__private::abi::{
 };
 use spark_native_source::{
     BatchWrite, Capabilities, CreateInfo, DataSource, DataWriter, DataWriterFactory,
-    PartitionWriter, Result, TaskContext, Unsupported, WriteInfo, WriteMode, WritePlan,
-    WriterContext,
+    PartitionWriter, Result, TaskContext, Unsupported, WriteInfo, WriteMode, WriterContext,
 };
 
 // Each test exercises the actual exported table; this lock isolates fixture observations.
@@ -40,6 +39,7 @@ static EVENTS: Mutex<Vec<Event>> = Mutex::new(Vec::new());
 #[derive(Clone, Debug, PartialEq)]
 enum Event {
     WriteCreated(bool),
+    FactoryCreated,
     Batch(usize),
     TaskCommit,
     TaskAbort(bool),
@@ -76,8 +76,6 @@ impl DataSource for Source {
     // A sink of any input: Spark requires a user-specified schema to read it.
     const INFERS_SCHEMA: bool = false;
 
-    const SUPPORTS_TRUNCATE: bool = true;
-
     fn new(info: CreateInfo) -> Result<Self> {
         Ok(Self {
             failure: info.options.get("failure").cloned().unwrap_or_default(),
@@ -89,26 +87,22 @@ impl DataSource for Source {
         })
     }
 
-    fn capabilities(&self, supported: Capabilities) -> Capabilities {
+    fn capabilities(&self) -> Capabilities {
         match self.capabilities.as_str() {
             "none" => Capabilities::empty(),
-            "append" => supported.without(Capabilities::TRUNCATE),
-            _ => supported,
+            "append" => Capabilities::all().without(Capabilities::TRUNCATE),
+            _ => Capabilities::all(),
         }
     }
 
-    fn new_write(&self, info: WriteInfo) -> Result<WritePlan<Driver>> {
+    fn new_write(&self, info: WriteInfo) -> Result<Driver> {
         if info.schema != schema() {
             return Err("unsupported input schema".into());
         }
         record(Event::WriteCreated(info.mode == WriteMode::Truncate));
-        let driver = Driver {
+        Ok(Driver {
             failure: self.failure.clone(),
-        };
-        let factory = Factory {
-            failure: self.failure.clone(),
-        };
-        Ok(WritePlan::new(driver, factory))
+        })
     }
 }
 
@@ -118,6 +112,19 @@ struct Driver {
 
 impl BatchWrite for Driver {
     type Factory = Factory;
+    type Message = Message;
+
+    const SUPPORTS_TRUNCATE: bool = true;
+
+    fn writer_factory(&self) -> Result<Factory> {
+        record(Event::FactoryCreated);
+        if self.failure == "writer_factory_error" {
+            return Err("creating the writer factory failed".into());
+        }
+        Ok(Factory {
+            failure: self.failure.clone(),
+        })
+    }
 
     fn commit(&mut self, messages: Vec<Message>) -> Result<()> {
         record(Event::DriverCommit(messages));
@@ -585,6 +592,7 @@ fn serialized_factory_and_messages_roundtrip_without_driver_source_or_input_buff
         events(),
         vec![
             Event::WriteCreated(true),
+            Event::FactoryCreated,
             Event::Batch(3),
             Event::Batch(0),
             Event::TaskCommit,
@@ -755,23 +763,34 @@ fn driver_failures_preserve_messages_and_missing_task_positions_for_abort() {
 }
 
 #[test]
-fn factory_serialization_failure_is_cached_and_driver_can_abort() {
+fn writer_factory_failures_are_cached_and_driver_can_abort() {
     let _guard = TEST_LOCK.lock().unwrap();
-    EVENTS.lock().unwrap().clear();
     let library = library();
-    let (source, _) = source(library, "factory_serialization", "");
-    let driver = driver(&source, 0);
-    for _ in 0..2 {
-        let (status, output) = serialize(&driver);
-        assert_ne!(status, 0);
-        assert!(output.is_empty());
-        assert!(error(library).contains("factory serialization failed"));
+    for (failure, expected) in [
+        ("writer_factory_error", "creating the writer factory failed"),
+        ("factory_serialization", "factory serialization failed"),
+    ] {
+        EVENTS.lock().unwrap().clear();
+        let (source, _) = source(library, failure, "");
+        let driver = driver(&source, 0);
+        for _ in 0..2 {
+            let (status, output) = serialize(&driver);
+            assert_ne!(status, 0);
+            assert!(output.is_empty());
+            assert!(error(library).contains(expected));
+        }
+        // Commit never follows a failed call.
+        assert_ne!(driver_finish(&driver, false, &[]), 0);
+        success(library, driver_finish(&driver, true, &[]));
+        assert_eq!(
+            events(),
+            vec![
+                Event::WriteCreated(false),
+                Event::FactoryCreated,
+                Event::DriverAbort(vec![])
+            ],
+        );
     }
-    success(library, driver_finish(&driver, true, &[]));
-    assert_eq!(
-        events(),
-        vec![Event::WriteCreated(false), Event::DriverAbort(vec![])],
-    );
 }
 
 #[test]

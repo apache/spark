@@ -39,6 +39,7 @@ publish = false
 arrow-array = { version = "58", features = ["ffi"] }
 arrow-schema = { version = "58", features = ["ffi", "serde"] }
 arrow-data = "58"
+log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
@@ -46,6 +47,7 @@ serde_json = "1"
 arrow-array.workspace = true
 arrow-schema.workspace = true
 arrow-data.workspace = true
+log.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 

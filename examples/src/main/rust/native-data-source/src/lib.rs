@@ -20,12 +20,13 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use arrow_array::StringArray;
-use arrow_array::{ArrayRef, Int64Array, RecordBatch, RecordBatchIterator, RecordBatchOptions};
+use arrow_array::{ArrayRef, Int64Array, RecordBatch, RecordBatchOptions};
 use arrow_schema::{ArrowError, DataType, Field, Schema, SchemaRef};
 use serde::{Deserialize, Serialize};
 use spark_native_source::{
     CreateInfo, DataSource, FilterSupport, LimitSupport, LiteralValue, Options, PartitionReader,
-    PartitionReaderFactory, Predicate, ReaderContext, Result, ScanBuilder, ScanPlan, Unsupported,
+    PartitionReaderFactory, Predicate, ReaderContext, Result, ScanBuilder, ScanInfo, ScanPlan,
+    Unsupported,
 };
 
 pub struct RangeSource {
@@ -94,7 +95,8 @@ impl DataSource for RangeSource {
         output_schema(&["id".into(), "label".into()])
     }
 
-    fn new_scan(&self, schema: SchemaRef) -> Result<Self::ScanBuilder> {
+    fn new_scan(&self, info: ScanInfo) -> Result<Self::ScanBuilder> {
+        let schema = info.schema;
         let columns: Vec<String> = schema.fields().iter().map(|f| f.name().clone()).collect();
         let expected = output_schema(&columns)?;
         for (field, expected) in schema.fields().iter().zip(expected.fields()) {
@@ -138,7 +140,6 @@ impl PartitionReaderFactory for RangeReaderFactory {
         let columns: Vec<String> = schema.fields().iter().map(|f| f.name().clone()).collect();
         output_schema(&columns)?;
         let task = context.task;
-        let batch_schema = Arc::clone(&schema);
         let mut current = partition.start;
         let batches = std::iter::from_fn(move || {
             if current == partition.end {
@@ -166,12 +167,12 @@ impl PartitionReaderFactory for RangeReaderFactory {
             current = next;
             // Explicit row counts also preserve COUNT(*) with a zero-column projection.
             Some(RecordBatch::try_new_with_options(
-                Arc::clone(&batch_schema),
+                Arc::clone(&schema),
                 arrays,
                 &RecordBatchOptions::new().with_row_count(Some(num_rows)),
             ))
         });
-        Ok(Box::new(RecordBatchIterator::new(batches, schema)))
+        Ok(Box::new(batches))
     }
 }
 
@@ -337,7 +338,9 @@ mod tests {
     }
 
     fn scan(source: &RangeSource) -> RangeScan {
-        source.new_scan(source.schema().unwrap()).unwrap()
+        source
+            .new_scan(ScanInfo::new(source.schema().unwrap()))
+            .unwrap()
     }
 
     fn comparison(name: &str, value: i64, reversed: bool) -> Predicate {
@@ -367,9 +370,7 @@ mod tests {
             .into_iter()
             .enumerate()
             .flat_map(|(index, partition)| {
-                let task = TaskContext::for_testing()
-                    .partition_id(index as i32)
-                    .build();
+                let task = TaskContext::for_testing().with_partition_id(index as i32);
                 plan.factory
                     .open(partition, ReaderContext::new(schema.clone(), task))
                     .unwrap()
@@ -585,9 +586,9 @@ mod tests {
         }
         let source = source(&[]);
         let invalid = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
-        assert!(source.new_scan(invalid).is_err());
+        assert!(source.new_scan(ScanInfo::new(invalid)).is_err());
         let labels = output_schema(&["label".into()]).unwrap();
-        let mut scan = source.new_scan(labels).unwrap();
+        let mut scan = source.new_scan(ScanInfo::new(labels)).unwrap();
         assert!(scan.prune_columns(&["id".into()]).is_err());
         assert!(output_schema(&["id".into(), "id".into()]).is_err());
     }
@@ -601,8 +602,7 @@ mod tests {
             ("batchsize", "2"),
         ]);
         let plan = scan(&source).plan().unwrap();
-        let context =
-            ReaderContext::new(source.schema().unwrap(), TaskContext::for_testing().build());
+        let context = ReaderContext::new(source.schema().unwrap(), TaskContext::for_testing());
         let mut reader = plan
             .factory
             .open(plan.partitions[0].clone(), context)

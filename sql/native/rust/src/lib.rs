@@ -20,11 +20,17 @@
 //! not implement. Then invoke [`export_data_source!`] once in a `cdylib` crate. The SDK
 //! owns handles, plan/message serialization, C ABI adaptation, and Arrow import/export.
 //! Rust traits stay inside the plugin; they are not an ABI between dynamic libraries.
+//!
+//! Methods receive their inputs in `#[non_exhaustive]` structs, so that new ABI fields
+//! can reach connectors without breaking them: `*Info` structs on the driver
+//! ([`CreateInfo`], [`ScanInfo`], [`WriteInfo`], and [`HostInfo`]), and `*Context`
+//! structs, which carry the live [`TaskContext`], on the executors ([`ReaderContext`]
+//! and [`WriterContext`]).
 
 use std::collections::BTreeMap;
 
-use arrow_array::{RecordBatch, RecordBatchReader};
-use arrow_schema::SchemaRef;
+use arrow_array::RecordBatch;
+use arrow_schema::{ArrowError, SchemaRef};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
@@ -54,9 +60,17 @@ pub mod __private {
 }
 
 pub use capabilities::Capabilities;
-pub use host::{log, HostInfo, LogLevel};
+pub use host::HostInfo;
+/// The `log` crate, whose macros write to the log of the Spark driver or executor, with
+/// the path of the library, once Spark initializes the library.
+///
+/// Any thread can call them, including in the dependencies of the library. Outside
+/// Spark, for example in unit tests, their messages are dropped. By default, the SDK
+/// passes messages of the `Info` and more severe levels; to pass more, call
+/// `log::set_max_level`, for example in [`DataSource::init`].
+pub use log;
 pub use predicate::{LiteralValue, Predicate};
-pub use task::{TaskContext, TaskContextBuilder};
+pub use task::TaskContext;
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub type Result<T> = std::result::Result<T, Error>;
@@ -139,9 +153,9 @@ pub trait DataSource: Send + Sized + 'static {
     /// [`Unsupported`].
     type ScanBuilder: ScanBuilder;
 
-    /// Creates an independent scan of the schema to read, which the user may have
+    /// Creates an independent scan of [`ScanInfo::schema`], which the user may have
     /// specified; reject unsupported schemas.
-    fn new_scan(&self, _schema: SchemaRef) -> Result<Self::ScanBuilder> {
+    fn new_scan(&self, _info: ScanInfo) -> Result<Self::ScanBuilder> {
         Err(
             "DataSource::new_scan is not implemented: implement it, or set \
              DataSource::ScanBuilder to Unsupported"
@@ -155,15 +169,11 @@ pub trait DataSource: Send + Sized + 'static {
     /// [`Unsupported`].
     type BatchWrite: BatchWrite;
 
-    /// Whether [`new_write`](Self::new_write) supports [`WriteMode::Truncate`], which
-    /// adds the `TRUNCATE` capability to batch writes.
-    const SUPPORTS_TRUNCATE: bool = false;
-
     /// Validate the input schema and create an independent write. Construction may be
     /// followed only by Drop, without commit or abort, so it must not make irreversible
     /// changes. The SDK calls this only while the instance's capabilities include
     /// `BATCH_WRITE`, and passes [`WriteMode::Truncate`] only when they include `TRUNCATE`.
-    fn new_write(&self, _info: WriteInfo) -> Result<WritePlan<Self::BatchWrite>> {
+    fn new_write(&self, _info: WriteInfo) -> Result<Self::BatchWrite> {
         Err(
             "DataSource::new_write is not implemented: implement it, or set \
              DataSource::BatchWrite to Unsupported"
@@ -173,17 +183,33 @@ pub trait DataSource: Send + Sized + 'static {
 
     // Instance restrictions.
 
-    /// Returns the operations of this instance, a subset of the implemented ones.
-    /// Override this to restrict an instance, for example for a read-only destination.
-    /// The SDK evaluates it once when Spark creates the source. An instance without
-    /// operations still supports schema discovery.
-    fn capabilities(&self, supported: Capabilities) -> Capabilities {
-        supported
+    /// Returns the operations of this instance. The SDK keeps only those that the source
+    /// implements, so the default, [`Capabilities::all`], keeps them all. Override this to
+    /// restrict an instance, for example for a read-only destination. The SDK evaluates
+    /// it once when Spark creates the source. An instance without operations still
+    /// supports schema discovery.
+    fn capabilities(&self) -> Capabilities {
+        Capabilities::all()
     }
 }
 
 // Batch reads: a ScanBuilder negotiates pushdown and plans the scan on the driver, and a
 // PartitionReaderFactory opens a reader of each partition on the executors.
+
+/// What Spark passes to create a scan.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub struct ScanInfo {
+    /// The schema to read: the schema of the source, or one that the user specified.
+    pub schema: SchemaRef,
+}
+
+impl ScanInfo {
+    /// The information of a scan created outside Spark, for example in a test.
+    pub fn new(schema: SchemaRef) -> Self {
+        Self { schema }
+    }
+}
 
 /// Negotiates pushdown on the driver, then plans the scan.
 ///
@@ -275,8 +301,8 @@ impl<F: PartitionReaderFactory> ScanPlan<F> {
 pub trait PartitionReaderFactory: Serialize + DeserializeOwned + Send + 'static {
     type Partition: Serialize + DeserializeOwned + Send + 'static;
 
-    /// Opens a lazy reader of `partition` that returns batches with the schema of
-    /// `context`.
+    /// Opens a lazy reader of the batches of `partition`, with the columns of
+    /// [`ReaderContext::schema`].
     ///
     /// - Return batches lazily, with bounded memory.
     /// - The reader owns its resources and cannot borrow this short-lived factory. It
@@ -290,7 +316,9 @@ pub trait PartitionReaderFactory: Serialize + DeserializeOwned + Send + 'static 
     ///
     /// The SDK checks Spark-compatible Arrow types, the negotiated schema and its
     /// nullability, and zero array offsets recursively. It reports incompatible layouts
-    /// instead of copying buffers.
+    /// instead of copying buffers. Batches may use any supported Arrow encoding of a
+    /// Spark type, such as `LargeUtf8` for a string, but the first batch determines the
+    /// Arrow schema of the stream, which every later batch must have.
     fn open<'task>(
         &self,
         partition: Self::Partition,
@@ -316,8 +344,10 @@ impl<'task> ReaderContext<'task> {
     }
 }
 
-/// The lazy Arrow reader of one partition, which [`PartitionReaderFactory::open`] returns.
-pub type PartitionReader<'task> = Box<dyn RecordBatchReader + Send + 'task>;
+/// The lazy batches of one partition, which [`PartitionReaderFactory::open`] returns.
+/// Any Arrow `RecordBatchReader`, such as a Parquet reader, is such an iterator.
+pub type PartitionReader<'task> =
+    Box<dyn Iterator<Item = std::result::Result<RecordBatch, ArrowError>> + Send + 'task>;
 
 // Batch writes: a BatchWrite coordinates the write on the driver, and a DataWriterFactory
 // opens a DataWriter for each task attempt on the executors.
@@ -352,29 +382,8 @@ pub enum WriteMode {
     Truncate,
 }
 
-/// A driver coordinator and the serializable configuration of its task writers.
-///
-/// The SDK serializes the factory once, with the schema of the input, and caches the
-/// result, including a serialization failure. Include a unique operation ID in the
-/// factory when needed; Spark supplies no batch query ID.
-#[non_exhaustive]
-pub struct WritePlan<W: BatchWrite> {
-    /// The coordinator that commits or aborts the write on the driver.
-    pub coordinator: W,
-    /// The configuration from which each task attempt opens its writer.
-    pub factory: W::Factory,
-}
-
-impl<W: BatchWrite> WritePlan<W> {
-    pub fn new(coordinator: W, factory: W::Factory) -> Self {
-        Self {
-            coordinator,
-            factory,
-        }
-    }
-}
-
-/// A driver coordinator for one batch write.
+/// A driver coordinator for one batch write, which also creates the serializable
+/// configuration of its task writers.
 ///
 /// Keep irreversible publication, including removing overwritten data, in commit.
 /// Drop releases resources; it must not publish data or perform fallible flushing.
@@ -384,41 +393,50 @@ impl<W: BatchWrite> WritePlan<W> {
 /// The SDK enforces the following, so implementations need not track their own
 /// phase or guard against repeated calls:
 ///
+/// - `writer_factory` runs at most once, before any task opens a writer.
 /// - `commit` runs at most once, only while no earlier call has failed, including
-///   the serialization of the factory. It is skipped, and the write fails, when
-///   any task message is missing or cannot be decoded.
+///   `writer_factory` and the serialization of its factory. It is skipped, and the
+///   write fails, when any task message is missing or cannot be decoded.
 /// - `abort` runs at most once, never after a successful `commit`. It may follow
 ///   a failed `commit`, or run without `commit`.
 /// - Drop runs exactly once, possibly without `commit` or `abort`. Spark closes the
-///   coordinator without `abort` when serializing the factory fails, so Drop must
-///   also release what only this write staged.
+///   coordinator without `abort` when `writer_factory` or the serialization of its
+///   factory fails, so Drop must also release what only this write staged.
 /// - A panic in any method is reported as that method's failure.
 ///
 /// Message `i` of `commit` and `abort` belongs to input partition `i`.
 pub trait BatchWrite: Send + 'static {
-    type Factory: DataWriterFactory;
+    /// The configuration from which each task attempt opens its writer.
+    type Factory: DataWriterFactory<Message = Self::Message>;
+
+    /// The message with which a task attempt reports its staged output to the driver.
+    type Message: Serialize + DeserializeOwned + Send + 'static;
+
+    /// Whether the write supports [`WriteMode::Truncate`], which adds the `TRUNCATE`
+    /// capability to batch writes.
+    const SUPPORTS_TRUNCATE: bool = false;
 
     /// False only for [`Unsupported`], from which the SDK derives the capabilities.
     #[doc(hidden)]
     const SUPPORTED: bool = true;
 
+    /// Returns the configuration of the task writers. The SDK serializes it once, with
+    /// the schema of the input, and caches the result, including a failure. Include a
+    /// unique operation ID when needed; Spark supplies no batch query ID.
+    fn writer_factory(&self) -> Result<Self::Factory>;
+
     /// Publish only the winning attempt from each input partition. Task retries
     /// and speculative attempts can stage other data that must not be published.
-    fn commit(
-        &mut self,
-        messages: Vec<<Self::Factory as DataWriterFactory>::Message>,
-    ) -> Result<()>;
+    fn commit(&mut self, messages: Vec<Self::Message>) -> Result<()>;
 
     /// Abort after input, task, or driver commit failure. None stands for a partition
     /// whose commit message did not reach the driver, or cannot be decoded.
     /// Executor loss can leave orphaned staged data; plan for its cleanup.
-    fn abort(
-        &mut self,
-        messages: Vec<Option<<Self::Factory as DataWriterFactory>::Message>>,
-    ) -> Result<()>;
+    fn abort(&mut self, messages: Vec<Option<Self::Message>>) -> Result<()>;
 }
 
-/// Serializable configuration for independent task-attempt writers.
+/// Serializable configuration for independent task-attempt writers, which
+/// [`BatchWrite::writer_factory`] creates.
 ///
 /// Open connections and files in open, not in the factory. A returned writer
 /// cannot borrow this temporary factory, but may retain the context until
@@ -513,8 +531,13 @@ impl PartitionReaderFactory for Unsupported {
 
 impl BatchWrite for Unsupported {
     type Factory = Self;
+    type Message = Self;
 
     const SUPPORTED: bool = false;
+
+    fn writer_factory(&self) -> Result<Self> {
+        match *self {}
+    }
 
     fn commit(&mut self, _: Vec<Self>) -> Result<()> {
         match *self {}
