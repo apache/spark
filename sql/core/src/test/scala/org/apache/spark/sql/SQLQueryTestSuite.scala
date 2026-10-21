@@ -22,6 +22,7 @@ import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.util.{Locale, UUID}
+import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 
@@ -30,6 +31,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.{SparkConf, TestUtils}
 import org.apache.spark.sql.catalyst.analysis.{TableOutputResolver, UnresolvedIdentifier,
   UnresolvedInsertTarget}
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{Command, CreateFlowCommand, LogicalPlan,
@@ -38,6 +40,8 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.QuotingUtils.quoteIdentifier
 import org.apache.spark.sql.catalyst.util.stringToFile
+import org.apache.spark.sql.connector.catalog.{V1Table, V2TableWithV1Fallback}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.TimestampTypes
@@ -107,8 +111,10 @@ import org.apache.spark.util.Utils
  *     remembered definition with Trigger.AvailableNow. The flow must use INSERT INTO <table> BY
  *     NAME, and the target table must already exist. Runs of the same named flow reuse its
  *     checkpoint. The target table must be written only by the flow because batch writes are not
- *     tracked by the streaming sink's metadata log. REFRESH FLOW is test-harness syntax; it is not
- *     part of the Spark SQL parser.
+ *     tracked by the streaming sink's metadata log, and each target table may be written by only
+ *     one flow. Dropping and recreating the target table while reusing a flow is unsupported and
+ *     should not be tested. REFRESH FLOW is test-harness syntax; it is not part of the Spark SQL
+ *     parser.
  *
  * For example:
  * {{{
@@ -405,6 +411,8 @@ class SQLQueryTestSuite extends SharedSparkSession
     "sql-query-test-" + UUID.nameUUIDFromBytes(identity.getBytes(StandardCharsets.UTF_8))
   }
 
+  private val triggeredFlowTimeoutMs = TimeUnit.MINUTES.toMillis(10)
+
   private case class TriggeredFlow(
       flowName: Seq[String],
       query: LogicalPlan,
@@ -425,6 +433,28 @@ class SQLQueryTestSuite extends SharedSparkSession
       right: Seq[String]): Boolean = {
     left.length == right.length && left.zip(right).forall { case (l, r) =>
       session.sessionState.conf.resolver(l, r)
+    }
+  }
+
+  private def canonicalTableName(session: SparkSession, tableName: String): Seq[String] = {
+    val analyzer = session.sessionState.analyzer
+    import analyzer.CatalogAndIdentifier
+
+    val multipartIdentifier = session.sessionState.sqlParser.parseMultipartIdentifier(tableName)
+    val CatalogAndIdentifier(catalog, identifier) = multipartIdentifier
+    Seq(catalog.name()) ++ identifier.namespace() :+ identifier.name()
+  }
+
+  private def loadV1Table(session: SparkSession, tableName: String): Option[CatalogTable] = {
+    val analyzer = session.sessionState.analyzer
+    import analyzer.CatalogAndIdentifier
+
+    val multipartIdentifier = session.sessionState.sqlParser.parseMultipartIdentifier(tableName)
+    val CatalogAndIdentifier(catalog, identifier) = multipartIdentifier
+    catalog.asTableCatalog.loadTable(identifier) match {
+      case table: V1Table => Some(table.v1Table)
+      case table: V2TableWithV1Fallback => Some(table.v1Table)
+      case _ => None
     }
   }
 
@@ -461,11 +491,24 @@ class SQLQueryTestSuite extends SharedSparkSession
       session: SparkSession,
       command: CreateFlowCommand,
       flows: mutable.Map[Seq[String], TriggeredFlow]): TriggeredFlow = {
-    val flow = parseCreateTriggeredFlow(command)
-    require(!flows.keys.exists(sameFlowName(session, _, flow.flowName)),
-      s"Triggered flow ${formatFlowName(flow.flowName)} is already defined in this test run.")
-    flows += flow.flowName -> flow
-    flow
+    session.withActive {
+      val flow = parseCreateTriggeredFlow(command)
+      require(!flows.keys.exists(sameFlowName(session, _, flow.flowName)),
+        s"Triggered flow ${formatFlowName(flow.flowName)} is already defined in this test run.")
+      val targetName = canonicalTableName(session, flow.targetTable)
+      flows.values.find { registeredFlow =>
+        sameFlowName(
+          session,
+          canonicalTableName(session, registeredFlow.targetTable),
+          targetName)
+      }.foreach { registeredFlow =>
+        throw new IllegalArgumentException(
+          s"SQL golden triggered flow target table '${flow.targetTable}' is already written by " +
+            s"flow ${formatFlowName(registeredFlow.flowName)}.")
+      }
+      flows += flow.flowName -> flow
+      flow
+    }
   }
 
   private def resolveTriggeredFlow(
@@ -493,23 +536,28 @@ class SQLQueryTestSuite extends SharedSparkSession
   private def parseTriggeredFlowStatement(
       session: SparkSession,
       sql: String): Option[TriggeredFlowStatement] = {
-    val tokens = sql.trim.split("\\s+", 3)
-    val hasFlowCommandPrefix = tokens.length >= 2 && tokens(1).equalsIgnoreCase("FLOW") &&
-      (tokens(0).equalsIgnoreCase("CREATE") || tokens(0).equalsIgnoreCase("REFRESH"))
-    if (hasFlowCommandPrefix) {
-      val parsedPlan = try {
-        Some(session.sessionState.sqlParser.parsePlan(sql))
-      } catch {
-        case _: ParseException => None
+    session.withActive {
+      val tokens = sql.trim.split("\\s+", 3)
+      val hasFlowCommandPrefix = tokens.length >= 2 && tokens(1).equalsIgnoreCase("FLOW") &&
+        (tokens(0).equalsIgnoreCase("CREATE") || tokens(0).equalsIgnoreCase("REFRESH"))
+      if (hasFlowCommandPrefix) {
+        if (tokens.length == 2 && tokens(0).equalsIgnoreCase("REFRESH")) {
+          throw new IllegalArgumentException("REFRESH FLOW requires a flow name.")
+        }
+        val parsedPlan = try {
+          Some(session.sessionState.sqlParser.parsePlan(sql))
+        } catch {
+          case _: ParseException => None
+        }
+        parsedPlan match {
+          case Some(command: CreateFlowCommand) => Some(CreateTriggeredFlow(command))
+          case None if tokens.length == 3 && tokens(0).equalsIgnoreCase("REFRESH") =>
+            parseRefreshTriggeredFlowStatement(session, tokens(2))
+          case _ => None
+        }
+      } else {
+        None
       }
-      parsedPlan match {
-        case Some(command: CreateFlowCommand) => Some(CreateTriggeredFlow(command))
-        case None if tokens.length == 3 && tokens(0).equalsIgnoreCase("REFRESH") =>
-          parseRefreshTriggeredFlowStatement(session, tokens(2))
-        case _ => None
-      }
-    } else {
-      None
     }
   }
 
@@ -520,43 +568,60 @@ class SQLQueryTestSuite extends SharedSparkSession
       testCase: TestCase,
       sparkConfigSet: Seq[(String, String)],
       flows: mutable.Map[Seq[String], TriggeredFlow]): (String, Seq[String]) = {
-    val flow = resolveTriggeredFlow(session, flowName, flows)
-    val df = classic.Dataset.ofRows(session.asInstanceOf[classic.SparkSession], flow.query)
-    require(df.isStreaming,
-      s"SQL golden triggered flow ${formatFlowName(flow.flowName)} requires a streaming query, " +
-        "but its CREATE FLOW query reads no streaming source.")
-    require(session.catalog.tableExists(flow.targetTable),
-      s"SQL golden triggered flow target table '${flow.targetTable}' does not exist.")
-    val queryName = triggeredFlowQueryName(testCase, sparkConfigSet, flow.flowName)
-    val alignedQuery = TableOutputResolver.resolveOutputColumns(
-      flow.targetTable,
-      session.table(flow.targetTable).queryExecution.analyzed.output,
-      df.queryExecution.analyzed,
-      byName = true,
-      session.sessionState.conf,
-      TableOutputResolver.DefaultValueFillMode.FILL)
-    val alignedDf = classic.Dataset.ofRows(
-      session.asInstanceOf[classic.SparkSession], alignedQuery)
+    session.withActive {
+      val flow = resolveTriggeredFlow(session, flowName, flows)
+      val df = classic.Dataset.ofRows(
+        session.asInstanceOf[classic.SparkSession], flow.query.clone())
+      require(df.isStreaming,
+        s"SQL golden triggered flow ${formatFlowName(flow.flowName)} requires a streaming query, " +
+          "but its CREATE FLOW query reads no streaming source.")
+      require(session.catalog.tableExists(flow.targetTable),
+        s"SQL golden triggered flow target table '${flow.targetTable}' does not exist.")
+      val queryName = triggeredFlowQueryName(testCase, sparkConfigSet, flow.flowName)
+      val targetTable = loadV1Table(session, flow.targetTable)
+      val alignedQuery = TableOutputResolver.resolveOutputColumns(
+        flow.targetTable,
+        session.table(flow.targetTable).queryExecution.analyzed.output,
+        df.queryExecution.analyzed,
+        byName = true,
+        session.sessionState.conf,
+        TableOutputResolver.DefaultValueFillMode.FILL)
+      val alignedDf = classic.Dataset.ofRows(
+        session.asInstanceOf[classic.SparkSession], alignedQuery)
 
-    val writer = alignedDf.writeStream
-      .outputMode(OutputMode.Append())
-      .trigger(Trigger.AvailableNow())
-      .queryName(queryName)
-      .option(
-        "checkpointLocation",
-        new Path(session.sessionState.conf.warehousePath, queryName).toString)
-    val query = writer.toTable(flow.targetTable)
-    Utils.tryWithSafeFinally {
-      try {
-        query.awaitTermination()
-      } catch {
-        case e: StreamingQueryException if e.cause != null => throw e.cause
+      val writer = alignedDf.writeStream
+        .outputMode(OutputMode.Append())
+        .trigger(Trigger.AvailableNow())
+        .queryName(queryName)
+        .option(
+          "checkpointLocation",
+          new Path(session.sessionState.conf.warehousePath, queryName).toString)
+      targetTable.foreach { table =>
+        writer.format(table.provider.getOrElse {
+          throw new IllegalArgumentException(
+            s"SQL golden triggered flow target table '${flow.targetTable}' has no provider.")
+        })
+        if (table.partitionColumnNames.nonEmpty) {
+          writer.partitionBy(table.partitionColumnNames: _*)
+        }
       }
-    } {
-      query.stop()
-    }
+      val query = writer.toTable(flow.targetTable)
+      Utils.tryWithSafeFinally {
+        try {
+          if (!query.awaitTermination(triggeredFlowTimeoutMs)) {
+            throw new IllegalStateException(
+              s"SQL golden triggered flow ${formatFlowName(flow.flowName)} did not terminate " +
+                s"within ${TimeUnit.MILLISECONDS.toMinutes(triggeredFlowTimeoutMs)} minutes.")
+          }
+        } catch {
+          case e: StreamingQueryException if e.cause != null => throw e.cause
+        }
+      } {
+        query.stop()
+      }
 
-    (emptySchema, Seq.empty)
+      (emptySchema, Seq.empty)
+    }
   }
 
   /**
@@ -1159,6 +1224,10 @@ class SQLQueryTestSuite extends SharedSparkSession
     assert(parseTriggeredFlow(specs(2)._1)
       .exists(_.isInstanceOf[RefreshTriggeredFlow]))
     assert(refreshFlowName("refresh flow `catalog`.`flow-name`") == Seq("catalog", "flow-name"))
+    val missingRefreshNameError = intercept[IllegalArgumentException] {
+      parseTriggeredFlow("REFRESH FLOW")
+    }
+    assert(missingRefreshNameError.getMessage.contains("requires a flow name"))
 
     val debugSpec = querySpecs(
       """--DEBUG
@@ -1196,6 +1265,23 @@ class SQLQueryTestSuite extends SharedSparkSession
     }
     assert(batchFlowError.getMessage.contains("triggered flow `batch_flow`"))
     assert(!batchFlowError.getMessage.contains("REFRESH FLOW"))
+
+    val sharedTargetFlows = mutable.Map.empty[Seq[String], TriggeredFlow]
+    registerTriggeredFlow(
+      spark,
+      createFlowCommand(
+        "CREATE FLOW first_flow AS INSERT INTO shared_sink BY NAME " +
+          "SELECT * FROM STREAM(first_source)"),
+      sharedTargetFlows)
+    val sharedTargetError = intercept[IllegalArgumentException] {
+      registerTriggeredFlow(
+        spark,
+        createFlowCommand(
+          "CREATE FLOW second_flow AS INSERT INTO shared_sink BY NAME " +
+            "SELECT * FROM STREAM(second_source)"),
+        sharedTargetFlows)
+    }
+    assert(sharedTargetError.getMessage.contains("already written by flow `first_flow`"))
 
     withTable("by_name_source", "by_name_sink") {
       spark.sql("CREATE TABLE by_name_source (second INT, first INT) USING parquet")
@@ -1270,6 +1356,89 @@ class SQLQueryTestSuite extends SharedSparkSession
         assert(!runtimeErrorOutput.exists(_.contains("STREAM_FAILED")))
         assert(!runtimeErrorOutput.exists(_.contains("runId")))
       }
+    }
+  }
+
+  test("test triggered flow execution semantics") {
+    def createFlowCommand(session: SparkSession, sql: String): CreateFlowCommand = {
+      parseTriggeredFlowStatement(session, sql) match {
+        case Some(CreateTriggeredFlow(command)) => command
+        case statement => fail(s"Expected CREATE FLOW, found $statement")
+      }
+    }
+
+    withTable("provider_source", "provider_sink") {
+      spark.sql("CREATE TABLE provider_source (id INT, part STRING) USING parquet")
+      spark.sql("INSERT INTO provider_source VALUES (1, 'a'), (2, 'b')")
+      spark.sql(
+        "CREATE TABLE provider_sink (id INT, part STRING) USING JSON PARTITIONED BY (part)")
+      val flows = mutable.Map.empty[Seq[String], TriggeredFlow]
+      registerTriggeredFlow(
+        spark,
+        createFlowCommand(
+          spark,
+          "CREATE FLOW provider_flow AS INSERT INTO provider_sink BY NAME " +
+            "SELECT id, part FROM STREAM(provider_source)"),
+        flows)
+      runTriggeredFlow(
+        spark,
+        Seq("provider_flow"),
+        RegularTestCase("provider", "", ""),
+        Nil,
+        flows)
+      checkAnswer(spark.table("provider_sink"), Seq(Row(1, "a"), Row(2, "b")))
+    }
+
+    withTable("retry_source", "retry_sink") {
+      spark.sql("CREATE TABLE retry_sink (id INT) USING parquet")
+      val flows = mutable.Map.empty[Seq[String], TriggeredFlow]
+      registerTriggeredFlow(
+        spark,
+        createFlowCommand(
+          spark,
+          "CREATE FLOW retry_flow AS INSERT INTO retry_sink BY NAME " +
+            "SELECT id FROM STREAM(retry_source)"),
+        flows)
+      intercept[AnalysisException] {
+        runTriggeredFlow(
+          spark,
+          Seq("retry_flow"),
+          RegularTestCase("retry", "", ""),
+          Nil,
+          flows)
+      }
+      spark.sql("CREATE TABLE retry_source (id INT) USING parquet")
+      spark.sql("INSERT INTO retry_source VALUES (1)")
+      runTriggeredFlow(
+        spark,
+        Seq("retry_flow"),
+        RegularTestCase("retry", "", ""),
+        Nil,
+        flows)
+      checkAnswer(spark.table("retry_sink"), Row(1))
+    }
+
+    val nonAnsiSession = spark.newSession()
+    nonAnsiSession.conf.set(SQLConf.ANSI_ENABLED.key, false)
+    withTable("non_ansi_source", "non_ansi_sink") {
+      nonAnsiSession.sql("CREATE TABLE non_ansi_source (value STRING) USING parquet")
+      nonAnsiSession.sql("INSERT INTO non_ansi_source VALUES ('not_an_int')")
+      nonAnsiSession.sql("CREATE TABLE non_ansi_sink (value INT) USING parquet")
+      val flows = mutable.Map.empty[Seq[String], TriggeredFlow]
+      registerTriggeredFlow(
+        nonAnsiSession,
+        createFlowCommand(
+          nonAnsiSession,
+          "CREATE FLOW non_ansi_flow AS INSERT INTO non_ansi_sink BY NAME " +
+            "SELECT CAST(value AS INT) AS value FROM STREAM(non_ansi_source)"),
+        flows)
+      runTriggeredFlow(
+        nonAnsiSession,
+        Seq("non_ansi_flow"),
+        RegularTestCase("non-ansi", "", ""),
+        Seq(SQLConf.ANSI_ENABLED.key -> "false"),
+        flows)
+      checkAnswer(nonAnsiSession.table("non_ansi_sink"), Row(null))
     }
   }
 
