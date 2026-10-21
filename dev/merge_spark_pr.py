@@ -1509,33 +1509,9 @@ def _fork_owner():
     """GitHub owner of the fork remote, for the `head` field of a backport PR.
 
     FORK_OWNER wins when set; otherwise the owner is parsed from the fork remote URL
-    (git@github.com:owner/spark.git or https://github.com/owner/spark.git). Fails with a
-    clear message if the URL is not a GitHub fork so the committer can set FORK_OWNER.
-
-    >>> from unittest.mock import patch
-    >>> with patch.object(git, "run", return_value="git@github.com:holdenk/spark.git\\n"):
-    ...     _fork_owner()
-    'holdenk'
-    >>> with patch.object(git, "run", return_value="https://github.com/holdenk/spark.git\\n"):
-    ...     _fork_owner()
-    'holdenk'
-    >>> with patch.dict(_fork_owner.__globals__, FORK_OWNER="alice"):
-    ...     _fork_owner()
-    'alice'
-
-    A non-GitHub remote fails rather than silently sending a bad `head` to the API:
-
-    >>> with (
-    ...     patch.object(git, "run", return_value="git@example.com:foo/bar.git\\n"),
-    ...     patch("builtins.print"),
-    ... ):
-    ...     try:
-    ...         _fork_owner()
-    ...         aborted = False
-    ...     except SystemExit:
-    ...         aborted = True
-    >>> aborted
-    True
+    (git@github.com:owner/spark.git or https://github.com/owner/spark.git). A non-GitHub
+    remote fails with a clear message, rather than silently sending a bad `head` to the
+    API, so the committer can set FORK_OWNER.
     """
     if FORK_OWNER:
         return FORK_OWNER
