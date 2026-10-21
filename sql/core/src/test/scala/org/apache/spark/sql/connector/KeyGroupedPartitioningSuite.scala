@@ -9727,11 +9727,14 @@ class KeyGroupedPartitioningSuite
     }
   }
 
-  Seq(false, true).foreach { lostRouting =>
-    val scenario = if (lostRouting) {
-      "joining marked unions with lost routing preserves undeclared matches"
-    } else {
-      "aggregating marked legs with different declared orders preserves undeclared rows"
+  Seq("different-orders", "lost-pairing", "lost-union").foreach { shape =>
+    val scenario = shape match {
+      case "different-orders" =>
+        "aggregating marked legs with different declared orders preserves undeclared rows"
+      case "lost-pairing" =>
+        "joining marked unions with lost routing preserves undeclared matches"
+      case "lost-union" =>
+        "a union rejects marked legs with identical declarations but different routing"
     }
     test(s"SPARK-60277: SPJ: $scenario") {
       Seq(
@@ -9762,7 +9765,7 @@ class KeyGroupedPartitioningSuite
             |  SELECT t2.id FROM testcat.ns.a3 a
             |  RIGHT OUTER JOIN t2 ON a.id = t2.id)
             |""".stripMargin
-        val query = producers + (if (lostRouting) {
+        val query = producers + (if (shape == "lost-pairing") {
           """
             |SELECT l.id, count(*) AS cnt FROM (
             |  SELECT id FROM leg1
@@ -9774,6 +9777,19 @@ class KeyGroupedPartitioningSuite
             |  SELECT id FROM testcat.ns.s2) r ON l.id = r.id
             |GROUP BY l.id
             |""".stripMargin
+        } else if (shape == "lost-union") {
+          """
+            |SELECT id, count(*) AS cnt FROM (
+            |  SELECT id FROM (
+            |    SELECT id, count(*) AS c FROM (
+            |      SELECT id FROM leg1
+            |      UNION ALL
+            |      SELECT id FROM testcat.ns.s1) merged
+            |    GROUP BY id) grouped
+            |  UNION ALL
+            |  SELECT id FROM leg2) u
+            |GROUP BY id
+            |""".stripMargin
         } else {
           """
             |SELECT id, count(*) AS cnt FROM (
@@ -9784,7 +9800,7 @@ class KeyGroupedPartitioningSuite
             |""".stripMargin
         })
         val expected = (1 to 40).map { id =>
-          val count = if (!lostRouting) {
+          val count = if (shape != "lost-pairing") {
             2L
           } else if (id <= 2) {
             4L
@@ -9814,7 +9830,20 @@ class KeyGroupedPartitioningSuite
               assert(orders.toSet == Set(Seq(3, 4, 1, 2), Seq(1, 2, 3, 4)),
                 s"the same declared key set must arrive in different orders: $orders")
               val unions = collect(plan) { case u: UnionExec => u }
-              if (lostRouting) {
+              if (shape == "lost-union") {
+                val outer = unions.head
+                val legs = outer.children.map { child =>
+                  PartitioningCollection.representativeOf(child.outputPartitioning).get
+                }
+                assert(legs.forall(_.partitionKeys.map(_.row.getInt(0)) == Seq(1, 2, 3, 4)),
+                  s"the outer legs must have identical declarations: $legs")
+                assert(legs.map(_.unknownKeysOrigin).toSet ==
+                  Set(Some(ROUTING_LOST), Some(HASH_ROUTING)),
+                  s"only one outer leg must retain routing: $legs")
+                assert(outer.outputPartitioning.isInstanceOf[physical.UnknownPartitioning],
+                  s"the outer union must reject lost/routed marked legs:\n$plan")
+                assert(ValidateRequirements.validate(plan))
+              } else if (shape == "lost-pairing") {
                 val markedUnions = unions.flatMap { u =>
                   PartitioningCollection.representativeOf(u.outputPartitioning)
                     .filter(_.mayContainUnknownPartitionKeys)
