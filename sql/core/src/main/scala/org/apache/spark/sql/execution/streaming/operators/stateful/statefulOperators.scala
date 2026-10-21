@@ -1429,10 +1429,6 @@ abstract class BaseStreamingDeduplicateExec
           allRemovalsTimeMs += timeTakenMs {
             // Remove up to incrementalCleanupFactor eligible rows for every input record.
             var numRemovalsCurrRecord = 0
-            // NOTE: the eviction iterator removes a row inside hasNext, not next(), so a bare
-            // hasNext already deletes it. To stop at exactly incrementalCleanupFactor removals per
-            // input we must re-check the count before each hasNext rather than draining the
-            // iterator.
             while (numRemovalsCurrRecord < incrementalCleanupFactor && evictionIter.hasNext) {
               evictionIter.next()
               numRemovalsCurrRecord += 1
@@ -1698,9 +1694,10 @@ case class StreamingDeduplicateWithinWatermarkExec(
 
     // We cannot reuse `EvictionIterator` here because it reads the eviction timestamp from the
     // state store key, whereas this operator stores `expiresAtMicros` in the value row (the key is
-    // only the dedup key columns). We still match EvictionIterator's semantics by returning only
-    // the rows that are actually evicted, so each next() corresponds to a real removal and the
-    // caller's numRemovedStateRows metric counts removals rather than state rows scanned.
+    // only the dedup key columns). Like EvictionIterator, this returns only the rows that are
+    // actually evicted, so numRemovedStateRows counts removals rather than state rows scanned.
+    // Unlike EvictionIterator, a row is removed in hasNext (via filter); that is safe here because
+    // without incremental cleanup the caller always drains the iterator.
     store.iterator().filter { rowPair =>
       numRowsReadDuringEviction += 1
       val expiresAt = rowPair.value.getLong(0)
