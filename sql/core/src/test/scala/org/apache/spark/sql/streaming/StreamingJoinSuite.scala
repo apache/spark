@@ -32,6 +32,7 @@ import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.plans.{LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -1274,37 +1275,51 @@ abstract class StreamingOuterJoinBase extends StreamingJoinSuite {
   import testImplicits._
   import org.apache.spark.sql.functions._
 
+  private sealed trait RestartMode
+  private object RestartMode {
+    case object WithoutRestart extends RestartMode
+    case object WithRestart extends RestartMode
+  }
+
   for {
-    joinType <- Seq("left_outer", "right_outer")
-    history <- Seq("continuous", "restart")
+    joinType <- Seq(LeftOuter, RightOuter)
+    restartMode <- Seq(RestartMode.WithoutRestart, RestartMode.WithRestart)
   } {
-    test(s"SPARK-60378: $joinType eviction includes old unwatermarked keys, $history") {
+    test(s"SPARK-60378: $joinType eviction includes old unwatermarked keys, $restartMode") {
       val leftInput = MemoryStream[(Int, Int)]
       val rightInput = MemoryStream[(Int, Int)]
-      val left = leftInput.toDF().toDF("leftKey", "time")
-        .select($"leftKey", timestamp_seconds($"time").as("leftTime"))
-      val right = rightInput.toDF().toDF("rightKey", "time")
-        .select($"rightKey", timestamp_seconds($"time").as("rightTime"))
-      val leftOuter = joinType == "left_outer"
-      val joined = (if (leftOuter) left else left.withWatermark("leftTime", "10 seconds"))
-        .join(if (leftOuter) right.withWatermark("rightTime", "10 seconds") else right,
-          expr("leftKey = rightKey AND leftTime = rightTime"), joinType)
+      val leftOuter = joinType == LeftOuter
+      val left = {
+        val df = leftInput.toDF().toDF("leftKey", "time")
+          .select($"leftKey", timestamp_seconds($"time").as("leftTime"))
+        if (leftOuter) df else df.withWatermark("leftTime", "10 seconds")
+      }
+      val right = {
+        val df = rightInput.toDF().toDF("rightKey", "time")
+          .select($"rightKey", timestamp_seconds($"time").as("rightTime"))
+        if (leftOuter) df.withWatermark("rightTime", "10 seconds") else df
+      }
+      val joined = left.join(right,
+        expr("leftKey = rightKey AND leftTime = rightTime"), joinType.toString)
         .select($"leftKey", $"rightKey", $"leftTime".cast("int"), $"rightTime".cast("int"))
-      val stateInput = if (leftOuter) leftInput else rightInput
-      val watermarkInput = if (leftOuter) rightInput else leftInput
+      val unwatermarkedInput = if (leftOuter) leftInput else rightInput
+      val watermarkedInput = if (leftOuter) rightInput else leftInput
       val expected = if (leftOuter) Row(2, null, 5, null) else Row(null, 2, null, 5)
 
       withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
         withTempDir { checkpointDir =>
           val start = StartStream(checkpointLocation = checkpointDir.getCanonicalPath)
           val setup = Seq(start,
-            AddData(watermarkInput, (9, 20)), CheckNewAnswer(),
-            AddData(watermarkInput, (9, 30)), CheckNewAnswer()) ++
-            (if (history == "restart") Seq(StopStream, start) else Nil)
+            AddData(watermarkedInput, (9, 20)), CheckNewAnswer(),
+            AddData(watermarkedInput, (9, 30)), CheckNewAnswer()) ++
+            (if (restartMode == RestartMode.WithRestart) Seq(StopStream, start) else Nil)
           testStream(joined)((setup ++ Seq(
-            // This input has no late filter, so it can add keys below the previous scan bound.
-            AddData(stateInput, (2, 5)), CheckNewAnswer(expected),
-            AddData(watermarkInput, (9, 40)), CheckNewAnswer(), StopStream)): _*)
+            // The setup batches advance the watermark to 10s and then 20s. This batch uses
+            // 10s for late-input filtering and 20s for eviction. Reusing the previous 10s cutoff
+            // as a scan bound would miss time=5s, which the unwatermarked input accepts.
+            // Eviction must find this row and emit its unmatched outer-join result.
+            AddData(unwatermarkedInput, (2, 5)), CheckNewAnswer(expected),
+            AddData(watermarkedInput, (9, 40)), CheckNewAnswer(), StopStream)): _*)
         }
       }
     }

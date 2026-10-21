@@ -26,6 +26,14 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.join.Streamin
 import org.apache.spark.sql.types._
 
 class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
+
+  private sealed trait WatermarkColumn
+  private object WatermarkColumn {
+    case object NoWatermark extends WatermarkColumn
+    case object JoinKey extends WatermarkColumn
+    case object Other extends WatermarkColumn
+  }
+
   val leftAttributeA = AttributeReference("a", IntegerType)()
   val leftAttributeB = AttributeReference("b", IntegerType)()
   val rightAttributeC = AttributeReference("c", IntegerType)()
@@ -130,18 +138,20 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
     assert(split.full.contains(predicate))
   }
 
-  for (watermarkColumn <- Seq("none", "key", "other")) {
+  for (watermarkColumn <- Seq(
+      WatermarkColumn.NoWatermark, WatermarkColumn.JoinKey, WatermarkColumn.Other)) {
     test(s"SPARK-60378: previous key scan bound with watermark on $watermarkColumn") {
       val watermark = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000L).build()
       val key = AttributeReference("key", TimestampType,
-        metadata = if (watermarkColumn == "key") watermark else Metadata.empty)()
+        metadata = if (watermarkColumn == WatermarkColumn.JoinKey) watermark else Metadata.empty)()
       val other = AttributeReference("other", TimestampType,
-        metadata = if (watermarkColumn == "other") watermark else Metadata.empty)()
+        metadata = if (watermarkColumn == WatermarkColumn.Other) watermark else Metadata.empty)()
       val rightKey = AttributeReference("rightKey", TimestampType, metadata = watermark)()
       val predicates = StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
         Seq(key, other), Seq(rightKey), Seq(key), Seq(rightKey), None,
         Some(20000L), Some(10000L), false)
-      val expectedPrevious = if (watermarkColumn == "key") Some(10000L) else None
+      val expectedPrevious =
+        if (watermarkColumn == WatermarkColumn.JoinKey) Some(10000L) else None
       assert(predicates.left.exists {
         case JoinStateKeyWatermarkPredicate(_, 20000L, previous) => previous == expectedPrevious
         case _ => false
