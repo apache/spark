@@ -1013,8 +1013,8 @@ class ProjectedOrderingAndPartitioningSuite
   }
 
   test("SPARK-50593: alias projection keeps a transform ordering in step with its partitioning") {
-    // A scan orders by its partition expressions (partitionKeyOrdering is on by default), so the
-    // ordering holds the same transform as the partitioning, literal parameter included. Projected
+    // A scan no longer reports an ordering that holds a partition transform (SPARK-59995), but an
+    // ordering over one still goes through the same alias projection as the partitioning. Projected
     // through `32 AS w`, both must keep the literal, or the two stop matching.
     val id = AttributeReference("id", IntegerType)()
     val bucketExpr = TransformExpression(BucketFunction, Seq(Literal(32), id))
