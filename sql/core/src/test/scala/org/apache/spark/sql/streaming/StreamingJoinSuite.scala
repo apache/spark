@@ -1425,10 +1425,9 @@ abstract class StreamingOuterJoinBase extends StreamingJoinSuite {
         assertNumStateRows(total = 7, updated = 2),
         AddData(rightInput, (0, 30)), // watermark = 30 - 10 = 20, no-data-batch computes nulls
         CheckNewAnswer(outerResult),
-        assertNumStateRows(total = 2, updated = 1),
-        Execute { query =>
-          assert(query.recentProgress.flatMap(_.stateOperators).map(_.numRowsRemoved).sum == 6)
-        }
+        assertNumStateRows(
+          total = Seq(2), updated = Seq(1), droppedByWatermark = Seq(0),
+          removed = Some(Seq(6)))
       )
 
       Seq(
@@ -1456,10 +1455,9 @@ abstract class StreamingOuterJoinBase extends StreamingJoinSuite {
           assertNumStateRows(total = 7, updated = 2),
           AddData(rightInput2, (0, 1800)),
           CheckNewAnswer(outerResult),
-          assertNumStateRows(total = 2, updated = 1),
-          Execute { query =>
-            assert(query.recentProgress.flatMap(_.stateOperators).map(_.numRowsRemoved).sum == 6)
-          }
+          assertNumStateRows(
+            total = Seq(2), updated = Seq(1), droppedByWatermark = Seq(0),
+            removed = Some(Seq(6)))
         )
       }
     }
@@ -2060,11 +2058,10 @@ abstract class StreamingFullOuterJoinBase extends StreamingJoinSuite {
         // states evicted
         // left: 1, 2, 3, 4 ,5 (below watermark)
         // right: 3, 4, 5, 6, 7 (below watermark)
-        assertNumStateRows(total = 2, updated = 2),
-        Execute { query =>
-          // Count matched rows too: only four of the ten removed rows produce null output.
-          assert(query.recentProgress.flatMap(_.stateOperators).map(_.numRowsRemoved).sum == 10)
-        },
+        // Count matched rows too: only four of the ten removed rows produce null output.
+        assertNumStateRows(
+          total = Seq(2), updated = Seq(2), droppedByWatermark = Seq(0),
+          removed = Some(Seq(10))),
         StopStream,
         // Restart the query from the same checkpoint
         StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
