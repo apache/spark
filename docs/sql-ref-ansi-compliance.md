@@ -205,8 +205,10 @@ As mentioned at the beginning, when `spark.sql.storeAssignmentPolicy` is set to 
 Table CHAR/VARCHAR columns apply length checks, trailing-space trimming, and CHAR padding on
 insert in the default overlay. CHAR/VARCHAR that survive in query plans require first-class
 CHAR/VARCHAR types (the preview flag or `spark.sql.preserveCharVarcharTypeInfo`). Distinct
-CAST and assignment semantics require the preview flag: an explicit CAST truncates or pads to
-the length, while assignment pads CHAR, trims only excess trailing spaces, and otherwise raises
+CAST and assignment semantics require the preview flag: an explicit CAST from a character
+string type truncates or pads to the length; a CAST from any other type, like assignment,
+raises `EXCEED_LIMIT_LENGTH` when the value does not fit (`TRY_CAST` returns NULL).
+Assignment pads CHAR, trims only excess trailing spaces, and otherwise raises
 `EXCEED_LIMIT_LENGTH`. With only `spark.sql.preserveCharVarcharTypeInfo`, an explicit CAST to
 CHAR/VARCHAR applies the same checks as assignment. See
 [Character String Types](sql-ref-character-string-types.html#assignment-and-reading).

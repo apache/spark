@@ -58,8 +58,9 @@ import org.apache.spark.util.Utils
     is undefined: it may fail or return arbitrary result.
     To deserialize the data with a compatible and evolved schema, the expected Avro schema can be
     set via the corresponding option.
-    CHAR/VARCHAR come from the spark.sql.catalyst.type property on Avro string fields
-    (written by Spark's Avro writer). Assignment is accepted when CHAR/VARCHAR are
+    CHAR/VARCHAR come from the spark.sql.catalyst.type property on Avro string fields,
+    and for map keys from spark.sql.catalyst.mapKey.type on the Avro map schema
+    (both written by Spark's Avro writer). Assignment is accepted when CHAR/VARCHAR are
     first-class (spark.sql.charVarchar.standardSemantics.enabled or
     spark.sql.preserveCharVarcharTypeInfo). Then STRING values are assigned (CHAR padded).
     Overflow is a malformed record: FAILFAST fails with EXCEED_LIMIT_LENGTH as the cause;

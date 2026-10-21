@@ -61,7 +61,9 @@ def from_avro(
     application as per the deployment section of "Apache Avro Data Source Guide".
 
     CHAR/VARCHAR come from the ``spark.sql.catalyst.type`` property on Avro
-    string fields. Assignment is accepted when types are first-class
+    string fields, and for map keys from ``spark.sql.catalyst.mapKey.type``
+    on the Avro map schema (both written by Spark's Avro writer). Assignment
+    is accepted when types are first-class
     (``spark.sql.charVarchar.standardSemantics.enabled`` or
     ``spark.sql.preserveCharVarcharTypeInfo``). STRING values are then assigned.
     Overflow is a malformed record: FAILFAST fails with

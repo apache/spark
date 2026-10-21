@@ -62,9 +62,11 @@ For compatibility with other SQL dialects, `EXECUTE IMMEDIATE` also supports `US
     A constant expression that binds to a parameter marker.
     The type of that expression is the type of the marker.
     A [string literal](sql-ref-literals.html#string-literal) such as `'ab'` binds as
-    `STRING`. A CHAR or VARCHAR value such as `CAST('ab' AS CHAR(2))` currently also
-    binds as `STRING`; to get a CHAR or VARCHAR marker, cast the marker in `sql_string`,
-    for example `CAST(:p AS CHAR(2))`.
+    `STRING`. A CHAR or VARCHAR value without an explicit collation currently also
+    binds as `STRING`; an explicitly collated value such as
+    `CAST('ab' AS CHAR(2) COLLATE UTF8_LCASE)` keeps that CHAR/VARCHAR type.
+    To get a CHAR or VARCHAR marker without relying on collation, cast the marker in
+    `sql_string`, for example `CAST(:p AS CHAR(2))`.
     If the parameter markers are unnamed, the binding is by position.
     For named parameter markers, binding is by name.
 
