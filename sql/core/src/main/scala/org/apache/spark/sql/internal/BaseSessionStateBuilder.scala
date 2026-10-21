@@ -20,7 +20,7 @@ import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.{DataSourceRegistration, ExperimentalMethods, SparkSessionExtensions, UDTFRegistration}
 import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, FunctionRegistry, InvokeProcedures, ReplaceCharWithVarchar, ResolveDataSource, ResolveEventTimeWatermark, ResolveExecuteImmediate, ResolveMetricView, ResolveSessionCatalog, ResolveSetCatalogCommand, ResolveTranspose, TableFunctionRegistry}
-import org.apache.spark.sql.catalyst.analysis.resolver.{DropTableResolver, ResolverExtension}
+import org.apache.spark.sql.catalyst.analysis.resolver.ResolverExtension
 import org.apache.spark.sql.catalyst.catalog.{FunctionExpressionBuilder, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExtractSemiStructuredFields, ParseSql}
 import org.apache.spark.sql.catalyst.normalizer.NormalizeCTEIds
@@ -199,7 +199,6 @@ abstract class BaseSessionStateBuilder(
       customHintResolutionRules
 
     override val singlePassResolverExtensions: Seq[ResolverExtension] = Seq(
-      new DropTableResolver(session),
       new LogicalRelationResolver
     )
 

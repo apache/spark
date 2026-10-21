@@ -95,9 +95,7 @@ class ResolverRunner(
 
   private def runValidator(plan: LogicalPlan): Unit = {
     if (conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_VALIDATION_ENABLED)) {
-      val validator = new ResolutionValidator(resolver.extensions.collect {
-        case extension: ResolutionValidatorExtension => extension
-      })
+      val validator = new ResolutionValidator
       validator.validatePlan(plan)
     }
   }

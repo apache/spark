@@ -36,7 +36,6 @@ import org.apache.spark.sql.catalyst.analysis.{
   UnresolvedExtractValue,
   UnresolvedFunction,
   UnresolvedHaving,
-  UnresolvedIdentifier,
   UnresolvedInlineTable,
   UnresolvedOrdinal,
   UnresolvedRelation,
@@ -161,8 +160,6 @@ class ResolverGuard(
         checkHaving(having)
       case sample: Sample =>
         checkSample(sample)
-      case DropTable(_: UnresolvedIdentifier, _, _) =>
-        None
       case _ =>
         Some(s"${operator.getClass} operator resolution")
     }

@@ -38,18 +38,6 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
     checkResolverGuard("SELECT col1,col2,col3 FROM VALUES(1,2,3)")
   }
 
-  test("DROP TABLE commands") {
-    checkResolverGuard("DROP TABLE t")
-    checkResolverGuard("DROP TABLE IF EXISTS spark_catalog.default.t")
-    checkResolverGuard("DROP TABLE t PURGE")
-  }
-
-  test("DROP TABLE with a resolved target is not supported") {
-    val plan = spark.sessionState.analyzer.execute(
-      spark.sessionState.sqlParser.parsePlan("DROP TABLE t"))
-    checkResolverGuard(plan, Some(s"${plan.getClass} operator resolution"))
-  }
-
   test("Inline table as a top level operator") {
     checkResolverGuard("VALUES(1,2,3)")
   }

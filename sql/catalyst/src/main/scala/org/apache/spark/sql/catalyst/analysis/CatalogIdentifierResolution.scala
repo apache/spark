@@ -21,8 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, LookupCatalog}
 
 /**
- * Resolves command target names to a [[ResolvedIdentifier]], shared by [[ResolveCatalogs]] and
- * the single-pass resolver.
+ * Resolves command target names to a [[ResolvedIdentifier]] for [[ResolveCatalogs]].
  */
 class CatalogIdentifierResolution(override val catalogManager: CatalogManager)
     extends LookupCatalog {

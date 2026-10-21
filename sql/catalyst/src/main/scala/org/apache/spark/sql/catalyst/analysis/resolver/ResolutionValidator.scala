@@ -36,8 +36,7 @@ import org.apache.spark.sql.types.BooleanType
  * conditions that must never be false no matter which SQL query or DataFrame program was provided.
  * The validation approach is single-pass, post-order, complementary to the resolution process.
  */
-class ResolutionValidator(
-    validatorExtensions: Seq[ResolutionValidatorExtension] = Seq.empty) {
+class ResolutionValidator {
   private val attributeScopeStack = new AttributeScopeStack
 
   private val expressionResolutionValidator = new ExpressionResolutionValidator(this)
@@ -121,10 +120,6 @@ class ResolutionValidator(
         validateRelation(multiInstanceRelation)
       case supervisingCommand: SupervisingCommand =>
         validateSupervisingCommand(supervisingCommand)
-      case _ if validatorExtensions.exists(_.validateOperator(operator, this)) =>
-      case _ =>
-        throw new IllegalArgumentException(
-          s"Unsupported operator in resolution validation: ${operator.getClass.getName}")
     }
 
     operator match {
@@ -388,7 +383,7 @@ class ResolutionValidator(
 
   private def validateSupervisingCommand(supervisingCommand: SupervisingCommand): Unit = {}
 
-  def handleOperatorOutput(operator: LogicalPlan): Unit = {
+  private def handleOperatorOutput(operator: LogicalPlan): Unit = {
     attributeScopeStack.overwriteCurrent(operator.output)
 
     operator.output.foreach(attribute => {

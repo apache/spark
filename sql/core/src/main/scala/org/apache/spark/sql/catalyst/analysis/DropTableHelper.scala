@@ -23,8 +23,8 @@ import org.apache.spark.sql.execution.command.{DropTableCommand, DropTempViewCom
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Rewrites a resolved [[DropTable]] to its session-catalog command, shared by
- * [[ResolveSessionCatalog]] and the single-pass resolver. Other catalogs keep the V2 command.
+ * Rewrites a resolved [[DropTable]] to its session-catalog command in [[ResolveSessionCatalog]].
+ * Other catalogs keep the V2 command.
  */
 object DropTableHelper {
   def rewrite(dropTable: DropTable): LogicalPlan = dropTable match {
