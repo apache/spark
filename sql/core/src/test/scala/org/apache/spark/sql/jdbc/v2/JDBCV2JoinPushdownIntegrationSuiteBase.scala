@@ -313,19 +313,21 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
 
     cases.foreach { case (query, keyword, expected) =>
       withClue(query) {
-        withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
-          checkAnswer(sql(query).select(caseConvert("name")), expected.map(Row(_)))
+        val schema = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
+          val df = sql(query)
+          checkAnswer(df.select(caseConvert("name")), expected.map(Row(_)))
+          df.schema
         }
         withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
           val df = sql(query)
           checkJoinPushed(df)
-          assert(df.schema.fieldNames.toSeq == Seq("ID", "NAME").map(caseConvert))
+          assert(df.schema == schema)
           val scans = df.queryExecution.optimizedPlan.collect {
             case relation: DataSourceV2ScanRelation => relation.scan
           }
           assert(scans.size == 1)
           val jdbcScan = scans.head.asInstanceOf[V1ScanWrapper].v1Scan.asInstanceOf[JDBCScan]
-          assert(jdbcScan.readSchema().fieldNames.toSeq == Seq("ID", "NAME").map(caseConvert))
+          assert(jdbcScan.readSchema() == schema)
           assert(jdbcScan.relation.jdbcOptions.tableOrQuery.contains(keyword))
           checkAnswer(df.select(caseConvert("name")), expected.map(Row(_)))
         }

@@ -57,3 +57,10 @@ class JDBCV2JoinPushdownSuite
     super.afterAll()
   }
 }
+
+class JDBCV2JoinPushdownLowerCaseSuite extends JDBCV2JoinPushdownSuite {
+  override val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass;" +
+    "DATABASE_TO_LOWER=TRUE"
+
+  override def caseConvert(identifier: String): String = identifier
+}
