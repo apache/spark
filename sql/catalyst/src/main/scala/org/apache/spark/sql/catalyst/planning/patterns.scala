@@ -443,7 +443,7 @@ object ExtractRangeJoinKeys extends PredicateHelper {
     case Join(left, right, joinType, Some(condition), _) =>
       val predicates = splitConjunctivePredicates(condition)
       val rangePreds = predicates.collect {
-        case RangePredicate(dt, low, high) if supportedType(dt) => (dt, low, high)
+        case RangePredicate(dt, low, high, strict) if supportedType(dt) => (dt, low, high, strict)
       }
       if (rangePreds.isEmpty) {
         None
@@ -459,7 +459,7 @@ object ExtractRangeJoinKeys extends PredicateHelper {
    * Types supported as range keys by the broadcast range index.
    * Other orderable types (arrays, intervals, timestamp-with-nanos, UDTs) stay a nested loop join.
    */
-  def supportedType(dataType: DataType): Boolean = dataType match {
+  private[planning] def supportedType(dataType: DataType): Boolean = dataType match {
     case BooleanType | ByteType | ShortType | IntegerType | LongType |
          FloatType | DoubleType | BinaryType | DateType | TimestampType |
          TimestampNTZType | _: StringType | _: DecimalType => true
@@ -472,7 +472,7 @@ object ExtractRangeJoinKeys extends PredicateHelper {
    * `supportedKeys` the eligibility; a rejected pair stays on the condition.
    */
   private def pairJoin(
-      rangePreds: Seq[(DataType, Expression, Expression)],
+      rangePreds: Seq[(DataType, Expression, Expression, Boolean)],
       left: LogicalPlan,
       right: LogicalPlan,
       joinType: JoinType,
@@ -480,7 +480,7 @@ object ExtractRangeJoinKeys extends PredicateHelper {
       shape: PartialFunction[(Expression, Expression, Expression, Expression),
         (Seq[Expression], Seq[Expression])]): Option[ReturnType] = {
     rangePreds.combinations(2).collectFirst(Function.unlift {
-      case Seq((d1, l1, h1), (d2, l2, h2)) if d1 == d2 =>
+      case Seq((d1, l1, h1, _), (d2, l2, h2, _)) if d1 == d2 =>
         shape.lift((l1, h1, l2, h2)).flatMap { case (keysA, keysB) =>
           place(keysA, keysB, left, right).filter { case (l, r) =>
             supportedKeys(l, r)
@@ -493,7 +493,7 @@ object ExtractRangeJoinKeys extends PredicateHelper {
   }
 
   private def pointInRange(
-      rangePreds: Seq[(DataType, Expression, Expression)],
+      rangePreds: Seq[(DataType, Expression, Expression, Boolean)],
       left: LogicalPlan,
       right: LogicalPlan,
       joinType: JoinType): Option[ReturnType] = {
@@ -529,7 +529,7 @@ object ExtractRangeJoinKeys extends PredicateHelper {
   }
 
   private def intervalOverlap(
-      rangePreds: Seq[(DataType, Expression, Expression)],
+      rangePreds: Seq[(DataType, Expression, Expression, Boolean)],
       left: LogicalPlan,
       right: LogicalPlan,
       joinType: JoinType): Option[ReturnType] = {
@@ -549,11 +549,11 @@ object ExtractRangeJoinKeys extends PredicateHelper {
   }
 
   private def partialRange(
-      rangePreds: Seq[(DataType, Expression, Expression)],
+      rangePreds: Seq[(DataType, Expression, Expression, Boolean)],
       left: LogicalPlan,
       right: LogicalPlan,
       joinType: JoinType): Option[ReturnType] = {
-    rangePreds.iterator.flatMap { case (_, low, high) =>
+    rangePreds.iterator.flatMap { case (_, low, high, strict) =>
       if (low.semanticEquals(high) || low.dataType != high.dataType ||
           !supportedKeys(Seq(low, high))) {
         None
@@ -561,9 +561,9 @@ object ExtractRangeJoinKeys extends PredicateHelper {
         // Unswapped, the left child holds `low`. Swapped, it holds `high`.
         place(Seq(low), Seq(high), left, right).map { case (leftKeys, rightKeys) =>
           val rangeJoin = if (canEvaluate(low, left)) {
-            LessPartialRangeJoin
+            LessPartialRangeJoin(strict)
           } else {
-            GreaterPartialRangeJoin
+            GreaterPartialRangeJoin(strict)
           }
           (joinType, leftKeys, rightKeys, rangeJoin, left, right)
         }

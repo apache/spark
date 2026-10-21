@@ -54,7 +54,7 @@ object LogicalQueryStageStrategy extends Strategy {
   private def isBroadcastStageWithIdentityBroadcastMode(plan: LogicalPlan): Boolean = plan match {
     // A range-join broadcast stage reports RangeRelationBroadcastMode (not IdentityBroadcastMode),
     // so it is naturally excluded here and routed to BroadcastRangeJoinExec by the
-    // `BroadcastRangeJoinMatch` case below instead of BroadcastNestedLoopJoinExec.
+    // `ExtractBroadcastRangeJoinStage` case below instead of BroadcastNestedLoopJoinExec.
     case LogicalQueryStage(_, bqs: BroadcastQueryStageExec) =>
       bqs.broadcast.outputPartitioning match {
         case BroadcastPartitioning(IdentityBroadcastMode) => true
@@ -83,7 +83,7 @@ object LogicalQueryStageStrategy extends Strategy {
    * query stage. `unapply` looks up the mode once so `apply` does not search
    * for both a guard and the constructor.
    */
-  private case class BroadcastRangeJoinMatch(
+  private case class ExtractBroadcastRangeJoinStage(
       left: LogicalPlan,
       right: LogicalPlan,
       buildSide: BuildSide,
@@ -93,8 +93,8 @@ object LogicalQueryStageStrategy extends Strategy {
       condition: Expression,
       rangeJoin: RangeJoin)
 
-  private object BroadcastRangeJoinMatch {
-    def unapply(plan: LogicalPlan): Option[BroadcastRangeJoinMatch] = {
+  private object ExtractBroadcastRangeJoinStage {
+    def unapply(plan: LogicalPlan): Option[ExtractBroadcastRangeJoinStage] = {
       if (!SQLConf.get.broadcastRangeJoinEnabled) {
         None
       } else {
@@ -105,7 +105,7 @@ object LogicalQueryStageStrategy extends Strategy {
                 def fromStage(
                     mode: RangeRelationBroadcastMode,
                     bqs: BroadcastQueryStageExec,
-                    buildSide: BuildSide): Option[BroadcastRangeJoinMatch] = {
+                    buildSide: BuildSide): Option[ExtractBroadcastRangeJoinStage] = {
                   if (!mode.indexKind.matches(rangeJoin) ||
                       !BroadcastRangeJoinExec.supports(joinType, buildSide)) {
                     None
@@ -122,7 +122,7 @@ object LogicalQueryStageStrategy extends Strategy {
                     // the broadcast was actually keyed on.
                     val bound = BindReferences.bindReferences(buildKeys, bqs.output)
                     if (mode == RangeRelationBroadcastMode(bound, mode.indexKind)) {
-                      Some(BroadcastRangeJoinMatch(
+                      Some(ExtractBroadcastRangeJoinStage(
                         left, right, buildSide, joinType, leftKeys, rightKeys, cond, rangeJoin))
                     } else {
                       None
@@ -161,7 +161,7 @@ object LogicalQueryStageStrategy extends Strategy {
       Seq(joins.BroadcastHashJoinExec(leftKeys, rightKeys, LeftAnti, BuildRight,
         None, planLater(j.left), planLater(j.right), isNullAwareAntiJoin = true))
 
-    case BroadcastRangeJoinMatch(stage) =>
+    case ExtractBroadcastRangeJoinStage(stage) =>
       BroadcastRangeJoinExec(
         planLater(stage.left), planLater(stage.right), stage.buildSide, stage.joinType,
         stage.leftKeys, stage.rightKeys, Some(stage.condition), stage.rangeJoin) :: Nil

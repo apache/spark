@@ -21,6 +21,8 @@ import java.sql.Date
 
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{Column, DataFrame}
+import org.apache.spark.sql.catalyst.optimizer.{
+  GreaterPartialRangeJoin, IntervalOverlapJoin, LessPartialRangeJoin, PointInRangeJoin, RangeJoin}
 import org.apache.spark.sql.execution.joins.{BroadcastNestedLoopJoinExec, BroadcastRangeJoinExec}
 import org.apache.spark.sql.functions.{broadcast, col, date_add, lit, lpad, when}
 import org.apache.spark.sql.internal.SQLConf
@@ -31,14 +33,17 @@ import org.apache.spark.sql.types.StringType
  *
  * Long keys cross every supported shape with every supported join type.
  * Inner joins broadcast each side once. Left anti probes values that match
- * nothing. Two long-key cases are not selective: wide interval overlap, and a
- * partial range whose bound sits at the median. Point-in-range inner is
- * repeated for date, timestamp, decimal, and UNICODE_CI strings.
+ * nothing. A partial range whose bound sits at the median is not selective.
+ * Wide interval overlap is mostly selective: a probe overlaps a build
+ * interval only when their starts sit within `wideSpan`, so about 2% of
+ * probes hit roughly `wideSpan / width` intervals each and the rest hit
+ * nothing. Point-in-range inner is repeated for date, timestamp, decimal,
+ * and UNICODE_CI strings.
  *
- * More cases probe the cost model directly: a streamed side of 1, 10, or 20
- * rows, where range join pays to sort the whole build side instead of one
- * nested-loop scan, and a fully overlapping inner join, where every pair
- * matches and the index prunes nothing.
+ * More cases probe the cost model directly: a streamed side of 1, 10, 100,
+ * 1000, 5000, or 10000 rows, where range join pays to sort the whole build
+ * side instead of one nested-loop scan, and a fully overlapping inner join,
+ * where every pair matches and the index prunes nothing.
  *
  * Staggered high-overlap builds cover the regime between those: most, but not
  * all, build intervals overlap each probe window, miss intervals are
@@ -67,7 +72,7 @@ object RangeJoinBenchmark extends SqlBasedBenchmark {
   private val buildRows = 4000
   private val probeRows = 400000
   private val width = 10
-  // Wide overlap and the median bound explode the output, so they stay smaller.
+  // Wide overlap and the median bound concentrate the output, so they stay smaller.
   private val heavyBuildRows = 2000
   private val heavyProbeRows = 100000
   private val halfBuildRows = 1000
@@ -122,9 +127,10 @@ object RangeJoinBenchmark extends SqlBasedBenchmark {
   private lazy val halfProbes: DataFrame = cached(spark.range(halfProbeRows).select(
     lit(halfBuildRows.toLong / 2).as("a")))
 
-  // M approx 1, 10, and 20. The build side still has to be sorted to answer a few
-  // streamed probes, so this weighs that one-time O(N log N) cost against one O(N)
-  // nested-loop scan of the same build side, and shows how fast that cost amortizes
+  // M approx 1, 10, 100, 1000, 5000, and 10000. The build side still has to be
+  // sorted to answer a few streamed probes, so this weighs that one-time O(N log N)
+  // cost against one O(N) nested-loop scan of the same build side, and shows how
+  // fast that cost amortizes
   // as M grows just past one.
   private val tinyProbeRowCounts = Seq(1, 10, 100, 1000, 5000, 10000)
   private lazy val tinyPoints: Map[Int, DataFrame] = tinyProbeRowCounts.map { n =>
@@ -239,13 +245,21 @@ object RangeJoinBenchmark extends SqlBasedBenchmark {
       val planned = df
       val plan = planned.queryExecution.sparkPlan
       if (rangeEnabled) {
-        val found = plan.collect { case j: BroadcastRangeJoinExec => j.rangeJoin.toString }
+        val found = plan.collect { case j: BroadcastRangeJoinExec => shapeName(j.rangeJoin) }
         assert(found == Seq(shape), plan)
       } else {
         assert(plan.exists(_.isInstanceOf[BroadcastNestedLoopJoinExec]), plan)
       }
       planned.noop()
     }
+  }
+
+  /** The tag name without a case class's arguments, for Shape assertions. */
+  private def shapeName(rangeJoin: RangeJoin): String = rangeJoin match {
+    case PointInRangeJoin => "PointInRangeJoin"
+    case IntervalOverlapJoin => "IntervalOverlapJoin"
+    case _: LessPartialRangeJoin => "LessPartialRangeJoin"
+    case _: GreaterPartialRangeJoin => "GreaterPartialRangeJoin"
   }
 
   private def compare(name: String, rows: Long, shape: String)(df: => DataFrame): Unit = {

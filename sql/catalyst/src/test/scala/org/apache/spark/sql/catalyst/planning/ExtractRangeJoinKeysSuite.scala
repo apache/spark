@@ -109,13 +109,13 @@ class ExtractRangeJoinKeysSuite extends PlanTest {
     val randBound = Cast(Rand(Literal(0L)), IntegerType)
     assertKeys(
       points, ranges, And(GreaterThanOrEqual(p, randBound), LessThanOrEqual(p, rHi)),
-      LessPartialRangeJoin, Seq(p), Seq(rHi))
+      LessPartialRangeJoin(strict = false), Seq(p), Seq(rHi))
 
     // A leading rand() conjunct stays residual; a.lo < b.hi is still the key.
     assertKeys(
       intervalsA, intervalsB,
       And(GreaterThan(Rand(Literal(0L)), Literal(0.0)), LessThan(aLo, bHi)),
-      LessPartialRangeJoin, Seq(aLo), Seq(bHi))
+      LessPartialRangeJoin(strict = true), Seq(aLo), Seq(bHi))
   }
 
   test("interval overlap keys are (low, high) on each side") {
@@ -153,19 +153,27 @@ class ExtractRangeJoinKeysSuite extends PlanTest {
   test("one cross-side inequality is a partial range") {
     assertKeys(
       intervalsA, intervalsB, LessThan(aLo, bHi),
-      LessPartialRangeJoin, Seq(aLo), Seq(bHi))
+      LessPartialRangeJoin(strict = true), Seq(aLo), Seq(bHi))
     // Same columns. Direction is the tag, not a second key.
     assertKeys(
       intervalsA, intervalsB, GreaterThan(aLo, bHi),
-      GreaterPartialRangeJoin, Seq(aLo), Seq(bHi))
+      GreaterPartialRangeJoin(strict = true), Seq(aLo), Seq(bHi))
     assertKeys(
       intervalsA, intervalsB, And(LessThan(aLo, bHi), Not(EqualTo(aHi, bLo))),
-      LessPartialRangeJoin, Seq(aLo), Seq(bHi))
+      LessPartialRangeJoin(strict = true), Seq(aLo), Seq(bHi))
+    // The four inequalities also differ in strictness, and the tag records it:
+    // the exclusive bound decides whether duplicated build keys surface.
+    assertKeys(
+      intervalsA, intervalsB, LessThanOrEqual(aLo, bHi),
+      LessPartialRangeJoin(strict = false), Seq(aLo), Seq(bHi))
+    assertKeys(
+      intervalsA, intervalsB, GreaterThanOrEqual(aLo, bHi),
+      GreaterPartialRangeJoin(strict = false), Seq(aLo), Seq(bHi))
     // a.lo <= a.hi shares a.hi with a.hi <= b.lo, but both bounds of the first
     // conjunct are on the left, so this is not point-in-range.
     assertKeys(
       intervalsA, intervalsB, And(LessThanOrEqual(aLo, aHi), LessThanOrEqual(aHi, bLo)),
-      LessPartialRangeJoin, Seq(aHi), Seq(bLo))
+      LessPartialRangeJoin(strict = false), Seq(aHi), Seq(bLo))
   }
 
   test("equality, mismatched types, and non-indexed types are not range joins") {

@@ -28,9 +28,10 @@ import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * Unit tests for the two range-join indexes. [[IntervalIndex]] is the interval tree
- * used by point-in-range and interval overlap. [[PointIndex]] is the sorted array
- * used by a single inequality. Operator-level behavior is covered by `RangeJoinSuite`.
+ * Unit tests for the range-join indexes: the boxed pair ([[IntervalIndex]],
+ * [[PointIndex]]), the raw-long pair ([[LongIntervalIndex]], [[LongPointIndex]]),
+ * and the broadcast-mode routing that picks between the two families.
+ * Operator-level behavior is covered by `RangeJoinSuite`.
  */
 class RangeIndexSuite extends SparkFunSuite {
 
@@ -444,6 +445,30 @@ class RangeIndexSuite extends SparkFunSuite {
     assert(index.estimatedSize > empty.estimatedSize)
   }
 
+  test("exclusive point bounds skip duplicated build keys") {
+    // 100 duplicate rows per key on both families. A strict partial predicate
+    // rejects the probe's own key, so the exclusive bound must skip it
+    // instead of surfacing 100 rows that all fail the condition.
+    val keyed = (1 to 5).flatMap(k => Seq.fill(100)((k: Any, row(k))))
+    val boxed = buildPoints(IntegerType, keyed)
+    val longPoints = RangeRelationBroadcastMode(
+      Seq(BoundReference(1, IntegerType, nullable = true)), PointIndexKind)
+      .transform(keyed.map(t => InternalRow(t._2.getInt(0), t._1)).toArray)
+      .asInstanceOf[LongPointIndex]
+
+    assert(ids(boxed.upTo(3)).size == 300)
+    assert(ids(boxed.upToExclusive(3)).size == 200)
+    assert(ids(boxed.from(3)).size == 300)
+    assert(ids(boxed.fromExclusive(3)).size == 200)
+    assert(ids(boxed.upToExclusive(1)).isEmpty)
+    assert(ids(boxed.fromExclusive(5)).isEmpty)
+
+    assert(ids(longPoints.upTo(3L)).size == 300)
+    assert(ids(longPoints.upToExclusive(3L)).size == 200)
+    assert(ids(longPoints.from(3L)).size == 300)
+    assert(ids(longPoints.fromExclusive(3L)).size == 200)
+  }
+
   test("PointIndex.build defends against a build-side iterator reusing its row buffer") {
     // Same hazard as the IntervalIndex case above: a point index built straight off a
     // reused row buffer must copy both the key and the row, not just reference them.
@@ -534,9 +559,9 @@ class RangeIndexSuite extends SparkFunSuite {
     // (key type, lo, hi, probe) covering each supported key family: fixed
     // width, floating point, decimal, binary, and collated strings. The
     // collated probe mixes cases, so a restored index only answers it when
-    // its collation ordering survived the round trip. CharType/VarcharType
-    // carry a StringConstraint (FixedLength/MaxLength) that Kryo must have
-    // registered separately from plain StringType.
+    // its collation ordering survived the round trip. The key type itself
+    // never reaches a serializer: writes cross it as JSON, so this exercises
+    // the index registrations, not any DataType registration.
     val cases: Seq[(DataType, Any, Any, Any)] = Seq(
       (ByteType, 0.toByte, 10.toByte, 5.toByte),
       (ShortType, 0.toShort, 10.toShort, 5.toShort),

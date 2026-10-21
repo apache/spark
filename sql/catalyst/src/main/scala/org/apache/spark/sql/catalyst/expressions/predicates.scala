@@ -1102,17 +1102,22 @@ object Equality {
 }
 
 /**
- * Normalizes `<`, `<=`, `>`, `>=` to `(low.dataType, low, high)`, with `>` and
- * `>=` reordered so the lower bound leads. Inclusivity stays on the original
- * predicate, which execution evaluates as-is.
+ * Normalizes `<`, `<=`, `>`, `>=` to `(low.dataType, low, high, strict)`, with
+ * `>` and `>=` reordered so the lower bound leads. Inclusivity stays on the
+ * original predicate, which execution evaluates as-is.
  */
 object RangePredicate {
-  def unapply(expression: Expression): Option[(DataType, Expression, Expression)] = {
+  /**
+   * Normalizes `<`, `<=`, `>`, `>=` to `(low.dataType, low, high, strict)`.
+   * Inclusivity stays on the original predicate, which execution evaluates
+   * as-is; a strict predicate also selects the exclusive point-index bound.
+   */
+  def unapply(expression: Expression): Option[(DataType, Expression, Expression, Boolean)] = {
     expression match {
-      case LessThan(low, high) => Some((low.dataType, low, high))
-      case LessThanOrEqual(low, high) => Some((low.dataType, low, high))
-      case GreaterThan(high, low) => Some((low.dataType, low, high))
-      case GreaterThanOrEqual(high, low) => Some((low.dataType, low, high))
+      case LessThan(low, high) => Some((low.dataType, low, high, true))
+      case LessThanOrEqual(low, high) => Some((low.dataType, low, high, false))
+      case GreaterThan(high, low) => Some((low.dataType, low, high, true))
+      case GreaterThanOrEqual(high, low) => Some((low.dataType, low, high, false))
       case _ => None
     }
   }
