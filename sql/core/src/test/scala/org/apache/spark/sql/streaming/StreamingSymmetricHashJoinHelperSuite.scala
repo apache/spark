@@ -27,11 +27,8 @@ import org.apache.spark.sql.types._
 
 class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
 
-  private sealed trait WatermarkColumn
-  private object WatermarkColumn {
-    case object NoWatermark extends WatermarkColumn
-    case object JoinKey extends WatermarkColumn
-    case object Other extends WatermarkColumn
+  private object WatermarkColumn extends Enumeration {
+    val NoWatermark, JoinKey, Other = Value
   }
 
   val leftAttributeA = AttributeReference("a", IntegerType)()
@@ -138,8 +135,7 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
     assert(split.full.contains(predicate))
   }
 
-  for (watermarkColumn <- Seq(
-      WatermarkColumn.NoWatermark, WatermarkColumn.JoinKey, WatermarkColumn.Other)) {
+  for (watermarkColumn <- WatermarkColumn.values) {
     test(s"SPARK-60378: previous key scan bound with watermark on $watermarkColumn") {
       val watermark = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000L).build()
       val key = AttributeReference("key", TimestampType,

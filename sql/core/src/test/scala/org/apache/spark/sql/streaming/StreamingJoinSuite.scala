@@ -1275,15 +1275,13 @@ abstract class StreamingOuterJoinBase extends StreamingJoinSuite {
   import testImplicits._
   import org.apache.spark.sql.functions._
 
-  private sealed trait RestartMode
-  private object RestartMode {
-    case object WithoutRestart extends RestartMode
-    case object WithRestart extends RestartMode
+  private object RestartMode extends Enumeration {
+    val WithoutRestart, WithRestart = Value
   }
 
   for {
     joinType <- Seq(LeftOuter, RightOuter)
-    restartMode <- Seq(RestartMode.WithoutRestart, RestartMode.WithRestart)
+    restartMode <- RestartMode.values
   } {
     test(s"SPARK-60378: $joinType eviction includes old unwatermarked keys, $restartMode") {
       val leftInput = MemoryStream[(Int, Int)]
