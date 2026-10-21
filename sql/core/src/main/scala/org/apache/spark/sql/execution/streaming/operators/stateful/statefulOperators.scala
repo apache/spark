@@ -1429,10 +1429,6 @@ abstract class BaseStreamingDeduplicateExec
           allRemovalsTimeMs += timeTakenMs {
             // Remove up to incrementalCleanupFactor eligible rows for every input record.
             var numRemovalsCurrRecord = 0
-            // NOTE: the eviction iterator removes a row inside hasNext, not next(), so a bare
-            // hasNext already deletes it. To stop at exactly incrementalCleanupFactor removals per
-            // input we must re-check the count before each hasNext rather than draining the
-            // iterator.
             while (numRemovalsCurrRecord < incrementalCleanupFactor && evictionIter.hasNext) {
               evictionIter.next()
               numRemovalsCurrRecord += 1
