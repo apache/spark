@@ -230,6 +230,14 @@ public class VariantBuilder {
     int offsetSize = getMetadataOffsetSize(metadata);
     int numKeys = getMetadataNumKeys(metadata, offsetSize);
     int stringStart = getMetadataStringStart(metadata, numKeys, offsetSize);
+    int lastOffset = readUnsigned(metadata, stringStart - offsetSize, offsetSize);
+    if (lastOffset > metadata.length - stringStart) {
+      throw malformedVariant();
+    }
+    int canonicalOffsetSize = getIntegerSize(Math.max(lastOffset, numKeys));
+    if (metadata[0] != metadataHeader(canonicalOffsetSize)) {
+      return false;
+    }
     int previousOffset = readUnsigned(metadata, 1 + offsetSize, offsetSize);
     if (previousOffset != 0) {
       return false;
@@ -252,10 +260,6 @@ public class VariantBuilder {
       currentOffset = nextOffset;
     }
     if (metadata.length != stringStart + currentOffset) {
-      return false;
-    }
-    int canonicalOffsetSize = getIntegerSize(Math.max(currentOffset, numKeys));
-    if (metadata[0] != metadataHeader(canonicalOffsetSize)) {
       return false;
     }
     boolean[] referenced = new boolean[numKeys];
@@ -850,17 +854,9 @@ public class VariantBuilder {
   }
 
   private static boolean isValidUtf8(byte[] bytes, int start, int length) {
-    int end = start + length;
-    int offset = start;
-    while (offset < end && bytes[offset] >= 0) {
-      ++offset;
-    }
-    if (offset == end) {
-      return true;
-    }
-    byte[] encoded = new String(bytes, offset, end - offset, StandardCharsets.UTF_8)
+    byte[] encoded = new String(bytes, start, length, StandardCharsets.UTF_8)
         .getBytes(StandardCharsets.UTF_8);
-    return Arrays.equals(bytes, offset, end, encoded, 0, encoded.length);
+    return Arrays.equals(bytes, start, start + length, encoded, 0, encoded.length);
   }
 
   private static int minimalLongTypeInfo(long value) {
