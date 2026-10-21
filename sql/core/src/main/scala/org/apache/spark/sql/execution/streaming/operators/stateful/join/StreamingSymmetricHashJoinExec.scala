@@ -746,7 +746,9 @@ case class StreamingSymmetricHashJoinExec(
 
         (lowerBoundMs, upperBoundMs) match {
           case (Some(lower), Some(upper)) =>
-            Some((lower * 1000L, -upper * 1000L)) // ms -> us
+            // ms -> us, saturating so an astronomical interval cannot overflow into a wrong window.
+            Some((WatermarkSupport.millisToMicrosSaturating(lower),
+              WatermarkSupport.millisToMicrosSaturating(-upper)))
           case _ => None
         }
       }
@@ -761,7 +763,8 @@ case class StreamingSymmetricHashJoinExec(
       scanRangeOffsets match {
         case Some((lowerOffset, upperOffset)) if eventTimeIdxForRangeScan >= 0 =>
           val eventTimeUs = thisRow.getLong(eventTimeIdxForRangeScan)
-          Some((eventTimeUs + lowerOffset, eventTimeUs + upperOffset))
+          Some((WatermarkSupport.addMicrosSaturating(eventTimeUs, lowerOffset),
+            WatermarkSupport.addMicrosSaturating(eventTimeUs, upperOffset)))
         case _ => None
       }
     }
