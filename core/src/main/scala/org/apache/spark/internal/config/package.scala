@@ -1885,7 +1885,7 @@ package object config {
     ConfigBuilder("spark.shuffle.streaming.writerConnectionTimeout")
       .doc("Maximum time a streaming shuffle writer waits for each reader to connect. " +
         "Set to -1 to wait indefinitely.")
-      .version("4.4.0")
+      .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(

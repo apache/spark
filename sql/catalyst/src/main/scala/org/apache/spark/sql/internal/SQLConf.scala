@@ -5389,7 +5389,7 @@ object SQLConf {
         "UDF worker protocol are executed via the unified, " +
         "external UDF worker framework instead of the " +
         "language-specific runners. Experimental.")
-      .version("4.2.0")
+      .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
