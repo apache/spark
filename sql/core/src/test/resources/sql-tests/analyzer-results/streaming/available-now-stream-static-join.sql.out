@@ -67,30 +67,20 @@ FROM STREAM(streaming_sql_golden_join_events) AS events
 LEFT JOIN streaming_sql_golden_join_customers AS customers
   ON events.customer_id = customers.customer_id
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "_LEGACY_ERROR_TEMP_3102",
-  "messageParameters" : {
-    "msg" : "Queries with streaming sources must be executed with writeStream.start(), or from a streaming table or flow definition within a Spark Declarative Pipeline."
-  }
-}
+~Project [event_id#x, coalesce(tier#x, unknown) AS tier#x, amount#x]
++- ~Join LeftOuter, (customer_id#x = customer_id#x)
+   :- ~SubqueryAlias events
+   :  +- ~SubqueryAlias spark_catalog.default.streaming_sql_golden_join_events
+   :     +- StreamingRelation FileSource[file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_join_events], [event_id#x, customer_id#x, amount#x], name=<Unassigned>
+   +- SubqueryAlias customers
+      +- SubqueryAlias spark_catalog.default.streaming_sql_golden_join_customers
+         +- Relation spark_catalog.default.streaming_sql_golden_join_customers[customer_id#x,tier#x] parquet
 
 
 -- !query
 REFRESH FLOW streaming_sql_golden_join_flow
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "INVALID_SQL_SYNTAX.INVALID_REFRESH_RESOURCE_PATH",
-  "sqlState" : "42000",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 43,
-    "fragment" : "REFRESH FLOW streaming_sql_golden_join_flow"
-  } ]
-}
+
 
 
 -- !query

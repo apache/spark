@@ -75,6 +75,16 @@ struct<>
 
 
 -- !query
+SELECT *
+FROM streaming_sql_golden_aggregation_sink
+ORDER BY window_start, category
+-- !query schema
+struct<window_start:timestamp,window_end:timestamp,category:string,total:bigint,event_count:bigint>
+-- !query output
+
+
+
+-- !query
 INSERT INTO streaming_sql_golden_aggregation_events VALUES
   (TIMESTAMP '2024-01-01 00:10:00', '__watermark__', 0)
 -- !query schema

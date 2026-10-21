@@ -97,6 +97,10 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
     // objects such as views. Therefore any following queries that reference these objects should
     // find them in the catalog.
     val df = session.sql(sql)
+    getNormalizedQueryAnalysisResult(df)
+  }
+
+  protected def getNormalizedQueryAnalysisResult(df: DataFrame): (String, Seq[String]) = {
     val schema = df.schema.catalogString
     val analyzed = df.queryExecution.analyzed
     // Determine if the analyzed plan contains any nondeterministic expressions.

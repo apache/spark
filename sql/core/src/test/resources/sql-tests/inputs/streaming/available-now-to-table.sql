@@ -17,5 +17,11 @@ REFRESH FLOW streaming_sql_golden_available_now_flow;
 
 SELECT * FROM streaming_sql_golden_available_now_sink ORDER BY id;
 
+INSERT INTO streaming_sql_golden_available_now_source VALUES (4, 'four');
+
+REFRESH FLOW streaming_sql_golden_available_now_flow;
+
+SELECT * FROM streaming_sql_golden_available_now_sink ORDER BY id;
+
 DROP TABLE streaming_sql_golden_available_now_source;
 DROP TABLE streaming_sql_golden_available_now_sink;

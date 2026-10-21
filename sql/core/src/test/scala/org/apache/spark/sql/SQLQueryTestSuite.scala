@@ -458,12 +458,12 @@ class SQLQueryTestSuite extends SharedSparkSession
   private def registerTriggeredFlow(
       session: SparkSession,
       command: CreateFlowCommand,
-      flows: mutable.Map[Seq[String], TriggeredFlow]): (String, Seq[String]) = {
+      flows: mutable.Map[Seq[String], TriggeredFlow]): TriggeredFlow = {
     val flow = parseCreateTriggeredFlow(command)
     require(!flows.keys.exists(sameFlowName(session, _, flow.flowName)),
       s"Triggered flow ${formatFlowName(flow.flowName)} is already defined in this test run.")
     flows += flow.flowName -> flow
-    (emptySchema, Seq.empty)
+    flow
   }
 
   private def resolveTriggeredFlow(
@@ -516,7 +516,6 @@ class SQLQueryTestSuite extends SharedSparkSession
   /** Runs one REFRESH FLOW statement to completion. */
   private def runTriggeredFlow(
       session: SparkSession,
-      sql: String,
       flowName: Seq[String],
       testCase: TestCase,
       sparkConfigSet: Seq[(String, String)],
@@ -524,7 +523,8 @@ class SQLQueryTestSuite extends SharedSparkSession
     val flow = resolveTriggeredFlow(session, flowName, flows)
     val df = classic.Dataset.ofRows(session.asInstanceOf[classic.SparkSession], flow.query)
     require(df.isStreaming,
-      s"SQL golden triggered flows require a streaming query, but '$sql' is batch SQL.")
+      s"SQL golden triggered flow ${formatFlowName(flow.flowName)} requires a streaming query, " +
+        "but its CREATE FLOW query reads no streaming source.")
     require(session.catalog.tableExists(flow.targetTable),
       s"SQL golden triggered flow target table '${flow.targetTable}' does not exist.")
     val queryName = triggeredFlowQueryName(testCase, sparkConfigSet, flow.flowName)
@@ -599,7 +599,6 @@ class SQLQueryTestSuite extends SharedSparkSession
           case RefreshTriggeredFlow(flowName) =>
             runTriggeredFlow(
               localSparkSession,
-              sql,
               flowName,
               testCase,
               sparkConfigSet,
@@ -697,32 +696,44 @@ class SQLQueryTestSuite extends SharedSparkSession
     val outputs: Seq[QueryTestOutput] = queries.map { sql =>
       testCase match {
         case _: AnalyzerTest =>
-          val (_, output) =
-            handleExceptions(getNormalizedQueryAnalysisResult(localSparkSession, sql))
+          val (_, output) = handleExceptions {
+            val parsedPlan = tryParsePlan(localSparkSession, sql)
+            parseTriggeredFlowStatement(localSparkSession, sql, parsedPlan) match {
+              case Some(CreateTriggeredFlow(command)) =>
+                val flow = registerTriggeredFlow(localSparkSession, command, triggeredFlows)
+                val df = classic.Dataset.ofRows(
+                  localSparkSession.asInstanceOf[classic.SparkSession], flow.query)
+                getNormalizedQueryAnalysisResult(df)
+              case Some(RefreshTriggeredFlow(flowName)) =>
+                resolveTriggeredFlow(localSparkSession, flowName, triggeredFlows)
+                (emptySchema, Seq.empty)
+              case None =>
+                getNormalizedQueryAnalysisResult(localSparkSession, sql)
+            }
+          }
           // We do some query canonicalization now.
           AnalyzerOutput(
             sql = sql,
             schema = None,
             output = normalizeTestResults(output.mkString("\n")))
         case _ =>
-          val parsedPlan = tryParsePlan(localSparkSession, sql)
-          val (schema, output) =
+          val (schema, output) = handleExceptions {
+            val parsedPlan = tryParsePlan(localSparkSession, sql)
             parseTriggeredFlowStatement(localSparkSession, sql, parsedPlan) match {
               case Some(CreateTriggeredFlow(command)) =>
-                handleExceptions(
-                  registerTriggeredFlow(localSparkSession, command, triggeredFlows))
+                registerTriggeredFlow(localSparkSession, command, triggeredFlows)
+                (emptySchema, Seq.empty)
               case Some(RefreshTriggeredFlow(flowName)) =>
-                handleExceptions(
-                  runTriggeredFlow(
-                    localSparkSession,
-                    sql,
-                    flowName,
-                    testCase,
-                    sparkConfigSet,
-                    triggeredFlows))
+                runTriggeredFlow(
+                  localSparkSession,
+                  flowName,
+                  testCase,
+                  sparkConfigSet,
+                  triggeredFlows)
               case None =>
-                handleExceptions(getNormalizedQueryExecutionResult(localSparkSession, sql))
+                getNormalizedQueryExecutionResult(localSparkSession, sql)
             }
+          }
           // We do some query canonicalization now.
           val executionOutput = ExecutionOutput(
             sql = sql,
@@ -1169,6 +1180,23 @@ class SQLQueryTestSuite extends SharedSparkSession
       resolveTriggeredFlow(spark, Seq("missing_flow"), mutable.Map.empty)
     }
     assert(undefinedFlowError.getMessage.contains("has not been defined in this test run"))
+
+    val batchFlows = mutable.Map.empty[Seq[String], TriggeredFlow]
+    registerTriggeredFlow(
+      spark,
+      createFlowCommand(
+        "CREATE FLOW batch_flow AS INSERT INTO sink BY NAME SELECT 1 AS id"),
+      batchFlows)
+    val batchFlowError = intercept[IllegalArgumentException] {
+      runTriggeredFlow(
+        spark,
+        Seq("batch_flow"),
+        RegularTestCase("batch-flow-error", "", ""),
+        Nil,
+        batchFlows)
+    }
+    assert(batchFlowError.getMessage.contains("triggered flow `batch_flow`"))
+    assert(!batchFlowError.getMessage.contains("REFRESH FLOW"))
   }
 
   test("Test logic for determining whether a query is semantically sorted") {

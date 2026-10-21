@@ -70,6 +70,32 @@ struct<id:int,value:string>
 
 
 -- !query
+INSERT INTO streaming_sql_golden_available_now_source VALUES (4, 'four')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+REFRESH FLOW streaming_sql_golden_available_now_flow
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM streaming_sql_golden_available_now_sink ORDER BY id
+-- !query schema
+struct<id:int,value:string>
+-- !query output
+2	TWO
+3	THREE
+4	FOUR
+
+
+-- !query
 DROP TABLE streaming_sql_golden_available_now_source
 -- !query schema
 struct<>

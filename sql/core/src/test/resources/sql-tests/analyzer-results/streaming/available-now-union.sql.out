@@ -67,30 +67,25 @@ WITH normalized AS (
 )
 SELECT id, origin, value FROM normalized
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "_LEGACY_ERROR_TEMP_3102",
-  "messageParameters" : {
-    "msg" : "Queries with streaming sources must be executed with writeStream.start(), or from a streaming table or flow definition within a Spark Declarative Pipeline."
-  }
-}
+~WithCTE
+:- ~CTERelationDef xxxx, false
+:  +- ~SubqueryAlias normalized
+:     +- ~Union false, false
+:        :- ~Project [id#x, left AS origin#x, upper(value#x) AS value#x]
+:        :  +- ~SubqueryAlias spark_catalog.default.streaming_sql_golden_union_left
+:        :     +- StreamingRelation FileSource[file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_union_left], [id#x, value#x], name=<Unassigned>
+:        +- ~Project [id#x, right AS origin#x, upper(value#x) AS value#x]
+:           +- ~SubqueryAlias spark_catalog.default.streaming_sql_golden_union_right
+:              +- StreamingRelation FileSource[file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_union_right], [id#x, value#x], name=<Unassigned>
++- ~Project [id#x, origin#x, value#x]
+   +- ~SubqueryAlias normalized
+      +- ~CTERelationRef xxxx, true, [id#x, origin#x, value#x], true, false
 
 
 -- !query
 REFRESH FLOW streaming_sql_golden_union_flow
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "INVALID_SQL_SYNTAX.INVALID_REFRESH_RESOURCE_PATH",
-  "sqlState" : "42000",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 44,
-    "fragment" : "REFRESH FLOW streaming_sql_golden_union_flow"
-  } ]
-}
+
 
 
 -- !query

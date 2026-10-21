@@ -29,6 +29,10 @@ GROUP BY window(event_time, '1 minute'), category;
 
 REFRESH FLOW streaming_sql_golden_aggregation_flow;
 
+SELECT *
+FROM streaming_sql_golden_aggregation_sink
+ORDER BY window_start, category;
+
 INSERT INTO streaming_sql_golden_aggregation_events VALUES
   (TIMESTAMP '2024-01-01 00:10:00', '__watermark__', 0);
 
