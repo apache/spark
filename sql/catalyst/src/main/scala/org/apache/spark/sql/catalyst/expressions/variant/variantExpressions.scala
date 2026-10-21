@@ -2166,6 +2166,28 @@ case class IsValidVariant(child: Expression) extends UnaryExpression
     copy(child = newChild)
 }
 
+case class CanonicalizeVariant(child: Expression)
+    extends UnaryExpression with ExpectsInputTypes {
+  override def nullIntolerant: Boolean = true
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(VariantType)
+
+  override def dataType: DataType = VariantType
+
+  override def prettyName: String = "canonicalize_variant"
+
+  override protected def nullSafeEval(input: Any): Any =
+    VariantExpressionEvalUtils.canonicalizeVariant(input.asInstanceOf[VariantVal])
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val helperClass = VariantExpressionEvalUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, input => s"$helperClass.canonicalizeVariant($input)")
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): CanonicalizeVariant =
+    copy(child = newChild)
+}
+
 /**
  * Internal expression. It surfaces a deferred cast error produced by `PushVariantIntoScan` for a
  * strict variant cast. Semantically equivalent to
