@@ -30,12 +30,12 @@ import org.apache.spark.util.Utils
 
 /**
  * The SQL metrics the reader updates while applying a [[ParquetStorageFilter]], created by
- * `ParquetFileFormat.storageFilterMetrics`. They count only what the filter saved against a read of
- * the same projection without one. A row group whose filter was given up counts nothing, so a scan
- * that read more than with the feature off can still show a saving. Nor do they take off a key
- * re-read after a spill, or the offset indexes phase 2 reads when no data filter is pushed, which a
- * plain read does not. Bytes are the compressed bytes the reader did not ask parquet for, which a
- * vectored read can still fetch when it merges nearby ranges.
+ * `ParquetFileFormat.storageFilterMetrics`. The first five count only what the filter saved against
+ * a read of the same projection without one. A row group whose filter was given up counts nothing
+ * there, so a scan that read more than with the feature off can still show a saving. Nor do they
+ * take off the offset indexes phase 2 reads when no data filter is pushed, which a plain read does
+ * not. Bytes are the compressed bytes the reader did not ask parquet for, which a vectored read can
+ * still fetch when it merges nearby ranges.
  *
  *  - [[rowGroupsSkipped]] counts row groups whose non-key columns were never read.
  *  - [[rowsExcludedByRowGroup]] sums those row groups' rows that the pushed data filter kept.
@@ -47,13 +47,26 @@ import org.apache.spark.util.Utils
  *
  * A row excluded within a row group may still have been read, as part of a page that held a
  * survivor.
+ *
+ * The other four count row groups the survivor buffer's budget limited, each once, under the last
+ * thing it gave up and the limit that made it: `maxSplicedRowGroupBytes`, or the task's memory
+ * manager denying the reservation.
+ *
+ *  - [[rowGroupsSplicingGivenUpByCap]] and [[rowGroupsSplicingGivenUpByMemory]] count row groups
+ *    that kept the filter but read their key columns a second time.
+ *  - [[rowGroupsFilterGivenUpByCap]] and [[rowGroupsFilterGivenUpByMemory]] count row groups read
+ *    without the filter.
  */
 case class StorageFilterMetrics(
     rowGroupsSkipped: SQLMetric,
     rowsExcludedByRowGroup: SQLMetric,
     rowsExcludedWithinRowGroup: SQLMetric,
     bytesAvoidedByRowGroup: SQLMetric,
-    bytesAvoidedByPageFiltering: SQLMetric) {
+    bytesAvoidedByPageFiltering: SQLMetric,
+    rowGroupsSplicingGivenUpByCap: SQLMetric,
+    rowGroupsSplicingGivenUpByMemory: SQLMetric,
+    rowGroupsFilterGivenUpByCap: SQLMetric,
+    rowGroupsFilterGivenUpByMemory: SQLMetric) {
 
   /** Counts a row group whose non-key columns the filter kept the reader from reading at all. */
   def recordRowGroupSkipped(excludedRows: Long, avoidedBytes: Long): Unit = {
@@ -71,6 +84,10 @@ object StorageFilterMetrics {
   val ROWS_EXCLUDED_WITHIN_ROW_GROUP = "storageFilterRowsExcludedWithinRowGroup"
   val BYTES_AVOIDED_BY_ROW_GROUP = "storageFilterBytesAvoidedByRowGroup"
   val BYTES_AVOIDED_BY_PAGE_FILTERING = "storageFilterBytesAvoidedByPageFiltering"
+  val ROW_GROUPS_SPLICING_GIVEN_UP_BY_CAP = "storageFilterRowGroupsSplicingGivenUpByCap"
+  val ROW_GROUPS_SPLICING_GIVEN_UP_BY_MEMORY = "storageFilterRowGroupsSplicingGivenUpByMemory"
+  val ROW_GROUPS_FILTER_GIVEN_UP_BY_CAP = "storageFilterRowGroupsFilterGivenUpByCap"
+  val ROW_GROUPS_FILTER_GIVEN_UP_BY_MEMORY = "storageFilterRowGroupsFilterGivenUpByMemory"
 
   /** A fresh set of counters, keyed for the scan, with the labels the SQL UI shows. */
   def create(sparkContext: SparkContext): Map[String, SQLMetric] = Map(
@@ -83,7 +100,15 @@ object StorageFilterMetrics {
     BYTES_AVOIDED_BY_ROW_GROUP -> SQLMetrics.createSizeMetric(
       sparkContext, "bytes avoided by storage filter (whole row group)"),
     BYTES_AVOIDED_BY_PAGE_FILTERING -> SQLMetrics.createSizeMetric(
-      sparkContext, "bytes avoided by storage filter (page filtering)"))
+      sparkContext, "bytes avoided by storage filter (page filtering)"),
+    ROW_GROUPS_SPLICING_GIVEN_UP_BY_CAP -> SQLMetrics.createMetric(
+      sparkContext, "row groups with key columns read twice by storage filter (buffer cap)"),
+    ROW_GROUPS_SPLICING_GIVEN_UP_BY_MEMORY -> SQLMetrics.createMetric(
+      sparkContext, "row groups with key columns read twice by storage filter (memory denied)"),
+    ROW_GROUPS_FILTER_GIVEN_UP_BY_CAP -> SQLMetrics.createMetric(
+      sparkContext, "row groups read without storage filter (buffer cap)"),
+    ROW_GROUPS_FILTER_GIVEN_UP_BY_MEMORY -> SQLMetrics.createMetric(
+      sparkContext, "row groups read without storage filter (memory denied)"))
 
   /** The counters the scan carries back, which [[create]] made. */
   def fromMap(metrics: Map[String, SQLMetric]): StorageFilterMetrics = StorageFilterMetrics(
@@ -91,7 +116,11 @@ object StorageFilterMetrics {
     rowsExcludedByRowGroup = metrics(ROWS_EXCLUDED_BY_ROW_GROUP),
     rowsExcludedWithinRowGroup = metrics(ROWS_EXCLUDED_WITHIN_ROW_GROUP),
     bytesAvoidedByRowGroup = metrics(BYTES_AVOIDED_BY_ROW_GROUP),
-    bytesAvoidedByPageFiltering = metrics(BYTES_AVOIDED_BY_PAGE_FILTERING))
+    bytesAvoidedByPageFiltering = metrics(BYTES_AVOIDED_BY_PAGE_FILTERING),
+    rowGroupsSplicingGivenUpByCap = metrics(ROW_GROUPS_SPLICING_GIVEN_UP_BY_CAP),
+    rowGroupsSplicingGivenUpByMemory = metrics(ROW_GROUPS_SPLICING_GIVEN_UP_BY_MEMORY),
+    rowGroupsFilterGivenUpByCap = metrics(ROW_GROUPS_FILTER_GIVEN_UP_BY_CAP),
+    rowGroupsFilterGivenUpByMemory = metrics(ROW_GROUPS_FILTER_GIVEN_UP_BY_MEMORY))
 }
 
 /**
@@ -241,21 +270,25 @@ object ParquetStorageFilter {
    */
   def rethrowIfMustPropagate(e: Throwable, fromRead: Boolean): Unit = {
     def corrupt(t: Throwable): Boolean = fromRead && t.isInstanceOf[InternalError]
-    def out(fatal: Throwable): Throwable = fatal match {
-      case internal: InternalError =>
-        new UnknownError("A storage filter met a fatal error it must not absorb")
-          .initCause(internal)
-      case other => other
-    }
-    if (Executor.isFatalError(e, 1) && !corrupt(e)) throw out(e)
+    if (Executor.isFatalError(e, 1) && !corrupt(e)) throw propagated(e)
     throwIfKilled(e)
     if (fromRead && isVectorGrowthFailure(e)) return
     val depth = if (fromRead && NonFatal(e)) fatalErrorDepth - 1 else fatalErrorDepth
     if (Executor.isFatalError(e, depth)) {
       // The one `Executor.isFatalError` found, which no SparkOutOfMemoryError can precede.
       val fatal = Iterator.iterate(e)(_.getCause).find(Utils.isFatalError).get
-      if (!corrupt(fatal)) throw out(fatal)
+      if (!corrupt(fatal)) throw propagated(fatal)
     }
+  }
+
+  /**
+   * `fatal` in a form `FileScanRDD` cannot take for a corrupt file: an `InternalError`, which it
+   * would, goes out in an `UnknownError`, and anything else as it is.
+   */
+  private def propagated(fatal: Throwable): Throwable = fatal match {
+    case internal: InternalError =>
+      new UnknownError("A storage filter met a fatal error it must not absorb").initCause(internal)
+    case other => other
   }
 
   /**
@@ -293,6 +326,22 @@ object ParquetStorageFilter {
       }
       throw new SparkException("A storage filter met a task kill it must not absorb", cause)
     }
+  }
+
+  /**
+   * Throws what reserving the survivor buffer's memory raised, in a form `FileScanRDD` cannot take
+   * for a corrupt file under `ignoreCorruptFiles`. The task's memory manager runs other consumers'
+   * spills inside the reservation, so it can raise anything. A `RuntimeException`, which is also
+   * what a kill's interrupt during a spill becomes, goes out wrapped in a checked
+   * [[SparkException]], as in [[throwIfKilled]]. An `InternalError` goes out in an `UnknownError`,
+   * and anything else, such as the `SparkOutOfMemoryError` of a failed spill, as it is, as in
+   * [[rethrowIfMustPropagate]]. Typed as returning a `RuntimeException` so Java code can write
+   * `throw memoryReservationFailed(e)`.
+   */
+  def memoryReservationFailed(e: Throwable): RuntimeException = e match {
+    case runtime: RuntimeException =>
+      throw new SparkException("A storage filter failed to reserve memory", runtime)
+    case other => throw propagated(other)
   }
 
   /**

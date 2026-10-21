@@ -2004,9 +2004,11 @@ object SQLConf {
         s"out of ${EXECUTOR_MEMORY_OVERHEAD.key}. Past the limit the reader drops the buffered " +
         "key values and reads the key columns again for the surviving rows. If the row ranges " +
         "alone pass it, the reader reads the row group with no filter applied. The buffer is " +
-        "also accounted to the task's execution memory, the key values only when they are on " +
-        "heap. A denied reservation is handled the same way. A spill can drop the key values " +
-        "not yet emitted, which the reader then reads again.")
+        "also counted against the task's execution memory, except key values held in off-heap " +
+        "column vectors, and a reservation the memory manager denies is handled the same way. " +
+        "The scan's metrics count the row groups each of these happens to, by cause. While it " +
+        "holds a buffer, the task is one of those sharing on-heap execution memory, as with any " +
+        "operator that reserves it.")
       .version("5.0.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .bytesConf(ByteUnit.BYTE)
@@ -2029,9 +2031,10 @@ object SQLConf {
         "as in the files pyarrow's write_table writes by default, or with that conf set to " +
         "false, the reader can only skip whole row groups, and it reads the key columns twice in " +
         "the others. With a page index, it can be slower when the matching rows are spread " +
-        "across most pages. The matching key values of a row group are buffered while it is " +
-        s"read, up to ${PARQUET_STORAGE_FILTER_PUSHDOWN_MAX_SPLICED_ROW_GROUP_BYTES.key}, in " +
-        "the task's execution memory unless column vectors are off heap.")
+        "across most pages. The matching key values and row ranges of a row group are buffered " +
+        "while it is read, up to " +
+        s"${PARQUET_STORAGE_FILTER_PUSHDOWN_MAX_SPLICED_ROW_GROUP_BYTES.key}, and counted " +
+        "against the task's execution memory, except key values held in off-heap column vectors.")
       .version("5.0.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
