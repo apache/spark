@@ -652,6 +652,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val (finalResultExprs, finalAggExprs, translatedAgg, canCompletePushDown) = {
         if (r.supportCompletePushDown(translatedAggOpt.get)) {
           (actualResultExprs, normalizedAggExprs, translatedAggOpt.get, true)
+        } else if (normalizedAggExprs.exists(_.filter.isDefined)) {
+          return agg
         } else if (!translatedAggOpt.get.aggregateExpressions().exists(_.isInstanceOf[Avg])) {
           (actualResultExprs, normalizedAggExprs, translatedAggOpt.get, false)
         } else {

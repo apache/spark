@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.Count
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, Average, Count, First, Max, Min, Partial, Sum}
 import org.apache.spark.sql.catalyst.expressions.variant.VariantGet
 import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, CombineFilters, ConstantFolding}
 import org.apache.spark.sql.catalyst.plans.Inner
@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, Joi
 import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue, SortOrder => V2SortOrder, VariantGet => V2VariantGet}
-import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
+import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count => V2Count, Max => V2Max, Min => V2Min, Sum => V2Sum}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate}
 import org.apache.spark.sql.connector.join.{JoinType => V2JoinType}
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, LocalScan, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder, Statistics, SupportsPushDownAggregates, SupportsPushDownJoin, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTopN, SupportsPushDownVariantExtractions, SupportsReportStatistics, V1Scan, VariantExtraction}
@@ -1124,6 +1124,51 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       // Translating such an expression used to recurse forever. Note that a regression hangs
       // this test instead of failing it, as the recursion is in tail position.
       assert(new V2ExpressionBuilder(folded, isPredicate = true).build().isEmpty)
+    }
+  }
+
+  test("translate filtered aggregates") {
+    attrInts.foreach { case (attr, name) =>
+      val filter = GreaterThan(attr, Literal(0))
+      val predicate = new Predicate(">", Array(FieldReference(name), LiteralValue(0, IntegerType)))
+      val input = new GeneralScalarExpression("CASE_WHEN", Array(predicate, FieldReference(name)))
+      val countInput = new GeneralScalarExpression(
+        "CASE_WHEN", Array(predicate, LiteralValue(1, IntegerType)))
+      val aggregates = Seq[(AggregateFunction, V2Expression)](
+        Min(attr) -> new V2Min(input),
+        Max(attr) -> new V2Max(input),
+        Sum(attr) -> new V2Sum(input, false),
+        Average(attr) -> new Avg(input, false),
+        Count(attr) -> new V2Count(input, false),
+        Count(Literal(1)) -> new V2Count(countInput, false),
+        Count(Literal.create(null, IntegerType)) -> new V2Count(
+          new GeneralScalarExpression("CASE_WHEN",
+            Array(predicate, LiteralValue(null, IntegerType))), false))
+      aggregates.foreach { case (func, expected) =>
+        val expr = func.toAggregateExpression(isDistinct = false, filter = Some(filter))
+        val actual = new V2ExpressionBuilder(expr).build().get
+        assert(actual.getClass == expected.getClass)
+        assert(actual.children().toSeq == expected.children().toSeq)
+        assert(actual.describe() == expected.describe())
+      }
+    }
+  }
+
+  test("unsupported filtered aggregates are not translated") {
+    val attr = $"cint".int
+    val filter = GreaterThan(attr, Literal(0))
+    val sum = Sum(attr).toAggregateExpression(isDistinct = false, filter = Some(filter))
+    val expressions = Seq(
+      sum.copy(isDistinct = true),
+      sum.copy(mode = Partial),
+      sum.copy(filter = Some(GreaterThan(Rand(0), Literal(0.5d)))),
+      sum.copy(filter = Some(RLike($"cstr".string, Literal("a.*")))),
+      Count(Seq(attr, $"other".int))
+        .toAggregateExpression(isDistinct = false, filter = Some(filter)),
+      First(attr, ignoreNulls = false)
+        .toAggregateExpression(isDistinct = false, filter = Some(filter)))
+    expressions.foreach { expr =>
+      assert(new V2ExpressionBuilder(expr).build().isEmpty)
     }
   }
 

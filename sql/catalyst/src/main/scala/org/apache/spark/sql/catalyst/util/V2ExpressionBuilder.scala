@@ -165,6 +165,9 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
       generateExpression(child).map(v => new V2Cast(v, child.dataType, dataType))
     case AggregateExpression(aggregateFunction, Complete, isDistinct, None, _) =>
       generateAggregateFunc(aggregateFunction, isDistinct)
+    case AggregateExpression(aggregateFunction, Complete, false, Some(filter), _)
+        if filter.deterministic =>
+      generateFilteredAggregateFunc(aggregateFunction, filter)
     case Abs(_, true) => generateExpressionWithName("ABS", expr, isPredicate)
     case _: Coalesce => generateExpressionWithName("COALESCE", expr, isPredicate)
     case _: Greatest => generateExpressionWithName("GREATEST", expr, isPredicate)
@@ -384,6 +387,27 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
           scalarFunc.name(), scalarFunc.canonicalName(), argumentExpressions.toArray[V2Expression]))
       } else {
         None
+      }
+    case _ => None
+  }
+
+  private def generateFilteredAggregateFunc(
+      aggregateFunction: AggregateFunction,
+      filter: Expression): Option[AggregateFunc] = aggregateFunction match {
+    case _: aggregate.Min | _: aggregate.Max | _: aggregate.Sum | _: aggregate.Average |
+        _: aggregate.Count if aggregateFunction.children.length == 1 =>
+      for {
+        predicate <- generatePredicate(filter)
+        child <- generateExpression(aggregateFunction.children.head)
+      } yield {
+        val input = new GeneralScalarExpression("CASE_WHEN", Array(predicate, child))
+        aggregateFunction match {
+          case _: aggregate.Min => new Min(input)
+          case _: aggregate.Max => new Max(input)
+          case _: aggregate.Sum => new Sum(input, false)
+          case _: aggregate.Average => new Avg(input, false)
+          case _: aggregate.Count => new Count(input, false)
+        }
       }
     case _ => None
   }
