@@ -202,7 +202,7 @@ fi
 unset AUTH_LINE
 
 echo "=== Verify: download back and compare SHA-256 ==="
-REMOTE_SHA=$(curl -sS --fail "${TARGET_URL}" | sha256sum | cut -d' ' -f1)
+REMOTE_SHA=$(curl -sS --fail -L "${TARGET_URL}" | sha256sum | cut -d' ' -f1)
 if [[ "${REMOTE_SHA}" != "${LOCAL_SHA}" ]]; then
     echo "ERROR: checksum mismatch after upload: local ${LOCAL_SHA}, remote ${REMOTE_SHA}"
     exit 4
