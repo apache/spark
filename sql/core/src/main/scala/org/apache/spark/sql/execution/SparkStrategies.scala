@@ -406,24 +406,22 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
                 canBroadcastBySize(plan, conf) && !blocked
               }
             }
-            val leftOk = qualifies(left, hintToBroadcastLeft(hint),
+            val canBuildLeft = qualifies(left, hintToBroadcastLeft(hint),
               hintToNotBroadcastAndReplicateLeft(hint)) && allowed(BuildLeft)
-            val rightOk = qualifies(right, hintToBroadcastRight(hint),
+            val canBuildRight = qualifies(right, hintToBroadcastRight(hint),
               hintToNotBroadcastAndReplicateRight(hint)) && allowed(BuildRight)
-            if (leftOk && rightOk) {
+            if (canBuildLeft && canBuildRight) {
               Some(getSmallerSide(left, right))
-            } else if (leftOk) {
+            } else if (canBuildLeft) {
               Some(BuildLeft)
-            } else if (rightOk) {
+            } else if (canBuildRight) {
               Some(BuildRight)
             } else {
               None
             }
           }
 
-          if (!conf.broadcastRangeJoinEnabled) {
-            None
-          } else {
+          if (conf.broadcastRangeJoinEnabled) {
             plan match {
               case ExtractRangeJoinKeys(_, leftKeys, rightKeys, rangeJoin, _, _) =>
                 val allowed = BroadcastRangeJoinExec.supports(joinType, _: BuildSide)
@@ -434,6 +432,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
                 }
               case _ => None
             }
+          } else {
+            None
           }
         }
 

@@ -332,8 +332,29 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
       assert(planned.size == 1)
       assert(planned.head.joinType == LeftOuter)
       assert(planned.head.buildSide == BuildRight)
-      assert(planned.head.rangeJoin == LessPartialRangeJoin)
+      assert(planned.head.rangeJoin == LessPartialRangeJoin(strict = true))
       checkAnswer(df, expected)
+    }
+  }
+
+  test("strict inequalities over duplicated build keys match the nested loop join") {
+    // 10,000 build rows over 100 dates, 100 per date. Under `<`, a point
+    // index that kept the probe's own key would surface 100 duplicates that
+    // all fail the condition before the first passing row; the strict scan
+    // must skip them, and semi/anti must still match the nested loop answers.
+    sql("CREATE OR REPLACE TEMP VIEW dup_dates(d) AS SELECT id % 100 FROM range(10000)")
+    sql("CREATE OR REPLACE TEMP VIEW probe_dates(d) AS SELECT id FROM range(100)")
+    val operators = Seq("<", "<=", ">", ">=")
+    val joinTypes = Seq("JOIN", "LEFT SEMI JOIN", "LEFT ANTI JOIN")
+    for (op <- operators; joinType <- joinTypes) {
+      val query =
+        s"SELECT p.d FROM probe_dates p $joinType dup_dates b ON p.d $op b.d"
+      val expected = sql(query).collect()
+      withRangeJoin() {
+        val df = sql(query)
+        assert(findRangeJoin(df.queryExecution.executedPlan).size == 1, query)
+        checkAnswer(df, expected)
+      }
     }
   }
 

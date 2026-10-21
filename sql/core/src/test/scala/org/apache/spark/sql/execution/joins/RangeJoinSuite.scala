@@ -244,7 +244,7 @@ class RangeJoinSuite extends QueryTest with SharedSparkSession {
       }, expected)
     }
     check(
-      LessPartialRangeJoin,
+      LessPartialRangeJoin(strict = true),
       (left, right) => LessThan(left.output.head, right.output(1)),
       Seq(
         (-1, 0, 1, 3), (-1, 0, 5, 7),
@@ -252,13 +252,13 @@ class RangeJoinSuite extends QueryTest with SharedSparkSession {
         (0, 2, 1, 3), (0, 2, 5, 7),
         (1, 5, 1, 3), (1, 5, 5, 7)).map(Row.fromTuple))
     check(
-      GreaterPartialRangeJoin,
+      GreaterPartialRangeJoin(strict = true),
       (left, right) => GreaterThan(left.output.head, right.output(1)),
       Seq((0, 1, -2, -1), (0, 2, -2, -1), (1, 5, -2, -1)).map(Row.fromTuple))
     // Same join, built from the other side: GreaterPartialRangeJoin + BuildLeft takes the
     // opposite PointIndex scan arm (from, not upTo) from the BuildRight case above.
     check(
-      GreaterPartialRangeJoin,
+      GreaterPartialRangeJoin(strict = true),
       (left, right) => GreaterThan(left.output.head, right.output(1)),
       Seq((0, 1, -2, -1), (0, 2, -2, -1), (1, 5, -2, -1)).map(Row.fromTuple),
       buildSide = BuildLeft)
@@ -280,6 +280,60 @@ class RangeJoinSuite extends QueryTest with SharedSparkSession {
         (0, 2, 1, 3),
         (1, 5, 1, 3)
       ).map(Row.fromTuple))
+  }
+
+  test("strict partial scans skip duplicated build keys instead of scanning them") {
+    // A strict inequality rejects build keys equal to the probe value, and the
+    // scan arm must skip them rather than surface them for the condition to
+    // reject one by one. With 10 duplicated rows per date and the probe at
+    // date 50, `<` must evaluate the condition on exactly the 49 later
+    // dates' rows and `>` on exactly the 50 earlier ones: an inclusive scan
+    // wired by mistake surfaces the probe's own 10 duplicates too, and an
+    // over-exclusive one silently drops passing rows. Both strict invariant
+    // answers are checked elsewhere; this pins the surfaced count itself.
+    val dup = 10
+    val n = 100
+    val probe = 50
+    val bounds = spark.createDataFrame(
+      sparkContext.parallelize((0 until n).flatMap(d => (0 until dup).map(_ => Row(d))), 1),
+      new StructType().add("b", IntegerType))
+    val points = spark.createDataFrame(
+      sparkContext.parallelize(Seq(Row(probe))),
+      new StructType().add("a", IntegerType))
+
+    val leftPlan = points.queryExecution.sparkPlan
+    val rightPlan = bounds.queryExecution.sparkPlan
+    val a = leftPlan.output.head
+    val b = rightPlan.output.head
+
+    // Strict `<` with the bound on the build side scans from the exclusive
+    // FROM bound; strict `>` scans up to the exclusive UP TO bound. The inner
+    // join evaluates every surfaced candidate, so each counter is exact.
+    val expectations = Seq(
+      (LessPartialRangeJoin(strict = true), LessThan(a, b), (n - 1 - probe) * dup),
+      (GreaterPartialRangeJoin(strict = true), GreaterThan(a, b), probe * dup))
+    Seq(true, false).foreach { codegenEnabled =>
+      val factoryMode = if (codegenEnabled) "CODEGEN_ONLY" else "NO_CODEGEN"
+      withSQLConf(
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled.toString,
+        SQLConf.CODEGEN_FALLBACK.key -> "false",
+        SQLConf.CODEGEN_FACTORY_MODE.key -> factoryMode) {
+        expectations.foreach { case (tag, cond, expected) =>
+          val counter = spark.sparkContext.longAccumulator("numCandidates")
+          val exec = rangeJoinExec(
+            leftPlan, rightPlan, BuildRight, Inner,
+            buildKeys = b :: Nil,
+            streamedKeys = a :: Nil,
+            condition = CountingPredicate(counter, cond),
+            rangeJoin = tag)
+          QueryTest.executePlan(exec, spark.sqlContext)
+          assert(counter.value == expected,
+            s"$tag (codegen=$codegenEnabled): examined ${counter.value} candidates, " +
+              s"expected exactly $expected, so the probe's own duplicated key was " +
+              "scanned or passing rows were dropped")
+        }
+      }
+    }
   }
 
   test("left semi and left anti stop probing once the first candidate matches") {
