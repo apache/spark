@@ -436,15 +436,6 @@ class SQLQueryTestSuite extends SharedSparkSession
     }
   }
 
-  private def canonicalTableName(session: SparkSession, tableName: String): Seq[String] = {
-    val analyzer = session.sessionState.analyzer
-    import analyzer.CatalogAndIdentifier
-
-    val multipartIdentifier = session.sessionState.sqlParser.parseMultipartIdentifier(tableName)
-    val CatalogAndIdentifier(catalog, identifier) = multipartIdentifier
-    Seq(catalog.name()) ++ identifier.namespace() :+ identifier.name()
-  }
-
   private def loadV1Table(session: SparkSession, tableName: String): Option[CatalogTable] = {
     val analyzer = session.sessionState.analyzer
     import analyzer.CatalogAndIdentifier
@@ -495,12 +486,8 @@ class SQLQueryTestSuite extends SharedSparkSession
       val flow = parseCreateTriggeredFlow(command)
       require(!flows.keys.exists(sameFlowName(session, _, flow.flowName)),
         s"Triggered flow ${formatFlowName(flow.flowName)} is already defined in this test run.")
-      val targetName = canonicalTableName(session, flow.targetTable)
       flows.values.find { registeredFlow =>
-        sameFlowName(
-          session,
-          canonicalTableName(session, registeredFlow.targetTable),
-          targetName)
+        session.sessionState.conf.resolver(registeredFlow.targetTable, flow.targetTable)
       }.foreach { registeredFlow =>
         throw new IllegalArgumentException(
           s"SQL golden triggered flow target table '${flow.targetTable}' is already written by " +
