@@ -6,7 +6,19 @@ OpenJDK 64-Bit Server VM 17.0.20.1+1-LTS on Linux 6.17.0-1022-azure
 AMD EPYC 7763 64-Core Processor
 window batch over two user key groups:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-baseline (window reorder off)                     24874          25160         348          0.7        1482.6       1.0X
-optimized (window reorder on)                     19455          19543         112          0.9        1159.6       1.3X
+baseline (window reorder off)                     25331          25698         439          0.7        1509.9       1.0X
+optimized (window reorder on)                     20076          20185          72          0.8        1196.6       1.3X
+
+
+================================================================================================
+WindowReorder: wide collect_list output in the window chain
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.20.1+1-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+ranking windows with a wide event list:   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+baseline (window reorder off)                     19162          19348         182          0.9        1142.2       1.0X
+optimized (window reorder on)                     17490          17578         110          1.0        1042.5       1.1X
 
 
