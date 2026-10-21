@@ -25,24 +25,47 @@ import org.apache.avro.io.{BinaryDecoder, DecoderFactory}
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, SpecificInternalRow, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
-import org.apache.spark.sql.catalyst.util.{FailFastMode, ParseMode, PermissiveMode}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, FailFastMode, ParseMode, PermissiveMode}
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 case class AvroDataToCatalyst(
     child: Expression,
     jsonFormatSchema: String,
-    options: Map[String, String])
+    options: Map[String, String],
+    // PERSISTED: capture at analysis (like JsonToStructs) so copy()/views keep
+    // creation-time CHAR/VARCHAR map-key checks, not the caller's session setting.
+    charVarcharStandardSemantics: Boolean,
+    charVarcharFirstClassTypes: Boolean)
   extends UnaryExpression with ExpectsInputTypes {
+
+  // Tests and 3-arg apply capture the current session flags.
+  def this(child: Expression, jsonFormatSchema: String, options: Map[String, String]) =
+    this(
+      child,
+      jsonFormatSchema,
+      options,
+      SQLConf.get.charVarcharStandardSemantics,
+      SQLConf.get.charVarcharFirstClassTypes)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
 
   override lazy val dataType: DataType = {
-    val dt = SchemaConverters.toSqlType(
+    val converted = SchemaConverters.toSqlType(
       expectedSchema,
       avroOptions.useStableIdForUnionType,
       avroOptions.stableIdPrefixForUnionType,
       avroOptions.recursiveFieldMaxDepth).dataType
+    // SchemaConverters restores CHAR/VARCHAR stamps from Avro even when first-class types
+    // are off. Use the analysis-time snapshot so copy() cannot drop CHAR map keys.
+    val dt = if (charVarcharFirstClassTypes) {
+      converted
+    } else {
+      // Conf-independent: replaceCharVarcharWithString would keep CHAR/VARCHAR if the
+      // live session has first-class types on.
+      CharVarcharUtils.replaceCharVarcharWithStringAlways(converted)
+    }
     parseMode match {
       // With PermissiveMode, the output Catalyst row might contain columns of null values for
       // corrupt records, even if some of the columns are not nullable in the user-provided schema.
@@ -69,7 +92,9 @@ case class AvroDataToCatalyst(
       avroOptions.datetimeRebaseModeInRead,
       avroOptions.useStableIdForUnionType,
       avroOptions.stableIdPrefixForUnionType,
-      avroOptions.recursiveFieldMaxDepth)
+      avroOptions.recursiveFieldMaxDepth,
+      applyCharVarcharAssignment = true,
+      charVarcharStandardSemanticsOverride = Some(charVarcharStandardSemantics))
 
   @transient private var decoder: BinaryDecoder = _
 
@@ -127,6 +152,9 @@ case class AvroDataToCatalyst(
 
   override def prettyName: String = "from_avro"
 
+  // Persist flags are not user arguments; omit them from EXPLAIN / Connect goldens.
+  override protected def stringArgs: Iterator[Any] = super.stringArgs.take(3)
+
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val expr = ctx.addReferenceObj("this", this)
     nullSafeCodeGen(ctx, ev, eval => {
@@ -145,4 +173,12 @@ case class AvroDataToCatalyst(
 
   override protected def withNewChildInternal(newChild: Expression): AvroDataToCatalyst =
     copy(child = newChild)
+}
+
+object AvroDataToCatalyst {
+  def apply(
+      child: Expression,
+      jsonFormatSchema: String,
+      options: Map[String, String]): AvroDataToCatalyst =
+    new AvroDataToCatalyst(child, jsonFormatSchema, options)
 }

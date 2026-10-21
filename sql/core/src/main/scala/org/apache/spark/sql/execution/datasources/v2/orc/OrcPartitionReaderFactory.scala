@@ -75,7 +75,8 @@ case class OrcPartitionReaderFactory(
   private def pushDownPredicates(orcSchema: TypeDescription, conf: Configuration): Unit = {
     if (orcFilterPushDown && filters.nonEmpty) {
       val fileSchema = OrcUtils.toCatalystSchema(orcSchema)
-      OrcFilters.createFilter(fileSchema, filters.toImmutableArraySeq).foreach { f =>
+      OrcFilters.createFilter(
+          fileSchema, filters.toImmutableArraySeq, Some(readDataSchema)).foreach { f =>
         OrcInputFormat.setSearchArgument(conf, f, fileSchema.fieldNames)
       }
     }

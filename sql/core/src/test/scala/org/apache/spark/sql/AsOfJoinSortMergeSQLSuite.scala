@@ -111,6 +111,38 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
         Row(Timestamp.valueOf("2026-06-29 10:00:12"), "MSFT", 50, 420.50)))
   }
 
+  gridTest("SQL ASOF JOIN uses sort-merge for mixed timestamp keys")(
+    for {
+      singlePass <- Seq(false, true)
+      sortMergeEnabled <- Seq(false, true)
+    } yield (singlePass, sortMergeEnabled)
+  ) { case (singlePass, sortMergeEnabled) =>
+    withSQLConf(
+        SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> sortMergeEnabled.toString,
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC",
+        SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_LTZ",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_ASOF_JOIN_RESOLUTION.key -> "true"
+    ) {
+      val query = sql(
+        """
+          |SELECT r.id
+          |FROM VALUES (TIMESTAMP '2026-06-29 10:00:05') AS l(ts)
+          |ASOF JOIN VALUES
+          |  (TIMESTAMP_NTZ '2026-06-29 10:00:00', 1),
+          |  (TIMESTAMP_NTZ '2026-06-29 10:00:04', 2),
+          |  (TIMESTAMP_NTZ '2026-06-29 10:00:06', 3) AS r(ts, id)
+          |  MATCH_CONDITION (l.ts >= r.ts)
+          |""".stripMargin
+      )
+      assertUsesSortMergeAsOfJoin(query)
+      // Single-pass analysis does not support the deserializer used by checkToRDD.
+      QueryTest.checkAnswer(df = query, expectedAnswer = Seq(Row(2)), checkToRDD = false)
+    }
+  }
+
   test("LEFT ASOF JOIN preserves unmatched left rows") {
     setupTradeQuoteViews()
     checkSortMergeAsOf(

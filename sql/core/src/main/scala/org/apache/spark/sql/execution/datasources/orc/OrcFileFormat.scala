@@ -198,7 +198,7 @@ class OrcFileFormat
         // ORC predicate pushdown
         if (orcFilterPushDown && filters.nonEmpty) {
           val fileSchema = OrcUtils.toCatalystSchema(orcSchema)
-          OrcFilters.createFilter(fileSchema, filters).foreach { f =>
+          OrcFilters.createFilter(fileSchema, filters, Some(requiredSchema)).foreach { f =>
             OrcInputFormat.setSearchArgument(conf, f, fileSchema.fieldNames)
           }
         }

@@ -22,6 +22,7 @@ import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch}
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
+import com.google.common.util.concurrent.Uninterruptibles
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.concurrent.Eventually._
 
@@ -132,6 +133,31 @@ class EventLoopSuite extends SparkFunSuite with TimeLimits {
     assert(1 === onStopTimes)
   }
 
+  test("EventLoop: interruption from onStop should preserve interrupt status and run once") {
+    var onStopTimes = 0
+    val eventLoop = new EventLoop[Int]("test") {
+      override def onReceive(event: Int): Unit = {}
+
+      override def onError(e: Throwable): Unit = {}
+
+      override def onStop(): Unit = {
+        onStopTimes += 1
+        throw new InterruptedException("interrupted onStop")
+      }
+    }
+
+    eventLoop.start()
+    try {
+      eventLoop.stop()
+      assert(Thread.currentThread().isInterrupted)
+      eventLoop.stop()
+      assert(onStopTimes === 1)
+    } finally {
+      Thread.interrupted()
+      eventLoop.stop()
+    }
+  }
+
   test("EventLoop: post event in multiple threads") {
     @volatile var receivedEventsCount = 0
     val eventLoop = new EventLoop[Int]("test") {
@@ -187,6 +213,81 @@ class EventLoopSuite extends SparkFunSuite with TimeLimits {
       eventLoop.stop()
     }
     assert(false === eventLoop.isActive)
+  }
+
+  Seq(true, false).foreach { interruptedBeforeStop =>
+    val interruptWhen = if (interruptedBeforeStop) "before stop" else "while joining"
+    test(s"EventLoop: stop waits for onReceive when caller is interrupted $interruptWhen") {
+      val onReceiveStarted = new CountDownLatch(1)
+      val finishOnReceive = new CountDownLatch(1)
+      val stopReturned = new CountDownLatch(1)
+      @volatile var onStopTimes = 0
+      @volatile var eventThreadAliveOnStop = false
+      @volatile var interruptedAfterStop = false
+      val eventLoop = new EventLoop[Int]("test") {
+        override def onReceive(event: Int): Unit = {
+          onReceiveStarted.countDown()
+          Uninterruptibles.awaitUninterruptibly(finishOnReceive)
+        }
+
+        override def onError(e: Throwable): Unit = {}
+
+        override def onStop(): Unit = {
+          eventThreadAliveOnStop = eventThread.isAlive
+          onStopTimes += 1
+        }
+      }
+      val stopThread = new Thread("stop-event-loop") {
+        override def run(): Unit = {
+          if (interruptedBeforeStop) {
+            interrupt()
+          }
+          eventLoop.stop()
+          interruptedAfterStop = isInterrupted
+          stopReturned.countDown()
+        }
+      }
+
+      eventLoop.start()
+      try {
+        eventLoop.post(1)
+        failAfter(5.seconds) {
+          onReceiveStarted.await()
+        }
+        stopThread.start()
+        if (!interruptedBeforeStop) {
+          eventually(timeout(5.seconds), interval(5.milliseconds)) {
+            assert(stopThread.getState === Thread.State.WAITING)
+          }
+          stopThread.interrupt()
+        }
+        eventually(timeout(5.seconds), interval(5.milliseconds)) {
+          // The join monitor keeps the wait-state and interrupt observations consistent.
+          eventLoop.eventThread.synchronized {
+            assert(stopReturned.getCount == 0 ||
+              (stopThread.getState == Thread.State.WAITING && !stopThread.isInterrupted))
+          }
+        }
+        assert(stopReturned.getCount === 1L)
+        assert(onStopTimes === 0)
+
+        finishOnReceive.countDown()
+        failAfter(5.seconds) {
+          stopReturned.await()
+        }
+        assert(!eventThreadAliveOnStop)
+        assert(interruptedAfterStop)
+        assert(onStopTimes === 1)
+        eventLoop.stop()
+        assert(onStopTimes === 1)
+      } finally {
+        finishOnReceive.countDown()
+        eventLoop.stop()
+        failAfter(5.seconds) {
+          stopThread.join()
+        }
+      }
+    }
   }
 
   test("EventLoop: stop in eventThread") {

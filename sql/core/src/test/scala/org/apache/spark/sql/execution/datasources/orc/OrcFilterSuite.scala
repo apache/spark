@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.orc
 import java.math.MathContext
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, LocalDateTime, LocalTime, Period, ZoneOffset}
+import java.time.{Duration, Instant, LocalDateTime, LocalTime, Period, ZoneOffset}
 
 import scala.jdk.CollectionConverters._
 
@@ -455,6 +455,85 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
                   In($"ts", Seq(ts(0), ts(2))), PredicateLeaf.Operator.IN)
               }
             }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60397: filter pushdown - nanosecond timestamp read with a lower precision") {
+    // A TIMESTAMP(9) value 1970-01-01 00:00:00.123456789 read as TIMESTAMP(7) is truncated to
+    // 00:00:00.1234567, while ORC evaluates a pushed down predicate against the stored value.
+    // For example, a pushed down `ts = 1970-01-01 00:00:00.1234567` would skip the stripe that
+    // holds the matching row.
+    withSQLConf(
+        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      Seq(
+        "TIMESTAMP_LTZ" -> ((s: String) => Instant.parse(s"1970-01-01T${s}Z")),
+        "TIMESTAMP_NTZ" -> ((s: String) => LocalDateTime.parse(s"1970-01-01T$s"))
+      ).foreach { case (tsType, toValue) =>
+        withTempPath { dir =>
+          sql(s"SELECT CAST(c AS $tsType(9)) AS ts FROM VALUES " +
+            "('1970-01-01 00:00:00.123456789'), ('1970-01-01 00:00:01'), (NULL) AS t(c)")
+            .coalesce(1).write.orc(dir.getCanonicalPath)
+          Seq(7, 8).foreach { p =>
+            val readDF = spark.read.schema(s"ts $tsType($p)").orc(dir.getCanonicalPath)
+            // The stored 00:00:00.123456789 is read as `v`, e.g. 00:00:00.1234567 for p = 7.
+            val v = "00:00:00." + "123456789".take(p)
+            def lit(s: String): String = s"CAST('1970-01-01 $s' AS $tsType($p))"
+            def check(condition: String, expected: Seq[String]): Unit = {
+              checkAnswer(readDF.where(condition), expected.map(s => Row(toValue(s))))
+            }
+            withAllNativeOrcReaders {
+              check(s"ts = ${lit(v)}", Seq(v))
+              check(s"ts <=> ${lit(v)}", Seq(v))
+              check(s"ts != ${lit(v)}", Seq("00:00:01"))
+              check(s"ts < ${lit("00:00:01")}", Seq(v))
+              check(s"ts <= ${lit(v)}", Seq(v))
+              check(s"ts > ${lit(v)}", Seq("00:00:01"))
+              check(s"ts >= ${lit(v)}", Seq(v, "00:00:01"))
+              check(s"ts IN (${lit(v)}, ${lit("00:00:02")})", Seq(v))
+              checkAnswer(readDF.where("ts IS NULL"), Row(null))
+              check("ts IS NOT NULL", Seq(v, "00:00:01"))
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60397: nanosecond timestamp predicates with a value are pushed down only if " +
+      "the read precision is not lower than the file precision") {
+    import org.apache.spark.sql.sources._
+    // The values of a TIMESTAMP(p) file have at most p fractional digits, and the reader truncates
+    // them to the read precision. So only IsNull and IsNotNull are pushed down for a lower one.
+    def schema(precision: Int): StructType = new StructType()
+      .add("ltz", TimestampLTZNanosType(precision))
+      .add("ntz", TimestampNTZNanosType(precision))
+    val ltz = Instant.parse("1970-01-01T00:00:00.1234567Z")
+    val ntz = LocalDateTime.parse("1970-01-01T00:00:00.1234567")
+    foreachNanosPrecision { filePrecision =>
+      foreachNanosPrecision { readPrecision =>
+        def createFilter(filter: Filter): Option[SearchArgument] = OrcFilters.createFilter(
+          schema(filePrecision), Seq(filter), Some(schema(readPrecision)))
+        val clue = s"file precision $filePrecision, read precision $readPrecision"
+        Seq[(String, Any)]("ltz" -> ltz, "ntz" -> ntz).foreach { case (name, value) =>
+          Seq(IsNull(name), IsNotNull(name)).foreach { filter =>
+            assert(createFilter(filter).isDefined, s"$filter, $clue")
+          }
+          Seq(
+            EqualTo(name, value),
+            EqualNullSafe(name, value),
+            Not(EqualTo(name, value)),
+            LessThan(name, value),
+            LessThanOrEqual(name, value),
+            GreaterThan(name, value),
+            GreaterThanOrEqual(name, value),
+            In(name, Array[Any](value))
+          ).foreach { filter =>
+            assert(createFilter(filter).isDefined === (readPrecision >= filePrecision),
+              s"$filter, $clue")
+          }
         }
       }
     }
