@@ -52,6 +52,10 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
       .replaceAll("plan_id=\\d+", "plan_id=x")
       .replaceAll("uuid\\(Some\\(-?\\d+\\)\\)", "uuid(Some(x))")
       .replaceAll(
+        "(?i)(EventTimeWatermark )\\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-" +
+          "[0-9a-f]{4}-[0-9a-f]{12}\\b",
+        "$1xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
+      .replaceAll(
         s"Location.*$clsName/",
         s"Location $notIncludedMsg/{warehouse_dir}/")
       .replaceAll(s"file:[^\\s,]*$clsName", s"file:$notIncludedMsg/{warehouse_dir}")
