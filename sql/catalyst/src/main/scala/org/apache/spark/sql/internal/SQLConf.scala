@@ -3215,7 +3215,8 @@ object SQLConf {
       .doc("When true, whole stage codegen splits the generated code of an expression that " +
         "supports it, such as a CASE WHEN with many branches, into methods that take the input " +
         "variables they read as parameters, the way code generation outside whole stage codegen " +
-        "splits it. In a stage whose expressions are split, the methods that subexpression " +
+        "splits it, and the outputs of a projection, each into a method of its own. In a stage " +
+        "whose expressions are split, the methods that subexpression " +
         "elimination's discarded first pass added are removed; and in every stage, a slot of " +
         "a compacted mutable state array counts as the field it is when code moves into a " +
         "method: an operator's method that took it as a parameter, and failed to compile, now " +
