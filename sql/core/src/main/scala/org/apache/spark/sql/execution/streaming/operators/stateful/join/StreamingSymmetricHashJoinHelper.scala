@@ -243,7 +243,12 @@ object StreamingSymmetricHashJoinHelper extends Logging {
           JoinStateKeyWatermarkPredicate(
             e,
             eventTimeWatermarkForEviction.get,
-            // An input without a late filter on this key can add rows below the previous bound.
+            // V4 can skip keys at or below the previous watermark only if late-input filtering
+            // rejects new rows in that range on this same key. A watermark on the other input's
+            // equality key can drive eviction even when this input has no watermark, or has one
+            // on a different column. New rows can then pass late-input filtering with keys
+            // already eligible for eviction. V4 must scan from the beginning to find them;
+            // otherwise, outer joins can fail to emit null rows for these unmatched inputs.
             eventTimeWatermarkForLateEvents.filter { _ =>
               oneSideInputAttributes.find(_.metadata.contains(delayKey))
                 .exists(oneSideJoinKeys(joinKeyOrdinalForWatermark.get).semanticEquals)
