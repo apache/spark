@@ -72,6 +72,20 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     }
   }
 
+  // SPARK-59561: the tests below shrink the executorManagement queue to a single slot and park
+  // its dispatch thread inside a listener, so that the next event is dropped on purpose. The
+  // ResourceProfileManager constructor has already posted SparkListenerResourceProfileAdded to
+  // the same queue; if the dispatch thread has not taken it yet, the first JobStart is dropped
+  // instead and the listener never runs. Drain the queue first, and bound the wait for the
+  // listener so that a miss fails fast with a message rather than hanging the suite.
+  private def postJobStartAndAwaitBlocked(bus: LiveListenerBus, blockStarted: Semaphore): Unit = {
+    bus.waitUntilEmpty()
+    bus.post(SparkListenerJobStart(0, 0, Seq.empty))
+    assert(blockStarted.tryAcquire(10, TimeUnit.SECONDS),
+      "the blocking listener did not receive the first JobStart; it was probably dropped " +
+        "from the one-slot executorManagement queue")
+  }
+
   private def post(event: SparkListenerEvent): Unit = {
     listenerBus.post(event)
     listenerBus.waitUntilEmpty()
@@ -153,8 +167,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     manager.start()
 
     try {
-      customBus.post(SparkListenerJobStart(0, 0, Seq.empty))
-      blockStarted.acquire()
+      postJobStartAndAwaitBlocked(customBus, blockStarted)
       // One post() call, delivered differently per queue: dropped on executorManagement
       // (capacity 1, already full), delivered normally on appStatus (unconstrained).
       customBus.post(SparkListenerJobStart(1, 0, Seq.empty))  // fills the single slot
@@ -437,8 +450,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     manager.start()
 
     try {
-      customBus.post(SparkListenerJobStart(0, 0, Seq.empty))
-      blockStarted.acquire()
+      postJobStartAndAwaitBlocked(customBus, blockStarted)
       customBus.post(SparkListenerJobStart(1, 0, Seq.empty))  // fills the single slot
 
       val stageInfos = (0 until 3).map { i =>
@@ -492,8 +504,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     manager.start()
 
     try {
-      customBus.post(SparkListenerJobStart(0, 0, Seq.empty))
-      blockStarted.acquire()
+      postJobStartAndAwaitBlocked(customBus, blockStarted)
       customBus.post(SparkListenerJobStart(1, 0, Seq.empty))  // fills the single slot
       val stageInfo = createStageInfo(0, 3)
       stageInfo.submissionTime = Some(System.currentTimeMillis())
@@ -548,8 +559,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     manager.start()
 
     try {
-      customBus.post(SparkListenerJobStart(0, 0, Seq.empty))
-      blockStarted.acquire()
+      postJobStartAndAwaitBlocked(customBus, blockStarted)
       customBus.post(SparkListenerJobStart(1, 0, Seq.empty))
       val stageInfo = createStageInfo(0, 3)
       stageInfo.submissionTime = Some(System.currentTimeMillis())
@@ -652,8 +662,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     manager.start()
 
     try {
-      customBus.post(SparkListenerJobStart(0, 0, Seq.empty))
-      blockStarted.acquire()
+      postJobStartAndAwaitBlocked(customBus, blockStarted)
       // One post() call, delivered differently per queue: dropped on executorManagement
       // (capacity 1, already full), delivered normally on appStatus (unconstrained).
       customBus.post(SparkListenerJobStart(1, 0, Seq.empty))  // fills the single slot
