@@ -178,6 +178,7 @@ LOCAL_SHA=$(sha256sum "${OUTPUT_DIR}/${PACKAGE}" | cut -d' ' -f1)
 echo "Built ${OUTPUT_DIR}/${PACKAGE}"
 echo "  size:   $(stat -c %s "${OUTPUT_DIR}/${PACKAGE}") bytes"
 echo "  sha256: ${LOCAL_SHA}"
+echo "  jars:   $(tar -tzf "${OUTPUT_DIR}/${PACKAGE}" | grep -c '/jars/.*\.jar$')"
 
 # --- Phase 4: upload and verify (only with --upload) ---
 if [[ "${UPLOAD}" != "true" ]]; then
