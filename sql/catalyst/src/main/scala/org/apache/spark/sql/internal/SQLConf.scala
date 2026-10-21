@@ -5077,19 +5077,15 @@ object SQLConf {
   val WINDOW_REORDER_ENABLED =
     buildConf("spark.sql.optimizer.windowReorder.enabled")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
-      .doc("When true, the optimizer reorders a stack of adjacent window operators (connected " +
-        "by simple projections) to reduce shuffles when their partition specs nest or repeat, " +
-        "and may place windows that share the same complete required child ordering next to " +
-        "each other so they can share a sort or be merged. The resulting shuffle count is not " +
-        "guaranteed to be minimal: the child's existing partitioning is not considered, and " +
-        "sorts are not minimized. Among exchange-minimal orders, windows producing " +
-        "collection-typed outputs (for example collect_list) are placed near the top of " +
-        "the stack, so those unbounded per-row payloads do not cross another group's " +
-        "shuffle; narrower outputs are not detected. If a stack cannot be reordered as a " +
-        "whole, or a projection computing new columns cuts it into one-window runs, the " +
-        "rule still applies those adjacent-pair swaps to the affected windows, so enabling " +
-        "this does not lose a swap the disabled rule would do (a window kept on top by a " +
-        "rank filter excepted). When false, only those adjacent-pair swaps are applied.")
+      .doc("When true, the optimizer reorders a stack of adjacent window operators to reduce " +
+        "shuffles when their PARTITION BY columns nest or repeat, and places windows with " +
+        "compatible sort orders next to each other to share a sort. The shuffle count is " +
+        "not guaranteed to be minimal, and over input already partitioned for one of the " +
+        "windows this can even add an exchange. Among orders with the same number of " +
+        "shuffles, windows with collection-typed outputs (for example collect_list) are " +
+        "placed near the top of the stack, so unbounded per-row payloads cross fewer " +
+        "shuffles. When false, two adjacent window operators are swapped only when the " +
+        "upper one's PARTITION BY columns are a strict subset of the lower one's.")
       .version("4.4.0")
       .booleanConf
       .createWithDefault(false)

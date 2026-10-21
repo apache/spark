@@ -19,20 +19,22 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.window.{WindowExec, WindowGroupLimitExec}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{col, lit, row_number, sum}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.ArrayType
+import org.apache.spark.sql.types.{ArrayType, MapType}
 
 /**
  * SQL end-to-end tests for window stack reordering done by the `TransposeWindow` optimizer
  * rule, run through a full SparkSession. The logical-rule transformations themselves are
  * covered in [[org.apache.spark.sql.catalyst.optimizer.TransposeWindowSuite]].
  */
-class TransposeWindowQuerySuite extends QueryTest with SharedSparkSession {
+class TransposeWindowQuerySuite extends QueryTest with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
 
   private def withInput(f: => Unit): Unit = {
     withTempView("t") {
@@ -44,14 +46,22 @@ class TransposeWindowQuerySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  // AQE-aware counters: under AQE the plan's top is an AdaptiveSparkPlanExec and each
+  // stage boundary is a QueryStageExec, and both are leaf wrappers, so a plain collect
+  // on the executed plan sees none of the operators below them. The
+  // AdaptiveSparkPlanHelper walk counts through the wrappers, and behaves identically
+  // to a plain collect when AQE is disabled. distinct guards against counting an
+  // exchange reachable through more than one query stage twice.
   private def numExchanges(df: DataFrame): Int =
-    df.queryExecution.executedPlan.collect { case _: ShuffleExchangeExec => () }.size
+    collect(df.queryExecution.executedPlan) {
+      case s: ShuffleExchangeExec => s
+    }.distinct.size
 
   private def numWindows(df: DataFrame): Int =
-    df.queryExecution.executedPlan.collect { case _: WindowExec => () }.size
+    collect(df.queryExecution.executedPlan) { case w: WindowExec => w }.size
 
   private def numSorts(df: DataFrame): Int =
-    df.queryExecution.executedPlan.collect { case _: SortExec => () }.size
+    collect(df.queryExecution.executedPlan) { case s: SortExec => s }.size
 
   /** Plans the DataFrame eagerly so the plan is fixed under the current withSQLConf scope. */
   private def planned(df: DataFrame): DataFrame = {
@@ -191,6 +201,120 @@ class TransposeWindowQuerySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("a window rides a longer sort its required ordering is a prefix of") {
+    // Bottom-to-top: m PARTITION BY k3 ORDER BY v, l PARTITION BY k1 ORDER BY k3, v, k2,
+    // x PARTITION BY k1, k3 ORDER BY v. x can ride both minimal specs, [k3] and [k1], and
+    // its required ordering [k1, k3, v] is a proper prefix of l's [k1, k3, v, k2], so it
+    // joins l's group and reuses l's sort: 2 exchanges and 2 sorts. Joining the [k3]
+    // group instead would emit m, x, l, forcing a third sort for x over hash(k3).
+    // `checkAnswer` compares the answers without making the physical row order of the
+    // unordered queries part of the contract.
+    val query =
+      """
+        |SELECT k1, k2, k3, v,
+        |  sum(v) OVER (PARTITION BY k3 ORDER BY v) AS m,
+        |  sum(v) OVER (PARTITION BY k1 ORDER BY k3, v, k2) AS l,
+        |  sum(v) OVER (PARTITION BY k1, k3 ORDER BY v) AS x
+        |FROM t
+      """.stripMargin
+
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withInput {
+        val actualDf = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+          val df = sql(query)
+          assert(numWindows(df) == 3)
+          assert(numExchanges(df) == 2)
+          assert(numSorts(df) == 2)
+          planned(df)
+        }
+        val expected = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "false") {
+          sql(query).collect()
+        }
+        checkAnswer(actualDf, expected)
+      }
+    }
+  }
+
+  test("a prefix rider moves beside its provider across a burying window") {
+    // Bottom-to-top: m PARTITION BY k3 ORDER BY v, l PARTITION BY k1 ORDER BY k3, v, k4,
+    // b PARTITION BY k1, k2 ORDER BY k4, x PARTITION BY k1, k3 ORDER BY v. b is not a
+    // rider of l ([k1, k2, k4] is not a prefix of [k1, k3, v, k4]), so in the input
+    // order b's sort buries l's ordering under x and x -- whose required ordering
+    // [k1, k3, v] is a proper prefix of l's -- pays its own sort: 4 sorts, and no
+    // pairwise swap applies. The reorder pulls x directly above l, one sort less.
+    // `checkAnswer` compares the answers without making the physical row order of the
+    // unordered queries part of the contract.
+    val query =
+      """
+        |SELECT k1, k2, k3, k4, v,
+        |  sum(v) OVER (PARTITION BY k3 ORDER BY v) AS m,
+        |  sum(v) OVER (PARTITION BY k1 ORDER BY k3, v, k4) AS l,
+        |  sum(v) OVER (PARTITION BY k1, k2 ORDER BY k4) AS b,
+        |  sum(v) OVER (PARTITION BY k1, k3 ORDER BY v) AS x
+        |FROM t
+      """.stripMargin
+
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withInput {
+        val actualDf = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+          val df = sql(query)
+          assert(numWindows(df) == 4)
+          assert(numExchanges(df) == 2)
+          assert(numSorts(df) == 3)
+          planned(df)
+        }
+        val expected = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "false") {
+          val df = sql(query)
+          assert(numWindows(df) == 4)
+          assert(numExchanges(df) == 2)
+          assert(numSorts(df) == 4)
+          df.collect()
+        }
+        checkAnswer(actualDf, expected)
+      }
+    }
+  }
+
+  test("a maximal candidate leads to save a sort") {
+    // Bottom-to-top: l2 PARTITION BY k1 ORDER BY k2, v, l1 PARTITION BY k1 ORDER BY
+    // k3, w PARTITION BY k1, k2 ORDER BY v, k3. l2 is the first [k1] candidate but
+    // not maximal: w extends its ordering [k1, k2, v]. No pairwise swap applies, so
+    // the default plan keeps l2 at the bottom and its sort [k1, k2, v] is stranded
+    // under l1's incompatible [k1, k3] (EnsureRequirements cannot push w's sort below
+    // l1): 3 sorts. The maximal candidate l1 leads and w's chain follows with l2
+    // riding its sort: 2 sorts.
+    // `checkAnswer` compares the answers without making the physical row order of the
+    // unordered queries part of the contract.
+    val query =
+      """
+        |SELECT k1, k2, v,
+        |  sum(v) OVER (PARTITION BY k1 ORDER BY k2, v) AS l2,
+        |  sum(v) OVER (PARTITION BY k1 ORDER BY k3) AS l1,
+        |  sum(v) OVER (PARTITION BY k1, k2 ORDER BY v, k3) AS w
+        |FROM t
+      """.stripMargin
+
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withInput {
+        val actualDf = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+          val df = sql(query)
+          assert(numWindows(df) == 3)
+          assert(numExchanges(df) == 1)
+          assert(numSorts(df) == 2)
+          planned(df)
+        }
+        val expected = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "false") {
+          val df = sql(query)
+          assert(numWindows(df) == 3)
+          assert(numExchanges(df) == 1)
+          assert(numSorts(df) == 3)
+          df.collect()
+        }
+        checkAnswer(actualDf, expected)
+      }
+    }
+  }
+
   test("window with an empty order spec and a relative frame blocks reordering") {
     // The running sum has no ORDER BY, so its ROWS ... CURRENT ROW frame covers whatever
     // row prefix the operator receives; a full stack permute would change that order and
@@ -230,9 +354,11 @@ class TransposeWindowQuerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("rank filter over a reordered chain still gets a window group limit") {
-    // The row_number window is pinned on top for InferWindowGroupLimit. A merge-safe pin
-    // refuses to put the same-spec RANGE sum directly under rn (that would lose the group
-    // limit after CollapseWindow), so this asserts WGL rather than a specific exchange count.
+    // All three windows ride the single minimal spec [k1, k2], so the unpinned reorder
+    // (f1, p1, rn bottom-to-top) already keeps rn on top riding f1's exchange: no pin
+    // is needed. The reorder inserts a pass-through restoring project at the chain top,
+    // and PushDownPredicates moves the filter below it, restoring the Filter-over-Window
+    // shape InferWindowGroupLimit needs.
     val query =
       """
         |SELECT * FROM (
@@ -262,9 +388,11 @@ class TransposeWindowQuerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("rank filter with a computed top project still gets a window group limit") {
-    // The derived alias n is computed by the subquery project between the row_number
-    // window and the outer rank filter. The rank conjunct pins the top window; predicate
-    // pushdown later restores the Filter-over-Window shape for InferWindowGroupLimit.
+    // The derived alias n is computed by the subquery project above the row_number
+    // window. PushDownPredicates runs before TransposeWindow in the operator batch and
+    // pushes both conjuncts below the project (n rewrites to v + k1), so the reorder
+    // sees the filter directly on the window stack; as in the previous test the unpinned
+    // order keeps rn on top riding f1's exchange, so no pin is needed.
     val query =
       """
         |SELECT * FROM (
@@ -420,8 +548,18 @@ class TransposeWindowQuerySuite extends QueryTest with SharedSparkSession {
           }.isEmpty)
           planned(df)
         }
+        // The other side of the tradeoff: the un-reordered stack pays one exchange per
+        // window (4) but keeps the group limit -- two WindowGroupLimitExec nodes, since
+        // the planner splits the logical WindowGroupLimit into Partial below the rank
+        // window's exchange and Final above it.
         val expected = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "false") {
-          rankFiltered.collect()
+          val df = rankFiltered
+          val rows = df.collect()
+          assert(numExchanges(df) == 4)
+          assert(df.queryExecution.executedPlan.collect {
+            case _: WindowGroupLimitExec => ()
+          }.size == 2)
+          rows
         }
         checkAnswer(actualDf, expected)
       }
@@ -499,6 +637,43 @@ class TransposeWindowQuerySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("map output stays above the other group's exchange") {
+    // Same stack as the collect_list test with the wide window typed as a bare MapType:
+    // first_value over a map output reaches hasWideOutput's MapType arm, which no
+    // collect_list test exercises. (k1) and (k2) key the two minimal exchanges; the map
+    // window on (k1, k3) rides only the (k1) exchange, and first appearance would move
+    // it below the (k2) exchange and ship each partition's map through that shuffle, so
+    // the wide group must rank last instead. ORDER BY v is unique, so the maps are
+    // deterministic across the compared plans.
+    val query =
+      """
+        |SELECT k1, k2, k3, v,
+        |  sum(v) OVER (PARTITION BY k1 ORDER BY v) AS s1,
+        |  sum(v) OVER (PARTITION BY k2 ORDER BY v) AS s4,
+        |  first_value(map(k1, v)) OVER (PARTITION BY k1, k3 ORDER BY v) AS m
+        |FROM t
+      """.stripMargin
+
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withInput {
+        val actualDf = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+          val df = sql(query)
+          assert(numWindows(df) == 3)
+          assert(numExchanges(df) == 2)
+          val topWindow = df.queryExecution.executedPlan.collect {
+            case w: WindowExec => w
+          }.head
+          assert(topWindow.windowExpression.exists(_.dataType.isInstanceOf[MapType]))
+          planned(df)
+        }
+        val expected = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "false") {
+          sql(query).collect()
+        }
+        checkAnswer(actualDf, expected)
+      }
+    }
+  }
+
   test("pinned reorder survives a merge cascade through an inherited order spec") {
     // Same stack, but r has no ORDER BY: it cannot merge into rn on its own (an
     // empty-order child merging into an ordered parent is gated off by default), yet
@@ -531,6 +706,70 @@ class TransposeWindowQuerySuite extends QueryTest with SharedSparkSession {
           rankFiltered.collect()
         }
         checkAnswer(actualDf, expected)
+      }
+    }
+  }
+
+  test("reorder win and pinned WindowGroupLimit survive adaptive execution") {
+    // The other tests disable AQE, so the two deployment-facing properties are pinned
+    // nowhere: the exchange reduction (the AQE-off counterpart asserts 2 on this same
+    // query) and the pinned rank window's WindowGroupLimit. Under AQE the final plan
+    // exists only once the query has run, so each side is collected inside its conf
+    // scope before the counters read it. AQE re-optimizes exchange widths from runtime
+    // statistics, but a distribution-required exchange is never removed, so the distinct
+    // exchange count and the WindowGroupLimit node stay assertable. The thread-leak
+    // warning this logs (QueryStageCreator, shuffle-exchange daemons) is benign daemon
+    // noise; this suite logs similar warnings on its AQE-off runs.
+    val stacked =
+      """
+        |SELECT k1, k2, k3, k4, v,
+        |  sum(v) OVER (PARTITION BY k1, k2 ORDER BY k1) AS f1,
+        |  sum(v) OVER (PARTITION BY k1, k2, k3 ORDER BY k1) AS p1,
+        |  sum(v) OVER (PARTITION BY k1, k4 ORDER BY k1) AS s1,
+        |  sum(v) OVER (PARTITION BY k1, k2 ORDER BY k2) AS f2,
+        |  sum(v) OVER (PARTITION BY k1, k2, k3 ORDER BY k2) AS p2,
+        |  sum(v) OVER (PARTITION BY k1, k4 ORDER BY k2) AS s2
+        |FROM t
+      """.stripMargin
+
+    def rankFiltered: DataFrame = {
+      val t = spark.table("t")
+      val wA = Window.partitionBy("k1", "k2").orderBy("k1")
+      val wS = Window.partitionBy("k1", "k4").orderBy("k1")
+      val wRn = Window.partitionBy("k1", "k2").orderBy("k1")
+      t.withColumn("a", sum("v").over(wA))
+        .withColumn("s", sum("v").over(wS))
+        .withColumn("rn", row_number().over(wRn))
+        .where(col("rn") <= 1)
+    }
+
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      withInput {
+        // Baseline: the un-reordered plan under AQE.
+        val expected = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "false") {
+          val df = sql(stacked)
+          val rows = df.collect()
+          assert(numExchanges(df) == 4)
+          rows
+        }
+
+        // The reordered plan keeps its exchange win under AQE.
+        val actualDf = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+          val df = sql(stacked)
+          df.collect()
+          assert(numExchanges(df) == 2)
+          df
+        }
+        checkAnswer(actualDf, expected)
+
+        // The pin keeps the rank window's WindowGroupLimit under AQE.
+        withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+          val df = rankFiltered
+          df.collect()
+          assert(collect(df.queryExecution.executedPlan) {
+            case _: WindowGroupLimitExec => ()
+          }.nonEmpty)
+        }
       }
     }
   }
