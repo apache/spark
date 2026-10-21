@@ -437,7 +437,7 @@ case class ShuffledHashJoinExec private (
       case BuildRight => streamedResultVars ++ buildResultVars
     }
     val consumeOuterJoinRow = ctx.freshName("consumeOuterJoinRow")
-    ctx.addNewFunction(consumeOuterJoinRow,
+    val consumeOuterJoinRowFuncName = ctx.addNewFunction(consumeOuterJoinRow,
       s"""
          |private void $consumeOuterJoinRow() throws java.io.IOException {
          |  ${metricTerm(ctx, "numOutputRows")}.add(1);
@@ -448,11 +448,11 @@ case class ShuffledHashJoinExec private (
     val isFullOuterJoin = joinType == FullOuter
     val joinWithUniqueKey = codegenBuildSideOrFullOuterJoinWithUniqueKey(
       ctx, (streamedRow, buildRow), (streamedInput, buildInput), streamedKeyEv, streamedKeyAnyNull,
-      streamedKeyExprCode.value, relationTerm, conditionCheck, consumeOuterJoinRow,
+      streamedKeyExprCode.value, relationTerm, conditionCheck, consumeOuterJoinRowFuncName,
       isFullOuterJoin)
     val joinWithNonUniqueKey = codegenBuildSideOrFullOuterJoinNonUniqueKey(
       ctx, (streamedRow, buildRow), (streamedInput, buildInput), streamedKeyEv, streamedKeyAnyNull,
-      streamedKeyExprCode.value, relationTerm, conditionCheck, consumeOuterJoinRow,
+      streamedKeyExprCode.value, relationTerm, conditionCheck, consumeOuterJoinRowFuncName,
       isFullOuterJoin)
 
     s"""

@@ -841,7 +841,7 @@ case class SortMergeJoinExec(
     // Generate code for result output in separate function, as we need to output result from
     // multiple places in join code.
     val consumeFullOuterJoinRow = ctx.freshName("consumeFullOuterJoinRow")
-    ctx.addNewFunction(consumeFullOuterJoinRow,
+    val consumeFullOuterJoinRowFuncName = ctx.addNewFunction(consumeFullOuterJoinRow,
       s"""
          |private void $consumeFullOuterJoinRow() throws java.io.IOException {
          |  ${metricTerm(ctx, "numOutputRows")}.add(1);
@@ -855,14 +855,14 @@ case class SortMergeJoinExec(
          |$leftOutputRow = $leftInputRow;
          |$rightOutputRow = null;
          |$leftInputRow = null;
-         |$consumeFullOuterJoinRow();
+         |$consumeFullOuterJoinRowFuncName();
        """.stripMargin
     val outputRightNoMatch =
       s"""
          |$rightOutputRow = $rightInputRow;
          |$leftOutputRow = null;
          |$rightInputRow = null;
-         |$consumeFullOuterJoinRow();
+         |$consumeFullOuterJoinRowFuncName();
        """.stripMargin
 
     // Generate a function to scan both sides to find rows with matched join keys.
@@ -881,7 +881,7 @@ case class SortMergeJoinExec(
     //            `rightBuffer`. Reset bit sets for both buffers accordingly (`leftMatched` and
     //            `rightMatched`).
     val findNextJoinRowsFuncName = ctx.freshName("findNextJoinRows")
-    ctx.addNewFunction(findNextJoinRowsFuncName,
+    val findNextJoinRowsFuncFullName = ctx.addNewFunction(findNextJoinRowsFuncName,
       s"""
          |private void $findNextJoinRowsFuncName(
          |    scala.collection.Iterator leftIter,
@@ -978,7 +978,7 @@ case class SortMergeJoinExec(
          |  for ($rightIndex = 0; $rightIndex < $rightBuffer.size(); $rightIndex++) {
          |    $rightOutputRow = (InternalRow) $rightBuffer.get($rightIndex);
          |    $conditionCheck {
-         |      $consumeFullOuterJoinRow();
+         |      $consumeFullOuterJoinRowFuncName();
          |      $leftMatched.set($leftIndex);
          |      $rightMatched.set($rightIndex);
          |    }
@@ -987,7 +987,7 @@ case class SortMergeJoinExec(
          |  if (!$leftMatched.get($leftIndex)) {
          |
          |    $rightOutputRow = null;
-         |    $consumeFullOuterJoinRow();
+         |    $consumeFullOuterJoinRowFuncName();
          |  }
          |}
          |
@@ -996,7 +996,7 @@ case class SortMergeJoinExec(
          |  if (!$rightMatched.get($rightIndex)) {
          |    // The right row has never matched any left row, join it with null row
          |    $rightOutputRow = (InternalRow) $rightBuffer.get($rightIndex);
-         |    $consumeFullOuterJoinRow();
+         |    $consumeFullOuterJoinRowFuncName();
          |  }
          |}
        """.stripMargin
@@ -1004,7 +1004,7 @@ case class SortMergeJoinExec(
     s"""
        |while (($leftInputRow != null || $leftInput.hasNext()) &&
        |  ($rightInputRow != null || $rightInput.hasNext())) {
-       |  $findNextJoinRowsFuncName($leftInput, $rightInput);
+       |  $findNextJoinRowsFuncFullName($leftInput, $rightInput);
        |  $matchRowsInBuffer
        |  if (shouldStop()) return;
        |}
