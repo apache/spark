@@ -164,7 +164,7 @@ supported set for the current options by overriding this `DataSource` method:
 fn capabilities(&self, supported: Capabilities) -> Capabilities {
     if self.read_only {
         // Also removes Truncate, which requires batch writes.
-        supported.without(SourceCapability::BatchWrite)
+        supported.without(Capabilities::BATCH_WRITE)
     } else {
         supported
     }

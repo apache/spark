@@ -29,7 +29,7 @@ framework and Java 22 or later on the driver and executors. The JNI SDK prototyp
 targets a different interface.
 
 Naming `RangeScan` as the `ScanBuilder`, with `type BatchWrite = Unsupported`, derives the
-`BatchRead` capability and the native mask `SPARK_DS_BATCH_READ` (`1`); the connector does not
+`BATCH_READ` capability and the native mask `SPARK_DS_BATCH_READ` (`1`); the connector does not
 maintain a separate capability list. Connectors can narrow their operations through
 `DataSource::capabilities()` based on options. This example does not implement writes or
 Structured Streaming. The companion [file sink](../native-data-sink/README.md) demonstrates batch

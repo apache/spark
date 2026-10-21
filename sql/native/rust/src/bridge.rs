@@ -27,8 +27,8 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use crate::{
     BatchWrite, Capabilities, CreateInfo, DataSource, FilterSupport, LimitSupport, LogLevel,
-    PartitionReaderFactory, Predicate, ReaderContext, Result, ScanBuilder, SourceCapability,
-    TaskContext, WriteInfo, WriteMode,
+    PartitionReaderFactory, Predicate, ReaderContext, Result, ScanBuilder, TaskContext, WriteInfo,
+    WriteMode,
 };
 
 use crate::write::DriverWriter;
@@ -110,7 +110,7 @@ impl<S: DataSource> Bridge<S> {
         let source = get(&self.sources, handle)?;
         let builder = {
             let source = lock(&source);
-            if !source.capabilities.contains(SourceCapability::BatchRead) {
+            if !source.capabilities.contains(Capabilities::BATCH_READ) {
                 return Err("source does not support batch reads".into());
             }
             source.source.new_scan(schema.clone())?
@@ -188,11 +188,11 @@ impl<S: DataSource> Bridge<S> {
         let schema = info.schema.clone();
         let plan = {
             let source = lock(&source);
-            if !source.capabilities.contains(SourceCapability::BatchWrite) {
+            if !source.capabilities.contains(Capabilities::BATCH_WRITE) {
                 return Err("source does not support batch writes".into());
             }
             if info.mode == WriteMode::Truncate
-                && !source.capabilities.contains(SourceCapability::Truncate)
+                && !source.capabilities.contains(Capabilities::TRUNCATE)
             {
                 return Err("source does not support truncate".into());
             }
@@ -905,7 +905,7 @@ mod tests {
         for (declared, expected) in [
             (Capabilities::all(), crate::abi::BATCH_READ),
             (Capabilities::empty(), 0),
-            (Capabilities::all().without(SourceCapability::BatchRead), 0),
+            (Capabilities::all().without(Capabilities::BATCH_READ), 0),
         ] {
             let (handle, mask) = bridge.register_source(Narrowing(declared)).unwrap();
             assert_eq!(mask, expected, "{declared:?}");

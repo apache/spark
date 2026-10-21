@@ -31,8 +31,8 @@ use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use serde::{Deserialize, Serialize};
 use spark_native_source::{
     BatchWrite, Capabilities, CreateInfo, DataSource, DataWriter, DataWriterFactory,
-    PartitionWriter, Result, SourceCapability, TaskContext, Unsupported, WriteInfo, WriteMode,
-    WritePlan, WriterContext,
+    PartitionWriter, Result, TaskContext, Unsupported, WriteInfo, WriteMode, WritePlan,
+    WriterContext,
 };
 
 spark_native_source::export_data_source!(JsonSink);
@@ -82,7 +82,7 @@ impl DataSource for JsonSink {
     fn capabilities(&self, supported: Capabilities) -> Capabilities {
         if self.readonly {
             // Also removes Truncate, which requires batch writes.
-            supported.without(SourceCapability::BatchWrite)
+            supported.without(Capabilities::BATCH_WRITE)
         } else {
             supported
         }
@@ -749,8 +749,8 @@ mod tests {
         ]))
         .unwrap();
         let capabilities = source.capabilities(Capabilities::all());
-        assert!(!capabilities.contains(SourceCapability::BatchWrite));
-        assert!(!capabilities.contains(SourceCapability::Truncate));
+        assert!(!capabilities.contains(Capabilities::BATCH_WRITE));
+        assert!(!capabilities.contains(Capabilities::TRUNCATE));
         assert!(new_write(&source, WriteMode::Append).is_err());
         assert!(!path.exists());
     }

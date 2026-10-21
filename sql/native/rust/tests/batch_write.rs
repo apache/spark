@@ -29,8 +29,8 @@ use spark_native_source::__private::abi::{
 };
 use spark_native_source::{
     BatchWrite, Capabilities, CreateInfo, DataSource, DataWriter, DataWriterFactory,
-    PartitionWriter, Result, SourceCapability, TaskContext, Unsupported, WriteInfo, WriteMode,
-    WritePlan, WriterContext,
+    PartitionWriter, Result, TaskContext, Unsupported, WriteInfo, WriteMode, WritePlan,
+    WriterContext,
 };
 
 // Each test exercises the actual exported table; this lock isolates fixture observations.
@@ -92,7 +92,7 @@ impl DataSource for Source {
     fn capabilities(&self, supported: Capabilities) -> Capabilities {
         match self.capabilities.as_str() {
             "none" => Capabilities::empty(),
-            "append" => supported.without(SourceCapability::Truncate),
+            "append" => supported.without(Capabilities::TRUNCATE),
             _ => supported,
         }
     }

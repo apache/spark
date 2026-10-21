@@ -22,7 +22,6 @@
 //! Rust traits stay inside the plugin; they are not an ABI between dynamic libraries.
 
 use std::collections::BTreeMap;
-use std::fmt;
 
 use arrow_array::{RecordBatch, RecordBatchReader};
 use arrow_schema::SchemaRef;
@@ -31,6 +30,7 @@ use serde::{Deserialize, Serialize};
 
 mod abi;
 mod bridge;
+mod capabilities;
 mod export;
 mod host;
 mod predicate;
@@ -53,6 +53,7 @@ pub mod __private {
     }
 }
 
+pub use capabilities::Capabilities;
 pub use host::{log, HostInfo, LogLevel};
 pub use predicate::{LiteralValue, Predicate};
 pub use task::{TaskContext, TaskContextBuilder};
@@ -60,142 +61,9 @@ pub use task::{TaskContext, TaskContextBuilder};
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub type Result<T> = std::result::Result<T, Error>;
 pub type Options = BTreeMap<String, String>;
-/// The lazy Arrow reader of one partition, which [`PartitionReaderFactory::open`] returns.
-pub type PartitionReader<'task> = Box<dyn RecordBatchReader + Send + 'task>;
-/// The writer of one task attempt, which [`DataWriterFactory::open`] returns.
-pub type PartitionWriter<'task, M> = Box<dyn DataWriter<Message = M> + 'task>;
 
-/// A native operation of a source instance.
-///
-/// These are native capabilities, not Spark's Data Source V2 routing flags or
-/// per-scan pushdown results. Streaming operations are not implemented by this SDK yet.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum SourceCapability {
-    BatchRead,
-    BatchWrite,
-    /// Batch writes that replace the existing data. Requires `BatchWrite`.
-    Truncate,
-}
-
-impl SourceCapability {
-    const ALL: [Self; 3] = [Self::BatchRead, Self::BatchWrite, Self::Truncate];
-
-    const fn bit(self) -> u64 {
-        match self {
-            Self::BatchRead => abi::BATCH_READ,
-            Self::BatchWrite => abi::BATCH_WRITE,
-            Self::Truncate => abi::TRUNCATE,
-        }
-    }
-}
-
-/// The native operations that a source instance supports with its effective options.
-///
-/// A source implements the operations whose types in [`DataSource`] are not
-/// [`Unsupported`]. [`DataSource::capabilities`] receives them and can only remove some,
-/// so a source cannot enable an operation that it does not implement. Removing
-/// `BatchWrite` also removes `Truncate`.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub struct Capabilities(u64);
-
-impl Capabilities {
-    /// No operations. A source without capabilities still supports schema discovery.
-    pub const fn empty() -> Self {
-        Self(0)
-    }
-
-    /// Every operation that this SDK implements, to test [`DataSource::capabilities`].
-    /// The SDK keeps only the operations that the source implements.
-    pub const fn all() -> Self {
-        Self(abi::BATCH_READ | abi::BATCH_WRITE | abi::TRUNCATE)
-    }
-
-    pub const fn contains(self, capability: SourceCapability) -> bool {
-        self.0 & capability.bit() != 0
-    }
-
-    pub const fn is_empty(self) -> bool {
-        self.0 == 0
-    }
-
-    /// Removes an operation, and also `Truncate` when it removes `BatchWrite`.
-    #[must_use]
-    pub const fn without(self, capability: SourceCapability) -> Self {
-        let removed = match capability {
-            SourceCapability::BatchWrite => abi::BATCH_WRITE | abi::TRUNCATE,
-            other => other.bit(),
-        };
-        Self(self.0 & !removed)
-    }
-
-    /// The operations of a source that implements batch reads, batch writes, and truncation.
-    pub(crate) const fn implemented(read: bool, write: bool, truncate: bool) -> Self {
-        let mut bits = 0;
-        if read {
-            bits |= abi::BATCH_READ;
-        }
-        if write {
-            bits |= abi::BATCH_WRITE;
-            if truncate {
-                bits |= abi::TRUNCATE;
-            }
-        }
-        Self(bits)
-    }
-
-    /// The operations in both sets, without `Truncate` unless `BatchWrite` remains.
-    pub(crate) const fn intersection(self, other: Self) -> Self {
-        let bits = self.0 & other.0;
-        if bits & abi::BATCH_WRITE == 0 {
-            Self(bits & !abi::TRUNCATE)
-        } else {
-            Self(bits)
-        }
-    }
-
-    /// The native capability mask, a combination of the SPARK_DS_* flags.
-    pub(crate) const fn bits(self) -> u64 {
-        self.0
-    }
-}
-
-impl fmt::Debug for Capabilities {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_set()
-            .entries(
-                SourceCapability::ALL
-                    .into_iter()
-                    .filter(|capability| self.contains(*capability)),
-            )
-            .finish()
-    }
-}
-
-/// How completely a connector evaluates a pushed predicate.
-/// Spark currently rechecks all predicates, including exact ones.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum FilterSupport {
-    /// Implements Spark SQL semantics and returns only matching rows.
-    Exact,
-    /// May skip data that cannot match, but may also return nonmatching rows.
-    PruningOnly,
-    /// Does not evaluate this predicate.
-    Unsupported,
-}
-
-/// Whether a connector limits the rows produced by the whole scan.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum LimitSupport {
-    /// The scan may return more rows than the limit. A connector may still cap the
-    /// rows of each partition on its own: Spark applies its limit after reading.
-    Unsupported,
-    /// The whole scan returns at most the limit. Spark still applies its limit.
-    Global,
-}
+// Data sources: Spark creates a DataSource for each operation, and its associated types
+// name the operations that the source implements.
 
 /// What Spark passes to create a data source.
 #[derive(Debug, Clone)]
@@ -241,22 +109,7 @@ impl CreateInfo {
 /// one only to inspect its capabilities, then drop it. Keep construction lightweight.
 /// Scan builders and writes cannot borrow their source, which Spark drops first.
 pub trait DataSource: Send + Sized + 'static {
-    /// The scan builder of batch reads, which [`new_scan`](Self::new_scan) creates, or
-    /// [`Unsupported`].
-    type ScanBuilder: ScanBuilder;
-
-    /// The coordinator of batch writes, which [`new_write`](Self::new_write) creates, or
-    /// [`Unsupported`].
-    type BatchWrite: BatchWrite;
-
-    /// Whether [`schema`](Self::schema) infers the schema of the data. When false, the
-    /// SDK leaves the native function unset: Spark then requires a user-specified
-    /// schema, reports its standard error without one, and never calls `schema`.
-    const INFERS_SCHEMA: bool = true;
-
-    /// Whether [`new_write`](Self::new_write) supports [`WriteMode::Truncate`], which
-    /// adds the `Truncate` capability to batch writes.
-    const SUPPORTS_TRUNCATE: bool = false;
+    fn new(info: CreateInfo) -> Result<Self>;
 
     /// Called once in each JVM when Spark loads the library, before it creates any
     /// source. On failure, Spark does not use the library, and the error is logged.
@@ -264,15 +117,12 @@ pub trait DataSource: Send + Sized + 'static {
         Ok(())
     }
 
-    fn new(info: CreateInfo) -> Result<Self>;
+    // Schema discovery.
 
-    /// Returns the operations of this instance, a subset of the implemented ones.
-    /// Override this to restrict an instance, for example for a read-only destination.
-    /// The SDK evaluates it once when Spark creates the source. An instance without
-    /// operations still supports schema discovery.
-    fn capabilities(&self, supported: Capabilities) -> Capabilities {
-        supported
-    }
+    /// Whether [`schema`](Self::schema) infers the schema of the data. When false, the
+    /// SDK leaves the native function unset: Spark then requires a user-specified
+    /// schema, reports its standard error without one, and never calls `schema`.
+    const INFERS_SCHEMA: bool = true;
 
     /// Returns the schema of the data, when the user does not specify one.
     fn schema(&self) -> Result<SchemaRef> {
@@ -282,6 +132,12 @@ pub trait DataSource: Send + Sized + 'static {
                 .into(),
         )
     }
+
+    // Batch reads.
+
+    /// The scan builder of batch reads, which [`new_scan`](Self::new_scan) creates, or
+    /// [`Unsupported`].
+    type ScanBuilder: ScanBuilder;
 
     /// Creates an independent scan of the schema to read, which the user may have
     /// specified; reject unsupported schemas.
@@ -293,10 +149,20 @@ pub trait DataSource: Send + Sized + 'static {
         )
     }
 
+    // Batch writes.
+
+    /// The coordinator of batch writes, which [`new_write`](Self::new_write) creates, or
+    /// [`Unsupported`].
+    type BatchWrite: BatchWrite;
+
+    /// Whether [`new_write`](Self::new_write) supports [`WriteMode::Truncate`], which
+    /// adds the `TRUNCATE` capability to batch writes.
+    const SUPPORTS_TRUNCATE: bool = false;
+
     /// Validate the input schema and create an independent write. Construction may be
     /// followed only by Drop, without commit or abort, so it must not make irreversible
     /// changes. The SDK calls this only while the instance's capabilities include
-    /// BatchWrite, and passes `Truncate` only when they include Truncate.
+    /// `BATCH_WRITE`, and passes [`WriteMode::Truncate`] only when they include `TRUNCATE`.
     fn new_write(&self, _info: WriteInfo) -> Result<WritePlan<Self::BatchWrite>> {
         Err(
             "DataSource::new_write is not implemented: implement it, or set \
@@ -304,21 +170,26 @@ pub trait DataSource: Send + Sized + 'static {
                 .into(),
         )
     }
+
+    // Instance restrictions.
+
+    /// Returns the operations of this instance, a subset of the implemented ones.
+    /// Override this to restrict an instance, for example for a read-only destination.
+    /// The SDK evaluates it once when Spark creates the source. An instance without
+    /// operations still supports schema discovery.
+    fn capabilities(&self, supported: Capabilities) -> Capabilities {
+        supported
+    }
 }
 
-/// The type of an operation that a source does not implement, as in
-/// `type BatchWrite = Unsupported;`. It has no values.
-#[derive(Debug, Serialize, Deserialize)]
-pub enum Unsupported {}
+// Batch reads: a ScanBuilder negotiates pushdown and plans the scan on the driver, and a
+// PartitionReaderFactory opens a reader of each partition on the executors.
 
-/// Mutable driver-side negotiation, followed by immutable planning.
+/// Negotiates pushdown on the driver, then plans the scan.
 ///
-/// The SDK consumes this builder on the first native `partitions` or
-/// `serialize_reader` call and caches the result, including a planning failure.
-/// This is later than Java DSv2 `ScanBuilder.build()`. Only serialized factory
-/// and partition descriptors travel to executors; driver handles stay local.
-/// It corresponds to Spark's driver-only `ColumnarBatchPlanner`: the native
-/// planner calls `partitions`, then `serialize_reader`, then closes the handle.
+/// The SDK calls [`plan`](Self::plan) once, when Spark first asks for the partitions,
+/// and caches the result, including a failure. Only the serialized factory and
+/// partitions reach the executors.
 pub trait ScanBuilder: Send + Sized + 'static {
     type Factory: PartitionReaderFactory;
 
@@ -352,6 +223,30 @@ pub trait ScanBuilder: Send + Sized + 'static {
     fn plan(self) -> Result<ScanPlan<Self::Factory>>;
 }
 
+/// How completely a connector evaluates a pushed predicate.
+/// Spark currently rechecks all predicates, including exact ones.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum FilterSupport {
+    /// Implements Spark SQL semantics and returns only matching rows.
+    Exact,
+    /// May skip data that cannot match, but may also return nonmatching rows.
+    PruningOnly,
+    /// Does not evaluate this predicate.
+    Unsupported,
+}
+
+/// Whether a connector limits the rows produced by the whole scan.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum LimitSupport {
+    /// The scan may return more rows than the limit. A connector may still cap the
+    /// rows of each partition on its own: Spark applies its limit after reading.
+    Unsupported,
+    /// The whole scan returns at most the limit. Spark still applies its limit.
+    Global,
+}
+
 /// A driver-created plan containing only serializable values.
 ///
 /// The SDK serializes the reader factory once and each partition independently.
@@ -372,6 +267,37 @@ impl<F: PartitionReaderFactory> ScanPlan<F> {
     }
 }
 
+/// Serializable configuration from which executors open partition readers.
+///
+/// The factory carries configuration or a snapshot descriptor; open connections and
+/// other live resources in [`open`](Self::open). The SDK serializes the negotiated
+/// schema with the factory, so the factory need not carry it.
+pub trait PartitionReaderFactory: Serialize + DeserializeOwned + Send + 'static {
+    type Partition: Serialize + DeserializeOwned + Send + 'static;
+
+    /// Opens a lazy reader of `partition` that returns batches with the schema of
+    /// `context`.
+    ///
+    /// - Return batches lazily, with bounded memory.
+    /// - The reader owns its resources and cannot borrow this short-lived factory. It
+    ///   may keep `context` until Spark releases the stream.
+    /// - Spark may call the reader on different threads, never concurrently, so it must
+    ///   be `Send` but not necessarily `Sync`.
+    /// - Check [`TaskContext::is_interrupted`] during long operations, and use timeouts
+    ///   for blocking I/O.
+    /// - Batches must own their buffers, because Spark may release the stream before
+    ///   its batches.
+    ///
+    /// The SDK checks Spark-compatible Arrow types, the negotiated schema and its
+    /// nullability, and zero array offsets recursively. It reports incompatible layouts
+    /// instead of copying buffers.
+    fn open<'task>(
+        &self,
+        partition: Self::Partition,
+        context: ReaderContext<'task>,
+    ) -> Result<PartitionReader<'task>>;
+}
+
 /// What an executor reader receives with its partition.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
@@ -390,44 +316,11 @@ impl<'task> ReaderContext<'task> {
     }
 }
 
-/// Serializable configuration for creating independent executor readers.
-///
-/// This type carries the configuration or snapshot descriptor; connections and
-/// other live resources are opened on the executor. The returned reader owns
-/// those resources and cannot borrow this short-lived factory. The SDK serializes
-/// the negotiated schema with the factory, so the factory need not carry it.
-pub trait PartitionReaderFactory: Serialize + DeserializeOwned + Send + 'static {
-    type Partition: Serialize + DeserializeOwned + Send + 'static;
+/// The lazy Arrow reader of one partition, which [`PartitionReaderFactory::open`] returns.
+pub type PartitionReader<'task> = Box<dyn RecordBatchReader + Send + 'task>;
 
-    /// Return lazy batches with the schema of `context` and bounded memory. The reader
-    /// may retain the context until the stream is released. Check cancellation during
-    /// long operations and use timeouts for blocking I/O.
-    /// Spark may call stream callbacks on different threads, never concurrently;
-    /// the reader must be `Send` but does not need to be `Sync`.
-    ///
-    /// The SDK checks Spark-compatible Arrow types, the negotiated schema and its
-    /// nullability, and zero array offsets recursively. It reports incompatible layouts
-    /// instead of copying buffers. Exported batches must own their buffers independently
-    /// of the reader, because Spark may release the stream before its batches.
-    fn open<'task>(
-        &self,
-        partition: Self::Partition,
-        context: ReaderContext<'task>,
-    ) -> Result<PartitionReader<'task>>;
-}
-
-/// How a batch write changes the destination.
-///
-/// New modes may be added. The SDK passes a mode only when the source instance
-/// has the matching capability, so a source never receives a mode it did not
-/// opt in to; a wildcard arm can return an error.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum WriteMode {
-    Append,
-    /// Replace existing data at driver commit, never at writer creation.
-    Truncate,
-}
+// Batch writes: a BatchWrite coordinates the write on the driver, and a DataWriterFactory
+// opens a DataWriter for each task attempt on the executors.
 
 /// What Spark passes to create a batch write.
 #[derive(Debug, Clone)]
@@ -444,6 +337,19 @@ impl WriteInfo {
     pub fn new(schema: SchemaRef, mode: WriteMode) -> Self {
         Self { schema, mode }
     }
+}
+
+/// How a batch write changes the destination.
+///
+/// New modes may be added. The SDK passes a mode only when the source instance
+/// has the matching capability, so a source never receives a mode it did not
+/// opt in to; a wildcard arm can return an error.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum WriteMode {
+    Append,
+    /// Replace existing data at driver commit, never at writer creation.
+    Truncate,
 }
 
 /// A driver coordinator and the serializable configuration of its task writers.
@@ -512,6 +418,20 @@ pub trait BatchWrite: Send + 'static {
     ) -> Result<()>;
 }
 
+/// Serializable configuration for independent task-attempt writers.
+///
+/// Open connections and files in open, not in the factory. A returned writer
+/// cannot borrow this temporary factory, but may retain the context until
+/// close. Callbacks can move between threads sequentially; writers must be Send.
+pub trait DataWriterFactory: Serialize + DeserializeOwned + Send + 'static {
+    type Message: Serialize + DeserializeOwned + Send + 'static;
+
+    fn open<'task>(
+        &self,
+        context: WriterContext<'task>,
+    ) -> Result<PartitionWriter<'task, Self::Message>>;
+}
+
 /// What a task writer receives when it opens.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
@@ -527,20 +447,6 @@ impl<'task> WriterContext<'task> {
     pub fn new(schema: SchemaRef, task: TaskContext<'task>) -> Self {
         Self { schema, task }
     }
-}
-
-/// Serializable configuration for independent task-attempt writers.
-///
-/// Open connections and files in open, not in the factory. A returned writer
-/// cannot borrow this temporary factory, but may retain the context until
-/// close. Callbacks can move between threads sequentially; writers must be Send.
-pub trait DataWriterFactory: Serialize + DeserializeOwned + Send + 'static {
-    type Message: Serialize + DeserializeOwned + Send + 'static;
-
-    fn open<'task>(
-        &self,
-        context: WriterContext<'task>,
-    ) -> Result<PartitionWriter<'task, Self::Message>>;
 }
 
 /// One task attempt's writer. The SDK closes it after commit or abort.
@@ -576,7 +482,16 @@ pub trait DataWriter: Send {
     fn abort(&mut self) -> Result<()>;
 }
 
-// Unsupported has no values, so none of these methods can be called.
+/// The writer of one task attempt, which [`DataWriterFactory::open`] returns.
+pub type PartitionWriter<'task, M> = Box<dyn DataWriter<Message = M> + 'task>;
+
+// Unsupported operations.
+
+/// The type of an operation that a source does not implement, as in
+/// `type BatchWrite = Unsupported;`. It has no values, so none of the methods of its
+/// trait implementations can be called.
+#[derive(Debug, Serialize, Deserialize)]
+pub enum Unsupported {}
 
 impl ScanBuilder for Unsupported {
     type Factory = Self;

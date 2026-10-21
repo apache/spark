@@ -26,8 +26,7 @@ use spark_native_source::__private::abi::{
 };
 use spark_native_source::{
     Capabilities, CreateInfo, DataSource, HostInfo, LogLevel, PartitionReader,
-    PartitionReaderFactory, ReaderContext, Result, ScanBuilder, ScanPlan, SourceCapability,
-    Unsupported,
+    PartitionReaderFactory, ReaderContext, Result, ScanBuilder, ScanPlan, Unsupported,
 };
 
 static DECLARATIONS: AtomicUsize = AtomicUsize::new(0);
@@ -68,7 +67,7 @@ impl DataSource for Source {
         match self.mode.as_str() {
             "empty" => Capabilities::empty(),
             "supported" => supported,
-            "without_read" => supported.without(SourceCapability::BatchRead),
+            "without_read" => supported.without(Capabilities::BATCH_READ),
             // Operations that the source does not implement are dropped.
             "all" => Capabilities::all(),
             "panic" => panic!("capability discovery failed"),

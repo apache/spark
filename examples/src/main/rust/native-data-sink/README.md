@@ -42,7 +42,7 @@ file-format dependency in this small example.
 | `readonly` | `false` | Remove both batch-write and truncate capabilities when `true` |
 
 Unknown options are rejected. Source creation and capability discovery do not create
-files. The default instance advertises only native `BatchWrite` and `Truncate`; it
+files. The default instance advertises only native `BATCH_WRITE` and `TRUNCATE`; it
 does not advertise batch reads or streaming operations. Spark performs its native
 capability check again with the operation's effective options.
 
