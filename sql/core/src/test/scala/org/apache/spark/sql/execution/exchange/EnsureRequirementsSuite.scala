@@ -2802,7 +2802,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       // behind. `KeyedPartitioning.apply` keeps the order it is given.
       val marked = KeyedPartitioning(Seq(exprA),
         Seq(InternalRow(3), InternalRow(4), InternalRow(1), InternalRow(2)))
-        .withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+        .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
       assert(marked.isGrouped, "test setup: the keys are distinct, so the layout is grouped")
 
       val smj = SortMergeJoinExec(Seq(exprA), Seq(exprB), Inner, None,
@@ -2830,17 +2830,15 @@ class EnsureRequirementsSuite extends SharedSparkSession {
 
   test("SPARK-59272: every plan the rule produces for a generated pair of shapes validates") {
     // A generated sweep asserting the property rather than a count: every plan this rule produces
-    // for a pair of shapes has to satisfy both children's required distribution. The shapes that
-    // make it fail are the marked ones, where a `GroupPartitionsExec` gives up the keyed claim
-    // while regrouping, which is an answer that arrives after the child's fate was decided, at
-    // either of the two sites that insert such a node.
+    // for a pair of shapes has to satisfy both children's required distribution. Plain regrouping
+    // keeps a marked layout keyed, with lost routing if partitions move. Rewritten keys or a
+    // non-identity expected-key alignment drop the keyed claim, so either insertion site must
+    // account for the grouping node's output before deciding the child's fate.
     //
     // `v2BucketingPartiallyClusteredDistributionEnabled` is deliberately not one of the cells.
     // That family leaves both children keyed but ungrouped on purpose, so neither satisfies its
     // distribution on its own and the oracle below rejects a plan this rule is right to produce.
-    // A marked layout cannot occur with it either: `KeyedShuffleSpec.createPartitioning` is the
-    // only producer of the marker, and it is only ever reached through `canCreatePartitioning`,
-    // which requires the config to be off.
+    // The ungrouped input shapes below still exercise plain regrouping with this config off.
     def shapes(a: Attribute): Seq[(String, KeyedPartitioning)] = {
       val keySets = Seq(
         "12" -> Seq(InternalRow(1), InternalRow(2)),
@@ -2849,7 +2847,9 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         // Not ascending, which is what a one-side shuffle onto a union's key order leaves behind.
         // `KeyedPartitioning.apply` keeps the order it is given, and for a marked layout that
         // order is part of the claim.
-        "312" -> Seq(InternalRow(3), InternalRow(1), InternalRow(2)))
+        "312" -> Seq(InternalRow(3), InternalRow(1), InternalRow(2)),
+        // Duplicate keys separated by another key force regrouping on either side of the join.
+        "121-interleaved" -> Seq(InternalRow(1), InternalRow(2), InternalRow(1)))
       val exprSets = Seq(
         "id" -> Seq[Expression](a),
         "bucket4" -> Seq[Expression](bucket(4, a)),
@@ -2857,13 +2857,14 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       for {
         (keyName, keys) <- keySets
         (exprName, exprs) <- exprSets
-        // A marked layout pins rows outside the declared keys to `hash(key) % numPartitions`, so
-        // regrouping one moves them and the node stops claiming the layout.
-        marked <- Seq(false, true)
+        // Hash routing locates undeclared keys; lost routing retains only full-key clustering.
+        (originName, origin) <- Seq(
+          "unmarked" -> None,
+          "hash-routing" -> Some(HASH_ROUTING),
+          "routing-lost" -> Some(ROUTING_LOST))
       } yield {
-        val kp = KeyedPartitioning(exprs, keys)
-        val p = if (marked) kp.withLayout(_.copy(mayContainUnknownPartitionKeys = true)) else kp
-        (s"$exprName/$keyName${if (marked) "/marked" else ""}", p)
+        val kp = KeyedPartitioning(exprs, keys).withLayout(_.copy(unknownKeysOrigin = origin))
+        (s"$exprName/$keyName/$originName", kp)
       }
     }
 
@@ -2871,8 +2872,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     // `Inner` and `LeftOuter`, so they would repeat those cells exactly.
     val joinTypes = Seq(Inner, LeftOuter, RightOuter, FullOuter)
     val configCells = for {
-      // Without this one no marked layout is reachable and no keyed spec can serve as a shuffle
-      // template, so the second grouping site is never entered.
+      // Without keyed shuffle no keyed spec can serve as a shuffle template, so the second
+      // grouping site is never entered. Marked inputs can still come from a union.
       keyedShuffle <- Seq(false, true)
       pushPartValues <- Seq(false, true)
       subsetKeys <- Seq(false, true)
@@ -2922,11 +2923,11 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     // The two join types put the marker on opposite sides on purpose, because that is the side
     // `rank` reads for the one-sided arms.
     val marked = KeyedPartitioning(Seq(exprA), Seq(InternalRow(1), InternalRow(2), InternalRow(3)))
-      .withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+      .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
     val plain = KeyedPartitioning(Seq(exprB), Seq(InternalRow(1), InternalRow(2)))
     val markedRight = KeyedPartitioning(
       Seq(exprB), Seq(InternalRow(1), InternalRow(2), InternalRow(3)))
-      .withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+      .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
     val plainLeft = KeyedPartitioning(Seq(exprA), Seq(InternalRow(1), InternalRow(2)))
 
     Seq(
