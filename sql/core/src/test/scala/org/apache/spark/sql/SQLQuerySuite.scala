@@ -3380,6 +3380,28 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     }
   }
 
+  test("SPARK-60418: subexpression elimination respects IN short-circuit") {
+    // `IN` evaluates the list elements until one matches, so an element past the match is never
+    // evaluated. `1 / id` is repeated inside such an element, so it is a common subexpression
+    // that only that element needs. For id = 0 the first element matches, so `1 / id` should
+    // never be computed; recursing into every child of the `IN` hoisted it out of the list and
+    // raised [DIVIDE_BY_ZERO]. The second query is the shape the JIRA reported, where two `IN`s
+    // share the element, so the element is common while neither `IN` is. ANSI mode is pinned on
+    // because that is what turns the extra evaluation into a failure: with it off the division
+    // returns null and both answers hold either way.
+    withSQLConf(
+      SQLConf.ANSI_ENABLED.key -> "true",
+      SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
+      SQLConf.SUBEXPRESSION_ELIMINATION_SKIP_FOR_SHORTCUT_EXPR.key -> "true") {
+      val inQuery = "select id in (id, 1 / id + 1 / id) from range(0, 1, 1, 1)"
+      checkAnswer(sql(inQuery), Row(true))
+
+      val sharedQuery = "select id in (id, 1 / id), id in (id, 1 / id, 7) " +
+        "from range(0, 1, 1, 1)"
+      checkAnswer(sql(sharedQuery), Row(true, true))
+    }
+  }
+
   test("SPARK-29213: FilterExec should not throw NPE") {
     // Under ANSI mode, casting string '' as numeric will cause runtime error
     if (!conf.ansiEnabled) {
