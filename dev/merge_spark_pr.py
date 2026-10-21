@@ -863,8 +863,14 @@ def post_merge_comment(pr_num, merged_commits):
     ...     patch.object(github, "comment", side_effect=fake_comment),
     ...     redirect_stdout(StringIO()),
     ... ):
-    ...     post_merge_comment(42, [("master", "abc123"), ("branch-4.2", "fork:holdenk:backport-pr42-branch-4.2")])
-    >>> "- backport pushed to branch-4.2 holdenk:backport-pr42-branch-4.2 (PR not opened)" in captured["body"]
+    ...     post_merge_comment(
+    ...         42,
+    ...         [("master", "abc123"), ("branch-4.2", "fork:holdenk:backport-pr42-branch-4.2")],
+    ...     )
+    >>> (
+    ...     "- backport pushed to branch-4.2 holdenk:backport-pr42-branch-4.2 (PR not opened)"
+    ...     in captured["body"]
+    ... )
     True
     >>> "- merged into branch-4.2" in captured["body"]
     False
@@ -1534,7 +1540,9 @@ def _landed_pick_refs(picks):
 
     >>> _landed_pick_refs([("master", "abc123"), ("branch-4.2", "https://github.com/apache/spark/pull/9")])
     ['master']
-    >>> _landed_pick_refs([("branch-4.x", "deadbeef"), ("branch-4.2", "fork:o:backport-pr1-branch-4.2")])
+    >>> _landed_pick_refs(
+    ...     [("branch-4.x", "deadbeef"), ("branch-4.2", "fork:o:backport-pr1-branch-4.2")]
+    ... )
     ['branch-4.x']
     >>> _landed_pick_refs([])
     []
