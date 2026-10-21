@@ -19,8 +19,10 @@ package org.apache.spark.sql.streaming
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Literal}
+import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.execution.LocalTableScanExec
-import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.JoinConditionSplitPredicates
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{JoinConditionSplitPredicates, JoinStateKeyWatermarkPredicate}
 import org.apache.spark.sql.types._
 
 class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
@@ -126,5 +128,24 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
     assert(split.bothSides.contains(
       leftAttributeA === rightAttributeC && randAttribute > Literal(0)))
     assert(split.full.contains(predicate))
+  }
+
+  for (watermarkColumn <- Seq("none", "key", "other")) {
+    test(s"SPARK-60378: previous key scan bound with watermark on $watermarkColumn") {
+      val watermark = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000L).build()
+      val key = AttributeReference("key", TimestampType,
+        metadata = if (watermarkColumn == "key") watermark else Metadata.empty)()
+      val other = AttributeReference("other", TimestampType,
+        metadata = if (watermarkColumn == "other") watermark else Metadata.empty)()
+      val rightKey = AttributeReference("rightKey", TimestampType, metadata = watermark)()
+      val predicates = StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
+        Seq(key, other), Seq(rightKey), Seq(key), Seq(rightKey), None,
+        Some(20000L), Some(10000L), false)
+      val expectedPrevious = if (watermarkColumn == "key") Some(10000L) else None
+      assert(predicates.left.exists {
+        case JoinStateKeyWatermarkPredicate(_, 20000L, previous) => previous == expectedPrevious
+        case _ => false
+      })
+    }
   }
 }

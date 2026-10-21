@@ -1274,6 +1274,42 @@ abstract class StreamingOuterJoinBase extends StreamingJoinSuite {
   import testImplicits._
   import org.apache.spark.sql.functions._
 
+  for {
+    joinType <- Seq("left_outer", "right_outer")
+    history <- Seq("continuous", "restart")
+  } {
+    test(s"SPARK-60378: $joinType eviction includes old unwatermarked keys, $history") {
+      val leftInput = MemoryStream[(Int, Int)]
+      val rightInput = MemoryStream[(Int, Int)]
+      val left = leftInput.toDF().toDF("leftKey", "time")
+        .select($"leftKey", timestamp_seconds($"time").as("leftTime"))
+      val right = rightInput.toDF().toDF("rightKey", "time")
+        .select($"rightKey", timestamp_seconds($"time").as("rightTime"))
+      val leftOuter = joinType == "left_outer"
+      val joined = (if (leftOuter) left else left.withWatermark("leftTime", "10 seconds"))
+        .join(if (leftOuter) right.withWatermark("rightTime", "10 seconds") else right,
+          expr("leftKey = rightKey AND leftTime = rightTime"), joinType)
+        .select($"leftKey", $"rightKey", $"leftTime".cast("int"), $"rightTime".cast("int"))
+      val stateInput = if (leftOuter) leftInput else rightInput
+      val watermarkInput = if (leftOuter) rightInput else leftInput
+      val expected = if (leftOuter) Row(2, null, 5, null) else Row(null, 2, null, 5)
+
+      withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+        withTempDir { checkpointDir =>
+          val start = StartStream(checkpointLocation = checkpointDir.getCanonicalPath)
+          val setup = Seq(start,
+            AddData(watermarkInput, (9, 20)), CheckNewAnswer(),
+            AddData(watermarkInput, (9, 30)), CheckNewAnswer()) ++
+            (if (history == "restart") Seq(StopStream, start) else Nil)
+          testStream(joined)((setup ++ Seq(
+            // This input has no late filter, so it can add keys below the previous scan bound.
+            AddData(stateInput, (2, 5)), CheckNewAnswer(expected),
+            AddData(watermarkInput, (9, 40)), CheckNewAnswer(), StopStream)): _*)
+        }
+      }
+    }
+  }
+
   Seq("left_outer", "right_outer").foreach { joinType =>
     test(s"stream-stream $joinType join does not support Update mode") {
       val input1 = MemoryStream[Int]

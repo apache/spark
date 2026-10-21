@@ -243,7 +243,11 @@ object StreamingSymmetricHashJoinHelper extends Logging {
           JoinStateKeyWatermarkPredicate(
             e,
             eventTimeWatermarkForEviction.get,
-            eventTimeWatermarkForLateEvents)
+            // An input without a late filter on this key can add rows below the previous bound.
+            eventTimeWatermarkForLateEvents.filter { _ =>
+              oneSideInputAttributes.find(_.metadata.contains(delayKey))
+                .exists(oneSideJoinKeys(joinKeyOrdinalForWatermark.get).semanticEquals)
+            })
         }
       } else if (isWatermarkDefinedOnInput) { // case 2 in the StreamingSymmetricHashJoinExec docs
         val stateValueWatermark = StreamingJoinHelper.getStateValueWatermark(
