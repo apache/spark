@@ -43,7 +43,7 @@ import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.optimizer.InferFiltersFromConstraints
+import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, InferFiltersFromConstraints}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.parseColumnPath
@@ -590,6 +590,58 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
               .toImmutableArraySeq),
             if (threshold == 3) classOf[FilterIn[_]] else classOf[Operators.Or],
             Seq(Row(resultFun(2D)), Row(resultFun(3D)), Row(resultFun(4F))))
+        }
+      }
+    }
+  }
+
+  test("SPARK-60322: filter pushdown - float and double zeros") {
+    // Spark treats 0.0 and -0.0 as equal, but Parquet orders -0.0 before 0.0, and its dictionaries
+    // and bloom filters tell them apart. Each file holds zeros of one sign only, so a predicate
+    // pushed down with the other zero must not skip it.
+    Seq("FLOAT", "DOUBLE").foreach { t =>
+      // Parquet writes a bloom filter only for a column that is not dictionary encoded.
+      Seq(true, false).foreach { dictionary =>
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          Seq(0 -> "0.0D", 100 -> "-0.0D", 200 -> "1.0D").foreach { case (start, value) =>
+            spark.range(start, start + 100, 1, 1)
+              .selectExpr("id", s"CAST($value AS $t) AS f")
+              .write.mode("append")
+              .option(ParquetOutputFormat.ENABLE_DICTIONARY, dictionary.toString)
+              .option(ParquetOutputFormat.BLOOM_FILTER_ENABLED + "#f", (!dictionary).toString)
+              .parquet(path)
+          }
+          dir.listFiles().filter(_.getName.endsWith(".parquet")).foreach { file =>
+            val in = HadoopInputFile.fromPath(
+              new Path(file.getCanonicalPath), spark.sessionState.newHadoopConf())
+            Utils.tryWithResource(ParquetFileReader.open(in)) { reader =>
+              val chunk = reader.getFooter.getBlocks.get(0).getColumns.get(1)
+              assert(chunk.hasDictionaryPage === dictionary)
+              assert((chunk.getBloomFilterOffset >= 0) === !dictionary)
+            }
+          }
+          val expected = spark.range(0, 300)
+            .selectExpr("id", s"CAST(CASE WHEN id < 100 THEN 0.0D WHEN id < 200 THEN -0.0D " +
+              s"ELSE 1.0D END AS $t) AS f")
+          val predicates = Seq("0.0D", "-0.0D").flatMap { zero =>
+            val z = s"CAST($zero AS $t)"
+            val many = (1 to 12).map(i => s"CAST($i.5D AS $t)").mkString(", ")
+            Seq(s"f = $z", s"f <=> $z", s"f IN ($z, CAST(5.0D AS $t))", s"f IN ($z, $many)",
+              s"f != $z", s"f < $z", s"f <= $z", s"f > $z", s"f >= $z",
+              s"NOT (f = $z)", s"NOT (f != $z)", s"NOT (f < $z)", s"NOT (f <= $z)",
+              s"NOT (f > $z)", s"NOT (f >= $z)")
+          }
+          withSQLConf(
+              // Keeps `NOT (f < 0.0)` from being rewritten into `f >= 0.0`, so that it is pushed
+              // down as a `Not`.
+              SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> BooleanSimplification.ruleName,
+              // The non-vectorized reader also applies the record-level filter of this suite.
+              SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+            predicates.foreach { p =>
+              checkAnswer(spark.read.parquet(path).where(p), expected.where(p))
+            }
+          }
         }
       }
     }
