@@ -122,9 +122,11 @@ case class SubExprCodes(
  *                       `genCode` is refused.
  * @param followCommonExprs follow a `With` and a `CommonExpressionRef` into the definitions the
  *                          code computes, rather than walk them like any other node.
- * @param onlyNames refuse a value no parameter can name, rather than pass over it.
- * @param fieldsNeedNoArgument leave a field out of the arguments, the method reading it as it
- *                             stands, rather than pass it.
+ * @param onlyNames refuse a value no parameter can name, rather than pass over an expression and
+ *                  pass a variable, which testing checks is a name.
+ * @param fieldsNeedNoArgument leave a variable naming a field `addMutableState` registered out of
+ *                             the arguments, the method reading it as it stands, rather than pass
+ *                             it.
  * @param checkParamLength refuse a method whose parameters would pass the JVM's limit.
  */
 private[sql] case class InputPolicy(
@@ -1325,16 +1327,22 @@ class CodegenContext extends Logging {
     // where the policy asks for names. A `SimpleExprValue` is an expression rather than a name
     // -- `posexplode_outer` gives its position the nullness `index == -1`, and a `Byte` or `Short`
     // literal's value is `(byte)1`. A field or a literal needs no parameter and is read as it
-    // stands; so is a field handed out as a `VariableValue` where the policy says so, passing one
-    // being refused by the split methods' own check.
+    // stands; so is a `VariableValue` naming a field `addMutableState` registered, where the
+    // policy says so, passing one being refused by the split methods' own check in tests. A slot
+    // of a compacted array is not a name at all, so it has to be handed out as a `GlobalValue`;
+    // where the policy does not ask for names, testing checks for one handed out as a variable.
     def take(v: ExprValue): Boolean = v match {
       case local: VariableValue =>
         val name = local.variableName
         val isName = name.nonEmpty && Character.isJavaIdentifierStart(name.head) &&
           name.forall(Character.isJavaIdentifierPart)
         val isField = policy.fieldsNeedNoArgument && mutableStateNames.contains(name)
-        val taken = isName || isField || !policy.onlyNames
+        val taken = isName || !policy.onlyNames
         if (taken && !isField) {
+          if (Utils.isTesting) {
+            assert(isName, s"$name is handed out as a local variable, but no parameter can " +
+              "carry it; hand out a field with JavaCode.global or isNullGlobal")
+          }
           args.getOrElseUpdate(name, local)
         }
         taken
@@ -2133,9 +2141,8 @@ class CodegenContext extends Logging {
     // The code of the non-split pass is discarded when the split pass below is taken, and with it
     // the calls to every function added while generating it, such as the split methods of a CASE
     // WHEN or a `With` definition's method. A generation that splits the stage's expressions
-    // (`WholeStageSplit.Split`) removes those functions then; any other keeps them, as the class
-    // did before that split existed, so that a stage kept in one piece, and the split turned off,
-    // have the functions they had before it.
+    // (`WholeStageSplit.Split`) removes those functions then; any other, a stage kept in one
+    // piece or the split turned off, keeps them, as the class did before that split existed.
     val functionsBeforeNonSplit = functionsMark()
     val occurrencesBeforeNonSplit = wholeStageSplitOccurrences.clone()
     val blocksSplitBeforeNonSplit = wholeStageBlocksSplit

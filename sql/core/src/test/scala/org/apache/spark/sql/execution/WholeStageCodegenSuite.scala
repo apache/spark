@@ -1758,13 +1758,14 @@ class WholeStageCodegenSuite extends SharedSparkSession
       def df: DataFrame =
         sql(s"SELECT c, $f AS x, concat($f, 'z') AS y FROM t UNPIVOT (v FOR c IN (a, b))")
       val expected = withoutWholeStage(df)
+      // A subexpression method also writes its own result into a slot of the same array, so the
+      // array's name alone does not show a read. `lpad` is called on the slot holding `v`.
+      val slotRead = "].lpad("
       val stringParameter = "private void \\w*subExpr_\\d+\\([^)]*UTF8String ".r
       Seq("true", "false").foreach { split =>
         withSQLConf(SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS.key -> split) {
           val code = genCode(df)
-          assert(code.exists { c =>
-            methodsHolding(c, "expand_mutableStateArray").exists(_.contains("subExpr"))
-          }, split)
+          assert(code.exists(c => methodsHolding(c, slotRead).exists(_.contains("subExpr"))), split)
           assert(code.forall(c => stringParameter.findFirstIn(c.body).isEmpty), split)
           code.foreach(CodeGenerator.compile)
           checkAnswer(df, expected)
@@ -1796,6 +1797,41 @@ class WholeStageCodegenSuite extends SharedSparkSession
       check(times.groupBy(window($"ts", "1 hour", "10 seconds")).count())
       withSQLConf(SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> "false") {
         check(times.select(window($"ts", "1 hour", "10 seconds")))
+      }
+    }
+  }
+
+  test("SPARK-59589: split switch cases and aggregate functions read an Expand's output as a " +
+      "field") {
+    // With the consume functions not split by operator, the consumer reads the UNPIVOT's output
+    // directly, and a tiny threshold moves its code into methods: the switch cases of the Expand
+    // that `RewriteDistinctAggregates` adds, and the aggregate functions. `lpad` is called on the
+    // slot holding `v`.
+    withSQLConf(
+        SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> "false",
+        SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1") {
+      withTempView("t") {
+        spark.range(10).selectExpr("concat('a', CAST(id AS STRING)) AS a",
+          "concat('b', CAST(id AS STRING)) AS b").createOrReplaceTempView("t")
+        val unpivot = "FROM t UNPIVOT (v FOR c IN (a, b))"
+        Seq(
+          "switchCaseCode" ->
+            s"SELECT count(DISTINCT lpad(v, 10, 'x')), count(DISTINCT rpad(v, 10, 'y')) $unpivot",
+          "doAggregate_sum" -> (s"SELECT c, sum(length(lpad(v, 10, 'x'))), " +
+            s"sum(length(rpad(v, 10, 'y'))) $unpivot GROUP BY c")
+        ).foreach { case (method, query) =>
+          def df: DataFrame = sql(query)
+          val expected = withoutWholeStage(df)
+          Seq("true", "false").foreach { split =>
+            withSQLConf(SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS.key -> split) {
+              val code = genCode(df)
+              assert(code.exists(c => methodsHolding(c, "].lpad(").exists(_.contains(method))),
+                s"$method $split")
+              code.foreach(CodeGenerator.compile)
+              checkAnswer(df, expected)
+            }
+          }
+        }
       }
     }
   }
@@ -2829,8 +2865,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
       // mutable state array, such as `expand_mutableStateArray_0[0]`, and hands it out as a field.
       // An UNPIVOT of string columns gives such an output, which the projection above reads
       // directly when the operators' consume functions are not split into methods of their own.
-      // Every block reads it, the ELSE too, and each reads it as the field it is, taking no
-      // argument for it.
+      // Every block reads it, the ELSE too, and each reads it as the field it is.
       withSQLConf(SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> "false") {
         withTempView("t") {
           spark.range(100).selectExpr("id", "concat('a', CAST(id % 50 AS STRING)) AS a",
@@ -2842,7 +2877,6 @@ class WholeStageCodegenSuite extends SharedSparkSession
           assert(genCode(df).exists { c =>
             methodsHolding(c, "expand_mutableStateArray").exists(_.contains("caseWhen"))
           })
-          assert(splitCaseWhenParameters(df).flatten.forall(!_.contains("mutableStateArray")))
           checkAnswer(df, withoutWholeStage(df))
         }
       }

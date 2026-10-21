@@ -139,8 +139,8 @@ class CollectInputsSuite extends SparkFunSuite with SQLHelper {
     assert(!ctx.collectInputs(Seq(input(0)), operator, Map.empty).get.readsRow)
   }
 
-  test("a field handed out as a global is never an argument; handed out as a variable, it is " +
-      "left out only where the policy says so") {
+  test("a field handed out as a global is never an argument; an inlined one handed out as a " +
+      "variable is left out only where the policy says so") {
     val ctx = context()
     val expr = Length(BoundReference(0, StringType, nullable = false))
     // A state of a type that is not primitive is a slot of a compacted array.
@@ -158,6 +158,19 @@ class CollectInputsSuite extends SparkFunSuite with SQLHelper {
     for (policy <- Seq(commonExpr, operator)) {
       assert(names(ctx.collectInputs(Seq(expr), policy, Map.empty).get) == Seq(field), policy)
     }
+  }
+
+  test("a slot handed out as a variable is refused where the policy asks for names, and fails " +
+      "the testing check where it does not") {
+    val ctx = context()
+    val slot = ctx.addMutableState("UTF8String", "value")
+    ctx.currentVars = Seq(ExprCode(EmptyBlock, FalseLiteral, JavaCode.variable(slot, StringType)))
+    val expr = Length(BoundReference(0, StringType, nullable = false))
+    for (policy <- Seq(InputPolicy.wholeStageSplit, commonExpr)) {
+      assert(ctx.collectInputs(Seq(expr), policy, Map.empty).isEmpty, policy)
+    }
+    val e = intercept[AssertionError](ctx.collectInputs(Seq(expr), operator, Map.empty))
+    assert(e.getMessage.contains(slot), e.getMessage)
   }
 
   test("the whole stage split walks below the state of a node that generates its child") {

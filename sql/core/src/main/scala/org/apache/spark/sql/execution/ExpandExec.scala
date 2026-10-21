@@ -188,7 +188,7 @@ case class ExpandExec(
             v => s"$v = ${CodeGenerator.defaultValue(firstExpr.dataType)};")
 
           // `addMutableState` hands back a field: a name of its own, or a slot in a compacted array
-          // (`mutableStateArray_0[3]`) for a type it cannot inline. Either is reachable from every
+          // (`mutableStateArray_0[3]`) for a state not inlined. Either is reachable from every
           // method of the generated class and is not a local variable, so a consumer collecting
           // local variables to pass into a split function must not take it for one -- a slot
           // expression is not a legal parameter name. Whole-stage subexpression elimination wraps
