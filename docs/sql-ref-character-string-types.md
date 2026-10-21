@@ -32,7 +32,7 @@ By default, `CHAR` and `VARCHAR` are table-schema overlays on `STRING`. DataFram
 show `STRING`, `CAST(... AS CHAR(n))` is `STRING`, and function schemas raise
 `UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING`. See [Data Types](sql-ref-datatypes.html).
 
-Spark SQL then has a family of three character string types:
+With the preview enabled, Spark SQL has a family of three character string types:
 
 ```text
 CHAR(n) -> VARCHAR(n) -> STRING

@@ -61,8 +61,11 @@ import org.apache.spark.unsafe.types.UTF8String
     (spark.sql.charVarchar.standardSemantics.enabled or
     spark.sql.preserveCharVarcharTypeInfo): fields are assigned (CHAR padded; overflow is
     a bad record). spark.sql.legacy.charVarcharAsString reads them as STRING. Otherwise
-    the schema raises UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING. Map-key length checks require
-    spark.sql.charVarchar.standardSemantics.enabled.
+    the schema raises UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING. With
+    spark.sql.charVarchar.standardSemantics.enabled, CHAR/VARCHAR map keys are
+    length-checked without padding or trimming; with only
+    spark.sql.preserveCharVarcharTypeInfo, short CHAR keys are padded and over-length keys
+    raise EXCEED_LIMIT_LENGTH.
   """,
   group = "xml_funcs",
   since = "4.0.0")

@@ -24537,8 +24537,10 @@ def from_xml(
       types are first-class (this flag or
       ``spark.sql.preserveCharVarcharTypeInfo``);
       ``spark.sql.legacy.charVarcharAsString`` reads them as STRING; otherwise
-      ``UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING``. Map-key length checks require
-      ``spark.sql.charVarchar.standardSemantics.enabled``.
+      ``UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING``. With this flag, CHAR/VARCHAR
+      map keys are length-checked without padding or trimming; with only
+      ``spark.sql.preserveCharVarcharTypeInfo``, short CHAR keys are padded and
+      over-length keys raise ``EXCEED_LIMIT_LENGTH``.
 
     Examples
     --------

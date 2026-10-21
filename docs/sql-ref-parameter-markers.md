@@ -35,6 +35,8 @@ bound value:
 * In SQL, `USING` binds a [constant expression](sql-ref-syntax-aux-exec-imm.html).
   A [string literal](sql-ref-literals.html#string-literal) such as `'ab'` is `STRING`.
   Use a typed literal (`5L`, `DATE '2024-01-01'`) or `CAST` to choose another type.
+  CHAR and VARCHAR are the exception: a `USING` value such as `CAST('ab' AS CHAR(2))`
+  currently binds as `STRING`, so cast the marker in the SQL text instead.
 * In Python, Scala, or Java `spark.sql(..., args)`, Spark infers the type from the host
   value. A Python or Java `str` / `String` is `STRING`. Host args must be literal-like
   constants: literals, or array/map/struct constructors of them. A `Column` such as
@@ -85,9 +87,6 @@ The mandatory preceding `:` (colon) differentiates the namespace of named parame
   string
 
 > SET spark.sql.charVarchar.standardSemantics.enabled = true;
-> EXECUTE IMMEDIATE 'SELECT TYPEOF(:p)' USING CAST('ab' AS CHAR(2)) AS p;
-  char(2)
-
 > EXECUTE IMMEDIATE 'SELECT TYPEOF(CAST(:p AS CHAR(2)))' USING 'ab' AS p;
   char(2)
 ```
@@ -196,17 +195,15 @@ If no value has been bound to the parameter marker, an `UNBOUND_SQL_PARAMETER` e
 You are not required to consume all provided values.
 
 The type rules are the same as for named markers: bind a typed `USING` expression, or
-`CAST` the `?` in the statement. Host `spark.sql(..., args)` values must be literal-like
-constants; they cannot be a `cast` `Column`.
+`CAST` the `?` in the statement. A CHAR or VARCHAR `USING` value currently binds as
+`STRING`, so use the in-statement `CAST` for those types. Host `spark.sql(..., args)`
+values must be literal-like constants; they cannot be a `cast` `Column`.
 
 ```sql
 > EXECUTE IMMEDIATE 'SELECT TYPEOF(?)' USING 'ab';
   string
 
 > SET spark.sql.charVarchar.standardSemantics.enabled = true;
-> EXECUTE IMMEDIATE 'SELECT TYPEOF(?)' USING CAST('ab' AS CHAR(2));
-  char(2)
-
 > EXECUTE IMMEDIATE 'SELECT TYPEOF(CAST(? AS CHAR(2)))' USING 'ab';
   char(2)
 ```

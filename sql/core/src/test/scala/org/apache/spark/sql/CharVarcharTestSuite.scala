@@ -1851,11 +1851,20 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
 
   test("SPARK-58942: CHAR column vs string literal under standardSemantics") {
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
-      withTable("contacts") {
+      withTable("contacts", "contacts_by_code") {
         sql("CREATE TABLE contacts (code CHAR(4), name VARCHAR(10)) USING parquet")
         sql("INSERT INTO contacts VALUES ('ab', 'Ada')")
-        checkAnswer(sql("SELECT name FROM contacts WHERE code = 'ab'"), Seq.empty)
-        checkAnswer(sql("SELECT name FROM contacts WHERE code = 'ab  '"), Row("Ada"))
+        // A predicate on a CHAR partition column goes through partition pruning instead of a
+        // scan filter, so check the same predicates against a table partitioned by the column.
+        sql("CREATE TABLE contacts_by_code (name VARCHAR(10), code CHAR(4)) USING parquet " +
+          "PARTITIONED BY (code)")
+        sql("INSERT INTO contacts_by_code VALUES ('Ada', 'ab')")
+        Seq("contacts", "contacts_by_code").foreach { t =>
+          checkAnswer(sql(s"SELECT name FROM $t WHERE code = 'ab'"), Seq.empty)
+          checkAnswer(sql(s"SELECT name FROM $t WHERE code = 'ab  '"), Row("Ada"))
+          checkAnswer(sql(s"SELECT name FROM $t WHERE code IN ('ab', 'cd')"), Seq.empty)
+          checkAnswer(sql(s"SELECT name FROM $t WHERE code IN ('ab  ', 'cd')"), Row("Ada"))
+        }
         checkAnswer(
           sql("SELECT name FROM contacts WHERE code COLLATE UTF8_BINARY_RTRIM = " +
             "'ab' COLLATE UTF8_BINARY_RTRIM"),

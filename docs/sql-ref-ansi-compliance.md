@@ -203,9 +203,12 @@ While casting of a decimal with a fraction to an interval type with SECOND as th
 ### Store assignment
 As mentioned at the beginning, when `spark.sql.storeAssignmentPolicy` is set to `ANSI`(which is the default value), Spark SQL complies with the ANSI store assignment rules on table insertions. The valid combinations of source and target data type in table insertions are given by the following table.
 Table CHAR/VARCHAR columns apply length checks, trailing-space trimming, and CHAR padding on
-insert in the default overlay. First-class CAST vs assignment, and CHAR/VARCHAR that survive
-in query plans, require first-class CHAR/VARCHAR types (the preview flag or
-`spark.sql.preserveCharVarcharTypeInfo`). See
+insert in the default overlay. CHAR/VARCHAR that survive in query plans require first-class
+CHAR/VARCHAR types (the preview flag or `spark.sql.preserveCharVarcharTypeInfo`). Distinct
+CAST and assignment semantics require the preview flag: an explicit CAST truncates or pads to
+the length, while assignment pads CHAR, trims only excess trailing spaces, and otherwise raises
+`EXCEED_LIMIT_LENGTH`. With only `spark.sql.preserveCharVarcharTypeInfo`, an explicit CAST to
+CHAR/VARCHAR applies the same checks as assignment. See
 [Character String Types](sql-ref-character-string-types.html#assignment-and-reading).
 
 | Source\Target | Numeric | String | Date | Time | Timestamp | Timestamp_NTZ | Interval | Boolean | Binary | Array | Map | Struct |
