@@ -528,4 +528,22 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
       }
     }
   }
+
+  test("SPARK-60424: ORC TIMESTAMP is inferred as TIMESTAMP_LTZ regardless of " +
+      "spark.sql.timestampType") {
+    withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> "hive") {
+      withTempPath { dir =>
+        val df = sql("SELECT ts, named_struct('ts', ts) AS s, array(ts) AS a, map('k', ts) AS m " +
+          "FROM VALUES (TIMESTAMP_LTZ'1970-01-01 00:00:01') AS t(ts)")
+        df.write.orc(dir.getCanonicalPath)
+        withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ") {
+          Seq("false", "true").foreach { mergeSchema =>
+            val readDf = spark.read.option("mergeSchema", mergeSchema).orc(dir.getCanonicalPath)
+            assert(readDf.schema === df.schema.asNullable)
+            checkAnswer(readDf, df)
+          }
+        }
+      }
+    }
+  }
 }
