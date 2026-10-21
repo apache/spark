@@ -144,6 +144,19 @@ object EchoGrpcWorkerMain {
   // scalastyle:on println
 
   /**
+   * Whether [[UnixDomainSocketTransport.detect]] can select epoll or kqueue.
+   * Callers outside `org.apache.spark.udf.worker.grpc` cannot see that
+   * transport. They assume on this and cancel on hosts where
+   * `DirectGrpcDispatcherIntegrationSuite` cancels.
+   */
+  def udsTransportAvailable: Boolean = try {
+    UnixDomainSocketTransport.detect()
+    true
+  } catch {
+    case _: UnsupportedOperationException => false
+  }
+
+  /**
    * Parses `--key value` flags. The engine guarantees `--id` and
    * `--connection` are present; unknown flags are ignored so future
    * engine-side additions don't break older workers.
