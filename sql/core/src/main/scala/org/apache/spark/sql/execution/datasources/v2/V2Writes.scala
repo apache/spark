@@ -21,8 +21,10 @@ import java.util.UUID
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.catalyst.expressions.PredicateHelper
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertOnlyMerge, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceData, RowLevelWrite, WriteDelta}
+import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.analysis.RewriteRowLevelCommand
+import org.apache.spark.sql.catalyst.expressions.{PredicateHelper, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertOnlyMerge, LocalRelation, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceData, RowLevelWrite, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.catalyst.util.WriteDeltaProjections
@@ -111,6 +113,7 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       WriteToDataSourceV2(Some(r), microBatchWrite, newQuery, customMetrics)
 
     case rd @ ReplaceData(r: DataSourceV2Relation, _, query, _, projections, _, None) =>
+      validateWriteRelation(rd)
       val (rowSchema, columnUpdateSchema) =
         writeSchemas(projections.rowProjection.schema, hasNarrowRows(rd))
       val metadataSchema = projections.metadataProjection.map(_.schema)
@@ -123,6 +126,7 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       rd.copy(write = Some(write), query = newQuery)
 
     case wd @ WriteDelta(r: DataSourceV2Relation, _, query, _, projections, _, None) =>
+      validateWriteRelation(wd)
       val writeOptions = mergeOptions(Map.empty, r.options.asCaseSensitiveMap.asScala.toMap)
       val deltaWriteBuilder =
         newDeltaWriteBuilder(r.table, writeOptions, projections, hasNarrowRows(wd))
@@ -142,8 +146,31 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   /**
+   * Checks that the write relation matches the current operation: a write that delivers narrow
+   * rows must have exactly the declared columns, in declared order, and any other write the full
+   * table columns. A rule that replaces the operation after the rewrite can break this, and the
+   * connector would then decode the rows with the wrong layout.
+   */
+  private def validateWriteRelation(rowLevelWrite: RowLevelWrite): Unit = {
+    val writeNames = rowLevelWrite.table.output.map(_.name)
+    val expectedNames = rowLevelWrite.operation match {
+      case op: SupportsColumnUpdates if hasNarrowRows(rowLevelWrite) =>
+        RewriteRowLevelCommand.resolveRequiredDataAttrs(rowLevelWrite.originalTable, op)
+          .map(_.name)
+      case _ =>
+        rowLevelWrite.originalTable.output.map(_.name)
+    }
+    if (writeNames != expectedNames) {
+      throw SparkException.internalError(
+        s"The write relation of operation ${rowLevelWrite.operation.getClass.getName} has " +
+          s"columns ${writeNames.mkString("[", ", ", "]")}, but the operation expects " +
+          s"${expectedNames.mkString("[", ", ", "]")}.")
+    }
+  }
+
+  /**
    * Checks that the distribution and ordering of a write that delivers narrow rows reference only
-   * columns the write reads. Other columns stay in the query only until column pruning removes
+   * columns passed to the write. Other columns stay in the query only until column pruning removes
    * them, so they are rejected here whether or not pruning ran.
    */
   private def validateColumnUpdateWrite(rowLevelWrite: RowLevelWrite, write: Write): Unit = {
@@ -154,13 +181,11 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
           case d: OrderedDistribution => d.ordering.toImmutableArraySeq
           case _ => Seq.empty
         }
-        val readNames = rowLevelWrite.references.toSeq.map(_.name)
-        val unread = (distribution ++ w.requiredOrdering.toImmutableArraySeq)
-          .flatMap(_.references.toImmutableArraySeq)
-          .filterNot(_.fieldNames.headOption.exists(n => readNames.exists(conf.resolver(_, n))))
-          .map(_.describe)
-          .distinct
-          .sorted
+        val readAttrs = rowLevelWrite.references.toSeq.distinctBy(_.name)
+        val unread = V2ExpressionUtils.unresolvableReferences(
+            distribution ++ w.requiredOrdering.toImmutableArraySeq,
+            LocalRelation(readAttrs))
+          .sortBy(_._1.mkString("."))
         if (unread.nonEmpty) {
           throw QueryCompilationErrors.undeclaredWriteRequirementColumnsError(
             rowLevelWrite.operation.getClass.getName, unread)

@@ -22,7 +22,7 @@ import java.util.Locale
 import scala.collection.mutable
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.ProjectingInternalRow
+import org.apache.spark.sql.catalyst.{ProjectingInternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, Expression, ExprId, If, Literal, MetadataAttribute, NamedExpression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, Expand, LogicalPlan, MergeRows, Project, Union}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -79,7 +79,7 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
     val updatedColumns = updatedAttrs.map(attr => FieldReference(Seq(attr.name)))
     val info = RowLevelOperationInfoImpl(command, options, updatedColumns)
     val operation = table.newRowLevelOperationBuilder(info).build()
-    RowLevelOperationTable(table, operation)
+    RowLevelOperationTable(table, operation)(info)
   }
 
   protected def buildRelationWithAttrs(
@@ -111,57 +111,6 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
     V2ExpressionUtils.resolveRefs[AttributeReference](
       operation.requiredMetadataAttributes.toImmutableArraySeq,
       relation)
-  }
-
-  /**
-   * Resolves the connector-declared required data attributes for column-update writes against
-   * the given relation. An empty declaration, nested fields, duplicate columns, columns that do
-   * not exist in the relation and metadata columns are rejected with an `AnalysisException`.
-   */
-  protected def resolveRequiredDataAttrs(
-      relation: DataSourceV2Relation,
-      operation: SupportsColumnUpdates): Seq[AttributeReference] = {
-    val refs = operation.requiredDataAttributes
-    if (refs.isEmpty) {
-      throw QueryCompilationErrors.emptyRequiredDataAttributesError(operation.getClass.getName)
-    }
-    val nested = refs.filter(_.fieldNames.length != 1).map(_.describe()).toImmutableArraySeq
-    if (nested.nonEmpty) {
-      throw QueryCompilationErrors.nestedRequiredDataAttributeError(
-        operation.getClass.getName, nested)
-    }
-    val normalizedNames = refs.map { ref =>
-      val name = ref.fieldNames.head
-      if (conf.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
-    }
-    val duplicates = refs.zip(normalizedNames).groupBy(_._2).collect {
-      case (_, occurrences) if occurrences.length > 1 => occurrences.head._1.describe()
-    }.toSeq
-    if (duplicates.nonEmpty) {
-      throw QueryCompilationErrors.duplicateRequiredDataAttributeError(
-        operation.getClass.getName, duplicates)
-    }
-    val resolvedOpts = refs.toImmutableArraySeq.map(V2ExpressionUtils.resolveRefOpt(_, relation))
-    val unknown = refs.toImmutableArraySeq.zip(resolvedOpts).collect {
-      case (ref, None) => ref.describe()
-    }
-    if (unknown.nonEmpty) {
-      throw QueryCompilationErrors.unknownRequiredDataAttributeError(
-        operation.getClass.getName, unknown)
-    }
-    val resolved = resolvedOpts.flatten.map(_.asInstanceOf[AttributeReference])
-    val metadata = refs.toImmutableArraySeq.zip(resolved).collect {
-      case (ref, attr) if MetadataAttribute.isValid(attr.metadata) => ref.describe()
-    }
-    if (metadata.nonEmpty) {
-      throw QueryCompilationErrors.metadataRequiredDataAttributeError(
-        operation.getClass.getName, metadata)
-    }
-    // `resolveRefOpt` matches case-insensitively but keeps the declared spelling, so map each
-    // resolved attribute back to the relation's own (by exprId) to avoid a spelling mismatch
-    // between the connector's declaration and the table's actual column name.
-    val byExprId = relation.output.map(a => a.exprId -> a).toMap
-    resolved.map(a => byExprId.getOrElse(a.exprId, a).asInstanceOf[AttributeReference])
   }
 
   protected def resolveRowIdAttrs(
@@ -326,24 +275,6 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
     WriteDeltaProjections(rowProjection, rowIdProjection, metadataProjection)
   }
 
-  /**
-   * Moves the query columns that no projection reads after the ones that are read, and returns
-   * the reordered query with a map from each old ordinal to the new one. The optimizer prunes the
-   * query columns after the last one the write reads, which then never changes an ordinal.
-   */
-  protected def orderReadColumnsFirst(
-      plan: LogicalPlan,
-      projections: Seq[ProjectingInternalRow]): (LogicalPlan, Int => Int) = {
-    val readOrdinals = (0 +: projections.flatMap(_.colOrdinals)).distinct.sorted
-    val readOrdinalSet = readOrdinals.toSet
-    val order = readOrdinals ++ plan.output.indices.filterNot(readOrdinalSet.contains)
-    if (order == plan.output.indices) {
-      (plan, identity)
-    } else {
-      (reorderOutputs(plan, order), order.zipWithIndex.toMap)
-    }
-  }
-
   private def extractOutputs(plan: LogicalPlan): Seq[Seq[Expression]] = {
     plan match {
       case p: Project => Seq(p.projectList)
@@ -351,17 +282,6 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       case m: MergeRows => m.outputs
       case u: Union => u.children.flatMap(extractOutputs)
       case _ => throw SparkException.internalError("Can't extract outputs from plan: " + plan)
-    }
-  }
-
-  private def reorderOutputs(plan: LogicalPlan, order: Seq[Int]): LogicalPlan = {
-    plan match {
-      case p: Project => p.copy(projectList = order.map(p.projectList))
-      case e: Expand =>
-        e.copy(projections = e.projections.map(output => order.map(output)),
-          output = order.map(e.output))
-      case u: Union => u.withNewChildren(u.children.map(reorderOutputs(_, order)))
-      case _ => throw SparkException.internalError("Can't reorder outputs of plan: " + plan)
     }
   }
 
@@ -420,7 +340,7 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
     assignments.flatMap { assignment =>
       val key = assignment.key.asInstanceOf[Attribute]
       val value = assignment.value
-      if (rowIdAttrSet.contains(key) && !key.semanticEquals(value)) {
+      if (rowIdAttrSet.contains(key) && !isIdentityAssignment(key, value)) {
         Some(Alias(key, ORIGINAL_ROW_ID_VALUE_PREFIX + key.name)())
       } else {
         None
@@ -443,5 +363,62 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
     attrs.zipWithIndex.map { case (attr, index) =>
       AttributeReference(attr.name, attr.dataType, nullabilityMap(index), attr.metadata)()
     }
+  }
+}
+
+object RewriteRowLevelCommand extends SQLConfHelper {
+
+  /**
+   * Resolves the connector-declared required data attributes for column-update writes against
+   * the given relation, in declared order and with the relation's spelling. An empty declaration,
+   * nested fields, duplicate columns, columns that do not exist in the relation and metadata
+   * columns are rejected with an `AnalysisException`.
+   */
+  private[sql] def resolveRequiredDataAttrs(
+      relation: LogicalPlan,
+      operation: SupportsColumnUpdates): Seq[AttributeReference] = {
+    val refs = operation.requiredDataAttributes.toImmutableArraySeq
+    if (refs.isEmpty) {
+      throw QueryCompilationErrors.emptyRequiredDataAttributesError(operation.getClass.getName)
+    }
+    val nested = refs.filter(_.fieldNames.length != 1).map(_.fieldNames.toSeq)
+    if (nested.nonEmpty) {
+      throw QueryCompilationErrors.nestedRequiredDataAttributeError(
+        operation.getClass.getName, nested)
+    }
+    val normalizedNames = refs.map { ref =>
+      val name = ref.fieldNames.head
+      if (conf.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
+    }
+    val counts = normalizedNames.groupBy(identity).view.mapValues(_.size).toMap
+    val duplicates = refs.zip(normalizedNames)
+      .filter { case (_, name) => counts(name) > 1 }
+      .distinctBy(_._2)
+      .map(_._1.fieldNames.toSeq)
+    if (duplicates.nonEmpty) {
+      throw QueryCompilationErrors.duplicateRequiredDataAttributeError(
+        operation.getClass.getName, duplicates)
+    }
+    val resolvedOpts = refs.map(V2ExpressionUtils.resolveRefOpt(_, relation))
+    val unknown = refs.zip(resolvedOpts).collect {
+      case (ref, None) => ref.fieldNames.toSeq
+    }
+    if (unknown.nonEmpty) {
+      throw QueryCompilationErrors.unknownRequiredDataAttributeError(
+        operation.getClass.getName, unknown)
+    }
+    val resolved = resolvedOpts.flatten.map(_.asInstanceOf[AttributeReference])
+    val metadata = refs.zip(resolved).collect {
+      case (ref, attr) if MetadataAttribute.isValid(attr.metadata) => ref.fieldNames.toSeq
+    }
+    if (metadata.nonEmpty) {
+      throw QueryCompilationErrors.metadataRequiredDataAttributeError(
+        operation.getClass.getName, metadata)
+    }
+    // `resolveRefOpt` matches case-insensitively but keeps the declared spelling, so map each
+    // resolved attribute back to the relation's own (by exprId) to avoid a spelling mismatch
+    // between the connector's declaration and the table's actual column name.
+    val byExprId = relation.output.map(a => a.exprId -> a).toMap
+    resolved.map(a => byExprId(a.exprId).asInstanceOf[AttributeReference])
   }
 }

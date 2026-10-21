@@ -1291,13 +1291,13 @@
   },
   "COLUMN_UPDATE_SPLIT_ROW_ID_REASSIGNMENT" : {
     "message" : [
-      "Connector <connector> mixes in `SupportsColumnUpdates` and represents UPDATE as delete and insert, so UPDATE cannot assign row ID column(s) <rowIds>. The reinserted row carries only the columns in `requiredDataAttributes()`, and with a new row ID it cannot be matched to the row whose other columns the connector must preserve. Do not assign row ID columns, or include every table column in `requiredDataAttributes()`."
+      "Connector <connector> mixes in `SupportsColumnUpdates` and represents UPDATE as delete and insert, so UPDATE cannot assign row ID column(s) <rowIds>. The reinserted row carries only the columns in `requiredDataAttributes()`, and with a new row ID it cannot be matched to the row whose other columns the connector must preserve. Do not assign row ID columns, or include every data column in `requiredDataAttributes()`."
     ],
     "sqlState" : "42000"
   },
   "COLUMN_UPDATE_UNDECLARED_WRITE_REQUIREMENT_COLUMNS" : {
     "message" : [
-      "Connector <connector> mixes in `SupportsColumnUpdates`, but its write requires a distribution or ordering by column(s) <columns> that the column-level UPDATE does not read. Declare each data column in `requiredDataAttributes()` and each metadata column in `requiredMetadataAttributes()`."
+      "Connector <connector> mixes in `SupportsColumnUpdates`, but its write requires a distribution or ordering by column(s) <columns> that are not passed to the write. Declare each data column in `requiredDataAttributes()` and each metadata column in `requiredMetadataAttributes()`."
     ],
     "sqlState" : "42000"
   },
@@ -2361,6 +2361,12 @@
   "DATA_SOURCE_COLUMNAR_READER_NOT_SUPPORTED" : {
     "message" : [
       "<class> cannot create columnar reader."
+    ],
+    "sqlState" : "0A000"
+  },
+  "DATA_SOURCE_COLUMN_UPDATE_SCHEMA_NOT_IMPLEMENTED" : {
+    "message" : [
+      "<class> does not implement columnUpdateSchema."
     ],
     "sqlState" : "0A000"
   },

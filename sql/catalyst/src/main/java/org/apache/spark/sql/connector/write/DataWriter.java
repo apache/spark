@@ -70,8 +70,11 @@ public interface DataWriter<T> extends Closeable {
    * Writes one record with metadata.
    * <p>
    * This method is used by group-based row-level operations to pass back metadata for records
-   * that are updated or copied. New records added during a MERGE operation are written using
-   * {@link #write(Object)} as there is no metadata associated with those records.
+   * that are updated or copied. When {@link LogicalWriteInfo#columnUpdateSchema()} is present for
+   * an operation that does not mix in {@link SupportsDelta}, Spark passes these records to
+   * {@link #writeColumnUpdate(Object, Object)} instead. New records added during a MERGE operation
+   * are written using {@link #write(Object)} as there is no metadata associated with those
+   * records.
    * <p>
    * If this method fails (by throwing an exception), {@link #abort()} will be called and this
    * data writer is considered to have been failed.
@@ -140,6 +143,10 @@ public interface DataWriter<T> extends Closeable {
 
   /**
    * Writes one record.
+   * <p>
+   * When {@link LogicalWriteInfo#columnUpdateSchema()} is present for a row-level operation that
+   * does not mix in {@link SupportsDelta}, Spark passes updated and copied records to
+   * {@link #writeColumnUpdate(Object)} or {@link #writeColumnUpdate(Object, Object)} instead.
    * <p>
    * If this method fails (by throwing an exception), {@link #abort()} will be called and this
    * data writer is considered to have been failed.

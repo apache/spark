@@ -361,13 +361,27 @@ trait RowLevelWrite extends V2WriteCommand with SupportsSubquery {
   protected def queryProjections: Seq[ProjectingInternalRow]
 
   /**
-   * The write reads the operation column at ordinal 0 and other columns only through projections.
-   * The query columns after the last one it reads can be pruned without changing its ordinals.
+   * The write reads the operation column at ordinal 0 and other query columns only through
+   * projections, by ordinal. Any other query column can be pruned with [[withPrunedQuery]].
    */
   override lazy val references: AttributeSet = {
-    val lastReadOrdinal = queryProjections.flatMap(_.colOrdinals).foldLeft(0)(math.max)
-    AttributeSet(query.output.take(lastReadOrdinal + 1))
+    val output = query.output
+    val readOrdinals = (0 +: queryProjections.flatMap(_.colOrdinals)).distinct
+    AttributeSet(readOrdinals.map { ordinal =>
+      if (ordinal >= output.length) {
+        throw SparkException.internalError(
+          s"A projection of $nodeName reads ordinal $ordinal of a query with ${output.length} " +
+            "columns.")
+      }
+      output(ordinal)
+    })
   }
+
+  /**
+   * Replaces the query with a pruned one and moves the projections to the new ordinals, given a
+   * map from each read ordinal of the current query to its ordinal in the new one.
+   */
+  def withPrunedQuery(newQuery: LogicalPlan, ordinalMap: Int => Int): RowLevelWrite
 
   protected def operationResolved: Boolean = {
     val attr = query.output.head
@@ -453,6 +467,10 @@ case class ReplaceData(
   override protected def queryProjections: Seq[ProjectingInternalRow] = projections.all
 
   override def withNewQuery(newQuery: LogicalPlan): ReplaceData = copy(query = newQuery)
+
+  override def withPrunedQuery(newQuery: LogicalPlan, ordinalMap: Int => Int): ReplaceData = {
+    copy(query = newQuery, projections = projections.remapOrdinals(ordinalMap))
+  }
 
   override def withNewTable(newTable: NamedRelation): ReplaceData = copy(table = newTable)
 
@@ -565,6 +583,10 @@ case class WriteDelta(
   override protected def queryProjections: Seq[ProjectingInternalRow] = projections.all
 
   override def withNewQuery(newQuery: LogicalPlan): V2WriteCommand = copy(query = newQuery)
+
+  override def withPrunedQuery(newQuery: LogicalPlan, ordinalMap: Int => Int): WriteDelta = {
+    copy(query = newQuery, projections = projections.remapOrdinals(ordinalMap))
+  }
 
   override def withNewTable(newTable: NamedRelation): V2WriteCommand = copy(table = newTable)
 
