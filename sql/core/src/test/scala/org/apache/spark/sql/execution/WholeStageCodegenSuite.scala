@@ -22,7 +22,7 @@ import java.time.Duration
 
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.MapPartitionsWithEvaluatorRDD
-import org.apache.spark.sql.{Dataset, Row, SaveMode}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SaveMode}
 import org.apache.spark.sql.catalyst.expressions.{And, Cast, CodegenObjectFactoryMode, Expression, IsNotNull}
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodeGenerator}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
@@ -1342,5 +1342,35 @@ class WholeStageCodegenSuite extends SharedSparkSession
     assert(enabledCount < disabledCount,
       s"subexpressionElimination.filterExec.enabled should reduce repeated evaluation: " +
         s"addExact appears $enabledCount times when enabled vs $disabledCount times when disabled")
+  }
+
+  test("SPARK-60398: Expand compiles with its switch case functions spilled to nested classes") {
+    // A sliding window has its Expand generate a row for each window a time can fall in: 360 rows
+    // for a window of an hour sliding by 10 seconds. Without subexpression elimination the code
+    // of each case computes the window in full and goes into a function of its own (SPARK-35329),
+    // and the 360 functions, about 2.5 million characters of code, take the class past
+    // `CodeGenerator.GENERATED_CLASS_SIZE_THRESHOLD`, so `addNewFunction` puts the later ones into
+    // nested classes. A call from outside of such a class has to go through its instance, as the
+    // name `addNewFunction` returns does; by the bare name it failed to compile, and the stage ran
+    // without whole stage codegen. The calls come from `expand_doConsume_0`, added after the
+    // functions into a later nested class, and, where the consume code of the operators is not
+    // split into functions, from `processNext` of the outer class.
+    val qualifiedCall = "\\w*nestedClassInstance_\\d+\\.\\w*switchCaseCode_\\d+\\(".r
+    def check(df: => DataFrame): Unit = {
+      val code = genCode(df)
+      code.foreach(CodeGenerator.compile)
+      assert(code.exists(c => qualifiedCall.findFirstIn(c.body).nonEmpty))
+      val expected = withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+        df.collect().toSeq
+      }
+      checkAnswer(df, expected)
+    }
+    def times: DataFrame = spark.range(10).selectExpr("timestamp_seconds(id) AS ts")
+    withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "false") {
+      check(times.groupBy(window($"ts", "1 hour", "10 seconds")).count())
+      withSQLConf(SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> "false") {
+        check(times.select(window($"ts", "1 hour", "10 seconds")))
+      }
+    }
   }
 }
