@@ -13,12 +13,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! A write-only JSONL sink demonstrating task staging and atomic manifest commits.
+//! A write-only JSONL sink demonstrating task staging, atomic manifest commits, and
+//! exactly-once streaming writes.
 //!
 //! This example requires one local or shared POSIX filesystem. It is not an
 //! object-store connector, a concurrent writer protocol, or a durable table format.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufWriter, ErrorKind, Write};
 use std::path::{Component, Path, PathBuf};
@@ -31,7 +32,8 @@ use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use serde::{Deserialize, Serialize};
 use spark_native_source::{
     BatchWrite, Capabilities, CreateInfo, DataSource, DataWriter, DataWriterFactory,
-    PartitionWriter, Result, TaskContext, Unsupported, WriteInfo, WriteMode, WriterContext,
+    PartitionWriter, Result, StreamingWrite, StreamingWriteInfo, TaskContext, Unsupported,
+    WriteInfo, WriteMode, WriterContext,
 };
 
 spark_native_source::export_data_source!(JsonSink);
@@ -47,7 +49,9 @@ pub struct JsonSink {
 impl DataSource for JsonSink {
     // A write-only sink.
     type ScanBuilder = Unsupported;
+    type MicroBatchStream = Unsupported;
     type BatchWrite = JsonWrite;
+    type StreamingWrite = JsonStreamingWrite;
 
     fn new(info: CreateInfo) -> Result<Self> {
         let mut options = info.options;
@@ -64,6 +68,8 @@ impl DataSource for JsonSink {
             Some("true") => true,
             _ => return Err("The readonly option must be true or false".into()),
         };
+        // Spark passes the checkpoint of a streaming query among the options of its sink.
+        options.remove("checkpointlocation");
         if !options.is_empty() {
             return Err(
                 format!("Unknown options: {:?}", options.keys().collect::<Vec<_>>()).into(),
@@ -78,8 +84,8 @@ impl DataSource for JsonSink {
 
     fn capabilities(&self) -> Capabilities {
         if self.readonly {
-            // Also removes Truncate, which requires batch writes.
-            Capabilities::all().without(Capabilities::BATCH_WRITE)
+            // Also removes Truncate, which requires a write.
+            Capabilities::all().without(Capabilities::BATCH_WRITE | Capabilities::STREAMING_WRITE)
         } else {
             Capabilities::all()
         }
@@ -91,6 +97,17 @@ impl DataSource for JsonSink {
         }
         validate_schema(&info.schema)?;
         JsonWrite::new(self.path.clone(), info.mode)
+    }
+
+    fn new_streaming_write(&self, info: StreamingWriteInfo) -> Result<JsonStreamingWrite> {
+        if self.readonly {
+            return Err("This sink is readonly".into());
+        }
+        validate_schema(&info.schema)?;
+        Ok(JsonStreamingWrite {
+            write: JsonWrite::new(self.path.clone(), info.mode)?,
+            query_id: info.query_id,
+        })
     }
 }
 
@@ -124,6 +141,9 @@ struct DataFile {
 struct Manifest {
     version: u32,
     files: Vec<DataFile>,
+    /// The last epoch that each streaming query committed, by the ID of the query.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    epochs: BTreeMap<String, i64>,
 }
 
 impl Default for Manifest {
@@ -131,6 +151,7 @@ impl Default for Manifest {
         Self {
             version: 1,
             files: Vec::new(),
+            epochs: BTreeMap::new(),
         }
     }
 }
@@ -223,7 +244,12 @@ impl JsonWrite {
         })
     }
 
-    fn publish(&mut self, messages: Vec<CommitMessage>) -> Result<()> {
+    /// Publishes the winning attempts, and records the epoch of a streaming query.
+    fn publish(
+        &mut self,
+        messages: Vec<CommitMessage>,
+        epoch: Option<(String, i64)>,
+    ) -> Result<()> {
         let mut filenames = BTreeSet::new();
         let mut partitions = BTreeSet::new();
         for (index, message) in messages.iter().enumerate() {
@@ -264,7 +290,15 @@ impl JsonWrite {
             path: format!("objects/{}/{}", self.operation, message.filename),
             rows: message.rows,
         }));
-        let manifest = Manifest { version: 1, files };
+        let mut epochs = self.previous.epochs.clone();
+        if let Some((query_id, epoch_id)) = epoch {
+            epochs.insert(query_id, epoch_id);
+        }
+        let manifest = Manifest {
+            version: 1,
+            files,
+            epochs,
+        };
         let file = OpenOptions::new()
             .write(true)
             .create_new(true)
@@ -282,6 +316,16 @@ impl JsonWrite {
         self.committed = true;
         self.lock.take();
         Ok(())
+    }
+
+    /// Publishes nothing, for an epoch whose output is already published: removes what this
+    /// write staged, and releases the lock.
+    fn skip(&mut self) -> Result<()> {
+        let result = self.cleanup();
+        // Nothing is left for Drop to clean.
+        self.committed = true;
+        self.lock.take();
+        result
     }
 
     fn cleanup(&self) -> Result<()> {
@@ -327,13 +371,47 @@ impl BatchWrite for JsonWrite {
     }
 
     fn commit(&mut self, messages: Vec<CommitMessage>) -> Result<()> {
-        self.publish(messages)
+        self.publish(messages, None)
     }
 
     fn abort(&mut self, _messages: Vec<Option<CommitMessage>>) -> Result<()> {
         let result = self.cleanup();
         self.lock.take();
         result
+    }
+}
+
+/// The write of a micro-batch, exactly once: the manifest records the last epoch that each
+/// streaming query committed, so an epoch that Spark commits again after a restart adds
+/// nothing.
+pub struct JsonStreamingWrite {
+    write: JsonWrite,
+    query_id: String,
+}
+
+impl StreamingWrite for JsonStreamingWrite {
+    type Factory = JsonWriterFactory;
+    type Message = CommitMessage;
+
+    // The output mode complete replaces the output of the previous micro-batches.
+    const SUPPORTS_TRUNCATE: bool = true;
+
+    fn writer_factory(&self) -> Result<JsonWriterFactory> {
+        self.write.writer_factory()
+    }
+
+    fn commit(&mut self, epoch_id: i64, messages: Vec<CommitMessage>) -> Result<()> {
+        // The write holds the lock, so the manifest that it read is still the latest one.
+        let committed = self.write.previous.epochs.get(&self.query_id);
+        if committed.is_some_and(|last| *last >= epoch_id) {
+            return self.write.skip();
+        }
+        self.write
+            .publish(messages, Some((self.query_id.clone(), epoch_id)))
+    }
+
+    fn abort(&mut self, _epoch_id: i64, messages: Vec<Option<CommitMessage>>) -> Result<()> {
+        self.write.abort(messages)
     }
 }
 
@@ -613,6 +691,29 @@ mod tests {
             .collect()
     }
 
+    fn new_streaming_write(
+        source: &JsonSink,
+        query_id: &str,
+        mode: WriteMode,
+    ) -> Result<(JsonStreamingWrite, JsonWriterFactory)> {
+        let info = StreamingWriteInfo::new(sink_schema(), mode, query_id);
+        let write = source.new_streaming_write(info)?;
+        let factory = write.writer_factory()?;
+        Ok((write, factory))
+    }
+
+    fn commit_epoch(
+        source: &JsonSink,
+        query_id: &str,
+        mode: WriteMode,
+        epoch_id: i64,
+        ids: Vec<Option<i64>>,
+    ) {
+        let (mut write, factory) = new_streaming_write(source, query_id, mode).unwrap();
+        let message = stage(&factory, 0, ids);
+        write.commit(epoch_id, vec![message]).unwrap();
+    }
+
     fn commit_ids(source: &JsonSink, mode: WriteMode, ids: Vec<Option<i64>>) {
         let (mut write, factory) = new_write(source, mode).unwrap();
         let message = stage(&factory, 0, ids);
@@ -740,6 +841,57 @@ mod tests {
     }
 
     #[test]
+    fn streaming_writes_publish_each_epoch_of_a_query_once() {
+        let directory = TempDirectory::new();
+        let source = directory.source();
+        commit_epoch(&source, "query", WriteMode::Append, 0, vec![Some(1)]);
+        commit_epoch(&source, "query", WriteMode::Append, 1, vec![Some(2)]);
+        // A restarted query commits its last epoch again, which publishes nothing and
+        // removes what the new attempt staged.
+        let (mut write, factory) =
+            new_streaming_write(&source, "query", WriteMode::Append).unwrap();
+        let message = stage(&factory, 0, vec![Some(3)]);
+        let staging = write.write.staging.clone();
+        write.commit(1, vec![message]).unwrap();
+        assert!(!staging.exists());
+        assert!(!directory.0.join(".write-lock").exists());
+        let rows = |ids: &[i64]| {
+            ids.iter()
+                .map(|id| serde_json::json!({"id": id, "label": format!("row-{id}")}))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(committed_rows(&directory.0), rows(&[1, 2]));
+
+        // Another query has epochs of its own.
+        commit_epoch(&source, "other", WriteMode::Append, 0, vec![Some(4)]);
+        assert_eq!(committed_rows(&directory.0), rows(&[1, 2, 4]));
+        assert_eq!(
+            read_manifest(&directory.0).unwrap().epochs,
+            BTreeMap::from([("other".to_owned(), 0), ("query".to_owned(), 1)])
+        );
+
+        // An aborted micro-batch leaves the output unchanged.
+        let (mut write, factory) =
+            new_streaming_write(&source, "query", WriteMode::Append).unwrap();
+        let message = stage(&factory, 0, vec![Some(5)]);
+        write.abort(2, vec![Some(message)]).unwrap();
+        assert_eq!(committed_rows(&directory.0), rows(&[1, 2, 4]));
+
+        // The output mode complete replaces the output of the previous micro-batches.
+        commit_epoch(&source, "query", WriteMode::Truncate, 2, vec![Some(6)]);
+        assert_eq!(committed_rows(&directory.0), rows(&[6]));
+        assert_eq!(read_manifest(&directory.0).unwrap().epochs["query"], 2);
+    }
+
+    #[test]
+    fn streaming_queries_pass_their_checkpoint_among_the_options() {
+        let directory = TempDirectory::new();
+        let path = directory.0.to_str().unwrap();
+        assert!(JsonSink::new(info(&[("path", path), ("checkpointlocation", "/tmp/c")])).is_ok());
+        assert!(JsonSink::new(info(&[("path", path), ("unknown", "1")])).is_err());
+    }
+
+    #[test]
     fn readonly_removes_all_write_capabilities_without_creating_files() {
         let directory = TempDirectory::new();
         let path = directory.0.join("not-created");
@@ -750,8 +902,10 @@ mod tests {
         .unwrap();
         let capabilities = source.capabilities();
         assert!(!capabilities.contains(Capabilities::BATCH_WRITE));
+        assert!(!capabilities.contains(Capabilities::STREAMING_WRITE));
         assert!(!capabilities.contains(Capabilities::TRUNCATE));
         assert!(new_write(&source, WriteMode::Append).is_err());
+        assert!(new_streaming_write(&source, "query", WriteMode::Append).is_err());
         assert!(!path.exists());
     }
 }

@@ -24,9 +24,9 @@ use arrow_array::{ArrayRef, Int64Array, RecordBatch, RecordBatchOptions};
 use arrow_schema::{ArrowError, DataType, Field, Schema, SchemaRef};
 use serde::{Deserialize, Serialize};
 use spark_native_source::{
-    CreateInfo, DataSource, FilterSupport, LimitSupport, LiteralValue, Options, PartitionReader,
-    PartitionReaderFactory, Predicate, ReaderContext, Result, ScanBuilder, ScanInfo, ScanPlan,
-    Unsupported,
+    CreateInfo, DataSource, FilterSupport, LimitSupport, LiteralValue, MicroBatchStream,
+    MicroBatchStreamInfo, Options, PartitionReader, PartitionReaderFactory, Predicate,
+    ReaderContext, Result, ScanBuilder, ScanInfo, ScanPlan, Unsupported,
 };
 
 pub struct RangeSource {
@@ -58,10 +58,28 @@ pub struct RangePartition {
     end: i64,
 }
 
+/// A streaming read of the range. The range is fixed, so all its rows are available when
+/// the query starts: the first micro-batch reads them, and later ones find no new data.
+pub struct RangeStream {
+    start: i64,
+    end: i64,
+    num_partitions: usize,
+    factory: RangeReaderFactory,
+}
+
+/// The offset of a streaming read: the next row to read. Spark stores it in the checkpoint
+/// as `{"next":13}`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RangeOffset {
+    next: i64,
+}
+
 impl DataSource for RangeSource {
     type ScanBuilder = RangeScan;
+    type MicroBatchStream = RangeStream;
     // A read-only source.
     type BatchWrite = Unsupported;
+    type StreamingWrite = Unsupported;
 
     fn new(info: CreateInfo) -> Result<Self> {
         let options = info.options;
@@ -96,25 +114,24 @@ impl DataSource for RangeSource {
     }
 
     fn new_scan(&self, info: ScanInfo) -> Result<Self::ScanBuilder> {
-        let schema = info.schema;
-        let columns: Vec<String> = schema.fields().iter().map(|f| f.name().clone()).collect();
-        let expected = output_schema(&columns)?;
-        for (field, expected) in schema.fields().iter().zip(expected.fields()) {
-            if field.data_type() != expected.data_type() {
-                return Err(format!(
-                    "Unsupported type for {}: {}",
-                    field.name(),
-                    field.data_type()
-                )
-                .into());
-            }
-        }
         Ok(RangeScan {
             lower: i128::from(self.start),
             upper: i128::from(self.end),
             num_partitions: self.num_partitions,
             limit: None,
-            columns,
+            columns: read_columns(&info.schema)?,
+            factory: RangeReaderFactory {
+                batch_size: self.batch_size,
+            },
+        })
+    }
+
+    fn new_micro_batch_stream(&self, info: MicroBatchStreamInfo) -> Result<Self::MicroBatchStream> {
+        read_columns(&info.schema)?;
+        Ok(RangeStream {
+            start: self.start,
+            end: self.end,
+            num_partitions: self.num_partitions,
             factory: RangeReaderFactory {
                 batch_size: self.batch_size,
             },
@@ -213,24 +230,82 @@ impl ScanBuilder for RangeScan {
         let upper = self.limit.map_or(self.upper, |limit| {
             self.upper.min(self.lower + limit as i128)
         });
-        let rows = (upper - self.lower).max(0);
-        let count = (self.num_partitions as i128).min(rows) as usize;
-        let mut partitions = Vec::with_capacity(count);
-        if count > 0 {
-            let width = rows / count as i128;
-            let extra = rows % count as i128;
-            let mut start = self.lower;
-            for index in 0..count {
-                let end = start + width + i128::from((index as i128) < extra);
-                partitions.push(RangePartition {
-                    start: start as i64,
-                    end: end as i64,
-                });
-                start = end;
-            }
-        }
+        let partitions = split(self.lower, upper, self.num_partitions);
         Ok(ScanPlan::new(self.factory, partitions))
     }
+}
+
+impl MicroBatchStream for RangeStream {
+    type Offset = RangeOffset;
+    // Micro-batches are read as batch scans are.
+    type Factory = RangeReaderFactory;
+
+    fn initial_offset(&mut self) -> Result<RangeOffset> {
+        Ok(RangeOffset { next: self.start })
+    }
+
+    fn latest_offset(&mut self) -> Result<RangeOffset> {
+        Ok(RangeOffset { next: self.end })
+    }
+
+    fn plan(
+        &mut self,
+        start: RangeOffset,
+        end: RangeOffset,
+    ) -> Result<ScanPlan<RangeReaderFactory>> {
+        // The offsets of a checkpoint may come from a query with other options.
+        if start.next < self.start || end.next > self.end || start.next > end.next {
+            return Err(format!(
+                "The offsets {} and {} do not delimit rows of the range [{}, {})",
+                start.next, end.next, self.start, self.end
+            )
+            .into());
+        }
+        let partitions = split(
+            i128::from(start.next),
+            i128::from(end.next),
+            self.num_partitions,
+        );
+        Ok(ScanPlan::new(self.factory.clone(), partitions))
+    }
+}
+
+/// Splits the rows in [lower, upper) into at most `num_partitions` disjoint partitions.
+fn split(lower: i128, upper: i128, num_partitions: usize) -> Vec<RangePartition> {
+    let rows = (upper - lower).max(0);
+    let count = (num_partitions as i128).min(rows) as usize;
+    let mut partitions = Vec::with_capacity(count);
+    if count > 0 {
+        let width = rows / count as i128;
+        let extra = rows % count as i128;
+        let mut start = lower;
+        for index in 0..count {
+            let end = start + width + i128::from((index as i128) < extra);
+            partitions.push(RangePartition {
+                start: start as i64,
+                end: end as i64,
+            });
+            start = end;
+        }
+    }
+    partitions
+}
+
+/// The columns of a schema to read, which must have the types of the range.
+fn read_columns(schema: &SchemaRef) -> Result<Vec<String>> {
+    let columns: Vec<String> = schema.fields().iter().map(|f| f.name().clone()).collect();
+    let expected = output_schema(&columns)?;
+    for (field, expected) in schema.fields().iter().zip(expected.fields()) {
+        if field.data_type() != expected.data_type() {
+            return Err(format!(
+                "Unsupported type for {}: {}",
+                field.name(),
+                field.data_type()
+            )
+            .into());
+        }
+    }
+    Ok(columns)
 }
 
 fn option<T>(options: &Options, name: &str, default: T) -> Result<T>
@@ -591,6 +666,38 @@ mod tests {
         let mut scan = source.new_scan(ScanInfo::new(labels)).unwrap();
         assert!(scan.prune_columns(&["id".into()]).is_err());
         assert!(output_schema(&["id".into(), "id".into()]).is_err());
+    }
+
+    #[test]
+    fn a_stream_plans_micro_batches_between_json_offsets() {
+        let source = source(&[
+            ("start", "10"),
+            ("end", "25"),
+            ("numpartitions", "2"),
+            ("batchsize", "4"),
+        ]);
+        let mut stream = source
+            .new_micro_batch_stream(MicroBatchStreamInfo::new(source.schema().unwrap()))
+            .unwrap();
+        let initial = stream.initial_offset().unwrap();
+        let latest = stream.latest_offset().unwrap();
+        assert_eq!(serde_json::to_string(&initial).unwrap(), r#"{"next":10}"#);
+        assert_eq!(serde_json::to_string(&latest).unwrap(), r#"{"next":25}"#);
+        // As if an earlier query had planned a micro-batch up to an offset of its checkpoint.
+        let middle: RangeOffset = serde_json::from_str(r#"{"next":13}"#).unwrap();
+        let first = stream.plan(initial, middle).unwrap();
+        assert_eq!(first.partitions.len(), 2);
+        assert_eq!(ids(&read(first, ALL)), (10..13).collect::<Vec<_>>());
+        let second = stream.plan(middle, latest).unwrap();
+        assert_eq!(ids(&read(second, ALL)), (13..25).collect::<Vec<_>>());
+        assert!(stream.plan(latest, latest).unwrap().partitions.is_empty());
+        let outside: RangeOffset = serde_json::from_str(r#"{"next":30}"#).unwrap();
+        assert!(stream.plan(initial, outside).is_err());
+        assert!(stream.plan(latest, initial).is_err());
+        let invalid = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
+        assert!(source
+            .new_micro_batch_stream(MicroBatchStreamInfo::new(invalid))
+            .is_err());
     }
 
     #[test]

@@ -17,7 +17,8 @@ limitations under the License.
 
 # Rust native range data source
 
-This example implements batch reads using the [Rust native data source SDK][sdk].
+This example implements batch and micro-batch streaming reads using the
+[Rust native data source SDK][sdk].
 The connector in [src/lib.rs](src/lib.rs) exports `rust_sdk_range` through the SDK's
 `export_data_source!(RangeSource)` macro. The macro exports the C entry point
 `spark_ds_init`; the connector does not use JNI, raw pointers, or unsafe code.
@@ -28,12 +29,13 @@ Running the Spark smoke script requires a distribution built with that native da
 framework and Java 22 or later on the driver and executors. The JNI SDK prototype in PR #59442
 targets a different interface.
 
-Naming `RangeScan` as the `ScanBuilder`, with `type BatchWrite = Unsupported`, derives the
-`BATCH_READ` capability and the native mask `SPARK_DS_BATCH_READ` (`1`); the connector does not
-maintain a separate capability list. Connectors can narrow their operations through
-`DataSource::capabilities()` based on options. This example does not implement writes or
-Structured Streaming. The companion [file sink](../native-data-sink/README.md) demonstrates batch
-append and overwrite.
+Naming `RangeScan` as the `ScanBuilder` and `RangeStream` as the `MicroBatchStream`, with
+`Unsupported` writes, derives the `BATCH_READ` and `MICRO_BATCH_READ` capabilities and the native
+mask `SPARK_DS_BATCH_READ | SPARK_DS_MICRO_BATCH_READ` (`3`); the connector does not maintain a
+separate capability list. Connectors can narrow their operations through
+`DataSource::capabilities()` based on options. This example does not implement writes. The
+companion [file sink](../native-data-sink/README.md) demonstrates batch append and overwrite, and
+exactly-once streaming writes.
 During analysis, Spark creates and closes a source with the table options to inspect its
 capabilities. It exposes `BATCH_WRITE` and `TRUNCATE` to Data Source V2 only
 when declared, so this example rejects batch append and overwrite before evaluating their input.
@@ -94,6 +96,15 @@ and keeps memory bounded by the configured batch size. Neither the factory
 nor a partition contains a driver handle or open connection. A storage connector can also put a
 snapshot identifier in its factory to make retried reads refer to the same data.
 
+A streaming read creates a `RangeStream`, whose offsets are the next row to read, such as
+`{"next":13}`. The range is fixed, so all its rows are available when the query starts: the
+initial offset is the start of the range, the latest offset its end, and the first micro-batch
+reads every row. Later micro-batches find no new data. `RangeStream::plan` splits the rows between
+two offsets into partitions with the `RangeReaderFactory` of batch scans, so the executors read a
+micro-batch exactly as a batch scan, with all the columns of the schema: Spark pushes nothing down
+into a streaming scan. A restarted query may plan its last range again, from the offsets of its
+checkpoint.
+
 ## Build and test
 
 Run from the repository root with Rust and a C compiler:
@@ -105,8 +116,9 @@ cargo test --manifest-path sql/native/rust/Cargo.toml --workspace --locked
 
 Build before testing so the `c_abi_smoke` integration test can load the actual connector library.
 That test calls its function table through the C header and consumes Arrow C streams without a
-JVM. The Rust tests cover filters, global limits, projections, serialization, bounded batches,
-and empty output projections. These checks do not substitute for the Spark smoke script.
+JVM, including a streaming read through the stream reader functions. The Rust tests cover
+filters, global limits, projections, serialization, bounded batches, empty output projections,
+and the micro-batches of a stream. These checks do not substitute for the Spark smoke script.
 
 ## Package and run with Spark
 

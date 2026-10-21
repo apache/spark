@@ -135,7 +135,8 @@ static void* create_source(const char* const* keys, const char* const* values, i
   void* source = NULL;
   check_status(library->create(&info, &capabilities, &source));
   CHECK(source != NULL, "create returned a null source");
-  CHECK(capabilities == SPARK_DS_BATCH_READ, "The Range source must only declare batch reads");
+  CHECK(capabilities == (SPARK_DS_BATCH_READ | SPARK_DS_MICRO_BATCH_READ),
+      "The Range source must declare batch and micro-batch reads");
   return source;
 }
 
@@ -331,6 +332,87 @@ static void consume_plan(
   CHECK(rows == expected_rows, "Unexpected total row count");
 }
 
+/* A NUL-terminated copy of a value that a sink received, such as an offset. */
+static char* copy_string(const Bytes* bytes) {
+  char* string = malloc((size_t) bytes->length + 1);
+  CHECK(string != NULL, "Cannot allocate a string");
+  memcpy(string, bytes->data, (size_t) bytes->length);
+  string[bytes->length] = '\0';
+  return string;
+}
+
+static void* create_stream_reader(
+    const char* const* keys, const char* const* values, int64_t count) {
+  void* source = create_source(keys, values, count);
+  struct ArrowSchema schema = {0};
+  check_status(library->schema(source, &schema));
+  void* stream = NULL;
+  check_status(library->create_stream_reader(source, &schema, &stream));
+  CHECK(stream != NULL, "create_stream_reader returned a null reader");
+  if (schema.release != NULL) {
+    schema.release(&schema);
+  }
+  /* Spark closes the source right after it creates the stream reader. */
+  library->close(source);
+  return stream;
+}
+
+static Plan plan_micro_batch(void* stream, const char* start, const char* end) {
+  Plan plan = {0};
+  check_status(library->stream_partitions(stream, start, end, add_bytes, &plan.partitions));
+  ByteList state = {0};
+  check_status(library->serialize_stream_reader(stream, add_bytes, &state));
+  CHECK(state.length == 1, "serialize_stream_reader must emit exactly one state value");
+  plan.state = state.values[0];
+  free(state.values);
+  return plan;
+}
+
+/*
+ * A streaming read: the stream reader stays on the driver, and plans each micro-batch between
+ * two offsets that the library defines as JSON. The executors read a micro-batch with the read
+ * function of batch scans.
+ */
+static void check_micro_batch_read(
+    const char* const* keys, const char* const* values, int64_t count) {
+  void* stream = create_stream_reader(keys, values, count);
+  ByteList offsets = {0};
+  check_status(library->initial_offset(stream, add_bytes, &offsets));
+  check_status(library->latest_offset(stream, add_bytes, &offsets));
+  CHECK(offsets.length == 2, "Each offset function must emit exactly one offset");
+  char* initial = copy_string(&offsets.values[0]);
+  char* latest = copy_string(&offsets.values[1]);
+  CHECK(strcmp(initial, "{\"next\":10}") == 0, "Unexpected initial offset");
+  CHECK(strcmp(latest, "{\"next\":25}") == 0, "Unexpected latest offset");
+
+  /* Two micro-batches, split at an offset as if from the checkpoint of an earlier query. */
+  const char* columns[] = {"id", "label"};
+  Plan first = plan_micro_batch(stream, initial, "{\"next\":13}");
+  consume_plan(&first, 10, 3, columns, 2);
+  free_plan(&first);
+  Plan second = plan_micro_batch(stream, "{\"next\":13}", latest);
+  consume_plan(&second, 13, 12, columns, 2);
+  free_plan(&second);
+  check_status(library->commit_offset(stream, latest));
+  library->close_stream_reader(stream);
+
+  /* An offset that does not decode fails the query, and then every call on its reader. */
+  stream = create_stream_reader(keys, values, count);
+  ByteList partitions = {0};
+  CHECK(library->stream_partitions(stream, initial, "not an offset", add_bytes, &partitions) != 0,
+      "An offset that does not decode must fail");
+  const char* error = library->last_error();
+  CHECK(error != NULL && strstr(error, "cannot decode the offset") != NULL,
+      "Missing offset error");
+  ByteList offset = {0};
+  CHECK(library->latest_offset(stream, add_bytes, &offset) != 0 && offset.length == 0,
+      "A failed stream must not be called again");
+  library->close_stream_reader(stream);
+  free(initial);
+  free(latest);
+  free_list(&offsets);
+}
+
 static void check_independent_planners(
     const char* const* keys,
     const char* const* values,
@@ -523,15 +605,15 @@ static void check_function_table(void) {
       library->push_limit != NULL && library->prune_columns != NULL &&
       library->partitions != NULL && library->serialize_reader != NULL &&
       library->close_reader != NULL && library->read != NULL, "Missing batch read functions");
-  CHECK(library->create_stream_reader == NULL && library->initial_offset == NULL &&
-      library->latest_offset == NULL && library->stream_partitions == NULL &&
-      library->serialize_stream_reader == NULL && library->commit_offset == NULL &&
-      library->close_stream_reader == NULL, "The batch SDK must not export streaming reads");
+  CHECK(library->create_stream_reader != NULL && library->initial_offset != NULL &&
+      library->latest_offset != NULL && library->stream_partitions != NULL &&
+      library->serialize_stream_reader != NULL && library->commit_offset != NULL &&
+      library->close_stream_reader != NULL, "Missing micro-batch read functions");
   CHECK(library->create_writer == NULL && library->serialize_writer == NULL &&
       library->commit == NULL && library->abort == NULL && library->close_writer == NULL &&
       library->create_data_writer == NULL && library->write == NULL &&
       library->commit_data_writer == NULL && library->abort_data_writer == NULL &&
-      library->close_data_writer == NULL, "The batch SDK must not export writes");
+      library->close_data_writer == NULL, "A read-only source must not export writes");
 }
 
 int main(int argc, char** argv) {
@@ -577,6 +659,7 @@ int main(int argc, char** argv) {
   check_capability_discovery(keys, values, 4);
   check_capability_discovery(NULL, NULL, 0);
   check_independent_planners(keys, values, 4, lower, upper);
+  check_micro_batch_read(keys, values, 4);
 
   Plan filtered = plan_scan(keys, values, 4, predicates, uses, 2, -1, reordered, 2);
   consume_plan(&filtered, 13, 9, reordered, 2);
@@ -606,6 +689,7 @@ int main(int argc, char** argv) {
   check_error_message();
 
   CHECK(dlclose(module) == 0, "Cannot close the Range library");
-  puts("C ABI, capabilities, planning, Arrow ownership, and cancellation checks passed.");
+  puts("C ABI, capabilities, planning, streaming, Arrow ownership, and cancellation checks "
+      "passed.");
   return 0;
 }

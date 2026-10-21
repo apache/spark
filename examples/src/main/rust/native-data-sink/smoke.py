@@ -118,7 +118,41 @@ def main():
                     raise AssertionError(f"readonly=true should reject {mode}")
             assert (root / "manifest.json").read_bytes() == before
             assert_clean(root)
-        print("Rust native batch sink Spark smoke checks passed")
+
+        # A streaming write records the epoch of each micro-batch that it commits: a restart
+        # without new input commits nothing, and new input commits the next epoch.
+        with tempfile.TemporaryDirectory(prefix="rust-native-sink-stream-") as directory:
+            base = Path(directory)
+            source, output = base / "input", base / "output"
+            source.mkdir()
+
+            def add_input(name, ids):
+                lines = "".join(json.dumps({"id": i, "label": f"row-{i}"}) + "\n" for i in ids)
+                (source / f"{name}.json").write_text(lines)
+
+            def run_stream():
+                query = (
+                    spark.readStream.schema("id BIGINT, label STRING")
+                    .json(str(source))
+                    .writeStream.format("rust_sdk_sink")
+                    .option("checkpointLocation", str(base / "checkpoint"))
+                    .trigger(availableNow=True)
+                    .start(str(output))
+                )
+                query.awaitTermination()
+                assert_clean(output)
+                return json.loads((output / "manifest.json").read_text())
+
+            add_input("first", range(3))
+            first = run_stream()
+            assert list(first["epochs"].values()) == [0], first
+            assert committed_rows(output) == [(i, f"row-{i}") for i in range(3)]
+            assert run_stream() == first
+            add_input("second", range(3, 5))
+            second = run_stream()
+            assert second["epochs"] == {query: 1 for query in first["epochs"]}, second
+            assert committed_rows(output) == [(i, f"row-{i}") for i in range(5)]
+        print("Rust native sink Spark smoke checks passed")
     finally:
         spark.stop()
 

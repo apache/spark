@@ -32,7 +32,9 @@ use crate::{CreateInfo, FilterSupport, HostInfo, Options, Result, WriteMode};
 
 pub const ABI_VERSION: i32 = 1;
 pub const BATCH_READ: u64 = 1;
+pub const MICRO_BATCH_READ: u64 = 2;
 pub const BATCH_WRITE: u64 = 4;
+pub const STREAMING_WRITE: u64 = 8;
 pub const TRUNCATE: u64 = 16;
 pub const LOG_ERROR: i32 = 1;
 
@@ -283,16 +285,20 @@ pub unsafe fn slice<'a, T>(data: *const T, length: i64) -> Result<&'a [T]> {
 }
 
 /// # Safety
+/// A non-null `pointer` must address a NUL-terminated string, readable during this call.
+pub unsafe fn string(pointer: *const c_char) -> Result<String> {
+    if pointer.is_null() {
+        return Err("null string".into());
+    }
+    Ok(unsafe { CStr::from_ptr(pointer) }.to_str()?.to_owned())
+}
+
+/// # Safety
 /// Each element must be a NUL-terminated UTF-8 string, readable during this call.
 pub unsafe fn strings(data: *const *const c_char, length: i64) -> Result<Vec<String>> {
     unsafe { slice(data, length)? }
         .iter()
-        .map(|pointer| {
-            if pointer.is_null() {
-                return Err("null string".into());
-            }
-            Ok(unsafe { CStr::from_ptr(*pointer) }.to_str()?.to_owned())
-        })
+        .map(|pointer| unsafe { string(*pointer) })
         .collect()
 }
 
@@ -320,9 +326,11 @@ pub unsafe fn create_info(info: *const SparkDsCreateInfo) -> Result<CreateInfo> 
     Ok(CreateInfo::new(name, options))
 }
 
+/// The mode of a write, and the ID of the query of a streaming write.
+///
 /// # Safety
 /// `info` must follow the create_writer contract of the C header.
-pub unsafe fn write_mode(info: *const SparkDsWriteInfo) -> Result<WriteMode> {
+pub unsafe fn write_info(info: *const SparkDsWriteInfo) -> Result<(WriteMode, Option<String>)> {
     let size = unsafe { struct_size(info)? };
     let pointer = info.cast();
     let mode: i32 = unsafe { field(pointer, size, offset_of!(SparkDsWriteInfo, mode)) }
@@ -330,21 +338,17 @@ pub unsafe fn write_mode(info: *const SparkDsWriteInfo) -> Result<WriteMode> {
     let query_id: *const c_char =
         unsafe { field(pointer, size, offset_of!(SparkDsWriteInfo, query_id)) }
             .ok_or("write info does not provide a query ID")?;
-    if !query_id.is_null() {
-        return Err("streaming writes are not supported".into());
-    }
-    match mode {
-        0 => Ok(WriteMode::Append),
-        1 => Ok(WriteMode::Truncate),
-        _ => Err(format!("unsupported native write mode: {mode}").into()),
-    }
-}
-
-pub fn batch_epoch(epoch: i64) -> Result<()> {
-    if epoch != -1 {
-        return Err("batch writes require epoch ID -1".into());
-    }
-    Ok(())
+    let mode = match mode {
+        0 => WriteMode::Append,
+        1 => WriteMode::Truncate,
+        _ => return Err(format!("unsupported native write mode: {mode}").into()),
+    };
+    let query_id = if query_id.is_null() {
+        None
+    } else {
+        Some(unsafe { string(query_id)? })
+    };
+    Ok((mode, query_id))
 }
 
 /// # Safety
@@ -461,25 +465,27 @@ mod tests {
     }
 
     #[test]
-    fn write_info_rejects_truncated_unknown_and_streaming_requests() {
+    fn write_info_carries_the_mode_and_the_query_of_a_streaming_write() {
         let prefix = size_of::<i64>() as i64;
         let truncated = (&prefix as *const i64).cast::<SparkDsWriteInfo>();
-        assert!(unsafe { write_mode(truncated) }.is_err());
+        assert!(unsafe { write_info(truncated) }.is_err());
         let mut info = SparkDsWriteInfo {
             size: size_of::<SparkDsWriteInfo>() as i64,
             mode: 0,
             query_id: std::ptr::null(),
         };
-        assert_eq!(unsafe { write_mode(&info) }.unwrap(), WriteMode::Append);
+        assert_eq!(
+            unsafe { write_info(&info) }.unwrap(),
+            (WriteMode::Append, None)
+        );
         info.mode = 1;
-        assert_eq!(unsafe { write_mode(&info) }.unwrap(), WriteMode::Truncate);
-        info.mode = 2;
-        assert!(unsafe { write_mode(&info) }.is_err());
-        info.mode = 0;
         info.query_id = c"stream".as_ptr();
-        assert!(unsafe { write_mode(&info) }.is_err());
-        assert!(batch_epoch(-1).is_ok());
-        assert!(batch_epoch(0).is_err());
+        assert_eq!(
+            unsafe { write_info(&info) }.unwrap(),
+            (WriteMode::Truncate, Some("stream".into()))
+        );
+        info.mode = 2;
+        assert!(unsafe { write_info(&info) }.is_err());
     }
 
     #[test]

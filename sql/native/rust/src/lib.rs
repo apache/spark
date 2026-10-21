@@ -15,17 +15,19 @@
 
 //! Experimental batch data source SDK for the C ABI proposed in Spark PR #59424.
 //!
-//! Implement [`DataSource`], naming its [`ScanBuilder`] for batch reads and its
-//! [`BatchWrite`] for batch writes, or [`Unsupported`] for an operation that it does
-//! not implement. Then invoke [`export_data_source!`] once in a `cdylib` crate. The SDK
+//! Implement [`DataSource`], naming the types of the operations that it implements: a
+//! [`ScanBuilder`] for batch reads, a [`MicroBatchStream`] for micro-batch streaming reads, a
+//! [`BatchWrite`] for batch writes, and a [`StreamingWrite`] for streaming writes, or
+//! [`Unsupported`] for an operation that it does not implement. Then invoke
+//! [`export_data_source!`] once in a `cdylib` crate. The SDK
 //! owns handles, plan/message serialization, C ABI adaptation, and Arrow import/export.
 //! Rust traits stay inside the plugin; they are not an ABI between dynamic libraries.
 //!
 //! Methods receive their inputs in `#[non_exhaustive]` structs, so that new ABI fields
 //! can reach connectors without breaking them: `*Info` structs on the driver
-//! ([`CreateInfo`], [`ScanInfo`], [`WriteInfo`], and [`HostInfo`]), and `*Context`
-//! structs, which carry the live [`TaskContext`], on the executors ([`ReaderContext`]
-//! and [`WriterContext`]).
+//! ([`CreateInfo`], [`ScanInfo`], [`MicroBatchStreamInfo`], [`WriteInfo`],
+//! [`StreamingWriteInfo`], and [`HostInfo`]), and `*Context` structs, which carry the live
+//! [`TaskContext`], on the executors ([`ReaderContext`] and [`WriterContext`]).
 
 use std::collections::BTreeMap;
 
@@ -104,24 +106,26 @@ impl CreateInfo {
 
 /// Driver-side source configuration, schema discovery, and the operations of a source.
 ///
-/// The two associated types name the operations that the source implements, and
+/// The associated types name the operations that the source implements, and
 /// [`Unsupported`] stands for one that it does not implement:
 ///
 /// ```rust,ignore
 /// impl DataSource for RangeSource {
 ///     type ScanBuilder = RangeScan;
+///     type MicroBatchStream = RangeStream;
 ///     type BatchWrite = Unsupported;
+///     type StreamingWrite = Unsupported;
 ///     ...
 /// }
 /// ```
 ///
 /// The SDK installs native callbacks and reports capabilities only for the implemented
-/// operations, and calls [`new_scan`](Self::new_scan) or [`new_write`](Self::new_write)
-/// only for them.
+/// operations, and calls the `new_*` method of an operation only for them.
 ///
-/// Spark creates a source for each schema inference, scan, and write, and may create
-/// one only to inspect its capabilities, then drop it. Keep construction lightweight.
-/// Scan builders and writes cannot borrow their source, which Spark drops first.
+/// Spark creates a source for each schema inference, scan, stream, and write, including
+/// the write of each micro-batch, and may create one only to inspect its capabilities,
+/// then drop it. Keep construction lightweight. Scan builders, streams, and writes cannot
+/// borrow their source, which Spark drops first.
 pub trait DataSource: Send + Sized + 'static {
     fn new(info: CreateInfo) -> Result<Self>;
 
@@ -163,6 +167,26 @@ pub trait DataSource: Send + Sized + 'static {
         )
     }
 
+    // Micro-batch streaming reads.
+
+    /// The stream of micro-batch streaming reads, which
+    /// [`new_micro_batch_stream`](Self::new_micro_batch_stream) creates, or [`Unsupported`].
+    type MicroBatchStream: MicroBatchStream;
+
+    /// Creates the stream of a streaming query that reads [`MicroBatchStreamInfo::schema`],
+    /// which the user may have specified; reject unsupported schemas. Spark pushes nothing
+    /// down into a streaming scan, so its readers return all the columns of the schema.
+    fn new_micro_batch_stream(
+        &self,
+        _info: MicroBatchStreamInfo,
+    ) -> Result<Self::MicroBatchStream> {
+        Err(
+            "DataSource::new_micro_batch_stream is not implemented: implement it, or set \
+             DataSource::MicroBatchStream to Unsupported"
+                .into(),
+        )
+    }
+
     // Batch writes.
 
     /// The coordinator of batch writes, which [`new_write`](Self::new_write) creates, or
@@ -172,11 +196,31 @@ pub trait DataSource: Send + Sized + 'static {
     /// Validate the input schema and create an independent write. Construction may be
     /// followed only by Drop, without commit or abort, so it must not make irreversible
     /// changes. The SDK calls this only while the instance's capabilities include
-    /// `BATCH_WRITE`, and passes [`WriteMode::Truncate`] only when they include `TRUNCATE`.
+    /// `BATCH_WRITE`, and passes [`WriteMode::Truncate`] only when they include `TRUNCATE`
+    /// and the write supports it.
     fn new_write(&self, _info: WriteInfo) -> Result<Self::BatchWrite> {
         Err(
             "DataSource::new_write is not implemented: implement it, or set \
              DataSource::BatchWrite to Unsupported"
+                .into(),
+        )
+    }
+
+    // Streaming writes.
+
+    /// The coordinator of the write of each micro-batch of a streaming query, which
+    /// [`new_streaming_write`](Self::new_streaming_write) creates, or [`Unsupported`].
+    type StreamingWrite: StreamingWrite;
+
+    /// Validate the input schema and create the write of a micro-batch. As with
+    /// [`new_write`](Self::new_write), construction may be followed only by Drop, so it must
+    /// not make irreversible changes. The SDK calls this only while the instance's
+    /// capabilities include `STREAMING_WRITE`, and passes [`WriteMode::Truncate`] only when
+    /// they include `TRUNCATE` and the write supports it.
+    fn new_streaming_write(&self, _info: StreamingWriteInfo) -> Result<Self::StreamingWrite> {
+        Err(
+            "DataSource::new_streaming_write is not implemented: implement it, or set \
+             DataSource::StreamingWrite to Unsupported"
                 .into(),
         )
     }
@@ -349,6 +393,77 @@ impl<'task> ReaderContext<'task> {
 pub type PartitionReader<'task> =
     Box<dyn Iterator<Item = std::result::Result<RecordBatch, ArrowError>> + Send + 'task>;
 
+// Micro-batch streaming reads: a MicroBatchStream finds new data and plans each micro-batch on
+// the driver, and the PartitionReaderFactory of each plan reads its partitions on the executors,
+// as in batch reads.
+
+/// What Spark passes to create the stream of a streaming query.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub struct MicroBatchStreamInfo {
+    /// The schema to read: the schema of the source, or one that the user specified.
+    pub schema: SchemaRef,
+}
+
+impl MicroBatchStreamInfo {
+    /// The information of a stream created outside Spark, for example in a test.
+    pub fn new(schema: SchemaRef) -> Self {
+        Self { schema }
+    }
+}
+
+/// Finds new data and plans the micro-batches of a streaming query, on the driver.
+///
+/// Spark creates a stream when a streaming query starts, or restarts from its checkpoint,
+/// and drops it when the query stops. For each micro-batch, it asks for the
+/// [`latest_offset`](Self::latest_offset), and when that differs from the end of the
+/// previous micro-batch, [`plan`](Self::plan)s the data in between. Only the serialized
+/// factory and partitions of each plan reach the executors, which read them as those of a
+/// batch scan.
+///
+/// # Offsets
+///
+/// Spark stores offsets in the checkpoint of the query, as the JSON of
+/// [`Offset`](Self::Offset), and compares them by that JSON, so serialize a position to the
+/// same JSON each time: for example, use structs and `BTreeMap` rather than `HashMap`. A
+/// restarted query passes the offsets of its checkpoint, which an earlier version of the
+/// library may have written, to `plan` and `commit`.
+///
+/// # Lifecycle
+///
+/// - Calls never run concurrently.
+/// - A failed call, including a panic, stops the query, so the SDK returns that failure
+///   from every later call.
+/// - After a restart, Spark may plan the last range of the query again, so `plan` must
+///   return partitions that read the same data for the same range.
+pub trait MicroBatchStream: Send + 'static {
+    /// A position in the data, such as the next record of each partition of a log.
+    type Offset: Serialize + DeserializeOwned;
+
+    /// The reader factory of the micro-batches, which can be that of batch scans.
+    type Factory: PartitionReaderFactory;
+
+    /// False only for [`Unsupported`], from which the SDK derives the capabilities.
+    #[doc(hidden)]
+    const SUPPORTED: bool = true;
+
+    /// Returns the offset to start from when the query has no checkpoint: the first
+    /// micro-batch reads the data after it.
+    fn initial_offset(&mut self) -> Result<Self::Offset>;
+
+    /// Returns the offset of the most recent data available.
+    fn latest_offset(&mut self) -> Result<Self::Offset>;
+
+    /// Plans the micro-batch that reads the data after `start`, up to and including `end`.
+    fn plan(&mut self, start: Self::Offset, end: Self::Offset) -> Result<ScanPlan<Self::Factory>>;
+
+    /// Tells the stream that Spark has processed the data up to and including `end` and
+    /// will not read it again, so that the stream can release it.
+    fn commit(&mut self, _end: Self::Offset) -> Result<()> {
+        Ok(())
+    }
+}
+
 // Batch writes: a BatchWrite coordinates the write on the driver, and a DataWriterFactory
 // opens a DataWriter for each task attempt on the executors.
 
@@ -436,7 +551,7 @@ pub trait BatchWrite: Send + 'static {
 }
 
 /// Serializable configuration for independent task-attempt writers, which
-/// [`BatchWrite::writer_factory`] creates.
+/// [`BatchWrite::writer_factory`] or [`StreamingWrite::writer_factory`] creates.
 ///
 /// Open connections and files in open, not in the factory. A returned writer
 /// cannot borrow this temporary factory, but may retain the context until
@@ -458,12 +573,19 @@ pub struct WriterContext<'task> {
     pub schema: SchemaRef,
     /// The task attempt that writes.
     pub task: TaskContext<'task>,
+    /// The epoch of the micro-batch of a streaming write, or `None` for a batch write.
+    pub epoch_id: Option<i64>,
 }
 
 impl<'task> WriterContext<'task> {
-    /// The context of a writer opened outside Spark, for example in a test.
+    /// The context of a batch writer opened outside Spark, for example in a test. Set
+    /// [`epoch_id`](Self::epoch_id) for a streaming writer.
     pub fn new(schema: SchemaRef, task: TaskContext<'task>) -> Self {
-        Self { schema, task }
+        Self {
+            schema,
+            task,
+            epoch_id: None,
+        }
     }
 }
 
@@ -503,6 +625,76 @@ pub trait DataWriter: Send {
 /// The writer of one task attempt, which [`DataWriterFactory::open`] returns.
 pub type PartitionWriter<'task, M> = Box<dyn DataWriter<Message = M> + 'task>;
 
+// Streaming writes: a StreamingWrite coordinates the write of one micro-batch on the driver,
+// and its DataWriterFactory opens a DataWriter for each task attempt on the executors, as in
+// batch writes.
+
+/// What Spark passes to create the write of a micro-batch.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub struct StreamingWriteInfo {
+    /// The schema of the data to write.
+    pub schema: SchemaRef,
+    /// How the micro-batch changes the destination: [`WriteMode::Truncate`] for the output
+    /// mode "complete", which replaces the output of the previous micro-batches.
+    pub mode: WriteMode,
+    /// The ID of the streaming query, which stays the same when the query restarts from
+    /// its checkpoint.
+    pub query_id: String,
+}
+
+impl StreamingWriteInfo {
+    /// The information of a write created outside Spark, for example in a test.
+    pub fn new(schema: SchemaRef, mode: WriteMode, query_id: impl Into<String>) -> Self {
+        Self {
+            schema,
+            mode,
+            query_id: query_id.into(),
+        }
+    }
+}
+
+/// A driver coordinator for the write of one micro-batch, or epoch, of a streaming query,
+/// which also creates the serializable configuration of its task writers.
+///
+/// Spark creates a write for each micro-batch. The SDK enforces the lifecycle of a
+/// [`BatchWrite`], with the epoch ID of the micro-batch passed to `commit` and `abort`,
+/// and to the task writers in [`WriterContext::epoch_id`].
+///
+/// # Exactly-once output
+///
+/// Spark may commit an epoch again, with a new write, for example when the query restarts
+/// after a failure: committing an epoch that is already committed must have no effect. The
+/// ID of the query, [`StreamingWriteInfo::query_id`], and the epoch ID identify the output
+/// of a micro-batch, also when other queries write to the same destination.
+pub trait StreamingWrite: Send + 'static {
+    /// The configuration from which each task attempt opens its writer.
+    type Factory: DataWriterFactory<Message = Self::Message>;
+
+    /// The message with which a task attempt reports its staged output to the driver.
+    type Message: Serialize + DeserializeOwned + Send + 'static;
+
+    /// Whether the write supports [`WriteMode::Truncate`], for the output mode "complete",
+    /// which adds the `TRUNCATE` capability.
+    const SUPPORTS_TRUNCATE: bool = false;
+
+    /// False only for [`Unsupported`], from which the SDK derives the capabilities.
+    #[doc(hidden)]
+    const SUPPORTED: bool = true;
+
+    /// Returns the configuration of the task writers. The SDK serializes it once, with the
+    /// schema of the input, and caches the result, including a failure.
+    fn writer_factory(&self) -> Result<Self::Factory>;
+
+    /// Publish the winning attempt of each input partition as the output of epoch
+    /// `epoch_id`, unless that epoch is already committed.
+    fn commit(&mut self, epoch_id: i64, messages: Vec<Self::Message>) -> Result<()>;
+
+    /// Abort the micro-batch after input, task, or driver commit failure. None stands for
+    /// a partition whose commit message did not reach the driver, or cannot be decoded.
+    fn abort(&mut self, epoch_id: i64, messages: Vec<Option<Self::Message>>) -> Result<()>;
+}
+
 // Unsupported operations.
 
 /// The type of an operation that a source does not implement, as in
@@ -525,6 +717,25 @@ impl PartitionReaderFactory for Unsupported {
     type Partition = Self;
 
     fn open<'task>(&self, _: Self, _: ReaderContext<'task>) -> Result<PartitionReader<'task>> {
+        match *self {}
+    }
+}
+
+impl MicroBatchStream for Unsupported {
+    type Offset = Self;
+    type Factory = Self;
+
+    const SUPPORTED: bool = false;
+
+    fn initial_offset(&mut self) -> Result<Self> {
+        match *self {}
+    }
+
+    fn latest_offset(&mut self) -> Result<Self> {
+        match *self {}
+    }
+
+    fn plan(&mut self, _: Self, _: Self) -> Result<ScanPlan<Self>> {
         match *self {}
     }
 }
@@ -552,6 +763,25 @@ impl DataWriterFactory for Unsupported {
     type Message = Self;
 
     fn open<'task>(&self, _: WriterContext<'task>) -> Result<PartitionWriter<'task, Self>> {
+        match *self {}
+    }
+}
+
+impl StreamingWrite for Unsupported {
+    type Factory = Self;
+    type Message = Self;
+
+    const SUPPORTED: bool = false;
+
+    fn writer_factory(&self) -> Result<Self> {
+        match *self {}
+    }
+
+    fn commit(&mut self, _: i64, _: Vec<Self>) -> Result<()> {
+        match *self {}
+    }
+
+    fn abort(&mut self, _: i64, _: Vec<Option<Self>>) -> Result<()> {
         match *self {}
     }
 }

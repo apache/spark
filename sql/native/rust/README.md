@@ -17,7 +17,8 @@ limitations under the License.
 
 # Rust native data source SDK prototype
 
-This experimental SDK implements **batch reads and writes** over the C ABI proposed in
+This experimental SDK implements **batch and micro-batch streaming reads, and batch and
+streaming writes** over the C ABI proposed in
 [Spark PR #59424](https://github.com/apache/spark/pull/59424), pinned to commit
 `74aa0dffc53463034fa6549796c4dd599e9705de`. Spark calls the library through the
 Java Foreign Function and Memory (FFM) API. This PR contains the SDK and example,
@@ -42,14 +43,16 @@ its operations, and optional capability restrictions. `DataSource::new` receives
 immediately drop a source just to discover capabilities; schema inference or an
 operation need not follow.
 
-Two associated types name the operations that the source implements, and
+Four associated types name the operations that the source implements, and
 `Unsupported` stands for one that it does not implement:
 
 ```rust
 impl DataSource for RangeSource {
     type ScanBuilder = RangeScan; // batch reads, created by new_scan
+    type MicroBatchStream = RangeStream; // streaming reads, by new_micro_batch_stream
     type BatchWrite = Unsupported; // no batch writes
-    // new, schema, and new_scan
+    type StreamingWrite = Unsupported; // no streaming writes
+    // new, schema, new_scan, and new_micro_batch_stream
 }
 ```
 
@@ -63,15 +66,22 @@ Read support uses three pieces:
   an iterator of Arrow batches, from a typed partition and a `ReaderContext`, which
   carries the negotiated schema and a borrowed `TaskContext`.
 
-Write support is independent: a write-only connector sets `ScanBuilder` to
-`Unsupported` and implements `DataSource::new_write`, `BatchWrite`,
-`DataWriterFactory`, and `DataWriter`. The write lifecycle is described below.
+Streaming reads reuse the executor side: `DataSource::new_micro_batch_stream` creates a
+`MicroBatchStream` from a `MicroBatchStreamInfo`, which carries the schema to read, and
+the stream plans each micro-batch as a `ScanPlan` of a `PartitionReaderFactory`; see
+[Streaming reads and writes](#streaming-reads-and-writes).
+
+Write support is independent: a write-only connector sets `ScanBuilder` and
+`MicroBatchStream` to `Unsupported` and implements `DataSource::new_write`, `BatchWrite`,
+`DataWriterFactory`, and `DataWriter`. Streaming writes add
+`DataSource::new_streaming_write` and `StreamingWrite`, with the same task writers. The
+write lifecycle is described below.
 
 The inputs of these methods are `#[non_exhaustive]` structs, so that new ABI fields can
 reach connectors without breaking them: `*Info` structs on the driver (`CreateInfo`,
-`ScanInfo`, `WriteInfo`, and `HostInfo`), and `*Context` structs, which carry the live
-`TaskContext`, on the executors (`ReaderContext` and `WriterContext`). `ScanPlan` has a
-constructor for the same reason.
+`ScanInfo`, `MicroBatchStreamInfo`, `WriteInfo`, `StreamingWriteInfo`, and `HostInfo`),
+and `*Context` structs, which carry the live `TaskContext`, on the executors
+(`ReaderContext` and `WriterContext`). `ScanPlan` has a constructor for the same reason.
 
 The factory and partition types implement `Serialize` and `Deserialize`.
 Connections, pointers, and open readers remain in their creating process.
@@ -155,14 +165,18 @@ classes.
 ## Source capabilities
 
 The associated types of `DataSource` determine the operations of the source: batch
-reads unless `ScanBuilder` is `Unsupported`, and batch writes unless `BatchWrite` is
-`Unsupported`. The SDK installs the native callbacks of these operations, leaves the
-others null, and derives the default capability set from them, so the macro takes
-only the source type. A `BatchWrite` opts into overwrite support with
-`const SUPPORTS_TRUNCATE: bool = true`, and `DataSource::new_write` then handles
-`WriteMode::Truncate`; without it the source supports only append writes. The macro
-also rejects a library built with `panic = "abort"`, because the SDK can report a
-panic as an error only when it unwinds.
+reads unless `ScanBuilder` is `Unsupported`, micro-batch reads unless `MicroBatchStream`
+is, batch writes unless `BatchWrite` is, and streaming writes unless `StreamingWrite` is.
+The SDK installs the native callbacks of these operations, leaves the others null, and
+derives the default capability set from them, so the macro takes only the source type.
+A `BatchWrite` or a `StreamingWrite` opts into truncation with
+`const SUPPORTS_TRUNCATE: bool = true`: the save mode "overwrite" of a batch write, or the
+output mode "complete" of a streaming write, which its `new_*` method then gets as
+`WriteMode::Truncate`; without it the write only appends. The ABI has one `TRUNCATE` flag
+for both, which the SDK declares while a write that supports truncation remains, and the
+SDK rejects the truncation of a write that does not support it when Spark creates that
+write. The macro also rejects a library built with `panic = "abort"`, because the SDK can
+report a panic as an error only when it unwinds.
 
 Most connectors do not implement `capabilities`. A connector can restrict the
 supported set for the current options by overriding this `DataSource` method:
@@ -170,8 +184,8 @@ supported set for the current options by overriding this `DataSource` method:
 ```rust
 fn capabilities(&self) -> Capabilities {
     if self.read_only {
-        // Also removes Truncate, which requires batch writes.
-        Capabilities::all().without(Capabilities::BATCH_WRITE)
+        // Also removes Truncate, which requires a write.
+        Capabilities::all().without(Capabilities::BATCH_WRITE | Capabilities::STREAMING_WRITE)
     } else {
         Capabilities::all()
     }
@@ -183,9 +197,8 @@ so a source can narrow its capabilities but never enable one that it does not
 implement.
 An empty set permits schema discovery and close, but rejects operation creation
 before calling the connector. The declaration stays fixed for that instance.
-The default declaration is `Capabilities::all()`, every operation of the SDK. Streaming
-capabilities are not supported yet. Predicate, limit, and projection support remain
-per-scan contracts.
+The default declaration is `Capabilities::all()`, every operation of the SDK. Predicate,
+limit, and projection support remain per-scan contracts.
 
 Spark also calls `create` and `close` during query analysis to discover table
 capabilities. A probe uses the table's options, while an operation may override
@@ -199,7 +212,9 @@ The pinned framework propagates native `BATCH_WRITE` and `TRUNCATE` flags to
 analysis, before Spark computes their input. Its DSv2 read and streaming-write
 flags remain present to avoid V1 fallback; the native flags still reject
 unsupported reads or streaming writes during planning. Thus the DSv2 table's
-flags are not a literal copy of the native mask declared by the Rust source.
+flags are not a literal copy of the native mask declared by the Rust source, and an
+unsupported streaming read or write fails when its query starts or plans its first
+micro-batch, after `start()` returns.
 
 ## Batch write lifecycle
 
@@ -253,14 +268,53 @@ when needed. Task-attempt IDs alone are not globally unique across applications.
 Spark closes a coordinator without commit or abort if creating or serializing its
 factory fails, so Drop must also release what only that write staged. It also creates writers
 late, after prerequisite AQE shuffle stages, but input computation can still fail
-during write tasks. Constructors must therefore avoid irreversible changes. This
-API is batch-only: non-null streaming query IDs and epoch IDs other than `-1` are
-rejected.
+during write tasks. Constructors must therefore avoid irreversible changes. The SDK
+rejects a batch write with an epoch ID other than `-1`, and the write of a micro-batch
+with a negative one.
 
 The [file sink][sink] demonstrates append/truncate using staged JSONL files and
 atomic publication of a manifest on a local or shared filesystem. Its documented
 single-writer assumption and orphan cleanup limitations are example constraints,
 not transaction guarantees provided by the SDK.
+
+## Streaming reads and writes
+
+Micro-batch streaming reads reuse the executor side of batch scans:
+
+```text
+Driver, for each run of a query:
+  DataSource::new_micro_batch_stream -> MicroBatchStream
+      initial_offset() / latest_offset() -> Offset, stored as JSON in the checkpoint
+      plan(start, end) -> ScanPlan { factory, partitions }, for each micro-batch
+      commit(end)
+Executor, per task:
+  restored factory + partition + ReaderContext -> Arrow reader -> Arrow C Stream
+```
+
+Spark creates a stream when a query starts or restarts from its checkpoint, and closes it
+when the query stops. For each micro-batch, it asks for the latest offset and plans the
+data after the end of the previous micro-batch, up to that offset. The executors read the
+partitions of a micro-batch exactly as those of a batch scan: the two share `read`, and
+the SDK tags the serialized state to restore the right factory. Spark pushes nothing down
+into a streaming scan, so the readers return all the columns of the schema.
+
+The SDK serializes `MicroBatchStream::Offset` with serde as compact JSON on a single line,
+which Spark stores in the checkpoint as it is, without the SDK's versioned envelope, and
+decodes the offsets that Spark passes back. Spark compares offsets by their JSON to decide
+whether a micro-batch has new data, so a position must always serialize to the same JSON:
+use structs and `BTreeMap`, not `HashMap`. A restarted query may plan its last range again,
+with offsets from its checkpoint that an earlier version of the library may have written. A
+failed call, including a panic or an offset that does not decode, stops the query, so the
+SDK returns that failure from every later call on the stream.
+
+Streaming writes reuse the task writers of batch writes. Spark creates a `StreamingWrite`
+for each micro-batch, from a `StreamingWriteInfo` with the ID of the query, which stays the
+same across restarts. The SDK enforces the lifecycle of a `BatchWrite`, passes the epoch ID
+of the micro-batch to `commit` and `abort`, and gives it to the task writers in
+`WriterContext::epoch_id`. Spark may commit an epoch again after a restart, with a new
+write, so a write must skip an epoch that is already committed: the query ID and the epoch
+ID identify the output of a micro-batch. The [file sink][sink] records the last epoch of
+each query in its manifest for this. Continuous processing is not supported.
 
 ## Arrow contract
 
@@ -356,36 +410,41 @@ The harness compiles against the unmodified framework header in
 from the pinned commit above. It calls the actual function table and validates
 capability-only source discovery and optional slots, independent driver planners,
 pushdown and planning, serialized executor reads, rejection of task contexts shorter
-than version 1, cancellation, sequential cross-thread stream callbacks, and Arrow
-buffers surviving stream release. This checks the C boundary without requiring
+than version 1, cancellation, sequential cross-thread stream callbacks, Arrow
+buffers surviving stream release, and micro-batch reads with their offsets, including an
+offset that does not decode. This checks the C boundary without requiring
 Java; it does not substitute for Spark planner and task-lifecycle testing.
 
 Rust tests additionally exercise the exported function table with option-dependent
 capabilities, narrowed and unimplemented declarations, the source name, library
-initialization and logging, and panics during capability discovery. They also
-cover terminal planning failures, predicates that do not parse, typed literals,
-retries after the driver registry is dropped, schema, layout, and nullability
-validation, sized ABI structures, task-context lifetimes, integer boundaries,
-projections, and deterministic partition plans. Write ABI tests cover typed
-factory/message round trips, retained Arrow buffers, cancellation, failed writes and
-commits, factory creation and serialization failures, missing and undecodable messages,
-and repeated callbacks. The sink tests cover append/truncate publication, losing attempts,
-messages at the wrong partition position, and cleanup after failed publication while
-preserving the previous manifest.
+initialization and logging, and panics during capability discovery. They also cover
+terminal planning failures, predicates that do not parse, typed literals, retries after
+the driver registry is dropped, schema, layout, and nullability validation, sized ABI
+structures, task-context lifetimes, integer boundaries, projections, and deterministic
+partition plans. Write ABI tests cover typed factory/message round trips, retained Arrow
+buffers, cancellation, failed writes and commits, factory creation and serialization
+failures, missing and undecodable messages, repeated callbacks, and the rejection of
+streaming epochs. Streaming ABI tests cover single-line JSON offsets, the state of each
+planned micro-batch, reads that restore batch or micro-batch factories of different
+types, failures and panics that fail a stream, and the query and epoch IDs of streaming
+writes and their task writers. The sink tests cover append/truncate publication, losing
+attempts, messages at the wrong partition position, cleanup after failed publication
+while preserving the previous manifest, and streaming epochs that are published once.
 
 ## Package and run with Spark
 
 See the [Range example guide][range] for packaging and `spark-submit` commands.
 Its `package.py` creates a single-platform `.sparkpkg`; `smoke.py` checks reading,
-filtered reads, projection, unfiltered limit pushdown, and analysis-time rejection
-of unsupported batch writes against the pinned #59424 framework. The write
+filtered reads, projection, unfiltered limit pushdown, a streaming read, and
+analysis-time rejection of unsupported batch writes against the pinned #59424 framework. The write
 checks use failing input behind a shuffle to verify Spark rejects the operation
 before computing its data. No full Spark integration is implied by the
 standalone Rust/C tests.
 
 The [sink guide][sink] uses the same packager with `--source rust_sdk_sink`. Its
-Spark smoke script checks append, overwrite, failed-overwrite cleanup, and
-analysis-time rejection for a source instance with writes disabled.
+Spark smoke script checks append, overwrite, failed-overwrite cleanup,
+analysis-time rejection for a source instance with writes disabled, and the epochs of a
+streaming write across restarts.
 
 ## Scope and limitations
 
@@ -396,10 +455,10 @@ or panics in custom Arrow buffer destructors cannot be recovered. A reader's or
 writer's background work must stop before its task context expires. Native memory
 is not reserved through Spark's memory manager.
 
-This prototype does not include Structured Streaming, nested projection,
-custom metrics, memory accounting, a generic filter evaluator, C++ bindings, or
-an ABI extension. The versioned JSON envelope is an SDK implementation detail;
-use the same plugin build on the driver and executors. Only the pinned framework
+This prototype does not include continuous processing, admission control for streaming
+reads, nested projection, custom metrics, memory accounting, a generic filter evaluator,
+C++ bindings, or an ABI extension. The versioned JSON envelope is an SDK implementation
+detail; use the same plugin build on the driver and executors. Only the pinned framework
 revision is targeted until the native API stabilizes.
 
 [range]: ../../../examples/src/main/rust/native-data-source/README.md

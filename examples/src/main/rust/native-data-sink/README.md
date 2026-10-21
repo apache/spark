@@ -15,11 +15,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# Rust native batch sink
+# Rust native sink
 
-This write-only example implements `DataSource`, `BatchWrite`, `DataWriterFactory`,
-and `DataWriter` from the [Rust native data source SDK][sdk]. Its `DataSource` sets
-`type ScanBuilder = Unsupported`, and its `BatchWrite` declares overwrite support with
+This write-only example implements `DataSource`, `BatchWrite`, `StreamingWrite`,
+`DataWriterFactory`, and `DataWriter` from the [Rust native data source SDK][sdk]. Its
+`DataSource` sets `type ScanBuilder = Unsupported` and `type MicroBatchStream = Unsupported`,
+and its batch and streaming writes declare truncation support with
 `const SUPPORTS_TRUNCATE: bool = true`; it exports `export_data_source!(JsonSink)` and
 implements no read traits. The SDK supplies the C ABI entry point, typed factory and commit
 message serialization, Arrow batch import, capability checks, and error handling.
@@ -39,12 +40,13 @@ file-format dependency in this small example.
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `path` | Required | Absolute directory shared by the driver and every executor |
-| `readonly` | `false` | Remove both batch-write and truncate capabilities when `true` |
+| `readonly` | `false` | Remove all the write and truncate capabilities when `true` |
 
-Unknown options are rejected. Source creation and capability discovery do not create
-files. The default instance advertises only native `BATCH_WRITE` and `TRUNCATE`; it
-does not advertise batch reads or streaming operations. Spark performs its native
-capability check again with the operation's effective options.
+Unknown options are rejected, except `checkpointLocation`, which Spark passes to the sink of
+a streaming query. Source creation and capability discovery do not create files. The default
+instance advertises only native `BATCH_WRITE`, `STREAMING_WRITE`, and `TRUNCATE`; it does not
+advertise reads. Spark performs its native capability check again with the operation's effective
+options.
 
 ## Commit and abort protocol
 
@@ -73,6 +75,20 @@ That one manifest replacement is the commit point:
 
 To inspect output, read only the files listed in `manifest.json`. Recursively reading
 the destination directory would also pick up data from previous truncate operations.
+
+## Streaming writes
+
+A streaming query writes each micro-batch, or epoch, with the protocol above: Spark creates a
+`JsonStreamingWrite` for each micro-batch, which stages, seals, and publishes its files as a
+batch write does. The output mode "append" appends to the manifest, and "complete" replaces its
+files, as a truncate does.
+
+The manifest also records the last epoch that each streaming query committed, by the ID of the
+query, which stays the same when the query restarts from its checkpoint. Spark may commit an
+epoch again after a restart, so a micro-batch whose epoch the manifest already records for its
+query publishes nothing: it removes what it staged and leaves the manifest unchanged. Each epoch
+of a query is therefore published once, and the queries that write to the same destination keep
+their epochs apart.
 For example, after a successful write:
 
 ```python
@@ -107,8 +123,10 @@ python3 examples/src/main/rust/native-data-source/package.py \
 Use `libspark_datasource_rust_sdk_sink.dylib` for macOS. The smoke script uses a
 temporary local directory and requires a local Spark master. It checks append,
 overwrite, a failed overwrite that preserves published data and cleans staging,
-and write rejection with `readonly=true`. Rust tests additionally exercise losing
-attempts, missing commit messages, a driver publication failure, and lock cleanup.
+write rejection with `readonly=true`, and a streaming write whose restart without new
+input commits nothing. Rust tests additionally exercise losing attempts, missing commit
+messages, a driver publication failure, lock cleanup, and epochs that a restarted query
+commits again.
 
 An application can write with:
 
@@ -117,6 +135,13 @@ spark.addArtifact("sql/native/rust/target/rust_sdk_sink.sparkpkg")
 data = spark.range(10).selectExpr("id", "concat('row-', id) AS label")
 data.write.format("rust_sdk_sink").mode("append").save("/absolute/shared/path/native-sink")
 data.write.format("rust_sdk_sink").mode("overwrite").save("/absolute/shared/path/native-sink")
+
+stream = spark.readStream.schema("id BIGINT, label STRING").json("/absolute/shared/path/input")
+query = (
+    stream.writeStream.format("rust_sdk_sink")
+    .option("checkpointLocation", "/absolute/shared/path/checkpoint")
+    .start("/absolute/shared/path/native-sink")
+)
 ```
 
 ## Limits of this example
@@ -127,8 +152,9 @@ refer to the same storage on all hosts. Executor-local paths in a distributed cl
 object-store URLs, and Windows are unsupported. Only one write operation can own a
 destination at a time; the lock is not a distributed lease or fencing protocol.
 
-This example demonstrates atomic visibility during normal execution and abort, not
-crash recovery or exactly-once publication across driver retries. It syncs files but
+This example demonstrates atomic visibility during normal execution and abort, and
+publishes each epoch of a streaming query once, not crash recovery or exactly-once
+publication of a retried batch write. It syncs files but
 does not implement a crash-durable metadata journal. Process or machine failure can
 leave a stale `.write-lock`, staged files, or unreferenced objects. Recover the lock
 only after confirming no operation still owns it. Retained files from old manifests

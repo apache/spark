@@ -71,7 +71,9 @@ struct Source {
 
 impl DataSource for Source {
     type ScanBuilder = Unsupported;
+    type MicroBatchStream = Unsupported;
     type BatchWrite = Driver;
+    type StreamingWrite = Unsupported;
 
     // A sink of any input: Spark requires a user-specified schema to read it.
     const INFERS_SCHEMA: bool = false;
@@ -791,6 +793,51 @@ fn writer_factory_failures_are_cached_and_driver_can_abort() {
             ],
         );
     }
+}
+
+#[test]
+fn batch_writes_reject_the_epochs_of_micro_batches() {
+    let _guard = TEST_LOCK.lock().unwrap();
+    EVENTS.lock().unwrap().clear();
+    let library = library();
+    let (source, _) = source(library, "", "");
+    let driver = driver(&source, 0);
+    let state = state(&driver);
+    let context = SparkDsTaskContext {
+        size: size_of::<SparkDsTaskContext>() as i64,
+        stage_id: 3,
+        stage_attempt_number: 0,
+        partition_id: 0,
+        attempt_number: 0,
+        task_attempt_id: 100,
+        is_interrupted: None,
+    };
+    let mut pointer = ptr::null_mut();
+    let status = unsafe {
+        library.create_data_writer.unwrap()(
+            &context,
+            state.as_ptr(),
+            state.len() as i64,
+            0,
+            &mut pointer,
+        )
+    };
+    assert_ne!(status, 0);
+    assert!(error(library).contains("epoch ID -1"));
+    assert!(pointer.is_null());
+    let status = unsafe { library.commit.unwrap()(driver.pointer, 3, ptr::null(), ptr::null(), 0) };
+    assert_ne!(status, 0);
+    assert!(error(library).contains("epoch ID -1"));
+    // The rejected call did not change the write, which can still abort.
+    success(library, driver_finish(&driver, true, &[]));
+    assert_eq!(
+        events(),
+        vec![
+            Event::WriteCreated(false),
+            Event::FactoryCreated,
+            Event::DriverAbort(vec![])
+        ],
+    );
 }
 
 #[test]

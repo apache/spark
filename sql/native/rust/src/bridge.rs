@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Driver-only handles and planners, with stateless executor plan restoration.
+//! Driver-only handles, planners, and streams, with stateless executor plan restoration.
 
 use std::any::Any;
 use std::collections::HashMap;
@@ -27,26 +27,28 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use crate::{
     BatchWrite, Capabilities, CreateInfo, DataSource, FilterSupport, LimitSupport,
-    PartitionReaderFactory, Predicate, ReaderContext, Result, ScanBuilder, ScanInfo, TaskContext,
+    MicroBatchStream, MicroBatchStreamInfo, PartitionReaderFactory, Predicate, ReaderContext,
+    Result, ScanBuilder, ScanInfo, StreamingWrite, StreamingWriteInfo, TaskContext, Unsupported,
     WriteInfo, WriteMode,
 };
 
-use crate::write::DriverWriter;
+use crate::write::{Batch, DriverWriter, Streaming};
 
 #[path = "stream.rs"]
 pub(crate) mod stream;
 
-const STATE_VERSION: u32 = 1;
+const STATE_VERSION: u32 = 2;
 
 type HandleMap<T> = Mutex<HashMap<i64, Arc<Mutex<T>>>>;
 
 /// One registry per loaded plugin. Provider code runs under a per-handle lock,
-/// so independent sources and scans do not serialize behind a global lock.
+/// so independent sources, scans, and streams do not serialize behind a global lock.
 pub struct Bridge<S: DataSource> {
     next_handle: AtomicI64,
     sources: HandleMap<SourceState<S>>,
     planners: HandleMap<Planner<S::ScanBuilder>>,
-    writers: HandleMap<DriverWriter<S::BatchWrite>>,
+    streams: HandleMap<StreamReader<S::MicroBatchStream>>,
+    writers: HandleMap<Write<S>>,
 }
 
 impl<S: DataSource> Default for Bridge<S> {
@@ -55,23 +57,39 @@ impl<S: DataSource> Default for Bridge<S> {
             next_handle: AtomicI64::new(1),
             sources: Mutex::new(HashMap::new()),
             planners: Mutex::new(HashMap::new()),
+            streams: Mutex::new(HashMap::new()),
             writers: Mutex::new(HashMap::new()),
         }
     }
 }
 
 impl<S: DataSource> Bridge<S> {
-    /// Whether the source implements batch reads, whose native callbacks the SDK installs.
+    // Whether the source implements each operation, whose native callbacks the SDK installs.
+
     pub const READ: bool = <S::ScanBuilder as ScanBuilder>::SUPPORTED;
 
-    /// Whether the source implements batch writes, whose native callbacks the SDK installs.
+    pub const MICRO_BATCH_READ: bool = <S::MicroBatchStream as MicroBatchStream>::SUPPORTED;
+
     pub const WRITE: bool = <S::BatchWrite as BatchWrite>::SUPPORTED;
 
-    const CAPABILITIES: Capabilities = Capabilities::implemented(
-        Self::READ,
-        Self::WRITE,
-        <S::BatchWrite as BatchWrite>::SUPPORTS_TRUNCATE,
-    );
+    pub const STREAMING_WRITE: bool = <S::StreamingWrite as StreamingWrite>::SUPPORTED;
+
+    // Whether each write supports truncation, which Unsupported does not.
+
+    const BATCH_TRUNCATE: bool = <S::BatchWrite as BatchWrite>::SUPPORTS_TRUNCATE;
+
+    const STREAMING_TRUNCATE: bool = <S::StreamingWrite as StreamingWrite>::SUPPORTS_TRUNCATE;
+
+    const CAPABILITIES: Capabilities = Capabilities::implemented(&[
+        (Capabilities::BATCH_READ, Self::READ),
+        (Capabilities::MICRO_BATCH_READ, Self::MICRO_BATCH_READ),
+        (Capabilities::BATCH_WRITE, Self::WRITE),
+        (Capabilities::STREAMING_WRITE, Self::STREAMING_WRITE),
+        (
+            Capabilities::TRUNCATE,
+            Self::BATCH_TRUNCATE || Self::STREAMING_TRUNCATE,
+        ),
+    ]);
 
     fn insert<T>(&self, handles: &HandleMap<T>, value: T) -> Result<i64> {
         let handle = self
@@ -87,8 +105,7 @@ impl<S: DataSource> Bridge<S> {
     }
 
     fn register_source(&self, source: S) -> Result<(i64, u64)> {
-        // Keep only implemented operations: a source can narrow them but never add one.
-        let capabilities = source.capabilities().intersection(Self::CAPABILITIES);
+        let capabilities = Self::effective(source.capabilities());
         let handle = self.insert(
             &self.sources,
             SourceState {
@@ -97,6 +114,20 @@ impl<S: DataSource> Bridge<S> {
             },
         )?;
         Ok((handle, capabilities.bits()))
+    }
+
+    /// Keeps the implemented operations of a declaration, so that a source can narrow its
+    /// operations but never add one, and truncation only while a write that supports it
+    /// remains.
+    fn effective(declared: Capabilities) -> Capabilities {
+        let capabilities = declared.intersection(Self::CAPABILITIES);
+        let truncates = (Self::BATCH_TRUNCATE && capabilities.contains(Capabilities::BATCH_WRITE))
+            || (Self::STREAMING_TRUNCATE && capabilities.contains(Capabilities::STREAMING_WRITE));
+        if truncates {
+            capabilities
+        } else {
+            capabilities.without(Capabilities::TRUNCATE)
+        }
     }
 
     pub fn schema(&self, handle: i64) -> Result<SchemaRef> {
@@ -183,23 +214,104 @@ impl<S: DataSource> Bridge<S> {
         result
     }
 
-    pub fn create_writer(&self, handle: i64, info: WriteInfo) -> Result<i64> {
-        stream::validate_schema(&info.schema)?;
+    pub fn create_stream_reader(&self, handle: i64, schema: SchemaRef) -> Result<i64> {
+        stream::validate_schema(&schema)?;
         let source = get(&self.sources, handle)?;
-        let schema = info.schema.clone();
-        let coordinator = {
+        let stream = {
             let source = lock(&source);
-            if !source.capabilities.contains(Capabilities::BATCH_WRITE) {
-                return Err("source does not support batch writes".into());
+            if !source.capabilities.contains(Capabilities::MICRO_BATCH_READ) {
+                return Err("source does not support micro-batch streaming reads".into());
             }
-            if info.mode == WriteMode::Truncate
-                && !source.capabilities.contains(Capabilities::TRUNCATE)
-            {
-                return Err("source does not support truncate".into());
-            }
-            source.source.new_write(info)?
+            source
+                .source
+                .new_micro_batch_stream(MicroBatchStreamInfo::new(schema.clone()))?
         };
-        self.insert(&self.writers, DriverWriter::new(coordinator, schema))
+        self.insert(&self.streams, StreamReader::new(stream, schema))
+    }
+
+    pub fn initial_offset(&self, handle: i64) -> Result<String> {
+        let stream = get(&self.streams, handle)?;
+        let result = lock(&stream).call(|stream| encode_offset(&stream.initial_offset()?));
+        result
+    }
+
+    pub fn latest_offset(&self, handle: i64) -> Result<String> {
+        let stream = get(&self.streams, handle)?;
+        let result = lock(&stream).call(|stream| encode_offset(&stream.latest_offset()?));
+        result
+    }
+
+    pub fn stream_partitions(&self, handle: i64, start: &str, end: &str) -> Result<Vec<Vec<u8>>> {
+        let stream = get(&self.streams, handle)?;
+        let result = lock(&stream).plan(start, end);
+        result
+    }
+
+    pub fn serialized_stream_reader(&self, handle: i64) -> Result<Arc<Vec<u8>>> {
+        let stream = get(&self.streams, handle)?;
+        let result = lock(&stream).serialized();
+        result
+    }
+
+    pub fn commit_offset(&self, handle: i64, end: &str) -> Result<()> {
+        let stream = get(&self.streams, handle)?;
+        let result = lock(&stream).call(|stream| stream.commit(decode_offset(end)?));
+        result
+    }
+
+    pub fn close_stream_reader(&self, handle: i64) -> Result<()> {
+        remove(&self.streams, handle);
+        Ok(())
+    }
+
+    /// Creates a batch write, or the write of a micro-batch of the streaming query `query_id`.
+    pub fn create_writer(
+        &self,
+        handle: i64,
+        schema: SchemaRef,
+        mode: WriteMode,
+        query_id: Option<String>,
+    ) -> Result<i64> {
+        stream::validate_schema(&schema)?;
+        let source = get(&self.sources, handle)?;
+        let writer = {
+            let source = lock(&source);
+            let capabilities = source.capabilities;
+            let truncate = mode == WriteMode::Truncate;
+            match query_id {
+                None => {
+                    if !capabilities.contains(Capabilities::BATCH_WRITE) {
+                        return Err("source does not support batch writes".into());
+                    }
+                    if truncate
+                        && !(Self::BATCH_TRUNCATE && capabilities.contains(Capabilities::TRUNCATE))
+                    {
+                        return Err("source does not support truncate".into());
+                    }
+                    let write = source
+                        .source
+                        .new_write(WriteInfo::new(schema.clone(), mode))?;
+                    Write::Batch(DriverWriter::new(Batch(write), schema))
+                }
+                Some(query_id) => {
+                    if !capabilities.contains(Capabilities::STREAMING_WRITE) {
+                        return Err("source does not support streaming writes".into());
+                    }
+                    if truncate
+                        && !(Self::STREAMING_TRUNCATE
+                            && capabilities.contains(Capabilities::TRUNCATE))
+                    {
+                        return Err("source does not support truncate in streaming writes \
+                                    (the output mode complete)"
+                            .into());
+                    }
+                    let info = StreamingWriteInfo::new(schema.clone(), mode, query_id);
+                    let write = source.source.new_streaming_write(info)?;
+                    Write::Streaming(DriverWriter::new(Streaming(write), schema))
+                }
+            }
+        };
+        self.insert(&self.writers, writer)
     }
 
     pub fn serialized_writer(&self, handle: i64) -> Result<Arc<Vec<u8>>> {
@@ -208,15 +320,15 @@ impl<S: DataSource> Bridge<S> {
         result
     }
 
-    pub fn commit(&self, handle: i64, messages: &[Option<&[u8]>]) -> Result<()> {
+    pub fn commit(&self, handle: i64, epoch_id: i64, messages: &[Option<&[u8]>]) -> Result<()> {
         let writer = get(&self.writers, handle)?;
-        let result = lock(&writer).commit(messages);
+        let result = lock(&writer).commit(epoch_id, messages);
         result
     }
 
-    pub fn abort(&self, handle: i64, messages: &[Option<&[u8]>]) -> Result<()> {
+    pub fn abort(&self, handle: i64, epoch_id: i64, messages: &[Option<&[u8]>]) -> Result<()> {
         let writer = get(&self.writers, handle)?;
-        let result = lock(&writer).abort(messages);
+        let result = lock(&writer).abort(epoch_id, messages);
         result
     }
 
@@ -236,19 +348,33 @@ impl<S: DataSource> Bridge<S> {
     }
 }
 
-/// Restores an executor reader using only its factory type and serialized values.
-/// No source, planner, or driver handle registry is created or consulted.
+/// Restores the executor reader of a batch scan, with factory `B`, or of a micro-batch, with
+/// factory `S`, using only serialized values. No source, planner, stream, or driver handle
+/// registry is created or consulted.
 ///
 /// # Safety
 /// `task` must satisfy TaskContext::from_raw and remain valid until the
 /// returned stream is released. The stream's consumer must follow the
 /// Arrow C Stream ownership protocol and keep the plugin loaded.
-pub unsafe fn open_reader<F: PartitionReaderFactory>(
+pub unsafe fn open_reader<B: PartitionReaderFactory, S: PartitionReaderFactory>(
     task: *const crate::abi::SparkDsTaskContext,
     state: &[u8],
     partition: &[u8],
 ) -> Result<FFI_ArrowArrayStream> {
-    let ReaderState { factory, schema }: ReaderState<F> = decode(state)?;
+    match decode::<Kind<ReaderState<B>, ReaderState<S>>>(state)? {
+        Kind::Batch(state) => unsafe { open_partition(task, state, partition) },
+        Kind::Streaming(state) => unsafe { open_partition(task, state, partition) },
+    }
+}
+
+/// # Safety
+/// As for open_reader.
+unsafe fn open_partition<F: PartitionReaderFactory>(
+    task: *const crate::abi::SparkDsTaskContext,
+    state: ReaderState<F>,
+    partition: &[u8],
+) -> Result<FFI_ArrowArrayStream> {
+    let ReaderState { factory, schema } = state;
     let schema = Arc::new(schema);
     stream::validate_schema(&schema)?;
     let task = unsafe { TaskContext::from_raw(task)? };
@@ -281,6 +407,36 @@ struct SourceState<S> {
     capabilities: Capabilities,
 }
 
+/// The driver writer of a batch write, or of the write of a micro-batch, which share the
+/// writer handles of the ABI.
+enum Write<S: DataSource> {
+    Batch(DriverWriter<Batch<S::BatchWrite>>),
+    Streaming(DriverWriter<Streaming<S::StreamingWrite>>),
+}
+
+impl<S: DataSource> Write<S> {
+    fn serialized(&mut self) -> Result<Arc<Vec<u8>>> {
+        match self {
+            Self::Batch(writer) => writer.serialized(),
+            Self::Streaming(writer) => writer.serialized(),
+        }
+    }
+
+    fn commit(&mut self, epoch_id: i64, messages: &[Option<&[u8]>]) -> Result<()> {
+        match self {
+            Self::Batch(writer) => writer.commit(epoch_id, messages),
+            Self::Streaming(writer) => writer.commit(epoch_id, messages),
+        }
+    }
+
+    fn abort(&mut self, epoch_id: i64, messages: &[Option<&[u8]>]) -> Result<()> {
+        match self {
+            Self::Batch(writer) => writer.abort(epoch_id, messages),
+            Self::Streaming(writer) => writer.abort(epoch_id, messages),
+        }
+    }
+}
+
 struct Planner<B: ScanBuilder> {
     phase: Phase<B>,
     schema: SchemaRef,
@@ -302,6 +458,14 @@ pub struct EncodedPlan {
 struct ReaderState<F> {
     factory: F,
     schema: Schema,
+}
+
+/// A value of a batch operation or of a streaming one, which share the executor entry points
+/// of the ABI, `read` and `create_data_writer`: the restored state tells them apart.
+#[derive(Serialize, Deserialize)]
+pub(crate) enum Kind<B, S> {
+    Batch(B),
+    Streaming(S),
 }
 
 impl<B: ScanBuilder> Planner<B> {
@@ -351,10 +515,10 @@ impl<B: ScanBuilder> Planner<B> {
         let result = provider_call(|| {
             let plan = builder.plan()?;
             Ok(Arc::new(EncodedPlan {
-                state: encode(&ReaderState {
+                state: encode(&Kind::<_, Unsupported>::Batch(ReaderState {
                     factory: plan.factory,
                     schema: self.schema.as_ref().clone(),
-                })?,
+                }))?,
                 partitions: plan.partitions.iter().map(encode).collect::<Result<_>>()?,
             }))
         });
@@ -369,6 +533,75 @@ impl<B: ScanBuilder> Planner<B> {
             }
         }
     }
+}
+
+/// The driver state of the stream of a streaming query.
+struct StreamReader<M: MicroBatchStream> {
+    stream: M,
+    schema: SchemaRef,
+    // The state of the last planned micro-batch, which serialize_stream_reader returns.
+    planned: Option<Arc<Vec<u8>>>,
+    // The first failure, which stops the query: every later call returns it.
+    failed: Option<String>,
+}
+
+impl<M: MicroBatchStream> StreamReader<M> {
+    fn new(stream: M, schema: SchemaRef) -> Self {
+        Self {
+            stream,
+            schema,
+            planned: None,
+            failed: None,
+        }
+    }
+
+    /// Calls the stream, unless an earlier call failed, and keeps the first failure.
+    fn call<T>(&mut self, action: impl FnOnce(&mut M) -> Result<T>) -> Result<T> {
+        if let Some(error) = &self.failed {
+            return Err(error.clone().into());
+        }
+        let stream = &mut self.stream;
+        provider_call(|| action(stream)).map_err(|error| {
+            self.failed = Some(error.clone());
+            error.into()
+        })
+    }
+
+    /// Plans a micro-batch, and keeps its encoded state for serialize_stream_reader.
+    fn plan(&mut self, start: &str, end: &str) -> Result<Vec<Vec<u8>>> {
+        let schema = self.schema.as_ref().clone();
+        let (state, partitions) = self.call(|stream| {
+            let plan = stream.plan(decode_offset(start)?, decode_offset(end)?)?;
+            let partitions = plan.partitions.iter().map(encode).collect::<Result<_>>()?;
+            let state = encode(&Kind::<Unsupported, _>::Streaming(ReaderState {
+                factory: plan.factory,
+                schema,
+            }))?;
+            Ok((state, partitions))
+        })?;
+        self.planned = Some(Arc::new(state));
+        Ok(partitions)
+    }
+
+    fn serialized(&self) -> Result<Arc<Vec<u8>>> {
+        if let Some(error) = &self.failed {
+            return Err(error.clone().into());
+        }
+        self.planned
+            .clone()
+            .ok_or_else(|| "no micro-batch has been planned".into())
+    }
+}
+
+/// Offsets are compact JSON on a single line, which Spark stores in the checkpoint as they
+/// are, so they have no envelope: the library owns their format.
+fn encode_offset<T: Serialize>(offset: &T) -> Result<String> {
+    Ok(serde_json::to_string(offset)?)
+}
+
+fn decode_offset<T: DeserializeOwned>(json: &str) -> Result<T> {
+    serde_json::from_str(json)
+        .map_err(|error| format!("cannot decode the offset {json}: {error}").into())
 }
 
 #[derive(Serialize, Deserialize)]
@@ -507,7 +740,9 @@ mod tests {
 
     impl DataSource for Source {
         type ScanBuilder = Builder;
+        type MicroBatchStream = Unsupported;
         type BatchWrite = Unsupported;
+        type StreamingWrite = Unsupported;
 
         fn new(_: CreateInfo) -> Result<Self> {
             Ok(Self {
@@ -583,6 +818,14 @@ mod tests {
         CreateInfo::new("bridge_test", Default::default())
     }
 
+    /// The factory in the serialized state of a planned batch scan.
+    fn batch_factory(state: &[u8]) -> Factory {
+        match decode::<Kind<ReaderState<Factory>, Unsupported>>(state).unwrap() {
+            Kind::Batch(state) => state.factory,
+            Kind::Streaming(never) => match never {},
+        }
+    }
+
     fn error_message<T>(result: Result<T>) -> String {
         result
             .err()
@@ -608,13 +851,7 @@ mod tests {
         assert!(Arc::ptr_eq(&bridge.planned(reader).unwrap(), &plan));
         assert_eq!(decode::<u64>(&plan.partitions[0]).unwrap(), 2);
         assert_eq!(decode::<u64>(&plan.partitions[1]).unwrap(), 7);
-        assert_eq!(
-            decode::<ReaderState<Factory>>(&plan.state)
-                .unwrap()
-                .factory
-                .0,
-            42
-        );
+        assert_eq!(batch_factory(&plan.state).0, 42);
         assert_eq!(builds.load(Ordering::SeqCst), 1);
         assert!(bridge.prune_columns(reader, &[]).is_err());
         bridge.close_reader(reader).unwrap();
@@ -784,20 +1021,8 @@ mod tests {
         assert!(!bridge.push_limit(second, 1).unwrap());
         let first_plan = bridge.planned(first).unwrap();
         let second_plan = bridge.planned(second).unwrap();
-        assert_eq!(
-            decode::<ReaderState<Factory>>(&first_plan.state)
-                .unwrap()
-                .factory
-                .0,
-            5
-        );
-        assert_eq!(
-            decode::<ReaderState<Factory>>(&second_plan.state)
-                .unwrap()
-                .factory
-                .0,
-            42
-        );
+        assert_eq!(batch_factory(&first_plan.state).0, 5);
+        assert_eq!(batch_factory(&second_plan.state).0, 42);
         assert!(!Arc::ptr_eq(&first_plan, &second_plan));
         assert_eq!(builds.load(Ordering::SeqCst), 2);
         assert_eq!(limits.load(Ordering::SeqCst), 1);
@@ -840,7 +1065,9 @@ mod tests {
                     is_interrupted: None,
                 };
                 // The executor entry point depends only on Factory, not Source or Builder.
-                let stream = unsafe { open_reader::<Factory>(&task, &state, partition) }.unwrap();
+                let stream =
+                    unsafe { open_reader::<Factory, Unsupported>(&task, &state, partition) }
+                        .unwrap();
                 let mut reader = ArrowArrayStreamReader::try_new(stream).unwrap();
                 let batch = reader.next().unwrap().unwrap();
                 let ids = batch
@@ -878,7 +1105,8 @@ mod tests {
         // The expected schema must survive serialization and the removal of driver handles.
         drop(bridge);
         let mut stream =
-            unsafe { open_reader::<Factory>(&task, &plan.state, &plan.partitions[0]) }.unwrap();
+            unsafe { open_reader::<Factory, Unsupported>(&task, &plan.state, &plan.partitions[0]) }
+                .unwrap();
         // The first batch, which get_schema reads, does not have the negotiated schema.
         let mut schema = arrow_schema::ffi::FFI_ArrowSchema::empty();
         assert_ne!(
@@ -897,7 +1125,9 @@ mod tests {
 
         impl DataSource for Narrowing {
             type ScanBuilder = Builder;
+            type MicroBatchStream = Unsupported;
             type BatchWrite = Unsupported;
+            type StreamingWrite = Unsupported;
 
             fn new(_: CreateInfo) -> Result<Self> {
                 unreachable!("registered directly")
@@ -949,7 +1179,8 @@ mod tests {
 
     #[test]
     fn rejects_a_different_wire_version() {
-        let error = decode::<u64>(br#"{"version":2,"value":42}"#).unwrap_err();
+        let other = format!(r#"{{"version":{},"value":42}}"#, STATE_VERSION + 1);
+        let error = decode::<u64>(other.as_bytes()).unwrap_err();
         assert!(error
             .to_string()
             .contains("unsupported native state version"));

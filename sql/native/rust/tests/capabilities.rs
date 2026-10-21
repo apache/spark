@@ -43,7 +43,9 @@ struct Source {
 
 impl DataSource for Source {
     type ScanBuilder = Builder;
+    type MicroBatchStream = Unsupported;
     type BatchWrite = Unsupported;
+    type StreamingWrite = Unsupported;
 
     fn init(host: &HostInfo) -> Result<()> {
         INITIALIZED.lock().unwrap().push(host.spark_version.clone());

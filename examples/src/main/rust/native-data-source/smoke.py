@@ -18,6 +18,7 @@
 
 import argparse
 from pathlib import Path
+import tempfile
 
 from pyspark.errors import AnalysisException
 from pyspark.sql import SparkSession, functions as F
@@ -73,6 +74,26 @@ def main():
         assert [row.id for row in labels] == [3, 13, 23]
         residual_limit = df.where(F.col("label") == "row-21").limit(1).select("id").collect()
         assert [row.id for row in residual_limit] == [21]
+
+        # A streaming read of the fixed range reads all its rows in its first micro-batch, with
+        # the reader of batch scans.
+        with tempfile.TemporaryDirectory(prefix="rust-native-range-stream-") as checkpoint:
+            query = (
+                spark.readStream.format("rust_sdk_range")
+                .option("start", 0)
+                .option("end", 31)
+                .option("numpartitions", 4)
+                .option("batchsize", 3)
+                .load()
+                .writeStream.format("memory")
+                .queryName("rust_sdk_range_stream")
+                .option("checkpointLocation", checkpoint)
+                .trigger(availableNow=True)
+                .start()
+            )
+            query.awaitTermination()
+            streamed = spark.table("rust_sdk_range_stream").orderBy("id").collect()
+            assert [tuple(row) for row in streamed] == [(i, f"row-{i}") for i in range(31)]
 
         # Analysis must reject both modes before AQE can run the input shuffle.
         failing_input = (
