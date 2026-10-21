@@ -739,10 +739,17 @@ case class StreamingSymmetricHashJoinExec(
           case RightSide => (right.output, left.output)
         }
 
+        // Scan bounds must constrain the event-time columns used by the index and probe.
+        // Bounds on other columns cannot limit this scan. If either event-time bound is
+        // missing, scan all rows for the join key.
+        val thisEventTime = WatermarkSupport.findEventTimeColumn(
+          thisSideAttrs, !allowMultipleStatefulOperators).toSeq
+        val otherEventTime = WatermarkSupport.findEventTimeColumn(
+          otherSideAttrs, !allowMultipleStatefulOperators).toSeq
         val lowerBoundMs = StreamingJoinHelper.getStateValueWatermark(
-          AttributeSet(otherSideAttrs), AttributeSet(thisSideAttrs), condition.full, Some(0L))
+          AttributeSet(otherEventTime), AttributeSet(thisEventTime), condition.full, Some(0L))
         val upperBoundMs = StreamingJoinHelper.getStateValueWatermark(
-          AttributeSet(thisSideAttrs), AttributeSet(otherSideAttrs), condition.full, Some(0L))
+          AttributeSet(thisEventTime), AttributeSet(otherEventTime), condition.full, Some(0L))
 
         (lowerBoundMs, upperBoundMs) match {
           case (Some(lower), Some(upper)) =>
