@@ -104,58 +104,77 @@ case class BroadcastRangeJoinExec(
   @transient private[this] lazy val buildOutput = buildPlan.output
   @transient private[this] lazy val streamedOutput = streamedPlan.output
 
-  /** Build side holds the lower bound, so points at or below the stream key match. */
-  private def buildHoldsLowerBound(partial: PartialRangeJoin): Boolean =
-    partial.leftIsLower == (buildSide == BuildLeft)
+  /**
+   * The point-index scan method name on PointIndex / LongPointIndex.
+   * Lower bound build side uses "upTo" (points <= probe), while upper bound uses
+   * "from" (points >= probe). Strict inequality uses the Exclusive variant.
+   */
+  private lazy val pointScanMethod: String = rangeJoin match {
+    case partial: PartialRangeJoin =>
+      val isLower = partial.leftIsLower == (buildSide == BuildLeft)
+      (isLower, partial.strict) match {
+        case (true, true) => "upToExclusive"
+        case (true, false) => "upTo"
+        case (false, true) => "fromExclusive"
+        case (false, false) => "from"
+      }
+    case other =>
+      throw new IllegalStateException(
+        s"Point index is only built for a partial range, got $other.")
+  }
 
   /**
-   * Candidates for one streamed row. A null bound is unknown: the index
-   * returns an empty iterator, and the original condition is not evaluated.
-   * A point probe has one key. Pass it as both ends so it is evaluated once.
+   * Create candidate probe function for a broadcast relation and bound probe keys.
+   * Constructed once per partition in `perPartition`, avoiding per-row relation dispatch.
    */
-  private def candidates(
+  private def makeCandidateFn(
       relation: RangeRelation,
-      boundStreamKeys: Seq[Expression],
-      streamRow: InternalRow): Iterator[InternalRow] = {
-    val low = boundStreamKeys.head.eval(streamRow)
+      boundStreamKeys: Seq[Expression]): InternalRow => Iterator[InternalRow] = {
+    val isOneKey = boundStreamKeys.length == 1
+    val lowExpr = boundStreamKeys.head
+    val highExpr = if (isOneKey) null else boundStreamKeys(1)
+
     relation match {
-      case longs: LongIntervalIndex =>
+      case longs: LongIntervalIndex => row =>
+        val low = lowExpr.eval(row)
         if (low == null) {
           Iterator.empty
         } else {
-          // A point probe has one key. Pass it as both ends so it is evaluated once.
-          val high = if (boundStreamKeys.length == 1) low else boundStreamKeys(1).eval(streamRow)
-          if (high == null) Iterator.empty else {
+          val high = if (isOneKey) low else highExpr.eval(row)
+          if (high == null) {
+            Iterator.empty
+          } else {
             longs.overlapping(longs.toLong(low), longs.toLong(high))
           }
         }
       case points: LongPointIndex =>
+        val scan: Long => Iterator[InternalRow] = pointScanMethod match {
+          case "upTo" => points.upTo
+          case "upToExclusive" => points.upToExclusive
+          case "from" => points.from
+          case "fromExclusive" => points.fromExclusive
+        }
+        row =>
+          val low = lowExpr.eval(row)
+          if (low == null) Iterator.empty else scan(points.toLong(low))
+      case intervals: IntervalIndex => row =>
+        val low = lowExpr.eval(row)
         if (low == null) {
           Iterator.empty
         } else {
-          rangeJoin match {
-            case partial: PartialRangeJoin if buildHoldsLowerBound(partial) =>
-              points.upTo(points.toLong(low))
-            case _: PartialRangeJoin =>
-              points.from(points.toLong(low))
-            case _ =>
-              throw new IllegalStateException(
-                s"Point index is only built for a partial range, got $rangeJoin.")
-          }
+          val high = if (isOneKey) low else highExpr.eval(row)
+          intervals.overlapping(low, high)
         }
-      case intervals: IntervalIndex =>
-        val high = if (boundStreamKeys.length == 1) low else boundStreamKeys(1).eval(streamRow)
-        intervals.overlapping(low, high)
       case points: PointIndex =>
-        rangeJoin match {
-          case partial: PartialRangeJoin if buildHoldsLowerBound(partial) =>
-            points.upTo(low)
-          case _: PartialRangeJoin =>
-            points.from(low)
-          case _ =>
-            throw new IllegalStateException(
-              s"Point index is only built for a partial range, got $rangeJoin.")
+        val scan: Any => Iterator[InternalRow] = pointScanMethod match {
+          case "upTo" => points.upTo
+          case "upToExclusive" => points.upToExclusive
+          case "from" => points.from
+          case "fromExclusive" => points.fromExclusive
         }
+        row =>
+          val low = lowExpr.eval(row)
+          if (low == null) Iterator.empty else scan(low)
     }
   }
 
@@ -165,14 +184,12 @@ case class BroadcastRangeJoinExec(
    */
   private class ProbeContext(
       val stream: Iterator[InternalRow],
-      relation: RangeRelation,
-      keys: Seq[Expression],
       val condition: InternalRow => Boolean,
       joinedRow: JoinedRow,
-      val nullBuild: InternalRow) {
+      val nullBuild: InternalRow,
+      candidateFn: InternalRow => Iterator[InternalRow]) {
 
-    def candidates(row: InternalRow): Iterator[InternalRow] =
-      BroadcastRangeJoinExec.this.candidates(relation, keys, row)
+    def candidates(row: InternalRow): Iterator[InternalRow] = candidateFn(row)
 
     def join(streamRow: InternalRow, buildRow: InternalRow): InternalRow = buildSide match {
       case BuildRight => joinedRow(streamRow, buildRow)
@@ -187,14 +204,14 @@ case class BroadcastRangeJoinExec(
     val cond = condition.get
     val schema = left.output ++ right.output
     val numBuildFields = buildPlan.output.length
+    val candidateFn = makeCandidateFn(relation.value, boundStreamKeys)
     streamedPlan.execute().mapPartitionsInternal { stream =>
       f(new ProbeContext(
         stream,
-        relation.value,
-        boundStreamKeys,
         Predicate.create(cond, schema).eval _,
         new JoinedRow,
-        new GenericInternalRow(numBuildFields)))
+        new GenericInternalRow(numBuildFields),
+        candidateFn))
     }
   }
 
@@ -378,30 +395,38 @@ case class BroadcastRangeJoinExec(
   }
 
   /**
-   * Probe the broadcast index. The index kind and scan direction are fixed when
-   * the plan is built, so generated code calls the concrete index method
-   * directly. A null key yields the empty scan those methods already return.
-   * Generated code does not allocate a key array. An interval probe owns its
-   * walk stack.
+   * Probe the broadcast index. The index kind and scan direction are fixed
+   * when the plan is built, so generated code calls the concrete index
+   * method directly. Keys either stay boxed per `genProbeKeys`, or arrive as
+   * primitive longs from `genLongProbeKeys` with a null term each that the
+   * long indexes cannot see; the call then yields the shared empty scan for
+   * a null key. Generated code does not allocate a key array. An interval
+   * probe owns its walk stack.
    */
   private def genCandidateIterator(
       ctx: CodegenContext,
       relationTerm: String,
-      keyVars: Seq[String]): (String, String) = {
+      keyVars: Seq[String],
+      nullVars: Seq[String]): (String, String) = {
     val matches = ctx.freshName("matches")
     val iterCls = classOf[Iterator[InternalRow]].getName
     val call = rangeJoin match {
-      case partial: PartialRangeJoin =>
-        val points = classOf[PointIndex].getName
-        val scan = if (buildHoldsLowerBound(partial)) "upTo" else "from"
-        s"(($points) $relationTerm).$scan(${keyVars.head})"
+      case _: PartialRangeJoin =>
+        val points = (if (usesLongKeys) classOf[LongPointIndex] else classOf[PointIndex]).getName
+        s"(($points) $relationTerm).$pointScanMethod(${keyVars.head})"
       case _ =>
-        val intervals = classOf[IntervalIndex].getName
+        val intervals =
+          (if (usesLongKeys) classOf[LongIntervalIndex] else classOf[IntervalIndex]).getName
         // A point probe has one key. Reuse it as both ends so it is evaluated once.
         val high = if (keyVars.length == 1) keyVars.head else keyVars(1)
         s"(($intervals) $relationTerm).overlapping(${keyVars.head}, $high)"
     }
-    val code = s"$iterCls $matches = $call;"
+    val code = if (nullVars.isEmpty) {
+      s"$iterCls $matches = $call;"
+    } else {
+      val emptyScan = s"${classOf[RowSlice].getName}$$.MODULE$$.empty()"
+      s"$iterCls $matches = ${nullVars.mkString(" || ")} ? ($iterCls) $emptyScan : $call;"
+    }
     (matches, code)
   }
 
@@ -437,52 +462,28 @@ case class BroadcastRangeJoinExec(
     (keys.map(_._1).mkString("\n"), keys.map(_._2), keys.map(_._3))
   }
 
-  private def genLongCandidateIterator(
-      ctx: CodegenContext,
-      relationTerm: String,
-      keyVars: Seq[String],
-      nullVars: Seq[String]): (String, String) = {
-    val matches = ctx.freshName("matches")
-    val iterCls = classOf[Iterator[InternalRow]].getName
-    val emptyScan = s"${classOf[RowSlice].getName}$$.MODULE$$.empty()"
-    val call = rangeJoin match {
-      case partial: PartialRangeJoin =>
-        val points = classOf[LongPointIndex].getName
-        val scan = if (buildHoldsLowerBound(partial)) "upTo" else "from"
-        s"(($points) $relationTerm).$scan(${keyVars.head})"
-      case _ =>
-        val intervals = classOf[LongIntervalIndex].getName
-        // A point probe has one key. Reuse it as both ends so it is evaluated once.
-        val high = if (keyVars.length == 1) keyVars.head else keyVars(1)
-        s"(($intervals) $relationTerm).overlapping(${keyVars.head}, $high)"
-    }
-    val code = s"$iterCls $matches = ${nullVars.mkString(" || ")} ?" +
-      s" ($iterCls) $emptyScan : $call;"
-    (matches, code)
-  }
-
   /**
    * Shared init for every doConsume path: broadcasts the relation, evaluates the
    * streamed probe keys, and opens the candidate iterator over it.
    */
   private def prepareProbe(ctx: CodegenContext, input: Seq[ExprCode]): (String, String, String) = {
     val relationTerm = prepareBroadcast(ctx)
-    if (usesLongKeys) {
-      val (keyCode, keyVars, nullVars) = genLongProbeKeys(ctx, input)
-      val (matches, iteratorCode) =
-        genLongCandidateIterator(ctx, relationTerm, keyVars, nullVars)
-      (keyCode, iteratorCode, matches)
+    val (keyCode, keyVars, nullVars) = if (usesLongKeys) {
+      genLongProbeKeys(ctx, input)
     } else {
-      val (keyCode, keyVars) = genProbeKeys(ctx, input)
-      val (matches, iteratorCode) = genCandidateIterator(ctx, relationTerm, keyVars)
-      (keyCode, iteratorCode, matches)
+      val (code, vars) = genProbeKeys(ctx, input)
+      (code, vars, Nil)
     }
+    val (matches, iteratorCode) = genCandidateIterator(ctx, relationTerm, keyVars, nullVars)
+    (keyCode, iteratorCode, matches)
   }
 
-  private def joinedVars(input: Seq[ExprCode], buildVars: Seq[ExprCode]): Seq[ExprCode] = {
+  private def orderResultVars(
+      streamVars: Seq[ExprCode],
+      buildVars: Seq[ExprCode]): Seq[ExprCode] = {
     buildSide match {
-      case BuildLeft => buildVars ++ input
-      case BuildRight => input ++ buildVars
+      case BuildLeft => buildVars ++ streamVars
+      case BuildRight => streamVars ++ buildVars
     }
   }
 
@@ -490,7 +491,7 @@ case class BroadcastRangeJoinExec(
     val (keyCode, iteratorCode, matches) = prepareProbe(ctx, input)
     val (buildRow, checkCondition, buildVars) =
       getJoinCondition(ctx, input, streamedPlan, buildPlan)
-    val resultVars = joinedVars(input, buildVars)
+    val resultVars = orderResultVars(input, buildVars)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
     s"""
@@ -512,7 +513,7 @@ case class BroadcastRangeJoinExec(
     val (_, checkCondition, _) = getJoinCondition(
       ctx, input, streamedPlan, buildPlan, Some(buildRow))
     val buildVars = genOneSideJoinVars(ctx, buildRow, buildPlan, setDefaultValue = true)
-    val resultVars = joinedVars(input, buildVars)
+    val resultVars = orderResultVars(input, buildVars)
     val found = ctx.freshName("foundMatch")
     val shouldOutput = ctx.freshName("shouldOutput")
     val numOutput = metricTerm(ctx, "numOutputRows")

@@ -118,6 +118,10 @@ private[joins] sealed trait LongKeyConversion extends RangeRelation {
 
 private[joins] object RangeIndex {
 
+  /** Capacity for a build buffer from the driver's row-count hint. */
+  def initialCapacity(sizeHint: Option[Long]): Int =
+    sizeHint.map(n => math.min(n, Int.MaxValue).toInt).getOrElse(64)
+
   /** Accessor reading a single field from `InternalRow` as a boxed value (or null). */
   def getValue(dt: DataType, ordinal: Int): InternalRow => Any = {
     val accessor = InternalRow.getAccessor(dt)
@@ -222,8 +226,10 @@ private[joins] object RowSlice {
  * parallel arrays sorted by low bound, with a row array in the same order
  * feeding the scan path and `maxHighIdx(mid)` indexing the maximum high
  * bound in the span rooted at mid. Each key and row object is owned once:
- * the tree holds one reference per value plus the single row array, so a
- * serialized index keeps the same object count it was built with.
+ * the tree holds one reference per value plus the single row array. Java
+ * serialization keeps these aliases; Kryo's reference resolver does not
+ * track primitive wrappers, so a key shared by `lows` and `highs`, such as
+ * the one key of a degenerate build, can deserialize as two objects.
  * Subtrees whose max high is below the probe window, or whose low starts
  * after it, are pruned during search, and a window covering every interval
  * skips the walk entirely.
@@ -241,10 +247,11 @@ private[joins] class IntervalIndex private (
 
   def keyType: DataType = _keyType
 
-  // All-covering window bounds. `lows` is sorted, so the last entry bounds
-  // every low from below, and coreHigh is the minimum high. A window covers
-  // every stored interval exactly when it holds probeLow <= coreHigh and
-  // probeHigh >= coreLow, whether or not the intervals share a common core.
+  // All-covering window bounds. `lows` is sorted, so the last entry is the
+  // largest low: it bounds every low from above, and coreHigh is the minimum
+  // high, which bounds every high from below. A window covers every stored
+  // interval exactly when it holds probeLow <= coreHigh and probeHigh >= coreLow,
+  // whether or not the intervals share a common core.
   // Recomputed in `read` too, since `lows`/`highs` are reassigned there.
   private[this] var coreLow: Any = IntervalIndex.coreLow(lows)
   private[this] var coreHigh: Any = IntervalIndex.coreHigh(highs, ordering)
@@ -374,8 +381,7 @@ private[joins] object IntervalIndex {
       buildKeys: Seq[Expression],
       rows: Iterator[InternalRow],
       sizeHint: Option[Long]): IntervalIndex = {
-    val initialCapacity = sizeHint.map(n => math.min(n, Int.MaxValue).toInt).getOrElse(64)
-    val buffer = new ArrayBuffer[(Any, Any, InternalRow)](initialCapacity)
+    val buffer = new ArrayBuffer[(Any, Any, InternalRow)](RangeIndex.initialCapacity(sizeHint))
     val projection = new InterpretedProjection(buildKeys)
     val lowOf = RangeIndex.getValue(buildKeys.head.dataType, 0)
     val ordering = PhysicalDataType.ordering(keyType)
@@ -547,6 +553,19 @@ private[joins] class PointIndex private (
   def from(value: Any): Iterator[InternalRow] =
     if (value == null) Iterator.empty else slice(searchBound(value, skipEquals = false), length)
 
+  /**
+   * Points whose key is strictly less than `value`. For a strict partial-range
+   * predicate the original condition rejects keys equal to the probe value,
+   * so the scan can skip them: a build heavy in duplicated keys would only
+   * hand the join rows that all fail.
+   */
+  def upToExclusive(value: Any): Iterator[InternalRow] =
+    if (value == null) Iterator.empty else slice(0, searchBound(value, skipEquals = false))
+
+  /** Points whose key is strictly greater than `value`. */
+  def fromExclusive(value: Any): Iterator[InternalRow] =
+    if (value == null) Iterator.empty else slice(searchBound(value, skipEquals = true), length)
+
   private def searchBound(value: Any, skipEquals: Boolean): Int = {
     val ord = ordering
     var lo = 0
@@ -625,8 +644,7 @@ private[joins] object PointIndex {
       buildKeys: Seq[Expression],
       rows: Iterator[InternalRow],
       sizeHint: Option[Long]): PointIndex = {
-    val initialCapacity = sizeHint.map(n => math.min(n, Int.MaxValue).toInt).getOrElse(64)
-    val buffer = new ArrayBuffer[(Any, InternalRow)](initialCapacity)
+    val buffer = new ArrayBuffer[(Any, InternalRow)](RangeIndex.initialCapacity(sizeHint))
     val projection = new InterpretedProjection(buildKeys)
     val lowOf = RangeIndex.getValue(buildKeys.head.dataType, 0)
     val ordering = PhysicalDataType.ordering(keyType)
@@ -647,15 +665,15 @@ private[joins] object PointIndex {
   private def sortAndBuild(
       keyType: DataType,
       ordering: Ordering[Any],
-      present: Array[(Any, InternalRow)]): PointIndex = {
-    java.util.Arrays.sort(present, Ordering.by[(Any, InternalRow), Any](_._1)(ordering))
-    val length = present.length
+      valid: Array[(Any, InternalRow)]): PointIndex = {
+    java.util.Arrays.sort(valid, Ordering.by[(Any, InternalRow), Any](_._1)(ordering))
+    val length = valid.length
     val keys = new Array[Any](length)
     val rows = new Array[InternalRow](length)
     var i = 0
     while (i < length) {
-      keys(i) = present(i)._1
-      rows(i) = present(i)._2
+      keys(i) = valid(i)._1
+      rows(i) = valid(i)._2
       i += 1
     }
     new PointIndex(keyType, keys, rows)
@@ -686,10 +704,11 @@ private[joins] class LongIntervalIndex private (
 
   def keyType: DataType = _keyType
 
-  // All-covering window bounds on raw keys: `lows` is sorted, so the last
-  // entry bounds every low from below, and coreHigh is the minimum high.
-  // A window covers every stored interval exactly when it holds probeLow <=
-  // coreHigh and probeHigh >= coreLow, whether or not a common core exists.
+  // All-covering window bounds on raw keys: `lows` is sorted, so the last entry
+  // is the largest low, bounding every low from above, and coreHigh is the
+  // minimum high, bounding every high from below. A window covers every
+  // stored interval exactly when it holds probeLow <= coreHigh and
+  // probeHigh >= coreLow, whether or not a common core exists.
   // Recomputed in `read` too, since `lows`/`highs` are reassigned there.
   private[this] var coreLow: Long = LongIntervalIndex.coreLow(lows)
   private[this] var coreHigh: Long = LongIntervalIndex.coreHigh(highs)
@@ -812,8 +831,7 @@ private[joins] object LongIntervalIndex {
       sizeHint: Option[Long]): LongIntervalIndex = {
     val toLongs: Seq[(InternalRow, Int) => Long] =
       buildKeys.map(k => RangeIndex.requiredLongKey(k.dataType).field)
-    val initialCapacity = sizeHint.map(n => math.min(n, Int.MaxValue).toInt).getOrElse(64)
-    val valid = new ArrayBuffer[(Long, Long, InternalRow)](initialCapacity)
+    val valid = new ArrayBuffer[(Long, Long, InternalRow)](RangeIndex.initialCapacity(sizeHint))
     val projection = new InterpretedProjection(buildKeys)
 
     while (rows.hasNext) {
@@ -957,6 +975,18 @@ private[joins] class LongPointIndex private (
   def from(value: Long): Iterator[InternalRow] =
     new RowSlice(rows, searchBound(value, skipEquals = false), length)
 
+  /**
+   * Points whose key is strictly less than `value`. For a strict partial-range
+   * predicate the original condition rejects keys equal to the probe value,
+   * so the scan can skip them; see [[PointIndex.upToExclusive]].
+   */
+  def upToExclusive(value: Long): Iterator[InternalRow] =
+    new RowSlice(rows, 0, searchBound(value, skipEquals = false))
+
+  /** Points whose key is strictly greater than `value`. */
+  def fromExclusive(value: Long): Iterator[InternalRow] =
+    new RowSlice(rows, searchBound(value, skipEquals = true), length)
+
   // java.util.Arrays.binarySearch returns an arbitrary hit; a bound scan needs
   // the first or last position, so lower and upper bounds are hand-rolled.
   private def searchBound(value: Long, skipEquals: Boolean): Int = {
@@ -1040,19 +1070,18 @@ private[joins] object LongPointIndex {
       sizeHint: Option[Long]): LongPointIndex = {
     require(buildKeys.length == 1, "A long point index expects one build key.")
     val keyAt = RangeIndex.requiredLongKey(buildKeys.head.dataType).field
-    val initialCapacity = sizeHint.map(n => math.min(n, Int.MaxValue).toInt).getOrElse(64)
-    val present = new ArrayBuffer[(Long, InternalRow)](initialCapacity)
+    val valid = new ArrayBuffer[(Long, InternalRow)](RangeIndex.initialCapacity(sizeHint))
     val projection = new InterpretedProjection(buildKeys)
 
     while (rows.hasNext) {
       val r = rows.next()
       val p = projection(r)
       if (!p.isNullAt(0)) {
-        present += ((keyAt(p, 0), r.copy()))
+        valid += ((keyAt(p, 0), r.copy()))
       }
     }
 
-    val staged = present.toArray
+    val staged = valid.toArray
     java.util.Arrays.sort(staged, Ordering.by[(Long, InternalRow), Long](_._1))
     val length = staged.length
     val keys = new Array[Long](length)
@@ -1116,6 +1145,13 @@ private[execution] case class RangeRelationBroadcastMode private (
 
   override lazy val canonicalized: RangeRelationBroadcastMode =
     RangeRelationBroadcastMode(buildKeys.map(_.canonicalized), indexKind)
+
+  // Route through the companion's apply() so nullable-normalization still applies; the
+  // compiler-generated copy() would otherwise reuse buildKeys verbatim.
+  def copy(
+      buildKeys: Seq[Expression] = buildKeys,
+      indexKind: RangeIndexKind = indexKind): RangeRelationBroadcastMode =
+    RangeRelationBroadcastMode(buildKeys, indexKind)
 }
 
 private[execution] object RangeRelationBroadcastMode {

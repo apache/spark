@@ -310,15 +310,23 @@ case object IntervalOverlapJoin extends RangeJoin
  */
 sealed abstract class PartialRangeJoin extends RangeJoin {
   def leftIsLower: Boolean
+
+  /**
+   * The inequality is `<`/`>` and not `<=`/`>=`. Inclusivity stays on the
+   * original condition, but the strict form also selects the exclusive
+   * point-index bound, so duplicated build keys equal to the probe value
+   * are skipped instead of failing the condition one by one.
+   */
+  def strict: Boolean
 }
 
 /** A `low <[=] high` partial-range join where the left side is the low bound. */
-case object LessPartialRangeJoin extends PartialRangeJoin {
+final case class LessPartialRangeJoin(override val strict: Boolean) extends PartialRangeJoin {
   override def leftIsLower: Boolean = true
 }
 
 /** A `low <[=] high` partial-range join where the left side is the high bound. */
-case object GreaterPartialRangeJoin extends PartialRangeJoin {
+final case class GreaterPartialRangeJoin(override val strict: Boolean) extends PartialRangeJoin {
   override def leftIsLower: Boolean = false
 }
 
