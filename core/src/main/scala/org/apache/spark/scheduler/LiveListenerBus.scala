@@ -83,7 +83,7 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
 
   /**
    * The number of events dropped from the executor management queue since this bus was
-   * started. Used by ExecutorAllocationManager (SPARK-58935) to detect when a dropped
+   * started. Used by ExecutorAllocationManager (SPARK-59561) to detect when a dropped
    * SparkListenerStageSubmitted event may have left its bookkeeping stale, and trigger
    * reconciliation against AppStatusStore's ground-truth stage state.
    */
