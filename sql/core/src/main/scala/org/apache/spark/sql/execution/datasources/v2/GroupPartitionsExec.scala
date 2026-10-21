@@ -656,7 +656,7 @@ private[sql] object GroupPartitionsExec {
     // `computeGrouping` reports that layout as `ROUTING_LOST`, since the regrouping moved an
     // undeclared key's group off `hash(key) % numPartitions`.
     //
-    // A projection, a reduction or an expected key list re-labels or replicates the groups, so
+    // A key rewrite or non-identity expected-key alignment re-labels or replicates the groups, so
     // those shapes give the keyed claim up, and only the physical output count is reported, which
     // is the count a parent's `PartitioningCollection` needs for uniformity.
     //
@@ -837,14 +837,8 @@ private[sql] object GroupPartitionsExec {
         case ((_, Seq(single)), outputIndex) => single == outputIndex
         case _ => false
       }
-    // A `copy` of the child's layout rather than a fresh one, so the marker and anything the
-    // layout grows later are carried without this having to name them, except for the routing:
-    // only an identity regrouping leaves an undeclared row where it was. The origin is the one
-    // field not carried: the output claims what this node's own producer stamped, never what
-    // the child's claimed, and only while the shape holds the claim -- a grouping that settles
-    // every key leaves nothing repeating, so it spends the claim the way `toGrouped` does.
-    // Built here, where the child is in scope, so `computeOutputPartitioning` has nothing left
-    // to re-apply.
+    // Copy the child's layout, deciding both origins explicitly. Only identity regrouping keeps
+    // unknown-key routing. Ungrouping uses this node's stamp, cleared when every key is grouped.
     val unknownKeysOrigin =
       if (isIdentity) childKp.layout.unknownKeysOrigin else childKp.layout.unknownKeysRoutingLost
     PartitionGrouping(

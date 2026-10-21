@@ -1065,6 +1065,36 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("SPARK-60277: concat preserves routing only for one grouped nonempty leg") {
+    val a = $"a".int
+    def kp(keys: Int*): KeyedPartitioning =
+      KeyedPartitioning(Seq(a), keys.map(InternalRow(_)))
+    val marked = kp(1, 2, 3).withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
+    val accurate = kp(4, 5)
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      Seq(Seq(marked, accurate), Seq(accurate, marked)).foreach { legs =>
+        val out = KeyedPartitioning.concat(legs)
+        assert(out.isGrouped && out.mayContainUnknownPartitionKeys && !out.unknownKeysRouted)
+        assert(!KeyedShuffleSpec(out, ClusteredDistribution(Seq(a))).canCreatePartitioning)
+      }
+      val unchanged = KeyedPartitioning.concat(Seq(kp(), marked, kp()))
+      assert(unchanged.isGrouped && unchanged.unknownKeysOrigin.contains(HASH_ROUTING))
+      assert(KeyedShuffleSpec(unchanged, ClusteredDistribution(Seq(a))).canCreatePartitioning)
+    }
+    val repeated = kp(1, 1, 2).withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
+    assert(!KeyedPartitioning.concat(Seq(kp(), repeated)).unknownKeysRouted)
+  }
+
+  test("SPARK-60277: keyed plan strings show bare unknown-key origins") {
+    val base = KeyedPartitioning(Seq($"a".int), Seq(InternalRow(1)))
+    assert(!base.toString.contains("None"))
+    Seq(HASH_ROUTING, ROUTING_LOST).foreach { origin =>
+      val rendered = base.withLayout(_.copy(unknownKeysOrigin = Some(origin))).toString
+      assert(rendered.contains(origin.toString))
+      assert(!rendered.contains("Some("))
+    }
+  }
+
   test("SPARK-60277: toGrouped gives the routing up") {
     val a = $"a".int
     val marked = KeyedPartitioning(Seq(a), Seq(InternalRow(1), InternalRow(1), InternalRow(2)))

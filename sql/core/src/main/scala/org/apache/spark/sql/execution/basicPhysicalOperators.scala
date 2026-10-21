@@ -1060,9 +1060,15 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     } else {
       val declared = marked.head.partitionKeys
       marked.tail.forall(_.partitionKeys == declared) &&
-        (marked.size == 1 || marked.forall(_.unknownKeysRouted)) &&
-        kps.filterNot(_.mayContainUnknownPartitionKeys)
-          .forall(_.partitionKeys.forall(declared.contains))
+        (marked.size == 1 || marked.forall(_.unknownKeysRouted)) && {
+          val unmarked = kps.filterNot(_.mayContainUnknownPartitionKeys)
+          if (unmarked.isEmpty) {
+            true
+          } else {
+            val declaredSet = declared.toSet
+            unmarked.forall(_.partitionKeys.forall(declaredSet.contains))
+          }
+        }
     }
   }
 

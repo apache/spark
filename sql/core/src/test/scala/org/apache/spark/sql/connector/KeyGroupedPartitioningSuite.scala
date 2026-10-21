@@ -27,7 +27,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, Q
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Descending, ExprId, Literal, TransformExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Complete
-import org.apache.spark.sql.catalyst.plans.{Cross, ExistenceJoin, Inner, JoinType, LeftAnti, LeftSemi, LeftSingle}
+import org.apache.spark.sql.catalyst.plans.{Cross, ExistenceJoin, Inner, JoinType, LeftAnti, LeftSemi, LeftSingle, RightOuter}
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.{HASH_ROUTING, KeyedPartitioning, PartitioningCollection, REPLICATED_FOR_JOIN, ROUTING_LOST, SPLIT_FOR_JOIN}
 import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryBaseTable, InMemoryCatalystRuntimeFilterCatalog, InMemoryTable, InMemoryTableCatalog}
@@ -9620,6 +9620,14 @@ class KeyGroupedPartitioningSuite
             assert(collectAllShuffles(plan).size == 1,
               s"the join pairs instead of re-shuffling the union side:\n$plan")
           }
+          val smaller = sql(query.replace("JOIN testcat.ns.ja a2", "JOIN testcat.ns.js a2"))
+          checkAnswer(smaller, Seq(Row(1, 2), Row(2, 2)))
+          if (!aqe) {
+            val plan = smaller.queryExecution.executedPlan
+            assert(ValidateRequirements.validate(plan))
+            assert(collectAllShuffles(plan).size == 2,
+              s"different declared key sets must fall back to a valid shuffle plan:\n$plan")
+          }
         }
       }
     }
@@ -9719,11 +9727,124 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  Seq(false, true).foreach { lostRouting =>
+    val scenario = if (lostRouting) {
+      "joining marked unions with lost routing preserves undeclared matches"
+    } else {
+      "aggregating marked legs with different declared orders preserves undeclared rows"
+    }
+    test(s"SPARK-60277: SPJ: $scenario") {
+      Seq(
+        "a1" -> Seq(3, 4),
+        "a2" -> Seq(1, 2),
+        "a3" -> Seq(1, 2, 3, 4),
+        "s1" -> Seq(1, 2),
+        "s2" -> Seq(1, 2)).foreach { case (name, ids) =>
+        createTable(name, columns, Array(identity("id")))
+        val values = ids.map(id => s"($id, '$name$id', NULL)").mkString(", ")
+        sql(s"INSERT INTO testcat.ns.$name VALUES $values")
+      }
+
+      withTable("t1", "t2") {
+        Seq("t1", "t2").foreach { name =>
+          sql(s"CREATE TABLE $name (id INT) USING parquet")
+          sql(s"INSERT INTO $name SELECT CAST(id AS INT) FROM range(1, 41)")
+        }
+        val producers =
+          """
+            |WITH leg1 AS (
+            |  SELECT t1.id FROM (
+            |    SELECT id FROM testcat.ns.a1
+            |    UNION ALL
+            |    SELECT id FROM testcat.ns.a2) a
+            |  RIGHT OUTER JOIN t1 ON a.id = t1.id),
+            |leg2 AS (
+            |  SELECT t2.id FROM testcat.ns.a3 a
+            |  RIGHT OUTER JOIN t2 ON a.id = t2.id)
+            |""".stripMargin
+        val query = producers + (if (lostRouting) {
+          """
+            |SELECT l.id, count(*) AS cnt FROM (
+            |  SELECT id FROM leg1
+            |  UNION ALL
+            |  SELECT id FROM testcat.ns.s1) l
+            |JOIN (
+            |  SELECT id FROM leg2
+            |  UNION ALL
+            |  SELECT id FROM testcat.ns.s2) r ON l.id = r.id
+            |GROUP BY l.id
+            |""".stripMargin
+        } else {
+          """
+            |SELECT id, count(*) AS cnt FROM (
+            |  SELECT id FROM leg1
+            |  UNION ALL
+            |  SELECT id FROM leg2) u
+            |GROUP BY id
+            |""".stripMargin
+        })
+        val expected = (1 to 40).map { id =>
+          val count = if (!lostRouting) {
+            2L
+          } else if (id <= 2) {
+            4L
+          } else {
+            1L
+          }
+          Row(id, count)
+        }
+
+        Seq(false, true).foreach { aqe =>
+          withSQLConf(
+              SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+              SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true",
+              SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
+            val df = sql(query)
+            checkAnswer(df, expected)
+            if (!aqe) {
+              val plan = df.queryExecution.executedPlan
+              val markedProducers = collect(plan) {
+                case j: ShuffledJoin if j.joinType == RightOuter =>
+                  PartitioningCollection.representativeOf(j.outputPartitioning).get
+              }
+              assert(markedProducers.size == 2, s"both producers must remain:\n$plan")
+              assert(markedProducers.forall(_.unknownKeysRouted),
+                s"the producers must retain hash routing: $markedProducers")
+              val orders = markedProducers.map(_.partitionKeys.map(_.row.getInt(0)))
+              assert(orders.toSet == Set(Seq(3, 4, 1, 2), Seq(1, 2, 3, 4)),
+                s"the same declared key set must arrive in different orders: $orders")
+              val unions = collect(plan) { case u: UnionExec => u }
+              if (lostRouting) {
+                val markedUnions = unions.flatMap { u =>
+                  PartitioningCollection.representativeOf(u.outputPartitioning)
+                    .filter(_.mayContainUnknownPartitionKeys)
+                }
+                assert(markedUnions.size == 2,
+                  s"both single-marked-leg unions must merge:\n$plan")
+                assert(markedUnions.forall(kp => !kp.isGrouped &&
+                  kp.layout.unknownKeysOrigin.contains(ROUTING_LOST)),
+                  s"concatenation must lose both unions' routing: $markedUnions")
+                assert(collectAllShuffles(plan).size == 4,
+                  s"two producer shuffles plus two join-side shuffles are required:\n$plan")
+              } else {
+                assert(unions.size == 2, s"the producer and outer unions must remain:\n$plan")
+                assert(unions.head.outputPartitioning.isInstanceOf[physical.UnknownPartitioning],
+                  s"the outer union must reject differing declared orders:\n$plan")
+                assert(collectAllShuffles(plan).size == 3,
+                  s"two producer shuffles plus the aggregate shuffle are required:\n$plan")
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-60277: marked legs must declare their keys in one order to be merged") {
     // Both legs send a key K no leg declares to `nonNegativeMod(K.hashCode, 3)`, so legs
     // declaring [1, 2, 3] and [2, 3, 1] send it to a different named group and K's rows split.
     // The gate compares the key lists, not the key sets; a differing multiplicity is refused for
-    // the same reason. Hand-built, since a planner lays both legs out on one template.
+    // the same reason. Hand-built to isolate order and routing from planner choices.
     val attrA = AttributeReference("a", IntegerType)()
     val attrB = AttributeReference("b", IntegerType)()
     def rows(values: Int*): Seq[InternalRow] = values.map(InternalRow(_))
@@ -9967,10 +10088,9 @@ class KeyGroupedPartitioningSuite
   test("SPARK-59050: SPJ: inner join keeps the marker beside a keyless sibling") {
     // A keyless sibling makes no keyed claim about its rows, so it cannot prove the marked
     // side's out-of-set rows away: the join equality can still match them, and they stay where
-    // the claim pins them. `keyedMarkerOf` answers `None` for such an input and the clearing
-    // must read that as "no unmarked keyed member", not as "unmarked" -- mapping `None` to
-    // `false` would clear the marker here while every sibling that carries a
-    // `KeyedPartitioning` stays green.
+    // the claim pins them. `representativeOf` returns `None` for a keyless input, which drops
+    // out of the marker comparison rather than supplying an unmarked keyed member. Treating it
+    // as unmarked would incorrectly clear the marker.
     val attrA = AttributeReference("a", IntegerType)()
     val attrB = AttributeReference("b", IntegerType)()
     val keys = Seq(InternalRow(1), InternalRow(2))
