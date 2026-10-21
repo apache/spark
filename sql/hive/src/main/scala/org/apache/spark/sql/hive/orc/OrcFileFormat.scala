@@ -139,7 +139,7 @@ case class OrcFileFormat() extends FileFormat
 
     if (getSqlConf(sparkSession).orcFilterPushDown) {
       // Sets pushed predicates
-      OrcFilters.createFilter(requiredSchema, filters).foreach { f =>
+      OrcFilters.createFilter(withoutNanosTimestamps(requiredSchema), filters).foreach { f =>
         hadoopConf.set(OrcFileFormat.SARG_PUSHDOWN, toKryo(f))
         hadoopConf.setBoolean("hive.optimize.index.filter", true)
       }
@@ -210,6 +210,17 @@ case class OrcFileFormat() extends FileFormat
 
     case _ => false
   }
+
+  // Removes the nanosecond timestamp fields, so that no predicate on them is pushed down. The
+  // search argument reaches Hive's ORC reader through a Kryo round trip (see `toKryo`) that
+  // truncates a java.sql.Timestamp value to milliseconds, while ORC compares it with nanosecond
+  // statistics. Besides, the TIMESTAMP_LTZ(p) value that `OrcFilters` pushes down is for the
+  // `timestamp with local time zone` column of the native ORC writer, while this format writes a
+  // Hive `timestamp` column.
+  private def withoutNanosTimestamps(schema: StructType): StructType = StructType(schema.collect {
+    case f @ StructField(_, st: StructType, _, _) => f.copy(dataType = withoutNanosTimestamps(st))
+    case f if !f.dataType.isInstanceOf[AnyTimestampNanoType] => f
+  })
 
   // HIVE-11253 moved `toKryo` from `SearchArgument` to `storage-api` module.
   // This is copied from Hive 1.2's SearchArgumentImpl.toKryo().

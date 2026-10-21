@@ -19,19 +19,24 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{
+  Cast,
   Expression,
+  GreaterThan,
+  If,
   SubqueryExpression,
+  SubtractTimestamps,
   WindowExpression
 }
 import org.apache.spark.sql.catalyst.expressions.AttributeSet
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, MatchComparisonOperator}
-import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.logical.AsOfJoin.MatchConditionTypes
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AS_OF_JOIN, GENERATOR}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryErrorsBase
+import org.apache.spark.sql.types.{DataType, StringType, TimestampFamily}
 
 /**
  * Resolves SQL [[AsOfJoin]] operators: materializes `MATCH_CONDITION` into the fields of
@@ -75,10 +80,12 @@ object ResolveAsOfJoin extends Rule[LogicalPlan] with SQLConfHelper {
       }
       val resolvedJoin = (matchLeft, matchOp, matchRight) match {
         case (Some(leftExpr), Some(operator), Some(rightExpr)) =>
+          val leftQualifiedAccessOnlyColumns = left.metadataOutput.filter(_.qualifiedAccessOnly)
+          val rightQualifiedAccessOnlyColumns = right.metadataOutput.filter(_.qualifiedAccessOnly)
           AsOfJoinMatchConditionResolution.materialize(
             join = joinBase,
-            leftSet = left.outputSet,
-            rightSet = right.outputSet,
+            leftSet = AttributeSet(left.output ++ leftQualifiedAccessOnlyColumns),
+            rightSet = AttributeSet(right.output ++ rightQualifiedAccessOnlyColumns),
             leftOperand = leftExpr,
             operator = operator,
             rightOperand = rightExpr) match {
@@ -99,11 +106,11 @@ object ResolveAsOfJoin extends Rule[LogicalPlan] with SQLConfHelper {
       }
       usingProjection match {
         case Some((projectList, hiddenList)) =>
-          val project = Project(projectList, resolvedJoin)
-          project.setTagValue(
-            Project.hiddenOutputTag,
-            hiddenList.map(_.markAsQualifiedAccessOnly()))
-          project
+          NaturalAndUsingJoinResolution.buildUsingJoinProject(
+            projectList,
+            hiddenList,
+            resolvedJoin,
+            resolvedJoin.metadataOutput)
         case None => resolvedJoin
       }
   }
@@ -172,7 +179,7 @@ private[analysis] object AsOfJoinMatchConditionResolution {
   }
 }
 
-private[analysis] object AsOfJoinValidation extends QueryErrorsBase {
+private[catalyst] object AsOfJoinValidation extends QueryErrorsBase with SQLConfHelper {
 
   def validateMatchConditionTableReferences(
       join: AsOfJoin,
@@ -219,6 +226,49 @@ private[analysis] object AsOfJoinValidation extends QueryErrorsBase {
     }
   }
 
+  /** Rejects unsupported DataFrame sort-merge keys before constant folding erases their types. */
+  def validateKeyTypes(join: AsOfJoin): Unit = {
+    if (conf.sortMergeAsOfJoinEnabled) {
+      if (hasMixedTimestampKeyTypes(join)) {
+        join.failAnalysis(
+          errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+          messageParameters = Map(
+            "sqlExpr" -> toSQLExpr(join.orderExpression),
+            "msg" -> ("Sort-merge as-of joins do not support mixing " +
+              "TIMESTAMP_LTZ and TIMESTAMP_NTZ keys"),
+            "hint" -> "")
+        )
+      }
+
+      if (hasNearestStringKeys(join)) {
+        join.failAnalysis(
+          errorClass = "AS_OF_JOIN.UNSUPPORTED_NEAREST_KEY_TYPE",
+          messageParameters = Map("dataType" -> toSQLType(StringType))
+        )
+      }
+    }
+  }
+
+  /** Whether DataFrame timestamp keys mix LTZ and NTZ before implicit coercion. */
+  def hasMixedTimestampKeyTypes(join: AsOfJoin): Boolean = {
+    def hasMixedKeys(expr: Expression): Boolean = expr match {
+      case SubtractTimestamps(l, r, _, _) => mixesTimeZoneFamilies(l, r)
+      case If(_, thenExpr, _) => hasMixedKeys(thenExpr)
+      case _ => false
+    }
+
+    !join.requiresSortMergeAsOfJoin && hasMixedKeys(join.orderExpression)
+  }
+
+  /** Whether a DataFrame nearest join compares STRING keys before numeric subtraction. */
+  def hasNearestStringKeys(join: AsOfJoin): Boolean = {
+    !join.requiresSortMergeAsOfJoin && (join.orderExpression match {
+      case If(GreaterThan(l, r), _, _) =>
+        l.dataType.isInstanceOf[StringType] && r.dataType.isInstanceOf[StringType]
+      case _ => false
+    })
+  }
+
   private def findInvalidMatchConditionExpression(expr: Expression): Option[Expression] = {
     expr.collect {
       case e: SubqueryExpression => e
@@ -227,5 +277,20 @@ private[analysis] object AsOfJoinValidation extends QueryErrorsBase {
       case e if e.containsPattern(GENERATOR) => e
       case e if !e.deterministic => e
     }.headOption
+  }
+
+  private def mixesTimeZoneFamilies(l: Expression, r: Expression): Boolean = {
+    // Read through implicit coercion, but preserve the target type of an explicit user cast.
+    def keyType(e: Expression): DataType = e match {
+      case cast @ Cast(child, _, _, _)
+          if !cast.containsTag(Cast.USER_SPECIFIED_CAST) &&
+            (TimestampFamily.isLtz(child.dataType) || TimestampFamily.isNtz(child.dataType)) =>
+        child.dataType
+      case _ => e.dataType
+    }
+
+    val (leftType, rightType) = (keyType(l), keyType(r))
+    (TimestampFamily.isLtz(leftType) && TimestampFamily.isNtz(rightType)) ||
+      (TimestampFamily.isNtz(leftType) && TimestampFamily.isLtz(rightType))
   }
 }

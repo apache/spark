@@ -371,6 +371,8 @@ object CommandUtils extends Logging {
     case _: IntegralType => true
     case _: DecimalType => true
     case DoubleType | FloatType => true
+    // percentile_approx rejects nanosecond timestamps, so they get no histogram.
+    case _: AnyTimestampNanoType => false
     case _: DatetimeType => true
     case _ => false
   }

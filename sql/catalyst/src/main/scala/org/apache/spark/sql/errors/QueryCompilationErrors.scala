@@ -5167,6 +5167,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "errors" -> errors.mkString("- ", "\n- ", "")))
   }
 
+  def unsupportedFileTypeError(): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FILE_TYPE",
+      messageParameters = Map.empty)
+  }
+
   def unsupportedTimeTypeError(): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_TIME_TYPE",

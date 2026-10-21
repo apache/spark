@@ -99,3 +99,9 @@ SELECT *
 FROM
     ( SELECT col1 FROM VALUES(false) ) LEFT JOIN ( SELECT col1 FROM VALUES(false) ) b USING(col1)
 WHERE b.col1;
+
+-- A copy of nt2 in a later join must not replace the hidden nt2.k in nt2.*
+SELECT nt2.* FROM (nt1 left outer join nt2 using (k)) join nt2 x on x.v2 = 1;
+
+-- Same, with the hidden nt2.k in the join condition
+SELECT nt2.k, x.k FROM (nt1 left outer join nt2 using (k)) join nt2 x on nt2.k = x.k;

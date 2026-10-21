@@ -233,6 +233,37 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
     }
   }
 
+  for (indirect <- Seq(false, true)) {
+    test(s"Repeated channel shuffle consumption is rejected (indirect=$indirect)") {
+      withPipelinedSparkContext(cores = 4) { sc =>
+        val input = sc.parallelize(0 until 100, 2).map(i => (i, i))
+        val shuffled = new PipelinedShuffledRDD[Int, Int, Int](input, new HashPartitioner(1))
+        val shuffleId = shuffled.dependencies.head
+          .asInstanceOf[PipelinedShuffleDependency[_, _, _]].shuffleId
+        val left = if (indirect) shuffled.map(identity) else shuffled
+        val right = if (indirect) shuffled.map(identity).map(identity) else shuffled
+
+        val error = intercept[SparkException] {
+          left.zipPartitions(right)((a, b) => a ++ b).collect()
+        }
+        checkError(
+          exception = error,
+          condition = "PIPELINED_SHUFFLE_UNSUPPORTED",
+          sqlState = Some("0A000"),
+          parameters = Map("reason" ->
+            ("a pipelined producer with more than one consumer invocation for transient " +
+              s"shuffle $shuffleId partition 0 (repeated consumption)")))
+        assert(ChannelShuffleRendezvous.numQueuesForTesting === 0)
+        assert(!ChannelShuffleRendezvous.holdsShuffle(shuffleId))
+        assert(!sc.isStopped)
+
+        val fresh = repartition(sc, n = 100, numIn = 2, numOut = 2)
+        assert(fresh.map(_._3).sorted === (0 until 100).toArray)
+        assert(ChannelShuffleRendezvous.numQueuesForTesting === 0)
+      }
+    }
+  }
+
   test("unregisterShuffle drops the shuffle's rendezvous queues across all epochs") {
     // Test the manager's cleanup contract directly rather than relying on the async
     // ContextCleaner + GC to fire (which would be flaky). Populate queues for a shuffle id under

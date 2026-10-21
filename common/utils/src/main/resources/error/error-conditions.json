@@ -205,6 +205,11 @@
         "message" : [
           "Unsupported as-of join direction '<direction>'. Supported as-of join direction include: <supported>."
         ]
+      },
+      "UNSUPPORTED_NEAREST_KEY_TYPE" : {
+        "message" : [
+          "Nearest sort-merge as-of joins do not support <dataType> keys. Cast the keys to a numeric or datetime type."
+        ]
       }
     },
     "sqlState" : "42604"
@@ -5821,6 +5826,12 @@
     ],
     "sqlState" : "2203G"
   },
+  "JSON_OBJECT_NULL_KEY" : {
+    "message" : [
+      "JSON_OBJECT key must be a non-null string, but got a null key."
+    ],
+    "sqlState" : "22004"
+  },
   "JSON_QUERY_ON_ERROR" : {
     "message" : [
       "<functionName> could not extract a value at path <path>."
@@ -6724,6 +6735,12 @@
       }
     },
     "sqlState" : "42846"
+  },
+  "PARQUET_FIELD_REQUESTED_MORE_THAN_ONCE" : {
+    "message" : [
+      "Requested fields <requestedFields> resolve to the same Parquet field <parquetField>, which can be read only once. When <fieldIdReadConf> is enabled, a requested field with a field ID is resolved by ID and any other requested field by name. Request the Parquet field only once, and refer to the resulting column more than once in the query instead."
+    ],
+    "sqlState" : "KD000"
   },
   "PARQUET_TYPE_ILLEGAL" : {
     "message" : [
@@ -8773,6 +8790,13 @@
     },
     "sqlState" : "42000"
   },
+  "UNSUPPORTED_AVRO_CHAR_VARCHAR_MAP_KEY" : {
+    "message" : [
+      "The Avro map key <key> is not a valid key for the map key type <dataType>.",
+      "A CHAR key must match the declared length exactly and a VARCHAR key must not exceed it; keys are never padded or trimmed. Use a STRING map key to accept any name."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_BUILT_IN_JDBC_DIALECT" : {
     "message" : [
       "`<name>` is not a supported built-in JDBC dialect. Supported dialects are: <supportedNames>."
@@ -9492,6 +9516,12 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_FILE_TYPE" : {
+    "message" : [
+      "The data type FILE is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_GENERATOR" : {
     "message" : [
       "The generator is not supported:"
@@ -9911,8 +9941,8 @@
   },
   "UNSUPPORTED_XML_CHAR_VARCHAR_MAP_KEY" : {
     "message" : [
-      "XML map keys of CHAR or VARCHAR cannot be padded or trimmed.",
-      "The key <key> is not valid for type <dataType>."
+      "The XML name <key> is not a valid key for the map key type <dataType>.",
+      "A CHAR key must match the declared length exactly and a VARCHAR key must not exceed it; keys are never padded or trimmed. Use a STRING map key to accept any name."
     ],
     "sqlState" : "0A000"
   },

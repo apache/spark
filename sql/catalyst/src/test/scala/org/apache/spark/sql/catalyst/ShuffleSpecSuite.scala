@@ -705,6 +705,65 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("SPARK-59971: canCreatePartitioning: KeyedShuffleSpec requires all the cluster keys") {
+    val a = $"a".int
+    val b = $"b".int
+    val distribution = ClusteredDistribution(Seq(a, b))
+    def spec(expressions: Expression*): KeyedShuffleSpec = KeyedShuffleSpec(
+      KeyedPartitioning(expressions, Seq(InternalRow.fromSeq(expressions.map(_ => 1)))),
+      distribution)
+    val bucketA = TransformExpression(TestBucketFunction, Seq(a), Some(4))
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "true") {
+      // Key order does not matter, and a transform covers the column it is over.
+      Seq(spec(a, b), spec(b, a), spec(bucketA, b)).foreach { s =>
+        assert(s.canCreatePartitioning, s"${s.partitioning.expressions} covers [a, b]")
+      }
+      Seq(spec(a), spec(bucketA)).foreach { s =>
+        assert(!s.canCreatePartitioning, s"${s.partitioning.expressions} does not cover b")
+      }
+      // The same specs are accepted without the requirement, so it is what turns them away.
+      withSQLConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
+        Seq(spec(a), spec(bucketA)).foreach { s =>
+          assert(s.canCreatePartitioning, s"${s.partitioning.expressions} without the requirement")
+        }
+      }
+    }
+  }
+
+  test("SPARK-59971: the V2 co-partition key requirement overrides the general one") {
+    val a = $"a".int
+    val b = $"b".int
+    val distribution = ClusteredDistribution(Seq(a, b))
+    val keyed = KeyedShuffleSpec(KeyedPartitioning(Seq(a), Seq(InternalRow(1))), distribution)
+    val hashed = HashShuffleSpec(HashPartitioning(Seq(a), 4), distribution)
+    val v2Key = SQLConf.V2_BUCKETING_REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key
+
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      // Unset, the V2 config follows the general one.
+      Seq(true, false).foreach { requireAll =>
+        withSQLConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> requireAll.toString) {
+          assert(keyed.canCreatePartitioning == !requireAll, s"requireAll = $requireAll")
+        }
+      }
+      // Set, it decides for a keyed spec only. A hash spec still follows the general config.
+      withSQLConf(
+          SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "true",
+          v2Key -> "false") {
+        assert(keyed.canCreatePartitioning, "the V2 config lifts the requirement")
+        assert(!hashed.canCreatePartitioning, "a hash spec keeps the general requirement")
+      }
+      withSQLConf(
+          SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+          v2Key -> "true") {
+        assert(!keyed.canCreatePartitioning, "the V2 config keeps the requirement")
+        assert(hashed.canCreatePartitioning, "a hash spec follows the general config")
+      }
+    }
+  }
+
   test("SPARK-59120: createShuffleSpec sorts the projected keys at their built-with types") {
     val a = $"a".timestamp
     val b = $"b".int
