@@ -3418,6 +3418,35 @@ object SQLConf {
         "The threshold must be >= 2 or -1 (disabled)")
       .createWithDefault(-1)
 
+  val REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED =
+    buildConf("spark.sql.optimizer.rewriteCountDistinctConditional.enabled")
+      .internal()
+      .doc("When true, rewrites COUNT(DISTINCT IF(cond, base, NULL)) and " +
+        "COUNT(DISTINCT CASE WHEN cond THEN base END) into " +
+        "COUNT(DISTINCT base) FILTER (WHERE cond). This reduces the Expand factor " +
+        "in RewriteDistinctAggregates from Nx to 1x when multiple conditional distinct " +
+        "counts share the same base column. Also guards the shared distinct Expand " +
+        "key with the union of the filters (IF(Or(cond1, ..., condN), base, NULL)) " +
+        "for an all-filtered distinct group whose filters are deterministic and " +
+        "subquery-free and whose children are safe to evaluate unconditionally " +
+        "(including user-written FILTER on a plain column), so the first " +
+        "aggregate's output cardinality stays bounded by the un-rewritten " +
+        "plan. A child that is not safe to evaluate unconditionally (for example " +
+        "a division, which can throw) keeps the raw Expand key. When false, both " +
+        "the IF/CASE rewrite and the union-of-filters guard are disabled. The " +
+        "IF/CASE rewrite is only applied to base expressions that are safe to " +
+        "evaluate unconditionally (e.g. plain columns), so the short-circuit " +
+        "semantics of IF/CASE WHEN are preserved. A condition that contains a " +
+        "subquery is not rewritten. When spark.sql.optimizer.optimizeExpandRatio " +
+        "enables OptimizeExpand, the normalized FILTER form is not eligible for " +
+        "pre-aggregation because Expand projects filter flags. Enabling both can " +
+        "therefore trade lower Expand fan-out for losing pre-aggregation on " +
+        "duplicate-heavy inputs (SPARK-60318).")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val REMOVE_REDUNDANT_PROJECTS_ENABLED = buildConf("spark.sql.execution.removeRedundantProjects")
     .internal()
     .doc("Whether to remove redundant project exec node based on children's output and " +
@@ -9531,6 +9560,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def exchangeReuseEnabled: Boolean = getConf(EXCHANGE_REUSE_ENABLED)
 
   def subqueryReuseEnabled: Boolean = getConf(SUBQUERY_REUSE_ENABLED)
+
+  def rewriteCountDistinctConditionalEnabled: Boolean =
+    getConf(REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED)
 
   override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
