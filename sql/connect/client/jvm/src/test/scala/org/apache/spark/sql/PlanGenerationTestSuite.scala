@@ -617,11 +617,11 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
         "TIMESTAMP_NTZ '2024-01-01 00:00:00' AS start",
         "TIMESTAMP_NTZ '2024-01-01 00:10:00' AS end",
         "100.0D AS value")
-    input.binBy
-      .range(input("start"), input("end"))
-      .binWidth(fn.expr("INTERVAL 5 MINUTES"))
-      .distributeUniform(input("value"))
-      .build()
+    input.binBy(
+      rangeStart = input("start"),
+      rangeEnd = input("end"),
+      binWidth = fn.expr("INTERVAL 5 MINUTES"),
+      distributeUniform = Array(input("value")))
   }
 
   test("binBy all_options") {
@@ -632,15 +632,15 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
         "TIMESTAMP_NTZ '2024-01-01 00:10:00' AS end",
         "100.0D AS value",
         "20.0F AS value2")
-    input.binBy
-      .range(input("start"), input("end"))
-      .binWidth(fn.expr("INTERVAL 5 MINUTES"))
-      .alignTo(fn.expr("TIMESTAMP_NTZ '2024-01-01 00:02:00'"))
-      .distributeUniform(input("value"), input("value2"))
-      .renameBinStart("window_start")
-      .renameBinEnd("window_end")
-      .renameBinDistributeRatio("ratio")
-      .build()
+    input.binBy(
+      rangeStart = input("start"),
+      rangeEnd = input("end"),
+      binWidth = fn.expr("INTERVAL 5 MINUTES"),
+      distributeUniform = Array(input("value"), input("value2")),
+      alignTo = fn.expr("TIMESTAMP_NTZ '2024-01-01 00:02:00'"),
+      binStartName = "window_start",
+      binEndName = "window_end",
+      binDistributeRatioName = "ratio")
   }
 
   test("unpivot values") {

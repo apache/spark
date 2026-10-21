@@ -1039,12 +1039,13 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
               proto.Expression.ExpressionString.newBuilder().setExpression("INTERVAL 5 MINUTES")))
         .addDistributeUniform("value".protoAttr)
         .addDistributeUniform("value2".protoAttr)
-      val builder = classic.binBy
-        .range(col("start"), col("end"))
-        .binWidth(expr("INTERVAL 5 MINUTES"))
       comparePlans(
         proto.Relation.newBuilder().setBinBy(binBy).build(),
-        builder.distributeUniform(col("value"), col("value2")).build())
+        classic.binBy(
+          rangeStart = col("start"),
+          rangeEnd = col("end"),
+          binWidth = expr("INTERVAL 5 MINUTES"),
+          distributeUniform = Array(col("value"), col("value2"))))
 
       val origin = "TIMESTAMP_NTZ '2024-01-01 00:02:00'"
       binBy
@@ -1058,13 +1059,15 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
         .setBinDistributeRatioName("")
       comparePlans(
         proto.Relation.newBuilder().setBinBy(binBy).build(),
-        builder
-          .alignTo(expr(origin))
-          .distributeUniform(col("value"), col("value2"))
-          .renameBinStart("bin.start")
-          .renameBinEnd("bin`end")
-          .renameBinDistributeRatio("")
-          .build())
+        classic.binBy(
+          rangeStart = col("start"),
+          rangeEnd = col("end"),
+          binWidth = expr("INTERVAL 5 MINUTES"),
+          distributeUniform = Array(col("value"), col("value2")),
+          alignTo = expr(origin),
+          binStartName = "bin.start",
+          binEndName = "bin`end",
+          binDistributeRatioName = ""))
     }
   }
 

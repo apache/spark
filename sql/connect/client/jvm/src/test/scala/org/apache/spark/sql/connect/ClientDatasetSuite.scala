@@ -25,7 +25,6 @@ import io.grpc.inprocess.{InProcessChannelBuilder, InProcessServerBuilder}
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.Column
-import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.client.{DummySparkConnectService, SparkConnectClient}
 import org.apache.spark.sql.connect.test.ConnectFunSuite
 import org.apache.spark.sql.functions._
@@ -183,10 +182,16 @@ class ClientDatasetSuite extends ConnectFunSuite {
     val df = ss.newDataFrame(_ => ())
     val end = df("end")
     val binWidth = expr("INTERVAL 5 MINUTES")
-    val values = Seq(df("value"), df("value2"))
-    val width = df.binBy.range(df("start"), end).binWidth(binWidth)
-    val distribute = width.distributeUniform(values: _*)
-    val default = distribute.build().plan.getRoot.getBinBy
+    val values = Array(df("value"), df("value2"))
+    val default = df
+      .binBy(
+        rangeStart = df("start"),
+        rangeEnd = end,
+        binWidth = binWidth,
+        distributeUniform = values)
+      .plan
+      .getRoot
+      .getBinBy
     assert(default.getInput == df.plan.getRoot)
     assert(
       default.getRangeStart.getUnresolvedAttribute.getPlanId == df.plan.getRoot.getCommon.getPlanId)
@@ -199,11 +204,15 @@ class ClientDatasetSuite extends ConnectFunSuite {
       !default.hasAlignTo && !default.hasBinStartName && !default.hasBinEndName &&
         !default.hasBinDistributeRatioName)
 
-    val renamed = distribute
-      .renameBinStart("bin.start")
-      .renameBinEnd("bin`end")
-      .renameBinDistributeRatio("")
-      .build()
+    val renamed = df
+      .binBy(
+        rangeStart = df("start"),
+        rangeEnd = end,
+        binWidth = binWidth,
+        distributeUniform = values,
+        binStartName = "bin.start",
+        binEndName = "bin`end",
+        binDistributeRatioName = "")
       .plan
       .getRoot
       .getBinBy
@@ -212,10 +221,17 @@ class ClientDatasetSuite extends ConnectFunSuite {
     assert(renamed.hasBinDistributeRatioName && renamed.getBinDistributeRatioName.isEmpty)
 
     val origin = lit(null).cast("timestamp")
-    val aligned =
-      width.alignTo(origin).distributeUniform(df("value")).build().plan.getRoot.getBinBy
+    val aligned = df
+      .binBy(
+        rangeStart = df("start"),
+        rangeEnd = end,
+        binWidth = binWidth,
+        distributeUniform = Array(df("value")),
+        alignTo = origin)
+      .plan
+      .getRoot
+      .getBinBy
     assert(aligned.hasAlignTo && aligned.getAlignTo == toExpr(origin))
-    assert(!distribute.build().plan.getRoot.getBinBy.hasAlignTo)
   }
 
   test("serialize as null") {

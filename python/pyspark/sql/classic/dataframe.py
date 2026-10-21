@@ -49,7 +49,7 @@ from pyspark.errors import (
 )
 from pyspark.resource import ResourceProfile
 from pyspark.serializers import BatchedSerializer, CPickleSerializer, UTF8Deserializer
-from pyspark.sql.classic.column import _to_java_column, _to_list, _to_seq
+from pyspark.sql.classic.column import _to_java_column, _to_java_column_opt, _to_list, _to_seq
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import (
     DataFrame as ParentDataFrame,
@@ -1270,21 +1270,24 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
                     },
                 )
 
-        builder = (
-            self._jdf.binBy()
-            .range(_to_java_column(rangeStart), _to_java_column(rangeEnd))
-            .binWidth(_to_java_column(binWidth))
+        assert self._sc._gateway is not None
+        assert self._sc._jvm is not None
+        columns = to_java_array(
+            self._sc._gateway,
+            self._sc._jvm.org.apache.spark.sql.Column,
+            [_to_java_column(column) for column in distributeUniform],
         )
-        if alignTo is not None:
-            builder = builder.alignTo(_to_java_column(alignTo))
-        builder = builder.distributeUniform(self._jcols(distributeUniform))
-        if binStartName is not None:
-            builder = builder.renameBinStart(binStartName)
-        if binEndName is not None:
-            builder = builder.renameBinEnd(binEndName)
-        if binDistributeRatioName is not None:
-            builder = builder.renameBinDistributeRatio(binDistributeRatioName)
-        return DataFrame(builder.build(), self.sparkSession)
+        jdf = self._jdf.binBy(
+            _to_java_column(rangeStart),
+            _to_java_column(rangeEnd),
+            _to_java_column(binWidth),
+            columns,
+            _to_java_column_opt(alignTo),
+            binStartName,
+            binEndName,
+            binDistributeRatioName,
+        )
+        return DataFrame(jdf, self.sparkSession)
 
     def unpivot(
         self,

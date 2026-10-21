@@ -4365,15 +4365,15 @@ class DataFrame:
         Parameters
         ----------
         rangeStart : :class:`Column` or str
-            Timestamp column for the inclusive range start.
+            Top-level timestamp column for the inclusive range start.
         rangeEnd : :class:`Column` or str
-            Timestamp column for the exclusive range end.
+            Top-level timestamp column for the exclusive range end.
             Both range columns must have the same timestamp type.
         binWidth : :class:`Column`
             Positive, constant day-time interval expression,
             for example ``sf.expr("INTERVAL 5 MINUTES")``.
         distributeUniform : list or tuple
-            Nonempty collection of FLOAT or DOUBLE columns to scale.
+            Nonempty collection of top-level FLOAT or DOUBLE columns to scale.
             Each entry is a :class:`Column` or a column name.
         alignTo : :class:`Column`, optional
             Constant alignment origin with the same timestamp type as the range columns.
@@ -4393,7 +4393,12 @@ class DataFrame:
 
         Notes
         -----
+        This API is experimental.
+
         This operation requires ``spark.sql.binByRelationOperator.enabled`` to be true.
+        The range and distribution arguments must directly reference top-level columns.
+        Use :meth:`select` to project computed, cast, or nested values into columns first.
+
         Each selected value must represent the change over its input range.
         The ratio uses the real elapsed time that overlaps each bin.
         TIMESTAMP bins use the session time zone for widths of at least one day.
