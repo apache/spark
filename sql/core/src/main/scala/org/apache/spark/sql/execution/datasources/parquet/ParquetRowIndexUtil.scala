@@ -54,6 +54,11 @@ object ParquetRowIndexUtil {
       }
     }
 
+    /** Drops the iterator of the row group initialized last, which holds the rows it read. */
+    def release(): Unit = {
+      rowIndexIterator = null
+    }
+
     def populateRowIndex(columnVectors: Array[ParquetColumnVector], numRows: Int): Unit = {
       populateRowIndex(columnVectors(rowIndexColumnIdx).getValueVector, numRows)
     }

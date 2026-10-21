@@ -1759,12 +1759,16 @@ case class Unpivot(
 
   def canBeCoercioned: Boolean = values.exists(_.nonEmpty) &&
     values.exists(_.forall(_.forall(_.resolved))) &&
+    // values are coerced by position, so every value group must have one value per value column,
+    // otherwise CheckAnalysis reports UNPIVOT_VALUE_SIZE_MISMATCH
+    values.exists(_.forall(_.length == valueColumnNames.length)) &&
     // when no ids are given, values must be Attributes (column names) to allow detecting ids
     // coercion will add aliases, would disallow detecting ids, so defer coercion after id detection
     ids.exists(_.forall(_.resolved))
 
   def valuesTypeCoercioned: Boolean = canBeCoercioned &&
-    // all inner values at position idx must have the same data type
+    // all inner values at position idx must have the same data type, ignoring nullability;
+    // UnpivotTransformer merges the nullability of the values into the value column
     values.get.head.zipWithIndex.forall { case (v, idx) =>
       values.get.tail.forall(vals => DataTypeUtils.sameType(vals(idx).dataType, v.dataType))
     }
@@ -2628,6 +2632,9 @@ object LateralJoin {
 
 /**
  * A logical plan for as-of join.
+ * @param direction Which matching right row to keep: the last for [[Backward]], the first for
+ *                  [[Forward]], the closest by `orderExpression` for [[Nearest]].
+ *                  `asOfCondition` and `orderExpression` must be built for the same direction.
  */
 case class AsOfJoin(
     left: LogicalPlan,
@@ -2637,6 +2644,7 @@ case class AsOfJoin(
     joinType: JoinType,
     orderExpression: Expression,
     toleranceAssertion: Option[Expression],
+    direction: AsOfJoinDirection,
     usingColumns: Option[Seq[String]] = None,
     matchLeftOperand: Option[Expression] = None,
     matchOperator: Option[MatchComparisonOperator] = None,
@@ -2707,12 +2715,14 @@ object AsOfJoin {
     val asOfCond = makeAsOfCond(leftAsOf, rightAsOf, tolerance, allowExactMatches, direction)
     val orderingExpr = makeOrderingExpr(leftAsOf, rightAsOf, direction)
     AsOfJoin(left, right, asOfCond, condition, joinType,
-      orderingExpr, tolerance.map(t => GreaterThanOrEqual(t, Literal.default(t.dataType))))
+      orderingExpr, tolerance.map(t => GreaterThanOrEqual(t, Literal.default(t.dataType))),
+      direction)
   }
 
   /**
    * Build an [[AsOfJoin]] from a SQL `MATCH_CONDITION (left_expr op right_expr)` clause.
-   * Operand normalization is deferred until analysis when join inputs are resolved.
+   * Operand normalization is deferred until analysis when join inputs are resolved. Analysis
+   * then replaces the placeholder `asOfCondition`, `orderExpression`, and `direction`.
    */
   def fromMatchCondition(
       left: LogicalPlan,
@@ -2731,6 +2741,7 @@ object AsOfJoin {
       joinType = joinType,
       orderExpression = Literal(0),
       toleranceAssertion = None,
+      direction = operator.direction,
       usingColumns = usingColumns,
       matchLeftOperand = Some(leftExpr),
       matchOperator = Some(operator),
@@ -2865,45 +2876,29 @@ object AsOfJoin {
           leftStruct.length == rightStruct.length && leftStruct.nonEmpty
         case _ => false
       }
-
-    /** Whole struct columns with identical schemas sort as a single struct value. */
-    def usesIdenticalStructSort(leftType: DataType, rightType: DataType): Boolean =
-      (leftType, rightType) match {
-        case (leftStruct: StructType, rightStruct: StructType) =>
-          leftStruct.sameType(rightStruct) && leftStruct.nonEmpty
-        case _ => false
-      }
   }
 
   /**
    * Sort-merge ASOF join sorts each side by these expressions (after equi-keys) so the
    * right-side buffer is ordered consistently with the MATCH_CONDITION comparison (scalar
-   * operands are already coerced to a common type; composites are handled case by case below).
+   * operands are already coerced to a common type).
    *
-   * SQL tuple literals `(t.a, t.b)` are flattened to scalar leaves. Whole struct columns
-   * (`t.k >= r.k`) sort by the struct value directly so nested struct shapes stay intact.
+   * Each side picks its own keys, because the two sides are never compared key by key. A SQL
+   * tuple `(t.a, t.b)` sorts by its parts. A tuple is never NULL, so this keeps the comparison
+   * order. Anything else sorts as one value, so a NULL struct comes before a struct of NULL
+   * fields, the same as in the comparison.
    * Array operands sort element-wise; length mismatches follow Spark array ordering semantics.
    */
   def matchSortExpressions(
       leftOperand: Expression,
-      rightOperand: Expression): (Seq[Expression], Seq[Expression]) = {
-    (leftOperand.dataType, rightOperand.dataType) match {
-      case (leftStruct: StructType, rightStruct: StructType)
-          if MatchConditionTypes.usesIdenticalStructSort(leftStruct, rightStruct) =>
-        if (isSqlTupleStructOperand(leftOperand) || isSqlTupleStructOperand(rightOperand)) {
-          val pairs = collectStructLeafPairs(leftOperand, rightOperand, leftStruct)
-          (pairs.map(_._1), pairs.map(_._2))
-        } else {
-          (Seq(leftOperand), Seq(rightOperand))
-        }
-      case _ =>
-        (Seq(leftOperand), Seq(rightOperand))
-    }
-  }
+      rightOperand: Expression): (Seq[Expression], Seq[Expression]) =
+    (matchSortKeys(leftOperand), matchSortKeys(rightOperand))
 
-  /** True for SQL `(col1, col2, ...)` tuple operands, which become [[CreateNamedStruct]]. */
-  private def isSqlTupleStructOperand(operand: Expression): Boolean =
-    operand.isInstanceOf[CreateNamedStruct]
+  /** A SQL tuple becomes [[CreateNamedStruct]] and sorts by its parts. */
+  private def matchSortKeys(operand: Expression): Seq[Expression] = operand match {
+    case tuple: CreateNamedStruct if tuple.valExprs.nonEmpty => tuple.valExprs
+    case other => Seq(other)
+  }
 
   private[catalyst] def normalizeMatchOperands(
       leftSet: AttributeSet,
@@ -2938,22 +2933,25 @@ object AsOfJoin {
     }
   }
 
+  /**
+   * Returns the `asOfCondition` and `orderExpression` for one MATCH_CONDITION comparison. The
+   * operands are compared as whole values, so a NULL struct never matches, while a struct whose
+   * fields are all NULL can.
+   */
   private def buildMatchExpressions(
       leftOperand: Expression,
       rightOperand: Expression,
       operator: MatchComparisonOperator): (Expression, Expression) = {
-    val (leftForCompare, rightForCompare) =
-      alignOperandsForComparison(leftOperand, rightOperand)
     val orderExpression = buildOrderExpression(leftOperand, rightOperand, operator)
     operator match {
       case GreaterThanOrEqualOp =>
-        (GreaterThanOrEqual(leftForCompare, rightForCompare), orderExpression)
+        (GreaterThanOrEqual(leftOperand, rightOperand), orderExpression)
       case GreaterThanOp =>
-        (GreaterThan(leftForCompare, rightForCompare), orderExpression)
+        (GreaterThan(leftOperand, rightOperand), orderExpression)
       case LessThanOrEqualOp =>
-        (LessThanOrEqual(leftForCompare, rightForCompare), orderExpression)
+        (LessThanOrEqual(leftOperand, rightOperand), orderExpression)
       case LessThanOp =>
-        (LessThan(leftForCompare, rightForCompare), orderExpression)
+        (LessThan(leftOperand, rightOperand), orderExpression)
     }
   }
 
@@ -2975,24 +2973,6 @@ object AsOfJoin {
           leftOperand, rightOperand, leftType.asInstanceOf[StructType], operator)
       case _ =>
         buildLeafOrderExpression(leftOperand, rightOperand, operator)
-    }
-  }
-
-  /**
-   * Tuple/struct operands may use different field names on each side. Rewrite them to positional
-   * structs with matching schemas so comparison and ordering type-check.
-   */
-  private def alignOperandsForComparison(
-      leftOperand: Expression,
-      rightOperand: Expression): (Expression, Expression) = {
-    decomposeStructOperands(leftOperand, rightOperand) match {
-      case Some(pairs) =>
-        val aligned = pairs.map { case (left, right) =>
-          alignOperandsForComparison(left, right)
-        }
-        (CreateStruct(aligned.map(_._1)), CreateStruct(aligned.map(_._2)))
-      case None =>
-        (leftOperand, rightOperand)
     }
   }
 
@@ -3127,26 +3107,6 @@ object AsOfJoin {
     diffs match {
       case Seq(single) => single
       case _ => CreateStruct(diffs)
-    }
-  }
-
-  /** Positional struct fields when both operands are the same struct shape. */
-  private def decomposeStructOperands(
-      leftOperand: Expression,
-      rightOperand: Expression): Option[Seq[(Expression, Expression)]] = {
-    if (MatchConditionTypes.usesStructDecomposition(
-        leftOperand.dataType, rightOperand.dataType)) {
-      val leftStruct = leftOperand.dataType.asInstanceOf[StructType]
-      val rightStruct = rightOperand.dataType.asInstanceOf[StructType]
-      val leftFields = structFieldExprs(leftOperand, leftStruct)
-      val rightFields = structFieldExprs(rightOperand, rightStruct)
-      if (leftFields.length == rightFields.length) {
-        Some(leftFields.zip(rightFields))
-      } else {
-        None
-      }
-    } else {
-      None
     }
   }
 

@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.connector.expressions._
+import org.apache.spark.sql.connector.expressions.filter.{Predicate => V2Predicate}
+import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
+import org.apache.spark.unsafe.types.UTF8String
 
 class V2ExpressionUtilsSuite extends SparkFunSuite {
 
@@ -36,6 +39,33 @@ class V2ExpressionUtilsSuite extends SparkFunSuite {
         LocalRelation.apply(AttributeReference("a", StringType)()))
     }
     assert(exc.message.contains("v2Fun(a) ASC NULLS FIRST is not currently supported"))
+  }
+
+  test("SPARK-59983: V2 expression with an unknown name should be rendered as a function call") {
+    val dateTrunc = new GeneralScalarExpression("DATE_TRUNC",
+      Array(LiteralValue(UTF8String.fromString("MONTH"), StringType), FieldReference("a")))
+    assert(dateTrunc.toString === "DATE_TRUNC('MONTH', a)")
+    assert(dateTrunc.describe() === "DATE_TRUNC('MONTH', a)")
+    assert(new GeneralScalarExpression("ABS", Array(dateTrunc)).toString ===
+      "ABS(DATE_TRUNC('MONTH', a))")
+    val like = new V2Predicate("LIKE",
+      Array(FieldReference("a"), LiteralValue(UTF8String.fromString("x%"), StringType)))
+    assert(like.toString === "LIKE(a, 'x%')")
+    // The SQL builder for pushdown still rejects an unknown name.
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        new V2ExpressionSQLBuilder().build(dateTrunc)
+      },
+      condition = "UNEXPECTED_V2_EXPRESSION",
+      parameters = Map("expr" -> "DATE_TRUNC('MONTH', a)"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        V2ExpressionUtils.toCatalystOrdering(
+          Array(SortValue(dateTrunc, SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)),
+          LocalRelation.apply(AttributeReference("a", StringType)()))
+      },
+      condition = "_LEGACY_ERROR_TEMP_3054",
+      parameters = Map("expr" -> "DATE_TRUNC('MONTH', a)"))
   }
 
   test("SPARK-59721: resolveRefOpt returns None for an unresolvable reference") {

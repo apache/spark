@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector.catalog.constraints;
 
 import java.util.StringJoiner;
 
+import org.apache.spark.sql.catalyst.util.QuotingUtils;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
 abstract class BaseConstraint implements Constraint {
@@ -65,7 +66,7 @@ abstract class BaseConstraint implements Constraint {
   public String toDDL() {
     // The validation status is not included in the DDL output as it's not part of
     // the Spark SQL syntax for constraints.
-    return "CONSTRAINT " + name + " " + toDescription();
+    return "CONSTRAINT " + QuotingUtils.quoteIfNeeded(name) + " " + toDescription();
   }
 
   public String toDescription() {

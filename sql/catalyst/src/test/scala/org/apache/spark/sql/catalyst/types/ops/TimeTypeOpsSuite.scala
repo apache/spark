@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.types.ops
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{DeserializerBuildHelper, SerializerBuildHelper}
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.LocalTimeEncoder
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.DEFAULT_LOCAL_TIME_ENCODER
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ObjectType, TimeType}
@@ -40,7 +40,7 @@ class TimeTypeOpsSuite extends SparkFunSuite with SQLHelper {
     withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "false") {
       checkError(
         exception = intercept[AnalysisException] {
-          SerializerBuildHelper.createSerializer(LocalTimeEncoder)
+          SerializerBuildHelper.createSerializer(DEFAULT_LOCAL_TIME_ENCODER)
         },
         condition = "UNSUPPORTED_TIME_TYPE",
         parameters = Map.empty[String, String])
@@ -51,7 +51,7 @@ class TimeTypeOpsSuite extends SparkFunSuite with SQLHelper {
     withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "false") {
       checkError(
         exception = intercept[AnalysisException] {
-          DeserializerBuildHelper.createDeserializer(LocalTimeEncoder)
+          DeserializerBuildHelper.createDeserializer(DEFAULT_LOCAL_TIME_ENCODER)
         },
         condition = "UNSUPPORTED_TIME_TYPE",
         parameters = Map.empty[String, String])
@@ -61,7 +61,7 @@ class TimeTypeOpsSuite extends SparkFunSuite with SQLHelper {
   test("building a TIME serializer succeeds when the TIME type is enabled") {
     withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
       // The gate passes and the framework builds a TIME serializer.
-      val serializer = SerializerBuildHelper.createSerializer(LocalTimeEncoder)
+      val serializer = SerializerBuildHelper.createSerializer(DEFAULT_LOCAL_TIME_ENCODER)
       assert(serializer.dataType.isInstanceOf[TimeType])
     }
   }
@@ -69,7 +69,7 @@ class TimeTypeOpsSuite extends SparkFunSuite with SQLHelper {
   test("building a TIME deserializer succeeds when the TIME type is enabled") {
     withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
       // The gate passes and the framework builds a TIME deserializer returning java.time.LocalTime.
-      val deserializer = DeserializerBuildHelper.createDeserializer(LocalTimeEncoder)
+      val deserializer = DeserializerBuildHelper.createDeserializer(DEFAULT_LOCAL_TIME_ENCODER)
       assert(deserializer.dataType === ObjectType(classOf[java.time.LocalTime]))
     }
   }
