@@ -696,11 +696,16 @@ public class JavaUtils {
     return new String(in.readAllBytes(), StandardCharsets.UTF_8);
   }
 
+  // The process environment is immutable, and System.getenv(String) allocates on every lookup,
+  // which shows up on hot paths such as Catalyst's per-transform isTesting check. The
+  // spark.testing system property is still read on each call since tests set and clear it.
+  private static final boolean SPARK_TESTING_ENV_SET = System.getenv("SPARK_TESTING") != null;
+
   /**
    * Indicates whether Spark is currently running unit tests.
    */
   public static boolean isTesting() {
-    return System.getenv("SPARK_TESTING") != null || System.getProperty("spark.testing") != null;
+    return SPARK_TESTING_ENV_SET || System.getProperty("spark.testing") != null;
   }
 
   /**

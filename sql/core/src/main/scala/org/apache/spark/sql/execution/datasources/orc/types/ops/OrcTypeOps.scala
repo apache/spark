@@ -84,7 +84,7 @@ import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZ
  *
  * @see TimeTypeOrcOps for a reference implementation (primitive Long-backed type)
  * @see TimestampLTZNanosOrcOps / TimestampNTZNanosOrcOps for OrcTimestamp-backed types
- * @since 5.0.0
+ * @since 4.3.0
  */
 private[orc] trait OrcTypeOps extends Serializable {
 

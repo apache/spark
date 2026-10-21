@@ -24,6 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.hadoop.fs.Path
 import org.apache.logging.log4j.Level
 
+import org.apache.spark.SparkThrowable
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
@@ -1298,6 +1299,27 @@ class MetastoreDataSourcesSuite extends QueryTest
         condition = "TABLE_OR_VIEW_ALREADY_EXISTS",
         parameters = Map("relationName" -> s"`$SESSION_CATALOG_NAME`.`default`.`tab1`")
       )
+    }
+  }
+
+  Seq(
+    // Rejected by the write option check of ParquetFileFormat.prepareWrite.
+    ("parquet", "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
+      () => spark.range(5).write.format("parquet").option("compression", "bogus")),
+    // Rejected by the analysis of the Hive CTAS.
+    ("hive", "COLUMN_NOT_DEFINED_IN_TABLE",
+      () => spark.range(5).write.format("hive").partitionBy("nonexistent"))
+  ).foreach { case (format, condition, newWriter) =>
+    test(s"SPARK-60387: saveAsTable with mode Overwrite keeps the existing $format table when " +
+        "it fails before writing") {
+      withTable("t") {
+        spark.range(3).write.format(format).saveAsTable("t")
+        val e = intercept[SparkThrowable] {
+          newWriter().mode(SaveMode.Overwrite).saveAsTable("t")
+        }
+        assert(e.getCondition === condition)
+        checkAnswer(table("t"), spark.range(3).toDF())
+      }
     }
   }
 

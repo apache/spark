@@ -73,8 +73,9 @@ class AsOfJoinResolver(
       Seq(leftNameScope.output, rightNameScope.output)
     )
 
-    expressionIdAssigner.createMappingFromChildMappings(
-      newOutputIds = leftNameScope.getOutputIds ++ rightNameScope.getOutputIds
+    mergeChildMappings(
+      leftNameScope = leftNameScope,
+      rightNameScope = rightNameScope
     )
 
     val partiallyResolved = unresolvedAsOfJoin.copy(
