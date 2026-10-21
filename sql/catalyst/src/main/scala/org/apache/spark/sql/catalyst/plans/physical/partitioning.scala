@@ -2496,9 +2496,9 @@ case class KeyedShuffleSpec(
           if TransformExpression.hasReducedKeys(e1) || TransformExpression.hasReducedKeys(e2) =>
         (None, None)
 
+      // A reducer that threw in either direction makes the pair not reducible, see `pairReducers`.
       case (e1: TransformExpression, e2: TransformExpression) =>
-        val thisReducer = e1.reducers(e2)
-        val otherReducer = e2.reducers(e1)
+        val (thisReducer, otherReducer) = e1.pairReducers(e2)
 
         val thisResult = thisReducer.map { reducer =>
           if (otherReducer.isEmpty) {

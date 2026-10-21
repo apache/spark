@@ -7797,6 +7797,49 @@ class KeyGroupedPartitioningSuite
       "must not emit the 'implements no reducer' hint for an implemented-but-throwing reducer")
   }
 
+  test("SPARK-50593: a reducer that throws in one direction makes the pair not reducible") {
+    // DirectionalBucketFunction reduces bucket(16) onto bucket(12) by gcd 4 from the finer side and
+    // throws when asked from the coarser one. Reading the throw as "this direction is not
+    // reducible" would leave a one-side reduce: the 16 side reduced by % 4 and reported as
+    // bucket(12), against the 12 side's raw keys, so only keys 0 to 3 would meet.
+    val id = attr("id")
+    val b16 = TransformExpression(DirectionalBucketFunction, Seq(Literal(16), id))
+    val b12 = TransformExpression(DirectionalBucketFunction, Seq(Literal(12), id))
+    assert(b16.reducers(b12).isDefined, "the finer side alone does reduce")
+    assert(b16.pairReducers(b12) == ((None, None)) && b12.pairReducers(b16) == ((None, None)))
+    assert(!b16.isCompatible(b12) && !b12.isCompatible(b16))
+
+    val data = AttributeReference("id", IntegerType)()
+    def spec(t: TransformExpression): physical.KeyedShuffleSpec = physical.KeyedShuffleSpec(
+      physical.KeyedPartitioning(Seq(t.copy(children = Seq(t.children.head, data))), Seq.empty),
+      physical.ClusteredDistribution(Seq(data)))
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      assert(spec(b16).reducersBothWays(spec(b12)) == ((None, None)))
+    }
+
+    withFunction(UnboundDirectionalBucketFunction) {
+      val ids = (0 until 48).map(i => s"($i, 'v$i', CAST('2022-01-01' AS timestamp))")
+      createTable("dir16", columns, Array(bucket(16, "id")))
+      sql(s"INSERT INTO testcat.ns.dir16 VALUES ${ids.mkString(", ")}")
+      createTable("dir12", columns, Array(bucket(12, "id")))
+      sql(s"INSERT INTO testcat.ns.dir12 VALUES ${ids.mkString(", ")}")
+      withSQLConf(
+          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+          SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        val df = sql(
+          s"""
+             |${selectWithMergeJoinHint("dir16", "dir12")}
+             |dir16.id FROM testcat.ns.dir16 JOIN testcat.ns.dir12 ON dir16.id = dir12.id
+             |""".stripMargin)
+        assert(df.collect().length === 48, "every id must find its match")
+      }
+    }
+  }
+
   test("SPARK-50593: deprecated overload is not probed once the generalized one reduces") {
     // Generalized-first dispatch: the generalized reducer is tried first, and the deprecated int
     // overload must not be probed once it reduced. Here the generalized reducer succeeds and the

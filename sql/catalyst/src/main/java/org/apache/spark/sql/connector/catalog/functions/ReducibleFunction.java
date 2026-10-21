@@ -87,8 +87,8 @@ public interface ReducibleFunction<I, O> {
    * sides are the same function, and each side has a single non-null integer parameter does Spark
    * fall back to the deprecated {@code reducer(int, ReducibleFunction, int)} overload. If every
    * eligible overload throws {@link UnsupportedOperationException}, Spark logs an "implements no
-   * reducer" warning; any other exception is logged and the pair is treated as not reducible (the
-   * join falls back to a shuffle).
+   * reducer" warning; any other exception, from either side's call, is logged and the pair is
+   * treated as not reducible (the join falls back to a shuffle).
    * <p>
    * Examples:
    * <ul>

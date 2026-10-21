@@ -180,7 +180,10 @@ case class TransformExpression(
    * @return true if compatible, false if not
    */
   def isCompatible(other: TransformExpression): Boolean =
-    isSameFunction(other) || reducers(other).isDefined || other.reducers(this).isDefined
+    isSameFunction(other) || {
+      val (r1, r2) = pairReducers(other)
+      r1.isDefined || r2.isDefined
+    }
 
   /**
    * Rewrites this transform's column arguments with `rewriteColumn`, leaving its literal parameters
@@ -286,22 +289,45 @@ case class TransformExpression(
    * is none: when either function is not a [[ReducibleFunction]], when the argument layouts or
    * literal parameters rule a reducer out, or when the connector reports it is not reducible.
    * Handles both parameterized (bucket, truncate) and non-parameterized (days, hours) functions.
+   *
+   * This answers one direction only. To decide a pair, use [[pairReducers]], which also refuses
+   * the pair when the other direction's reducer threw.
    */
-  def reducers(other: TransformExpression): Option[Reducer[_, _]] = {
+  def reducers(other: TransformExpression): Option[Reducer[_, _]] =
+    TransformExpression.reducerOf(reducerOutcome(other))
+
+  /**
+   * Both directions' reducers, `reducers(other)` and `other.reducers(this)`, or `(None, None)` when
+   * either direction's reducer threw: then the pair is not reducible at all and shuffles. Reading a
+   * thrown direction as merely "not reducible" would leave the other direction looking like a
+   * one-side reduce, which is only right for a reducer that satisfies `r(f1(x)) = f2(x)`; a
+   * two-sided one such as a gcd of bucket counts would then pair keys from two different spaces.
+   */
+  def pairReducers(other: TransformExpression)
+      : (Option[Reducer[_, _]], Option[Reducer[_, _]]) = {
+    import TransformExpression._
+    (reducerOutcome(other), other.reducerOutcome(this)) match {
+      case (Threw(_), _) | (_, Threw(_)) => (None, None)
+      case (o1, o2) => (reducerOf(o1), reducerOf(o2))
+    }
+  }
+
+  /** What probing the connector for a reducer onto `other` gave, logged when it failed. */
+  private def reducerOutcome(other: TransformExpression): TransformExpression.Outcome = {
     import TransformExpression._
     val thisFunction: ReducibleFunction[_, _] = function match {
       case f: ReducibleFunction[_, _] => f
-      case _ => return None
+      case _ => return NotReducible
     }
     val otherFunction: ReducibleFunction[_, _] = other.function match {
       case o: ReducibleFunction[_, _] => o
-      case _ => return None
+      case _ => return NotReducible
     }
     if (!sameArgumentLayout(other) ||
         !literalParamsMatchInputTypes || !other.literalParamsMatchInputTypes ||
         !noComplexLiteralParams || !other.noComplexLiteralParams ||
         literalChildren.exists(_.value == null) || other.literalChildren.exists(_.value == null)) {
-      return None
+      return NotReducible
     }
 
     val thisParams = extractParameters
@@ -341,18 +367,16 @@ case class TransformExpression(
       }
 
     outcome match {
-      case Reducible(r) => Some(r)
-      case NotReducible => None
       case Threw(e) =>
         logWarning(log"V2 function ${MDC(FUNCTION_NAME, thisName)} reducer threw an exception; " +
           log"treating as not reducible.", e)
-        None
       case Unimplemented =>
         logWarning(log"V2 function ${MDC(FUNCTION_NAME, thisName)} implements no reducer; " +
           log"treating as not reducible. Override " +
           log"reducer(Literal[], ReducibleFunction, Literal[]) to enable SPJ.")
-        None
+      case _ =>
     }
+    outcome
   }
 
   /**
@@ -463,4 +487,10 @@ object TransformExpression {
   private case object NotReducible extends Outcome
   private case class Threw(e: Throwable) extends Outcome
   private case object Unimplemented extends Outcome
+
+  /** The reducer an [[Outcome]] found, if it found one. */
+  private def reducerOf(o: Outcome): Option[Reducer[_, _]] = o match {
+    case Reducible(r) => Some(r)
+    case _ => None
+  }
 }

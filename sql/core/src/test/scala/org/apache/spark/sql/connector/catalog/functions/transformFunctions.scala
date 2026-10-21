@@ -203,6 +203,38 @@ object UnboundBucketFunction extends UnboundFunction {
   override def name(): String = "bucket"
 }
 
+/**
+ * A `bucket` like [[BucketFunction]] whose generalized reducer throws when asked from the coarser
+ * side, a natural guard for an implementor who expects to be asked only from the finer one.
+ */
+object DirectionalBucketFunction extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
+  override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "bucket"
+  override def canonicalName(): String = name()
+  override def toString: String = name()
+  override def produceResult(input: InternalRow): Int = {
+    Math.floorMod(input.getLong(1), input.getInt(0))
+  }
+
+  override def reducer(
+      thisParams: Array[Literal[_]],
+      otherFunc: ReducibleFunction[_, _],
+      otherParams: Array[Literal[_]]): Reducer[Int, Int] = {
+    val thisNumBuckets = thisParams(0).value().asInstanceOf[Int]
+    val otherNumBuckets = otherParams(0).value().asInstanceOf[Int]
+    require(thisNumBuckets >= otherNumBuckets, "asked from the coarser side")
+    val gcd = BigInt(thisNumBuckets).gcd(BigInt(otherNumBuckets)).toInt
+    if (gcd > 1 && gcd != thisNumBuckets) BucketReducer(gcd) else null
+  }
+}
+
+object UnboundDirectionalBucketFunction extends UnboundFunction {
+  override def bind(inputType: StructType): BoundFunction = DirectionalBucketFunction
+  override def description(): String = name()
+  override def name(): String = "bucket"
+}
+
 // the result should be consistent with BucketTransform defined at InMemoryBaseTable.scala
 object BucketFunction extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
   override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
