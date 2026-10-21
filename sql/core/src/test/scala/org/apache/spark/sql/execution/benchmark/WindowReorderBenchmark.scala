@@ -28,13 +28,16 @@ import org.apache.spark.sql.internal.SQLConf
  * mirrors the window-function shape of a typical LLM-serving ETL: one wide
  * SELECT that annotates every inference request with a batch of ROW_NUMBER /
  * LAG ranking columns, keyed on a single user dimension. The windows are
- * partitioned over two overlapping key groups (user id plus a core flag and
- * plus a service-tier flag, and user id plus a model and a priority flag), so
- * the analyzer stacks them into a single chain of adjacent Window operators.
- * Several windows use `ORDER BY create_ts` and others `ORDER BY create_ts DESC`,
- * so every complete required child ordering is distinct and reordering cannot
- * share sorts here; the measured win is from grouping by partition spec and
- * removing redundant shuffles.
+ * partitioned over three specs that share the user key: the nested pair
+ * (user_id, is_primary) and (user_id, tier, is_primary), plus (user_id,
+ * model, priority), so the analyzer stacks them into a single chain of
+ * adjacent Window operators.
+ * Several windows use `ORDER BY create_ts` and others `ORDER BY create_ts DESC`;
+ * apart from rn_user_tier and prev_create_ts, which share one spec and which the
+ * analyzer therefore fuses into a single Window in both configurations, every
+ * complete required child ordering is distinct and reordering cannot share sorts
+ * here; the measured win is from grouping by partition spec and removing
+ * redundant shuffles.
  *
  * A second case mixes a COLLECT_LIST window (an unbounded array output) with narrow
  * ranking windows over incomparable key groups. The collect_list rides one minimal
