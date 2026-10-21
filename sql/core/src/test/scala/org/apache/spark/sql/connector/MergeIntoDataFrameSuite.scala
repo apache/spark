@@ -29,10 +29,10 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.ResolveSchemaEvolution
 import org.apache.spark.sql.classic.MergeIntoWriter
 import org.apache.spark.sql.connector.catalog.{Aborted, Column => V2Column, Committed, InMemoryBaseTable, InMemoryRowLevelOperationTable, InMemoryRowLevelOperationTableCatalog, InMemoryTableCatalog, TableCapability}
-import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.TableCapability.{ACCEPT_ANY_SCHEMA, AUTOMATIC_SCHEMA_EVOLUTION}
 import org.apache.spark.sql.connector.catalog.TableInfo
+import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.Distribution
 import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
 import org.apache.spark.sql.functions._
