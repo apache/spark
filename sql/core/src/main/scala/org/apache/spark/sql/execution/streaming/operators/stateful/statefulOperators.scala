@@ -1694,9 +1694,10 @@ case class StreamingDeduplicateWithinWatermarkExec(
 
     // We cannot reuse `EvictionIterator` here because it reads the eviction timestamp from the
     // state store key, whereas this operator stores `expiresAtMicros` in the value row (the key is
-    // only the dedup key columns). We still match EvictionIterator's semantics by returning only
-    // the rows that are actually evicted, so each next() corresponds to a real removal and the
-    // caller's numRemovedStateRows metric counts removals rather than state rows scanned.
+    // only the dedup key columns). Like EvictionIterator, this returns only the rows that are
+    // actually evicted, so numRemovedStateRows counts removals rather than state rows scanned.
+    // Unlike EvictionIterator, a row is removed in hasNext (via filter); that is safe here because
+    // without incremental cleanup the caller always drains the iterator.
     store.iterator().filter { rowPair =>
       numRowsReadDuringEviction += 1
       val expiresAt = rowPair.value.getLong(0)
