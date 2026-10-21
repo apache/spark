@@ -105,7 +105,8 @@ class InProcessUDFWrapper:
         self._parsed_return_type: Optional[DataType] = None
         self.evalType = PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF
         self._deterministic: bool = deterministic
-        self._name: str = getattr(func, "__name__", "inprocess_udf")
+        # As for other Python UDFs, e.g. a functools.partial or a callable object.
+        self._name: str = getattr(func, "__name__", type(func).__name__)
 
         from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 
@@ -119,6 +120,7 @@ class InProcessUDFWrapper:
         # The JVM-side function, created once so that calls do not resend the command.
         self._jfunc: Optional["JavaObject"] = None
         update_wrapper(self, func, updated=())
+        self.__name__ = self._name
 
     @property
     def func(self) -> Callable:

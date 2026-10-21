@@ -23,7 +23,7 @@ RUN mkdir /versions && \
     for name in jep arrow; do \
       sed -n "s:.*<${name}.version>\(.*\)</${name}.version>.*:\1:p" /pom.xml | head -n 1 \
         > "/versions/${name}" && \
-      test -s "/versions/${name}"; \
+      test -s "/versions/${name}" || exit 1; \
     done
 
 # Image for building and testing Spark branches. Based on Ubuntu 24.04.

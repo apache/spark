@@ -86,6 +86,23 @@ class InProcessRuntimeTests(unittest.TestCase):
             result.validate.assert_called_once_with()
             normalize.assert_not_called()
             result.buffers.assert_not_called()
+        # The full validation, of the binary view, also precedes every later step.
+        result = MagicMock(spec=pa.Array)
+        result.type = pa.string()
+        result.__len__.return_value = 2
+        result.view.return_value.validate.side_effect = pa.ArrowInvalid("invalid offsets")
+        with (
+            patch("pyspark.inprocess.runtime._repair_offsets") as repair,
+            patch("pyspark.inprocess.runtime._with_schema") as normalize,
+        ):
+            with self.assertRaisesRegex(pa.ArrowInvalid, "invalid offsets"):
+                validate(result, 2, pa.string())
+            result.validate.assert_called_once_with()
+            result.view.assert_called_once_with(pa.binary())
+            result.view.return_value.validate.assert_called_once_with(full=True)
+            repair.assert_not_called()
+            normalize.assert_not_called()
+            result.buffers.assert_not_called()
 
     def test_full_validation_accepts_invalid_utf8_like_spark_strings(self):
         # Spark strings may hold invalid UTF-8, e.g. CAST(X'FF' AS STRING); workers accept them.
@@ -501,6 +518,12 @@ class InProcessRuntimeTests(unittest.TestCase):
         udf = inprocess_udf(LongType())(identity)
         self.assertEqual(udf.__name__, identity.__name__)
         self.assertEqual(udf.__doc__, identity.__doc__)
+        # Like other Python UDFs, a callable without a name is named after its type.
+        import functools
+
+        partial = inprocess_udf(LongType())(functools.partial(identity))
+        self.assertEqual(partial.__name__, "partial")
+        self.assertEqual(partial._name, "partial")
         self.assertIs(udf.func, identity)
         self.assertEqual(udf.returnType, LongType())
         self.assertEqual(udf.evalType, PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF)

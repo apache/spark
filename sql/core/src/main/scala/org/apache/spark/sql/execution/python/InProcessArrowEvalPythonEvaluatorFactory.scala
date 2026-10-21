@@ -30,7 +30,7 @@ import scala.jdk.CollectionConverters._
 import com.google.common.util.concurrent.Uninterruptibles
 import org.apache.arrow.c.{ArrowArray, ArrowSchema, BaseStruct}
 import org.apache.arrow.util.AutoCloseables
-import org.apache.arrow.vector.{BaseLargeVariableWidthVector, BaseVariableWidthVector, DensityAwareVector, VectorSchemaRoot}
+import org.apache.arrow.vector.{BaseFixedWidthVector, BaseLargeVariableWidthVector, BaseVariableWidthVector, ValueVector, VectorSchemaRoot}
 
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.api.python.ChainedPythonFunctions
@@ -44,6 +44,7 @@ import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
+import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
 
 /**
@@ -118,7 +119,7 @@ class InProcessArrowEvalPythonEvaluatorFactory(
       inputSchema: StructType,
       context: TaskContext,
       joinInput: InProcessArrowEvalPythonEvaluatorFactory.JoinInput): Iterator[InternalRow] = {
-    import InProcessArrowEvalPythonEvaluatorFactory.{Buffered, ReadBack}
+    import InProcessArrowEvalPythonEvaluatorFactory.{Buffered, ReadBack, dataBytes, roundedDensity}
     ArrowUtils.failDuplicatedFieldNames(inputSchema)
     val functions = funcs.map { case (chain, _) =>
       if (chain.funcs.size != 1) {
@@ -139,15 +140,15 @@ class InProcessArrowEvalPythonEvaluatorFactory(
     // Rows are copied out of the queue and Arrow vectors before they are returned, so they
     // remain valid after task completion releases those, on whichever thread consumes them.
     val resultProj = UnsafeProjection.create(output, output)
-    // Spill files go into a directory of the queue's own, created with the first disk queue, so
-    // that task completion can delete them when it cannot close the queue.
-    @volatile var spillDir: File = null
-    // Guarded by the queue's monitor.
-    var queueAbandoned = false
     // Only the consumer holding the iterator's lock adds and removes rows.
     class InProcessRowQueue(localDir: File, serializerManager: SerializerManager)
       extends HybridRowQueue(context.taskMemoryManager(), localDir, childOutput.length,
         serializerManager, lockFree = true) {
+      // Spill files go into a directory of the queue's own, created with the first disk queue,
+      // so that task completion can delete them when it cannot close the queue.
+      @volatile private var spillDir: File = null
+      // Guarded by the queue's monitor.
+      private var abandoned = false
 
       override protected def createDiskQueue(): RowQueue = synchronized {
         if (spillDir == null) {
@@ -160,7 +161,7 @@ class InProcessArrowEvalPythonEvaluatorFactory(
       // Once task completion leaves the queue to the executor, it must not spill for other
       // consumers into a directory that nothing deletes.
       override def spill(size: Long, trigger: MemoryConsumer): Long = synchronized {
-        if (queueAbandoned) 0L else super.spill(size, trigger)
+        if (abandoned) 0L else super.spill(size, trigger)
       }
 
       /**
@@ -169,7 +170,7 @@ class InProcessArrowEvalPythonEvaluatorFactory(
        * queue, and its last changes are visible, since it marked a read afterwards.
        */
       def abandon(): Unit = synchronized {
-        queueAbandoned = true
+        abandoned = true
         Utils.tryWithSafeFinally {
           (queues.asScala ++ Option(reading)).filterNot(isInMemoryQueue).foreach { q =>
             Utils.tryLogNonFatalError(q.close())
@@ -177,6 +178,12 @@ class InProcessArrowEvalPythonEvaluatorFactory(
         } {
           Utils.deleteQuietly(spillDir)
         }
+      }
+
+      // Closing the queue deletes the spill files it tracks; deleteQuietly also removes any
+      // other, without starting a process or throwing, also on an interrupted thread.
+      override def close(): Unit = Utils.tryWithSafeFinally(super.close()) {
+        Utils.deleteQuietly(spillDir)
       }
     }
     val (queue, projection) = joinInput match {
@@ -204,11 +211,7 @@ class InProcessArrowEvalPythonEvaluatorFactory(
     }
 
     val resources = new InProcessArrowEvalPythonEvaluatorFactory.IteratorResources(
-      // Closing the queue deletes the spill files it tracks; deleteQuietly also removes any
-      // other, without starting a process or throwing, also on an interrupted thread.
-      releaseTaskMemory = () => if (queue != null) {
-        Utils.tryWithSafeFinally(queue.close())(Utils.deleteQuietly(spillDir))
-      },
+      releaseTaskMemory = () => if (queue != null) queue.close(),
       abandonTaskMemory = () => if (queue != null) queue.abandon(),
       recordTime = nanos => metrics("pythonTotalTime") += nanos,
       releaseOthers = () => {
@@ -312,24 +315,22 @@ class InProcessArrowEvalPythonEvaluatorFactory(
 
       // Called with the lock held.
       private def nextBatch(): Unit = {
-        // Each batch needs buffers of its own, which Python may retain, but sizing them like
-        // the previous batch's avoids growing them from Arrow's defaults row by row.
+        // Each batch needs buffers of its own, which Python may retain, but sizing flat vectors
+        // like the previous batch's avoids growing them from Arrow's defaults row by row.
+        // Nested vectors keep the defaults, since Arrow sizes their children per record.
         val capacities = if (writer == null) Seq.empty else {
-          writer.root.getFieldVectors.asScala.map { v =>
-            val density = v match {
-              case v: BaseVariableWidthVector => v.getDensity
-              case v: BaseLargeVariableWidthVector => v.getDensity
-              case _ => 0.0
-            }
-            (v.getValueCount, density)
-          }.toSeq
+          writer.root.getFieldVectors.asScala.map(v => (v.getValueCount, dataBytes(v))).toSeq
         }
         closeBatch()
         val root = VectorSchemaRoot.create(arrowSchema, ArrowUtils.rootAllocator)
-        capacities.zip(root.getFieldVectors.asScala).foreach { case ((count, density), v) =>
+        capacities.zip(root.getFieldVectors.asScala).foreach { case ((count, bytes), v) =>
           if (count > 0) v match {
-            case v: DensityAwareVector if density > 0 => v.setInitialCapacity(count, density)
-            case v => v.setInitialCapacity(count)
+            case v: BaseFixedWidthVector => v.setInitialCapacity(count)
+            case v: BaseVariableWidthVector if bytes > 0 =>
+              v.setInitialCapacity(count, roundedDensity(count, bytes, Int.MaxValue))
+            case v: BaseLargeVariableWidthVector if bytes > 0 =>
+              v.setInitialCapacity(count, roundedDensity(count, bytes, Long.MaxValue))
+            case _ =>
           }
         }
         writer = try {
@@ -427,6 +428,21 @@ private[python] object InProcessArrowEvalPythonEvaluatorFactory {
    * copies element by element out of Arrow, but with a single copy out of an unsafe row, and
    * decimals, which Arrow reads back through a `BigDecimal` per value.
    */
+  /** The bytes of values in a variable-width vector, or 0 for any other vector. */
+  private[python] def dataBytes(vector: ValueVector): Long = vector match {
+    case v: BaseVariableWidthVector => math.round(v.getDensity * v.getValueCount)
+    case v: BaseLargeVariableWidthVector => math.round(v.getDensity * v.getValueCount)
+    case _ => 0L
+  }
+
+  /**
+   * The density for `setInitialCapacity` that allocates `bytes` rounded up to a power of two,
+   * as Arrow rounds smaller requests, so that a slightly larger batch does not reallocate and
+   * copy its data on its last rows. Arrow truncates `count * density`, hence the half byte.
+   */
+  private[python] def roundedDensity(count: Int, bytes: Long, maxBytes: Long): Double =
+    (math.min(ByteArrayMethods.nextPowerOf2(bytes), maxBytes) + 0.5) / count
+
   def readsBack(dataType: DataType): Boolean = dataType match {
     case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType |
         FloatType | DoubleType | BinaryType | DateType | TimestampType | TimestampNTZType => true

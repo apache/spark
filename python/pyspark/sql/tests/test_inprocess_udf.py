@@ -34,7 +34,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.testing.utils import eventually
+from pyspark.testing.utils import eventually, have_pyarrow
 
 _jep_spec = find_spec("jep")
 _cdi_jar = os.environ.get("ARROW_C_DATA_JAR")
@@ -42,7 +42,7 @@ _test_mode = os.environ.get("INPROCESS_TESTS")
 _run_inprocess = _test_mode == "1" or (
     _test_mode != "0"
     and _jep_spec is not None
-    and find_spec("pyarrow") is not None
+    and have_pyarrow
     and _cdi_jar is not None
     and Path(_cdi_jar).is_file()
 )
@@ -410,6 +410,7 @@ class MissingJepProbe {
 
     def test_fresh_jvm_retries_configuration_without_spark_home(self):
         import subprocess
+        import sysconfig
         import venv
 
         from pyspark import cloudpickle
@@ -420,23 +421,25 @@ class MissingJepProbe {
         spark_home = jvm.java.lang.System.getenv("SPARK_HOME")
         self.assertIsNotNone(spark_home)
         python_lib = Path(spark_home) / "python" / "lib"
-        if not (python_lib / "pyspark.zip").is_file():
-            self.skipTest("Packaged bootstrap coverage requires python/lib/pyspark.zip")
         env = os.environ.copy()
         env.pop("SPARK_HOME", None)
         env.pop("VIRTUAL_ENV", None)
         env["PATH"] = os.defpath
-        env["PYTHONPATH"] = os.pathsep.join(str(p) for p in python_lib.glob("*.zip"))
         # These flags must be ignored by the embedded interpreter. No signals are raised.
         env["PYTHONFAULTHANDLER"] = "1"
         env["PYTHONDEVMODE"] = "1"
         env["LC_ALL"] = "C"
         env["LANG"] = "C"
 
+        # The failed configuration also lists a default sys.path entry, which a retry keeps.
+        stdlib = os.path.realpath(sysconfig.get_paths()["stdlib"])
+
         class BootstrapCheck:
             def __reduce__(self):
                 return eval, (
                     "(__import__('sys').flags.isolated == 1 and "
+                    f"{stdlib!r} in [__import__('os').path.realpath(p) "
+                    "for p in __import__('sys').path] and "
                     "__import__('sys').flags.ignore_environment == 1 and "
                     "not __import__('faulthandler').is_enabled() and "
                     "'pyspark.zip' in __import__('pyspark').__file__ and "
@@ -459,7 +462,8 @@ import org.apache.spark.sql.util.ArrowUtils;
 
 class BootstrapProbe {
   public static void main(String[] args) throws Exception {
-    var bad = scala.jdk.javaapi.CollectionConverters.asScala(Arrays.asList(args[0])).toSeq();
+    var bad = scala.jdk.javaapi.CollectionConverters
+        .asScala(Arrays.asList(args[0].split(java.io.File.pathSeparator))).toSeq();
     boolean failed = false;
     try {
       InProcessPythonRuntime.initialize(bad);
@@ -467,8 +471,10 @@ class BootstrapProbe {
       failed = true;
     }
     if (!failed) throw new AssertionError("Expected missing JEP package");
+    // A configured directory that did not exist when the first attempt failed.
+    Files.createSymbolicLink(Path.of(args[5]), Path.of(args[2]));
     var good = scala.jdk.javaapi.CollectionConverters
-        .asScala(Arrays.asList(args[1], args[2])).toSeq();
+        .asScala(Arrays.asList(args[1], args[5])).toSeq();
     try {
       InProcessPythonRuntime.initialize(good);
       Field field = ArrowUtils.toArrowField("result", DataTypes.LongType, true, "UTC",
@@ -495,6 +501,19 @@ class BootstrapProbe {
             # A module that only the failed configuration's directory has, which the retried
             # configuration must not import.
             (Path(directory) / "only_in_failed_config.py").write_text("")
+            late = Path(directory) / "created_after_failure"
+            # Without a packaged zip, e.g. in CI, package the sources for this process.
+            packaged = python_lib / "pyspark.zip"
+            if not packaged.is_file():
+                packaged = Path(directory) / "pyspark.zip"
+                with zipfile.ZipFile(packaged, "w") as archive:
+                    sources = Path(spark_home) / "python" / "pyspark"
+                    for entry in sources.rglob("*"):
+                        if entry.is_file() and "__pycache__" not in entry.parts:
+                            archive.write(entry, entry.relative_to(sources.parent))
+            env["PYTHONPATH"] = os.pathsep.join(
+                [str(packaged)] + [str(p) for p in python_lib.glob("py4j-*.zip")]
+            )
             source_file = Path(directory) / "BootstrapProbe.java"
             source_file.write_text(source)
             command_file = Path(directory) / "command.pickle"
@@ -511,11 +530,12 @@ class BootstrapProbe {
                     "--class-path",
                     classpath,
                     str(source_file),
-                    directory,
+                    os.pathsep.join([directory, stdlib, str(late)]),
                     self.site_packages,
                     str(self.jep_dir.parent),
                     str(command_file),
                     "%d.%d" % sys.version_info[:2],
+                    str(late),
                 ],
                 env=env,
                 capture_output=True,
@@ -1722,7 +1742,25 @@ class BootstrapFailureProbe {
             for field in df.schema.fields:
                 self.assertTrue(reads_back(from_json(field.dataType.json())), field)
             expected = df.collect()
-            rows = df.select("*", count(*[df[c] for c in df.columns]).alias("n")).collect()
+            query = df.select("*", count(*[df[c] for c in df.columns]).alias("n"))
+            # ReadBack also needs the arguments to be exactly the child's output, in order.
+            nodes = [query._jdf.queryExecution().executedPlan()]
+            evaluators = []
+            while nodes:
+                node = nodes.pop()
+                if node.nodeName() == "InProcessArrowEvalPython":
+                    evaluators.append(node)
+                children = node.children().iterator()
+                while children.hasNext():
+                    nodes.append(children.next())
+            self.assertEqual(len(evaluators), 1)
+            node = evaluators[0]
+            arguments = node.udfs().apply(0).children()
+            output = node.child().output()
+            self.assertEqual(arguments.size(), output.size())
+            for i in range(output.size()):
+                self.assertTrue(arguments.apply(i).semanticEquals(output.apply(i)), i)
+            rows = query.collect()
         self.assertEqual([r[:-1] for r in rows], [tuple(r) for r in expected])
         self.assertEqual({r.n for r in rows}, {len(df.columns)})
 
@@ -1909,6 +1947,11 @@ class BootstrapFailureProbe {
                     self.assertEqual(metrics.apply("pythonNumRowsReceived").value(), 8)
                     self.assertGreater(metrics.apply("pythonDataSent").value(), 0)
                     self.assertGreater(metrics.apply("pythonDataReceived").value(), 0)
+                    # In nanoseconds, so a sub-millisecond registration or batch still counts.
+                    processing = metrics.apply("pythonProcessingTime").value()
+                    self.assertGreater(metrics.apply("pythonInitTime").value(), 0)
+                    self.assertGreater(processing, 0)
+                    self.assertGreaterEqual(metrics.apply("pythonTotalTime").value(), processing)
         finally:
             df.unpersist()
 

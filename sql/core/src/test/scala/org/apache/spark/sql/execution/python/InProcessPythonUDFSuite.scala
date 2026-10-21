@@ -138,24 +138,18 @@ class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
 
   test("legacy Python profilers are rejected") {
     for (key <- Seq("spark.python.profile", "spark.python.profile.memory")) {
-      SparkEnv.get.conf.set(key, "true")
-      try {
+      withSparkEnvConfs(key -> "true") {
         checkError(
           exception = intercept[SparkException] {
             InProcessPythonUDFBuilder.checkConfiguration(spark.sessionState.conf)
           },
           condition = "INVALID_SPARK_CONFIG.UNSUPPORTED_IN_PROCESS_PYTHON_UDF",
           parameters = Map("config" -> key))
-      } finally {
-        SparkEnv.get.conf.remove(key)
       }
       // As in PySpark, other values leave the profiler off, without failing to parse.
       for (value <- Seq("True", "0", "off")) {
-        SparkEnv.get.conf.set(key, value)
-        try {
+        withSparkEnvConfs(key -> value) {
           InProcessPythonUDFBuilder.checkConfiguration(spark.sessionState.conf)
-        } finally {
-          SparkEnv.get.conf.remove(key)
         }
       }
     }

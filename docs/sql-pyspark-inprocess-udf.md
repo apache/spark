@@ -131,9 +131,10 @@ when `SPARK_HOME` is absent. Python modules must not install process-wide signal
 that replace the JVM's handlers. UDF code should not start processes, e.g. with
 `multiprocessing`, `concurrent.futures.ProcessPoolExecutor`, joblib or a PyTorch
 `DataLoader` with `num_workers > 0`: a forked child copies the multi-threaded executor JVM,
-and a spawned one runs `sys.executable`, which is not a Python interpreter under JEP unless
-the code first calls `multiprocessing.set_executable`. JEP's automatic Java package discovery
-is disabled so Java packages do not shadow Python packages.
+and a spawned one runs `sys.executable`, which under JEP is not the embedded interpreter (the
+`java` launcher on macOS, or the first `python3` on `PATH`, if any, on Linux) unless the code
+first calls `multiprocessing.set_executable`. JEP's automatic Java package discovery is
+disabled so Java packages do not shadow Python packages.
 
 Executors must start with a UTF-8 locale, for example `LC_ALL=C.UTF-8` on systems that
 provide it. Isolated initialization ignores `PYTHONUTF8` and `PYTHONIOENCODING` and does

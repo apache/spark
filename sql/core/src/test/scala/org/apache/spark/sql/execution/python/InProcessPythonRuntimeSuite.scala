@@ -371,6 +371,18 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
     assert(releases.taskMemory.get == 1 && releases.others.get == 1)
   }
 
+  test("string data is pre-sized to the next power of two of the previous batch") {
+    import InProcessArrowEvalPythonEvaluatorFactory.roundedDensity
+    // Arrow truncates count * density, so the result must not fall below the power of two.
+    for ((count, bytes, expected) <- Seq(
+        (10, 3000L, 4096L), (10000, 30000000L, 33554432L), (3, 1L, 1L), (7, 4096L, 4096L))) {
+      assert((count * roundedDensity(count, bytes, Int.MaxValue)).toLong == expected)
+    }
+    // 32-bit offsets cap the data buffer.
+    assert((10 * roundedDensity(10, Int.MaxValue.toLong - 1, Int.MaxValue)).toLong ==
+      Int.MaxValue.toLong)
+  }
+
   test("only some types read back from the exported input vectors") {
     import InProcessArrowEvalPythonEvaluatorFactory.readsBack
     val struct = (t: DataType) => new StructType().add("f", t)
