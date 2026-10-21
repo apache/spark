@@ -3159,8 +3159,52 @@ class TypesTestsMixin:
         self.assertRaises(
             PySparkValueError, lambda: str(VariantVal(bytes([32, 0, 0, 202, 154, 59]), metadata))
         )
+        # The scale of a decimal4 or decimal8 may exceed its max precision (9 and 18), up to 38.
+        self.assertEqual(
+            VariantVal(bytes([32, 10, 1, 0, 0, 0]), metadata).toPython(), Decimal("1E-10")
+        )
+        self.assertEqual(
+            VariantVal(bytes([32, 13, 0xD2, 0x04, 0, 0]), metadata).toPython(), Decimal("1.234E-10")
+        )
+        self.assertEqual(
+            VariantVal(bytes([36, 25, 0xD2, 0x04, 0, 0, 0, 0, 0, 0]), metadata).toPython(),
+            Decimal("1.234E-22"),
+        )
+        self.assertEqual(
+            VariantVal(bytes([32, 38, 1, 0, 0, 0]), metadata).toPython(),
+            Decimal("1E-38"),
+        )
+        # -1234 with scale 13 as decimal4.
+        self.assertEqual(
+            VariantVal(bytes([32, 13, 0x2E, 0xFB, 0xFF, 0xFF]), metadata).toPython(),
+            Decimal("-1.234E-10"),
+        )
+        # 0 with scale 38 as decimal4.
+        self.assertEqual(
+            VariantVal(bytes([32, 38, 0, 0, 0, 0]), metadata).toPython(), Decimal("0E-38")
+        )
+
+        def decimal16(unscaled, scale):
+            return VariantVal(
+                bytes([40, scale]) + unscaled.to_bytes(16, byteorder="little", signed=True),
+                metadata,
+            )
+
+        # Decimal16 with a scale above 18.
+        self.assertEqual(decimal16(1234, 25).toPython(), Decimal("1.234E-22"))
+        self.assertEqual(decimal16(-1234, 25).toPython(), Decimal("-1.234E-22"))
+        self.assertRaises(PySparkValueError, lambda: str(decimal16(1, 39)))
+        # The scale is bounded by 38 for every decimal type.
         self.assertRaises(
-            PySparkValueError, lambda: str(VariantVal(bytes([32, 10, 1, 0, 0, 0]), metadata))
+            PySparkValueError, lambda: str(VariantVal(bytes([32, 39, 1, 0, 0, 0]), metadata))
+        )
+        self.assertRaises(
+            PySparkValueError,
+            lambda: str(VariantVal(bytes([36, 39, 1, 0, 0, 0, 0, 0, 0, 0]), metadata)),
+        )
+        # A negative scale byte is read as an unsigned value above 38.
+        self.assertRaises(
+            PySparkValueError, lambda: str(VariantVal(bytes([32, 253, 1, 0, 0, 0]), metadata))
         )
 
         # check parse_json
