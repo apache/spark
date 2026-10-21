@@ -478,17 +478,28 @@ class SQLQueryTestSuite extends SharedSparkSession
     }
   }
 
-  private def hasFlowCommandPrefix(sql: String, command: String): Boolean = {
-    val tokens = sql.trim.split("\\s+", 3)
-    tokens.length >= 2 && tokens(0).equalsIgnoreCase(command) &&
-      tokens(1).equalsIgnoreCase("FLOW")
-  }
-
   private def tryParsePlan(session: SparkSession, sql: String): Option[LogicalPlan] = {
     try {
       Some(session.sessionState.sqlParser.parsePlan(sql))
     } catch {
       case _: ParseException => None
+    }
+  }
+
+  private def parseRefreshTriggeredFlowStatement(
+      session: SparkSession,
+      sql: String): Option[RefreshTriggeredFlow] = {
+    val tokens = sql.trim.split("\\s+", 3)
+    if (tokens.length == 3 && tokens(0).equalsIgnoreCase("REFRESH") &&
+        tokens(1).equalsIgnoreCase("FLOW")) {
+      try {
+        Some(RefreshTriggeredFlow(
+          session.sessionState.sqlParser.parseMultipartIdentifier(tokens(2))))
+      } catch {
+        case _: ParseException => None
+      }
+    } else {
+      None
     }
   }
 
@@ -498,19 +509,7 @@ class SQLQueryTestSuite extends SharedSparkSession
       parsedPlan: Option[LogicalPlan]): Option[TriggeredFlowStatement] = {
     parsedPlan match {
       case Some(command: CreateFlowCommand) => Some(CreateTriggeredFlow(command))
-      case _ if hasFlowCommandPrefix(sql, "REFRESH") =>
-        val tokens = sql.trim.split("\\s+", 3)
-        if (tokens.length != 3) {
-          None
-        } else {
-          try {
-            Some(RefreshTriggeredFlow(
-              session.sessionState.sqlParser.parseMultipartIdentifier(tokens(2))))
-          } catch {
-            case _: ParseException => None
-          }
-        }
-      case _ => None
+      case _ => parseRefreshTriggeredFlowStatement(session, sql)
     }
   }
 
@@ -590,26 +589,26 @@ class SQLQueryTestSuite extends SharedSparkSession
     queriesWithDebug.zipWithIndex.foreach { case ((sql, isDebug), i) =>
       val parsedPlan = tryParsePlan(localSparkSession, sql)
       val isCommand = parsedPlan.exists(_.isInstanceOf[Command])
+      val triggeredFlowStatement =
+        parseTriggeredFlowStatement(localSparkSession, sql, parsedPlan)
+      val isFlow = triggeredFlowStatement.nonEmpty
 
-      val handledFlow = parseTriggeredFlowStatement(localSparkSession, sql, parsedPlan) match {
-        case Some(CreateTriggeredFlow(command)) =>
-          registerTriggeredFlow(localSparkSession, command, triggeredFlows)
-          true
-        case Some(RefreshTriggeredFlow(flowName)) =>
-          runTriggeredFlow(
-            localSparkSession,
-            sql,
-            flowName,
-            testCase,
-            sparkConfigSet,
-            triggeredFlows)
-          true
-        case None => false
-      }
-
-      if (!handledFlow && isCommand) {
+      if (isFlow) {
+        triggeredFlowStatement.foreach {
+          case CreateTriggeredFlow(command) =>
+            registerTriggeredFlow(localSparkSession, command, triggeredFlows)
+          case RefreshTriggeredFlow(flowName) =>
+            runTriggeredFlow(
+              localSparkSession,
+              sql,
+              flowName,
+              testCase,
+              sparkConfigSet,
+              triggeredFlows)
+        }
+      } else if (isCommand) {
         localSparkSession.sql(sql).collect()
-      } else if (!handledFlow && isDebug) {
+      } else if (isDebug) {
         // Capture exception stacktrace if the query fails.
         var exceptionTrace: Option[String] = None
         val (schema, result) = handleExceptions {
