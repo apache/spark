@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalRelation, Lo
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{Decimal, DecimalType, DoubleType, IntegerType}
 
 class CombineApproximatePercentilesSuite extends PlanTest {
 
@@ -78,6 +78,11 @@ class CombineApproximatePercentilesSuite extends PlanTest {
     val expressions = percentileAggregates(aggregate)
     assert(expressions.map(_.resultId).distinct.size == expressions.size)
     assert(!aggregate.aggregateExpressions.exists(_.exists(_.isInstanceOf[GetArrayItem])))
+  }
+
+  private def decimalLiteral(value: String, scale: Int): Literal = {
+    Literal(Decimal(BigDecimal(value), DecimalType.MAX_PRECISION, scale),
+      DecimalType(DecimalType.MAX_PRECISION, scale))
   }
 
   test("do not combine approximate percentiles when disabled") {
@@ -229,7 +234,7 @@ class CombineApproximatePercentilesSuite extends PlanTest {
     assertNotCombined(crossDistinctFilter)
   }
 
-  test("do not fuse canonically equivalent but differently evaluated accuracies") {
+  test("fuse differently evaluated floating-point accuracies separately") {
     val firstAccuracy =
       ((Literal(1.0e16) + Literal(-1.0e16)) + Literal(3.0)).cast(IntegerType)
     val secondAccuracy =
@@ -249,11 +254,16 @@ class CombineApproximatePercentilesSuite extends PlanTest {
 
     assert(firstAccuracy.eval() == 3)
     assert(secondAccuracy.eval() == 4)
-    assert(firstAccuracy.canonicalized == secondAccuracy.canonicalized)
-    assertNotCombined(result)
+    assert(firstAccuracy.canonicalized != secondAccuracy.canonicalized)
+    val aggregates = percentileAggregates(result).distinctBy(_.resultId)
+    assert(aggregates.size == 2)
+    val percentiles = aggregates.map(_.aggregateFunction.asInstanceOf[ApproximatePercentile])
+    assert(percentiles.map(_.accuracyExpression.eval()) == Seq(3, 4))
+    assert(percentiles.map(percentageValues) == Seq(Seq(0.5, 0.9), Seq(0.5, 0.9)))
+    assert(ordinals(result) == Seq(Some(0), Some(0), Some(1), Some(1)))
   }
 
-  test("do not fuse canonically equal percentages that evaluate differently") {
+  test("fuse differently evaluated floating-point percentages by evaluated value") {
     val firstPercentage =
       (Literal(1.0e16) + Literal(-1.0e16)) + Literal(0.5)
     val secondPercentage =
@@ -268,8 +278,12 @@ class CombineApproximatePercentilesSuite extends PlanTest {
       Alias(percentile(value, 0.9), "p90")())
     assert(firstPercentage.eval() == 0.5d)
     assert(secondPercentage.eval() == 0.0d)
-    assert(firstPercentage.canonicalized == secondPercentage.canonicalized)
-    assertNotCombined(scalarResult)
+    assert(firstPercentage.canonicalized != secondPercentage.canonicalized)
+    val scalarAggregates = percentileAggregates(scalarResult)
+    assert(scalarAggregates.map(_.resultId).distinct.size == 1)
+    assert(percentageValues(scalarAggregates.head.aggregateFunction
+      .asInstanceOf[ApproximatePercentile]) == Seq(0.5, 0.0, 0.9))
+    assert(ordinals(scalarResult) == Seq(Some(0), Some(1), Some(2)))
 
     val arrayPercentile = new ApproximatePercentile(
       value,
@@ -286,6 +300,55 @@ class CombineApproximatePercentilesSuite extends PlanTest {
     assert(percentageValues(arrayAggregates(1).aggregateFunction
       .asInstanceOf[ApproximatePercentile]) == Seq(0.0, 0.9))
     assert(ordinals(arrayResult) == Seq(None, Some(0), Some(1)))
+  }
+
+  // Decimal Add is still re-associated by canonicalization, but rounds intermediate results when
+  // precision loss is allowed, so differently associated sums can be canonically equal while
+  // evaluating differently.
+  test("do not fuse canonically equal decimal-derived accuracies that evaluate differently") {
+    val a = decimalLiteral("1.9999994", 7)
+    val b = decimalLiteral("0.0000001", 7)
+    val c = decimalLiteral("1.0000000", 7)
+    val firstAccuracy = ((a + b) + c).cast(IntegerType)
+    val secondAccuracy = (a + (b + c)).cast(IntegerType)
+
+    def percentileWithAccuracy(
+        percentage: Double,
+        accuracy: Expression): AggregateExpression = {
+      new ApproximatePercentile(value, Literal(percentage), accuracy).toAggregateExpression()
+    }
+
+    val result = optimizedAggregate(
+      Alias(percentileWithAccuracy(0.5, firstAccuracy), "first_p50")(),
+      Alias(percentileWithAccuracy(0.5, secondAccuracy), "second_p50")(),
+      Alias(percentileWithAccuracy(0.9, secondAccuracy), "second_p90")(),
+      Alias(percentileWithAccuracy(0.9, firstAccuracy), "first_p90")())
+
+    assert(firstAccuracy.eval() == 3)
+    assert(secondAccuracy.eval() == 2)
+    assert(firstAccuracy.canonicalized == secondAccuracy.canonicalized)
+    assertNotCombined(result)
+  }
+
+  test("do not fuse canonically equal decimal-derived percentages that evaluate differently") {
+    val a = decimalLiteral("0.0000000004", 10)
+    val b = decimalLiteral("0.0000000001", 10)
+    val c = decimalLiteral("0.0000000040", 10)
+    val firstPercentage = ((a + b) + c).cast(DoubleType)
+    val secondPercentage = (a + (b + c)).cast(DoubleType)
+    def percentileWithPercentage(percentage: Expression): AggregateExpression = {
+      new ApproximatePercentile(value, percentage, Literal(10000)).toAggregateExpression()
+    }
+
+    val result = optimizedAggregate(
+      Alias(percentileWithPercentage(firstPercentage), "first")(),
+      Alias(percentileWithPercentage(secondPercentage), "second")(),
+      Alias(percentile(value, 0.9), "p90")())
+
+    assert(firstPercentage.eval() == 1.0e-8)
+    assert(secondPercentage.eval() == 0.0d)
+    assert(firstPercentage.canonicalized == secondPercentage.canonicalized)
+    assertNotCombined(result)
   }
 
   test("preserve existing arrays while combining compatible scalars") {

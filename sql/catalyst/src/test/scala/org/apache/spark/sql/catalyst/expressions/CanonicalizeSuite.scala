@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.MULTI_COMMUTATIVE_OP_OPT_THRESHOLD
-import org.apache.spark.sql.types.{BooleanType, Decimal, DecimalType, DoubleType, IntegerType, LongType, StringType, StructField, StructType, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{BooleanType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, StringType, StructField, StructType, TimestampNTZType, TimestampType}
 
 class CanonicalizeSuite extends SparkFunSuite {
 
@@ -477,6 +477,31 @@ class CanonicalizeSuite extends SparkFunSuite {
           SQLConf.get.setConfString(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD.key,
             default.toString)
         }
+    }
+  }
+
+  test("SPARK-60178: Do not re-associate floating-point Add/Multiply in canonicalization") {
+    Seq(FloatType, DoubleType).foreach { dt =>
+      val a = AttributeReference("a", dt)()
+      val b = AttributeReference("b", dt)()
+      val c = AttributeReference("c", dt)()
+      Seq(1, 100).foreach { threshold =>
+        val default = SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)
+        SQLConf.get.setConfString(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD.key, threshold.toString)
+        try {
+          Seq[(Expression, Expression) => Expression](
+            Add(_, _), Multiply(_, _)).foreach { op =>
+            // Commutativity of a single operator still holds.
+            assert(op(a, b).semanticEquals(op(b, a)))
+            assert(op(op(a, b), c).semanticEquals(op(c, op(b, a))))
+            // Re-association changes the floating-point result.
+            assert(!op(op(a, b), c).semanticEquals(op(a, op(b, c))))
+            assert(!op(op(a, b), c).semanticEquals(op(op(a, c), b)))
+          }
+        } finally {
+          SQLConf.get.setConfString(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD.key, default.toString)
+        }
+      }
     }
   }
 

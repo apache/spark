@@ -2853,6 +2853,25 @@ class CachedTableSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-60178: a re-associated floating-point query does not reuse the cached result") {
+    withTempView("t") {
+      spark.range(0, 1, 1, 1).selectExpr(
+        "CAST(id AS DOUBLE) + 1.0E16 AS a",
+        "CAST(id AS DOUBLE) - 1.0E16 AS b",
+        "CAST(id AS DOUBLE) + 1.0 AS c").createOrReplaceTempView("t")
+      val cached = sql("SELECT (a + b) + c AS v FROM t")
+      cached.cache()
+      try {
+        checkAnswer(cached, Row(1.0))
+        val reassociated = sql("SELECT a + (b + c) AS v FROM t")
+        assert(cacheManager.lookupCachedData(reassociated).isEmpty)
+        checkAnswer(reassociated, Row(0.0))
+      } finally {
+        cached.unpersist()
+      }
+    }
+  }
+
   private def cacheManager = spark.sharedState.cacheManager
 
   private def pinTable(
