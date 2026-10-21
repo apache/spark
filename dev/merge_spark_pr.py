@@ -1603,6 +1603,11 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref, title=""):
         {"d": ["d", "direct", ""], "p": ["p", "pr"], "s": ["s", "skip"]},
     )
     if choice == "s":
+        # Restore the original checkout and drop the temp PICK_PR_* branches before skipping,
+        # as the continue_maybe decline path does. Otherwise this branch stays checked out and a
+        # later pick of the same ref fails when `git fetch` tries to update the checked-out branch.
+        print("Skipping this branch; the merge continues.")
+        clean_up()
         raise SkipCherryPick()
 
     if choice == "p":
