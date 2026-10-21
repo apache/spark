@@ -448,6 +448,23 @@ case object REPLICATED_FOR_JOIN extends UngroupingOrigin
 case object SPLIT_FOR_ORDERING extends UngroupingOrigin
 
 /**
+ * Why a layout may hold rows whose key it does not declare, and what became of the hash routing
+ * that placed them. `KeyGroupedPartitioner` routes such a row by
+ * `nonNegativeMod(key.hashCode, numPartitions)`, so a marked layout co-locates whole keys, never a
+ * subset of their columns. Non-identity regrouping and `toGrouped` lose routing, as does
+ * concatenation with duplicate keys or multiple nonempty legs. Combining different origins also
+ * records `ROUTING_LOST`.
+ * Key-rewriting projections and reductions cannot retain a marked keyed claim.
+ */
+sealed trait UnknownKeysOrigin
+
+// An undeclared row sits at `nonNegativeMod(key.hashCode, numPartitions)`; the relation holds.
+case object HASH_ROUTING extends UnknownKeysOrigin
+
+// The layout no longer guarantees the hash-index relation; full-key grouping remains possible.
+case object ROUTING_LOST extends UnknownKeysOrigin
+
+/**
  * The physical layout of the partitions a [[KeyedPartitioning]] describes, which is everything
  * about them except the expressions naming them.
  *
@@ -473,34 +490,33 @@ case object SPLIT_FOR_ORDERING extends UngroupingOrigin
  *                    partitioning this layout was derived from onto the same key, so one key here
  *                    can stand for several of the original ones. Sticky. See
  *                    [[KeyedPartitioning]]'s "Key Collapse" for what it gates and how it travels.
- * @param mayContainUnknownPartitionKeys Whether the data may contain rows whose partition key is
- *                                 not among the declared `partitionKeys`. `KeyGroupedPartitioner`
- *                                 routes such rows by a deterministic hash when a side is
- *                                 re-shuffled onto this partitioning (see
- *                                 `KeyedShuffleSpec.createPartitioning`), so co-location holds
- *                                 for whole keys only: two marked partitionings declaring the
- *                                 same keys in the same order and using the same partition
- *                                 function per position still pair (equal undeclared keys hash
- *                                 to the same partition), but a row of an undeclared key sits in
- *                                 the partition of some other declared key and need not be
- *                                 co-located with rows sharing only a subset of its columns.
- *                                 `satisfies` and `KeyedShuffleSpec.areKeysCompatible` therefore
- *                                 accept a marked partitioning only for full-key clustering,
- *                                 never for a subset of its partition columns and never for a
- *                                 global ordering across several partitions. Two carry rules:
- *                                 (1) a node that changes the declared key set must drop the
- *                                 keyed partitioning, whether it coarsens it (a key-dropping
- *                                 projection, a key-changing reduction, a join-key projection)
- *                                 or expands it over a marked leg (a union, where another leg
- *                                 may declare exactly the key that leg holds out-of-set);
- *                                 (2) marker agreement comes free with the layout, since the
- *                                 members of a [[PartitioningCollection]] share it by reference
- *                                 and `fromPartitionings` merges one canonical layout, so
- *                                 consumers may read any member. `ShuffledJoin`'s `InnerLike`
- *                                 arm, the only site that meets a marked input with an unmarked
- *                                 one, clears the markers first. That is precision, not the
- *                                 guarantee: without it the merge would spread the spurious
- *                                 marker onto the accurate side.
+ * @param unknownKeysOrigin Whether the data may contain rows whose partition key is not among the
+ *                           declared `partitionKeys`, and whether the layout still says where they
+ *                           sit. `None` when every row's key is declared. See
+ *                           [[UnknownKeysOrigin]]. `KeyGroupedPartitioner` routes such rows by a
+ *                           deterministic hash when a side is re-shuffled onto this partitioning
+ *                           (see `KeyedShuffleSpec.createPartitioning`), so co-location holds for
+ *                           whole keys only: two marked partitionings declaring the same keys in
+ *                           the same order and still routing by that hash still pair (equal
+ *                           undeclared keys hash to the same partition), but a row of an undeclared
+ *                           key sits in the partition of some other declared key and need not be
+ *                           co-located with rows sharing only a subset of its columns.
+ *                           `satisfies` and `KeyedShuffleSpec` therefore accept a marked
+ *                           partitioning only for full-key clustering, never for a subset of its
+ *                           partition columns and never for a global ordering across several
+ *                           partitions. Two carry rules:
+ *                           (1) key-rewriting projections and reductions drop the marked claim.
+ *                           A union retains it only when the legs prove full-key grouping remains
+ *                           possible, without adding keys beyond the marked declaration. Hash
+ *                           routing survives only a grouped concatenation with at most one nonempty
+ *                           leg; other concatenations and non-identity regrouping lose routing;
+ *                           (2) state agreement comes free with the layout, since the members of a
+ *                           [[PartitioningCollection]] share it by reference and
+ *                           `fromPartitionings` merges one canonical layout, so consumers may read
+ *                           any member. `ShuffledJoin`'s `InnerLike` arm clears the marker when
+ *                           marked and unmarked inputs meet. That is precision, not the guarantee:
+ *                           without it the merge would spread the spurious state onto the accurate
+ *                           side.
  * @param ungroupingOrigin Why the keys repeat on purpose, when a producer built them that way
  *                         rather than leaving them for the grouping node that would settle them.
  *                         A clustering refuses an ungrouped layout whatever this says: on its
@@ -516,7 +532,7 @@ case class KeyLayout(
     dataTypes: Seq[DataType],
     isGrouped: Boolean,
     isCollapsed: Boolean,
-    mayContainUnknownPartitionKeys: Boolean = false,
+    unknownKeysOrigin: Option[UnknownKeysOrigin] = None,
     ungroupingOrigin: Option[UngroupingOrigin] = None) {
 
   // The rows carry the types they are compared at, so the pair is checked against itself rather
@@ -525,6 +541,19 @@ case class KeyLayout(
   require(partitionKeys.isEmpty || partitionKeys.head.dataTypes == dataTypes,
     s"A KeyLayout's dataTypes ($dataTypes) must be the types its keys are compared at " +
       s"(${partitionKeys.head.dataTypes})")
+
+  def mayContainUnknownPartitionKeys: Boolean = unknownKeysOrigin.isDefined
+
+  /**
+   * Whether an undeclared row still sits at `nonNegativeMod(key.hashCode, numPartitions)`. A
+   * marked layout answers true only while its key list is the one the data was routed over; every
+   * carrier that changes the list records `ROUTING_LOST` instead.
+   */
+  def unknownKeysRouted: Boolean = unknownKeysOrigin.forall(_ == HASH_ROUTING)
+
+  /** The unknown-keys state after a change that moved the keys, which gives the routing up. */
+  def unknownKeysRoutingLost: Option[UnknownKeysOrigin] =
+    unknownKeysOrigin.map(_ => ROUTING_LOST)
 
   /**
    * Whether `other` describes the same partition keys as this layout, which is the question every
@@ -707,6 +736,8 @@ case class KeyedPartitioning(
   def isGrouped: Boolean = layout.isGrouped
   def isCollapsed: Boolean = layout.isCollapsed
   def mayContainUnknownPartitionKeys: Boolean = layout.mayContainUnknownPartitionKeys
+  def unknownKeysOrigin: Option[UnknownKeysOrigin] = layout.unknownKeysOrigin
+  def unknownKeysRouted: Boolean = layout.unknownKeysRouted
   def ungroupingOrigin: Option[UngroupingOrigin] = layout.ungroupingOrigin
 
   /** This partitioning over a changed layout, e.g. `withLayout(_.copy(isGrouped = false))`. */
@@ -726,8 +757,8 @@ case class KeyedPartitioning(
    * string is the only place a reader sees why a marked partitioning still shuffles.
    */
   override protected def stringArgs: Iterator[Any] =
-    Iterator(expressions, partitionKeys, isGrouped, isCollapsed,
-      mayContainUnknownPartitionKeys) ++ ungroupingOrigin
+    Iterator(expressions, partitionKeys, isGrouped, isCollapsed) ++ unknownKeysOrigin ++
+      ungroupingOrigin
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): KeyedPartitioning =
@@ -783,8 +814,8 @@ case class KeyedPartitioning(
    * Projects this partitioning onto the key positions in `positions`, whose order becomes the order
    * of the projected expressions and key fields. The projected `isGrouped` and `isCollapsed` are
    * computed together, because dropping a position can map keys that were distinct here onto the
-   * same key. Keeping every position changes no key, so both answers are inherited as they are,
-   * with no pass over the keys. `GroupPartitionsExec` decides the same two answers from the key
+   * same key. Keeping every position in its original order returns this partitioning without
+   * scanning keys. `GroupPartitionsExec` decides the same two answers from the key
    * groups it keeps, so it does not use this.
    */
   def project(positions: Seq[Int]): KeyedPartitioning = {
@@ -810,9 +841,10 @@ case class KeyedPartitioning(
         }
       }
       // A `copy` of the layout rather than a fresh one, so every field this method does not decide
-      // is carried, including the unknown-keys marker and anything the layout grows later. A
-      // projection that coarsens the declared key set cannot keep a marked claim, and
-      // `createShuffleSpec` refuses that case before it gets here, but this does not depend on it.
+      // is carried, including anything the layout grows later. A marked projection cannot keep
+      // co-location: an undeclared row can project to a different key than its partition's label.
+      assert(!mayContainUnknownPartitionKeys,
+        "A key-dropping projection cannot be applied to a layout that may hold undeclared rows")
       copy(
         expressions = positions.map(expressions),
         layout = layout.copy(
@@ -828,7 +860,8 @@ case class KeyedPartitioning(
     val uniqueKeys = if (isGrouped) partitionKeys else partitionKeys.distinct
     // The keys are unique afterwards, so a reason to be ungrouped has been spent.
     withLayout(_.copy(partitionKeys = uniqueKeys.sorted(keyOrdering), isGrouped = true,
-      ungroupingOrigin = None))
+      ungroupingOrigin = None,
+      unknownKeysOrigin = layout.unknownKeysRoutingLost))
   }
 
   /**
@@ -1129,10 +1162,9 @@ case class KeyedPartitioning(
       val joinKeyPositions = result.keyPositions.map(_.nonEmpty).zipWithIndex.filter(_._1).map(_._2)
       // A marked claim is never projected. The claim says the undeclared rows sit at
       // `hash(key) % numPartitions` over *these* keys in *this* order, and both halves of the
-      // projection below break it: narrowing coarsens the declared set, and `toGrouped` sorts it,
-      // which sends a consumer's undeclared rows where this side does not hold them. Producing
-      // either would also need a `GroupPartitionsExec` on this side, and that node gives the keyed
-      // claim up rather than perform a non-identity regrouping of a marked layout.
+      // projection below can break it: narrowing loses co-location, and `toGrouped` sorts it,
+      // which can change undeclared rows' partition indices. Plain regrouping retains clustering
+      // but loses routing, so its result cannot be a shuffle template.
       //
       // What the unprojected spec is good for depends on the layout. Where every partition
       // expression covers a clustering key, so the projection would only have re-sorted, the spec
@@ -1202,24 +1234,49 @@ object KeyedPartitioning {
   }
 
   /**
+   * The unknown-keys state a layout built from several members carries: the marked members have to
+   * agree, since one layout cannot carry two descriptions of where an undeclared row sits, and a
+   * disagreement leaves `ROUTING_LOST`. An unmarked member takes no part. Asked of the members'
+   * states, so a new origin joins without this changing.
+   */
+  def combine(states: Seq[Option[UnknownKeysOrigin]]): Option[UnknownKeysOrigin] =
+    states.flatten.distinct match {
+      case Seq() => None
+      case Seq(one) => Some(one)
+      case _ => Some(ROUTING_LOST)
+    }
+
+  /**
    * Concatenates partitionings that agree on their expressions, which is what a `UnionExec` does to
    * its children's partitions. The result reports one key per output partition, so its keys are the
    * children's keys in child order.
    *
    * Keys repeating across children is not a collapse. Only a child's own collapse carries over,
    * since such a key still stands for several finer-grained ones in the concatenation.
+   *
+   * One marked child marks the result. Hash routing survives only when the combined origin is
+   * `HASH_ROUTING`, the result is grouped, and at most one leg is nonempty. Other marked
+   * concatenations lose routing: each leg routed undeclared rows over its own partition count.
    */
   def concat(kps: Seq[KeyedPartitioning]): KeyedPartitioning = {
     val concatenatedKeys = kps.flatMap(_.partitionKeys)
     val ungroupingOrigin = PartitioningCollection.concatUngrouping(kps.map(_.ungroupingOrigin))
+    // A child that has duplicates of its own puts them in the concatenation too, which answers
+    // this without walking the keys.
+    val grouped = kps.forall(_.isGrouped) &&
+      concatenatedKeys.distinct.length == concatenatedKeys.length
+    // Only a grouped concatenation, where one marked leg holds every partition, keeps the routing.
+    val routing = combine(kps.map(_.layout.unknownKeysOrigin)) match {
+      case Some(HASH_ROUTING) if !grouped || kps.count(_.numPartitions > 0) > 1 =>
+        Some(ROUTING_LOST)
+      case other => other
+    }
     kps.head.withLayout(_.copy(
       ungroupingOrigin = ungroupingOrigin,
       partitionKeys = concatenatedKeys,
-      // A child that has duplicates of its own puts them in the concatenation too, which answers
-      // this without walking the keys.
-      isGrouped = kps.forall(_.isGrouped) &&
-        concatenatedKeys.distinct.length == concatenatedKeys.length,
-      isCollapsed = kps.exists(_.isCollapsed)))
+      isGrouped = grouped,
+      isCollapsed = kps.exists(_.isCollapsed),
+      unknownKeysOrigin = routing))
   }
 
   def supportsExpressions(expressions: Seq[Expression]): Boolean = {
@@ -1624,13 +1681,12 @@ object PartitioningCollection {
   }
 
   /**
-   * The uniform `mayContainUnknownPartitionKeys` marker of `p`'s keyed members, read from its
-   * first keyed member, the same one `checkKeyedPartitioningInvariant` compares against.
-   * `None` when `p` holds no [[KeyedPartitioning]] at all, distinct from the `Some(false)` of
-   * an unmarked keyed one: there is no claim there to answer about.
+   * The uniform `unknownKeysOrigin` state of `p`'s keyed members, read from its first keyed
+   * member, the same one `checkKeyedPartitioningInvariant` compares against. `None` when `p` holds
+   * no [[KeyedPartitioning]], and when its keyed member holds no undeclared rows.
    */
-  private[sql] def keyedMarkerOf(p: Partitioning): Option[Boolean] =
-    representativeOf(p).map(_.mayContainUnknownPartitionKeys)
+  private[sql] def keyedUnknownKeysOf(p: Partitioning): Option[UnknownKeysOrigin] =
+    representativeOf(p).flatMap(_.layout.unknownKeysOrigin)
 
   /**
    * Builds a [[PartitioningCollection]], unifying the [[KeyLayout]] reference across all
@@ -1641,17 +1697,19 @@ object PartitioningCollection {
    * Note: this can't be implemented with `TreeNode.transform`.
    */
   def fromPartitionings(partitionings: Seq[Partitioning]): PartitioningCollection = {
-    // See the class doc for why the flags are normalized by OR rather than required to agree. One
+    // See the class doc for why the flags are normalized rather than required to agree. One
     // representative per member is enough, because every collection agrees internally by this same
     // construction, and only a member that disagrees is rebuilt.
     val representatives = partitionings.flatMap(representativeOf)
     val anyCollapsed = representatives.exists(_.isCollapsed)
-    val anyUnknownKeys = representatives.exists(_.mayContainUnknownPartitionKeys)
+    // The weakest state wins: any member that may hold undeclared rows marks the joint layout,
+    // and one that lost the routing leaves it unable to say where they sit.
+    val anyRouting = KeyedPartitioning.combine(representatives.map(_.layout.unknownKeysOrigin))
 
-    // The canonical layout is the first one that already agrees with the OR'd flags, so the members
-    // that agree keep their instance and only the ones that disagree are rebuilt. Anchoring on the
-    // first representative instead would push *every* member off the `eq` path whenever that one
-    // happened to need a flag fixed, since no existing layout is `eq` a fresh copy.
+    // The canonical layout is the first one that already agrees with the normalized flags, so the
+    // members that agree keep their instance and only the ones that disagree are rebuilt. Anchoring
+    // on the first representative instead would push *every* member off the `eq` path whenever that
+    // one happened to need a flag fixed, since no existing layout is `eq` a fresh copy.
     //
     // A partitioning with no `KeyedPartitioning` in it has nothing to normalize, and one that
     // already holds the canonical layout is returned as it is. That is what keeps repeated
@@ -1663,10 +1721,10 @@ object PartitioningCollection {
       PartitioningCollection.concatUngrouping(representatives.map(_.layout.ungroupingOrigin))
     val canonicalLayout = representatives.map(_.layout)
       .find(l => l.isCollapsed == anyCollapsed &&
-        l.mayContainUnknownPartitionKeys == anyUnknownKeys &&
+        l.unknownKeysOrigin == anyRouting &&
         l.ungroupingOrigin == concatUngrouping)
       .orElse(representatives.headOption.map(_.layout.copy(
-        isCollapsed = anyCollapsed, mayContainUnknownPartitionKeys = anyUnknownKeys,
+        isCollapsed = anyCollapsed, unknownKeysOrigin = anyRouting,
         ungroupingOrigin = concatUngrouping)))
       .orNull
 
@@ -2270,20 +2328,22 @@ case class KeyedShuffleSpec(
       // their order: the out-of-set keys hash to the same-index partition on both sides, and a
       // `GroupPartitionsExec` regrouping re-labels each partition by that side's declared key, so
       // a differing declared order would push the out-of-set keys into different output
-      // partitions and lose their matches.
+      // partitions and lose their matches. They also have to still route by that hash: a side a
+      // regrouping moved off it reports `ROUTING_LOST`, and two such sides cannot pair this way.
       if (unknownKeys) {
         // Comparing the declared keys also asks that neither side's keys were reduced, since
         // reduced keys are in a space neither expression describes. A marked layout never carries
         // them: `canCreatePartitioning` requires `expressionsDescribeKeys` before
         // `KeyedShuffleSpec.createPartitioning` can mark anything, a `GroupPartitionsExec` that
-        // reduces is not an identity regrouping and so gives the keyed claim up, and
+        // reduces rewrites keys and so gives the keyed claim up, and
         // `ShuffledJoin.clearUnknownPartitionKeys` strips the marker a `PartitioningCollection`
         // would otherwise OR onto a merged layout. Asked rather than asserted, so that a producer
         // this misses costs a shuffle rather than the query.
         partitioning.expressionsDescribeKeys && other.partitioning.expressionsDescribeKeys && {
           if (partitioning.mayContainUnknownPartitionKeys &&
               other.partitioning.mayContainUnknownPartitionKeys) {
-            partitioning.partitionKeys == other.partitioning.partitionKeys
+            partitioning.unknownKeysRouted && other.partitioning.unknownKeysRouted &&
+              partitioning.partitionKeys == other.partitioning.partitionKeys
           } else if (partitioning.mayContainUnknownPartitionKeys) {
             val declared = partitioning.partitionKeys.toSet
             other.partitioning.partitionKeys.forall(declared.contains)
@@ -2494,6 +2554,9 @@ case class KeyedShuffleSpec(
       // satisfy the distribution in a `GroupPartitionsExec` before it builds any spec -- so do not
       // read this clause as redundant.
       partitioning.isGrouped &&
+      // The sibling laid out here routes its undeclared rows by `hash % numPartitions`, so it
+      // lands where this side's own undeclared rows sit only while this layout still does too.
+      partitioning.unknownKeysRouted &&
       // Every partition expression must map to a clustering key, otherwise `createPartitioning`
       // cannot rewrite it. This also keeps the unprojected spec returned by `createShuffleSpec`
       // for a marked narrowing projection from being chosen as the best spec.
@@ -2537,7 +2600,7 @@ case class KeyedShuffleSpec(
     // One `copy`, so no intermediate node is built and discarded.
     partitioning.copy(
       expressions = newExpressions,
-      layout = partitioning.layout.copy(mayContainUnknownPartitionKeys = true))
+      layout = partitioning.layout.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
   }
 }
 

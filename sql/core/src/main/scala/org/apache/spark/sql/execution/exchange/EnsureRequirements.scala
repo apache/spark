@@ -657,10 +657,9 @@ case class EnsureRequirements(
       l.joinKeyPositions.isEmpty && r.joinKeyPositions.isEmpty
 
     // Whether the merged key list below may be narrowed to what the join type allows. Not when
-    // either side is marked. Narrowing drops groups that side holds, so its regrouping stops being
-    // the identity, and `GroupPartitionsExec` gives up a marked claim it does not regroup
-    // identically. That costs the pair its join at the gate at the end of this method, which is a
-    // poor trade for pruning a few groups.
+    // either side is marked. Narrowing drops groups that side holds, so the expected-key alignment
+    // is non-identity and `GroupPartitionsExec` gives up the marked claim. That costs the pair its
+    // join at the final gate, a poor trade for pruning a few groups.
     //
     // Narrowing is the only thing here that can shrink the list below a marked side's own keys: the
     // merging arms take the union, and `KeyedShuffleSpec.areKeysCompatible` pairs a marked layout
@@ -938,9 +937,10 @@ case class EnsureRequirements(
 
     // The pairing is only worth committing to if both children still declare the same aligned key
     // sequence once the grouping has been pushed into them. A `GroupPartitionsExec` gives up its
-    // keyed claim when it turns out to regroup a layout that pins undeclared rows to
-    // `hash(key) % numPartitions` (see `KeyLayout.mayContainUnknownPartitionKeys`), and only the
-    // node knows the permutation it performs, so that answer arrives after the pairing was chosen.
+    // keyed claim when the grouping re-labels the keys or replicates them into expected slots,
+    // which a layout holding undeclared rows cannot survive (see `KeyLayout.unknownKeysOrigin`),
+    // and only the node knows the permutation it performs, so that answer arrives after the pairing
+    // was chosen.
     // Asking before returning is what keeps the join from skipping both shuffles for a child that
     // no longer satisfies its distribution, which is a plan `ValidateRequirements` rejects and
     // every AQE rule that needs a valid plan then refuses to touch.
@@ -952,10 +952,8 @@ case class EnsureRequirements(
     // `KeyLayout.describesSameKeys` asks exactly that, and it compares the key types as well as
     // the rows.
     //
-    // Both routes to `newLeft`/`newRight` build, so both are asked. On the base this was the push
-    // branch's question alone, because the other route left the children exactly as the pairing
-    // read them. Here `groupIfNeeded` can wrap a side that is not grouped, and that node gives up
-    // the claim for the same reason the pushed one does.
+    // Check both pushed alignment and plain grouping. Plain grouping retains a marked keyed claim
+    // but loses routing; pushed key rewrites or non-identity expected alignment drop the claim.
     val (newLeft, newRight) =
       pushed.getOrElse((groupIfNeeded(rawLeft), groupIfNeeded(rawRight)))
     def declaredLayout(plan: SparkPlan): Option[KeyLayout] =

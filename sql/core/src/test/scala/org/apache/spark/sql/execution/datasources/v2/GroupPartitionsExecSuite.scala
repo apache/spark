@@ -22,7 +22,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, CodegenObjectFactoryMode, SortOrder, TransformExpression}
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, KeyedPartitioning, KeyReducer, OrderedDistribution, Partitioning, PartitioningCollection, REPLICATED_FOR_JOIN, SPLIT_FOR_JOIN, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, HASH_ROUTING, KeyedPartitioning, KeyedShuffleSpec, KeyReducer, OrderedDistribution, Partitioning, PartitioningCollection, REPLICATED_FOR_JOIN, SPLIT_FOR_JOIN, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.date
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, BucketReducer, DaysFunctionWithToYearsReducerWithLongResult, DaysToYearsReducerWithLongResult, Reducer, YearsFunction, YearsFunctionWithToYearsReducerWithLongResult}
@@ -370,35 +370,60 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     // unknown-key hash-routing relationship intact, so the marker rides the transform.
     val child = DummySparkPlan(
       outputPartitioning = KeyedPartitioning(Seq(exprA), Seq(row(1), row(2)))
-        .withLayout(_.copy(mayContainUnknownPartitionKeys = true)))
+        .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING))))
     val out = GroupPartitionsExec(child)
       .outputPartitioning.asInstanceOf[KeyedPartitioning]
     assert(out.mayContainUnknownPartitionKeys, "the marker must survive identity grouping")
+    assert(out.unknownKeysRouted, "an identity grouping leaves the hash routing in place")
   }
 
-  test("SPARK-59050: non-identity grouping without reducers drops the unknown-keyed claim") {
-    // A regrouping that reorders or coalesces the partitions moves the rows an unknown-key claim
-    // pins to hash(key) % numPartitions, so the claim cannot survive; clearing only the marker
-    // would misreport the undeclared rows that remain.
+  test("SPARK-59050: non-identity grouping keeps the clustering claim and loses the routing") {
+    // A regrouping that reorders or coalesces the partitions leaves every key's rows in the group
+    // named for it, which is all a clustering reads, so the keyed claim survives; it only moves an
+    // undeclared row off `hash(key) % numPartitions`, which `ROUTING_LOST` records and the two
+    // routing readers refuse.
+    def markedKp(keys: Seq[InternalRow]): KeyedPartitioning =
+      KeyedPartitioning(Seq(exprA), keys)
+        .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
+    def markedChild(keys: Seq[InternalRow]): DummySparkPlan =
+      DummySparkPlan(outputPartitioning = markedKp(keys))
+
     // Coalesce: keys [1, 2, 1] merge the two key-1 partitions.
-    val coalesced = DummySparkPlan(
-      outputPartitioning = KeyedPartitioning(Seq(exprA), Seq(row(1), row(2), row(1)))
-        .withLayout(_.copy(mayContainUnknownPartitionKeys = true)))
-    GroupPartitionsExec(coalesced).outputPartitioning match {
-      case u: UnknownPartitioning =>
-        assert(u.numPartitions === 2, "the give-up count must match the physical partitions")
-      case other =>
-        fail(s"expected the unknown-keyed claim to be dropped on coalesce, got $other")
-    }
+    val coalesced = GroupPartitionsExec(markedChild(Seq(row(1), row(2), row(1))))
+    val coalescedOut = coalesced.outputPartitioning.asInstanceOf[KeyedPartitioning]
+    assert(coalescedOut.isGrouped && coalescedOut.numPartitions === 2)
+    assert(coalescedOut.mayContainUnknownPartitionKeys, "the undeclared rows remain")
+    assert(!coalescedOut.unknownKeysRouted, "the regrouping moved them off the hash")
+
     // Reorder: keys [2, 1] sort to [1, 2], swapping partitions 0 and 1.
-    val reordered = DummySparkPlan(
-      outputPartitioning = KeyedPartitioning(Seq(exprA), Seq(row(2), row(1)))
-        .withLayout(_.copy(mayContainUnknownPartitionKeys = true)))
-    GroupPartitionsExec(reordered).outputPartitioning match {
-      case u: UnknownPartitioning =>
-        assert(u.numPartitions === 2, "the give-up count must match the physical partitions")
-      case other =>
-        fail(s"expected the unknown-keyed claim to be dropped on reorder, got $other")
+    val reordered = GroupPartitionsExec(markedChild(Seq(row(2), row(1))))
+    val reorderedOut = reordered.outputPartitioning.asInstanceOf[KeyedPartitioning]
+    assert(reorderedOut.isGrouped && reorderedOut.numPartitions === 2)
+    assert(reorderedOut.mayContainUnknownPartitionKeys && !reorderedOut.unknownKeysRouted)
+
+    // The routing readers refuse the reported layout: it cannot be the template a sibling is
+    // shuffled onto, nor pair index by index with another marked side. A routed layout of the same
+    // shape passes both, which is what makes these assertions discriminating.
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      val distribution = ClusteredDistribution(Seq(exprA))
+      val routed = markedKp(Seq(row(1), row(2)))
+      val routedSpec = KeyedShuffleSpec(routed, distribution)
+      assert(routedSpec.canCreatePartitioning, "control: a routed layout can serve as a template")
+      assert(!KeyedShuffleSpec(coalescedOut, distribution).canCreatePartitioning,
+        "a layout whose routing is lost cannot")
+
+      assert(routedSpec.areKeysCompatible(
+        KeyedShuffleSpec(routed.copy(), distribution), allowReduce = false),
+        "control: two routed sides with the same keys pair")
+      assert(!KeyedShuffleSpec(coalescedOut, distribution).areKeysCompatible(
+        routedSpec, allowReduce = false),
+        "an unrouted side cannot pair index by index with another marked side")
+      assert(!routedSpec.areKeysCompatible(
+        KeyedShuffleSpec(coalescedOut, distribution), allowReduce = false),
+        "a routed side must refuse a lost partner too")
+      assert(!KeyedShuffleSpec(coalescedOut, distribution).areKeysCompatible(
+        KeyedShuffleSpec(coalescedOut, distribution), allowReduce = false),
+        "two lost sides cannot pair either")
     }
   }
 
@@ -410,7 +435,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     // promise hash(key) % 2. The count check catches what the per-group check cannot.
     val child = DummySparkPlan(
       outputPartitioning = KeyedPartitioning(Seq(exprA), Seq(row(1), row(2), row(3)))
-        .withLayout(_.copy(mayContainUnknownPartitionKeys = true)))
+        .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING))))
     def keyOf(a: Int): InternalRowComparableWrapper =
       InternalRowComparableWrapper(row(a), Seq(exprA))
     val gpe = GroupPartitionsExec(child,
@@ -447,7 +472,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     val partitionKeys = Seq(row(1), row(2), row(3))
     val child = DummySparkPlan(
       outputPartitioning = KeyedPartitioning(Seq(exprA), partitionKeys)
-        .withLayout(_.copy(mayContainUnknownPartitionKeys = true)))
+        .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING))))
     val gpe = GroupPartitionsExec(child, reducers = Some(Seq(Some(reducer))))
 
     assert(gpe.groupedPartitions.size === 2, "mod 2 collapses keys 1 and 3")
@@ -475,7 +500,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     // a marked layout, so these shapes are pinned here directly.
     val child = DummySparkPlan(
       outputPartitioning = KeyedPartitioning(Seq(exprA, exprB), Seq(row(1, 10), row(2, 20)))
-        .withLayout(_.copy(mayContainUnknownPartitionKeys = true)))
+        .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING))))
 
     // Reducer slots: `Some(Seq(None, None))` leaves every key and every index unchanged.
     val reduced = GroupPartitionsExec(child, reducers = Some(Seq(None, None)))
@@ -570,6 +595,27 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
       val ordering = GroupPartitionsExec(child).outputOrdering
       assert(ordering.length === 1)
       assert(ordering.head.child === exprA)
+    }
+  }
+
+  test("SPARK-60277: marked layouts preserve ordering only without concatenation") {
+    val ordering = Seq(SortOrder(exprA, Ascending), SortOrder(exprC, Ascending))
+    def child(keys: Seq[InternalRow]): DummyLeafSparkPlan = DummyLeafSparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(exprA), keys)
+        .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING))),
+      outputOrdering = ordering)
+
+    val unmerged = GroupPartitionsExec(child(Seq(row(1), row(2))))
+    assert(unmerged.groupedPartitions.forall(_._2.size == 1))
+    assert(unmerged.outputOrdering === ordering)
+
+    val repeated = child(Seq(row(1), row(2), row(1)))
+    withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
+      val concatenated = GroupPartitionsExec(repeated)
+      assert(concatenated.groupedPartitions.exists(_._2.size > 1))
+      assert(concatenated.outputOrdering.isEmpty)
+      assert(GroupPartitionsExec(repeated, sortedMergeOrdering = Some(ordering))
+        .outputOrdering === ordering)
     }
   }
 
