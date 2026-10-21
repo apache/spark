@@ -2409,6 +2409,12 @@ case class KeyedShuffleSpec(
    */
   def reducersBothWays(other: KeyedShuffleSpec)
       : (Option[Seq[Option[KeyReducer]]], Option[Seq[Option[KeyReducer]]]) = {
+    // `canReduceKeys` is the same condition `areKeysCompatible` consults: when it is false, for
+    // example under partial clustering, only same-function pairs are admitted, and those already
+    // share a key space, so neither side needs a reducer. Deriving one anyway lets a function that
+    // reduces itself merge keys that were never meant to merge, so the spread side's expected
+    // counts no longer match the groups it builds (SPARK-59234).
+    if (!canReduceKeys) return (None, None)
     val results: Seq[(Option[KeyReducer], Option[KeyReducer])] =
       partitioning.expressions.zip(other.partitioning.expressions).map {
       // Keys an earlier join already reduced live in a key space that neither expression
