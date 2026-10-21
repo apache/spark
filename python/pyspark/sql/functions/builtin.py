@@ -12839,6 +12839,7 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     col : :class:`~pyspark.sql.Column` or column name
         column values to convert.
         A column that evaluates to a string, date, timestamp, or numeric.
+        If `format` is specified, a numeric input is cast to a string and parsed with `format`.
     format: literal string, optional
         format to use to convert timestamp values.
         A column that evaluates to a string.
@@ -12993,6 +12994,7 @@ def try_to_timestamp(col: "ColumnOrName", format: Optional["ColumnOrName"] = Non
     col : :class:`~pyspark.sql.Column` or column name
         column values to convert.
         A column that evaluates to a string, date, timestamp, or numeric.
+        If `format` is specified, a numeric input is cast to a string and parsed with `format`.
     format: literal string, optional
         format to use to convert timestamp values.
         A column that evaluates to a string.
@@ -14748,6 +14750,7 @@ def to_timestamp_ltz(
     timestamp : :class:`~pyspark.sql.Column` or column name
         Input column or strings.
         A column that evaluates to a string, date, timestamp, or numeric.
+        If `format` is specified, a numeric input is cast to a string and parsed with `format`.
     format : :class:`~pyspark.sql.Column` or column name, optional
         format to use to convert type `TimestampType` timestamp values.
         A column that evaluates to a string.
