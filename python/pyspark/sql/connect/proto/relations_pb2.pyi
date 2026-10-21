@@ -3507,9 +3507,10 @@ class BinBy(google.protobuf.message.Message):
         """(Required) The input relation."""
     @property
     def range_start(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
-        """(Required) Timestamp columns that define the half-open input range."""
+        """(Required) Inclusive range start timestamp."""
     @property
-    def range_end(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression: ...
+    def range_end(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
+        """(Required) Exclusive range end, with the same timestamp type as range_start."""
     @property
     def bin_width(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
         """(Required) A positive, constant day-time interval expression."""
@@ -3524,9 +3525,11 @@ class BinBy(google.protobuf.message.Message):
     ]:
         """(Required) At least one FLOAT or DOUBLE column to scale."""
     bin_start_name: builtins.str
-    """(Optional) Names for the three appended output columns."""
+    """(Optional) Name for the appended bin-start column. Defaults to bin_start."""
     bin_end_name: builtins.str
+    """(Optional) Name for the appended bin-end column. Defaults to bin_end."""
     bin_distribute_ratio_name: builtins.str
+    """(Optional) Name for the appended overlap-ratio column. Defaults to bin_distribute_ratio."""
     def __init__(
         self,
         *,

@@ -1722,10 +1722,10 @@ abstract class Dataset[T] extends Serializable {
       rangeEnd: Column,
       binWidth: Column,
       distributeUniform: Array[Column],
-      alignTo: Column = null,
-      binStartName: String = null,
-      binEndName: String = null,
-      binDistributeRatioName: String = null): DataFrame
+      alignTo: Column,
+      binStartName: String,
+      binEndName: String,
+      binDistributeRatioName: String): DataFrame
 
   /**
    * Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns

@@ -714,6 +714,7 @@ class BinBySuite extends QueryTest with SharedSparkSession {
         rangeEnd = input("end"),
         binWidth = width,
         distributeUniform = Array(input("value")),
+        alignTo = null,
         binStartName = "bin.start",
         binEndName = "bin`end",
         binDistributeRatioName = "ratio")
@@ -740,6 +741,7 @@ class BinBySuite extends QueryTest with SharedSparkSession {
       checkAnswer(result.select("value", "bin_start", "bin_end", "bin_distribute_ratio"), Seq(
         Row(50.0, tsAt("2024-01-01 00:00:00"), tsAt("2024-01-01 00:05:00"), 0.5),
         Row(50.0, tsAt("2024-01-01 00:05:00"), tsAt("2024-01-01 00:10:00"), 0.5)))
+      checkAnswer(renamed, result)
     }
   }
 

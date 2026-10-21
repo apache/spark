@@ -975,8 +975,10 @@ message BinBy {
   // (Required) The input relation.
   Relation input = 1;
 
-  // (Required) Timestamp columns that define the half-open input range.
+  // (Required) Inclusive range start timestamp.
   Expression range_start = 2;
+
+  // (Required) Exclusive range end, with the same timestamp type as range_start.
   Expression range_end = 3;
 
   // (Required) A positive, constant day-time interval expression.
@@ -988,9 +990,13 @@ message BinBy {
   // (Required) At least one FLOAT or DOUBLE column to scale.
   repeated Expression distribute_uniform = 6;
 
-  // (Optional) Names for the three appended output columns.
+  // (Optional) Name for the appended bin-start column. Defaults to bin_start.
   optional string bin_start_name = 7;
+
+  // (Optional) Name for the appended bin-end column. Defaults to bin_end.
   optional string bin_end_name = 8;
+
+  // (Optional) Name for the appended overlap-ratio column. Defaults to bin_distribute_ratio.
   optional string bin_distribute_ratio_name = 9;
 }
 

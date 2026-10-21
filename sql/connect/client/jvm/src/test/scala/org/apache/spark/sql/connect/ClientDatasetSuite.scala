@@ -210,6 +210,7 @@ class ClientDatasetSuite extends ConnectFunSuite {
         rangeEnd = end,
         binWidth = binWidth,
         distributeUniform = values,
+        alignTo = null,
         binStartName = "bin.start",
         binEndName = "bin`end",
         binDistributeRatioName = "")
@@ -219,6 +220,7 @@ class ClientDatasetSuite extends ConnectFunSuite {
     assert(renamed.getBinStartName == "bin.start")
     assert(renamed.getBinEndName == "bin`end")
     assert(renamed.hasBinDistributeRatioName && renamed.getBinDistributeRatioName.isEmpty)
+    assert(!renamed.hasAlignTo)
 
     val origin = lit(null).cast("timestamp")
     val aligned = df
