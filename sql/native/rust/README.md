@@ -30,10 +30,11 @@ part of Maven/SBT and introduces no Rust requirement for building Spark. This is
 an API prototype, not a published crate or a compatibility commitment.
 
 The [Range connector][range] is a separate workspace member under
-`examples/src/main/rust/native-data-source`, with a C integration test, packaging
-helper, and Spark smoke script. The [file sink example][sink] is a separate write-only connector. All crates
-share this directory's lockfile and `target` directory. Cargo commands select the SDK by default; use `--workspace`
-to include the example.
+`examples/src/main/rust/native-data-source`, with a C integration test, packaging helper, and Spark
+smoke script. The [file sink example][sink] is a separate write-only connector, and the [Parquet
+example][parquet] a batch-read connector on the Parquet reader of arrow-rs. All crates share this
+directory's lockfile and `target` directory. Cargo commands select the SDK by default; use
+`--workspace` to include the examples.
 
 ## Connector API and lifecycle
 
@@ -446,6 +447,11 @@ Spark smoke script checks append, overwrite, failed-overwrite cleanup,
 analysis-time rejection for a source instance with writes disabled, and the epochs of a
 streaming write across restarts.
 
+The [Parquet guide][parquet] uses the same packager with `--source rust_sdk_parquet`. Its smoke
+script checks that queries over files that Spark writes return what Spark's own Parquet reader
+returns, with and without the arrow-rs `RowFilter` that evaluates the pushed predicates, and its
+benchmark script compares the two readers.
+
 ## Scope and limitations
 
 Native sources run trusted code in the driver and executors. The SDK translates
@@ -465,3 +471,5 @@ revision is targeted until the native API stabilizes.
 [range-source]: ../../../examples/src/main/rust/native-data-source/src/lib.rs
 
 [sink]: ../../../examples/src/main/rust/native-data-sink/README.md
+
+[parquet]: ../../../examples/src/main/rust/native-parquet/README.md

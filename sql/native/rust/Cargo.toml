@@ -25,6 +25,7 @@ description = "Experimental Rust batch data source SDK for Apache Spark PR #5942
 members = [
     "../../../examples/src/main/rust/native-data-source",
     "../../../examples/src/main/rust/native-data-sink",
+    "../../../examples/src/main/rust/native-parquet",
 ]
 default-members = ["."]
 resolver = "2"
