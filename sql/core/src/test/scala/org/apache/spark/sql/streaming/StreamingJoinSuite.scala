@@ -38,7 +38,7 @@ import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.{StreamingSymmetricHashJoinExec, StreamingSymmetricHashJoinHelper}
-import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExecution}
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -458,6 +458,35 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
       AddData(leftInput, (1, 20), (1, 21)),
       CheckNewAnswer((1, 21, 28)),
       assertNumStateRows(total = 6, updated = 1, droppedByWatermark = 1)
+    )
+  }
+
+  test("stream stream inner join preserves repeated subtraction terms") {
+    val leftInput = MemoryStream[(Int, Int)]
+    val rightInput = MemoryStream[(Int, Int)]
+    val left = leftInput.toDF().toDF("leftKey", "time")
+      .select($"leftKey", timestamp_seconds($"time").as("leftTime"))
+      .withWatermark("leftTime", "10 seconds")
+    val right = rightInput.toDF().toDF("rightKey", "time")
+      .select($"rightKey", timestamp_seconds($"time").as("rightTime"))
+      .withWatermark("rightTime", "10 seconds")
+    val joined = left.join(right, expr("leftKey = rightKey AND " +
+      "CAST(leftTime AS BIGINT) > CAST(rightTime AS BIGINT) - 2 - 2"))
+      .select($"leftKey", $"leftTime".cast("int"), $"rightTime".cast("int"))
+
+    testStream(joined)(
+      MultiAddData(leftInput, (1, 8))(rightInput, (1, 9)),
+      CheckNewAnswer((1, 8, 9)),
+      // Advance both input watermarks to 10s using keys that cannot match.
+      MultiAddData(leftInput, (2, 20))(rightInput, (3, 20)),
+      CheckNewAnswer(),
+      Execute { query =>
+        assert(query.lastProgress.eventTime.get("watermark") == "1970-01-01T00:00:10.000Z")
+      },
+      // The state cutoff is 10 - 2 - 2 = 6s. Deduplicating the constants gives 8s,
+      // evicting the left row even though it can still match an on-time right row.
+      AddData(rightInput, (1, 11)),
+      CheckNewAnswer((1, 8, 11))
     )
   }
 
@@ -977,7 +1006,7 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
   }
 
   testWithVirtualColumnFamilyJoins(
-    "SPARK-51779 Join query using virtual column families with HDFS should fail") {
+    "Join query with a non-RocksDB provider uses compatible format") {
     withTempDir { checkpointDir =>
       withSQLConf(
         SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[HDFSBackedStateStoreProvider].getName
@@ -988,20 +1017,37 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
         val df1 = input1.toDF().select($"value" as "key", ($"value" * 2) as "leftValue")
         val df2 = input2.toDF().select($"value" as "key", ($"value" * 3) as "rightValue")
         val joined = df1.join(df2, "key")
+        val configuredVersion =
+          SQLConf.get.getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION)
 
+        def checkJoinStateFormat(query: StreamExecution): Unit = {
+          val join = query.lastExecution.executedPlan.collectFirst {
+            case join: StreamingSymmetricHashJoinExec => join
+          }.getOrElse(fail("StreamingSymmetricHashJoinExec not found"))
+          assert(join.stateFormatVersion == 2)
+          assert(SQLConf.get.getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION) ==
+            configuredVersion, "the guardrail must not mutate the caller's session")
+        }
+
+        assert(Set(3, 4).contains(configuredVersion))
         testStream(joined)(
           StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
-          AddData(input1, 1, 2),
-          ExpectFailure[StateStoreMultipleColumnFamiliesNotSupportedException] {
-            (t: Throwable) => {
-              checkError(
-                exception = t.asInstanceOf[StateStoreMultipleColumnFamiliesNotSupportedException],
-                condition = "UNSUPPORTED_FEATURE.STATE_STORE_MULTIPLE_COLUMN_FAMILIES",
-                sqlState = Some("0A000"),
-                parameters = Map("stateStoreProvider" -> "HDFSBackedStateStoreProvider")
-              )
-            }
-          }
+          AddData(input1, 1),
+          AddData(input2, 1),
+          CheckAnswer((1, 2, 3)),
+          Execute { query =>
+            checkJoinStateFormat(query)
+            assert(query.offsetLog.getLatest().flatMap(_._2.metadataOpt)
+              .flatMap(_.conf.get(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key))
+              .contains("2"))
+          },
+          StopStream,
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(input1, 2),
+          AddData(input2, 2),
+          CheckNewAnswer((2, 4, 6)),
+          Execute(checkJoinStateFormat),
+          StopStream
         )
       }
     }

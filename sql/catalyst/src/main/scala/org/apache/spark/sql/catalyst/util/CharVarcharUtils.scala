@@ -63,11 +63,27 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
    * re-construct the original data type with CharType/VarcharType later when needed.
    */
   def replaceCharVarcharWithStringInSchema(st: StructType): StructType = {
+    replaceCharVarcharWithStringInSchema(st, replaceCharVarcharWithString)
+  }
+
+  /**
+   * Like [[replaceCharVarcharWithStringInSchema]], but always rewrites the physical type to
+   * unbounded STRING even when first-class CHAR/VARCHAR is enabled. Hive TRANSFORM script I/O
+   * is STRING-on-the-wire; callers apply [[stringLengthCheck]] in a Project when first-class
+   * CHAR/VARCHAR types are enabled.
+   */
+  def replaceCharVarcharWithStringInSchemaAlways(st: StructType): StructType = {
+    replaceCharVarcharWithStringInSchema(st, replaceCharVarcharWithStringAlways)
+  }
+
+  private def replaceCharVarcharWithStringInSchema(
+      st: StructType,
+      replace: DataType => DataType): StructType = {
     StructType(st.map { field =>
       if (hasCharVarchar(field.dataType)) {
         val metadata = new MetadataBuilder().withMetadata(field.metadata)
           .putString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, field.dataType.catalogString).build()
-        field.copy(dataType = replaceCharVarcharWithString(field.dataType), metadata = metadata)
+        field.copy(dataType = replace(field.dataType), metadata = metadata)
       } else {
         field
       }
@@ -193,6 +209,30 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
   }
 
   /**
+   * True if a CHAR/VARCHAR map key is not a valid identity key: CHAR(n) must be exactly n
+   * characters (shorter keys fail too); VARCHAR(n) must be at most n. STRING and other
+   * key types never violate. Avro map-key checks use this; JSON/XML keep local checks.
+   */
+  def charVarcharMapKeyViolatesLength(key: UTF8String, keyType: DataType): Boolean = {
+    keyType match {
+      case c: CharType => key.numChars() != c.length
+      case v: VarcharType => key.numChars() > v.length
+      case _ => false
+    }
+  }
+
+  /**
+   * Caps a map key echoed in an error so a long user-supplied name cannot blow the message.
+   */
+  def truncateMapKeyForError(key: UTF8String, maxChars: Int = 128): UTF8String = {
+    if (key != null && key.numChars() > maxChars) {
+      UTF8String.concat(key.substring(0, maxChars), UTF8String.fromString("..."))
+    } else {
+      key
+    }
+  }
+
+  /**
    * Returns an expression to apply write-side string length check for the given expression. A
    * string value can not exceed N characters if it's written into a CHAR(N)/VARCHAR(N)
    * column/field.
@@ -258,10 +298,8 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
         if (struct.valExprs.forall(_.isInstanceOf[GetStructField])) {
           // No field needs char/varchar processing, just return the original expression.
           expr
-        } else if (expr.nullable) {
-          If(IsNull(expr), Literal(null, struct.dataType), struct)
         } else {
-          struct
+          nullSafeRebuiltStruct(expr, struct)
         }
 
       case ArrayType(et, containsNull) =>
@@ -282,6 +320,19 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
         }
 
       case _ => expr
+    }
+  }
+
+  /**
+   * Guard a rebuilt named_struct so a NULL input stays NULL. Use CaseWhen rather than If:
+   * CollationTypeCoercion rewrites If (no same-type skip) and can widen VARCHAR collations
+   * inside the struct to unbounded STRING. CaseWhen skips that when the branches already match.
+   */
+  private def nullSafeRebuiltStruct(expr: Expression, struct: CreateNamedStruct): Expression = {
+    if (expr.nullable) {
+      CaseWhen(Seq((IsNull(expr), Literal(null, struct.dataType))), Some(struct))
+    } else {
+      struct
     }
   }
 
@@ -391,11 +442,7 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
           // GetStructField on a NULL struct yields NULL fields, which CreateNamedStruct would
           // turn into a non-NULL struct of NULLs. Guard it the same way the scan-side rewrite
           // in processStringForCharVarchar does.
-          Some(if (expr.nullable) {
-            If(IsNull(expr), Literal(null, struct.dataType), struct)
-          } else {
-            struct
-          })
+          Some(nullSafeRebuiltStruct(expr, struct))
         } else {
           None
         }

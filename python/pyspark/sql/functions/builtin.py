@@ -34859,10 +34859,13 @@ def vector_avg(col: "ColumnOrName") -> Column:
 
 @_try_remote_functions
 def vector_sum(col: "ColumnOrName") -> Column:
-    """Aggregate function: returns the element-wise sum of float vectors in a group.
+    """Aggregate function: returns the element-wise sum of float or double vectors in a group.
     All vectors must have the same dimension.
 
     .. versionadded:: 4.3.0
+
+    .. versionchanged:: 4.4.0
+        Supports arrays of doubles.
 
     Parameters
     ----------
@@ -34872,7 +34875,8 @@ def vector_sum(col: "ColumnOrName") -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        the element-wise sum vector as an array of floats.
+        the element-wise sum vector as an array with the same element type as the input
+        (float or double).
 
     Examples
     --------

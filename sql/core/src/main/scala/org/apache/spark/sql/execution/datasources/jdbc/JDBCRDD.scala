@@ -106,9 +106,7 @@ object JDBCRDD extends Logging {
     Using.resource(conn.prepareStatement(query)) { statement =>
       statement.setQueryTimeout(options.queryTimeout)
       Using.resource(statement.executeQuery()) { rs =>
-        JdbcUtils.getSchema(conn, rs, dialect, alwaysNullable = true,
-          isTimestampNTZ = options.preferTimestampNTZ,
-          preferTimestampNanos = options.preferTimestampNanos)
+        JdbcUtils.getSchema(conn, rs, dialect, options, alwaysNullable = true)
       }
     }
   }
@@ -400,7 +398,8 @@ class JDBCRDD(
         dialect,
         schema,
         inputMetrics,
-        Some(fetchAndTransformToInternalRowsMetric))
+        Some(fetchAndTransformToInternalRowsMetric),
+        Some(options))
 
     CompletionIterator[InternalRow, Iterator[InternalRow]](
       new InterruptibleIterator(context, rowsIterator), close())

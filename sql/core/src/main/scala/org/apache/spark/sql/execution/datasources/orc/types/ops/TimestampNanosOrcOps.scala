@@ -48,7 +48,7 @@ import org.apache.spark.unsafe.types.TimestampNanosVal
  * UTC wall clock, via Timestamp.valueOf(LocalDateTime.ofInstant(instant, UTC)). This keeps the
  * pushed predicate consistent with the ORC min/max statistics regardless of the JVM time zone.
  *
- * @since 5.0.0
+ * @since 4.3.0
  */
 case class TimestampLTZNanosOrcOps(t: TimestampLTZNanosType) extends OrcTypeOps {
 
@@ -111,7 +111,7 @@ case class TimestampLTZNanosOrcOps(t: TimestampLTZNanosType) extends OrcTypeOps 
  * super-value, so the two are value-equal and the pushed predicate is consistent with the ORC
  * min/max statistics.
  *
- * @since 5.0.0
+ * @since 4.3.0
  */
 case class TimestampNTZNanosOrcOps(t: TimestampNTZNanosType) extends OrcTypeOps {
 

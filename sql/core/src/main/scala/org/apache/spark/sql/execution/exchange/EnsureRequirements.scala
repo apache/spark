@@ -371,7 +371,8 @@ case class EnsureRequirements(
     }
     // Choose all the children whose spec can be used to shuffle other children, each with the
     // members that can serve as the layout. Any other member would build a partitioning its own
-    // child is not laid out on, and it does not count towards the ranking below either.
+    // child is not laid out on, or is turned away by a co-partition key requirement to avoid skew.
+    // It does not count towards the ranking below either.
     val candidateSpecs = children.zip(specs).flatMap {
       case (child, Some(spec)) if !shouldConsiderMinParallelism ||
           child.outputPartitioning.numPartitions >= conf.defaultNumShufflePartitions =>
@@ -982,9 +983,9 @@ case class EnsureRequirements(
    *
    * Close to what `ValidateRequirements` asks of a finished plan, but not the same question, and
    * the difference is deliberate. This goes through `createKeyedShuffleSpecs`, so it also applies
-   * `REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION`, admits a member on `keysMaySatisfy`, and looks at
-   * keyed members only. The per-side half is the validator's: `satisfies`, which is strict, so a
-   * child that still needs a node answers no.
+   * `V2_BUCKETING_REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION`, admits a member on `keysMaySatisfy`,
+   * and looks at keyed members only. The per-side half is the validator's: `satisfies`, which is
+   * strict, so a child that still needs a node answers no.
    *
    * Both sides also have to answer with an unprojected spec. A projected one describes the layout a
    * [[GroupPartitionsExec]] would emit rather than the one the child has, so two sides can agree
@@ -1086,8 +1087,8 @@ case class EnsureRequirements(
         // reads an expression's reference. And a re-run reads the positions off a report an
         // earlier pass already projected.
         val composed = g.joinKeyPositions.fold(positions)(old => positions.map(old))
-        val newGroupPartitions =
-          GroupPartitionsExec(g.child, Some(composed), enableSortedMerge = g.enableSortedMerge)
+        val newGroupPartitions = GroupPartitionsExec(
+          g.child, Some(composed), sortedMergeOrdering = g.sortedMergeOrdering)
         newGroupPartitions.copyTagsFrom(g)
         newGroupPartitions
       // Everything else is wrapped, an aligned grouping included. `positions` index what `plan`
@@ -1139,21 +1140,15 @@ case class EnsureRequirements(
       partitioning: Partitioning,
       distribution: ClusteredDistribution): Seq[KeyedShuffleSpec] = {
     def tryCreate(partitioning: KeyedPartitioning): Option[KeyedShuffleSpec] = {
-      // The config requires all the cluster keys to be covered by the partition keys, to avoid
-      // the skew of joining on keys that are coarser than the join keys. Key order and duplicated
-      // cluster keys don't matter.
-      def allClusterKeysCovered: Boolean =
-        // Only an expression over a single column covers that column. One over several, e.g.
-        // `b + c`, maps to no position (`KeyedShuffleSpec.keyPositions`). The spec turns it away
-        // or projects it away, so its columns are not covered.
-        distribution.allClusterKeysAmong(
-          partitioning.expressions.filter(_.references.size == 1).flatMap(_.references))
-
+      // The V2 co-partition key requirement asks for all the cluster keys to be covered by the
+      // partition keys, to avoid the skew of joining on keys that are coarser than the join keys.
+      // Key order and duplicated cluster keys don't matter.
+      //
       // The coverage requirement is a comparison of expressions, while `keysMaySatisfy` can end in
       // a projection of the partition keys, so the cheap question is asked first. The requirement
       // is on by default and turns most members away.
-      if ((!SQLConf.get.getConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION) ||
-            allClusterKeysCovered) && partitioning.keysMaySatisfy(distribution)) {
+      if (partitioning.meetsCoPartitionKeyRequirement(distribution) &&
+          partitioning.keysMaySatisfy(distribution)) {
         // `toGrouped` both dedups and sorts, and only a `GroupPartitionsExec` performs either. A
         // source that already reports one partition per key gets no node, so its own key order is
         // what the join will see and claiming the sorted one would be a lie. This is the whole
