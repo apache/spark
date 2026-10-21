@@ -133,7 +133,7 @@ class MatricesSuite extends SparkFunSuite {
     assert(sm1 === dm2.transpose)
   }
 
-  test("equals and sparse hashCode preserve Breeze behavior") {
+  test("equals and sparse hashCode delegate to ML matrices") {
     val dense = new DenseMatrix(2, 2, Array(0.0, -0.0, 2.0, 0.0))
     val sparse = new SparseMatrix(2, 2, Array(0, 2, 3), Array(0, 1, 0),
       Array(0.0, -0.0, 2.0))
@@ -146,13 +146,13 @@ class MatricesSuite extends SparkFunSuite {
       Seq(m, m.copy, m.transpose)
     }
     for (left <- matrices; right <- matrices) {
-      assert(left.equals(right) === left.asBreeze.equals(right.asBreeze))
+      assert(left.equals(right) === left.asML.equals(right.asML))
     }
     matrices.foreach { matrix =>
       assert(!matrix.equals(null))
       assert(!matrix.equals(matrix.asML))
       matrix match {
-        case m: SparseMatrix => assert(m.hashCode() === m.asBreeze.hashCode())
+        case m: SparseMatrix => assert(m.hashCode() === m.asML.hashCode())
         case _ =>
       }
     }
@@ -544,14 +544,14 @@ class MatricesSuite extends SparkFunSuite {
     assert(lines.length == 5 && lines.forall(_.length <= 100))
   }
 
-  test("matrix formatting preserves Breeze layout and truncation") {
+  test("matrix formatting delegates to ML matrices") {
     val dense = new DenseMatrix(2, 3, Array(0.0, -0.0, Double.NaN, 1.0, 20.0, 3.0))
     val sparse = new SparseMatrix(2, 3, Array(0, 2, 2, 3),
       Array(0, 1, 0), Array(-0.0, 1.0, Double.NaN))
     for (matrix <- Seq(dense, sparse, dense.transpose, sparse.transpose)) {
-      assert(matrix.toString == matrix.asBreeze.toString())
+      assert(matrix.toString == matrix.asML.toString)
       for ((lines, width) <- Seq((0, 0), (1, 5), (2, 15), (5, 80))) {
-        assert(matrix.toString(lines, width) == matrix.asBreeze.toString(lines, width))
+        assert(matrix.toString(lines, width) == matrix.asML.toString(lines, width))
       }
     }
   }

@@ -32,25 +32,24 @@ private[linalg] object MatrixFormatter {
     format(matrix, maxLines, 80)
   }
 
-  def format(matrix: Matrix, maxLines: Int, maxLineWidth: Int): String = matrix match {
-    case sparse: SparseMatrix => formatSparse(sparse, maxLines)
-    case dense: DenseMatrix => formatDense(dense, maxLines, maxLineWidth)
+  def format(matrix: Matrix, maxLines: Int, maxLineWidth: Int): String = {
+    MatrixUtils.checkDimensions(matrix)
+    matrix match {
+      case sparse: SparseMatrix => formatSparse(sparse, maxLines)
+      case dense: DenseMatrix => formatDense(dense, maxLines, maxLineWidth)
+    }
   }
 
   private def formatSparse(matrix: SparseMatrix, maxLines: Int): String = {
-    // The previous Breeze transpose also reordered entries and removed explicit zeros.
-    val columns = if (matrix.isTransposed) matrix.toSparseColMajor else matrix
+    val entries = new MatrixUtils.SparseEntries(matrix)
     val result = new StringBuilder("%d x %d CSCMatrix".format(matrix.numRows, matrix.numCols))
-    val limit = math.min(columns.values.length, maxLines - 1)
-    var col = 0
-    var index = 0
-    while (index < limit) {
-      while (index >= columns.colPtrs(col + 1)) {
-        col += 1
-      }
-      result.append('\n').append("(%d,%d) ".format(columns.rowIndices(index), col))
-        .append(columns.values(index))
-      index += 1
+    val limit = maxLines - 1
+    var count = 0
+    while (count < limit && entries.hasNext) {
+      entries.next()
+      result.append('\n').append("(%d,%d) ".format(entries.row, entries.col))
+        .append(entries.value)
+      count += 1
     }
     result.toString()
   }
@@ -59,6 +58,10 @@ private[linalg] object MatrixFormatter {
     val rows = matrix.numRows
     val cols = matrix.numCols
     val showRows = if (rows > maxLines) maxLines - 1 else rows
+    if (showRows > rows && cols > 0 && maxLineWidth > 0) {
+      // Preserve Breeze's exception when maxLines - 1 overflows before reading the cells.
+      throw new IndexOutOfBoundsException(s"($rows,0) not in [-$rows,$rows) x [-$cols,$cols)")
+    }
     val widths = new ArrayBuffer[Int]
     var totalWidth = 0
     var col = 0

@@ -217,8 +217,8 @@ core/src/main/resources/org/apache/spark/ui/static/vis*
 connector/spark-ganglia-lgpl/src/main/java/com/codahale/metrics/ganglia/GangliaReporter.java
 core/src/main/resources/org/apache/spark/ui/static/d3-flamegraph.min.js
 core/src/main/resources/org/apache/spark/ui/static/d3-flamegraph.css
-mllib-local/src/main/scala/org/apache/spark/ml/linalg/Matrices.scala (portions)
 mllib-local/src/main/scala/org/apache/spark/ml/linalg/MatrixFormatter.scala
+mllib-local/src/main/scala/org/apache/spark/ml/linalg/MatrixUtils.scala
 mllib-local/src/main/scala/scala/collection/compat/package.scala
 
 Python Software Foundation License

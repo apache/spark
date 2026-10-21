@@ -127,7 +127,7 @@ class MatricesSuite extends SparkMLFunSuite {
     }
   }
 
-  test("sparse equality preserves explicit-zero compatibility") {
+  test("sparse equality preserves Breeze's known non-transitive explicit-zero quirk") {
     val empty = new SparseMatrix(3, 1, Array(0, 0), Array.emptyIntArray, Array.emptyDoubleArray)
     val zeroAtFirst = new SparseMatrix(3, 1, Array(0, 1), Array(0), Array(0.0))
     val zeroAtLast = new SparseMatrix(3, 1, Array(0, 1), Array(2), Array(-0.0))
@@ -145,6 +145,55 @@ class MatricesSuite extends SparkMLFunSuite {
     assert(middleZero.transpose.equals(lastZero.transpose))
   }
 
+  test("dense equality normalizes unsorted row-major sparse indices") {
+    val dense = new DenseMatrix(2, 3, Array(1.0, 0.0, 0.0, 5.0, 3.0, 6.0))
+    val sparse = new SparseMatrix(2, 3, Array(0, 2, 4), Array(2, 0, 2, 1),
+      Array(3.0, 1.0, 6.0, 5.0), isTransposed = true)
+    assert(dense.equals(sparse))
+    assert(sparse.equals(dense))
+    val different = dense.copy
+    different.values(0) = 2.0
+    assert(!different.equals(sparse))
+    assert(!sparse.equals(different))
+  }
+
+  test("row-major sparse duplicates are normalized for equality, hashing and formatting") {
+    val matrix = new SparseMatrix(1, 2, Array(0, 2), Array(1, 1), Array(1.0, 2.0),
+      isTransposed = true)
+    val dense = new DenseMatrix(1, 2, Array(0.0, 3.0))
+    val sparse = SparseMatrix.fromCOO(1, 2, Seq((0, 1, 3.0)))
+    assert(matrix.equals(dense))
+    assert(dense.equals(matrix))
+    assert(matrix.equals(sparse))
+    assert(sparse.equals(matrix))
+    assert(matrix.hashCode() === -942016480)
+    assert(matrix.toString == "1 x 2 CSCMatrix\n(0,1) 3.0")
+  }
+
+  test("matrix operations reject invalid negative dimensions") {
+    val dense = new DenseMatrix(-1, -1, Array(1.0))
+    val sparse = new SparseMatrix(-1, 1, Array(0, 0),
+      Array.emptyIntArray, Array.emptyDoubleArray)
+    Seq(dense, sparse, sparse.transpose).foreach { matrix =>
+      intercept[IllegalArgumentException] {
+        matrix.equals(matrix.copy)
+      }
+      intercept[IllegalArgumentException] {
+        matrix.toString
+      }
+    }
+    Seq(sparse, sparse.transpose).foreach { matrix =>
+      intercept[IllegalArgumentException] {
+        matrix.hashCode()
+      }
+      Seq(true, false).foreach { colMajor =>
+        intercept[IllegalArgumentException] {
+          matrix.toSparseMatrix(colMajor)
+        }
+      }
+    }
+  }
+
   test("sparse hashCode preserves Breeze value hashing") {
     val sparse = new SparseMatrix(3, 2, Array(0, 3, 6), Array(0, 1, 2, 0, 1, 2),
       Array(0.0, -0.0, Double.NaN, Double.PositiveInfinity, 4294967297.0, 2.5))
@@ -152,10 +201,11 @@ class MatricesSuite extends SparkMLFunSuite {
       Array(1.0, 2.0, 3.0, 4.0))
     val empty = new SparseMatrix(2, 3, Array(0, 0, 0, 0),
       Array.emptyIntArray, Array.emptyDoubleArray)
-    Seq(sparse, ordinary, empty).foreach { matrix =>
-      Seq(matrix, matrix.transpose).foreach { m =>
-        assert(m.hashCode() === m.asBreeze.hashCode())
-      }
+    val matrices = Seq(sparse, ordinary, empty).flatMap(m => Seq(m, m.transpose))
+    val expectedHashes = Seq(1999056974, -274380619, -1538214276, 2094930921, 43, 43)
+    matrices.zip(expectedHashes).foreach { case (matrix, expectedHash) =>
+      assert(matrix.hashCode() === expectedHash)
+      assert(matrix.hashCode() === matrix.asBreeze.hashCode())
     }
   }
 
@@ -447,6 +497,67 @@ class MatricesSuite extends SparkMLFunSuite {
         assert(converted.colPtrs === new Array[Int](numPtrs + 1))
         assert(converted.rowIndices.isEmpty)
         assert(converted.values.isEmpty)
+      }
+    }
+  }
+
+  test("sparse layout conversion traverses pointer ranges rather than backing arrays") {
+    val view = new SparseMatrix(3, 2, Array(1, 2, 3), Array(2, 0, 1),
+      Array(99.0, 1.0, 2.0))
+    val overlapping = new SparseMatrix(3, 3, Array(0, 2, 1, 3), Array(0, 2, 1),
+      Array(1.0, 2.0, 3.0))
+    val empty = new SparseMatrix(2, 0, Array(1), Array(0), Array(99.0))
+    val fixtures = Seq(
+      (view, Array(0, 1, 2, 2), Array(0, 1), Array(1.0, 2.0)),
+      (overlapping, Array(0, 1, 2, 4), Array(0, 2, 0, 2), Array(1.0, 3.0, 2.0, 2.0)),
+      (empty, Array(0, 0, 0), Array.emptyIntArray, Array.emptyDoubleArray))
+    fixtures.foreach { case (matrix, pointers, indices, values) =>
+      Seq(matrix, matrix.transpose).foreach { input =>
+        val converted = input.toSparseMatrix(colMajor = input.isRowMajor)
+        assert(converted.numRows === input.numRows)
+        assert(converted.numCols === input.numCols)
+        assert(converted.isTransposed !== input.isTransposed)
+        assert(converted.colPtrs === pointers)
+        assert(converted.rowIndices === indices)
+        assert(converted.values === values)
+      }
+    }
+  }
+
+  test("sparse layout conversion sums duplicates and retains cancellation zeros") {
+    val matrix = new SparseMatrix(4, 3, Array(0, 4, 6, 8),
+      Array(0, 0, 1, 1, 2, 2, 3, 3),
+      Array(1.0, 2.0, 1.0, -1.0, Double.PositiveInfinity, Double.NegativeInfinity, 0.0, -0.0))
+    Seq(matrix, matrix.transpose).foreach { input =>
+      val converted = input.toSparseMatrix(colMajor = input.isRowMajor)
+      assert(converted.colPtrs === Array(0, 1, 2, 3, 3))
+      assert(converted.rowIndices === Array(0, 0, 1))
+      assert(converted.values.length === 3)
+      assert(converted.values(0) === 3.0)
+      assert(java.lang.Double.doubleToRawLongBits(converted.values(1)) === 0L)
+      assert(converted.values(2).isNaN)
+    }
+
+    // Noncanonical duplicates accumulate in stored order, unlike Breeze's unstable sort.
+    val ordered = new SparseMatrix(21, 2, Array(0, 4, 8),
+      Array(10, 10, 10, 20, 1, 2, 3, 4), Array(1e16, -1e16, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0))
+    Seq(ordered, ordered.transpose).foreach { input =>
+      val converted = input.toSparseMatrix(colMajor = input.isRowMajor)
+      assert(converted.colPtrs ===
+        Array(0, 0, 1, 2, 3, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6))
+      assert(converted.rowIndices === Array(1, 1, 1, 1, 0, 0))
+      assert(converted.values === Array(1.0, 1.0, 1.0, 1.0, 1.0, 1.0))
+    }
+  }
+
+  test("sparse layout conversion rejects invalid nonzero inner indices") {
+    Seq(-1, 2).foreach { index =>
+      val matrix = new SparseMatrix(2, 1, Array(0, 1), Array(index), Array(1.0))
+      Seq(matrix, matrix.transpose).foreach { input =>
+        val error = intercept[IllegalArgumentException] {
+          input.toSparseMatrix(colMajor = input.isRowMajor)
+        }
+        assert(error.getMessage.contains(s"Expected 0 <= inner index < 2, got $index."))
       }
     }
   }
@@ -1045,11 +1156,51 @@ class MatricesSuite extends SparkMLFunSuite {
       Locale.setDefault(Locale.Category.FORMAT, Locale.forLanguageTag("ar-EG"))
       val dense = new DenseMatrix(2, 2, Array(1.0, 2.0, 3.0, 4.0))
       val sparse = dense.toSparse
-      assert(dense.toString(1, 1) == dense.asBreeze.toString(1, 1))
-      assert(sparse.toString == sparse.asBreeze.toString())
-      assert(sparse.transpose.toString == sparse.transpose.asBreeze.toString())
+      // scalastyle:off nonascii
+      assert(dense.toString(5, 1) == "٢ x ٢ matrix")
+      assert(sparse.toString ==
+        "٢ x ٢ CSCMatrix\n(٠,٠) 1.0\n(١,٠) 2.0\n(٠,١) 3.0\n(١,١) 4.0")
+      assert(sparse.transpose.toString ==
+        "٢ x ٢ CSCMatrix\n(٠,٠) 1.0\n(١,٠) 3.0\n(٠,١) 2.0\n(١,١) 4.0")
+      // scalastyle:on nonascii
     } finally {
       Locale.setDefault(Locale.Category.FORMAT, originalLocale)
+    }
+  }
+
+  test("sparse formatting traverses pointer ranges and respects truncated line limits") {
+    val view = new SparseMatrix(3, 2, Array(1, 2, 3), Array(2, 0, 1),
+      Array(99.0, 1.0, 2.0))
+    val overlapping = new SparseMatrix(3, 3, Array(0, 2, 1, 3), Array(0, 2, 1),
+      Array(1.0, 2.0, 3.0))
+    val empty = new SparseMatrix(2, 0, Array(1), Array(0), Array(99.0))
+    val fixtures = Seq(
+      (view, "3 x 2 CSCMatrix\n(0,0) 1.0\n(1,1) 2.0",
+        "2 x 3 CSCMatrix\n(0,0) 1.0\n(1,1) 2.0"),
+      (overlapping, "3 x 3 CSCMatrix\n(0,0) 1.0\n(2,0) 2.0\n(2,2) 2.0\n(1,2) 3.0",
+        "3 x 3 CSCMatrix\n(0,0) 1.0\n(2,1) 3.0\n(0,2) 2.0\n(2,2) 2.0"),
+      (empty, "2 x 0 CSCMatrix", "0 x 2 CSCMatrix"))
+    fixtures.foreach { case (matrix, expected, expectedTranspose) =>
+      Seq((matrix, expected), (matrix.transpose, expectedTranspose)).foreach {
+        case (input, output) =>
+          assert(input.toString == output)
+          assert(input.toString == input.asBreeze.toString())
+          Seq(0, 1, 2, 3, 5).foreach { maxLines =>
+            val truncated = output.split('\n').take(math.max(1, maxLines)).mkString("\n")
+            assert(input.toString(maxLines, 80) == truncated)
+            assert(input.toString(maxLines, 80) == input.asBreeze.toString(maxLines, 80))
+          }
+      }
+    }
+  }
+
+  test("dense formatting preserves Breeze behavior for overflowing invalid line limits") {
+    val matrix = new DenseMatrix(2, 2, Array(1.0, 2.0, 3.0, 4.0))
+    Seq(matrix, matrix.transpose).foreach { input =>
+      intercept[IndexOutOfBoundsException] {
+        input.toString(Int.MinValue, 80)
+      }
+      assert(input.toString(Int.MinValue, Int.MinValue) == "2 x 2 matrix")
     }
   }
 

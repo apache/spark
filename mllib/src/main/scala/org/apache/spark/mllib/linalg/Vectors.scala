@@ -112,9 +112,8 @@ sealed trait Vector extends Serializable {
    * @param i index
    */
   @Since("1.1.0")
-  def apply(i: Int): Double = this match {
-    case v: DenseVector => v(i)
-    case v: SparseVector => v(i)
+  def apply(i: Int): Double = {
+    throw new UnsupportedOperationException(s"apply is not implemented for ${this.getClass}.")
   }
 
   /**
