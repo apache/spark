@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.execution.bucketing
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide, ReorderJoin}
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{BinaryExecNode, FileSourceScanExec, SparkPlan}
@@ -325,44 +326,44 @@ class CoalesceBucketsInJoinSuite extends SharedSparkSession {
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
       SQLConf.CBO_ENABLED.key -> "false",
       SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true",
-      SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
-        "org.apache.spark.sql.catalyst.optimizer.ReorderJoin") {
+      SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ReorderJoin.ruleName) {
       withTable("dim16", "fact100", "other8") {
-        spark.sql(
-          """CREATE TABLE dim16 (i INT, k INT) USING parquet
-            |CLUSTERED BY (i) INTO 16 BUCKETS""".stripMargin)
-        spark.sql(
-          """CREATE TABLE fact100 (i INT, k INT, v STRING) USING parquet
-            |CLUSTERED BY (i) INTO 100 BUCKETS""".stripMargin)
-        spark.sql(
-          """CREATE TABLE other8 (i INT, v STRING) USING parquet
-            |CLUSTERED BY (i) INTO 8 BUCKETS""".stripMargin)
-        spark.sql("INSERT INTO dim16 VALUES (0, 1)")
-        spark.sql(
-          """CREATE OR REPLACE TEMP VIEW picked AS
-            |SELECT CAST(id AS INT) AS i
-            |FROM range(0, 4000)
-            |WHERE pmod(pmod(hash(CAST(id AS INT)), 100), 8)
-            |      <> pmod(hash(CAST(id AS INT)), 8)
-            |ORDER BY id
-            |LIMIT 1""".stripMargin)
-        spark.sql("INSERT INTO fact100 SELECT i, 1, 'fact' FROM picked")
-        spark.sql("INSERT INTO other8 SELECT i, 'other' FROM picked")
-        val key = spark.sql("SELECT i FROM picked").head().getInt(0)
+        withTempView("picked") {
+          spark.sql(
+            """CREATE TABLE dim16 (i INT, k INT) USING parquet
+              |CLUSTERED BY (i) INTO 16 BUCKETS""".stripMargin)
+          spark.sql(
+            """CREATE TABLE fact100 (i INT, k INT, v STRING) USING parquet
+              |CLUSTERED BY (i) INTO 100 BUCKETS""".stripMargin)
+          spark.sql(
+            """CREATE TABLE other8 (i INT, v STRING) USING parquet
+              |CLUSTERED BY (i) INTO 8 BUCKETS""".stripMargin)
+          spark.sql("INSERT INTO dim16 VALUES (0, 1)")
+          spark.sql(
+            """CREATE OR REPLACE TEMP VIEW picked AS
+              |SELECT CAST(id AS INT) AS i
+              |FROM range(0, 4000)
+              |WHERE pmod(pmod(hash(CAST(id AS INT)), 100), 8)
+              |      <> pmod(hash(CAST(id AS INT)), 8)
+              |ORDER BY id
+              |LIMIT 1""".stripMargin)
+          spark.sql("INSERT INTO fact100 SELECT i, 1, 'fact' FROM picked")
+          spark.sql("INSERT INTO other8 SELECT i, 'other' FROM picked")
+          val key = spark.sql("SELECT i FROM picked").head().getInt(0)
 
-        val query =
-          """SELECT /*+ BROADCAST(dim16), MERGE(fact100, other8) */
-            |  fact100.i, fact100.v, other8.v
-            |FROM dim16
-            |JOIN fact100 ON dim16.k = fact100.k
-            |JOIN other8 ON fact100.i = other8.i""".stripMargin
-        val executed = spark.sql(query).queryExecution.executedPlan
-        val scans = executed.collect { case f: FileSourceScanExec =>
-          (f.relation.bucketSpec.map(_.numBuckets), f.optionalNumCoalescedBuckets)
+          val query =
+            """SELECT /*+ BROADCAST(dim16), MERGE(fact100, other8) */
+              |  fact100.i, fact100.v, other8.v
+              |FROM dim16
+              |JOIN fact100 ON dim16.k = fact100.k
+              |JOIN other8 ON fact100.i = other8.i""".stripMargin
+          val executed = spark.sql(query).queryExecution.executedPlan
+          val scans = executed.collect { case f: FileSourceScanExec =>
+            (f.relation.bucketSpec.map(_.numBuckets), f.optionalNumCoalescedBuckets)
+          }
+          assert(scans == Seq((Some(16), None), (Some(100), None), (Some(8), None)), executed)
+          checkAnswer(spark.sql(query), Seq(Row(key, "fact", "other")))
         }
-        assert(!scans.contains((Some(100), Some(8))), executed)
-        val kept = spark.sql(query).collect()
-        assert(kept.length == 1 && kept.head.getInt(0) == key, executed)
       }
     }
   }
