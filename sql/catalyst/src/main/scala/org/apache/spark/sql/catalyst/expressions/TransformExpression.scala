@@ -452,6 +452,25 @@ object TransformExpression {
       None
     }
 
+  /**
+   * `id` with each column argument's shape replaced by `argument`'s: `ColumnRef` for a bare column,
+   * otherwise its [[expressionShape]]. Unchanged when `argument` has no shape.
+   */
+  private[sql] def withColumnShape(id: TransformFunctionId, argument: Expression)
+      : TransformFunctionId = {
+    import TransformFunctionId.ArgumentShape
+    val shape = argument match {
+      case _: Attribute => Some(ArgumentShape.ColumnRef)
+      case e => expressionShape(e).map(ArgumentShape.Expr(_))
+    }
+    shape.fold(id) { s =>
+      id.copy(argumentShapes = id.argumentShapes.map {
+        case ArgumentShape.ColumnRef | ArgumentShape.Expr(_) => s
+        case other => other
+      })
+    }
+  }
+
   /** Whether `a` and `b` are the same expression of one column each, see [[expressionShape]]. */
   private[sql] def sameShape(a: Expression, b: Expression): Boolean =
     expressionShape(a).exists(expressionShape(b).contains)
