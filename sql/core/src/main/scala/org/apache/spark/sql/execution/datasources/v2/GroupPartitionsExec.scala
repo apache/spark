@@ -722,12 +722,23 @@ private[sql] object GroupPartitionsExec {
       val splits = keyMap.getOrElse(key, Seq.empty)
       numMatchedPartitions += splits.size
       if (distributePartitions) {
+        // `padTo` only pads, never truncates, so a key holding more splits than its expected
+        // count would be emitted more times than the count says, while `isGrouped` can still
+        // read as grouped. No producer does this today: under partial clustering the join split
+        // carries no reducers (`reducersBothWays` returns none), so it never merges keys and its
+        // counts match its splits, and the ordering split counts the same keys it groups. The
+        // assert surfaces any future miscount here instead of as a shuffle fallback at the
+        // `committed` gate in `EnsureRequirements` or as a bad grouped layout.
+        assert(splits.size <= numSplits,
+          s"a distributed partition key holds more splits (${splits.size}) than its expected " +
+            s"count ($numSplits)")
         // Distribute splits across expected partitions, padding with empty sequences
         val paddedSplits = splits.map(Seq(_)).padTo(numSplits, Seq.empty)
         paddedSplits.map((key, _))
       } else {
-        // The slots beyond the first re-read the whole group. A key this side does not hold
-        // has no splits to re-read, so the product is 0 and no explicit guard is needed.
+        // `Seq.fill(numSplits)` emits exactly `numSplits` entries whatever the split count, so this
+        // branch cannot over-emit and needs no size guard. The slots beyond the first re-read the
+        // whole group; a key this side does not hold has no splits to re-read, so the product is 0.
         numReplicatedPartitionReads += (numSplits - 1) * splits.size
         // Replicate all splits to each expected partition
         Seq.fill(numSplits)((key, splits))

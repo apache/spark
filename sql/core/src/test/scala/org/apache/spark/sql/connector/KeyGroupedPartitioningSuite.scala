@@ -1328,6 +1328,45 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  test("SPARK-59234: a self-reducing function is not reduced under partial clustering") {
+    // self_reduce(id) is a transform that reduces itself. The join is a same-function pair, which
+    // `areKeysCompatible` admits, and `V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS` is on so partial
+    // clustering is the only reason `canReduceKeys` is false. `reducersBothWays` then returns none
+    // (SPARK-59234), so the join stays on the raw keys with no merging to miscount. t1 holds key 0
+    // twice, so partial clustering really spreads it across two slots (`SPLIT_FOR_JOIN`) while t2
+    // repeats it (`REPLICATED_FOR_JOIN`). Assert that, plus correct rows, no shuffle, and that
+    // neither side reduced. If a change brought the reducer back, the merged keys would overflow
+    // the spread side's groups and trip the fail-fast guard.
+    withFunction(SelfReduceFunction) {
+      val cols = Array(Column.create("id", LongType), Column.create("data", StringType))
+      createTable("t1", cols, Array(Expressions.apply("self_reduce", Expressions.column("id"))))
+      sql("INSERT INTO testcat.ns.t1 VALUES (0, 'a'), (0, 'e'), (1, 'b'), (2, 'c'), (3, 'd')")
+      createTable("t2", cols, Array(Expressions.apply("self_reduce", Expressions.column("id"))))
+      sql("INSERT INTO testcat.ns.t2 VALUES (0, 'w'), (1, 'x'), (2, 'y'), (3, 'z')")
+      val df = sql(
+        "SELECT t1.id FROM testcat.ns.t1 JOIN testcat.ns.t2 ON t1.id = t2.id")
+      withSQLConf(
+          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true",
+          SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true") {
+        checkAnswer(df, Seq(Row(0L), Row(0L), Row(1L), Row(2L), Row(3L)))
+        val plan = stripAQEPlan(df.queryExecution.executedPlan)
+        assert(collectShuffles(plan).isEmpty,
+          "storage-partitioned join should be kept, not shuffled")
+        val gpes = collectGroupPartitions(plan)
+        assert(gpes.flatMap(_.ungroupingOrigin).toSet == Set(SPLIT_FOR_JOIN, REPLICATED_FOR_JOIN),
+          s"one side spreads and the other repeats:\n$plan")
+        assert(gpes.forall(_.reducers.isEmpty),
+          s"a same-function pair is admitted without reducing under partial clustering:\n$plan")
+        assert(gpes.map(_.outputPartitioning.numPartitions) == Seq(5, 5),
+          s"key 0 gets two slots on both sides:\n$plan")
+        val joins = collect(plan) { case smj: SortMergeJoinExec => smj }
+        assert(joins.size == 1 && ValidateRequirements.validate(joins.head),
+          s"the pair holds up:\n$plan")
+      }
+    }
+  }
+
   test("SPARK-59045: reduced expression is retargeted per KeyedPartitioning") {
     // A chained SPJ's output partitioning reports one `KeyedPartitioning` per join side, but the
     // reduced expression is derived from the one member `checkKeyGroupCompatible` paired this side
