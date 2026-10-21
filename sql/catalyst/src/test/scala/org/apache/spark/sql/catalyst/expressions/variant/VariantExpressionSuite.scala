@@ -766,6 +766,16 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       "$['\\" + "uD800\\" + "uD83D\\" + "uDE00']",
       IntegerType,
       21)
+    testVariantGet(
+      "{\"a\\" + "uD83D\\" + "uDE00b\": 22}",
+      "$['a\\" + "ud83d\\" + "ude00b']",
+      IntegerType,
+      22)
+    testVariantGet(
+      "{\"a\\" + "uDBFF\\" + "uDFFFb\": 23}",
+      "$['a\\" + "uDBFF\\" + "uDFFFb']",
+      IntegerType,
+      23)
     Seq("uD800", "uDC00").foreach { escape =>
       val path = "$['\\" + escape + "']"
       testVariantGet("""{"?":1}""", path, IntegerType, null)
