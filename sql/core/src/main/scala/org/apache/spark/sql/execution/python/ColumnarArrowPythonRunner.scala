@@ -52,8 +52,8 @@ private[python] class ColumnarArrowPythonWithNamedArgumentRunner(
   with ColumnarArrowPythonInput
   with BasicPythonArrowOutput {
 
-  // `ColumnarArrowEvalPythonEvaluatorFactory` pairs each output batch with one input batch, so
-  // the batches returned from Python must not be sliced.
+  // `ColumnarArrowEvalPythonEvaluatorFactory.evalArrowColumnar` pairs each output batch with
+  // one input batch, so the batches returned from Python must not be sliced.
   override protected def arrowMaxRecordsPerOutputBatch: Int = -1
   override protected def arrowMaxBytesPerOutputBatch: Int = -1
 

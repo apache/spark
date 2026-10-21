@@ -3802,10 +3802,10 @@ class LegacyUDTFArrowTestsMixin(BaseUDTFTestsMixin):
             {"spark.sql.execution.arrow.maxBytesPerOutputBatch": "3"},
         ]:
             with self.subTest(conf=conf), self.sql_conf(conf):
-                actual = self.spark.sql(
+                df = self.spark.sql(
                     "SELECT t.id, u.x FROM range(0, 3, 1, 1) t, LATERAL test_udtf_slicing(t.id) u"
-                ).collect()
-                self.assertEqual(sorted(actual), expected)
+                )
+                assertDataFrameEqual(df, expected)
 
 
 class LegacyUDTFArrowTests(LegacyUDTFArrowTestsMixin, ReusedSQLTestCase):

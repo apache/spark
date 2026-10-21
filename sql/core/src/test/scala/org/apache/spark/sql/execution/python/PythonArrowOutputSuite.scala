@@ -99,7 +99,7 @@ class PythonArrowOutputSuite extends SparkFunSuite {
     }
     processor.close()
     reader.close(false)
-    // Fails if any root or slice handed out by the processor was leaked.
+    // Fails if any slice made by the processor was leaked.
     allocator.close()
     assert(metrics("pythonNumRowsReceived").value === batchSizes.sum)
     output.toSeq
@@ -122,7 +122,11 @@ class PythonArrowOutputSuite extends SparkFunSuite {
       val output = readAll(batchSizes, (reader, metrics) =>
         new SliceRecordsArrowOutputProcessorImpl(reader, metrics, maxRecords))
       checkAllRowsOnceInOrder(batchSizes, output)
-      assert(output.forall(_._1.size <= maxRecords))
+      val expectedSizes = batchSizes.flatMap { n =>
+        val sizes = Seq.fill(n / maxRecords)(maxRecords) ++ Seq(n % maxRecords).filter(_ > 0)
+        if (sizes.isEmpty) Seq(0) else sizes
+      }
+      assert(output.map(_._1.size) === expectedSizes)
     }
   }
 
@@ -130,7 +134,7 @@ class PythonArrowOutputSuite extends SparkFunSuite {
     (Seq(1, 100, 1), 512),
     (Seq(100, 1, 100), 512),
     (Seq(1, 0, 57, 2, 33), 512),
-    // Even a single row is larger than the limit, so every output batch has one row.
+    // Even a single row is larger than the limit, so every non-empty output batch has one row.
     (Seq(2, 0, 5, 1), 3)
   ).foreach { case (batchSizes, maxBytes) =>
     test(s"slice by bytes: batches $batchSizes, max $maxBytes bytes per batch") {

@@ -195,11 +195,10 @@ class GroupedApplyInPandasWithStateTestsMixin:
         self._test_apply_in_pandas_with_state_basic(func, check_results)
 
     def test_apply_in_pandas_with_state_output_batch_slicing(self):
-        # The output batch of each group has 5 data rows and 1 state row. It must not be sliced
-        # by the configs below, since its data and state counts cover the whole batch.
+        # The worker packs the data rows (5 per group) and state rows (1 per group) of the groups
+        # in a partition into one output batch. Its data and state counts cover the whole batch,
+        # so it must not be sliced by the configs below.
         def func(key, pdf_iter, state):
-            for _ in pdf_iter:
-                pass
             state.update((1,))
             yield pd.DataFrame(
                 {"key": [f"{key[0]}_{i}" for i in range(5)], "countAsString": list("01234")}

@@ -318,7 +318,7 @@ class SliceRecordsArrowOutputProcessorImpl(
     // Output the whole root only if this chunk is the whole batch.
     val rootSlice = if (numRows == rowCount) root else root.slice(currentRowIdx, numRows)
 
-    currentRowIdx = currentRowIdx + rootSlice.getRowCount
+    currentRowIdx = currentRowIdx + numRows
 
     rootSlice
   }
