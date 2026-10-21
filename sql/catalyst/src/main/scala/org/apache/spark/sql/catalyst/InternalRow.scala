@@ -127,11 +127,12 @@ object InternalRow {
   val empty = apply()
 
   /**
-   * Copies the given value if it's string/struct/array/map type.
+   * Copies the given value if it's string/binary/struct/array/map type.
    */
   def copyValue(value: Any): Any = value match {
     case v: UTF8String => v.copy()
     case v: BinaryView => v.copy()
+    case v: Array[Byte] => v.clone()
     case v: InternalRow => v.copy()
     case v: ArrayData => v.copy()
     case v: MapData => v.copy()
