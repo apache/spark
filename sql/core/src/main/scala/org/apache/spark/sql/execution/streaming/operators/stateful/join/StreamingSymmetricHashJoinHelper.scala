@@ -50,16 +50,19 @@ object StreamingSymmetricHashJoinHelper extends Logging {
    *
    * @param stateWatermark Current batch's eviction watermark. Entries with timestamp
    *                       at or below this value are eligible for eviction in this batch.
-   * @param prevStateWatermark Previous batch's eviction watermark, i.e. the watermark
-   *                           used for filtering late events in the current batch.
-   *                           Entries with timestamp at or below this value were already
-   *                           evicted in prior batches, so the effective range of entries
-   *                           to evict in this batch is `(prevStateWatermark, stateWatermark]`.
-   *                           State manager implementations can leverage this lower bound
-   *                           to optimize eviction (e.g. narrowing the scan range to skip
-   *                           already-evicted entries). `None` means we do not have a known
-   *                           lower bound (e.g. the first batch after restart), in which
-   *                           case eviction must consider all entries up to `stateWatermark`.
+   * @param prevStateWatermark Safe exclusive lower bound in the same timestamp domain as
+   *                           `stateWatermark`. It is derived from a prior eviction cutoff
+   *                           only when prior eviction and late-input filtering prove that
+   *                           the skipped range is empty: entries at or below this value
+   *                           were already evicted, and newly admitted rows cannot land
+   *                           there. The effective range of entries to evict in this batch
+   *                           is `(prevStateWatermark, stateWatermark]`. State manager
+   *                           implementations can leverage this lower bound to optimize
+   *                           eviction (e.g. narrowing the scan range to skip already-evicted
+   *                           entries). `None` means we do not have a known lower bound, or
+   *                           cannot prove that late-input filtering excludes newly admitted
+   *                           rows at or below it. In that case eviction must consider all
+   *                           entries up to `stateWatermark`.
    */
   case class JoinStateKeyWatermarkPredicate(
       expr: Expression,
@@ -238,21 +241,25 @@ object StreamingSymmetricHashJoinHelper extends Logging {
           oneSideJoinKeys(joinKeyOrdinalForWatermark.get).nullable)
         val expr = watermarkExpression(Some(keyExprWithWatermark), eventTimeWatermarkForEviction)
         expr.map { e =>
+          // V4 can skip keys at or below the previous watermark only if late-input filtering
+          // rejects new rows in that range on this same key. A watermark on the other input's
+          // equality key can drive eviction even when this input has no watermark, or has one
+          // on a different column. New rows can then pass late-input filtering with keys
+          // already eligible for eviction. V4 must scan from the beginning to find them;
+          // otherwise, outer joins can fail to emit null rows for these unmatched inputs.
+          val prevStateKeyWatermark =
+            if (oneSideInputAttributes.find(_.metadata.contains(delayKey))
+              .exists(oneSideJoinKeys(joinKeyOrdinalForWatermark.get).semanticEquals)) {
+              eventTimeWatermarkForLateEvents
+            } else {
+              None
+            }
           // watermarkExpression only provides the expression when eventTimeWatermarkForEviction
-          // is defined
+          // is defined.
           JoinStateKeyWatermarkPredicate(
             e,
             eventTimeWatermarkForEviction.get,
-            // V4 can skip keys at or below the previous watermark only if late-input filtering
-            // rejects new rows in that range on this same key. A watermark on the other input's
-            // equality key can drive eviction even when this input has no watermark, or has one
-            // on a different column. New rows can then pass late-input filtering with keys
-            // already eligible for eviction. V4 must scan from the beginning to find them;
-            // otherwise, outer joins can fail to emit null rows for these unmatched inputs.
-            eventTimeWatermarkForLateEvents.filter { _ =>
-              oneSideInputAttributes.find(_.metadata.contains(delayKey))
-                .exists(oneSideJoinKeys(joinKeyOrdinalForWatermark.get).semanticEquals)
-            })
+            prevStateKeyWatermark)
         }
       } else if (isWatermarkDefinedOnInput) { // case 2 in the StreamingSymmetricHashJoinExec docs
         val stateValueWatermark = StreamingJoinHelper.getStateValueWatermark(
