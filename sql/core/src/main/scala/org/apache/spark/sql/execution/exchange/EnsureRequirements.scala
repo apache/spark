@@ -145,7 +145,9 @@ case class EnsureRequirements(
             // To choose a KeyGroupedShuffleSpec, we must be able to push down SPJ parameters into
             // the scan (for join key positions). If these parameters can't be pushed down, this
             // spec can't be used to shuffle other children.
-            case (idx, _: KeyGroupedShuffleSpec) => canPushDownSPJParamsToScan(children(idx))
+            case (idx, s: KeyGroupedShuffleSpec) =>
+              canPushDownSPJParamsToScan(children(idx)) &&
+                !isBuiltFromReducedScan(children(idx), s)
             case _ => true
           }
           .filter(p => !shouldConsiderMinParallelism ||
@@ -504,6 +506,9 @@ case class EnsureRequirements(
       if (specOpt.isEmpty) return None
       specOpt.get
     }
+    if (Seq(left, right).zip(specs).exists { case (p, s) => isBuiltFromReducedScan(p, s) }) {
+      return None
+    }
 
     val leftSpec = specs.head
     val rightSpec = specs(1)
@@ -720,13 +725,16 @@ case class EnsureRequirements(
   }
 
   /**
-   * Project full-width common partition values onto composed join-key positions and deduplicate,
-   * summing split counts for keys that collapse to the same projected value.
+   * Project common partition values onto `projectionPositions` of the layout `expressions`
+   * describes and deduplicate. Values that collapse to the same key are read as one group, so
+   * they become one partition, unless the scan is partially clustered, where each split of the
+   * group still gets its own partition and the split counts add up.
    */
   private def projectAndDedupeCommonPartitionValues(
       values: Seq[(InternalRow, Int)],
       expressions: Seq[Expression],
-      projectionPositions: Seq[Int]): Seq[(InternalRow, Int)] = {
+      projectionPositions: Seq[Int],
+      partiallyClustered: Boolean): Seq[(InternalRow, Int)] = {
     val projectedExpressions = projectionPositions.map(expressions(_))
     val partitionOrdering = RowOrdering.createNaturalAscendingOrdering(
       projectedExpressions.map(_.dataType))
@@ -735,36 +743,83 @@ case class EnsureRequirements(
         expressions, projectionPositions, partValue)
       (InternalRowComparableWrapper(projected, projectedExpressions), numSplits)
     }.groupBy(_._1).map { case (wrapper, entries) =>
-      (wrapper.row, entries.map(_._2).sum)
+      (wrapper.row, if (partiallyClustered) entries.map(_._2).sum else 1)
     }.toSeq.sortBy(_._1)(partitionOrdering)
   }
 
   /**
-   * When join-key positions narrow, project common partition values from full scan width onto the
-   * composed positions. Prefer full-width pushed values from the current merge; otherwise
-   * re-project values already pushed by an inner join. Narrow pushed values alone cannot recover
-   * rows that share the same join key under different partition keys.
+   * The partition expressions a scan currently reports, i.e. its own partition expressions
+   * projected onto the join-key positions pushed so far.
+   */
+  private def reportedLayout(params: StoragePartitionJoinParams): Option[Seq[Expression]] =
+    params.keyGroupedPartitioning.map { expressions =>
+      params.joinKeyPositions.map(_.map(expressions)).getOrElse(expressions)
+    }
+
+  /**
+   * Common partition values for a scan after a push. Values pushed by this join are the merge with
+   * the other side and already sit in the layout `newPositions` select, so they win. Otherwise the
+   * values an inner join pushed sit in the scan's reported layout, and are projected onto
+   * `newPositions`, which index that layout.
    */
   private def finalizeCommonPartitionValues(
       existing: StoragePartitionJoinParams,
       pushedValues: Option[Seq[(InternalRow, Int)]],
-      composedPositions: Option[Seq[Int]]): Option[Seq[(InternalRow, Int)]] = {
-    val rawValues = pushedValues.orElse(existing.commonPartitionValues)
-    (composedPositions, existing.keyGroupedPartitioning) match {
-      case (Some(positions), Some(expressions)) if positions.length < expressions.length =>
-        val fullWidthValues = pushedValues
-            .filter(_.nonEmpty)
-            .filter(_.head._1.numFields == expressions.length)
-            .orElse(existing.commonPartitionValues
-                .filter(_.nonEmpty)
-                .filter(_.head._1.numFields == expressions.length))
-        fullWidthValues match {
-          case Some(values) =>
-            Some(projectAndDedupeCommonPartitionValues(values, expressions, positions))
-          case None => rawValues
-        }
-      case _ =>
-        rawValues
+      newPositions: Option[Seq[Int]]): Option[Seq[(InternalRow, Int)]] = {
+    (pushedValues, existing.commonPartitionValues, newPositions, reportedLayout(existing)) match {
+      case (Some(values), _, _, _) => Some(values)
+      case (None, Some(values), Some(positions), Some(layout))
+          if values.nonEmpty && values.head._1.numFields == layout.length &&
+            positions != layout.indices =>
+        Some(projectAndDedupeCommonPartitionValues(
+          values, layout, positions, existing.applyPartialClustering))
+      case (None, values, _, _) => values
+    }
+  }
+
+  /**
+   * Reducers for a scan after a push. The reducers an inner join pushed index the scan's reported
+   * layout, so they are first projected onto `newPositions`. A reducer this join pushes for a
+   * position applies to values the inner reducer already produced, so the two are chained.
+   */
+  private def composeReducers(
+      existing: Option[Seq[Option[Reducer[_, _]]]],
+      newPositions: Option[Seq[Int]],
+      pushed: Option[Seq[Option[Reducer[_, _]]]]): Option[Seq[Option[Reducer[_, _]]]] = {
+    val projectedExisting = (existing, newPositions) match {
+      case (Some(rs), Some(positions)) => Some(positions.map(rs))
+      case _ => existing
+    }
+    (projectedExisting, pushed) match {
+      case (Some(inner), Some(outer)) =>
+        assert(inner.length == outer.length,
+          "pushed reducers must index the same layout as the composed join-key positions")
+        Some(inner.zip(outer).map {
+          case (Some(i), Some(o)) => Some(ChainedReducer(i, o))
+          case (i, o) => o.orElse(i)
+        })
+      case (inner, outer) => outer.orElse(inner)
+    }
+  }
+
+  /**
+   * Whether `spec` was built from the reported partitioning of a scan below `plan` whose splits an
+   * inner join already reduced. Such a scan reports its own partition transform but values of the
+   * reduced transform, so a spec built from it describes a layout the scan does not have.
+   */
+  private def isBuiltFromReducedScan(plan: SparkPlan, spec: KeyGroupedShuffleSpec): Boolean = {
+    val specExpressions = spec.partitioning.expressions
+    // Only a nested join can hand a reduced scan's layout to a later join. Looking below a join
+    // also keeps a re-run of this rule over an already planned join from matching its own scans.
+    plan.exists {
+      case join @ (_: SortMergeJoinExec | _: ShuffledHashJoinExec) => join.exists {
+        case scan: BatchScanExec if scan.spjParams.reducers.exists(_.exists(_.isDefined)) =>
+          reportedLayout(scan.spjParams).exists { layout =>
+            specExpressions.forall(e => layout.exists(_.semanticEquals(e)))
+          }
+        case _ => false
+      }
+      case _ => false
     }
   }
 
@@ -809,10 +864,9 @@ case class EnsureRequirements(
       scan.copy(
         spjParams = existing.copy(
           commonPartitionValues = finalizeCommonPartitionValues(
-            existing, commonPartitionValues, composedPositions),
+            existing, commonPartitionValues, joinKeyPositions),
           joinKeyPositions = composedPositions,
-          // Keep inner reducers when the outer join does not push new ones.
-          reducers = reducers.orElse(existing.reducers),
+          reducers = composeReducers(existing.reducers, joinKeyPositions, reducers),
           applyPartialClustering = commonPartitionValues match {
             case Some(_) => applyPartialClustering
             case _ => existing.applyPartialClustering
@@ -972,4 +1026,11 @@ case class EnsureRequirements(
       newPlan
     }
   }
+}
+
+/** Applies `first`, then `second`, to reduce a partition value across two nested joins. */
+private case class ChainedReducer(first: Reducer[_, _], second: Reducer[_, _])
+  extends Reducer[Any, Any] {
+  override def reduce(arg: Any): Any = second.asInstanceOf[Reducer[Any, Any]].reduce(
+    first.asInstanceOf[Reducer[Any, Any]].reduce(arg))
 }
