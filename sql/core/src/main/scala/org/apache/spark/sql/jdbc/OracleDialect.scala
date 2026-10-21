@@ -187,7 +187,18 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
       case BINARY_DOUBLE => Some(DoubleType) // Value for OracleTypes.BINARY_DOUBLE
       case INTERVAL_YM => Some(YearMonthIntervalType())
       case INTERVAL_DS => Some(DayTimeIntervalType())
-      case TIMESTAMP if !conf.legacyOracleTimestampNTZMappingEnabled && typeName != null &&
+      case _ => None
+    }
+  }
+
+  override def getCatalystType(
+      sqlType: Int,
+      typeName: String,
+      size: Int,
+      md: MetadataBuilder,
+      options: JDBCOptions): Option[DataType] = {
+    sqlType match {
+      case TIMESTAMP if options.zonelessTimestampAsNTZ && typeName != null &&
           typeName.toUpperCase(Locale.ROOT).matches("DATE|TIMESTAMP") =>
         val metadata = if (md != null) md.build() else Metadata.empty
         // Absent scale metadata: Oracle TIMESTAMP defaults to TIMESTAMP(6).
@@ -197,7 +208,7 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
         val resolved = JdbcUtils.resolveTimestampType(
           isTimestampNTZ = true, scale = scale, preferTimestampNanos = preferNanos)
         Some(resolved)
-      case _ => None
+      case _ => getCatalystType(sqlType, typeName, size, md)
     }
   }
 

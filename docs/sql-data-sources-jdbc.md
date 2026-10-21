@@ -383,6 +383,22 @@ logging into the data sources.
     <td>read</td>
   </tr>
   <tr>
+    <td><code>zonelessTimestampAsNTZ</code></td>
+    <td>true</td>
+    <td>
+      When the option is set to <code>true</code>, timestamp types without a time zone are inferred as Spark's TimestampNTZ type regardless of <code>preferTimestampNTZ</code>. Otherwise, they follow <code>preferTimestampNTZ</code>. This option currently exists only for Oracle and is only honored by the Oracle dialect. Its default follows the dialect's legacy TimestampNTZ mapping configuration: it is <code>false</code> when that configuration is enabled. Depending on the driver, values read as TimestampNTZ may not keep their wall-clock time unless <code>timestampNTZAsWallClock</code> is also <code>true</code>.
+    </td>
+    <td>read</td>
+  </tr>
+  <tr>
+    <td><code>timestampNTZAsWallClock</code></td>
+    <td>false</td>
+    <td>
+      When the option is set to <code>true</code>, TimestampNTZ values are read and written as <code>java.time.LocalDateTime</code>, preserving the wall-clock value without a time zone conversion. This requires a JDBC driver that supports <code>java.time.LocalDateTime</code>. Otherwise, they are converted through <code>java.sql.Timestamp</code> in the JVM default time zone. Its default follows the dialect's legacy TimestampNTZ mapping configuration: it is <code>false</code> when that configuration is enabled (only Oracle has one, so the default is <code>true</code> for Oracle and <code>false</code> for other dialects).
+    </td>
+    <td>read/write</td>
+  </tr>
+  <tr>
     <td><code>hint</code></td>
     <td>(none)</td>
     <td>

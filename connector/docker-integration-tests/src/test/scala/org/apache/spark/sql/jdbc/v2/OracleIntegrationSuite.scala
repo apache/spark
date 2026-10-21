@@ -187,7 +187,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
 
   override def caseConvert(tableName: String): String = tableName.toUpperCase(Locale.ROOT)
 
-  test("SPARK-58876: a V2 NTZ read planned before a legacy flag flip still reads wall-clock") {
+  test("SPARK-58876: V2 NTZ reads keep frozen options and honor per-read zonelessTimestampAsNTZ") {
     val table = s"$catalogName.${namespaceOpt.get}.${caseConvert("datetime")}"
     withDefaultTimeZone(LA) {
       val df = withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "false") {
@@ -196,7 +196,15 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
       assert(df.schema.head.dataType === TimestampNTZType)
       withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
         assert(df.collect().head.get(0) === LocalDateTime.of(2022, 5, 19, 0, 0, 0))
+        // Per-read options override the flag: the mapping at loadTable, the getter at the scan.
+        val perRead = sql(s"SELECT time1 FROM $table WITH ('zonelessTimestampAsNTZ' = 'true', " +
+          "'timestampNTZAsWallClock' = 'true') WHERE name = 'amy'")
+        assert(perRead.schema.head.dataType === TimestampNTZType)
+        assert(perRead.collect().head.get(0) === LocalDateTime.of(2022, 5, 19, 0, 0, 0))
       }
+      val legacyRead = sql(s"SELECT time1 FROM $table WITH ('zonelessTimestampAsNTZ' = 'false') " +
+        "WHERE name = 'amy'")
+      assert(legacyRead.schema.head.dataType === TimestampType)
     }
   }
 
