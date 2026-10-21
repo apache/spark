@@ -484,32 +484,33 @@ class SQLQueryTestSuite extends SharedSparkSession
       tokens(1).equalsIgnoreCase("FLOW")
   }
 
+  private def tryParsePlan(session: SparkSession, sql: String): Option[LogicalPlan] = {
+    try {
+      Some(session.sessionState.sqlParser.parsePlan(sql))
+    } catch {
+      case _: ParseException => None
+    }
+  }
+
   private def parseTriggeredFlowStatement(
       session: SparkSession,
-      sql: String): Option[TriggeredFlowStatement] = {
-    if (hasFlowCommandPrefix(sql, "CREATE")) {
-      try {
-        session.sessionState.sqlParser.parsePlan(sql) match {
-          case command: CreateFlowCommand => Some(CreateTriggeredFlow(command))
-          case _ => None
+      sql: String,
+      parsedPlan: Option[LogicalPlan]): Option[TriggeredFlowStatement] = {
+    parsedPlan match {
+      case Some(command: CreateFlowCommand) => Some(CreateTriggeredFlow(command))
+      case _ if hasFlowCommandPrefix(sql, "REFRESH") =>
+        val tokens = sql.trim.split("\\s+", 3)
+        if (tokens.length != 3) {
+          None
+        } else {
+          try {
+            Some(RefreshTriggeredFlow(
+              session.sessionState.sqlParser.parseMultipartIdentifier(tokens(2))))
+          } catch {
+            case _: ParseException => None
+          }
         }
-      } catch {
-        case _: ParseException => None
-      }
-    } else if (hasFlowCommandPrefix(sql, "REFRESH")) {
-      val tokens = sql.trim.split("\\s+", 3)
-      if (tokens.length != 3) {
-        None
-      } else {
-        try {
-          Some(RefreshTriggeredFlow(
-            session.sessionState.sqlParser.parseMultipartIdentifier(tokens(2))))
-        } catch {
-          case _: ParseException => None
-        }
-      }
-    } else {
-      None
+      case _ => None
     }
   }
 
@@ -587,13 +588,10 @@ class SQLQueryTestSuite extends SharedSparkSession
     }
 
     queriesWithDebug.zipWithIndex.foreach { case ((sql, isDebug), i) =>
-      val isCommand = try {
-        localSparkSession.sessionState.sqlParser.parsePlan(sql).isInstanceOf[Command]
-      } catch {
-        case _: ParseException => false
-      }
+      val parsedPlan = tryParsePlan(localSparkSession, sql)
+      val isCommand = parsedPlan.exists(_.isInstanceOf[Command])
 
-      val handledFlow = parseTriggeredFlowStatement(localSparkSession, sql) match {
+      val handledFlow = parseTriggeredFlowStatement(localSparkSession, sql, parsedPlan) match {
         case Some(CreateTriggeredFlow(command)) =>
           registerTriggeredFlow(localSparkSession, command, triggeredFlows)
           true
@@ -709,22 +707,24 @@ class SQLQueryTestSuite extends SharedSparkSession
             schema = None,
             output = normalizeTestResults(output.mkString("\n")))
         case _ =>
-          val (schema, output) = parseTriggeredFlowStatement(localSparkSession, sql) match {
-            case Some(CreateTriggeredFlow(command)) =>
-              handleExceptions(
-                registerTriggeredFlow(localSparkSession, command, triggeredFlows))
-            case Some(RefreshTriggeredFlow(flowName)) =>
-              handleExceptions(
-                runTriggeredFlow(
-                  localSparkSession,
-                  sql,
-                  flowName,
-                  testCase,
-                  sparkConfigSet,
-                  triggeredFlows))
-            case None =>
-              handleExceptions(getNormalizedQueryExecutionResult(localSparkSession, sql))
-          }
+          val parsedPlan = tryParsePlan(localSparkSession, sql)
+          val (schema, output) =
+            parseTriggeredFlowStatement(localSparkSession, sql, parsedPlan) match {
+              case Some(CreateTriggeredFlow(command)) =>
+                handleExceptions(
+                  registerTriggeredFlow(localSparkSession, command, triggeredFlows))
+              case Some(RefreshTriggeredFlow(flowName)) =>
+                handleExceptions(
+                  runTriggeredFlow(
+                    localSparkSession,
+                    sql,
+                    flowName,
+                    testCase,
+                    sparkConfigSet,
+                    triggeredFlows))
+              case None =>
+                handleExceptions(getNormalizedQueryExecutionResult(localSparkSession, sql))
+            }
           // We do some query canonicalization now.
           val executionOutput = ExecutionOutput(
             sql = sql,
@@ -1104,15 +1104,19 @@ class SQLQueryTestSuite extends SharedSparkSession
       getQueriesWithDebugFlag(code, comments, Nil)
     }
 
+    def parseTriggeredFlow(sql: String): Option[TriggeredFlowStatement] = {
+      parseTriggeredFlowStatement(spark, sql, tryParsePlan(spark, sql))
+    }
+
     def createFlowCommand(sql: String): CreateFlowCommand = {
-      parseTriggeredFlowStatement(spark, sql) match {
+      parseTriggeredFlow(sql) match {
         case Some(CreateTriggeredFlow(command)) => command
         case statement => fail(s"Expected CREATE FLOW, found $statement")
       }
     }
 
     def refreshFlowName(sql: String): Seq[String] = {
-      parseTriggeredFlowStatement(spark, sql) match {
+      parseTriggeredFlow(sql) match {
         case Some(RefreshTriggeredFlow(flowName)) => flowName
         case statement => fail(s"Expected REFRESH FLOW, found $statement")
       }
@@ -1141,10 +1145,10 @@ class SQLQueryTestSuite extends SharedSparkSession
     val flow = resolveTriggeredFlow(spark, flowName, flows)
     assert(flow.targetTable == "`catalog`.`schema`.`sink-table`")
     assert(resolveTriggeredFlow(spark, flowName, flows) eq flow)
-    assert(parseTriggeredFlowStatement(spark, specs.head._1).isEmpty)
-    assert(parseTriggeredFlowStatement(spark, specs(1)._1)
+    assert(parseTriggeredFlow(specs.head._1).isEmpty)
+    assert(parseTriggeredFlow(specs(1)._1)
       .exists(_.isInstanceOf[CreateTriggeredFlow]))
-    assert(parseTriggeredFlowStatement(spark, specs(2)._1)
+    assert(parseTriggeredFlow(specs(2)._1)
       .exists(_.isInstanceOf[RefreshTriggeredFlow]))
     assert(refreshFlowName("refresh flow `catalog`.`flow-name`") == Seq("catalog", "flow-name"))
 
