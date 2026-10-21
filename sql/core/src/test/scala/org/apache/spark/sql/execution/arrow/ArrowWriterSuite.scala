@@ -18,13 +18,14 @@
 package org.apache.spark.sql.execution.arrow
 
 import scala.jdk.CollectionConverters._
+import scala.util.Random
 
-import org.apache.arrow.vector.{VectorSchemaRoot, ViewVarBinaryVector, ViewVarCharVector}
+import org.apache.arrow.vector.{VectorLoader, VectorSchemaRoot, VectorUnloader, ViewVarBinaryVector, ViewVarCharVector}
 import org.apache.arrow.vector.complex.ListViewVector
 import org.apache.arrow.vector.types.pojo.{ArrowType, FieldType}
 
 import org.apache.spark.{SparkArithmeticException, SparkFunSuite, SparkUnsupportedOperationException}
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.YearUDT
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -1274,5 +1275,91 @@ class ArrowWriterSuite extends SparkFunSuite {
     assert(array0.numElements() === 0)
 
     writer.root.close()
+  }
+
+  test("SPARK-60428: a reused writer matches a fresh writer after a larger batch") {
+    val schema = new StructType()
+      .add("bool", BooleanType)
+      .add("byte", ByteType)
+      .add("short", ShortType)
+      .add("int", IntegerType)
+      .add("long", LongType)
+      .add("float", FloatType)
+      .add("double", DoubleType)
+      .add("decimal", DecimalType(38, 18))
+      .add("string", StringType)
+      .add("binary", BinaryType)
+      .add("date", DateType)
+      .add("timestamp", TimestampType)
+      .add("timestamp_ntz", TimestampNTZType)
+      .add("time", TimeType())
+      .add("year_month", YearMonthIntervalType())
+      .add("day_time", DayTimeIntervalType())
+      .add("null", NullType)
+      .add("array", ArrayType(IntegerType))
+      .add("array_of_string", ArrayType(StringType))
+      .add("nested_array", ArrayType(ArrayType(LongType)))
+      .add("struct", new StructType()
+        .add("i", IntegerType)
+        .add("s", StringType)
+        .add("a", ArrayType(DoubleType)))
+      .add("map", MapType(IntegerType, LongType))
+      .add("map_of_array", MapType(IntegerType, ArrayType(IntegerType)))
+      .add("map_of_struct", MapType(IntegerType, new StructType()
+        .add("b", BinaryType)
+        .add("m", MapType(IntegerType, BooleanType))))
+
+    // Generates values without nulls at any level, so that every slot of the large batch holds
+    // a value that a later null in the same slot has to hide.
+    def nonNullable(dt: DataType): DataType = dt match {
+      case ArrayType(et, _) => ArrayType(nonNullable(et), containsNull = false)
+      case MapType(kt, vt, _) => MapType(kt, nonNullable(vt), valueContainsNull = false)
+      case StructType(fields) =>
+        StructType(fields.map(f => f.copy(dataType = nonNullable(f.dataType), nullable = false)))
+      case other => other
+    }
+
+    val rand = new Random(42)
+    val valueRow = RandomDataGenerator.forType(nonNullable(schema), nullable = false, rand).get
+    val randomRow = RandomDataGenerator.forType(schema, nullable = false, rand).get
+    val nullRow = Row.fromSeq(Seq.fill(schema.length)(null))
+    val toInternalRow = ExpressionEncoder(toRowEncoder(schema)).createSerializer()
+    def rows(gen: () => Any, n: Int): Seq[InternalRow] =
+      Seq.fill(n)(toInternalRow(gen().asInstanceOf[Row]).copy())
+
+    val batches = Seq(
+      rows(valueRow, 500),
+      toInternalRow(nullRow).copy() +: rows(randomRow, 30),
+      Seq.empty,
+      rows(randomRow, 7) :+ toInternalRow(nullRow).copy(),
+      rows(valueRow, 3))
+
+    def write(writer: ArrowWriter, batch: Seq[InternalRow]): Unit = {
+      batch.foreach(writer.write)
+      writer.finish()
+    }
+
+    Seq(false, true).foreach { largeVarTypes =>
+      val tz = "America/Los_Angeles"
+      val writer = ArrowWriter.create(schema, tz, largeVarTypes = largeVarTypes)
+      batches.foreach { batch =>
+        write(writer, batch)
+        val fresh = ArrowWriter.create(schema, tz, largeVarTypes = largeVarTypes)
+        write(fresh, batch)
+        assert(writer.root.equals(fresh.root))
+
+        // What a consumer such as a Python worker receives: the batch after IPC unloading.
+        val recordBatch = new VectorUnloader(writer.root).getRecordBatch
+        val loaded = VectorSchemaRoot.create(writer.root.getSchema, ArrowUtils.rootAllocator)
+        new VectorLoader(loaded).load(recordBatch)
+        assert(loaded.equals(fresh.root))
+
+        recordBatch.close()
+        loaded.close()
+        fresh.root.close()
+        writer.reset()
+      }
+      writer.root.close()
+    }
   }
 }
