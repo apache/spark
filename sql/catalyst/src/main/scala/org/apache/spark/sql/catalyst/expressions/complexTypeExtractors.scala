@@ -478,7 +478,7 @@ trait GetArrayItemUtil {
           true
       }
     } else {
-      if (failOnError) arrayElementNullable || child.nullable else true
+      if (failOnError) arrayElementNullable || child.nullable || ordinal.nullable else true
     }
   }
 }

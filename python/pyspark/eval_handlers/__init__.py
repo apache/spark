@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-"""Internal handlers for the Arrow/Pandas UDF and UDTF eval types.
+"""Internal handlers for the UDF and UDTF eval types.
 
 Not a supported extension API: the registry is per executor process and filled at
 import time, so handlers must be defined in this package rather than by user code.
@@ -26,9 +26,17 @@ several handlers, each declaring the ``variant_value`` of a ``variant_conf`` ``R
 property that selects it at lookup. Importing this package imports the concrete handler
 submodules so they register.
 
-``_arrow``, ``_pandas`` and ``_udtf`` import pyarrow (and pandas) lazily, so they register
-their handlers without those installed and defer the checks to when a handler runs.
+``_arrow``, ``_elementwise``, ``_pandas``, ``_stateful`` and ``_udtf`` import pyarrow (and pandas)
+lazily, so they register their handlers without those installed and defer the checks to when a
+handler runs.
 """
 
 # Registers the handlers on import.
-from pyspark.eval_handlers import _arrow, _pandas, _udtf  # noqa: F401
+from pyspark.eval_handlers import (  # noqa: F401
+    _arrow,
+    _elementwise,
+    _pandas,
+    _stateful,
+    _udtf,
+    _vanilla,
+)

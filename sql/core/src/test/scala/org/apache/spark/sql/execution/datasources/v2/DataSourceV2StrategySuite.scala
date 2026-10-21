@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.time.LocalTime
 import java.util.{EnumSet, OptionalLong}
 
 import org.apache.spark.SparkConf
@@ -42,7 +43,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, BooleanType, DoubleType, FloatType, IntegerType, LongType, StringType, StructField, StructType, TimestampType, VariantType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DoubleType, FloatType, IntegerType, LongType, StringType, StructField, StructType, TimestampType, TimeType, VariantType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.udf.worker.UDFWorkerSpecification
 import org.apache.spark.unsafe.types.UTF8String
@@ -1916,6 +1917,16 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       runtimeFilter(Cast($"clong".long, DoubleType), Array[Any](1.0d))).isEmpty)
     assert(DataSourceV2Strategy.translateRuntimeFilterV2(
       runtimeFilter(Cast($"cint".int, StringType), Array[Any](UTF8String.fromString("1")))).isEmpty)
+  }
+
+  test("SPARK-60355: translate runtime IN filter on a time column cast to a larger precision") {
+    // values with more fractional digits than the column type are dropped and nulls are kept,
+    // the same as `UnwrapCastInBinaryComparison` does for `InSet`
+    val noon = LocalTime.NOON.toNanoOfDay
+    val ctime = AttributeReference("ctime", TimeType(6))()
+    val in = runtimeFilter(Cast(ctime, TimeType(9)), Array[Any](noon, noon + 1, null))
+    checkRuntimeFilter(in, "ctime",
+      Set(LiteralValue(noon, TimeType(6)), LiteralValue(null, TimeType(6))))
   }
 
   private def runtimeFilter(child: Expression, values: Array[Any]): InSubqueryExec = {
