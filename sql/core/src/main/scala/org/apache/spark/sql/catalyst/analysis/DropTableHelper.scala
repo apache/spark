@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.analysis.ResolveSessionCatalog.ResolvedV1Identifier
 import org.apache.spark.sql.catalyst.plans.logical.{DropTable, LogicalPlan}
 import org.apache.spark.sql.execution.command.{DropTableCommand, DropTempViewCommand}
 import org.apache.spark.sql.internal.SQLConf
@@ -28,7 +27,8 @@ import org.apache.spark.sql.internal.SQLConf
  */
 object DropTableHelper {
   def rewrite(dropTable: DropTable): LogicalPlan = dropTable match {
-    case DropTable(ResolvedV1Identifier(identifier), ifExists, purge) if SQLConf.get.useV1Command =>
+    case DropTable(ResolvedV1CommandIdentifier(identifier), ifExists, purge)
+        if SQLConf.get.useV1Command =>
       DropTableCommand(identifier, ifExists, isView = false, purge = purge)
     case DropTable(ResolvedIdentifier(FakeSystemCatalog, identifier), _, _) =>
       DropTempViewCommand(identifier)

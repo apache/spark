@@ -21,6 +21,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.LogKeys.CONFIG
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.V1CommandUtils.supportsV1Command
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec, HiveTableRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, AliasHelper, Attribute}
 import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
@@ -28,7 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, CharVarcharUtils, ResolveDefaultColumns => DefaultCols}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.connector.catalog.{CatalogExtension, CatalogManager, CatalogPlugin, CatalogV2Util, LookupCatalog, SupportsNamespaces, V1Table, ViewCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, LookupCatalog, SupportsNamespaces, V1Table, ViewCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.command._
@@ -51,7 +52,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import org.apache.spark.sql.connector.catalog.CatalogV2Util._
   import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
-  import ResolveSessionCatalog.ResolvedV1Identifier
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
     case a @ AddColumns(ResolvedV1TableIdentifier(ident), cols)
@@ -269,7 +269,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     // For CREATE TABLE [AS SELECT], we should use the v1 command if the catalog is resolved to the
     // session catalog and the table provider is not v2.
-    case c @ CreateTable(ResolvedV1Identifier(ident), _, _, tableSpec: TableSpec, _)
+    case c @ CreateTable(ResolvedV1CommandIdentifier(ident), _, _, tableSpec: TableSpec, _)
         if c.resolved && c.columns.forall(_.isDefaultValueTypeCoerced) =>
       val (storageFormat, provider) = getStorageFormatAndProvider(
         c.tableSpec.provider, tableSpec.options, c.tableSpec.location, c.tableSpec.serde,
@@ -300,7 +300,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       }
 
     case c @ CreateTableAsSelect(
-        ResolvedV1Identifier(ident), _, _, tableSpec: TableSpec, writeOptions, _, _) =>
+        ResolvedV1CommandIdentifier(ident), _, _, tableSpec: TableSpec, writeOptions, _, _) =>
       val (storageFormat, provider) = getStorageFormatAndProvider(
         c.tableSpec.provider,
         tableSpec.options ++ writeOptions,
@@ -324,7 +324,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     // For REPLACE TABLE [AS SELECT], we should fail if the catalog is resolved to the
     // session catalog and the table provider is not v2.
-    case c @ ReplaceTable(ResolvedV1Identifier(ident), _, _, _, _) if c.resolved =>
+    case c @ ReplaceTable(ResolvedV1CommandIdentifier(ident), _, _, _, _) if c.resolved =>
       val provider = c.tableSpec.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
         throw QueryCompilationErrors.unsupportedTableOperationError(
@@ -333,7 +333,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         c
       }
 
-    case c @ ReplaceTableAsSelect(ResolvedV1Identifier(ident), _, _, _, _, _, _) =>
+    case c @ ReplaceTableAsSelect(ResolvedV1CommandIdentifier(ident), _, _, _, _, _, _) =>
       val provider = c.tableSpec.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
         throw QueryCompilationErrors.unsupportedTableOperationError(
@@ -346,7 +346,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     // catalog (or a V1-compatible catalog extension). If source is in a different catalog, fall
     // through to the V2 execution path (CreateTableLikeExec via DataSourceV2Strategy).
     case CreateTableLike(
-        ResolvedV1Identifier(targetIdent),
+        ResolvedV1CommandIdentifier(targetIdent),
         ResolvedV1TableOrViewIdentifier(sourceIdent),
         location, provider, serdeInfo, properties, ifNotExists) =>
       val fileFormat = buildStorageFormatFromSerdeInfo(location, serdeInfo)
@@ -1002,9 +1002,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     }
   }
 
-  private def supportsV1Command(catalog: CatalogPlugin): Boolean =
-    ResolveSessionCatalog.supportsV1Command(catalog)
-
   // True when the ALTER COLUMN specs only change comments (set or drop, no type / nullability /
   // position / default changes) and, taken together, touch multiple columns or a nested field.
   // Such changes come from `COMMENT ON TABLE ... COLUMN (...)` and cannot be expressed by the
@@ -1019,24 +1016,4 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     commentOnly && (specs.size > 1 || specs.exists(_.column.name.length > 1))
   }
 
-}
-
-object ResolveSessionCatalog {
-  /** Whether commands on `catalog` can be converted to V1 session-catalog commands. */
-  def supportsV1Command(catalog: CatalogPlugin): Boolean = {
-    CatalogV2Util.isSessionCatalog(catalog) && (
-      SQLConf.get.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION) == "builtin" ||
-        catalog.isInstanceOf[CatalogExtension])
-  }
-
-  /** Extracts a V1 identifier, rejecting namespaces that cannot be represented in V1. */
-  object ResolvedV1Identifier {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-
-    def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
-      case ResolvedIdentifier(catalog, ident) if supportsV1Command(catalog) =>
-        Some(ident.asTableIdentifier.copy(catalog = Some(catalog.name)))
-      case _ => None
-    }
-  }
 }
