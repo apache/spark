@@ -3016,7 +3016,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
 
         val plan = df.queryExecution.executedPlan
         assert(collectShuffles(plan).isEmpty, "SPJ should be triggered for both joins")
-        val t4Scan = collectScans(plan).find(_.spjParams.joinKeyPositions.isDefined).get
+        val t4Scan = collectScans(plan).find(_.table.name().endsWith("t4")).get
         assert(t4Scan.spjParams.joinKeyPositions.contains(Seq(1)),
           "t4 scan should keep the inner join's key position [1], not [0]")
         checkAnswer(df, Seq(
@@ -3070,7 +3070,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
 
         val plan = df.queryExecution.executedPlan
         assert(collectShuffles(plan).isEmpty, "SPJ should be triggered for both joins")
-        val t1Scan = collectScans(plan).find(_.spjParams.joinKeyPositions.isDefined).get
+        val t1Scan = collectScans(plan).find(_.table.name().endsWith("t1")).get
         assert(t1Scan.spjParams.joinKeyPositions.contains(Seq(1)),
           "t1 scan should keep the inner join's key position [1], not [0]")
         checkAnswer(df, Seq(
@@ -3167,7 +3167,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
   }
 
   // Aligning partition counts when one id maps to multiple names needs GroupPartitionsExec
-  // (4.2+, SPARK-55535). The minimal 4.1 fix covers the other JIRA shapes only.
+  // (4.2+, SPARK-55535). Projecting common values in populateSpjParams covers the other shapes.
   ignore("SPARK-60232: nested SPJ with multiple names per id over common partition values") {
     val items2 = "items2"
     val itemsPartitions = Array(identity("id"), identity("name"))
