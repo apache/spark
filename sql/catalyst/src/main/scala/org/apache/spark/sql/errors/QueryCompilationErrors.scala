@@ -4646,82 +4646,91 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def duplicateRequiredDataAttributeError(
       connectorClass: String,
-      duplicateAttributes: Seq[String]): Throwable = {
+      duplicateAttributes: Seq[Seq[String]]): Throwable = {
     new AnalysisException(
       errorClass = "COLUMN_UPDATE_DUPLICATE_REQUIRED_DATA_ATTRIBUTE",
       messageParameters = Map(
         "connector" -> connectorClass,
-        "duplicateAttributes" -> duplicateAttributes.mkString("[", ", ", "]")))
+        "duplicateAttributes" -> duplicateAttributes.map(toSQLId).mkString("[", ", ", "]")))
   }
 
   def metadataRequiredDataAttributeError(
       connectorClass: String,
-      metadataAttributes: Seq[String]): Throwable = {
+      metadataAttributes: Seq[Seq[String]]): Throwable = {
     new AnalysisException(
       errorClass = "COLUMN_UPDATE_METADATA_REQUIRED_DATA_ATTRIBUTE",
       messageParameters = Map(
         "connector" -> connectorClass,
-        "metadataAttributes" -> metadataAttributes.mkString("[", ", ", "]")))
+        "metadataAttributes" -> metadataAttributes.map(toSQLId).mkString("[", ", ", "]")))
   }
 
   def nestedRequiredDataAttributeError(
       connectorClass: String,
-      nestedAttributes: Seq[String]): Throwable = {
+      nestedAttributes: Seq[Seq[String]]): Throwable = {
     new AnalysisException(
       errorClass = "COLUMN_UPDATE_NESTED_REQUIRED_DATA_ATTRIBUTE",
       messageParameters = Map(
         "connector" -> connectorClass,
-        "nestedAttributes" -> nestedAttributes.mkString("[", ", ", "]")))
+        "nestedAttributes" -> nestedAttributes.map(toSQLId).mkString("[", ", ", "]")))
   }
 
   def requiredDataAttributesMissingUpdatedColumnsError(
       connectorClass: String,
-      missingColumns: Seq[String]): Throwable = {
+      missingColumns: Seq[Seq[String]]): Throwable = {
     new AnalysisException(
       errorClass = "COLUMN_UPDATE_REQUIRED_DATA_ATTRIBUTES_MISSING_UPDATED_COLUMNS",
       messageParameters = Map(
         "connector" -> connectorClass,
-        "missingColumns" -> missingColumns.mkString("[", ", ", "]")))
+        "missingColumns" -> missingColumns.map(toSQLId).mkString("[", ", ", "]")))
   }
 
   def splitUpdateRowIdNotDeclaredError(
       connectorClass: String,
-      rowIds: Seq[String]): Throwable = {
+      rowIds: Seq[Seq[String]]): Throwable = {
     new AnalysisException(
       errorClass = "COLUMN_UPDATE_SPLIT_ROW_ID_NOT_DECLARED",
       messageParameters = Map(
         "connector" -> connectorClass,
-        "rowIds" -> rowIds.mkString("[", ", ", "]")))
+        "rowIds" -> rowIds.map(toSQLId).mkString("[", ", ", "]")))
   }
 
   def splitUpdateRowIdReassignmentError(
       connectorClass: String,
-      rowIds: Seq[String]): Throwable = {
+      rowIds: Seq[Seq[String]]): Throwable = {
     new AnalysisException(
       errorClass = "COLUMN_UPDATE_SPLIT_ROW_ID_REASSIGNMENT",
       messageParameters = Map(
         "connector" -> connectorClass,
-        "rowIds" -> rowIds.mkString("[", ", ", "]")))
+        "rowIds" -> rowIds.map(toSQLId).mkString("[", ", ", "]")))
   }
 
   def unknownRequiredDataAttributeError(
       connectorClass: String,
-      unknownAttributes: Seq[String]): Throwable = {
+      unknownAttributes: Seq[Seq[String]]): Throwable = {
     new AnalysisException(
       errorClass = "COLUMN_UPDATE_UNKNOWN_REQUIRED_DATA_ATTRIBUTE",
       messageParameters = Map(
         "connector" -> connectorClass,
-        "unknownAttributes" -> unknownAttributes.mkString("[", ", ", "]")))
+        "unknownAttributes" -> unknownAttributes.map(toSQLId).mkString("[", ", ", "]")))
   }
 
+  /**
+   * `columns` holds the name parts of each column with, when resolving it failed with an error
+   * instead of finding no column, that error's condition.
+   */
   def undeclaredWriteRequirementColumnsError(
       connectorClass: String,
-      columns: Seq[String]): Throwable = {
+      columns: Seq[(Seq[String], Option[String])]): Throwable = {
+    val names = columns.map {
+      case (Seq(), _) => "<empty>"
+      case (parts, None) => toSQLId(parts)
+      case (parts, Some(condition)) => s"${toSQLId(parts)} ($condition)"
+    }
     new AnalysisException(
       errorClass = "COLUMN_UPDATE_UNDECLARED_WRITE_REQUIREMENT_COLUMNS",
       messageParameters = Map(
         "connector" -> connectorClass,
-        "columns" -> columns.mkString("[", ", ", "]")))
+        "columns" -> names.mkString("[", ", ", "]")))
   }
 
   def cannotRenameTableAcrossSchemaError(): Throwable = {

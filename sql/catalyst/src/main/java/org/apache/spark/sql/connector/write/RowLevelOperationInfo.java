@@ -43,9 +43,12 @@ public interface RowLevelOperationInfo {
    * Returns the columns being updated by this operation. Currently only UPDATE populates it;
    * other commands report an empty array.
    * <p>
-   * A column is reported only if it is assigned a new value, so identity assignments such as
-   * {@code SET a = a} are excluded. Nested struct field updates are reported at root-column
-   * granularity (e.g. {@code SET s.c1 = -1} returns {@code s}).
+   * A column is reported unless its assigned value is the column itself, so identity assignments
+   * such as {@code SET a = a} are excluded. With the default CHAR and VARCHAR handling, a
+   * self-assignment on a CHAR or VARCHAR column is still reported, because Spark pads or
+   * length-checks the assigned value. Nested struct field updates are reported at root-column
+   * granularity (e.g. {@code SET s.c1 = -1} returns {@code s}), even when the field is assigned to
+   * itself.
    *
    * @since 4.4.0
    */

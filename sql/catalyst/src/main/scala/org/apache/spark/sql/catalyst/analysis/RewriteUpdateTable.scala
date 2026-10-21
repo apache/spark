@@ -47,10 +47,10 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
           val updatedAttrs = collectUpdatedAttrs(assignments)
           val table = buildOperationTable(tbl, UPDATE, r.options, updatedAttrs)
           val updateCond = cond.getOrElse(TrueLiteral)
-          val writeAttrs = resolveWriteAttrs(r, table.operation, assignments)
+          val writeAttrs = resolveWriteAttrs(r, table.operation, updatedAttrs)
           table.operation match {
             case _: SupportsDelta =>
-              buildWriteDeltaPlan(r, table, assignments, updateCond, writeAttrs)
+              buildWriteDeltaPlan(r, table, assignments, updateCond, writeAttrs, updatedAttrs)
             case _ if SubqueryExpression.hasSubquery(updateCond) =>
               buildReplaceDataWithUnionPlan(r, table, assignments, updateCond, writeAttrs)
             case _ =>
@@ -83,10 +83,8 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     // build a plan to replace read groups in the table
     val writeRelation = relation.copy(table = operationTable, output = writeAttrs)
     val projections = buildReplaceDataProjections(query, writeRelation.output, metadataAttrs)
-    val (orderedQuery, ordinalMap) = orderReadColumnsFirst(query, projections.all)
     val groupFilterCond = if (groupFilterEnabled) Some(cond) else None
-    ReplaceData(writeRelation, cond, orderedQuery, relation, projections.remapOrdinals(ordinalMap),
-      groupFilterCond)
+    ReplaceData(writeRelation, cond, query, relation, projections, groupFilterCond)
   }
 
   // build a rewrite plan for sources that support replacing groups of data (e.g. files, partitions)
@@ -121,10 +119,8 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     // build a plan to replace read groups in the table
     val writeRelation = relation.copy(table = operationTable, output = writeAttrs)
     val projections = buildReplaceDataProjections(query, writeRelation.output, metadataAttrs)
-    val (orderedQuery, ordinalMap) = orderReadColumnsFirst(query, projections.all)
     val groupFilterCond = if (groupFilterEnabled) Some(cond) else None
-    ReplaceData(writeRelation, cond, orderedQuery, relation, projections.remapOrdinals(ordinalMap),
-      groupFilterCond)
+    ReplaceData(writeRelation, cond, query, relation, projections, groupFilterCond)
   }
 
   // this method assumes the assignments have been already aligned before
@@ -163,13 +159,22 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
       operationTable: RowLevelOperationTable,
       assignments: Seq[Assignment],
       cond: Expression,
-      writeAttrs: Seq[AttributeReference]): WriteDelta = {
+      writeAttrs: Seq[AttributeReference],
+      updatedAttrs: Seq[AttributeReference]): WriteDelta = {
 
     val operation = operationTable.operation.asInstanceOf[SupportsDelta]
 
     // resolve all needed attrs (e.g. row ID and any required metadata attrs)
     val rowIdAttrs = resolveRowIdAttrs(relation, operation)
     val metadataAttrs = resolveRequiredMetadataAttrs(relation, operation)
+
+    operation match {
+      case op: SupportsColumnUpdates if op.representUpdateAsDeleteAndInsert =>
+        val declared = AttributeSet(writeAttrs)
+        validateNoRowIdReassignment(op, relation, declared, updatedAttrs, rowIdAttrs)
+        validateRowIdDeclared(op, declared, rowIdAttrs, metadataAttrs)
+      case _ =>
+    }
 
     // construct a read relation and include all required metadata columns
     val readRelation = buildRelationWithAttrs(relation, operationTable, metadataAttrs, rowIdAttrs)
@@ -186,10 +191,8 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     val writeRelation = relation.copy(table = operationTable, output = writeAttrs)
     val projections = buildWriteDeltaProjections(
       rowDeltaPlan, writeRelation.output, rowIdAttrs, metadataAttrs)
-    val (orderedPlan, ordinalMap) = orderReadColumnsFirst(rowDeltaPlan, projections.all)
     val groupFilterCond = if (groupFilterEnabled) Some(cond) else None
-    WriteDelta(writeRelation, cond, orderedPlan, relation, projections.remapOrdinals(ordinalMap),
-      groupFilterCond)
+    WriteDelta(writeRelation, cond, rowDeltaPlan, relation, projections, groupFilterCond)
   }
 
   // this method assumes the assignments have been already aligned before
@@ -244,52 +247,30 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
   /**
    * Returns the output of the write relation, which is the layout of the data rows the connector
    * receives. If the operation opts into column updates, this is the connector's
-   * `requiredDataAttributes()`, validated against the assignments. Otherwise it is the full
+   * `requiredDataAttributes()`, validated against the updated columns. Otherwise it is the full
    * relation output.
    */
   private def resolveWriteAttrs(
       relation: DataSourceV2Relation,
       operation: RowLevelOperation,
-      assignments: Seq[Assignment]): Seq[AttributeReference] = operation match {
-    case op: SupportsColumnUpdates with SupportsDelta if op.representUpdateAsDeleteAndInsert =>
-      val attrs = resolveDeclaredAttrs(relation, op, assignments)
-      val rowIdAttrs = resolveRowIdAttrs(relation, op)
-      validateNoRowIdReassignment(op, relation, attrs, assignments, rowIdAttrs)
-      validateRowIdDeclared(op, attrs, rowIdAttrs, resolveRequiredMetadataAttrs(relation, op))
-      attrs
+      updatedAttrs: Seq[AttributeReference]): Seq[AttributeReference] = operation match {
     case op: SupportsColumnUpdates =>
-      resolveDeclaredAttrs(relation, op, assignments)
+      val attrs = RewriteRowLevelCommand.resolveRequiredDataAttrs(relation, op)
+      validateUpdatedColumnsSubset(op, updatedAttrs, AttributeSet(attrs))
+      attrs
     case _ =>
       relation.output
   }
 
   /**
-   * Resolves the connector's `requiredDataAttributes()` and checks that it covers every assigned
-   * column.
-   */
-  private def resolveDeclaredAttrs(
-      relation: DataSourceV2Relation,
-      operation: SupportsColumnUpdates,
-      assignments: Seq[Assignment]): Seq[AttributeReference] = {
-    val attrs = resolveRequiredDataAttrs(relation, operation)
-    validateUpdatedColumnsSubset(operation, assignments, attrs)
-    attrs
-  }
-
-  /**
-   * Enforces that every column being assigned (non-identity) is present in the connector-declared
+   * Enforces that every updated column is present in the connector-declared
    * `requiredDataAttributes()`. Comparison is at root-column granularity.
    */
   private def validateUpdatedColumnsSubset(
       operation: RowLevelOperation,
-      assignments: Seq[Assignment],
-      connectorDataAttrs: Seq[AttributeReference]): Unit = {
-    val declaredIds = connectorDataAttrs.map(_.exprId).toSet
-    val missing = assignments.collect {
-      case Assignment(key: AttributeReference, value)
-          if !isIdentityAssignment(key, value) && !declaredIds.contains(key.exprId) =>
-        key.name
-    }.distinct
+      updatedAttrs: Seq[AttributeReference],
+      declared: AttributeSet): Unit = {
+    val missing = updatedAttrs.filterNot(declared.contains).map(a => Seq(a.name))
     if (missing.nonEmpty) {
       throw QueryCompilationErrors.requiredDataAttributesMissingUpdatedColumnsError(
         operation.getClass.getName, missing)
@@ -299,30 +280,25 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
   /**
    * For connectors that opt into narrow column updates AND represent UPDATE as delete + insert,
    * reject reassignment of any row-ID column, unless `requiredDataAttributes()` covers every
-   * column in the relation. In that case the REINSERT payload already is the full row with the
-   * new row-ID value, and the DELETE half still carries the original row-ID via
-   * `newLazyRowIdProjection`, so reassignment is safe. Otherwise the REINSERT path has no
-   * row-ID channel to reconstruct columns outside `requiredDataAttributes()`.
+   * data column of the relation. In that case the REINSERT payload already is the full row with
+   * the new row-ID value, and the DELETE half still carries the original row-ID via
+   * `newLazyRowIdProjection`, so reassignment is safe. Otherwise the REINSERT path has no row-ID
+   * channel to reconstruct columns outside `requiredDataAttributes()`.
    */
   private def validateNoRowIdReassignment(
       operation: RowLevelOperation,
       relation: DataSourceV2Relation,
-      connectorDataAttrs: Seq[AttributeReference],
-      assignments: Seq[Assignment],
+      declared: AttributeSet,
+      updatedAttrs: Seq[AttributeReference],
       rowIdAttrs: Seq[Attribute]): Unit = {
-    val declaredIds = connectorDataAttrs.map(_.exprId).toSet
-    if (relation.output.forall(a => declaredIds.contains(a.exprId))) {
-      return
-    }
-    val rowIdAttrSet = AttributeSet(rowIdAttrs)
-    val reassigned = assignments.collect {
-      case Assignment(key: AttributeReference, value)
-          if rowIdAttrSet.contains(key) && !isIdentityAssignment(key, value) =>
-        key.name
-    }.distinct
-    if (reassigned.nonEmpty) {
-      throw QueryCompilationErrors.splitUpdateRowIdReassignmentError(
-        operation.getClass.getName, reassigned)
+    val dataAttrs = relation.output.filterNot(a => MetadataAttribute.isValid(a.metadata))
+    if (!dataAttrs.forall(declared.contains)) {
+      val rowIdAttrSet = AttributeSet(rowIdAttrs)
+      val reassigned = updatedAttrs.filter(rowIdAttrSet.contains).map(a => Seq(a.name))
+      if (reassigned.nonEmpty) {
+        throw QueryCompilationErrors.splitUpdateRowIdReassignmentError(
+          operation.getClass.getName, reassigned)
+      }
     }
   }
 
@@ -336,15 +312,14 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
    */
   private def validateRowIdDeclared(
       operation: RowLevelOperation,
-      connectorDataAttrs: Seq[AttributeReference],
+      declared: AttributeSet,
       rowIdAttrs: Seq[Attribute],
       metadataAttrs: Seq[Attribute]): Unit = {
-    val declaredIds = connectorDataAttrs.map(_.exprId).toSet
-    val reinsertedMetadataIds =
-      metadataAttrs.filter(MetadataAttribute.isPreservedOnReinsert).map(_.exprId).toSet
+    val reinsertedMetadata =
+      AttributeSet(metadataAttrs.filter(MetadataAttribute.isPreservedOnReinsert))
     val undeclared = rowIdAttrs
-      .filterNot(a => declaredIds.contains(a.exprId) || reinsertedMetadataIds.contains(a.exprId))
-      .map(_.name).distinct
+      .filterNot(a => declared.contains(a) || reinsertedMetadata.contains(a))
+      .map(a => Seq(a.name)).distinct
     if (undeclared.nonEmpty) {
       throw QueryCompilationErrors.splitUpdateRowIdNotDeclaredError(
         operation.getClass.getName, undeclared)

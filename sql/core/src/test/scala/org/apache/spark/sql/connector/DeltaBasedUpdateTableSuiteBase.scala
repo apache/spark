@@ -23,68 +23,6 @@ abstract class DeltaBasedUpdateTableSuiteBase extends UpdateTableSuiteBase {
 
   override protected def deltaUpdate: Boolean = true
 
-  test("SPARK-58111: updatedColumns: single non-identity assignment") {
-    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
-      """{ "pk": 1, "id": 1, "dep": "hr" }
-        |""".stripMargin)
-
-    sql(s"UPDATE $tableNameAsString SET id = -1 WHERE pk = 1")
-
-    checkLastUpdatedColumns("id")
-  }
-
-  test("SPARK-58111: updatedColumns: multiple non-identity assignments") {
-    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
-      """{ "pk": 1, "id": 1, "dep": "hr" }
-        |""".stripMargin)
-
-    sql(s"UPDATE $tableNameAsString SET id = -1, dep = 'eng' WHERE pk = 1")
-
-    checkLastUpdatedColumns("id", "dep")
-  }
-
-  test("SPARK-58111: updatedColumns: identity assignments are excluded") {
-    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
-      """{ "pk": 1, "id": 1, "dep": "hr" }
-        |""".stripMargin)
-
-    sql(s"UPDATE $tableNameAsString SET id = -1, dep = dep WHERE pk = 1")
-
-    checkLastUpdatedColumns("id")
-  }
-
-  test("SPARK-58111: updatedColumns: empty when all assignments are identity") {
-    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
-      """{ "pk": 1, "id": 1, "dep": "hr" }
-        |""".stripMargin)
-
-    sql(s"UPDATE $tableNameAsString SET id = id, dep = dep WHERE pk = 1")
-
-    checkLastUpdatedColumns()
-  }
-
-  test("SPARK-58111: updatedColumns: no WHERE clause still reports assigned columns") {
-    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
-      """{ "pk": 1, "id": 1, "dep": "hr" }
-        |{ "pk": 2, "id": 2, "dep": "software" }
-        |""".stripMargin)
-
-    sql(s"UPDATE $tableNameAsString SET dep = 'eng'")
-
-    checkLastUpdatedColumns("dep")
-  }
-
-  test("SPARK-58111: updatedColumns: assignment from another column is not identity") {
-    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
-      """{ "pk": 1, "id": 10, "dep": "hr" }
-        |""".stripMargin)
-
-    sql(s"UPDATE $tableNameAsString SET id = pk WHERE pk = 1")
-
-    checkLastUpdatedColumns("id")
-    checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(1, 1, "hr") :: Nil)
-  }
-
   test("nullable row ID attrs") {
     createAndInitTable("pk INT, salary INT, dep STRING",
       """{ "pk": 1, "salary": 300, "dep": 'hr' }

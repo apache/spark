@@ -56,6 +56,56 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
     plan.resolve(ref.fieldNames.toImmutableArraySeq, conf.resolver)
   }
 
+  /**
+   * Returns the names of the columns referenced by the given expressions that cannot be resolved
+   * against the plan, at any depth, including inside transform arguments.
+   */
+  private[sql] def unresolvableColumns(
+      exprs: Seq[V2Expression],
+      relation: LogicalPlan): Seq[String] = {
+    unresolvableReferences(exprs, relation).map {
+      case (Seq(), _) => "<empty>"
+      case (parts, None) => parts.quoted
+      case (parts, Some(condition)) => s"${parts.quoted} ($condition)"
+    }.distinct
+  }
+
+  /**
+   * Returns the name parts of the column references in the given expressions that cannot be
+   * resolved against the plan, at any depth, each with the error condition when resolving it
+   * throws.
+   */
+  private[sql] def unresolvableReferences(
+      exprs: Seq[V2Expression],
+      relation: LogicalPlan): Seq[(Seq[String], Option[String])] = {
+    // Walk the accessors the conversion reads, `Transform.arguments()` and
+    // `SortOrder.expression()`, instead of `V2Expression.references()` or `children()`: a connector
+    // can override those to disagree with the conversion, and `ApplyTransform.references()` returns
+    // only its top-level arguments, which would miss `f(g(missing))`. Other expressions, such as
+    // `GeneralScalarExpression`, which the conversion rejects, go through `children()`.
+    def collectReferences(expr: V2Expression): Seq[NamedReference] = expr match {
+      case ref: NamedReference => Seq(ref)
+      case t: Transform => t.arguments().toImmutableArraySeq.flatMap(collectReferences)
+      case s: V2SortOrder => collectReferences(s.expression())
+      case other => other.children().toImmutableArraySeq.flatMap(collectReferences)
+    }
+    exprs.flatMap(collectReferences).flatMap { ref =>
+      val parts = ref.fieldNames.toImmutableArraySeq
+      if (parts.isEmpty) {
+        // An empty name can be neither quoted nor resolved: both throw.
+        Some(parts -> None)
+      } else {
+        try {
+          Option.when(resolveRefOpt(ref, relation).isEmpty)(parts -> None)
+        } catch {
+          // A nested-field extraction error or an ambiguous reference throws instead of returning
+          // None.
+          case e: AnalysisException => Some(parts -> Some(e.getCondition))
+        }
+      }
+    }.distinct
+  }
+
   def resolveRef[T <: NamedExpression](ref: NamedReference, plan: LogicalPlan): T = {
     resolveRefOpt(ref, plan).getOrElse {
       val name = ref.fieldNames.toImmutableArraySeq.quoted

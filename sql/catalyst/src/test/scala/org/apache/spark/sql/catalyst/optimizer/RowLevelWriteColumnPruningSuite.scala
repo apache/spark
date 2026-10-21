@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import java.util
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ProjectingInternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, EqualNullSafe, Expression, If, Literal, Not}
@@ -34,8 +35,8 @@ import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
- * Tests the [[ColumnPruning]] case that prunes the query columns of a [[RowLevelWrite]] after the
- * last one its projections read.
+ * Tests the [[ColumnPruning]] case that prunes the query columns of a [[RowLevelWrite]] that its
+ * projections don't read and moves the projections to the ordinals of the pruned query.
  */
 class RowLevelWriteColumnPruningSuite extends PlanTest {
 
@@ -61,10 +62,9 @@ class RowLevelWriteColumnPruningSuite extends PlanTest {
 
   private val dataColumns = Seq("pk", "id", "dep", "salary", "bonus", "extra")
 
-  // the data columns of a write that receives pk and salary, with the ones it reads first and
-  // _partition after them, as RewriteUpdateTable orders them
+  // the data columns of a write that receives pk and salary
   private val writeColumns = Seq("pk", "salary")
-  private val otherColumns = Seq("id", "dep", "bonus", "extra")
+  private val queryColumns = dataColumns :+ "_partition"
 
   private def column(plan: LogicalPlan, name: String): Attribute = {
     plan.output.find(_.name == name).get
@@ -100,9 +100,7 @@ class RowLevelWriteColumnPruningSuite extends PlanTest {
     Project(Alias(operation, OPERATION_COLUMN)() +: values, plan)
   }
 
-  private def readFirstQuery(plan: LogicalPlan): LogicalPlan = {
-    replaceDataQuery(plan, (writeColumns :+ "_partition") ++ otherColumns)
-  }
+  private def updateQuery(plan: LogicalPlan): LogicalPlan = replaceDataQuery(plan, queryColumns)
 
   private def replaceData(query: LogicalPlan, rowNames: Seq[String]): ReplaceData = {
     val projections = ReplaceDataProjections(
@@ -124,41 +122,55 @@ class RowLevelWriteColumnPruningSuite extends PlanTest {
       .filter(relation.outputSet.contains).map(_.name).toSet
   }
 
+  // the query columns each projection of the write reads
+  private def projectedColumns(write: RowLevelWrite): Seq[Seq[Attribute]] = {
+    val projections = write match {
+      case r: ReplaceData => r.projections.all
+      case d: WriteDelta => d.projections.all
+    }
+    projections.map(_.colOrdinals.map(write.query.output))
+  }
+
   private def checkPruned(optimized: RowLevelWrite, write: RowLevelWrite): Unit = {
     assert(optimized.query.output.map(_.name) ==
       OPERATION_COLUMN +: writeColumns :+ "_partition")
-    assert(optimized.query.output == write.query.output.take(4))
+    assert(projectedColumns(optimized) == projectedColumns(write))
     comparePlans(Optimize.execute(optimized), optimized, checkAnalysis = false)
   }
 
-  test("ReplaceData: prune the columns after the last one the write reads") {
-    val write = replaceData(readFirstQuery(read), writeColumns)
+  test("ReplaceData: prune the columns the write does not read") {
+    val write = replaceData(updateQuery(read), writeColumns)
     val optimized = Optimize.execute(write).asInstanceOf[ReplaceData]
 
     checkPruned(optimized, write)
-    assert(optimized.projections == write.projections)
     assert(scannedColumns(optimized, read) == Set("pk", "dep", "salary", "bonus", "_partition"))
   }
 
-  test("ReplaceData: keep unread columns before the last one the write reads") {
-    val write = replaceData(replaceDataQuery(read, dataColumns :+ "_partition"), writeColumns)
-    comparePlans(Optimize.execute(write), write, checkAnalysis = false)
+  test("ReplaceData: move the projections to the ordinals of the pruned query") {
+    val write = replaceData(updateQuery(read), writeColumns)
+    assert(write.projections.rowProjection.colOrdinals == Seq(1, 4))
+    assert(write.projections.metadataProjection.get.colOrdinals == Seq(7))
+
+    val optimized = Optimize.execute(write).asInstanceOf[ReplaceData]
+
+    assert(optimized.projections.rowProjection.colOrdinals == Seq(1, 2))
+    assert(optimized.projections.metadataProjection.get.colOrdinals == Seq(3))
+    assert(optimized.projections.rowProjection.schema == write.projections.rowProjection.schema)
   }
 
   test("ReplaceData: a CHECK filter on the query keeps its columns") {
-    val updated = readFirstQuery(read)
+    val updated = updateQuery(read)
     val write = replaceData(Filter(column(updated, "extra") > 0, updated), writeColumns)
     val optimized = Optimize.execute(write).asInstanceOf[ReplaceData]
 
     checkPruned(optimized, write)
     assert(optimized.query.exists(_.isInstanceOf[Filter]))
-    assert(optimized.projections == write.projections)
     assert(scannedColumns(optimized, read) ==
       Set("pk", "dep", "salary", "bonus", "extra", "_partition"))
   }
 
   test("ReplaceData: prune both children of the Union built for subquery conditions") {
-    val names = (writeColumns :+ "_partition") ++ otherColumns
+    val names = queryColumns
     val matched = Filter(cond(read), read)
     val updated = Project(
       Alias(Literal(UPDATE_OPERATION), OPERATION_COLUMN)() +: names.map { name =>
@@ -179,14 +191,13 @@ class RowLevelWriteColumnPruningSuite extends PlanTest {
     union.children.foreach { child =>
       assert(child.output.map(_.name) == OPERATION_COLUMN +: writeColumns :+ "_partition")
     }
-    assert(optimized.projections == write.projections)
     assert(scannedColumns(optimized, read) == Set("pk", "dep", "salary", "bonus", "_partition"))
     assert(scannedColumns(optimized, read2) == Set("pk", "dep", "salary", "_partition"))
   }
 
-  test("WriteDelta: prune the columns after the last one the write reads") {
+  test("WriteDelta: prune the columns the write does not read") {
     val matched = Filter(cond(read), read)
-    val names = (writeColumns :+ "_partition") ++ otherColumns
+    val names = queryColumns
     val query = Project(
       Alias(Literal(UPDATE_OPERATION), OPERATION_COLUMN)() +: names.map { name =>
         if (name == "_partition") column(matched, name)
@@ -197,13 +208,12 @@ class RowLevelWriteColumnPruningSuite extends PlanTest {
     val optimized = Optimize.execute(write).asInstanceOf[WriteDelta]
 
     checkPruned(optimized, write)
-    assert(optimized.projections == write.projections)
     assert(scannedColumns(optimized, read) == Set("pk", "dep", "salary", "bonus", "_partition"))
   }
 
   test("WriteDelta: prune the Expand built for delete and reinsert") {
     val matched = Filter(cond(read), read)
-    val names = (writeColumns :+ "_partition") ++ otherColumns
+    val names = queryColumns
     val deleteOutput = Literal(DELETE_OPERATION) +: names.map { name =>
       if (name == "pk" || name == "_partition") column(matched, name)
       else Literal(null, column(matched, name).dataType)
@@ -219,13 +229,26 @@ class RowLevelWriteColumnPruningSuite extends PlanTest {
     val expand = optimized.query.collectFirst { case e: Expand => e }.get
     assert(expand.output.map(_.name) == OPERATION_COLUMN +: writeColumns :+ "_partition")
     assert(expand.projections.forall(_.size == 4))
-    assert(optimized.projections == write.projections)
     assert(scannedColumns(optimized, read) == Set("pk", "dep", "salary", "bonus", "_partition"))
+  }
+
+  test("a projection that reads past the query output is an internal error") {
+    val query = updateQuery(read)
+    val field = StructField("x", IntegerType)
+    val projections = ReplaceDataProjections(
+      ProjectingInternalRow(StructType(Seq(field)), IndexedSeq(query.output.length)), None)
+    val write = ReplaceData(tableRelation, cond(read), query, tableRelation, projections)
+
+    checkError(
+      exception = intercept[SparkException](write.references),
+      condition = "INTERNAL_ERROR",
+      parameters = Map("message" ->
+        "A projection of ReplaceData reads ordinal 8 of a query with 8 columns."))
   }
 
   test("no change when the projections read every query column") {
     // DELETE and an UPDATE that is not a column update read every data column
-    val update = replaceData(replaceDataQuery(read, dataColumns :+ "_partition"), dataColumns)
+    val update = replaceData(updateQuery(read), dataColumns)
     comparePlans(Optimize.execute(update), update, checkAnalysis = false)
 
     val delete = replaceData(

@@ -41,7 +41,8 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  * The scan builder returned by {@link #newScanBuilder} should implement
  * {@link org.apache.spark.sql.connector.read.SupportsPushDownRequiredColumns}, so that the scan
  * does not read columns the command neither references nor declares. Otherwise the scan reads
- * every column.
+ * every column. For operations that do not mix in {@link SupportsDelta}, only top-level columns
+ * are pruned: a struct column the command references through a nested field is read in full.
  *
  * @since 4.4.0
  */
@@ -54,8 +55,16 @@ public interface SupportsColumnUpdates extends RowLevelOperation {
    * {@link LogicalWriteInfo#columnUpdateSchema()}, in declared order. Implementations must include
    * every column they want to receive: every column reported by
    * {@link RowLevelOperationInfo#updatedColumns()}, plus any columns needed for row lookup or
-   * routing, e.g. a primary key. Columns that are not declared are absent from the rows the
-   * connector receives, so the connector must preserve their values itself.
+   * routing. Columns that are not declared are absent from the rows the connector receives, so
+   * the connector must preserve their values itself. Spark may call this method more than once
+   * for the same operation, and every call must return the same columns.
+   * <p>
+   * An operation that does not mix in {@link SupportsDelta} should locate original rows through
+   * metadata columns returned by {@link #requiredMetadataAttributes()} that are preserved on
+   * update ({@link org.apache.spark.sql.connector.catalog.MetadataColumn#PRESERVE_ON_UPDATE}),
+   * such as a file and a row position. If it locates rows through a data column, its builder
+   * should build an operation without this mix-in when
+   * {@link RowLevelOperationInfo#updatedColumns()} contains that column.
    * <p>
    * Each entry must name a top-level data column of the table. For updates on nested fields such
    * as {@code SET s.c1 = -1}, the connector must declare the root struct column {@code s}. Spark
@@ -71,7 +80,9 @@ public interface SupportsColumnUpdates extends RowLevelOperation {
    * {@link #requiredMetadataAttributes()} with
    * {@link org.apache.spark.sql.connector.catalog.MetadataColumn#PRESERVE_ON_REINSERT} set. In
    * this mode, an UPDATE that assigns a new value to a row-ID column is also rejected, unless
-   * every table column is declared here. Both cases are rejected with an analysis exception.
+   * every data column is declared here. With the default CHAR and VARCHAR handling, this includes
+   * a self-assignment on a CHAR or VARCHAR row-ID column. Both cases are rejected with an analysis
+   * exception.
    * <p>
    * Data columns the write needs must be declared here too, even if the command does not
    * reference them, such as the source columns of partition transforms and any columns used by

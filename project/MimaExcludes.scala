@@ -49,7 +49,7 @@ object MimaExcludes {
       "org.apache.spark.ml.regression.DecisionTreeRegressionModel.predictVariance"),
     // BIN BY DataFrame API.
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.Dataset.binBy"),
-    // [SPARK-58111] Write schema narrowing for column-level UPDATE in DSv2
+    // [SPARK-58111] Scan and write schema narrowing for column-level UPDATE in DSv2
     ProblemFilters.exclude[ReversedMissingMethodProblem](
       "org.apache.spark.sql.connector.write.RowLevelOperationInfo.updatedColumns")
   )

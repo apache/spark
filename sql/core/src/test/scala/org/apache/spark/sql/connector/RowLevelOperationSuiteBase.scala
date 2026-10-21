@@ -52,7 +52,6 @@ abstract class RowLevelOperationSuiteBase
     spark.conf.set("spark.sql.catalog.cat", classOf[InMemoryRowLevelOperationTableCatalog].getName)
     spark.conf.set(
       "spark.sql.catalog.cat.tableStateOptionKeys", "load-option,targetLoadOption")
-    InMemoryRowLevelOperationTable.resetLastScanSchema()
   }
 
   after {
@@ -127,6 +126,17 @@ abstract class RowLevelOperationSuiteBase
   protected def createTable(columns: Array[Column]): Unit = {
     val transforms = Array[Transform](identity(reference(Seq("dep"))))
     createTable(columns, transforms)
+  }
+
+  // `extraTableProps` as the TBLPROPERTIES clause of a CREATE TABLE statement
+  protected def extraTablePropertiesClause: String = {
+    if (extraTableProps.isEmpty) {
+      ""
+    } else {
+      extraTableProps.asScala
+        .map { case (key, value) => s"'$key' = '$value'" }
+        .mkString("TBLPROPERTIES (", ", ", ")")
+    }
   }
 
   protected def createTable(columns: Array[Column], transforms: Array[Transform]): Unit = {
@@ -282,18 +292,55 @@ abstract class RowLevelOperationSuiteBase
     assert(scans.isEmpty, "plan must not contain scan relations")
   }
 
-  protected def executeAndCheckScan(
-      query: String,
-      expectedScanSchema: String): Unit = {
-
+  // the schemas of the scans of the target table, directly or through a row-level operation, in
+  // the plan of the query
+  private def executeAndCollectScanSchemas(query: String): Seq[StructType] = {
     val executedPlan = executeAndKeepPlan {
       sql(query)
     }
+    val targetName = table.name
+    def scansTarget(scan: BatchScanExec): Boolean = scan.table match {
+      case RowLevelOperationTable(t, _) => t.name == targetName
+      case t => t.name == targetName
+    }
+    val schemas = collect(executedPlan) {
+      case scan: BatchScanExec if scansTarget(scan) => scan.schema
+    }
+    assert(schemas.nonEmpty, s"no scan of the target table for: $query")
+    schemas
+  }
 
-    val scan = collect(executedPlan) {
-      case s: BatchScanExec => s
-    }.head
-    assert(DataTypeUtils.sameType(scan.schema, StructType.fromDDL(expectedScanSchema)))
+  /**
+   * Executes the query and asserts the exact schema of its scans of the target table, including
+   * the spelling of field names but ignoring nullability.
+   */
+  protected def executeAndCheckScan(
+      query: String,
+      expectedScanSchema: String): Unit = {
+    executeAndCollectScanSchemas(query).foreach { schema =>
+      assert(DataTypeUtils.equalsIgnoreNullability(schema, StructType.fromDDL(expectedScanSchema)),
+        s"scan read ${schema.toDDL} but expected $expectedScanSchema")
+    }
+  }
+
+  /** Executes the query and asserts that its table scans read all of the given columns. */
+  protected def executeAndCheckScanIncludes(query: String, includedNames: String*): Unit = {
+    executeAndCollectScanSchemas(query).foreach { schema =>
+      val missing = includedNames.toSet.diff(schema.fieldNames.toSet)
+      assert(missing.isEmpty,
+        s"scan must include ${missing.mkString("[", ", ", "]")} " +
+          s"but read ${schema.fieldNames.mkString("[", ", ", "]")}")
+    }
+  }
+
+  /** Executes the query and asserts that its table scans read none of the given columns. */
+  protected def executeAndCheckScanExcludes(query: String, excludedNames: String*): Unit = {
+    executeAndCollectScanSchemas(query).foreach { schema =>
+      val leaked = excludedNames.toSet.intersect(schema.fieldNames.toSet)
+      assert(leaked.isEmpty,
+        s"scan should not include ${leaked.mkString("[", ", ", "]")} " +
+          s"but read ${schema.fieldNames.mkString("[", ", ", "]")}")
+    }
   }
 
   protected def executeAndCheckScans(
@@ -308,7 +355,8 @@ abstract class RowLevelOperationSuiteBase
     val primaryScan = collect(executedPlan) {
       case s: BatchScanExec => s
     }.head
-    assert(DataTypeUtils.sameType(primaryScan.schema, StructType.fromDDL(primaryScanSchema)))
+    assert(DataTypeUtils.equalsIgnoreNullability(
+      primaryScan.schema, StructType.fromDDL(primaryScanSchema)))
 
     val groupFilterScan = primaryScan.runtimeFilters match {
       case Seq(DynamicPruningExpression(child: InSubqueryExec)) =>
@@ -323,7 +371,8 @@ abstract class RowLevelOperationSuiteBase
     groupFilterScanSchema match {
       case Some(filterSchema) =>
         assert(groupFilterScan.isDefined, "could not find group filter scan")
-        assert(DataTypeUtils.sameType(groupFilterScan.get.schema, StructType.fromDDL(filterSchema)))
+        assert(DataTypeUtils.equalsIgnoreNullability(
+          groupFilterScan.get.schema, StructType.fromDDL(filterSchema)))
 
       case None =>
         assert(groupFilterScan.isEmpty, "should not be any group filter scans")
@@ -355,47 +404,17 @@ abstract class RowLevelOperationSuiteBase
       "column update schema must match")
   }
 
-
   /**
    * Asserts that the column names in RowLevelOperationInfo.updatedColumns() received by the
    * last operation match exactly the expected set.  Order is ignored.
    */
   protected def checkLastUpdatedColumns(expectedNames: String*): Unit = {
+    assert(table.lastUpdatedColumns != null, "no row-level operation was built")
     val actual = table.lastUpdatedColumns.map(_.describe()).toSet
     val expected = expectedNames.toSet
     assert(actual == expected,
       s"updatedColumns mismatch: expected ${expected.mkString("[", ", ", "]")} " +
         s"but got ${actual.mkString("[", ", ", "]")}")
-  }
-
-  /** Asserts that the last connector scan schema contains none of the given columns. */
-  protected def checkLastScanExcludes(excludedNames: String*): Unit = {
-    val schema = table.lastScanSchema
-    assert(schema != null, "no scan schema was recorded")
-    val actual = schema.fieldNames.toSet
-    val leaked = excludedNames.toSet.intersect(actual)
-    assert(leaked.isEmpty,
-      s"scan should not include ${leaked.mkString("[", ", ", "]")} " +
-        s"but lastScanSchema=${schema.fieldNames.mkString("[", ", ", "]")}")
-  }
-
-  /** Asserts that the last connector scan schema contains all of the given columns. */
-  protected def checkLastScanIncludes(includedNames: String*): Unit = {
-    val schema = table.lastScanSchema
-    assert(schema != null, "no scan schema was recorded")
-    val actual = schema.fieldNames.toSet
-    val missing = includedNames.toSet.diff(actual)
-    assert(missing.isEmpty,
-      s"scan must include ${missing.mkString("[", ", ", "]")} " +
-        s"but lastScanSchema=${schema.fieldNames.mkString("[", ", ", "]")}")
-  }
-
-  /** Asserts the exact schema of the last connector scan, ignoring nullability. */
-  protected def checkLastScanSchema(expectedSchema: String): Unit = {
-    val schema = table.lastScanSchema
-    assert(schema != null, "no scan schema was recorded")
-    assert(DataTypeUtils.sameType(schema, StructType.fromDDL(expectedSchema)),
-      s"lastScanSchema=${schema.toDDL} but expected $expectedSchema")
   }
 
   protected def checkLastWriteLog(expectedEntries: WriteLogEntry*): Unit = {
