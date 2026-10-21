@@ -1254,9 +1254,9 @@ object KeyedPartitioning {
    * Keys repeating across children is not a collapse. Only a child's own collapse carries over,
    * since such a key still stands for several finer-grained ones in the concatenation.
    *
-   * One marked child marks the result, and the concatenation reports the weakest routing of its
-   * legs': ungrouped, it routes an undeclared row per contributing leg rather than by a hash over
-   * its own count.
+   * One marked child marks the result. Hash routing survives only when the combined origin is
+   * `HASH_ROUTING`, the result is grouped, and at most one leg is nonempty. Other marked
+   * concatenations lose routing: each leg routed undeclared rows over its own partition count.
    */
   def concat(kps: Seq[KeyedPartitioning]): KeyedPartitioning = {
     val concatenatedKeys = kps.flatMap(_.partitionKeys)
