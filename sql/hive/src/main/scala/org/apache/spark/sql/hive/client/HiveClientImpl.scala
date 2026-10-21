@@ -1103,6 +1103,17 @@ private[hive] object HiveClientImpl extends Logging {
     new FieldSchema(c.name, typeString, c.getComment().orNull)
   }
 
+  /**
+   * Parses a Hive type string. The parser resolves `timestamp` by spark.sql.timestampType, but
+   * Hive `timestamp` is always TIMESTAMP_LTZ in Spark and Hive has no TIMESTAMP_NTZ type, so map
+   * TIMESTAMP_NTZ back to TIMESTAMP_LTZ.
+   */
+  def parseHiveType(typeStr: String): DataType = {
+    CatalystSqlParser.parseDataType(typeStr).transformRecursively {
+      case TimestampNTZType => TimestampType
+    }
+  }
+
   /** Get the Spark SQL native DataType from Hive's FieldSchema. */
   private def getSparkSQLDataType(hc: FieldSchema): DataType = {
     // For struct types, Hive metastore API uses unquoted element names, so does the spark catalyst
@@ -1117,7 +1128,7 @@ private[hive] object HiveClientImpl extends Logging {
     //   map<string,struct<x:int,y.z:int>> -> map<string,struct<`x`:int,`y.z`:int>>
     val typeStr = hc.getType.replaceAll("(?<=struct<|,)([^,<:]+)(?=:)", "`$1`")
     try {
-      CatalystSqlParser.parseDataType(typeStr)
+      parseHiveType(typeStr)
     } catch {
       case e: ParseException =>
         throw QueryExecutionErrors.cannotRecognizeHiveTypeError(e, typeStr, hc.getName)
