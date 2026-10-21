@@ -499,504 +499,243 @@ A `Table` that declares `STREAMING_WRITE` supports streaming writes through
 
 ## Building a Connector
 
-A minimal batch connector is a `TableProvider`, a `Table` that declares what it can do, a
-`ScanBuilder` that plans partitions and creates readers, and a `WriteBuilder` that implements the
-commit protocol. The examples read and write a CSV file in which every column is a string, so the
-API surface stays visible.
+The sections above describe the interfaces one at a time. This section puts them together in
+the order a connector author needs them, using the connectors Spark tests itself with:
+[`JavaSimpleDataSourceV2`](https://github.com/apache/spark/blob/master/sql/core/src/test/java/test/org/apache/spark/sql/connector/JavaSimpleDataSourceV2.java)
+for a minimal read,
+[`JavaAdvancedDataSourceV2WithV2Filter`](https://github.com/apache/spark/blob/master/sql/core/src/test/java/test/org/apache/spark/sql/connector/JavaAdvancedDataSourceV2WithV2Filter.java)
+for pushdown, and
+[`JavaSimpleWritableDataSource`](https://github.com/apache/spark/blob/master/sql/core/src/test/java/test/org/apache/spark/sql/connector/JavaSimpleWritableDataSource.java)
+for writes, exercised by
+[`DataSourceV2Suite`](https://github.com/apache/spark/blob/master/sql/core/src/test/scala/org/apache/spark/sql/connector/DataSourceV2Suite.scala).
+The three share a few test helpers: `TestingV2Source` is a `TableProvider` whose schema is two
+`int` columns, `i` and `j`; `JavaSimpleBatchTable` is a `Table` that declares `BATCH_READ` and
+returns that schema; `JavaRangeInputPartition` carries a `start` and `end`; and
+`JavaSimpleScanBuilder` is a `ScanBuilder` that is also its own `Scan` and `Batch`.
 
-### Declaring the Table and Its Capabilities
+### Step 1: A Minimal Batch Read
 
-The `Table` names the dataset, exposes its columns, declares its capabilities, and hands out
-builders through `SupportsRead` and `SupportsWrite`. It does no I/O itself.
-
-{% highlight java %}
-public class CsvTable implements SupportsRead, SupportsWrite {
-
-  private static final Set<TableCapability> CAPABILITIES = EnumSet.of(
-      TableCapability.BATCH_READ,
-      TableCapability.BATCH_WRITE,
-      TableCapability.TRUNCATE);
-
-  private final StructType schema;
-  private final CsvFile file;
-
-  public CsvTable(StructType schema, CsvFile file) {
-    this.schema = schema;
-    this.file = file;
-  }
-
-  @Override
-  public String name() {
-    return "csv:" + file.path();
-  }
-
-  @Override
-  public Column[] columns() {
-    return CatalogHelpers.asColumns(schema);
-  }
-
-  @Override
-  public Set<TableCapability> capabilities() {
-    return CAPABILITIES;
-  }
-
-  @Override
-  public ScanBuilder newScanBuilder(CaseInsensitiveStringMap options) {
-    return new CsvScanBuilder(schema, file);
-  }
-
-  @Override
-  public WriteBuilder newWriteBuilder(LogicalWriteInfo info) {
-    return new CsvWriteBuilder(info.schema(), file);
-  }
-}
-{% endhighlight %}
-
-Spark checks [`TableCapability`](api/java/org/apache/spark/sql/connector/catalog/TableCapability.html)
-during analysis, before it calls `newScanBuilder` or `newWriteBuilder`, so the set decides which
-operations are planned regardless of which mix-ins the table implements:
-
-| Capability | What it enables |
-|------------|-----------------|
-| `BATCH_READ` | Batch reads through `newScanBuilder` and `Scan.toBatch()` |
-| `MICRO_BATCH_READ` / `CONTINUOUS_READ` | Streaming reads through `Scan.toMicroBatchStream` / `Scan.toContinuousStream` |
-| `BATCH_WRITE` | Append writes through `newWriteBuilder` and `Write.toBatch()` |
-| `STREAMING_WRITE` | Streaming writes through `Write.toStreaming()` |
-| `TRUNCATE` | Overwriting the whole table (`SaveMode.Overwrite`, `INSERT OVERWRITE` without a partition spec); the builder also implements `SupportsTruncate` |
-| `OVERWRITE_BY_FILTER` | Overwriting the rows that match a predicate (`DataFrameWriterV2.overwrite(condition)`, `INSERT OVERWRITE` with static partition values); the builder also implements `SupportsOverwriteV2` |
-| `OVERWRITE_DYNAMIC` | Dynamic partition overwrite; the builder also implements `SupportsDynamicOverwrite` |
-| `ACCEPT_ANY_SCHEMA` | Skips Spark's write-side schema resolution; the table accepts input of any schema |
-| `AUTOMATIC_SCHEMA_EVOLUTION` | Lets Spark alter the table schema as part of an operation when the input requires it |
-| `V1_BATCH_WRITE` | Append writes through a [`V1Write`](api/java/org/apache/spark/sql/connector/write/V1Write.html) wrapping a V1 `InsertableRelation`; combines with `TRUNCATE` and `OVERWRITE_BY_FILTER` but not `OVERWRITE_DYNAMIC` |
-| `GENERATE_COLUMN_VALUES_ON_WRITE` | Spark computes missing generated-column values on by-name writes and validates explicitly supplied ones (since 4.3.0) |
-| `SCAN_MERGING` | Spark may fuse two scans of the table that differ only in pruned columns or pushed filters into one scan (since 4.3.0) |
-
-A table loaded through a catalog without `BATCH_READ` fails with
-`[UNSUPPORTED_FEATURE.TABLE_OPERATION] ... does not support batch scan`; a table from a
-`TableProvider` without it is not treated as a V2 source at all, and Spark falls back to the V1
-lookup for the class name. `SaveMode.Overwrite` needs `BATCH_WRITE` plus `TRUNCATE` or
-`OVERWRITE_BY_FILTER`, and `SupportsTruncate` on the builder does not stand in for the
-capability.
-
-### Implementing the Read Path
-
-`Batch.planInputPartitions()` runs once on the driver and returns one
-[`InputPartition`](api/java/org/apache/spark/sql/connector/read/InputPartition.html) per task.
-Each partition is serialized to an executor, so it holds only what identifies the split and
-nothing that cannot cross the wire (no connections, file handles, or references back to the
-`Scan`):
+The smallest connector is a `TableProvider` that returns a `Table`, a `Table` that declares
+`BATCH_READ` and returns a `ScanBuilder`, and a `ScanBuilder` whose `Batch` plans partitions and
+creates readers. `JavaSimpleDataSourceV2` is exactly that:
 
 {% highlight java %}
-public class CsvInputPartition implements InputPartition {
+public class JavaSimpleDataSourceV2 implements TestingV2Source {
 
-  private static final long serialVersionUID = 1L;
-
-  final long startByte;
-  final long endByte;
-
-  public CsvInputPartition(long startByte, long endByte) {
-    this.startByte = startByte;
-    this.endByte = endByte;
-  }
-}
-{% endhighlight %}
-
-Here the split is a byte range computed from the file length, so planning never reads data.
-The `PartitionReaderFactory` is serialized the same way and creates a `PartitionReader` on the
-executor. The reader is a cursor: `next()` advances, `get()` returns the current row, and
-`close()` releases the handle.
-
-{% highlight java %}
-@Override
-public boolean next() {
-  while (range.next()) {
-    List<String> cells = CsvFile.splitLine(range.get());
-    if (!matchesPushedFilters(cells, fullSchema, pushedFilters)) {
-      continue;
+  static class MyScanBuilder extends JavaSimpleScanBuilder {
+    @Override
+    public InputPartition[] planInputPartitions() {
+      InputPartition[] partitions = new InputPartition[2];
+      partitions[0] = new JavaRangeInputPartition(0, 5);
+      partitions[1] = new JavaRangeInputPartition(5, 10);
+      return partitions;
     }
-    Object[] values = new Object[projection.length];
-    for (int i = 0; i < projection.length; i++) {
-      int src = projection[i];
-      values[i] = src < cells.size() ? UTF8String.fromString(cells.get(src)) : null;
-    }
-    currentRow = new GenericInternalRow(values);
-    return true;
-  }
-  currentRow = null;
-  return false;
-}
-
-@Override
-public InternalRow get() {
-  return currentRow;
-}
-{% endhighlight %}
-
-A `PartitionReader<InternalRow>` produces `org.apache.spark.sql.catalyst.InternalRow`, which
-holds each column in Spark's internal representation rather than the external one a `Row`
-carries: `UTF8String` for strings, `Decimal` for decimals, an `int` of days for dates, a `long`
-of microseconds for timestamps, `byte[]` for binary, and `ArrayData`, `MapData`, and
-`InternalRow` for nested types. The accessor names on `InternalRow` (`getUTF8String`,
-`getDecimal`, `getInt`, `getLong`, `getBinary`, `getArray`, `getMap`, `getStruct`) are the
-reference for each type. `GenericInternalRow` takes `Object[]`, so a `java.lang.String` in a
-string column compiles and fails on the executor with
-`ClassCastException: class java.lang.String cannot be cast to class org.apache.spark.unsafe.types.UTF8String`.
-
-### Pushdown and How to Confirm It
-
-Pushdown is negotiated on the `ScanBuilder` through the mix-ins described under
-[ScanBuilder](#scanbuilder). The builder records what it accepted and carries it into the
-`Scan` and the reader factory, so the reader applies exactly the filters and the projection the
-builder claimed:
-
-{% highlight java %}
-public class CsvScanBuilder
-    implements ScanBuilder, Scan, Batch, SupportsPushDownFilters, SupportsPushDownRequiredColumns {
-
-  private final StructType fullSchema;
-  private final CsvFile file;
-
-  private StructType requiredSchema;
-  private Filter[] pushedFilters = new Filter[0];
-
-  public CsvScanBuilder(StructType fullSchema, CsvFile file) {
-    this.fullSchema = fullSchema;
-    this.file = file;
-    this.requiredSchema = fullSchema;
   }
 
   @Override
-  public Filter[] pushFilters(Filter[] filters) {
-    List<Filter> accepted = new ArrayList<>();
-    List<Filter> rejected = new ArrayList<>();
-    for (Filter f : filters) {
-      if (f instanceof EqualTo eq && fullSchema.getFieldIndex(eq.attribute()).isDefined()) {
-        accepted.add(f);
-      } else {
-        rejected.add(f);
-      }
-    }
-    this.pushedFilters = accepted.toArray(new Filter[0]);
-    return rejected.toArray(new Filter[0]);
-  }
-
-  @Override
-  public Filter[] pushedFilters() {
-    return pushedFilters;
-  }
-
-  @Override
-  public void pruneColumns(StructType requiredSchema) {
-    this.requiredSchema = requiredSchema;
-  }
-
-  @Override
-  public Scan build() {
-    return this;
-  }
-
-  @Override
-  public Batch toBatch() {
-    return this;
-  }
-
-  @Override
-  public StructType readSchema() {
-    return requiredSchema;
-  }
-
-  @Override
-  public String description() {
-    return "CsvScan(path=" + file.path()
-        + ", columns=" + String.join(",", requiredSchema.fieldNames())
-        + ", pushedFilters=" + pushedFilters.length + ")";
-  }
-
-  @Override
-  public InputPartition[] planInputPartitions() {
-    List<long[]> ranges = file.byteRanges();
-    InputPartition[] partitions = new InputPartition[ranges.size()];
-    for (int i = 0; i < ranges.size(); i++) {
-      partitions[i] = new CsvInputPartition(ranges.get(i)[0], ranges.get(i)[1]);
-    }
-    return partitions;
-  }
-
-  @Override
-  public PartitionReaderFactory createReaderFactory() {
-    return new CsvReaderFactory(fullSchema, requiredSchema, pushedFilters, file);
-  }
-}
-{% endhighlight %}
-
-`Scan.description()` renders inside the `BatchScan` node of the physical plan, after the table
-name and the pruned output columns, which makes it the place to report what the connector was
-actually given. For `df.select("name").filter(df.dept == "eng")` the plan shows the pruned
-columns and the pushed filter at the scan, while the residual `isnotnull` stays in Spark's own
-`Filter` node:
-
-```
-== Physical Plan ==
-*(1) Project [name#6]
-+- *(1) Filter isnotnull(dept#7)
-   +- BatchScan csv:/tmp/dsv2lab/people.csv[name#6, dept#7] CsvScan(path=/tmp/dsv2lab/people.csv, columns=name,dept, pushedFilters=1) RuntimeFilters: []
-```
-
-The default `description()` is the implementation's class name.
-
-### Implementing the Write Path
-
-The `WriteBuilder` records the write mode and builds a `Write` whose `toBatch()` returns the
-`BatchWrite`. Implementing `SupportsTruncate` on the builder, together with the `TRUNCATE`
-capability on the table, is what makes `SaveMode.Overwrite` work:
-
-{% highlight java %}
-public class CsvWriteBuilder implements WriteBuilder, SupportsTruncate {
-
-  private final StructType schema;
-  private final CsvFile file;
-  private boolean truncate = false;
-
-  public CsvWriteBuilder(StructType schema, CsvFile file) {
-    this.schema = schema;
-    this.file = file;
-  }
-
-  @Override
-  public WriteBuilder truncate() {
-    this.truncate = true;
-    return this;
-  }
-
-  @Override
-  public Write build() {
-    return new Write() {
+  public Table getTable(CaseInsensitiveStringMap options) {
+    return new JavaSimpleBatchTable() {
       @Override
-      public BatchWrite toBatch() {
-        return new CsvBatchWrite(schema, file, truncate);
+      public ScanBuilder newScanBuilder(CaseInsensitiveStringMap options) {
+        return new MyScanBuilder();
       }
     };
   }
 }
 {% endhighlight %}
 
-Spark then runs the commit protocol:
-
-```
-driver:    BatchWrite.createBatchWriterFactory(info)
-executor:  DataWriter.write(row) per row
-           DataWriter.commit()  -> WriterCommitMessage    (or abort() on failure)
-driver:    BatchWrite.commit(messages[])                  (or abort(messages[]))
-```
-
-Each `DataWriter` streams its rows to its own staging location and returns a
-[`WriterCommitMessage`](api/java/org/apache/spark/sql/connector/write/WriterCommitMessage.html)
-that identifies what it wrote. The messages are collected on the driver, so a message carries a
-reference (a path, an object key, a transaction id), not the rows:
+`planInputPartitions()` runs once on the driver and returns one `InputPartition` per task. Each
+partition is serialized to an executor, so it should hold only what identifies the split (here a
+range of integers; for a file source, a path and a byte range). The `PartitionReaderFactory` is
+serialized the same way and creates a `PartitionReader` on the executor. The reader is a cursor:
+`next()` advances, `get()` returns the current row, `close()` releases any handle. The one in
+`JavaSimpleReaderFactory` counts through the partition's range:
 
 {% highlight java %}
-static final class CsvCommitMessage implements WriterCommitMessage {
-  private static final long serialVersionUID = 1L;
-  final String partFile;
+return new PartitionReader<InternalRow>() {
+  private int current = p.start - 1;
 
-  CsvCommitMessage(String partFile) {
-    this.partFile = partFile;
-  }
-}
-
-static final class CsvDataWriter implements DataWriter<InternalRow> {
-  private final StructType schema;
-  private final Path partFile;
-  private final BufferedWriter out;
-
-  CsvDataWriter(StructType schema, int partitionId, long taskId) {
-    this.schema = schema;
-    try {
-      this.partFile = Files.createTempFile("csvv2-part-" + partitionId + "-" + taskId + "-", ".csv");
-      this.out = Files.newBufferedWriter(partFile, StandardCharsets.UTF_8);
-    } catch (IOException e) {
-      throw new UncheckedIOException(e);
-    }
+  @Override
+  public boolean next() {
+    current += 1;
+    return current < p.end;
   }
 
   @Override
-  public void write(InternalRow record) {
-    String[] cells = new String[schema.fields().length];
-    for (int i = 0; i < cells.length; i++) {
-      cells[i] = record.isNullAt(i) ? "" : record.getUTF8String(i).toString();
-    }
-    try {
-      out.write(String.join(",", cells));
-      out.newLine();
-    } catch (IOException e) {
-      throw new UncheckedIOException(e);
-    }
-  }
-
-  @Override
-  public WriterCommitMessage commit() {
-    try {
-      out.flush();
-      out.close();
-    } catch (IOException e) {
-      throw new UncheckedIOException(e);
-    }
-    return new CsvCommitMessage(partFile.toString());
-  }
-
-  @Override
-  public void abort() {
-    try {
-      out.close();
-      Files.deleteIfExists(partFile);
-    } catch (IOException e) {
-      // Best effort: abort must not throw and mask the original failure.
-    }
+  public InternalRow get() {
+    return new GenericInternalRow(new Object[] {current, -current});
   }
 
   @Override
   public void close() {
-    try {
-      out.close();
-    } catch (IOException e) {
-      // Already closed by commit() in the normal path.
-    }
   }
-}
+};
 {% endhighlight %}
 
-`BatchWrite.commit(messages)` makes the result visible in one step; here it concatenates the part
-files into a staged copy and moves it over the destination, so a reader never sees a half-written
-file. `BatchWrite.abort(messages)` removes the parts that did succeed; it receives `null` entries
-for tasks that never committed and must tolerate them.
+A `PartitionReader<InternalRow>` produces
+[`InternalRow`](api/java/org/apache/spark/sql/catalyst/InternalRow.html), which holds each column
+in Spark's internal representation rather than the external one a `Row` carries: a boxed `int`
+is fine for an `IntegerType` column as above, but a `StringType` column holds `UTF8String` (not
+`java.lang.String`), `DecimalType` holds `Decimal`, `DateType` holds an `int` of days,
+`TimestampType` a `long` of microseconds, `BinaryType` a `byte[]`, and nested types hold
+`ArrayData`, `MapData` and `InternalRow`. The accessor names on `InternalRow` (`getUTF8String`,
+`getDecimal`, `getInt`, `getLong`, `getBinary`, `getArray`, `getMap`, `getStruct`) are the
+reference for each type. `GenericInternalRow` takes `Object[]`, so a value of the wrong
+representation compiles and fails on the executor with a `ClassCastException`.
 
-### Registering Through a Catalog
+With this much, `spark.read.format("...JavaSimpleDataSourceV2").load()` returns ten rows, and
+the `select` and `filter` in the "simplest implementation" test work too: Spark applies the
+projection and the filter itself, above the scan.
 
-A `TableProvider` is reached by class name from `spark.read.format(...)`. To reach the same
-tables through SQL identifiers and DDL, implement [`TableCatalog`](#tablecatalog) and register
-the catalog by name. Every configuration key under the catalog's prefix is passed to
-`CatalogPlugin.initialize(name, options)` with the prefix removed:
+### Step 2: Projection and Filter Pushdown (Optional)
 
-```
-spark.sql.catalog.demo=com.example.CsvCatalog
-spark.sql.catalog.demo.warehouse=/tmp/warehouse      # arrives as options.get("warehouse")
-```
+A connector that can skip columns or rows adds the pushdown mix-ins to its `ScanBuilder` (the
+full list and order are under [ScanBuilder](#scanbuilder)). The contract that matters most is
+for filters: the method receives the candidate predicates, keeps the ones the connector will
+apply, and returns the **residual**, the predicates Spark must still evaluate after the scan.
+`JavaAdvancedDataSourceV2WithV2Filter` accepts only `i > <int literal>` and hands everything
+else back (the test's `assertInstanceOf` checks and the mirror-image `unsupported` stream are
+elided here):
 
 {% highlight java %}
 @Override
-public void initialize(String name, CaseInsensitiveStringMap options) {
-  this.name = name;
-  String dir = options.get("warehouse");
-  if (dir == null) {
-    throw new IllegalArgumentException(
-        "CsvCatalog needs spark.sql.catalog." + name + ".warehouse set to a directory");
-  }
-  this.warehouse = Paths.get(dir);
-  try {
-    Files.createDirectories(warehouse);
-  } catch (IOException e) {
-    throw new UncheckedIOException(e);
-  }
+public Predicate[] pushPredicates(Predicate[] predicates) {
+  Predicate[] supported = Arrays.stream(predicates).filter(f -> {
+    if (f.name().equals(">")) {
+      FieldReference column = (FieldReference) f.children()[0];
+      Literal value = (Literal) f.children()[1];
+      return column.describe().equals("i") && value.value() instanceof Integer;
+    } else {
+      return false;
+    }
+  }).toArray(Predicate[]::new);
+  Predicate[] unsupported = /* the complement of supported */;
+  this.predicates = supported;
+  return unsupported;
+}
+
+@Override
+public Predicate[] pushedPredicates() {
+  return predicates;
+}
+
+@Override
+public void pruneColumns(StructType requiredSchema) {
+  this.requiredSchema = requiredSchema;
 }
 {% endhighlight %}
 
-`CREATE TABLE demo.analytics.people (id STRING, name STRING, dept STRING)` arrives as
-`createTable(ident, tableInfo)`, and `tableInfo.columns()` is a `Column[]`. `Table.columns()`
-returns the same type, while the read and write paths still speak `StructType`. The converter
-Spark uses internally (`CatalogV2Util.structTypeToV2Columns`) is `private[sql]`, so a connector
-builds the array with
-[`Column.create`](api/java/org/apache/spark/sql/connector/catalog/Column.html):
+Spark evaluates only what `pushPredicates` returns (plus anything it could not translate), so a
+predicate that is accepted here and then not applied by the reader is silently dropped from the
+query. If the connector can only use a predicate to skip whole files or row groups, report it as
+pushed and also return it, so Spark re-checks it row by row. `pushedPredicates()` is what the
+query plan reports; the `Batch` in the same class uses the accepted predicate to plan fewer
+partitions, and its reader fills only the columns in `requiredSchema`.
+
+The "advanced implementation with V2 Filter" test shows the contract from the outside by
+inspecting the `Batch` Spark planned: `df.filter($"i" > 3)` leaves one pushed predicate on `i`
+and reads both columns, `df.select($"i").filter($"i" > 6)` keeps the predicate and prunes the
+schema to `i`, and `df.select($"j").filter($"j" < -10)` pushes nothing, because the connector
+only accepts predicates on `i`, so Spark evaluates that filter itself. To see the same on a
+connector of your own, override `Scan.description()`, which renders inside the `BatchScan` node
+of `EXPLAIN` after the output columns; the default is the class name.
+
+### Step 3: Batch Writes
+
+A writable table declares `BATCH_WRITE` and implements `SupportsWrite`; it adds `TRUNCATE` and
+`SupportsTruncate` on the builder if `SaveMode.Overwrite` should work (the full list is under
+[Table](#table) and in
+[`TableCapability`](api/java/org/apache/spark/sql/connector/catalog/TableCapability.html)).
+Spark checks the capability set during analysis, before calling any builder, so a missing value
+fails the query even when the mix-in is implemented. From `JavaSimpleWritableDataSource`:
 
 {% highlight java %}
-public static Column[] asColumns(StructType schema) {
-  StructField[] fields = schema.fields();
-  Column[] columns = new Column[fields.length];
-  for (int i = 0; i < fields.length; i++) {
-    columns[i] = Column.create(fields[i].name(), fields[i].dataType(), fields[i].nullable());
-  }
-  return columns;
+@Override
+public Set<TableCapability> capabilities() {
+  return EnumSet.of(
+      TableCapability.BATCH_READ,
+      TableCapability.BATCH_WRITE,
+      TableCapability.TRUNCATE);
 }
 {% endhighlight %}
 
-`spark.sql.defaultCatalog` names the catalog that is current when a session has not set one
-explicitly, so unqualified identifiers resolve against it. After
-`SET spark.sql.defaultCatalog=demo`, `current_catalog()` reports `demo` and
-`SELECT name FROM analytics.people` resolves to `demo.analytics.people`.
-
-### Running and Debugging Outside spark-submit
-
-`spark-submit`, `spark-shell`, and `pyspark` add a set of JVM options for JDK 17 and later
-(`--add-opens` for the `java.base` packages Spark and its serializers reach into, plus a few
-system properties); the list lives in
-`launcher/src/main/java/org/apache/spark/launcher/JavaModuleOptions.java`. A connector started
-from a plain `main()` in an IDE or from a JUnit runner does not get them, so copy the options
-from `JavaModuleOptions` into the run configuration or the test runner's `argLine`. Without them,
-code paths that reflect into those packages (Kryo serializing a `ByteBuffer`, for example) fail
-with `java.lang.reflect.InaccessibleObjectException: ... module java.base does not "opens java.nio" to unnamed module`.
-
-Running in `local[n]` executes tasks in the driver JVM, which hides serialization mistakes in an
-`InputPartition` or `PartitionReaderFactory`; `local-cluster[2,1,1024]` starts separate
-executor JVMs and surfaces them.
-
-## Migrating from Data Source V1
-
-### Interface Mapping
-
-| Data Source V1 | Data Source V2 | Note |
-|----------------|----------------|------|
-| `RelationProvider` | [`TableProvider`](#tableprovider) | Entry point for path and option based sources |
-| `SchemaRelationProvider` | `TableProvider.inferSchema` plus `getTable(schema, partitioning, properties)` | Schema handling is two explicit steps; `supportsExternalMetadata()` must return `true` for a user-supplied schema to be accepted |
-| `BaseRelation` | [`Table`](#table) | An interface rather than an abstract class, with no `SQLContext` |
-| `BaseRelation.schema()` | `Table.columns()` | `Table.schema()` exists but is deprecated (since 3.4.0) |
-| `TableScan.buildScan()` | `ScanBuilder` to `Scan` to `Batch` to `PartitionReader` | The connector describes the read, Spark executes it |
-| `PrunedScan` | `SupportsPushDownRequiredColumns` | Opt-in mix-in on the `ScanBuilder` |
-| `PrunedFilteredScan` | `SupportsPushDownFilters` or `SupportsPushDownV2Filters` | Opt-in mix-in on the `ScanBuilder` |
-| `BaseRelation.unhandledFilters` | The return value of `pushFilters` / `pushPredicates` | One method decides what the source applies and what Spark keeps |
-| `InsertableRelation.insert` | `WriteBuilder` to `Write` to `BatchWrite` to `DataWriter` | A two-phase commit replaces a single method with no failure story |
-| `overwrite` flag on `insert` | `SupportsTruncate` plus the `TRUNCATE` capability | Overwrite is a declared capability, not a boolean |
-| `RDD<Row>` | `PartitionReader<InternalRow>` | `Row` becomes `InternalRow`; see [Implementing the Read Path](#implementing-the-read-path) |
-| no equivalent | `TableCatalog`, `SupportsNamespaces`, `ViewCatalog`, `FunctionCatalog`, `ProcedureCatalog` | DDL and multi-part namespaces through Spark SQL |
-| no equivalent | `SupportsRowLevelOperations`, `SupportsDeleteV2` | `DELETE`, `UPDATE`, `MERGE INTO` |
-
-A V1 connector can keep its `InsertableRelation` during the transition by returning a `V1Write`
-from the `WriteBuilder` and declaring `V1_BATCH_WRITE` instead of `BATCH_WRITE`.
-
-### Parallelism Moves to InputPartition
-
-A V1 relation returns an `RDD<Row>`, so the connector chooses its parallelism by constructing the
-RDD, and a relation that calls `parallelize` on a list has already materialized the data on the
-driver. In V2, `Batch.planInputPartitions()` returns serializable descriptions of work, Spark
-starts one task per `InputPartition`, and the `PartitionReaderFactory` creates the reader on the
-executor. Nothing is read on the driver. Everything reachable from an `InputPartition` or a
-`PartitionReaderFactory` must therefore be `Serializable` and should be small: a byte range or a
-shard id, not an open connection, a file handle, or a reference back to the `Scan`. The failure
-mode for a stray reference is `java.io.NotSerializableException` when the first task is scheduled.
-
-### Writes Become a Commit Protocol
-
-V1's `insert(data, overwrite)` is a single call; if it throws halfway through, the destination
-keeps whatever partial state it reached. V2 splits the write across the driver and the executors:
+The write is split across the driver and the executors:
 
 ```
-driver:    BatchWrite.createBatchWriterFactory(info)
-executor:  DataWriter.write(row) per row
-           DataWriter.commit()  -> WriterCommitMessage    (or abort() on failure)
-driver:    BatchWrite.commit(messages[])                  (or abort(messages[]))
+driver:    WriteBuilder.build() -> Write.toBatch() -> BatchWrite.createBatchWriterFactory(info)
+executor:  DataWriterFactory.createWriter(partitionId, taskId)
+           DataWriter.write(row) per row
+           DataWriter.commit() -> WriterCommitMessage       (or abort() on failure)
+driver:    BatchWrite.commit(messages[])                     (or abort(messages[]))
 ```
 
-The connector's job is to make the driver-side `commit` atomic and to keep task output invisible
-until then, typically by writing each task's output to a staging location and moving or
-registering it in `commit`. `abort(messages)` receives `null` entries for tasks that never
-committed, so it must tolerate them.
+Each `DataWriter` writes its task's output to a staging location, and `BatchWrite.commit` on the
+driver makes all of it visible in one step. The staging location must be reachable from both
+sides: executors write there and the driver renames or registers from there, usually on
+different machines. `JavaSimpleWritableDataSource` stages under `<path>/_temporary/<queryId>` on
+the table's own file system, writes one file per task, and commits by renaming the staged files
+into place (error handling elided):
 
-### Filters: unhandledFilters Becomes a Return Value
+{% highlight java %}
+@Override
+public DataWriter<InternalRow> createWriter(int partitionId, long taskId) {
+  Path jobPath = new Path(new Path(path, "_temporary"), jobId);
+  Path filePath = new Path(jobPath, String.format("%s-%d-%d", jobId, partitionId, taskId));
+  FileSystem fs = filePath.getFileSystem(conf.value());
+  return new JavaCSVDataWriter(fs, filePath);
+}
+{% endhighlight %}
 
-V1 splits filter handling between `buildScan(columns, filters)` and `unhandledFilters(filters)`.
-If the two disagree, Spark either evaluates a filter twice (harmless) or skips one the scan never
-applied (wrong results). V2 folds both into `pushFilters`, which returns the filters the source
-did **not** accept, while `pushedFilters()` reports the ones it did; the `CsvScanBuilder` under
-[Pushdown and How to Confirm It](#pushdown-and-how-to-confirm-it) shows the shape. Only claim a
-filter the reader actually applies, because Spark does not re-check a filter reported as pushed.
+{% highlight java %}
+@Override
+public void commit(WriterCommitMessage[] messages) {
+  Path finalPath = new Path(this.path);
+  Path jobPath = new Path(new Path(finalPath, "_temporary"), queryId);
+  FileSystem fs = jobPath.getFileSystem(conf);
+  try {
+    for (FileStatus status : fs.listStatus(jobPath)) {
+      Path file = status.getPath();
+      Path dest = new Path(finalPath, file.getName());
+      if (!fs.rename(file, dest)) {
+        throw new IOException(String.format("failed to rename(%s, %s)", file, dest));
+      }
+    }
+  } finally {
+    fs.delete(jobPath, true);
+  }
+}
+{% endhighlight %}
+
+A [`WriterCommitMessage`](api/java/org/apache/spark/sql/connector/write/WriterCommitMessage.html)
+is returned by `DataWriter.commit()` on an executor and delivered to `BatchWrite.commit` on the
+driver, where the whole array is held in memory. It should carry a reference to what the task
+wrote (a path, an object key, a transaction id), never the rows. This connector keeps its state
+in the staging directory and returns `null`. `BatchWrite.abort(messages)` removes the staged
+output; it receives `null` entries for tasks that never committed and must tolerate them.
+`DataWriter.abort()` on the executor side deletes that task's own file.
+
+`DataWriter.write` receives rows in the internal representation described in Step 1, so a
+`StringType` column is read back with `record.getUTF8String(i).toString()`.
+
+### Step 4: Catalog Integration (Optional)
+
+A `TableProvider` is reached by class name from `spark.read.format(...)`. To reach the same
+tables through SQL identifiers and DDL (`CREATE TABLE demo.db.t`, `INSERT INTO demo.db.t`,
+`SHOW TABLES IN demo.db`), implement [`TableCatalog`](#tablecatalog) and register it by name.
+Every configuration key under the catalog's prefix is passed to
+`CatalogPlugin.initialize(name, options)` with the prefix removed:
+
+```
+spark.sql.catalog.demo=com.example.DemoCatalog
+spark.sql.catalog.demo.warehouse=/path/to/warehouse    # arrives as options.get("warehouse")
+```
+
+`CREATE TABLE` arrives as `createTable(ident, tableInfo)`, and `tableInfo.columns()` is a
+`Column[]`; `Table.columns()` returns the same type, while the read and write paths speak
+`StructType`. Build the array with
+[`Column.create(name, dataType, nullable)`](api/java/org/apache/spark/sql/connector/catalog/Column.html).
+`spark.sql.defaultCatalog` names the catalog that is current when a session has not set one, so
+after `SET spark.sql.defaultCatalog=demo`, `db.t` resolves to `demo.db.t`.
 
 ## Further Reading
 
