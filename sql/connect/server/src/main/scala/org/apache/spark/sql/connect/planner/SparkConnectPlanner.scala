@@ -1309,18 +1309,24 @@ class SparkConnectPlanner(
     }
 
     val child = transformRelation(rel.getInput)
-    try {
-      // Try the eager analysis first.
-      Dataset
-        .ofRows(session, child)
-        .withColumnsRenamed(colNames, newColNames)
-        .logicalPlan
-    } catch {
-      case _: AnalysisException | _: SparkException =>
-        Project(
-          Seq(UnresolvedStarWithColumnsRenames(existingNames = colNames, newNames = newColNames)),
-          child)
+    // Try the eager analysis first.
+    val eagerPlan = if (hasUnsubstitutedPlanId(child)) {
+      None
+    } else {
+      try {
+        Some(
+          Dataset
+            .ofRows(session, child)
+            .withColumnsRenamed(colNames, newColNames)
+            .logicalPlan)
+      } catch {
+        case _: AnalysisException | _: SparkException => None
+      }
     }
+    eagerPlan.getOrElse(
+      Project(
+        Seq(UnresolvedStarWithColumnsRenames(existingNames = colNames, newNames = newColNames)),
+        child))
   }
 
   private def transformWithColumns(rel: proto.WithColumns): LogicalPlan = {
@@ -1340,22 +1346,39 @@ class SparkConnectPlanner(
       }.unzip3
 
     val child = transformRelation(rel.getInput)
-    try {
-      // Try the eager analysis first.
-      Dataset
-        .ofRows(session, child)
-        .withColumns(colNames, exprs.map(expr => Column(expr)), metadata)
-        .logicalPlan
-    } catch {
-      case _: AnalysisException | _: SparkException =>
-        Project(
-          Seq(
-            UnresolvedStarWithColumns(
-              colNames = colNames,
-              exprs = exprs,
-              explicitMetadata = Some(metadata))),
-          child)
+    // Try the eager analysis first.
+    val eagerPlan = if (hasUnsubstitutedPlanId(child, exprs)) {
+      None
+    } else {
+      try {
+        Some(
+          Dataset
+            .ofRows(session, child)
+            .withColumns(colNames, exprs.map(expr => Column(expr)), metadata)
+            .logicalPlan)
+      } catch {
+        case _: AnalysisException | _: SparkException => None
+      }
     }
+    eagerPlan.getOrElse(
+      Project(
+        Seq(
+          UnresolvedStarWithColumns(
+            colNames = colNames,
+            exprs = exprs,
+            explicitMetadata = Some(metadata))),
+        child))
+  }
+
+  /**
+   * Returns true if the plan or expressions still reference a subquery plan by plan id, which
+   * [[transformWithRelations]] substitutes only after the root relation is transformed. Eager
+   * analysis cannot succeed before that, and its failure would be posted as a failed SQL
+   * execution, so callers should build a lazy plan instead.
+   */
+  private def hasUnsubstitutedPlanId(plan: LogicalPlan, exprs: Seq[Expression] = Nil): Boolean = {
+    plan.containsPattern(TreePattern.UNRESOLVED_PLAN_ID) ||
+    exprs.exists(_.containsPattern(TreePattern.UNRESOLVED_PLAN_ID))
   }
 
   private def transformWithWatermark(rel: proto.WithWatermark): LogicalPlan = {
@@ -4547,8 +4570,27 @@ class SparkConnectPlanner(
     if (isValidSQLWithRefs(getWithRelations)) {
       transformSqlWithRefs(getWithRelations)
     } else {
+      val referencePlanIds = getWithRelations.getReferencesList.asScala.collect {
+        case ref if ref.hasCommon && ref.getCommon.hasPlanId => ref.getCommon.getPlanId
+      }.toSet
+
       // Wrap the plan to keep the original planId.
-      val plan = Project(Seq(UnresolvedStar(None)), transformRelation(getWithRelations.getRoot))
+      val plan =
+        try {
+          Project(Seq(UnresolvedStar(None)), transformRelation(getWithRelations.getRoot))
+        } catch {
+          // Some transforms analyze the root eagerly, before the referenced plans are substituted
+          // below. A plan id that is attached here is then a server-side issue, not a client error.
+          case e: AnalysisException
+              if e.getCondition == "CONNECT_INVALID_PLAN.SUBQUERY_PLAN_NOT_ATTACHED" &&
+                e.getMessageParameters.asScala.get("planId").exists { id =>
+                  referencePlanIds.contains(id.toLong)
+                } =>
+            throw SparkException.internalError(
+              s"The subquery plan referenced by plan id ${e.getMessageParameters.get("planId")} " +
+                "is attached in WithRelations but was analyzed before it was substituted.",
+              e)
+        }
 
       val relations = getWithRelations.getReferencesList.asScala.map { ref =>
         if (ref.hasCommon && ref.getCommon.hasPlanId) {
