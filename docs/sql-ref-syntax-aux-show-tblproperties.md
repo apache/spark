@@ -24,10 +24,13 @@ license: |
 This statement returns the value of a table property given an optional value for
 a property key. If no key is specified then all the properties are returned. 
 
-For V2 tables, the output may also include display-only properties supplied by the catalog.
-`ALTER TABLE ... UNSET TBLPROPERTIES` does not remove these entries, and `SHOW CREATE TABLE`
-does not include them. Stored properties take precedence over display-only entries with the
-same key; unsetting a stored non-reserved property exposes the display-only value if present.
+For tables in [Data Source V2](sql-v2-data-sources.html) catalogs, the output may also include
+display-only properties supplied by the catalog. Spark itself does not remove these entries on
+`ALTER TABLE ... UNSET TBLPROPERTIES`; whether they remain depends on the catalog.
+`SHOW CREATE TABLE` does not include them. Stored properties take precedence over display-only
+entries with the same key. After unsetting a stored property other than `comment`, Spark displays
+the display-only value with that key if the catalog still supplies it. Display-only `comment`
+entries are ignored, even after unsetting the stored `comment`.
 
 ### Syntax
 
