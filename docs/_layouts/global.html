@@ -196,17 +196,17 @@
         <script src="{{ rel_path_to_root }}js/vendor/jquery.min.js"></script>
         <script src="{{ rel_path_to_root }}js/vendor/bootstrap.bundle.min.js"></script>
 
-        <script src="{{ rel_path_to_root }}js/vendor/anchor.min.js">
-            // Keep the version of AnchorJS used here in sync with what's used on the main website.
-            // See: https://github.com/apache/spark-website/blob/asf-site/js/vendor/anchor.min.js
-        </script>
+        {% comment %}
+        Keep the version of AnchorJS used here in sync with what's used on the main website.
+        See: https://github.com/apache/spark-website/blob/asf-site/js/vendor/anchor.min.js
+        {% endcomment %}
+        <script src="{{ rel_path_to_root }}js/vendor/anchor.min.js"></script>
         <script>
             // Display anchor links when hovering over headings.
             // See: https://www.bryanbraun.com/anchorjs/
-            anchors.options = { placement: 'right' };
             // Note: AnchorJS 4.0+ excludes h1 from the default selector, but many
             // Spark doc pages use h1 for section headings, so we include it explicitly.
-            anchors.add('h1, h2, h3, h4, h5, h6');
+            anchors.add('#content :is(h1, h2, h3, h4, h5, h6)');
         </script>
         <script src="{{ rel_path_to_root}}js/main.js"></script>
 
