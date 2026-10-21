@@ -18,8 +18,8 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Literal, Round}
-import org.apache.spark.sql.catalyst.expressions.aggregate.CollectSet
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Literal, Round, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectSet, ListAgg}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.types.{IntegerType, StringType}
@@ -125,4 +125,38 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
       fail(s"Plan is not as expected:\n$rewrite")
     }
   }
+
+  test("SPARK-60124: listagg with distinct and filter") {
+    val relation = LocalRelation($"s".string, $"keep".int)
+    val input = relation
+      .select(
+        ListAgg(
+          child = $"s",
+          delimiter = Literal("|"),
+          orderExpressions = Seq(SortOrder($"s", Ascending))
+        ).toAggregateExpression(
+          isDistinct = true,
+          filter = Some($"keep" === 1)
+        ).as("rendered")
+      ).analyze
+    val rewrite = RewriteDistinctAggregates(input)
+    assert(rewrite.resolved)
+  }
+
+  test("SPARK-60124: regular listagg alongside distinct aggregates") {
+    val relation = LocalRelation($"a".int, $"b".int, $"s".string)
+    val input = relation
+      .groupBy($"a")(
+        countDistinct($"b").as("agg1"),
+        countDistinct($"a").as("agg2"),
+        ListAgg(
+          child = $"s",
+          delimiter = Literal("|"),
+          orderExpressions = Seq(SortOrder($"s", Ascending))
+        ).toAggregateExpression(isDistinct = false).as("rendered")
+      ).analyze
+    val rewrite = RewriteDistinctAggregates(input)
+    assert(rewrite.resolved)
+  }
 }
+
