@@ -303,6 +303,10 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
 
   // Filters on non-partition columns.
   def dataFilters: Seq[Expression]
+  // Filters the storage layer evaluates to skip reading the other columns of the rows they reject,
+  // see `FileFormat.buildReaderWithStorageFilters`. Their subqueries are materialized on the
+  // driver while the RDD is built.
+  def storageFilters: Seq[Expression] = Nil
   // Disable bucketed scan based on physical query plan, see rule
   // [[DisableUnnecessaryBucketedScan]] for details.
   def disableBucketedScan: Boolean
@@ -555,7 +559,9 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
         "PartitionFilters" -> seqToString(partitionFilters),
         "PushedFilters" -> seqToString(pushedFiltersForDisplay),
         "DataFilters" -> seqToString(dataFilters),
-        "Location" -> locationDesc)
+        "Location" -> locationDesc) ++
+      // Only when there are some, since `simpleString` would render an empty entry too.
+      Option.when(storageFilters.nonEmpty)("StorageFilters" -> seqToString(storageFilters))
 
     relation.bucketSpec.map { spec =>
       val bucketedKey = "Bucketed"
@@ -642,7 +648,14 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
     } else {
       None
     }
-  } ++ driverMetrics
+  } ++ storageFilterMetrics ++ driverMetrics
+
+  // The format creates these, and this node carries them into `metrics` for the SQL UI.
+  protected lazy val storageFilterMetrics: Map[String, SQLMetric] = if (storageFilters.nonEmpty) {
+    relation.fileFormat.storageFilterMetrics(sparkContext)
+  } else {
+    Map.empty
+  }
 
   /**
    * A file listing that represents a file list as an array of [[PartitionDirectory]]. This extends
@@ -715,6 +728,9 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
  * @param tableIdentifier Identifier for the table in the metastore.
  * @param disableBucketedScan Disable bucketed scan based on physical query plan, see rule
  *                            [[DisableUnnecessaryBucketedScan]] for details.
+ * @param storageFilters Filters evaluated by the storage layer (e.g. parquet reader) to drive
+ *                       value-column IO pruning based on key-column evaluation. May contain
+ *                       subqueries, which `preparedStorageFilters` materializes on the driver.
  */
 case class FileSourceScanExec(
     @transient override val relation: HadoopFsRelation,
@@ -727,7 +743,8 @@ case class FileSourceScanExec(
     override val dataFilters: Seq[Expression],
     override val tableIdentifier: Option[TableIdentifier],
     override val disableBucketedScan: Boolean = false,
-    override val markedForSingleTaskExecution: Boolean = false)
+    override val markedForSingleTaskExecution: Boolean = false,
+    override val storageFilters: Seq[Expression] = Nil)
   extends FileSourceScanLike {
 
   // Note that some vals referring the file-based relation are lazy intentionally
@@ -752,15 +769,34 @@ case class FileSourceScanExec(
   lazy val inputRDD: RDD[InternalRow] = {
     val options = relation.options +
       (FileFormat.OPTION_RETURNING_BATCH -> supportsColumnar.toString)
-    val readFile: (PartitionedFile) => Iterator[InternalRow] =
-      relation.fileFormat.buildReaderWithPartitionValues(
+    // The storage-filter entry point is only asked when there is something to push, so a format
+    // that customizes `buildReaderWithPartitionValues` keeps it on every other query. Each builder
+    // gets a conf of its own, so a declining builder's setup cannot reach the fallback.
+    val storageFilterReader = if (preparedStorageFilters.isEmpty) {
+      None
+    } else {
+      relation.fileFormat.buildReaderWithStorageFilters(
         sparkSession = relation.sparkSession,
         dataSchema = relation.dataSchema,
         partitionSchema = relation.partitionSchema,
         requiredSchema = requiredSchema,
         filters = pushedDownFilters,
+        storageFilters = preparedStorageFilters,
         options = options,
-        hadoopConf = getHadoopConf(relation.sparkSession, relation.options))
+        hadoopConf = getHadoopConf(relation.sparkSession, relation.options),
+        storageFilterMetrics = storageFilterMetrics)
+    }
+    val readFile: (PartitionedFile) => Iterator[InternalRow] =
+      storageFilterReader.getOrElse {
+        relation.fileFormat.buildReaderWithPartitionValues(
+          sparkSession = relation.sparkSession,
+          dataSchema = relation.dataSchema,
+          partitionSchema = relation.partitionSchema,
+          requiredSchema = requiredSchema,
+          filters = pushedDownFilters,
+          options = options,
+          hadoopConf = getHadoopConf(relation.sparkSession, relation.options))
+      }
 
     val readRDD = if (bucketedScan) {
       createBucketedReadRDD(relation.bucketSpec.get, readFile, dynamicallySelectedPartitions)
@@ -769,6 +805,21 @@ case class FileSourceScanExec(
     }
     sendDriverMetrics()
     readRDD
+  }
+
+  // The storage filters with their scalar subqueries materialized, bound to `requiredSchema`.
+  // `output` is `readDataColumns ++ generatedMetadataColumns ++ storageFilterCheckedColumn ++
+  // partitionColumns ++ constantMetadataColumns`, and `requiredSchema` is the first three groups,
+  // so its fields are the first `requiredSchema.length` attributes of `output`. Subqueries must
+  // be prepared before this is forced, as for `pushedDownFilters`. The conf is not checked again
+  // here, since it decides at planning time whether a scan gets storage filters at all.
+  @transient
+  protected lazy val preparedStorageFilters: Seq[Expression] = {
+    val requestedDataAttrs = output.take(requiredSchema.length)
+    storageFilters.map { expr =>
+      val subqueryReplaced = expr.transform { case s: execution.ScalarSubquery => s.toLiteral }
+      BindReferences.bindReference(subqueryReplaced, requestedDataAttrs)
+    }
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
@@ -971,7 +1022,8 @@ case class FileSourceScanExec(
       QueryPlan.normalizePredicates(dataFilters, output),
       None,
       disableBucketedScan,
-      markedForSingleTaskExecution)
+      markedForSingleTaskExecution,
+      QueryPlan.normalizePredicates(storageFilters, output))
   }
 
   override def getStream: Option[SparkDataStream] = stream

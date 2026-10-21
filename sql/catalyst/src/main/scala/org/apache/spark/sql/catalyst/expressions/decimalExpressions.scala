@@ -117,6 +117,8 @@ case class CheckOverflow(
     dataType: DecimalType,
     nullOnOverflow: Boolean) extends UnaryExpression with SupportQueryContext {
 
+  override def nullIntolerant: Boolean = true
+
   override def nullable: Boolean = true
 
   override def nullSafeEval(input: Any): Any =

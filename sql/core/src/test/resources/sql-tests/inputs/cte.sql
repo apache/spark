@@ -297,6 +297,104 @@ WITH cte AS (SELECT 1 AS id, 'test' AS COLNAME),
      cte3 AS (SELECT id, COLNAME, colname FROM cte2)
 SELECT * FROM cte2 a JOIN cte2 b ON (a.id = b.id);
 
+-- CTE materialization options
+WITH t AS MATERIALIZED (SELECT 1 AS x)
+SELECT * FROM t, t AS t2;
+
+WITH t AS NOT MATERIALIZED (SELECT 1 AS x)
+SELECT * FROM t, t AS t2;
+
+-- AS may be omitted before MATERIALIZED
+WITH t(x) MATERIALIZED (SELECT 1)
+SELECT * FROM t;
+
+-- MATERIALIZED is a non-reserved keyword
+WITH materialized AS (SELECT 1 AS x)
+SELECT * FROM materialized;
+
+-- CTE referencing the outer query is inlined
+SELECT * FROM t WHERE EXISTS (
+  WITH s AS NOT MATERIALIZED (SELECT 1 FROM t2 WHERE t2.id = t.id)
+  SELECT * FROM s
+);
+
+-- MATERIALIZED CTE referencing the outer query, should fail
+SELECT * FROM t WHERE EXISTS (
+  WITH s AS MATERIALIZED (SELECT 1 FROM t2 WHERE t2.id = t.id)
+  SELECT * FROM s
+);
+
+-- Unreferenced MATERIALIZED CTE referencing the outer query, should fail
+SELECT * FROM t WHERE EXISTS (
+  WITH s AS MATERIALIZED (SELECT 1 FROM t2 WHERE t2.id = t.id)
+  SELECT 1
+);
+
+-- MATERIALIZED CTE in a subquery whose query references the outer query, should fail
+SELECT * FROM t o WHERE EXISTS (
+  WITH v AS MATERIALIZED (SELECT id FROM t2)
+  SELECT * FROM v WHERE v.id = o.id
+);
+
+-- A correlation above a derived table holding the WITH clause is fine
+SELECT * FROM t o WHERE EXISTS (
+  SELECT * FROM (WITH v AS MATERIALIZED (SELECT id FROM t2) SELECT * FROM v) x WHERE x.id = o.id
+);
+
+-- MATERIALIZED CTE referencing the outer query through another CTE, should fail
+SELECT * FROM t WHERE EXISTS (
+  WITH s AS (SELECT 1 FROM t2 WHERE t2.id = t.id),
+       s2 AS MATERIALIZED (SELECT * FROM s)
+  SELECT * FROM s2
+);
+
+-- Inner CTE correlated to the MATERIALIZED CTE's own relation does not cross its boundary
+WITH v AS MATERIALIZED (
+  SELECT t.id, (WITH s AS (SELECT count(*) c FROM t2 WHERE t2.id = t.id) SELECT c FROM s) AS c
+  FROM t
+)
+SELECT * FROM v;
+
+WITH v AS MATERIALIZED (
+  SELECT t.id, l.c
+  FROM t, LATERAL (WITH s AS (SELECT count(*) c FROM t2 WHERE t2.id = t.id) SELECT c FROM s) l
+)
+SELECT * FROM v;
+
+-- MATERIALIZED CTE referencing a CTE whose inner CTE is correlated to that CTE's own relation
+WITH v1 AS (
+  SELECT t.id, (WITH s AS (SELECT count(*) c FROM t2 WHERE t2.id = t.id) SELECT c FROM s) AS c
+  FROM t
+),
+v2 AS MATERIALIZED (SELECT * FROM v1)
+SELECT * FROM v2;
+
+-- MATERIALIZED CTE correlated through a CTE shared with the enclosing query, should fail
+WITH s AS (SELECT id FROM t)
+SELECT * FROM s o WHERE EXISTS (
+  WITH v AS MATERIALIZED (SELECT i.id FROM s i WHERE i.id = o.id)
+  SELECT * FROM v
+);
+
+-- MATERIALIZED CTE referencing a correlated CTE through a subquery, should fail
+SELECT * FROM t o WHERE EXISTS (
+  WITH s AS (SELECT i.id FROM t2 i WHERE i.id = o.id),
+       v AS MATERIALIZED (SELECT t.id, (SELECT count(*) FROM s) AS n FROM t)
+  SELECT * FROM v
+);
+
+SELECT * FROM t o WHERE EXISTS (
+  WITH s AS (SELECT i.id FROM t2 i WHERE i.id = o.id),
+       v AS MATERIALIZED (SELECT t.id, l.n FROM t, LATERAL (SELECT count(*) n FROM s) l)
+  SELECT * FROM v
+);
+
+SELECT * FROM t o WHERE EXISTS (
+  WITH s AS (SELECT i.id FROM t2 i WHERE i.id = o.id),
+       v AS MATERIALIZED (SELECT t.id FROM t WHERE t.id IN (SELECT id FROM s))
+  SELECT * FROM v
+);
+
 -- Clean up
 DROP VIEW IF EXISTS t;
 DROP VIEW IF EXISTS t2;

@@ -135,6 +135,20 @@ especially public ones*
 Consult [the Hadoop documentation](https://hadoop.apache.org/docs/current/) for the relevant
 configuration and security options.
 
+## OIDC Credential Propagation
+
+The authentication methods above use credentials that are either static (keys in configuration) or
+shared by all jobs running on a host (an instance profile or a pod's service account). As an
+alternative, Spark can access object storage using short-lived credentials derived from a
+per-workload or per-user OIDC identity, so that authorization and audit happen at the granularity
+of that identity rather than a shared role. Spark ships a reference provider for Amazon S3 and any
+STS-compatible endpoint (such as MinIO or Ceph) that supplies `fs.s3a.*` credentials to the S3A
+connector.
+
+This is described in full, including how to enable the reference provider and its configuration
+options, under [OIDC Credential Propagation](security.html#oidc-credential-propagation) on the
+security page.
+
 ## Configuring
 
 Each cloud connector has its own set of configuration parameters, again, 

@@ -17,15 +17,39 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.util.UUID
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class InternalRowComparableWrapperSuite extends SparkFunSuite {
 
   private val structA = new StructType().add("a", IntegerType)
   private val structB = new StructType().add("b", IntegerType)
+
+  private def checkPythonUDTOrderingCache(binaryFirst: Boolean): Unit = {
+    // The cache lasts for the JVM, so use a name that no earlier test run could have populated.
+    val pyUDT = UUID.randomUUID().toString
+    val lcaseType = StringType("UTF8_LCASE")
+    def ordering(sqlType: DataType) = KeyedPartitioning.groupedKeyRowOrdering(
+      Seq(new PythonUserDefinedType(sqlType, pyUDT, "serializedPyClass")))
+
+    val (binaryOrdering, lcaseOrdering) = if (binaryFirst) {
+      val binaryOrdering = ordering(StringType)
+      (binaryOrdering, ordering(lcaseType))
+    } else {
+      val lcaseOrdering = ordering(lcaseType)
+      (ordering(StringType), lcaseOrdering)
+    }
+    val uppercase = InternalRow(UTF8String.fromString("A"))
+    val lowercase = InternalRow(UTF8String.fromString("a"))
+
+    assert(binaryOrdering.compare(uppercase, lowercase) !== 0)
+    assert(lcaseOrdering.compare(uppercase, lowercase) === 0)
+  }
 
   test("SPARK-59187: comparableTypes erases the naming and nothing else") {
     // The erasure has to answer exactly what `DataType.equalsStructurally` answers with
@@ -93,6 +117,14 @@ class InternalRowComparableWrapperSuite extends SparkFunSuite {
       .getInternalRowComparableWrapperFactory(Seq(IntegerType, LongType))(InternalRow(1, 2L))
 
     assert(KeyedPartitioning.groupedKeyRowOrdering(Seq(IntegerType, LongType)) eq wrapper.ordering)
+  }
+
+  test("Python UDT ordering cache distinguishes SQL types with binary first") {
+    checkPythonUDTOrderingCache(binaryFirst = true)
+  }
+
+  test("Python UDT ordering cache distinguishes SQL types with UTF8_LCASE first") {
+    checkPythonUDTOrderingCache(binaryFirst = false)
   }
 
   test("SPARK-59187: a factory answers for the types it settled on") {

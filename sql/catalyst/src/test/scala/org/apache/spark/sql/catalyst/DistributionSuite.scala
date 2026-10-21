@@ -20,13 +20,22 @@ package org.apache.spark.sql.catalyst
 import org.apache.spark.SparkFunSuite
 /* Implicit conversions */
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, CollationAwareMurmur3Hash, Expression, Literal, Pmod, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, CollationAwareMurmur3Hash, Expression, Literal, Pmod, SortOrder, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.connector.catalog.functions.ScalarFunction
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{DataType, IntegerType}
 
 class DistributionSuite extends SparkFunSuite with SQLHelper {
+
+  /** A bound function with a stable canonical name, enough to build a `TransformExpression`. */
+  private object TestYearsFunction extends ScalarFunction[Int] {
+    override def inputTypes(): Array[DataType] = Array(IntegerType)
+    override def resultType(): DataType = IntegerType
+    override def name(): String = "years"
+    override def canonicalName(): String = "test.years"
+  }
 
   protected def checkSatisfied(
       inputPartitioning: Partitioning,
@@ -413,6 +422,56 @@ class DistributionSuite extends SparkFunSuite with SQLHelper {
     checkSatisfied(groupedKP, ClusteredDistribution(Seq(x)), true)
   }
 
+  test("SPARK-59289: satisfies is strict about a projection that merges partitions") {
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val clustered = ClusteredDistribution(Seq(a))
+
+    // Partitioned by [a, b], clustered on [a] alone. Both are grouped, so the only question is
+    // whether rows sharing `a` share a partition.
+    val merging = KeyedPartitioning(Seq(a, b), Seq(InternalRow(1, 1), InternalRow(1, 2)))
+    val notMerging = KeyedPartitioning(Seq(a, b), Seq(InternalRow(1, 1), InternalRow(2, 2)))
+    assert(merging.isGrouped && notMerging.isGrouped)
+
+    withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      // a = 1 sits on two partitions, so this satisfies nothing until a GroupPartitionsExec
+      // projects the keys onto [a]. `keysMaySatisfy` is the question that says so.
+      checkSatisfied(merging, clustered, false)
+      assert(merging.keysMaySatisfy(clustered))
+
+      // Projecting here would merge no partition, so every `a` already sits on one and the
+      // partitioning satisfies as it stands. Keeping it beats projecting, since it still names `b`
+      // for a downstream operator to co-partition on.
+      checkSatisfied(notMerging, clustered, true)
+    }
+  }
+
+  test("SPARK-59289: satisfies accepts a partition expression that is itself a cluster key") {
+    val ts = AttributeReference("ts", IntegerType)()
+    val other = AttributeReference("other", IntegerType)()
+    val years = TransformExpression(TestYearsFunction, Seq(ts))
+    val partitioning = KeyedPartitioning(Seq(years), Seq(InternalRow(1), InternalRow(2)))
+    assert(partitioning.isGrouped)
+
+    // The clustering names the transform rather than the column it reads, so rows sharing
+    // `years(ts)` already sit on one partition and nothing has to be re-partitioned. The test that
+    // decides this reads the expression as well as its references, and it runs on the default
+    // configuration.
+    checkSatisfied(partitioning, ClusteredDistribution(Seq(years)), true)
+
+    // The `requireAllClusterKeys` arm has always accepted this shape, since it compares
+    // expressions rather than references, so the two arms agree now.
+    checkSatisfied(
+      partitioning, ClusteredDistribution(Seq(years), requireAllClusterKeys = true), true)
+
+    // Clustered on the column the transform reads, rows sharing `ts` share a partition too, since
+    // the partition expression is a function of it.
+    checkSatisfied(partitioning, ClusteredDistribution(Seq(ts)), true)
+
+    // Neither the expression nor its reference is a cluster key here, so this is refused.
+    checkSatisfied(partitioning, ClusteredDistribution(Seq(other)), false)
+  }
+
   test("SPARK-56877: fromPartitionings reuses already-consistent nested collections") {
     val x = AttributeReference("x", IntegerType)()
     val y = AttributeReference("y", IntegerType)()
@@ -457,9 +516,9 @@ class DistributionSuite extends SparkFunSuite with SQLHelper {
     val a = AttributeReference("a", IntegerType)()
     val ordered = OrderedDistribution(Seq(SortOrder(a, Ascending)))
     val markedOne = KeyedPartitioning(Seq(a), Seq(InternalRow(1)))
-      .withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+      .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
     val markedTwo = KeyedPartitioning(Seq(a), Seq(InternalRow(1), InternalRow(2)))
-      .withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+      .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
     withSQLConf(SQLConf.V2_BUCKETING_SORTING_ENABLED.key -> "true") {
       checkSatisfied(markedOne, ordered, true)
       checkSatisfied(markedTwo, ordered, false)
@@ -470,14 +529,23 @@ class DistributionSuite extends SparkFunSuite with SQLHelper {
     val x = AttributeReference("x", IntegerType)()
     val y = AttributeReference("y", IntegerType)()
     val marked = KeyedPartitioning(Seq(x), Seq(InternalRow(1), InternalRow(2)))
-      .withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+      .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
     val plain = KeyedPartitioning(Seq(y), Seq(InternalRow(1), InternalRow(2)))
     val combined = PartitioningCollection.fromPartitionings(Seq(marked, plain))
-    // The conservative direction: an unmarked member must never excuse marked data, because
-    // the OR'd-on marker only costs a shuffle while the AND'd-off one could cost correctness.
+    // The conservative direction: an unmarked member must never excuse marked data, because a
+    // merged marker only costs a shuffle while dropping one could cost correctness.
     val members = combined.partitionings.map(_.asInstanceOf[KeyedPartitioning])
     assert(members.forall(_.mayContainUnknownPartitionKeys), members.toString)
     assert(members.last.layout eq members.head.layout)
+
+    // A member that lost the routing makes the joint layout lose it as well.
+    val lost = KeyedPartitioning(Seq(x), Seq(InternalRow(1), InternalRow(2)))
+      .withLayout(_.copy(unknownKeysOrigin = Some(ROUTING_LOST)))
+    val withLost = PartitioningCollection.fromPartitionings(Seq(lost, plain))
+    val lostMembers = withLost.partitionings.map(_.asInstanceOf[KeyedPartitioning])
+    assert(lostMembers.forall(_.mayContainUnknownPartitionKeys), lostMembers.toString)
+    assert(lostMembers.forall(!_.unknownKeysRouted), lostMembers.toString)
+    assert(lostMembers.last.layout eq lostMembers.head.layout)
   }
 
   test("SPARK-59050: PartitioningCollection requires members to agree on the marker") {
@@ -485,11 +553,11 @@ class DistributionSuite extends SparkFunSuite with SQLHelper {
     val y = AttributeReference("y", IntegerType)()
     val keys = Seq(InternalRow(1), InternalRow(2))
     val base = KeyedPartitioning(Seq(x), keys)
-    val marked = base.withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+    val marked = base.withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
     // The marker lives on the layout, so two members that disagree on it hold two layouts, and the
     // one `eq` on the layout refuses them. There is no clause of its own to reach.
     val disagree =
-      KeyedPartitioning(Seq(y), marked.layout.copy(mayContainUnknownPartitionKeys = false))
+      KeyedPartitioning(Seq(y), marked.layout.copy(unknownKeysOrigin = None))
     val err = intercept[IllegalArgumentException] {
       PartitioningCollection(Seq(marked, disagree))
     }
@@ -500,8 +568,8 @@ class DistributionSuite extends SparkFunSuite with SQLHelper {
     val x = AttributeReference("x", IntegerType)()
     val y = AttributeReference("y", IntegerType)()
     val keys = Seq(InternalRow(1), InternalRow(2))
-    val marked =
-      KeyedPartitioning(Seq(x), keys).withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+    val marked = KeyedPartitioning(Seq(x), keys)
+      .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
     val plainNested = PartitioningCollection.fromPartitionings(
       Seq(KeyedPartitioning(Seq(y), keys)))
     val combined = PartitioningCollection.fromPartitionings(Seq(marked, plainNested))
@@ -522,7 +590,7 @@ class DistributionSuite extends SparkFunSuite with SQLHelper {
     val keys = Seq(InternalRow(1), InternalRow(2))
     val base = KeyedPartitioning(Seq(x), keys)
     val markedNested = PartitioningCollection.fromPartitionings(Seq(
-      base.withLayout(_.copy(mayContainUnknownPartitionKeys = true))))
+      base.withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))))
     val plain = base.copy(expressions = Seq(y))
     // The nested collection is internally uniform, so its own construction passes. The outer
     // constructor must still catch its representative against the unmarked sibling, and the marker

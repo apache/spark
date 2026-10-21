@@ -230,17 +230,18 @@ case class ExpandExec(
         val paramLength = CodeGenerator.calculateParamLengthFromExprValues(inputVars)
         val maybeSplitUpdateCode = if (CodeGenerator.isValidParamLength(paramLength)) {
           val switchCaseFunc = ctx.freshName("switchCaseCode")
+          ctx.assertSplitCallsWithin(updateCode, inputVars.map(_.variableName), switchCaseFunc)
           val argList = inputVars.map { v =>
             s"${CodeGenerator.typeName(v.javaType)} ${v.variableName}"
           }
-          ctx.addNewFunction(switchCaseFunc,
+          val switchCaseFuncName = ctx.addNewFunction(switchCaseFunc,
             s"""
                |private void $switchCaseFunc(${argList.mkString(", ")}) {
                |  $updateCode
                |}
              """.stripMargin)
 
-          s"$switchCaseFunc(${inputVars.map(_.variableName).mkString(", ")});"
+          s"$switchCaseFuncName(${inputVars.map(_.variableName).mkString(", ")});"
         } else {
           updateCode
         }

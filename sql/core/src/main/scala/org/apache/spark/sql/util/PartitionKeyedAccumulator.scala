@@ -34,58 +34,81 @@ import org.apache.spark.util.AccumulatorV2
  * failed/interrupted tasks are dropped by the accumulator framework (it is not
  * `countFailedValues`), so only complete per-partition values are ever merged.
  *
- * Backed by a `ConcurrentHashMap`. Mutations and folds are synchronized so a caller can atomically
- * verify that every partition completed and read its statistics from the same stable snapshot.
+ * Backed by a `ConcurrentHashMap`. All access is synchronized so a caller can atomically verify
+ * that every partition completed and read its statistics from the same stable snapshot.
  * Framework-facing reads remain safe, weakly consistent views.
  *
  * @tparam T the per-partition value type. Must be non-null (`ConcurrentHashMap` forbids nulls).
  */
 class PartitionKeyedAccumulator[T] extends AccumulatorV2[(Int, T), java.util.Map[Int, T]] {
 
-  // partition id -> value.
-  private val byPartition = new ConcurrentHashMap[Int, T]()
+  // partition id -> value. Deliberately a lazily created `var` rather than a `val`: Java
+  // deserialization assigns a subclass's fields only AFTER `AccumulatorV2.readObject` has already
+  // registered `this` with the `TaskContext`, so another thread can reach this accumulator while
+  // the map is still unset -- in production the executor heartbeater, which calls `isZero` on every
+  // registered accumulator. A final field would additionally leave that thread no guarantee of ever
+  // seeing the post-publication reflective write (JLS 17.5.3). All access goes through
+  // `getOrCreate`; see SPARK-20977, which fixed the same hazard in `CollectionAccumulator`.
+  private var byPartition: ConcurrentHashMap[Int, T] = _
 
-  override def isZero: Boolean = byPartition.isEmpty
+  private def getOrCreate: ConcurrentHashMap[Int, T] = {
+    if (byPartition == null) {
+      byPartition = new ConcurrentHashMap[Int, T]()
+    }
+    byPartition
+  }
+
+  override def isZero: Boolean = synchronized {
+    getOrCreate.isEmpty
+  }
 
   override def copyAndReset(): PartitionKeyedAccumulator[T] = new PartitionKeyedAccumulator[T]
 
   override def copy(): PartitionKeyedAccumulator[T] = synchronized {
     val newAcc = new PartitionKeyedAccumulator[T]
-    newAcc.byPartition.putAll(byPartition)
+    newAcc.getOrCreate.putAll(getOrCreate)
     newAcc
   }
 
   override def reset(): Unit = synchronized {
-    byPartition.clear()
+    getOrCreate.clear()
   }
 
   override def add(v: (Int, T)): Unit = synchronized {
-    byPartition.put(v._1, v._2)
+    getOrCreate.put(v._1, v._2)
   }
 
-  override def merge(other: AccumulatorV2[(Int, T), java.util.Map[Int, T]]): Unit = synchronized {
-    other match {
-      case o: PartitionKeyedAccumulator[T] =>
-        // Last-write-wins per partition id: a partition recorded by more than one task replaces
-        // rather than accumulates, keeping any caller-derived aggregate exact.
-        byPartition.putAll(o.byPartition)
-      case _ => throw new UnsupportedOperationException(
-        s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
-    }
+  override def merge(other: AccumulatorV2[(Int, T), java.util.Map[Int, T]]): Unit = other match {
+    case o: PartitionKeyedAccumulator[T] =>
+      // Resolve the source map before taking our own monitor. Acquiring `o`'s monitor while
+      // holding ours would leave the two merge directions with opposite lock orders, so a
+      // concurrent `o.merge(this)` could deadlock against this call.
+      val source = o.value
+      // Last-write-wins per partition id: a partition recorded by more than one task replaces
+      // rather than accumulates, keeping any caller-derived aggregate exact.
+      synchronized {
+        getOrCreate.putAll(source)
+      }
+    case _ => throw new UnsupportedOperationException(
+      s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
   }
 
   // A read-only VIEW over the live map -- no copy. Only the accumulator framework calls `value`
   // (event log / `toInfo` / `toString`); our own code reads via `accumulatedNumPartitions` /
   // `foldValues`. The view is thread-safe (ConcurrentHashMap) and weakly consistent, which matches
   // this accumulator's eventual-consistency contract.
-  override def value: java.util.Map[Int, T] = java.util.Collections.unmodifiableMap(byPartition)
+  override def value: java.util.Map[Int, T] = synchronized {
+    java.util.Collections.unmodifiableMap(getOrCreate)
+  }
 
   /** Number of distinct partitions that have been recorded. */
-  def accumulatedNumPartitions: Long = byPartition.size().toLong
+  def accumulatedNumPartitions: Long = synchronized {
+    getOrCreate.size().toLong
+  }
 
   private def foldValuesUnsafe[A](zero: A)(op: (A, T) => A): A = {
     var result = zero
-    val it = byPartition.values().iterator()
+    val it = getOrCreate.values().iterator()
     while (it.hasNext) result = op(result, it.next())
     result
   }
@@ -100,7 +123,7 @@ class PartitionKeyedAccumulator[T] extends AccumulatorV2[(Int, T), java.util.Map
       expectedNumPartitions: Int,
       zero: A)(
       op: (A, T) => A): Option[A] = synchronized {
-    if (byPartition.size() == expectedNumPartitions) {
+    if (getOrCreate.size() == expectedNumPartitions) {
       Some(foldValuesUnsafe(zero)(op))
     } else {
       None

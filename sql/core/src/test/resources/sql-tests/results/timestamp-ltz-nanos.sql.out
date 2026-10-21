@@ -1177,6 +1177,28 @@ timestamp_ltz(9)	1582-10-15 23:59:59.123456789
 
 
 -- !query
+SELECT typeof(c), c FROM (
+    SELECT '2020-01-01 00:00:00.1234567' :: timestamp_ltz(7) AS c
+    UNION ALL SELECT '2021-07-15 12:34:56.12345678' :: timestamp_ltz(8)) ORDER BY c
+-- !query schema
+struct<typeof(c):string,c:timestamp_ltz(8)>
+-- !query output
+timestamp_ltz(8)	2020-01-01 00:00:00.1234567
+timestamp_ltz(8)	2021-07-15 12:34:56.12345678
+
+
+-- !query
+SELECT typeof(c), c FROM (
+    SELECT '2020-01-01 00:00:00.12345678' :: timestamp_ltz(8) AS c
+    UNION ALL SELECT '2021-07-15 12:34:56.123456789' :: timestamp_ltz(9)) ORDER BY c
+-- !query schema
+struct<typeof(c):string,c:timestamp_ltz(9)>
+-- !query output
+timestamp_ltz(9)	2020-01-01 00:00:00.12345678
+timestamp_ltz(9)	2021-07-15 12:34:56.123456789
+
+
+-- !query
 SELECT typeof(v), v FROM (SELECT coalesce(
     '1969-12-31 23:59:59.0000001 Asia/Kolkata' :: timestamp_ltz(7),
     '1969-12-31 23:59:59.999999999 UTC' :: timestamp_ltz(9)) AS v)
@@ -1790,3 +1812,742 @@ SELECT element_at(map(TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC', 'a',
 struct<element_at(map(TIMESTAMP_LTZ '2019-12-31 16:00:00.000000001', a, TIMESTAMP_LTZ '2019-12-31 16:00:00.000000999', b), TIMESTAMP_LTZ '2019-12-31 16:00:00.000000001'):string>
 -- !query output
 a
+
+
+-- !query
+SELECT timestampadd(SECOND, 5, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000123 UTC')
+-- !query schema
+struct<timestampadd(SECOND, 5, TIMESTAMP_LTZ '2019-12-31 16:00:00.000000123'):timestamp_ltz(9)>
+-- !query output
+2019-12-31 16:00:05.000000123
+
+
+-- !query
+SELECT timestampadd(MICROSECOND, 2, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000123 UTC')
+-- !query schema
+struct<timestampadd(MICROSECOND, 2, TIMESTAMP_LTZ '2019-12-31 16:00:00.000000123'):timestamp_ltz(9)>
+-- !query output
+2019-12-31 16:00:00.000002123
+
+
+-- !query
+SELECT timestampadd(NANOSECOND, 300, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000123 UTC')
+-- !query schema
+struct<timestampadd(NANOSECOND, 300, TIMESTAMP_LTZ '2019-12-31 16:00:00.000000123'):timestamp_ltz(9)>
+-- !query output
+2019-12-31 16:00:00.000000423
+
+
+-- !query
+SELECT timestampadd(NANOSECOND, -300, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000100 UTC')
+-- !query schema
+struct<timestampadd(NANOSECOND, -300, TIMESTAMP_LTZ '2019-12-31 16:00:00.000000100'):timestamp_ltz(9)>
+-- !query output
+2019-12-31 15:59:59.9999998
+
+
+-- !query
+SELECT timestampadd(NANOSECOND, 900, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000200 UTC')
+-- !query schema
+struct<timestampadd(NANOSECOND, 900, TIMESTAMP_LTZ '2019-12-31 16:00:00.000000200'):timestamp_ltz(9)>
+-- !query output
+2019-12-31 16:00:00.0000011
+
+
+-- !query
+SELECT timestampadd(NANOSECOND, 1, TIMESTAMP_LTZ '2020-01-01 00:00:00 UTC')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`TIMESTAMPADD`",
+    "invalidValue" : "'NANOSECOND'",
+    "parameter" : "`unit`"
+  }
+}
+
+
+-- !query
+SELECT timestampdiff(MICROSECOND, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999',
+    TIMESTAMP_LTZ '2020-01-01 00:00:00.000001001')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999'\"",
+    "inputType" : "\"TIMESTAMP_LTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"timestampdiff(MICROSECOND, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999', TIMESTAMP_LTZ '2020-01-01 00:00:00.000001001')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 131,
+    "fragment" : "timestampdiff(MICROSECOND, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999',\n    TIMESTAMP_LTZ '2020-01-01 00:00:00.000001001')"
+  } ]
+}
+
+
+-- !query
+SELECT months_between(TIMESTAMP_LTZ '2020-02-01 00:00:00.000000001',
+    TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP_LTZ '2020-02-01 00:00:00.000000001'\"",
+    "inputType" : "\"TIMESTAMP_LTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"months_between(TIMESTAMP_LTZ '2020-02-01 00:00:00.000000001', TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001', true)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 119,
+    "fragment" : "months_between(TIMESTAMP_LTZ '2020-02-01 00:00:00.000000001',\n    TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001')"
+  } ]
+}
+
+
+-- !query
+SELECT window(c, '1 second')
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_LTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"STRUCT<start: TIMESTAMP, end: TIMESTAMP>\" or \"STRUCT<start: TIMESTAMP_NTZ, end: TIMESTAMP_NTZ>\")",
+    "sqlExpr" : "\"window(c, 1000000, 1000000, 0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "window(c, '1 second')"
+  } ]
+}
+
+
+-- !query
+SELECT session_window(c, '1 second')
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_LTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"STRUCT<start: TIMESTAMP, end: TIMESTAMP>\" or \"STRUCT<start: TIMESTAMP_NTZ, end: TIMESTAMP_NTZ>\")",
+    "sqlExpr" : "\"sessionwindow(c, 1 second)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "session_window(c, '1 second')"
+  } ]
+}
+
+
+-- !query
+SELECT approx_percentile(c, 0.5)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_LTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"NUMERIC\" or \"DATE\" or \"TIMESTAMP\" or \"TIMESTAMP_NTZ\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\" or \"TIME\")",
+    "sqlExpr" : "\"approx_percentile(c, 0.5, 10000)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "approx_percentile(c, 0.5)"
+  } ]
+}
+
+
+-- !query
+SELECT histogram_numeric(c, 2)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_LTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"NUMERIC\" or \"DATE\" or \"TIMESTAMP\" or \"TIMESTAMP_NTZ\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\" or \"TIME\")",
+    "sqlExpr" : "\"histogram_numeric(c, 2)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "histogram_numeric(c, 2)"
+  } ]
+}
+
+
+-- !query
+SELECT percentile(c, 0.5)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_LTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "((\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\") or \"TIME\")",
+    "sqlExpr" : "\"percentile(c, 0.5, 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "percentile(c, 0.5)"
+  } ]
+}
+
+
+-- !query
+SELECT median(c)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_LTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "((\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\") or \"TIME\")",
+    "sqlExpr" : "\"median(c)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 16,
+    "fragment" : "median(c)"
+  } ]
+}
+
+
+-- !query
+SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY c)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_LTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "((\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\") or \"TIME\")",
+    "sqlExpr" : "\"percentile_cont(c, 0.5)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 53,
+    "fragment" : "percentile_cont(0.5) WITHIN GROUP (ORDER BY c)"
+  } ]
+}
+
+
+-- !query
+SELECT percentile_disc(0.5) WITHIN GROUP (ORDER BY c)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_LTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "((\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\") or \"TIME\")",
+    "sqlExpr" : "\"percentile_disc(c, 0.5)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 53,
+    "fragment" : "percentile_disc(0.5) WITHIN GROUP (ORDER BY c)"
+  } ]
+}
+
+
+-- !query
+SELECT time_trunc('HOUR', c)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_LTZ(9)\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"TIME\"",
+    "sqlExpr" : "\"time_trunc(HOUR, c)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "time_trunc('HOUR', c)"
+  } ]
+}
+
+
+-- !query
+SELECT time_diff('SECOND', TIME '12:00:00', c)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_LTZ(9)\"",
+    "paramIndex" : "third",
+    "requiredType" : "\"TIME\"",
+    "sqlExpr" : "\"time_diff(SECOND, TIME '12:00:00', c)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 46,
+    "fragment" : "time_diff('SECOND', TIME '12:00:00', c)"
+  } ]
+}
+
+
+-- !query
+SELECT last_day(c), next_day(c, 'MO'), datediff(c, '2019-12-31'), add_months(c, 1)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query schema
+struct<last_day(c):date,next_day(c, MO):date,datediff(c, 2019-12-31):int,add_months(c, 1):date>
+-- !query output
+2020-01-31	2020-01-06	1	2020-02-01
+
+
+-- !query
+SET spark.sql.ansi.enabled=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.ansi.enabled	false
+
+
+-- !query
+SELECT timestampdiff(MICROSECOND, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999',
+    TIMESTAMP_LTZ '2020-01-01 00:00:00.000001001')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999'\"",
+    "inputType" : "\"TIMESTAMP_LTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"timestampdiff(MICROSECOND, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999', TIMESTAMP_LTZ '2020-01-01 00:00:00.000001001')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 131,
+    "fragment" : "timestampdiff(MICROSECOND, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999',\n    TIMESTAMP_LTZ '2020-01-01 00:00:00.000001001')"
+  } ]
+}
+
+
+-- !query
+SELECT months_between(TIMESTAMP_LTZ '2020-02-01 00:00:00.000000001',
+    TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP_LTZ '2020-02-01 00:00:00.000000001'\"",
+    "inputType" : "\"TIMESTAMP_LTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"months_between(TIMESTAMP_LTZ '2020-02-01 00:00:00.000000001', TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001', true)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 119,
+    "fragment" : "months_between(TIMESTAMP_LTZ '2020-02-01 00:00:00.000000001',\n    TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001')"
+  } ]
+}
+
+
+-- !query
+SELECT window(c, '1 second')
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_LTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"STRUCT<start: TIMESTAMP, end: TIMESTAMP>\" or \"STRUCT<start: TIMESTAMP_NTZ, end: TIMESTAMP_NTZ>\")",
+    "sqlExpr" : "\"window(c, 1000000, 1000000, 0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "window(c, '1 second')"
+  } ]
+}
+
+
+-- !query
+SELECT session_window(c, '1 second')
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_LTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"STRUCT<start: TIMESTAMP, end: TIMESTAMP>\" or \"STRUCT<start: TIMESTAMP_NTZ, end: TIMESTAMP_NTZ>\")",
+    "sqlExpr" : "\"sessionwindow(c, 1 second)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "session_window(c, '1 second')"
+  } ]
+}
+
+
+-- !query
+SELECT approx_percentile(c, 0.5)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_LTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"NUMERIC\" or \"DATE\" or \"TIMESTAMP\" or \"TIMESTAMP_NTZ\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\" or \"TIME\")",
+    "sqlExpr" : "\"approx_percentile(c, 0.5, 10000)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "approx_percentile(c, 0.5)"
+  } ]
+}
+
+
+-- !query
+SELECT histogram_numeric(c, 2)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_LTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"NUMERIC\" or \"DATE\" or \"TIMESTAMP\" or \"TIMESTAMP_NTZ\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\" or \"TIME\")",
+    "sqlExpr" : "\"histogram_numeric(c, 2)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "histogram_numeric(c, 2)"
+  } ]
+}
+
+
+-- !query
+SELECT percentile(c, 0.5)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_LTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "((\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\") or \"TIME\")",
+    "sqlExpr" : "\"percentile(c, 0.5, 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "percentile(c, 0.5)"
+  } ]
+}
+
+
+-- !query
+SELECT median(c)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_LTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "((\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\") or \"TIME\")",
+    "sqlExpr" : "\"median(c)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 16,
+    "fragment" : "median(c)"
+  } ]
+}
+
+
+-- !query
+SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY c)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_LTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "((\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\") or \"TIME\")",
+    "sqlExpr" : "\"percentile_cont(c, 0.5)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 53,
+    "fragment" : "percentile_cont(0.5) WITHIN GROUP (ORDER BY c)"
+  } ]
+}
+
+
+-- !query
+SELECT percentile_disc(0.5) WITHIN GROUP (ORDER BY c)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_LTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "((\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\") or \"TIME\")",
+    "sqlExpr" : "\"percentile_disc(c, 0.5)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 53,
+    "fragment" : "percentile_disc(0.5) WITHIN GROUP (ORDER BY c)"
+  } ]
+}
+
+
+-- !query
+SELECT time_trunc('HOUR', c)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_LTZ(9)\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"TIME\"",
+    "sqlExpr" : "\"time_trunc(HOUR, c)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "time_trunc('HOUR', c)"
+  } ]
+}
+
+
+-- !query
+SELECT time_diff('SECOND', TIME '12:00:00', c)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_LTZ(9)\"",
+    "paramIndex" : "third",
+    "requiredType" : "\"TIME\"",
+    "sqlExpr" : "\"time_diff(SECOND, TIME '12:00:00', c)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 46,
+    "fragment" : "time_diff('SECOND', TIME '12:00:00', c)"
+  } ]
+}
+
+
+-- !query
+SELECT last_day(c), next_day(c, 'MO'), datediff(c, '2019-12-31'), add_months(c, 1)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query schema
+struct<last_day(c):date,next_day(c, MO):date,datediff(c, 2019-12-31):int,add_months(c, 1):date>
+-- !query output
+2020-01-31	2020-01-06	1	2020-02-01
+
+
+-- !query
+SET spark.sql.ansi.enabled=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.ansi.enabled	true

@@ -380,8 +380,7 @@ private[sql] class DefaultCatalogManager(
    * list (the only thing returned here) is unaffected. Moving the read inside the CM lock
    * would re-introduce the SPARK-56939 lock-order inversion this helper exists to avoid.
    *
-   * Callers (e.g. [[SessionCatalog.sessionFunctionKindsInResolutionOrder]],
-   * [[org.apache.spark.sql.catalyst.analysis.FunctionResolution.isSessionBeforeBuiltinInPath]])
+   * Callers (e.g. [[SessionCatalog.sessionFunctionKindsInResolutionOrder]])
    * MUST NOT hold [[SessionCatalog]]'s intrinsic lock when invoking this method.
    */
   override def sessionFunctionKindsForUnqualifiedResolution(): Seq[SessionFunctionKind] = {

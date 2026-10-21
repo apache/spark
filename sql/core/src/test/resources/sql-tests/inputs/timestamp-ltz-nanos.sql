@@ -359,6 +359,16 @@ SELECT typeof(c), c FROM (
 SELECT typeof(c), c FROM (
     SELECT '1582-10-04 12:30:45.1234567' :: timestamp_ltz(7) AS c
     UNION ALL SELECT '1582-10-15 23:59:59.123456789' :: timestamp_ltz(9)) ORDER BY c;
+-- The p=8 boundary widens to the wider precision (nanos(7)/nanos(8) -> nanos(8), nanos(8)/nanos(9)
+-- -> nanos(9)); widening never floors, so each operand keeps its exact value and only the resolved
+-- type moves up. Bare literals are read and rendered in the session zone, so they round-trip;
+-- typeof() locks the wider precision and the rendered fractions confirm neither operand lost a digit.
+SELECT typeof(c), c FROM (
+    SELECT '2020-01-01 00:00:00.1234567' :: timestamp_ltz(7) AS c
+    UNION ALL SELECT '2021-07-15 12:34:56.12345678' :: timestamp_ltz(8)) ORDER BY c;
+SELECT typeof(c), c FROM (
+    SELECT '2020-01-01 00:00:00.12345678' :: timestamp_ltz(8) AS c
+    UNION ALL SELECT '2021-07-15 12:34:56.123456789' :: timestamp_ltz(9)) ORDER BY c;
 
 -- coalesce keeps the first non-null, widened: pre-epoch boundary read from a +05:30-offset zone.
 SELECT typeof(v), v FROM (SELECT coalesce(
@@ -580,3 +590,73 @@ SELECT map(TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC', 'a',
 SELECT element_at(map(TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC', 'a',
            TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC', 'b'),
        TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC');
+
+-- SPARK-57833: timestampadd over TIMESTAMP_LTZ(p). Units of MICROSECOND or coarser keep the
+-- sub-microsecond fraction unchanged; the NANOSECOND unit adds whole nanoseconds and carries into
+-- the microsecond (a negative quantity borrows across the boundary). The result stays nanos-typed.
+SELECT timestampadd(SECOND, 5, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000123 UTC');
+SELECT timestampadd(MICROSECOND, 2, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000123 UTC');
+SELECT timestampadd(NANOSECOND, 300, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000123 UTC');
+SELECT timestampadd(NANOSECOND, -300, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000100 UTC');
+-- Carry into the microsecond: 200ns + 900ns = 1100ns -> +1us, 100ns.
+SELECT timestampadd(NANOSECOND, 900, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000200 UTC');
+-- NANOSECOND is rejected on a microsecond-precision timestamp (nanoseconds are unrepresentable).
+SELECT timestampadd(NANOSECOND, 1, TIMESTAMP_LTZ '2020-01-01 00:00:00 UTC');
+
+-- Functions without TIMESTAMP_LTZ(p) support reject it in both ANSI modes instead of implicitly
+-- narrowing it to a microsecond timestamp, DATE or TIME. Date-valued functions still take it
+-- as DATE.
+SELECT timestampdiff(MICROSECOND, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999',
+    TIMESTAMP_LTZ '2020-01-01 00:00:00.000001001');
+SELECT months_between(TIMESTAMP_LTZ '2020-02-01 00:00:00.000000001',
+    TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001');
+SELECT window(c, '1 second')
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SELECT session_window(c, '1 second')
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SELECT approx_percentile(c, 0.5)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SELECT histogram_numeric(c, 2)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SELECT percentile(c, 0.5)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SELECT median(c)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY c)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SELECT percentile_disc(0.5) WITHIN GROUP (ORDER BY c)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SELECT time_trunc('HOUR', c)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SELECT time_diff('SECOND', TIME '12:00:00', c)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SELECT last_day(c), next_day(c, 'MO'), datediff(c, '2019-12-31'), add_months(c, 1)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SET spark.sql.ansi.enabled=false;
+SELECT timestampdiff(MICROSECOND, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999',
+    TIMESTAMP_LTZ '2020-01-01 00:00:00.000001001');
+SELECT months_between(TIMESTAMP_LTZ '2020-02-01 00:00:00.000000001',
+    TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001');
+SELECT window(c, '1 second')
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SELECT session_window(c, '1 second')
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SELECT approx_percentile(c, 0.5)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SELECT histogram_numeric(c, 2)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SELECT percentile(c, 0.5)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SELECT median(c)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY c)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SELECT percentile_disc(0.5) WITHIN GROUP (ORDER BY c)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SELECT time_trunc('HOUR', c)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SELECT time_diff('SECOND', TIME '12:00:00', c)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SELECT last_day(c), next_day(c, 'MO'), datediff(c, '2019-12-31'), add_months(c, 1)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SET spark.sql.ansi.enabled=true;

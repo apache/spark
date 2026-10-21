@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.connect.common
 
-import java.io.{InputStream, ObjectInputStream, ObjectOutputStream, OutputStream}
+import java.io.{InputStream, ObjectOutputStream, OutputStream}
 
 import com.google.protobuf.ByteString
 
@@ -56,9 +56,10 @@ case class UdfPacket(
 }
 
 object UdfPacket {
+  // Uses UdfSerialization, which accepts a sql.types serialVersionUID change only for the exact
+  // (class, stream SUID, local SUID) transitions it audits; any other mismatch still fails.
   def apply(in: InputStream): UdfPacket = {
-    val ois = new ObjectInputStream(in)
-    ois.readObject().asInstanceOf[UdfPacket]
+    UdfSerialization.deserialize[UdfPacket](in)
   }
 
   def apply(bytes: ByteString): UdfPacket = {

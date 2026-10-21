@@ -156,6 +156,7 @@ EXTRACT	false
 FALSE	true
 FETCH	true
 FIELDS	false
+FILE	false
 FILEFORMAT	false
 FILTER	true
 FIRST	false
@@ -216,6 +217,7 @@ JOIN	true
 JSON	false
 JSON_ARRAY	false
 JSON_EXISTS	false
+JSON_OBJECT	false
 JSON_QUERY	false
 JSON_TABLE	false
 JSON_VALUE	false
@@ -433,6 +435,7 @@ UNPIVOT	false
 UNSET	false
 UNTIL	false
 UPDATE	false
+UPDATES	false
 USE	false
 USER	true
 USING	true

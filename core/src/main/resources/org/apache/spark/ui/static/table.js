@@ -63,6 +63,19 @@ function expandAllThreadStackTrace(toggleButton) {
 }
 /* eslint-enable no-unused-vars */
 
+// Builds the file in the browser (as the SQL plan download does) rather than linking to a data:
+// URI, which browsers truncate at the first '#'.
+function downloadThreadDump(fileName) {
+  const text = document.getElementById("thread-dump-text").textContent;
+  const url = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  // Release the Blob once the browser has started the download, as exportSparkProperties does.
+  setTimeout(function () { URL.revokeObjectURL(url); }, 100);
+}
+
 function collapseAllThreadStackTrace(toggleButton) {
   $('.accordion-body').each(function() {
     $(this).remove()
@@ -118,6 +131,11 @@ $(function() {
   });
   $(document).on("click", "[data-action=collapseAllThreadStackTrace]", function() {
     collapseAllThreadStackTrace($(this).data("toggle-button") !== false);
+  });
+
+  // downloadThreadDump
+  $(document).on("click", "[data-action=downloadThreadDump]", function() {
+    downloadThreadDump($(this).data("filename"));
   });
 
   // onMouseOverAndOut

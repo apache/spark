@@ -68,11 +68,29 @@ private[sql] object OrcFilters extends OrcFiltersBase {
 
   /**
    * Create ORC filter as a SearchArgument instance.
+   *
+   * @param schema the schema of the ORC file.
+   * @param readSchema the schema that the ORC file is read with, if it can differ from `schema`.
+   *                   A predicate with a value on a field of a Types Framework type is converted
+   *                   only if the field is read as a type that keeps the stored values, see
+   *                   `OrcTypeOps.acceptsReadType`.
    */
-  def createFilter(schema: StructType, filters: Seq[Filter]): Option[SearchArgument] = {
-    val dataTypeMap = OrcFilters.getSearchableTypeMap(schema, SQLConf.get.caseSensitiveAnalysis)
+  def createFilter(
+      schema: StructType,
+      filters: Seq[Filter],
+      readSchema: Option[StructType] = None): Option[SearchArgument] = {
+    val caseSensitive = SQLConf.get.caseSensitiveAnalysis
+    val dataTypeMap = OrcFilters.getSearchableTypeMap(schema, caseSensitive)
+    val readTypeMap = readSchema.map(OrcFilters.getSearchableTypeMap(_, caseSensitive))
+    // ORC evaluates a pushed down predicate against the stored values, which the reader can
+    // change for the read type, e.g. truncate them to a lower precision.
+    def acceptsValue(name: String): Boolean = readTypeMap.forall { readTypes =>
+      OrcTypeOps(dataTypeMap(name).fieldType).forall { ops =>
+        readTypes.get(name).exists(f => ops.acceptsReadType(f.fieldType))
+      }
+    }
     // Combines all convertible filters using `And` to produce a single conjunction
-    val conjunctionOptional = buildTree(convertibleFilters(dataTypeMap, filters))
+    val conjunctionOptional = buildTree(convertibleFilters(dataTypeMap, filters, acceptsValue))
     conjunctionOptional.map { conjunction =>
       // Then tries to build a single ORC `SearchArgument` for the conjunction predicate.
       // The input predicate is fully convertible. There should not be any empty result in the
@@ -81,9 +99,14 @@ private[sql] object OrcFilters extends OrcFiltersBase {
     }
   }
 
+  /**
+   * Returns the convertible parts of `filters`. `acceptsValue` tells whether a predicate with a
+   * value can be pushed down for a field, see `createFilter`.
+   */
   def convertibleFilters(
       dataTypeMap: Map[String, OrcPrimitiveField],
-      filters: Seq[Filter]): Seq[Filter] = {
+      filters: Seq[Filter],
+      acceptsValue: String => Boolean = _ => true): Seq[Filter] = {
     import org.apache.spark.sql.sources._
 
     def convertibleFiltersHelper(
@@ -130,7 +153,8 @@ private[sql] object OrcFilters extends OrcFiltersBase {
         val childResultOptional = convertibleFiltersHelper(pred, canPartialPushDown = false)
         childResultOptional.map(Not)
       case other =>
-        for (_ <- buildLeafSearchArgument(dataTypeMap, other, newBuilder())) yield other
+        for (_ <- buildLeafSearchArgument(dataTypeMap, other, newBuilder(), acceptsValue))
+          yield other
     }
     filters.flatMap { filter =>
       convertibleFiltersHelper(filter, true)
@@ -145,7 +169,7 @@ private[sql] object OrcFilters extends OrcFiltersBase {
     case ByteType | ShortType | IntegerType | LongType |
          _: AnsiIntervalType | TimestampNTZType => PredicateLeaf.Type.LONG
     case FloatType | DoubleType => PredicateLeaf.Type.FLOAT
-    case StringType => PredicateLeaf.Type.STRING
+    case _: StringType => PredicateLeaf.Type.STRING
     case DateType => PredicateLeaf.Type.DATE
     case TimestampType => PredicateLeaf.Type.TIMESTAMP
     case _: DecimalType => PredicateLeaf.Type.DECIMAL
@@ -227,14 +251,20 @@ private[sql] object OrcFilters extends OrcFiltersBase {
    * @param dataTypeMap a map from the attribute name to its data type.
    * @param expression the input filter predicates.
    * @param builder the input SearchArgument.Builder.
+   * @param acceptsValue whether a predicate with a value can be pushed down for an attribute.
    * @return the builder so far.
    */
   private def buildLeafSearchArgument(
       dataTypeMap: Map[String, OrcPrimitiveField],
       expression: Filter,
-      builder: Builder): Option[Builder] = {
+      builder: Builder,
+      acceptsValue: String => Boolean = _ => true): Option[Builder] = {
     def getType(attribute: String): PredicateLeaf.Type =
       getPredicateLeafType(dataTypeMap(attribute).fieldType)
+
+    // IsNull and IsNotNull have no value, so they don't depend on `acceptsValue`.
+    def canPushValue(attribute: String): Boolean =
+      dataTypeMap.contains(attribute) && acceptsValue(attribute)
 
     import org.apache.spark.sql.sources._
 
@@ -242,32 +272,32 @@ private[sql] object OrcFilters extends OrcFiltersBase {
     // call is mandatory. ORC `SearchArgument` builder requires that all leaf predicates must be
     // wrapped by a "parent" predicate (`And`, `Or`, or `Not`).
     expression match {
-      case EqualTo(name, value) if dataTypeMap.contains(name) =>
+      case EqualTo(name, value) if canPushValue(name) =>
         val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
         Some(builder.startAnd()
           .equals(dataTypeMap(name).fieldName, getType(name), castedValue).end())
 
-      case EqualNullSafe(name, value) if dataTypeMap.contains(name) =>
+      case EqualNullSafe(name, value) if canPushValue(name) =>
         val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
         Some(builder.startAnd()
           .nullSafeEquals(dataTypeMap(name).fieldName, getType(name), castedValue).end())
 
-      case LessThan(name, value) if dataTypeMap.contains(name) =>
+      case LessThan(name, value) if canPushValue(name) =>
         val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
         Some(builder.startAnd()
           .lessThan(dataTypeMap(name).fieldName, getType(name), castedValue).end())
 
-      case LessThanOrEqual(name, value) if dataTypeMap.contains(name) =>
+      case LessThanOrEqual(name, value) if canPushValue(name) =>
         val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
         Some(builder.startAnd()
           .lessThanEquals(dataTypeMap(name).fieldName, getType(name), castedValue).end())
 
-      case GreaterThan(name, value) if dataTypeMap.contains(name) =>
+      case GreaterThan(name, value) if canPushValue(name) =>
         val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
         Some(builder.startNot()
           .lessThanEquals(dataTypeMap(name).fieldName, getType(name), castedValue).end())
 
-      case GreaterThanOrEqual(name, value) if dataTypeMap.contains(name) =>
+      case GreaterThanOrEqual(name, value) if canPushValue(name) =>
         val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
         Some(builder.startNot()
           .lessThan(dataTypeMap(name).fieldName, getType(name), castedValue).end())
@@ -280,7 +310,7 @@ private[sql] object OrcFilters extends OrcFiltersBase {
         Some(builder.startNot()
           .isNull(dataTypeMap(name).fieldName, getType(name)).end())
 
-      case In(name, values) if dataTypeMap.contains(name) =>
+      case In(name, values) if canPushValue(name) =>
         val castedValues = values.map(v => castLiteralValue(v, dataTypeMap(name).fieldType))
         Some(builder.startAnd().in(dataTypeMap(name).fieldName, getType(name),
           castedValues.map(_.asInstanceOf[AnyRef]): _*).end())
