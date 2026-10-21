@@ -29,8 +29,9 @@ import org.apache.spark.internal.config.HADOOP_RDD_IGNORE_EMPTY_SPLITS
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.hive.HiveUtils.{CONVERT_METASTORE_ORC, CONVERT_METASTORE_PARQUET, USE_DELEGATE_FOR_SYMLINK_TEXT_INPUT_FORMAT}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.internal.SQLConf.{ORC_IMPLEMENTATION}
+import org.apache.spark.sql.internal.SQLConf.{ORC_IMPLEMENTATION, TIMESTAMP_TYPE}
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.types.{StructType, TimestampType}
 import org.apache.spark.tags.SlowHiveTest
 
 @SlowHiveTest
@@ -310,6 +311,32 @@ class HiveSerDeReadWriteSuite extends QueryTest with SQLTestUtils with TestHiveS
             Seq.empty[Row]
           )
         }
+      }
+    }
+  }
+
+  test("SPARK-60424: Hive TIMESTAMP is TIMESTAMP_LTZ regardless of spark.sql.timestampType") {
+    Seq(
+      "TEXTFILE" -> Nil,
+      "ORC" -> Nil,
+      "ORC" -> Seq(CONVERT_METASTORE_ORC.key -> "true"),
+      "ORC" -> Seq(CONVERT_METASTORE_ORC.key -> "true", ORC_IMPLEMENTATION.key -> "native"),
+      "PARQUET" -> Nil,
+      "PARQUET" -> Seq(CONVERT_METASTORE_PARQUET.key -> "true")
+    ).foreach { case (fileFormat, confs) =>
+      withTable("hive_serde") {
+        spark.sql(s"CREATE TABLE hive_serde (c1 TIMESTAMP) STORED AS $fileFormat")
+        hiveClient.runSqlHive("INSERT INTO TABLE hive_serde values('2019-04-11 15:50:00')")
+        withSQLConf(confs :+ (TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ"): _*) {
+          assert(spark.table("hive_serde").schema === new StructType().add("c1", TimestampType))
+          spark.sql("INSERT INTO TABLE hive_serde VALUES (TIMESTAMP_LTZ'2019-04-12 15:50:00')")
+          checkAnswer(
+            spark.table("hive_serde"),
+            Seq(Row(Timestamp.valueOf("2019-04-11 15:50:00")),
+              Row(Timestamp.valueOf("2019-04-12 15:50:00"))))
+        }
+        assert(hiveClient.runSqlHive("SELECT c1 FROM hive_serde ORDER BY c1") ===
+          Seq("2019-04-11 15:50:00", "2019-04-12 15:50:00"))
       }
     }
   }
