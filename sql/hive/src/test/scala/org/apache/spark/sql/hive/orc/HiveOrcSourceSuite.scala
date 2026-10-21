@@ -24,6 +24,7 @@ import org.apache.spark.sql.TestingUDT.{IntervalData, IntervalUDT}
 import org.apache.spark.sql.execution.datasources.orc.OrcSuite
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -340,6 +341,47 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
                 checkAnswer(sql(wildcardL2SqlStatement), Nil)
               }
             }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60423: Hive ORC filter pushdown on timestamps with sub-millisecond digits") {
+    // Each value is written to its own file, so a pushed down predicate that skips a file with a
+    // matching row changes the result. The Kryo round trip of the search argument truncates
+    // `00:00:00.123456` to `00:00:00.123`, the first value.
+    def ts(time: String): String = s"TIMESTAMP'2020-01-01 $time'"
+    val value = ts("00:00:00.123456")
+    withSQLConf(
+        SQLConf.ORC_IMPLEMENTATION.key -> "hive",
+        SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      val input = sql(s"SELECT ${ts("00:00:00.123")} AS ts UNION ALL SELECT $value " +
+        s"UNION ALL SELECT ${ts("00:00:01")}")
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        input.coalesce(1).write.option("maxRecordsPerFile", 1).orc(path)
+        // The filter value is a java.sql.Timestamp or a java.time.Instant.
+        Seq(false, true).foreach { java8Api =>
+          withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString) {
+            val df = spark.read.schema(input.schema).orc(path)
+            Seq(
+              s"ts = $value",
+              s"ts <=> $value",
+              s"ts IN ($value, ${ts("00:00:01")})",
+              s"ts < $value",
+              s"ts <= $value",
+              s"ts > $value",
+              s"ts >= $value",
+              s"ts != $value",
+              s"ts NOT IN ($value, ${ts("00:00:01")})",
+              s"ts = $value OR ts > ${ts("00:00:01")}"
+            ).foreach { condition =>
+              checkAnswer(df.where(condition), input.where(condition))
+            }
+            // A predicate with a millisecond value is still pushed down and skips the other files.
+            val condition = s"ts = ${ts("00:00:00.123")}"
+            checkAnswer(stripSparkFilter(df.where(condition)), input.where(condition))
           }
         }
       }
