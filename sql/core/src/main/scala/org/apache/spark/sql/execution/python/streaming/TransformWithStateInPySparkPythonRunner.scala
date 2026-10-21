@@ -21,15 +21,17 @@ import java.io.{DataInputStream, DataOutputStream, File}
 import java.net.{InetAddress, InetSocketAddress, StandardProtocolFamily, UnixDomainSocketAddress}
 import java.nio.channels.ServerSocketChannel
 import java.util.UUID
+import java.util.concurrent.{ExecutorService, TimeUnit}
 
 import scala.concurrent.ExecutionContext
 
+import com.google.common.util.concurrent.Uninterruptibles
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ArrowStreamWriter
 
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.api.python.{BasePythonRunner, ChainedPythonFunctions, PythonFunction, PythonWorkerUtils, StreamingPythonRunner}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config.Python.{PYTHON_UNIX_DOMAIN_SOCKET_DIR, PYTHON_UNIX_DOMAIN_SOCKET_ENABLED}
 import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.sql.catalyst.InternalRow
@@ -282,21 +284,13 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
       context: TaskContext): Iterator[ColumnarBatch] = {
     initStateServer()
 
-    val executor = ThreadUtils.newDaemonSingleThreadExecutor("stateConnectionListenerThread")
-    val executionContext = ExecutionContext.fromExecutor(executor)
-
-    executionContext.execute(
+    startStateServerForTask(
       new TransformWithStateInPySparkStateServer(stateServerSocket, processorHandle,
         groupingKeySchema,
         sqlConf.arrowTransformWithStateInPySparkMaxStateRecordsPerBatch,
         batchTimestampMs, eventTimeWatermarkForEviction,
-        authHelper = stateServerAuthHelper))
-
-    context.addTaskCompletionListener[Unit] { _ =>
-      logInfo(log"completion listener called")
-      executor.shutdownNow()
-      closeServerSocketChannelSilently(stateServerSocket)
-    }
+        authHelper = stateServerAuthHelper),
+      context)
 
     super.compute(inputIterator, partitionIndex, context)
   }
@@ -425,6 +419,45 @@ trait TransformWithStateInPySparkPythonRunnerUtils extends Logging {
     } finally {
       if (failed) {
         closeServerSocketChannelSilently(stateServerSocket)
+      }
+    }
+  }
+
+  private val STATE_SERVER_STOP_TIMEOUT_MS = 30000L
+
+  /**
+   * Runs `stateServer` on its own thread for the rest of the task, stopping it before the state
+   * store is aborted if the task fails.
+   */
+  protected def startStateServerForTask(stateServer: Runnable, context: TaskContext): Unit = {
+    val executor = ThreadUtils.newDaemonSingleThreadExecutor("stateConnectionListenerThread")
+    ExecutionContext.fromExecutor(executor).execute(stateServer)
+
+    stopStateServerOnTaskFailure(executor, context)
+    context.addTaskCompletionListener[Unit] { _ =>
+      logInfo(log"Stopping TransformWithState state server after the task completed")
+      executor.shutdownNow()
+      closeServerSocketChannelSilently(stateServerSocket)
+    }
+  }
+
+  /**
+   * Stops the state server running on `executor` if the task fails, before the state store's
+   * failure listener aborts the store, so user code that is still running cannot reach the
+   * aborted store. The store registers its listeners before the runner starts, and failure
+   * listeners run in reverse registration order. The wait ignores interrupts because a killed
+   * task's thread is still interrupted when its failure listeners run.
+   */
+  private def stopStateServerOnTaskFailure(
+      executor: ExecutorService, context: TaskContext): Unit = {
+    context.addTaskFailureListener { (_, _) =>
+      executor.shutdownNow()
+      if (Uninterruptibles.awaitTerminationUninterruptibly(
+          executor, STATE_SERVER_STOP_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+        logInfo(log"Stopped TransformWithState state server after the task failed")
+      } else {
+        logWarning(log"TransformWithState state server did not stop within " +
+          log"${MDC(LogKeys.TIMEOUT, STATE_SERVER_STOP_TIMEOUT_MS)} ms after the task failed")
       }
     }
   }
