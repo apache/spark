@@ -591,9 +591,8 @@ class SQLQueryTestSuite extends SharedSparkSession
       val isCommand = parsedPlan.exists(_.isInstanceOf[Command])
       val triggeredFlowStatement =
         parseTriggeredFlowStatement(localSparkSession, sql, parsedPlan)
-      val isFlow = triggeredFlowStatement.nonEmpty
 
-      if (isFlow) {
+      if (triggeredFlowStatement.nonEmpty) {
         triggeredFlowStatement.foreach {
           case CreateTriggeredFlow(command) =>
             registerTriggeredFlow(localSparkSession, command, triggeredFlows)
