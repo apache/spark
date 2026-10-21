@@ -357,7 +357,7 @@ object StaticSQLConf {
         "framework. Execution requires a supported external UDF physical operator. When false, " +
         "external UDF expressions are rejected. This config must be set before the SparkSession " +
         "is created. Experimental.")
-      .version("4.2.0")
+      .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
