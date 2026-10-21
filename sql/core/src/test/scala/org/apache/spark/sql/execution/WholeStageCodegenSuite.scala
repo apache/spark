@@ -2816,8 +2816,11 @@ class WholeStageCodegenSuite extends SharedSparkSession
           def df: DataFrame = sql(s"SELECT id, CASE $branches ELSE length(value) END AS v " +
             "FROM t UNPIVOT (value FOR name IN (a, b))")
           assert(splitsCaseWhen(df))
+          // The slot is in the compacted array of its type, which is named after the operator
+          // that added the first state of that type: `ExpandExec`, or the projection below it,
+          // whose string outputs are split too.
           assert(genCode(df).exists { c =>
-            methodsHolding(c, "expand_mutableStateArray").exists(_.contains("caseWhen"))
+            methodsHolding(c, "_mutableStateArray").exists(_.contains("caseWhen"))
           })
           assert(splitCaseWhenParameters(df).flatten.forall(!_.contains("mutableStateArray")))
           checkAnswer(df, withoutWholeStage(df))
