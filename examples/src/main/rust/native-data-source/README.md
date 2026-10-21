@@ -152,9 +152,10 @@ df.where("id >= 10 AND id < 20").select("label", "id").show()
 ```
 
 [smoke.py](smoke.py) checks rows, projection, unfiltered and filtered limits, zero-column counts,
-and residual predicates against Spark. It also checks that batch append and overwrite fail during
-analysis before evaluating an input containing `raise_error` and a shuffle. Run it against the
-pinned framework before relying on end-to-end compatibility.
+residual predicates, and a streaming read with `Trigger.AvailableNow` against Spark. It also
+checks that batch append and overwrite fail during analysis before evaluating an input containing
+`raise_error` and a shuffle. Run it against the pinned framework before relying on end-to-end
+compatibility.
 
 [sdk]: ../../../../../sql/native/rust/README.md
 [native-source-pr]: https://github.com/apache/spark/pull/59424
