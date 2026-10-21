@@ -1267,6 +1267,13 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     valid(Array(primitiveHeader(INT8), 1, 0, 0, 0, 0, 0, 0, 0))
     valid(Array(primitiveHeader(DOUBLE), 0, 0, 0, 0, 0, 0, 0, 0))
     valid(Array(primitiveHeader(DECIMAL4), 0, 1, 0, 0, 0))
+    // Scale is in [0, 38] for all decimal widths per the Variant spec; precision is the
+    // only per-type limit. 0.00042626262 = unscaled 42626262 (precision 8, fits in decimal4)
+    // with scale 11.
+    valid(Array(primitiveHeader(DECIMAL4), 11,
+      0xd6.toByte, 0x6c, 0x8a.toByte, 0x02))
+    // 1E-19 = unscaled 1 (precision 1, fits in decimal8) with scale 19.
+    valid(Array(primitiveHeader(DECIMAL8), 19, 1, 0, 0, 0, 0, 0, 0, 0))
     valid(Array(primitiveHeader(FLOAT), 0, 0, 0, 0))
     valid(Array(primitiveHeader(DATE), 0, 0, 0, 0))
     valid(Array(primitiveHeader(TIMESTAMP), 0, 0, 0, 0, 0, 0, 0, 0))
@@ -1282,6 +1289,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     invalid(Array(primitiveHeader(DECIMAL8)))
     invalid(Array(primitiveHeader(DECIMAL16)))
     invalid(Array(primitiveHeader(DECIMAL16)) ++ createArray[Byte](16, 0.toByte))
+    // Scale greater than 38 is beyond the Variant spec ceiling.
+    invalid(Array(primitiveHeader(DECIMAL4), 39, 1, 0, 0, 0))
     invalid(Array(shortStrHeader(2), 'x'))
     invalid(Array(primitiveHeader(LONG_STR), 0, 0, 0))
     invalid(Array(primitiveHeader(LONG_STR), 1, 0, 0, 0))

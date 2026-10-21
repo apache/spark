@@ -427,9 +427,11 @@ public class VariantUtil {
     return Double.longBitsToDouble(readLong(value, pos + 1, 8));
   }
 
-  // Check whether the precision and scale of the decimal are within the limit.
+  // Check that precision is within the per-type limit and scale is within the spec ceiling.
+  // Per the Variant encoding spec, scale is in [0, 38] for all of decimal4/8/16; only precision
+  // is bounded by the type width.
   private static void checkDecimal(BigDecimal d, int maxPrecision) {
-    if (d.precision() > maxPrecision || d.scale() > maxPrecision) {
+    if (d.precision() > maxPrecision || d.scale() > MAX_DECIMAL16_PRECISION) {
       throw malformedVariant();
     }
   }
