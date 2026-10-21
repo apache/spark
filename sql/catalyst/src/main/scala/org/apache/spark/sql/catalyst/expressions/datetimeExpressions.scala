@@ -2045,6 +2045,7 @@ object ParseToTimestampNTZExpressionBuilder extends ExpressionBuilder {
     Arguments:
       * timestamp_str - A string to be parsed to timestamp with local time zone.
         An expression that evaluates to a string, date, timestamp, or numeric.
+        If `fmt` is specified, a numeric input is cast to a string and then parsed with `fmt`.
       * fmt - Timestamp format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
               date and time format patterns.
         An expression that evaluates to a string.
@@ -2085,6 +2086,7 @@ object ParseToTimestampLTZExpressionBuilder extends ExpressionBuilder {
     Arguments:
       * timestamp_str - A string to be parsed to timestamp.
         An expression that evaluates to a string, date, timestamp, or numeric.
+        If `fmt` is specified, a numeric input is cast to a string and then parsed with `fmt`.
       * fmt - Timestamp format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
               date and time format patterns.
         An expression that evaluates to a string.
@@ -3244,6 +3246,7 @@ object TryToDateExpressionBuilder extends ExpressionBuilder {
     Arguments:
       * timestamp_str - A string to be parsed to timestamp.
         An expression that evaluates to a string, date, timestamp, or numeric.
+        If `fmt` is specified, a numeric input is cast to a string and then parsed with `fmt`.
       * fmt - Timestamp format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
               date and time format patterns.
         An expression that evaluates to a string.
@@ -3297,8 +3300,12 @@ case class ParseToTimestamp(
         DateType,
         TimestampType,
         TimestampNTZType)
+    // NumericType is only accepted without a format, where `replacement` is a plain Cast. With a
+    // format, `replacement` is GetTimestamp, which does not accept numeric inputs, so numeric
+    // inputs are implicitly cast to string and parsed with the format instead.
+    val acceptsNumeric = dataType.isInstanceOf[TimestampType] && format.isEmpty
     TypeCollection(
-      (if (dataType.isInstanceOf[TimestampType]) types :+ NumericType else types): _*
+      (if (acceptsNumeric) types :+ NumericType else types): _*
     ) +: format.map(_ => StringTypeWithCollation(supportsTrimCollation = true)).toSeq
   }
 
