@@ -230,8 +230,12 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
    * than read off the consumer's atomic counter per survivor.
    */
   private long reservedBytes;
-  /** Whether the key values are accounted too, which needs them on heap. */
-  private boolean accountKeys;
+  /**
+   * What the budget gave splicing up for in the row group being loaded, or null. Phase 1 leaves it
+   * for {@link #loadNextRowGroup} to record once phase 2 keeps the filter, so a row group counts
+   * once.
+   */
+  private BudgetGiveUp splicingGiveUp;
 
   public LateMaterializationParquetRecordReader(
       ZoneId convertTz,
@@ -489,7 +493,6 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
     TaskMemoryManager taskMemoryManager = context == null ? null : context.taskMemoryManager();
     if (taskMemoryManager != null) {
       survivorMemory = new SurvivorMemory(taskMemoryManager);
-      accountKeys = MEMORY_MODE == MemoryMode.ON_HEAP;
     }
     // Last, since a non-null `keyColumns` is what says the filter is applied to this file.
     keyColumns = keys;
@@ -596,6 +599,7 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
       requireRowCount(dataPages, finalRowCount, blockIdx);
       // A row group whose filter was given up reports nothing (see `StorageFilterMetrics`).
       if (!filterGivenUp) {
+        if (splicingGiveUp != null) recordBudgetGiveUp(splicingGiveUp);
         // Over the columns phase 2 read, the key columns included once splicing is given up. A
         // spliced row group that pruned nothing read exactly the baseline.
         long phase2Bytes = spliceCurrentRowGroup && finalRowCount == baselineRows
@@ -718,12 +722,10 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
 
     PrimitiveIterator.OfLong rowIndexIter = pushedFilterRanges.iterator();
     RowRanges.Builder finalRangesBuilder = RowRanges.builder();
-    // The budget weighs both the key values buffered for splicing and the survivors' ranges.
-    rangeCharge = 0L;
     long previousSurvivor = -2L;
+    // The budget weighs both the key values buffered for splicing and the survivors' ranges.
     long cap = storageFilter.maxSplicedRowGroupBytes();
-    // Splicing the budget gave up, which the row group counts as unless the filter goes too.
-    BudgetGiveUp splicingGivenUp = null;
+    splicingGiveUp = null;
     // Out of the loop, since resolving it is a volatile read.
     BasePredicate predicate = storageFilter.preparedPredicate();
     while (remaining > 0) {
@@ -787,7 +789,7 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
         }
         if (bufferedKeyCharge() + rangeCharge > cap) {
           // The buffer goes first, which is a no-op once splicing is given up.
-          if (spliceCurrentRowGroup) splicingGivenUp = BudgetGiveUp.SPLICING_ON_CAP;
+          if (spliceCurrentRowGroup) splicingGiveUp = BudgetGiveUp.SPLICING_ON_CAP;
           abandonSplicing();
           // The ranges would be thrown away, so stop.
           if (rangeCharge > cap) {
@@ -797,12 +799,12 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
         }
         // A reservation the task's memory manager denies is handled as passing the cap is. With no
         // key values in it, giving splicing up frees nothing, so the ranges are denied too.
-        long keyCharge = accountKeys ? bufferedKeyCharge() : 0L;
-        boolean denied = !reserveSurvivorMemory(keyCharge + rangeCharge);
-        if (denied && keyCharge > 0L) {
-          splicingGivenUp = BudgetGiveUp.SPLICING_ON_MEMORY;
+        long held = heldCharge();
+        boolean denied = !reserveSurvivorMemory(held);
+        if (denied && held > rangeCharge) {
+          splicingGiveUp = BudgetGiveUp.SPLICING_ON_MEMORY;
           abandonSplicing();
-          denied = !reserveSurvivorMemory(rangeCharge);
+          denied = !reserveSurvivorMemory(heldCharge());
         }
         if (denied) {
           recordBudgetGiveUp(BudgetGiveUp.FILTER_ON_MEMORY);
@@ -814,7 +816,6 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
 
     // A partly filled set of accumulators goes to the queue as this row group's last batch.
     if (currentKeyAccumulators != null) pushAccumulators();
-    if (splicingGivenUp != null) recordBudgetGiveUp(splicingGivenUp);
     return finalRangesBuilder.build();
   }
 
@@ -1030,7 +1031,7 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
 
   /** The accounted bytes the survivor buffer holds, see {@link SurvivorMemory}. */
   private long heldCharge() {
-    return accountKeys ? rangeCharge + bufferedKeyCharge() : rangeCharge;
+    return MEMORY_MODE == MemoryMode.ON_HEAP ? rangeCharge + bufferedKeyCharge() : rangeCharge;
   }
 
   /**
@@ -1049,9 +1050,9 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
     long granted;
     try {
       granted = survivorMemory.acquireMemory(ask);
-    } catch (RuntimeException | InternalError e) {
-      // Another consumer's spill runs inside, so this can raise anything, see
-      // `ParquetStorageFilter.memoryReservationFailed`.
+    } catch (Exception | InternalError e) {
+      // Another consumer's spill and the eviction of cached blocks run inside, so this can raise
+      // anything, see `ParquetStorageFilter.memoryReservationFailed`.
       throw ParquetStorageFilter.memoryReservationFailed(e);
     }
     if (granted < missing) {
@@ -1095,7 +1096,8 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
    * its key pages again, which the memory manager does not see either. A denied reservation is
    * handled where it is made, as passing that bound is. ON_HEAP whatever the reader's memory mode,
    * since off-heap vectors allocate native memory outside the Tungsten off-heap pool. With them
-   * only the row ranges, which are always on heap, are accounted.
+   * only the row ranges, which are always on heap, are accounted. The task's memory manager keeps
+   * every consumer until the task ends, so a task holds one per file it reserved for.
    */
   private static final class SurvivorMemory extends MemoryConsumer {
     SurvivorMemory(TaskMemoryManager taskMemoryManager) {
@@ -1108,11 +1110,8 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
     }
   }
 
-  /**
-   * One batch's survivor vectors, indexed like {@link #keyColumns}, and what they are charged.
-   * Package-private for {@code ParquetTestAccess}.
-   */
-  record SurvivorBatch(WritableColumnVector[] vectors, long charge) {}
+  /** One batch's survivor vectors, indexed like {@link #keyColumns}, and what they are charged. */
+  private record SurvivorBatch(WritableColumnVector[] vectors, long charge) {}
 
   /**
    * What the survivor budget gave up for a row group and the limit that made it, with the metric

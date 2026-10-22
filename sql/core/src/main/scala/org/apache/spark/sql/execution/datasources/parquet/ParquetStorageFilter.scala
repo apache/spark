@@ -270,25 +270,21 @@ object ParquetStorageFilter {
    */
   def rethrowIfMustPropagate(e: Throwable, fromRead: Boolean): Unit = {
     def corrupt(t: Throwable): Boolean = fromRead && t.isInstanceOf[InternalError]
-    if (Executor.isFatalError(e, 1) && !corrupt(e)) throw propagated(e)
+    def out(fatal: Throwable): Throwable = fatal match {
+      case internal: InternalError =>
+        new UnknownError("A storage filter met a fatal error it must not absorb")
+          .initCause(internal)
+      case other => other
+    }
+    if (Executor.isFatalError(e, 1) && !corrupt(e)) throw out(e)
     throwIfKilled(e)
     if (fromRead && isVectorGrowthFailure(e)) return
     val depth = if (fromRead && NonFatal(e)) fatalErrorDepth - 1 else fatalErrorDepth
     if (Executor.isFatalError(e, depth)) {
       // The one `Executor.isFatalError` found, which no SparkOutOfMemoryError can precede.
       val fatal = Iterator.iterate(e)(_.getCause).find(Utils.isFatalError).get
-      if (!corrupt(fatal)) throw propagated(fatal)
+      if (!corrupt(fatal)) throw out(fatal)
     }
-  }
-
-  /**
-   * `fatal` in a form `FileScanRDD` cannot take for a corrupt file: an `InternalError`, which it
-   * would, goes out in an `UnknownError`, and anything else as it is.
-   */
-  private def propagated(fatal: Throwable): Throwable = fatal match {
-    case internal: InternalError =>
-      new UnknownError("A storage filter met a fatal error it must not absorb").initCause(internal)
-    case other => other
   }
 
   /**
@@ -330,18 +326,15 @@ object ParquetStorageFilter {
 
   /**
    * Throws what reserving the survivor buffer's memory raised, in a form `FileScanRDD` cannot take
-   * for a corrupt file under `ignoreCorruptFiles`. The task's memory manager runs other consumers'
-   * spills inside the reservation, so it can raise anything. A `RuntimeException`, which is also
-   * what a kill's interrupt during a spill becomes, goes out wrapped in a checked
-   * [[SparkException]], as in [[throwIfKilled]]. An `InternalError` goes out in an `UnknownError`,
-   * and anything else, such as the `SparkOutOfMemoryError` of a failed spill, as it is, as in
-   * [[rethrowIfMustPropagate]]. Typed as returning a `RuntimeException` so Java code can write
-   * `throw memoryReservationFailed(e)`.
+   * for a corrupt or missing file. The task's memory manager runs other consumers' spills inside
+   * the reservation, and can evict cached blocks to disk there, so it can raise anything, an
+   * `IOException` included. What [[rethrowIfMustPropagate]] rethrows goes out as it does there, and
+   * anything else wrapped in a checked [[SparkException]]. Typed as returning a `RuntimeException`
+   * so Java code can write `throw memoryReservationFailed(e)`.
    */
-  def memoryReservationFailed(e: Throwable): RuntimeException = e match {
-    case runtime: RuntimeException =>
-      throw new SparkException("A storage filter failed to reserve memory", runtime)
-    case other => throw propagated(other)
+  def memoryReservationFailed(e: Throwable): RuntimeException = {
+    rethrowIfMustPropagate(e, fromRead = false)
+    throw new SparkException("A storage filter failed to reserve memory", e)
   }
 
   /**
