@@ -944,7 +944,8 @@ private[spark] class TaskSchedulerImpl(
       }
     }
     ThreadUtils.shutdown(starvationTimer)
-    ThreadUtils.shutdown(abortTimer)
+    // Discard pending abort tasks, delayed by `UNSCHEDULABLE_TASKSET_TIMEOUT`, without waiting.
+    abortTimer.shutdownNow()
   }
 
   override def defaultParallelism(): Int = backend.defaultParallelism()
