@@ -1868,7 +1868,7 @@ jira_ops = None
 
 
 def resolve_jira_issues(title, merge_branches, comment, title_components=()):
-    jira_ids = re.findall("SPARK-[0-9]{4,5}", title)
+    jira_ids = leading_jira_ids(title)
 
     if len(jira_ids) == 0:
         resolve_jira_issue(
@@ -1908,7 +1908,7 @@ def update_jira_for_pr(pr_num, title, merge_branches, title_components, is_rever
     print()
     continue_maybe("Would you like to update an associated JIRA?")
     if is_revert:
-        jira_ids = list(dict.fromkeys(re.findall("SPARK-[0-9]{4,5}", jira_title)))
+        jira_ids = leading_jira_ids(jira_title)
         for jira_id in jira_ids or [""]:
             revert_jira_issue(merge_branches, jira_id)
         return
@@ -2148,12 +2148,61 @@ class Title:
             raise ValueError("[SPARK-NNNNN], [MINOR], and [TRIVIAL] cannot coexist")
         return cls(leading, components, text)
 
+    def jira_ids(self) -> List[str]:
+        """The leading SPARK-NNNNN JIRA ids, in order, without duplicates.
+
+        Only the ids that appear as leading bracket tags count; SPARK-NNNNN
+        mentions in the title body (e.g. a reference to a related ticket) are
+        deliberately excluded, since the body is not the ticket this PR
+        resolves.  [MINOR]/[TRIVIAL] markers in ``leading`` are dropped.
+
+        >>> Title.parse("[SPARK-1234][SQL] Fix something").jira_ids()
+        ['SPARK-1234']
+        >>> Title.parse("[SPARK-1234][SPARK-5678][SQL] Fix").jira_ids()
+        ['SPARK-1234', 'SPARK-5678']
+        >>> Title.parse("[SPARK-1234][SQL] Follow up to SPARK-5678").jira_ids()
+        ['SPARK-1234']
+        >>> Title.parse("[MINOR][SQL] Fix typo").jira_ids()
+        []
+        """
+        seen = set()
+        ids = []
+        for tag in self.leading:
+            if _SPARK_ID_RE.match(tag) and tag not in seen:
+                seen.add(tag)
+                ids.append(tag)
+        return ids
+
     def __str__(self) -> str:
         parts = "".join("[%s]" % t for t in self.leading)
         parts += "".join("[%s]" % c for c in self.components)
         if not self.text:
             return parts
         return parts + (" " if parts else "") + self.text
+
+
+def leading_jira_ids(title: str) -> List[str]:
+    """Return the leading SPARK-NNNNN JIRA ids of ``title``, in order.
+
+    Unlike a bare ``re.findall("SPARK-[0-9]{4,5}", title)``, this only returns
+    ids that appear as leading bracket tags, so a SPARK-NNNNN reference in the
+    title body is not mistaken for the ticket the PR resolves.  Titles that do
+    not start with a recognized leading tag (and so cannot be parsed) yield an
+    empty list.
+
+    >>> leading_jira_ids("[SPARK-1234][SQL] Fix something")
+    ['SPARK-1234']
+    >>> leading_jira_ids("[SPARK-1234][SQL] Follow up to SPARK-5678")
+    ['SPARK-1234']
+    >>> leading_jira_ids("[MINOR][SQL] Fix typo")
+    []
+    >>> leading_jira_ids("No leading tag, mentions SPARK-5678")
+    []
+    """
+    try:
+        return Title.parse(title).jira_ids()
+    except ValueError:
+        return []
 
 
 def prompt_for_components():
@@ -2546,7 +2595,7 @@ def main():
         continue_maybe(msg)
 
     # asf_jira is guaranteed to be set here: initialize_jira() fails fast otherwise.
-    jira_ids = re.findall("SPARK-[0-9]{4,5}", title)
+    jira_ids = leading_jira_ids(title)
     # Epic / Umbrella tickets group related work and must not be resolved by a single PR.
     # Collect every offender so the committer sees the full list in one shot rather than
     # discovering them one-by-one across repeated merge attempts.
