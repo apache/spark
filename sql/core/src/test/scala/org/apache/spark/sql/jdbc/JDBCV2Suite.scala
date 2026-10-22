@@ -2017,6 +2017,18 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     checkAnswer(df10, Seq(Row(6, "jen", 12000, 1200, true)))
   }
 
+  test("SPARK-60479: CHAR equality is pushed down with read-side padding") {
+    val table = "h2.test.char_pad"
+    withTable(table) {
+      sql(s"CREATE TABLE $table (id INT, flag CHAR(1))")
+      sql(s"INSERT INTO $table VALUES (1, 'Y'), (2, 'N')")
+      val df = sql(s"SELECT id FROM $table WHERE flag = 'Y'")
+      checkFiltersRemoved(df)
+      checkPushedInfo(df, "flag IS NOT NULL", "(RPAD(flag, 1, ' ')) = 'Y'")
+      checkAnswer(df, Seq(Row(1)))
+    }
+  }
+
   test("scan with aggregate push-down: MAX AVG with filter and group by") {
     val df = sql("SELECT MAX(SaLaRY), AVG(BONUS) FROM h2.test.employee WHERE dept > 0" +
       " GROUP BY DePt")
