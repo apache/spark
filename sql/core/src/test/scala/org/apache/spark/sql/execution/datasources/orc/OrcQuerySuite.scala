@@ -849,6 +849,40 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-60436: ORC predicate pushdown on timestamps with sub-millisecond digits") {
+    // Each value is written to its own file, so a pushed down predicate that skips a file with a
+    // matching row changes the result. `00:00:00.123` is `value` truncated to milliseconds.
+    def ts(time: String): String = s"CAST('2020-01-01 $time' AS TIMESTAMP)"
+    val value = ts("00:00:00.123456789")
+    val input = sql(s"SELECT ${ts("00:00:00.123")} AS ts UNION ALL SELECT $value " +
+      s"UNION ALL SELECT ${ts("00:00:01")}")
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      input.coalesce(1).write.option("maxRecordsPerFile", 1).orc(path)
+      Seq(true, false).foreach { vectorized =>
+        withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+          val df = spark.read.schema(input.schema).orc(path)
+          Seq(
+            s"ts = $value",
+            s"ts <=> $value",
+            s"ts IN ($value, ${ts("00:00:01")})",
+            s"ts < $value",
+            s"ts <= $value",
+            s"ts > $value",
+            s"ts >= $value",
+            s"ts != $value",
+            s"ts NOT IN ($value, ${ts("00:00:01")})"
+          ).foreach { condition =>
+            checkAnswer(df.where(condition), input.where(condition))
+          }
+          // The pushed down value keeps its sub-millisecond digits and skips the other files.
+          checkAnswer(
+            stripSparkFilter(df.where(s"ts = $value")), input.where(s"ts = $value"))
+        }
+      }
+    }
+  }
+
   // SPARK-39519: Ignore this case because it requires more than 4g heap memory to ensure test
   // stability when use Java 11. Should test it manually when upgrading `hive-storage-api`
   ignore("SPARK-39387: BytesColumnVector should not throw RuntimeException due to overflow") {
