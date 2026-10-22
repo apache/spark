@@ -993,6 +993,227 @@ Project [a#x, a#x, z2#x]
 
 
 -- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> select t.a
+-- !query analysis
+Project [a#x]
++- Project [(a#x + 1) AS a#x, b#x, a#x]
+   +- SubqueryAlias t
+      +- LocalRelation [a#x, b#x]
+
+
+-- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> select a, t.a, t.b
+-- !query analysis
+Project [a#x, a#x, b#x]
++- Project [(a#x + 1) AS a#x, b#x, a#x]
+   +- SubqueryAlias t
+      +- LocalRelation [a#x, b#x]
+
+
+-- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> as u
+-- !query analysis
+SubqueryAlias u
++- Project [(a#x + 1) AS a#x, b#x]
+   +- SubqueryAlias t
+      +- LocalRelation [a#x, b#x]
+
+
+-- !query
+select 1 as x, named_struct('x', 2) as col
+|> as col
+|> set x = x + 1
+|> select x, col.x
+-- !query analysis
+Project [x#x, x#x]
++- Project [(x#x + 1) AS x#x, col#x, x#x]
+   +- SubqueryAlias col
+      +- Project [1 AS x#x, named_struct(x, 2) AS col#x]
+         +- OneRowRelation
+
+
+-- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> select *
+-- !query analysis
+Project [a#x, b#x]
++- Project [(a#x + 1) AS a#x, b#x]
+   +- SubqueryAlias t
+      +- LocalRelation [a#x, b#x]
+
+
+-- !query
+values (1, 2, 3) as t(a, b, c)
+|> set b = 20
+|> select t.*
+-- !query analysis
+Project [a#x, b#x, c#x]
++- Project [a#x, 20 AS b#x, c#x, b#x]
+   +- SubqueryAlias t
+      +- LocalRelation [a#x, b#x, c#x]
+
+
+-- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1, b = b + 1
+|> select a, b, t.*
+-- !query analysis
+Project [a#x, b#x, a#x, b#x]
++- Project [a#x, (b#x + 1) AS b#x, a#x, b#x]
+   +- Project [(a#x + 1) AS a#x, b#x, a#x]
+      +- SubqueryAlias t
+         +- LocalRelation [a#x, b#x]
+
+
+-- !query
+values (1, 2) as s(a, b)
+|> select a, a, b
+|> as t
+|> set b = 3
+|> select t.*
+-- !query analysis
+Project [a#x, a#x, b#x]
++- Project [a#x, a#x, 3 AS b#x, b#x]
+   +- SubqueryAlias t
+      +- Project [a#x, a#x, b#x]
+         +- SubqueryAlias s
+            +- LocalRelation [a#x, b#x]
+
+
+-- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> where t.a = 1
+|> select a, t.a
+-- !query analysis
+Project [a#x, a#x]
++- Filter (a#x = 1)
+   +- PipeOperator
+      +- Project [(a#x + 1) AS a#x, b#x, a#x]
+         +- SubqueryAlias t
+            +- LocalRelation [a#x, b#x]
+
+
+-- !query
+values (1), (2) as t(a)
+|> set a = 0
+|> select distinct a
+|> select t.a
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`t`.`a`",
+    "proposal" : "`a`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 69,
+    "stopIndex" : 71,
+    "fragment" : "t.a"
+  } ]
+}
+
+
+-- !query
+values (1), (2) as t(a)
+|> set a = 0
+|> select distinct a, t.a
+|> select t.a
+|> order by t.a
+-- !query analysis
+Sort [a#x ASC NULLS FIRST], true
++- PipeOperator
+   +- Project [a#x]
+      +- Distinct
+         +- Project [a#x, a#x]
+            +- Project [0 AS a#x, a#x]
+               +- SubqueryAlias t
+                  +- LocalRelation [a#x]
+
+
+-- !query
+values (0) as t(x)
+|> set x = x + 1
+|> join lateral (select x + rand(0) as y)
+|> select x, y >= x as y_at_least_x
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+values (1, 10) as lhs(k, l)
+|> inner join values (1, 20) as rhs(k, r) using (k)
+|> set k = k + 1
+|> select k, lhs.k, rhs.k, l, r
+-- !query analysis
+Project [k#x, k#x, k#x, l#x, r#x]
++- Project [(k#x + 1) AS k#x, l#x, r#x, k#x, k#x]
+   +- Project [k#x, l#x, r#x, k#x]
+      +- Join Inner, (k#x = k#x)
+         :- SubqueryAlias lhs
+         :  +- LocalRelation [k#x, l#x]
+         +- SubqueryAlias rhs
+            +- LocalRelation [k#x, r#x]
+
+
+-- !query
+values (1) as t(a)
+|> set a = a + 1
+|> aggregate count(t.*)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_USAGE_OF_STAR_WITH_TABLE_IDENTIFIER_IN_COUNT",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "tableName" : "`t`"
+  }
+}
+
+
+-- !query
+table t
+|> set x = x + 1
+|> select x, _metadata.file_name is not null as has_file_name
+|> order by x
+-- !query analysis
+Sort [x#x ASC NULLS FIRST], true
++- PipeOperator
+   +- Project [x#x, isnotnull(_metadata#x.file_name) AS has_file_name#x]
+      +- Project [(x#x + 1) AS x#x, y#x, _metadata#x]
+         +- SubqueryAlias spark_catalog.default.t
+            +- Relation spark_catalog.default.t[x#x,y#x,_metadata#x] csv
+
+
+-- !query
+table t
+|> select *, _metadata
+|> set _metadata = 1
+|> select x, _metadata,
+     t._metadata.file_name is not null as original_metadata_available
+|> order by x
+-- !query analysis
+Sort [x#x ASC NULLS FIRST], true
++- PipeOperator
+   +- Project [x#x, _metadata#x, isnotnull(_metadata#x.file_name) AS original_metadata_available#x]
+      +- Project [x#x, y#x, 1 AS _metadata#x, _metadata#x]
+         +- Project [x#x, y#x, _metadata#x]
+            +- SubqueryAlias spark_catalog.default.t
+               +- Relation spark_catalog.default.t[x#x,y#x,_metadata#x] csv
+
+
+-- !query
 table t
 |> set z = 1
 -- !query analysis

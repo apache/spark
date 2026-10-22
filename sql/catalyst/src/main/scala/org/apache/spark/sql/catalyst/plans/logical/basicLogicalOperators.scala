@@ -2249,6 +2249,7 @@ case class Sample(
  */
 case class Distinct(child: LogicalPlan) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
+  override def metadataOutput: Seq[Attribute] = child.metadataOutput.filterNot(_.pipeSetRetained)
   override def output: Seq[Attribute] = {
     val base = child.output
     if (isStateful) WidenStatefulOpNullability.widenOutputForStatefulOp(base) else base
@@ -2455,6 +2456,7 @@ case class Deduplicate(
       Seq.empty
     })
   override def maxRows: Option[Long] = child.maxRows
+  override def metadataOutput: Seq[Attribute] = child.metadataOutput.filterNot(_.pipeSetRetained)
   override def output: Seq[Attribute] = {
     val base = child.output
     if (isStateful) WidenStatefulOpNullability.widenOutputForStatefulOp(base) else base
@@ -2476,6 +2478,7 @@ case class DeduplicateWithinWatermark(
   override def references: AttributeSet = AttributeSet(keys) ++
     AttributeSet(child.output.filter(_.metadata.contains(EventTimeWatermark.delayKey)))
   override def maxRows: Option[Long] = child.maxRows
+  override def metadataOutput: Seq[Attribute] = child.metadataOutput.filterNot(_.pipeSetRetained)
   override def output: Seq[Attribute] = {
     val base = child.output
     if (isStateful) WidenStatefulOpNullability.widenOutputForStatefulOp(base) else base

@@ -94,20 +94,16 @@ object PruneMetadataColumns extends Rule[LogicalPlan] {
    */
   private def pruneMetadataColumnsInProject(project: Project, neededAttributes: HashSet[ExprId]) = {
     val existingExprIds = new HashSet[ExprId]
-    val newProjectList = if (!neededAttributes.isEmpty) {
-      project.projectList.collect {
-        case namedExpression: NamedExpression if !namedExpression.toAttribute.qualifiedAccessOnly =>
-          existingExprIds.add(namedExpression.exprId)
-          namedExpression
-        case namedExpression: NamedExpression
-            if namedExpression.toAttribute.qualifiedAccessOnly && neededAttributes.contains(
-              namedExpression.exprId
-            ) && !existingExprIds.contains(namedExpression.exprId) =>
-          existingExprIds.add(namedExpression.exprId)
-          namedExpression
-      }
-    } else {
-      project.projectList
+    val newProjectList = project.projectList.collect {
+      case namedExpression: NamedExpression if !namedExpression.toAttribute.qualifiedAccessOnly =>
+        existingExprIds.add(namedExpression.exprId)
+        namedExpression
+      case namedExpression: NamedExpression
+          if namedExpression.toAttribute.qualifiedAccessOnly && neededAttributes.contains(
+            namedExpression.exprId
+          ) && !existingExprIds.contains(namedExpression.exprId) =>
+        existingExprIds.add(namedExpression.exprId)
+        namedExpression
     }
     val projectWithNewChildren =
       withNewChildrenPrunedByNeededAttributes(project, newProjectList).asInstanceOf[Project]

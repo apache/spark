@@ -417,7 +417,7 @@ class NameScope(
    */
   def isStarQualifiedByTable(unresolvedStar: UnresolvedStarBase): Boolean = {
     unresolvedStar.isQualifiedByTable(
-      childOperatorOutput = output,
+      childOperatorOutput = output ++ hiddenOutput.filter(_.qualifiedAccessOnly),
       resolver = nameComparator
     )
   }
@@ -1101,6 +1101,7 @@ class NameScopeStack(
 
     val refreshedHiddenOutput = prevScope.hiddenOutput.map { attribute =>
       outputLookup.get(attribute.exprId) match {
+        case _ if attribute.qualifiedAccessOnly => attribute
         case null => attribute
         case outputAttribute => outputAttribute
       }

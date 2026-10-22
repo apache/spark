@@ -45,9 +45,12 @@ import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{
   Alias,
   Attribute,
+  AttributeSeq,
   AttributeSet,
+  EliminateResolvedPipeSetInputs,
   Expression,
-  ExprId
+  ExprId,
+  PipeSetInput
 }
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -90,7 +93,8 @@ class Resolver(
     extends LogicalPlanResolver
     with ResolverMetricTracker
     with DelegatesResolutionToExtensions
-    with QueryErrorsBase {
+    with QueryErrorsBase
+    with RetainsOriginalJoinOutput {
   private val planLogger = new PlanLogger
   private val subqueryRegistry = new SubqueryRegistry
   private val scopes = new NameScopeStack(
@@ -134,7 +138,9 @@ class Resolver(
    * `planRewriter` is used to rewrite the plan and the subqueries inside by applying
    * `planRewriteRules`.
    */
-  private val planRewriter = new PlanRewriter(planRewriteRules, extendedRewriteRules)
+  private val planRewriter = new PlanRewriter(
+    planRewriteRules,
+    extendedRewriteRules :+ EliminateResolvedPipeSetInputs)
 
   /**
    * [[relationMetadataProvider]] is used to resolve metadata for relations. It's initialized with
@@ -233,9 +239,13 @@ class Resolver(
         recordProfile("resolve") {
           resolve(planAfterSubstitution)
         }
+      val resolvedPlanWithOriginalJoinOutput = retainOriginalJoinOutputAtBoundary(
+        plan = resolvedPlan,
+        outputExpressions = scopes.current.output
+      )
 
       recordProfile("rewrite") {
-        planRewriter.rewriteWithSubqueries(resolvedPlan)
+        planRewriter.rewriteWithSubqueries(resolvedPlanWithOriginalJoinOutput)
       }
     }
   }
@@ -273,6 +283,8 @@ class Resolver(
             handleResolvedWithCte(withCte)
           case unresolvedProject: Project =>
             projectResolver.resolve(unresolvedProject)
+          case unresolvedPipeSetInput: PipeSetInput =>
+            resolvePipeSetInput(unresolvedPipeSetInput)
           case unresolvedAggregate: Aggregate =>
             aggregateResolver.resolve(unresolvedAggregate)
           case unresolvedFilter: Filter =>
@@ -349,6 +361,22 @@ class Resolver(
   }
 
   /**
+   * Resolves the input marker of a pipe SET assignment and exposes its original qualified row as
+   * hidden output. The visible output remains unchanged so unqualified references continue to see
+   * the values produced by earlier assignments.
+   */
+  private def resolvePipeSetInput(unresolvedPipeSetInput: PipeSetInput): LogicalPlan = {
+    val resolvedPipeSetInput =
+      unresolvedPipeSetInput.copy(child = resolve(unresolvedPipeSetInput.child))
+    val hiddenOutput = AttributeSeq.mergeHiddenAndVisibleOutput(
+      scopes.current.hiddenOutput,
+      resolvedPipeSetInput.metadataOutput
+    )
+    scopes.overwriteCurrent(hiddenOutput = Some(hiddenOutput))
+    resolvedPipeSetInput
+  }
+
+  /**
    * [[UnresolvedWith]] contains a list of unresolved CTE definitions, which are represented by
    * (name, subquery) pairs, and an actual child query. First we resolve the CTE definitions
    * strictly in their declaration order, so they become available for other lower definitions
@@ -367,7 +395,11 @@ class Resolver(
       cteRegistry.pushScope()
 
       val resolvedCtePlan = try {
-        resolve(cteRelation.plan)
+        val plan = resolve(cteRelation.plan)
+        retainOriginalJoinOutputAtBoundary(
+          plan = plan,
+          outputExpressions = scopes.current.output
+        )
       } finally {
         cteRegistry.popScope()
         scopes.popScope()
@@ -472,8 +504,13 @@ class Resolver(
    *  {{{ spark.sql("SELECT * FROM VALUES (1, 2)").select("col1").as("q1").select("col2"); }}}
    */
   private def resolveSubqueryAlias(unresolvedSubqueryAlias: SubqueryAlias): LogicalPlan = {
+    val resolvedChild = resolve(unresolvedSubqueryAlias.child)
+    val resolvedChildWithOriginalOutput = retainOriginalJoinOutputAtBoundary(
+      plan = resolvedChild,
+      outputExpressions = scopes.current.output
+    )
     val resolvedSubqueryAlias =
-      unresolvedSubqueryAlias.copy(child = resolve(unresolvedSubqueryAlias.child))
+      unresolvedSubqueryAlias.copy(child = resolvedChildWithOriginalOutput)
 
     val qualifier = resolvedSubqueryAlias.identifier.qualifier :+ resolvedSubqueryAlias.alias
     val output = scopes.current.output.map(attribute => attribute.withQualifier(qualifier))
@@ -627,7 +664,12 @@ class Resolver(
    * programs. In that case we simply recurse into the child plan.
    */
   private def handleResolvedCteRelationDef(cteRelationDef: CTERelationDef): LogicalPlan = {
-    cteRelationDef.copy(child = resolve(cteRelationDef.child))
+    val resolvedChild = resolve(cteRelationDef.child)
+    val resolvedChildWithOriginalOutput = retainOriginalJoinOutputAtBoundary(
+      plan = resolvedChild,
+      outputExpressions = scopes.current.output
+    )
+    cteRelationDef.copy(child = resolvedChildWithOriginalOutput)
   }
 
   /**
