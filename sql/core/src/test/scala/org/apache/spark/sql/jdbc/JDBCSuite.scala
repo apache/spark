@@ -2351,7 +2351,7 @@ class JDBCSuite extends SharedSparkSession {
   }
 
   test("SPARK-60479: dialects compile CHAR_READ_SIDE_PADDING") {
-    val pad = new GeneralScalarExpression("CHAR_READ_SIDE_PADDING",
+    val pad = new GeneralScalarExpression(CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING,
       Array[V2Expression](
         FieldReference("flag"),
         LiteralValue(5, IntegerType),

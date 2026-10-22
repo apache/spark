@@ -26,6 +26,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.expressions.{Expression, Extract, Literal}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
@@ -47,7 +48,8 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
   private val supportedAggregateFunctions =
     Set("MAX", "MIN", "SUM", "COUNT", "AVG") ++ distinctUnsupportedAggregateFunctions
   private val supportedFunctions =
-    supportedAggregateFunctions ++ Set("TRUNC", "CHAR_READ_SIDE_PADDING")
+    supportedAggregateFunctions ++
+      Set("TRUNC", CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING)
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)

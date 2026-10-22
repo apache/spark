@@ -2067,6 +2067,14 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
       checkFiltersRemoved(likeFam, removed = false)
       checkAnswer(likeFam, Seq(Row(1), Row(3)))
 
+      val likeEq = sql(s"SELECT id FROM $table WHERE flag LIKE 'Y'")
+      checkFiltersRemoved(likeEq, removed = false)
+      checkAnswer(likeEq, Seq.empty)
+
+      val likeEnd = sql(s"SELECT id FROM $table WHERE flag LIKE '%Y'")
+      checkFiltersRemoved(likeEnd, removed = false)
+      checkAnswer(likeEnd, Seq.empty)
+
       val vsCols = "h2.test.char_vs_vc"
       withTable(vsCols) {
         sql(s"CREATE TABLE $vsCols (flag CHAR(5), v VARCHAR(5))")

@@ -310,7 +310,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
       val nullRows = isNull.collect()
       assert(nullRows.length === 1)
       assert(nullRows(0).getInt(0) === 2)
-      val notIn = sql(s"SELECT id FROM $table WHERE flag NOT IN ('Y')")
+      val notIn = sql(s"SELECT id FROM $table WHERE flag NOT IN ('Y', 'N')")
       checkFilterPushed(notIn)
       assert(notIn.collect().isEmpty)
       val cnt = sql(s"SELECT COUNT(flag) FROM $table")

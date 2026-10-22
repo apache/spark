@@ -34,7 +34,8 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.plans.logical.SampleMethod
-import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{
+  CharVarcharUtils, DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{localDateTimeToMicros, toJavaTimestampNoRebase}
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{fromDayTimeString, fromYearMonthString, getDuration}
 import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
@@ -418,8 +419,9 @@ abstract class JdbcDialect extends Serializable with Logging {
     override def build(expr: Expression): String = expr match {
       case _: AlwaysTrue => "(1 = 1)"
       case _: AlwaysFalse => "(1 = 0)"
-      case e: GeneralScalarExpression if e.name() == "CHAR_READ_SIDE_PADDING" =>
-        if (!isSupportedFunction("CHAR_READ_SIDE_PADDING")) {
+      case e: GeneralScalarExpression
+          if e.name() == CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING =>
+        if (!isSupportedFunction(CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING)) {
           throw new SparkUnsupportedOperationException(
             errorClass = "_LEGACY_ERROR_TEMP_3177",
             messageParameters = Map(
@@ -480,7 +482,7 @@ abstract class JdbcDialect extends Serializable with Logging {
       funcName match {
         // JDBC CHAR is stored padded. readSidePadding wrapped the column and blocked
         // pushdown; compiling it as the column restores col = 'Y    ' (literal padded).
-        case "CHAR_READ_SIDE_PADDING" => inputs(0)
+        case CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING => inputs(0)
         case _ => s"""${dialectFunctionName(funcName)}(${inputs.mkString(", ")})"""
       }
     }
