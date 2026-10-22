@@ -21,16 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.{TranspiledPythonUDF, Transpile
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.TRANSPILED_PYTHON_UDF
-import org.apache.spark.sql.types.{
-  ArrayType,
-  BinaryType,
-  BooleanType,
-  DataType,
-  DecimalType,
-  MapType,
-  NumericType,
-  StringType
-}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, DataType, DecimalType, MapType, NumericType, StringType}
 
 /**
  * Prunes the per-input-type options carried by a [[TranspiledPythonUDF]] down to those whose
@@ -87,12 +78,10 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
 
   // True when each declared category matches the corresponding argument type:
   // "numeric" -> NumericType, "string" -> StringType, "bool" -> BooleanType,
-  // "binary" -> BinaryType, "map" -> MapType, "array" -> ArrayType. "string"
-  // matches only StringType (not BinaryType): a bytes/BinaryType column is
-  // tagged "binary" instead, so the string lowerings (e.g. `repeat`) never
-  // see it. "map"/"array" match any MapType/ArrayType (coarse on purpose;
-  // the lowered body type-checks against the bound column). Empty
-  // categories means "no restriction", so the option is kept.
+  // "binary" -> BinaryType, "map" -> MapType, "array" -> ArrayType (any element
+  // types). "string" matches only StringType (not BinaryType): a bytes/BinaryType
+  // column is tagged "binary" instead, so the string lowerings (e.g. `repeat`)
+  // never see it. Empty categories means "no restriction", so the option is kept.
   //
   // Two deliberate exclusions keep the transpiled semantics faithful to Python:
   // - DecimalType is NOT "numeric": Python receives decimal.Decimal objects,

@@ -2648,145 +2648,92 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertEqual(combo[0], "string")
 
     def test_annotation_category_map_and_array(self):
-        # dict/Dict/Mapping (bare or subscripted) -> "map", list/List/Sequence
-        # -> "array"; a stringized annotation unwraps the same way. Pinning them
-        # stops the untyped numeric/string blow-up (SPARK-55219).
+        # dict/Dict/Mapping -> "map", list/List/Sequence -> "array": bare, subscripted,
+        # typing.-qualified or stringized (SPARK-55219).
         import ast as _ast
 
         from pyspark.sql.transpile import _annotation_category
 
-        def cat(src: str) -> object:
-            return _annotation_category(_ast.parse(src).body[0].args.args[0].annotation)
-
-        self.assertEqual(cat("def f(a: dict): ..."), "map")
-        self.assertEqual(cat("def f(a: Dict): ..."), "map")
-        self.assertEqual(cat("def f(a: Mapping): ..."), "map")
-        self.assertEqual(cat("def f(a: dict[str, str]): ..."), "map")
-        self.assertEqual(cat("def f(a: Dict[str, str]): ..."), "map")
-        self.assertEqual(cat("def f(a: Mapping[str, str]): ..."), "map")
-        self.assertEqual(cat("def f(a: typing.Dict[str, str]): ..."), "map")
-        self.assertEqual(cat('def f(a: "dict"): ...'), "map")
-        self.assertEqual(cat("def f(a: list): ..."), "array")
-        self.assertEqual(cat("def f(a: List): ..."), "array")
-        self.assertEqual(cat("def f(a: Sequence): ..."), "array")
-        self.assertEqual(cat("def f(a: list[int]): ..."), "array")
-        self.assertEqual(cat("def f(a: List[int]): ..."), "array")
-        self.assertEqual(cat("def f(a: Sequence[int]): ..."), "array")
-        self.assertEqual(cat("def f(a: typing.List[int]): ..."), "array")
-        self.assertEqual(cat('def f(a: "list"): ...'), "array")
-        # Unrelated / absent annotations stay untyped.
-        self.assertIsNone(_annotation_category(None))
-        self.assertEqual(cat("def f(a: int): ..."), "numeric")
-        self.assertEqual(cat("def f(a: str): ..."), "string")
-        self.assertIsNone(cat("def f(a: set): ..."))
+        for ann, expected in [
+            ("dict", "map"),
+            ("Dict", "map"),
+            ("Mapping", "map"),
+            ("dict[str, str]", "map"),
+            ("Mapping[str, str]", "map"),
+            ("typing.Dict[str, str]", "map"),
+            ('"dict"', "map"),
+            ("list", "array"),
+            ("List", "array"),
+            ("Sequence", "array"),
+            ("list[int]", "array"),
+            ("Sequence[int]", "array"),
+            ("typing.List[int]", "array"),
+            ('"list"', "array"),
+            ("set", None),
+        ]:
+            with self.subTest(ann=ann):
+                fn = _ast.parse(f"def f(a: {ann}): ...").body[0]
+                self.assertEqual(_annotation_category(fn.args.args[0].annotation), expected)
 
     def test_param_category_combos_pins_map_and_array(self):
-        # A pinned map/array param is a single-element candidate, so it shrinks
-        # the combo matrix instead of doubling it like an untyped param.
+        # A pinned map/array param does not double the combos like an untyped one.
         import ast as _ast
 
         from pyspark.sql.transpile import _param_category_combos
 
-        # a: dict (pinned "map"), b untyped -> 2 combos, a always "map".
         fn = _ast.parse("def f(a: dict, b): return b").body[0]
-        combos = _param_category_combos(fn, ["a", "b"])
-        self.assertEqual(len(combos), 2)
-        for combo in combos:
-            self.assertEqual(combo[0], "map")
-            self.assertIn(combo[1], ("numeric", "string"))
-
-        # Two pinned complex params -> a single combo, no numeric/string split.
+        self.assertEqual(
+            _param_category_combos(fn, ["a", "b"]),
+            [{0: "map", 1: "numeric"}, {0: "map", 1: "string"}],
+        )
         fn = _ast.parse("def f(a: list, b: dict): return b").body[0]
-        combos = _param_category_combos(fn, ["a", "b"])
-        self.assertEqual(combos, [{0: "array", 1: "map"}])
+        self.assertEqual(_param_category_combos(fn, ["a", "b"]), [{0: "array", 1: "map"}])
 
     def test_udf_transpile_map_and_array_input_categories(self):
-        # A map/array-annotated param is pinned to its category, so the option
-        # survives against a matching MapType/ArrayType column and is pruned
-        # (falling back to interpreted Python) against a non-matching column.
-        # The body ignores the complex param and lowers the numeric one, so the
-        # built-in transpiler produces an option whose categories the JVM picks.
+        # The option lowers against a matching MapType/ArrayType column and is pruned
+        # to interpreted Python against anything else.
         def map_plus(x: dict, y: int):
             return y + 1
 
         def array_plus(x: list, y: int):
             return y + 1
 
-        # Matching column -> lowered (no EvalPython).
-        self.assertEqual(
-            self._vals(
+        for func, schema, rows, other_schema, other_rows in (
+            (
                 map_plus,
-                LongType(),
                 "a map<string,string>, b long",
                 [({"k": "v"}, 1), ({}, 2), (None, 3)],
+                "a string, b long",
+                [("z", 1)],
             ),
-            [2, 3, 4],
-        )
-        self.assertEqual(
-            self._vals(
+            (
                 array_plus,
-                LongType(),
                 "a array<string>, b long",
                 [(["x"], 1), ([], 2), (None, 3)],
+                "a long, b long",
+                [(1, 1)],
             ),
-            [2, 3, 4],
-        )
+        ):
+            self.assertEqual(self._vals(func, LongType(), schema, rows), [2, 3, 4])
+            with self.sql_conf(_TRANSPILE_ON):
+                u = self._transpiled_udf(func, LongType())
+                projected = self.spark.createDataFrame(other_rows, other_schema).select(u("a", "b"))
+                self.assertGreater(self._eval_python_count(projected), 0, str(func))
+                self.assertEqual([r[0] for r in projected.collect()], [2], str(func))
 
-        # Non-matching column -> the option is pruned and interpreted Python
-        # runs (EvalPython present) but still returns the right value.
-        with self.sql_conf(_TRANSPILE_ON):
-            u = UserDefinedFunction(map_plus, LongType())
-            self.assertTrue(u.transpiled, f"{map_plus} produced no options")
-            df = self.spark.createDataFrame([("z", 1)], "a string, b long")
-            projected = df.select(u("a", "b"))
-            self.assertGreater(self._eval_python_count(projected), 0)
-            self.assertEqual([r[0] for r in projected.collect()], [2])
-
-            u = UserDefinedFunction(array_plus, LongType())
-            self.assertTrue(u.transpiled, f"{array_plus} produced no options")
-            df = self.spark.createDataFrame([(1, 1)], "a long, b long")
-            projected = df.select(u("a", "b"))
-            self.assertGreater(self._eval_python_count(projected), 0)
-            self.assertEqual([r[0] for r in projected.collect()], [2])
-
-    def test_udf_transpile_map_and_array_equality_falls_back(self):
-        # `==`/`!=` on two map/array params must NOT lower to Spark's `=`, which
-        # requires orderable operands and rejects MapType/ArrayType at analysis
-        # (SPARK-55219). The transpiler refuses the equality lowering so the UDF
-        # falls back to interpreted Python (Python's `==` on dicts/lists is value
-        # equality) and returns the right answer instead of failing the query.
+    def test_udf_transpile_map_and_array_comparison_falls_back(self):
+        # MapType/ArrayType are not orderable, so a lowered `=`/`<` fails analysis and
+        # breaks the query -- even vs None, which coerces to the complex type
+        # (SPARK-55219). Refuse and let interpreted Python answer.
         def map_eq(a: dict, b: dict):
             return a == b
 
         def array_eq(a: list, b: list):
             return a == b
 
-        with self.sql_conf(_TRANSPILE_ON):
-            for func, schema, rows in (
-                (
-                    map_eq,
-                    "a map<string,string>, b map<string,string>",
-                    [({"k": "v"}, {"k": "v"}), ({"k": "v"}, {"k": "x"})],
-                ),
-                (array_eq, "a array<string>, b array<string>", [(["x"], ["x"]), (["x"], ["y"])]),
-            ):
-                u = UserDefinedFunction(func, BooleanType())
-                self.assertEqual([], u.transpiled, f"{func} must not transpile")
-                df = self.spark.createDataFrame(rows, schema)
-                projected = df.select(u("a", "b"))
-                self.assertGreater(self._eval_python_count(projected), 0, str(func))
-                self.assertEqual(
-                    [r[0] for r in projected.collect()],
-                    [True, False],
-                    str(func),
-                )
+        def array_lt(a: list, b: list):
+            return a < b
 
-    def test_udf_transpile_map_and_array_eq_none_falls_back(self):
-        # `==`/`!=` with a map/array operand and a None literal must NOT lower:
-        # the None coerces to MapType/ArrayType, so Spark's `=` still hits the
-        # INVALID_ORDERING_TYPE check and would break the query instead of
-        # falling back (SPARK-55219). `_lower_eq` allows `x == None` for basic
-        # types, so the map/array guard must fire on the complex operand alone.
         def map_eq_none(a: dict):
             return a == None  # noqa: E711
 
@@ -2796,22 +2743,21 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         def array_eq_none(a: list):
             return a == None  # noqa: E711
 
+        maps = "a map<string,string>, b map<string,string>"
+        arrays = "a array<string>, b array<string>"
         with self.sql_conf(_TRANSPILE_ON):
             for func, schema, rows, expected in (
+                (map_eq, maps, [({"k": "v"}, {"k": "v"}), ({"k": "v"}, {"k": "x"})], [True, False]),
+                (array_eq, arrays, [(["x"], ["x"]), (["x"], ["y"])], [True, False]),
+                (array_lt, arrays, [(["x"], ["y"]), (["y"], ["x"])], [True, False]),
                 (map_eq_none, "a map<string,string>", [({"k": "v"},), (None,)], [False, True]),
                 (map_ne_none, "a map<string,string>", [({"k": "v"},), (None,)], [True, False]),
                 (array_eq_none, "a array<string>", [(["x"],), (None,)], [False, True]),
             ):
-                u = UserDefinedFunction(func, BooleanType())
-                self.assertEqual([], u.transpiled, f"{func} must not transpile")
-                df = self.spark.createDataFrame(rows, schema)
-                projected = df.select(u("a"))
-                self.assertGreater(self._eval_python_count(projected), 0, str(func))
-                self.assertEqual(
-                    [r[0] for r in projected.collect()],
-                    expected,
-                    str(func),
-                )
+                with self.subTest(func=func.__name__):
+                    u, _ = self._fallback_reason(func, BooleanType())
+                    df = self.spark.createDataFrame(rows, schema)
+                    self.assertEqual([r[0] for r in df.select(u(*df.columns)).collect()], expected)
 
 
 if __name__ == "__main__":
