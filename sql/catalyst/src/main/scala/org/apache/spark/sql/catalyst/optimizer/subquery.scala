@@ -431,41 +431,62 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
    * `spark.sql.optimizer.decorrelatePredicateSubqueriesInJoinPredicate.enabled`, which gates that
    * handling. The routing recurses, since the joins built here go through it in turn.
    *
-   * An uncorrelated sub-query is deliberately left where it is. It has no hoisted condition to
-   * lose, and `InSubqueryExec` evaluates it with the three-valued semantics that the `exists`
-   * attribute of an existence join cannot carry.
+   * An uncorrelated sub-query is routed as well, rather than left for that handling to rewrite
+   * under its default configuration: it has no hoisted condition to lose, but it is subject to the
+   * same unknown-result guard as one on the sub-query-plan route, and that handling has no such
+   * guard. Consuming it here is what keeps an IN whose result is observably unknown from becoming
+   * a two-valued `exists` attribute.
+   *
+   * The classification mirrors [[rewriteExistentialExprInSubqueryPlan]], with this join's inputs
+   * in place of the outer and the sub-query plan: a sub-query referencing exactly one input is
+   * routed against it, one referencing both is rejected when it is correlated or carries a
+   * correlated sub-query, since neither input alone can evaluate it, and one whose unknown result
+   * is observable is rejected. A sub-query referencing both inputs or neither and carrying no
+   * correlation is left where it is, as it is at the first level.
    */
   private def rewriteCarriedExistentialExprs(join: Join): LogicalPlan = {
     if (!join.condition.exists(_.containsAnyPattern(EXISTS_SUBQUERY, IN_SUBQUERY))) {
       return join
     }
     val condition = join.condition.get
-    // Only a correlated sub-query has to be consumed here, see above.
-    val carried = condition.collect {
-      case sq @ (_: Exists | _: InSubquery) if hasCorrelatedCondition(sq) => sq
-    }
+    val carried = ArrayBuffer.empty[Expression]
+    collectCarriedExistentialExprs(condition, carried)
     if (carried.isEmpty) {
       return join
     }
-    // Where the value of a carried IN is observed beyond being TRUE, an existence join cannot
-    // stand in for it, exactly as on the routes above.
+    // A NOT IN is carried as the Not over the IN, which is the unit the rewrite consumes and the
+    // unit the unknown-result collector reports, so both agree on the node below.
+    def negatedIn(sq: Expression): Expression = sq match {
+      case Not(in: InSubquery) => in
+      case other => other
+    }
     val unknownSensitive = unknownSensitiveInSubqueries(condition, truthOnly = true)
     def observesUnknown(sq: Expression): Boolean = unknownSensitive.exists(_.fastEquals(sq))
     def referencesInput(sq: Expression, input: LogicalPlan): Boolean =
       effectiveReferences(sq).exists(input.outputSet.contains)
+    def referencesBothInputs(sq: Expression): Boolean =
+      referencesInput(sq, join.left) && referencesInput(sq, join.right)
+    def referencesOneInput(sq: Expression): Boolean =
+      referencesInput(sq, join.left) != referencesInput(sq, join.right)
 
-    val rejected = carried.filter { sq =>
-      observesUnknown(sq) ||
-        (referencesInput(sq, join.left) && referencesInput(sq, join.right))
+    // The two rejections of the sub-query-plan route apply here for the same reasons, against the
+    // inputs of this join rather than against the outer and the sub-query plan, and each raises
+    // the condition whose message describes it.
+    val referencingBothInputs = carried.filter { sq =>
+      referencesBothInputs(sq) &&
+        (hasCorrelatedCondition(sq) || carriesCorrelatedSubquery(negatedIn(sq)))
     }
-    if (rejected.nonEmpty) {
-      // A sub-query that needs both inputs can be rewritten against neither, and one whose
-      // unknown is observable cannot become an `exists` attribute at all.
-      throw QueryCompilationErrors.nestedSubqueryReferencingOuterAndInnerQueryError(rejected)
+    if (referencingBothInputs.nonEmpty) {
+      throw QueryCompilationErrors.nestedSubqueryReferencingOuterAndInnerQueryError(
+        referencingBothInputs.toSeq)
+    }
+    val unknownResult = carried.filter(sq => referencesOneInput(sq) && observesUnknown(sq))
+    if (unknownResult.nonEmpty) {
+      throw QueryCompilationErrors.nestedInSubqueryWithUnknownResultError(unknownResult.toSeq)
     }
     var newCondition = condition
     def route(plan: LogicalPlan, isInput: Expression => Boolean): LogicalPlan = {
-      carried.filter(sq => isInput(sq) && !rejected.contains(sq)).foldLeft(plan) {
+      carried.filter(sq => referencesOneInput(sq) && isInput(sq)).foldLeft(plan) {
         case (p, sq) =>
           val (rewritten, newInput, _) = rewriteExistentialExprWithAttrs(Seq(sq), p)
           newCondition = newCondition.transform {
@@ -483,6 +504,30 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       // own output, which already carries its own.
       Project(join.output, join.copy(
         left = newLeft, right = newRight, condition = Some(newCondition)))
+    }
+  }
+
+  /**
+   * Collects the existential sub-queries carried by the condition of an existence join, as the
+   * units [[rewriteExistentialExprWithAttrs]] rewrites: a NOT IN is collected as the [[Not]] over
+   * the [[InSubquery]], so the rewrite takes its null-aware arm and the unknown-result collector,
+   * which reports the same node, can be compared against it.
+   *
+   * A collected sub-query is not descended into. One nested below it is reached when it is
+   * rewritten, since the join built for it goes through the routing in turn, and one below a
+   * sub-query left in place is left with it, as everywhere else in this rule.
+   */
+  private def collectCarriedExistentialExprs(
+      expr: Expression,
+      collected: ArrayBuffer[Expression]): Unit = {
+    if (!expr.containsAnyPattern(EXISTS_SUBQUERY, IN_SUBQUERY)) {
+      return
+    }
+    expr match {
+      case sq @ Not(_: InSubquery) => collected += sq
+      case sq: Exists => collected += sq
+      case sq: InSubquery => collected += sq
+      case other => other.children.foreach(collectCarriedExistentialExprs(_, collected))
     }
   }
 
@@ -973,6 +1018,8 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
    */
   private def hasCorrelatedCondition(e: Expression): Boolean = e match {
     case Exists(_, _, _, joinCond, _) => joinCond.nonEmpty
+    // A NOT IN is classified by the IN it negates, as the rewrite treats the two as one unit.
+    case Not(in: InSubquery) => hasCorrelatedCondition(in)
     case InSubquery(_, ListQuery(_, _, _, _, joinCond, _)) => joinCond.nonEmpty
     case _ => false
   }

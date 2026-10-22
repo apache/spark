@@ -3416,10 +3416,11 @@ class SubquerySuite extends SharedSparkSession
       // NOT IN is the outer predicate on purpose: its rewrite returns a bare Join, which
       // RewritePredicateSubquery does not offer to its own handling of predicate subqueries in
       // join conditions, so this rejection is the only one that can fire and the assertion below
-      // pins it. With EXISTS the rewrite returns a Project over the join, which that handling
-      // reaches under the default configuration and rejects with
-      // UNSUPPORTED_CORRELATED_EXPRESSION_IN_JOIN_CONDITION instead, so the query would still
-      // fail but on a different condition than the one asserted here.
+      // pins it. The EXISTS form of this query fails on the same condition, raised by the same
+      // rejection in rewriteExistentialExprInSubqueryPlan before any join exists; were that
+      // rejection removed, the EXISTS form would instead reach the join-condition handling, which
+      // rejects it with UNSUPPORTED_CORRELATED_EXPRESSION_IN_JOIN_CONDITION under the default
+      // configuration, so only the NOT IN form pins this rejection on its own.
       val correlated =
         """
           |SELECT *
@@ -3552,12 +3553,127 @@ class SubquerySuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-59351: a carried subquery is classified as on the subquery-plan route") {
+    // The carried router applies the same rules as rewriteExistentialExprInSubqueryPlan, against
+    // the inputs of the existence join rather than the outer and the subquery plan.
+    withTempView("t1", "t2", "t4", "t5", "t3n", "t5n") {
+      Seq(1, 2, 3).toDF("a").persist().createOrReplaceTempView("t1")
+      Seq(1, 8, 9).toDF("c1").persist().createOrReplaceTempView("t2")
+      Seq((9, 7)).toDF("col1", "k").persist().createOrReplaceTempView("t4")
+      Seq(Some(3), None).toDF("x").persist().createOrReplaceTempView("t3n")
+      Seq((Some(3), 7)).toDF("x", "k").persist().createOrReplaceTempView("t5n")
+
+      // A carried NOT IN is collected as the Not over the IN, so the rewrite takes its null-aware
+      // arm. Taking the positive-IN arm instead leaves NOT exists over a condition that ignores
+      // NULL comparisons: 5 NOT IN (NULL) is unknown, so the t4 row is excluded and the answer is
+      // empty, where the two-valued form returns every row of t1.
+      withTempView("n1", "n2", "n4", "n5") {
+        Seq(1, 2).toDF("a").persist().createOrReplaceTempView("n1")
+        Seq(5).toDF("c1").persist().createOrReplaceTempView("n2")
+        Seq((5, 100)).toDF("col1", "k").persist().createOrReplaceTempView("n4")
+        Seq((Option.empty[Int], 100)).toDF("x", "y").persist().createOrReplaceTempView("n5")
+        val carriedNotIn =
+          """SELECT * FROM n1 WHERE EXISTS (
+            |  SELECT 1 FROM n2 WHERE a = c1 OR c1 IN (
+            |    SELECT col1 FROM n4
+            |    WHERE k = c1 OR col1 NOT IN (SELECT x FROM n5 WHERE y = k)))""".stripMargin
+        Seq("true", "false").foreach { conf =>
+          withSQLConf(SQLConf.DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION.key -> conf) {
+            checkAnswer(sql(carriedNotIn), Nil)
+          }
+        }
+      }
+
+      // An uncorrelated carried IN is routed too, not left for the join-condition rewrite, which
+      // has no unknown guard and would make it a two-valued exists under the default
+      // configuration. Its unknown is observable here, so it is rejected under both settings.
+      val uncorrelatedUnknown =
+        """SELECT * FROM t1 WHERE EXISTS (
+          |  SELECT 1 FROM t2 WHERE a = c1 OR c1 IN (
+          |    SELECT col1 FROM t4
+          |    WHERE k = c1 OR ((col1 IN (SELECT x FROM t3n)) <=> false)))""".stripMargin
+      // A correlated one in the same position, which must report the same condition rather than
+      // the one about referencing both queries.
+      val correlatedUnknown =
+        """SELECT * FROM t1 WHERE EXISTS (
+          |  SELECT 1 FROM t2 WHERE a = c1 OR c1 IN (
+          |    SELECT col1 FROM t4
+          |    WHERE k = c1
+          |    OR ((col1 IN (SELECT x FROM t5n WHERE x = k)) <=> false)))""".stripMargin
+      Seq(uncorrelatedUnknown, correlatedUnknown).foreach { query =>
+        Seq("true", "false").foreach { conf =>
+          withSQLConf(SQLConf.DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION.key -> conf) {
+            val e = intercept[AnalysisException](sql(query).collect())
+            assert(e.getCondition == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+              "NESTED_IN_SUBQUERY_WITH_UNKNOWN_RESULT", query)
+          }
+        }
+      }
+
+      // The same shape where only truth is observed is still rewritten and answers correctly.
+      Seq("true", "false").foreach { conf =>
+        withSQLConf(SQLConf.DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION.key -> conf) {
+          checkAnswer(
+            sql("""SELECT * FROM t1 WHERE EXISTS (
+                  |  SELECT 1 FROM t2 WHERE a = c1 OR c1 IN (
+                  |    SELECT col1 FROM t4
+                  |    WHERE k = c1 OR (col1 IN (SELECT x FROM t3n))))""".stripMargin),
+            Row(1) :: Nil)
+        }
+      }
+    }
+  }
+
+  test("SPARK-59351: carried subqueries are routed on every route that builds an existence join") {
+    // rewriteCarriedExistentialExprs runs on every existence join this rule builds, not only on
+    // the ones the semi/anti join arms build for a top-level predicate subquery. On the routes
+    // below the outer EXISTS is itself rewritten into an existence join by
+    // rewriteExistentialExprWithAttrs, so the nested IN hoisted into its condition is carried
+    // rather than routed by the first-level classification, and only this router reaches it.
+    withTempView("t1", "t2", "t4", "t6") {
+      Seq(1, 2, 3).toDF("a").persist().createOrReplaceTempView("t1")
+      Seq(1, 8, 9).toDF("c1").persist().createOrReplaceTempView("t2")
+      // The correlated nested IN is false for every c1 of t2, while the same IN without k = c1
+      // holds for c1 = 1, so losing that predicate turns every answer below into every row.
+      Seq((1, 9), (9, 1)).toDF("col1", "k").persist().createOrReplaceTempView("t4")
+      Seq(1, 2, 3).toDF("b").persist().createOrReplaceTempView("t6")
+      val exists =
+        "EXISTS (SELECT 1 FROM t2 WHERE a = c1 OR c1 IN (SELECT col1 FROM t4 WHERE k = c1))"
+
+      Seq("true", "false").foreach { decorrelateInJoinCondition =>
+        withSQLConf(SQLConf.DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION.key ->
+          decorrelateInJoinCondition) {
+          // The Filter-predicate arm: under OR the EXISTS is not a conjunct of its own, so it
+          // goes through rewriteExistentialExpr rather than through the semi join arm.
+          checkAnswer(sql(s"SELECT * FROM t1 WHERE a > 100 OR $exists"), Row(1) :: Nil)
+          // handleUnaryNode: the EXISTS is a projection rather than a predicate.
+          checkAnswer(
+            sql(s"SELECT a, $exists AS e FROM t1"),
+            Row(1, true) :: Row(2, false) :: Row(3, false) :: Nil)
+        }
+      }
+
+      // The join-condition arm reaches the router only when it runs at all, which is what
+      // decorrelatePredicateSubqueriesInJoinPredicate gates; with it disabled the subquery stays
+      // in the join condition, which is pre-existing behaviour this PR does not change.
+      withSQLConf(SQLConf.DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION.key -> "true") {
+        checkAnswer(
+          sql(s"SELECT t1.a FROM t1 JOIN t6 ON t1.a = t6.b AND $exists"), Row(1) :: Nil)
+      }
+    }
+  }
+
   test("SPARK-59351: NOT IN keeps an uncorrelated three-valued residual") {
-    // The NOT IN rewrite returns a bare Join, which this rule does not offer to its own handling
-    // of predicate subqueries in join conditions, so an uncorrelated nested IN left in the
-    // anti-join condition stays there and InSubqueryExec evaluates it three-valued. No existence
-    // join is built for it and it has no hoisted condition to lose, so it must not be rejected:
-    // these queries returned the standard SQL answer before SPARK-59351 and must keep doing so.
+    // The NOT IN rewrite returns a bare Join, so an uncorrelated nested IN left in the anti-join
+    // condition stays there and InSubqueryExec evaluates it three-valued. No existence join is
+    // built for it and it has no hoisted condition to lose, so it must not be rejected: these
+    // queries returned the standard SQL answer before SPARK-59351 and must keep doing so.
+    //
+    // That the anti join is bare only holds while the NOT IN is the last subquery conjunct of its
+    // Filter: a later EXISTS or IN conjunct wraps it as `p` in Project(p.output, Join(p, ...)),
+    // which the top-down pass then reaches in the `case j: Join` arm, where the residual is
+    // rewritten two-valued under the default configuration. That is pre-existing behaviour, built
+    // the same way at the merge base, and not what this test covers.
     withTempView("t1", "t2", "t3n", "t4n") {
       Seq(1, 2, 3).toDF("a").persist().createOrReplaceTempView("t1")
       Seq(1, 8, 9).toDF("c1").persist().createOrReplaceTempView("t2")
@@ -3566,17 +3682,24 @@ class SubquerySuite extends SharedSparkSession
       // Nullable col1 again, but correlated through k = c1.
       Seq((Some(3), 1), (None, 8)).toDF("col1", "k").persist().createOrReplaceTempView("t4n")
 
+      // The hoisted disjunct is `c1 > a` rather than the NOT IN key equality, so the answer
+      // depends on the residual: were it rewritten into a two-valued exists, every case below
+      // would flip to the other answer, since c1 IN (SELECT col1 FROM t3n) is unknown for every
+      // row of t2 while the exists attribute standing in for it would be FALSE. The two groups
+      // differ because unknown makes the first pair FALSE and the second pair TRUE.
       Seq(
-        "(c1 IN (SELECT col1 FROM t3n)) <=> false",
-        "(c1 IN (SELECT col1 FROM t3n)) IS NULL",
-        "COALESCE(c1 IN (SELECT col1 FROM t3n), true)",
-        "(c1 NOT IN (SELECT col1 FROM t3n)) <=> false").foreach { predicate =>
-        // Every such predicate is FALSE for every row of t2, so the subquery reduces to a = c1
-        // and only 2 and 3 survive the NOT IN. Rejecting instead, or rewriting the nested IN into
-        // a two-valued exists, would change this.
+        // unknown <=> false is FALSE, so the subquery holds only for c1 > a and every row of t1
+        // survives the NOT IN; a two-valued false <=> false would be TRUE and drop row 1.
+        "(c1 IN (SELECT col1 FROM t3n)) <=> false" -> Seq(1, 2, 3),
+        "(c1 NOT IN (SELECT col1 FROM t3n)) <=> false" -> Seq(1, 2, 3),
+        // unknown IS NULL is TRUE, so the subquery holds for every c1 and row 1 is dropped; a
+        // two-valued false IS NULL would be FALSE and keep it.
+        "(c1 IN (SELECT col1 FROM t3n)) IS NULL" -> Seq(2, 3),
+        "COALESCE(c1 IN (SELECT col1 FROM t3n), true)" -> Seq(2, 3)
+      ).foreach { case (predicate, expected) =>
         checkAnswer(
-          sql(s"SELECT * FROM t1 WHERE a NOT IN (SELECT c1 FROM t2 WHERE a = c1 OR $predicate)"),
-          Row(2) :: Row(3) :: Nil)
+          sql(s"SELECT * FROM t1 WHERE a NOT IN (SELECT c1 FROM t2 WHERE c1 > a OR $predicate)"),
+          expected.map(Row(_)))
       }
 
       // A correlated one is still rejected, under this arm as under the others: its hoisted
@@ -3591,10 +3714,11 @@ class SubquerySuite extends SharedSparkSession
           "NESTED_IN_SUBQUERY_WITH_UNKNOWN_RESULT", query)
       }
 
-      // And a truth-only nested IN under an outer NOT IN is still rewritten, not kept.
-      checkAnswer(
-        sql("""SELECT * FROM t1 WHERE a NOT IN (
-              |  SELECT c1 FROM t2 WHERE a = c1 OR c1 IN (SELECT col1 FROM t3n))""".stripMargin),
+      // And a truth-only nested IN under an outer NOT IN is still rewritten rather than kept,
+      // which the plan check asserts: an existence join is built for it on the subquery side.
+      checkAnswerAndPlan(
+        """SELECT * FROM t1 WHERE a NOT IN (
+          |  SELECT c1 FROM t2 WHERE a = c1 OR c1 IN (SELECT col1 FROM t3n))""".stripMargin,
         Row(2) :: Row(3) :: Nil)
     }
   }
