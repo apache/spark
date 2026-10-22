@@ -427,7 +427,9 @@ private[spark] object ThreadUtils {
    * Shuts down the executor, waiting up to `gracePeriod` for running and queued tasks to finish.
    * If they do not finish in time, or if the calling thread is interrupted while waiting, calls
    * `shutdownNow()` to interrupt the running tasks and drop the queued ones. In the latter case,
-   * the `InterruptedException` is rethrown.
+   * the `InterruptedException` is rethrown. This method does not wait again after
+   * `shutdownNow()`, so the executor may not be terminated yet when it returns, and tasks that
+   * ignore interrupts may keep running.
    */
   def shutdown(
       executor: ExecutorService,
