@@ -40,6 +40,9 @@ class StorageFilterImpl private (
     private val attrs: Seq[Attribute])
   extends StorageFilter with Logging {
 
+  // The width of the row `eval` takes.
+  private val numReferences = attrs.length
+
   // Whether this instance has logged a failure, so a task logs only its first.
   @transient private var loggedFailure = false
 
@@ -50,10 +53,17 @@ class StorageFilterImpl private (
 
   /**
    * Wraps a non-fatal error in [[StorageFilterNotAppliedException]], unless the task is being
-   * killed. Each task logs the first one.
+   * killed. Each task logs the first one. A row of another width than [[references]] is a reader
+   * bug, which fails the task, since the predicate would read the wrong values.
    */
   override def eval(row: InternalRow): Boolean = {
-    // Outside the `try`, so a failure to build the predicate fails the task.
+    // Outside the `try`, so a failure to build the predicate, or a row of another width, fails the
+    // task.
+    if (row.numFields != numReferences) {
+      throw SparkException.internalError(
+        s"A storage filter over ${references.mkString("[", ", ", "]")} takes rows of " +
+          s"$numReferences values, but got ${row.numFields}")
+    }
     val predicate = boundPredicate
     try {
       predicate(row)

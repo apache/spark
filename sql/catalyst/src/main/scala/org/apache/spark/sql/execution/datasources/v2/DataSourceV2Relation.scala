@@ -254,6 +254,19 @@ case class DataSourceV2ScanRelation(
   }
 
   /**
+   * Resolves runtime-filter references against this relation's output.
+   *
+   * [[AttributeSet]] reduces nested references to their root attributes. This is sufficient for
+   * ordinary runtime-filter eligibility because Spark retains the post-scan predicate.
+   */
+  private def resolveFilterAttrs(
+      filterAttrs: Array[NamedReference],
+      method: String): AttributeSet = {
+    V2ExpressionUtils.resolveDataSourceRuntimeFilterRefs(
+      filterAttrs, output, method, scan.getClass.getName)
+  }
+
+  /**
    * The output columns the scan declares for storage filtering via
    * [[SupportsStorageFilters.storageFilterAttributes]], matched by name. Only top-level
    * declarations count, and a declared column the scan does not read is left out, since no offered
@@ -267,19 +280,6 @@ case class DataSourceV2ScanRelation(
       val resolver = SQLConf.get.resolver
       AttributeSet(output.filter(a => declared.exists(resolver(a.name, _))))
     case _ => AttributeSet.empty
-  }
-
-  /**
-   * Resolves runtime-filter references against this relation's output.
-   *
-   * [[AttributeSet]] reduces nested references to their root attributes. This is sufficient for
-   * ordinary runtime-filter eligibility because Spark retains the post-scan predicate.
-   */
-  private def resolveFilterAttrs(
-      filterAttrs: Array[NamedReference],
-      method: String): AttributeSet = {
-    V2ExpressionUtils.resolveDataSourceRuntimeFilterRefs(
-      filterAttrs, output, method, scan.getClass.getName)
   }
 
   override val nodePatterns: Seq[TreePattern] = Seq(DATA_SOURCE_V2_SCAN_RELATION)

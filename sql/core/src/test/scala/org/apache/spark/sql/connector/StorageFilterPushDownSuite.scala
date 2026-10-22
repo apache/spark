@@ -140,28 +140,33 @@ class StorageFilterPushDownSuite
     }
   }
 
-  test("a reader that gives the filter up marks its rows unchecked, and the Filter filters them") {
-    withBloomJoin() {
-      val (result, plan) = runBloomJoin("columnar" -> "true", "giveUp" -> "true")
-      assert(bloomsAbove(plan) == (0, 1), s"the plan is that of a filtering reader:\n$plan")
-      assert(StorageFilterTestSource.rowsEvaluated.get() == 0,
-        s"the reader must evaluate nothing; got ${StorageFilterTestSource.rowsEvaluated.get()}")
-      assert(StorageFilterTestSource.rowsReturned.get() == StorageFilterTestSource.numRows,
-        s"the reader must return every row; got ${StorageFilterTestSource.rowsReturned.get()}")
-      assert(rowsOutOfFilter(plan) < StorageFilterTestSource.numRows,
-        s"the Filter must apply the bloom to unchecked rows; got ${rowsOutOfFilter(plan)}")
-      assert(result == joinResult, s"got $result")
+  Seq(false, true).foreach { columnar =>
+    val kind = if (columnar) "columnar" else "row-based"
+    test(s"a $kind reader that gives the filter up marks its rows unchecked, and the Filter " +
+        "filters them") {
+      withBloomJoin() {
+        val (result, plan) = runBloomJoin("columnar" -> columnar.toString, "giveUp" -> "true")
+        assert(bloomsAbove(plan) == (0, 1), s"the plan is that of a filtering reader:\n$plan")
+        assert(StorageFilterTestSource.rowsEvaluated.get() == 0,
+          s"the reader must evaluate nothing; got ${StorageFilterTestSource.rowsEvaluated.get()}")
+        assert(StorageFilterTestSource.rowsReturned.get() == StorageFilterTestSource.numRows,
+          s"the reader must return every row; got ${StorageFilterTestSource.rowsReturned.get()}")
+        assert(rowsOutOfFilter(plan) < StorageFilterTestSource.numRows,
+          s"the Filter must apply the bloom to unchecked rows; got ${rowsOutOfFilter(plan)}")
+        assert(result == joinResult, s"got $result")
+      }
     }
-  }
 
-  test("the Filter takes the reader's word on the rows it marks checked") {
-    // This reader breaks the contract on purpose: it applies no filter but marks every row
-    // checked. Only skipping the bloom on those rows keeps all of them.
-    withBloomJoin() {
-      val (result, plan) = runBloomJoin("columnar" -> "true", "markAllChecked" -> "true")
-      assert(rowsOutOfFilter(plan) == StorageFilterTestSource.numRows,
-        s"the Filter must keep every row marked checked; got ${rowsOutOfFilter(plan)}")
-      assert(result == joinResult, s"the join must still filter; got $result")
+    test(s"the Filter takes a $kind reader's word on the rows it marks checked") {
+      // This reader breaks the contract on purpose: it applies no filter but marks every row
+      // checked. Only skipping the bloom on those rows keeps all of them.
+      withBloomJoin() {
+        val (result, plan) =
+          runBloomJoin("columnar" -> columnar.toString, "markAllChecked" -> "true")
+        assert(rowsOutOfFilter(plan) == StorageFilterTestSource.numRows,
+          s"the Filter must keep every row marked checked; got ${rowsOutOfFilter(plan)}")
+        assert(result == joinResult, s"the join must still filter; got $result")
+      }
     }
   }
 

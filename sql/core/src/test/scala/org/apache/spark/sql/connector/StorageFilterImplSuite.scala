@@ -63,6 +63,12 @@ class StorageFilterImplSuite extends SparkFunSuite {
     assert(!filter.eval(InternalRow(1L, 10L)))
   }
 
+  test("a row of another width than the references fails, rather than being misread") {
+    // `evenKeys` reads `k` alone, so a row holding `v, k` would put `v` where `k` is read.
+    val e = intercept[SparkException](evenKeys.eval(InternalRow(3L, 4L)))
+    assert(e.getCondition == "INTERNAL_ERROR", s"got ${e.getCondition}")
+  }
+
   test("a filter over a column outside the scan output is an internal error") {
     val e = intercept[SparkException](StorageFilterImpl(EqualTo(k, Literal(1L)), Seq(v)))
     assert(e.getCondition == "INTERNAL_ERROR", s"got ${e.getCondition}")

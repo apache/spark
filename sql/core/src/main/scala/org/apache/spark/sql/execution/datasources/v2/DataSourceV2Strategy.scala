@@ -137,7 +137,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       filters: Seq[Expression]): Seq[Expression] = {
     if (!session.sessionState.conf.v2StorageFilterPushdownEnabled) return Nil
     if (relation.storageFilterAttrs.isEmpty) return Nil
-    if (StorageFilterPlanning.clashesWithCheckedColumn(relation.output.map(_.name))) return Nil
+    // Over the whole table, as on the file-source side, since `output` is matched by name later.
+    if (StorageFilterPlanning.clashesWithCheckedColumn(relation.relation.output.map(_.name))) {
+      return Nil
+    }
     StorageFilterPlanning.offeredConjuncts(filters, relation.storageFilterAttrs,
       AttributeSet(relation.output), _.isInstanceOf[BloomFilterMightContain])
   }

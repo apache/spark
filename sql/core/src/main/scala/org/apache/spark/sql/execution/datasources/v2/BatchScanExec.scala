@@ -150,25 +150,20 @@ case class BatchScanExec(
   override def simpleString(maxFields: Int): String = {
     val truncatedOutputString = truncatedString(output, "[", ", ", "]", maxFields)
     val runtimeFiltersString = s"RuntimeFilters: ${runtimeFilters.mkString("[", ",", "]")}"
-    // Only when the scan has some, since an empty one would change every other scan's description.
-    val storageFiltersString = if (storageFilters.isEmpty) {
-      ""
-    } else {
-      s" StorageFilters: ${storageFilters.mkString("[", ",", "]")}"
-    }
+    val storageFiltersString = storageFiltersDescription.map(" " + _).getOrElse("")
     val result = s"$nodeName$truncatedOutputString ${scan.description()} " +
       s"$runtimeFiltersString$storageFiltersString"
     redact(result)
   }
 
-  // As in `simpleString`, only when the scan has some.
   override def verboseStringWithOperatorId(): String = {
     val verbose = super.verboseStringWithOperatorId()
-    if (storageFilters.isEmpty) {
-      verbose
-    } else {
-      verbose + redact(s"StorageFilters: ${storageFilters.mkString("[", ",", "]")}") + "\n"
-    }
+    storageFiltersDescription.map(d => verbose + redact(d) + "\n").getOrElse(verbose)
+  }
+
+  // Only when the scan has some, since an empty one would change every other scan's description.
+  private def storageFiltersDescription: Option[String] = Option.when(storageFilters.nonEmpty) {
+    s"StorageFilters: ${storageFilters.mkString("[", ",", "]")}"
   }
 
   override def nodeName: String = {
