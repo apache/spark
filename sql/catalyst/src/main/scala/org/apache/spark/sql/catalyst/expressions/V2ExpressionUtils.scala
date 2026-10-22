@@ -25,6 +25,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchFunctionException, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.encoders.EncoderUtils
+import org.apache.spark.sql.catalyst.expressions.aggregate.V2Aggregator
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, SampleMethod}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.fromAttributes
@@ -208,6 +209,41 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
   def toCatalyst(sampleMethod: V2SampleMethod): SampleMethod = sampleMethod match {
     case V2SampleMethod.BERNOULLI => SampleMethod.Bernoulli
     case V2SampleMethod.SYSTEM => SampleMethod.System
+  }
+
+  /**
+   * Binds a V2 [[UnboundFunction]] to the given arguments and turns the resulting
+   * [[BoundFunction]] into a Catalyst expression.
+   *
+   * An aggregate function is returned as a bare [[V2Aggregator]] so that callers can wrap it into
+   * an `AggregateExpression` carrying DISTINCT / FILTER, which is not known here.
+   */
+  def bindFunction(unbound: UnboundFunction, arguments: Seq[Expression]): Expression = {
+    val inputType = StructType(arguments.zipWithIndex.map {
+      case (exp, pos) => StructField(s"_$pos", exp.dataType, exp.nullable)
+    })
+    val bound = try {
+      unbound.bind(inputType)
+    } catch {
+      case unsupported: UnsupportedOperationException =>
+        throw QueryCompilationErrors.functionCannotProcessInputError(
+          unbound, arguments, unsupported)
+    }
+
+    if (bound.inputTypes().length != arguments.length) {
+      throw QueryCompilationErrors.v2FunctionInvalidInputTypeLengthError(bound, arguments)
+    }
+
+    bound match {
+      case scalarFunc: ScalarFunction[_] =>
+        resolveScalarFunction(scalarFunc, arguments)
+      case aggFunc: AggregateFunction[_, _] =>
+        V2Aggregator(aggFunc, arguments)
+      case _ =>
+        throw new AnalysisException(
+          errorClass = "INVALID_UDF_IMPLEMENTATION",
+          messageParameters = Map("funcName" -> toSQLId(bound.name())))
+    }
   }
 
   def resolveScalarFunction(
