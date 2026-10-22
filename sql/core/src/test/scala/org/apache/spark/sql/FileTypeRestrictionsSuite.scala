@@ -18,11 +18,16 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkConf
+import org.apache.spark.api.python.{PythonBroadcast, PythonEvalType, SimplePythonFunction}
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.api.java.UDF1
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.connector.catalog.InMemoryCatalog
+import org.apache.spark.sql.execution.python.{UserDefinedPythonFunction, UserDefinedPythonTableFunction}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{FileType, IntegerType, MapType}
+import org.apache.spark.sql.types.{DataType, FileType, IntegerType, MapType, StructType}
 
 /**
  * Tests the rules on where the FILE type can be used: table columns must be FILE EXTERNAL,
@@ -125,14 +130,26 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
         }
       }
     }
-    withTable("testcat.t") {
-      sql("CREATE TABLE testcat.t (id INT, f FILE EXTERNAL) CLUSTER BY (id)")
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql("ALTER TABLE testcat.t CLUSTER BY (f)")
-        },
-        condition = "FILE_TYPE_UNSUPPORTED_COLUMN_USAGE.CLUSTERING_COLUMN",
-        parameters = Map("colName" -> "`f`", "dataType" -> "\"FILE EXTERNAL\""))
+    Seq("testcat.t", "t").foreach { table =>
+      withTable(table) {
+        if (table.startsWith("testcat")) {
+          sql(s"CREATE TABLE $table (id INT, f FILE EXTERNAL) CLUSTER BY (id)")
+        } else {
+          // No V1 data source can store a FILE yet, so the table is created in the catalog.
+          spark.sessionState.catalog.createTable(CatalogTable(
+            identifier = TableIdentifier(table),
+            tableType = CatalogTableType.MANAGED,
+            storage = CatalogStorageFormat.empty,
+            schema = new StructType().add("id", IntegerType).add("f", FileType.external),
+            provider = Some("parquet")), ignoreIfExists = false)
+        }
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"ALTER TABLE $table CLUSTER BY (f)")
+          },
+          condition = "FILE_TYPE_UNSUPPORTED_COLUMN_USAGE.CLUSTERING_COLUMN",
+          parameters = Map("colName" -> "`f`", "dataType" -> "\"FILE EXTERNAL\""))
+      }
     }
   }
 
@@ -274,5 +291,44 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
       condition = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_QUALIFIER",
       parameters = Map("routineType" -> "function", "routineName" -> "inline_udf"))
     spark.udf.register("file_udf", fileUdf, FileType())
+  }
+
+  test("a Python UDF and UDTF declare a plain FILE in their return type") {
+    // Registration does not run Python, so the function body is never used.
+    val func = SimplePythonFunction(
+      command = Seq.empty[Byte],
+      envVars = new java.util.HashMap[String, String](),
+      pythonIncludes = java.util.Collections.emptyList[String](),
+      pythonExec = "python3",
+      pythonVer = "3",
+      broadcastVars = java.util.Collections.emptyList[Broadcast[PythonBroadcast]](),
+      accumulator = null)
+    def pythonUdf(dataType: DataType): UserDefinedPythonFunction = UserDefinedPythonFunction(
+      "py_udf", func, dataType, PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+    def pythonUdtf(returnType: Option[StructType]): UserDefinedPythonTableFunction =
+      UserDefinedPythonTableFunction(
+        "py_udtf", func, returnType, PythonEvalType.SQL_TABLE_UDF, udfDeterministic = true)
+
+    Seq(
+      (() => spark.udf.registerPython("py_udf", pythonUdf(FileType.external)), "py_udf"),
+      (() => spark.udtf.registerPython("py_udtf",
+        pythonUdtf(Some(new StructType().add("f", FileType.external)))), "py_udtf")
+    ).foreach { case (register, name) =>
+      checkError(
+        exception = intercept[AnalysisException](register()),
+        condition = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_QUALIFIER",
+        parameters = Map("routineType" -> "function", "routineName" -> name))
+    }
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.udf.registerPython("py_udf", pythonUdf(MapType(FileType(), IntegerType)))
+      },
+      condition = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_MAP_KEY",
+      parameters = Map("routineType" -> "function", "routineName" -> "py_udf"))
+
+    // A plain FILE is accepted, and a UDTF with an analyze method has no static return type.
+    spark.udf.registerPython("py_udf", pythonUdf(FileType()))
+    spark.udtf.registerPython("py_udtf", pythonUdtf(Some(new StructType().add("f", FileType()))))
+    spark.udtf.registerPython("py_udtf", pythonUdtf(None))
   }
 }

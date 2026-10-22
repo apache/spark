@@ -1472,13 +1472,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
       // FILE has no defined ordering, so it cannot be a clustering column.
       case AlterTableClusterBy(table: ResolvedTable, Some(clusterBySpec)) =>
-        clusterBySpec.columnNames.foreach { ref =>
-          table.schema.findNestedField(ref.fieldNames.toImmutableArraySeq,
-              resolver = alter.conf.resolver)
-            .foreach { case (_, field) =>
-              TypeUtils.checkNoFileTypeInColumnUsage(field, "CLUSTERING_COLUMN")
-            }
-        }
+        TypeUtils.checkNoFileTypeClusteringColumn(table.schema, clusterBySpec, alter.conf.resolver)
       case _ =>
     }
   }

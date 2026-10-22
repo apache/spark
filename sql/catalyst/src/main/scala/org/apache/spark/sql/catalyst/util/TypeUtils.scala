@@ -17,14 +17,16 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.catalyst.analysis.{AnalysisErrorAt, TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisErrorAt, Resolver, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.catalog.ClusterBySpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, RowOrdering}
 import org.apache.spark.sql.catalyst.expressions.st.STExpressionUtils.isGeoSpatialType
 import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalNumericType}
 import org.apache.spark.sql.errors.{DataTypeErrors, QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Functions to help with checking for valid data types and value comparison of various types.
@@ -199,6 +201,17 @@ object TypeUtils extends QueryErrorsBase {
   def checkNoFileTypeInColumnUsage(field: StructField, usage: String): Unit = {
     if (field.dataType.existsRecursively(_.isInstanceOf[FileType])) {
       throw QueryCompilationErrors.fileTypeUnsupportedColumnUsageError(field, usage)
+    }
+  }
+
+  /** Fails if a clustering column of `clusterBySpec` holds a FILE. */
+  def checkNoFileTypeClusteringColumn(
+      schema: StructType,
+      clusterBySpec: ClusterBySpec,
+      resolver: Resolver): Unit = {
+    clusterBySpec.columnNames.foreach { ref =>
+      schema.findNestedField(ref.fieldNames.toImmutableArraySeq, resolver = resolver)
+        .foreach { case (_, field) => checkNoFileTypeInColumnUsage(field, "CLUSTERING_COLUMN") }
     }
   }
 

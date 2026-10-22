@@ -366,10 +366,7 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
       schema.find(f => conf.resolver(f.name, name))
         .foreach(checkNoFileTypeInColumnUsage(_, "PARTITION_COLUMN"))
     }
-    table.clusterBySpec.foreach(_.columnNames.foreach { ref =>
-      schema.findNestedField(ref.fieldNames.toImmutableArraySeq, resolver = conf.resolver)
-        .foreach { case (_, field) => checkNoFileTypeInColumnUsage(field, "CLUSTERING_COLUMN") }
-    })
+    table.clusterBySpec.foreach(checkNoFileTypeClusteringColumn(schema, _, conf.resolver))
   }
 
   private def normalizeCatalogTable(schema: StructType, table: CatalogTable): CatalogTable = {
