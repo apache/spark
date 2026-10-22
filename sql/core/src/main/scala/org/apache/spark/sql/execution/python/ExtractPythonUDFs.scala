@@ -25,7 +25,8 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.REASON
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.PythonUDF.{correctEvalType, isScalarPythonUDF}
+import org.apache.spark.sql.catalyst.expressions.PythonUDF.{canonicalizeDeterministic,
+  correctEvalType, isScalarPythonUDF}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -288,14 +289,6 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
       case p: ArrowEvalPython => p
 
       case plan: LogicalPlan => extract(plan)
-    }
-  }
-
-  private def canonicalizeDeterministic(u: PythonUDF) = {
-    if (u.deterministic) {
-      u.canonicalized.asInstanceOf[PythonUDF]
-    } else {
-      u
     }
   }
 

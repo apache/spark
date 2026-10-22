@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.python
 
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.{AnalysisException, QueryTest}
-import org.apache.spark.sql.catalyst.expressions.{LambdaFunction, Literal, NamedArgumentExpression,
-  PythonUDF}
+import org.apache.spark.sql.catalyst.expressions.{ArraysZip, LambdaFunction, Literal,
+  NamedArgumentExpression, PythonUDF}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, ArrowEvalPython, Join}
 import org.apache.spark.sql.functions.{array_sort, col, collect_list, forall, lit, map_filter,
   map_zip_with, transform, transform_keys, transform_values, when, zip_with}
@@ -160,6 +160,24 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
     assert(liftedUDFs(deterministic).size == 3)
 
     assert(udfsInsideLambda(nested(nondeterministicUDF)).isEmpty)
+  }
+
+  test("a composite argument over a nested call zips only the arrays it reads") {
+    // `f(g(x) + 1)` reads only `g`'s result, not the element, so its argument is a `transform` over
+    // that result alone: zipping in the element array as well would build a struct per element for
+    // nothing. With the index, `f(g(x) + i)` zips just the index and `g`'s result.
+    def zippedArrayCounts(df: org.apache.spark.sql.DataFrame): Seq[Int] =
+      liftedUDFs(df).flatMap(_.collect { case z: ArraysZip => z.children.size })
+
+    val plusOne = arrayDF.select(
+      transform(col("values"), x => pythonUDF(pythonUDF(x).cast("int") + lit(1))).as("r"))
+    assert(udfsInsideLambda(plusOne).isEmpty)
+    assert(zippedArrayCounts(plusOne).isEmpty)
+
+    val plusIndex = arrayDF.select(
+      transform(col("values"), (x, i) => pythonUDF(pythonUDF(x).cast("int") + i)).as("r"))
+    assert(udfsInsideLambda(plusIndex).isEmpty)
+    assert(zippedArrayCounts(plusIndex) == Seq(2))
   }
 
   test("identical nondeterministic calls are lifted distinctly, not deduplicated") {
@@ -311,6 +329,27 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
         (a, b) => when(pythonUDF(a) === pythonUDF(b), lit(0)).otherwise(lit(1))).as("r"))
     assert(udfsInsideLambda(df).isEmpty)
     assert(liftedUDFs(df).size == 1)
+  }
+
+  test("a key-form array_sort comparator shares a nondeterministic call between its sides") {
+    // An element must have one sort key whichever side of a comparison it is on, so `k(a)` and
+    // `k(b)` share one lifted call even when `k` is nondeterministic: one draw per element. A draw
+    // per side would make the comparator inconsistent, and the sort could fail with "Comparison
+    // method violates its general contract!". The same holds for a deterministic UDF over a
+    // nondeterministic argument, `f(r(a))` and `f(r(b))`.
+    val bare = arrayDF.select(
+      array_sort(col("values"), (a, b) =>
+        when(nondeterministicUDF(a) === nondeterministicUDF(b), lit(0)).otherwise(lit(1))).as("r"))
+    assert(udfsInsideLambda(bare).isEmpty)
+    assert(liftedUDFs(bare).size == 1)
+
+    val wrapped = arrayDF.select(
+      array_sort(col("values"), (a, b) =>
+        when(pythonUDF(nondeterministicUDF(a)) === pythonUDF(nondeterministicUDF(b)), lit(0))
+          .otherwise(lit(1))).as("r"))
+    assert(udfsInsideLambda(wrapped).isEmpty)
+    // One draw per element, and one outer call over it.
+    assert(liftedUDFs(wrapped).size == 2)
   }
 
   test("a vectorized scalar UDF inside a lambda is lifted to its element-wise eval type") {
@@ -474,6 +513,23 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
       left("k") === right("k") &&
         org.apache.spark.sql.functions.exists(left("values"), x => pythonUDF(x)),
       "left_outer")
+    val join = df.queryExecution.optimizedPlan.collectFirst { case j: Join => j }.get
+    assert(join.left.exists(_.isInstanceOf[ArrowEvalPython]))
+    assert(!join.right.exists(_.isInstanceOf[ArrowEvalPython]))
+  }
+
+  test("a UDF in a lambda over one side of an inner join condition is evaluated on that side") {
+    // The conjunct reads both sides, so it stays in the join condition, but once lifted the UDF
+    // itself reads only the left side and is evaluated below the join on that side, as a plain
+    // one-side UDF in a join condition is. While still inside the lambda it read neither side, so
+    // the whole conjunct was pulled out into a `Filter` above the join.
+    val left = Seq((1, Seq(1, 2))).toDF("k", "values")
+    val right = Seq((1, true)).toDF("k", "flag")
+    val df = left.join(
+      right,
+      left("k") === right("k") &&
+        org.apache.spark.sql.functions.exists(left("values"), x => pythonUDF(x) === right("flag")),
+      "inner")
     val join = df.queryExecution.optimizedPlan.collectFirst { case j: Join => j }.get
     assert(join.left.exists(_.isInstanceOf[ArrowEvalPython]))
     assert(!join.right.exists(_.isInstanceOf[ArrowEvalPython]))
