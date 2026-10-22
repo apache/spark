@@ -21,7 +21,8 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.util.Locale
 
 import org.apache.spark.{SparkConf, SparkFunSuite, SparkIllegalArgumentException}
-import org.apache.spark.internal.config.IO_COMPRESSION_ZSTD_BUFFERPOOL_ENABLED
+import org.apache.spark.internal.config.{IO_COMPRESSION_ZSTD_BUFFERPOOL_ENABLED, IO_COMPRESSION_ZSTD_BUFFERSIZE}
+import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
 
 class CompressionCodecSuite extends SparkFunSuite {
@@ -124,6 +125,34 @@ class CompressionCodecSuite extends SparkFunSuite {
     val codec = CompressionCodec.createCodec(conf, classOf[ZStdCompressionCodec].getName)
     assert(codec.getClass === classOf[ZStdCompressionCodec])
     testConcatenationOfSerializedStreams(codec)
+  }
+
+  test("SPARK-60432: zstd compression codec validates the buffer size") {
+    val maxBufferSize = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
+    testCodec(new ZStdCompressionCodec(
+      new SparkConf(false).set(IO_COMPRESSION_ZSTD_BUFFERSIZE.key, "1")))
+    // The codec allocates the buffer per stream, so creating it with the upper bound is cheap.
+    new ZStdCompressionCodec(
+      new SparkConf(false).set(IO_COMPRESSION_ZSTD_BUFFERSIZE.key, maxBufferSize.toString))
+
+    Seq(
+      "0" -> "0b",
+      "-1" -> "-1b",
+      s"${maxBufferSize + 1}" -> s"${maxBufferSize + 1}b",
+      "2g" -> "2147483648b",
+      "4g" -> "4294967296b").foreach { case (bufferSize, confValue) =>
+      val conf = new SparkConf(false).set(IO_COMPRESSION_ZSTD_BUFFERSIZE.key, bufferSize)
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          new ZStdCompressionCodec(conf)
+        },
+        condition = "INVALID_CONF_VALUE.REQUIREMENT",
+        parameters = Map(
+          "confName" -> IO_COMPRESSION_ZSTD_BUFFERSIZE.key,
+          "confValue" -> confValue,
+          "confRequirement" ->
+            s"The buffer size must be positive and less than or equal to $maxBufferSize."))
+    }
   }
 
   test("bad compression codec") {
