@@ -231,7 +231,9 @@ class Strategy @Since("1.3.0") (
     new Strategy(algo, impurity, maxDepth, numClasses, maxBins,
       quantileCalculationStrategy, categoricalFeaturesInfo, minInstancesPerNode,
       minInfoGain, maxMemoryInMB, subsamplingRate, useNodeIdCache,
-      checkpointInterval, minWeightFractionPerNode, pruneTree = pruneTree)
+      checkpointInterval, minWeightFractionPerNode,
+      bootstrap = bootstrap,
+      pruneTree = pruneTree)
   }
 }
 

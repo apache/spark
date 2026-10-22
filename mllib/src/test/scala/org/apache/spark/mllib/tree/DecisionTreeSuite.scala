@@ -57,11 +57,19 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("Strategy should configure pruning independently of bootstrapping") {
-    val strategy = new Strategy(Classification, Gini, 3, bootstrap = true, pruneTree = false)
+    for {
+      bootstrap <- Seq(false, true)
+      pruneTree <- Seq(false, true)
+    } {
+      val strategy = new Strategy(Classification, Gini, 3,
+        bootstrap = bootstrap, pruneTree = pruneTree)
+      assert(strategy.bootstrap == bootstrap)
+      assert(strategy.pruneTree == pruneTree)
 
-    assert(strategy.bootstrap)
-    assert(!strategy.pruneTree)
-    assert(!strategy.copy.pruneTree)
+      val copied = strategy.copy
+      assert(copied.bootstrap == bootstrap)
+      assert(copied.pruneTree == pruneTree)
+    }
   }
 
   /////////////////////////////////////////////////////////////////////////////
