@@ -1083,6 +1083,40 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     }
   }
 
+  test("SPARK-60474: stop should not wait for pending abort timer tasks") {
+    // Keep the abort timer task pending much longer than the 30s grace period of
+    // `ThreadUtils.shutdown`
+    taskScheduler = setupSchedulerWithMockTaskSetExcludelist(
+      config.UNSCHEDULABLE_TASKSET_TIMEOUT.key -> "1h")
+
+    // We have only 1 task remaining with 1 executor
+    val taskSet = FakeTask.createTaskSet(numTasks = 1)
+    taskScheduler.submitTasks(taskSet)
+    val tsm = stageToMockTaskSetManager(0)
+
+    // submit an offer with one executor
+    val firstTaskAttempts = taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor0", "host0", 1)
+    )).flatten
+
+    // Fail the running task
+    val failedTask = firstTaskAttempts.head
+    failTask(failedTask.taskId, TaskState.FAILED, UnknownReason, tsm)
+    when(tsm.taskSetExcludelistHelperOpt.get.isExecutorExcludedForTask(
+      "executor0", failedTask.index)).thenReturn(true)
+
+    // make an offer on the excluded executor. We won't schedule anything, and start the abort
+    // timer for the task set
+    assert(taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor0", "host0", 1)
+    )).flatten.isEmpty)
+    assert(taskScheduler.unschedulableTaskSetToExpiryTime.contains(tsm))
+
+    val startTime = System.nanoTime()
+    taskScheduler.stop()
+    assert(System.nanoTime() - startTime < 10.seconds.toNanos)
+  }
+
   /**
    * Helper for performance tests.  Takes the explicitly excluded nodes and executors; verifies
    * that the excluded are used efficiently to ensure scheduling is not O(numPendingTasks).
