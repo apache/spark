@@ -20,6 +20,10 @@ package org.apache.spark.sql.connector
 import java.io.File
 import java.lang.management.ManagementFactory
 
+import scala.reflect.ClassTag
+
+import test.org.apache.spark.sql.connector.catalog.functions.{JavaInitTrackingStrLen, JavaStaticInitFailingStrLen}
+
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction, SimpleFunction, UnboundFunction}
@@ -195,6 +199,30 @@ class CreateV2FunctionSuite extends QueryTest with SharedSparkSession {
     intercept[AnalysisException](sql("SELECT strlen('abc')"))
   }
 
+  test("unsupported clauses and column names use the function name") {
+    withUserDefinedFunction("strlen" -> true, "iavg" -> true, "default.pstrlen" -> false) {
+      sql(s"CREATE TEMPORARY FUNCTION strlen AS '$strLenClass'")
+      sql(s"CREATE TEMPORARY FUNCTION iavg AS '$avgClass'")
+      sql(s"CREATE FUNCTION pstrlen AS '$strLenClass'")
+      assert(sql("SELECT strlen('a'), pstrlen('a'), iavg(id) FROM range(3)").columns.toSeq ==
+        Seq("strlen(a)", "spark_catalog.default.pstrlen(a)", "iavg(id)"))
+
+      def checkUnsupported(call: String, name: String, syntax: String): Unit = {
+        checkError(
+          exception = intercept[AnalysisException](sql(s"SELECT $call FROM range(3)")),
+          condition = "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
+          parameters = Map("prettyName" -> name, "syntax" -> syntax),
+          context = ExpectedContext(call, 7, 6 + call.length))
+      }
+      checkUnsupported("strlen(DISTINCT 'a')", "`strlen`", "DISTINCT")
+      checkUnsupported("pstrlen(DISTINCT 'a')", "`spark_catalog`.`default`.`pstrlen`", "DISTINCT")
+      checkUnsupported("strlen('a') FILTER (WHERE true)", "`strlen`", "FILTER CLAUSE")
+      checkUnsupported("iavg(id) IGNORE NULLS", "`iavg`", "IGNORE NULLS")
+      checkUnsupported(
+        "iavg(id) WITHIN GROUP (ORDER BY id)", "`iavg`", "WITHIN GROUP (ORDER BY ...)")
+    }
+  }
+
   test("input type that the function cannot bind") {
     withUserDefinedFunction("strlen" -> true) {
       sql(s"CREATE TEMPORARY FUNCTION strlen AS '$strLenClass'")
@@ -209,33 +237,74 @@ class CreateV2FunctionSuite extends QueryTest with SharedSparkSession {
    * Checks that a broken persistent function `f` can be created, listed and described like a
    * Hive UDF, and only fails when invoked.
    */
-  private def checkFailsOnlyWhenInvoked(createSql: String)(
-      check: AnalysisException => Unit): Unit = {
+  private def checkFailsOnlyWhenInvoked[T <: Throwable : ClassTag](createSql: String)(
+      check: T => Unit): Unit = {
     withUserDefinedFunction("default.f" -> false) {
       sql(createSql)
       assert(sql("SHOW USER FUNCTIONS").collect().map(_.getString(0)).contains(
         "spark_catalog.default.f"))
       assert(spark.catalog.listFunctions().collect().exists(_.name == "f"))
+      assert(spark.catalog.getFunction("f").className == createSql.split("'")(1))
       sql("DESCRIBE FUNCTION EXTENDED f").collect()
-      check(intercept[AnalysisException](sql("SELECT f('abc')").collect()))
+      check(intercept[T](sql("SELECT f('abc')").collect()))
+    }
+  }
+
+  /** Checks that a class that cannot be instantiated fails as `CANNOT_INSTANTIATE_...`. */
+  private def checkCannotInstantiate(className: String, msg: String): Unit = {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(s"CREATE TEMPORARY FUNCTION f AS '$className'")
+      },
+      condition = "CANNOT_INSTANTIATE_FUNCTION_CLASS",
+      parameters = Map("className" -> className, "functionName" -> "`f`", "msg" -> msg))
+
+    checkFailsOnlyWhenInvoked[AnalysisException](s"CREATE FUNCTION f AS '$className'") { e =>
+      checkError(
+        exception = e,
+        condition = "CANNOT_INSTANTIATE_FUNCTION_CLASS",
+        parameters = Map(
+          "className" -> className,
+          "functionName" -> "`spark_catalog`.`default`.`f`",
+          "msg" -> msg),
+        context = ExpectedContext("f('abc')", 7, 14))
     }
   }
 
   test("class without a public no-arg constructor") {
     val className = classOf[V2FunctionWithoutNoArgConstructor].getName
-    val e = intercept[AnalysisException] {
-      sql(s"CREATE TEMPORARY FUNCTION f AS '$className'")
-    }
-    assert(e.getCondition == "CANNOT_INSTANTIATE_FUNCTION_CLASS")
-    assert(e.getMessageParameters.get("className") == className)
+    checkCannotInstantiate(className, s"$className.<init>()")
+  }
 
-    checkFailsOnlyWhenInvoked(s"CREATE FUNCTION f AS '$className'") { e =>
-      assert(e.getCondition == "CANNOT_INSTANTIATE_FUNCTION_CLASS")
+  test("class whose constructor throws") {
+    checkCannotInstantiate(classOf[V2FunctionThrowingConstructor].getName, "constructor failed")
+  }
+
+  test("class that fails to initialize") {
+    val className = classOf[JavaStaticInitFailingStrLen].getName
+    checkFailsOnlyWhenInvoked[LinkageError](s"CREATE FUNCTION f AS '$className'") { _ => }
+  }
+
+  test("USING resources are loaded before the class is initialized") {
+    val className = classOf[JavaInitTrackingStrLen].getName
+    val initialized = "spark.test.JavaInitTrackingStrLen.initialized"
+    val jar = createStrLenJar("test.v2udf.UsingResourceStrLen")
+    withUserDefinedFunction("default.f" -> false) {
+      sql(s"CREATE FUNCTION f AS '$className' USING JAR '$jar'")
+      spark.catalog.listFunctions().collect()
+      val describe = sql("DESCRIBE FUNCTION f").collect().map(_.getString(0))
+      assert(!describe.exists(_.contains("strlen(string) -> int")))
+      assert(System.getProperty(initialized) == null)
+
+      checkAnswer(sql("SELECT f('abc')"), Row(3))
+      assert(System.getProperty(initialized) == "true")
+      assert(sql("DESCRIBE FUNCTION f").collect().map(_.getString(0))
+        .exists(_.contains("strlen(string) -> int")))
     }
   }
 
   test("class that is not on the classpath") {
-    checkFailsOnlyWhenInvoked("CREATE FUNCTION f AS 'not.a.Class'") { e =>
+    checkFailsOnlyWhenInvoked[AnalysisException]("CREATE FUNCTION f AS 'not.a.Class'") { e =>
       checkError(
         exception = e,
         condition = "CANNOT_LOAD_FUNCTION_CLASS",
@@ -248,7 +317,7 @@ class CreateV2FunctionSuite extends QueryTest with SharedSparkSession {
 
   test("jar that is not accessible") {
     val jar = new File(Utils.createTempDir(), "missing.jar").toURI.toString
-    checkFailsOnlyWhenInvoked(
+    checkFailsOnlyWhenInvoked[AnalysisException](
         s"CREATE FUNCTION f AS 'test.v2udf.MissingJarStrLen' USING JAR '$jar'") { e =>
       assert(e.getCondition == "CANNOT_LOAD_FUNCTION_CLASS", e.getMessage)
     }
@@ -290,6 +359,10 @@ class V2IntegralAverage extends UnboundFunction {
   override def name(): String = IntegralAverage.name()
   override def bind(inputType: StructType): BoundFunction = IntegralAverage.bind(inputType)
   override def description(): String = IntegralAverage.description()
+}
+
+class V2FunctionThrowingConstructor extends V2StrLen {
+  throw new IllegalStateException("constructor failed")
 }
 
 class V2FunctionWithoutNoArgConstructor(name: String) extends UnboundFunction {

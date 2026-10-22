@@ -1449,7 +1449,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "className" -> className,
         "functionName" -> toSQLId(func.toString),
-        "msg" -> Option(cause.getMessage).getOrElse("")),
+        "msg" -> Option(cause.getMessage).getOrElse(cause.getClass.getName)),
       cause = Some(cause))
   }
 
