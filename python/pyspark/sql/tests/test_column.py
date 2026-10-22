@@ -501,7 +501,6 @@ class ColumnTestsMixin:
         self.assertEqual(result[1][0], 40)
         self.assertEqual(result[2][0], 60)
 
-
     def test_select_regular_column_with_reused_dataframe_hidden_in_natural_join(self):
         # A DataFrame appears both as a direct join side and inside a natural/USING
         # join that hides one of its columns into `metadataOutput`. When resolving
@@ -528,6 +527,7 @@ class ColumnTestsMixin:
             [r["id"] for r in result.collect()],
             [10, 20],
         )
+
 
 class ColumnTests(ColumnTestsMixin, ReusedSQLTestCase):
     pass
