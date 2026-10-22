@@ -133,8 +133,9 @@ object ParquetStorageFilter {
 
   /**
    * Builds a [[ParquetStorageFilter]] from storage filters bound to the scan's requested data
-   * schema, combined with AND. Every condition below is asserted, since `storageFiltersFor`
-   * pre-checks them and a violation is a planner bug.
+   * schema. The blooms are combined with AND, and so are the conjuncts over their key columns,
+   * which are evaluated only where the blooms keep the row. Every condition below is asserted,
+   * since `storageFiltersFor` pre-checks them and a violation is a planner bug.
    */
   def create(
       boundExpressions: Seq[Expression],
@@ -156,12 +157,13 @@ object ParquetStorageFilter {
     // The ordinals this predicate reads, deduplicated and sorted. The order only makes the key
     // row's layout deterministic.
     val originalOrdinals = expr.collect { case b: BoundReference => b.ordinal }.distinct.sorted
-    // These messages name the expression by its node, since a bloom's literal renders as
+    // These messages name the filters by their nodes, since a bloom's literal renders as
     // megabytes of hex.
+    val names = boundExpressions.map(_.prettyName).mkString(", ")
     require(originalOrdinals.nonEmpty,
-      s"storage filter ${expr.prettyName} has no bound reference to a key column")
+      s"storage filters $names have no bound reference to a key column")
     require(originalOrdinals.forall(i => i >= 0 && i < requestedSchema.length),
-      s"storage filter ${expr.prettyName} references ordinals " +
+      s"storage filters $names reference ordinals " +
         s"${originalOrdinals.mkString("[", ", ", "]")} outside the ${requestedSchema.length} " +
         s"fields of ${requestedSchema.catalogString}")
     val keyFields = originalOrdinals.map(requestedSchema.fields(_))

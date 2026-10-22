@@ -2032,9 +2032,8 @@ object SQLConf {
     buildConf("spark.sql.parquet.storageFilterPushdown.enabled")
       .doc("If true, the vectorized reader of the V1 Parquet file source may apply a runtime " +
         "bloom filter from join runtime filtering while it reads, and skip the pages and row " +
-        "groups of the other columns that hold no matching rows. Other filter conditions that " +
-        "reference only the bloom filter's columns are applied with it. Only ParquetFileFormat " +
-        "itself is supported, not its subclasses. A table with a column named " +
+        "groups of the other columns that hold no matching rows. Only ParquetFileFormat itself " +
+        "is supported, not its subclasses. A table with a column named " +
         "_tmp_storage_filter_checked is not offered storage filters, and a file holding one " +
         "outside the table's schema is not supported. The filter also stays in the post-scan " +
         "filter, so the answer does not change, with two exceptions. Under " +
@@ -2048,6 +2047,21 @@ object SQLConf {
         "across most pages. The matching key values of a row group are buffered while it is " +
         s"read, up to ${PARQUET_STORAGE_FILTER_PUSHDOWN_MAX_SPLICED_ROW_GROUP_BYTES.key}, " +
         "outside Spark's memory manager.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  val PARQUET_STORAGE_FILTER_PUSHDOWN_KEY_CONDITIONS_ENABLED =
+    buildConf("spark.sql.parquet.storageFilterPushdown.keyConditions.enabled")
+      .doc(s"If true, and ${PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED.key} applies a bloom filter, " +
+        "the reader also applies the query's other filter conditions that reference only the " +
+        "bloom filter's columns, on the rows the bloom filter keeps. They then run before the " +
+        "query's conditions on other columns. Only scans that return columnar batches with whole-" +
+        "stage codegen take them. The answer does not change, with the exceptions of " +
+        s"${PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED.key} and one more. A condition that raises a " +
+        "fatal error, such as a regular expression or a UDF overflowing the stack, on a row that " +
+        "a condition on another column would have dropped first fails the query.")
       .version("5.0.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
@@ -9481,6 +9495,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def parquetStorageFilterPushdownEnabled: Boolean =
     getConf(PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED)
+
+  def parquetStorageFilterPushdownKeyConditionsEnabled: Boolean =
+    getConf(PARQUET_STORAGE_FILTER_PUSHDOWN_KEY_CONDITIONS_ENABLED)
 
   def parquetStorageFilterPushdownMaxSplicedRowGroupBytes: Long =
     getConf(PARQUET_STORAGE_FILTER_PUSHDOWN_MAX_SPLICED_ROW_GROUP_BYTES)
