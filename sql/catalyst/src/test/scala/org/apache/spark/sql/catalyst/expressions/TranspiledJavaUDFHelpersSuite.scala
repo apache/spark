@@ -255,6 +255,41 @@ class TranspiledJavaUDFHelpersSuite extends SparkFunSuite {
     assert(H.equalsBoolean(true, true) === true)
   }
 
+  test("mixed int/float comparison is exact, as CPython's is") {
+    // Widening the long to a double first would round 9007199254740993 to 9007199254740992.0
+    // and call these equal; CPython compares the exact integer values and does not.
+    assert(H.equalsLongDouble(9007199254740993L, 9007199254740992.0d) === false)
+    assert(H.equalsDoubleLong(9007199254740992.0d, 9007199254740993L) === false)
+    assert(H.not(H.equalsLongDouble(9007199254740993L, 9007199254740992.0d)) === true)
+    // Where the double IS the exact value of the long, they are equal.
+    assert(H.equalsLongDouble(9007199254740992L, 9007199254740992.0d) === true)
+    assert(H.lessThanLongDouble(9007199254740993L, 9007199254740994.0d) === true)
+    assert(H.greaterThanLongDouble(9007199254740993L, 9007199254740992.0d) === true)
+    assert(H.lessThanDoubleLong(9007199254740992.0d, 9007199254740993L) === true)
+    assert(H.greaterThanDoubleLong(9007199254740994.0d, 9007199254740993L) === true)
+    // NaN and +-Infinity behave as they do against any int in Python.
+    assert(H.equalsLongDouble(1L, Double.NaN) === false)
+    assert(H.lessThanLongDouble(1L, Double.NaN) === false)
+    assert(H.greaterThanLongDouble(1L, Double.NaN) === false)
+    assert(H.lessThanLongDouble(1L, Double.PositiveInfinity) === true)
+    assert(H.greaterThanLongDouble(1L, Double.NegativeInfinity) === true)
+    assert(H.lessThanDoubleLong(Double.NegativeInfinity, 1L) === true)
+    assert(H.greaterThanDoubleLong(Double.PositiveInfinity, 1L) === true)
+  }
+
+  test("mixed int/float comparison raises on null like the same-category ones") {
+    Seq[() => Any](
+      () => H.lessThanLongDouble(null, 1.0d),
+      () => H.greaterThanOrEqualLongDouble(1L, null),
+      () => H.lessThanDoubleLong(null, 1L),
+      () => H.greaterThanOrEqualDoubleLong(1.0d, null)
+    ).foreach { op =>
+      val e = intercept[SparkRuntimeException](op())
+      assert(e.getCondition === "USER_RAISED_EXCEPTION")
+      assert(e.getMessage.contains("cannot compare NULL"))
+    }
+  }
+
   test("not keeps null, and is the only boolean connective here") {
     // `and` / `or` were removed: the transpiler refuses `ast.BoolOp`, so nothing called them, and
     // their SQL three-valued semantics are not what a short-circuiting lowering will want.

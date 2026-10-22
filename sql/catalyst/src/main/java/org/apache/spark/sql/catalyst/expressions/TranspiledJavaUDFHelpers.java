@@ -310,6 +310,117 @@ public final class TranspiledJavaUDFHelpers {
     return a >= b;
   }
 
+  // ---------------------------------------------------------------------------------------------
+  // Mixed integral / fractional comparison
+  // ---------------------------------------------------------------------------------------------
+
+  // CPython compares an int and a float EXACTLY, not by widening the int to double: the long
+  // 9007199254740993 is not equal to the double 9007199254740992.0, but `(double) 9007199254740993`
+  // rounds to that same double and a plain `equalsDouble(toDouble(a), b)` would say True.
+  // `new BigDecimal(double)` is the double's exact binary value (per its javadoc), and
+  // `new BigDecimal(long)` is exact, so `compareTo` agrees with CPython. NaN and +-Infinity,
+  // which BigDecimal cannot represent, are handled first. The arithmetic promotion in
+  // `toDouble` is still right for `+`/`-`/`*`/`/` -- Python widens the int there too -- so only
+  // comparison takes this path.
+
+  private static int compareLongDouble(long a, double b) {
+    return new BigDecimal(a).compareTo(new BigDecimal(b));
+  }
+
+  private static int compareDoubleLong(double a, long b) {
+    return new BigDecimal(a).compareTo(new BigDecimal(b));
+  }
+
+  public static Boolean equalsLongDouble(Long a, Double b) {
+    if (a == null || b == null) return a == null && b == null;
+    double bv = b;
+    if (Double.isNaN(bv) || bv == Double.POSITIVE_INFINITY || bv == Double.NEGATIVE_INFINITY) {
+      return Boolean.FALSE;
+    }
+    return compareLongDouble(a.longValue(), bv) == 0;
+  }
+
+  public static Boolean equalsDoubleLong(Double a, Long b) {
+    if (a == null || b == null) return a == null && b == null;
+    double av = a;
+    if (Double.isNaN(av) || av == Double.POSITIVE_INFINITY || av == Double.NEGATIVE_INFINITY) {
+      return Boolean.FALSE;
+    }
+    return compareDoubleLong(av, b.longValue()) == 0;
+  }
+
+  public static Boolean lessThanLongDouble(Long a, Double b) {
+    requireNonNullForOrdering(a, b, "<");
+    double bv = b;
+    if (Double.isNaN(bv)) return Boolean.FALSE;
+    if (bv == Double.POSITIVE_INFINITY) return Boolean.TRUE;
+    if (bv == Double.NEGATIVE_INFINITY) return Boolean.FALSE;
+    return compareLongDouble(a.longValue(), bv) < 0;
+  }
+
+  public static Boolean lessThanOrEqualLongDouble(Long a, Double b) {
+    requireNonNullForOrdering(a, b, "<=");
+    double bv = b;
+    if (Double.isNaN(bv)) return Boolean.FALSE;
+    if (bv == Double.POSITIVE_INFINITY) return Boolean.TRUE;
+    if (bv == Double.NEGATIVE_INFINITY) return Boolean.FALSE;
+    return compareLongDouble(a.longValue(), bv) <= 0;
+  }
+
+  public static Boolean greaterThanLongDouble(Long a, Double b) {
+    requireNonNullForOrdering(a, b, ">");
+    double bv = b;
+    if (Double.isNaN(bv)) return Boolean.FALSE;
+    if (bv == Double.POSITIVE_INFINITY) return Boolean.FALSE;
+    if (bv == Double.NEGATIVE_INFINITY) return Boolean.TRUE;
+    return compareLongDouble(a.longValue(), bv) > 0;
+  }
+
+  public static Boolean greaterThanOrEqualLongDouble(Long a, Double b) {
+    requireNonNullForOrdering(a, b, ">=");
+    double bv = b;
+    if (Double.isNaN(bv)) return Boolean.FALSE;
+    if (bv == Double.POSITIVE_INFINITY) return Boolean.FALSE;
+    if (bv == Double.NEGATIVE_INFINITY) return Boolean.TRUE;
+    return compareLongDouble(a.longValue(), bv) >= 0;
+  }
+
+  public static Boolean lessThanDoubleLong(Double a, Long b) {
+    requireNonNullForOrdering(a, b, "<");
+    double av = a;
+    if (Double.isNaN(av)) return Boolean.FALSE;
+    if (av == Double.NEGATIVE_INFINITY) return Boolean.TRUE;
+    if (av == Double.POSITIVE_INFINITY) return Boolean.FALSE;
+    return compareDoubleLong(av, b.longValue()) < 0;
+  }
+
+  public static Boolean lessThanOrEqualDoubleLong(Double a, Long b) {
+    requireNonNullForOrdering(a, b, "<=");
+    double av = a;
+    if (Double.isNaN(av)) return Boolean.FALSE;
+    if (av == Double.NEGATIVE_INFINITY) return Boolean.TRUE;
+    if (av == Double.POSITIVE_INFINITY) return Boolean.FALSE;
+    return compareDoubleLong(av, b.longValue()) <= 0;
+  }
+
+  public static Boolean greaterThanDoubleLong(Double a, Long b) {
+    requireNonNullForOrdering(a, b, ">");
+    double av = a;
+    if (Double.isNaN(av)) return Boolean.FALSE;
+    if (av == Double.NEGATIVE_INFINITY) return Boolean.FALSE;
+    if (av == Double.POSITIVE_INFINITY) return Boolean.TRUE;
+    return compareDoubleLong(av, b.longValue()) > 0;
+  }
+
+  public static Boolean greaterThanOrEqualDoubleLong(Double a, Long b) {
+    requireNonNullForOrdering(a, b, ">=");
+    double av = a;
+    if (Double.isNaN(av)) return Boolean.FALSE;
+    if (av == Double.NEGATIVE_INFINITY) return Boolean.FALSE;
+    if (av == Double.POSITIVE_INFINITY) return Boolean.TRUE;
+    return compareDoubleLong(av, b.longValue()) >= 0;
+  }
+
   /** Byte / codepoint order. `binaryCompare`, not `compareTo` (disabled) or collation. */
   public static Boolean equalsString(UTF8String a, UTF8String b) {
     if (a == null || b == null) return a == null && b == null;

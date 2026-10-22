@@ -132,6 +132,24 @@ _COMPARE_HELPERS: Dict[Tuple[str, str], str] = {
     ("GtE", "string"): "greaterThanOrEqualString",
 }
 
+# Mixed integral / fractional comparison. CPython compares an int and a float exactly, so the
+# long is NOT widened to double the way the arithmetic `_coerce` does: `9007199254740993 ==
+# 9007199254740992.0` is False in Python but True after `toDouble`. Direction matters -- Java
+# evaluates arguments left to right, so the operand that raises has to raise first -- which is why
+# there is a helper per direction rather than one with the operands swapped.
+_MIXED_COMPARE_HELPERS: Dict[Tuple[str, str, str], str] = {
+    ("Eq", "integral", "fractional"): "equalsLongDouble",
+    ("Eq", "fractional", "integral"): "equalsDoubleLong",
+    ("Lt", "integral", "fractional"): "lessThanLongDouble",
+    ("Lt", "fractional", "integral"): "lessThanDoubleLong",
+    ("LtE", "integral", "fractional"): "lessThanOrEqualLongDouble",
+    ("LtE", "fractional", "integral"): "lessThanOrEqualDoubleLong",
+    ("Gt", "integral", "fractional"): "greaterThanLongDouble",
+    ("Gt", "fractional", "integral"): "greaterThanDoubleLong",
+    ("GtE", "integral", "fractional"): "greaterThanOrEqualLongDouble",
+    ("GtE", "fractional", "integral"): "greaterThanOrEqualDoubleLong",
+}
+
 
 class _JavaValue(NamedTuple):
     """A lowered Java expression and the category it produces. Boxed, so ``null``
@@ -570,7 +588,27 @@ class JavaTranspiler(AbstractTranspiler):
 
         lowered_left = self._lower_expr(left)
         lowered_right = self._lower_expr(right)
-        category = self._unify(lowered_left.category, lowered_right.category, "comparison")
+        left_cat, right_cat = lowered_left.category, lowered_right.category
+        if isinstance(op, (ast.Eq, ast.NotEq)):
+            op_key = "Eq"
+        else:
+            op_key = _ORDER_OPS.get(type(op))
+            if op_key is None:
+                raise UnsupportedOperationException(
+                    f"{type(op).__name__} comparisons are not lowered by the java transpiler"
+                )
+
+        # Mixed integral / fractional: compare exactly rather than widening the long to a
+        # double (see `_MIXED_COMPARE_HELPERS`). The operands stay in their own types, so no
+        # `_coerce` runs and the operand that raises still raises first.
+        mixed = _MIXED_COMPARE_HELPERS.get((op_key, left_cat, right_cat))
+        if mixed is not None:
+            call = f"{_HELPERS}.{mixed}({lowered_left.code}, {lowered_right.code})"
+            if isinstance(op, ast.NotEq):
+                call = f"{_HELPERS}.not({call})"
+            return _JavaValue(call, "bool")
+
+        category = self._unify(left_cat, right_cat, "comparison")
         left_code = self._coerce(lowered_left, category).code
         right_code = self._coerce(lowered_right, category).code
 
@@ -587,12 +625,7 @@ class JavaTranspiler(AbstractTranspiler):
             if isinstance(op, ast.NotEq):
                 call = f"{_HELPERS}.not({call})"
             return _JavaValue(call, "bool")
-        order = _ORDER_OPS.get(type(op))
-        if order is None:
-            raise UnsupportedOperationException(
-                f"{type(op).__name__} comparisons are not lowered by the java transpiler"
-            )
-        return self._ordered(category, order, left_code, right_code)
+        return self._ordered(category, op_key, left_code, right_code)
 
     def _ordered(self, category: str, op_name: str, left: str, right: str) -> _JavaValue:
         helper = _COMPARE_HELPERS.get((op_name, category))

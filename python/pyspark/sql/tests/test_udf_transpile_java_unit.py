@@ -192,6 +192,35 @@ class JavaTranspileLoweringTests(unittest.TestCase):
         self.assertIn("toDouble(_udf_arg_0)", lowered)
         self.assertIn("addDouble", lowered)
 
+    def test_mixed_int_float_comparison_is_exact_not_widened(self):
+        # Arithmetic widens the int (Python does too), but comparison must not: widening
+        # 9007199254740993 to a double rounds it to 9007199254740992.0 and calls them equal
+        # where CPython says they are not. So the helper is direction-aware, not toDouble.
+        eq_long_double = _lower(
+            "def f(a, b):\n    return a == b", BooleanType(), {0: "integral", 1: "fractional"}
+        )
+        self.assertIn("equalsLongDouble(_udf_arg_0, _udf_arg_1)", eq_long_double)
+        self.assertNotIn("toDouble", eq_long_double)
+        eq_double_long = _lower(
+            "def f(a, b):\n    return a == b", BooleanType(), {0: "fractional", 1: "integral"}
+        )
+        self.assertIn("equalsDoubleLong(_udf_arg_0, _udf_arg_1)", eq_double_long)
+        self.assertNotIn("toDouble", eq_double_long)
+        neq = _lower(
+            "def f(a, b):\n    return a != b", BooleanType(), {0: "integral", 1: "fractional"}
+        )
+        # `!=` is `not(equals)`, so the exact helper still runs and is then negated.
+        self.assertIn("equalsLongDouble(_udf_arg_0, _udf_arg_1)", neq)
+        self.assertIn("Helpers.not(", neq)
+        lt = _lower(
+            "def f(a, b):\n    return a < b", BooleanType(), {0: "integral", 1: "fractional"}
+        )
+        self.assertIn("lessThanLongDouble(_udf_arg_0, _udf_arg_1)", lt)
+        gt = _lower(
+            "def f(a, b):\n    return a > b", BooleanType(), {0: "fractional", 1: "integral"}
+        )
+        self.assertIn("greaterThanDoubleLong(_udf_arg_0, _udf_arg_1)", gt)
+
     def test_string_concat_and_repeat(self):
         concat = _lower("def f(s):\n    return s + 'x'", StringType(), {0: "string"})
         self.assertIn("TranspiledJavaUDFHelpers.concat", concat)
@@ -826,6 +855,26 @@ class JavaTranspileEndToEndTests(ReusedSQLTestCase):
             self.assertEqual(2.5, integral.select(udf(col("a"))).first()[0])
             fractional = self.spark.createDataFrame([(5.5,)], "a double")
             self.assertEqual(2.75, fractional.select(udf(col("a"))).first()[0])
+
+    def test_mixed_int_float_comparison_matches_python_exactly(self):
+        # A multi-statement body Catalyst declines, so the java target takes it. Widening the
+        # long to a double would make 9007199254740993 == 9007199254740992.0 True, where Python
+        # (and so the interpreted UDF) says False. The exact helper keeps them in agreement.
+        def eq_after_assign(a, b):
+            c = a
+            return c == b
+
+        df = self.spark.createDataFrame(
+            [(9007199254740993, 9007199254740992.0)], "a bigint, b double"
+        )
+        with self.sql_conf(_TRANSPILE_OFF):
+            interpreted = UserDefinedFunction(eq_after_assign, BooleanType())
+            expected = df.select(interpreted(col("a"), col("b"))).first()[0]
+        self.assertFalse(expected)
+        with self.sql_conf(_JAVA_ONLY):
+            lowered = UserDefinedFunction(eq_after_assign, BooleanType())
+            self.assertTrue(lowered.transpiled)
+            self.assertFalse(df.select(lowered(col("a"), col("b"))).first()[0])
 
     def test_string_comparison_matches_python_codepoint_order(self):
         # Codepoint order, so "Z" < "a". Spark disables UTF8String.compareTo in favour of
