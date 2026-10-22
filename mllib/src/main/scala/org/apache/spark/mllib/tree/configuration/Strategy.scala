@@ -65,8 +65,6 @@ import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Impurity, Variance}
  *                           E.g. 10 means that the cache will get checkpointed every 10 updates. If
  *                           the checkpoint directory is not set in
  *                           [[org.apache.spark.SparkContext]], this setting is ignored.
- * @param pruneTree If this is true, the final training tree will undergo a pruning in which
- *                  nodes with the same prediction are merged.
  */
 @Since("1.0.0")
 class Strategy @Since("1.3.0") (
@@ -85,7 +83,6 @@ class Strategy @Since("1.3.0") (
     @Since("1.2.0") @BeanProperty var checkpointInterval: Int = 10,
     @Since("3.0.0") @BeanProperty var minWeightFractionPerNode: Double = 0.0,
     @BeanProperty private[spark] var bootstrap: Boolean = false,
-    @Since("4.3.0")
     @BeanProperty private[spark] var pruneTree: Boolean = true) extends Serializable {
 
   /**
@@ -106,7 +103,6 @@ class Strategy @Since("1.3.0") (
   /**
    * Retains the constructor signature used before the pruning parameter was introduced.
    */
-  @Since("4.3.0")
   def this(
       algo: Algo,
       impurity: Impurity,
