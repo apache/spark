@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.{TranspiledPythonUDF, Transpile
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.TRANSPILED_PYTHON_UDF
-import org.apache.spark.sql.types.{BinaryType, BooleanType, DataType, DecimalType, NumericType, StringType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, DataType, DecimalType, MapType, NumericType, StringType, TimestampType}
 
 /**
  * Prunes the per-input-type options carried by a [[TranspiledPythonUDF]] down to those whose
@@ -78,7 +78,8 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
 
   // True when each declared category matches the corresponding argument type:
   // "numeric" -> NumericType, "string" -> StringType, "bool" -> BooleanType,
-  // "binary" -> BinaryType. "string" matches only StringType (not BinaryType): a
+  // "binary" -> BinaryType, "timestamp" -> TimestampType, "map" -> MapType,
+  // "array" -> ArrayType. "string" matches only StringType (not BinaryType): a
   // bytes/BinaryType column is tagged "binary" instead, so the string lowerings
   // (e.g. `repeat`) never see it. Empty categories means "no restriction", so the
   // option is kept.
@@ -92,6 +93,10 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
   //   collation (e.g. UTF8_LCASE) Spark's `=`/`<`/`concat` follow collation
   //   rules while Python compares codepoints, so `'abc' == 'ABC'` would return
   //   true where Python returns False.
+  // "map" and "array" match any element/key type: the category names the container,
+  //   not its contents, and a variety that reports "map"/"array" is responsible
+  //   for the per-element lowering (an out-of-tree transpiler verifies its
+  //   rewrite before serving it, so a wrong shape does not ship).
   private def optionMatchesTypes(categories: Seq[String], argTypes: Seq[DataType]): Boolean = {
     if (categories.isEmpty) {
       true
@@ -103,6 +108,9 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
         case ("string", st: StringType) => st.isUTF8BinaryCollation
         case ("bool", dt) => dt.isInstanceOf[BooleanType]
         case ("binary", dt) => dt.isInstanceOf[BinaryType]
+        case ("timestamp", dt) => dt.isInstanceOf[TimestampType]
+        case ("map", dt) => dt.isInstanceOf[MapType]
+        case ("array", dt) => dt.isInstanceOf[ArrayType]
         case _ => false
       }
     }
