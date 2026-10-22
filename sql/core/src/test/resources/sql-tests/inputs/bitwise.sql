@@ -87,6 +87,9 @@ SELECT 20181117 >>>> 2;
 select cast(null as array<array<int>>), 20181117 >> 2;
 select cast(null as array<array<int>>), 20181117 >>> 2;
 select cast(null as map<int, array<int>>), 20181117 >> 2;
+select array(1), map(1, 2), struct(1), 20181117 >> 2, 20181117 >>> 2;
+select '[1]' IS JSON ARRAY, 20181117 >> 2, 20181117 >>> 2;
+select cast(null as array /* comment */ <array<int>>), 20181117 >> 2;
 
 select 1 << 1 + 2 as plus_over_shift; -- if correct, the result is 8. otherwise, 4
 select 2 >> 1 << 1 as left_to_right; -- if correct, the result is 2. otherwise, 0
