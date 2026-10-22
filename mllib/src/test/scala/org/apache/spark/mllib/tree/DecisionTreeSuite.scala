@@ -25,6 +25,7 @@ import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.FeatureType._
+import org.apache.spark.mllib.tree.configuration.QuantileStrategy.Sort
 import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Variance}
 import org.apache.spark.mllib.tree.model._
@@ -34,6 +35,34 @@ import org.apache.spark.util.Utils
 
 
 class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
+
+  /////////////////////////////////////////////////////////////////////////////
+  // Tests for Strategy configuration
+  /////////////////////////////////////////////////////////////////////////////
+
+  test("Strategy should retain the constructor signature used by Spark 4.2") {
+    assert(classOf[Strategy].getConstructors.exists(_.getParameterCount == 15))
+    for (bootstrap <- Seq(false, true)) {
+      val strategy = new Strategy(Classification, Gini, 3, 2, 32, Sort, Map.empty[Int, Int],
+        1, 0.0, 256, 1.0, false, 10, 0.0, bootstrap)
+
+      assert(strategy.bootstrap == bootstrap)
+      assert(strategy.pruneTree)
+    }
+  }
+
+  test("Strategy should retain the bootstrap default getter used by compiled callers") {
+    val bootstrapDefault = Strategy.getClass.getMethod("$lessinit$greater$default$15")
+    assert(bootstrapDefault.invoke(Strategy) == java.lang.Boolean.FALSE)
+  }
+
+  test("Strategy should configure pruning independently of bootstrapping") {
+    val strategy = new Strategy(Classification, Gini, 3, bootstrap = true, pruneTree = false)
+
+    assert(strategy.bootstrap)
+    assert(!strategy.pruneTree)
+    assert(!strategy.copy.pruneTree)
+  }
 
   /////////////////////////////////////////////////////////////////////////////
   // Tests calling train()
