@@ -46,7 +46,7 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
   // scalastyle:on line.size.limit
   private val supportedAggregateFunctions =
     Set("MAX", "MIN", "SUM", "COUNT", "AVG") ++ distinctUnsupportedAggregateFunctions
-  private val supportedFunctions = supportedAggregateFunctions ++ Set("TRUNC")
+  private val supportedFunctions = supportedAggregateFunctions ++ Set("TRUNC", "RPAD")
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)

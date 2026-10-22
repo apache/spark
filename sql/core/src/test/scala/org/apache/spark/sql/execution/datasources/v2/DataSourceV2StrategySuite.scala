@@ -27,11 +27,12 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Complete, Count, Percentile, PercentileDisc}
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.expressions.variant.VariantGet
 import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, CombineFilters, ConstantFolding}
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, JoinHint, Limit, LogicalPlan, Offset, OneRowRelation, Project, Sort}
-import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
+import org.apache.spark.sql.catalyst.util.{CharVarcharCodegenUtils, V2ExpressionBuilder}
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue, SortOrder => V2SortOrder, VariantGet => V2VariantGet}
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
@@ -1917,6 +1918,41 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     assertResult(result) {
       DataSourceV2Strategy.translateFilterV2(catalystFilter)
     }
+  }
+
+  test("SPARK-60479: read-side CHAR padding StaticInvoke translates to RPAD") {
+    val col = AttributeReference("flag", StringType)()
+    def paddingInvoke(functionName: String): StaticInvoke = {
+      StaticInvoke(
+        classOf[CharVarcharCodegenUtils],
+        StringType,
+        functionName,
+        col :: Literal(1) :: Nil,
+        returnNullable = false)
+    }
+    Seq("readSidePadding", "charTypeReadSideCheck").foreach { name =>
+      val eq = EqualTo(paddingInvoke(name), Literal("Y"))
+      val result = new V2ExpressionBuilder(eq, isPredicate = true).build()
+      assert(result.isDefined, s"$name should translate to a V2 predicate")
+      result.get match {
+        case p: Predicate if p.name() == "=" =>
+          p.children()(0) match {
+            case g: GeneralScalarExpression if g.name() == "RPAD" =>
+              assert(g.children()(0) === FieldReference("flag"))
+              assert(g.children()(1) === LiteralValue(1, IntegerType))
+              assert(g.children()(2) ===
+                LiteralValue(UTF8String.fromString(" "), StringType))
+            case other =>
+              fail(s"$name: expected RPAD, got ${other.getClass.getName} ${other.describe()}")
+          }
+          assert(p.children()(1) === LiteralValue(UTF8String.fromString("Y"), StringType))
+        case other =>
+          fail(s"$name: expected '=' predicate, got ${other.describe()}")
+      }
+    }
+    val varcharCheck = paddingInvoke("varcharTypeReadSideCheck")
+    assert(new V2ExpressionBuilder(EqualTo(varcharCheck, Literal("Y")), isPredicate = true)
+      .build().isEmpty)
   }
 
   test("SPARK-59301: translate runtime IN filter") {

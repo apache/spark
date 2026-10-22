@@ -381,6 +381,12 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
         case _ =>
           None
       }
+    // Read-side CHAR padding is a JVM StaticInvoke, not StringRPad. Map it to RPAD so JDBC/DSv2
+    // can push CHAR comparisons when spark.sql.readSideCharPadding is true (the default).
+    case invoke: StaticInvoke if isCharReadSidePadding(invoke) =>
+      generateExpression(
+        CharVarcharUtils.createStringRPad(invoke.arguments.head, invoke.arguments(1)),
+        isPredicate)
     case StaticInvoke(_, _, _, arguments, _, _, _, _, Some(scalarFunc)) =>
       val argumentExpressions = arguments.flatMap(generateExpression(_))
       if (argumentExpressions.length == arguments.length) {
@@ -462,6 +468,20 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
       case "<=" => ">="
       case _ => operatorName
     }
+  }
+
+  /**
+   * CHAR scan padding from [[CharVarcharUtils.addPaddingForScan]]: `readSidePadding` when
+   * `spark.sql.readSideCharPadding` is on, and `charTypeReadSideCheck` under standard semantics.
+   * Both pad to the CHAR length; JDBC CHAR values already satisfy the length, so RPAD is a
+   * valid remote equivalent for filter pushdown.
+   */
+  private def isCharReadSidePadding(invoke: StaticInvoke): Boolean = {
+    invoke.scalarFunction.isEmpty &&
+      invoke.staticObject.getName == classOf[CharVarcharCodegenUtils].getName &&
+      (invoke.functionName == "readSidePadding" ||
+        invoke.functionName == "charTypeReadSideCheck") &&
+      invoke.arguments.length == 2
   }
 
   private def generateExpressionWithName(

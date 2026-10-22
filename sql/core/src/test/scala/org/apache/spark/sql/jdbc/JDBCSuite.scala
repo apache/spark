@@ -2350,6 +2350,20 @@ class JDBCSuite extends SharedSparkSession {
     assert(getJdbcType(oracleDialect, TimestampNTZType) == "TIMESTAMP")
   }
 
+  test("SPARK-60479: Oracle dialect compiles RPAD for CHAR filter pushdown") {
+    val oracleDialect = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
+    import org.apache.spark.unsafe.types.UTF8String
+    val rpad = new GeneralScalarExpression("RPAD",
+      Array[V2Expression](
+        FieldReference("PROD_VERSION_CURRENT"),
+        LiteralValue(1, IntegerType),
+        LiteralValue(UTF8String.fromString(" "), StringType)))
+    val eq = new Predicate("=",
+      Array[V2Expression](rpad, LiteralValue(UTF8String.fromString("Y"), StringType)))
+    val sql = oracleDialect.compileExpression(eq).get
+    assert(sql === """(RPAD("PROD_VERSION_CURRENT", 1, ' ')) = 'Y'""", sql)
+  }
+
   test("Oracle TRUNC pushdown should map Spark format strings to Oracle format") {
     val oracleDialect = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
     val dateRef = FieldReference("d")
