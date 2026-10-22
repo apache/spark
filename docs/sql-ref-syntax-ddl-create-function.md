@@ -82,6 +82,8 @@ CREATE [ OR REPLACE ] [ TEMPORARY ] FUNCTION [ IF NOT EXISTS ]
     Specifies the name of the class that provides the implementation for function to be created.
     The implementing class should extend one of the base classes as follows:
 
+    * Should implement `UnboundFunction` in `org.apache.spark.sql.connector.catalog.functions`
+      package.
     * Should extend `UDF` or `UDAF` in `org.apache.hadoop.hive.ql.exec` package.
     * Should extend `AbstractGenericUDAFResolver`, `GenericUDF`, or
       `GenericUDTF` in `org.apache.hadoop.hive.ql.udf.generic` package.

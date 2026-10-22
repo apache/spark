@@ -615,6 +615,12 @@
     ],
     "sqlState" : "22546"
   },
+  "CANNOT_INSTANTIATE_FUNCTION_CLASS" : {
+    "message" : [
+      "Cannot instantiate class <className> when registering the function <functionName>, please make sure it has a public no-arg constructor. <msg>"
+    ],
+    "sqlState" : "46103"
+  },
   "CANNOT_INSTANTIATE_HIVE_FUNCTION" : {
     "message" : [
       "Cannot instantiate the Hive UDF/UDAF/UDTF wrapper class <clazz>. Check that the function arguments and their types are supported."

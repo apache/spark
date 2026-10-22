@@ -42,9 +42,10 @@ import org.apache.hadoop.io.{LongWritable, Writable}
 import org.apache.spark.{SparkException, SparkFiles, SparkRuntimeException, TestUtils}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BindReferences, CodegenObjectFactoryMode, Literal}
+import org.apache.spark.sql.catalyst.expressions.{ApplyFunctionExpression, AttributeReference, BindReferences, CodegenObjectFactoryMode, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Project}
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, SimpleFunction}
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.functions.{call_function, max}
 import org.apache.spark.sql.hive.{HiveGenericUDF, HiveGenericUDTF}
@@ -1225,6 +1226,38 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
     }
     hiveContext.reset()
   }
+
+  test("class implementing both GenericUDF and a V2 function runs as a V2 function") {
+    withUserDefinedFunction("dual_strlen" -> false) {
+      sql(s"CREATE FUNCTION dual_strlen AS '${classOf[GenericUDFAndV2StrLen].getName}'")
+      val df = sql("SELECT dual_strlen('abc')")
+      val analyzed = df.queryExecution.analyzed
+      assert(!analyzed.exists(_.expressions.exists(_.exists(_.isInstanceOf[HiveGenericUDF]))))
+      assert(analyzed.exists(_.expressions.exists(_.exists(
+        _.isInstanceOf[ApplyFunctionExpression]))))
+      checkAnswer(df, Row(3))
+    }
+  }
+}
+
+/**
+ * A function that runs in Hive as a [[GenericUDF]] and in Spark as a V2 function.
+ */
+class GenericUDFAndV2StrLen extends GenericUDF with SimpleFunction with ScalarFunction[Int] {
+  override def initialize(arguments: Array[ObjectInspector]): ObjectInspector =
+    PrimitiveObjectInspectorFactory.javaIntObjectInspector
+
+  override def evaluate(arguments: Array[DeferredObject]): AnyRef =
+    Int.box(arguments(0).get().toString.length)
+
+  override def getDisplayString(children: Array[String]): String =
+    s"dual_strlen(${children.mkString(", ")})"
+
+  override def inputTypes(): Array[DataType] = Array(StringType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "dual_strlen"
+  override def description(): String = "dual_strlen(string) -> int"
+  override def produceResult(input: InternalRow): Int = input.getUTF8String(0).numChars()
 }
 
 class TestPair(x: Int, y: Int) extends Writable with Serializable {
