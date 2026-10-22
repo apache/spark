@@ -83,9 +83,11 @@ public interface ReducibleFunction<I, O> {
    * <p>
    * Returning {@code null} means "not reducible for these parameters" and is authoritative:
    * Spark consults no other overload. Dispatch order: Spark tries this generalized overload
-   * first; only if it is not implemented (throws {@link UnsupportedOperationException}), both
-   * sides are the same function, and each side has a single non-null integer parameter does Spark
-   * fall back to the deprecated {@code reducer(int, ReducibleFunction, int)} overload. If every
+   * first, for every pair. Only if it is not implemented (throws
+   * {@link UnsupportedOperationException}) does Spark fall back: to
+   * {@link #reducer(ReducibleFunction)} when neither side has a parameter, or to the deprecated
+   * {@code reducer(int, ReducibleFunction, int)} overload when both sides are the same function
+   * and each has a single non-null integer parameter. If every
    * eligible overload throws {@link UnsupportedOperationException}, Spark logs an "implements no
    * reducer" warning; any other exception, from either side's call, is logged and the pair is
    * treated as not reducible (the join falls back to a shuffle).
@@ -152,15 +154,11 @@ public interface ReducibleFunction<I, O> {
    *     <li>thisFunction = days</li>
    *     <li>otherFunction = hours</li>
    * </ul>
-   * <p>
-   * This default delegates to
-   * {@link #reducer(Literal[], ReducibleFunction, Literal[])}, so an implementation of that
-   * overload must not call back into this method.
    *
    * @param otherFunction the other function
    * @return a reduction function if it is reducible, null if not.
    */
   default Reducer<I, O> reducer(ReducibleFunction<?, ?> otherFunction) {
-    return reducer(new Literal<?>[0], otherFunction, new Literal<?>[0]);
+    throw new UnsupportedOperationException();
   }
 }

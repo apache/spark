@@ -7797,6 +7797,20 @@ class KeyGroupedPartitioningSuite
       "must not emit the 'implements no reducer' hint for an implemented-but-throwing reducer")
   }
 
+  test("SPARK-50593: a parameterless pair is offered the generalized overload first") {
+    // GeneralizedShimFunction implements only the generalized overload and forwards a
+    // parameterless pair to the parameterless one. If that default delegated back, this would
+    // recurse until StackOverflowError, which `Try` does not catch.
+    val a = attr("a")
+    val l = TransformExpression(GeneralizedShimFunction, Seq(a))
+    val r = TransformExpression(DaysFunction, Seq(a))
+    assert(l.reducers(r).isEmpty)
+    // A function implementing only the parameterless overload still reduces through the fallback.
+    val days = TransformExpression(DaysFunction, Seq(a))
+    val years = TransformExpression(YearsFunction, Seq(a))
+    assert(days.reducers(years).isDefined)
+  }
+
   test("SPARK-50593: a reducer that throws in one direction makes the pair not reducible") {
     // DirectionalBucketFunction reduces bucket(16) onto bucket(12) by gcd 4 from the finer side and
     // throws when asked from the coarser one. Reading the throw as "this direction is not

@@ -351,19 +351,18 @@ case class TransformExpression(
     // Prefer the generalized overload. Use the deprecated one only if the generalized one is not
     // implemented; any other outcome is final.
     val outcome =
-      if (thisParams.isEmpty && otherParams.isEmpty) {
-        probe(thisFunction.reducer(otherFunction))
-      } else {
-        probe(thisFunction.reducer(thisParams, otherFunction, otherParams)) match {
-          // The deprecated overload is documented for bucket against bucket, so only offer it a
-          // pair of the same function.
-          case Unimplemented if isSingleInt(thisParams) && isSingleInt(otherParams) &&
-              function.canonicalName() == other.function.canonicalName() =>
-            probe(thisFunction.reducer(
-              thisParams(0).value().asInstanceOf[Int], otherFunction,
-              otherParams(0).value().asInstanceOf[Int]))
-          case other => other
-        }
+      probe(thisFunction.reducer(thisParams, otherFunction, otherParams)) match {
+        // A parameterless pair falls back to the parameterless overload.
+        case Unimplemented if thisParams.isEmpty && otherParams.isEmpty =>
+          probe(thisFunction.reducer(otherFunction))
+        // The deprecated overload is documented for bucket against bucket, so only offer it a
+        // pair of the same function.
+        case Unimplemented if isSingleInt(thisParams) && isSingleInt(otherParams) &&
+            function.canonicalName() == other.function.canonicalName() =>
+          probe(thisFunction.reducer(
+            thisParams(0).value().asInstanceOf[Int], otherFunction,
+            otherParams(0).value().asInstanceOf[Int]))
+        case outcome => outcome
       }
 
     outcome match {

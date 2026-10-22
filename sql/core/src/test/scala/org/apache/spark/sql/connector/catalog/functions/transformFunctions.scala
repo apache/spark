@@ -204,6 +204,25 @@ object UnboundBucketFunction extends UnboundFunction {
 }
 
 /**
+ * A parameterless transform that implements only the generalized overload and, as a migration
+ * shim, answers a parameterless pair through the parameterless overload.
+ */
+object GeneralizedShimFunction extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
+  override def inputTypes(): Array[DataType] = Array(IntegerType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "generalized_shim"
+  override def canonicalName(): String = name()
+  override def produceResult(input: InternalRow): Int = input.getInt(0)
+
+  override def reducer(
+      thisParams: Array[Literal[_]],
+      otherFunc: ReducibleFunction[_, _],
+      otherParams: Array[Literal[_]]): Reducer[Int, Int] = {
+    if (thisParams.isEmpty && otherParams.isEmpty) reducer(otherFunc) else null
+  }
+}
+
+/**
  * A `bucket` like [[BucketFunction]] whose generalized reducer throws when asked from the coarser
  * side, a natural guard for an implementor who expects to be asked only from the finer one.
  */
