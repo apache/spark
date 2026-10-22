@@ -483,6 +483,12 @@ abstract class SchemaPruningSuite
       val query1 = sql(s"select id, part.pid $explodeOrderParts")
       checkScan(query1, "struct<id:int,items:array<struct<parts:array<struct<pid:int>>>>>")
       checkAnswer(query1, Row(0, 1) :: Row(0, 2) :: Row(0, null) :: Row(1, null) :: Nil)
+
+      // the inferred `size(items) > 0` filter reads the smallest field of the outer element
+      val query2 = sql("select part.pid from orders lateral view explode(items) t1 as item " +
+        "lateral view explode(item.parts) t2 as part")
+      checkScan(query2, "struct<items:array<struct<qty:int,parts:array<struct<pid:int>>>>>")
+      checkAnswer(query2, Row(1) :: Row(2) :: Nil)
     }
   }
 

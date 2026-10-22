@@ -28,7 +28,8 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
-import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, StructField,
+  StructType}
 import org.apache.spark.sql.util.SchemaUtils._
 
 /**
@@ -118,11 +119,37 @@ object SchemaPruning extends Rule[LogicalPlan] {
     if (!conf.nestedSchemaPruningEnabled || !conf.nestedSchemaPruningThroughGenerateEnabled) {
       None
     } else {
-      op match {
-        case GeneratorsOverScan(segments, generators, _) =>
-          pruneThroughGeneratorsImpl(op, segments, generators, scanRelation)(pruneScan)
+      // e.g. the `size(arr) > 0` filters inferred for a non-outer explode
+      op.transformAllExpressions {
+        case s @ Size(child, _) => s.copy(child = lengthOnly(child))
+      } match {
+        case sized @ GeneratorsOverScan(segments, generators, _) =>
+          pruneThroughGeneratorsImpl(sized, segments, generators, scanRelation)(pruneScan)
         case _ => None
       }
+    }
+  }
+
+  /**
+   * The size of an array only needs its length. Returns an array of the same length that reads
+   * as little as possible: the smallest field of an array of structs, like
+   * [[org.apache.spark.sql.catalyst.optimizer.RewriteSizeOfArrayStruct]] does for scan columns,
+   * and of the outer array for a nested field of an array of structs, which has the same length.
+   */
+  private def lengthOnly(array: Expression): Expression = {
+    def smallestField(array: Expression): Option[Expression] = array.dataType match {
+      case ArrayType(StructType(fields), containsNull) if fields.length > 1 =>
+        val (field, ordinal) = fields.zipWithIndex.minBy(_._1.dataType.defaultSize)
+        Some(GetArrayStructFields(
+          array, field, ordinal, fields.length, containsNull || field.nullable))
+      case _ => None
+    }
+    array match {
+      // a field that is itself nested, e.g. `items.parts`: read a field of `items` instead
+      case g @ GetArrayStructFields(child, field, _, _, _)
+          if !field.dataType.isInstanceOf[AtomicType] =>
+        smallestField(child).orElse(smallestField(g)).getOrElse(g)
+      case _ => smallestField(array).getOrElse(array)
     }
   }
 
@@ -257,8 +284,8 @@ object SchemaPruning extends Rule[LogicalPlan] {
     val normalizedRootFieldProjects = rootFieldProjects.map(
       normalizeAttributeRefNames(attrNameMap, _).asInstanceOf[Seq[NamedExpression]])
     val requestedRootFields = identifyRootFields(
-      normalizedRootFieldProjects.getOrElse(normalizedProjects), normalizedFilters) ++
-      extraRootFields
+      normalizedRootFieldProjects.getOrElse(normalizedProjects), normalizedFilters,
+      extraRootFields)
 
     // If requestedRootFields includes a nested field, continue. Otherwise,
     // return op

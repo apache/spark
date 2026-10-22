@@ -98,9 +98,10 @@ object SchemaPruning extends SQLConfHelper {
    */
   def identifyRootFields(
       projects: Seq[NamedExpression],
-      filters: Seq[Expression]): Seq[RootField] = {
+      filters: Seq[Expression],
+      extraRootFields: Seq[RootField] = Nil): Seq[RootField] = {
     val projectionRootFields = projects.flatMap(getRootFields)
-    val filterRootFields = filters.flatMap(getRootFields)
+    val filterRootFields = filters.flatMap(getRootFields) ++ extraRootFields
 
     // Kind of expressions don't need to access any fields of a root fields, e.g., `IsNotNull`.
     // For them, if there are any nested fields accessed in the query, we don't need to add root
@@ -162,8 +163,9 @@ object SchemaPruning extends SQLConfHelper {
       val renamed = exprs.map(_.transform {
         case a: Attribute if a.exprId == element.exprId => a.withName(name)
       })
-      val fields = identifyRootFields(Nil, renamed).filter(_.field.name == name) ++
-        elementFields.map(f => RootField(f.copy(name = name), derivedFromAtt = false))
+      val fields = identifyRootFields(Nil, renamed,
+        elementFields.map(f => RootField(f.copy(name = name), derivedFromAtt = false)))
+        .filter(_.field.name == name)
       val prunedElementType = (fields, elementType) match {
         // not read: only the array sizes are needed
         case (Seq(), StructType(structFields)) if structFields.length > 1 =>

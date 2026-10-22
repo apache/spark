@@ -693,7 +693,7 @@ object PushDownUtils extends Logging {
     scanBuilder match {
       case r: SupportsPushDownRequiredColumns if SQLConf.get.nestedSchemaPruningEnabled =>
         val rootFields = SchemaPruning.identifyRootFields(
-          rootFieldProjects.getOrElse(projects), filters) ++ extraRootFields
+          rootFieldProjects.getOrElse(projects), filters, extraRootFields)
         val prunedSchema = if (rootFields.nonEmpty) {
           SchemaPruning.pruneSchema(relation.schema, rootFields)
         } else {
