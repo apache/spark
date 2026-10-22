@@ -78,6 +78,10 @@ JIRA_ACCESS_TOKEN = os.environ.get("JIRA_ACCESS_TOKEN")
 # Connection timeout (in seconds) for the JIRA client. Raise this if the default is too
 # short for your network, e.g. when the TLS handshake goes through a slow proxy.
 JIRA_CONNECT_TIMEOUT = float(os.environ.get("JIRA_CONNECT_TIMEOUT", "3.05"))
+# Read timeout (in seconds) for a single JIRA request. Doubles as the budget for the startup
+# liveness probe, so a server that is down or too slow to answer disables JIRA for this run
+# rather than failing or stalling the merge.
+JIRA_READ_TIMEOUT = float(os.environ.get("JIRA_READ_TIMEOUT", "30"))
 # OAuth key used for issuing requests against the GitHub API. If this is not defined, then requests
 # will be unauthenticated. You should only need to configure this if you find yourself regularly
 # exceeding your IP's unauthenticated request rate limit. You can create an OAuth key at
@@ -1866,6 +1870,11 @@ class DryRunJira(Jira):
 # run. None until then; only the JIRA-write flow, well after construction, uses it.
 jira_ops = None
 
+# Set True by initialize_jira() when the liveness probe fails, leaving asf_jira None and every JIRA
+# step skipped. A module-level default (unlike asf_jira, which only exists after initialize_jira())
+# so callers can short-circuit on it without JIRA being set up -- which the doctests rely on.
+jira_disabled = False
+
 
 def resolve_jira_issues(title, merge_branches, comment, title_components=()):
     jira_ids = re.findall("SPARK-[0-9]{4,5}", title)
@@ -1886,6 +1895,15 @@ def resolve_jira_issues(title, merge_branches, comment, title_components=()):
 
 
 def update_jira_for_pr(pr_num, title, merge_branches, title_components, is_revert=False):
+    if jira_disabled:
+        # JIRA was disabled at startup (unreachable); nothing to update.
+        print()
+        print_error(
+            "JIRA is disabled; skipping JIRA update for PR #%s. Reconcile the ticket(s) manually."
+            % pr_num
+        )
+        return
+
     skip_jira_title_tags = ("MINOR", "TRIVIAL", "FOLLOWUP")
     tags = set(title_components)
     jira_title = title[len('Revert "') : -1] if is_revert else title
@@ -1904,7 +1922,8 @@ def update_jira_for_pr(pr_num, title, merge_branches, title_components, is_rever
         )
         return
 
-    # asf_jira is guaranteed to be set here: initialize_jira() fails fast otherwise.
+    # asf_jira is set here: the jira_disabled guard above returns when JIRA is unreachable, and
+    # initialize_jira() fails fast on a missing library/credentials when JIRA is live.
     print()
     continue_maybe("Would you like to update an associated JIRA?")
     if is_revert:
@@ -2205,19 +2224,53 @@ def get_current_ref():
         return ref
 
 
+def jira_is_live():
+    """Quick liveness probe for the SPARK JIRA backend, to decide whether to touch JIRA at all.
+
+    Returns False -- so the merge proceeds with JIRA disabled rather than failing or hanging --
+    when JIRA is down, errors out, or takes longer than JIRA_READ_TIMEOUT to answer. The ASF JIRA
+    instance goes down for infra maintenance often enough to be worth tolerating.
+    """
+    # issues.apache.org is a reverse proxy in front of several backends, so the front door can be
+    # up while the backend serving SPARK returns 503. Probe a SPARK-specific endpoint so the result
+    # reflects whether SPARK operations will actually work. A 4xx still means a backend answered
+    # (up); a 5xx (e.g. that 503) or a connection/timeout error means it is effectively dead.
+    url = "%s/rest/api/2/project/SPARK" % JIRA_API_BASE
+    try:
+        with urlopen(Request(url), timeout=JIRA_READ_TIMEOUT):
+            return True
+    except HTTPError as e:
+        return e.code < 500
+    except Exception:
+        return False
+
+
 def initialize_jira():
-    # JIRA access is mandatory: a successful merge must resolve the associated ticket. Bail out
-    # early -- before any git work -- if a prerequisite is missing, rather than silently merging
-    # and leaving the JIRA open (which is easy to miss and tedious to reconcile after the fact).
-    global asf_jira
+    # A successful merge should resolve its ticket, so JIRA access is normally mandatory and we
+    # bail out early -- before any git work -- on a missing library or credentials. But the ASF
+    # JIRA instance is not always up; probe it first and, if it is unreachable or too slow, disable
+    # JIRA for this run (asf_jira stays None) and let the merge proceed, reconciling by hand later.
+    global asf_jira, jira_disabled
     asf_jira = None
+    jira_disabled = False
     jira_server = {"server": JIRA_API_BASE}
+
+    if not jira_is_live():
+        jira_disabled = True
+        print_error(
+            "JIRA is unreachable (%s did not answer within %gs); disabling all JIRA steps for "
+            "this merge. Resolve the associated ticket(s) manually."
+            % (JIRA_API_BASE, JIRA_READ_TIMEOUT)
+        )
+        return
 
     if not JIRA_IMPORTED:
         fail("ERROR finding jira library. Run 'pip3 install jira' to install, then retry.")
     elif JIRA_ACCESS_TOKEN:
         client = jira.client.JIRA(
-            jira_server, token_auth=JIRA_ACCESS_TOKEN, timeout=(JIRA_CONNECT_TIMEOUT, 30)
+            jira_server,
+            token_auth=JIRA_ACCESS_TOKEN,
+            timeout=(JIRA_CONNECT_TIMEOUT, JIRA_READ_TIMEOUT),
         )
         try:
             # Eagerly check if the token is valid to align with the behavior of username/password
@@ -2240,7 +2293,7 @@ def initialize_jira():
         asf_jira = jira.client.JIRA(
             jira_server,
             basic_auth=(JIRA_USERNAME, JIRA_PASSWORD),
-            timeout=(JIRA_CONNECT_TIMEOUT, 30),
+            timeout=(JIRA_CONNECT_TIMEOUT, JIRA_READ_TIMEOUT),
         )
     else:
         fail(
@@ -2545,8 +2598,15 @@ def main():
         )
         continue_maybe(msg)
 
-    # asf_jira is guaranteed to be set here: initialize_jira() fails fast otherwise.
     jira_ids = re.findall("SPARK-[0-9]{4,5}", title)
+    # When JIRA is disabled (unreachable at startup), empty jira_ids to skip both the
+    # Epic/Umbrella check and the per-ticket verification below (their loops then no-op).
+    if jira_disabled:
+        print_error(
+            "JIRA is disabled; skipping the Epic/Umbrella check and ticket verification. "
+            "Confirm %s manually." % (", ".join(jira_ids) or "the linked ticket(s)")
+        )
+        jira_ids = []
     # Epic / Umbrella tickets group related work and must not be resolved by a single PR.
     # Collect every offender so the committer sees the full list in one shot rather than
     # discovering them one-by-one across repeated merge attempts.
