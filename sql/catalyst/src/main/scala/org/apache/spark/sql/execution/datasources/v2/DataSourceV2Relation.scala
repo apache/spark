@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, truncatedStri
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability, TableCatalog, V2TableUtil}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
-import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics, SupportsRuntimeV2Filtering}
+import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics, SupportsRuntimeV2Filtering, SupportsStorageFilters}
 import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram => V2Histogram, HistogramBin => V2HistogramBin}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -251,6 +251,18 @@ case class DataSourceV2ScanRelation(
   lazy val fullyPushedRuntimeFilterAttrs: AttributeSet = {
     checkRuntimeFilteringInterfaces()
     resolvedFullyPushedRuntimeFilterAttrs
+  }
+
+  /**
+   * Resolved attributes the scan declares for storage filtering via
+   * [[SupportsStorageFilters.storageFilterAttributes]]. Empty when the scan does not implement that
+   * interface. Unlike runtime filtering, there is no "fully pushed" set, since a storage filter
+   * always stays in the plan above the scan.
+   */
+  lazy val storageFilterAttrs: AttributeSet = scan match {
+    case s: SupportsStorageFilters =>
+      resolveFilterAttrs(s.storageFilterAttributes(), "storageFilterAttributes()")
+    case _ => AttributeSet.empty
   }
 
   /**

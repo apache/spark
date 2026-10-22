@@ -27,7 +27,7 @@ import org.apache.spark.internal.LogKeys.EXPR
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedPersistentView, ResolvedTable, ResolvedTempView}
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, Cast, DynamicPruning, Expression, InSet, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, BloomFilterMightContain, Cast, DynamicPruning, Expression, InSet, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -46,7 +46,7 @@ import org.apache.spark.sql.connector.write.{V1Write, Write}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, ScalarSubquery => ExecScalarSubquery, SparkPlan, SparkStrategy => Strategy}
 import org.apache.spark.sql.execution.command.{CommandUtils, MetricViewHelper}
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelationWithTable, PushableColumnAndNestedColumn}
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelationWithTable, PushableColumnAndNestedColumn, StorageFilterPlanning}
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
@@ -127,6 +127,23 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     tableSpec.withNewLocation(newLoc)
   }
 
+  /**
+   * The conjuncts of `filters` offered to the scan as storage filters, see
+   * `SupportsStorageFilters` and `StorageFilterPlanning.offeredConjuncts`. Only runtime blooms for
+   * now, as on the file-source side.
+   */
+  private def storageFiltersFor(
+      relation: DataSourceV2ScanRelation,
+      filters: Seq[Expression]): Seq[Expression] = {
+    if (!session.sessionState.conf.v2StorageFilterPushdownEnabled) return Nil
+    // Before the declared columns are resolved, which fails on one pruned out of the read schema.
+    if (!filters.exists(_.isInstanceOf[BloomFilterMightContain])) return Nil
+    if (relation.storageFilterAttrs.isEmpty) return Nil
+    if (StorageFilterPlanning.clashesWithCheckedColumn(relation.output.map(_.name))) return Nil
+    StorageFilterPlanning.offeredConjuncts(filters, relation.storageFilterAttrs,
+      AttributeSet(relation.output), _.isInstanceOf[BloomFilterMightContain])
+  }
+
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case PhysicalOperation(project, filters, ExtractV2ScanInfo(
       v2Relation, V1ScanWrapper(scan, pushed, pushedDownOperators), output)) =>
@@ -200,10 +217,20 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       // rewritten it to TrueLiteral by the time we get here.
       val runtimeFilters = dynamicFilters ++ scalarSubqueryFilters
 
-      val batchExec = BatchScanExec(relation.output, relation.scan, runtimeFilters,
-        relation.ordering, relation.relation.table, relation.keyGroupedPartitioning)
-      DataSourceV2Strategy.withProjectAndFilter(
-        project, postScanFilters.diff(fullyPushedRuntimeFilters),
+      // Whether the scan gets the checked column does not depend on whether it is columnar. Asking
+      // that can plan the scan's partitions, which the node built afterwards would plan again. A
+      // row-based scan gets a Project for the UnsafeRow conversion anyway, so dropping the column
+      // there copies nothing more.
+      val filtersAbove = postScanFilters.diff(fullyPushedRuntimeFilters)
+      val storageFilters = storageFiltersFor(relation, filtersAbove)
+      val checked = StorageFilterPlanning.checkedColumn(
+        session.sessionState.conf, storageFilters, relation.output)
+      val batchExec = BatchScanExec(relation.output ++ checked, relation.scan, runtimeFilters,
+        relation.ordering, relation.relation.table, relation.keyGroupedPartitioning,
+        storageFilters)
+      // With the checked column the scan's output differs from `project`, so a Project drops it.
+      DataSourceV2Strategy.withProjectAndFilter(project,
+        StorageFilterPlanning.skipCheckedRows(filtersAbove, storageFilters, checked),
         batchExec, !batchExec.supportsColumnar) :: Nil
 
     case PhysicalOperation(p, f, r: StreamingDataSourceV2ScanRelation)
