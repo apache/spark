@@ -2781,6 +2781,38 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                     str(func),
                 )
 
+    def test_udf_transpile_map_and_array_eq_none_falls_back(self):
+        # `==`/`!=` with a map/array operand and a None literal must NOT lower:
+        # the None coerces to MapType/ArrayType, so Spark's `=` still hits the
+        # INVALID_ORDERING_TYPE check and would break the query instead of
+        # falling back (SPARK-55219). `_lower_eq` allows `x == None` for basic
+        # types, so the map/array guard must fire on the complex operand alone.
+        def map_eq_none(a: dict):
+            return a == None  # noqa: E711
+
+        def map_ne_none(a: dict):
+            return a != None  # noqa: E711
+
+        def array_eq_none(a: list):
+            return a == None  # noqa: E711
+
+        with self.sql_conf(_TRANSPILE_ON):
+            for func, schema, rows, expected in (
+                (map_eq_none, "a map<string,string>", [({"k": "v"},), (None,)], [False, True]),
+                (map_ne_none, "a map<string,string>", [({"k": "v"},), (None,)], [True, False]),
+                (array_eq_none, "a array<string>", [(["x"],), (None,)], [False, True]),
+            ):
+                u = UserDefinedFunction(func, BooleanType())
+                self.assertEqual([], u.transpiled, f"{func} must not transpile")
+                df = self.spark.createDataFrame(rows, schema)
+                projected = df.select(u("a"))
+                self.assertGreater(self._eval_python_count(projected), 0, str(func))
+                self.assertEqual(
+                    [r[0] for r in projected.collect()],
+                    expected,
+                    str(func),
+                )
+
 
 if __name__ == "__main__":
     from pyspark.testing import main

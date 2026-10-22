@@ -385,11 +385,13 @@ class CatalystTranspiler(AbstractTranspiler):
                 "Python compares across types as unequal while Spark would coerce "
                 "or fail analysis, so the transpiler falls back to interpreted Python"
             )
-        if lc is not None and rc is not None and lc == rc and lc in ("map", "array"):
-            # MapType/ArrayType are not orderable; a lowered `=` would fail
-            # analysis, so fall back to interpreted Python (SPARK-55219).
+        if lc in ("map", "array") or rc in ("map", "array"):
+            # MapType/ArrayType are not orderable, so a lowered `=` fails analysis
+            # -- even vs a None literal, which coerces to the complex type before
+            # the ordering check (SPARK-55219). The guard above handles
+            # map-vs-numeric etc.; this catches map/array-vs-None and map-vs-map.
             raise UnsupportedOperationException(
-                f"`==`/`!=` operands are both `{lc}`; Spark's `=` does not "
+                "`==`/`!=` has a `map`/`array` operand; Spark's `=` does not "
                 "support ordering on MapType/ArrayType, so the transpiler falls "
                 "back to interpreted Python"
             )
