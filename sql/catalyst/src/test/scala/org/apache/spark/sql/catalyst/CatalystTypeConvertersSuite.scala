@@ -568,6 +568,23 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
     assert(result === geog)
   }
 
+  test("SPARK-60470: createToScalaConverter for geospatial fields at non-zero ordinals") {
+    // WKB bytes for POINT (3 4), distinct from `pointWkb`.
+    val otherPointWkb: Array[Byte] = "010100000000000000000008400000000000001040"
+      .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
+    Seq(
+      (GeometryType(0), Geometry.fromWKB(pointWkb, 0), Geometry.fromWKB(otherPointWkb, 0)),
+      (GeographyType(4326), Geography.fromWKB(pointWkb, 4326),
+        Geography.fromWKB(otherPointWkb, 4326))
+    ).foreach { case (dt, first, second) =>
+      val schema = new StructType().add("first", dt).add("second", dt)
+      val toCatalyst = CatalystTypeConverters.createToCatalystConverter(schema)
+      val toScala = CatalystTypeConverters.createToScalaConverter(schema)
+      val row = Row(first, second)
+      assert(toScala(toCatalyst(row)) === row)
+    }
+  }
+
   test("null handling for geospatial individual values") {
     assert(CatalystTypeConverters.createToScalaConverter(GeometryType(0))(null) === null)
     assert(CatalystTypeConverters.createToScalaConverter(GeographyType(4326))(null) === null)
