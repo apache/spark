@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming
 
 import java.io.File
 import java.util.concurrent.{CountDownLatch, ExecutionException, Semaphore, TimeUnit}
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.ListBuffer
 
@@ -912,6 +913,71 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
           assert(logAppender.loggingEvents.exists(_.getMessage.getFormattedMessage.endsWith(
             "did not terminate in 30 seconds")))
           assert(!spark.streams.active.exists(_.id == query.id))
+        } finally {
+          injectionState.delayCreateAtomicRegex = Seq.empty
+          if (semaphore.hasQueuedThreads) {
+            semaphore.release()
+          }
+          FailureInjectionFileSystem.removePathFromTempToInjectionState(checkpointDir.getPath)
+        }
+      }
+    }
+  }
+
+  test("SPARK-XXXXX: a source commit failure on stop fails the query and still terminates it") {
+    withSQLConf(
+      SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key ->
+        classOf[FailureInjectionCheckpointFileManager].getName) {
+      withTempDir { checkpointDir =>
+        val injectionState = FailureInjectionFileSystem.registerTempPath(checkpointDir.getPath)
+        val semaphore = FailureInjectionFileSystem.createAtomicDelaySemaphore
+        val failCommit = new AtomicBoolean(false)
+        val inputData = new MemoryStreamCapture[Int](id = 0, spark) {
+          override def commit(end: streaming.Offset): Unit = {
+            if (failCommit.get) {
+              throw new IllegalStateException("source commit failed")
+            }
+            super.commit(end)
+          }
+        }
+        def startQuery(): StreamingQuery = inputData.toDF().writeStream
+          .format("noop")
+          .option(ASYNC_PROGRESS_TRACKING_ENABLED, true)
+          .option(ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS, 0)
+          .option("checkpointLocation", checkpointDir.getAbsolutePath)
+          .start()
+        try {
+          val query = startQuery()
+          inputData.addData(0)
+          query.processAllAvailable()
+
+          // The offset log write of batch 1 queues the source commit of batch 0. Blocking it until
+          // batch 1 has started leaves that commit to `cleanup()` when the query stops.
+          injectionState.delayCreateAtomicRegex = Seq(".*/offsets/1")
+          inputData.addData(1)
+          query.processAllAvailable()
+          eventually(timeout(streamingTimeout)) {
+            assert(semaphore.hasQueuedThreads)
+          }
+          injectionState.delayCreateAtomicRegex = Seq.empty
+          semaphore.release()
+          waitPendingOffsetWrites(query.asInstanceOf[StreamingQueryWrapper].streamingQuery)
+          assert(inputData.commits.isEmpty)
+
+          failCommit.set(true)
+          query.stop()
+          val e = intercept[StreamingQueryException](query.awaitTermination())
+          assert(e.cause.getMessage == "source commit failed")
+          assert(query.exception.contains(e))
+          assert(!query.isActive)
+          assert(!spark.streams.active.exists(_.id == query.id))
+
+          failCommit.set(false)
+          val restartedQuery = startQuery()
+          inputData.addData(2)
+          restartedQuery.processAllAvailable()
+          restartedQuery.stop()
+          assert(restartedQuery.exception.isEmpty)
         } finally {
           injectionState.delayCreateAtomicRegex = Seq.empty
           if (semaphore.hasQueuedThreads) {

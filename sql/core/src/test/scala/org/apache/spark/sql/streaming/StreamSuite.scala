@@ -517,6 +517,85 @@ class StreamSuite extends StreamTest {
     assert(uncaught.contains(buildFailure))
   }
 
+  /**
+   * Terminates a query whose source throws `stopFailure` when stopped: by `stop()`, or by a
+   * `getBatch` failure if `failBatch` is set. Checks that the query still terminates and returns
+   * it, its terminated event, and the error, if any, rethrown to its `UncaughtExceptionHandler`.
+   */
+  private def failWhileStoppingSource(
+      stopFailure: Throwable,
+      failBatch: Boolean): (StreamingQuery, QueryTerminatedEvent, Option[Throwable]) = {
+    val source = new Source {
+      override def getOffset: Option[Offset] = if (failBatch) Some(LongOffset(0)) else None
+
+      override def getBatch(start: Option[Offset], end: Offset): DataFrame =
+        throw new IllegalStateException("getBatch failed")
+
+      override def schema: StructType = StructType(Array(StructField("value", IntegerType)))
+
+      override def stop(): Unit = throw stopFailure
+    }
+    val df = Dataset[Int](
+      sqlContext.sparkSession,
+      StreamingExecutionRelation(source, sqlContext.sparkSession))
+    val terminated = new AtomicReference[QueryTerminatedEvent]()
+    val uncaught = new AtomicReference[Throwable]()
+    val listener = new StreamingQueryListener {
+      override def onQueryStarted(event: QueryStartedEvent): Unit =
+        Thread.currentThread.setUncaughtExceptionHandler(
+          (_: Thread, e: Throwable) => uncaught.set(e))
+      override def onQueryProgress(event: QueryProgressEvent): Unit = {}
+      override def onQueryTerminated(event: QueryTerminatedEvent): Unit = terminated.set(event)
+    }
+    spark.streams.addListener(listener)
+    try {
+      val query = df.writeStream.format("noop").start()
+      val queryThread =
+        query.asInstanceOf[StreamingQueryWrapper].streamingQuery.queryExecutionThread
+      try {
+        if (failBatch) {
+          intercept[StreamingQueryException] {
+            query.awaitTermination(streamingTimeout.toMillis)
+          }
+        } else {
+          query.processAllAvailable()
+          query.stop()
+        }
+        queryThread.join(streamingTimeout.toMillis)
+        assert(!queryThread.isAlive)
+        assert(!query.isActive)
+        assert(!spark.streams.active.exists(_.id == query.id))
+        eventually(timeout(streamingTimeout)) {
+          assert(terminated.get() != null)
+        }
+        (query, terminated.get(), Option(uncaught.get()))
+      } finally {
+        query.stop()
+      }
+    } finally {
+      spark.streams.removeListener(listener)
+    }
+  }
+
+  test("SPARK-XXXXX: a fatal error while stopping the sources fails the query and still " +
+      "terminates it") {
+    val stopFailure = new StackOverflowError("source stop failed")
+    val (query, terminated, uncaught) = failWhileStoppingSource(stopFailure, failBatch = false)
+    assert(query.exception.map(_.cause).contains(stopFailure))
+    assert(terminated.exception.exists(_.contains("source stop failed")))
+    assert(uncaught.contains(stopFailure))
+  }
+
+  test("SPARK-XXXXX: an error while stopping the sources of a failed query is suppressed") {
+    val stopFailure = new StackOverflowError("source stop failed")
+    val (query, terminated, uncaught) = failWhileStoppingSource(stopFailure, failBatch = true)
+    val e = query.exception.get
+    assert(e.cause.getMessage == "getBatch failed")
+    assert(e.getSuppressed.toSeq == Seq(stopFailure))
+    assert(terminated.exception.exists(_.contains("getBatch failed")))
+    assert(uncaught.contains(stopFailure))
+  }
+
   test("output mode API in Scala") {
     assert(OutputMode.Append === InternalOutputModes.Append)
     assert(OutputMode.Complete === InternalOutputModes.Complete)

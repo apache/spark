@@ -392,8 +392,7 @@ class AsyncProgressTrackingMicroBatchExecution(
     } else {
       ThreadUtils.shutdown(asyncWritesExecutorService)
     }
-    // Only warn if the executor has not terminated. An exception here would skip the rest of the
-    // query termination in StreamExecution.runStream, such as unregistering the query.
+    // Only warn if the executor has not terminated, so that a slow write does not fail the query.
     if (asyncWritesExecutorService.isTerminated) {
       logInfo(log"Async progress tracking executor for query " +
         log"${MDC(PRETTY_ID_STRING, prettyIdString)} has been shutdown")
@@ -401,8 +400,11 @@ class AsyncProgressTrackingMicroBatchExecution(
       logWarning(log"Async progress tracking executor for query " +
         log"${MDC(PRETTY_ID_STRING, prettyIdString)} did not terminate in 30 seconds")
     }
-    commitAllSources()
-    super.cleanup()
+    try {
+      commitAllSources()
+    } finally {
+      super.cleanup()
+    }
   }
 
   // used for testing
