@@ -438,7 +438,7 @@ class SparkEnv (
   @volatile private var _streamingShuffleOutputTracker: Option[StreamingShuffleOutputTracker] =
     None
 
-  def streamingShuffleOutputTracker: Option[StreamingShuffleOutputTracker] =
+  private[spark] def streamingShuffleOutputTracker: Option[StreamingShuffleOutputTracker] =
     _streamingShuffleOutputTracker
 
   /**
