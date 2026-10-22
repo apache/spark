@@ -2020,12 +2020,34 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
   test("SPARK-60479: CHAR equality is pushed down with read-side padding") {
     val table = "h2.test.char_pad"
     withTable(table) {
-      sql(s"CREATE TABLE $table (id INT, flag CHAR(1))")
-      sql(s"INSERT INTO $table VALUES (1, 'Y'), (2, 'N')")
-      val df = sql(s"SELECT id FROM $table WHERE flag = 'Y'")
-      checkFiltersRemoved(df)
-      checkPushedInfo(df, "flag IS NOT NULL", "(RPAD(flag, 1, ' ')) = 'Y'")
-      checkAnswer(df, Seq(Row(1)))
+      sql(s"CREATE TABLE $table (id INT, flag CHAR(5))")
+      sql(s"INSERT INTO $table VALUES (1, 'Y'), (2, 'N'), (3, 'YES')")
+
+      val eq = sql(s"SELECT id FROM $table WHERE flag = 'Y'")
+      checkFiltersRemoved(eq)
+      checkPushedInfo(eq, "flag IS NOT NULL", "(RPAD(flag, 5, ' ')) = 'Y    '")
+      checkAnswer(eq, Seq(Row(1)))
+
+      val in = sql(s"SELECT id FROM $table WHERE flag IN ('Y', 'N')")
+      checkFiltersRemoved(in)
+      checkPushedInfo(in, "RPAD(flag, 5, ' ') IN ('Y    ', 'N    ')")
+      checkAnswer(in, Seq(Row(1), Row(2)))
+
+      withSQLConf(SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+        val padFalse = sql(s"SELECT id FROM $table WHERE flag = 'Y'")
+        checkFiltersRemoved(padFalse)
+        checkPushedInfo(padFalse, "flag IS NOT NULL",
+          "(RPAD(flag, 5, ' ')) = 'Y    '")
+        checkAnswer(padFalse, Seq(Row(1)))
+      }
+
+      withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+        val std = sql(s"SELECT id FROM $table WHERE flag = CAST('Y' AS CHAR(5))")
+        // charTypeReadSideCheck is not RPAD; keep the length-error path local.
+        checkFiltersRemoved(std, removed = false)
+        checkPushedInfo(std, "PushedFilters: [flag IS NOT NULL]")
+        checkAnswer(std, Seq(Row(1)))
+      }
     }
   }
 

@@ -1893,29 +1893,30 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
         col :: Literal(1) :: Nil,
         returnNullable = false)
     }
-    Seq("readSidePadding", "charTypeReadSideCheck").foreach { name =>
-      val eq = EqualTo(paddingInvoke(name), Literal("Y"))
-      val result = new V2ExpressionBuilder(eq, isPredicate = true).build()
-      assert(result.isDefined, s"$name should translate to a V2 predicate")
-      result.get match {
-        case p: Predicate if p.name() == "=" =>
-          p.children()(0) match {
-            case g: GeneralScalarExpression if g.name() == "RPAD" =>
-              assert(g.children()(0) === FieldReference("flag"))
-              assert(g.children()(1) === LiteralValue(1, IntegerType))
-              assert(g.children()(2) ===
-                LiteralValue(UTF8String.fromString(" "), StringType))
-            case other =>
-              fail(s"$name: expected RPAD, got ${other.getClass.getName} ${other.describe()}")
-          }
-          assert(p.children()(1) === LiteralValue(UTF8String.fromString("Y"), StringType))
-        case other =>
-          fail(s"$name: expected '=' predicate, got ${other.describe()}")
-      }
+    val eq = EqualTo(paddingInvoke("readSidePadding"), Literal("Y"))
+    val result = new V2ExpressionBuilder(eq, isPredicate = true).build()
+    assert(result.isDefined, "readSidePadding should translate to a V2 predicate")
+    result.get match {
+      case p: Predicate if p.name() == "=" =>
+        p.children()(0) match {
+          case g: GeneralScalarExpression if g.name() == "RPAD" =>
+            assert(g.children()(0) === FieldReference("flag"))
+            assert(g.children()(1) === LiteralValue(1, IntegerType))
+            assert(g.children()(2) ===
+              LiteralValue(UTF8String.fromString(" "), StringType))
+          case other =>
+            fail(s"expected RPAD, got ${other.getClass.getName} ${other.describe()}")
+        }
+        assert(p.children()(1) === LiteralValue(UTF8String.fromString("Y"), StringType))
+      case other =>
+        fail(s"expected '=' predicate, got ${other.describe()}")
     }
-    val varcharCheck = paddingInvoke("varcharTypeReadSideCheck")
-    assert(new V2ExpressionBuilder(EqualTo(varcharCheck, Literal("Y")), isPredicate = true)
-      .build().isEmpty)
+    // Length-error path must stay local: RPAD truncates, charTypeReadSideCheck throws.
+    Seq("charTypeReadSideCheck", "varcharTypeReadSideCheck").foreach { name =>
+      assert(new V2ExpressionBuilder(
+        EqualTo(paddingInvoke(name), Literal("Y")), isPredicate = true).build().isEmpty,
+        s"$name should not translate to RPAD")
+    }
   }
 
   test("SPARK-59301: translate runtime IN filter") {
