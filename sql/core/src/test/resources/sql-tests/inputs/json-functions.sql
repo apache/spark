@@ -386,6 +386,17 @@ select '[''a'', ''b'']' IS JSON;
 -- trailing content after a well-formed value is rejected
 select '1 2' IS JSON;
 select '{} []' IS JSON;
+-- input that is not valid UTF-8 is rejected (lone continuation byte, encoded surrogate)
+select cast(X'228022' AS STRING) IS JSON;
+select cast(X'22EDA08022' AS STRING) IS JSON;
+-- unpaired surrogate escapes are rejected in values and field names, also when nested
+select '"\\uD835"' IS JSON;
+select '"\\uDC00"' IS JSON SCALAR;
+select '{"\\uD835":1}' IS JSON OBJECT;
+select '[{"a":["\\uDC00"]}]' IS JSON ARRAY;
+select '"\\uD835\\uDC00"' IS JSON;
+-- shift operators after the ARRAY qualifier
+select '[1]' IS JSON ARRAY, 8 >> 1, 8 >>> 1;
 -- keywords usable as identifiers (non-reserved)
 select 1 AS OBJECT;
 select 1 AS SCALAR;
