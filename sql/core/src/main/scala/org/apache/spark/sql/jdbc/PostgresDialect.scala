@@ -47,7 +47,7 @@ private case class PostgresDialect()
   private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
     "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP", "COVAR_POP", "COVAR_SAMP", "CORR",
     "REGR_INTERCEPT", "REGR_R2", "REGR_SLOPE", "REGR_SXY")
-  private val supportedStringFunctions = Set("RPAD", "LPAD")
+  private val supportedStringFunctions = Set("RPAD", "LPAD", "CHAR_READ_SIDE_PADDING")
   private val supportedFunctions = supportedAggregateFunctions ++ supportedStringFunctions
 
   override def isSupportedFunction(funcName: String): Boolean =
@@ -331,6 +331,11 @@ private case class PostgresDialect()
   }
 
   class PostgresSQLBuilder extends JDBCSQLBuilder {
+    override protected def dialectFunctionName(funcName: String): String = funcName match {
+      case "CHAR_READ_SIDE_PADDING" => "RPAD"
+      case other => super.dialectFunctionName(other)
+    }
+
     override def visitExtract(field: String, source: String): String = {
       // SECOND, MINUTE, HOUR, DAY, MONTH, QUARTER, YEAR are identical on postgres and spark for
       // both datetime and interval types.

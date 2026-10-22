@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.variant.VariantGet
 import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, CombineFilters, ConstantFolding}
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, JoinHint, Limit, LogicalPlan, Offset, OneRowRelation, Project, Sort}
-import org.apache.spark.sql.catalyst.util.{CharVarcharCodegenUtils, V2ExpressionBuilder}
+import org.apache.spark.sql.catalyst.util.{CharVarcharCodegenUtils, CharVarcharUtils, V2ExpressionBuilder}
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue, SortOrder => V2SortOrder, VariantGet => V2VariantGet}
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
@@ -44,7 +44,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, BooleanType, DoubleType, FloatType, IntegerType, LongType, StringType, StructField, StructType, TimestampNTZNanosType, TimestampType, TimeType, VariantType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DoubleType, FloatType, IntegerType, LongType, MetadataBuilder, StringType, StructField, StructType, TimestampNTZNanosType, TimestampType, TimeType, VariantType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.udf.worker.UDFWorkerSpecification
 import org.apache.spark.unsafe.types.UTF8String
@@ -1920,39 +1920,55 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-60479: read-side CHAR padding StaticInvoke translates to RPAD") {
-    val col = AttributeReference("flag", StringType)()
-    def paddingInvoke(functionName: String): StaticInvoke = {
-      StaticInvoke(
-        classOf[CharVarcharCodegenUtils],
-        StringType,
-        functionName,
-        col :: Literal(1) :: Nil,
-        returnNullable = false)
-    }
-    val eq = EqualTo(paddingInvoke("readSidePadding"), Literal("Y"))
+  test("SPARK-60479: read-side CHAR padding StaticInvoke translates") {
+    val md = new MetadataBuilder()
+      .putString(CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, "char(1)")
+      .build()
+    val col = AttributeReference("flag", StringType, metadata = md)()
+    val padded = CharVarcharUtils.addPaddingForScan(col)
+    val eq = EqualTo(padded, Literal("Y"))
     val result = new V2ExpressionBuilder(eq, isPredicate = true).build()
     assert(result.isDefined, "readSidePadding should translate to a V2 predicate")
     result.get match {
       case p: Predicate if p.name() == "=" =>
         p.children()(0) match {
-          case g: GeneralScalarExpression if g.name() == "RPAD" =>
+          case g: GeneralScalarExpression
+              if g.name() == CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING =>
             assert(g.children()(0) === FieldReference("flag"))
             assert(g.children()(1) === LiteralValue(1, IntegerType))
             assert(g.children()(2) ===
               LiteralValue(UTF8String.fromString(" "), StringType))
           case other =>
-            fail(s"expected RPAD, got ${other.getClass.getName} ${other.describe()}")
+            fail(s"expected CHAR_READ_SIDE_PADDING, got ${other.describe()}")
         }
         assert(p.children()(1) === LiteralValue(UTF8String.fromString("Y"), StringType))
       case other =>
         fail(s"expected '=' predicate, got ${other.describe()}")
     }
-    // Length-error path must stay local: RPAD truncates, charTypeReadSideCheck throws.
-    Seq("charTypeReadSideCheck", "varcharTypeReadSideCheck").foreach { name =>
+
+    val isNull = new V2ExpressionBuilder(IsNull(padded), isPredicate = true).build()
+    assert(isNull.isDefined)
+    isNull.get match {
+      case p: Predicate if p.name() == "IS_NULL" =>
+        assert(p.children()(0) === FieldReference("flag"))
+      case other => fail(s"expected IS_NULL on the raw column, got ${other.describe()}")
+    }
+
+    def paddingInvoke(cls: Class[_], functionName: String): StaticInvoke = {
+      StaticInvoke(cls, StringType, functionName, col :: Literal(1) :: Nil, returnNullable = false)
+    }
+    val otherClass = paddingInvoke(classOf[String], CharVarcharUtils.READ_SIDE_PADDING)
+    assert(new V2ExpressionBuilder(EqualTo(otherClass, Literal("Y")), isPredicate = true)
+      .build().isEmpty)
+    Seq(CharVarcharUtils.CHAR_TYPE_READ_SIDE_CHECK,
+        CharVarcharUtils.VARCHAR_TYPE_READ_SIDE_CHECK).foreach { name =>
       assert(new V2ExpressionBuilder(
-        EqualTo(paddingInvoke(name), Literal("Y")), isPredicate = true).build().isEmpty,
-        s"$name should not translate to RPAD")
+        EqualTo(paddingInvoke(classOf[CharVarcharCodegenUtils], name), Literal("Y")),
+        isPredicate = true).build().isEmpty,
+        s"$name should not translate")
+    }
+    withSQLConf(SQLConf.PUSH_DOWN_CHAR_READ_SIDE_PADDING.key -> "false") {
+      assert(new V2ExpressionBuilder(eq, isPredicate = true).build().isEmpty)
     }
   }
 

@@ -8001,6 +8001,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val PUSH_DOWN_CHAR_READ_SIDE_PADDING =
+    buildConf("spark.sql.optimizer.pushDownCharReadSidePadding")
+      .internal()
+      .doc("When true, V2 sources may push CHAR read-side padding as CHAR_READ_SIDE_PADDING. " +
+        "JDBC dialects must opt in via isSupportedFunction; this is not SQL RPAD. When false, " +
+        "CHAR padding stays local even if the source could compile it.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val LEGACY_NO_CHAR_PADDING_IN_PREDICATE = buildConf("spark.sql.legacy.noCharPaddingInPredicate")
     .internal()
     .doc("When true, Spark will not apply char type padding for CHAR type columns in string " +
@@ -10344,6 +10354,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def structPredicateDecomposeMaxFields: Int = getConf(STRUCT_PREDICATE_DECOMPOSE_MAX_FIELDS)
 
   def readSideCharPadding: Boolean = getConf(SQLConf.READ_SIDE_CHAR_PADDING)
+
+  def pushDownCharReadSidePadding: Boolean = getConf(SQLConf.PUSH_DOWN_CHAR_READ_SIDE_PADDING)
 
   def cliPrintHeader: Boolean = getConf(SQLConf.CLI_PRINT_HEADER)
 

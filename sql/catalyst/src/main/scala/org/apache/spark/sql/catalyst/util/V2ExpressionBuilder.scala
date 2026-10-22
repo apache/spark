@@ -144,6 +144,12 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
       } else {
         None
       }
+    case IsNull(invoke: StaticInvoke) if isCharReadSidePaddingInvoke(invoke) =>
+      generateExpression(invoke.arguments.head)
+        .map(c => new V2Predicate("IS_NULL", Array[V2Expression](c)))
+    case IsNotNull(invoke: StaticInvoke) if isCharReadSidePaddingInvoke(invoke) =>
+      generateExpression(invoke.arguments.head)
+        .map(c => new V2Predicate("IS_NOT_NULL", Array[V2Expression](c)))
     case IsNull(col) => generateExpression(col)
       .map(c => new V2Predicate("IS_NULL", Array[V2Expression](c)))
     case IsNotNull(col) => generateExpression(col)
@@ -381,15 +387,14 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
         case _ =>
           None
       }
-    // Scan CHAR padding is a JVM invoke; V2 only has RPAD. This matches local eval when the
-    // stored length is <= n (pad-or-keep then equals truncating RPAD). Over-long values would
-    // be truncated remotely. charTypeReadSideCheck is left untranslated so length errors stay
-    // local under spark.sql.charVarchar.standardSemantics.enabled.
-    case StaticInvoke(staticObject, dataType, "readSidePadding", arguments, _, _, _, _, None)
-        if staticObject == classOf[CharVarcharCodegenUtils] && arguments.length == 2 =>
+    // CHAR scan padding is a JVM invoke. Emit CHAR_READ_SIDE_PADDING, not SQL RPAD: dialects
+    // and connectors must opt in, and RPAD truncates over-long values while readSidePadding
+    // keeps them. charTypeReadSideCheck stays local so length errors are not dropped.
+    case invoke @ StaticInvoke(_, dataType, _, arguments, _, _, _, _, None)
+        if isCharReadSidePaddingInvoke(invoke) =>
       generateExpressionWithNameByChildren(
-        "RPAD",
-        Seq(arguments.head, arguments(1), Literal.create(" ", arguments.head.dataType)),
+        CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING,
+        Seq(arguments.head, arguments(1), Literal.create(" ", StringType)),
         dataType,
         isPredicate)
     case StaticInvoke(_, _, _, arguments, _, _, _, _, Some(scalarFunc)) =>
@@ -473,6 +478,14 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
       case "<=" => ">="
       case _ => operatorName
     }
+  }
+
+  private def isCharReadSidePaddingInvoke(invoke: StaticInvoke): Boolean = {
+    SQLConf.get.pushDownCharReadSidePadding &&
+      invoke.scalarFunction.isEmpty &&
+      invoke.staticObject == classOf[CharVarcharCodegenUtils] &&
+      invoke.functionName == CharVarcharUtils.READ_SIDE_PADDING &&
+      invoke.arguments.length == 2
   }
 
   private def generateExpressionWithName(
