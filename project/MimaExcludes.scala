@@ -74,6 +74,15 @@ object MimaExcludes {
       "org.apache.spark.ml.recommendation.ALS.intermediateStorageLevel"),
     ProblemFilters.exclude[FinalMethodProblem](
       "org.apache.spark.ml.recommendation.ALS.getIntermediateStorageLevel"),
+    // [SPARK-60384] Spark 4.2 artifacts shade Jetty types in these private wrapper classes.
+    ProblemFilters.exclude[MissingTypesProblem](
+      "org.apache.spark.ui.ProxyRedirectHandler$MutableFieldsWrapper"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem](
+      "org.apache.spark.ui.ProxyRedirectHandler#MutableFieldsWrapper.onAddField"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem](
+      "org.apache.spark.ui.ProxyRedirectHandler#MutableFieldsWrapper.this"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem](
+      "org.apache.spark.ui.ProxyRedirectHandler#ResponseWrapper.getHeaders"),
     // [SPARK-57987] Add desc field to the SQL REST API Node case class
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.sql.Node.apply"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.sql.Node.copy"),
