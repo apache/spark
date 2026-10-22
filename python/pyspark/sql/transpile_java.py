@@ -589,14 +589,11 @@ class JavaTranspiler(AbstractTranspiler):
         lowered_left = self._lower_expr(left)
         lowered_right = self._lower_expr(right)
         left_cat, right_cat = lowered_left.category, lowered_right.category
-        if isinstance(op, (ast.Eq, ast.NotEq)):
-            op_key = "Eq"
-        else:
-            op_key = _ORDER_OPS.get(type(op))
-            if op_key is None:
-                raise UnsupportedOperationException(
-                    f"{type(op).__name__} comparisons are not lowered by the java transpiler"
-                )
+        op_key = "Eq" if isinstance(op, (ast.Eq, ast.NotEq)) else _ORDER_OPS.get(type(op))
+        if op_key is None:
+            raise UnsupportedOperationException(
+                f"{type(op).__name__} comparisons are not lowered by the java transpiler"
+            )
 
         # Mixed integral / fractional: compare exactly rather than widening the long to a
         # double (see `_MIXED_COMPARE_HELPERS`). The operands stay in their own types, so no
