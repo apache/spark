@@ -637,7 +637,7 @@
   },
   "CANNOT_INSTANTIATE_FUNCTION_CLASS" : {
     "message" : [
-      "Cannot instantiate class <className> when registering the function <functionName>, please make sure it has a public no-arg constructor. <msg>"
+      "Cannot instantiate class <className> when registering the function <functionName>: <msg>. Please make sure the class has a public no-arg constructor that succeeds."
     ],
     "sqlState" : "46103"
   },
