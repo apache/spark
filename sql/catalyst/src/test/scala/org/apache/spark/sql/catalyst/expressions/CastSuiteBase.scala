@@ -2176,6 +2176,23 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       }
   }
 
+  test("SPARK-60484: Cast string to INTERVAL SECOND keeps the sign of values in (-1, 0)") {
+    Seq(("-0.5", -500000L),
+      ("-00.5", -500000L),
+      ("-0.000001", -1L),
+      ("-0.999999999", -999999L),
+      ("0.5", 500000L),
+      ("INTERVAL '-0.5' SECOND", -500000L),
+      ("INTERVAL -'0.5' SECOND", -500000L),
+      ("INTERVAL -'-0.5' SECOND", 500000L))
+      .foreach { case (str, micros) =>
+        checkEvaluation(cast(Literal.create(str), DayTimeIntervalType(SECOND)), micros)
+      }
+
+    val interval = Literal.create(Duration.ofMillis(-500), DayTimeIntervalType(SECOND))
+    checkEvaluation(cast(cast(interval, StringType), DayTimeIntervalType(SECOND)), -500000L)
+  }
+
   test("SPARK-60119: cast string with a huge negative exponent to decimal") {
     Seq("1e-2147483647", "-1e-2147483647", "1e-100000000", "0e-2147483647").foreach { str =>
       checkEvaluation(cast(str, DecimalType(10, 2)), Decimal("0.00"))
