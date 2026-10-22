@@ -449,8 +449,12 @@ class ArrowUDFTranspileEvalTypeGateTests(ArrowUDFTranspileTestsMixin, ReusedSQLT
             self.assertEqual([5], [r[0] for r in df.select(pudf("a")).collect()])
 
     def test_functions_udf_transpiles_on_default_configuration(self):
-        # The motivating case: no useArrow argument, no conf override -- what users write.
-        with self.sql_conf({**_TRANSPILE_ON, "spark.sql.execution.pythonUDF.arrow.enabled": True}):
+        # The motivating case: no useArrow argument, so functions.udf picks the
+        # Arrow-optimized eval type from the default of
+        # spark.sql.execution.pythonUDF.arrow.enabled (true) -- what users write. Only the
+        # experimental transpile flag is set; the arrow conf is left at its default so this
+        # actually exercises it rather than pinning it.
+        with self.sql_conf(_TRANSPILE_ON):
             wrapped = udf(add_four, LongType())
             self.assertEqual(wrapped.evalType, PythonEvalType.SQL_ARROW_BATCHED_UDF)
             self._assert_transpiled(wrapped._unwrapped, "functions.udf on default config")
