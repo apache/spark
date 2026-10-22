@@ -589,13 +589,11 @@ projection and the filter itself, above the scan.
 
 ### Step 2: Projection and Filter Pushdown (Optional)
 
-A connector that can skip columns or rows adds the pushdown mix-ins to its `ScanBuilder` (the
-full list and order are under [ScanBuilder](#scanbuilder)). The contract that matters most is
-for filters: the method receives the candidate predicates, keeps the ones the connector will
-apply, and returns the **residual**, the predicates Spark must still evaluate after the scan.
-`JavaAdvancedDataSourceV2WithV2Filter` accepts only `i > <int literal>` and hands everything
-else back (the test's `assertInstanceOf` checks and the mirror-image `unsupported` stream are
-elided here):
+A connector that can skip columns or rows adds the pushdown mix-ins to its `ScanBuilder`. The
+list, the order Spark applies them in, and the residual-filter contract are under
+[ScanBuilder](#scanbuilder). `JavaAdvancedDataSourceV2WithV2Filter` accepts only
+`i > <int literal>` and returns everything else for Spark to evaluate (the test's
+`assertInstanceOf` checks and the mirror-image `unsupported` stream are elided here):
 
 {% highlight java %}
 @Override
@@ -625,18 +623,11 @@ public void pruneColumns(StructType requiredSchema) {
 }
 {% endhighlight %}
 
-Spark evaluates only what `pushPredicates` returns (plus anything it could not translate), so a
-predicate that is accepted here and then not applied by the reader is silently dropped from the
-query. If the connector can only use a predicate to skip whole files or row groups, report it as
-pushed and also return it, so Spark re-checks it row by row. `pushedPredicates()` is what the
-query plan reports; the `Batch` in the same class uses the accepted predicate to plan fewer
-partitions, and its reader fills only the columns in `requiredSchema`.
-
-The "advanced implementation with V2 Filter" test shows the contract from the outside by
-inspecting the `Batch` Spark planned: `df.filter($"i" > 3)` leaves one pushed predicate on `i`
-and reads both columns, `df.select($"i").filter($"i" > 6)` keeps the predicate and prunes the
-schema to `i`, and `df.select($"j").filter($"j" < -10)` pushes nothing, because the connector
-only accepts predicates on `i`, so Spark evaluates that filter itself. To see the same on a
+`pushedPredicates()` is what the query plan reports; the `Batch` in the same class uses the
+accepted predicate to plan fewer partitions, and its reader fills only the columns in
+`requiredSchema`. The "advanced implementation with V2 Filter" test in
+[`DataSourceV2Suite`](https://github.com/apache/spark/blob/master/sql/core/src/test/scala/org/apache/spark/sql/connector/DataSourceV2Suite.scala)
+checks the planned `Batch` for a few `filter` and `select` combinations. To see the same on a
 connector of your own, override `Scan.description()`, which renders inside the `BatchScan` node
 of `EXPLAIN` after the output columns; the default is the class name.
 
@@ -647,17 +638,8 @@ A writable table declares `BATCH_WRITE` and implements `SupportsWrite`; it adds 
 [Table](#table) and in
 [`TableCapability`](api/java/org/apache/spark/sql/connector/catalog/TableCapability.html)).
 Spark checks the capability set during analysis, before calling any builder, so a missing value
-fails the query even when the mix-in is implemented. From `JavaSimpleWritableDataSource`:
-
-{% highlight java %}
-@Override
-public Set<TableCapability> capabilities() {
-  return EnumSet.of(
-      TableCapability.BATCH_READ,
-      TableCapability.BATCH_WRITE,
-      TableCapability.TRUNCATE);
-}
-{% endhighlight %}
+fails the query even when the mix-in is implemented. `JavaSimpleWritableDataSource` declares all
+three.
 
 The write is split across the driver and the executors:
 
@@ -670,41 +652,17 @@ driver:    BatchWrite.commit(messages[])                     (or abort(messages[
 ```
 
 Each `DataWriter` writes its task's output to a staging location, and `BatchWrite.commit` on the
-driver makes all of it visible in one step. The staging location must be reachable from both
-sides: executors write there and the driver renames or registers from there, usually on
-different machines. `JavaSimpleWritableDataSource` stages under `<path>/_temporary/<queryId>` on
-the table's own file system, writes one file per task, and commits by renaming the staged files
-into place (error handling elided):
-
-{% highlight java %}
-@Override
-public DataWriter<InternalRow> createWriter(int partitionId, long taskId) {
-  Path jobPath = new Path(new Path(path, "_temporary"), jobId);
-  Path filePath = new Path(jobPath, String.format("%s-%d-%d", jobId, partitionId, taskId));
-  FileSystem fs = filePath.getFileSystem(conf.value());
-  return new JavaCSVDataWriter(fs, filePath);
-}
-{% endhighlight %}
-
-{% highlight java %}
-@Override
-public void commit(WriterCommitMessage[] messages) {
-  Path finalPath = new Path(this.path);
-  Path jobPath = new Path(new Path(finalPath, "_temporary"), queryId);
-  FileSystem fs = jobPath.getFileSystem(conf);
-  try {
-    for (FileStatus status : fs.listStatus(jobPath)) {
-      Path file = status.getPath();
-      Path dest = new Path(finalPath, file.getName());
-      if (!fs.rename(file, dest)) {
-        throw new IOException(String.format("failed to rename(%s, %s)", file, dest));
-      }
-    }
-  } finally {
-    fs.delete(jobPath, true);
-  }
-}
-{% endhighlight %}
+driver publishes the staged files. The staging location must be reachable from both sides:
+executors write there and the driver renames or registers from there, usually on different
+machines. `JavaSimpleWritableDataSource` stages under `<path>/_temporary/<queryId>` on the
+table's own file system, writes one file per task
+([`JavaCSVDataWriterFactory.createWriter`](https://github.com/apache/spark/blob/master/sql/core/src/test/java/test/org/apache/spark/sql/connector/JavaSimpleWritableDataSource.java)),
+and commits by renaming the staged files into the table directory one at a time
+([`MyBatchWrite.commit`](https://github.com/apache/spark/blob/master/sql/core/src/test/java/test/org/apache/spark/sql/connector/JavaSimpleWritableDataSource.java)).
+`commit` is a single driver-side call, but that alone does not make the publication atomic: a
+reader listing the directory between two renames sees a partial result. A connector that needs
+all-or-nothing visibility has to provide it itself, for example by writing a manifest or
+committing a transaction as the last step.
 
 A [`WriterCommitMessage`](api/java/org/apache/spark/sql/connector/write/WriterCommitMessage.html)
 is returned by `DataWriter.commit()` on an executor and delivered to `BatchWrite.commit` on the
