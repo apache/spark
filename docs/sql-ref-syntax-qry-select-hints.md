@@ -211,7 +211,9 @@ the reason. When Spark declines the hint, it does not build a filter in the othe
 
     The hinted side is evaluated again to build the filter, so its cost is paid twice. A Bloom
     filter is merged in a single task from one partial filter per task that reads the hinted side,
-    and it prunes well only while the hinted side's distinct keys fit
+    and it prunes well only while the hinted side's distinct keys fit its capacity:
+    `spark.sql.optimizer.runtime.bloomFilter.expectedNumItems` when Spark has no row count for the
+    hinted side, otherwise the row count capped by
     `spark.sql.optimizer.runtime.bloomFilter.maxNumItems`. For dynamic partition pruning without a
     broadcast to reuse, the hinted side's distinct join keys are collected to the driver and count
     toward `spark.driver.maxResultSize`. Hint a side whose size and distinct key count stay within
