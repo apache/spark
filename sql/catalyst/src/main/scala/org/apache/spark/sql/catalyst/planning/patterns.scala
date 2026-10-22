@@ -21,7 +21,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.optimizer.{GreaterPartialRangeJoin, IntervalOverlapJoin, JoinSelectionHelper, LessPartialRangeJoin, PointInRangeJoin, RangeJoin}
+import org.apache.spark.sql.catalyst.optimizer.JoinSelectionHelper
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.Table
@@ -423,6 +423,48 @@ object ExtractSingleColumnNullAwareAntiJoin extends JoinSelectionHelper with Pre
 }
 
 /**
+ * Tags the shape of a range-predicate join recognized by [[ExtractRangeJoinKeys]].
+ * Point-in-range and interval overlap both probe an interval index. A partial range
+ * is one inequality; Less vs Greater records which side holds the lower bound.
+ */
+sealed abstract class RangeJoin
+
+/** A point-in-range join: a value from one side falls within a `[low, high]` range on the other. */
+case object PointInRangeJoin extends RangeJoin
+
+/**
+ * An interval-overlap join: `(low, high)` on each side. The build side is an
+ * interval index and the stream side probes it with `overlapping(low, high)`.
+ */
+case object IntervalOverlapJoin extends RangeJoin
+
+/**
+ * A partial-range join: one inequality, one column per side.
+ * `leftIsLower` says which child holds the lower bound.
+ */
+sealed abstract class PartialRangeJoin extends RangeJoin {
+  def leftIsLower: Boolean
+
+  /**
+   * The inequality is `<`/`>` and not `<=`/`>=`. Inclusivity stays on the
+   * original condition, but the strict form also selects the exclusive
+   * point-index bound, so duplicated build keys equal to the probe value
+   * are skipped instead of failing the condition one by one.
+   */
+  def strict: Boolean
+}
+
+/** A `low <[=] high` partial-range join where the left side is the low bound. */
+final case class LessPartialRangeJoin(override val strict: Boolean) extends PartialRangeJoin {
+  override def leftIsLower: Boolean = true
+}
+
+/** A `low <[=] high` partial-range join where the left side is the high bound. */
+final case class GreaterPartialRangeJoin(override val strict: Boolean) extends PartialRangeJoin {
+  override def leftIsLower: Boolean = false
+}
+
+/**
  * Finds joins whose condition is a range predicate usable by a broadcast range join.
  *
  * Tries the two-predicate shapes first (point-in-range, then interval overlap),
@@ -436,8 +478,7 @@ object ExtractSingleColumnNullAwareAntiJoin extends JoinSelectionHelper with Pre
  * per candidate.
  */
 object ExtractRangeJoinKeys extends PredicateHelper {
-  type ReturnType = (JoinType, Seq[Expression], Seq[Expression],
-    RangeJoin, LogicalPlan, LogicalPlan)
+  type ReturnType = (JoinType, Seq[Expression], Seq[Expression], RangeJoin)
 
   def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
     case Join(left, right, joinType, Some(condition), _) =>
@@ -485,7 +526,7 @@ object ExtractRangeJoinKeys extends PredicateHelper {
           place(keysA, keysB, left, right).filter { case (l, r) =>
             supportedKeys(l, r)
           }.map { case (leftKeys, rightKeys) =>
-            (joinType, leftKeys, rightKeys, rangeJoin, left, right)
+            (joinType, leftKeys, rightKeys, rangeJoin)
           }
         }
       case _ => None
@@ -565,7 +606,7 @@ object ExtractRangeJoinKeys extends PredicateHelper {
           } else {
             GreaterPartialRangeJoin(strict)
           }
-          (joinType, leftKeys, rightKeys, rangeJoin, left, right)
+          (joinType, leftKeys, rightKeys, rangeJoin)
         }
       }
     }.nextOption()

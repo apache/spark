@@ -24,9 +24,11 @@ import scala.collection.mutable.ArrayBuffer
 import com.esotericsoftware.kryo.{Kryo, KryoSerializable}
 import com.esotericsoftware.kryo.io.{Input, Output}
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, Expression, InterpretedProjection}
-import org.apache.spark.sql.catalyst.optimizer.{IntervalOverlapJoin, PartialRangeJoin, PointInRangeJoin, RangeJoin}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildSide}
+import org.apache.spark.sql.catalyst.planning.{IntervalOverlapJoin, PartialRangeJoin, PointInRangeJoin, RangeJoin}
 import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DateType, Decimal, DecimalType, IntegerType, LongType, ShortType, TimestampNTZType, TimestampType}
@@ -118,9 +120,18 @@ private[joins] sealed trait LongKeyConversion extends RangeRelation {
 
 private[joins] object RangeIndex {
 
-  /** Capacity for a build buffer from the driver's row-count hint. */
+  /**
+   * Capacity for a build buffer from the driver's row-count hint, capped well under the
+   * hint itself. `BroadcastExchangeExec` only checks the row count against its row-count
+   * limit (up to half a billion for this mode) before calling `transform`, and only
+   * checks the built relation's byte size afterward, so sizing a buffer directly off an
+   * inflated hint can allocate hundreds of megabytes before a single row is read - ahead
+   * of the size check that is supposed to catch an over-large broadcast. Starting small
+   * and letting the buffer grow from there bounds only the initial allocation; the final
+   * size still tracks the actual row count, which is what the post-build size check sees.
+   */
   def initialCapacity(sizeHint: Option[Long]): Int =
-    sizeHint.map(n => math.min(n, Int.MaxValue).toInt).getOrElse(64)
+    sizeHint.map(n => math.min(n, 1L << 20).toInt).getOrElse(64)
 
   /** Accessor reading a single field from `InternalRow` as a boxed value (or null). */
   def getValue(dt: DataType, ordinal: Int): InternalRow => Any = {
@@ -249,7 +260,7 @@ private[joins] class IntervalIndex private (
 
   // All-covering window bounds. `lows` is sorted, so the last entry is the
   // largest low: it bounds every low from above, and coreHigh is the minimum
-  // high, which bounds every high from below. A window covers every stored
+  // high, which bounds every high from below. A window overlaps every stored
   // interval exactly when it holds probeLow <= coreHigh and probeHigh >= coreLow,
   // whether or not the intervals share a common core.
   // Recomputed in `read` too, since `lows`/`highs` are reassigned there.
@@ -270,8 +281,8 @@ private[joins] class IntervalIndex private (
     val ord = ordering
     val (probeLow, probeHigh) = if (ord.lteq(low, high)) (low, high) else (high, low)
     // A window that covers every interval gets every row the walk would
-    // return, without visiting the tree. The comparison above is exact for
-    // windows on its own, so a disjoint build qualifies too.
+    // return, without visiting the tree. Returns all rows iff every interval
+    // overlaps the probe; the condition still re-checks each candidate.
     if (ord.lteq(probeLow, coreHigh) && ord.gteq(probeHigh, coreLow)) {
       return new RowSlice(rows, 0, rows.length)
     }
@@ -364,7 +375,9 @@ private[joins] object IntervalIndex {
   // null`, before `keyType` is set, and forcing `ordering` eagerly would
   // throw trying to derive an ordering for a not-yet-known key type.
   private[joins] def coreHigh(highs: Array[Any], ordering: => Ordering[Any]): Any = {
-    if (highs == null || highs.isEmpty) null else {
+    if (highs == null || highs.isEmpty) {
+      null
+    } else {
       val ord = ordering
       var min = highs(0)
       var i = 1
@@ -469,12 +482,9 @@ private[joins] class OverlapIterator(
   private[this] var stackStart = new Array[Int](math.max(8, depth * 3))
   private[this] var stackEnd = new Array[Int](math.max(8, depth * 3))
   private[this] var stackTop = 0
-  private[joins] var steps = 0
   private[this] var nextRow: InternalRow = null
 
   push(0, lows.length)
-
-  private[joins] def stackCapacity: Int = stackStart.length
 
   private def push(s: Int, e: Int): Unit = {
     if (stackTop >= stackStart.length) {
@@ -488,7 +498,6 @@ private[joins] class OverlapIterator(
 
   private def advance(): InternalRow = {
     while (stackTop > 0) {
-      steps += 1
       stackTop -= 1
       val start = stackStart(stackTop)
       val end = stackEnd(stackTop)
@@ -511,8 +520,9 @@ private[joins] class OverlapIterator(
   }
 
   override def hasNext: Boolean = {
-    if (nextRow != null) true
-    else {
+    if (nextRow != null) {
+      true
+    } else {
       nextRow = advance()
       nextRow != null
     }
@@ -691,6 +701,16 @@ private[joins] object PointIndex {
 // `RangeRelationBroadcastMode` picks between the two families once, from the
 // build keys' data types.
 
+/**
+ * Augmented interval tree of build-side intervals, on raw keys. Lows and highs sit in
+ * parallel arrays sorted by low bound, with a row array in the same order feeding the
+ * scan path and `maxHighs(mid)` holding the maximum high bound in the span rooted at
+ * mid - the value itself, unlike [[IntervalIndex.maxHighIdx]], which stores an index
+ * into `highs` because boxed values there are shared references worth not duplicating.
+ * `highs` here is already an unboxed `Array[Long]`, so storing the max value directly
+ * costs 4 bytes/row more than an Int index would (a Long vs. an Int), in exchange for
+ * comparing it without the extra `highs(idx)` indirection on every node a probe visits.
+ */
 private[joins] class LongIntervalIndex private (
     private[this] var _keyType: DataType,
     private[this] var lows: Array[Long],
@@ -706,7 +726,7 @@ private[joins] class LongIntervalIndex private (
 
   // All-covering window bounds on raw keys: `lows` is sorted, so the last entry
   // is the largest low, bounding every low from above, and coreHigh is the
-  // minimum high, bounding every high from below. A window covers every
+  // minimum high, bounding every high from below. A window overlaps every
   // stored interval exactly when it holds probeLow <= coreHigh and
   // probeHigh >= coreLow, whether or not a common core exists.
   // Recomputed in `read` too, since `lows`/`highs` are reassigned there.
@@ -726,8 +746,8 @@ private[joins] class LongIntervalIndex private (
       probeHigh = t
     }
     // A window that covers every interval gets every row the walk would
-    // return, without visiting the tree. The comparison alone is exact for
-    // windows, so a disjoint build qualifies too.
+    // return, without visiting the tree. Returns all rows iff every interval
+    // overlaps the probe; the condition still re-checks each candidate.
     if (probeLow <= coreHigh && probeHigh >= coreLow) {
       return new RowSlice(rows, 0, rows.length)
     }
@@ -810,10 +830,16 @@ private[joins] object LongIntervalIndex {
   // `highs` are null right after the zero-arg constructor runs, before
   // `readExternal`/`read` populate them.
   private[joins] def coreLow(lows: Array[Long]): Long =
-    if (lows == null || lows.isEmpty) Long.MinValue else lows(lows.length - 1)
+    if (lows == null || lows.isEmpty) {
+      Long.MinValue
+    } else {
+      lows(lows.length - 1)
+    }
 
   private[joins] def coreHigh(highs: Array[Long]): Long = {
-    if (highs == null || highs.isEmpty) Long.MinValue else {
+    if (highs == null || highs.isEmpty) {
+      Long.MaxValue
+    } else {
       var min = Long.MaxValue
       var i = 0
       while (i < highs.length) {
@@ -895,12 +921,9 @@ private[joins] class LongOverlapIterator(
   private[this] var stackStart = new Array[Int](math.max(8, depth * 3))
   private[this] var stackEnd = new Array[Int](math.max(8, depth * 3))
   private[this] var stackTop = 0
-  private[joins] var steps = 0
   private[this] var nextRow: InternalRow = null
 
   push(0, lows.length)
-
-  private[joins] def stackCapacity: Int = stackStart.length
 
   private def push(s: Int, e: Int): Unit = {
     if (stackTop >= stackStart.length) {
@@ -914,7 +937,6 @@ private[joins] class LongOverlapIterator(
 
   private def advance(): InternalRow = {
     while (stackTop > 0) {
-      steps += 1
       stackTop -= 1
       val start = stackStart(stackTop)
       val end = stackEnd(stackTop)
@@ -937,8 +959,9 @@ private[joins] class LongOverlapIterator(
   }
 
   override def hasNext: Boolean = {
-    if (nextRow != null) true
-    else {
+    if (nextRow != null) {
+      true
+    } else {
       nextRow = advance()
       nextRow != null
     }
@@ -1097,6 +1120,67 @@ private[joins] object LongPointIndex {
 }
 
 /**
+ * Which side of a single-inequality range join's bound the build side holds, and
+ * whether the comparison is strict - the four spellings a [[PointIndex]] /
+ * [[LongPointIndex]] expose as scan methods. The interpreted probe
+ * ([[BroadcastRangeJoinExec]]'s `makeCandidateFn`) calls `apply` to get a direct method
+ * reference, so renaming a scan method here fails that path at compile time. Generated
+ * probe code instead splices `methodName` into the Java source it emits, since codegen
+ * has no way to reference a Scala method value directly; that string has to be kept in
+ * sync with the method it names by hand, and a mismatch only surfaces as a Janino
+ * compile failure at query-run time, not a Scala compile failure here. RangeJoinSuite's
+ * codegen point-scan tests are what actually catches that class of typo.
+ */
+private[joins] sealed abstract class PointScan(val methodName: String) {
+  def apply(index: PointIndex): Any => Iterator[InternalRow]
+  def apply(index: LongPointIndex): Long => Iterator[InternalRow]
+}
+
+private[joins] object PointScan {
+  case object UpTo extends PointScan("upTo") {
+    override def apply(index: PointIndex): Any => Iterator[InternalRow] = index.upTo
+    override def apply(index: LongPointIndex): Long => Iterator[InternalRow] = index.upTo
+  }
+
+  case object UpToExclusive extends PointScan("upToExclusive") {
+    override def apply(index: PointIndex): Any => Iterator[InternalRow] = index.upToExclusive
+    override def apply(index: LongPointIndex): Long => Iterator[InternalRow] =
+      index.upToExclusive
+  }
+
+  case object From extends PointScan("from") {
+    override def apply(index: PointIndex): Any => Iterator[InternalRow] = index.from
+    override def apply(index: LongPointIndex): Long => Iterator[InternalRow] = index.from
+  }
+
+  case object FromExclusive extends PointScan("fromExclusive") {
+    override def apply(index: PointIndex): Any => Iterator[InternalRow] = index.fromExclusive
+    override def apply(index: LongPointIndex): Long => Iterator[InternalRow] =
+      index.fromExclusive
+  }
+
+  /**
+   * The scan a partial-range join's build side probes with. Lower bound build side
+   * uses `UpTo` (points <= probe), upper bound uses `From` (points >= probe); strict
+   * inequality selects the Exclusive variant. Throws for any other range-join shape;
+   * callers only touch this for a [[PointIndexKind]] build.
+   */
+  def forJoin(rangeJoin: RangeJoin, buildSide: BuildSide): PointScan = rangeJoin match {
+    case partial: PartialRangeJoin =>
+      val isLower = partial.leftIsLower == (buildSide == BuildLeft)
+      (isLower, partial.strict) match {
+        case (true, true) => UpToExclusive
+        case (true, false) => UpTo
+        case (false, true) => FromExclusive
+        case (false, false) => From
+      }
+    case other =>
+      throw SparkException.internalError(
+        s"Point index is only built for a partial range, got $other.")
+  }
+}
+
+/**
  * A [[BroadcastMode]] that materializes the build side into a [[RangeRelation]].
  *
  * Symmetric with `HashedRelationBroadcastMode`. `buildKeys` are bound to the
@@ -1146,8 +1230,6 @@ private[execution] case class RangeRelationBroadcastMode private (
   override lazy val canonicalized: RangeRelationBroadcastMode =
     RangeRelationBroadcastMode(buildKeys.map(_.canonicalized), indexKind)
 
-  // Route through the companion's apply() so nullable-normalization still applies; the
-  // compiler-generated copy() would otherwise reuse buildKeys verbatim.
   def copy(
       buildKeys: Seq[Expression] = buildKeys,
       indexKind: RangeIndexKind = indexKind): RangeRelationBroadcastMode =

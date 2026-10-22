@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.execution.joins
 
+import org.apache.spark.SparkException
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide, PartialRangeJoin, RangeJoin}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
+import org.apache.spark.sql.catalyst.planning.RangeJoin
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, Partitioning, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{CodegenSupport, ExplainUtils, SparkPlan}
@@ -54,6 +56,10 @@ case class BroadcastRangeJoinExec(
     rangeJoin: RangeJoin)
   extends JoinCodegenSupport {
 
+  if (condition.isEmpty) {
+    throw SparkException.internalError("BroadcastRangeJoinExec requires a join condition.")
+  }
+
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
@@ -80,8 +86,7 @@ case class BroadcastRangeJoinExec(
       case LeftSemi | LeftAnti =>
         left.output
       case t =>
-        throw new IllegalArgumentException(
-          s"BroadcastRangeJoin should not take $t as the JoinType")
+        throw SparkException.internalError(s"BroadcastRangeJoin should not take $t as the JoinType")
     }
   }
 
@@ -104,114 +109,39 @@ case class BroadcastRangeJoinExec(
   @transient private[this] lazy val buildOutput = buildPlan.output
   @transient private[this] lazy val streamedOutput = streamedPlan.output
 
-  /**
-   * The point-index scan method name on PointIndex / LongPointIndex.
-   * Lower bound build side uses "upTo" (points <= probe), while upper bound uses
-   * "from" (points >= probe). Strict inequality uses the Exclusive variant.
-   */
-  private lazy val pointScanMethod: String = rangeJoin match {
-    case partial: PartialRangeJoin =>
-      val isLower = partial.leftIsLower == (buildSide == BuildLeft)
-      (isLower, partial.strict) match {
-        case (true, true) => "upToExclusive"
-        case (true, false) => "upTo"
-        case (false, true) => "fromExclusive"
-        case (false, false) => "from"
-      }
-    case other =>
-      throw new IllegalStateException(
-        s"Point index is only built for a partial range, got $other.")
-  }
+  // The point-index scan used to probe this join's build side. See `PointScan.forJoin`.
+  private lazy val pointScan: PointScan = PointScan.forJoin(rangeJoin, buildSide)
 
-  /**
-   * Create candidate probe function for a broadcast relation and bound probe keys.
-   * Constructed once per partition in `perPartition`, avoiding per-row relation dispatch.
-   */
-  private def makeCandidateFn(
-      relation: RangeRelation,
-      boundStreamKeys: Seq[Expression]): InternalRow => Iterator[InternalRow] = {
-    val isOneKey = boundStreamKeys.length == 1
-    val lowExpr = boundStreamKeys.head
-    val highExpr = if (isOneKey) null else boundStreamKeys(1)
-
-    relation match {
-      case longs: LongIntervalIndex => row =>
-        val low = lowExpr.eval(row)
-        if (low == null) {
-          Iterator.empty
-        } else {
-          val high = if (isOneKey) low else highExpr.eval(row)
-          if (high == null) {
-            Iterator.empty
-          } else {
-            longs.overlapping(longs.toLong(low), longs.toLong(high))
-          }
-        }
-      case points: LongPointIndex =>
-        val scan: Long => Iterator[InternalRow] = pointScanMethod match {
-          case "upTo" => points.upTo
-          case "upToExclusive" => points.upToExclusive
-          case "from" => points.from
-          case "fromExclusive" => points.fromExclusive
-        }
-        row =>
-          val low = lowExpr.eval(row)
-          if (low == null) Iterator.empty else scan(points.toLong(low))
-      case intervals: IntervalIndex => row =>
-        val low = lowExpr.eval(row)
-        if (low == null) {
-          Iterator.empty
-        } else {
-          val high = if (isOneKey) low else highExpr.eval(row)
-          intervals.overlapping(low, high)
-        }
-      case points: PointIndex =>
-        val scan: Any => Iterator[InternalRow] = pointScanMethod match {
-          case "upTo" => points.upTo
-          case "upToExclusive" => points.upToExclusive
-          case "from" => points.from
-          case "fromExclusive" => points.fromExclusive
-        }
-        row =>
-          val low = lowExpr.eval(row)
-          if (low == null) Iterator.empty else scan(low)
-    }
-  }
-
-  /**
-   * Broadcast relation, bound probe keys, and the original condition for one
-   * streamed partition. The joined row is reused; the caller copies it.
-   */
-  private class ProbeContext(
-      val stream: Iterator[InternalRow],
-      val condition: InternalRow => Boolean,
-      joinedRow: JoinedRow,
-      val nullBuild: InternalRow,
-      candidateFn: InternalRow => Iterator[InternalRow]) {
-
-    def candidates(row: InternalRow): Iterator[InternalRow] = candidateFn(row)
-
-    def join(streamRow: InternalRow, buildRow: InternalRow): InternalRow = buildSide match {
-      case BuildRight => joinedRow(streamRow, buildRow)
-      case BuildLeft => joinedRow(buildRow, streamRow)
-    }
-  }
+  // Alias so `innerJoin`/`outerJoin`/`leftExistenceJoin` need no change below; the class
+  // itself lives on the companion object (see there for why).
+  private type ProbeContext = BroadcastRangeJoinExec.ProbeContext
 
   private def perPartition(
       relation: Broadcast[RangeRelation])(
       f: ProbeContext => Iterator[InternalRow]): RDD[InternalRow] = {
     val boundStreamKeys = BindReferences.bindReferences(streamedKeys, streamedOutput)
-    val cond = condition.get
     val schema = left.output ++ right.output
     val numBuildFields = buildPlan.output.length
-    val candidateFn = makeCandidateFn(relation.value, boundStreamKeys)
+    val join = rangeJoin
+    val side = buildSide
     streamedPlan.execute().mapPartitionsInternal { stream =>
-      f(new ProbeContext(
+      // relation.value is read here, inside the task closure, so each executor fetches
+      // the index through the broadcast machinery (and shares it across the partitions
+      // that closure runs over) instead of the driver baking the materialized index
+      // into the closure that gets shipped out. PointScan.forJoin is passed by-name into
+      // makeCandidateFn, so it is only evaluated - and only throws for a non-partial-range
+      // join - inside the point-index branches that actually need it, same as before. It
+      // reads `join`/`side` (copied above), not `rangeJoin`/`buildSide` directly, so this
+      // closure captures only those small values instead of the enclosing plan node.
+      val candidateFn = BroadcastRangeJoinExec.makeCandidateFn(
+        relation.value, boundStreamKeys, PointScan.forJoin(join, side))
+      f(new BroadcastRangeJoinExec.ProbeContext(
         stream,
-        Predicate.create(cond, schema).eval _,
+        Predicate.create(condition.get, schema).eval _,
         new JoinedRow,
         new GenericInternalRow(numBuildFields),
-        candidateFn))
+        candidateFn,
+        side))
     }
   }
 
@@ -296,13 +226,14 @@ case class BroadcastRangeJoinExec(
     case LeftSemi | LeftAnti =>
       UnsafeProjection.create(output, output)
     case _ =>
-      UnsafeProjection.create(
-        output, (left.output ++ right.output).map(_.withNullability(true)))
+      UnsafeProjection.create(output, (left.output ++ right.output).map(_.withNullability(true)))
   }
 
   override def doExecute(): RDD[InternalRow] = {
-    require(BroadcastRangeJoinExec.supports(joinType, buildSide),
-      s"BroadcastRangeJoin does not support $joinType with $buildSide")
+    if (!BroadcastRangeJoinExec.supports(joinType, buildSide)) {
+      throw SparkException.internalError(
+        s"BroadcastRangeJoin does not support $joinType with $buildSide")
+    }
     val relation = buildPlan.executeBroadcast[RangeRelation]()
     val joined = joinType match {
       case _: InnerLike => innerJoin(relation)
@@ -310,7 +241,7 @@ case class BroadcastRangeJoinExec(
       case LeftSemi => leftExistenceJoin(relation, exists = true)
       case LeftAnti => leftExistenceJoin(relation, exists = false)
       case t =>
-        throw new IllegalArgumentException(
+        throw SparkException.internalError(
           s"BroadcastRangeJoin should not take $t as the JoinType")
     }
     val numOutputRows = longMetric("numOutputRows")
@@ -352,7 +283,7 @@ case class BroadcastRangeJoinExec(
       case LeftSemi => codegenLeftExistence(ctx, input, exists = true)
       case LeftAnti => codegenLeftExistence(ctx, input, exists = false)
       case t =>
-        throw new IllegalArgumentException(
+        throw SparkException.internalError(
           s"BroadcastRangeJoin code-gen should not take $t as the JoinType")
     }
   }
@@ -410,11 +341,14 @@ case class BroadcastRangeJoinExec(
       nullVars: Seq[String]): (String, String) = {
     val matches = ctx.freshName("matches")
     val iterCls = classOf[Iterator[InternalRow]].getName
-    val call = rangeJoin match {
-      case _: PartialRangeJoin =>
+    // Dispatches on RangeIndexKind, the same source `requiredChildDistribution` uses to
+    // decide which structure got built, instead of re-deriving "point or interval" from
+    // rangeJoin a second time.
+    val call = RangeIndexKind(rangeJoin) match {
+      case PointIndexKind =>
         val points = (if (usesLongKeys) classOf[LongPointIndex] else classOf[PointIndex]).getName
-        s"(($points) $relationTerm).$pointScanMethod(${keyVars.head})"
-      case _ =>
+        s"(($points) $relationTerm).${pointScan.methodName}(${keyVars.head})"
+      case IntervalIndexKind =>
         val intervals =
           (if (usesLongKeys) classOf[LongIntervalIndex] else classOf[IntervalIndex]).getName
         // A point probe has one key. Reuse it as both ends so it is evaluated once.
@@ -588,5 +522,77 @@ object BroadcastRangeJoinExec {
     case (RightOuter, BuildLeft) => true
     case (LeftOuter | LeftSemi | LeftAnti, BuildRight) => true
     case _ => false
+  }
+
+  /**
+   * Create candidate probe function for a broadcast relation and bound probe keys.
+   * Constructed once per partition in `perPartition`, avoiding per-row relation dispatch.
+   * Lives here rather than on [[BroadcastRangeJoinExec]] so the closure that calls it
+   * does not capture the enclosing plan node. `pointScan` is by-name so it is only
+   * forced - and only throws for a non-partial-range join - inside the point-index
+   * branches below, matching the laziness `perPartition` relies on.
+   */
+  private def makeCandidateFn(
+      relation: RangeRelation,
+      boundStreamKeys: Seq[Expression],
+      pointScan: => PointScan): InternalRow => Iterator[InternalRow] = {
+    val isOneKey = boundStreamKeys.length == 1
+    val lowExpr = boundStreamKeys.head
+    val highExpr = if (isOneKey) null else boundStreamKeys(1)
+
+    relation match {
+      case longs: LongIntervalIndex => row =>
+        val low = lowExpr.eval(row)
+        if (low == null) {
+          Iterator.empty
+        } else {
+          val high = if (isOneKey) low else highExpr.eval(row)
+          if (high == null) {
+            Iterator.empty
+          } else {
+            longs.overlapping(longs.toLong(low), longs.toLong(high))
+          }
+        }
+      case points: LongPointIndex =>
+        val scan = pointScan(points)
+        row =>
+          val low = lowExpr.eval(row)
+          if (low == null) Iterator.empty else scan(points.toLong(low))
+      case intervals: IntervalIndex => row =>
+        val low = lowExpr.eval(row)
+        if (low == null) {
+          Iterator.empty
+        } else {
+          val high = if (isOneKey) low else highExpr.eval(row)
+          intervals.overlapping(low, high)
+        }
+      case points: PointIndex =>
+        val scan = pointScan(points)
+        row =>
+          val low = lowExpr.eval(row)
+          if (low == null) Iterator.empty else scan(low)
+    }
+  }
+
+  /**
+   * Broadcast relation, bound probe keys, and the original condition for one
+   * streamed partition. The joined row is reused; the caller copies it. Nested here
+   * (not inside [[BroadcastRangeJoinExec]]) so constructing it does not implicitly
+   * capture the enclosing plan node through a synthetic outer reference.
+   */
+  private class ProbeContext(
+      val stream: Iterator[InternalRow],
+      val condition: InternalRow => Boolean,
+      joinedRow: JoinedRow,
+      val nullBuild: InternalRow,
+      candidateFn: InternalRow => Iterator[InternalRow],
+      buildSide: BuildSide) {
+
+    def candidates(row: InternalRow): Iterator[InternalRow] = candidateFn(row)
+
+    def join(streamRow: InternalRow, buildRow: InternalRow): InternalRow = buildSide match {
+      case BuildRight => joinedRow(streamRow, buildRow)
+      case BuildLeft => joinedRow(buildRow, streamRow)
+    }
   }
 }

@@ -1222,20 +1222,13 @@ object SQLConf {
 
   val BROADCAST_RANGE_JOIN_ENABLED = buildConf("spark.sql.join.broadcastRangeJoin.enabled")
     .internal()
-    .doc("When true, a join whose condition is a range predicate is planned as a " +
-      "broadcast range join instead of a broadcast nested loop join, provided that a " +
-      "supported build side qualifies for broadcast by size or by a BROADCAST hint. " +
-      "Supported join types are inner, left outer, right outer, left semi, and left anti. " +
-      "The preserved side is streamed. Full outer stays a broadcast nested loop join. " +
-      "Point-in-range and interval overlap (a.lo < b.hi AND b.lo < a.hi) broadcast " +
-      "an interval index. A single inequality broadcasts a sorted point index. " +
-      "Only types the index compares with the join predicate are recognized. " +
-      "A non-deterministic expression is not used as a range key. " +
-      "Measured at least an order of magnitude faster than the nested loop " +
-      "join it replaces when probes are selective, at parity for probed sides " +
-      "of only a few rows, for partial ranges at the median bound, and for " +
-      "fully overlapping ranges, and slower when most, but not all, build intervals overlap " +
-      "each probe: about 0.7X on long keys and 0.6X on boxed keys. Off by default.")
+    .doc("When true, joins with range predicates (such as point-in-range, interval-overlap, " +
+      "or single inequalities) are planned as broadcast range joins instead of broadcast " +
+      "nested loop joins if the build side is eligible for broadcast. Supported join types " +
+      "include inner, left outer, right outer, left semi, and left anti. Broadcast range joins " +
+      "build an index on the broadcast side to significantly accelerate selective range probes, " +
+      "but may perform worse than nested loop joins when nearly all intervals overlap. " +
+      "Off by default.")
     .version("4.4.0")
     .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .booleanConf

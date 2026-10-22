@@ -21,8 +21,7 @@ import java.sql.Date
 
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{Column, DataFrame}
-import org.apache.spark.sql.catalyst.optimizer.{
-  GreaterPartialRangeJoin, IntervalOverlapJoin, LessPartialRangeJoin, PointInRangeJoin, RangeJoin}
+import org.apache.spark.sql.catalyst.planning.{GreaterPartialRangeJoin, IntervalOverlapJoin, LessPartialRangeJoin, PointInRangeJoin, RangeJoin}
 import org.apache.spark.sql.execution.joins.{BroadcastNestedLoopJoinExec, BroadcastRangeJoinExec}
 import org.apache.spark.sql.functions.{broadcast, col, date_add, lit, lpad, when}
 import org.apache.spark.sql.internal.SQLConf

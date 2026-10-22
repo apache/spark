@@ -1101,16 +1101,13 @@ object Equality {
   }
 }
 
-/**
- * Normalizes `<`, `<=`, `>`, `>=` to `(low.dataType, low, high, strict)`, with
- * `>` and `>=` reordered so the lower bound leads. Inclusivity stays on the
- * original predicate, which execution evaluates as-is.
- */
+/** Matches a single-column inequality; see `unapply` for the exact normalization. */
 object RangePredicate {
   /**
-   * Normalizes `<`, `<=`, `>`, `>=` to `(low.dataType, low, high, strict)`.
-   * Inclusivity stays on the original predicate, which execution evaluates
-   * as-is; a strict predicate also selects the exclusive point-index bound.
+   * Normalizes `<`, `<=`, `>`, `>=` to `(low.dataType, low, high, strict)`, with
+   * `>` and `>=` reordered so the lower bound leads. Inclusivity stays on the
+   * original predicate, which execution evaluates as-is; a strict predicate
+   * also selects the exclusive point-index bound.
    */
   def unapply(expression: Expression): Option[(DataType, Expression, Expression, Boolean)] = {
     expression match {

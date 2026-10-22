@@ -19,7 +19,8 @@ package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, IntervalOverlapJoin, LessPartialRangeJoin}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
+import org.apache.spark.sql.catalyst.planning.{IntervalOverlapJoin, LessPartialRangeJoin}
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti, LeftOuter, LeftSemi}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -83,6 +84,32 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
   private def withRangeJoin(extra: (String, String)*)(f: => Unit): Unit = {
     withSQLConf((Seq(SQLConf.BROADCAST_RANGE_JOIN_ENABLED.key -> "true") ++ extra): _*)(f)
   }
+
+  /**
+   * One query per key family and join type that a range join can plan, shared by
+   * "whole-stage codegen covers each range-join probe" and "interpreted execution
+   * covers each range-join probe" so the two coverage lists cannot drift apart.
+   */
+  private def probeCoverageQueries: Seq[String] = Seq(
+    s"SELECT s.id, l.zip_id FROM signin_ip s JOIN ip_lookup l ON $pointCond",
+    s"SELECT s.id, l.zip_id FROM signin_ip s LEFT JOIN ip_lookup l ON $pointCond",
+    s"SELECT s.id, l.zip_id FROM signin_ip s RIGHT JOIN ip_lookup l ON $pointCond",
+    s"SELECT s.id FROM signin_ip s LEFT SEMI JOIN ip_lookup l ON $pointCond",
+    s"SELECT s.id FROM signin_ip s LEFT ANTI JOIN ip_lookup l ON $pointCond",
+    "SELECT p.p, r.lo, r.hi FROM dec_points p JOIN dec_ranges r ON p.p >= r.lo AND p.p <= r.hi",
+    "SELECT /*+ BROADCAST(r) */ p.s, r.lo, r.hi FROM str_points p JOIN str_ranges r " +
+      "ON p.s >= r.lo AND p.s <= r.hi",
+    "SELECT a.lo, a.hi, b.lo, b.hi FROM intervals_a a JOIN intervals_b b " +
+      "ON a.lo < b.hi AND b.lo < a.hi",
+    "SELECT a.lo, a.hi, b.lo, b.hi FROM intervals_a a LEFT JOIN intervals_b b ON a.hi < b.lo",
+    "SELECT /*+ BROADCAST(a) */ a.lo, b.hi FROM intervals_a a JOIN intervals_b b ON a.lo < b.hi",
+    // Double and string keys stay on the boxed point index, so these queries reach
+    // its generated probe code (or, interpreted, its candidates() branch), which
+    // int partial ranges never do.
+    "SELECT p.d, b.lo FROM dbl_partial_points p JOIN dbl_partial_bounds b ON p.d < b.lo",
+    "SELECT p.d, b.lo FROM dbl_partial_bounds b JOIN dbl_partial_points p ON p.d > b.lo",
+    "SELECT p.s, b.lo FROM str_partial_points p JOIN str_partial_bounds b ON p.s < b.lo",
+    "SELECT p.s, b.lo FROM str_partial_bounds b JOIN str_partial_points p ON p.s > b.lo")
 
   private def setupIpLookupViews(): Unit = {
     sql(
@@ -455,6 +482,42 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
     }
   }
 
+  test("CHAR and VARCHAR range joins match the nested loop result, including " +
+      "trailing-space-only values") {
+    // CHAR(n) is blank-padded on read (ApplyCharTypePadding), so this only exercises the
+    // index's own ordering if the padding survives into the probe: a temp view backed by
+    // VALUES never carries the char/varchar catalog metadata that padding keys off, so this
+    // needs real catalog tables.
+    withTable("char_points", "char_ranges", "varchar_points") {
+      sql("CREATE TABLE char_points(p CHAR(5)) USING parquet")
+      sql("INSERT INTO char_points VALUES ('ab'), ('ab   '), ('zz')")
+      sql("CREATE TABLE char_ranges(lo CHAR(5), hi CHAR(5)) USING parquet")
+      sql("INSERT INTO char_ranges VALUES ('aa', 'ab'), ('ab   ', 'ab   ')")
+      sql("CREATE TABLE varchar_points(p VARCHAR(5)) USING parquet")
+      sql("INSERT INTO varchar_points VALUES ('ab'), ('zz')")
+
+      val charQuery =
+        "SELECT /*+ BROADCAST(r) */ p.p, r.lo, r.hi FROM char_points p JOIN char_ranges r " +
+          "ON p.p >= r.lo AND p.p <= r.hi"
+      // CHAR(5) blank-pads 'ab' to 'ab   ', so it matches both the ('aa', 'ab') and the
+      // ('ab   ', 'ab   ') range: trailing-space-only values must compare equal, not just
+      // round-trip unchanged.
+      val varcharQuery =
+        "SELECT /*+ BROADCAST(r) */ p.p, r.lo, r.hi FROM varchar_points p JOIN char_ranges r " +
+          "ON p.p >= r.lo AND p.p <= r.hi"
+
+      Seq(charQuery, varcharQuery).foreach { query =>
+        val expected = sql(query).collect()
+        assert(expected.nonEmpty, query)
+        withRangeJoin() {
+          val df = sql(query)
+          assert(findRangeJoin(df.queryExecution.executedPlan).size == 1, query)
+          checkAnswer(df, expected)
+        }
+      }
+    }
+  }
+
   test("date and timestamp range joins match the nested loop result") {
     setupDateAndTimestampViews()
     val dateQuery =
@@ -501,26 +564,7 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
     setupCollatedStrings()
     setupIntervalViews()
     setupPartialRangeViews()
-    val queries = Seq(
-      s"SELECT s.id, l.zip_id FROM signin_ip s JOIN ip_lookup l ON $pointCond",
-      s"SELECT s.id, l.zip_id FROM signin_ip s LEFT JOIN ip_lookup l ON $pointCond",
-      s"SELECT s.id, l.zip_id FROM signin_ip s RIGHT JOIN ip_lookup l ON $pointCond",
-      s"SELECT s.id FROM signin_ip s LEFT SEMI JOIN ip_lookup l ON $pointCond",
-      s"SELECT s.id FROM signin_ip s LEFT ANTI JOIN ip_lookup l ON $pointCond",
-      "SELECT p.p, r.lo, r.hi FROM dec_points p JOIN dec_ranges r ON p.p >= r.lo AND p.p <= r.hi",
-      "SELECT /*+ BROADCAST(r) */ p.s, r.lo, r.hi FROM str_points p JOIN str_ranges r " +
-        "ON p.s >= r.lo AND p.s <= r.hi",
-      "SELECT a.lo, a.hi, b.lo, b.hi FROM intervals_a a JOIN intervals_b b " +
-        "ON a.lo < b.hi AND b.lo < a.hi",
-      "SELECT a.lo, a.hi, b.lo, b.hi FROM intervals_a a LEFT JOIN intervals_b b ON a.hi < b.lo",
-      "SELECT /*+ BROADCAST(a) */ a.lo, b.hi FROM intervals_a a JOIN intervals_b b ON a.lo < b.hi",
-      // Double and string keys stay on the boxed point index, so these queries
-      // reach its generated probe code, which int partial ranges never do.
-      "SELECT p.d, b.lo FROM dbl_partial_points p JOIN dbl_partial_bounds b ON p.d < b.lo",
-      "SELECT p.d, b.lo FROM dbl_partial_bounds b JOIN dbl_partial_points p ON p.d > b.lo",
-      "SELECT p.s, b.lo FROM str_partial_points p JOIN str_partial_bounds b ON p.s < b.lo",
-      "SELECT p.s, b.lo FROM str_partial_bounds b JOIN str_partial_points p ON p.s > b.lo")
-    queries.foreach { query =>
+    probeCoverageQueries.foreach { query =>
       val expected = sql(query).collect()
       withRangeJoin(
         SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
@@ -541,26 +585,7 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
     setupCollatedStrings()
     setupIntervalViews()
     setupPartialRangeViews()
-    val queries = Seq(
-      s"SELECT s.id, l.zip_id FROM signin_ip s JOIN ip_lookup l ON $pointCond",
-      s"SELECT s.id, l.zip_id FROM signin_ip s LEFT JOIN ip_lookup l ON $pointCond",
-      s"SELECT s.id, l.zip_id FROM signin_ip s RIGHT JOIN ip_lookup l ON $pointCond",
-      s"SELECT s.id FROM signin_ip s LEFT SEMI JOIN ip_lookup l ON $pointCond",
-      s"SELECT s.id FROM signin_ip s LEFT ANTI JOIN ip_lookup l ON $pointCond",
-      "SELECT p.p, r.lo, r.hi FROM dec_points p JOIN dec_ranges r ON p.p >= r.lo AND p.p <= r.hi",
-      "SELECT /*+ BROADCAST(r) */ p.s, r.lo, r.hi FROM str_points p JOIN str_ranges r " +
-        "ON p.s >= r.lo AND p.s <= r.hi",
-      "SELECT a.lo, a.hi, b.lo, b.hi FROM intervals_a a JOIN intervals_b b " +
-        "ON a.lo < b.hi AND b.lo < a.hi",
-      "SELECT a.lo, a.hi, b.lo, b.hi FROM intervals_a a LEFT JOIN intervals_b b ON a.hi < b.lo",
-      "SELECT /*+ BROADCAST(a) */ a.lo, b.hi FROM intervals_a a JOIN intervals_b b ON a.lo < b.hi",
-      // Boxed point-index probes: candidates() must take the PointIndex branch
-      // that int partial ranges never reach.
-      "SELECT p.d, b.lo FROM dbl_partial_points p JOIN dbl_partial_bounds b ON p.d < b.lo",
-      "SELECT p.d, b.lo FROM dbl_partial_bounds b JOIN dbl_partial_points p ON p.d > b.lo",
-      "SELECT p.s, b.lo FROM str_partial_points p JOIN str_partial_bounds b ON p.s < b.lo",
-      "SELECT p.s, b.lo FROM str_partial_bounds b JOIN str_partial_points p ON p.s > b.lo")
-    queries.foreach { query =>
+    probeCoverageQueries.foreach { query =>
       val expected = sql(query).collect()
       withRangeJoin(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
         val df = sql(query)
