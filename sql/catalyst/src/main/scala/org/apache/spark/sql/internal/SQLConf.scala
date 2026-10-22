@@ -1584,6 +1584,7 @@ object SQLConf {
       .doc("The fraction of the rows of the hinted side that is sampled to find the hot keys " +
         "for a join with a SKEW_JOIN hint.")
       .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .doubleConf
       .checkValue(v => v > 0.0 && v <= 1.0, "The sample fraction must be in (0, 1].")
       .createWithDefault(0.1)
@@ -1595,6 +1596,7 @@ object SQLConf {
         "many rows and at least as many rows as the average shuffle partition, which is the " +
         s"estimated row count of the hinted side divided by '${SHUFFLE_PARTITIONS.key}'.")
       .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .longConf
       .checkValue(_ > 0, "The minimum number of rows of a hot key must be positive.")
       .createWithDefault(1000L)
@@ -1604,6 +1606,7 @@ object SQLConf {
       .doc("The maximum number of hot keys to split out of a join with a SKEW_JOIN hint. When " +
         "more keys are hot, the most frequent ones are used.")
       .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .intConf
       .checkValue(_ > 0, "The maximum number of hot keys must be positive.")
       .createWithDefault(1000)
