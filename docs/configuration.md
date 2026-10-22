@@ -1923,6 +1923,7 @@ Apart from these, the following properties are also available, and may be useful
     is used. Lowering this size will lower the shuffle memory usage when Zstd is used, but it
     might increase the compression cost because of excessive JNI call overhead. This
     configuration only applies to <code>spark.io.compression.codec</code>.
+    The value must be positive and less than or equal to 2147483632 bytes.
   </td>
   <td>2.3.0</td>
 </tr>

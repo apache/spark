@@ -23,7 +23,8 @@ import java.util.Locale
 import com.google.common.io.ByteStreams
 
 import org.apache.spark.{SparkConf, SparkFunSuite, SparkIllegalArgumentException}
-import org.apache.spark.internal.config.IO_COMPRESSION_ZSTD_BUFFERPOOL_ENABLED
+import org.apache.spark.internal.config.{IO_COMPRESSION_ZSTD_BUFFERPOOL_ENABLED, IO_COMPRESSION_ZSTD_BUFFERSIZE}
+import org.apache.spark.unsafe.array.ByteArrayMethods
 
 class CompressionCodecSuite extends SparkFunSuite {
   val conf = new SparkConf(false)
@@ -125,6 +126,30 @@ class CompressionCodecSuite extends SparkFunSuite {
     val codec = CompressionCodec.createCodec(conf, classOf[ZStdCompressionCodec].getName)
     assert(codec.getClass === classOf[ZStdCompressionCodec])
     testConcatenationOfSerializedStreams(codec)
+  }
+
+  test("SPARK-60432: zstd compression codec validates the buffer size") {
+    val maxBufferSize = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
+    testCodec(new ZStdCompressionCodec(
+      new SparkConf(false).set(IO_COMPRESSION_ZSTD_BUFFERSIZE.key, "1")))
+    // The codec allocates the buffer per stream, so creating it with the upper bound is cheap.
+    new ZStdCompressionCodec(
+      new SparkConf(false).set(IO_COMPRESSION_ZSTD_BUFFERSIZE.key, maxBufferSize.toString))
+
+    Seq(
+      "0" -> "0",
+      "-1" -> "-1",
+      s"${maxBufferSize + 1}" -> s"${maxBufferSize + 1}",
+      "2g" -> "2147483648",
+      "4g" -> "4294967296").foreach { case (bufferSize, confValue) =>
+      val conf = new SparkConf(false).set(IO_COMPRESSION_ZSTD_BUFFERSIZE.key, bufferSize)
+      val e = intercept[IllegalArgumentException] {
+        new ZStdCompressionCodec(conf)
+      }
+      assert(e.getMessage ===
+        s"'$confValue' in ${IO_COMPRESSION_ZSTD_BUFFERSIZE.key} is invalid. " +
+          s"The buffer size must be positive and less than or equal to $maxBufferSize.")
+    }
   }
 
   test("bad compression codec") {
