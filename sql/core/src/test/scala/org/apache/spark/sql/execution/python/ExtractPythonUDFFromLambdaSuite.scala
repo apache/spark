@@ -21,9 +21,9 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.expressions.{LambdaFunction, Literal, NamedArgumentExpression,
   PythonUDF}
-import org.apache.spark.sql.catalyst.plans.logical.ArrowEvalPython
-import org.apache.spark.sql.functions.{array_sort, col, forall, lit, map_filter, map_zip_with,
-  transform, transform_keys, transform_values, when, zip_with}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, ArrowEvalPython, Join}
+import org.apache.spark.sql.functions.{array_sort, col, collect_list, forall, lit, map_filter,
+  map_zip_with, transform, transform_keys, transform_values, when, zip_with}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePointUDT, SharedSparkSession}
 import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType, StringType}
@@ -144,6 +144,24 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
     assert(liftedUDFs(negated).size == 2)
   }
 
+  test("a lifted call two levels deep inside a composite argument is substituted whole") {
+    // `f(g(h(x)) + 1)`: `f`'s composite argument holds the lifted call `g(h(x))`, which itself
+    // holds the lifted call `h(x)`. Substituting bottom-up would replace `h(x)` first, so `g(...)`
+    // no longer matches its lifted result and a raw `g` is left inside the generated lambda. That
+    // `g` is lifted a second time when it can be, and stays inside the lambda when it cannot (its
+    // lambda then iterates the nondeterministic result of `h`).
+    def nested(inner: UserDefinedPythonFunction): org.apache.spark.sql.DataFrame =
+      arrayDF.select(transform(col("values"), x =>
+        pythonUDF(pythonUDF(inner(x)).cast("int") + lit(1))).as("r"))
+
+    val deterministic = nested(pythonUDF)
+    assert(udfsInsideLambda(deterministic).isEmpty)
+    // One lifted UDF per call: `h`, `g` and `f`.
+    assert(liftedUDFs(deterministic).size == 3)
+
+    assert(udfsInsideLambda(nested(nondeterministicUDF)).isEmpty)
+  }
+
   test("identical nondeterministic calls are lifted distinctly, not deduplicated") {
     // Deduplicating `f(x)` with `f(x)` would collapse two independent draws into one; a
     // nondeterministic UDF must keep each call, so both are lifted.
@@ -151,6 +169,18 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
       transform(col("values"), x => nondeterministicUDF(x) || nondeterministicUDF(x)).as("r"))
     assert(udfsInsideLambda(df).isEmpty)
     assert(liftedUDFs(df).size == 2)
+  }
+
+  test("a deterministic UDF over a nondeterministic argument is not deduplicated") {
+    // `f(r(x)) === f(r(x))`: `f` itself is deterministic, but each side wraps its own draw of the
+    // nondeterministic `r`, so the two `f` calls are distinct. Keying them by canonical form would
+    // erase the inner calls' `resultId`s and lift one `f` call for both sides, comparing a single
+    // draw with itself.
+    val df = arrayDF.select(transform(col("values"), x =>
+      pythonUDF(nondeterministicUDF(x)) === pythonUDF(nondeterministicUDF(x))).as("r"))
+    assert(udfsInsideLambda(df).isEmpty)
+    // Two inner draws, and one outer call over each of them.
+    assert(liftedUDFs(df).size == 4)
   }
 
   test("transform_values whose result type equals the key type replaces values, not keys") {
@@ -404,15 +434,49 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
   }
 
   test("the rewrite cannot be disabled via excludedRules") {
-    // The lambda rewrite is driven by `ExtractPythonUDFs` (not a standalone batch rule), and that
-    // rule is non-excludable, so a plan that only works because of the rewrite cannot be broken by
-    // excludedRules. Excluding either name must leave the UDF lifted out of the lambda.
+    // The lambda rewrite is a non-excludable rule, so a plan that only works because of the rewrite
+    // cannot be broken by excludedRules. Excluding it (or `ExtractPythonUDFs`, which extracts the
+    // lifted UDF) must leave the UDF lifted out of the lambda.
     withSQLConf(
       SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
         Seq(ExtractPythonUDFFromLambda.ruleName, ExtractPythonUDFs.ruleName).mkString(",")) {
       val df = arrayDF.select(transform(col("values"), x => pythonUDF(x)).as("r"))
       assert(udfsInsideLambda(df).isEmpty)
     }
+  }
+
+  test("a UDF in a lambda over an aggregate's result is evaluated above the aggregate") {
+    // `transform(collect_list(id), x -> f(x))`: once lifted, the UDF reads the aggregate's result,
+    // so it must be lifted before `ExtractPythonUDFFromAggregate` runs, which then evaluates it
+    // above the `Aggregate`. Lifted later, it would be evaluated below the aggregate, where neither
+    // an aggregate function nor (for a lambda over a grouping key) the grouped value exists.
+    val overAggregate = spark.range(3).groupBy()
+      .agg(transform(collect_list(col("id")), x => pythonUDF(x)).as("r"))
+    val overGroupingKey = Seq(Seq(1, 2), Seq(3)).toDF("values").groupBy("values")
+      .agg(transform(col("values"), x => pythonUDF(x)).as("r"))
+    Seq(overAggregate, overGroupingKey).foreach { df =>
+      assert(udfsInsideLambda(df).isEmpty)
+      val evals = df.queryExecution.optimizedPlan.collect { case a: ArrowEvalPython => a }
+      assert(evals.size == 1)
+      assert(evals.head.child.exists(_.isInstanceOf[Aggregate]))
+    }
+  }
+
+  test("a UDF in a lambda over one side of an outer join condition is evaluated on that side") {
+    // A left outer join keeps a predicate over only its left side in the join condition. Once
+    // lifted, the UDF reads only left-side columns and is evaluated below the join on that side,
+    // like a plain UDF. While still inside the lambda it read neither side, so it was rejected as a
+    // Python UDF in the ON clause of an outer join.
+    val left = Seq((1, Seq(1, 2))).toDF("k", "values")
+    val right = Seq((1, "a")).toDF("k", "v")
+    val df = left.join(
+      right,
+      left("k") === right("k") &&
+        org.apache.spark.sql.functions.exists(left("values"), x => pythonUDF(x)),
+      "left_outer")
+    val join = df.queryExecution.optimizedPlan.collectFirst { case j: Join => j }.get
+    assert(join.left.exists(_.isInstanceOf[ArrowEvalPython]))
+    assert(!join.right.exists(_.isInstanceOf[ArrowEvalPython]))
   }
 
   test("a UDF over only constants is still lifted per element") {

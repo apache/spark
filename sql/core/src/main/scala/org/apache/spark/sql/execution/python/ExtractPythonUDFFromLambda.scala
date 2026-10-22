@@ -55,10 +55,15 @@ import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType}
  * them uniformly with no per-argument metadata. With the result now an ordinary column, arithmetic,
  * `when`, casts, the element index, multiple UDFs and nested calls `f(g(x))` all just work.
  *
- * Runs before [[ExtractPythonUDFs]]. Handles all ten single-lambda functions: `transform`,
- * `filter`, `exists`, `forall`, `zip_with`, `array_sort`, and the four map functions (desugared to
- * `map_keys`/`map_values` arrays and rebuilt with `map_from_arrays`). `array_sort` precomputes a
- * per-element key, or, when one call takes both elements, the UDF over the cross product of pairs.
+ * Runs first in the optimizer's UDF extraction batch, before every rule that decides where a
+ * Python UDF is evaluated from the columns it reads (`ExtractPythonUDFFromJoinCondition`,
+ * [[ExtractPythonUDFFromAggregate]], [[ExtractPythonUDFs]], ...): inside a lambda a UDF reads the
+ * lambda's variables, so only its lifted form tells them, e.g., that it applies to an aggregate's
+ * result and must be evaluated above the aggregate. Handles all ten single-lambda functions:
+ * `transform`, `filter`, `exists`, `forall`, `zip_with`, `array_sort`, and the four map functions
+ * (desugared to `map_keys`/`map_values` arrays and rebuilt with `map_from_arrays`). `array_sort`
+ * precomputes a per-element key, or, when one call takes both elements, the UDF over the cross
+ * product of pairs.
  * A UDF in a *nested* lambda, `transform(arr, i -> transform(i, x -> f(x)))`, is handled too: the
  * whole nest is rewritten root-first (see `apply` / `rewriteNest`), lifting the UDF out one lambda
  * level at a time so it ends up applied to the fully flattened leaves.
@@ -403,8 +408,9 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
     // lookups can find it. Deterministic calls that lift to the *same* function over the *same*
     // array arguments share one lifted UDF: a key-form comparator's `udf(a)` and `udf(b)`
     // canonicalize differently (`a` != `b`) but both read the whole array, so without this the
-    // Python function would run 2n times instead of n. Nondeterministic calls stay distinct (their
-    // signature is the lifted node itself, carrying a distinct `resultId`), matching `liftKey`.
+    // Python function would run 2n times instead of n. Nondeterministic calls - including a
+    // deterministic UDF over a nondeterministic argument - stay distinct (their signature is the
+    // lifted node itself, carrying a distinct `resultId`), matching `liftKey`.
     var arrayResults = Map.empty[Expression, Expression]
     val distinctLifted = scala.collection.mutable.ArrayBuffer.empty[PythonUDF]
     val ordinalBySignature = scala.collection.mutable.HashMap.empty[Expression, Int]
@@ -442,7 +448,7 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
         PythonUDF.liftedElementwiseEvalType(udf.evalType),
         udf.udfDeterministic,
         elementwiseNestingDepth = newDepth)
-      val signature: Expression = if (udf.udfDeterministic) lifted.canonicalized else lifted
+      val signature: Expression = if (udf.deterministic) lifted.canonicalized else lifted
       val ordinal = ordinalBySignature.getOrElseUpdate(signature, {
         val o = distinctLifted.length
         distinctLifted += lifted
@@ -559,9 +565,14 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
    * nondeterministic call must stay distinct - `transform(arr, x -> f(x) + f(x))` calls `f` twice
    * and each call may return a different value - so it is keyed by its own `resultId`-bearing node
    * (`canonicalized` erases `resultId`, which would collapse the two calls into one).
+   *
+   * A call is deterministic only if its arguments are too (`deterministic`, not the UDF's own
+   * `udfDeterministic` flag). In `ident(r(x)) = ident(r(x))` with a nondeterministic `r`, the two
+   * `ident` calls wrap two independent draws; canonicalizing them would also erase the inner calls'
+   * `resultId`s and collapse both sides into one call, compared with itself.
    */
   private def liftKey(udf: PythonUDF): Expression =
-    if (udf.udfDeterministic) udf.canonicalized else udf
+    if (udf.deterministic) udf.canonicalized else udf
 
   /**
    * Turns a UDF argument expression, written in terms of single elements, into the equivalent
@@ -595,8 +606,11 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
       // call's aligned array result, then fold those arrays into the variable-to-array map so the
       // logic below treats them exactly like element variables. This keeps a lifted UDF buried in
       // a composite argument (`f(g(x) + 1)`) from being left as a raw UDF inside a lambda.
+      // Top-down, so the outermost lifted call is replaced whole: bottom-up would first replace
+      // a lifted call nested in its arguments (`h(x)` in `f(g(h(x)) + 1)`), after which `g(...)`
+      // no longer matches its own lifted result and would be left behind as a raw UDF.
       val nestedVars = scala.collection.mutable.LinkedHashMap.empty[Expression, NamedLambdaVariable]
-      val expr = e.transformUp {
+      val expr = e.transformDown {
         case u: PythonUDF if arrayResults.contains(liftKey(u)) =>
           nestedVars.getOrElseUpdate(liftKey(u), {
             val arrType = arrayResults(liftKey(u)).dataType.asInstanceOf[ArrayType]
