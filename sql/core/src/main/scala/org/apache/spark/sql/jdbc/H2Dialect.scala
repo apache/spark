@@ -57,7 +57,7 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
       "POWER", "SQRT", "FLOOR", "CEIL", "ROUND", "SIN", "SINH", "COS", "COSH", "TAN",
       "TANH", "COT", "ASIN", "ACOS", "ATAN", "ATAN2", "DEGREES", "RADIANS", "SIGN",
       "PI", "SUBSTRING", "UPPER", "LOWER", "TRANSLATE", "TRIM", "MD5", "SHA1", "SHA2",
-      "BIT_LENGTH", "CHAR_LENGTH", "CONCAT", "RPAD", "LPAD")
+      "BIT_LENGTH", "CHAR_LENGTH", "CONCAT", "RPAD", "LPAD", "CHAR_READ_SIDE_PADDING")
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
@@ -299,6 +299,11 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
         case _ => field
       }
       s"EXTRACT($newField FROM $source)"
+    }
+
+    override protected def dialectFunctionName(funcName: String): String = funcName match {
+      case "CHAR_READ_SIDE_PADDING" => "RPAD"
+      case other => super.dialectFunctionName(other)
     }
 
     override def visitSQLFunction(funcName: String, inputs: Array[String]): String = {

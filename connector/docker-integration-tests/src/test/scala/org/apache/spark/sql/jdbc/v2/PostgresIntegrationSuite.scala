@@ -416,4 +416,22 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     assert(rows.length === 1)
     assert(rows(0).getString(0) === "amy")
   }
+
+  test("SPARK-60479: CHAR read-side padding with NULL") {
+    val table = s"$catalogName.char_pad"
+    withTable(table) {
+      sql(s"CREATE TABLE $table (id INT, flag CHAR(5))")
+      sql(s"INSERT INTO $table VALUES (1, 'Y'), (2, NULL)")
+      val isNull = sql(s"SELECT id FROM $table WHERE flag IS NULL")
+      checkFilterPushed(isNull)
+      val nullRows = isNull.collect()
+      assert(nullRows.length === 1)
+      assert(nullRows(0).getInt(0) === 2)
+      val notIn = sql(s"SELECT id FROM $table WHERE flag NOT IN ('Y')")
+      checkFilterPushed(notIn)
+      assert(notIn.collect().isEmpty)
+      val cnt = sql(s"SELECT COUNT(flag) FROM $table")
+      assert(cnt.collect()(0).getLong(0) === 1)
+    }
+  }
 }

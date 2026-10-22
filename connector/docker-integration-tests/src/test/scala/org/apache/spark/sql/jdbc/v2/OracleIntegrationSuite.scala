@@ -428,4 +428,21 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
     assert(rows11(0).getString(0) === "amy")
     assert(rows11(1).getString(0) === "alex")
   }
+
+  test("SPARK-60479: CHAR filters stay local because Oracle does not opt in") {
+    val table = s"$catalogName.char_pad"
+    withTable(table) {
+      sql(s"CREATE TABLE $table (id INT, flag CHAR(5))")
+      sql(s"INSERT INTO $table VALUES (1, 'Y'), (2, NULL)")
+      val eq = sql(s"SELECT id FROM $table WHERE flag = 'Y'")
+      checkFilterPushed(eq, pushed = false)
+      val eqRows = eq.collect()
+      assert(eqRows.length === 1)
+      assert(eqRows(0).getInt(0) === 1)
+      val isNull = sql(s"SELECT id FROM $table WHERE flag IS NULL")
+      val nullRows = isNull.collect()
+      assert(nullRows.length === 1)
+      assert(nullRows(0).getInt(0) === 2)
+    }
+  }
 }

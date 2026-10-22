@@ -58,7 +58,7 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
   // scalastyle:on line.size.limit
   private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
     "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP")
-  private val supportedStringFunctions = Set("RPAD", "LPAD")
+  private val supportedStringFunctions = Set("RPAD", "LPAD", "CHAR_READ_SIDE_PADDING")
   private val supportedFunctions = supportedAggregateFunctions ++ supportedStringFunctions
 
   override def isSupportedFunction(funcName: String): Boolean =
@@ -91,14 +91,25 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
 
     override def visitSQLFunction(funcName: String, inputs: Array[String]): String =
       funcName match {
-        case "RPAD" =>
+        case "RPAD" | "CHAR_READ_SIDE_PADDING" =>
           val Array(str, len, pad) = inputs
-          s"LEFT(CONCAT($str, REPLICATE($pad, $len)), $len)"
+          mssqlNullSafePad(str, len, pad, left = true)
         case "LPAD" =>
           val Array(str, len, pad) = inputs
-          s"RIGHT(CONCAT(REPLICATE($pad, $len), $str), $len)"
+          mssqlNullSafePad(str, len, pad, left = false)
         case _ => super.visitSQLFunction(funcName, inputs)
       }
+
+    // SQL Server CONCAT treats NULL as '': wrap so RPAD/LPAD/CHAR padding stay NULL.
+    private def mssqlNullSafePad(
+        str: String, len: String, pad: String, left: Boolean): String = {
+      val padded = if (left) {
+        s"LEFT(CONCAT($str, REPLICATE($pad, $len)), $len)"
+      } else {
+        s"RIGHT(CONCAT(REPLICATE($pad, $len), $str), $len)"
+      }
+      s"CASE WHEN $str IS NULL OR $len IS NULL OR $pad IS NULL THEN NULL ELSE $padded END"
+    }
 
     // MsSqlServer has no boolean type: a predicate (comparison, IN, AND/OR/NOT, LIKE-family, ...)
     // cannot appear as a value. IS NULL / IS NOT NULL over any predicate operand is rejected so

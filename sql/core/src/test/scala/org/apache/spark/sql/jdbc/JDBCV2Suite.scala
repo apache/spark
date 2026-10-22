@@ -2021,29 +2021,82 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     val table = "h2.test.char_pad"
     withTable(table) {
       sql(s"CREATE TABLE $table (id INT, flag CHAR(5))")
-      sql(s"INSERT INTO $table VALUES (1, 'Y'), (2, 'N'), (3, 'YES')")
+      // scalastyle:off nonascii
+      sql(s"INSERT INTO $table VALUES (1, 'Y'), (2, 'N'), (3, 'YES'), (4, NULL), (5, 'ä')")
 
       val eq = sql(s"SELECT id FROM $table WHERE flag = 'Y'")
       checkFiltersRemoved(eq)
-      checkPushedInfo(eq, "flag IS NOT NULL", "(RPAD(flag, 5, ' ')) = 'Y    '")
+      checkPushedInfo(eq,
+        "PushedFilters: [flag IS NOT NULL, (CHAR_READ_SIDE_PADDING(flag, 5, ' ')) = 'Y    ']")
       checkAnswer(eq, Seq(Row(1)))
 
       val in = sql(s"SELECT id FROM $table WHERE flag IN ('Y', 'N')")
       checkFiltersRemoved(in)
-      checkPushedInfo(in, "RPAD(flag, 5, ' ') IN ('Y    ', 'N    ')")
+      checkPushedInfo(in,
+        "PushedFilters: [CHAR_READ_SIDE_PADDING(flag, 5, ' ') IN ('Y    ', 'N    ')]")
       checkAnswer(in, Seq(Row(1), Row(2)))
+
+      val isNull = sql(s"SELECT id FROM $table WHERE flag IS NULL")
+      checkFiltersRemoved(isNull)
+      checkPushedInfo(isNull, "PushedFilters: [flag IS NULL]")
+      checkAnswer(isNull, Seq(Row(4)))
+
+      val notIn = sql(s"SELECT id FROM $table WHERE flag NOT IN ('Y', 'N')")
+      checkFiltersRemoved(notIn)
+      checkPushedInfo(notIn,
+        "PushedFilters: [NOT (CHAR_READ_SIDE_PADDING(flag, 5, ' ') IN ('Y    ', 'N    '))]")
+      checkAnswer(notIn, Seq(Row(3), Row(5)))
+
+      val orPred = sql(s"SELECT id FROM $table WHERE flag = 'Y' OR flag = 'N'")
+      checkFiltersRemoved(orPred)
+      checkAnswer(orPred, Seq(Row(1), Row(2)))
+
+      val nseq = sql(s"SELECT id FROM $table WHERE flag <=> 'Y'")
+      checkFiltersRemoved(nseq)
+      checkAnswer(nseq, Seq(Row(1)))
+
+      val longLit = sql(s"SELECT id FROM $table WHERE flag = 'YYYYYY'")
+      checkFiltersRemoved(longLit)
+      checkAnswer(longLit, Seq.empty)
+
+      val range = sql(s"SELECT id FROM $table WHERE flag > 'A'")
+      checkFiltersRemoved(range)
+      checkAnswer(range, Seq(Row(1), Row(2), Row(3), Row(5)))
+
+      val likeFam = sql(s"SELECT id FROM $table WHERE flag LIKE 'Y%'")
+      checkFiltersRemoved(likeFam)
+      checkAnswer(likeFam, Seq(Row(1), Row(3)))
+
+      val cnt = sql(s"SELECT COUNT(flag) FROM $table")
+      checkAggregateRemoved(cnt)
+      checkAnswer(cnt, Seq(Row(4)))
+
+      val grp = sql(s"SELECT flag, COUNT(*) FROM $table GROUP BY flag")
+      checkAggregateRemoved(grp)
+      checkAnswer(grp, Seq(
+        Row("Y    ", 1), Row("N    ", 1), Row("YES  ", 1), Row(null, 1), Row("ä    ", 1)))
+      // scalastyle:on nonascii
+
+      val topN = sql(s"SELECT id FROM $table WHERE flag IS NOT NULL ORDER BY flag LIMIT 1")
+      checkSortRemoved(topN)
+      checkAnswer(topN, Seq(Row(2)))
 
       withSQLConf(SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
         val padFalse = sql(s"SELECT id FROM $table WHERE flag = 'Y'")
         checkFiltersRemoved(padFalse)
-        checkPushedInfo(padFalse, "flag IS NOT NULL",
-          "(RPAD(flag, 5, ' ')) = 'Y    '")
+        checkPushedInfo(padFalse,
+          "PushedFilters: [flag IS NOT NULL, (RPAD(flag, 5, ' ')) = 'Y    ']")
         checkAnswer(padFalse, Seq(Row(1)))
+      }
+
+      withSQLConf(SQLConf.PUSH_DOWN_CHAR_READ_SIDE_PADDING.key -> "false") {
+        val disabled = sql(s"SELECT id FROM $table WHERE flag = 'Y'")
+        checkFiltersRemoved(disabled, removed = false)
+        checkAnswer(disabled, Seq(Row(1)))
       }
 
       withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
         val std = sql(s"SELECT id FROM $table WHERE flag = CAST('Y' AS CHAR(5))")
-        // charTypeReadSideCheck is not RPAD; keep the length-error path local.
         checkFiltersRemoved(std, removed = false)
         checkPushedInfo(std, "PushedFilters: [flag IS NOT NULL]")
         checkAnswer(std, Seq(Row(1)))

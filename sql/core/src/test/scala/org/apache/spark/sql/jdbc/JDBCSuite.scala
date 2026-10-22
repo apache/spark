@@ -2350,17 +2350,38 @@ class JDBCSuite extends SharedSparkSession {
     assert(getJdbcType(oracleDialect, TimestampNTZType) == "TIMESTAMP")
   }
 
-  test("SPARK-60479: Oracle dialect compiles RPAD for CHAR filter pushdown") {
-    val oracleDialect = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
-    val rpad = new GeneralScalarExpression("RPAD",
+  test("SPARK-60479: dialects compile CHAR_READ_SIDE_PADDING") {
+    val pad = new GeneralScalarExpression("CHAR_READ_SIDE_PADDING",
       Array[V2Expression](
-        FieldReference("PROD_VERSION_CURRENT"),
-        LiteralValue(1, IntegerType),
+        FieldReference("flag"),
+        LiteralValue(5, IntegerType),
         LiteralValue(UTF8String.fromString(" "), StringType)))
     val eq = new Predicate("=",
-      Array[V2Expression](rpad, LiteralValue(UTF8String.fromString("Y"), StringType)))
-    val sql = oracleDialect.compileExpression(eq).get
-    assert(sql === """(RPAD("PROD_VERSION_CURRENT", 1, ' ')) = 'Y'""", sql)
+      Array[V2Expression](pad, LiteralValue(UTF8String.fromString("Y    "), StringType)))
+    val rpad = new GeneralScalarExpression("RPAD",
+      Array[V2Expression](
+        FieldReference("flag"),
+        LiteralValue(5, IntegerType),
+        LiteralValue(UTF8String.fromString(" "), StringType)))
+    val rpadEq = new Predicate("=",
+      Array[V2Expression](rpad, LiteralValue(UTF8String.fromString("Y    "), StringType)))
+
+    val h2 = JdbcDialects.get("jdbc:h2:mem:testdb0")
+    assert(h2.compileExpression(eq).get === """(RPAD("flag", 5, ' ')) = 'Y    '""")
+
+    val postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+    assert(postgres.compileExpression(eq).get === """(RPAD("flag", 5, ' ')) = 'Y    '""")
+
+    val mssql = JdbcDialects.get("jdbc:sqlserver://127.0.0.1/db")
+    val mssqlEq = mssql.compileExpression(eq).get
+    assert(mssqlEq.contains("CASE WHEN \"flag\" IS NULL"), mssqlEq)
+    assert(mssqlEq.contains("THEN NULL ELSE LEFT(CONCAT("), mssqlEq)
+    val mssqlRpad = mssql.compileExpression(rpadEq).get
+    assert(mssqlRpad.contains("CASE WHEN \"flag\" IS NULL"), mssqlRpad)
+
+    val oracle = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
+    assert(oracle.compileExpression(eq).isEmpty)
+    assert(oracle.compileExpression(rpadEq).isEmpty)
   }
 
   test("Oracle TRUNC pushdown should map Spark format strings to Oracle format") {
