@@ -617,22 +617,26 @@ public class VariantBuilder {
           ArrayList<FieldEntry> fields = new ArrayList<>(size);
           int start = writePos;
           Integer[] fieldOrder = null;
+          String[] keys = null;
           if (needCanonicalization && size > 1) {
             fieldOrder = new Integer[size];
-            byte[][] keyBytes = new byte[size][];
+            keys = new String[size];
+            int[] newIds = new int[size];
             for (int fieldIndex = 0; fieldIndex < size; ++fieldIndex) {
               fieldOrder[fieldIndex] = fieldIndex;
               int keyId = readUnsigned(value, idStart + idSize * fieldIndex, idSize);
-              keyBytes[fieldIndex] = encodeKey(getMetadataKey(metadata, keyId));
+              keys[fieldIndex] = getMetadataKey(metadata, keyId);
+              newIds[fieldIndex] = addKey(keys[fieldIndex]);
             }
-            Arrays.sort(fieldOrder, (left, right) -> compareKeys(keyBytes[left], keyBytes[right]));
+            // `buildCanonicalized` adds the keys in sorted order, so new IDs follow key order.
+            Arrays.sort(fieldOrder, (left, right) -> Integer.compare(newIds[left], newIds[right]));
           }
           for (int fieldIndex = 0; fieldIndex < size; ++fieldIndex) {
             int sourceIndex = fieldOrder == null ? fieldIndex : fieldOrder[fieldIndex];
             int id = readUnsigned(value, idStart + idSize * sourceIndex, idSize);
             int offset = readUnsigned(value, offsetStart + offsetSize * sourceIndex, offsetSize);
             int elementPos = dataStart + offset;
-            String key = getMetadataKey(metadata, id);
+            String key = keys == null ? getMetadataKey(metadata, id) : keys[sourceIndex];
             int newId = addKey(key);
             fields.add(new FieldEntry(key, newId, writePos - start));
             appendVariantImpl(value, metadata, elementPos, needCanonicalization);

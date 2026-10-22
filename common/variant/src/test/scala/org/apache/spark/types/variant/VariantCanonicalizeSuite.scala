@@ -19,6 +19,8 @@ package org.apache.spark.types.variant
 
 import java.nio.charset.StandardCharsets
 
+import scala.util.Random
+
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 import org.apache.spark.SparkRuntimeException
@@ -647,5 +649,90 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
       (actual.value.toSeq, actual.metadata.toSeq)
     }
     assert(outputs.distinct.size == outputs.size)
+  }
+
+  private def assertSameVariant(actual: Variant, expected: Variant, label: String): Unit = {
+    assertBytes(actual.value, expected.value, s"$label value")
+    assertBytes(actual.metadata, expected.metadata, s"$label metadata")
+  }
+
+  test("fuzz: equivalent random encodings canonicalize to the same bytes") {
+    import VariantCanonicalizeSuite.{generate, render}
+    (0 until 300).foreach { iteration =>
+      val seed = 0xC0FFEEL + iteration
+      val rand = new Random(seed)
+      val tree = generate(rand, 2 + rand.nextInt(4))
+      val first = VariantBuilder.parseJson(render(tree, rand), false)
+      val second = VariantBuilder.parseJson(render(tree, rand), false)
+      withClue(s"seed=$seed: ") {
+        val canonical = VariantBuilder.canonicalize(first)
+        assertSameVariant(VariantBuilder.canonicalize(second), canonical, "second encoding")
+        assert(VariantBuilder.isCanonical(canonical))
+        assertSameVariant(VariantBuilder.doCanonicalize(canonical), canonical, "rebuild")
+        if (VariantBuilder.isCanonical(first)) {
+          assertSameVariant(VariantBuilder.doCanonicalize(first), first, "canonical input")
+        }
+        val builder = new VariantBuilder(false)
+        builder.appendVariant(first)
+        val copy = builder.result()
+        assert(isValidVariant(copy.value, copy.metadata))
+        assertSameVariant(VariantBuilder.canonicalize(copy), canonical, "appendVariant copy")
+      }
+    }
+  }
+}
+
+// Random values for the fuzz test. Each value is rendered to JSON twice, with object fields
+// shuffled and numbers spelled differently, so the two parses differ in bytes but not in meaning.
+object VariantCanonicalizeSuite {
+  private sealed trait FuzzValue
+  private case class FuzzObject(fields: Seq[(String, FuzzValue)]) extends FuzzValue
+  private case class FuzzArray(elements: Seq[FuzzValue]) extends FuzzValue
+  private case class FuzzScalar(spellings: Seq[String]) extends FuzzValue
+
+  private val fuzzKeys = Seq("", "a", "b", "z", "key", "\u00e9", "\ue000", "\ud800\udc00")
+  private val fuzzStrings =
+    Seq("", "x", "hello", "y" * 70, "\u00e9t\u00e9", "\ud800\udc00" * 20)
+
+  private def generate(rand: Random, depth: Int): FuzzValue = {
+    if (depth <= 0) {
+      generateScalar(rand)
+    } else {
+      rand.nextInt(6) match {
+        case 0 => generateScalar(rand)
+        case 1 | 2 => FuzzArray(Seq.fill(1 + rand.nextInt(3))(generate(rand, depth - 1)))
+        case _ => FuzzObject(rand.shuffle(fuzzKeys).take(1 + rand.nextInt(3))
+          .map(key => key -> generate(rand, depth - 1)))
+      }
+    }
+  }
+
+  private def generateScalar(rand: Random): FuzzValue = rand.nextInt(10) match {
+    case 0 => FuzzScalar(Seq(rand.nextBoolean().toString))
+    case 1 => FuzzScalar(Seq("null"))
+    case 2 => FuzzScalar(Seq("\"" + fuzzStrings(rand.nextInt(fuzzStrings.size)) + "\""))
+    case 3 =>
+      val n = rand.nextInt(200) - 100
+      FuzzScalar(Seq(s"$n", s"$n.0", s"$n.00"))
+    case 4 =>
+      val n = (rand.nextInt(200) - 100) * 100003
+      FuzzScalar(Seq(s"$n", s"$n.0", s"$n.000"))
+    case 5 =>
+      val n = rand.nextInt(99) + 1
+      FuzzScalar(Seq(s"$n.5", s"$n.50", s"$n.500"))
+    case 6 => FuzzScalar(Seq("100000000000000000000", "100000000000000000000.0"))
+    case 7 =>
+      val doubles = Seq(Seq("1.5e0", "15e-1"), Seq("-0e0", "0e0"), Seq("2.5e2", "250e0"))
+      FuzzScalar(doubles(rand.nextInt(doubles.size)))
+    case 8 => FuzzObject(Seq.empty)
+    case _ => FuzzArray(Seq.empty)
+  }
+
+  private def render(value: FuzzValue, rand: Random): String = value match {
+    case FuzzObject(fields) =>
+      rand.shuffle(fields).map { case (key, field) => "\"" + key + "\":" + render(field, rand) }
+        .mkString("{", ",", "}")
+    case FuzzArray(elements) => elements.map(render(_, rand)).mkString("[", ",", "]")
+    case FuzzScalar(spellings) => spellings(rand.nextInt(spellings.size))
   }
 }
