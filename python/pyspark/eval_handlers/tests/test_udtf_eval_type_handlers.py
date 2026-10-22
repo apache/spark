@@ -17,9 +17,9 @@
 
 """Tests for the UDTF eval type handlers (``_udtf``).
 
-The handler gets the ``(udtf, args_offsets, kwargs_offsets, return_type)`` tuple
-``read_single_udtf`` produces; each test builds that tuple around a UDTF instance,
-calls ``run(0, <input batches>)`` and asserts on the output batches.
+The handler gets the ``UDTF`` record ``read_single_udtf`` returns; each test builds that
+record around a UDTF instance, calls ``run(0, <input batches>)`` and asserts on the output
+batches.
 """
 
 import os
@@ -28,6 +28,7 @@ from unittest.mock import patch
 
 from pyspark.errors import PySparkRuntimeError
 from pyspark.eval_handlers._base import get_eval_type_handler
+from pyspark.eval_handlers._typing import UDTF
 from pyspark.eval_handlers._udtf import TableUDTFHandler, UDTFWithPartitions
 from pyspark.serializers import BatchedSerializer, CPickleSerializer
 from pyspark.sql.functions import SkipRestOfInputTableException
@@ -137,7 +138,14 @@ class TableUDTFHandlerTests(UDTFEvalTypeHandlerTestCase):
 
     def _handler(self, udtf, args=(0,), kwargs=None, return_type=None):
         return TableUDTFHandler(
-            udfs=[(udtf, list(args), kwargs or {}, return_type or self._ROW_RETURN_TYPE)],
+            udfs=[
+                UDTF(
+                    udtf=udtf,
+                    args_offsets=list(args),
+                    kwargs_offsets=kwargs or {},
+                    return_type=return_type or self._ROW_RETURN_TYPE,
+                )
+            ],
             runner_conf=RunnerConf({}),
             eval_conf=EvalConf({}),
         )
@@ -241,7 +249,14 @@ class ArrowUDTFHandlerTests(UDTFEvalTypeHandlerTestCase):
     def _handler(self, udtf, args=(0,), kwargs=None, table_arg_offsets="0"):
         conf = {} if table_arg_offsets is None else {"table_arg_offsets": table_arg_offsets}
         return ArrowUDTFHandler(
-            udfs=[(udtf, list(args), kwargs or {}, self._RETURN_TYPE)],
+            udfs=[
+                UDTF(
+                    udtf=udtf,
+                    args_offsets=list(args),
+                    kwargs_offsets=kwargs or {},
+                    return_type=self._RETURN_TYPE,
+                )
+            ],
             runner_conf=RunnerConf({}),
             eval_conf=EvalConf(conf),
         )
@@ -401,7 +416,14 @@ class ArrowTableUDTFHandlerTestsMixin:
 
     def _handler(self, udtf, args=(0,), kwargs=None, return_type=None):
         return self.handler_cls(
-            udfs=[(udtf, list(args), kwargs or {}, return_type or self._ROW_RETURN_TYPE)],
+            udfs=[
+                UDTF(
+                    udtf=udtf,
+                    args_offsets=list(args),
+                    kwargs_offsets=kwargs or {},
+                    return_type=return_type or self._ROW_RETURN_TYPE,
+                )
+            ],
             runner_conf=RunnerConf({}),
             eval_conf=EvalConf({"input_type": self._ROW_INPUT_TYPE.json()}),
         )

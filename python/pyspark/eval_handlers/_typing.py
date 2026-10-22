@@ -21,11 +21,14 @@ The Arrow element types are forward refs so pyarrow stays a type-checking-only
 import at runtime, as elsewhere in the worker.
 """
 
-from collections.abc import Iterator
-from typing import TYPE_CHECKING, TypeVar
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 
 if TYPE_CHECKING:
     import pyarrow as pa
+
+    from pyspark.sql.types import StructType
 
 # Grouped-category input element, matching what the serializer yields: a group
 # serializer yields a lazy iterator; a co-group serializer materializes each side.
@@ -35,3 +38,39 @@ CoGroupedBatch = tuple[list["pa.RecordBatch"], list["pa.RecordBatch"]]
 # Handler input and output stream element types.
 InputBatch = TypeVar("InputBatch")
 OutputBatch = TypeVar("OutputBatch")
+
+
+@dataclass(frozen=True)
+class UDF:
+    """One UDF as read by ``read_single_udf``; each handler takes the fields it needs."""
+
+    # The chained function wrapped for profiling and, for most eval types, in
+    # fail_on_stopiteration.
+    func: Callable[..., Any]
+    # The chained function before any wrapping, for handlers that need the pickled object
+    # itself (an incremental Aggregator) or its signature.
+    raw_func: Any
+    args_offsets: list[int]
+    kwargs_offsets: dict[str, int]
+    # The DataType of the last function in the chain; a StructType for the eval types that
+    # return rows.
+    return_type: Any
+
+
+class UDTFInstance(Protocol):
+    """An instance of the user's UDTF class, or the PartitionedUDTF wrapping one: an object whose
+    methods are called, not a function. ``terminate`` and ``cleanup`` are optional."""
+
+    def eval(self, *args: Any, **kwargs: Any) -> Any: ...
+
+
+@dataclass(frozen=True)
+class UDTF:
+    """The UDTF as read by ``read_single_udtf``."""
+
+    # Wrapped in the handler's partition_wrapper when its TABLE argument has PARTITION BY
+    # expressions.
+    udtf: UDTFInstance
+    args_offsets: list[int]
+    kwargs_offsets: dict[str, int]
+    return_type: "StructType"

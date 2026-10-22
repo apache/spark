@@ -35,8 +35,8 @@ from pyspark.accumulators import (
 )
 from pyspark.errors import PySparkRuntimeError
 from pyspark.eval_handlers._base import get_eval_type_handler
+from pyspark.eval_handlers._typing import UDF, UDTF
 from pyspark.eval_handlers._udtf import TableUDTFHandler, UDTFEvalTypeHandler
-from pyspark.eval_handlers.utils import wrap_kwargs_support
 from pyspark.logger.worker_io import capture_outputs
 from pyspark.messages import (
     SparkMessageReceiver,
@@ -201,86 +201,20 @@ def read_single_udf(pickleSer, udf_info, handler_cls, runner_conf):
         # when they are processed in a for loop, raise them as RuntimeError's instead
         func = fail_on_stopiteration(profiling_func)
 
-    args_offsets, kwargs_offsets = udf_info.args, udf_info.kwargs
-
-    # The last returnType will be the return type of UDF. Eval types are grouped below by the
-    # shape of the value they return.
-
-    # Incremental Python aggregators: the pickled "function" is the Aggregator object itself, whose
-    # zero/reduce/merge/finish methods the worker calls directly. Return it unwrapped (not through
-    # fail_on_stopiteration, which would treat it as a plain callable).
-    if eval_type in (
-        PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF,
-        PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF,
-        PythonEvalType.SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF,
-    ):
-        return chained_func, args_offsets, kwargs_offsets, return_type
-
-    # Scalar, aggregation and window UDFs: (func, args_offsets, kwargs_offsets, return_type).
-    if eval_type in (
-        PythonEvalType.SQL_ARROW_BATCHED_UDF,
-        PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF,
-        PythonEvalType.SQL_SCALAR_PANDAS_ELEMENTWISE_UDF,
-        PythonEvalType.SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF,
-        PythonEvalType.SQL_SCALAR_ARROW_ELEMENTWISE_UDF,
-        PythonEvalType.SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF,
-        PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
-        PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
-        PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
-        PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
-        PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
-        PythonEvalType.SQL_SCALAR_ARROW_UDF,
-        PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
-        PythonEvalType.SQL_SCALAR_PANDAS_UDF,
-        PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
-        PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
-    ):
-        return func, args_offsets, kwargs_offsets, return_type
-    # Grouped-map and cogrouped-map UDFs: (func, args_offsets, return_type, num_udf_args).
-    elif eval_type in (
-        PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF,
-        PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
-        PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
-        PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
-        PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
-        PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
-    ):
-        # signature was lost when wrapping it
-        num_udf_args = len(inspect.getfullargspec(chained_func).args)
-        return func, args_offsets, return_type, num_udf_args
-    # Grouped-map-with-state and transform-with-state UDFs: (func, args_offsets, return_type).
-    elif eval_type in (
-        PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
-        PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF,
-        PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,
-        PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF,
-        PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF,
-    ):
-        return func, args_offsets, return_type
-    # Map iterator UDFs take no offsets.
-    elif eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF:
-        return func, None, None, return_type
-    elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
-        return func, None, None, None
-    # Batched (plain Python) UDFs: (args_kwargs_offsets, eval func); apply kwargs binding and
-    # convert each result to the internal representation only when the return type requires it.
-    elif eval_type == PythonEvalType.SQL_BATCHED_UDF:
-        func, args_kwargs_offsets = wrap_kwargs_support(func, args_offsets, kwargs_offsets)
-        if return_type.needConversion():
-            toInternal = return_type.toInternal
-            return args_kwargs_offsets, lambda *a: toInternal(func(*a))
-        else:
-            return args_kwargs_offsets, lambda *a: func(*a)
-    else:
-        raise ValueError("Unknown eval type: {}".format(eval_type))
+    # The last returnType will be the return type of UDF.
+    return UDF(
+        func=func,
+        raw_func=chained_func,
+        args_offsets=udf_info.args,
+        kwargs_offsets=udf_info.kwargs,
+        return_type=return_type,
+    )
 
 
 # Read a serialized user-defined table function (UDTF) and prepare it for evaluation: wrap
 # the constructor to receive the AnalyzeResult, instantiate the UDTF (wrapped in the handler's
 # partition_wrapper when its TABLE argument has PARTITION BY expressions), and check the 'eval'
-# signature against the call arguments. Returns the same
-# (func, args_offsets, kwargs_offsets, return_type) shape as read_single_udf, with the UDTF
-# instance in the func slot.
+# signature against the call arguments.
 def read_single_udtf(pickleSer, udtf_info, handler_cls):
     if udtf_info.pickled_analyze_result is not None:
         pickled_analyze_result = pickleSer.loads(udtf_info.pickled_analyze_result)
@@ -356,7 +290,12 @@ def read_single_udtf(pickleSer, udtf_info, handler_cls):
             messageParameters={"name": udtf_info.name, "reason": str(e)},
         ) from None
 
-    return udtf, udtf_info.args, udtf_info.kwargs, return_type
+    return UDTF(
+        udtf=udtf,
+        args_offsets=udtf_info.args,
+        kwargs_offsets=udtf_info.kwargs,
+        return_type=return_type,
+    )
 
 
 def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
