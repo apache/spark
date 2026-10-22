@@ -492,7 +492,9 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
         throw SparkException.internalError(
           s"V2Reference should be resolved during analysis: ${r.name}")
 
-      case u: UnresolvedInlineTable if unresolvedInlineTableContainsScalarSubquery(u) =>
+      case u: UnresolvedInlineTable
+          if !SQLConf.get.getConf(SQLConf.INLINE_TABLE_NON_FOLDABLE_EXPRESSIONS_ENABLED) &&
+            unresolvedInlineTableContainsScalarSubquery(u) =>
         throw QueryCompilationErrors.inlineTableContainsScalarSubquery(u)
 
       case command: V2PartitionCommand =>

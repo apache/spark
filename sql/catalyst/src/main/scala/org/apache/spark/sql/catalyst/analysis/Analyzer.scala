@@ -2801,6 +2801,10 @@ class Analyzer(
         resolveSubQueries(j, j)
       case tvf: UnresolvedTableValuedFunction =>
         resolveSubQueries(tvf, tvf)
+      // An inline table has no output, so its subqueries cannot reference its columns.
+      case t: UnresolvedInlineTable
+          if conf.getConf(SQLConf.INLINE_TABLE_NON_FOLDABLE_EXPRESSIONS_ENABLED) =>
+        resolveSubQueries(t, t)
       case s: SupportsSubquery if s.childrenResolved =>
         resolveSubQueries(s, s)
     }
