@@ -89,16 +89,16 @@ private[master] class FileSystemPersistenceEngine(
   // still be shared across hosts (e.g. an NFS-mounted recovery directory).
   private def deserializeFromFile[T](file: File)(implicit m: ClassTag[T]): T = {
     var fileIn: InputStream = new FileInputStream(file)
-    codec.foreach { c => fileIn = c.compressedInputStream(new FileInputStream(file)) }
     var in: DeserializationStream = null
-    try {
+    Utils.tryWithSafeFinally {
+      codec.foreach { c => fileIn = c.compressedInputStream(fileIn) }
       in = serializer.newInstance().deserializeStream(fileIn)
       in.readObject[T]()
-    } finally {
-      fileIn.close()
+    } {
       if (in != null) {
         in.close()
       }
+      fileIn.close()
     }
   }
 
