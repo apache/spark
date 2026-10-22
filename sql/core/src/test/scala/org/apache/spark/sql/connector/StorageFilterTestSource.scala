@@ -43,7 +43,8 @@ import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
  *    Here the unit is the one partition;
  *  - `markAllChecked`: reads without the filter but marks every row checked, which breaks the
  *    contract on purpose;
- *  - `declared`: the comma-separated storage-filter columns, `k` by default;
+ *  - `declared`: the comma-separated storage-filter columns, `k` by default, a dot separating a
+ *    nested field;
  *  - `valueName`: the name of the value column, `v` by default.
  *
  * A filter that throws `StorageFilterNotAppliedException` is given up for the rest of the
@@ -125,7 +126,7 @@ class StorageFilterTestScan(
   }
 
   override def storageFilterAttributes(): Array[NamedReference] =
-    declared.map(FieldReference.column).toArray[NamedReference]
+    declared.map(name => FieldReference(name.split('.').toSeq)).toArray[NamedReference]
 
   override def planInputPartitions(): Array[InputPartition] =
     Array(StorageFilterTestPartition)

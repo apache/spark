@@ -254,14 +254,18 @@ case class DataSourceV2ScanRelation(
   }
 
   /**
-   * Resolved attributes the scan declares for storage filtering via
-   * [[SupportsStorageFilters.storageFilterAttributes]]. Empty when the scan does not implement that
-   * interface. Unlike runtime filtering, there is no "fully pushed" set, since a storage filter
-   * always stays in the plan above the scan.
+   * The output columns the scan declares for storage filtering via
+   * [[SupportsStorageFilters.storageFilterAttributes]], matched by name. Only top-level
+   * declarations count, and a declared column the scan does not read is left out, since no offered
+   * filter can reference it. Empty when the scan does not implement that interface. Unlike runtime
+   * filtering, there is no "fully pushed" set, since a storage filter always stays in the plan
+   * above the scan.
    */
   lazy val storageFilterAttrs: AttributeSet = scan match {
     case s: SupportsStorageFilters =>
-      resolveFilterAttrs(s.storageFilterAttributes(), "storageFilterAttributes()")
+      val declared = s.storageFilterAttributes().map(_.fieldNames).collect { case Array(n) => n }
+      val resolver = SQLConf.get.resolver
+      AttributeSet(output.filter(a => declared.exists(resolver(a.name, _))))
     case _ => AttributeSet.empty
   }
 

@@ -136,8 +136,6 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       relation: DataSourceV2ScanRelation,
       filters: Seq[Expression]): Seq[Expression] = {
     if (!session.sessionState.conf.v2StorageFilterPushdownEnabled) return Nil
-    // Before the declared columns are resolved, which fails on one pruned out of the read schema.
-    if (!filters.exists(_.isInstanceOf[BloomFilterMightContain])) return Nil
     if (relation.storageFilterAttrs.isEmpty) return Nil
     if (StorageFilterPlanning.clashesWithCheckedColumn(relation.output.map(_.name))) return Nil
     StorageFilterPlanning.offeredConjuncts(filters, relation.storageFilterAttrs,
@@ -227,7 +225,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         session.sessionState.conf, storageFilters, relation.output)
       val batchExec = BatchScanExec(relation.output ++ checked, relation.scan, runtimeFilters,
         relation.ordering, relation.relation.table, relation.keyGroupedPartitioning,
-        storageFilters)
+        storageFilters, checked)
       // With the checked column the scan's output differs from `project`, so a Project drops it.
       DataSourceV2Strategy.withProjectAndFilter(project,
         StorageFilterPlanning.skipCheckedRows(filtersAbove, storageFilters, checked),

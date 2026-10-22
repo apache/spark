@@ -2069,19 +2069,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val V2_STORAGE_FILTER_PUSHDOWN_ENABLED =
-    buildConf("spark.sql.sources.v2.storageFilterPushdown.enabled")
-      .doc("If true, a runtime bloom filter from join runtime filtering is offered to a data " +
-        "source V2 scan that implements SupportsStorageFilters and declares the filter's " +
-        "columns. Its readers may apply it while they read, to skip reading the other columns " +
-        "of the rows it rejects. The filter also stays in the post-scan filter, so the answer " +
-        "does not change. " +
-        s"${PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED.key} is the V1 Parquet file source's own conf.")
-      .version("5.0.0")
-      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
-      .booleanConf
-      .createWithDefault(false)
-
   val PARQUET_AGGREGATE_PUSHDOWN_ENABLED = buildConf("spark.sql.parquet.aggregatePushdown")
     .doc("If true, aggregates will be pushed down to Parquet for optimization. Support MIN, MAX " +
       "and COUNT as aggregate expression. For MIN/MAX, support boolean, integer, float and date " +
@@ -2783,6 +2770,19 @@ object SQLConf {
         s"during coalescing. This config requires ${V2_BUCKETING_ENABLED.key} to be enabled.")
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
+  val V2_STORAGE_FILTER_PUSHDOWN_ENABLED =
+    buildConf("spark.sql.sources.v2.storageFilterPushdown.enabled")
+      .doc("If true, a runtime bloom filter from join runtime filtering is offered to a data " +
+        "source V2 scan that implements SupportsStorageFilters and declares the filter's " +
+        "columns. Its readers may apply it while they read, to skip reading the other columns " +
+        "of the rows it rejects. The filter also stays in the post-scan filter, so the answer " +
+        "does not change. " +
+        s"${PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED.key} is the V1 Parquet file source's own conf.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 
@@ -9520,8 +9520,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def parquetStorageFilterPushdownEnabled: Boolean =
     getConf(PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED)
 
-  def v2StorageFilterPushdownEnabled: Boolean = getConf(V2_STORAGE_FILTER_PUSHDOWN_ENABLED)
-
   def parquetStorageFilterPushdownMaxSplicedRowGroupBytes: Long =
     getConf(PARQUET_STORAGE_FILTER_PUSHDOWN_MAX_SPLICED_ROW_GROUP_BYTES)
 
@@ -9838,6 +9836,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def v2BucketingPreserveOrderingOnCoalesceEnabled: Boolean =
     getConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED)
+
+  def v2StorageFilterPushdownEnabled: Boolean = getConf(V2_STORAGE_FILTER_PUSHDOWN_ENABLED)
 
   def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)

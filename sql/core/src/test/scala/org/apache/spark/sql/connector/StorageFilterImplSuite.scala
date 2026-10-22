@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.{SparkArithmeticException, SparkException, SparkFunSuite, TaskContext}
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkFunSuite, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, Divide, EqualTo, EvalMode, GreaterThan, Literal, NumericEvalContext, Remainder}
+import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, Cast, Divide, EqualTo, EvalMode, GreaterThan, Literal, NumericEvalContext, Remainder}
 import org.apache.spark.sql.connector.expressions.filter.StorageFilterNotAppliedException
+import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
-import org.apache.spark.sql.internal.connector.StorageFilterImpl
+import org.apache.spark.sql.internal.connector.{StorageFilterImpl, StorageFilterRequestImpl}
 import org.apache.spark.sql.types.{DoubleType, LongType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
@@ -54,6 +55,14 @@ class StorageFilterImplSuite extends SparkFunSuite {
     assert(evenKeys.references.map(_.toString).toSeq == Seq("k"))
   }
 
+  test("a filter over two columns takes them in the scan output's order") {
+    val filter =
+      StorageFilterImpl(And(EqualTo(k, Literal(1L)), EqualTo(v, Literal(10L))), Seq(v, k))
+    assert(filter.references.map(_.toString).toSeq == Seq("v", "k"))
+    assert(filter.eval(InternalRow(10L, 1L)), "the row holds v, then k")
+    assert(!filter.eval(InternalRow(1L, 10L)))
+  }
+
   test("a filter over a column outside the scan output is an internal error") {
     val e = intercept[SparkException](StorageFilterImpl(EqualTo(k, Literal(1L)), Seq(v)))
     assert(e.getCondition == "INTERNAL_ERROR", s"got ${e.getCondition}")
@@ -75,6 +84,21 @@ class StorageFilterImplSuite extends SparkFunSuite {
     assert(e.getCause.isInstanceOf[SparkArithmeticException], s"got ${e.getCause}")
     withBatchOf(1L, 0L) { batch =>
       intercept[StorageFilterNotAppliedException](filter.select(batch, new Array[Int](2)))
+    }
+  }
+
+  test("a reader factory without the storage-filter methods cannot create a filtering reader") {
+    val factory = new PartitionReaderFactory {
+      override def createReader(partition: InputPartition): PartitionReader[InternalRow] = null
+    }
+    val request = StorageFilterRequestImpl(evenKeys, appendsCheckedColumn = false)
+    Seq(
+      () => factory.createReader(StorageFilterTestPartition, request),
+      () => factory.createColumnarReader(StorageFilterTestPartition, request)
+    ).foreach { create =>
+      val e = intercept[SparkUnsupportedOperationException](create())
+      assert(e.getCondition == "DATA_SOURCE_STORAGE_FILTER_READER_NOT_SUPPORTED",
+        s"got ${e.getCondition}")
     }
   }
 

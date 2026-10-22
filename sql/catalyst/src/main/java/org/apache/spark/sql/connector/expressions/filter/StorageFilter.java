@@ -65,8 +65,7 @@ public abstract class StorageFilter extends Predicate {
    * <p>
    * For a StorageFilter these are the columns the predicate reads, and their order is the layout of
    * the row {@link #eval(InternalRow)} and the batch {@link #select(ColumnarBatch, int[])} expect.
-   * Each is one of the scan's {@link SupportsStorageFilters#storageFilterAttributes()}, or the
-   * top-level column of a nested one.
+   * Each is one of the scan's {@link SupportsStorageFilters#storageFilterAttributes()}.
    */
   @Override
   public abstract NamedReference[] references();

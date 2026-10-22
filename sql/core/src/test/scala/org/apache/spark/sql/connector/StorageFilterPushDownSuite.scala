@@ -116,7 +116,8 @@ class StorageFilterPushDownSuite
         assert(scan.supportsColumnar == columnar, s"the scan must read $kind:\n$plan")
         assert(scan.storageFilters.size == 1,
           s"the bloom filter must be on the scan; got ${scan.storageFilters}\n$plan")
-        assert(scan.appendsCheckedColumn, s"the scan must get the checked column:\n$plan")
+        assert(scan.checkedColumn.isDefined && scan.checkedColumn == scan.output.lastOption,
+          s"the scan must get the checked column, last:\n$plan")
         assert(bloomsAbove(plan) == (0, 1),
           s"the Filter must skip the bloom on checked rows:\n$plan")
         assert(rowsOutOfFilter(plan) == StorageFilterTestSource.rowsReturned.get(),
@@ -197,7 +198,7 @@ class StorageFilterPushDownSuite
         val scan = scanOf(plan)
         assert(scan.storageFilters.size == 1,
           s"the bloom filter must be on the scan; got ${scan.storageFilters}\n$plan")
-        assert(!scan.appendsCheckedColumn, s"the scan must not get the checked column:\n$plan")
+        assert(scan.checkedColumn.isEmpty, s"the scan must not get the checked column:\n$plan")
         assert(StorageFilterTestSource.checkedColumnRequests.get() == 0,
           "the reader must not be asked for the checked column")
         assert(bloomsAbove(plan) == (1, 0), s"the Filter must keep the bloom as it is:\n$plan")
@@ -212,6 +213,7 @@ class StorageFilterPushDownSuite
     ("with the conf off", Seq(SQLConf.V2_STORAGE_FILTER_PUSHDOWN_ENABLED.key -> "false"), Nil),
     ("to a scan that declares no column", Nil, Seq("declared" -> "")),
     ("to a scan that declares only another column", Nil, Seq("declared" -> "v")),
+    ("to a scan that declares only a nested field", Nil, Seq("declared" -> "k.x")),
     ("to a scan with a column named like the checked column", Nil,
       Seq("valueName" -> checkedName.toUpperCase(java.util.Locale.ROOT)))
   ).foreach { case (when, conf, options) =>
@@ -219,7 +221,7 @@ class StorageFilterPushDownSuite
       withBloomJoin(conf: _*) {
         val (result, plan) = runBloomJoin(options :+ ("columnar" -> "true"): _*)
         val scan = scanOf(plan)
-        assert(scan.storageFilters.isEmpty && !scan.appendsCheckedColumn,
+        assert(scan.storageFilters.isEmpty && scan.checkedColumn.isEmpty,
           s"the scan must get no storage filter:\n$plan")
         assert(bloomsAbove(plan) == (1, 0), s"the Filter must keep the bloom as it is:\n$plan")
         assert(StorageFilterTestSource.filteredReaders.get() == 0,
@@ -252,11 +254,21 @@ class StorageFilterPushDownSuite
       val fresh = AttributeMap(scan.output.map(a => a -> a.newInstance()))
       val twin = scan.copy(
         output = scan.output.map(fresh(_)),
+        checkedColumn = scan.checkedColumn.map(fresh(_)),
         storageFilters = scan.storageFilters.map(_.transform {
           case a: Attribute => fresh.getOrElse(a, a)
         }))
       assert(scan.sameResult(twin),
         s"the same filtering scan must be reusable:\n${scan.canonicalized}\n${twin.canonicalized}")
+    }
+  }
+
+  test("a declared column the scan does not read is ignored") {
+    withBloomJoin() {
+      val (result, plan) = runBloomJoin("columnar" -> "true", "declared" -> "k,w")
+      assert(scanOf(plan).storageFilters.size == 1,
+        s"the bloom filter must be on the scan:\n$plan")
+      assert(result == joinResult, s"got $result")
     }
   }
 

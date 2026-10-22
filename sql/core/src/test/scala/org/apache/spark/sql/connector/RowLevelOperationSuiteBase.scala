@@ -169,8 +169,8 @@ abstract class RowLevelOperationSuiteBase
   protected def executeTransaction(func: => Unit): (Txn, Map[String, TxnTable]) = {
     val tables = withQueryExecutionsCaptured(spark)(func).flatMap { qe =>
       collectWithSubqueries(qe.executedPlan) {
-        case BatchScanExec(_, _, _, _, table: TxnTable, _, _) => table
-        case BatchScanExec(_, _, _, _, RowLevelOperationTable(table: TxnTable, _), _, _) => table
+        case BatchScanExec(_, _, _, _, table: TxnTable, _, _, _) => table
+        case BatchScanExec(_, _, _, _, RowLevelOperationTable(table: TxnTable, _), _, _, _) => table
       }
     }
     (catalog.lastTransaction, indexByName(tables))

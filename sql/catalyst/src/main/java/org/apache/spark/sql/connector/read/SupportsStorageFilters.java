@@ -43,7 +43,11 @@ import org.apache.spark.sql.connector.expressions.filter.StorageFilterNotApplied
  * rest of the unit once the filter throws {@link StorageFilterNotAppliedException}.
  * <p>
  * When {@link StorageFilterRequest#appendsCheckedColumn()} is true, the reader also marks the rows
- * it applied the filter to.
+ * it applied the filter to. Spark reserves the name {@code _tmp_storage_filter_checked} for that
+ * column, so a scan with a column of that name is offered no filter.
+ * <p>
+ * Spark does not see what a filter saves, or where a reader read without it. A scan reports that
+ * through its own metrics, see {@link Scan#supportedCustomMetrics()}.
  *
  * @since 5.0.0
  */
@@ -51,12 +55,12 @@ import org.apache.spark.sql.connector.expressions.filter.StorageFilterNotApplied
 public interface SupportsStorageFilters extends Scan {
 
   /**
-   * Returns the columns this scan can evaluate a {@link StorageFilter} on. Spark offers the scan a
-   * filter only when every column the filter references is one of these. A nested reference
-   * counts as its top-level column, which {@link StorageFilter#references()} then names.
+   * Returns the top-level columns this scan can evaluate a {@link StorageFilter} on. Spark offers
+   * the scan a filter only when every column the filter references is one of these. A filter over
+   * a field of a struct column references the whole column.
    * <p>
-   * Declare only columns of {@link Scan#readSchema()}. Spark resolves these against the scan's
-   * output when it has a filter to offer, and a column pruned out of it fails the query.
+   * Spark matches these by name against the columns of {@link Scan#readSchema()}. It ignores a
+   * nested reference, and a column the scan does not read.
    */
   NamedReference[] storageFilterAttributes();
 }

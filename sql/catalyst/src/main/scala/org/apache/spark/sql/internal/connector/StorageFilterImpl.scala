@@ -20,6 +20,7 @@ package org.apache.spark.sql.internal.connector
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, BindReferences, Expression => CatalystExpression, Predicate => CatalystPredicate}
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
@@ -37,7 +38,10 @@ import org.apache.spark.sql.connector.expressions.filter.{StorageFilter, Storage
 class StorageFilterImpl private (
     private val catalystExpr: CatalystExpression,
     private val attrs: Seq[Attribute])
-  extends StorageFilter {
+  extends StorageFilter with Logging {
+
+  // Whether this instance has logged a failure, so a task logs only its first.
+  @transient private var loggedFailure = false
 
   @transient private lazy val boundPredicate: InternalRow => Boolean = {
     val bound = BindReferences.bindReference(catalystExpr, attrs)
@@ -46,7 +50,7 @@ class StorageFilterImpl private (
 
   /**
    * Wraps a non-fatal error in [[StorageFilterNotAppliedException]], unless the task is being
-   * killed.
+   * killed. Each task logs the first one.
    */
   override def eval(row: InternalRow): Boolean = {
     // Outside the `try`, so a failure to build the predicate fails the task.
@@ -55,6 +59,12 @@ class StorageFilterImpl private (
       predicate(row)
     } catch {
       case NonFatal(e) if !StorageFilterImpl.taskKilled =>
+        if (!loggedFailure) {
+          loggedFailure = true
+          // The columns only, since a runtime bloom's literal would print every byte of the bloom.
+          logWarning(log"A storage filter over ${MDC(LogKeys.EXPR, references.mkString(", "))} " +
+            log"could not be applied, so the reader reads without it.", e)
+        }
         throw new StorageFilterNotAppliedException(e)
     }
   }
