@@ -688,8 +688,13 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     // via `Project.hiddenOutputTag`). We accept that here but tag the candidate
     // as `hidden` so the top-level merge in `resolveDataFrameColumn` can prefer
     // a regular (p.output) match over hidden (p.metadataOutput) ones.
+    //
+    // A candidate is hidden only if it is not visible via `p.output`. An attribute
+    // can be in both `p.output` and `p.metadataOutput`, e.g. a USING join's hidden
+    // right key that a Project above re-selects (`Project.metadataOutput` inherits
+    // the child's), and such a candidate must stay regular.
     val filtered = candidates.flatMap { c =>
-      val hidden = c.hidden || c.expr.references.subsetOf(AttributeSet(p.metadataOutput))
+      val hidden = c.hidden || !c.expr.references.subsetOf(p.outputSet)
       if (c.expr.references.subsetOf(AttributeSet(p.output ++ p.metadataOutput))) {
         Some(c.copy(hidden = hidden))
       } else {
