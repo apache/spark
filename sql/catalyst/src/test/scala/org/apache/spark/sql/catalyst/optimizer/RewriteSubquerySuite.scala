@@ -179,8 +179,9 @@ class RewriteSubquerySuite extends PlanTest {
       "the two plans must share an attribute for this test to mean anything")
 
     // The nested subquery references `a`, which only the subquery plan is meant to give it, and
-    // is correlated to it, so it must be rewritten against the subquery plan. Classifying `a` as
-    // a reference to the outer plan as well would report it as referencing both plans.
+    // is correlated to it, so it must be rewritten against the subquery plan. Attributing `a` to
+    // the outer plan instead, which is what swapping the probes in planReferences would do, would
+    // decline the nested subquery and leave it in the semi join condition.
     val nestedInSubquery = InSubquery(
       Seq(a),
       ListQuery(nested.select($"col1"), joinCond = Seq(EqualTo($"col1", a))))
