@@ -225,7 +225,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     sessionHolder.eventManager.status_(SessionStatus.Started)
     val suppliedId = "racing-checkpoint-id"
-    val racingDataFrame = spark.range(1)
+    val racingDataFrame = spark.range(1).toDF()
     val raceSessionHolder = sessionHolder
 
     val error = intercept[InvalidPlanInput] {

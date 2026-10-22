@@ -71,8 +71,8 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
 
   test("DataFrame cache: Duplicate IDs are not overwritten") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
-    val df1 = spark.range(1)
-    val df2 = spark.range(2)
+    val df1 = spark.range(1).toDF()
+    val df2 = spark.range(2).toDF()
     val dfId = "duplicate-id"
 
     sessionHolder.cacheDataFrameById(dfId, df1)
