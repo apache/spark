@@ -2056,29 +2056,42 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
       checkAnswer(nseq, Seq(Row(1)))
 
       val longLit = sql(s"SELECT id FROM $table WHERE flag = 'YYYYYY'")
-      checkFiltersRemoved(longLit)
+      checkFiltersRemoved(longLit, removed = false)
       checkAnswer(longLit, Seq.empty)
 
       val range = sql(s"SELECT id FROM $table WHERE flag > 'A'")
-      checkFiltersRemoved(range)
+      checkFiltersRemoved(range, removed = false)
       checkAnswer(range, Seq(Row(1), Row(2), Row(3), Row(5)))
 
       val likeFam = sql(s"SELECT id FROM $table WHERE flag LIKE 'Y%'")
-      checkFiltersRemoved(likeFam)
+      checkFiltersRemoved(likeFam, removed = false)
       checkAnswer(likeFam, Seq(Row(1), Row(3)))
 
+      val vsCols = "h2.test.char_vs_vc"
+      withTable(vsCols) {
+        sql(s"CREATE TABLE $vsCols (flag CHAR(5), v VARCHAR(5))")
+        sql(s"INSERT INTO $vsCols VALUES ('Y', 'Y')")
+        val vsVarchar = sql(s"SELECT v FROM $vsCols WHERE flag = v")
+        checkFiltersRemoved(vsVarchar, removed = false)
+        checkAnswer(vsVarchar, Seq.empty)
+      }
+
+      val rpadNest = sql(s"SELECT id FROM $table WHERE rpad(flag, 10, 'x') = 'Y    xxxxx'")
+      checkFiltersRemoved(rpadNest, removed = false)
+      checkAnswer(rpadNest, Seq(Row(1)))
+
       val cnt = sql(s"SELECT COUNT(flag) FROM $table")
-      checkAggregateRemoved(cnt)
+      checkAggregateRemoved(cnt, removed = false)
       checkAnswer(cnt, Seq(Row(4)))
 
       val grp = sql(s"SELECT flag, COUNT(*) FROM $table GROUP BY flag")
-      checkAggregateRemoved(grp)
+      checkAggregateRemoved(grp, removed = false)
       checkAnswer(grp, Seq(
         Row("Y    ", 1), Row("N    ", 1), Row("YES  ", 1), Row(null, 1), Row("ä    ", 1)))
       // scalastyle:on nonascii
 
       val topN = sql(s"SELECT id FROM $table WHERE flag IS NOT NULL ORDER BY flag LIMIT 1")
-      checkSortRemoved(topN)
+      checkSortRemoved(topN, removed = false)
       checkAnswer(topN, Seq(Row(2)))
 
       withSQLConf(SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {

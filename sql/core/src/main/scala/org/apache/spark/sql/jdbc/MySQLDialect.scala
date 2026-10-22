@@ -45,8 +45,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
   // See https://dev.mysql.com/doc/refman/8.0/en/aggregate-functions.html
   private val supportedAggregateFunctions =
     Set("MAX", "MIN", "SUM", "COUNT", "AVG") ++ distinctUnsupportedAggregateFunctions
-  private val supportedFunctions =
-    supportedAggregateFunctions ++ Set("DATE_ADD", "DATE_DIFF", "CHAR_READ_SIDE_PADDING")
+  private val supportedFunctions = supportedAggregateFunctions ++ Set("DATE_ADD", "DATE_DIFF")
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)

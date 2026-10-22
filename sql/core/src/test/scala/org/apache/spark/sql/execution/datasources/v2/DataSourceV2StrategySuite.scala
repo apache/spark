@@ -1917,6 +1917,22 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       case other => fail(s"expected IS_NULL on the raw column, got ${other.describe()}")
     }
 
+    val nseq = new V2ExpressionBuilder(EqualNullSafe(padded, Literal("Y")), isPredicate = true)
+      .build()
+    assert(nseq.isDefined)
+    val in = new V2ExpressionBuilder(In(padded, Seq(Literal("Y"))), isPredicate = true).build()
+    assert(in.isDefined)
+    assert(new V2ExpressionBuilder(EqualTo(padded, Literal("YY")), isPredicate = true)
+      .build().isEmpty, "over-long literal should stay local")
+    assert(new V2ExpressionBuilder(GreaterThan(padded, Literal("A")), isPredicate = true)
+      .build().isEmpty, "range comparison should stay local")
+    val other = AttributeReference("other", StringType)()
+    assert(new V2ExpressionBuilder(EqualTo(padded, other), isPredicate = true).build().isEmpty,
+      "CHAR vs column should stay local")
+    val nestedRpad = StringRPad(padded, Literal(3), Literal("x"))
+    assert(new V2ExpressionBuilder(EqualTo(nestedRpad, Literal("Yxx")), isPredicate = true)
+      .build().isEmpty, "rpad of padded CHAR should stay local")
+
     def paddingInvoke(cls: Class[_], functionName: String): StaticInvoke = {
       StaticInvoke(cls, StringType, functionName, col :: Literal(1) :: Nil, returnNullable = false)
     }

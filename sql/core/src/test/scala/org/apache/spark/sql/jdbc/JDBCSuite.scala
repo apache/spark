@@ -2370,14 +2370,16 @@ class JDBCSuite extends SharedSparkSession {
       "jdbc:h2:mem:testdb0",
       "jdbc:postgresql://127.0.0.1/db",
       "jdbc:sqlserver://127.0.0.1/db",
-      "jdbc:oracle://127.0.0.1/db",
-      "jdbc:db2://127.0.0.1/db",
-      "jdbc:derby:memory:db").foreach { url =>
+      "jdbc:oracle://127.0.0.1/db").foreach { url =>
       assert(
         JdbcDialects.get(url).compileExpression(eq).get === """("flag") = 'Y    '""", url)
     }
-    assert(JdbcDialects.get("jdbc:mysql://127.0.0.1/db").compileExpression(eq).get ===
-      "(`flag`) = 'Y    '")
+    Seq(
+      "jdbc:mysql://127.0.0.1/db",
+      "jdbc:db2://127.0.0.1/db",
+      "jdbc:derby:memory:db").foreach { url =>
+      assert(JdbcDialects.get(url).compileExpression(eq).isEmpty, url)
+    }
 
     val h2 = JdbcDialects.get("jdbc:h2:mem:testdb0")
     assert(h2.compileExpression(rpadEq).get === """(RPAD("flag", 5, ' ')) = 'Y    '""")
