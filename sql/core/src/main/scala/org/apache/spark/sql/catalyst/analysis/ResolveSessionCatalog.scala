@@ -1019,10 +1019,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     }
   }
 
-  private def supportsV1Command(catalog: CatalogPlugin): Boolean = {
-    DataSourceV2Utils.supportsV1Command(catalog, SQLConf.get)
-  }
-
   // True when the ALTER COLUMN specs only change comments (set or drop, no type / nullability /
   // position / default changes) and, taken together, touch multiple columns or a nested field.
   // Such changes come from `COMMENT ON TABLE ... COLUMN (...)` and cannot be expressed by the

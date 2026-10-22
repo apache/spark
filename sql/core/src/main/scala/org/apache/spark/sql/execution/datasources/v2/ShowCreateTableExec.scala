@@ -22,7 +22,7 @@ import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.ResolvedTable
+import org.apache.spark.sql.catalyst.analysis.{ResolvedTable, V1CommandUtils}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -170,7 +170,7 @@ case class ShowCreateTableExec(
   // or ROW FORMAT, would create a v1 table, which cannot record the clauses, so the replay would
   // be rejected. A provider that cannot be looked up or linked fails the replay too.
   private def createsV1Table(catalog: TableCatalog, provider: Option[String]): Boolean = {
-    DataSourceV2Utils.supportsV1Command(catalog, conf) && {
+    V1CommandUtils.supportsV1Command(catalog) && {
       val tableProvider = DataSourceV2Utils.createTableProvider(
         provider, hasSerde = false, ctas = false, conf)
       try {
