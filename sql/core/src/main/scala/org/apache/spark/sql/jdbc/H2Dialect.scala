@@ -301,11 +301,6 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
       s"EXTRACT($newField FROM $source)"
     }
 
-    override protected def dialectFunctionName(funcName: String): String = funcName match {
-      case "CHAR_READ_SIDE_PADDING" => "RPAD"
-      case other => super.dialectFunctionName(other)
-    }
-
     override def visitSQLFunction(funcName: String, inputs: Array[String]): String = {
       funcName match {
         case "MD5" =>

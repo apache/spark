@@ -2089,12 +2089,6 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
         checkAnswer(padFalse, Seq(Row(1)))
       }
 
-      withSQLConf(SQLConf.PUSH_DOWN_CHAR_READ_SIDE_PADDING.key -> "false") {
-        val disabled = sql(s"SELECT id FROM $table WHERE flag = 'Y'")
-        checkFiltersRemoved(disabled, removed = false)
-        checkAnswer(disabled, Seq(Row(1)))
-      }
-
       withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
         val std = sql(s"SELECT id FROM $table WHERE flag = CAST('Y' AS CHAR(5))")
         checkFiltersRemoved(std, removed = false)

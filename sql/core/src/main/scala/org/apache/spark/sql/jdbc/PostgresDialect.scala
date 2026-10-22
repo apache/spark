@@ -331,11 +331,6 @@ private case class PostgresDialect()
   }
 
   class PostgresSQLBuilder extends JDBCSQLBuilder {
-    override protected def dialectFunctionName(funcName: String): String = funcName match {
-      case "CHAR_READ_SIDE_PADDING" => "RPAD"
-      case other => super.dialectFunctionName(other)
-    }
-
     override def visitExtract(field: String, source: String): String = {
       // SECOND, MINUTE, HOUR, DAY, MONTH, QUARTER, YEAR are identical on postgres and spark for
       // both datetime and interval types.
