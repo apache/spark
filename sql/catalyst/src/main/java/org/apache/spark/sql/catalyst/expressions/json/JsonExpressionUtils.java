@@ -141,6 +141,12 @@ public class JsonExpressionUtils {
    * input and always returns a definite true/false.
    */
   public static boolean isJson(UTF8String json, int shape) {
+    // The parser decodes the bytes through a UTF-8 reader that silently replaces malformed
+    // sequences with U+FFFD, so check the raw bytes first: input that is not valid UTF-8
+    // (e.g. a lone continuation byte, or an encoded surrogate) is not well-formed JSON text.
+    if (!json.isValid()) {
+      return false;
+    }
     try (JsonParser jsonParser =
         CreateJacksonParser.utf8String(STRICT_JSON_FACTORY, json)) {
       JsonToken token = jsonParser.nextToken();
@@ -166,14 +172,50 @@ public class JsonExpressionUtils {
       if (!matchesShape) {
         return false;
       }
-      // Consume the whole value so malformed input (e.g. `{`, `[1,`) surfaces as a parse error
-      // below and yields false.
-      jsonParser.skipChildren();
+      // Walk the whole value token by token (rather than `skipChildren`, which does not look at
+      // string contents) so that malformed input (e.g. `{`, `[1,`) surfaces as a parse error
+      // and every string value and field name can be checked for unpaired surrogates.
+      int depth = 0;
+      do {
+        switch (token) {
+          case START_OBJECT, START_ARRAY -> depth++;
+          case END_OBJECT, END_ARRAY -> depth--;
+          case FIELD_NAME, VALUE_STRING -> {
+            if (hasUnpairedSurrogate(jsonParser.getText())) {
+              return false;
+            }
+          }
+          default -> { }
+        }
+      } while (depth > 0 && (token = jsonParser.nextToken()) != null);
+      if (depth > 0) {
+        return false;
+      }
       // Reject trailing content after the first value, e.g. `1 2` or `{} []`, so only a single
       // well-formed JSON value is accepted.
       return jsonParser.nextToken() == null;
     } catch (IOException e) {
       return false;
     }
+  }
+
+  // Returns whether `str` contains an unpaired UTF-16 surrogate code unit. Jackson accepts an
+  // escaped lone surrogate (e.g. a high surrogate escape with no low surrogate after it), but
+  // RFC 8259 section 7 requires JSON string contents to be well-formed Unicode. This mirrors the
+  // strict check in VariantBuilder.checkValidUnicodeString.
+  private static boolean hasUnpairedSurrogate(String str) {
+    int len = str.length();
+    for (int i = 0; i < len; ++i) {
+      char c = str.charAt(i);
+      if (Character.isHighSurrogate(c)) {
+        if (i + 1 >= len || !Character.isLowSurrogate(str.charAt(i + 1))) {
+          return true;
+        }
+        ++i;
+      } else if (Character.isLowSurrogate(c)) {
+        return true;
+      }
+    }
+    return false;
   }
 }
