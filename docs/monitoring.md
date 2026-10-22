@@ -420,6 +420,26 @@ Security options for the Spark History Server are covered more detail in the
     <td>3.4.0</td>
   </tr>
   <tr>
+    <td>spark.history.snapshot.enabled</td>
+    <td>false</td>
+    <td>
+        Whether completed applications write a protobuf snapshot of their UI data, and whether the
+        History Server loads the UI from that snapshot instead of replaying the event log. Must be
+        set, together with <code>spark.history.snapshot.path</code>, for both applications and the
+        History Server. When the cleaner is enabled, snapshots are deleted with their event logs.
+    </td>
+    <td>4.4.0</td>
+  </tr>
+  <tr>
+    <td>spark.history.snapshot.path</td>
+    <td>(none)</td>
+    <td>
+        Shared filesystem or object store path where applications write history snapshots and the
+        History Server reads them from.
+    </td>
+    <td>4.4.0</td>
+  </tr>
+  <tr>
     <td>spark.history.custom.executor.log.url</td>
     <td>(none)</td>
     <td>

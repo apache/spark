@@ -134,6 +134,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     log" ${MDC(ADMIN_ACL_GROUPS, historyUiAdminAclsGroups.mkString(","))}")
 
   private val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
+
+  private val snapshotStore = new HistorySnapshotStore(conf, hadoopConf)
   // Visible for testing
   private[history] val fs: FileSystem = new Path(logDirs.head).getFileSystem(hadoopConf)
 
@@ -1346,6 +1348,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       logInfo(log"Deleting expired event log for ${MDC(PATH, attempt.logPath)}")
       val (logFs, logPath) = resolveLogPath(attempt.logPath, attempt.logSourceFullPath)
       cleanAppData(app.id, attempt.info.attemptId, logPath.toString())
+      snapshotStore.deleteSnapshots(app.id, attempt.info.attemptId)
       if (deleteLog(logFs, logPath)) {
         countDeleted += 1
       }
@@ -1445,7 +1448,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       parseAppEventLogs(eventLogFiles, replayBus, !reader.completed)
       trackingStore.close(false)
       val durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs)
-      logInfo(s"Finished parsing ${reader.rootPath} in ${durationMs} ms")
+      logInfo(log"Finished parsing ${MDC(PATH, reader.rootPath)} in " +
+        log"${MDC(TOTAL_TIME, durationMs)} ms")
     } catch {
       case e: Exception =>
         Utils.tryLogNonFatalError {
@@ -1553,19 +1557,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
     // At this point the disk data either does not exist or was deleted because it failed to load.
     // Prefer a pre-materialized snapshot before falling back to event log replay.
-    HistorySnapshotStore.findSnapshot(conf, appId, attempt.info.attemptId).foreach { snapshot =>
+    snapshotStore.findSnapshot(appId, attempt.info.attemptId).foreach { snapshot =>
       try {
         return createDiskStoreFromSnapshot(dm, appId, attempt, metadata, snapshot)
       } catch {
-        case e: InvalidHistorySnapshotException =>
-          logInfo(s"Failed to import invalid snapshot for appId: $appId.", e)
-          val fs = snapshot.getFileSystem(SparkHadoopUtil.get.newConfiguration(conf))
-          Utils.tryLogNonFatalError {
-            HistorySnapshotStore.deleteSnapshot(fs, snapshot)
-            logInfo(s"Deleted invalid history snapshot $snapshot for appId: $appId.")
-          }
         case e: Exception =>
-          logInfo(s"Failed to import snapshot for appId: $appId.", e)
+          logWarning(log"Failed to import history snapshot ${MDC(PATH, snapshot)} for " +
+            log"${MDC(APP_ID, appId)}, replaying the event log instead.", e)
       }
     }
 
@@ -1712,57 +1710,42 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       attempt: AttemptInfoWrapper,
       metadata: AppStatusStoreMetadata,
       manifestPath: Path): KVStore = {
-    var newStorePath: File = null
-    val snapshotSize = HistorySnapshotStore.snapshotSize(conf, manifestPath)
-    while (newStorePath == null) {
-      val lease = dm.leaseExact(snapshotSize)
-      val startNs = System.nanoTime()
-      try {
-        Utils.tryWithResource(KVUtils.open(lease.tmpPath, metadata, conf, live = false)) { store =>
-          try {
-            HistorySnapshotStore.restoreSnapshot(conf, store, manifestPath)
-          } catch {
-            case e: Exception =>
-              throw InvalidHistorySnapshotException(manifestPath, e)
-          }
-        }
-        newStorePath = lease.commit(appId, attempt.info.attemptId)
-        val durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs)
-        logInfo(
-          s"Restored history snapshot $manifestPath for appId: $appId " +
-            s"into disk store in ${durationMs} ms")
-      } catch {
-        case e: Exception =>
-          lease.rollback()
-          throw e
+    val lease = dm.leaseExact(snapshotStore.snapshotSize(manifestPath))
+    val startNs = System.nanoTime()
+    val newStorePath = try {
+      Utils.tryWithResource(KVUtils.open(lease.tmpPath, metadata, conf, live = false)) { store =>
+        snapshotStore.restoreSnapshot(store, manifestPath)
       }
+      lease.commit(appId, attempt.info.attemptId)
+    } catch {
+      case e: Exception =>
+        lease.rollback()
+        throw e
     }
+    val durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs)
+    logInfo(log"Restored history snapshot ${MDC(PATH, manifestPath)} for " +
+      log"${MDC(APP_ID, appId)} into disk store in ${MDC(TOTAL_TIME, durationMs)} ms")
 
     KVUtils.open(newStorePath, metadata, conf, live = false)
   }
 
   private def createInMemoryStore(appId: String, attempt: AttemptInfoWrapper): KVStore = {
-    HistorySnapshotStore.findSnapshot(conf, appId, attempt.info.attemptId).foreach { snapshot =>
+    snapshotStore.findSnapshot(appId, attempt.info.attemptId).foreach { snapshot =>
       val store = new InMemoryStore()
       store.setMetadata(new AppStatusStoreMetadata(AppStatusStore.CURRENT_VERSION))
       val startNs = System.nanoTime()
       try {
-        HistorySnapshotStore.restoreSnapshot(conf, store, snapshot)
+        snapshotStore.restoreSnapshot(store, snapshot)
         val durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs)
-        logInfo(
-          s"Restored history snapshot $snapshot for appId: $appId " +
-            s"into in-memory store in ${durationMs} ms")
+        logInfo(log"Restored history snapshot ${MDC(PATH, snapshot)} for " +
+          log"${MDC(APP_ID, appId)} into in-memory store in ${MDC(TOTAL_TIME, durationMs)} ms")
         return store
       } catch {
         case e: Exception =>
-          logInfo(s"Failed to import history snapshot $snapshot for appId: $appId.", e)
+          logWarning(log"Failed to import history snapshot ${MDC(PATH, snapshot)} for " +
+            log"${MDC(APP_ID, appId)}, replaying the event log instead.", e)
           Utils.tryLogNonFatalError {
             store.close()
-          }
-          val fs = snapshot.getFileSystem(SparkHadoopUtil.get.newConfiguration(conf))
-          Utils.tryLogNonFatalError {
-            HistorySnapshotStore.deleteSnapshot(fs, snapshot)
-            logInfo(s"Deleted invalid history snapshot $snapshot for appId: $appId.")
           }
       }
     }
@@ -1921,9 +1904,6 @@ private[spark] object FsHistoryProvider {
    * all data and re-generate the listing data from the event logs.
    */
   val CURRENT_LISTING_VERSION = 1L
-
-  private[history] case class InvalidHistorySnapshotException(snapshot: Path, cause: Throwable)
-    extends IOException(s"History snapshot $snapshot is invalid.", cause)
 }
 
 private[spark] case class FsHistoryProviderMetadata(

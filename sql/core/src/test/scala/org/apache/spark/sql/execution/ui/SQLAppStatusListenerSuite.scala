@@ -184,16 +184,13 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     assert(statusStore.execution(executionId).flatMap(_.completionTime).nonEmpty)
     assert(statusStore.planGraphCount() == 1L)
 
-    val manifestPath = HistorySnapshotStore.writeSnapshot(
-      snapshotConf,
-      kvstore,
-      "sql-snapshot-app",
-      None)
+    val snapshots = new HistorySnapshotStore(snapshotConf)
+    val manifestPath = snapshots.writeSnapshot(kvstore, "sql-snapshot-app", None)
     assert(manifestPath.isDefined)
 
     val restored = new InMemoryStore()
     try {
-      HistorySnapshotStore.restoreSnapshot(snapshotConf, restored, manifestPath.get)
+      snapshots.restoreSnapshot(restored, manifestPath.get)
       val restoredStatusStore = new SQLAppStatusStore(restored)
       assert(restoredStatusStore.executionsCount() == 1L)
       assert(restoredStatusStore.planGraphCount() == 1L)

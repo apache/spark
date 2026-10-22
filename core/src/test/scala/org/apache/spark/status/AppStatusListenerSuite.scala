@@ -778,10 +778,9 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
     }
   }
 
-  test("writes history snapshot and records metrics when application store closes") {
+  test("writes history snapshot when application store closes") {
     val snapshotConf = newSnapshotConf()
-    val appStatusSource = new AppStatusSource()
-    val liveStore = AppStatusStore.createLiveStore(snapshotConf, Some(appStatusSource))
+    val liveStore = AppStatusStore.createLiveStore(snapshotConf)
     val listener = liveStore.listener.get
 
     try {
@@ -794,20 +793,15 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
         None))
       listener.onApplicationEnd(SparkListenerApplicationEnd(2L))
 
-      assert(HistorySnapshotStore.findSnapshot(
-        snapshotConf,
-        "snapshot-app-id",
-        Some("attempt-1")).isEmpty)
+      assert(new HistorySnapshotStore(snapshotConf)
+        .findSnapshot("snapshot-app-id", Some("attempt-1")).isEmpty)
     } finally {
       liveStore.close()
     }
 
-    val manifest = HistorySnapshotStore.findSnapshot(snapshotConf, "snapshot-app-id",
-      Some("attempt-1"))
+    val manifest = new HistorySnapshotStore(snapshotConf)
+      .findSnapshot("snapshot-app-id", Some("attempt-1"))
     assert(manifest.isDefined)
-    assert(appStatusSource.SNAPSHOT_WRITES.getCount === 1L)
-    assert(appStatusSource.SNAPSHOT_WRITE_FAILURES.getCount === 0L)
-    assert(appStatusSource.SNAPSHOT_WRITE_TIME.getCount === 1L)
   }
 
   test("history snapshot includes events posted after application end once store closes") {
@@ -838,14 +832,14 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
       liveStore.close()
     }
 
-    val manifest = HistorySnapshotStore.findSnapshot(snapshotConf, "snapshot-app-id",
-      Some("attempt-1"))
+    val manifest = new HistorySnapshotStore(snapshotConf)
+      .findSnapshot("snapshot-app-id", Some("attempt-1"))
     assert(manifest.isDefined)
 
     val restored = new InMemoryStore()
     restored.setMetadata(AppStatusStoreMetadata(AppStatusStore.CURRENT_VERSION))
     try {
-      HistorySnapshotStore.restoreSnapshot(snapshotConf, restored, manifest.get)
+      new HistorySnapshotStore(snapshotConf).restoreSnapshot(restored, manifest.get)
       val restoredStatusStore = new AppStatusStore(restored)
       assert(restoredStatusStore.job(1).status === JobExecutionStatus.SUCCEEDED)
       assert(restoredStatusStore.taskCount(stage.stageId, stage.attemptNumber()) === 1L)
