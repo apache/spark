@@ -196,9 +196,10 @@ class GroupBasedMergeIntoTableSuite extends MergeIntoTableSuiteBase {
       val sourceDF = Seq(1, 3, 6).toDF("pk")
       sourceDF.createOrReplaceTempView("source")
 
-      // every NOT MATCHED BY SOURCE clause is conditional, so the ON condition and that clause's
-      // condition can be pushed to the target table as a disjunction; a target row satisfying
-      // neither is only carried over, so its group doesn't have to be read at all
+      // every NOT MATCHED BY SOURCE clause is conditional, so the target-only part of the ON
+      // condition and that clause's condition can be pushed to the target table as a
+      // disjunction; a target row satisfying neither is only carried over, so its group
+      // doesn't have to be read at all
       val (cond, groupFilterCond) = executeAndKeepConditions {
         sql(
           s"""MERGE INTO $tableNameAsString t

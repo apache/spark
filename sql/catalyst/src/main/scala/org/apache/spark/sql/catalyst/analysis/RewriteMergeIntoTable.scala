@@ -174,12 +174,14 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       readRelation, joinPlan, matchedActions, notMatchedActions,
       notMatchedBySourceActions, metadataAttrs, checkCardinality)
 
-    // without NOT MATCHED BY SOURCE clauses, target rows that don't satisfy the ON condition
-    // match no action and are simply carried over, so the ON condition can filter the target
-    // with such clauses, the ON condition can only be used together with the predicates of all
-    // of them, and only the part of it that references the target alone can take part, as a
-    // disjunction that references the source is not a valid filter for the target table
-    // an unconditional NOT MATCHED BY SOURCE clause matches any target row and disables this
+    // predicates that can be used to filter the target table (planning):
+    // - without NOT MATCHED BY SOURCE clauses, target rows that don't satisfy the ON condition
+    //   match no action and are simply carried over, so the ON condition can filter the target
+    // - if every NOT MATCHED BY SOURCE clause is conditional, a target row can be skipped only
+    //   if it satisfies neither the ON condition nor any of those conditions, so the filter is
+    //   their disjunction; only the target-only part of the ON condition can take part, as a
+    //   disjunction that references the source is not a valid filter for the target table
+    // - an unconditional NOT MATCHED BY SOURCE clause matches any target row and disables this
     val pushableCond = if (notMatchedBySourceActions.isEmpty) {
       cond
     } else if (notMatchedBySourceActions.exists(_.condition.isEmpty)) {
