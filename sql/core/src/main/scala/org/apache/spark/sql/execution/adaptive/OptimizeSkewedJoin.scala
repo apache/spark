@@ -269,16 +269,22 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
   }
 
   /**
-   * `plan` with `candidates` replaced by their splits. A candidate's children are shuffle stages,
-   * so no candidate contains another and every candidate is a node `plan` itself holds, which is
-   * how they are matched here: structurally equal joins in different places are distinct
-   * candidates. A subset may be passed, keeping the others out of the result.
+   * `plan` with `candidates` replaced by their splits. Candidates are matched by node identity,
+   * so structurally equal joins in different places are distinct candidates. A subset may be
+   * passed, keeping the others out of the result.
+   *
+   * The walk is top-down: a sort-merge or shuffled-hash candidate has shuffle stages as children
+   * and contains nothing else, but a broadcast-hash join only constrains its streamed side, so
+   * another candidate can sit in its build side. Replacing the outer join first keeps that inner
+   * candidate an instance `plan` holds, and the walk then splits it inside the replacement.
    */
-  private def applySkewJoins(plan: SparkPlan, candidates: Seq[SkewJoinCandidate]): SparkPlan = {
+  private[adaptive] def applySkewJoins(
+      plan: SparkPlan,
+      candidates: Seq[SkewJoinCandidate]): SparkPlan = {
     if (candidates.isEmpty) {
       return plan
     }
-    plan.transformUp { operator =>
+    plan.transformDown { operator =>
       candidates.find(_.join eq operator).map(_.replacement).getOrElse(operator)
     }
   }

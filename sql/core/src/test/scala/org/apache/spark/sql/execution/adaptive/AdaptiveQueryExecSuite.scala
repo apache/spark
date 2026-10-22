@@ -1988,9 +1988,10 @@ class AdaptiveQueryExecSuite
           s"SELECT k, rank() OVER (PARTITION BY k ORDER BY v) FROM ($union) u"
 
         // Both branches report the join's hash layout, so the union claims it and the window above
-        // depends on it: a split takes the claim away from both branches. Base rejects the whole
-        // plan here too; this arm pins that the per-join fallback keeps no split the claim cannot
-        // take, and the arm below that the same splits are kept when nothing reads the claim.
+        // depends on it: a split takes the claim away from both branches. The all-at-once attempt
+        // rejects this plan too; this arm pins that the per-join fallback keeps no split the claim
+        // cannot take, and the arm below that the same splits are kept when nothing reads the
+        // claim.
         val windowed = splitJoins(windowedQuery)
         assert(windowed.forall(j => !j.isSkewJoin))
         // Each branch holds the 334000 joined rows of key1 = 0, so across the union every v of
@@ -2010,6 +2011,32 @@ class AdaptiveQueryExecSuite
           (0L until 1000L by 3).map(_ -> 2000).toMap)
       }
     }
+  }
+
+  test("SPARK-60458: split a join nested in a broadcast join's build side") {
+    // A broadcast-hash join constrains only its streamed side, so another candidate can sit in
+    // its build side. Replacing the outer join must keep the inner split instead of dropping the
+    // outer one and carrying the original build subtree.
+    val k1 = AttributeReference("k1", IntegerType)()
+    val k2 = AttributeReference("k2", IntegerType)()
+    val innerJoin = SortMergeJoinExec(
+      Seq(k1), Seq(k2), Inner, None,
+      LocalTableScanExec(Seq(k1), Nil, None),
+      LocalTableScanExec(Seq(k2), Nil, None))
+    val bhj = BroadcastHashJoinExec(
+      Seq(k2), Seq(k2), Inner, BuildRight, None,
+      LocalTableScanExec(Seq(k2), Nil, None),
+      BroadcastExchangeExec(HashedRelationBroadcastMode(Seq(k2)), innerJoin))
+    val rule = OptimizeSkewedJoin(EnsureRequirements())
+
+    val result = rule.applySkewJoins(bhj, Seq(
+      SkewJoinCandidate(innerJoin, Inner, innerJoin.copy(isSkewJoin = true)),
+      SkewJoinCandidate(bhj, Inner, bhj.copy(isSkewJoin = true))))
+
+    assert(result.isInstanceOf[BroadcastHashJoinExec])
+    assert(result.asInstanceOf[BroadcastHashJoinExec].isSkewJoin)
+    val innerJoins = collect(result) { case j: SortMergeJoinExec => j }
+    assert(innerJoins.size == 1 && innerJoins.head.isSkewJoin)
   }
 
   test("SPARK-58099: Remove local sort dangling below the shuffle added by skew join") {
