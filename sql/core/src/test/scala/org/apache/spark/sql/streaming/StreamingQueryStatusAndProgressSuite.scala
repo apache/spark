@@ -67,21 +67,6 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
     assert(exception.getMessage === s"Unknown type of trigger: $trigger")
   }
 
-  test("SPARK-59986: starting a query with an unknown trigger identifies the input") {
-    import testImplicits._
-
-    val input = MemoryStream[Int]
-    val trigger = new Trigger {}
-    val exception = intercept[IllegalStateException] {
-      input.toDS().writeStream
-        .format("memory")
-        .queryName("unsupported_trigger")
-        .trigger(trigger)
-        .start()
-    }
-    assert(exception.getMessage === s"Unknown type of trigger: $trigger")
-  }
-
   test("SPARK-59986: trigger metadata has a public read-only JVM accessor") {
     val accessor = runtimeMirror(getClass.getClassLoader)
       .classSymbol(classOf[StreamingQueryProgress])

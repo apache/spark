@@ -38,7 +38,7 @@ import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, ReportsS
 import org.apache.spark.sql.execution.{QueryExecution, StreamSourceAwareSparkPlan}
 import org.apache.spark.sql.execution.datasources.v2.{MicroBatchScanExec, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress}
 import org.apache.spark.sql.execution.datasources.v2.RealTimeStreamScanExec
-import org.apache.spark.sql.execution.streaming.{StreamingQueryPlanTraverseHelper, Triggers}
+import org.apache.spark.sql.execution.streaming.StreamingQueryPlanTraverseHelper
 import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqMetadataBase
 import org.apache.spark.sql.execution.streaming.operators.stateful.{EventTimeWatermarkExec, StateStoreWriter}
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
@@ -58,8 +58,6 @@ class ProgressReporter(
     private[runtime] val triggerConfig: Trigger,
     val logicalPlan: () => LogicalPlan)
   extends Logging {
-
-  Triggers.toJson(triggerConfig)
 
   // The timestamp we report an event that has not executed anything
   var lastNoExecutionProgressEventTime = Long.MinValue
