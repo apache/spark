@@ -743,19 +743,17 @@ class Analyzer(
       Seq(ResolveUpdateEventTimeWatermarkColumn) ++
       extendedResolutionRules ++
       Seq(NameStreamingSources) : _*),
-    Batch("Remove TempResolvedColumn", Once, RemoveTempResolvedColumn),
     // Resolution has converged by here, so a transpiled UDF option that is still unresolved never
     // will be. Drop it and let the call fall back to interpreted Python rather than hand
-    // CheckAnalysis an unresolved child to report on. Dropping an option can resolve the
-    // UDF while leaving an enclosing UnresolvedAlias or parent UnresolvedAttribute untouched
-    // (the Resolution batch already converged), so re-run those rules here -- fixedPoint so
-    // a newly-resolvable parent is caught on the next iteration. The drop rule itself only
-    // fires on options still unresolved after convergence, so it cannot drop one the
-    // resolution rules would have resolved on a second pass.
-    Batch("Drop Unresolved Transpiled UDF Options", fixedPoint,
-      DropUnresolvedTranspiledPythonUDFOptions,
-      ResolveAliases,
-      new ResolveReferences(catalogManager)),
+    // CheckAnalysis an unresolved child to report on. The rule also re-runs some resolution rules
+    // on the plans it changed -- see its doc. Before "Remove TempResolvedColumn" on purpose: the
+    // re-run can create TempResolvedColumn in ORDER BY/HAVING, and only that batch strips them.
+    Batch("Drop Unresolved Transpiled UDF Options", Once,
+      new DropUnresolvedTranspiledPythonUDFOptions(
+        new ResolveReferences(catalogManager),
+        ResolveAliases,
+        ResolveAggregateFunctions)),
+    Batch("Remove TempResolvedColumn", Once, RemoveTempResolvedColumn),
     Batch("Post-Hoc Resolution", Once,
       Seq(ResolveCommandsWithIfExists) ++
       postHocResolutionRules: _*),

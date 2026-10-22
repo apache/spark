@@ -19,11 +19,11 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAlias
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Add, Alias, AttributeReference, Cast, Concat, Expression, Literal, PythonUDF, TranspiledPythonUDF}
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalRelation, Project, Sort}
 import org.apache.spark.sql.types.{ByteType, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType}
 
 /**
@@ -200,10 +200,10 @@ class ResolveTranspiledPythonUDFOptionsSuite extends PlanTest with AnalysisTest 
       "an unresolvable option must be dropped so the call falls back to Python")
   }
 
-  // Dropping an unresolved option resolves the UDF, but an enclosing UnresolvedAlias
-  // (from `SELECT udf(a)`) was left untouched when the drop batch was Once: the
-  // Resolution batch had already converged, so ResolveAliases never ran again.
-  // CheckAnalysis then failed on the UnresolvedAlias instead of falling back.
+  // Dropping an unresolved option resolves the UDF, but the Resolution batch has already
+  // converged, so an enclosing UnresolvedAlias (what `df.select(udf(col))` produces) stays
+  // unresolved on its own and CheckAnalysis fails the query instead of falling back. The
+  // drop rule must finish those parents off itself.
   test("SPARK-59090: unaliased call with an unresolvable option still analyzes") {
     val a = $"a".binary
     val neverResolves = Cast(a, LongType)
@@ -220,10 +220,11 @@ class ResolveTranspiledPythonUDFOptionsSuite extends PlanTest with AnalysisTest 
       "an unresolvable option must be dropped so the call falls back to Python")
   }
 
-  // A reference to an aliased UDF result whose option is dropped: the inner Alias
-  // becomes resolvable only after the drop, so the outer UnresolvedAttribute
-  // needs ResolveReferences to run again too. (Uses a long literal so the Add's
-  // operands match without a type-coercion re-run, which is a separate concern.)
+  // A reference to an aliased UDF result whose option is dropped: while the UDF is
+  // unresolved the alias's toAttribute is a by-name UnresolvedAttribute, and only the
+  // drop makes it resolvable -- so the drop rule has to re-run ResolveReferences too.
+  // (Uses a long literal so the Add's operands match without a type-coercion re-run,
+  // which is a separate concern.)
   test("SPARK-59090: reference to an aliased call with an unresolvable option resolves") {
     val a = $"a".binary
     val neverResolves = Cast(a, LongType)
@@ -231,6 +232,8 @@ class ResolveTranspiledPythonUDFOptionsSuite extends PlanTest with AnalysisTest 
       List(List("binary")))
     val inner = Project(Seq(Alias(node, "r")()), LocalRelation(a))
     val r = inner.output.head
+    assert(r.isInstanceOf[UnresolvedAttribute],
+      "an alias of an unresolved UDF yields a by-name reference, not an attribute")
     // `r + 1L` references the inner alias; unresolved until the inner UDF resolves.
     val outer = Project(Seq(Alias(Add(r, Literal(1L)), "r1")()), inner)
     val analyzed = getAnalyzer.executeAndCheck(outer, new QueryPlanningTracker)
@@ -239,5 +242,31 @@ class ResolveTranspiledPythonUDFOptionsSuite extends PlanTest with AnalysisTest 
       .flatMap(_.collect { case t: TranspiledPythonUDF => t }).head
     assert(out.transpiledOptions.isEmpty,
       "an unresolvable option must be dropped so the call falls back to Python")
+  }
+
+  // The parent re-resolution shares machinery with aggregate queries: ORDER BY references
+  // over an Aggregate travel as TempResolvedColumn until ResolveAggregateFunctions marks
+  // the invalid ones hasTried and "Remove TempResolvedColumn" turns those back into
+  // UnresolvedAttribute. Because the pending UDF held the Aggregate unresolved, that
+  // marking never ran during Resolution -- so if the drop rule's re-resolution resolved
+  // `c` without re-running ResolveAggregateFunctions, an invalid ORDER BY in the same
+  // query as a dropped option would be silently accepted (an earlier iteration of this
+  // fix did exactly that). The error must survive the drop.
+  test("SPARK-59090: a dropped option does not silence an invalid ORDER BY in the same query") {
+    val b = $"b".binary
+    val c = $"c".int
+    val neverResolves = Cast(b, LongType)
+    val node = TranspiledPythonUDF("udf", pyUDF(Seq(b)), List(neverResolves),
+      List(List("binary")))
+    // GROUP BY b (the UDF's argument, so the query itself is valid). ORDER BY c is a
+    // plain name reference, like the SQL `... GROUP BY b ORDER BY c`, and not a
+    // grouping expression -- it must error, not resolve through the dropped option's
+    // re-resolution. `c` is an attribute reference only to build the LocalRelation.
+    val agg = Aggregate(Seq(b), Seq(Alias(node, "u")()), LocalRelation(b, c))
+    val plan = Sort(Seq($"c".asc), global = true, agg)
+    assertAnalysisErrorCondition(
+      plan,
+      "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      Map("objectName" -> "`c`", "proposal" -> "`u`"))
   }
 }
