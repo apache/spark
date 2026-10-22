@@ -116,8 +116,6 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     "collations-string-functions.sql",
     "listagg-collations.sql",
     "pipe-operators.sql",
-    // SPARK-60416: These inputs use flow syntax implemented only by SQLQueryTestSuite.
-    "streaming/",
     // VARIANT type
     "variant/named-function-arguments.sql",
     "variant-field-extractions.sql"
