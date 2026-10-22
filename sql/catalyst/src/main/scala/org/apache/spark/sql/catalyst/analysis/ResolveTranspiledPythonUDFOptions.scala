@@ -192,39 +192,70 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
  * back to coerce the body. Dropping on `!resolved` from inside the batch would throw away every
  * option that reads a parameter and turn transpilation off without saying so. Once the batch is at
  * a fixed point, nothing is going to resolve one.
+ *
+ * Dropping an option resolves the UDF, but the Resolution batch has already converged, so whatever
+ * was waiting on the UDF stays unresolved on its own: the enclosing `UnresolvedAlias` of
+ * `SELECT udf(a)`, or a parent held by name such as the `r` of `SELECT r + 1 FROM (SELECT udf(a)
+ * AS r ...)`. `CheckAnalysis` would then report the fall-back itself as an error, so after
+ * dropping, this rule re-runs the resolution rules that finish those parents off -- and only on
+ * plans it changed, so queries without a dropped option never pay for this. The re-run is a single
+ * pass of each rule in Resolution-batch order; each walks bottom-up, which covers the parents of
+ * every dropped UDF at any nesting depth. `resolveAggregateFunctions` comes along because
+ * `resolveReferences` wraps ORDER BY/HAVING references over an Aggregate in `TempResolvedColumn`,
+ * and only `ResolveAggregateFunctions` marks the invalid ones `hasTried` for the later
+ * `RemoveTempResolvedColumn` batch to turn back into an unresolved attribute -- without it, an
+ * invalid ORDER BY in the same query as a dropped option would be unwrapped to a resolved
+ * attribute the Aggregate never provides, and reported as `MISSING_ATTRIBUTES` instead of the
+ * `UNRESOLVED_COLUMN` the same query gets without a UDF. The batch must therefore run before
+ * "Remove TempResolvedColumn", so that batch can still clean up behind this re-run. A shape
+ * needing a resolution rule not listed here fails `CheckAnalysis` as it did before the drop rule
+ * existed, rather than analyzing wrongly.
+ *
+ * @param resolveReferences the Analyzer's `ResolveReferences`, shared with the Resolution batch.
+ * @param resolveAliases the Analyzer's `ResolveAliases`.
+ * @param resolveAggregateFunctions the Analyzer's `ResolveAggregateFunctions`.
  */
-object DropUnresolvedTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
+class DropUnresolvedTranspiledPythonUDFOptions(
+    resolveReferences: Rule[LogicalPlan],
+    resolveAliases: Rule[LogicalPlan],
+    resolveAggregateFunctions: Rule[LogicalPlan]) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
-    if (!plan.containsPattern(TRANSPILED_PYTHON_UDF)) {
+    val dropped =
+      if (!plan.containsPattern(TRANSPILED_PYTHON_UDF)) {
+        plan
+      } else {
+        plan.resolveOperatorsWithPruning(_.containsPattern(TRANSPILED_PYTHON_UDF)) {
+          case op if op.containsPattern(TRANSPILED_PYTHON_UDF) =>
+            op.transformExpressionsUpWithPruning(_.containsPattern(TRANSPILED_PYTHON_UDF)) {
+              case t: TranspiledPythonUDF if t.arguments.forall(_.resolved) &&
+                  (t.optionInputCategories.nonEmpty || !t.transpiledOptions.forall(_.resolved)) =>
+                val typed = ResolveTranspiledPythonUDFOptions.pruneByCategoryAndTypeParameters(t)
+                val (kept, dropped) = typed.transpiledOptions.partition(_.resolved)
+                if (dropped.nonEmpty) {
+                  val first = Utils.redact(
+                    SQLConf.get.stringRedactionPattern, dropped.head.simpleString(maxFields = 100))
+                  // Only claim "falls back to interpreted Python" when every option was
+                  // dropped; with survivors, ConvertToCatalyst still picks the first kept one.
+                  if (kept.isEmpty) {
+                    logWarning(log"Dropping ${MDC(LogKeys.COUNT, dropped.length)} transpiled " +
+                      log"option(s) for Python UDF ${MDC(LogKeys.FUNCTION_NAME, t.name)}; " +
+                      log"the call falls back to interpreted Python. First dropped: " +
+                      log"${MDC(LogKeys.EXPR, first)}")
+                  } else {
+                    logWarning(log"Dropping ${MDC(LogKeys.COUNT, dropped.length)} transpiled " +
+                      log"option(s) for Python UDF ${MDC(LogKeys.FUNCTION_NAME, t.name)}; " +
+                      log"${MDC(LogKeys.COUNT, kept.length)} option(s) remain. First dropped: " +
+                      log"${MDC(LogKeys.EXPR, first)}")
+                  }
+                }
+                typed.copy(transpiledOptions = kept)
+            }
+        }
+      }
+    if (dropped eq plan) {
       plan
     } else {
-      plan.resolveOperatorsWithPruning(_.containsPattern(TRANSPILED_PYTHON_UDF)) {
-        case op if op.containsPattern(TRANSPILED_PYTHON_UDF) =>
-          op.transformExpressionsUpWithPruning(_.containsPattern(TRANSPILED_PYTHON_UDF)) {
-            case t: TranspiledPythonUDF if t.arguments.forall(_.resolved) &&
-                (t.optionInputCategories.nonEmpty || !t.transpiledOptions.forall(_.resolved)) =>
-              val typed = ResolveTranspiledPythonUDFOptions.pruneByCategoryAndTypeParameters(t)
-              val (kept, dropped) = typed.transpiledOptions.partition(_.resolved)
-              if (dropped.nonEmpty) {
-                val first = Utils.redact(
-                  SQLConf.get.stringRedactionPattern, dropped.head.simpleString(maxFields = 100))
-                // Only claim "falls back to interpreted Python" when every option was
-                // dropped; with survivors, ConvertToCatalyst still picks the first kept one.
-                if (kept.isEmpty) {
-                  logWarning(log"Dropping ${MDC(LogKeys.COUNT, dropped.length)} transpiled " +
-                    log"option(s) for Python UDF ${MDC(LogKeys.FUNCTION_NAME, t.name)}; " +
-                    log"the call falls back to interpreted Python. First dropped: " +
-                    log"${MDC(LogKeys.EXPR, first)}")
-                } else {
-                  logWarning(log"Dropping ${MDC(LogKeys.COUNT, dropped.length)} transpiled " +
-                    log"option(s) for Python UDF ${MDC(LogKeys.FUNCTION_NAME, t.name)}; " +
-                    log"${MDC(LogKeys.COUNT, kept.length)} option(s) remain. First dropped: " +
-                    log"${MDC(LogKeys.EXPR, first)}")
-                }
-              }
-              typed.copy(transpiledOptions = kept)
-          }
-      }
+      resolveAggregateFunctions(resolveAliases(resolveReferences(dropped)))
     }
   }
 }
