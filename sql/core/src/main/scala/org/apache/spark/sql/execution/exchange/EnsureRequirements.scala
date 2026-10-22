@@ -148,6 +148,13 @@ case class EnsureRequirements(
             case (idx, s: KeyGroupedShuffleSpec) =>
               canPushDownSPJParamsToScan(children(idx)) &&
                 !isBuiltFromReducedScan(children(idx), s)
+            // A nested join reports a collection, and any of its members can end up as the best
+            // member the other side is shuffled onto.
+            case (idx, s: ShuffleSpecCollection) =>
+              flattenSpec(s).forall {
+                case k: KeyGroupedShuffleSpec => !isBuiltFromReducedScan(children(idx), k)
+                case _ => true
+              }
             case _ => true
           }
           .filter(p => !shouldConsiderMinParallelism ||
@@ -729,6 +736,10 @@ case class EnsureRequirements(
    * describes and deduplicate. Values that collapse to the same key are read as one group, so
    * they become one partition, unless the scan is partially clustered, where each split of the
    * group still gets its own partition and the split counts add up.
+   *
+   * The keys keep the order in which they first appear, as `KeyGroupedPartitioning.apply` does.
+   * A one-side shuffle routes the other child into that order, so partition i of both sides must
+   * hold the same key.
    */
   private def projectAndDedupeCommonPartitionValues(
       values: Seq[(InternalRow, Int)],
@@ -736,15 +747,14 @@ case class EnsureRequirements(
       projectionPositions: Seq[Int],
       partiallyClustered: Boolean): Seq[(InternalRow, Int)] = {
     val projectedExpressions = projectionPositions.map(expressions(_))
-    val partitionOrdering = RowOrdering.createNaturalAscendingOrdering(
-      projectedExpressions.map(_.dataType))
-    values.map { case (partValue, numSplits) =>
-      val projected = KeyGroupedPartitioning.project(
-        expressions, projectionPositions, partValue)
-      (InternalRowComparableWrapper(projected, projectedExpressions), numSplits)
-    }.groupBy(_._1).map { case (wrapper, entries) =>
-      (wrapper.row, if (partiallyClustered) entries.map(_._2).sum else 1)
-    }.toSeq.sortBy(_._1)(partitionOrdering)
+    val projected = values.map { case (partValue, numSplits) =>
+      val row = KeyGroupedPartitioning.project(expressions, projectionPositions, partValue)
+      (InternalRowComparableWrapper(row, projectedExpressions), numSplits)
+    }
+    val splitsPerKey = projected.groupMapReduce(_._1)(_._2)(_ + _)
+    projected.map(_._1).distinct.map { wrapper =>
+      (wrapper.row, if (partiallyClustered) splitsPerKey(wrapper) else 1)
+    }
   }
 
   /**
@@ -803,9 +813,10 @@ case class EnsureRequirements(
   }
 
   /**
-   * Whether `spec` was built from the reported partitioning of a scan below `plan` whose splits an
-   * inner join already reduced. Such a scan reports its own partition transform but values of the
-   * reduced transform, so a spec built from it describes a layout the scan does not have.
+   * Whether `spec` uses a partition expression of a scan below `plan` whose splits an inner join
+   * already reduced at that position. Such a scan reports its own partition transform there but
+   * values of the reduced transform, so a spec built on that position describes a layout the scan
+   * does not have. Positions without a reducer still hold the scan's own values and are sound.
    */
   private def isBuiltFromReducedScan(plan: SparkPlan, spec: KeyGroupedShuffleSpec): Boolean = {
     val specExpressions = spec.partitioning.expressions
@@ -813,9 +824,13 @@ case class EnsureRequirements(
     // also keeps a re-run of this rule over an already planned join from matching its own scans.
     plan.exists {
       case join @ (_: SortMergeJoinExec | _: ShuffledHashJoinExec) => join.exists {
-        case scan: BatchScanExec if scan.spjParams.reducers.exists(_.exists(_.isDefined)) =>
-          reportedLayout(scan.spjParams).exists { layout =>
-            specExpressions.forall(e => layout.exists(_.semanticEquals(e)))
+        case scan: BatchScanExec =>
+          (reportedLayout(scan.spjParams), scan.spjParams.reducers) match {
+            case (Some(layout), Some(reducers)) =>
+              layout.zip(reducers).exists { case (e, r) =>
+                r.isDefined && specExpressions.exists(_.semanticEquals(e))
+              }
+            case _ => false
           }
         case _ => false
       }
@@ -877,6 +892,8 @@ case class EnsureRequirements(
           }
         )
       )
+    // A broadcast build side does not feed this join's partitioning.
+    case b: BroadcastExchangeLike => b
     case node =>
       // Recurse through every child down to the scans.
       node.mapChildren(child => populateSpjParams(
