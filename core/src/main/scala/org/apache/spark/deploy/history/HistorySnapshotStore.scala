@@ -25,7 +25,7 @@ import java.util.{Properties, UUID}
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.{FileSystem, FSDataOutputStream, Path}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -41,7 +41,7 @@ import org.apache.spark.util.kvstore.KVStore
 /**
  * Writes and restores protobuf snapshots of an application's status store under
  * `spark.history.snapshot.path`, so the History Server can load a completed application without
- * replaying its event log.
+ * replaying its event log. Snapshot files use the same permissions as event logs.
  */
 private[spark] class HistorySnapshotStore(conf: SparkConf, hadoopConf: Configuration)
   extends Logging {
@@ -69,13 +69,14 @@ private[spark] class HistorySnapshotStore(conf: SparkConf, hadoopConf: Configura
    */
   def writeSnapshot(store: KVStore, appId: String, attemptId: Option[String]): Option[Path] = {
     snapshotDir(appId, attemptId).map { attemptDir =>
-      fs.mkdirs(attemptDir)
+      mkdirs(attemptDir.getParent)
+      mkdirs(attemptDir)
       val snapshotId = newSnapshotId()
       val dataDir = new Path(attemptDir, s"$SNAPSHOT_DIR_PREFIX$snapshotId")
       val manifestPath = new Path(attemptDir, s"$MANIFEST_FILE_PREFIX$snapshotId.properties")
 
       try {
-        fs.mkdirs(dataDir)
+        mkdirs(dataDir)
         val entries = writeEntityFiles(store, dataDir, appId)
 
         val manifest = new Properties()
@@ -86,7 +87,7 @@ private[spark] class HistorySnapshotStore(conf: SparkConf, hadoopConf: Configura
           manifest.setProperty(s"${entry.className}.file", entry.fileName)
         }
 
-        Utils.tryWithResource(fs.create(manifestPath, false)) { out =>
+        Utils.tryWithResource(create(manifestPath, overwrite = false)) { out =>
           manifest.store(out, "spark history snapshot")
         }
         // Only older manifests are deleted, so readers always see either the old snapshot or the
@@ -169,9 +170,18 @@ private[spark] class HistorySnapshotStore(conf: SparkConf, hadoopConf: Configura
     }
   }
 
+  /**
+   * Returns the snapshot directory of an application attempt. The IDs come from event logs, and
+   * Hadoop normalizes `.` and `..` components, so the result is checked to stay within the root.
+   */
   private def snapshotDir(appId: String, attemptId: Option[String]): Option[Path] = {
     rootPath.map { root =>
-      new Path(new Path(root, encode(appId)), encode(attemptId.getOrElse("_default_")))
+      val dir = new Path(new Path(root, encode(appId)), encode(attemptId.getOrElse("_default_")))
+      if (dir.getParent == null || dir.getParent.getParent != root) {
+        throw new IllegalArgumentException(
+          s"Snapshot path for app $appId / $attemptId escapes the snapshot directory")
+      }
+      dir
     }
   }
 
@@ -227,6 +237,24 @@ private[spark] class HistorySnapshotStore(conf: SparkConf, hadoopConf: Configura
     deletePathQuietly(manifestPath, recursive = false)
   }
 
+  private def mkdirs(dir: Path): Unit = {
+    if (!FileSystem.mkdirs(fs, dir, EventLogFileWriter.LOG_FOLDER_PERMISSIONS)) {
+      throw new IOException(s"Failed to create history snapshot directory $dir")
+    }
+  }
+
+  private def create(path: Path, overwrite: Boolean): FSDataOutputStream = {
+    val out = fs.create(path, overwrite)
+    try {
+      fs.setPermission(path, EventLogFileWriter.LOG_FILE_PERMISSIONS)
+    } catch {
+      case NonFatal(e) =>
+        Utils.closeQuietly(out)
+        throw e
+    }
+    out
+  }
+
   private def deletePathQuietly(path: Path, recursive: Boolean): Unit = {
     Utils.tryLogNonFatalError {
       if (fs.exists(path)) {
@@ -274,14 +302,14 @@ private[spark] class HistorySnapshotStore(conf: SparkConf, hadoopConf: Configura
   /** Serializes a stream of KVStore values using length-delimited protobuf records. */
   private def writeValuesFile(path: Path, values: Iterator[AnyRef]): Long = {
     var count = 0L
-    Utils.tryWithResource(new DataOutputStream(new BufferedOutputStream(fs.create(path, true)))) {
-      out =>
-        while (values.hasNext) {
-          val bytes = serializer.serialize(values.next())
-          out.writeInt(bytes.length)
-          out.write(bytes)
-          count += 1
-        }
+    Utils.tryWithResource(
+        new DataOutputStream(new BufferedOutputStream(create(path, overwrite = true)))) { out =>
+      while (values.hasNext) {
+        val bytes = serializer.serialize(values.next())
+        out.writeInt(bytes.length)
+        out.write(bytes)
+        count += 1
+      }
     }
     count
   }

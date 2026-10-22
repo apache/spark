@@ -202,6 +202,30 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     }
   }
 
+  test("live executions are flushed on close when history snapshots are enabled") {
+    val snapshotConf = sparkContext.conf.clone()
+      .set(SNAPSHOT_ENABLED, true)
+      .set(SNAPSHOT_PATH, Utils.createTempDir().getAbsolutePath)
+    val store = new ElementTrackingStore(new InMemoryStore, snapshotConf)
+    val listener = new SQLAppStatusListener(snapshotConf, store, live = true)
+    val executionId = 998L
+    val df = createTestDataFrame
+
+    listener.onOtherEvent(SparkListenerSQLExecutionStart(
+      executionId,
+      Some(executionId),
+      "snapshot-flush-test",
+      "snapshot-flush-test-details",
+      df.queryExecution.toString,
+      SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
+      System.currentTimeMillis(),
+      Map.empty))
+    store.close(closeParent = false)
+
+    val execution = new SQLAppStatusStore(store).execution(executionId)
+    assert(execution.exists(_.metricValues != null))
+  }
+
   test("basic") {
     def checkAnswer(actual: Map[Long, String], expected: Map[Long, Long]): Unit = {
       assert(actual.size == expected.size)

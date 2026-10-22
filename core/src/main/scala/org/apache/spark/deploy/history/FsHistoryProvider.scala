@@ -1704,6 +1704,27 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     KVUtils.open(newStorePath, metadata, conf, live = false)
   }
 
+  /**
+   * Restores a history snapshot and checks that it contains the expected application attempt, so
+   * an incomplete snapshot falls back to replay instead of producing a store the UI cannot load.
+   */
+  private def restoreSnapshot(
+      store: KVStore,
+      snapshot: Path,
+      appId: String,
+      attempt: AttemptInfoWrapper): Unit = {
+    snapshotStore.restoreSnapshot(store, snapshot)
+    val restored = try {
+      Some(store.read(classOf[org.apache.spark.status.ApplicationInfoWrapper], appId).info)
+    } catch {
+      case _: NoSuchElementException => None
+    }
+    if (!restored.exists(_.attempts.exists(_.attemptId == attempt.info.attemptId))) {
+      throw new IOException(
+        s"History snapshot $snapshot does not contain app $appId / ${attempt.info.attemptId}")
+    }
+  }
+
   private def createDiskStoreFromSnapshot(
       dm: HistoryServerDiskManager,
       appId: String,
@@ -1714,7 +1735,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val startNs = System.nanoTime()
     val newStorePath = try {
       Utils.tryWithResource(KVUtils.open(lease.tmpPath, metadata, conf, live = false)) { store =>
-        snapshotStore.restoreSnapshot(store, manifestPath)
+        restoreSnapshot(store, manifestPath, appId, attempt)
       }
       lease.commit(appId, attempt.info.attemptId)
     } catch {
@@ -1735,7 +1756,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       store.setMetadata(new AppStatusStoreMetadata(AppStatusStore.CURRENT_VERSION))
       val startNs = System.nanoTime()
       try {
-        snapshotStore.restoreSnapshot(store, snapshot)
+        restoreSnapshot(store, snapshot, appId, attempt)
         val durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs)
         logInfo(log"Restored history snapshot ${MDC(PATH, snapshot)} for " +
           log"${MDC(APP_ID, appId)} into in-memory store in ${MDC(TOTAL_TIME, durationMs)} ms")

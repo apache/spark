@@ -239,8 +239,9 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     }
   }
 
-  Seq(true, false).foreach { inMemory =>
-    test(s"corrupt snapshots fall back to event log replay (inMemory = $inMemory)") {
+  for (inMemory <- Seq(true, false); truncateAll <- Seq(true, false)) {
+    test(s"corrupt snapshots fall back to event log replay " +
+        s"(inMemory = $inMemory, truncateAll = $truncateAll)") {
       val snapshotDir = Utils.createTempDir()
       val conf = createTestConf(inMemory = inMemory)
         .set(SNAPSHOT_ENABLED, true)
@@ -283,7 +284,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
         ByteStreams.toByteArray(in)
       }
       Utils.tryWithResource(snapshotFs.create(entityPath, true)) { out =>
-        out.write(originalBytes, 0, originalBytes.length - 1)
+        out.write(originalBytes, 0, if (truncateAll) 0 else originalBytes.length - 1)
       }
 
       val appUi = provider.getAppUI("snap-invalid-id", None)
@@ -386,6 +387,36 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
       list shouldBe empty
     }
     new HistorySnapshotStore(conf).findSnapshot("snap-clean-id", None) shouldBe empty
+  }
+
+  test("snapshot paths stay within the snapshot directory") {
+    val parentDir = Utils.createTempDir()
+    val sentinel = new File(parentDir, "sentinel")
+    assert(sentinel.createNewFile())
+    val conf = createSnapshotTestConf()
+      .set(SNAPSHOT_PATH, new File(parentDir, "snapshots").getAbsolutePath)
+    val manifest = writeTestSnapshot(conf, "snap-other-id")
+
+    val snapshots = new HistorySnapshotStore(conf)
+    snapshots.deleteSnapshots("snap-app-id", Some(".."))
+    snapshots.deleteSnapshots("..", Some("."))
+    snapshots.findSnapshot("..", Some(".")) shouldBe empty
+    assert(sentinel.exists())
+    snapshots.findSnapshot("snap-other-id", None) shouldBe Some(manifest)
+  }
+
+  test("snapshot files use event log permissions") {
+    val conf = createSnapshotTestConf()
+    val manifest = writeTestSnapshot(conf, "snap-permissions-id")
+    val fs = manifest.getFileSystem(SparkHadoopUtil.get.newConfiguration(conf))
+    val dataDir = fs.listStatus(manifest.getParent).map(_.getPath).find(_ != manifest).get
+
+    Seq(manifest.getParent.getParent, manifest.getParent, dataDir).foreach { dir =>
+      fs.getFileStatus(dir).getPermission should be (EventLogFileWriter.LOG_FOLDER_PERMISSIONS)
+    }
+    (manifest +: fs.listStatus(dataDir).map(_.getPath).toSeq).foreach { file =>
+      fs.getFileStatus(file).getPermission should be (EventLogFileWriter.LOG_FILE_PERMISSIONS)
+    }
   }
 
   private def createSnapshotTestConf(): SparkConf = {
