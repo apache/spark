@@ -177,6 +177,44 @@ abstract class NestedSchemaPruningBenchmark extends SqlBasedBenchmark {
     }
   }
 
+  protected def explodeBenchmark(numRows: Int, numIters: Int): Unit = {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      // col4 ARRAY<STRUCT<_1: BIGINT, _2: BIGINT, _3: STRING>>: _1 and _2 are read through an
+      // explode, _3 mimics the burden for the other fields
+      spark.range(numRows)
+        .map(x => (0 until 5).map(i => (x + i, x * i, s"$x".repeat(100))))
+        .toDF("col4")
+        .write.format(dataSourceName).save(path + "/4")
+      spark.read.format(dataSourceName).load(path + "/4").createOrReplaceTempView("t4")
+
+      // col5 ARRAY<STRUCT<_1: BIGINT, _2: ARRAY<STRUCT<_1: BIGINT, _2: STRING>>>>: _2._1 is read
+      // through two chained explodes, _2._2 mimics the burden for the other fields
+      spark.range(numRows / 5)
+        .map(x => (0 until 5).map(i => (x + i, (0 until 5).map(j => (x * j, s"$x".repeat(20))))))
+        .toDF("col5")
+        .write.format(dataSourceName).save(path + "/5")
+      spark.read.format(dataSourceName).load(path + "/5").createOrReplaceTempView("t5")
+
+      val benchmark = new Benchmark(s"Explode", numRows, numIters, output = output)
+      val cases = Seq(
+        "Two nested fields of an exploded array" ->
+          "SELECT e._1, e._2 FROM t4 LATERAL VIEW explode(col4) AS e",
+        "A nested field through two chained explodes" ->
+          "SELECT f._1 FROM t5 LATERAL VIEW explode(col5) AS e LATERAL VIEW explode(e._2) AS f")
+      for ((name, sql) <- cases; enabled <- Seq(false, true)) {
+        benchmark.addCase(s"$name, through generate $enabled") { _ =>
+          withSQLConf(
+              SQLConf.NESTED_SCHEMA_PRUNING_THROUGH_GENERATE_ENABLED.key -> enabled.toString) {
+            spark.sql(sql).noop()
+          }
+        }
+      }
+
+      benchmark.run()
+    }
+  }
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark(benchmarkName) {
       withSQLConf(SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
@@ -186,6 +224,7 @@ abstract class NestedSchemaPruningBenchmark extends SqlBasedBenchmark {
         repartitionByExprBenchmark(N, numIters)
         sampleBenchmark(N, numIters)
         sortBenchmark(N, numIters)
+        explodeBenchmark(N, numIters)
       }
     }
   }
