@@ -334,9 +334,9 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
   }
 
   /**
-   * Returns the join keys the query's runtime Bloom filters are applied on. The attribute names in
-   * this suite's tables are unique per table (`c1` in `bf1`, `c2` in `bf2`, ...), so this
-   * identifies which side a filter was applied to.
+   * Returns the join keys the query's runtime Bloom filters are applied on. Apart from `bf5part`
+   * and `bf5filtered`, which share a schema, the tables use their own attribute names (`c1` in
+   * `bf1`, `c2` in `bf2`, ...), so this identifies which side a filter was applied to.
    */
   def bloomFilterApplicationSideKeys(query: String): Set[String] = {
     sql(query).queryExecution.optimizedPlan.collect {
@@ -346,11 +346,15 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     }.flatten.toSet
   }
 
-  /** Optimizes `query` and returns the warnings the hint error handler logged while doing so. */
-  def hintWarnings(query: String): Seq[String] = {
+  /**
+   * Optimizes `query`, and plans it when `planned` is set, and returns the warnings the hint error
+   * handler logged while doing so.
+   */
+  def hintWarnings(query: String, planned: Boolean = false): Seq[String] = {
     val logAppender = new LogAppender("runtime filter hint")
     withLogAppender(logAppender, level = Some(Level.WARN)) {
-      sql(query).queryExecution.optimizedPlan
+      val queryExecution = sql(query).queryExecution
+      if (planned) queryExecution.executedPlan else queryExecution.optimizedPlan
     }
     val hintLogger = HintErrorLogger.getClass.getName.stripSuffix("$")
     logAppender.loggingEvents.filter(_.getLoggerName == hintLogger)
@@ -1593,6 +1597,9 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
         "SELECT row_number() OVER (ORDER BY c2) AS c2 FROM bf2",
         // An inner generate drops the rows for which an unstable generator yields nothing.
         "SELECT c2 FROM bf2 LATERAL VIEW explode(bf_nondeterministic_array(a2)) x AS v",
+        // An inner join null-safely comparing an order-dependent value changes the row set.
+        "SELECT x.b2 AS c2 FROM (SELECT b2, first(c2) AS f FROM bf2 GROUP BY b2) x " +
+          "JOIN bf3 ON x.f <=> bf3.c3",
         // A key computed by a subquery whose own plan is not repeatable.
         "SELECT (SELECT max(c2) FROM bf2 TABLESAMPLE (50 PERCENT)) AS c2 FROM bf2",
         // A scalar subquery whose row count depends on a floating point sum may return more than
@@ -1764,6 +1771,13 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
         "from bf2 join (select c3 from bf3 limit 5) t on bf2.c2 = t.c3)"
       assertNoBloomFilters(failing)
       assert(hintWarnings(failing).count(_.contains("is not supported")) == 1)
+      // The same when the hinted join's subtree renames a column: a failure is reported once, and
+      // a filter built on a renamed key, which pushdown moves below the rename, is built once.
+      val renamedFailing = "select * from bf4 where bf4.c4 in (select /*+ RUNTIME_FILTER(t) */ " +
+        "bf2.c2 from bf2 join (select c3 as k from bf3 limit 5) t on bf2.c2 = t.k)"
+      assert(hintWarnings(renamedFailing).count(_.contains("is not supported")) == 1)
+      assertHintedRewrite("select * from bf4 where bf4.c4 in (select /*+ RUNTIME_FILTER(bf3) */ " +
+        "t.k from (select c2 as k from bf2) t join bf3 on t.k = bf3.c3)")
       val ambiguous = "select * from bf4 where bf4.c4 in " +
         "(select /*+ RUNTIME_FILTER(bf2, bf3) */ bf2.c2 from bf2 join bf3 on bf2.c2 = bf3.c3)"
       assert(hintWarnings(ambiguous).count(
@@ -2099,6 +2113,21 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       assert(warnings.exists(_.contains("Hint (strategy=merge) is overridden")))
       assert(warnings.exists(_.contains("Hint (runtime_filter) is not supported")))
       assert(!warnings.exists(_.contains("(strategy=merge, runtime_filter)")))
+      // The same when join selection rejects the strategy: an invalid build side, or a join
+      // without equi-join keys, whichever side carries the strategy.
+      Seq(
+        ("select /*+ BROADCAST(bf4), RUNTIME_FILTER(bf4) */ * from bf4 " +
+          "left outer join bf2 on bf4.c4 = bf2.c2",
+          "Hint (strategy=broadcast) is not supported in the query: build left for left outer"),
+        ("select /*+ MERGE(bf2), RUNTIME_FILTER(bf2) */ * from bf4 join bf2 on bf4.c4 > bf2.c2",
+          "Hint (strategy=merge) is not supported in the query: no equi-join keys"),
+        ("select /*+ RUNTIME_FILTER(bf4), MERGE(bf2) */ * from bf4 join bf2 on bf4.c4 > bf2.c2",
+          "Hint (strategy=merge) is not supported in the query: no equi-join keys")
+      ).foreach { case (query, strategyWarning) =>
+        val planned = hintWarnings(query, planned = true)
+        assert(planned.exists(_.startsWith(strategyWarning)), planned)
+        assert(!planned.exists(_.contains(", runtime_filter)")), planned)
+      }
     }
   }
 
@@ -2136,11 +2165,17 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
         assertHintNotApplied(existing,
           s"${SQLConf.RUNTIME_FILTER_NUMBER_THRESHOLD.key} (1) is reached")
       }
-      // With Bloom filters disabled the hint is still reported rather than silently dropped.
+      // With Bloom filters disabled the hint is still reported rather than silently dropped,
+      // unless a DPP filter honors it.
       withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "false") {
         assertHintNotApplied(
           "select /*+ RUNTIME_FILTER(bf2) */ * from bf4 join bf2 on bf4.c4 = bf2.c2",
           s"${SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key} is false")
+        val dppHonored = "select /*+ RUNTIME_FILTER(bf2) */ * from bf5part join bf2 " +
+          "on bf5part.f5 = bf2.f2 where bf2.a2 = 10"
+        assert(hasDynamicPruning(dppHonored))
+        assert(getNumBloomFilters(sql(dppHonored).queryExecution.optimizedPlan) == 0)
+        assert(hintWarnings(dppHonored).isEmpty)
       }
     }
   }

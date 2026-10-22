@@ -539,6 +539,46 @@ Repartition 2, false
 
 
 -- !query
+SELECT /*+ RUNTIME_FILTER(t2) */ * FROM t1 JOIN t2 ON t1.c1 = t2.c1
+-- !query analysis
+Project [c1#x, c2#x, c1#x, c3#x]
++- Join Inner, (c1#x = c1#x)
+   :- SubqueryAlias t1
+   :  +- View (`t1`, [c1#x, c2#x])
+   :     +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as string) AS c2#x]
+   :        +- Project [c1#x, c2#x]
+   :           +- SubqueryAlias t1
+   :              +- LocalRelation [c1#x, c2#x]
+   +- ResolvedHint (runtime_filter)
+      +- SubqueryAlias t2
+         +- View (`t2`, [c1#x, c3#x])
+            +- Project [cast(c1#x as int) AS c1#x, cast(c3#x as string) AS c3#x]
+               +- Project [c1#x, c3#x]
+                  +- SubqueryAlias t2
+                     +- LocalRelation [c1#x, c3#x]
+
+
+-- !query
+SELECT /*+ MERGE(t2), RUNTIME_FILTER(t2) */ * FROM t1 JOIN t2 ON t1.c1 = t2.c1
+-- !query analysis
+Project [c1#x, c2#x, c1#x, c3#x]
++- Join Inner, (c1#x = c1#x)
+   :- SubqueryAlias t1
+   :  +- View (`t1`, [c1#x, c2#x])
+   :     +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as string) AS c2#x]
+   :        +- Project [c1#x, c2#x]
+   :           +- SubqueryAlias t1
+   :              +- LocalRelation [c1#x, c2#x]
+   +- ResolvedHint (strategy=merge, runtime_filter)
+      +- SubqueryAlias t2
+         +- View (`t2`, [c1#x, c3#x])
+            +- Project [cast(c1#x as int) AS c1#x, cast(c3#x as string) AS c3#x]
+               +- Project [c1#x, c3#x]
+                  +- SubqueryAlias t2
+                     +- LocalRelation [c1#x, c3#x]
+
+
+-- !query
 SELECT /*+ COALESCE(c1) */ * FROM t1
 -- !query analysis
 org.apache.spark.sql.AnalysisException
