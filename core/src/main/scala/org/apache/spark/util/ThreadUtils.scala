@@ -423,13 +423,24 @@ private[spark] object ThreadUtils {
   }
   // scalastyle:on awaitready
 
+  /**
+   * Shuts down the executor, waiting up to `gracePeriod` for running and queued tasks to finish.
+   * If they do not finish in time, or if the calling thread is interrupted while waiting, calls
+   * `shutdownNow()` to interrupt the running tasks and drop the queued ones. In the latter case,
+   * the `InterruptedException` is rethrown.
+   */
   def shutdown(
       executor: ExecutorService,
       gracePeriod: Duration = FiniteDuration(30, TimeUnit.SECONDS)): Unit = {
     executor.shutdown()
-    executor.awaitTermination(gracePeriod.toMillis, TimeUnit.MILLISECONDS)
-    if (!executor.isShutdown) {
-      executor.shutdownNow()
+    try {
+      if (!executor.awaitTermination(gracePeriod.toMillis, TimeUnit.MILLISECONDS)) {
+        executor.shutdownNow()
+      }
+    } catch {
+      case e: InterruptedException =>
+        executor.shutdownNow()
+        throw e
     }
   }
 
