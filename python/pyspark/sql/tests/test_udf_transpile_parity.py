@@ -31,8 +31,8 @@ error the transpiled code may succeed where the regular path would not.
 Transpilation is currently only supported in regular (non-Connect) Spark, so
 these classes are guarded with ``is_remote_only()`` and are intentionally not
 inherited into the Spark Connect parity tests. The companion suites that test
-the transpiler directly live in ``test_udf_transpile_unit.py`` and
-``test_udf_transpile_hypothesis.py``.
+the transpiler directly live in ``test_udf_transpile_unit.py``,
+``test_udf_transpile_hypothesis.py``, and ``test_udf_transpile_java_unit.py``.
 
 Note on configuration: enabling transpilation requires ANSI mode, so an "on"
 run is unavoidably also an ANSI run.

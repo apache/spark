@@ -467,13 +467,19 @@ class JavaTranspileEndToEndTests(ReusedSQLTestCase):
         return df._jdf.queryExecution().optimizedPlan().toString()
 
     def test_java_target_is_off_by_default(self):
-        # The whole point of the opt-in: with the default transpiler list, naming nothing
-        # new, a body only this target can lower must still run as interpreted Python.
+        # The whole point of the opt-in: with the conf untouched, a body only this
+        # target can lower must still run as interpreted Python. No pyTranspilers
+        # override here -- the test pins the default itself, not a spelling of it.
         def multi(x):
             doubled = x * 2
             return doubled + 1
 
-        with self.sql_conf(_CATALYST_ONLY):
+        with self.sql_conf(
+            {
+                "spark.sql.experimental.optimizer.transpilePyUDFs": True,
+                "spark.sql.ansi.enabled": True,
+            }
+        ):
             self.assertEqual([], UserDefinedFunction(multi, LongType()).transpiled)
 
     def test_catalyst_wins_when_both_can_lower(self):
@@ -531,6 +537,9 @@ class JavaTranspileEndToEndTests(ReusedSQLTestCase):
             plan = self._plan(result)
             self.assertIn("TranspiledJavaUDF", plan)
             self.assertNotIn("BatchEvalPython", plan)
+            # The claim in the name: the select's own Project is the only one --
+            # nothing was hoisted to give the argument a column of its own.
+            self.assertEqual(1, plan.count("Project"))
             self.assertEqual([0, 6, 12], [r[0] for r in result.collect()])
 
     def test_results_match_interpreted_python(self):
@@ -963,6 +972,12 @@ class JavaTranspileEndToEndTests(ReusedSQLTestCase):
             for value in (2**31, 2**62):
                 df = self.spark.createDataFrame([(value,)], "a bigint")
                 self.assertEqual(value, df.select(udf(col("a"))).first()[0])
+            # The int arm of the claim: the cast to the category type is what
+            # widens it, and the lowering (not a fallback) has to run over it.
+            int_col = self.spark.createDataFrame([(7,)], "a int")
+            result = int_col.select(udf(col("a")))
+            self.assertIn("TranspiledJavaUDF", self._plan(result))
+            self.assertEqual(7, result.first()[0])
 
 
 class GetTranspilersTests(unittest.TestCase):

@@ -51,6 +51,7 @@ What falls back (``UnsupportedOperationException`` -> ordinary fallback):
   (``b != 0 and a // b > 1``). Catalyst's ``And`` can, so ``catalyst,java``
   keeps them.
 * ``== None`` / ``!= None`` -- use ``is None`` / ``is not None``.
+* ``None is x`` / ``None is not x`` -- reverse it to ``x is None``.
 * ``not`` over anything but a real boolean.
 * An annotated local whose annotation disagrees with its value.
 * Loops, ``try``/``except``, string methods, bitwise ops, and any type
