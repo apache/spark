@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
+import java.sql.Timestamp
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
 
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
@@ -266,12 +267,57 @@ private[sql] object OrcFilters extends OrcFiltersBase {
     def canPushValue(attribute: String): Boolean =
       dataTypeMap.contains(attribute) && acceptsValue(attribute)
 
+    // A TimestampType column reads the stored ORC timestamps truncated to microseconds, while ORC
+    // compares a pushed down value with the stored nanoseconds, e.g. of a file written by another
+    // engine. So a value `v` is read from the stored values from `v` to `v` + 999 nanoseconds,
+    // and `=`, `<=>`, `<=`, `>`, and `IN` compare with that range. `<` and `>=` are exact with `v`.
+    def isTimestamp(attribute: String): Boolean =
+      canPushValue(attribute) && dataTypeMap(attribute).fieldType == TimestampType
+
+    // Returns the casted `value` and the largest stored value that is read as it.
+    def timestampRange(value: Any): (Any, Any) = castLiteralValue(value, TimestampType) match {
+      case ts: Timestamp =>
+        val upper = new Timestamp(ts.getTime)
+        upper.setNanos(ts.getNanos + 999)
+        (ts, upper)
+      case other => (other, other)
+    }
+
     import org.apache.spark.sql.sources._
 
     // NOTE: For all case branches dealing with leaf predicates below, the additional `startAnd()`
     // call is mandatory. ORC `SearchArgument` builder requires that all leaf predicates must be
     // wrapped by a "parent" predicate (`And`, `Or`, or `Not`).
     expression match {
+      case EqualTo(name, value) if isTimestamp(name) =>
+        val (lower, upper) = timestampRange(value)
+        Some(builder.startAnd()
+          .between(dataTypeMap(name).fieldName, getType(name), lower, upper).end())
+
+      // Unlike BETWEEN, `<=>` is never null, so `NOT (ts <=> v)` holds for the null values. A null
+      // `v` stays with the case below, which ORC does not use to skip anything.
+      case EqualNullSafe(name, value) if isTimestamp(name) && value != null =>
+        val (lower, upper) = timestampRange(value)
+        Some(builder.startAnd()
+          .startNot().isNull(dataTypeMap(name).fieldName, getType(name)).end()
+          .between(dataTypeMap(name).fieldName, getType(name), lower, upper).end())
+
+      case LessThanOrEqual(name, value) if isTimestamp(name) =>
+        val (_, upper) = timestampRange(value)
+        Some(builder.startAnd()
+          .lessThanEquals(dataTypeMap(name).fieldName, getType(name), upper).end())
+
+      case GreaterThan(name, value) if isTimestamp(name) =>
+        val (_, upper) = timestampRange(value)
+        Some(builder.startNot()
+          .lessThanEquals(dataTypeMap(name).fieldName, getType(name), upper).end())
+
+      case In(name, values) if isTimestamp(name) =>
+        Some(values.foldLeft(builder.startOr()) { (b, value) =>
+          val (lower, upper) = timestampRange(value)
+          b.between(dataTypeMap(name).fieldName, getType(name), lower, upper)
+        }.end())
+
       case EqualTo(name, value) if canPushValue(name) =>
         val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
         Some(builder.startAnd()
