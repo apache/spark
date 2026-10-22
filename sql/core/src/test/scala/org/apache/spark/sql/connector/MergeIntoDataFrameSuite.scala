@@ -47,6 +47,10 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
 
   import testImplicits._
 
+  private def targetTableCol(colName: String): Column = {
+    col(tableNameAsString + "." + colName)
+  }
+
   test("self merge with transactional checks") {
     // create table
     createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
@@ -1228,24 +1232,22 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
             Seq(Row(2, "b", false, 2L)).asJava,
             first.schema.add("score", LongType))
 
-          /** A write matching the table schema does not warn. */
+          // A write matching the table schema does not warn.
           checkSchemaEvolutionWriteWithWarning(
             tableName, command, initial, evolutionEnabled, capabilities,
             expectWarning = false)
 
-          /** Adding multiple columns emits at most one warning for the entire write. */
+          // Adding multiple columns emits at most one warning for the entire write.
           checkSchemaEvolutionWriteWithWarning(
             tableName, command, first, evolutionEnabled, capabilities,
             expectWarning = warnOnEvolution)
 
-          /** A later request adding another column gets its own warning when applicable. */
+          // A later request adding another column gets its own warning when applicable.
           checkSchemaEvolutionWriteWithWarning(
             tableName, command, next, evolutionEnabled, capabilities,
             expectWarning = warnOnEvolution)
 
-          /**
-           * Repeating the write does not warn.
-           */
+          // Repeating the write does not warn.
           checkSchemaEvolutionWriteWithWarning(
             tableName, command, next, evolutionEnabled, capabilities, expectWarning = false)
 
@@ -1633,10 +1635,6 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
   }
 
   // Test helpers.
-
-  private def targetTableCol(colName: String): Column = {
-    col(tableNameAsString + "." + colName)
-  }
 
   private def checkSchemaEvolutionWriteWithWarning(
       tableName: String,
