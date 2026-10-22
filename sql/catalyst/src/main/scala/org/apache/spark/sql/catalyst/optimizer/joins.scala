@@ -681,7 +681,9 @@ private[optimizer] object RuntimeFilterSourceAnalysis {
   def rejection(plan: LogicalPlan, key: Expression): Option[String] = {
     if (plan.isStreaming) {
       Some("the hinted side is a stream")
-    } else if (containsExtractedFunction(plan)) {
+    } else if (containsExtractedFunction(plan) ||
+        // A DPP filter evaluates the key in its own subquery, which no UDF extraction rewrites.
+        key.containsAnyPattern(PYTHON_UDF, EXTERNAL_UDF)) {
       Some("the hinted side contains a Python UDF, Python UDTF or external UDF, which a runtime " +
         "filter cannot evaluate")
     } else {
@@ -876,8 +878,8 @@ private[optimizer] object RuntimeFilterSourceAnalysis {
    * are order-dependent. An exact sum is order-dependent too when an overflow of a partial sum
    * turns it into null for good, as a decimal sum does outside ANSI mode and `try_sum` /
    * `try_avg` do for any input, since whether a partial sum overflows depends on how the rows
-   * are split. A Bloom filter aggregate, which [[InjectRuntimeFilter]] injects for an inner
-   * join, merges commutatively.
+   * are split. A Bloom filter aggregate, which [[InjectRuntimeFilter]] injects, merges
+   * commutatively.
    */
   private def isOrderIrrelevant(e: Expression): Boolean = e match {
     case _: AttributeReference => true
