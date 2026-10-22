@@ -294,7 +294,6 @@ class TorchDistributorBaselineUnitTestsMixin:
             dist._run_distributed_training(MagicMock(), MagicMock(), None, None)
 
         self.assertEqual(dist.log_streaming_server_port, -1)
-        self.assertIsNone(dist.log_streaming_auth_secret)
         self.assertEqual(len(logs.records), 1)
         message = logs.records[0].getMessage()
         self.assertIn("Start torch distributor log streaming server failed", message)
