@@ -41,7 +41,8 @@ import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
-import org.apache.spark.sql.connector.expressions.{Expression, Literal, NamedReference}
+import org.apache.spark.sql.connector.expressions.{Expression, GeneralScalarExpression, Literal,
+  NamedReference}
 import org.apache.spark.sql.connector.expressions.aggregate.AggregateFunc
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, Predicate}
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
@@ -417,6 +418,15 @@ abstract class JdbcDialect extends Serializable with Logging {
     override def build(expr: Expression): String = expr match {
       case _: AlwaysTrue => "(1 = 1)"
       case _: AlwaysFalse => "(1 = 0)"
+      case e: GeneralScalarExpression if e.name() == "CHAR_READ_SIDE_PADDING" =>
+        if (!isSupportedFunction("CHAR_READ_SIDE_PADDING")) {
+          throw new SparkUnsupportedOperationException(
+            errorClass = "_LEGACY_ERROR_TEMP_3177",
+            messageParameters = Map(
+              "class" -> this.getClass.getSimpleName,
+              "funcName" -> e.name()))
+        }
+        inputToSQL(e.children()(0))
       case _ => super.build(expr)
     }
 
@@ -543,8 +553,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @return True if the database supports function.
    */
   @Since("3.3.0")
-  def isSupportedFunction(funcName: String): Boolean =
-    funcName == "CHAR_READ_SIDE_PADDING"
+  def isSupportedFunction(funcName: String): Boolean = false
 
   /**
    * Converts V2 expression to String representing a SQL expression.

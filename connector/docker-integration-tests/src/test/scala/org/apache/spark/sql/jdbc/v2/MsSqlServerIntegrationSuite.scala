@@ -300,6 +300,11 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
     withTable(table) {
       sql(s"CREATE TABLE $table (id INT, flag CHAR(5))")
       sql(s"INSERT INTO $table VALUES (1, 'Y'), (2, NULL)")
+      val eq = sql(s"SELECT id FROM $table WHERE flag = 'Y'")
+      checkFilterPushed(eq)
+      val eqRows = eq.collect()
+      assert(eqRows.length === 1)
+      assert(eqRows(0).getInt(0) === 1)
       val isNull = sql(s"SELECT id FROM $table WHERE flag IS NULL")
       checkFilterPushed(isNull)
       val nullRows = isNull.collect()

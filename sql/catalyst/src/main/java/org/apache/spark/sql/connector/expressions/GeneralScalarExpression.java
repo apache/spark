@@ -428,6 +428,16 @@ import org.apache.spark.sql.internal.connector.ExpressionWithToString;
  *    <li>Since version: 4.0.0</li>
  *   </ul>
  *  </li>
+ *  <li>Name: <code>CHAR_READ_SIDE_PADDING</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>RPAD(str, len, ' ')</code> on a CHAR scan column when
+ *        read-side padding is on. Spark only emits this in <code>=</code>,
+ *        <code>&lt;=&gt;</code>, <code>&lt;&gt;</code>, and <code>IN</code> against
+ *        a string of length <code>len</code>. JDBC sources that store CHAR already
+ *        padded may compile it as the raw column.</li>
+ *    <li>Since version: 4.4.0</li>
+ *   </ul>
+ *  </li>
  * </ol>
  * Note: SQL semantic conforms ANSI standard, so some expressions are not supported when ANSI off,
  * including: add, subtract, multiply, divide, remainder, pmod.
