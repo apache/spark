@@ -25,8 +25,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from typing import Callable, Iterable, List, Union, Iterator, Tuple
+from unittest import mock
 
-from pyspark.errors import AnalysisException, PythonException
+from pyspark.errors import AnalysisException, PySparkNotImplementedError, PythonException
 from pyspark.memory_profiler_ext import has_memory_profiler
 from pyspark.sql.datasource import (
     CaseInsensitiveDict,
@@ -64,6 +65,19 @@ from pyspark.testing.utils import (
     pyarrow_requirement_message,
 )
 from pyspark.util import is_remote_only
+
+
+class PythonDataSourceWorkerUtilsTests(unittest.TestCase):
+    @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+    def test_deserialize_unsupported_filter(self):
+        with mock.patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
+            from pyspark.sql.worker.data_source_pushdown_filters import deserializeFilter
+
+        with self.assertRaises(PySparkNotImplementedError) as pe:
+            deserializeFilter({"name": "UnknownFilter", "columnPath": ["x"], "isNegated": False})
+
+        self.assertEqual(pe.exception.getCondition(), "UNSUPPORTED_FILTER")
+        self.assertEqual(pe.exception.getMessageParameters(), {"name": "UnknownFilter"})
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -364,7 +378,10 @@ class BasePythonDataSourceTestsMixin:
 
         with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
             self.spark.dataSource.register(TestDataSource)
-            with self.assertRaisesRegex(Exception, "DATA_SOURCE_EXTRANEOUS_FILTERS"):
+            with self.assertRaisesRegex(
+                Exception,
+                "DATA_SOURCE_EXTRANEOUS_FILTERS.*returned filters that are not part of the input",
+            ):
                 self.spark.read.format("test").load().filter("x = 1").show()
 
     def test_filter_pushdown_error(self):
