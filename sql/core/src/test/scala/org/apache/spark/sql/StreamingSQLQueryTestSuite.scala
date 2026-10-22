@@ -201,7 +201,8 @@ class StreamingSQLQueryTestSuite extends SQLQueryTestSuite {
 
   private def parseTriggeredFlowStatement(
       session: SparkSession,
-      sql: String): Option[TriggeredFlowStatement] = {
+      sql: String,
+      parsedPlan: => Option[LogicalPlan]): Option[TriggeredFlowStatement] = {
     session.withActive {
       val tokens = sql.trim.split("\\s+", 3)
       val hasFlowCommandPrefix = tokens.length >= 2 && tokens(1).equalsIgnoreCase("FLOW") &&
@@ -209,11 +210,6 @@ class StreamingSQLQueryTestSuite extends SQLQueryTestSuite {
       if (hasFlowCommandPrefix) {
         if (tokens.length == 2 && tokens(0).equalsIgnoreCase("REFRESH")) {
           throw new IllegalArgumentException("REFRESH FLOW requires a flow name.")
-        }
-        val parsedPlan = try {
-          Some(session.sessionState.sqlParser.parsePlan(sql))
-        } catch {
-          case _: ParseException => None
         }
         parsedPlan match {
           case Some(command: CreateFlowCommand) => Some(CreateTriggeredFlow(command))
@@ -225,6 +221,12 @@ class StreamingSQLQueryTestSuite extends SQLQueryTestSuite {
         None
       }
     }
+  }
+
+  private def parseTriggeredFlowStatement(
+      session: SparkSession,
+      sql: String): Option[TriggeredFlowStatement] = {
+    parseTriggeredFlowStatement(session, sql, parsePlan(session, sql))
   }
 
   /** Runs one REFRESH FLOW statement to completion. */
@@ -294,9 +296,10 @@ class StreamingSQLQueryTestSuite extends SQLQueryTestSuite {
       session: SparkSession,
       testCase: TestCase,
       sparkConfigSet: Seq[(String, String)],
-      analyzerOnly: Boolean): String => Option[(String, Seq[String])] = {
+      analyzerOnly: Boolean):
+      (String, () => Option[LogicalPlan]) => Option[(String, Seq[String])] = {
     val flows = mutable.Map.empty[Seq[String], TriggeredFlow]
-    sql => parseTriggeredFlowStatement(session, sql).map {
+    (sql, getParsedPlan) => parseTriggeredFlowStatement(session, sql, getParsedPlan()).map {
       case CreateTriggeredFlow(command) =>
         val flow = registerTriggeredFlow(session, command, flows)
         if (analyzerOnly) {

@@ -367,12 +367,26 @@ class SQLQueryTestSuite extends SharedSparkSession
     localSparkSession
   }
 
-  /** Returns a per-test executor for SQL statements handled by a specialized subclass. */
+  protected def parsePlan(session: SparkSession, sql: String): Option[LogicalPlan] = {
+    session.withActive {
+      try {
+        Some(session.sessionState.sqlParser.parsePlan(sql))
+      } catch {
+        case _: ParseException => None
+      }
+    }
+  }
+
+  /**
+   * Returns a per-test executor for SQL statements handled by a specialized subclass. The plan
+   * supplier is lazy so ordinary statements are not parsed an extra time.
+   */
   protected def createCustomQueryExecutor(
       session: SparkSession,
       testCase: TestCase,
       sparkConfigSet: Seq[(String, String)],
-      analyzerOnly: Boolean): String => Option[(String, Seq[String])] = _ => None
+      analyzerOnly: Boolean):
+      (String, () => Option[LogicalPlan]) => Option[(String, Seq[String])] = (_, _) => None
 
   /**
    * Runs queries in debug mode. Only commands and --DEBUG-marked queries are executed.
@@ -401,12 +415,9 @@ class SQLQueryTestSuite extends SharedSparkSession
     }
 
     queriesWithDebug.zipWithIndex.foreach { case ((sql, isDebug), i) =>
-      val customQueryExecuted = executeCustomQuery(sql).nonEmpty
-      lazy val isCommand = try {
-        localSparkSession.sessionState.sqlParser.parsePlan(sql).isInstanceOf[Command]
-      } catch {
-        case _: ParseException => false
-      }
+      lazy val parsedPlan = parsePlan(localSparkSession, sql)
+      val customQueryExecuted = executeCustomQuery(sql, () => parsedPlan).nonEmpty
+      lazy val isCommand = parsedPlan.exists(_.isInstanceOf[Command])
 
       if (!customQueryExecuted && isCommand) {
         localSparkSession.sql(sql).collect()
@@ -500,10 +511,11 @@ class SQLQueryTestSuite extends SharedSparkSession
 
     // Run the SQL queries preparing them for comparison.
     val outputs: Seq[QueryTestOutput] = queries.map { sql =>
+      lazy val parsedPlan = parsePlan(localSparkSession, sql)
       testCase match {
         case _: AnalyzerTest =>
           val (_, output) = handleExceptions {
-            executeCustomQuery(sql)
+            executeCustomQuery(sql, () => parsedPlan)
               .getOrElse(getNormalizedQueryAnalysisResult(localSparkSession, sql))
           }
           // We do some query canonicalization now.
@@ -513,7 +525,7 @@ class SQLQueryTestSuite extends SharedSparkSession
             output = normalizeTestResults(output.mkString("\n")))
         case _ =>
           val (schema, output) = handleExceptions {
-            executeCustomQuery(sql)
+            executeCustomQuery(sql, () => parsedPlan)
               .getOrElse(getNormalizedQueryExecutionResult(localSparkSession, sql))
           }
           // We do some query canonicalization now.
