@@ -137,7 +137,7 @@ object ResolvedDatabaseInSessionCatalog {
 
 /**
  * Extracts the name of a database to create in a catalog that supports V1 commands. Fails if the
- * namespace has more than one part.
+ * namespace does not have exactly one part.
  */
 object DatabaseNameInSessionCatalog {
   def unapply(resolved: ResolvedNamespace): Option[String] = resolved match {

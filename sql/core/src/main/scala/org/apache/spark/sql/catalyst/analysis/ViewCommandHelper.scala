@@ -30,8 +30,9 @@ object ViewCommandHelper {
 
   /**
    * Rewrites a resolved [[DropView]] to [[DropTempViewCommand]] for a temporary view or to
-   * [[DropTableCommand]] for a session-catalog view, and fails for a catalog that cannot host
-   * views. Returns `dropView` itself if its target is in a [[ViewCatalog]] or is not resolved.
+   * [[DropTableCommand]] for a session-catalog view. Fails for a session-catalog target whose
+   * namespace does not have exactly one part, and for a catalog that cannot host views. Returns
+   * `dropView` itself if its target is in a [[ViewCatalog]] or is not resolved.
    */
   def rewrite(dropView: DropView): LogicalPlan = dropView match {
     // Session-qualified temp view: same execution path as FakeSystemCatalog DROP VIEW.
