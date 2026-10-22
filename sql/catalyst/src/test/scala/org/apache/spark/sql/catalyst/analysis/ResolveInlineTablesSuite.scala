@@ -208,10 +208,7 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
       Seq(Seq(lit(1), Add(lit(2), lit(3))), Seq(lit(4L), lit(5))),
       // CURRENT_LIKE expressions are replaced at the end of the analysis phase, so the other
       // expressions of the table are evaluated at that point too.
-      Seq(Seq(CurrentTimestamp(), Add(lit(2), lit(3)))),
-      // The cell is evaluated at the end of the analysis phase like before, even though it isn't
-      // foldable once CURRENT_LIKE expressions are replaced.
-      Seq(Seq(Concat(Seq(CurrentUser(), Uuid(Some(1L))))))
+      Seq(Seq(CurrentTimestamp(), Add(lit(2), lit(3))))
     ).foreach { rows =>
       val table = UnresolvedInlineTable(rows.head.indices.map(i => s"c$i"), rows)
       val resolved = ResolveInlineTables(table)
@@ -241,6 +238,19 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
         // Both CURRENT_TIMESTAMP expressions are evaluated to the same value.
         assert(ts1 == ts2)
       case other => fail(s"Expected an Expand, but got $other")
+    }
+  }
+
+  test("nondeterministic expressions next to CURRENT_LIKE expressions in the same expression") {
+    // A ResolvedInlineTable cannot contain nondeterministic expressions.
+    val e = Concat(Seq(CurrentUser(), Uuid(Some(1L))))
+    val table = UnresolvedInlineTable(Seq("c1"), Seq(Seq(e)))
+    ResolveInlineTables(table) match {
+      case Expand(Seq(Seq(projection)), _, _: OneRowRelation) => assert(projection == e)
+      case other => fail(s"Expected an Expand, but got $other")
+    }
+    withSQLConf(SQLConf.INLINE_TABLE_NON_FOLDABLE_EXPRESSIONS_ENABLED.key -> "false") {
+      assert(ResolveInlineTables(table).isInstanceOf[ResolvedInlineTable])
     }
   }
 

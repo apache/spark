@@ -53,7 +53,7 @@ object EvaluateUnresolvedInlineTable extends SQLConfHelper
     validateInputDimension(table)
     validateInputEvaluable(table)
     val resolvedTable = findCommonTypesAndCast(table, ignoreCollation)
-    if (table.rows.forall(_.forall(canEvalDuringAnalysis))) {
+    if (canEvalAllDuringAnalysis(table)) {
       earlyEvalIfPossible(resolvedTable)
     } else {
       toExpand(resolvedTable)
@@ -74,27 +74,44 @@ object EvaluateUnresolvedInlineTable extends SQLConfHelper
   /**
    * Turns an inline table with expressions that are evaluated when the query runs into an
    * [[Expand]] over a [[OneRowRelation]], which produces one output row per projection. The
-   * foldable expressions are evaluated now, except CURRENT_LIKE expressions, which are replaced
-   * with literals at the end of the analysis phase.
+   * constant expressions are evaluated now (see [[isConstant]]).
    */
   private def toExpand(table: ResolvedInlineTable): Expand = {
     val projections = table.rows.map(_.map {
-      case e if !e.containsPattern(CURRENT_LIKE) && trimAliases(prepareForEval(e)).foldable =>
-        Literal(EvalInlineTables.evalExpression(table, e), e.dataType)
+      case e if isConstant(e) => Literal(EvalInlineTables.evalExpression(table, e), e.dataType)
       case e => e
     })
     Expand(projections, table.output, OneRowRelation())
   }
 
+  private def runtimeEvaluationEnabled: Boolean =
+    conf.getConf(SQLConf.INLINE_TABLE_NON_FOLDABLE_EXPRESSIONS_ENABLED)
+
+  /** Returns whether all the expressions of the inline table can be evaluated during analysis. */
+  private def canEvalAllDuringAnalysis(table: UnresolvedInlineTable): Boolean =
+    table.rows.forall(_.forall(canEvalDuringAnalysis))
+
   /**
    * Returns whether the expression can be evaluated during the analysis phase: it must be
    * foldable, or contain CURRENT_LIKE expressions, which are replaced by literals at the end of
    * the analysis phase, but no subqueries, which can only be evaluated when the query runs.
-   * Inline tables with only such expressions are evaluated during analysis.
+   * Inline tables with only such expressions are evaluated during analysis. If
+   * [[SQLConf.INLINE_TABLE_NON_FOLDABLE_EXPRESSIONS_ENABLED]] is true, the expressions with
+   * CURRENT_LIKE expressions must also be deterministic, because a [[ResolvedInlineTable]] cannot
+   * contain nondeterministic expressions.
    */
   private def canEvalDuringAnalysis(e: Expression): Boolean =
-    (e.containsPattern(CURRENT_LIKE) && !SubqueryExpression.hasSubquery(e)) ||
+    (e.containsPattern(CURRENT_LIKE) && !SubqueryExpression.hasSubquery(e) &&
+      (e.deterministic || !runtimeEvaluationEnabled)) ||
       (e.resolved && trimAliases(prepareForEval(e)).foldable)
+
+  /**
+   * Returns whether the expression is a constant, which is evaluated during the analysis phase
+   * even if the inline table becomes an [[Expand]]: it must be foldable, and not contain
+   * CURRENT_LIKE expressions, which are replaced with literals at the end of the analysis phase.
+   */
+  private def isConstant(e: Expression): Boolean =
+    !e.containsPattern(CURRENT_LIKE) && e.resolved && trimAliases(prepareForEval(e)).foldable
 
   /**
    * Validates the input data dimension:
@@ -123,16 +140,20 @@ object EvaluateUnresolvedInlineTable extends SQLConfHelper
    * Validates that all inline table data are valid expressions that can be evaluated: during the
    * analysis phase (see [[canEvalDuringAnalysis]]), or, if
    * [[SQLConf.INLINE_TABLE_NON_FOLDABLE_EXPRESSIONS_ENABLED]] is true, when the query runs (see
-   * [[isRuntimeEvaluable]]).
+   * [[isRuntimeEvaluable]]). In the latter case, all the expressions that are not constants are
+   * evaluated when the query runs, including the ones with CURRENT_LIKE expressions.
    * This is package visible for unit testing.
    */
   def validateInputEvaluable(table: UnresolvedInlineTable): Unit = {
-    val allowRuntimeEvaluation =
-      conf.getConf(SQLConf.INLINE_TABLE_NON_FOLDABLE_EXPRESSIONS_ENABLED)
+    val evaluatedWhenQueryRuns = runtimeEvaluationEnabled && !canEvalAllDuringAnalysis(table)
     table.rows.foreach { row =>
       row.foreach { e =>
-        if (!canEvalDuringAnalysis(e) &&
-            !(allowRuntimeEvaluation && e.resolved && isRuntimeEvaluable(e))) {
+        val evaluable = if (evaluatedWhenQueryRuns) {
+          isConstant(e) || (e.resolved && isRuntimeEvaluable(e))
+        } else {
+          canEvalDuringAnalysis(e)
+        }
+        if (!evaluable) {
           e.failAnalysis(
             errorClass = "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
             messageParameters = Map("expr" -> toSQLExpr(e)))

@@ -131,6 +131,34 @@ class InlineTableNonFoldableExpressionsSuite
     checkAnswer(df, Row(1, 2))
   }
 
+  test("nondeterministic expressions next to CURRENT_LIKE expressions in the same expression") {
+    checkAnswer(
+      sql(
+        """SELECT count(DISTINCT s), min(startswith(s, current_user()))
+          |FROM VALUES (concat(current_user(), uuid())), (concat(current_user(), uuid())) AS t(s)
+          |""".stripMargin),
+      Row(2, true))
+    checkAnswer(
+      sql(
+        """SELECT d BETWEEN current_date() AND date_add(current_date(), 9)
+          |FROM VALUES (date_add(current_date(), CAST(rand() * 10 AS INT))) AS t(d)
+          |""".stripMargin),
+      Row(true))
+    withUserDefinedFunction("nd_identity" -> true) {
+      spark.udf.register("nd_identity", udf((s: String) => s).asNondeterministic())
+      checkAnswer(
+        sql("SELECT s = current_user() FROM VALUES (nd_identity(current_user())) AS t(s)"),
+        Row(true))
+    }
+
+    withSQLConf(SQLConf.INLINE_TABLE_NON_FOLDABLE_EXPRESSIONS_ENABLED.key -> "false") {
+      // The inline table is not evaluated when the query runs, so it cannot contain them.
+      val e = intercept[AnalysisException](
+        sql("SELECT * FROM VALUES (concat(current_user(), uuid()))"))
+      assert(e.getCondition == "INVALID_NON_DETERMINISTIC_EXPRESSIONS")
+    }
+  }
+
   test("type coercion and nullability") {
     val df = sql("SELECT * FROM VALUES (1, rand()), (2L, NULL) AS t(a, b)")
     assert(df.schema == StructType(Seq(
@@ -172,6 +200,30 @@ class InlineTableNonFoldableExpressionsSuite
     }
   }
 
+  test("unresolved references in VALUES lists with scalar subqueries") {
+    val unknownColumn = "SELECT * FROM VALUES ((SELECT 1), unknown_col)"
+    checkError(
+      exception = intercept[AnalysisException](sql(unknownColumn)),
+      condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+      parameters = Map("objectName" -> "`unknown_col`"),
+      context = contextOf(unknownColumn, "unknown_col"))
+    val missingTable = "SELECT * FROM VALUES ((SELECT x FROM missing_table))"
+    checkError(
+      exception = intercept[AnalysisException](sql(missingTable)),
+      condition = "TABLE_OR_VIEW_NOT_FOUND",
+      parameters = Map("relationName" -> "`missing_table`"),
+      context = contextOf(missingTable, "missing_table"))
+    withTable("t") {
+      sql("CREATE TABLE t(id INT) USING parquet")
+      val insert = "INSERT INTO t VALUES ((SELECT max(id) FROM missing_table))"
+      checkError(
+        exception = intercept[AnalysisException](sql(insert)),
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relationName" -> "`missing_table`"),
+        context = contextOf(insert, "missing_table"))
+    }
+  }
+
   test("correlated references and subqueries other than scalar subqueries are rejected") {
     withTempView("t") {
       sql("CREATE TEMPORARY VIEW t AS SELECT * FROM VALUES (1) AS t(a)")
@@ -181,6 +233,14 @@ class InlineTableNonFoldableExpressionsSuite
         condition = "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
         parameters = Map("expr" -> "\"outer(t.a)\""),
         context = contextOf(query, "t.a"))
+
+      // The subquery can only reference the columns of the inline table, which has none.
+      val nested = "SELECT * FROM t, LATERAL (VALUES ((SELECT t.a), rand())) AS v(b, r)"
+      checkError(
+        exception = intercept[AnalysisException](sql(nested)),
+        condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+        parameters = Map("objectName" -> "`t`.`a`"),
+        context = contextOf(nested, "t.a"))
     }
     Seq(
       "SELECT * FROM VALUES (EXISTS (SELECT 1), rand())",
@@ -197,7 +257,11 @@ class InlineTableNonFoldableExpressionsSuite
     Seq(
       "SELECT * FROM VALUES (count(1), rand())",
       "SELECT * FROM VALUES (row_number() OVER (ORDER BY 1), rand())",
-      "SELECT * FROM VALUES (explode(array(1, 2)), 1)").foreach { query =>
+      "SELECT * FROM VALUES (explode(array(1, 2)), 1)",
+      // Also over CURRENT_LIKE expressions, next to expressions evaluated when the query runs.
+      "SELECT * FROM VALUES (max(current_date()), rand())",
+      "SELECT * FROM VALUES (row_number() OVER (ORDER BY current_date()), rand())",
+      "SELECT * FROM VALUES (explode(array(current_date())), rand())").foreach { query =>
       val e = intercept[AnalysisException](sql(query))
       assert(e.getCondition == "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE")
     }
