@@ -127,7 +127,10 @@ jobs:
           path: ./tpcds-kit
       - name: Build tpcds-kit
         if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
-        run: cd tpcds-kit/tools && make OS=LINUX
+        run: |
+          # tpcds-kit is old C code (implicit int, K&R declarations) that newer GCC
+          # versions (e.g. GCC 15 on Ubuntu 26.04) reject by default, so pin the C standard.
+          cd tpcds-kit/tools && make OS=LINUX LINUX_CFLAGS="-O3 -std=gnu89"
       - name: Install Java ${{ inputs.jdk }}
         if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
         uses: actions/setup-java@v5
