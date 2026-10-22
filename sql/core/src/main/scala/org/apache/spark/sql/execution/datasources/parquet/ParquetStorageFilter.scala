@@ -48,9 +48,9 @@ import org.apache.spark.util.Utils
  * A row excluded within a row group may still have been read, as part of a page that held a
  * survivor.
  *
- * The other four count row groups the survivor buffer's budget limited, each once, under the last
- * thing it gave up and the limit that made it: `maxSplicedRowGroupBytes`, or the task's memory
- * manager denying the reservation.
+ * The other four count row groups the survivor buffer's budget limited, each at most once, under
+ * the last thing it gave up and the limit that made it: `maxSplicedRowGroupBytes`, or the task's
+ * memory manager denying the reservation.
  *
  *  - [[rowGroupsSplicingGivenUpByCap]] and [[rowGroupsSplicingGivenUpByMemory]] count row groups
  *    that kept the filter but read their key columns a second time.
