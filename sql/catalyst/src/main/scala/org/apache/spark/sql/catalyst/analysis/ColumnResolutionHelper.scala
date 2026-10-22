@@ -604,9 +604,10 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
   // Candidate threaded through the plan walk:
   //   - expr:   the resolved expression
   //   - depth:  the depth at which it was matched
-  //   - hidden: whether the candidate's references live in `p.metadataOutput`
-  //             at some plan node along the way (e.g. a natural/USING join
-  //             wrapper that hides a join key via `Project.hiddenOutputTag`).
+  //   - hidden: whether the candidate's references are not all in `p.outputSet`
+  //             at some plan node along the way, i.e. they are only reachable via
+  //             `p.metadataOutput` (e.g. a natural/USING join wrapper that hides a
+  //             join key via `Project.hiddenOutputTag`).
   private case class Candidate(expr: NamedExpression, depth: Int, hidden: Boolean)
 
   private def resolveDataFrameColumnByPlanId(
@@ -640,7 +641,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       // case, return an empty Seq to delay the failure, so it is possible to be
       // resolved in the next iteration.
       // Always initialize `hidden = false` here; the filter below will set it
-      // correctly based on whether the references live in `p.metadataOutput`.
+      // correctly based on whether the references are all in `p.outputSet`.
       (resolved.map(Candidate(_, currentDepth, hidden = false)).toSeq, true)
     } else {
       val children = p match {
