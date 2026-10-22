@@ -17,7 +17,18 @@
 
 package org.apache.spark.sql.execution.python
 
+import java.io.File
+import java.nio.file.Files
+import java.util.UUID
+import java.util.concurrent.TimeUnit
+
+import scala.collection.mutable.HashMap
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration._
+
+import org.apache.spark.{JobArtifactSet, JobArtifactState, SparkEnv, SparkFiles}
 import org.apache.spark.api.python.PythonEvalType
+import org.apache.spark.executor.IsolatedSessionState
 import org.apache.spark.sql.{IntegratedUDFTestUtils, Row}
 import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Expression, FunctionTableSubqueryArgumentExpression, Literal}
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -26,6 +37,7 @@ import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.{MutableURLClassLoader, ThreadUtils, Utils}
 
 class PythonUDTFSuite extends SharedSparkSession {
 
@@ -117,6 +129,85 @@ class PythonUDTFSuite extends SharedSparkSession {
       arrayOfVariantOutputScript,
       Some(StructType.fromDDL("v ARRAY<VARIANT>"))
     )
+
+  test("SPARK-54055: local session eviction does not stop an active Python UDTF planner") {
+    assume(shouldTestPythonUDFs && !Utils.isWindows)
+    withTempDir { tempDir =>
+      val uuid = UUID.randomUUID().toString
+      val started = new File(tempDir, "started")
+      val resume = new File(tempDir, "resume")
+      val script = s"""
+        |import os
+        |import time
+        |from pyspark.sql.types import StructType
+        |from pyspark.sql.udtf import AnalyzeResult
+        |
+        |class BlockingAnalyze:
+        |    @staticmethod
+        |    def analyze():
+        |        with open("${started.getCanonicalPath}", "w") as started:
+        |            started.write(str(os.getpid()))
+        |        deadline = time.monotonic() + 30
+        |        while not os.path.exists("${resume.getCanonicalPath}"):
+        |            if time.monotonic() > deadline:
+        |                raise TimeoutError("Planner was not resumed")
+        |            time.sleep(0.01)
+        |        return AnalyzeResult(StructType().add("value", "integer"))
+        |
+        |    def eval(self):
+        |        yield 1,
+        |""".stripMargin
+      val udtf = createUserDefinedPythonTableFunction("BlockingAnalyze", script, None)
+      val loader = new MutableURLClassLoader(Array.empty, getClass.getClassLoader)
+      val session = new IsolatedSessionState(
+        uuid, loader, loader, new HashMap[String, Long], new HashMap[String, Long],
+        new HashMap[String, Long], None)
+      IsolatedSessionState.sessions.put(uuid, session)
+      val pool = ThreadUtils.newDaemonSingleThreadExecutor("python-planner-eviction")
+      implicit val executionContext: ExecutionContext = ExecutionContext.fromExecutor(pool)
+      val planning = Future {
+        spark.withActive {
+          JobArtifactSet.withActiveJobArtifactState(JobArtifactState(uuid, None)) {
+            val runner = new UserDefinedPythonTableFunctionAnalyzeRunner(
+              udtf.name, udtf.func, Seq.empty, Seq.empty, spark.sessionState.sqlParser)
+            runner.runInPython(useDaemon = true)
+          }
+        }
+      }
+      try {
+        eventually(timeout(10.seconds), interval(10.milliseconds)) {
+          assert(started.isFile)
+          assert(Files.readString(started.toPath).nonEmpty)
+        }
+        val child = ProcessHandle.of(Files.readString(started.toPath).toLong).get()
+        val daemon = child.parent().get()
+        val directory = new File(SparkFiles.getRootDirectory(), uuid)
+        assert(directory.isDirectory)
+
+        // No executor tasks hold this session, but the driver is still planning its query.
+        session.markEvicted()
+        assert(!directory.exists())
+        assert(!IsolatedSessionState.sessions.containsKey(uuid))
+        assert(child.isAlive)
+        assert(daemon.isAlive)
+        Files.writeString(resume.toPath, "resume")
+        assert(ThreadUtils.awaitResult(planning, 10.seconds).schema ==
+          StructType.fromDDL("value int"))
+      } finally {
+        Files.writeString(resume.toPath, "resume")
+        pool.shutdown()
+        try {
+          assert(pool.awaitTermination(10, TimeUnit.SECONDS))
+        } finally {
+          pool.shutdownNow()
+          if (IsolatedSessionState.sessions.containsKey(uuid)) {
+            session.markEvicted()
+          }
+          SparkEnv.get.removePythonWorkerFactories(uuid)
+        }
+      }
+    }
+  }
 
   test("Simple PythonUDTF") {
     assume(shouldTestPythonUDFs)

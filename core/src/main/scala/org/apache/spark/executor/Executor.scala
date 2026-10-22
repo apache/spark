@@ -69,7 +69,7 @@ private[spark] object IsolatedSessionState {
 
 /**
  * Represents an isolated session state on the executor side, containing session-specific
- * classloaders, files, jars, and archives. This class manages the lifecycle of these resources
+ * classloaders, files, jars, archives, and Python workers. This class manages their lifecycle
  * and prevents race conditions between concurrent task execution and cache eviction.
  *
  * == Architecture ==
@@ -122,8 +122,8 @@ private[spark] object IsolatedSessionState {
  *  - Immediately when `markEvicted()` is called and no tasks are using the session
  *  - Deferred when the last task calls `release()` after the session was evicted
  *
- * Cleanup closes the classloader, deletes session files, and removes the session
- * from the authoritative map.
+ * Cleanup stops Python worker factories, closes the classloader, deletes session files,
+ * and removes the session from the authoritative map.
  *
  * == Concurrency Guarantees ==
  *
@@ -214,6 +214,10 @@ private[spark] class IsolatedSessionState(
   }
 
   private def cleanup(): Unit = {
+    // Stop Python processes before deleting their session working directory. Cleanup runs only
+    // after eviction and after every task using this session has released its reference.
+    SparkEnv.get.removePythonWorkerFactories(sessionUUID)
+
     // Close the urlClassLoader to release resources.
     try {
       urlClassLoader match {
