@@ -92,7 +92,7 @@ object Constants {
   val ENV_HADOOP_TOKEN_FILE_LOCATION = "HADOOP_TOKEN_FILE_LOCATION"
 
   // Pod scheduling gates
-  // Holds the driver pod unschedulable until every resource it mounts has been created.
+  // Holds the driver pod unschedulable until the resources spark-submit creates for it exist.
   val DRIVER_RESOURCES_SCHEDULING_GATE = "spark.apache.org/driver-resources"
 
   // BINDINGS

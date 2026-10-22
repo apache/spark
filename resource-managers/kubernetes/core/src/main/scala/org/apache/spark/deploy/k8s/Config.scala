@@ -676,13 +676,14 @@ private[spark] object Config extends Logging {
   val USE_DRIVER_SCHEDULING_GATE =
     ConfigBuilder("spark.kubernetes.submission.useDriverSchedulingGate")
       .doc("If true, in cluster mode the driver pod is created with a scheduling gate that " +
-        "is removed once the resources the driver mounts exist. Removing the gate needs the " +
-        "`patch` verb on pods, and the scheduler must honor scheduling gates. If false, the " +
-        "driver pod can be scheduled before those resources exist.")
+        "is removed once the resources `spark-submit` creates for the driver, such as its " +
+        "config map, exist. A driver pod that sets `spec.nodeName` is not gated. Removing the " +
+        "gate needs the `patch` verb on pods, and the scheduler must honor scheduling gates. " +
+        "If false, the driver pod can be scheduled before those resources exist.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val REPORT_INTERVAL =
     ConfigBuilder("spark.kubernetes.report.interval")
