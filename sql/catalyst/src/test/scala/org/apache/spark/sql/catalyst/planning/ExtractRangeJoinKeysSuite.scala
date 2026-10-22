@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.planning
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.optimizer.{GreaterPartialRangeJoin, IntervalOverlapJoin, LessPartialRangeJoin, PointInRangeJoin, RangeJoin}
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Join, JoinHint, LocalRelation}
 import org.apache.spark.sql.types.{DayTimeIntervalType, DoubleType, IntegerType}
@@ -54,7 +53,7 @@ class ExtractRangeJoinKeysSuite extends PlanTest {
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression]): Unit = {
     join(left, right, cond) match {
-      case ExtractRangeJoinKeys(_, actualLeft, actualRight, rangeJoin, _, _) =>
+      case ExtractRangeJoinKeys(_, actualLeft, actualRight, rangeJoin) =>
         assert(rangeJoin === expected)
         assert(actualLeft === leftKeys)
         assert(actualRight === rightKeys)

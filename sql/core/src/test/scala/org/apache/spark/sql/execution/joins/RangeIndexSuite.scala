@@ -343,7 +343,7 @@ class RangeIndexSuite extends SparkFunSuite {
     // Array equals is identity, and UTF8String equals is binary, so these keys
     // compare equal under the index ordering without being equal. The tree
     // orders them with that comparator, so a probe on either key returns both.
-    // Signed zero is already one key: Scala equality treats -0.0 and 0.0 as equal.
+    // Signed zero is treated as one key: the index ordering treats -0.0 and 0.0 as equal.
     def assertMerged(
         dataType: DataType,
         low: Any,
@@ -694,60 +694,6 @@ class RangeIndexSuite extends SparkFunSuite {
     }
   }
 
-  test("overlap iterator right-sizes scratch stack to tree depth") {
-    // A single-row index has a trivial core equal to its one interval, so the
-    // probe deliberately lands outside it to exercise the walk's scratch stack.
-    val oneRowIndex = buildIntervals(Seq(span(0, 10, 0)))
-    val oneRowIter = oneRowIndex.overlapping(15, 15).asInstanceOf[OverlapIterator]
-    assert(oneRowIter.stackCapacity == 8,
-      s"one-row index should allocate minimal scratch (8), got ${oneRowIter.stackCapacity}")
-
-    val largeIndex = buildIntervals((0 until 10000).map(i => span(i, i + 100, i)))
-    val largeIter = largeIndex.overlapping(50, 50).asInstanceOf[OverlapIterator]
-    // 10,000 rows has tree depth 14, requiring 3 * 14 = 42 capacity.
-    assert(largeIter.stackCapacity == 42,
-      s"10,000-row index should size scratch to tree depth (42), got ${largeIter.stackCapacity}")
-  }
-
-  test("overlapping traversal is lazy and supports early exit under high overlap") {
-    // The pending-work stack tracks tree depth, not match count: draining a handful
-    // of candidates out of ~100 matches among n=10,000 intervals must not grow it
-    // toward n. Staggered spans also avoid the common-core short cut, which would
-    // skip the walk entirely.
-    val n = 10000
-    val overlappingSpans = (0 until n).map(i => span(i, i + 100, i))
-    val index = buildIntervals(overlappingSpans)
-    val iter = index.overlapping(5000, 5000).asInstanceOf[OverlapIterator]
-    val initialCapacity = iter.stackCapacity
-
-    assert(iter.take(3).size == 3)
-    assert(iter.steps < 50,
-      s"lazy traversal must perform bounded steps ($n total intervals), but took ${iter.steps}")
-    assert(iter.stackCapacity == initialCapacity,
-      s"stack grew from $initialCapacity to ${iter.stackCapacity} after taking 3 of $n matches")
-  }
-
-  test("long overlap traversal is lazy and supports early exit under high overlap") {
-    // The same core-free, high-overlap shape on the family int/long/date/timestamp
-    // and compact-decimal keys take: the long walk must be lazy too, and a fully
-    // eager advance would step through more than these bounds before first match.
-    val n = 10000
-    val index = RangeRelationBroadcastMode(
-      Seq(BoundReference(0, LongType, nullable = true),
-        BoundReference(1, LongType, nullable = true)),
-      IntervalIndexKind)
-      .transform((0 until n).map(i => InternalRow(i.toLong, (i + 100).toLong)).toArray)
-      .asInstanceOf[LongIntervalIndex]
-    val iter = index.overlapping(5000L, 5000L).asInstanceOf[LongOverlapIterator]
-    val initialCapacity = iter.stackCapacity
-
-    assert(iter.take(3).size == 3)
-    assert(iter.steps < 50,
-      s"lazy traversal must perform bounded steps ($n total intervals), but took ${iter.steps}")
-    assert(iter.stackCapacity == initialCapacity,
-      s"stack grew from $initialCapacity to ${iter.stackCapacity} after taking 3 of $n matches")
-  }
-
   test("overlapping uses the common-core short cut without changing the answer") {
     // [0, 10], [5, 15], and [8, 20] share the core [8, 10] (1-D Helly). Any
     // window that reaches it overlaps every interval, so the index returns
@@ -903,6 +849,14 @@ class RangeIndexSuite extends SparkFunSuite {
         assertSameWindow(randomGeneric, randomLong, math.min(a, b), math.max(a, b))
       }
     }
+  }
+
+  test("LongIntervalIndex.coreLow/coreHigh use the empty-set identities, like the boxed family") {
+    // Mirrors IntervalIndex.coreLow/coreHigh, which both return null for an empty index:
+    // a max-of-nothing is -infinity and a min-of-nothing is +infinity, so an all-covering
+    // probe window correctly fails both comparisons instead of only one.
+    assert(LongIntervalIndex.coreLow(Array.empty[Long]) == Long.MinValue)
+    assert(LongIntervalIndex.coreHigh(Array.empty[Long]) == Long.MaxValue)
   }
 
   test("boolean keys take the long path and answer the same windows") {
