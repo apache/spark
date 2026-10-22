@@ -921,7 +921,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       holder.sortOrders.nonEmpty
 
   /**
-   * Whether a side of a pushed join carries a pushdown whose rows depend on order or chance. Join
+   * Whether a pushed join side carries an aggregate or an order- or chance-dependent pushdown. Join
    * pushdown moves each side's pushdowns into
    * [[ScanBuilderHolder.joinedRelationsPushedDownOperators]] (and clears the side's
    * `pushedSample`), so [[hasBlockingPushdown]] does not see them.

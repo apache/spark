@@ -2185,6 +2185,12 @@ abstract class DynamicPartitionPruningDataSourceSuiteBase
       checkAnswer(hinted,
         sql("SELECT date_id, store_id FROM fact_sk WHERE store_id IN (SELECT store_id FROM " +
           "dim_store)").collect().toSeq)
+      // So could the filtering key, which the DPP filter evaluates in the same subquery.
+      val udfKey = sql(
+        """SELECT /*+ RUNTIME_FILTER(s) */ f.date_id, f.store_id
+          |FROM fact_sk f JOIN dim_store s ON f.store_id = py_identity(s.store_id)""".stripMargin)
+      checkPartitionPruningPredicate(udfKey, withSubquery = false, withBroadcast = false)
+      checkAnswer(udfKey, hinted.collect().toSeq)
     }
   }
 
