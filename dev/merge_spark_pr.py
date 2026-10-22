@@ -2176,23 +2176,36 @@ class Title:
 
 
 def _unwrap_title(title: str) -> str:
-    """Strip a ``Revert "..."`` / ``Reapply "..."`` wrapper from a PR title.
+    """Strip ``Revert "..."`` / ``Reapply "..."`` wrappers from a PR title.
 
     ``main()`` keeps Revert and Reapply PR titles verbatim, so the JIRA id,
     leading markers, and components all live inside the quotes.  Unwrapping here
-    lets the id-extraction and skip-tag logic see them.  A title without such a
-    wrapper is returned unchanged.
+    lets the id-extraction and skip-tag logic see them.  Wrappers are stripped
+    repeatedly, so a revert-of-revert (``Revert "Revert "...""``), including
+    mixed ``Revert``/``Reapply`` nesting, is reduced to its innermost title.  A
+    title without such a wrapper is returned unchanged.
 
     >>> _unwrap_title('Revert "[SPARK-1234][SQL] Fix"')
     '[SPARK-1234][SQL] Fix'
     >>> _unwrap_title('Reapply "[SPARK-1234][SQL] Fix"')
     '[SPARK-1234][SQL] Fix'
+    >>> _unwrap_title('Revert "Revert "[SPARK-1234][SQL] Fix""')
+    '[SPARK-1234][SQL] Fix'
+    >>> _unwrap_title('Revert "Reapply "[SPARK-1234][SQL] Fix""')
+    '[SPARK-1234][SQL] Fix'
     >>> _unwrap_title('[SPARK-1234][SQL] Fix')
     '[SPARK-1234][SQL] Fix'
+    >>> _unwrap_title('Revert "')
+    ''
     """
-    for prefix in ('Revert "', 'Reapply "'):
-        if title.startswith(prefix) and title.endswith('"'):
-            return title[len(prefix) : -1]
+    changed = True
+    while changed:
+        changed = False
+        for prefix in ('Revert "', 'Reapply "'):
+            if title.startswith(prefix) and title.endswith('"'):
+                title = title[len(prefix) : -1]
+                changed = True
+                break
     return title
 
 
@@ -2201,9 +2214,9 @@ def leading_jira_ids(title: str) -> List[str]:
 
     Unlike a bare ``re.findall("SPARK-[0-9]{4,5}", title)``, only ids that
     appear as leading bracket tags are returned, so a SPARK-NNNNN reference in
-    the title body is not mistaken for the ticket the PR resolves.  A
-    ``Revert "..."`` / ``Reapply "..."`` wrapper is stripped first, so those PRs
-    still yield the wrapped id.
+    the title body is not mistaken for the ticket the PR resolves.  Any
+    ``Revert "..."`` / ``Reapply "..."`` wrappers are stripped first (including
+    nested ones), so those PRs still yield the wrapped id.
 
     The title is parsed with :meth:`Title.parse`.  When parsing fails -- the
     title has no recognized leading tag, or starts with ``[SPARK-N]`` but breaks
@@ -2215,6 +2228,10 @@ def leading_jira_ids(title: str) -> List[str]:
     >>> leading_jira_ids("[SPARK-1234][SQL] Follow up to SPARK-5678")
     ['SPARK-1234']
     >>> leading_jira_ids('Reapply "[SPARK-1234][SQL] Fix"')
+    ['SPARK-1234']
+    >>> leading_jira_ids('Revert "Revert "[SPARK-1234][SQL] Fix""')
+    ['SPARK-1234']
+    >>> leading_jira_ids('Revert "Reapply "[SPARK-1234][SQL] Fix""')
     ['SPARK-1234']
     >>> leading_jira_ids("[SPARK-1234][SQL][MINOR] Fix")
     ['SPARK-1234']
@@ -2957,6 +2974,16 @@ __test__ = {
     ...     reverter.assert_not_called()
     ...     resolver.assert_not_called()
     ...     confirm.assert_not_called()
+
+    Nested wrappers are unwrapped before the skip-tag and id checks, so an inner
+    skip tag is still honored and an inner id still reaches the revert path.
+
+    >>> update('Revert "Revert "[MINOR][SQL] Fix""', ["master"], is_revert=True)
+    >>> reverter.assert_not_called()
+    >>> resolver.assert_not_called()
+    >>> confirm.assert_not_called()
+    >>> update('Revert "Revert "[SPARK-1234][SQL] Fix""', ["master"], is_revert=True)
+    >>> reverter.assert_called_once_with(["master"], "SPARK-1234")
 
     Ordinary merges and reapplies still resolve the issue or add fix versions.
 
