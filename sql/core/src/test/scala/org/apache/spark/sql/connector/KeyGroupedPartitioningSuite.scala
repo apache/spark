@@ -3171,9 +3171,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     }
   }
 
-  // Aligning partition counts when one id maps to multiple names needs GroupPartitionsExec
-  // (4.2+, SPARK-55535). Projecting common values in populateSpjParams covers the other shapes.
-  ignore("SPARK-60232: nested SPJ with multiple names per id over common partition values") {
+  test("SPARK-60232: nested SPJ with multiple names per id over common partition values") {
     val items2 = "items2"
     val itemsPartitions = Array(identity("id"), identity("name"))
     val inserts = Seq(
@@ -3482,6 +3480,122 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
             |JOIN testcat.ns.tc ON ta.c = tc.c
             |""".stripMargin)
         checkAnswer(df, Seq(Row(1, 10, 100, 100), Row(2, 20, 100, 100), Row(3, 30, 300, 300)))
+      }
+    }
+  }
+
+  test("SPARK-60232: nested SPJ keeps projected values in the order a one-side shuffle uses") {
+    val cols = Array(
+      Column.create("store", IntegerType),
+      Column.create("dept", IntegerType),
+      Column.create("data", StringType))
+    createTable("oa", cols, Array(identity("store"), identity("dept")))
+    createTable("ob", cols, Array(identity("store"), identity("dept")))
+    createTable("oc", cols, Array.empty)
+    // The projected dept keys come out as 20, 10, which is not their sorted order.
+    sql("INSERT INTO testcat.ns.oa VALUES (1, 20, 'a1'), (2, 10, 'a2')")
+    sql("INSERT INTO testcat.ns.ob VALUES (1, 20, 'b1'), (2, 10, 'b2')")
+    sql("INSERT INTO testcat.ns.oc VALUES (0, 10, 'c10'), (0, 20, 'c20')")
+
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
+        val df = sql(
+          """
+            |SELECT /*+ MERGE(oa, ob, oc) */ oa.store, oa.data, ob.data, oc.data
+            |FROM testcat.ns.oa JOIN testcat.ns.ob ON oa.store = ob.store AND oa.dept = ob.dept
+            |JOIN testcat.ns.oc ON oa.dept = oc.dept
+            |""".stripMargin)
+        assert(collectShuffles(df.queryExecution.executedPlan).size == 1,
+          "only the unpartitioned oc side should shuffle")
+        checkAnswer(df, Seq(Row(1, "a1", "b1", "c20"), Row(2, "a2", "b2", "c10")))
+      }
+    }
+  }
+
+  test("SPARK-60232: nested SPJ does not shuffle the other side onto a reduced scan's layout") {
+    val idCols = Array(Column.create("id", LongType))
+    Seq("l12" -> 12, "l4" -> 4, "l2" -> 2).foreach { case (t, n) =>
+      createTable(t, idCols, Array(bucket(n, "id")))
+      sql(s"INSERT INTO testcat.ns.$t SELECT id FROM range(24)")
+    }
+    createTable("ld", idCols, Array.empty)
+    sql("INSERT INTO testcat.ns.ld SELECT id FROM range(24)")
+    val expected = (0L until 24L).map(i => Row(i, i, i))
+
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        Seq("l2", "ld").foreach { third =>
+          val df = sql(
+            s"""
+               |SELECT /*+ MERGE(l12, l4, $third) */ l12.id, l4.id, $third.id
+               |FROM testcat.ns.l12 JOIN testcat.ns.l4 ON l12.id = l4.id
+               |JOIN testcat.ns.$third ON l12.id = $third.id
+               |""".stripMargin)
+          checkAnswer(df, expected)
+        }
+      }
+    }
+  }
+
+  test("SPARK-60232: nested SPJ keeps SPJ on a key the inner join did not reduce") {
+    val cols = Array(Column.create("store", IntegerType), Column.create("id", IntegerType))
+    createTable("ra", cols, Array(identity("store"), bucket(12, "id")))
+    createTable("rb", cols, Array(identity("store"), bucket(4, "id")))
+    createTable("rc", Array(Column.create("store", IntegerType)), Array(identity("store")))
+    sql("INSERT INTO testcat.ns.ra SELECT CAST(id % 3 AS INT), CAST(id AS INT) FROM range(12)")
+    sql("INSERT INTO testcat.ns.rb SELECT CAST(id % 3 AS INT), CAST(id AS INT) FROM range(12)")
+    sql("INSERT INTO testcat.ns.rc VALUES (0), (1), (2)")
+
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
+        val df = sql(
+          """
+            |SELECT /*+ MERGE(ra, rb, rc) */ ra.id, rb.id, rc.store
+            |FROM testcat.ns.ra JOIN testcat.ns.rb ON ra.store = rb.store AND ra.id = rb.id
+            |JOIN testcat.ns.rc ON ra.store = rc.store
+            |""".stripMargin)
+        assert(collectShuffles(df.queryExecution.executedPlan).isEmpty,
+          "SPJ should be triggered for both joins")
+        checkAnswer(df, (0 until 12).map(i => Row(i, i, i % 3)))
+      }
+    }
+  }
+
+  test("SPARK-60232: nested SPJ does not push into a broadcast build side") {
+    createTable("qa", Array(Column.create("id", IntegerType), Column.create("x", StringType)),
+      Array(identity("id")))
+    createTable("qd", Array(Column.create("x", StringType), Column.create("region", IntegerType)),
+      Array(identity("region")))
+    createTable("qc", Array(Column.create("id", IntegerType)), Array(identity("id")))
+    sql("INSERT INTO testcat.ns.qa VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+    sql("INSERT INTO testcat.ns.qd VALUES ('a', 10), ('b', 20), ('c', 30)")
+    sql("INSERT INTO testcat.ns.qc VALUES (1), (2), (3)")
+
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
+        val df = sql(
+          """
+            |SELECT /*+ BROADCAST(qd) */ qa.id, qd.region, qc.id
+            |FROM testcat.ns.qa JOIN testcat.ns.qd ON qa.x = qd.x
+            |JOIN testcat.ns.qc ON qa.id = qc.id
+            |""".stripMargin)
+        checkAnswer(df, Seq(Row(1, 10, 1), Row(2, 20, 2), Row(3, 30, 3)))
       }
     }
   }
