@@ -28,7 +28,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, Expression, InterpretedProjection}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildSide}
-import org.apache.spark.sql.catalyst.planning.{IntervalOverlapJoin, PartialRangeJoin, PointInRangeJoin, RangeJoin}
+import org.apache.spark.sql.catalyst.planning.{IntervalOverlapJoin, PartialRangeJoin, PointInRangeJoin, RangeJoinKind}
 import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DateType, Decimal, DecimalType, IntegerType, LongType, ShortType, TimestampNTZType, TimestampType}
@@ -58,7 +58,7 @@ private[execution] sealed trait RangeRelation extends KnownSizeEstimation with S
  * accordingly.
  */
 private[execution] sealed abstract class RangeIndexKind {
-  def matches(rangeJoin: RangeJoin): Boolean = RangeIndexKind(rangeJoin) == this
+  def matches(rangeJoinKind: RangeJoinKind): Boolean = RangeIndexKind(rangeJoinKind) == this
 }
 
 private[execution] case object IntervalIndexKind extends RangeIndexKind
@@ -66,7 +66,7 @@ private[execution] case object IntervalIndexKind extends RangeIndexKind
 private[execution] case object PointIndexKind extends RangeIndexKind
 
 private[execution] object RangeIndexKind {
-  def apply(rangeJoin: RangeJoin): RangeIndexKind = rangeJoin match {
+  def apply(rangeJoinKind: RangeJoinKind): RangeIndexKind = rangeJoinKind match {
     case PointInRangeJoin | IntervalOverlapJoin => IntervalIndexKind
     case _: PartialRangeJoin => PointIndexKind
   }
@@ -121,8 +121,9 @@ private[joins] sealed trait LongKeyConversion extends RangeRelation {
 private[joins] object RangeIndex {
 
   /**
-   * Capacity for a build buffer from the driver's row-count hint, capped well under the
-   * hint itself. `BroadcastExchangeExec` only checks the row count against its row-count
+   * Capacity for a build buffer from the driver's row-count hint, capped at 2^20 for any
+   * larger hint (well under a hint that large) and equal to the hint itself below that.
+   * `BroadcastExchangeExec` only checks the row count against its row-count
    * limit (up to half a billion for this mode) before calling `transform`, and only
    * checks the built relation's byte size afterward, so sizing a buffer directly off an
    * inflated hint can allocate hundreds of megabytes before a single row is read - ahead
@@ -486,6 +487,9 @@ private[joins] class OverlapIterator(
 
   push(0, lows.length)
 
+  private[joins] def stackCapacity: Int = stackStart.length
+  private[joins] def pendingSpans: Int = stackTop
+
   private def push(s: Int, e: Int): Unit = {
     if (stackTop >= stackStart.length) {
       stackStart = java.util.Arrays.copyOf(stackStart, stackStart.length * 2)
@@ -693,11 +697,13 @@ private[joins] object PointIndex {
 // ===== Long-specialized indexes for keys that map to one long ==============
 //
 // Indexes for the key types `RangeIndex.longKey` maps to one order-preserving
-// long, stored as raw longs converted at the build boundary. Once built, these
-// structures carry no Spark types: the tree walk and the binary searches
+// long, stored as raw longs converted at the build boundary. The key comparison
+// itself touches no Spark types once built: the tree walk and the binary searches
 // compare raw longs, and generated probe code passes long keys without boxing.
-// Fixed width alone is not the routed property: floating point is fixed-width
-// but stays boxed, while compact decimals route here as unscaled longs.
+// The row payload still does - `rows: Array[InternalRow]` and the serialized
+// `_keyType: DataType` are retained alongside the long arrays. Fixed width alone
+// is not the routed property: floating point is fixed-width but stays boxed,
+// while compact decimals route here as unscaled longs.
 // `RangeRelationBroadcastMode` picks between the two families once, from the
 // build keys' data types.
 
@@ -925,6 +931,9 @@ private[joins] class LongOverlapIterator(
 
   push(0, lows.length)
 
+  private[joins] def stackCapacity: Int = stackStart.length
+  private[joins] def pendingSpans: Int = stackTop
+
   private def push(s: Int, e: Int): Unit = {
     if (stackTop >= stackStart.length) {
       stackStart = java.util.Arrays.copyOf(stackStart, stackStart.length * 2)
@@ -1122,42 +1131,24 @@ private[joins] object LongPointIndex {
 /**
  * Which side of a single-inequality range join's bound the build side holds, and
  * whether the comparison is strict - the four spellings a [[PointIndex]] /
- * [[LongPointIndex]] expose as scan methods. The interpreted probe
- * ([[BroadcastRangeJoinExec]]'s `makeCandidateFn`) calls `apply` to get a direct method
- * reference, so renaming a scan method here fails that path at compile time. Generated
- * probe code instead splices `methodName` into the Java source it emits, since codegen
- * has no way to reference a Scala method value directly; that string has to be kept in
- * sync with the method it names by hand, and a mismatch only surfaces as a Janino
- * compile failure at query-run time, not a Scala compile failure here. RangeJoinSuite's
- * codegen point-scan tests are what actually catches that class of typo.
+ * [[LongPointIndex]] expose as scan methods. A `match` on this sealed hierarchy is
+ * exhaustiveness-checked by the compiler, so both the interpreted probe
+ * ([[BroadcastRangeJoinExec]]'s `makeCandidateFn`) and generated probe code have to
+ * handle every case; it is the compiler, not a developer re-reading four string
+ * literals, that notices when a fifth case gets added here. Generated code still has
+ * to splice `methodName` into the Java source it emits, since codegen has no way to
+ * reference a Scala method value directly; that string has to be kept in sync with
+ * the method it names by hand, and a mismatch only surfaces as a Janino compile
+ * failure at query-run time. RangeJoinSuite's codegen point-scan tests are what
+ * actually catches that class of typo.
  */
-private[joins] sealed abstract class PointScan(val methodName: String) {
-  def apply(index: PointIndex): Any => Iterator[InternalRow]
-  def apply(index: LongPointIndex): Long => Iterator[InternalRow]
-}
+private[joins] sealed abstract class PointScan(val methodName: String)
 
 private[joins] object PointScan {
-  case object UpTo extends PointScan("upTo") {
-    override def apply(index: PointIndex): Any => Iterator[InternalRow] = index.upTo
-    override def apply(index: LongPointIndex): Long => Iterator[InternalRow] = index.upTo
-  }
-
-  case object UpToExclusive extends PointScan("upToExclusive") {
-    override def apply(index: PointIndex): Any => Iterator[InternalRow] = index.upToExclusive
-    override def apply(index: LongPointIndex): Long => Iterator[InternalRow] =
-      index.upToExclusive
-  }
-
-  case object From extends PointScan("from") {
-    override def apply(index: PointIndex): Any => Iterator[InternalRow] = index.from
-    override def apply(index: LongPointIndex): Long => Iterator[InternalRow] = index.from
-  }
-
-  case object FromExclusive extends PointScan("fromExclusive") {
-    override def apply(index: PointIndex): Any => Iterator[InternalRow] = index.fromExclusive
-    override def apply(index: LongPointIndex): Long => Iterator[InternalRow] =
-      index.fromExclusive
-  }
+  case object UpTo extends PointScan("upTo")
+  case object UpToExclusive extends PointScan("upToExclusive")
+  case object From extends PointScan("from")
+  case object FromExclusive extends PointScan("fromExclusive")
 
   /**
    * The scan a partial-range join's build side probes with. Lower bound build side
@@ -1165,7 +1156,7 @@ private[joins] object PointScan {
    * inequality selects the Exclusive variant. Throws for any other range-join shape;
    * callers only touch this for a [[PointIndexKind]] build.
    */
-  def forJoin(rangeJoin: RangeJoin, buildSide: BuildSide): PointScan = rangeJoin match {
+  def forJoin(rangeJoinKind: RangeJoinKind, buildSide: BuildSide): PointScan = rangeJoinKind match {
     case partial: PartialRangeJoin =>
       val isLower = partial.leftIsLower == (buildSide == BuildLeft)
       (isLower, partial.strict) match {

@@ -450,12 +450,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         def createRangeJoin(onlyLookingAtHint: Boolean) = {
           if (conf.broadcastRangeJoinEnabled) {
             plan match {
-              case ExtractRangeJoinKeys(_, leftKeys, rightKeys, rangeJoin) =>
+              case ExtractRangeJoinKeys(_, leftKeys, rightKeys, rangeJoinKind) =>
                 val allowed = BroadcastRangeJoinExec.supports(joinType, _: BuildSide)
                 broadcastSide(onlyLookingAtHint, allowed).map { buildSide =>
                   Seq(BroadcastRangeJoinExec(
                     planLater(left), planLater(right), buildSide, joinType,
-                    leftKeys, rightKeys, condition, rangeJoin))
+                    leftKeys, rightKeys, condition, rangeJoinKind))
                 }
               case _ => None
             }

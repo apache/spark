@@ -1101,7 +1101,7 @@ object Equality {
   }
 }
 
-/** Matches a single-column inequality; see `unapply` for the exact normalization. */
+/** Matches a `<`/`<=`/`>`/`>=` comparison; see `unapply` for the exact normalization. */
 object RangePredicate {
   /**
    * Normalizes `<`, `<=`, `>`, `>=` to `(low.dataType, low, high, strict)`, with

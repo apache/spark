@@ -103,9 +103,13 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
       "ON a.lo < b.hi AND b.lo < a.hi",
     "SELECT a.lo, a.hi, b.lo, b.hi FROM intervals_a a LEFT JOIN intervals_b b ON a.hi < b.lo",
     "SELECT /*+ BROADCAST(a) */ a.lo, b.hi FROM intervals_a a JOIN intervals_b b ON a.lo < b.hi",
+    // DOUBLE keys stay on the boxed interval index (see setupDoubleIntervalViews), unlike
+    // the INT two-key overlap above, which is long-specialized.
+    "SELECT a.lo, a.hi, b.lo, b.hi FROM dbl_ranges_a a JOIN dbl_ranges_b b " +
+      "ON a.lo < b.hi AND b.lo < a.hi",
     // Double and string keys stay on the boxed point index, so these queries reach
-    // its generated probe code (or, interpreted, its candidates() branch), which
-    // int partial ranges never do.
+    // its generated probe code (or, interpreted, the per-index dispatch in
+    // BroadcastRangeJoinExec.makeCandidateFn), which int partial ranges never do.
     "SELECT p.d, b.lo FROM dbl_partial_points p JOIN dbl_partial_bounds b ON p.d < b.lo",
     "SELECT p.d, b.lo FROM dbl_partial_bounds b JOIN dbl_partial_points p ON p.d > b.lo",
     "SELECT p.s, b.lo FROM str_partial_points p JOIN str_partial_bounds b ON p.s < b.lo",
@@ -157,6 +161,26 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
       """
         |CREATE OR REPLACE TEMP VIEW intervals_b(lo, hi) AS VALUES
         |  (-2, -1), (-4, -2), (1, 3), (5, 7)
+        |""".stripMargin)
+  }
+
+  /**
+   * Two-column DOUBLE ranges, so a two-key interval-overlap query here builds a boxed
+   * `IntervalIndex` (DoubleType has no bit-preserving long encoding) with both bounds
+   * supplied by the streamed side - the `case intervals: IntervalIndex` branch of
+   * `BroadcastRangeJoinExec.makeCandidateFn` that `intervals_a`/`intervals_b` (INT,
+   * long-specialized) never reaches.
+   */
+  private def setupDoubleIntervalViews(): Unit = {
+    sql(
+      """
+        |CREATE OR REPLACE TEMP VIEW dbl_ranges_a(lo, hi) AS VALUES
+        |  (-1.0, 0.0), (0.0, 1.0), (0.0, 2.0), (1.0, 5.0)
+        |""".stripMargin)
+    sql(
+      """
+        |CREATE OR REPLACE TEMP VIEW dbl_ranges_b(lo, hi) AS VALUES
+        |  (-2.0, -1.0), (-4.0, -2.0), (1.0, 3.0), (5.0, 7.0)
         |""".stripMargin)
   }
 
@@ -359,7 +383,7 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
       assert(planned.size == 1)
       assert(planned.head.joinType == LeftOuter)
       assert(planned.head.buildSide == BuildRight)
-      assert(planned.head.rangeJoin == LessPartialRangeJoin(strict = true))
+      assert(planned.head.rangeJoinKind == LessPartialRangeJoin(strict = true))
       checkAnswer(df, expected)
     }
   }
@@ -412,7 +436,7 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
       val df = sql(query)
       val planned = findRangeJoin(df.queryExecution.executedPlan)
       assert(planned.size == 1)
-      assert(planned.head.rangeJoin == IntervalOverlapJoin)
+      assert(planned.head.rangeJoinKind == IntervalOverlapJoin)
       assert(planned.head.leftKeys.length == 2)
       assert(planned.head.rightKeys.length == 2)
       checkAnswer(df, expected)
@@ -563,6 +587,7 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
     setupDecimalViews()
     setupCollatedStrings()
     setupIntervalViews()
+    setupDoubleIntervalViews()
     setupPartialRangeViews()
     probeCoverageQueries.foreach { query =>
       val expected = sql(query).collect()
@@ -584,6 +609,7 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
     setupDecimalViews()
     setupCollatedStrings()
     setupIntervalViews()
+    setupDoubleIntervalViews()
     setupPartialRangeViews()
     probeCoverageQueries.foreach { query =>
       val expected = sql(query).collect()
@@ -655,7 +681,7 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
       checkAnswer(df, expected)
       val plan = df.queryExecution.executedPlan
       val joins = findRangeJoin(plan)
-      assert(joins.size == 2 && joins.forall(_.rangeJoin == IntervalOverlapJoin))
+      assert(joins.size == 2 && joins.forall(_.rangeJoinKind == IntervalOverlapJoin))
       assert(oneCodegenStageOwns(plan, 2))
     }
   }
@@ -699,7 +725,7 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
         val plan = df.queryExecution.executedPlan
         val joins = findRangeJoin(plan)
         assert(joins.size == 2, query)
-        assert(joins.forall(_.rangeJoin == IntervalOverlapJoin), query)
+        assert(joins.forall(_.rangeJoinKind == IntervalOverlapJoin), query)
         assert(joins.map(_.joinType).toSet == Set(Inner, existence), query)
         assert(oneCodegenStageOwns(plan, 2), query + "\n" + plan.treeString)
       }

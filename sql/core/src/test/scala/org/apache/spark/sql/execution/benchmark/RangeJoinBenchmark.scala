@@ -21,7 +21,7 @@ import java.sql.Date
 
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{Column, DataFrame}
-import org.apache.spark.sql.catalyst.planning.{GreaterPartialRangeJoin, IntervalOverlapJoin, LessPartialRangeJoin, PointInRangeJoin, RangeJoin}
+import org.apache.spark.sql.catalyst.planning.{GreaterPartialRangeJoin, IntervalOverlapJoin, LessPartialRangeJoin, PointInRangeJoin, RangeJoinKind}
 import org.apache.spark.sql.execution.joins.{BroadcastNestedLoopJoinExec, BroadcastRangeJoinExec}
 import org.apache.spark.sql.functions.{broadcast, col, date_add, lit, lpad, when}
 import org.apache.spark.sql.internal.SQLConf
@@ -34,9 +34,9 @@ import org.apache.spark.sql.types.StringType
  * Inner joins broadcast each side once. Left anti probes values that match
  * nothing. A partial range whose bound sits at the median is not selective.
  * Wide interval overlap is mostly selective: a probe overlaps a build
- * interval only when their starts sit within `wideSpan`, so about 2% of
- * probes hit roughly `wideSpan / width` intervals each and the rest hit
- * nothing. Point-in-range inner is repeated for date, timestamp, decimal,
+ * interval only when |i - j| <= 20, so about 2% of the 100,000 probes hit
+ * up to 41 of the 2,000 build intervals each and the rest hit nothing.
+ * Point-in-range inner is repeated for date, timestamp, decimal,
  * and UNICODE_CI strings.
  *
  * More cases probe the cost model directly: a streamed side of 1, 10, 100,
@@ -71,7 +71,7 @@ object RangeJoinBenchmark extends SqlBasedBenchmark {
   private val buildRows = 4000
   private val probeRows = 400000
   private val width = 10
-  // Wide overlap and the median bound concentrate the output, so they stay smaller.
+  // Wide overlap is measured over 100,000 probes and 2,000 build intervals.
   private val heavyBuildRows = 2000
   private val heavyProbeRows = 100000
   private val halfBuildRows = 1000
@@ -103,7 +103,9 @@ object RangeJoinBenchmark extends SqlBasedBenchmark {
     (lit(buildRows.toLong * width + width) + col("id") * width).as("alo"),
     (lit(buildRows.toLong * width + width * 2) + col("id") * width).as("ahi")))
 
-  // About 40 build intervals overlap each probe.
+  // Mostly selective: a probe overlaps a build interval only when |i - j| <= 20,
+  // so about 2% of the 100,000 probes hit up to 41 of the 2,000 build intervals
+  // each and the rest hit nothing (see the class doc above).
   private lazy val wideProbe: DataFrame = cached(intervals(heavyProbeRows, "a", wideSpan))
   private lazy val wideBuild: DataFrame = cached(intervals(heavyBuildRows, "b", wideSpan))
 
@@ -244,7 +246,7 @@ object RangeJoinBenchmark extends SqlBasedBenchmark {
       val planned = df
       val plan = planned.queryExecution.sparkPlan
       if (rangeEnabled) {
-        val found = plan.collect { case j: BroadcastRangeJoinExec => shapeName(j.rangeJoin) }
+        val found = plan.collect { case j: BroadcastRangeJoinExec => shapeName(j.rangeJoinKind) }
         assert(found == Seq(shape), plan)
       } else {
         assert(plan.exists(_.isInstanceOf[BroadcastNestedLoopJoinExec]), plan)
@@ -254,7 +256,7 @@ object RangeJoinBenchmark extends SqlBasedBenchmark {
   }
 
   /** The tag name without a case class's arguments, for Shape assertions. */
-  private def shapeName(rangeJoin: RangeJoin): String = rangeJoin match {
+  private def shapeName(rangeJoinKind: RangeJoinKind): String = rangeJoinKind match {
     case PointInRangeJoin => "PointInRangeJoin"
     case IntervalOverlapJoin => "IntervalOverlapJoin"
     case _: LessPartialRangeJoin => "LessPartialRangeJoin"
@@ -379,11 +381,13 @@ object RangeJoinBenchmark extends SqlBasedBenchmark {
 
   private def partialLessCases(): Unit = {
     val n = s"probe=$probeRows, bounds=$buildRows"
-    // Build holds the upper bound, so the point index scans with from().
+    // Build holds the upper bound; the strict `<` makes the point index scan with
+    // fromExclusive(), skipping build keys equal to the probe value.
     compare(s"partial < inner, build upper ($n)", probeRows, "LessPartialRangeJoin") {
       highProbes.join(broadcast(bounds), col("a") < col("b"), "inner")
     }
-    // Build holds the lower bound, so the point index scans with upTo().
+    // Build holds the lower bound; the strict `<` makes the point index scan with
+    // upToExclusive(), skipping build keys equal to the probe value.
     compare(s"partial < inner, build lower ($n)", buildRows, "LessPartialRangeJoin") {
       broadcast(highProbes).join(bounds, col("a") < col("b"), "inner")
     }
@@ -414,11 +418,13 @@ object RangeJoinBenchmark extends SqlBasedBenchmark {
 
   private def partialGreaterCases(): Unit = {
     val n = s"probe=$probeRows, bounds=$buildRows"
-    // Build holds the lower bound, so the point index scans with upTo().
+    // Build holds the lower bound; the strict `>` makes the point index scan with
+    // upToExclusive(), skipping build keys equal to the probe value.
     compare(s"partial > inner, build lower ($n)", probeRows, "GreaterPartialRangeJoin") {
       lowProbes.join(broadcast(bounds), col("a") > col("b"), "inner")
     }
-    // Build holds the upper bound, so the point index scans with from().
+    // Build holds the upper bound; the strict `>` makes the point index scan with
+    // fromExclusive(), skipping build keys equal to the probe value.
     compare(s"partial > inner, build upper ($n)", buildRows, "GreaterPartialRangeJoin") {
       broadcast(lowProbes).join(bounds, col("a") > col("b"), "inner")
     }

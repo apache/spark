@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{And, Expression, GreaterThan, 
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
-import org.apache.spark.sql.catalyst.planning.{GreaterPartialRangeJoin, IntervalOverlapJoin, LessPartialRangeJoin, PointInRangeJoin, RangeJoin}
+import org.apache.spark.sql.catalyst.planning.{GreaterPartialRangeJoin, IntervalOverlapJoin, LessPartialRangeJoin, PointInRangeJoin, RangeJoinKind}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.internal.SQLConf
@@ -101,13 +101,13 @@ class RangeJoinSuite extends QueryTest with SharedSparkSession {
       buildKeys: Seq[Expression],
       streamedKeys: Seq[Expression],
       condition: Expression,
-      rangeJoin: RangeJoin = PointInRangeJoin): BroadcastRangeJoinExec = {
+      rangeJoinKind: RangeJoinKind = PointInRangeJoin): BroadcastRangeJoinExec = {
     val (leftKeys, rightKeys) = buildSide match {
       case BuildLeft => (buildKeys, streamedKeys)
       case BuildRight => (streamedKeys, buildKeys)
     }
     BroadcastRangeJoinExec(
-      left, right, buildSide, joinType, leftKeys, rightKeys, Some(condition), rangeJoin)
+      left, right, buildSide, joinType, leftKeys, rightKeys, Some(condition), rangeJoinKind)
   }
 
   private def pointCondition(
@@ -227,7 +227,7 @@ class RangeJoinSuite extends QueryTest with SharedSparkSession {
     // a.lo < b.hi builds the high side and scans from the stream key.
     // a.lo > b.hi builds the low side and scans up to the stream key.
     def check(
-        rangeJoin: RangeJoin,
+        rangeJoinKind: RangeJoinKind,
         condition: (SparkPlan, SparkPlan) => Expression,
         expected: Seq[Row],
         buildSide: BuildSide = BuildRight): Unit = {
@@ -241,7 +241,7 @@ class RangeJoinSuite extends QueryTest with SharedSparkSession {
           buildKeys = buildKeys,
           streamedKeys = streamedKeys,
           condition = condition(left, right),
-          rangeJoin = rangeJoin)
+          rangeJoinKind = rangeJoinKind)
       }, expected)
     }
     check(
@@ -292,7 +292,7 @@ class RangeJoinSuite extends QueryTest with SharedSparkSession {
         buildKeys = right.output,
         streamedKeys = left.output,
         condition = condition(left, right),
-        rangeJoin = IntervalOverlapJoin)
+        rangeJoinKind = IntervalOverlapJoin)
     },
       Seq(
         (0, 2, 1, 3),
@@ -343,7 +343,7 @@ class RangeJoinSuite extends QueryTest with SharedSparkSession {
             buildKeys = b :: Nil,
             streamedKeys = a :: Nil,
             condition = CountingPredicate(counter, cond),
-            rangeJoin = tag)
+            rangeJoinKind = tag)
           QueryTest.executePlan(exec, spark.sqlContext)
           assert(counter.value == expected,
             s"$tag (codegen=$codegenEnabled): examined ${counter.value} candidates, " +
@@ -425,9 +425,9 @@ class RangeJoinSuite extends QueryTest with SharedSparkSession {
             buildKeys = bounds, streamedKeys = point :: Nil,
             condition = CountingPredicate(counter, baseCond))
           QueryTest.executePlan(exec, spark.sqlContext)
-          assert(counter.value < n,
-            s"$joinType (codegen=$codegenEnabled) examined ${counter.value} of $n " +
-              "staggered candidates; the first candidate should have ended the probe")
+          assert(counter.value == 1,
+            s"$joinType (codegen=$codegenEnabled) examined ${counter.value} candidates; " +
+              "the first candidate should have ended the probe")
         }
       }
     }

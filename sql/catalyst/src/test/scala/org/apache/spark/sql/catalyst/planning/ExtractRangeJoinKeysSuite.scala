@@ -25,7 +25,7 @@ import org.apache.spark.sql.types.{DayTimeIntervalType, DoubleType, IntegerType}
 
 /**
  * Plan-level coverage for [[ExtractRangeJoinKeys]]: which condition shapes are
- * recognized, which `RangeJoin` tag is produced, and what residual remains.
+ * recognized, which `RangeJoinKind` tag is produced, and what residual remains.
  */
 class ExtractRangeJoinKeysSuite extends PlanTest {
 
@@ -49,12 +49,12 @@ class ExtractRangeJoinKeysSuite extends PlanTest {
       left: LocalRelation,
       right: LocalRelation,
       cond: Expression,
-      expected: RangeJoin,
+      expected: RangeJoinKind,
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression]): Unit = {
     join(left, right, cond) match {
-      case ExtractRangeJoinKeys(_, actualLeft, actualRight, rangeJoin) =>
-        assert(rangeJoin === expected)
+      case ExtractRangeJoinKeys(_, actualLeft, actualRight, rangeJoinKind) =>
+        assert(rangeJoinKind === expected)
         assert(actualLeft === leftKeys)
         assert(actualRight === rightKeys)
       case other => fail(s"expected $expected, got $other")
@@ -103,6 +103,12 @@ class ExtractRangeJoinKeysSuite extends PlanTest {
     // The index would store one rand() and the condition would draw another.
     assertUnrecognized(join(intervalsA, intervalsB,
       LessThan(Cast(aLo, DoubleType), Rand(Literal(0L)))))
+
+    // A key that both references a column and is non-deterministic: unlike the bare
+    // Rand(...) cases below, `references.nonEmpty` alone would accept this one, so
+    // this is the case that actually exercises `key.deterministic` in supportedKeys.
+    assertUnrecognized(join(intervalsA, intervalsB,
+      LessThan(Add(aLo, Rand(Literal(0L))), bHi)))
 
     // Only the deterministic bound becomes a key.
     val randBound = Cast(Rand(Literal(0L)), IntegerType)
