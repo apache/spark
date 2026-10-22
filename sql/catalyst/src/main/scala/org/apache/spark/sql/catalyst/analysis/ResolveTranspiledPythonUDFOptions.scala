@@ -22,8 +22,8 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.TRANSPILED_PYTHON_UDF
 import org.apache.spark.sql.types.{
-  BinaryType, BooleanType, DataType, DecimalType, FractionalType,
-  IntegralType, NumericType, StringType}
+  ArrayType, BinaryType, BooleanType, DataType, DecimalType, FractionalType,
+  IntegralType, MapType, NumericType, StringType, TimestampType}
 
 /**
  * Prunes the per-input-type options carried by a [[TranspiledPythonUDF]] down to those whose
@@ -82,12 +82,15 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
   // Empty categories means "no restriction" and the option is kept.
   //
   // Category -> Spark type mapping:
-  //   "integer" -> IntegralType (byte/short/int/long; NaN impossible)
-  //   "float"   -> FractionalType minus DecimalType (float/double; NaN possible)
-  //   "numeric" -> any NumericType minus DecimalType (legacy catch-all)
-  //   "string"  -> StringType with UTF8_BINARY collation only
-  //   "bool"    -> BooleanType
-  //   "binary"  -> BinaryType
+  //   "integer"   -> IntegralType (byte/short/int/long; NaN impossible)
+  //   "float"     -> FractionalType minus DecimalType (float/double; NaN possible)
+  //   "numeric"   -> any NumericType minus DecimalType (legacy catch-all)
+  //   "string"    -> StringType with UTF8_BINARY collation only
+  //   "bool"      -> BooleanType
+  //   "binary"    -> BinaryType
+  //   "timestamp" -> TimestampType
+  //   "map"       -> MapType
+  //   "array"     -> ArrayType
   //
   // Two deliberate exclusions keep the transpiled semantics faithful to Python:
   // - DecimalType is NOT matched by any numeric category: Python receives
@@ -98,6 +101,10 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
   //   collation (e.g. UTF8_LCASE) Spark's `=`/`<`/`concat` follow collation
   //   rules while Python compares codepoints, so `'abc' == 'ABC'` would return
   //   true where Python returns False.
+  // "map" and "array" match any element/key type: the category names the container,
+  //   not its contents, and a variety that reports "map"/"array" is responsible
+  //   for the per-element lowering (an out-of-tree transpiler verifies its
+  //   rewrite before serving it, so a wrong shape does not ship).
   private def optionMatchesTypes(categories: Seq[String], argTypes: Seq[DataType]): Boolean = {
     if (categories.isEmpty) {
       true
@@ -112,6 +119,9 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
         case ("string", st: StringType) => st.isUTF8BinaryCollation
         case ("bool", dt) => dt.isInstanceOf[BooleanType]
         case ("binary", dt) => dt.isInstanceOf[BinaryType]
+        case ("timestamp", dt) => dt.isInstanceOf[TimestampType]
+        case ("map", dt) => dt.isInstanceOf[MapType]
+        case ("array", dt) => dt.isInstanceOf[ArrayType]
         case _ => false
       }
     }
