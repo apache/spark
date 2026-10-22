@@ -1261,9 +1261,9 @@ class CatalystTranspiler(AbstractTranspiler):
             # regime only -- the masked-extension regime is refused in udf.py /
             # ConvertToCatalyst, where a NaN stays NaN. The clean single-reference form
             # ``NaNvl(body, null)`` is type-valid only for float/double and the body's
-            # resolved type is not known here, so the body is referenced twice until a
-            # type-aware pass in ResolveTranspiledPythonUDFOptions removes the duplication
-            # (plan-size cost only; correctness preserved).
+            # resolved type is not known here, so the body is referenced twice (once in
+            # the isnan test, once as the value) -- a plan-size cost only, correctness
+            # preserved (the duplication survives analysis and optimization).
             converted = when(isnan(converted.cast("double")), lit(None)).otherwise(converted)
         # Cast to the declared return type so the rewritten plan reports a
         # known data type to the optimizer's plan validator (otherwise it
