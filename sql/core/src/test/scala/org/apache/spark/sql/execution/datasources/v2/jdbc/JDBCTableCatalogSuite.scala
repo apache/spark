@@ -28,7 +28,7 @@ import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.catalog.{Identifier, TableChange, TableSummary}
+import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableChange, TableSummary}
 import org.apache.spark.sql.errors.DataTypeErrors.{toSQLConf, toSQLStmt}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.internal.SQLConf
@@ -817,4 +817,32 @@ class JDBCTableCatalogSuite extends SharedSparkSession {
       assert(plan.isInstanceOf[InMemoryTableScanExec])
     }
   }
+
+  test("loads without state options keep a subclass loadTable(ident) in the path") {
+    withSQLConf(
+        "spark.sql.catalog.h2counting" -> classOf[CountingJDBCTableCatalog].getName,
+        "spark.sql.catalog.h2counting.url" -> url,
+        "spark.sql.catalog.h2counting.driver" -> "org.h2.Driver") {
+      withTable("h2counting.test.counted") {
+        sql("CREATE TABLE h2counting.test.counted (id INTEGER)")
+        CountingJDBCTableCatalog.loads.set(0)
+        sql("INSERT INTO h2counting.test.counted VALUES (1)")
+        assert(CountingJDBCTableCatalog.loads.get() > 0)
+        CountingJDBCTableCatalog.loads.set(0)
+        checkAnswer(sql("SELECT id FROM h2counting.test.counted"), Row(1))
+        assert(CountingJDBCTableCatalog.loads.get() > 0)
+      }
+    }
+  }
+}
+
+class CountingJDBCTableCatalog extends JDBCTableCatalog {
+  override def loadTable(ident: Identifier): Table = {
+    CountingJDBCTableCatalog.loads.incrementAndGet()
+    super.loadTable(ident)
+  }
+}
+
+object CountingJDBCTableCatalog {
+  val loads = new java.util.concurrent.atomic.AtomicInteger()
 }

@@ -160,7 +160,7 @@ class JDBCTableCatalog extends TableCatalog
       ident: Identifier,
       context: TableContext,
       stateOptions: CaseInsensitiveStringMap): Table = {
-    if (context.timeTravel().isPresent) {
+    if (context.timeTravel().isPresent || stateOptions.isEmpty) {
       super.loadTable(ident, context, stateOptions)
     } else {
       loadTableWithStateOptions(ident, stateOptions.asCaseSensitiveMap().asScala)
