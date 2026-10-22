@@ -474,9 +474,23 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    * explicitly removed by the owners of the DataFrame once it is not needed.
    */
   private[connect] def cacheDataFrameById(dfId: String, df: DataFrame): Unit = {
-    if (dataFrameCache.putIfAbsent(dfId, df) != null) {
+    if (!cacheDataFrameByIdIfAbsent(dfId, df)) {
       throw SparkException.internalError(s"A dataframe is already associated with id $dfId")
     }
+  }
+
+  /**
+   * Caches the given DataFrame with the ID if the ID is not already in use.
+   *
+   * @return
+   *   whether the DataFrame was added to the cache
+   */
+  private[connect] def cacheDataFrameByIdIfAbsent(dfId: String, df: DataFrame): Boolean = {
+    dataFrameCache.putIfAbsent(dfId, df) == null
+  }
+
+  private[connect] def containsCachedDataFrame(dfId: String): Boolean = {
+    dataFrameCache.containsKey(dfId)
   }
 
   /**

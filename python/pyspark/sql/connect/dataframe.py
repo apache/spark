@@ -48,6 +48,7 @@ import pyspark.sql.connect.plan as plan
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
 from pyspark.errors import (
+    PySparkAssertionError,
     PySparkAttributeError,
     PySparkNotImplementedError,
     PySparkRuntimeError,
@@ -2417,47 +2418,57 @@ class DataFrame(ParentDataFrame):
     def offset(self, num: int) -> ParentDataFrame:
         return DataFrame(plan.Offset(child=self._plan, offset=num), session=self._session)
 
-    def checkpoint(self, eager: bool = True) -> ParentDataFrame:
+    def _checkpoint(
+        self,
+        *,
+        local: bool,
+        eager: bool,
+        storage_level: Optional[StorageLevel] = None,
+    ) -> ParentDataFrame:
         relation_id = str(uuid.uuid4())
         cmd = plan.Checkpoint(
             child=self._plan,
-            local=False,
+            local=local,
             eager=eager,
+            storage_level=storage_level,
             relation_id=relation_id,
         )
         _, properties, self._execution_info = self._session.client.execute_command(
             cmd.command(self._session.client)
         )
-        assert "checkpoint_command_result" in properties
-        assert properties["checkpoint_command_result"] == relation_id, (
-            "Checkpoint relation ID does not match the requested ID"
-        )
+        returned_relation_id = properties.get("checkpoint_command_result")
+        if returned_relation_id != relation_id:
+            if returned_relation_id:
+                try:
+                    remove_cmd = plan.RemoveRemoteCachedRelation(returned_relation_id)
+                    self._session.client.execute_command(remove_cmd.command(self._session.client))
+                except Exception as error:
+                    logger.warning(
+                        "Failed to remove checkpoint relation %s after the server returned an "
+                        "unexpected relation ID: %s",
+                        returned_relation_id,
+                        error,
+                    )
+            raise PySparkAssertionError(
+                "Checkpoint relation ID does not match the requested ID: "
+                f"{returned_relation_id} != {relation_id}. The Spark Connect server must "
+                "support client-generated checkpoint relation IDs."
+            )
         return DataFrame(
             plan=plan.CachedRemoteRelation(relation_id, self._session),
             session=self._session,
         )
 
+    def checkpoint(self, eager: bool = True) -> ParentDataFrame:
+        return self._checkpoint(local=False, eager=eager)
+
     def localCheckpoint(
         self, eager: bool = True, storageLevel: Optional[StorageLevel] = None
     ) -> ParentDataFrame:
-        relation_id = str(uuid.uuid4())
-        cmd = plan.Checkpoint(
-            child=self._plan,
+        return self._checkpoint(
             local=True,
             eager=eager,
             storage_level=storageLevel,
-            relation_id=relation_id,
-        )
-        _, properties, self._execution_info = self._session.client.execute_command(
-            cmd.command(self._session.client)
-        )
-        assert "checkpoint_command_result" in properties
-        assert properties["checkpoint_command_result"] == relation_id, (
-            "Checkpoint relation ID does not match the requested ID"
-        )
-        return DataFrame(
-            plan=plan.CachedRemoteRelation(relation_id, self._session),
-            session=self._session,
         )
 
     def toJSON(self) -> ParentDataFrame:

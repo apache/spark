@@ -1431,6 +1431,11 @@
           "ChunkedCachedLocalRelation should contain data."
         ]
       },
+      "DATAFRAME_ALREADY_EXISTS" : {
+        "message" : [
+          "A DataFrame with id <dfId> already exists in the session <sessionId>."
+        ]
+      },
       "DATAFRAME_NOT_FOUND" : {
         "message" : [
           "No DataFrame with id <dfId> is found in the session <sessionId>"

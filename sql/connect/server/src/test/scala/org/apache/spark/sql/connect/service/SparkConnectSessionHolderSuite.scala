@@ -30,7 +30,7 @@ import scala.util.control.NonFatal
 import com.google.common.collect.Lists
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.api.python.SimplePythonFunction
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.IntegratedUDFTestUtils
@@ -67,6 +67,26 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
 
     val expectedDf2 = sessionHolder.getDataFrameOrThrow(id2)
     assert(expectedDf2 == df2)
+  }
+
+  test("DataFrame cache: Duplicate IDs are not overwritten") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    val df1 = spark.range(1)
+    val df2 = spark.range(2)
+    val dfId = "duplicate-id"
+
+    sessionHolder.cacheDataFrameById(dfId, df1)
+    assert(!sessionHolder.cacheDataFrameByIdIfAbsent(dfId, df2))
+    assert(sessionHolder.getDataFrameOrThrow(dfId) eq df1)
+
+    val error = intercept[SparkException] {
+      sessionHolder.cacheDataFrameById(dfId, df2)
+    }
+    checkError(
+      exception = error,
+      condition = "INTERNAL_ERROR",
+      parameters = Map("message" -> s"A dataframe is already associated with id $dfId"))
+    assert(sessionHolder.getDataFrameOrThrow(dfId) eq df1)
   }
 
   test("DataFrame cache: Should throw when dataframe is not found") {

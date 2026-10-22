@@ -1055,6 +1055,10 @@ class DataFrame:
         .. versionchanged:: 4.0.0
             Supports Spark Connect.
 
+        .. versionchanged:: 4.4.0
+            In Spark Connect, this method requires a server that supports client-generated
+            checkpoint relation IDs.
+
         Parameters
         ----------
         eager : bool, optional, default True
@@ -1092,6 +1096,10 @@ class DataFrame:
         .. versionchanged:: 4.0.0
             Supports Spark Connect.
             Added storageLevel parameter.
+
+        .. versionchanged:: 4.4.0
+            In Spark Connect, this method requires a server that supports client-generated
+            checkpoint relation IDs.
 
         Parameters
         ----------

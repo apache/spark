@@ -4083,13 +4083,17 @@ class SparkConnectPlanner(
   private def handleCheckpointCommand(
       checkpointCommand: CheckpointCommand,
       responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
-    val dfId = if (checkpointCommand.hasRelationId) {
+    val clientSuppliedId = checkpointCommand.hasRelationId
+    val dfId = if (clientSuppliedId) {
       if (checkpointCommand.getRelationId.isEmpty) {
         throw InvalidPlanInput("CONNECT_INVALID_PLAN.CHECKPOINT_RELATION_ID_EMPTY", Map.empty)
       }
       checkpointCommand.getRelationId
     } else {
       UUID.randomUUID().toString
+    }
+    if (clientSuppliedId && sessionHolder.containsCachedDataFrame(dfId)) {
+      throw checkpointRelationIdAlreadyExists(dfId)
     }
     val target = Dataset
       .ofRows(session, transformRelation(checkpointCommand.getRelation))
@@ -4107,7 +4111,13 @@ class SparkConnectPlanner(
     }
 
     logInfo(log"Caching DataFrame with id ${MDC(DATAFRAME_ID, dfId)}")
-    sessionHolder.cacheDataFrameById(dfId, checkpointed)
+    if (clientSuppliedId) {
+      if (!sessionHolder.cacheDataFrameByIdIfAbsent(dfId, checkpointed)) {
+        throw checkpointRelationIdAlreadyExists(dfId)
+      }
+    } else {
+      sessionHolder.cacheDataFrameById(dfId, checkpointed)
+    }
 
     executeHolder.eventsManager.postFinished()
     responseObserver.onNext(
@@ -4121,6 +4131,12 @@ class SparkConnectPlanner(
             .setRelation(proto.CachedRemoteRelation.newBuilder().setRelationId(dfId).build())
             .build())
         .build())
+  }
+
+  private def checkpointRelationIdAlreadyExists(dfId: String): InvalidPlanInput = {
+    InvalidPlanInput(
+      "CONNECT_INVALID_PLAN.DATAFRAME_ALREADY_EXISTS",
+      Map("dfId" -> dfId, "sessionId" -> sessionId))
   }
 
   private def handleRemoveCachedRemoteRelationCommand(
