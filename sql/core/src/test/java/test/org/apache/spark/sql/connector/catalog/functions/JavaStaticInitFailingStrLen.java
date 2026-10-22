@@ -28,7 +28,8 @@ import org.apache.spark.sql.types.DataTypes;
  */
 public class JavaStaticInitFailingStrLen implements SimpleFunction, ScalarFunction<Integer> {
   static {
-    if (Boolean.parseBoolean("true")) {
+    // javac rejects a static initializer that cannot complete normally; `if` avoids that.
+    if (true) {
       throw new IllegalStateException("static initializer failed");
     }
   }
