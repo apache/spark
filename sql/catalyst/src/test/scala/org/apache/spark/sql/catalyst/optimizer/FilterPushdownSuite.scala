@@ -1152,6 +1152,20 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(Optimize.execute(originalQuery), originalQuery)
   }
 
+  test("as-of joins: do not push down predicates with raise_error") {
+    // raise_error over a literal references no columns, so it looks like a left-side predicate.
+    // Below the join it would fire on left rows that the join drops.
+    val raiseError = IsNull(RaiseError(Literal("boom")))
+    val whereQuery = asOfJoin(asOfLeft, asOfRight, Some(leftKey === rightKey), Inner)
+      .where(raiseError)
+      .analyze
+    comparePlans(Optimize.execute(whereQuery), whereQuery)
+
+    val onQuery = asOfJoin(asOfLeft, asOfRight, Some(leftKey === rightKey && raiseError), Inner)
+      .analyze
+    comparePlans(Optimize.execute(onQuery), onQuery)
+  }
+
   test("as-of joins: push a right-side join condition into the right side") {
     Seq(Inner, LeftOuter).foreach { joinType =>
       val originalQuery = asOfJoin(
@@ -1176,6 +1190,18 @@ class FilterPushdownSuite extends PlanTest {
     // A left outer join keeps every left row, so the condition must stay in the join.
     val leftOuterQuery = asOfJoin(asOfLeft, asOfRight, condition, LeftOuter).analyze
     comparePlans(Optimize.execute(leftOuterQuery), leftOuterQuery)
+  }
+
+  test("as-of joins: push a where condition and a join condition together") {
+    val originalQuery = asOfJoin(
+      asOfLeft, asOfRight, Some(leftKey === rightKey && rightValue > 2), LeftOuter)
+      .where(leftValue > 1)
+      .analyze
+    val correctAnswer = asOfJoin(
+      asOfLeft.where(leftValue > 1), asOfRight.where(rightValue > 2),
+      Some(leftKey === rightKey), LeftOuter)
+      .analyze
+    comparePlans(Optimize.execute(originalQuery), correctAnswer)
   }
 
   test("as-of joins: PushDownPredicates visits an as-of join with no filter above it") {
