@@ -283,7 +283,7 @@ Before calling `build()`, Spark negotiates operator pushdown with the scan build
 for mix-in interfaces. The pushdown order is:
 
 1. **Sample** (`SupportsPushDownSample`)
-2. **Filter** (`SupportsPushDownFilters` / `SupportsPushDownV2Filters`)
+2. **Filter** (`SupportsPushDownV2Filters` / `SupportsPushDownFilters`)
 3. **Aggregate** (`SupportsPushDownAggregates`)
 4. **Limit / Top-N** (`SupportsPushDownLimit` / `SupportsPushDownTopN`)
 5. **Offset** (`SupportsPushDownOffset`)
@@ -292,28 +292,32 @@ for mix-in interfaces. The pushdown order is:
 Each mix-in has a method that Spark calls with the candidate operator, and the return value tells
 Spark what it must still evaluate itself after the scan:
 
-- [`SupportsPushDownFilters`](api/java/org/apache/spark/sql/connector/read/SupportsPushDownFilters.html):
-  `pushFilters(filters)` receives the filters Spark could translate to
-  `org.apache.spark.sql.sources.Filter` and returns the ones that still need to be evaluated
-  **after** the scan. `pushedFilters()` returns the filters the source accepted. A filter may appear
-  in both: a source that can only skip whole files or row groups on a predicate reports it as pushed
-  and also returns it, so Spark re-checks it row by row. Spark evaluates only what `pushFilters`
-  returns (plus anything it could not translate), so a filter that is neither returned nor applied
-  by the reader is silently dropped from the query.
-- [`SupportsPushDownV2Filters`](api/java/org/apache/spark/sql/connector/read/SupportsPushDownV2Filters.html)
-  (since 3.3.0) is the preferred form of the same contract: `pushPredicates(predicates)` returns
-  the post-scan predicates as [`Predicate`](#expressions) instances and `pushedPredicates()`
-  reports the accepted ones,
-  without the conversion to the V1 `Filter` type. Spark checks for `SupportsPushDownFilters`
-  first, so a `ScanBuilder` should implement one or the other.
+- [`SupportsPushDownV2Filters`](api/java/org/apache/spark/sql/connector/read/SupportsPushDownV2Filters.html):
+  `pushPredicates(predicates)` receives the candidate [`Predicate`](#expressions) instances and
+  returns the ones that still need to be evaluated **after** the scan. `pushedPredicates()`
+  returns the predicates the source accepted. A predicate may appear in both: a source that can
+  only skip whole files or row groups on a predicate reports it as pushed and also returns it, so
+  Spark re-checks it row by row. Spark evaluates only what `pushPredicates` returns (plus anything
+  it could not translate), so a predicate that is neither returned nor applied by the reader is
+  silently dropped from the query.
+- [`SupportsPushDownFilters`](api/java/org/apache/spark/sql/connector/read/SupportsPushDownFilters.html)
+  is the pre-3.3 form of the same contract over the V1 `org.apache.spark.sql.sources.Filter`
+  type: `pushFilters(filters)` returns the post-scan filters and `pushedFilters()` reports the
+  accepted ones. New connectors should implement `SupportsPushDownV2Filters`; Spark checks for
+  `SupportsPushDownFilters` first, so a `ScanBuilder` should implement one or the other.
 - [`SupportsPushDownRequiredColumns`](api/java/org/apache/spark/sql/connector/read/SupportsPushDownRequiredColumns.html):
   `pruneColumns(requiredSchema)` passes the narrowest schema the query needs. Pruning may be
   partial (for example top-level columns only), and `Scan.readSchema()` must report whatever
   pruning was actually applied.
-- `pushLimit`, `pushTopN`, `pushOffset`, and `pushAggregation` return `true` when the source
-  will apply the operator. `isPartiallyPushed()` (limit, top-N) and
-  `supportCompletePushDown(aggregation)` tell Spark whether it still has to apply the operator
-  on top of the scan.
+- [`SupportsPushDownLimit`](api/java/org/apache/spark/sql/connector/read/SupportsPushDownLimit.html)`.pushLimit`,
+  [`SupportsPushDownTopN`](api/java/org/apache/spark/sql/connector/read/SupportsPushDownTopN.html)`.pushTopN`,
+  [`SupportsPushDownOffset`](api/java/org/apache/spark/sql/connector/read/SupportsPushDownOffset.html)`.pushOffset`
+  and
+  [`SupportsPushDownAggregates`](api/java/org/apache/spark/sql/connector/read/SupportsPushDownAggregates.html)`.pushAggregation`
+  return `true` when the source accepts the operator. For limit and top-N, `isPartiallyPushed()`
+  tells Spark whether it must keep the operator above the scan. For aggregation,
+  `supportCompletePushDown(aggregation)` tells Spark whether the source handles the aggregation
+  completely.
 
 ### Scan
 
