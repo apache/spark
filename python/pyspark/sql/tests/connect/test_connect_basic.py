@@ -1740,7 +1740,11 @@ class SparkConnectGCTests(SparkConnectSQLTestCase):
                     gc.collect()
         finally:
             ConnectSparkSession._active_session.session = previous_active_session
-            originating_session.stop()
+            # Release this session without stopping the shared local Connect server.
+            try:
+                originating_session.client.release_session()
+            finally:
+                originating_session.client.close()
 
     def test_garbage_collection_derived_checkpoint(self):
         # SPARK-48258: Should keep the cached remote relation when derived DataFrames exist

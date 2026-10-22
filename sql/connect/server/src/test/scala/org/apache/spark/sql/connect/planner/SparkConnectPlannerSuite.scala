@@ -128,7 +128,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       relationId: Option[String],
       relation: proto.Relation = proto.Relation
         .newBuilder()
-        .setRange(proto.Range.newBuilder().setStart(0).setEnd(1))
+        .setRange(proto.Range.newBuilder().setStart(0).setEnd(1).setStep(1))
         .build()): proto.Command = {
     val checkpoint = proto.CheckpointCommand
       .newBuilder()
