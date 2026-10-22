@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
-import org.apache.spark.sql.catalyst.planning.RangeJoin
+import org.apache.spark.sql.catalyst.planning.RangeJoinKind
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, Partitioning, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{CodegenSupport, ExplainUtils, SparkPlan}
@@ -53,7 +53,7 @@ case class BroadcastRangeJoinExec(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
     condition: Option[Expression],
-    rangeJoin: RangeJoin)
+    rangeJoinKind: RangeJoinKind)
   extends JoinCodegenSupport {
 
   if (condition.isEmpty) {
@@ -63,10 +63,21 @@ case class BroadcastRangeJoinExec(
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
-  override lazy val requiredChildDistribution: Seq[Distribution] = {
+  /** BuildRight means the right relation is the broadcast relation. */
+  private val (streamed, broadcast, streamedKeys, buildKeys) = buildSide match {
+    case BuildRight => (left, right, leftKeys, rightKeys)
+    case BuildLeft => (right, left, rightKeys, leftKeys)
+  }
+
+  override def simpleStringWithNodeId(): String = {
+    val opId = ExplainUtils.getOpId(this)
+    s"$nodeName $joinType $buildSide ($opId)".trim
+  }
+
+  override def requiredChildDistribution: Seq[Distribution] = {
     val mode = RangeRelationBroadcastMode(
-      BindReferences.bindReferences(buildKeys, buildOutput),
-      RangeIndexKind(rangeJoin))
+      BindReferences.bindReferences(buildKeys, broadcast.output),
+      RangeIndexKind(rangeJoinKind))
     buildSide match {
       case BuildLeft =>
         BroadcastDistribution(mode) :: UnspecifiedDistribution :: Nil
@@ -74,6 +85,10 @@ case class BroadcastRangeJoinExec(
         UnspecifiedDistribution :: BroadcastDistribution(mode) :: Nil
     }
   }
+
+  override def outputPartitioning: Partitioning = streamed.outputPartitioning
+
+  override def outputOrdering: Seq[SortOrder] = streamed.outputOrdering
 
   override def output: Seq[Attribute] = {
     joinType match {
@@ -90,54 +105,24 @@ case class BroadcastRangeJoinExec(
     }
   }
 
-  // The preserved side is streamed, so its partitioning and ordering pass through.
-  override def outputPartitioning: Partitioning = streamedPlan.outputPartitioning
-
-  override def outputOrdering: Seq[SortOrder] = streamedPlan.outputOrdering
-
-  override def simpleStringWithNodeId(): String = {
-    val opId = ExplainUtils.getOpId(this)
-    s"$nodeName $joinType $buildSide ($opId)".trim
-  }
-
-  private[this] lazy val buildPlan = if (buildSide == BuildLeft) left else right
-  private[this] lazy val streamedPlan = if (buildSide == BuildLeft) right else left
-
-  private[this] lazy val buildKeys = if (buildSide == BuildLeft) leftKeys else rightKeys
-  private[this] lazy val streamedKeys = if (buildSide == BuildLeft) rightKeys else leftKeys
-
-  @transient private[this] lazy val buildOutput = buildPlan.output
-  @transient private[this] lazy val streamedOutput = streamedPlan.output
-
   // The point-index scan used to probe this join's build side. See `PointScan.forJoin`.
-  private lazy val pointScan: PointScan = PointScan.forJoin(rangeJoin, buildSide)
-
-  // Alias so `innerJoin`/`outerJoin`/`leftExistenceJoin` need no change below; the class
-  // itself lives on the companion object (see there for why).
-  private type ProbeContext = BroadcastRangeJoinExec.ProbeContext
+  private lazy val pointScan: PointScan = PointScan.forJoin(rangeJoinKind, buildSide)
 
   private def perPartition(
       relation: Broadcast[RangeRelation])(
-      f: ProbeContext => Iterator[InternalRow]): RDD[InternalRow] = {
-    val boundStreamKeys = BindReferences.bindReferences(streamedKeys, streamedOutput)
+      f: BroadcastRangeJoinExec.ProbeContext => Iterator[InternalRow]): RDD[InternalRow] = {
+    val boundStreamKeys = BindReferences.bindReferences(streamedKeys, streamed.output)
+    val cond = condition.get
     val schema = left.output ++ right.output
-    val numBuildFields = buildPlan.output.length
-    val join = rangeJoin
+    val numBuildFields = broadcast.output.length
+    val kind = rangeJoinKind
     val side = buildSide
-    streamedPlan.execute().mapPartitionsInternal { stream =>
-      // relation.value is read here, inside the task closure, so each executor fetches
-      // the index through the broadcast machinery (and shares it across the partitions
-      // that closure runs over) instead of the driver baking the materialized index
-      // into the closure that gets shipped out. PointScan.forJoin is passed by-name into
-      // makeCandidateFn, so it is only evaluated - and only throws for a non-partial-range
-      // join - inside the point-index branches that actually need it, same as before. It
-      // reads `join`/`side` (copied above), not `rangeJoin`/`buildSide` directly, so this
-      // closure captures only those small values instead of the enclosing plan node.
+    streamed.execute().mapPartitionsInternal { streamedIter =>
       val candidateFn = BroadcastRangeJoinExec.makeCandidateFn(
-        relation.value, boundStreamKeys, PointScan.forJoin(join, side))
+        relation.value, boundStreamKeys, PointScan.forJoin(kind, side))
       f(new BroadcastRangeJoinExec.ProbeContext(
-        stream,
-        Predicate.create(condition.get, schema).eval _,
+        streamedIter,
+        Predicate.create(cond, schema).eval _,
         new JoinedRow,
         new GenericInternalRow(numBuildFields),
         candidateFn,
@@ -208,7 +193,9 @@ case class BroadcastRangeJoinExec(
     }
   }
 
-  /** Semi keeps a stream row that matches. Anti keeps one that does not. */
+  /**
+   * The implementation for LeftSemi and LeftAnti joins.
+   */
   private def leftExistenceJoin(
       relation: Broadcast[RangeRelation],
       exists: Boolean): RDD[InternalRow] = {
@@ -222,31 +209,30 @@ case class BroadcastRangeJoinExec(
     }
   }
 
-  private def genResultProjection: UnsafeProjection = joinType match {
-    case LeftSemi | LeftAnti =>
-      UnsafeProjection.create(output, output)
-    case _ =>
-      UnsafeProjection.create(output, (left.output ++ right.output).map(_.withNullability(true)))
-  }
-
-  override def doExecute(): RDD[InternalRow] = {
+  protected override def doExecute(): RDD[InternalRow] = {
     if (!BroadcastRangeJoinExec.supports(joinType, buildSide)) {
       throw SparkException.internalError(
         s"BroadcastRangeJoin does not support $joinType with $buildSide")
     }
-    val relation = buildPlan.executeBroadcast[RangeRelation]()
-    val joined = joinType match {
-      case _: InnerLike => innerJoin(relation)
-      case LeftOuter | RightOuter => outerJoin(relation)
-      case LeftSemi => leftExistenceJoin(relation, exists = true)
-      case LeftAnti => leftExistenceJoin(relation, exists = false)
+    val broadcastedRelation = broadcast.executeBroadcast[RangeRelation]()
+    val resultRdd = joinType match {
+      case _: InnerLike => innerJoin(broadcastedRelation)
+      case LeftOuter | RightOuter => outerJoin(broadcastedRelation)
+      case LeftSemi => leftExistenceJoin(broadcastedRelation, exists = true)
+      case LeftAnti => leftExistenceJoin(broadcastedRelation, exists = false)
       case t =>
         throw SparkException.internalError(
           s"BroadcastRangeJoin should not take $t as the JoinType")
     }
+    val (resultOutput, resultInput) = joinType match {
+      case LeftSemi | LeftAnti =>
+        (output, output)
+      case _ =>
+        (output, (left.output ++ right.output).map(_.withNullability(true)))
+    }
     val numOutputRows = longMetric("numOutputRows")
-    joined.mapPartitionsWithIndexInternal { (index, iter) =>
-      val resultProj = genResultProjection
+    resultRdd.mapPartitionsWithIndexInternal { (index, iter) =>
+      val resultProj = UnsafeProjection.create(resultOutput, resultInput)
       resultProj.initialize(index)
       iter.map { r =>
         numOutputRows += 1
@@ -260,7 +246,7 @@ case class BroadcastRangeJoinExec(
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
-    streamedPlan.asInstanceOf[CodegenSupport].inputRDDs()
+    streamed.asInstanceOf[CodegenSupport].inputRDDs()
   }
 
   private def multipleOutputForOneInput: Boolean = joinType match {
@@ -269,11 +255,11 @@ case class BroadcastRangeJoinExec(
   }
 
   override def needCopyResult: Boolean = {
-    streamedPlan.asInstanceOf[CodegenSupport].needCopyResult || multipleOutputForOneInput
+    streamed.asInstanceOf[CodegenSupport].needCopyResult || multipleOutputForOneInput
   }
 
   override def doProduce(ctx: CodegenContext): String = {
-    streamedPlan.asInstanceOf[CodegenSupport].produce(ctx, this)
+    streamed.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
@@ -289,11 +275,11 @@ case class BroadcastRangeJoinExec(
   }
 
   private def prepareBroadcast(ctx: CodegenContext): String = {
-    val broadcast = buildPlan.executeBroadcast[RangeRelation]()
-    val broadcastTerm = ctx.addReferenceObj("broadcast", broadcast)
-    val cls = classOf[RangeRelation].getName
-    ctx.addMutableState(cls, "rangeRelation",
-      v => s"$v = ($cls) $broadcastTerm.value();", forceInline = true)
+    val broadcastRelation = broadcast.executeBroadcast[RangeRelation]()
+    val broadcastTerm = ctx.addReferenceObj("broadcast", broadcastRelation)
+    val clsName = broadcastRelation.value.getClass.getName
+    ctx.addMutableState(clsName, "rangeRelation",
+      v => s"$v = ($clsName) $broadcastTerm.value();", forceInline = true)
   }
 
   /**
@@ -305,7 +291,7 @@ case class BroadcastRangeJoinExec(
       input: Seq[ExprCode]): (String, Seq[String]) = {
     ctx.currentVars = input
     val keys = streamedKeys.map { key =>
-      val bound = BindReferences.bindReference(key, streamedOutput)
+      val bound = BindReferences.bindReference(key, streamed.output)
       val ev = bound.genCode(ctx)
       val name = ctx.freshName("probeKey")
       val javaType = CodeGenerator.javaType(key.dataType)
@@ -343,8 +329,8 @@ case class BroadcastRangeJoinExec(
     val iterCls = classOf[Iterator[InternalRow]].getName
     // Dispatches on RangeIndexKind, the same source `requiredChildDistribution` uses to
     // decide which structure got built, instead of re-deriving "point or interval" from
-    // rangeJoin a second time.
-    val call = RangeIndexKind(rangeJoin) match {
+    // rangeJoinKind a second time.
+    val call = RangeIndexKind(rangeJoinKind) match {
       case PointIndexKind =>
         val points = (if (usesLongKeys) classOf[LongPointIndex] else classOf[PointIndex]).getName
         s"(($points) $relationTerm).${pointScan.methodName}(${keyVars.head})"
@@ -382,7 +368,7 @@ case class BroadcastRangeJoinExec(
       input: Seq[ExprCode]): (String, Seq[String], Seq[String]) = {
     ctx.currentVars = input
     val keys = streamedKeys.map { key =>
-      val bound = BindReferences.bindReference(key, streamedOutput)
+      val bound = BindReferences.bindReference(key, streamed.output)
       val ev = bound.genCode(ctx)
       val toLong = RangeIndex.requiredLongKey(key.dataType)
       val name = ctx.freshName("probeKey")
@@ -423,8 +409,7 @@ case class BroadcastRangeJoinExec(
 
   private def codegenInner(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     val (keyCode, iteratorCode, matches) = prepareProbe(ctx, input)
-    val (buildRow, checkCondition, buildVars) =
-      getJoinCondition(ctx, input, streamedPlan, buildPlan)
+    val (buildRow, checkCondition, buildVars) = getJoinCondition(ctx, input, streamed, broadcast)
     val resultVars = orderResultVars(input, buildVars)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
@@ -444,12 +429,11 @@ case class BroadcastRangeJoinExec(
   private def codegenOuter(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     val (keyCode, iteratorCode, matches) = prepareProbe(ctx, input)
     val buildRow = ctx.freshName("buildRow")
-    val (_, checkCondition, _) = getJoinCondition(
-      ctx, input, streamedPlan, buildPlan, Some(buildRow))
-    val buildVars = genOneSideJoinVars(ctx, buildRow, buildPlan, setDefaultValue = true)
+    val (_, checkCondition, _) = getJoinCondition(ctx, input, streamed, broadcast, Some(buildRow))
+    val buildVars = genOneSideJoinVars(ctx, buildRow, broadcast, setDefaultValue = true)
     val resultVars = orderResultVars(input, buildVars)
-    val found = ctx.freshName("foundMatch")
-    val shouldOutput = ctx.freshName("shouldOutput")
+    val shouldOutputRow = ctx.freshName("shouldOutputRow")
+    val foundMatch = ctx.freshName("foundMatch")
     val numOutput = metricTerm(ctx, "numOutputRows")
 
     // One consume site, inside the loop. The last iteration pads the build side
@@ -457,21 +441,21 @@ case class BroadcastRangeJoinExec(
     s"""
        |$keyCode
        |$iteratorCode
-       |boolean $found = false;
-       |while ($matches.hasNext() || !$found) {
+       |boolean $foundMatch = false;
+       |while ($matches.hasNext() || !$foundMatch) {
        |  InternalRow $buildRow = $matches.hasNext() ?
        |    (InternalRow) $matches.next() : null;
-       |  boolean $shouldOutput = false;
+       |  boolean $shouldOutputRow = false;
        |  if ($buildRow != null) {
        |    $checkCondition {
-       |      $shouldOutput = true;
-       |      $found = true;
+       |      $shouldOutputRow = true;
+       |      $foundMatch = true;
        |    }
        |  } else {
-       |    $shouldOutput = true;
-       |    $found = true;
+       |    $shouldOutputRow = true;
+       |    $foundMatch = true;
        |  }
-       |  if ($shouldOutput) {
+       |  if ($shouldOutputRow) {
        |    $numOutput.add(1);
        |    ${consume(ctx, resultVars)}
        |  }
@@ -485,21 +469,21 @@ case class BroadcastRangeJoinExec(
       exists: Boolean): String = {
     val (keyCode, iteratorCode, matches) = prepareProbe(ctx, input)
     val (buildRow, checkCondition, _) =
-      getJoinCondition(ctx, input, streamedPlan, buildPlan)
-    val found = ctx.freshName("foundMatch")
+      getJoinCondition(ctx, input, streamed, broadcast)
+    val foundMatch = ctx.freshName("foundMatch")
     val numOutput = metricTerm(ctx, "numOutputRows")
 
     s"""
        |$keyCode
        |$iteratorCode
-       |boolean $found = false;
-       |while (!$found && $matches.hasNext()) {
+       |boolean $foundMatch = false;
+       |while (!$foundMatch && $matches.hasNext()) {
        |  InternalRow $buildRow = (InternalRow) $matches.next();
        |  $checkCondition {
-       |    $found = true;
+       |    $foundMatch = true;
        |  }
        |}
-       |if ($found == $exists) {
+       |if ($foundMatch == $exists) {
        |  $numOutput.add(1);
        |  ${consume(ctx, input)}
        |}
@@ -554,7 +538,12 @@ object BroadcastRangeJoinExec {
           }
         }
       case points: LongPointIndex =>
-        val scan = pointScan(points)
+        val scan: Long => Iterator[InternalRow] = pointScan match {
+          case PointScan.UpTo => points.upTo
+          case PointScan.UpToExclusive => points.upToExclusive
+          case PointScan.From => points.from
+          case PointScan.FromExclusive => points.fromExclusive
+        }
         row =>
           val low = lowExpr.eval(row)
           if (low == null) Iterator.empty else scan(points.toLong(low))
@@ -567,7 +556,12 @@ object BroadcastRangeJoinExec {
           intervals.overlapping(low, high)
         }
       case points: PointIndex =>
-        val scan = pointScan(points)
+        val scan: Any => Iterator[InternalRow] = pointScan match {
+          case PointScan.UpTo => points.upTo
+          case PointScan.UpToExclusive => points.upToExclusive
+          case PointScan.From => points.from
+          case PointScan.FromExclusive => points.fromExclusive
+        }
         row =>
           val low = lowExpr.eval(row)
           if (low == null) Iterator.empty else scan(low)

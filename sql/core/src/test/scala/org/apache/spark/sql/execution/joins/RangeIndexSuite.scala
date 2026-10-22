@@ -343,7 +343,9 @@ class RangeIndexSuite extends SparkFunSuite {
     // Array equals is identity, and UTF8String equals is binary, so these keys
     // compare equal under the index ordering without being equal. The tree
     // orders them with that comparator, so a probe on either key returns both.
-    // Signed zero is treated as one key: the index ordering treats -0.0 and 0.0 as equal.
+    // (Signed zero is the same kind of merge, but Double's == already treats -0.0
+    // and 0.0 as equal, which fails this helper's != precondition - see the
+    // dedicated "-0.0 and 0.0 are treated as one key" test below instead.)
     def assertMerged(
         dataType: DataType,
         low: Any,
@@ -390,6 +392,27 @@ class RangeIndexSuite extends SparkFunSuite {
       lower,
       UTF8String.fromString("z"),
       Seq(UTF8String.fromString("a"), UTF8String.fromString("b")))
+  }
+
+  test("-0.0 and 0.0 are treated as one key") {
+    // Double's own `==` already treats -0.0 and 0.0 as equal, so `PhysicalDataType.ordering`
+    // (which SQL requires to distinguish them from no other value, but not from each other)
+    // merges them exactly like the UTF8String/Array[Byte] keys above: a probe on either
+    // sign finds rows stored under both.
+    val negZero: Any = -0.0
+    val posZero: Any = 0.0
+    val ordering = PhysicalDataType.ordering(DoubleType)
+    assert(ordering.compare(negZero, posZero) == 0)
+
+    val points = Array((negZero, negZero, row(0)), (posZero, posZero, row(1)))
+    val pointIdx = buildIntervals(DoubleType, points.toSeq)
+    assert(ids(pointIdx.overlapping(negZero, negZero)).toSet == Set(0, 1))
+    assert(ids(pointIdx.overlapping(posZero, posZero)).toSet == Set(0, 1))
+
+    val intervals = Array((-5.0: Any, negZero, row(0)), (posZero, 5.0: Any, row(1)))
+    val index = buildIntervals(DoubleType, intervals.toSeq)
+    assert(ids(index.overlapping(negZero, negZero)).sorted == List(0, 1))
+    assert(ids(index.overlapping(posZero, posZero)).sorted == List(0, 1))
   }
 
   test("a nested probe does not drop rows from the outer iterator") {
@@ -586,7 +609,7 @@ class RangeIndexSuite extends SparkFunSuite {
         ser: org.apache.spark.serializer.SerializerInstance, index: A): A =
       ser.deserialize[A](ser.serialize(index))
 
-    // One reader for the sealed family, mirroring candidates() dispatch:
+    // One reader for the sealed family, mirroring BroadcastRangeJoinExec.makeCandidateFn dispatch:
     // the interval kinds answer a window, the point kinds answer a
     // lower-bound scan, and every relation this test builds answers at
     // row ordinal 0.
@@ -743,6 +766,48 @@ class RangeIndexSuite extends SparkFunSuite {
     assert(longIdx.overlapping(5L, 15L).isInstanceOf[LongOverlapIterator])
   }
 
+  test("overlap iterator sizes its scratch stack to tree depth, not row count") {
+    // The scratch stack is pre-sized off `lows.length` alone (tree depth), independent of
+    // data distribution. Bounding against that same depth formula (rather than a fixed
+    // magic number) still catches a regression to O(row count) sizing, without breaking
+    // if the depth-to-capacity multiplier or the floor constant is tuned to a different
+    // (but still O(log n)) value.
+    def depthOf(n: Int): Int = 32 - java.lang.Integer.numberOfLeadingZeros(n)
+
+    val oneRowIndex = buildIntervals(Seq(span(0, 10, 0)))
+    val oneRowIter = oneRowIndex.overlapping(15, 15).asInstanceOf[OverlapIterator]
+    assert(oneRowIter.stackCapacity <= math.max(8, depthOf(1) * 4),
+      s"a one-row index should need only a handful of scratch slots, " +
+        s"got ${oneRowIter.stackCapacity}")
+
+    val n = 10000
+    val largeIndex = buildIntervals((0 until n).map(i => span(i, i + 100, i)))
+    val largeIter = largeIndex.overlapping(50, 50).asInstanceOf[OverlapIterator]
+    // log2(10000) ~= 13.3: a handful of tree levels, nowhere near n.
+    assert(largeIter.stackCapacity <= depthOf(n) * 4,
+      s"a $n-row index should size its scratch stack to tree depth (~${depthOf(n)}), " +
+        s"not row count; got ${largeIter.stackCapacity}")
+  }
+
+  test("overlapping traversal is lazy and supports early exit under high overlap") {
+    // The pending-work stack tracks tree depth, not match count: draining a handful
+    // of candidates out of ~100 matches among n=10,000 intervals must not grow it
+    // toward n. Staggered spans also avoid the common-core short cut, which would
+    // skip the walk entirely. Reading `pendingSpans` confirms work remains on the
+    // stack after taking initial matches, proving the walk did not drain eagerly.
+    val n = 10000
+    val overlappingSpans = (0 until n).map(i => span(i, i + 100, i))
+    val index = buildIntervals(overlappingSpans)
+    val iter = index.overlapping(5000, 5000).asInstanceOf[OverlapIterator]
+    val initialCapacity = iter.stackCapacity
+
+    assert(iter.take(3).size == 3)
+    assert(iter.pendingSpans > 0,
+      s"lazy traversal must leave work pending on the stack, but had ${iter.pendingSpans} spans")
+    assert(iter.stackCapacity == initialCapacity,
+      s"stack grew from $initialCapacity to ${iter.stackCapacity} after taking 3 of $n matches")
+  }
+
   test("overlapping matches a brute-force reference across randomized interval sets") {
     // Cross-checks the tree-pruning search in overlapping() against an independent
     // O(n) scan, across many random interval sets and probe windows. Hand-written
@@ -780,9 +845,24 @@ class RangeIndexSuite extends SparkFunSuite {
       Seq(BoundReference(0, IntegerType, nullable = true)), PointIndexKind)
       .transform(Array(InternalRow(5, 1))).isInstanceOf[LongPointIndex])
     // Floating point has no bit-preserving SQL order, and strings are not one long.
+    // Pinned for both kinds and both widths: signed zero and NaN need the boxed
+    // ordering's special-cased comparator, not a bit-preserving long encoding.
     assert(RangeRelationBroadcastMode(
       Seq(BoundReference(0, FloatType, nullable = true)), PointIndexKind)
       .transform(Array(InternalRow(1.0f, 1))).isInstanceOf[PointIndex])
+    assert(RangeRelationBroadcastMode(
+      Seq(BoundReference(0, DoubleType, nullable = true)), PointIndexKind)
+      .transform(Array(InternalRow(1.0, 1))).isInstanceOf[PointIndex])
+    assert(RangeRelationBroadcastMode(
+      Seq(BoundReference(0, FloatType, nullable = true),
+        BoundReference(1, FloatType, nullable = true)),
+      IntervalIndexKind)
+      .transform(Array(InternalRow(1.0f, 2.0f, 1))).isInstanceOf[IntervalIndex])
+    assert(RangeRelationBroadcastMode(
+      Seq(BoundReference(0, DoubleType, nullable = true),
+        BoundReference(1, DoubleType, nullable = true)),
+      IntervalIndexKind)
+      .transform(Array(InternalRow(1.0, 2.0, 1))).isInstanceOf[IntervalIndex])
     assert(RangeRelationBroadcastMode(
       Seq(BoundReference(0, StringType, nullable = true),
         BoundReference(1, StringType, nullable = true)),
@@ -852,11 +932,52 @@ class RangeIndexSuite extends SparkFunSuite {
   }
 
   test("LongIntervalIndex.coreLow/coreHigh use the empty-set identities, like the boxed family") {
-    // Mirrors IntervalIndex.coreLow/coreHigh, which both return null for an empty index:
-    // a max-of-nothing is -infinity and a min-of-nothing is +infinity, so an all-covering
-    // probe window correctly fails both comparisons instead of only one.
+    // Defensive consistency fix, not a live-bug regression test: overlapping()'s own
+    // `if (lows.isEmpty) return Iterator.empty` guard already short-circuits before either
+    // field is ever read on an empty index, so an all-covering probe window never actually
+    // reaches this comparison for one - it would in fact pass (vacuously, for every window),
+    // not fail, since probeLow <= Long.MaxValue and probeHigh >= Long.MinValue always hold.
+    // Kept anyway because it mirrors IntervalIndex.coreLow/coreHigh, which both return null
+    // for an empty index: a max-of-nothing is -infinity and a min-of-nothing is +infinity,
+    // and the two index families should agree on that convention even where neither
+    // currently depends on it.
     assert(LongIntervalIndex.coreLow(Array.empty[Long]) == Long.MinValue)
     assert(LongIntervalIndex.coreHigh(Array.empty[Long]) == Long.MaxValue)
+  }
+
+  test("long overlap iterator sizes its scratch stack to tree depth, not row count") {
+    def depthOf(n: Int): Int = 32 - java.lang.Integer.numberOfLeadingZeros(n)
+    val n = 10000
+    val index = RangeRelationBroadcastMode(
+      Seq(BoundReference(0, LongType, nullable = true),
+        BoundReference(1, LongType, nullable = true)),
+      IntervalIndexKind)
+      .transform((0 until n).map(i => InternalRow(i.toLong, (i + 100).toLong)).toArray)
+      .asInstanceOf[LongIntervalIndex]
+    val iter = index.overlapping(50L, 50L).asInstanceOf[LongOverlapIterator]
+    assert(iter.stackCapacity <= depthOf(n) * 4,
+      s"a $n-row index should size its scratch stack to tree depth (~${depthOf(n)}), " +
+        s"not row count; got ${iter.stackCapacity}")
+  }
+
+  test("long overlap traversal is lazy and supports early exit under high overlap") {
+    // The same core-free, high-overlap shape the boxed-family test above uses: the long
+    // walk must be lazy too, leaving pending spans on the stack after taking initial matches.
+    val n = 10000
+    val index = RangeRelationBroadcastMode(
+      Seq(BoundReference(0, LongType, nullable = true),
+        BoundReference(1, LongType, nullable = true)),
+      IntervalIndexKind)
+      .transform((0 until n).map(i => InternalRow(i.toLong, (i + 100).toLong)).toArray)
+      .asInstanceOf[LongIntervalIndex]
+    val iter = index.overlapping(5000L, 5000L).asInstanceOf[LongOverlapIterator]
+    val initialCapacity = iter.stackCapacity
+
+    assert(iter.take(3).size == 3)
+    assert(iter.pendingSpans > 0,
+      s"lazy traversal must leave work pending on the stack, but had ${iter.pendingSpans} spans")
+    assert(iter.stackCapacity == initialCapacity,
+      s"stack grew from $initialCapacity to ${iter.stackCapacity} after taking 3 of $n matches")
   }
 
   test("boolean keys take the long path and answer the same windows") {
