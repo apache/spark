@@ -6999,9 +6999,11 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitCheckConstraint(ctx: CheckConstraintContext): CheckConstraint =
     withOrigin(ctx) {
       val condition = getOriginalText(ctx.expr)
+      val child = expression(ctx.booleanExpression())
       CheckConstraint(
-        child = expression(ctx.booleanExpression()),
-        condition = condition)
+        child = child,
+        condition = condition,
+        hasParameterMarker = child.containsPattern(PARAMETER))
     }
 
 

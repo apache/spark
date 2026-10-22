@@ -171,11 +171,17 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
   }
 
   test("SPARK-60032: Check constraint added by ALTER TABLE reading the current time") {
-    // The check compares with the time of the write, not the time of the ALTER TABLE.
+    // The check compares with the time of the write, not the time of the ALTER TABLE. 'now' is
+    // read after the snapshot `current_timestamp()` takes, so only `<=` holds for a row written
+    // with `current_timestamp()`.
     Seq(
       ("TIMESTAMP", "current_timestamp()", "current_timestamp()", "INTERVAL 1 DAY"),
       ("TIMESTAMP", "CAST('now' AS TIMESTAMP)", "current_timestamp()", "INTERVAL 1 DAY"),
       ("TIMESTAMP", "to_timestamp('now')", "current_timestamp()", "INTERVAL 1 DAY"),
+      ("TIMESTAMP", "CAST('23:59:59.999999' AS TIMESTAMP)", "current_timestamp()",
+        "INTERVAL 1 DAY"),
+      ("TIMESTAMP", "CAST(TIME '23:59:59.999999' AS TIMESTAMP)", "current_timestamp()",
+        "INTERVAL 1 DAY"),
       ("TIMESTAMP_NTZ", "CAST('now' AS TIMESTAMP_NTZ)", "localtimestamp()", "INTERVAL 1 DAY"),
       ("DATE", "current_date()", "current_date()", "1"),
       ("DATE", "CAST('today' AS DATE)", "current_date()", "1")
@@ -185,6 +191,9 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
           withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
             sql(s"CREATE TABLE $t (id INT, created $dataType) $defaultUsing")
             sql(s"ALTER TABLE $t ADD CONSTRAINT valid_time CHECK (created <= $now)")
+            val check = getCheckConstraint(loadTable(nonPartitionCatalog, "ns", "tbl"))
+            assert(check.predicateSql() == s"created <= $now")
+            assert(check.predicate() == null, now)
 
             sql(s"INSERT INTO $t VALUES (1, $current)")
             checkAnswer(spark.table(t).select("id"), Seq(Row(1)))
@@ -204,7 +213,9 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
   test("SPARK-60032: Check constraint added by ALTER TABLE on a column qualified by the table") {
     // ALTER TABLE resolves `tbl.id` as the column `id` of the table `tbl`, not as the field `id` of
     // its struct column `tbl`. A write that parses `predicateSql` reads `tbl.id` as the field, so
-    // the test fails if this constraint is stored without a predicate.
+    // the test fails if this constraint is stored without a predicate. `nullif` has no V2 form
+    // before the optimizer replaces it, so the test also fails if the predicate is built from the
+    // analyzed condition.
     withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
       sql(s"CREATE TABLE $t (id BIGINT, tbl STRUCT<id: BIGINT>) $defaultUsing")
       sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK (nullif(tbl.id, 3) > 0)")
@@ -221,6 +232,81 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
           "expression" -> "nullif(tbl.id, 3) > 0",
           "values" -> " - id : -1"))
       checkAnswer(spark.table(t).select("id"), Seq(Row(3)))
+    }
+  }
+
+  test("SPARK-60032: Check constraint added by ALTER TABLE on a fixed datetime") {
+    // 'epoch' and a full datetime string do not read the current date, so the predicate is kept.
+    Seq(
+      "created >= CAST('epoch' AS TIMESTAMP)",
+      "created >= 'epoch'",
+      "created >= CAST('2020-01-01 00:00:00' AS TIMESTAMP)").foreach { cond =>
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        sql(s"CREATE TABLE $t (id INT, created TIMESTAMP) $defaultUsing")
+        sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK ($cond)")
+        assert(getCheckConstraint(loadTable(nonPartitionCatalog, "ns", "tbl")).predicate() != null,
+          cond)
+      }
+    }
+    // A write that parses `predicateSql` fails to resolve `tbl.created`, so this fails if the
+    // constraint is stored without a predicate.
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, created TIMESTAMP) $defaultUsing")
+      sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK (tbl.created >= 'epoch')")
+      sql(s"INSERT INTO $t VALUES (1, TIMESTAMP '2020-01-01 00:00:00')")
+      val error = intercept[SparkRuntimeException] {
+        sql(s"INSERT INTO $t VALUES (2, TIMESTAMP '1960-01-01 00:00:00')")
+      }
+      assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION")
+      checkAnswer(spark.table(t).select("id"), Seq(Row(1)))
+    }
+  }
+
+  test("SPARK-60032: Check constraint added by ALTER TABLE with a parameter marker") {
+    // Under the legacy parameter substitution, the marker stays in `predicateSql`, which a write
+    // cannot bind, so the constraint keeps the predicate built from the optimized plan. Otherwise
+    // the marker is substituted before parsing and the constraint is stored without a predicate.
+    Seq(true, false).foreach { legacy =>
+      withSQLConf(SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY.key -> legacy.toString) {
+        withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+          sql(s"CREATE TABLE $t (id INT, ts TIMESTAMP) $defaultUsing")
+          spark.sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK " +
+            "(ts >= current_timestamp() - make_interval(0, 0, 0, :d))", Map("d" -> 1))
+          val check = getCheckConstraint(loadTable(nonPartitionCatalog, "ns", "tbl"))
+          assert(check.predicateSql().contains(":d") == legacy, check.predicateSql())
+          assert((check.predicate() != null) == legacy, check.predicateSql())
+
+          sql(s"INSERT INTO $t VALUES (1, current_timestamp())")
+          val error = intercept[SparkRuntimeException] {
+            sql(s"INSERT INTO $t VALUES (2, current_timestamp() - INTERVAL 2 DAYS)")
+          }
+          assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION")
+          checkAnswer(spark.table(t).select("id"), Seq(Row(1)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-60032: Check constraint added by ALTER TABLE reading the current database") {
+    withNamespace(s"$nonPartitionCatalog.ns2") {
+      sql(s"CREATE NAMESPACE $nonPartitionCatalog.ns2")
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        withCurrentCatalogAndNamespace {
+          sql(s"CREATE TABLE $t (id INT, db STRING) $defaultUsing")
+          sql(s"USE $nonPartitionCatalog.ns")
+          sql(s"ALTER TABLE $t ADD CONSTRAINT valid_db CHECK (db = current_database())")
+          assert(getCheckConstraint(loadTable(nonPartitionCatalog, "ns", "tbl")).predicate() ==
+            null)
+
+          sql(s"USE $nonPartitionCatalog.ns2")
+          sql(s"INSERT INTO $t VALUES (1, 'ns2')")
+          val error = intercept[SparkRuntimeException] {
+            sql(s"INSERT INTO $t VALUES (2, 'ns')")
+          }
+          assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION")
+          checkAnswer(spark.table(t).select("id"), Seq(Row(1)))
+        }
+      }
     }
   }
 

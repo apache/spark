@@ -22,15 +22,16 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.codegen.{Block, CodegenContext, ExprCode, FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
-import org.apache.spark.sql.catalyst.optimizer.{ComputeCurrentTime, ReplaceExpressions, SpecialDatetimeValues}
+import org.apache.spark.sql.catalyst.optimizer.{ComputeCurrentTime, ReplaceExpressions}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern.{ANALYSIS_AWARE_EXPRESSION, CURRENT_LIKE, TreePattern}
-import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, V2ExpressionBuilder}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.expressions.FieldReference
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{AbstractDataType, BooleanType, DataType}
+import org.apache.spark.sql.types.{AbstractDataType, BooleanType, DataType, DateType, StringType, TimestampLTZNanosType, TimestampNTZType, TimestampType}
+import org.apache.spark.unsafe.types.UTF8String
 
 trait TableConstraint extends Expression with Unevaluable {
   /** Convert to a data source v2 constraint */
@@ -123,7 +124,8 @@ case class CheckConstraint(
     override val userProvidedName: String = null,
     override val tableName: String = null,
     override val userProvidedCharacteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty,
-    analyzedChild: Option[Expression] = None)
+    hasParameterMarker: Boolean = false,
+    readsCurrentContext: Boolean = false)
   extends UnaryExpression
   with TableConstraint
   with ImplicitCastInputTypes
@@ -134,16 +136,22 @@ case class CheckConstraint(
 
   override def inputTypes: Seq[AbstractDataType] = Seq(BooleanType)
 
-  override def stringArgs: Iterator[Any] =
-    Iterator(child, condition, userProvidedName, tableName, userProvidedCharacteristic)
-
-  override def markAsAnalyzed(): CheckConstraint = copy(analyzedChild = Some(child))
+  // Under the legacy parameter substitution, a parameter marker stays in `condition`, which a write
+  // cannot bind, so a condition with one keeps the predicate built from the optimized plan, as
+  // before.
+  override def markAsAnalyzed(): CheckConstraint = copy(
+    readsCurrentContext = !hasParameterMarker && CheckConstraint.readsCurrentContext(child))
 
   // ALTER TABLE builds the constraint from the optimized plan, where the current time, date,
   // catalog, user and the like are replaced by their values at the time of the ALTER TABLE. A
-  // condition that reads one is stored without a predicate, so that writes check `predicateSql`.
+  // condition that `readsCurrentContext` finds reading one is stored without a predicate, so that
+  // writes check `predicateSql`.
+  // The predicate is not built from the analyzed condition, as the default value of a column is,
+  // because `V2ExpressionBuilder` folds `CAST('today' AS DATE)` there as an ordinary cast. CREATE
+  // and REPLACE TABLE convert their constraints before analysis finishes, while
+  // `readsCurrentContext` is still false.
   def toV2Constraint: Constraint = {
-    val predicate = if (analyzedChild.exists(readsCurrentContext)) {
+    val predicate = if (readsCurrentContext) {
       null
     } else {
       new V2ExpressionBuilder(child, true).buildPredicate().orNull
@@ -158,17 +166,6 @@ case class CheckConstraint(
       .enforced(enforced)
       .validationStatus(Constraint.ValidationStatus.VALID)
       .build()
-  }
-
-  /**
-   * Whether the rules that compute the current time, date, catalog and the like change part of `e`,
-   * applied to `e` as the optimizer has it, with its `RuntimeReplaceable`s replaced.
-   */
-  private def readsCurrentContext(e: Expression): Boolean = {
-    val replaced = ReplaceExpressions.replace(e)
-    replaced.containsPattern(CURRENT_LIKE) ||
-      (ComputeCurrentTime.applyForExpression(replaced) ne replaced) ||
-      (SpecialDatetimeValues.applyForExpression(replaced) ne replaced)
   }
 
   override protected def withNewChildInternal(newChild: Expression): Expression =
@@ -197,6 +194,40 @@ case class CheckConstraint(
       )
     }
     copy(userProvidedCharacteristic = c)
+  }
+}
+
+object CheckConstraint {
+  /**
+   * Whether `e`, with its `RuntimeReplaceable`s replaced, reads the current time, date, catalog,
+   * user and the like, which the optimizer replaces with their values. The CURRENT_LIKE pattern
+   * stands in for `ReplaceCurrentLike`, which needs a `CatalogManager`, and for the functions
+   * `ComputeCurrentTime` replaces. `ComputeCurrentTime` is still applied for the casts from TIME
+   * to a timestamp it rewrites, which carry no CURRENT_LIKE bit.
+   */
+  private def readsCurrentContext(e: Expression): Boolean = {
+    val replaced = ReplaceExpressions.replace(e)
+    replaced.containsPattern(CURRENT_LIKE) ||
+      (ComputeCurrentTime.applyForExpression(replaced) ne replaced) ||
+      replaced.exists {
+        case Cast(s, to, _, _) if s.foldable && s.dataType.isInstanceOf[StringType] =>
+          val v = s.eval()
+          v != null && castReadsCurrentDate(v.asInstanceOf[UTF8String], to)
+        case _ => false
+      }
+  }
+
+  /**
+   * Whether casting `s` to `to` reads the current date: `s` is 'now', 'today', 'tomorrow' or
+   * 'yesterday', which `SpecialDatetimeValues` replaces ('epoch' is a fixed value), or `s` has only
+   * a time part, which a cast to a timestamp with local time zone completes with the current date.
+   */
+  private def castReadsCurrentDate(s: UTF8String, to: DataType): Boolean = to match {
+    case DateType | TimestampNTZType => DateTimeUtils.isCurrentSpecialValue(s.toString)
+    case TimestampType =>
+      DateTimeUtils.isCurrentSpecialValue(s.toString) || DateTimeUtils.isTimeOnlyTimestamp(s)
+    case _: TimestampLTZNanosType => DateTimeUtils.isTimeOnlyTimestamp(s)
+    case _ => false
   }
 }
 

@@ -75,8 +75,10 @@ public class Check extends BaseConstraint {
 
   /**
    * Returns the search condition as a {@link Predicate}, or {@code null} if the condition cannot be
-   * expressed using supported predicate expressions. Use {@link #predicateSql()} for the canonical
-   * SQL representation, which is always present.
+   * expressed using supported predicate expressions. Spark may also leave it {@code null} for a
+   * condition that reads the current time, date, catalog, user and the like, so that each write
+   * evaluates it from {@link #predicateSql()}. Use {@link #predicateSql()} for the canonical SQL
+   * representation, which is always present.
    */
   public Predicate predicate() {
     return predicate;

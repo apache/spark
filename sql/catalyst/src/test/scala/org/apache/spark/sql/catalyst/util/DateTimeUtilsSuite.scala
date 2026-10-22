@@ -1103,6 +1103,21 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
+  test("SPARK-60032: special values and time-only strings that read the current date") {
+    Seq("now", " Today ", "TOMORROW", "yesterday", "tomorrow CET").foreach { s =>
+      assert(isCurrentSpecialValue(s), s)
+    }
+    Seq("epoch", "Epoch", "now UTC", "2020-01-01", "12:00:00", "").foreach { s =>
+      assert(!isCurrentSpecialValue(s), s)
+    }
+    Seq("12:00:00", " 23:59:59.999999 ", "T12:00", "12:00:00 UTC").foreach { s =>
+      assert(isTimeOnlyTimestamp(UTF8String.fromString(s)), s)
+    }
+    Seq("2020-01-01 12:00:00", "2020-01-01", "now", "", "abc").foreach { s =>
+      assert(!isTimeOnlyTimestamp(UTF8String.fromString(s)), s)
+    }
+  }
+
   test("parsing day of week") {
     assert(getDayOfWeekFromString(UTF8String.fromString("THU")) == 0)
     assert(getDayOfWeekFromString(UTF8String.fromString("MONDAY")) == 4)
