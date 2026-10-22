@@ -646,6 +646,14 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               s"Cannot resolve the runtime replaceable expression ${toSQLExpr(e)}. " +
               s"The replacement is unresolved: ${toSQLExpr(e.replacement)}.")
 
+          // Only the Spark Connect planner creates UnresolvedPlanId (a DataFrame subquery by plan
+          // id), and only its WithRelations transform resolves it. A survivor usually means the
+          // client never attached the referenced plan to the request, so report an invalid Spark
+          // Connect plan. If the planner analyzes the plan before substituting an attached plan
+          // id, it rethrows this error as an INTERNAL_ERROR.
+          case u: UnresolvedPlanId =>
+            throw QueryCompilationErrors.subqueryPlanNotAttached(u)
+
           // `Grouping` and `GroupingID` are considered as of having lower priority than the other
           // nodes which cause errors.
           case g: Grouping =>
