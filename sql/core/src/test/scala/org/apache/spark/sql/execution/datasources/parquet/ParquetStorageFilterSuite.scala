@@ -1068,7 +1068,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     }
   }
 
-  test("a join's runtime bloom takes a condition over its key on the fact side with it") {
+  test("a LEFT OUTER JOIN applies a condition on the fact side's join key with its runtime bloom") {
     // The fact side of a LEFT OUTER JOIN filters on its join key in a derived table. The
     // optimizer does not infer that condition onto the side the bloom is built from, so the bloom
     // keeps keys 0 until 20 while the condition keeps only every fourth of them. With both in the

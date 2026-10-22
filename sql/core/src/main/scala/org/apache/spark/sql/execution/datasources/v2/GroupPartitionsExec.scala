@@ -75,14 +75,18 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
  *                         [[REPLICATED_FOR_JOIN]] groups the splits first and repeats each group
  *                         into its expected slots, and `None` groups them, one partition per key.
  *                         See [[UngroupingOrigin]].
- * @param enableSortedMerge When true, uses [[SortedMergeCoalescedRDD]] to perform a k-way merge
- *                          of the coalesced partitions, preserving the child's output ordering
- *                          end-to-end. Set by [[EnsureRequirements]] when a parent operator
- *                          requires the ordering that this node can satisfy via sorted merge.
- *                          This flag is the decision, not a hint. Nothing below re-reads the
- *                          config that produced it. A node planned with the merge would otherwise
- *                          concatenate instead, and a sort-merge join above it would lose rows
- *                          (SPARK-59279).
+ * @param sortedMergeOrdering When set, uses [[SortedMergeCoalescedRDD]] to perform a k-way merge
+ *                            of the coalesced partitions by this ordering, preserving it
+ *                            end-to-end. Set by [[EnsureRequirements]] when a parent operator
+ *                            requires the ordering that this node can satisfy via sorted merge.
+ *                            This is the decision, not a hint. Nothing below re-reads the config
+ *                            that produced it. A node planned with the merge would otherwise
+ *                            concatenate instead, and a sort-merge join above it would lose rows
+ *                            (SPARK-59279). The ordering is captured from the child when the merge
+ *                            is decided. That is the ordering the parent's requirement was checked
+ *                            against. The child's ordering can follow a config too, so a later
+ *                            read could merge by a shorter or empty one (SPARK-60044). The
+ *                            captured ordering is never empty.
  */
 case class GroupPartitionsExec(
     child: SparkPlan,
@@ -93,7 +97,7 @@ case class GroupPartitionsExec(
     @transient expectedKeyCount: Option[Int],
     @transient reducers: Option[Seq[Option[KeyReducer]]],
     @transient ungroupingOrigin: Option[UngroupingOrigin],
-    @transient enableSortedMerge: Boolean
+    @transient sortedMergeOrdering: Option[Seq[SortOrder]]
   ) extends UnaryExecNode {
 
   /**
@@ -234,8 +238,8 @@ case class GroupPartitionsExec(
   // not the one belonging to the just-exhausted partition. If that last sorter is still being
   // actively read by another partition in the k-way merge, freeing it causes a use-after-free.
   //
-  // To be conservative, we use a whitelist: unknown node types fall through to unsafe, causing
-  // a fallback to simple sequential coalescing. Only node types explicitly confirmed to store no
+  // To be conservative, we use a whitelist. An unknown node type counts as unsafe, so the merge
+  // is not planned and the node concatenates. Only node types explicitly confirmed to store no
   // per-partition state in shared (plan node) instance fields are permitted.
   //
   // --- Interaction with late plan-tree mutations ---
@@ -246,33 +250,47 @@ case class GroupPartitionsExec(
   // such change mints a fresh node through `withNewChildInternal`, so this is recomputed against
   // the new child. The correctness of this code relies on all such insertable nodes
   // (WholeStageCodegenExec, InputAdapter, ColumnarToRowExec) being in the SafeForKWayMerge
-  // whitelist so the evaluation stays consistent.
+  // whitelist so the evaluation stays consistent. So is the `DebugExec` that the `debug()` helper
+  // (`org.apache.spark.sql.execution.debug`) wraps every node in without AQE. A rule that breaks
+  // this under a planned merge fails the query at execution, see `checkPlannedMergeRuns`.
   @transient private lazy val childIsSafeForKWayMerge: Boolean =
     !child.exists {
       case _: SafeForKWayMerge => false
       case _ => true
     }
 
-  /** Whether a k-way merge would work at all, leaving aside whether it is switched on. */
-  @transient private lazy val kWayMergeIsFeasible: Boolean =
-    child.outputOrdering.nonEmpty && childIsSafeForKWayMerge
+  // A merge by an empty ordering would run but sort nothing.
+  require(sortedMergeOrdering.forall(_.nonEmpty), "A k-way merge needs an ordering to merge by")
 
-  /** Whether this node performs the k-way merge. No config term, see `enableSortedMerge`. */
-  @transient private lazy val usesSortedMerge: Boolean =
-    enableSortedMerge && hasCoalescing && kWayMergeIsFeasible
+  /**
+   * Whether the k-way merge was planned for this node. See `sortedMergeOrdering`. Driver-only, like
+   * the other accessors of `@transient` fields: a deserialized copy holds no ordering.
+   */
+  def enableSortedMerge: Boolean = sortedMergeOrdering.isDefined
+
+  /** Whether this node was planned to k-way merge partitions it coalesces. */
+  @transient private lazy val mergeIsPlanned: Boolean = enableSortedMerge && hasCoalescing
+
+  /** Whether this node performs the k-way merge. No config term, see `sortedMergeOrdering`. */
+  @transient private lazy val usesSortedMerge: Boolean = mergeIsPlanned && childIsSafeForKWayMerge
 
   /**
    * Returns a copy of this node with k-way merge enabled, when the config is on, this node
-   * coalesces partitions and the merge is feasible. The only read of
-   * `preserveOrderingOnCoalesce`.
+   * coalesces partitions, the child reports an ordering and its subtree is safe for the merge. The
+   * only read of `preserveOrderingOnCoalesce`. The copy keeps the ordering checked here, see
+   * `sortedMergeOrdering`. A node that already merges is left as it is, so the merge is decided
+   * once.
    */
   def tryEnableSortedMerge(): Option[GroupPartitionsExec] = {
-    Option.when(conf.v2BucketingPreserveOrderingOnCoalesceEnabled && hasCoalescing &&
-        kWayMergeIsFeasible) {
-      val newGroupPartitions = copy(enableSortedMerge = true)
-      newGroupPartitions.copyTagsFrom(this)
-      newGroupPartitions
-    }
+    // The ordering is read once, so the ordering frozen is the one checked.
+    Option.when(!enableSortedMerge && conf.v2BucketingPreserveOrderingOnCoalesceEnabled &&
+        hasCoalescing && childIsSafeForKWayMerge)(child.outputOrdering)
+      .filter(_.nonEmpty)
+      .map { ordering =>
+        val newGroupPartitions = copy(sortedMergeOrdering = Some(ordering))
+        newGroupPartitions.copyTagsFrom(this)
+        newGroupPartitions
+      }
   }
 
   /**
@@ -282,7 +300,7 @@ case class GroupPartitionsExec(
    * serialized with the RDD in every task -- is dropped.
    */
   private[v2] def kWayMergeOrdering: Seq[SortOrder] =
-    child.outputOrdering.map(_.copy(sameOrderExpressions = Seq.empty))
+    sortedMergeOrdering.get.map(_.copy(sameOrderExpressions = Seq.empty))
 
   private def sendDriverMetrics(): Unit = {
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
@@ -337,8 +355,25 @@ case class GroupPartitionsExec(
     }
   }
 
+  /**
+   * Fails a planned merge that would not run. The parent's required ordering was checked against
+   * the merge, so no sort was added above it. A rule after `EnsureRequirements` can still put a
+   * node outside the `SafeForKWayMerge` whitelist below this one. This node would then concatenate
+   * and hand the parent unsorted rows. No built-in rule does that, see `childIsSafeForKWayMerge`.
+   * Like `checkChildStillMatches`, this makes the failure explicit if one starts.
+   */
+  private def checkPlannedMergeRuns(): Unit = {
+    if (mergeIsPlanned && !childIsSafeForKWayMerge) {
+      val blocker = child.find(!_.isInstanceOf[SafeForKWayMerge]).map(_.nodeName)
+      throw SparkException.internalError(
+        "GroupPartitionsExec was planned with a k-way merge, but its child holds " +
+          s"${blocker.getOrElse("a node")}, which does not mix in SafeForKWayMerge")
+    }
+  }
+
   override protected def doExecute(): RDD[InternalRow] = {
     checkChildStillMatches()
+    checkPlannedMergeRuns()
     sendDriverMetrics()
     if (groupedPartitions.isEmpty) {
       sparkContext.emptyRDD
@@ -356,10 +391,17 @@ case class GroupPartitionsExec(
     }
   }
 
-  override def supportsColumnar: Boolean = child.supportsColumnar && !usesSortedMerge
+  // The columnar path never merges, so a planned merge stays row-based. That is decided by the plan
+  // rather than by the live child, so the columnar transition lands below the node, and `doExecute`
+  // either merges or fails in `checkPlannedMergeRuns`.
+  override def supportsColumnar: Boolean = child.supportsColumnar && !mergeIsPlanned
 
   override protected def doExecuteColumnar(): RDD[ColumnarBatch] = {
     checkChildStillMatches()
+    if (mergeIsPlanned) {
+      throw SparkException.internalError(
+        "GroupPartitionsExec was planned with a k-way merge, which the columnar path cannot run")
+    }
     sendDriverMetrics()
     if (groupedPartitions.isEmpty) {
       sparkContext.emptyRDD
@@ -377,29 +419,32 @@ case class GroupPartitionsExec(
   override def outputOrdering: Seq[SortOrder] = {
     if (!hasCoalescing) {
       // No coalescing: each output partition is exactly one input partition. The child's
-      // within-partition ordering is fully preserved (including any key-derived ordering that
-      // `DataSourceV2ScanExecBase` already prepended).
+      // within-partition ordering is fully preserved, including an ordering that
+      // `DataSourceV2ScanExecBase` derives from the partition keys.
       child.outputOrdering
     } else if (usesSortedMerge) {
-      // Coalescing with sorted merge: SortedMergeCoalescedRDD performs a k-way merge using the
-      // child's ordering, so the full within-partition ordering is preserved end-to-end.
-      child.outputOrdering
+      // Coalescing with sorted merge: SortedMergeCoalescedRDD performs a k-way merge by the
+      // planned ordering, so that ordering is preserved end-to-end. See `sortedMergeOrdering`.
+      sortedMergeOrdering.get
     } else {
       // Coalescing: multiple input partitions are merged into one output partition. The child's
       // within-partition ordering is lost due to concatenation -- for example, if two input
       // partitions both share key=A and hold rows (A,1),(A,3) and (A,2),(A,5) respectively (each
       // sorted ascending by the data column), concatenating them yields (A,1),(A,3),(A,2),(A,5)
-      // which is no longer sorted by the data column. Only sort orders over partition key
-      // expressions remain valid -- they evaluate to the same value (A) in every merged partition.
+      // which is no longer sorted by the data column. For unmarked layouts without reducers, sort
+      // orders over partition keys remain valid: they evaluate to the same value in each partition.
       //
-      // The config below stays a per-call read. It gates only whether to report an ordering that
-      // holds either way, so a late read can never claim more than this node delivers. The merge
-      // config is different, because what it gates changes what this node produces.
+      // The config below and the child's ordering stay per-call reads. They only change how much
+      // of an ordering that holds either way is reported. So a late read can never claim more
+      // than this node delivers. The merge is different, because its config and its ordering
+      // change what this node produces. It reads the config once and freezes the ordering when it
+      // is planned, see `sortedMergeOrdering`.
       outputPartitioning match {
         case p: Partitioning with Expression
-            if reducers.isEmpty && conf.v2BucketingPreserveKeyOrderingOnCoalesceEnabled =>
-          // Without reducers all merged partitions share the same original key value, so the sort
-          // orders on key expressions still hold. The transform keys match nothing here, since
+            if reducers.isEmpty && conf.v2BucketingPreserveKeyOrderingOnCoalesceEnabled &&
+              PartitioningCollection.keyedUnknownKeysOf(p).isEmpty =>
+          // Undeclared rows can have different key values within a merged partition.
+          // Unmarked layouts without reducers keep key orders. Transform keys match nothing here:
           // `DataSourceV2ScanExecBase.outputOrdering` drops every sort order over a transform.
           val keyedPartitionings = p.collect { case k: KeyedPartitioning => k }
           val keyExprs = ExpressionSet(keyedPartitionings.flatMap(_.expressions))
@@ -428,14 +473,22 @@ case class GroupPartitionsExec(
    * `plannedPartitioning` are decided for one child's partitioning, so a node handed another has to
    * be decided again over it.
    *
-   * Rebuilding is all this does: what the operator above reads, the ordering it was planned
-   * against included, is the caller's to hold, since nothing here knows what that operator
-   * requires.
+   * A merging node is turned away. Its frozen `sortedMergeOrdering` was checked against this node's
+   * child, not against `newChild`. No merging node reaches this path today. The only caller,
+   * `CombineAdjacentAggregation`, asks a node whose child holds the partial aggregate. An aggregate
+   * is not `SafeForKWayMerge`, so that node never merges.
+   *
+   * Rebuilding is all this does. Nothing here knows what the operator above requires, so checking
+   * that the rebuilt node still meets it is the caller's job.
    */
   def withKeyPositionsFor(newChild: SparkPlan): Option[GroupPartitionsExec] = {
     // An aligned node's slot order comes from the parent distribution rather than the child, so the
     // factory cannot re-decide it for `newChild`.
     if (expectedKeyCount.isDefined) {
+      return None
+    }
+    // The frozen merge ordering was checked against this node's child, not against `newChild`.
+    if (enableSortedMerge) {
       return None
     }
     // `grouping` indexes the partitions of the child this node was decided for, and the positions
@@ -466,8 +519,7 @@ case class GroupPartitionsExec(
           child = newChild,
           joinKeyPositions = Option.when(positions != newChildKp.expressions.indices)(positions),
           reducers = reducers,
-          ungroupingOrigin = ungroupingOrigin,
-          enableSortedMerge = enableSortedMerge)
+          ungroupingOrigin = ungroupingOrigin)
         regrouped.copyTagsFrom(this)
         Some(regrouped)
       case _ => None
@@ -480,20 +532,22 @@ case class GroupPartitionsExec(
 
   override protected def stringArgs: Iterator[Any] = planSummaryParts(Int.MaxValue)
 
-  private def planSummaryParts(joinKeyMaxFields: Int): Iterator[String] = {
+  private def planSummaryParts(maxFields: Int): Iterator[String] = {
     val joinKeyStr = joinKeyPositions.map { p =>
-      s"JoinKeyPositions: ${truncatedString(p, "[", ", ", "]", joinKeyMaxFields)}"
+      s"JoinKeyPositions: ${truncatedString(p, "[", ", ", "]", maxFields)}"
     }.iterator
     val expectedStr = expectedKeyCount.map(n => s"ExpectedPartitionKeys: $n")
     val reducersStr = reducers.map { seq =>
       val names = seq.map(_.map(_.reducer.displayName()).getOrElse("identity"))
-      s"Reducers: ${truncatedString(names, "[", ", ", "]", joinKeyMaxFields)}"
+      s"Reducers: ${truncatedString(names, "[", ", ", "]", maxFields)}"
     }
     val distributeStr = Iterator(s"DistributePartitions: $distributePartitions")
-    // Rendered from the constructor field, as `DistributePartitions` above is, and not from
-    // `usesSortedMerge`, which reads the child's ordering. This method feeds `simpleString`, which
-    // `treeString` calls on error paths, so it stays on what the node was built with.
-    val sortedMergeStr = Iterator(s"SortedMerge: $enableSortedMerge")
+    // Rendered from the constructor field `sortedMergeOrdering`, as `DistributePartitions` above
+    // is. `usesSortedMerge` would walk the child. This method feeds `simpleString`, which
+    // `treeString` calls on error paths, so it stays on what the node was built with. The
+    // ordering is shown since it can differ from the one the child reports now.
+    val sortedMergeStr = Iterator("SortedMerge: " +
+      sortedMergeOrdering.fold("false")(truncatedString(_, "[", ", ", "]", maxFields)))
     joinKeyStr ++ expectedStr ++ reducersStr ++ distributeStr ++ sortedMergeStr
   }
 }
@@ -513,6 +567,9 @@ case class GroupPartitionsExec(
  *                   claim into a different key space or changes the modulus. A reducer slot counts
  *                   as key-changing even where a conforming self-reducer could not rewrite a
  *                   reachable key value, so the give-up there loses at most an optimization.
+ * @param keysRewritten whether the grouping re-labels the groups, by projecting the keys onto
+ *                      cluster-key positions or by reducing them, so an undeclared row is grouped
+ *                      under the image of a key the clustering does not read.
  * @param numPrunedPartitions the alignment's effect on the reads of the child's splits, 0 outside
  *                            the alignment path. See `alignToExpectedKeys`.
  * @param numReplicatedPartitionReads as above.
@@ -521,6 +578,7 @@ private[sql] case class PartitionGrouping(
     partitions: Seq[(InternalRowComparableWrapper, Seq[Int])],
     layout: KeyLayout,
     isIdentity: Boolean,
+    keysRewritten: Boolean,
     numPrunedPartitions: Int,
     numReplicatedPartitionReads: Int) {
 
@@ -534,8 +592,10 @@ private[sql] object GroupPartitionsExec {
    *
    * **Both are derived, and neither `copy` nor the generated `apply` re-derives them**, so a change
    * to `child`, `joinKeyPositions`, `expectedPartitionKeys` (stored as `expectedKeyCount`),
-   * `reducers` or `ungroupingOrigin` has to come back through here. `enableSortedMerge` is not
-   * an input to either, which is why `tryEnableSortedMerge` may `copy` it.
+   * `reducers` or `ungroupingOrigin` has to come back through here. `sortedMergeOrdering` is not
+   * an input to either, which is why `tryEnableSortedMerge` may `copy` it. That is the only place
+   * the ordering is captured from the child. This factory takes it as given, so a rebuild passes
+   * on the one the node it replaces holds.
    *
    * Two other `copy` calls in this file are deliberate. `withNewChildInternal` carries both fields
    * over a child rewrite, and a child that turns out to report something else is what
@@ -549,7 +609,7 @@ private[sql] object GroupPartitionsExec {
       expectedPartitionKeys: Option[Seq[(InternalRowComparableWrapper, Int)]] = None,
       reducers: Option[Seq[Option[KeyReducer]]] = None,
       ungroupingOrigin: Option[UngroupingOrigin] = None,
-      enableSortedMerge: Boolean = false): GroupPartitionsExec = {
+      sortedMergeOrdering: Option[Seq[SortOrder]] = None): GroupPartitionsExec = {
     // There must be a `KeyedPartitioning` in the child's output partitioning, as a
     // `GroupPartitionsExec` node is added to a plan only in that case.
     val childPartitioning = child.outputPartitioning
@@ -561,9 +621,11 @@ private[sql] object GroupPartitionsExec {
     val grouping = computeGrouping(
       childKp, joinKeyPositions, expectedPartitionKeys, reducers, ungroupingOrigin)
     GroupPartitionsExec(child, grouping,
-      computeOutputPartitioning(childExpr, grouping, joinKeyPositions, reducers),
+      computeOutputPartitioning(
+        childExpr, grouping, joinKeyPositions, reducers,
+        hasExpectedKeys = expectedPartitionKeys.isDefined),
       childPartitioning, joinKeyPositions, expectedPartitionKeys.map(_.size), reducers,
-      ungroupingOrigin, enableSortedMerge)
+      ungroupingOrigin, sortedMergeOrdering)
   }
 
   /**
@@ -576,7 +638,8 @@ private[sql] object GroupPartitionsExec {
       p: Partitioning with Expression,
       grouping: PartitionGrouping,
       joinKeyPositions: Option[Seq[Int]],
-      reducers: Option[Seq[Option[KeyReducer]]]): Partitioning = {
+      reducers: Option[Seq[Option[KeyReducer]]],
+      hasExpectedKeys: Boolean): Partitioning = {
     // There can be multiple `KeyedPartitioning`s in an output partitioning of a join, but they
     // can only differ in `expressions`, since they share one `KeyLayout` (enforced by
     // `PartitioningCollection`). So the grouping is computed once, and the layout it describes
@@ -587,18 +650,20 @@ private[sql] object GroupPartitionsExec {
     // single-side-transform reducers; for the both-sides-reduce shape no single transform
     // describes the keys, so the reduce marks it (see `KeyedShuffleSpec.reducersBothWays`).
     //
-    // A marked claim pins undeclared rows to hash(key) % numPartitions (see [[KeyLayout]]'s
-    // `mayContainUnknownPartitionKeys`), and only an identity grouping keeps that relationship (see
-    // `PartitionGrouping.isIdentity`). Clearing the marker alone would misreport the undeclared
-    // rows that remain, so the keyed partitioning goes and only the physical output count is
-    // reported, one per group with padding included, which is the count a parent's
-    // `PartitioningCollection` needs for uniformity. `EnsureRequirements` asks this before it
-    // commits to a pairing and falls back to a shuffle when it happens.
+    // A marked layout keeps its keyed claim through a plain regrouping: coalescing the partitions
+    // that share a key leaves every key's rows, declared or not, in the group named for the
+    // declared key they reached, and full-key clustering is all a `ClusteredDistribution` reads.
+    // `computeGrouping` reports that layout as `ROUTING_LOST`, since the regrouping moved an
+    // undeclared key's group off `hash(key) % numPartitions`.
     //
-    // The marker read off `p` is the same bit the `else` branch publishes through
-    // `grouping.layout`, since `computeGrouping` copies the child's layout and carries the
-    // marker over. A change to that copy has to move this guard with it.
-    if (PartitioningCollection.keyedMarkerOf(p).contains(true) && !grouping.isIdentity) {
+    // A key rewrite or non-identity expected-key alignment re-labels or replicates the groups, so
+    // those shapes give the keyed claim up, and only the physical output count is reported, which
+    // is the count a parent's `PartitioningCollection` needs for uniformity.
+    //
+    // The state read off `p` is the one `computeGrouping` copies into `grouping.layout`; a change
+    // to that copy has to move this guard with it.
+    if (PartitioningCollection.keyedUnknownKeysOf(p).isDefined &&
+        (grouping.keysRewritten || (hasExpectedKeys && !grouping.isIdentity))) {
       UnknownPartitioning(grouping.partitions.size)
     } else {
       // One instance for every member, so they share it by reference. It already carries the
@@ -667,12 +732,23 @@ private[sql] object GroupPartitionsExec {
       val splits = keyMap.getOrElse(key, Seq.empty)
       numMatchedPartitions += splits.size
       if (distributePartitions) {
+        // `padTo` only pads, never truncates, so a key holding more splits than its expected
+        // count would be emitted more times than the count says, while `isGrouped` can still
+        // read as grouped. No producer does this today: under partial clustering the join split
+        // carries no reducers (`reducersBothWays` returns none), so it never merges keys and its
+        // counts match its splits, and the ordering split counts the same keys it groups. The
+        // assert surfaces any future miscount here instead of as a shuffle fallback at the
+        // `committed` gate in `EnsureRequirements` or as a bad grouped layout.
+        assert(splits.size <= numSplits,
+          s"a distributed partition key holds more splits (${splits.size}) than its expected " +
+            s"count ($numSplits)")
         // Distribute splits across expected partitions, padding with empty sequences
         val paddedSplits = splits.map(Seq(_)).padTo(numSplits, Seq.empty)
         paddedSplits.map((key, _))
       } else {
-        // The slots beyond the first re-read the whole group. A key this side does not hold
-        // has no splits to re-read, so the product is 0 and no explicit guard is needed.
+        // `Seq.fill(numSplits)` emits exactly `numSplits` entries whatever the split count, so this
+        // branch cannot over-emit and needs no size guard. The slots beyond the first re-read the
+        // whole group; a key this side does not hold has no splits to re-read, so the product is 0.
         numReplicatedPartitionReads += (numSplits - 1) * splits.size
         // Replicate all splits to each expected partition
         Seq.fill(numSplits)((key, splits))
@@ -761,13 +837,10 @@ private[sql] object GroupPartitionsExec {
         case ((_, Seq(single)), outputIndex) => single == outputIndex
         case _ => false
       }
-    // A `copy` of the child's layout rather than a fresh one, so the marker and anything the
-    // layout grows later are carried without this having to name them. The origin is the one
-    // field not carried: the output claims what this node's own producer stamped, never what
-    // the child's claimed, and only while the shape holds the claim -- a grouping that settles
-    // every key leaves nothing repeating, so it spends the claim the way `toGrouped` does.
-    // Built here, where the child is in scope, so `computeOutputPartitioning` has nothing left
-    // to re-apply.
+    // Copy the child's layout, deciding both origins explicitly. Only identity regrouping keeps
+    // unknown-key routing. Ungrouping uses this node's stamp, cleared when every key is grouped.
+    val unknownKeysOrigin =
+      if (isIdentity) childKp.layout.unknownKeysOrigin else childKp.layout.unknownKeysRoutingLost
     PartitionGrouping(
       partitions,
       childKp.layout.copy(
@@ -775,8 +848,9 @@ private[sql] object GroupPartitionsExec {
         dataTypes = reducedDataTypes,
         isGrouped = isGrouped,
         isCollapsed = isCollapsed,
+        unknownKeysOrigin = unknownKeysOrigin,
         ungroupingOrigin = if (isGrouped) None else ungroupingOrigin),
-      isIdentity, numPrunedPartitions, numReplicatedPartitionReads)
+      isIdentity, keysRewritten, numPrunedPartitions, numReplicatedPartitionReads)
   }
 }
 

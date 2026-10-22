@@ -461,6 +461,35 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
     )
   }
 
+  test("stream stream inner join preserves repeated subtraction terms") {
+    val leftInput = MemoryStream[(Int, Int)]
+    val rightInput = MemoryStream[(Int, Int)]
+    val left = leftInput.toDF().toDF("leftKey", "time")
+      .select($"leftKey", timestamp_seconds($"time").as("leftTime"))
+      .withWatermark("leftTime", "10 seconds")
+    val right = rightInput.toDF().toDF("rightKey", "time")
+      .select($"rightKey", timestamp_seconds($"time").as("rightTime"))
+      .withWatermark("rightTime", "10 seconds")
+    val joined = left.join(right, expr("leftKey = rightKey AND " +
+      "CAST(leftTime AS BIGINT) > CAST(rightTime AS BIGINT) - 2 - 2"))
+      .select($"leftKey", $"leftTime".cast("int"), $"rightTime".cast("int"))
+
+    testStream(joined)(
+      MultiAddData(leftInput, (1, 8))(rightInput, (1, 9)),
+      CheckNewAnswer((1, 8, 9)),
+      // Advance both input watermarks to 10s using keys that cannot match.
+      MultiAddData(leftInput, (2, 20))(rightInput, (3, 20)),
+      CheckNewAnswer(),
+      Execute { query =>
+        assert(query.lastProgress.eventTime.get("watermark") == "1970-01-01T00:00:10.000Z")
+      },
+      // The state cutoff is 10 - 2 - 2 = 6s. Deduplicating the constants gives 8s,
+      // evicting the left row even though it can still match an on-time right row.
+      AddData(rightInput, (1, 11)),
+      CheckNewAnswer((1, 8, 11))
+    )
+  }
+
   testWithAppendAndUpdate("stream stream inner join with time range - with watermark" +
       " - two side conditions") { outputMode =>
     import org.apache.spark.sql.functions._
@@ -546,6 +575,59 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
       CheckNewAnswer((1, 49, 50), (1, 50, 50)),
       assertNumStateRows(total = 7, updated = 1, droppedByWatermark = 1)   // 50 added
     )
+  }
+
+  private object MatchingScanArrival extends Enumeration {
+    val Together, LeftFirst, RightFirst, LeftRestart, RightRestart = Value
+  }
+
+  private object MatchingScanShape extends Enumeration {
+    val Between, Conjunction, FixedInterval = Value
+  }
+
+  for {
+    arrival <- MatchingScanArrival.values
+    shape <- MatchingScanShape.values
+  } {
+    test(s"stream stream inner join matching scan on event time, $arrival $shape") {
+      val leftInput = MemoryStream[(Int, Long)]
+      val rightInput = MemoryStream[(Int, Long)]
+      val left = leftInput.toDF().toDF("leftKey", "time")
+        .select($"leftKey", timestamp_millis($"time").as("leftTime"))
+        .withColumn("expiry", $"leftTime" + expr("INTERVAL 10 SECONDS"))
+        .withWatermark("leftTime", "60 seconds")
+      val right = rightInput.toDF().toDF("rightKey", "time")
+        .select($"rightKey", timestamp_millis($"time").as("rightTime"))
+        .withWatermark("rightTime", "60 seconds")
+      val range = shape match {
+        case MatchingScanShape.Between => "rightTime BETWEEN leftTime AND expiry"
+        case MatchingScanShape.Conjunction => "rightTime >= leftTime AND rightTime <= expiry"
+        case MatchingScanShape.FixedInterval =>
+          "rightTime BETWEEN leftTime AND leftTime + INTERVAL 10 SECONDS"
+      }
+      val joined = left.join(right, expr(s"leftKey = rightKey AND $range"))
+        .select(unix_millis($"rightTime") - 100000L)
+      val offsets = Seq(0L, 1L, 2L, 1000L, 5000L, 10000L)
+      // Include nonmatching rows immediately outside both inclusive boundaries.
+      val rows = (Seq(-1L) ++ offsets ++ Seq(10001L)).map(t => (1, 100000L + t))
+      val input = arrival match {
+        case MatchingScanArrival.Together =>
+          Seq(MultiAddData(leftInput, (1, 100000L))(rightInput, rows: _*))
+        case MatchingScanArrival.LeftFirst =>
+          Seq(AddData(leftInput, (1, 100000L)), CheckNewAnswer(),
+            AddData(rightInput, rows: _*))
+        case MatchingScanArrival.RightFirst =>
+          Seq(AddData(rightInput, rows: _*), CheckNewAnswer(),
+            AddData(leftInput, (1, 100000L)))
+        case MatchingScanArrival.LeftRestart =>
+          Seq(AddData(leftInput, (1, 100000L)), CheckNewAnswer(),
+            StopStream, StartStream(), AddData(rightInput, rows: _*))
+        case MatchingScanArrival.RightRestart =>
+          Seq(AddData(rightInput, rows: _*), CheckNewAnswer(),
+            StopStream, StartStream(), AddData(leftInput, (1, 100000L)))
+      }
+      testStream(joined)((input :+ CheckNewAnswer(offsets.map(Row(_)): _*)): _*)
+    }
   }
 
   testQuietly("stream stream inner join without equality predicate") {
@@ -2245,6 +2327,47 @@ abstract class StreamingFullOuterJoinSuite extends StreamingFullOuterJoinBase
 abstract class StreamingLeftSemiJoinBase extends StreamingJoinSuite {
 
   import testImplicits._
+
+  for (leftWatermark <- Seq(false, true); joinOnTime <- Seq(false, true)) {
+    test(s"left semi output watermark follows output event time: " +
+        s"left watermark=$leftWatermark, equality=$joinOnTime") {
+      val leftInput = MemoryStream[(Int, Int)]
+      val rightInput = MemoryStream[(Int, Int)]
+      val leftWithoutWatermark = leftInput.toDF()
+        .select($"_1".as("leftKey"), timestamp_seconds($"_2").as("leftTime"))
+      val left = if (leftWatermark) {
+        leftWithoutWatermark.withWatermark("leftTime", "0 seconds")
+      } else {
+        leftWithoutWatermark
+      }
+      val right = rightInput.toDF()
+        .select($"_1".as("rightKey"), timestamp_seconds($"_2").as("rightTime"))
+        .withWatermark("rightTime", "0 seconds")
+      val timeCondition = if (joinOnTime) {
+        "leftTime = rightTime"
+      } else {
+        "leftTime > rightTime - INTERVAL 5 SECONDS AND " +
+          "leftTime < rightTime + INTERVAL 30 SECONDS"
+      }
+      val joined = left.join(right, expr(s"leftKey = rightKey AND $timeCondition"), "left_semi")
+        .select($"leftKey", $"leftTime".cast("int"))
+      val expectedWatermark = if (leftWatermark) {
+        Some(if (joinOnTime) 120000L else 115000L)
+      } else {
+        None
+      }
+
+      testStream(joined)(
+        MultiAddData(leftInput, (1, 5))(rightInput, (1, 5)),
+        CheckNewAnswer((1, 5)),
+        Execute { query =>
+          val joinOperator = query.lastExecution.executedPlan.collect {
+            case j: StreamingSymmetricHashJoinExec => j
+          }.head
+          assert(joinOperator.produceOutputWatermark(120000L) === expectedWatermark)
+        })
+    }
+  }
 
   testWithAppendAndUpdate("windowed left semi join") { outputMode =>
     withTempDir { checkpointDir =>

@@ -205,6 +205,11 @@
         "message" : [
           "Unsupported as-of join direction '<direction>'. Supported as-of join direction include: <supported>."
         ]
+      },
+      "UNSUPPORTED_NEAREST_KEY_TYPE" : {
+        "message" : [
+          "Nearest sort-merge as-of joins do not support <dataType> keys. Cast the keys to a numeric or datetime type."
+        ]
       }
     },
     "sqlState" : "42604"
@@ -1656,6 +1661,11 @@
       "STRUCT_LITERAL_NOT_SET" : {
         "message" : [
           "Struct literal is not set."
+        ]
+      },
+      "SUBQUERY_PLAN_NOT_ATTACHED" : {
+        "message" : [
+          "The subquery plan referenced by plan id <planId> is not attached to the request."
         ]
       },
       "UDT_TYPE_FIELD_INVALID" : {
@@ -5227,6 +5237,11 @@
           "<sparkSubmitDeployModeKey> can only be \"cluster\" or \"client\"."
         ]
       },
+      "MISSING_IN_PROCESS_PYTHON_PLUGIN" : {
+        "message" : [
+          "In-process Python UDFs require <plugin>, or a subclass of it, in spark.plugins. Install JEP and Arrow CDI on executors and configure the plugin before starting Spark."
+        ]
+      },
       "NETWORK_AUTH_MUST_BE_ENABLED" : {
         "message" : [
           "<networkAuthEnabledConf> must be enabled when enabling encryption."
@@ -5245,6 +5260,11 @@
       "RESERVED_PYTHON_WORKER_ENV_VAR_NAME" : {
         "message" : [
           "The environment variable name <name>, set under <prefix>, is reserved for Spark. Names beginning with <reservedPrefixes>, and the names <reservedNames>, are set by Spark for its own Python workers and cannot be set by a session."
+        ]
+      },
+      "UNSUPPORTED_IN_PROCESS_PYTHON_UDF" : {
+        "message" : [
+          "In-process Python UDFs do not support <config>. Unset this configuration or use Python worker UDFs."
         ]
       }
     },
@@ -5820,6 +5840,12 @@
       "<functionName> could not evaluate the path <path>: the input is not valid JSON. This error was requested by the ERROR ON ERROR clause."
     ],
     "sqlState" : "2203G"
+  },
+  "JSON_OBJECT_NULL_KEY" : {
+    "message" : [
+      "JSON_OBJECT key must be a non-null string, but got a null key."
+    ],
+    "sqlState" : "22004"
   },
   "JSON_QUERY_ON_ERROR" : {
     "message" : [
@@ -6724,6 +6750,12 @@
       }
     },
     "sqlState" : "42846"
+  },
+  "PARQUET_FIELD_REQUESTED_MORE_THAN_ONCE" : {
+    "message" : [
+      "Requested fields <requestedFields> resolve to the same Parquet field <parquetField>, which can be read only once. When <fieldIdReadConf> is enabled, a requested field with a field ID is resolved by ID and any other requested field by name. Request the Parquet field only once, and refer to the resulting column more than once in the query instead."
+    ],
+    "sqlState" : "KD000"
   },
   "PARQUET_TYPE_ILLEGAL" : {
     "message" : [
@@ -8773,6 +8805,13 @@
     },
     "sqlState" : "42000"
   },
+  "UNSUPPORTED_AVRO_CHAR_VARCHAR_MAP_KEY" : {
+    "message" : [
+      "The Avro map key <key> is not a valid key for the map key type <dataType>.",
+      "A CHAR key must match the declared length exactly and a VARCHAR key must not exceed it; keys are never padded or trimmed. Use a STRING map key to accept any name."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_BUILT_IN_JDBC_DIALECT" : {
     "message" : [
       "`<name>` is not a supported built-in JDBC dialect. Supported dialects are: <supportedNames>."
@@ -9492,6 +9531,12 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_FILE_TYPE" : {
+    "message" : [
+      "The data type FILE is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_GENERATOR" : {
     "message" : [
       "The generator is not supported:"
@@ -9911,8 +9956,8 @@
   },
   "UNSUPPORTED_XML_CHAR_VARCHAR_MAP_KEY" : {
     "message" : [
-      "XML map keys of CHAR or VARCHAR cannot be padded or trimmed.",
-      "The key <key> is not valid for type <dataType>."
+      "The XML name <key> is not a valid key for the map key type <dataType>.",
+      "A CHAR key must match the declared length exactly and a VARCHAR key must not exceed it; keys are never padded or trimmed. Use a STRING map key to accept any name."
     ],
     "sqlState" : "0A000"
   },
@@ -10127,7 +10172,7 @@
   },
   "WINDOW_FUNCTION_PARTITION_SIZE_EXCEEDS_LIMIT" : {
     "message" : [
-      "Cannot evaluate the window function because the window partition has <numRows> rows, which exceeds the maximum of 2,147,483,647 (2^31 - 1) rows supported per window partition. Reduce the partition size, for example by adding more expressions to the PARTITION BY clause."
+      "Cannot evaluate the window function because the window partition has <numRows> rows, which exceeds the maximum of 2,147,483,647 (2^31 - 1) rows that at least one of its window functions supports per partition. Reduce the partition size, for example by adding more expressions to the PARTITION BY clause."
     ],
     "sqlState" : "54000"
   },
