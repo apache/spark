@@ -42,7 +42,7 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLe
   // See https://www.ibm.com/docs/en/db2/11.5?topic=functions-aggregate
   private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
     "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP") ++ distinctUnsupportedAggregateFunctions
-  private val supportedFunctions = supportedAggregateFunctions
+  private val supportedFunctions = supportedAggregateFunctions ++ Set("CHAR_READ_SIDE_PADDING")
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)

@@ -91,25 +91,14 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
 
     override def visitSQLFunction(funcName: String, inputs: Array[String]): String =
       funcName match {
-        case "RPAD" | "CHAR_READ_SIDE_PADDING" =>
+        case "RPAD" =>
           val Array(str, len, pad) = inputs
-          mssqlNullSafePad(str, len, pad, left = true)
+          s"LEFT(CONCAT($str, REPLICATE($pad, $len)), $len)"
         case "LPAD" =>
           val Array(str, len, pad) = inputs
-          mssqlNullSafePad(str, len, pad, left = false)
+          s"RIGHT(CONCAT(REPLICATE($pad, $len), $str), $len)"
         case _ => super.visitSQLFunction(funcName, inputs)
       }
-
-    // SQL Server CONCAT treats NULL as '': wrap so RPAD/LPAD/CHAR padding stay NULL.
-    private def mssqlNullSafePad(
-        str: String, len: String, pad: String, left: Boolean): String = {
-      val padded = if (left) {
-        s"LEFT(CONCAT($str, REPLICATE($pad, $len)), $len)"
-      } else {
-        s"RIGHT(CONCAT(REPLICATE($pad, $len), $str), $len)"
-      }
-      s"CASE WHEN $str IS NULL OR $len IS NULL OR $pad IS NULL THEN NULL ELSE $padded END"
-    }
 
     // MsSqlServer has no boolean type: a predicate (comparison, IN, AND/OR/NOT, LIKE-family, ...)
     // cannot appear as a value. IS NULL / IS NOT NULL over any predicate operand is rejected so

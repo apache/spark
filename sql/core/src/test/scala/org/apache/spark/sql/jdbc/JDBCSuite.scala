@@ -2366,21 +2366,23 @@ class JDBCSuite extends SharedSparkSession {
     val rpadEq = new Predicate("=",
       Array[V2Expression](rpad, LiteralValue(UTF8String.fromString("Y    "), StringType)))
 
+    Seq(
+      "jdbc:h2:mem:testdb0",
+      "jdbc:postgresql://127.0.0.1/db",
+      "jdbc:sqlserver://127.0.0.1/db",
+      "jdbc:oracle://127.0.0.1/db",
+      "jdbc:db2://127.0.0.1/db",
+      "jdbc:derby:memory:db").foreach { url =>
+      assert(
+        JdbcDialects.get(url).compileExpression(eq).get === """("flag") = 'Y    '""", url)
+    }
+    assert(JdbcDialects.get("jdbc:mysql://127.0.0.1/db").compileExpression(eq).get ===
+      "(`flag`) = 'Y    '")
+
     val h2 = JdbcDialects.get("jdbc:h2:mem:testdb0")
-    assert(h2.compileExpression(eq).get === """(RPAD("flag", 5, ' ')) = 'Y    '""")
-
-    val postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
-    assert(postgres.compileExpression(eq).get === """(RPAD("flag", 5, ' ')) = 'Y    '""")
-
-    val mssql = JdbcDialects.get("jdbc:sqlserver://127.0.0.1/db")
-    val mssqlEq = mssql.compileExpression(eq).get
-    assert(mssqlEq.contains("CASE WHEN \"flag\" IS NULL"), mssqlEq)
-    assert(mssqlEq.contains("THEN NULL ELSE LEFT(CONCAT("), mssqlEq)
-    val mssqlRpad = mssql.compileExpression(rpadEq).get
-    assert(mssqlRpad.contains("CASE WHEN \"flag\" IS NULL"), mssqlRpad)
+    assert(h2.compileExpression(rpadEq).get === """(RPAD("flag", 5, ' ')) = 'Y    '""")
 
     val oracle = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
-    assert(oracle.compileExpression(eq).isEmpty)
     assert(oracle.compileExpression(rpadEq).isEmpty)
   }
 

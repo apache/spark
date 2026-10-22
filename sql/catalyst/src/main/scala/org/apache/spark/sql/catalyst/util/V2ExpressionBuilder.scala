@@ -383,9 +383,9 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
         case _ =>
           None
       }
-    // CHAR scan padding is a JVM invoke. Emit CHAR_READ_SIDE_PADDING, not SQL RPAD: dialects
-    // and connectors must opt in, and RPAD truncates over-long values while readSidePadding
-    // keeps them. charTypeReadSideCheck stays local so length errors are not dropped.
+    // CHAR scan padding is a JVM invoke. Emit CHAR_READ_SIDE_PADDING, not SQL RPAD: JDBC
+    // compiles it as the column (CHAR is already padded). charTypeReadSideCheck stays
+    // local so length errors are not dropped.
     case invoke @ StaticInvoke(_, dataType, _, arguments, _, _, _, _, None)
         if isCharReadSidePaddingInvoke(invoke) =>
       generateExpressionWithNameByChildren(
@@ -475,8 +475,7 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
   }
 
   private def isCharReadSidePaddingInvoke(invoke: StaticInvoke): Boolean = {
-    SQLConf.get.pushDownCharReadSidePadding &&
-      invoke.scalarFunction.isEmpty &&
+    invoke.scalarFunction.isEmpty &&
       invoke.staticObject == classOf[CharVarcharCodegenUtils] &&
       invoke.functionName == CharVarcharUtils.READ_SIDE_PADDING &&
       invoke.arguments.length == 2

@@ -1930,9 +1930,6 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
         isPredicate = true).build().isEmpty,
         s"$name should not translate")
     }
-    withSQLConf(SQLConf.PUSH_DOWN_CHAR_READ_SIDE_PADDING.key -> "false") {
-      assert(new V2ExpressionBuilder(eq, isPredicate = true).build().isEmpty)
-    }
   }
 
   test("SPARK-59301: translate runtime IN filter") {

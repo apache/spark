@@ -34,7 +34,7 @@ private case class TeradataDialect() extends JdbcDialect with NoLegacyJDBCError 
   // scalastyle:on line.size.limit
   private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
     "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP", "COVAR_POP", "COVAR_SAMP", "CORR")
-  private val supportedFunctions = supportedAggregateFunctions
+  private val supportedFunctions = supportedAggregateFunctions ++ Set("CHAR_READ_SIDE_PADDING")
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
