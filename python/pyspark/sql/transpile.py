@@ -190,10 +190,9 @@ class AbstractTranspiler(object):
         (``"numeric"`` / ``"string"`` / ``"bool"`` / ``"binary"``) describing the
         option it built, which the caller uses in place of the combo.
 
-        Decline with plain ``None``, not a tuple. A malformed return -- a
-        non-Column, a wrong-length categories list, a tuple whose Column is
-        ``None`` -- is refused so the UDF falls back to interpreted Python
-        rather than breaking at call time.
+        Decline with plain ``None``, not a tuple; a malformed return is refused
+        so the UDF falls back to interpreted Python rather than breaking at
+        call time.
         """
         pass
 
@@ -1416,12 +1415,25 @@ def _variety_option(result: Any, combo: dict, num_params: int) -> Tuple[Column, 
     if isinstance(result, Column):
         return result, [combo.get(i, "numeric") for i in range(num_params)]
     if isinstance(result, tuple):
+        # Guard the shape before unpacking so a wrong-arity tuple reports a
+        # clear reason instead of an opaque "too many values to unpack".
+        if len(result) != 2:
+            raise UnsupportedOperationException(
+                f"transpiler returned a {len(result)}-element tuple; "
+                "expected (Column, list[str]) or None"
+            )
         column, categories = result
         # Declining is plain None; a None Column would surface a raw JVM NPE.
         if not isinstance(column, Column):
             raise UnsupportedOperationException(
                 "transpiler returned a (Column, list[str]) tuple whose first "
                 "element is not a Column; return None to decline"
+            )
+        # A non-list categories (e.g. a string) has a len and is iterable, so
+        # it would otherwise slip through as bogus per-char categories.
+        if not isinstance(categories, list):
+            raise UnsupportedOperationException(
+                "transpiler returned categories that are not a list"
             )
         # The JVM drops the WHOLE option set on a length mismatch, so a
         # wrong-length list would silently neuter every variety.
