@@ -5330,8 +5330,8 @@ class AdaptiveQueryExecSuite
     // against. `SnapshotUnionPreparationConf` has to run first, or the value the stamp reads
     // is whatever `conf` says by then rather than the one `EnsureRequirements` saw. Shuffle
     // push-down runs under that snapshot before the stamp fixes the rebuilt unions. An injected
-    // rule cannot land between these preparation rules. AQE builds its own list, and
-    // `UnionCodegenSuite` covers the one `QueryExecution` builds when AQE is off.
+    // rule cannot land between these preparation rules, but an edit to the list can. AQE builds
+    // its own list, and `UnionCodegenSuite` covers the one `QueryExecution` builds when AQE is off.
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
       // The repartition exchanges are what bring AQE in, with the aggregate's distribution
       // requirement as a second reason: `InsertAdaptiveSparkPlan` tests for either and leaves a
