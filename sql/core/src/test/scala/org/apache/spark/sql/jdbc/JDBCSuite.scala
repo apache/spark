@@ -54,6 +54,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 class JDBCSuite extends SharedSparkSession {
@@ -1432,7 +1433,6 @@ class JDBCSuite extends SharedSparkSession {
 
     // LIKE-family operators render with a trailing ESCAPE clause and must be delimited too.
     // LiteralValue for StringType must use UTF8String (Spark's internal string type).
-    import org.apache.spark.unsafe.types.UTF8String
     for ((op, pattern) <- Seq(
         "STARTS_WITH" -> "abc%", "ENDS_WITH" -> "%abc", "CONTAINS" -> "%abc%")) {
       val like = new Predicate(op,
@@ -2352,7 +2352,6 @@ class JDBCSuite extends SharedSparkSession {
 
   test("SPARK-60479: Oracle dialect compiles RPAD for CHAR filter pushdown") {
     val oracleDialect = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
-    import org.apache.spark.unsafe.types.UTF8String
     val rpad = new GeneralScalarExpression("RPAD",
       Array[V2Expression](
         FieldReference("PROD_VERSION_CURRENT"),
@@ -2370,7 +2369,6 @@ class JDBCSuite extends SharedSparkSession {
 
     // LiteralValue for StringType must use UTF8String (Spark's internal string type)
     // to match what V2ExpressionBuilder produces in the real pushdown path.
-    import org.apache.spark.unsafe.types.UTF8String
     def truncExpr(fmt: String): GeneralScalarExpression = new GeneralScalarExpression("TRUNC",
       Array[V2Expression](dateRef, LiteralValue(UTF8String.fromString(fmt), StringType)))
 

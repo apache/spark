@@ -381,11 +381,16 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
         case _ =>
           None
       }
-    // Read-side CHAR padding is a JVM StaticInvoke, not StringRPad. Map it to RPAD so JDBC/DSv2
-    // can push CHAR comparisons when spark.sql.readSideCharPadding is true (the default).
-    case invoke: StaticInvoke if isCharReadSidePadding(invoke) =>
-      generateExpression(
-        CharVarcharUtils.createStringRPad(invoke.arguments.head, invoke.arguments(1)),
+    // Scan CHAR padding is a JVM invoke; V2 only has RPAD. This matches local eval when the
+    // stored length is <= n (pad-or-keep then equals truncating RPAD). Over-long values would
+    // be truncated remotely. charTypeReadSideCheck is left untranslated so length errors stay
+    // local under spark.sql.charVarchar.standardSemantics.enabled.
+    case StaticInvoke(staticObject, dataType, "readSidePadding", arguments, _, _, _, _, None)
+        if staticObject == classOf[CharVarcharCodegenUtils] && arguments.length == 2 =>
+      generateExpressionWithNameByChildren(
+        "RPAD",
+        Seq(arguments.head, arguments(1), Literal.create(" ", arguments.head.dataType)),
+        dataType,
         isPredicate)
     case StaticInvoke(_, _, _, arguments, _, _, _, _, Some(scalarFunc)) =>
       val argumentExpressions = arguments.flatMap(generateExpression(_))
@@ -468,20 +473,6 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
       case "<=" => ">="
       case _ => operatorName
     }
-  }
-
-  /**
-   * CHAR scan padding from [[CharVarcharUtils.addPaddingForScan]]: `readSidePadding` when
-   * `spark.sql.readSideCharPadding` is on, and `charTypeReadSideCheck` under standard semantics.
-   * Both pad to the CHAR length; JDBC CHAR values already satisfy the length, so RPAD is a
-   * valid remote equivalent for filter pushdown.
-   */
-  private def isCharReadSidePadding(invoke: StaticInvoke): Boolean = {
-    invoke.scalarFunction.isEmpty &&
-      invoke.staticObject.getName == classOf[CharVarcharCodegenUtils].getName &&
-      (invoke.functionName == "readSidePadding" ||
-        invoke.functionName == "charTypeReadSideCheck") &&
-      invoke.arguments.length == 2
   }
 
   private def generateExpressionWithName(
