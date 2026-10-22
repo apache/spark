@@ -17,11 +17,53 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, HashPartitioning, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{CollectMetricsExec, DeserializeToObjectExec, FilterExec, ProjectExec, SortExec, SparkPlan}
-import org.apache.spark.sql.execution.exchange.{REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.{REPARTITION_BY_COL, REPARTITION_BY_NUM, ReusedExchangeExec, ShuffleExchangeExec}
 
 object AQEUtils {
+
+  /**
+   * Canonicalized forms of shuffle exchanges occurring more than once across the plan,
+   * materialized stages, and subquery plans -- flipping one of these loses stage reuse.
+   *
+   * Note: `ShuffleExchangeExec.pipelined` is a plain case-class field with no doCanonicalize
+   * override, so it PARTICIPATES in the canonical form. An already-flipped (pipelined = true)
+   * exchange and a structurally identical unflipped twin therefore canonicalize DIFFERENTLY and
+   * would not be paired here. The counts are taken over the CURRENT plan on each replanning
+   * round (and this rule does re-run in later rounds on a plan that may already contain an
+   * earlier round's flip -- it is NOT a before-any-flip pass). That is still safe: a flipped and
+   * an unflipped structural twin cannot coexist as a real duplicate, because reuse collapses
+   * twins (ReuseExchangeAndSubquery / ShuffleQueryStageExec) before this rule runs, and if one
+   * somehow slipped through, the DAGScheduler's fan-out check rejects a multi-consumer pipelined
+   * producer rather than producing wrong results. So missing such a pair here is fail-safe.
+   */
+  private[adaptive] def duplicatedShuffleForms(plan: SparkPlan): Set[SparkPlan] = {
+    val counts = mutable.HashMap.empty[SparkPlan, Int]
+    def count(exchange: ShuffleExchangeExec): Unit = {
+      val canonical = exchange.canonicalized
+      counts.update(canonical, counts.getOrElse(canonical, 0) + 1)
+    }
+    def visit(p: SparkPlan): Unit = p.foreach {
+      case exchange: ShuffleExchangeExec => count(exchange)
+      case stage: ShuffleQueryStageExec =>
+        stage.plan match {
+          case exchange: ShuffleExchangeExec => count(exchange)
+          case reused: ReusedExchangeExec =>
+            reused.child match {
+              case exchange: ShuffleExchangeExec => count(exchange)
+              case _ =>
+            }
+          case _ =>
+        }
+      case _ =>
+    }
+    visit(plan)
+    plan.subqueriesAll.foreach(visit)
+    counts.collect { case (exchange, copies) if copies > 1 => exchange }.toSet
+  }
 
   // Analyze the given plan and calculate the required distribution of this plan w.r.t. the
   // user-specified repartition.

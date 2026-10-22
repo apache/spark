@@ -149,10 +149,14 @@ case class AdaptiveSparkPlanExec(
       // decision under the same value the exchanges were planned against.
       new SnapshotUnionPreparationConf(unionConf),
       ensureRequirements,
+      // Must run after `EnsureRequirements`, whose exchanges it moves, and before
+      // `StampUnionDecisions`, which would freeze a rebuilt union's partitioning before the
+      // rewrite can take it. It shares the instance above, which carries the root distribution
+      // the rewrite must keep.
       PushDownShuffleExchangeThroughUnion(unionConf, ensureRequirements),
-      // Must run after `EnsureRequirements`: it fixes each `UnionExec`'s partitioning decision, so
-      // every rule below and the execution itself read the answer the exchanges above it were
-      // planned against.
+      // Must run after `EnsureRequirements` and the shuffle push-down: it fixes each `UnionExec`'s
+      // partitioning decision, so every rule below and the execution itself read the answer the
+      // exchanges above it were planned against.
       new StampUnionDecisions(unionConf),
       // This rule must be run after `EnsureRequirements`.
       InsertSortForLimitAndOffset,

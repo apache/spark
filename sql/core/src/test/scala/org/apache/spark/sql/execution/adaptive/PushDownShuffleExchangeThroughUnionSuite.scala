@@ -15,22 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution
+package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{
-  Alias, Ascending, Attribute, AttributeReference, GreaterThan, IsNotNull, Literal, Rand,
+  Alias, Ascending, Attribute, AttributeReference, ExprId, GreaterThan, IsNotNull, Literal, Rand,
   RowNumber, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical.{
   ClusteredDistribution, Distribution, HashPartitioning, NullAwareHashPartitioning, Partitioning,
   RoundRobinPartitioning, UnknownPartitioning}
-import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
+import org.apache.spark.sql.execution.{
+  FilterExec, InputAdapter, LocalLimitExec, ProjectExec, QueryExecution, ScalarSubquery, SortExec,
+  SparkPlan, StampUnionDecisions, SubqueryExec, UnaryExecNode, UnionConfSnapshot, UnionExec,
+  WholeStageCodegenExec}
 import org.apache.spark.sql.execution.exchange.{
-  ENSURE_REQUIREMENTS, EnsureRequirements, REPARTITION_BY_COL, ShuffleExchangeExec,
-  ValidateRequirements}
-import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
+  ENSURE_REQUIREMENTS, EnsureRequirements, REPARTITION_BY_COL, REPARTITION_BY_NUM,
+  ShuffleExchangeExec, ValidateRequirements}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.window.{Final => FinalWindowGroupLimit, Partial => PartialWindowGroupLimit, WindowGroupLimitExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -38,6 +41,10 @@ import org.apache.spark.sql.types.IntegerType
 
 class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
+
+  // The suite exercises the rule itself, so it is on for every test whatever the default is.
+  override protected def sparkConf =
+    super.sparkConf.set(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key, "true")
 
   private val query: String =
     """
@@ -49,8 +56,10 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
       |)
       |""".stripMargin
 
+  // A shuffle that moves a union as a whole, not one the rewrite puts under one of its children to
+  // lay that child out on the target.
   private def numShufflesOnUnion(plan: SparkPlan): Int =
-    plan.collect { case s: ShuffleExchangeExec if isUnionPlan(s.child) => s }.size
+    countShuffles(plan, underUnion = false) { s => isUnionPlan(s.child) }
 
   // The union may be wrapped in a `WholeStageCodegenExec` by `CollapseCodegenStages`, or in an
   // `InputAdapter` when it feeds a codegen'd parent, so look through both when checking whether
@@ -64,9 +73,19 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
 
   // A shuffle with a union anywhere below it, through the operators this rule can cross and the
   // codegen wrappers `CollapseCodegenStages` may have added.
-  private def numShufflesOverUnion(plan: SparkPlan): Int = plan.collect {
-    case s: ShuffleExchangeExec if reachesUnion(s.child) => s
-  }.size
+  private def numShufflesOverUnion(plan: SparkPlan): Int =
+    countShuffles(plan, underUnion = false) { s => reachesUnion(s.child) }
+
+  private def countShuffles(
+      plan: SparkPlan,
+      underUnion: Boolean)(matches: ShuffleExchangeExec => Boolean): Int = {
+    val here = plan match {
+      case s: ShuffleExchangeExec if !underUnion && matches(s) => 1
+      case _ => 0
+    }
+    here + plan.children.map(countShuffles(_, underUnion || plan.isInstanceOf[UnionExec])(matches))
+      .sum
+  }
 
   private def reachesUnion(plan: SparkPlan): Boolean = plan match {
     case _: UnionExec => true
@@ -186,11 +205,14 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
               val df = spark.sql(query)
               checkAnswer(df, expected)
               val initial = aqeInitialPlan(df)
-              assert(numShufflesOnUnion(initial) === (if (enabled) 0 else 1),
+              // A target below what the replaced exchange carried is not picked, since the
+              // operator above would then run with fewer partitions than before.
+              val pushedDown = enabled && partitions >= 8
+              assert(numShufflesOnUnion(initial) === (if (pushedDown) 0 else 1),
                 s"unexpected shuffle over the union:\n$initial")
               // The window runs with the child's count once the layout is pushed down, and with
               // `spark.sql.shuffle.partitions` while the exchange above the union is kept.
-              val expectedPartitions = if (enabled) partitions else 8
+              val expectedPartitions = if (pushedDown) partitions else 8
               assert(initial.outputPartitioning.numPartitions === expectedPartitions,
                 s"unexpected count:\n$initial")
               assert(df.rdd.getNumPartitions === expectedPartitions)
@@ -327,17 +349,25 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
           SQLConf.SHUFFLE_PARTITIONS.key -> "5") {
         withTempView("t1", "t2") {
           createTables()
-          val df = spark.table("t1").repartition(2, $"id")
+          val df = spark.table("t1").repartition(8, $"id")
             .union(spark.table("t2"))
             .withColumn("rn", org.apache.spark.sql.functions.row_number().over(
               org.apache.spark.sql.expressions.Window.partitionBy("id").orderBy("v")))
-            .repartition(5, $"id").select("v", "rn")
-          checkAnswer(df, Seq(Row(7, 1), Row(10, 1), Row(20, 2), Row(40, 3), Row(5, 1), Row(8, 2)))
+            .repartition(5, $"id").select("id", "v", "rn")
+          checkAnswer(df, Seq(
+            Row(1, 10, 1), Row(1, 20, 2), Row(1, 40, 3), Row(2, 5, 1), Row(2, 8, 2),
+            Row(3, 7, 1)))
 
           val plan = if (adaptive) {
             aqeInitialPlan(df)
           } else {
             df.queryExecution.executedPlan
+          }
+          if (adaptive) {
+            // The 8-partition target passes the floor of 5, but not the elided root repartition's
+            // explicit count of 5. Only the root check rejects this rewrite.
+            assert(numShufflesOnUnion(plan) === 1,
+              s"the root repartition's layout must be kept:\n$plan")
           }
           assert(df.rdd.getNumPartitions === 5, s"unexpected root:\n$plan")
         }
@@ -589,7 +619,7 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
       // parallelism the pushed shuffle had.
       val children = Seq(leaf(a, hash(a, 2)), leaf(a1, hash(a1, 2)), leaf(a2, hash(a2, 8)))
       val parent = TestPartitioningPlan(
-        children = Seq(ensureShuffle(hash(a, 8), UnionExec(children))),
+        children = Seq(ensureShuffle(hash(a, 2), UnionExec(children))),
         required = Seq(clustered(a)),
         output = Seq(a))
 
@@ -816,7 +846,8 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
 
   test("SPARK-60379: pick a lower-ranked layout when the most offered one does not pair " +
       "with a sibling") {
-    withPushDown {
+    withSQLConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
+      withPushDown {
       val a = attr("a")
       val c = attr("c")
       val x = attr("x")
@@ -847,8 +878,11 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
       assert(newUnion.outputPartitioning === hash(c, 2),
         s"the union should be rebuilt on the layout that pairs with the sibling:\n$newPlan")
       assert(newUnion.children(2).fastEquals(unionChildren(2)), s"hash(c) is kept:\n$newPlan")
+      assert(newUnion.children.take(2).forall(_.isInstanceOf[ShuffleExchangeExec]),
+        s"the hash(a) children are re-shuffled:\n$newPlan")
       assert(newPlan.children(1).fastEquals(sibling), s"the sibling must not change:\n$newPlan")
       assert(ValidateRequirements.validate(newPlan), s"invalid plan:\n$newPlan")
+      }
     }
   }
 
@@ -918,25 +952,31 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
   test("SPARK-60379: roll back when a higher operator's pairing breaks") {
     withPushDown {
       val a = attr("a")
-      val a1 = attr("a")
       val b = attr("b")
+      val x = attr("x")
+      val y = attr("y")
 
-      def plan(siblingPartitions: Int): SparkPlan = {
-        val union = UnionExec(Seq(leaf(a, hash(a, 2)), leaf(a1)))
-        // The site's parent passes its child's partitioning up to the pairing operator.
-        val site = PassThroughPlan(ensureShuffle(hash(a, siblingPartitions), union), clustered(a))
+      def plan(targetKey: Attribute): SparkPlan = {
+        val kept = TestPartitioningPlan(
+          outputPartitioning = hash(targetKey, 2), output = Seq(a, b))
+        val plain = TestPartitioningPlan(output = Seq(attr("a"), attr("b")))
+        val union = UnionExec(Seq(kept, plain))
+        // Either target answers the site's requirement, but only `a` pairs with the ancestor.
+        val site = PassThroughPlan(
+          ensureShuffle(hash(a, 2), union), ClusteredDistribution(Seq(a, b)))
+        val sibling = TestPartitioningPlan(
+          outputPartitioning = hash(x, 2), output = Seq(x, y))
         TestPartitioningPlan(
-          children = Seq(site, leaf(b, hash(b, siblingPartitions))),
-          required = Seq(clustered(a), clustered(b)),
-          output = Seq(a, b))
+          children = Seq(site, sibling),
+          required = Seq(ClusteredDistribution(Seq(a, b)), ClusteredDistribution(Seq(x, y))),
+          output = Seq(a, b, x, y))
       }
 
-      // hash(a, 2) pairs with hash(b, 2): kept.
-      val pushed = pushDown(plan(siblingPartitions = 2))
+      val pushed = pushDown(plan(a))
       assert(numShufflesOnUnion(pushed) === 0, s"the push-down should be kept:\n$pushed")
 
-      // A target with 2 partitions cannot replace the exchange with 3 partitions.
-      val incompatible = plan(siblingPartitions = 3)
+      // Both layouts have two partitions, but `b` and `x` occupy different cluster-key positions.
+      val incompatible = plan(b)
       val rolledBack = pushDown(incompatible)
       assert(rolledBack.fastEquals(incompatible),
         s"the push-down should be rolled back:\n$rolledBack")
@@ -1020,7 +1060,9 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
           ("non-deterministic project",
             (p: SparkPlan) => ProjectExec(Seq(a, Alias(Rand(Literal(0L)), "r")()), p), none),
           ("non-deterministic filter",
-            (p: SparkPlan) => FilterExec(GreaterThan(Rand(Literal(0L)), Literal(0.5)), p), none))
+            (p: SparkPlan) => FilterExec(GreaterThan(Rand(Literal(0L)), Literal(0.5)), p), none),
+          ("operator the rule does not know",
+            (p: SparkPlan) => TestPartitioningPlan(children = Seq(p), output = p.output), none))
         barriers.foreach { case (name, between, above) =>
           assert(!pushed(between, above), s"$name must stop the push-down")
         }
@@ -1028,23 +1070,346 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
     }
   }
 
-  test("SPARK-60379: do not push down when the union is behind an operator the rule cannot cross") {
+  test("SPARK-60379: retain the keys of a root repartition") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "5") {
+      withTempView("t1", "t2") {
+        createTables()
+        // The branch is laid out on `id` alone, which answers the window's two-key distribution
+        // but not the root repartition the window's own exchange let `EnsureRequirements` elide.
+        val df = spark.table("t1").repartition(5, $"id")
+          .union(spark.table("t2"))
+          .withColumn("rn", org.apache.spark.sql.functions.row_number().over(
+            org.apache.spark.sql.expressions.Window.partitionBy("id", "v").orderBy("id")))
+          .repartition(5, $"id", $"v").select("id", "v", "rn")
+        checkAnswer(df, Seq(
+          Row(1, 10, 1), Row(1, 20, 1), Row(1, 40, 1), Row(2, 5, 1), Row(2, 8, 1),
+          Row(3, 7, 1)))
+
+        val plan = aqeInitialPlan(df)
+        assert(numShufflesOnUnion(plan) === 1,
+          s"the root repartition's keys must be kept:\n$plan")
+        assert(df.rdd.getNumPartitions === 5, s"unexpected root:\n$plan")
+      }
+    }
+  }
+
+  test("SPARK-60379: sort the rebuilt child back to the required ordering") {
     withPushDown {
       val a = attr("id")
       val a1 = attr("id")
-      val union = UnionExec(Seq(leaf(a, hash(a, 2)), leaf(a1)))
-      // An operator between the shuffle and the union whose result depends on the input
-      // partitioning must stop the push-down.
-      val middle = TestPartitioningPlan(children = Seq(union), output = union.output)
+      val ordering = Seq(SortOrder(a, Ascending))
       val parent = TestPartitioningPlan(
-        children = Seq(ensureShuffle(hash(a, 2), middle)),
+        children = Seq(ensureShuffle(hash(a, 2), UnionExec(Seq(leaf(a, hash(a, 2)), leaf(a1))))),
         required = Seq(clustered(a)),
+        ordering = Seq(ordering),
         output = Seq(a))
 
       val newPlan = pushDown(parent)
-      assert(newPlan.fastEquals(parent),
-        s"the shuffle must stay on top of the union when an uncrossable operator sits " +
-          s"in between:\n$newPlan")
+      newPlan.children.head match {
+        case sort: SortExec =>
+          assert(!sort.global, s"the sort must stay local:\n$newPlan")
+          assert(sort.sortOrder === ordering, s"unexpected ordering:\n$newPlan")
+          assert(sort.child.isInstanceOf[UnionExec], s"the sort goes above the union:\n$newPlan")
+        case other => fail(s"expected a local sort above the rebuilt union:\n$other")
+      }
+      assert(ValidateRequirements.validate(newPlan), s"invalid plan:\n$newPlan")
+    }
+  }
+
+  test("SPARK-60379: do not lay out more children than the limit allows") {
+    withPushDown {
+      def planWith(moved: Int): SparkPlan = {
+        val a = attr("id")
+        val kept = leaf(a, hash(a, 2))
+        val others = (0 until moved).map(_ => leaf(attr("id")))
+        TestPartitioningPlan(
+          children = Seq(ensureShuffle(hash(a, 2), UnionExec(kept +: others))),
+          required = Seq(clustered(a)),
+          output = Seq(a))
+      }
+
+      def pushed(moved: Int): Boolean = {
+        val plan = planWith(moved)
+        !pushDown(plan).fastEquals(plan)
+      }
+
+      // The limit is three by default: three children are laid out, a fourth is not.
+      assert(pushed(3), "three moved children are within the limit")
+      assert(!pushed(4), "four moved children are past the limit")
+
+      withSQLConf(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_MAX_MOVED_BRANCHES.key -> "4") {
+        assert(pushed(4), "a higher limit allows the fourth")
+      }
+      withSQLConf(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_MAX_MOVED_BRANCHES.key -> "0") {
+        assert(!pushed(1), "a zero limit allows none")
+      }
+    }
+  }
+
+  test("SPARK-60379: a branch AQE cannot coalesce is not a target by default") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "200") {
+      withTempView("t1", "t2", "t3") {
+        Seq((1, 10), (2, 20)).toDF("id", "v").createOrReplaceTempView("t1")
+        Seq((1, 30), (3, 7)).toDF("id", "v").createOrReplaceTempView("t2")
+        Seq((1, 1), (3, 3)).toDF("id", "v2").createOrReplaceTempView("t3")
+        // `REPARTITION(200, id)` shuffles on a fixed count, which coalescing cannot change, so
+        // keeping that branch would cost the join's stages their coalescing.
+        val sql =
+          """SELECT u.id, u.v, r.v2 FROM (
+            |  SELECT /*+ REPARTITION(200, id) */ id, v FROM t1
+            |  UNION ALL
+            |  SELECT id, v FROM t2
+            |) u JOIN t3 r ON u.id = r.id""".stripMargin
+        val expected = Seq(Row(1, 10, 1), Row(1, 30, 1), Row(3, 7, 3))
+
+        Seq(
+          "default" -> Map(
+            SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_NON_COALESCIBLE_BRANCHES_ENABLED.key ->
+              "false"),
+          "allowed" -> Map(
+            SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_NON_COALESCIBLE_BRANCHES_ENABLED.key ->
+              "true"),
+          "coalescing off" -> Map(
+            SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false")).foreach { case (label, conf) =>
+          withSQLConf(conf.toSeq: _*) {
+            val df = spark.sql(sql)
+            checkAnswer(df, expected)
+            val pushedDown = label != "default"
+            assert(numShufflesOnUnion(aqeInitialPlan(df)) === (if (pushedDown) 0 else 1),
+              s"$label: unexpected union exchange:\n${aqeInitialPlan(df)}")
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60379: keep an exchange the plan reuses elsewhere") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "4") {
+      withTempView("t1", "t2", "t3") {
+        Seq((1, 10), (2, 20)).toDF("id", "v").createOrReplaceTempView("t1")
+        Seq((1, 30), (3, 7)).toDF("id", "v").createOrReplaceTempView("t2")
+        Seq((1, 1), (3, 3)).toDF("id", "v2").createOrReplaceTempView("t3")
+        // The union is consumed twice on the same key, so `EnsureRequirements` builds one
+        // exchange and AQE reuses its stage. Moving it below the union would run the union's
+        // subtree once per consumer. The join branch is allowed as a target here, so only the
+        // reuse blocks the rewrite.
+        val sql =
+          """WITH u AS (
+            |  SELECT l.id AS id, l.v AS v FROM t1 l JOIN t3 r ON l.id = r.id
+            |  UNION ALL
+            |  SELECT id, v FROM t2)
+            |SELECT * FROM u u1 JOIN u u2 ON u1.id = u2.id""".stripMargin
+        val df = spark.sql(sql)
+        df.collect()
+
+        val plan = aqeInitialPlan(df)
+        assert(numShufflesOnUnion(plan) === 2,
+          s"an exchange the plan reuses is not moved below the union:\n$plan")
+
+        // With reuse off every exchange gets its own stage, so the rewrite goes ahead.
+        withSQLConf(SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
+          val noReuse = spark.sql(sql)
+          noReuse.collect()
+          val noReusePlan = aqeInitialPlan(noReuse)
+          assert(numShufflesOnUnion(noReusePlan) === 0,
+            s"without exchange reuse there is no stage to protect:\n$noReusePlan")
+        }
+      }
+    }
+  }
+
+  test("SPARK-60379: duplicated shuffle forms include a shuffle query stage and a " +
+      "subquery plan") {
+    import testImplicits._
+    val leaf = spark.range(10).select($"id" as Symbol("k")).queryExecution.executedPlan
+    val hp = HashPartitioning(leaf.output, 4)
+
+    // A duplicate carried by a shuffle query stage, without materializing it.
+    val staged = ShuffleExchangeExec(hp, leaf)
+    val stage = ShuffleQueryStageExec(0, staged, staged.canonicalized)
+    val twin = ShuffleExchangeExec(hp, leaf)
+    assert(AQEUtils.duplicatedShuffleForms(UnionExec(Seq(stage, twin))) ===
+      Set(staged.canonicalized), "an exchange a stage holds is a duplicate")
+
+    // A duplicate carried by a subquery plan.
+    val outer = ShuffleExchangeExec(hp, leaf)
+    val inner = ShuffleExchangeExec(hp, leaf)
+    val subquery = ScalarSubquery(SubqueryExec("sub", inner), ExprId(0))
+    val filter = FilterExec(GreaterThan(subquery, Literal(0)), leaf)
+    assert(AQEUtils.duplicatedShuffleForms(UnionExec(Seq(outer, filter))) ===
+      Set(outer.canonicalized), "an exchange a subquery plan holds is a duplicate")
+  }
+
+  test("SPARK-60379: a shuffle query stage with a supported origin may offer a target") {
+    withPushDown {
+      val a = attr("id")
+      val staged = ensureShuffle(hash(a, 2), leaf(a))
+      val stage = ShuffleQueryStageExec(0, staged, staged.canonicalized)
+      val union = UnionExec(Seq(stage, leaf(attr("id"))))
+      val parent = TestPartitioningPlan(
+        children = Seq(ensureShuffle(hash(a, 2), union)),
+        required = Seq(clustered(a)),
+        output = Seq(a))
+
+      val result = pushDown(parent)
+      assert(numShufflesOnUnion(result) === 0,
+        s"the stage reports a coalescible shuffle, so it keeps its layout:\n$result")
+      val newUnion = result.children.head match {
+        case u: UnionExec => u
+        case other => fail(s"the shuffle should be pushed below the union:\n$other")
+      }
+      assert(newUnion.children.head.fastEquals(stage),
+        s"the stage must not be shuffled:\n$result")
+    }
+  }
+
+  test("SPARK-60379: all sources of a multi-input child must support coalescing") {
+    withPushDown {
+      withSQLConf(
+          SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+          SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_NON_COALESCIBLE_BRANCHES_ENABLED.key ->
+            "false") {
+        val scan = spark.range(10).queryExecution.sparkPlan
+        val a = scan.output.head
+        val supported = ensureShuffle(hash(a, 2), scan)
+        val fixed = ShuffleExchangeExec(hash(a, 2), scan, REPARTITION_BY_NUM)
+
+        Seq(scan, fixed).foreach { unsupported =>
+          Seq(Seq(supported, unsupported), Seq(unsupported, supported)).foreach { sources =>
+            val child = TestPartitioningPlan(
+              children = sources,
+              outputPartitioning = hash(a, 2),
+              output = Seq(a))
+            val union = UnionExec(Seq(child, leaf(a.newInstance())))
+            val parent = TestPartitioningPlan(
+              children = Seq(ensureShuffle(hash(a, 2), union)),
+              required = Seq(clustered(a)),
+              output = Seq(a))
+
+            assert(pushDown(parent).fastEquals(parent),
+              s"an unsupported source must reject the target in either child order:\n$parent")
+            withSQLConf(
+                SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_NON_COALESCIBLE_BRANCHES_ENABLED.key ->
+                  "true") {
+              assert(numShufflesOnUnion(pushDown(parent)) === 0)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60379: source checks stop at supported shuffle boundaries") {
+    withPushDown {
+      withSQLConf(
+          SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+          SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_NON_COALESCIBLE_BRANCHES_ENABLED.key ->
+            "false") {
+        val scan = spark.range(10).queryExecution.sparkPlan
+        val a = scan.output.head
+        val fixed = ShuffleExchangeExec(hash(a, 2), scan, REPARTITION_BY_NUM)
+        Seq(scan, fixed).foreach { input =>
+          val child = ensureShuffle(hash(a, 2), input)
+          val union = UnionExec(Seq(child, leaf(a.newInstance())))
+          val parent = TestPartitioningPlan(
+            children = Seq(ensureShuffle(hash(a, 2), union)),
+            required = Seq(clustered(a)),
+            output = Seq(a))
+
+          val result = pushDown(parent)
+          assert(numShufflesOnUnion(result) === 0,
+            s"sources below a supported shuffle must not reject its target:\n$result")
+          assert(result.children.head.children.head.fastEquals(child))
+        }
+      }
+    }
+  }
+
+  Seq("BROADCAST(b)", "BROADCAST(a)").foreach { hint =>
+    test(s"SPARK-60379: broadcast build sources do not reject a target with $hint") {
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+          SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+          SQLConf.SHUFFLE_PARTITIONS.key -> "4",
+          SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_NON_COALESCIBLE_BRANCHES_ENABLED.key ->
+            "false") {
+        withTempView("t1", "t2", "t3") {
+          Seq((1, 10), (1, 20), (2, 5)).toDF("id", "v").createOrReplaceTempView("t1")
+          Seq(1, 2).toDF("id").createOrReplaceTempView("t2")
+          Seq((1, 30), (3, 7)).toDF("id", "v").createOrReplaceTempView("t3")
+          val sql = s"""SELECT id, v, row_number() OVER (PARTITION BY id ORDER BY v) rn FROM (
+            | SELECT /*+ $hint */ a.id, a.v FROM
+            | (SELECT id, v FROM t1 DISTRIBUTE BY id) a JOIN
+            | (SELECT id FROM t2 DISTRIBUTE BY id) b ON a.id = b.id
+            | UNION ALL SELECT id, v FROM t3)""".stripMargin
+          Seq(false, true).foreach { enabled =>
+            withSQLConf(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key -> enabled.toString) {
+              val df = spark.sql(sql)
+              checkAnswer(df, Seq(Row(1, 10, 1), Row(1, 20, 2), Row(1, 30, 3),
+                Row(2, 5, 1), Row(3, 7, 1)))
+              val initial = aqeInitialPlan(df)
+              assert(initial.exists(_.isInstanceOf[BroadcastHashJoinExec]))
+              assert(numShufflesOnUnion(initial) === (if (enabled) { 0 } else { 1 }),
+                s"broadcast build sources must not reject the streamed layout:\n$initial")
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60379: a cached child is not a target by default") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "4") {
+      withTempView("t1", "t2", "t3", "cached") {
+        Seq((1, 10), (2, 20)).toDF("id", "v").createOrReplaceTempView("t1")
+        Seq((1, 30), (3, 7)).toDF("id", "v").createOrReplaceTempView("t2")
+        Seq((1, 1), (3, 3)).toDF("id", "v2").createOrReplaceTempView("t3")
+        // A cached relation is read through an in-memory scan, which reports the layout the cache
+        // was built with: a leaf rather than a shuffle stage, so no group it feeds is coalesced.
+        val cached = spark.table("t1").repartition(4, $"id").cache()
+        try {
+          cached.count()
+          cached.createOrReplaceTempView("cached")
+          val sql =
+            """SELECT u.id, u.v, r.v2 FROM (
+              |  SELECT id, v FROM cached
+              |  UNION ALL
+              |  SELECT id, v FROM t2
+              |) u JOIN t3 r ON u.id = r.id""".stripMargin
+          val expected = Seq(Row(1, 10, 1), Row(1, 30, 1), Row(3, 7, 3))
+
+          Seq(
+            "default" -> Map(
+              SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_NON_COALESCIBLE_BRANCHES_ENABLED.key ->
+                "false"),
+            "allowed" -> Map(
+              SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_NON_COALESCIBLE_BRANCHES_ENABLED.key ->
+                "true")).foreach { case (label, conf) =>
+            withSQLConf(conf.toSeq: _*) {
+              val df = spark.sql(sql)
+              checkAnswer(df, expected)
+              val pushedDown = label != "default"
+              assert(numShufflesOnUnion(aqeInitialPlan(df)) === (if (pushedDown) 0 else 1),
+                s"$label: unexpected union exchange:\n${aqeInitialPlan(df)}")
+            }
+          }
+        } finally {
+          cached.unpersist()
+        }
+      }
     }
   }
 
