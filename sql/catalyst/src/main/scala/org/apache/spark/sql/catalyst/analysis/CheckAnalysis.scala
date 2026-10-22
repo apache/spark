@@ -170,6 +170,8 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
       plan.output.find(a => hasFileType(a.dataType))
     case d: Deduplicate =>
       d.keys.find(a => hasFileType(a.dataType))
+    case d: DeduplicateWithinWatermark =>
+      d.keys.find(a => hasFileType(a.dataType))
     case _ => None
   }
 
@@ -180,9 +182,10 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
       case _ => None
     }
 
+  // Covers both REPARTITION / DISTRIBUTE BY and the REBALANCE hint.
   protected def fileExprInPartitionExpression(plan: LogicalPlan): Option[Expression] =
     plan match {
-      case r: RepartitionByExpression =>
+      case r: HasPartitionExpressions =>
         r.partitionExpressions.find(e => hasFileType(e.dataType))
       case _ => None
     }

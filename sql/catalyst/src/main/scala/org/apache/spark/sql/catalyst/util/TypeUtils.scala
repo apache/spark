@@ -217,7 +217,7 @@ object TypeUtils extends QueryErrorsBase {
 
   /**
    * Fails if a FILE in the parameter or return types of a routine has a qualifier. Routines
-   * declare a plain FILE; a FILE of any mode can still be passed to them.
+   * declare a plain FILE. `routineName` is quoted already.
    */
   def checkNoQualifierInRoutineSignature(
       dataTypes: Seq[DataType],
@@ -254,15 +254,16 @@ object TypeUtils extends QueryErrorsBase {
   /**
    * Checks the return type of a function that is not created by SQL DDL, for example a UDF
    * registered through `spark.udf.register`, as [[checkNoQualifierInRoutineSignature]] and
-   * [[checkNoFileTypeMapKeyInReturnType]] do for SQL functions. Does nothing when the FILE type
-   * is disabled.
+   * [[checkNoFileTypeMapKeyInReturnType]] do for SQL functions. `routineName` is the unquoted
+   * name of the function. Does nothing when the FILE type is disabled.
    */
   def checkNoQualifierInRegisteredRoutineReturnType(
       returnType: DataType,
       routineName: String): Unit = {
     if (SQLConf.get.isFileTypeEnabled) {
-      checkNoQualifierInRoutineSignature(Seq(returnType), "function", routineName)
-      checkNoFileTypeMapKeyInReturnType(returnType, routineName)
+      val quotedName = toSQLId(Seq(routineName))
+      checkNoQualifierInRoutineSignature(Seq(returnType), "function", quotedName)
+      checkNoFileTypeMapKeyInReturnType(returnType, quotedName)
     }
   }
 }

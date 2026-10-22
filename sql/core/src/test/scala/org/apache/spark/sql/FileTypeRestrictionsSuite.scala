@@ -207,6 +207,22 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
       },
       condition = "UNSUPPORTED_FEATURE.PARTITION_BY_FILE",
       parameters = Map("expr" -> "\"f\"", "dataType" -> "\"FILE EXTERNAL\""))
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(s"SELECT /*+ REBALANCE(f) */ * FROM ($externalFile)")
+      },
+      condition = "UNSUPPORTED_FEATURE.PARTITION_BY_FILE",
+      parameters = Map("expr" -> "\"f\"", "dataType" -> "\"FILE EXTERNAL\""),
+      context = ExpectedContext(fragment = "/*+ REBALANCE(f) */", start = 7, stop = 25))
+  }
+
+  test("a FILE cannot be a key of dropDuplicatesWithinWatermark") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(externalFile).dropDuplicatesWithinWatermark("f")
+      },
+      condition = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_FILE_TYPE",
+      parameters = Map("colName" -> "`f`", "dataType" -> "\"FILE EXTERNAL\""))
   }
 
   test("a FILE cannot be hashed") {
@@ -248,7 +264,10 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
       "(x FILE EXTERNAL) RETURNS INT RETURN 1",
       "(x INT) RETURNS FILE EXTERNAL RETURN NULL",
       "(x INT) RETURNS ARRAY<FILE EXTERNAL> RETURN NULL",
-      "(x INT) RETURNS TABLE (f FILE EXTERNAL) RETURN SELECT NULL").foreach { signature =>
+      "(x INT) RETURNS TABLE (f FILE EXTERNAL) RETURN SELECT NULL",
+      // Without a RETURNS clause, or with a bare RETURNS TABLE, the return type is inferred.
+      "(x INT) RETURN CAST(NULL AS FILE EXTERNAL)",
+      "(x INT) RETURNS TABLE RETURN SELECT CAST(NULL AS FILE EXTERNAL) AS f").foreach { signature =>
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"CREATE TEMPORARY FUNCTION fn$signature")
@@ -256,12 +275,16 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
         condition = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_QUALIFIER",
         parameters = Map("routineType" -> "function", "routineName" -> "`fn`"))
     }
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql("CREATE TEMPORARY FUNCTION fn(x INT) RETURNS MAP<FILE, INT> RETURN NULL")
-      },
-      condition = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_MAP_KEY",
-      parameters = Map("routineType" -> "function", "routineName" -> "`fn`"))
+    Seq(
+      "RETURNS MAP<FILE, INT> RETURN NULL",
+      "RETURN CAST(NULL AS MAP<FILE, INT>)").foreach { body =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"CREATE TEMPORARY FUNCTION fn(x INT) $body")
+        },
+        condition = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_MAP_KEY",
+        parameters = Map("routineType" -> "function", "routineName" -> "`fn`"))
+    }
     withUserDefinedFunction("fn" -> true) {
       sql("CREATE TEMPORARY FUNCTION fn(x FILE) RETURNS FILE RETURN x")
     }
@@ -276,20 +299,20 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
         spark.udf.register("file_udf", fileUdf, FileType.external)
       },
       condition = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_QUALIFIER",
-      parameters = Map("routineType" -> "function", "routineName" -> "file_udf"))
+      parameters = Map("routineType" -> "function", "routineName" -> "`file_udf`"))
     checkError(
       exception = intercept[AnalysisException] {
         spark.udf.register("file_udf", fileUdf, MapType(FileType(), IntegerType))
       },
       condition = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_MAP_KEY",
-      parameters = Map("routineType" -> "function", "routineName" -> "file_udf"))
+      parameters = Map("routineType" -> "function", "routineName" -> "`file_udf`"))
     // A UDF that is not registered is checked when it is used in a query.
     checkError(
       exception = intercept[AnalysisException] {
         spark.range(1).select(udf(fileUdf, FileType.external).withName("inline_udf")(col("id")))
       },
       condition = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_QUALIFIER",
-      parameters = Map("routineType" -> "function", "routineName" -> "inline_udf"))
+      parameters = Map("routineType" -> "function", "routineName" -> "`inline_udf`"))
     spark.udf.register("file_udf", fileUdf, FileType())
   }
 
@@ -317,14 +340,14 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
       checkError(
         exception = intercept[AnalysisException](register()),
         condition = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_QUALIFIER",
-        parameters = Map("routineType" -> "function", "routineName" -> name))
+        parameters = Map("routineType" -> "function", "routineName" -> s"`$name`"))
     }
     checkError(
       exception = intercept[AnalysisException] {
         spark.udf.registerPython("py_udf", pythonUdf(MapType(FileType(), IntegerType)))
       },
       condition = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_MAP_KEY",
-      parameters = Map("routineType" -> "function", "routineName" -> "py_udf"))
+      parameters = Map("routineType" -> "function", "routineName" -> "`py_udf`"))
 
     // A plain FILE is accepted, and a UDTF with an analyze method has no static return type.
     spark.udf.registerPython("py_udf", pythonUdf(FileType()))

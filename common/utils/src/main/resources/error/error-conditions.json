@@ -3033,7 +3033,7 @@
   },
   "FILE_TYPE_UNKNOWN_WRITE" : {
     "message" : [
-      "Column(s) <colNames> have an ambiguous FILE type. Declare the columns as FILE EXTERNAL in the target table before writing."
+      "Column(s) <colNames> of the query have an ambiguous FILE type, so they cannot be stored in a table. A table column must be FILE EXTERNAL, so the query must produce FILE EXTERNAL values for these columns."
     ],
     "sqlState" : "42K01"
   },

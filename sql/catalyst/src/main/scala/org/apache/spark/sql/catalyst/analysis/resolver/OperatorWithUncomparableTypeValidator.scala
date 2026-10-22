@@ -25,15 +25,16 @@ import org.apache.spark.sql.types.{DataType, FileType, MapType, VariantType}
 /**
  * [[OperatorWithUncomparableTypeValidator]] performs the validation of a logical plan to ensure
  * that it (if it is [[Distinct]] or [[SetOperation]]) does not contain any uncomparable types:
- * [[VariantType]] or [[MapType]].
+ * [[VariantType]], [[MapType]] or [[FileType]].
  */
 object OperatorWithUncomparableTypeValidator {
 
   /**
    * Validates that the provided logical plan does not contain any uncomparable types:
    * [[VariantType]], [[MapType]] or [[FileType]] (throws a specific user-facing error if it
-   * does). Operators that are not supported are [[Distinct]] and [[SetOperation]] ([[Union]],
-   * [[Except]], [[Intersect]]).
+   * does). Operators that are not supported are [[Distinct]] and [[SetOperation]] ([[Except]],
+   * [[Intersect]]). [[Union]] is not a [[SetOperation]], so UNION ALL is allowed, while UNION
+   * DISTINCT is rejected through the [[Distinct]] above it.
    */
   def validate(operator: LogicalPlan, output: Seq[Attribute]): Unit = {
     operator match {
