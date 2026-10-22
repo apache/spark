@@ -1653,6 +1653,52 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             _, reasons = self._fallback_reason(add, LongType())
             self.assertIn("input categories", reasons)
 
+    def test_udf_transpile_variety_wrong_arity_tuple_falls_back(self):
+        # A tuple with the wrong number of elements is refused with a clear
+        # reason, not an opaque "too many values to unpack".
+        from pyspark.sql.functions import col
+        from pyspark.sql.transpile import AbstractTranspiler
+
+        class ThreeElementTupleTranspiler(AbstractTranspiler):
+            variety = "three_element_tuple_55213"
+
+            def _transpile_from_ast(
+                self, src, ast_info, function_ast, params, returnType, param_categories=None
+            ):
+                return (col("_udf_param_0").cast(returnType), ["numeric"] * len(params), "extra")
+
+        with self._with_variety(ThreeElementTupleTranspiler):
+
+            def add(a: int, b: int):
+                return a + b
+
+            _, reasons = self._fallback_reason(add, LongType())
+            self.assertIn("3-element tuple", reasons)
+
+    def test_udf_transpile_variety_non_list_categories_falls_back(self):
+        # A non-list categories (a string) has a len and is iterable, so
+        # without the isinstance check it would slip through as bogus chars.
+        from pyspark.sql.functions import col
+        from pyspark.sql.transpile import AbstractTranspiler
+
+        class StringCategoriesTranspiler(AbstractTranspiler):
+            variety = "string_categories_55213"
+
+            def _transpile_from_ast(
+                self, src, ast_info, function_ast, params, returnType, param_categories=None
+            ):
+                # "nu" has len 2 for the two public params -- passes the
+                # length check, but is not a list.
+                return (col("_udf_param_0").cast(returnType), "nu")
+
+        with self._with_variety(StringCategoriesTranspiler):
+
+            def add(a: int, b: int):
+                return a + b
+
+            _, reasons = self._fallback_reason(add, LongType())
+            self.assertIn("not a list", reasons)
+
     # ------------------------------------------------------------------
     # Edge cases (SPARK-55206 follow-up). Helpers build a UDF with
     # transpilation on; `_vals` runs it and returns outputs (asserting it
