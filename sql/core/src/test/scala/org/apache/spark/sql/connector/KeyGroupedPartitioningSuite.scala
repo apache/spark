@@ -7714,6 +7714,22 @@ class KeyGroupedPartitioningSuite
     assert(l.reducers(r).isEmpty && r.reducers(l).isEmpty)
   }
 
+  test("SPARK-50593: struct-field arguments reach the reducer only over the same field") {
+    import org.apache.spark.sql.catalyst.expressions.{Expression, GetStructField}
+    // `sameArgumentLayout` uses the shapes identity tells apart: `s.a` and `t.a` are the same
+    // expression of one column, `s.a` and `s.b` are not. BucketFunction reduces any pair of bucket
+    // counts, so a None here comes from Spark.
+    val structType = StructType(Seq(StructField("a", LongType), StructField("b", LongType)))
+    val s = AttributeReference("s", structType)()
+    val t = AttributeReference("t", structType)()
+    def bucket(n: Int, arg: Expression): TransformExpression =
+      TransformExpression(BucketFunction, Seq(Literal(n), arg))
+    assert(bucket(8, GetStructField(s, 0)).reducers(bucket(4, GetStructField(t, 0))).isDefined,
+      "the same field of another struct column reaches the reducer")
+    assert(bucket(8, GetStructField(s, 0)).reducers(bucket(4, GetStructField(s, 1))).isEmpty,
+      "a different field does not")
+  }
+
   test("SPARK-50593: mismatched column/literal argument layout is not reducible") {
     // Both transforms pass the strict gate (one column-reference non-literal child), but the column
     // and literal sit in swapped positions: truncate(id, 2) is (col, lit) while truncate(4, sid) is

@@ -262,15 +262,15 @@ case class TransformExpression(
     children.length == function.inputTypes().length && inputTypesMatch(_ => true)
 
   /**
-   * Whether each position holds a literal on both sides, a column reference on both sides, or the
-   * same expression of a column on both sides (e.g. `b + 1` and `c + 1`). Literal values and arity
-   * may differ; the connector reducer decides those.
+   * Whether each position holds a literal on both sides, a bare column on both sides, or the same
+   * expression of one column on both sides (e.g. `b + 1` and `c + 1`, or `s.a` and `t.a`). These
+   * are the shapes [[functionId]] tells apart, so a pair this admits differs at most in literal
+   * values and arity, which the connector reducer decides.
    */
   private def sameArgumentLayout(other: TransformExpression): Boolean =
     children.zip(other.children).forall {
       case (_: Literal, _: Literal) => true
-      case (c1, c2) if TransformExpression.isColumnRef(c1) && TransformExpression.isColumnRef(c2) =>
-        true
+      case (_: Attribute, _: Attribute) => true
       case (c1, c2) => TransformExpression.sameShape(c1, c2)
     }
 
@@ -476,9 +476,8 @@ object TransformExpression {
 
   /**
    * Whether `e` is a column reference: an [[Attribute]] or a [[GetStructField]] chain
-   * (struct-field access on a column). Used by `sameArgumentLayout` and by
-   * `KeyedPartitioning.supportsExpressions`, which both decide whether a transform's non-literal
-   * argument is a plain column.
+   * (struct-field access on a column). Used by `KeyedPartitioning.supportsExpressions`, which
+   * decides whether a scan may report a transform over this argument.
    */
   @tailrec
   private[sql] def isColumnRef(e: Expression): Boolean = e match {
