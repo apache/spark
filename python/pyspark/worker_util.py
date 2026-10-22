@@ -320,6 +320,10 @@ class RunnerConf(Conf):
         )
 
     @property
+    def detailed_timing_enabled(self) -> bool:
+        return self.get("spark.sql.execution.pythonUDF.detailedTiming.enabled", "false") == "true"
+
+    @property
     def use_legacy_pandas_udtf_conversion(self) -> bool:
         return (
             self.get("spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled", "false")

@@ -46,11 +46,15 @@ object MimaExcludes {
       "org.apache.spark.ml.regression.DecisionTreeRegressionModel.numLeave"),
     // [SPARK-59154] Remove unused prediction variance helper after inlining its implementation.
     ProblemFilters.exclude[DirectMissingMethodProblem](
-      "org.apache.spark.ml.regression.DecisionTreeRegressionModel.predictVariance")
+      "org.apache.spark.ml.regression.DecisionTreeRegressionModel.predictVariance"),
+    // BIN BY DataFrame API.
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.Dataset.binBy")
   )
 
   // Exclude rules for 4.3.x from 4.2.0 (add 4.3-specific filters below as needed).
   lazy val v43excludes: Seq[Problem => Boolean] = v42excludes ++ Seq(
+    // [SPARK-60113][CORE][SQL] Add TaskContext.addTaskPreCompletionListener
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.addTaskPreCompletionListener"),
     // [SPARK-54879] Add exitCode field to ApplicationAttemptInfo
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo.tupled"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo.curried"),
@@ -70,6 +74,15 @@ object MimaExcludes {
       "org.apache.spark.ml.recommendation.ALS.intermediateStorageLevel"),
     ProblemFilters.exclude[FinalMethodProblem](
       "org.apache.spark.ml.recommendation.ALS.getIntermediateStorageLevel"),
+    // [SPARK-60384] Spark 4.2 artifacts shade Jetty types in these private wrapper classes.
+    ProblemFilters.exclude[MissingTypesProblem](
+      "org.apache.spark.ui.ProxyRedirectHandler$MutableFieldsWrapper"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem](
+      "org.apache.spark.ui.ProxyRedirectHandler#MutableFieldsWrapper.onAddField"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem](
+      "org.apache.spark.ui.ProxyRedirectHandler#MutableFieldsWrapper.this"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem](
+      "org.apache.spark.ui.ProxyRedirectHandler#ResponseWrapper.getHeaders"),
     // [SPARK-57987] Add desc field to the SQL REST API Node case class
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.sql.Node.apply"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.sql.Node.copy"),

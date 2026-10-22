@@ -52,7 +52,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.parser.{NamedParameterContext, ParameterContext, ParseException, ParserUtils, PositionalParameterContext}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, CoGroup, CollectMetrics, CommandResult, DeduplicateAllColumnsAsKey, DeduplicateKeyColumns, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TimeModes, TransformWithState, TypedFilter, Union, Unpivot, UnresolvedHint, UpdateAction, UpdateEventTimeWatermarkColumn, UpdateStarAction}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, BinByOutputAliases, CoGroup, CollectMetrics, CommandResult, DeduplicateAllColumnsAsKey, DeduplicateKeyColumns, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TimeModes, TransformWithState, TypedFilter, Union, Unpivot, UnresolvedBinBy, UnresolvedHint, UpdateAction, UpdateEventTimeWatermarkColumn, UpdateStarAction}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -206,6 +206,7 @@ class SparkConnectPlanner(
           transformChunkedCachedLocalRelation(rel.getChunkedCachedLocalRelation)
         case proto.Relation.RelTypeCase.HINT => transformHint(rel.getHint)
         case proto.Relation.RelTypeCase.UNPIVOT => transformUnpivot(rel.getUnpivot)
+        case proto.Relation.RelTypeCase.BIN_BY => transformBinBy(rel.getBinBy)
         case proto.Relation.RelTypeCase.TRANSPOSE => transformTranspose(rel.getTranspose)
         case proto.Relation.RelTypeCase.UNRESOLVED_TABLE_VALUED_FUNCTION =>
           transformUnresolvedTableValuedFunction(rel.getUnresolvedTableValuedFunction)
@@ -1309,18 +1310,24 @@ class SparkConnectPlanner(
     }
 
     val child = transformRelation(rel.getInput)
-    try {
-      // Try the eager analysis first.
-      Dataset
-        .ofRows(session, child)
-        .withColumnsRenamed(colNames, newColNames)
-        .logicalPlan
-    } catch {
-      case _: AnalysisException | _: SparkException =>
-        Project(
-          Seq(UnresolvedStarWithColumnsRenames(existingNames = colNames, newNames = newColNames)),
-          child)
+    // Try the eager analysis first.
+    val eagerPlan = if (hasUnsubstitutedPlanId(child)) {
+      None
+    } else {
+      try {
+        Some(
+          Dataset
+            .ofRows(session, child)
+            .withColumnsRenamed(colNames, newColNames)
+            .logicalPlan)
+      } catch {
+        case _: AnalysisException | _: SparkException => None
+      }
     }
+    eagerPlan.getOrElse(
+      Project(
+        Seq(UnresolvedStarWithColumnsRenames(existingNames = colNames, newNames = newColNames)),
+        child))
   }
 
   private def transformWithColumns(rel: proto.WithColumns): LogicalPlan = {
@@ -1340,22 +1347,39 @@ class SparkConnectPlanner(
       }.unzip3
 
     val child = transformRelation(rel.getInput)
-    try {
-      // Try the eager analysis first.
-      Dataset
-        .ofRows(session, child)
-        .withColumns(colNames, exprs.map(expr => Column(expr)), metadata)
-        .logicalPlan
-    } catch {
-      case _: AnalysisException | _: SparkException =>
-        Project(
-          Seq(
-            UnresolvedStarWithColumns(
-              colNames = colNames,
-              exprs = exprs,
-              explicitMetadata = Some(metadata))),
-          child)
+    // Try the eager analysis first.
+    val eagerPlan = if (hasUnsubstitutedPlanId(child, exprs)) {
+      None
+    } else {
+      try {
+        Some(
+          Dataset
+            .ofRows(session, child)
+            .withColumns(colNames, exprs.map(expr => Column(expr)), metadata)
+            .logicalPlan)
+      } catch {
+        case _: AnalysisException | _: SparkException => None
+      }
     }
+    eagerPlan.getOrElse(
+      Project(
+        Seq(
+          UnresolvedStarWithColumns(
+            colNames = colNames,
+            exprs = exprs,
+            explicitMetadata = Some(metadata))),
+        child))
+  }
+
+  /**
+   * Returns true if the plan or expressions still reference a subquery plan by plan id, which
+   * [[transformWithRelations]] substitutes only after the root relation is transformed. Eager
+   * analysis cannot succeed before that, and its failure would be posted as a failed SQL
+   * execution, so callers should build a lazy plan instead.
+   */
+  private def hasUnsubstitutedPlanId(plan: LogicalPlan, exprs: Seq[Expression] = Nil): Boolean = {
+    plan.containsPattern(TreePattern.UNRESOLVED_PLAN_ID) ||
+    exprs.exists(_.containsPattern(TreePattern.UNRESOLVED_PLAN_ID))
   }
 
   private def transformWithWatermark(rel: proto.WithWatermark): LogicalPlan = {
@@ -1407,6 +1431,21 @@ class SparkConnectPlanner(
     UnresolvedTableValuedFunction(
       rel.getFunctionName,
       rel.getArgumentsList.asScala.map(transformExpression).toSeq)
+  }
+
+  private def transformBinBy(rel: proto.BinBy): LogicalPlan = {
+    UnresolvedBinBy(
+      binWidthExpr = transformExpression(rel.getBinWidth),
+      rangeStartCol = transformExpression(rel.getRangeStart),
+      rangeEndCol = transformExpression(rel.getRangeEnd),
+      originExpr = if (rel.hasAlignTo) Some(transformExpression(rel.getAlignTo)) else None,
+      distributeColumns = rel.getDistributeUniformList.asScala.map(transformExpression).toSeq,
+      outputAliases = BinByOutputAliases(
+        binStart = if (rel.hasBinStartName) Some(rel.getBinStartName) else None,
+        binEnd = if (rel.hasBinEndName) Some(rel.getBinEndName) else None,
+        binRatio =
+          if (rel.hasBinDistributeRatioName) Some(rel.getBinDistributeRatioName) else None),
+      child = transformRelation(rel.getInput))
   }
 
   private def transformUnpivot(rel: proto.Unpivot): LogicalPlan = {
@@ -2314,6 +2353,10 @@ class SparkConnectPlanner(
   }
 
   private def transformPythonFunction(fun: proto.PythonUDF): SimplePythonFunction = {
+    // Connect Python commands require worker execution and session isolation.
+    if (fun.getEvalType == PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF) {
+      throw InvalidInputErrors.functionEvalTypeNotSupported(fun.getEvalType)
+    }
     SimplePythonFunction(
       command = fun.getCommand.toByteArray.toImmutableArraySeq,
       // Empty environment variables
@@ -3132,8 +3175,13 @@ class SparkConnectPlanner(
     }
 
     // Block unsupported SQL commands if the request comes from Spark Declarative Pipelines.
+    // For a valid SQL-with-references WITH_RELATIONS, transformRelation would route
+    // through executeSQLWithRefs and eagerly run the root SQL as a side effect, producing
+    // a CommandResult that bypasses the blocklist. blockUnsupportedSqlCommandIn checks such
+    // a relation at the top level or as a direct reference input without executing it. See
+    // its scaladoc for a known limitation.
     if (PipelineAnalysisContextUtils.hasPipelineAnalysisContext(userContext)) {
-      PipelinesHandler.blockUnsupportedSqlCommand(queryPlan = transformRelation(relation))
+      blockUnsupportedSqlCommandIn(relation)
     }
 
     // If the spark.sql() is called inside a pipeline flow function, we don't need to execute
@@ -3233,6 +3281,30 @@ class SparkConnectPlanner(
           .setServerSideSessionId(sessionHolder.serverSessionId)
           .setMetrics(metrics.build)
           .build)
+    }
+  }
+
+  /**
+   * Applies [[PipelinesHandler.blockUnsupportedSqlCommand]] to a relation without executing a
+   * valid SQL-with-references [[proto.WithRelations]] at the top level or as a direct reference
+   * input. For such a relation, the root SQL is parsed (not executed) and each reference input is
+   * checked with this method again. Any other relation is passed to [[transformRelation]].
+   *
+   * Known limitation: [[transformRelation]] still executes a SQL-with-references
+   * [[proto.WithRelations]] that is nested under another relation (for example a `Limit`) or
+   * wrapped in a Dataset-building relation such as `SHOW_STRING`, as it did before this check.
+   */
+  private def blockUnsupportedSqlCommandIn(rel: proto.Relation): Unit = {
+    rel.getRelTypeCase match {
+      case proto.Relation.RelTypeCase.WITH_RELATIONS
+          if isValidSQLWithRefs(rel.getWithRelations) =>
+        val withRel = rel.getWithRelations
+        PipelinesHandler.blockUnsupportedSqlCommand(transformSql(withRel.getRoot.getSql))
+        withRel.getReferencesList.asScala.foreach { ref =>
+          blockUnsupportedSqlCommandIn(ref.getSubqueryAlias.getInput)
+        }
+      case _ =>
+        PipelinesHandler.blockUnsupportedSqlCommand(transformRelation(rel))
     }
   }
 
@@ -4547,8 +4619,27 @@ class SparkConnectPlanner(
     if (isValidSQLWithRefs(getWithRelations)) {
       transformSqlWithRefs(getWithRelations)
     } else {
+      val referencePlanIds = getWithRelations.getReferencesList.asScala.collect {
+        case ref if ref.hasCommon && ref.getCommon.hasPlanId => ref.getCommon.getPlanId
+      }.toSet
+
       // Wrap the plan to keep the original planId.
-      val plan = Project(Seq(UnresolvedStar(None)), transformRelation(getWithRelations.getRoot))
+      val plan =
+        try {
+          Project(Seq(UnresolvedStar(None)), transformRelation(getWithRelations.getRoot))
+        } catch {
+          // Some transforms analyze the root eagerly, before the referenced plans are substituted
+          // below. A plan id that is attached here is then a server-side issue, not a client error.
+          case e: AnalysisException
+              if e.getCondition == "CONNECT_INVALID_PLAN.SUBQUERY_PLAN_NOT_ATTACHED" &&
+                e.getMessageParameters.asScala.get("planId").exists { id =>
+                  referencePlanIds.contains(id.toLong)
+                } =>
+            throw SparkException.internalError(
+              s"The subquery plan referenced by plan id ${e.getMessageParameters.get("planId")} " +
+                "is attached in WithRelations but was analyzed before it was substituted.",
+              e)
+        }
 
       val relations = getWithRelations.getReferencesList.asScala.map { ref =>
         if (ref.hasCommon && ref.getCommon.hasPlanId) {

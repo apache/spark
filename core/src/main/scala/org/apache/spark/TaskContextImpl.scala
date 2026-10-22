@@ -70,6 +70,13 @@ private[spark] class TaskContextImpl(
    */
   @transient private val onCompleteCallbacks = new Stack[TaskCompletionListener]
 
+  /**
+   * List of callback functions to execute when the task completes, before any of
+   * `onCompleteCallbacks`. `markTaskCompleted()` runs them on its own thread before it sets
+   * `completed`, in reverse order of registration, as they are popped from the stack.
+   */
+  @transient private val onPreCompleteCallbacks = new Stack[TaskCompletionListener]
+
   /** List of callback functions to execute when the task fails. */
   @transient private val onFailureCallbacks = new Stack[TaskFailureListener]
 
@@ -100,6 +107,10 @@ private[spark] class TaskContextImpl(
   // Whether this task is able to be interrupted. Should be protected by `TaskContext.synchronized`.
   private var _interruptible = true
 
+  // Whether `markTaskCompleted()` has been called. It sets `completed` once the pre-completion
+  // listeners have run.
+  private var completionStarted: Boolean = false
+
   // Whether the task has completed.
   private var completed: Boolean = false
 
@@ -124,6 +135,24 @@ private[spark] class TaskContextImpl(
     }
     if (needToCallListener) {
       invokeTaskCompletionListeners(None)
+    }
+    this
+  }
+
+  override private[spark] def addTaskPreCompletionListener(
+      listener: TaskCompletionListener): this.type = {
+    val completedAlready = synchronized {
+      // While `markTaskCompleted()` runs the pre-completion listeners, `completed` is not set yet,
+      // so the new listener is queued and that thread runs it before it sets `completed`.
+      if (!completed) {
+        onPreCompleteCallbacks.push(listener)
+      }
+      completed
+    }
+    if (completedAlready) {
+      // Too late to run before the completion listeners: run it like one added now, i.e. right
+      // away, or next if the completion listeners are still running.
+      addTaskCompletionListener(listener)
     }
     this
   }
@@ -178,14 +207,77 @@ private[spark] class TaskContextImpl(
 
   private[spark] override def markTaskCompleted(error: Option[Throwable]): Unit = {
     synchronized {
-      if (completed) return
-      completed = true
+      if (completionStarted) return
+      completionStarted = true
     }
-    invokeTaskCompletionListeners(error)
+    // Run the pre-completion listeners on this thread before setting `completed`, outside the
+    // listener invocation of `invokeListeners()`. Until `completed` is set, a listener that
+    // another thread adds is only queued, so that thread cannot start running the listeners. That
+    // thread can be one a pre-completion listener stops and waits for, e.g. a pipelined Python UDF
+    // writer that adds listeners lazily while it pulls its input. And since the completion
+    // listeners only run after `completed` is set, they run after every pre-completion listener,
+    // even if another thread is invoking listeners at this point.
+    val preCompletionExceptions = new ArrayBuffer[Throwable](2)
+    def nextPreCompletionListener(): Option[TaskCompletionListener] = synchronized {
+      if (onPreCompleteCallbacks.empty()) {
+        // Set together with finding no more pre-completion listeners, so that one added later
+        // is handed to `addTaskCompletionListener` instead of being left in the stack.
+        completed = true
+        None
+      } else {
+        Some(onPreCompleteCallbacks.pop())
+      }
+    }
+    var listener: Option[TaskCompletionListener] = None
+    while ({listener = nextPreCompletionListener(); listener.nonEmpty}) {
+      invokeTaskPreCompletionListener(listener.get, preCompletionExceptions)
+    }
+
+    try {
+      invokeTaskCompletionListeners(error)
+    } catch {
+      case e: TaskCompletionListenerException if preCompletionExceptions.nonEmpty =>
+        // Merge the completion listeners' own failures, not the exception that wraps them. Any
+        // other error comes from invokeListeners itself (e.g. an OutOfMemoryError) and is left
+        // to propagate, so that the executor still sees a fatal one.
+        preCompletionExceptions ++= e.getSuppressed.toSeq
+    }
+    if (preCompletionExceptions.nonEmpty) {
+      throw newTaskCompletionListenerException(preCompletionExceptions.toSeq, error)
+    }
   }
 
   private[spark] override def getTaskFailure: Option[Throwable] = {
     failureCauseOpt
+  }
+
+  /**
+   * Runs a pre-completion listener. If it fails, marks the task failed, like a failing completion
+   * listener does in `invokeListeners()`, and adds the failure to `listenerExceptions`.
+   */
+  private def invokeTaskPreCompletionListener(
+      listener: TaskCompletionListener,
+      listenerExceptions: ArrayBuffer[Throwable]): Unit = {
+    try {
+      listener.onTaskCompletion(this)
+    } catch {
+      case e: Throwable =>
+        try {
+          markTaskFailed(e)
+        } catch {
+          case t: Throwable => e.addSuppressed(t)
+        }
+        listenerExceptions += e
+        logError(log"Error in ${MDC(LISTENER, "TaskPreCompletionListener")}", e)
+    }
+  }
+
+  private def newTaskCompletionListenerException(
+      listenerExceptions: Seq[Throwable],
+      error: Option[Throwable]): TaskCompletionListenerException = {
+    val exception = new TaskCompletionListenerException(listenerExceptions.map(_.getMessage), error)
+    listenerExceptions.foreach(exception.addSuppressed)
+    exception
   }
 
   private def invokeTaskCompletionListeners(error: Option[Throwable]): Unit = {

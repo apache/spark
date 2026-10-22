@@ -24,10 +24,8 @@ import inspect
 import json
 import os
 import sys
-import time
 import warnings
-from collections.abc import Iterator
-from typing import Any, BinaryIO
+from typing import BinaryIO
 
 from pyspark import shuffle
 from pyspark.accumulators import (
@@ -45,8 +43,6 @@ from pyspark.messages import (
     SparkSocketMessageReceiver,
 )
 from pyspark.serializers import (
-    BatchedSerializer,
-    CPickleSerializer,
     SpecialLengths,
     write_int,
     write_with_length,
@@ -64,6 +60,7 @@ from pyspark.util import (
     with_faulthandler,
 )
 from pyspark.worker_message import UDTFInfo, WorkerInitInfo
+from pyspark.worker_metrics import WorkerMetrics
 from pyspark.worker_util import (
     EvalConf,
     RunnerConf,
@@ -78,21 +75,9 @@ from pyspark.worker_util import (
 )
 
 
-def report_metrics(
-    outfile, boot, init, finish, execution_duration_ms, memory_bytes_spilled, disk_bytes_spilled
-):
+def report_metrics(outfile: BinaryIO, metrics: dict[str, int]) -> None:
     """Write the worker metrics as a length-prefixed JSON report after METRICS_DATA."""
-    payload = json.dumps(
-        {
-            "bootTimestampMs": int(1000 * boot),
-            "initTimestampMs": int(1000 * init),
-            "finishTimestampMs": int(1000 * finish),
-            "pythonExecutionDurationMs": execution_duration_ms,
-            "memoryBytesSpilled": memory_bytes_spilled,
-            "diskBytesSpilled": disk_bytes_spilled,
-        },
-        separators=(",", ":"),
-    ).encode("utf-8")
+    payload = json.dumps(metrics, separators=(",", ":")).encode("utf-8")
     write_int(SpecialLengths.METRICS_DATA, outfile)
     write_with_length(payload, outfile)
 
@@ -102,24 +87,7 @@ def chain(f, g):
     return lambda *a: g(f(*a))
 
 
-def _is_iter_based(eval_type: int) -> bool:
-    return eval_type in (
-        PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
-        PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
-        # Iterator UDFs lifted out of a higher-order function lambda keep the iterator contract:
-        # the user function still consumes and produces an iterator of batches; the worker only
-        # feeds it the flattened elements and re-nests the results. See ExtractPythonUDFFromLambda.
-        PythonEvalType.SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF,
-        PythonEvalType.SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF,
-        PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
-        PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
-        PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
-        PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
-        PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
-    )
-
-
-def wrap_perf_profiler(f, eval_type, result_id):
+def wrap_perf_profiler(f, iter_based, result_id):
     from pyspark.sql.profiler import ProfileResultsParam, ProfileResultsParamV2, WorkerPerfProfiler
 
     accumulator = _deserialize_accumulator(
@@ -129,7 +97,7 @@ def wrap_perf_profiler(f, eval_type, result_id):
         SpecialAccumulatorIds.SQL_UDF_PROFIER_V2, {}, ProfileResultsParamV2
     )
 
-    if _is_iter_based(eval_type):
+    if iter_based:
 
         def profiling_func(*args, **kwargs):
             iterator = iter(f(*args, **kwargs))
@@ -151,7 +119,7 @@ def wrap_perf_profiler(f, eval_type, result_id):
     return profiling_func
 
 
-def wrap_memory_profiler(f, eval_type, result_id):
+def wrap_memory_profiler(f, iter_based, result_id):
     import pyspark.memory_profiler_ext
     from pyspark.sql.profiler import (
         ProfileResultsParam,
@@ -170,7 +138,7 @@ def wrap_memory_profiler(f, eval_type, result_id):
         SpecialAccumulatorIds.SQL_UDF_PROFIER_V2, {}, ProfileResultsParamV2
     )
 
-    if _is_iter_based(eval_type):
+    if iter_based:
 
         def profiling_func(*args, **kwargs):
             g = f(*args, **kwargs)
@@ -194,7 +162,8 @@ def wrap_memory_profiler(f, eval_type, result_id):
     return profiling_func
 
 
-def read_single_udf(pickleSer, udf_info, eval_type, runner_conf, udf_index):
+def read_single_udf(pickleSer, udf_info, handler_cls, runner_conf):
+    eval_type = handler_cls.eval_type
     chained_func = None
     for udf in udf_info.udfs:
         f, return_type = read_command(pickleSer, udf)
@@ -211,9 +180,13 @@ def read_single_udf(pickleSer, udf_info, eval_type, runner_conf, udf_index):
     else:
         profiler = runner_conf.udf_profiler
     if profiler == "perf":
-        profiling_func = wrap_perf_profiler(chained_func, eval_type, udf_info.result_id)
+        profiling_func = wrap_perf_profiler(
+            chained_func, handler_cls.is_iter_based, udf_info.result_id
+        )
     elif profiler == "memory":
-        profiling_func = wrap_memory_profiler(chained_func, eval_type, udf_info.result_id)
+        profiling_func = wrap_memory_profiler(
+            chained_func, handler_cls.is_iter_based, udf_info.result_id
+        )
     else:
         profiling_func = chained_func
 
@@ -303,12 +276,12 @@ def read_single_udf(pickleSer, udf_info, eval_type, runner_conf, udf_index):
 
 
 # Read a serialized user-defined table function (UDTF) and prepare it for evaluation: wrap
-# the constructor to receive the AnalyzeResult, instantiate the UDTF (wrapped in
+# the constructor to receive the AnalyzeResult, instantiate the UDTF (wrapped in the handler's
 # partition_wrapper when its TABLE argument has PARTITION BY expressions), and check the 'eval'
 # signature against the call arguments. Returns the same
 # (func, args_offsets, kwargs_offsets, return_type) shape as read_single_udf, with the UDTF
 # instance in the func slot.
-def read_single_udtf(pickleSer, udtf_info, partition_wrapper):
+def read_single_udtf(pickleSer, udtf_info, handler_cls):
     if udtf_info.pickled_analyze_result is not None:
         pickled_analyze_result = pickleSer.loads(udtf_info.pickled_analyze_result)
     else:
@@ -356,7 +329,7 @@ def read_single_udtf(pickleSer, udtf_info, partition_wrapper):
     # Instantiate the UDTF class.
     try:
         if len(udtf_info.partition_child_indexes) > 0:
-            udtf = partition_wrapper(handler, udtf_info.partition_child_indexes)
+            udtf = handler_cls.partition_wrapper(handler, udtf_info.partition_child_indexes)
         else:
             udtf = handler()
     except Exception as e:
@@ -386,38 +359,6 @@ def read_single_udtf(pickleSer, udtf_info, partition_wrapper):
     return udtf, udtf_info.args, udtf_info.kwargs, return_type
 
 
-def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
-    batch_size = int(os.environ.get("PYTHON_UDF_BATCH_SIZE", "100"))
-    ser = BatchedSerializer(CPickleSerializer(), batch_size)
-
-    udfs = [
-        read_single_udf(pickleSer, udf_info, eval_type, runner_conf, udf_index=udf_index)
-        for udf_index, udf_info in enumerate(udf_info_list)
-    ]
-
-    num_udfs = len(udfs)
-
-    if eval_type == PythonEvalType.SQL_BATCHED_UDF:
-        # Plain Python (pickle) UDFs, the only eval type reaching this branch. read_single_udf
-        # prepared each UDF as an (arg_offsets, eval_func) pair. Apply every one to each input
-        # row: a single UDF yields its bare result, multiple UDFs yield a tuple of results,
-        # which is the shape the JVM side expects. num_udfs is fixed, so the single-result
-        # case is handled once here rather than by unwrapping a one-element tuple per row.
-        def func(split_index: int, data: Iterator[Any]) -> Iterator[Any]:
-            if num_udfs == 1:
-                arg_offsets, f = udfs[0]
-                return (f(*[row[offset] for offset in arg_offsets]) for row in data)
-            return (
-                tuple(f(*[row[offset] for offset in arg_offsets]) for arg_offsets, f in udfs)
-                for row in data
-            )
-
-        return func, ser
-
-    else:
-        raise ValueError("Unknown eval type: {}".format(eval_type))
-
-
 def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
     """
     This function is the main processing function for worker.py.
@@ -427,7 +368,9 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
     Initialization -> Processing -> Finish/Cleanup
     """
     try:
-        boot_time = time.time()
+        metrics = WorkerMetrics()
+        metrics.reset()
+        metrics.set_current_timestamp("bootTimestampMs")
         # Initialization
         init_message = message_receiver.get_init_message()
         init_info = WorkerInitInfo.from_stream(init_message)
@@ -462,38 +405,28 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
             assert isinstance(init_info.udf_info, (bytes, memoryview))
             func, profiler, deserializer, serializer = read_command(pickleSer, init_info.udf_info)
         else:
-            # UDF and UDTF runners read input and write output through a single serializer.
-            # If an eval type has a registered handler, dispatch through it: the handler
-            # provides both the function and the serializer.
+            # UDF and UDTF runners dispatch through the eval type's registered handler, which
+            # provides both the function and the single serializer for input and output.
             handler_cls = get_eval_type_handler(eval_type, runner_conf)
-            if handler_cls is not None:
-                if isinstance(init_info.udf_info, UDTFInfo):
-                    assert issubclass(handler_cls, (UDTFEvalTypeHandler, TableUDTFHandler))
-                    udfs = [
-                        read_single_udtf(
-                            pickleSer, init_info.udf_info, handler_cls.partition_wrapper
-                        )
-                    ]
-                else:
-                    assert isinstance(init_info.udf_info, list)
-                    udfs = [
-                        read_single_udf(
-                            pickleSer, udf_info, eval_type, runner_conf, udf_index=udf_index
-                        )
-                        for udf_index, udf_info in enumerate(init_info.udf_info)
-                    ]
-                handler = handler_cls(udfs=udfs, runner_conf=runner_conf, eval_conf=eval_conf)
-                func, serializer = handler.run, handler.serializer
+            if handler_cls is None:
+                raise ValueError("Unknown eval type: {}".format(eval_type))
+            if isinstance(init_info.udf_info, UDTFInfo):
+                assert issubclass(handler_cls, (UDTFEvalTypeHandler, TableUDTFHandler))
+                udfs = [read_single_udtf(pickleSer, init_info.udf_info, handler_cls)]
             else:
-                func, serializer = read_udfs(
-                    pickleSer, init_info.udf_info, eval_type, runner_conf, eval_conf
-                )
+                assert isinstance(init_info.udf_info, list)
+                udfs = [
+                    read_single_udf(pickleSer, udf_info, handler_cls, runner_conf)
+                    for udf_info in init_info.udf_info
+                ]
+            handler = handler_cls(udfs=udfs, runner_conf=runner_conf, eval_conf=eval_conf)
+            func, serializer = handler.run, handler.serializer
             deserializer = serializer
 
         split_index = init_info.split_index
         del init_info
 
-        init_time = time.time()
+        metrics.set_current_timestamp("initTimestampMs")
 
         # Processing
 
@@ -600,17 +533,17 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                     )
 
         is_pipelined = os.environ.get("SPARK_PIPELINED_UDF") == "1"
+        # Pipelined reads can overlap UDF work, so mark these task reports for filtering.
+        metrics.set("pythonNumPipelinedTasks", int(is_pipelined))
         if is_pipelined and hasattr(serializer, "_flush_per_batch"):
             serializer._flush_per_batch = True
         run_process = pipelined_process if is_pipelined else process
 
-        execution_start_time = time.time()
-        with capture_outputs():
+        with metrics.measure("pythonExecutionDurationMs"), capture_outputs():
             if profiler:
                 profiler.profile(run_process)
             else:
                 run_process()
-        execution_duration_ms = int(1000 * (time.time() - execution_start_time))
 
         # Cleanup
         # Reset task context to None. This is a guard code to avoid residual context when worker
@@ -620,16 +553,11 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
     except BaseException as e:
         handle_worker_exception(e, outfile)
         sys.exit(-1)
-    finish_time = time.time()
-    report_metrics(
-        outfile,
-        boot_time,
-        init_time,
-        finish_time,
-        execution_duration_ms,
-        shuffle.MemoryBytesSpilled,
-        shuffle.DiskBytesSpilled,
-    )
+    metrics.set_current_timestamp("finishTimestampMs")
+    # Spill totals are byte counts already expressed in their reporting unit.
+    metrics.set("memoryBytesSpilled", shuffle.MemoryBytesSpilled)
+    metrics.set("diskBytesSpilled", shuffle.DiskBytesSpilled)
+    report_metrics(outfile, metrics.to_dict())
 
     # Mark the beginning of the accumulators section of the output
     write_int(SpecialLengths.END_OF_DATA_SECTION, outfile)
