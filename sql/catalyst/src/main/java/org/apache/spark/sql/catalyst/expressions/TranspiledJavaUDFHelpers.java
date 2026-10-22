@@ -28,8 +28,9 @@ import org.apache.spark.unsafe.types.UTF8String;
  * lives here; generated code calls these by FQCN.
  *
  * <ul>
- *   <li>Null propagates through arithmetic (SQL, same as Catalyst) and raises
- *   in ordering (so `if x > 0` cannot quietly take the false branch).</li>
+ *   <li>A NULL value makes arithmetic NULL (SQL, same as the Catalyst target;
+ *   interpreted Python raises TypeError on None) and raises in ordering (so
+ *   `if x > 0` cannot quietly take the false branch).</li>
  *   <li>Overflow raises (ANSI / `Math.*Exact`). Python `int` is arbitrary
  *   precision; that is the same documented divergence Catalyst has.</li>
  *   <li>Division by zero raises for both int and float. Java would give
@@ -110,13 +111,15 @@ public final class TranspiledJavaUDFHelpers {
       return ((double) x) / ((double) y);
     }
     // Exact first. A tie is dyadic so the exact divide succeeds; whatever
-    // reaches DECIMAL128 cannot be a tie. Rounding an already-rounded
-    // quotient is 1 ULP out on
-    // 14410791856275153 / -4611686018427387904.
+    // reaches the fallback cannot be a tie. But not-tied is not enough: the
+    // gap to the nearest tie can be as small as 1/(y*2^53) relative -- under
+    // 2^-116 for y near 2^63, finer than DECIMAL128's 34 digits -- so rounding
+    // twice can still flip the last bit (2525447105329283886 /
+    // 1152921504606846997). 40 digits clear the worst case for |y| < 2^64.
     try {
       return new BigDecimal(x).divide(new BigDecimal(y)).doubleValue();
     } catch (ArithmeticException nonTerminating) {
-      return new BigDecimal(x).divide(new BigDecimal(y), MathContext.DECIMAL128).doubleValue();
+      return new BigDecimal(x).divide(new BigDecimal(y), new MathContext(40)).doubleValue();
     }
   }
 
@@ -156,7 +159,7 @@ public final class TranspiledJavaUDFHelpers {
 
   /**
    * Python's `//` on floats (`7.0 // 2.0 == 3.0`). Not `Math.floor(a / b)`:
-   * that is off by one on inexact quotients and wrong for inf. See [[divmod]].
+   * that is off by one on inexact quotients and wrong for inf. See {@code divmod}.
    */
   public static Double floorDivideDouble(Double a, Double b) {
     if (a == null || b == null) return null;
@@ -166,7 +169,7 @@ public final class TranspiledJavaUDFHelpers {
 
   /**
    * Python's `%` on floats (divisor's sign: `-7.0 % 3.0 == 2.0`). Sign-fixing
-   * `a - b * floor(a / b)` is 0.0 for `5.5 % 1.1`. See [[divmod]].
+   * `a - b * floor(a / b)` is 0.0 for `5.5 % 1.1`. See {@code divmod}.
    */
   public static Double modDouble(Double a, Double b) {
     if (a == null || b == null) return null;
@@ -459,9 +462,9 @@ public final class TranspiledJavaUDFHelpers {
   // No `and` / `or`: a helper cannot short-circuit. Hoist the right operand
   // behind an `if` when that lands (SPARK-55209 follow-up).
 
-  /** SQL `NOT`: null stays null. Used for `!=`. */
+  /** Python's `not`: `not None` is True, unlike SQL's `NOT NULL`. Used for `!=`. */
   public static Boolean not(Boolean a) {
-    if (a == null) return null;
+    if (a == null) return true;
     return !a;
   }
 

@@ -98,6 +98,10 @@ class TranspiledJavaUDFHelpersSuite extends SparkFunSuite {
     // answer for this pair, and for 22k others swept alongside it.
     assert(java.lang.Double.doubleToRawLongBits(
       H.divideLong(14410791856275153L, -4611686018427387904L)) === 0xbf699944f8c33f68L)
+    // A quotient a hair above a tie: 34 digits (DECIMAL128) round the
+    // intermediate onto the tie and the result lands a ulp down; 40 do not.
+    // CPython's answer.
+    assert(H.divideLong(2525447105329283886L, 1152921504606846997L) === 2.1904761904761907d)
   }
 
   test("division by zero raises for both categories") {
@@ -138,6 +142,9 @@ class TranspiledJavaUDFHelpersSuite extends SparkFunSuite {
     assert(H.repeat(utf8("a"), null) === null)
     assert(H.negateLong(null) === null)
     assert(H.toDouble(null) === null)
+    // The promotion itself rounds, like Python's float(int): past 2^53 the double
+    // is the nearest, not the exact, long.
+    assert(H.toDouble(9007199254740993L) === 9007199254740992.0d)
   }
 
   test("equality is null-safe, because Python's is") {
@@ -290,10 +297,13 @@ class TranspiledJavaUDFHelpersSuite extends SparkFunSuite {
     }
   }
 
-  test("not keeps null, and is the only boolean connective here") {
+  test("not follows Python, and is the only boolean connective here") {
     // `and` / `or` were removed: the transpiler refuses `ast.BoolOp`, so nothing called them, and
     // their SQL three-valued semantics are not what a short-circuiting lowering will want.
-    assert(H.not(null) === null)
+    // `not None` is True, matching Python and the Catalyst target's coalesce-to-True; the
+    // null-safe equals helpers feeding `!=` never pass null, so the True only ever surfaces
+    // where Python had a None.
+    assert(H.not(null) === true)
     assert(H.not(true) === false)
     assert(H.not(false) === true)
   }
