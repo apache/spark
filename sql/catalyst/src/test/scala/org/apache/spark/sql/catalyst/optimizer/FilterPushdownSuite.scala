@@ -1098,6 +1098,96 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  private val asOfLeft = LocalRelation($"lt".int, $"lk".int, $"lv".int)
+  private val asOfRight = LocalRelation($"rt".int, $"rk".int, $"rv".int)
+  private val leftKey = asOfLeft.output(1)
+  private val leftValue = asOfLeft.output(2)
+  private val rightKey = asOfRight.output(1)
+  private val rightValue = asOfRight.output(2)
+
+  // A backward as-of join on lt >= rt. Only the inputs, the ON condition, and the type vary.
+  private def asOfJoin(
+      left: LogicalPlan,
+      right: LogicalPlan,
+      condition: Option[Expression],
+      joinType: JoinType): LogicalPlan = {
+    AsOfJoin(left, right, asOfLeft.output(0), asOfRight.output(0), condition, joinType,
+      tolerance = None, allowExactMatches = true, direction = AsOfJoinDirection("backward"))
+  }
+
+  test("as-of joins: push a left-side where condition into the left side") {
+    Seq(Inner, LeftOuter).foreach { joinType =>
+      val originalQuery = asOfJoin(asOfLeft, asOfRight, Some(leftKey === rightKey), joinType)
+        .where(leftValue > 1)
+        .analyze
+      val optimized = Optimize.execute(originalQuery)
+      val correctAnswer = asOfJoin(
+        asOfLeft.where(leftValue > 1), asOfRight, Some(leftKey === rightKey), joinType)
+        .analyze
+      comparePlans(optimized, correctAnswer)
+    }
+  }
+
+  test("as-of joins: keep right-side and two-side where conditions above the join") {
+    Seq(Inner, LeftOuter).foreach { joinType =>
+      val join = asOfJoin(asOfLeft, asOfRight, Some(leftKey === rightKey), joinType)
+      // A right-side filter must run after the match, as it changes which right row is closest.
+      val rightOnlyQuery = join.where(rightValue > 2).analyze
+      comparePlans(Optimize.execute(rightOnlyQuery), rightOnlyQuery)
+
+      val mixedQuery = join.where(leftValue > 1 && rightValue > 2 && leftValue > rightValue)
+        .analyze
+      val correctAnswer = asOfJoin(
+        asOfLeft.where(leftValue > 1), asOfRight, Some(leftKey === rightKey), joinType)
+        .where(rightValue > 2 && leftValue > rightValue)
+        .analyze
+      comparePlans(Optimize.execute(mixedQuery), correctAnswer)
+    }
+  }
+
+  test("as-of joins: do not push down non-deterministic where conditions") {
+    val originalQuery = asOfJoin(asOfLeft, asOfRight, Some(leftKey === rightKey), Inner)
+      .where(Rand(10) > 0.5)
+      .analyze
+    comparePlans(Optimize.execute(originalQuery), originalQuery)
+  }
+
+  test("as-of joins: push a right-side join condition into the right side") {
+    Seq(Inner, LeftOuter).foreach { joinType =>
+      val originalQuery = asOfJoin(
+        asOfLeft, asOfRight, Some(leftKey === rightKey && rightValue > 2), joinType)
+        .analyze
+      val optimized = Optimize.execute(originalQuery)
+      val correctAnswer = asOfJoin(
+        asOfLeft, asOfRight.where(rightValue > 2), Some(leftKey === rightKey), joinType)
+        .analyze
+      comparePlans(optimized, correctAnswer)
+    }
+  }
+
+  test("as-of joins: push a left-side join condition only for an inner join") {
+    val condition = Some(leftKey === rightKey && leftValue > 1)
+    val innerQuery = asOfJoin(asOfLeft, asOfRight, condition, Inner).analyze
+    val correctAnswer = asOfJoin(
+      asOfLeft.where(leftValue > 1), asOfRight, Some(leftKey === rightKey), Inner)
+      .analyze
+    comparePlans(Optimize.execute(innerQuery), correctAnswer)
+
+    // A left outer join keeps every left row, so the condition must stay in the join.
+    val leftOuterQuery = asOfJoin(asOfLeft, asOfRight, condition, LeftOuter).analyze
+    comparePlans(Optimize.execute(leftOuterQuery), leftOuterQuery)
+  }
+
+  test("as-of joins: PushDownPredicates visits an as-of join with no filter above it") {
+    val originalQuery = asOfJoin(
+      asOfLeft, asOfRight, Some(leftKey === rightKey && rightValue > 2), Inner)
+      .analyze
+    val correctAnswer = asOfJoin(
+      asOfLeft, asOfRight.where(rightValue > 2), Some(leftKey === rightKey), Inner)
+      .analyze
+    comparePlans(PushDownPredicates(originalQuery), correctAnswer)
+  }
+
   val testRelationWithArrayType = LocalRelation($"a".int, $"b".int, $"c_arr".array(IntegerType))
 
   test("generate: predicate referenced no generated column") {

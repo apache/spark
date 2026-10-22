@@ -2551,7 +2551,7 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
  */
 object PushDownPredicates extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsAnyPattern(FILTER, JOIN)) {
+    _.containsAnyPattern(FILTER, JOIN, AS_OF_JOIN)) {
     CombineFilters.applyLocally
       .orElse(PushPredicateThroughNonJoin.applyLocally)
       .orElse(PushPredicateThroughJoin.applyLocally)
@@ -2973,6 +2973,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
  * And also pushes down the join filter, where the `condition` can be evaluated using only the
  * attributes of the left or right side of sub query when applicable.
  *
+ * Also pushes the safe predicates through an [[AsOfJoin]]
+ *
  * Check https://cwiki.apache.org/confluence/display/Hive/OuterJoinBehavior for more details
  */
 object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
@@ -3088,6 +3090,40 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 
         case other =>
           throw SparkException.internalError(s"Unexpected join type: $other")
+      }
+    // Left-side WHERE predicate can run before the join, but a right-side one can not
+    case f @ Filter(filterCondition, j: AsOfJoin) =>
+      val (leftFilterConditions, rightFilterConditions, commonFilterCondition) =
+        split(splitConjunctivePredicates(filterCondition), j.left, j.right)
+      if (leftFilterConditions.isEmpty) {
+        f
+      } else {
+        val newJoin = j.copy(left = Filter(leftFilterConditions.reduceLeft(And), j.left))
+        (rightFilterConditions ++ commonFilterCondition).
+          reduceLeftOption(And).map(Filter(_, newJoin)).getOrElse(newJoin)
+      }
+
+    // Right-side ON predicates can filter the right input first.
+    // Left-side ON predicates can filter the left input only for an inner join
+    // because a left outer join keeps every left row.
+    case j: AsOfJoin =>
+      val (leftJoinConditions, rightJoinConditions, commonJoinCondition) =
+        split(j.condition.map(splitConjunctivePredicates).getOrElse(Nil), j.left, j.right)
+      val (pushedLeftConditions, keptLeftConditions) = j.joinType match {
+        case Inner => (leftJoinConditions, Nil)
+        case LeftOuter => (Nil, leftJoinConditions)
+        case other =>
+          throw SparkException.internalError(s"Unexpected as-of join type: $other")
+      }
+      if (pushedLeftConditions.isEmpty && rightJoinConditions.isEmpty) {
+        j
+      } else {
+        val newLeft = pushedLeftConditions.
+          reduceLeftOption(And).map(Filter(_, j.left)).getOrElse(j.left)
+        val newRight = rightJoinConditions.
+          reduceLeftOption(And).map(Filter(_, j.right)).getOrElse(j.right)
+        j.copy(left = newLeft, right = newRight,
+          condition = (keptLeftConditions ++ commonJoinCondition).reduceLeftOption(And))
       }
   }
 }
