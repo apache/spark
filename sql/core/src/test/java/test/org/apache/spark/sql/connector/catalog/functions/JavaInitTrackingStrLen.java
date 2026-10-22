@@ -24,13 +24,19 @@ import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DataTypes;
 
 /**
- * A string length function that records the initialization of its class in a system property.
+ * A string length function whose class initialization requires the class
+ * `test.v2udf.UsingResourceStrLen`, which only exists in the function's `USING` jar, and records
+ * the initialization in a system property.
  */
 public class JavaInitTrackingStrLen implements SimpleFunction, ScalarFunction<Integer> {
-  public static final String INITIALIZED_PROPERTY = "spark.test.JavaInitTrackingStrLen.initialized";
-
   static {
-    System.setProperty(INITIALIZED_PROPERTY, "true");
+    try {
+      Class.forName(
+        "test.v2udf.UsingResourceStrLen", true, Thread.currentThread().getContextClassLoader());
+    } catch (ClassNotFoundException e) {
+      throw new IllegalStateException(e);
+    }
+    System.setProperty("spark.test.JavaInitTrackingStrLen.initialized", "true");
   }
 
   @Override

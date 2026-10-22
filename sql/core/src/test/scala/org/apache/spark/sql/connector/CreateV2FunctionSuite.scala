@@ -288,10 +288,13 @@ class CreateV2FunctionSuite extends QueryTest with SharedSparkSession {
   test("USING resources are loaded before the class is initialized") {
     val className = classOf[JavaInitTrackingStrLen].getName
     val initialized = "spark.test.JavaInitTrackingStrLen.initialized"
+    // Initializing the class requires a class in this jar, so it fails if done before the jar
+    // is loaded.
     val jar = createStrLenJar("test.v2udf.UsingResourceStrLen")
     withUserDefinedFunction("default.f" -> false) {
       sql(s"CREATE FUNCTION f AS '$className' USING JAR '$jar'")
       spark.catalog.listFunctions().collect()
+      spark.catalog.getFunction("f")
       val describe = sql("DESCRIBE FUNCTION f").collect().map(_.getString(0))
       assert(!describe.exists(_.contains("strlen(string) -> int")))
       assert(System.getProperty(initialized) == null)
