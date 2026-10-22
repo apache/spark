@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils.fromAttributes
 import org.apache.spark.sql.connector.catalog.{FunctionCatalog, Identifier}
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction.MAGIC_METHOD_NAME
-import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, GeneralScalarExpression, IdentityTransform, Literal => V2Literal, NamedReference, NamedTransform, NullOrdering => V2NullOrdering, SortDirection => V2SortDirection, SortOrder => V2SortOrder, SortValue, Transform}
+import org.apache.spark.sql.connector.expressions.{BucketTransform, Cast => V2Cast, Expression => V2Expression, GeneralScalarExpression, IdentityTransform, Literal => V2Literal, LogicalExpressions, NamedReference, NamedTransform, NullOrdering => V2NullOrdering, SortDirection => V2SortDirection, SortOrder => V2SortOrder, SortValue, Transform}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue}
 import org.apache.spark.sql.connector.read.{SampleMethod => V2SampleMethod}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
@@ -153,8 +153,12 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       funCatalogOpt: Option[FunctionCatalog] = None): Option[Expression] = trans match {
     case IdentityTransform(ref) =>
       Some(resolveRef[NamedExpression](ref, query))
-    // Bucket resolves here too, so its count is a Literal child like any other parameter. A
-    // SortedBucketTransform without sort columns therefore resolves `sorted_bucket`, not `bucket`.
+    // A sorted bucket with no sort columns is a bucket: resolve it as `bucket(numBuckets, col)`, as
+    // before literal parameters became children. With sort columns it stays `sorted_bucket`.
+    case t @ BucketTransform(numBuckets, Seq(ref), Seq()) if t.name == "sorted_bucket" =>
+      toCatalystTransformOpt(
+        LogicalExpressions.bucket(numBuckets, Array(ref)), query, funCatalogOpt)
+    // Bucket resolves here too, so its count is a Literal child like any other parameter.
     case NamedTransform(name, args) =>
       val catalystArgs = args.map(toCatalyst(_, query, funCatalogOpt))
       funCatalogOpt.flatMap { catalog =>

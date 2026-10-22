@@ -7397,6 +7397,27 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  test("SPARK-50593: a sorted bucket with no sort columns resolves as a bucket") {
+    // The catalog registers `bucket` only. A sort-free `sorted_bucket` is the same partitioning,
+    // so it must resolve to that function and pair with a `bucket` table without a shuffle.
+    val sortFree = SortedBucketTransform(
+      LogicalExpressions.literal(4, IntegerType), Seq(FieldReference("id")))
+    createTable("sb_sorted", columns, Array(sortFree))
+    sql("INSERT INTO testcat.ns.sb_sorted VALUES " +
+      "(1, 'a', CAST('2022-01-01' AS timestamp)), (5, 'b', CAST('2022-01-01' AS timestamp))")
+    createTable("sb_plain", columns, Array(bucket(4, "id")))
+    sql("INSERT INTO testcat.ns.sb_plain VALUES " +
+      "(1, 'c', CAST('2022-01-01' AS timestamp)), (5, 'd', CAST('2022-01-01' AS timestamp))")
+    val df = sql(
+      s"""
+         |${selectWithMergeJoinHint("sb_sorted", "sb_plain")}
+         |sb_sorted.id FROM testcat.ns.sb_sorted JOIN testcat.ns.sb_plain
+         |ON sb_sorted.id = sb_plain.id
+         |""".stripMargin)
+    assert(collectShuffles(df.queryExecution.executedPlan).isEmpty)
+    checkAnswer(df, Seq(Row(1), Row(5)))
+  }
+
   test("SPARK-50593: identical truncate widths trigger SPJ under the default config") {
     val table1 = "trunc_same_a"
     val table2 = "trunc_same_b"
