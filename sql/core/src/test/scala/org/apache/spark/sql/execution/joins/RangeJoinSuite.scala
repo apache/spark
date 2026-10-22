@@ -22,7 +22,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{And, Expression, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide, GreaterPartialRangeJoin, IntervalOverlapJoin, LessPartialRangeJoin, PointInRangeJoin, RangeJoin}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
+import org.apache.spark.sql.catalyst.planning.{GreaterPartialRangeJoin, IntervalOverlapJoin, LessPartialRangeJoin, PointInRangeJoin, RangeJoin}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.internal.SQLConf
@@ -262,6 +263,23 @@ class RangeJoinSuite extends QueryTest with SharedSparkSession {
       (left, right) => GreaterThan(left.output.head, right.output(1)),
       Seq((0, 1, -2, -1), (0, 2, -2, -1), (1, 5, -2, -1)).map(Row.fromTuple),
       buildSide = BuildLeft)
+    // Non-strict counterparts of the two cases above: PointScan.UpTo and PointScan.From,
+    // the inclusive scan arms the strict cases never reach. Each adds exactly the one row
+    // the strict comparison drops (low1 == high2 at -1), pinning that the inclusive scan
+    // (not just the final condition re-check) actually surfaces an equal boundary key.
+    check(
+      LessPartialRangeJoin(strict = false),
+      (left, right) => LessThanOrEqual(left.output.head, right.output(1)),
+      Seq(
+        (-1, 0, -2, -1), (-1, 0, 1, 3), (-1, 0, 5, 7),
+        (0, 1, 1, 3), (0, 1, 5, 7),
+        (0, 2, 1, 3), (0, 2, 5, 7),
+        (1, 5, 1, 3), (1, 5, 5, 7)).map(Row.fromTuple))
+    check(
+      GreaterPartialRangeJoin(strict = false),
+      (left, right) => GreaterThanOrEqual(left.output.head, right.output(1)),
+      Seq(
+        (-1, 0, -2, -1), (0, 1, -2, -1), (0, 2, -2, -1), (1, 5, -2, -1)).map(Row.fromTuple))
   }
 
   test("interval overlap probes both bounds") {

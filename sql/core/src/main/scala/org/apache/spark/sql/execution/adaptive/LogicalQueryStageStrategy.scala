@@ -18,8 +18,8 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.catalyst.expressions.{BindReferences, Expression}
-import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide, RangeJoin}
-import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractRangeJoinKeys, ExtractSingleColumnNullAwareAntiJoin}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
+import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractRangeJoinKeys, ExtractSingleColumnNullAwareAntiJoin, RangeJoin}
 import org.apache.spark.sql.catalyst.plans.{JoinType, LeftAnti}
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastPartitioning, IdentityBroadcastMode}
@@ -101,7 +101,7 @@ object LogicalQueryStageStrategy extends Strategy {
         plan match {
           case j @ Join(_, _, _, Some(cond), _) =>
             j match {
-              case ExtractRangeJoinKeys(joinType, leftKeys, rightKeys, rangeJoin, left, right) =>
+              case ExtractRangeJoinKeys(joinType, leftKeys, rightKeys, rangeJoin) =>
                 def fromStage(
                     mode: RangeRelationBroadcastMode,
                     bqs: BroadcastQueryStageExec,
@@ -123,16 +123,17 @@ object LogicalQueryStageStrategy extends Strategy {
                     val bound = BindReferences.bindReferences(buildKeys, bqs.output)
                     if (mode == RangeRelationBroadcastMode(bound, mode.indexKind)) {
                       Some(ExtractBroadcastRangeJoinStage(
-                        left, right, buildSide, joinType, leftKeys, rightKeys, cond, rangeJoin))
+                        j.left, j.right, buildSide, joinType, leftKeys, rightKeys, cond, rangeJoin))
                     } else {
                       None
                     }
                   }
                 }
-                broadcastRangeStage(left).flatMap { case (m, bqs) => fromStage(m, bqs, BuildLeft) }
-                  .orElse(broadcastRangeStage(right).flatMap {
-                    case (m, bqs) => fromStage(m, bqs, BuildRight)
-                  })
+                broadcastRangeStage(j.left).flatMap {
+                  case (m, bqs) => fromStage(m, bqs, BuildLeft)
+                }.orElse(broadcastRangeStage(j.right).flatMap {
+                  case (m, bqs) => fromStage(m, bqs, BuildRight)
+                })
               case _ => None
             }
           case _ => None
