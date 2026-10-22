@@ -386,12 +386,14 @@ class CatalystTranspiler(AbstractTranspiler):
                 "or fail analysis, so the transpiler falls back to interpreted Python"
             )
         if lc in ("map", "array") or rc in ("map", "array"):
-            # Not orderable, so a lowered `=` fails analysis -- even vs None, which
-            # coerces to the complex type first (SPARK-55219).
+            # A map is not orderable, so `=` fails analysis -- even vs None, which
+            # coerces to MapType first. "array" says nothing about the element type
+            # (map elements fail the same way) and Python's `[None] == [None]` is
+            # True, so arrays are refused too (SPARK-55219).
             raise UnsupportedOperationException(
-                "`==`/`!=` has a `map`/`array` operand; Spark's `=` does not "
-                "support ordering on MapType/ArrayType, so the transpiler falls "
-                "back to interpreted Python"
+                "`==`/`!=` has a `map`/`array` operand; Spark's `=` fails analysis "
+                "or diverges from Python there, so the transpiler falls back to "
+                "interpreted Python"
             )
         left_col = self._convert_chunk(params, left_node)
         right_col = self._convert_chunk(params, right_node)
@@ -450,10 +452,11 @@ class CatalystTranspiler(AbstractTranspiler):
                 "transpiler falls back to interpreted Python"
             )
         if lc in ("map", "array"):
+            # Same reasons as `_lower_eq`, plus Python's `[None] < [1]` raises.
             raise UnsupportedOperationException(
-                f"`{op_repr}` operands are both `{lc}`; Spark's ordering operators "
-                "do not support ordering on MapType/ArrayType, so the transpiler "
-                "falls back to interpreted Python"
+                f"`{op_repr}` operands are both `{lc}`; Spark's ordering fails "
+                "analysis or diverges from Python there, so the transpiler falls "
+                "back to interpreted Python"
             )
         left_col = self._convert_chunk(params, left_node)
         right_col = self._convert_chunk(params, right_node)
@@ -959,8 +962,12 @@ def _annotation_category(annotation: Optional[ast.AST]) -> Optional[str]:
     name: Optional[str] = None
     if isinstance(annotation, ast.Name):
         name = annotation.id
-    elif isinstance(annotation, ast.Attribute):
-        name = annotation.attr  # typing.Dict -> Dict
+    elif (
+        isinstance(annotation, ast.Attribute)
+        and isinstance(annotation.value, ast.Name)
+        and annotation.value.id == "typing"
+    ):
+        name = annotation.attr  # typing.Dict -> Dict, but not torch.float
     elif isinstance(annotation, ast.Constant) and isinstance(annotation.value, str):
         name = annotation.value  # stringized annotation, e.g. def f(a: "int")
     # str -> "string", int/float -> "numeric", bool -> "bool", bytes -> "binary"

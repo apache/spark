@@ -90,16 +90,19 @@ class ResolveTranspiledPythonUDFOptionsSuite extends PlanTest {
     // because the `$"a".map(...)` DSL collides with TreeNode.map.
     val n = $"b".long
     val opt = Add(n, Literal(1L))
-    Seq("map" -> MapType(StringType, StringType), "array" -> ArrayType(StringType)).foreach {
-      case (category, dt) =>
-        def node(first: AttributeReference) = TranspiledPythonUDF(
+    val mapT = MapType(StringType, StringType)
+    val arrT = ArrayType(StringType)
+    Seq(("map", mapT, arrT), ("array", arrT, mapT)).foreach {
+      case (category, dt, otherDt) =>
+        def node(first: AttributeReference): TranspiledPythonUDF = TranspiledPythonUDF(
           "udf", pyUDF(Seq(first, n)), List(opt), List(List(category, "numeric")))
         val c = AttributeReference("a", dt)()
         val pruned = prune(node(c), LocalRelation(c, n))
         assert(pruned.transpiledOptions == List(opt))
         assert(pruned.optionInputCategories.isEmpty)
-        val s = $"a".string
-        assert(prune(node(s), LocalRelation(s, n)).transpiledOptions.isEmpty)
+        Seq($"a".string, AttributeReference("a", otherDt)()).foreach { wrong =>
+          assert(prune(node(wrong), LocalRelation(wrong, n)).transpiledOptions.isEmpty)
+        }
     }
   }
 

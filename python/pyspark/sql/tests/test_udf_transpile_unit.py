@@ -2670,6 +2670,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             ("typing.List[int]", "array"),
             ('"list"', "array"),
             ("set", None),
+            ("torch.float", None),
         ]:
             with self.subTest(ann=ann):
                 fn = _ast.parse(f"def f(a: {ann}): ...").body[0]
@@ -2722,9 +2723,9 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 self.assertEqual([r[0] for r in projected.collect()], [2], str(func))
 
     def test_udf_transpile_map_and_array_comparison_falls_back(self):
-        # MapType/ArrayType are not orderable, so a lowered `=`/`<` fails analysis and
-        # breaks the query -- even vs None, which coerces to the complex type
-        # (SPARK-55219). Refuse and let interpreted Python answer.
+        # A lowered `=`/`<` fails analysis on a map (even vs None) and diverges from
+        # Python on arrays (None elements), so refuse and let Python answer
+        # (SPARK-55219).
         def map_eq(a: dict, b: dict):
             return a == b
 
