@@ -427,22 +427,22 @@ object ExtractSingleColumnNullAwareAntiJoin extends JoinSelectionHelper with Pre
  * Point-in-range and interval overlap both probe an interval index. A partial range
  * is one inequality; Less vs Greater records which side holds the lower bound.
  */
-sealed abstract class RangeJoin
+sealed abstract class RangeJoinKind
 
 /** A point-in-range join: a value from one side falls within a `[low, high]` range on the other. */
-case object PointInRangeJoin extends RangeJoin
+case object PointInRangeJoin extends RangeJoinKind
 
 /**
  * An interval-overlap join: `(low, high)` on each side. The build side is an
  * interval index and the stream side probes it with `overlapping(low, high)`.
  */
-case object IntervalOverlapJoin extends RangeJoin
+case object IntervalOverlapJoin extends RangeJoinKind
 
 /**
- * A partial-range join: one inequality, one column per side.
+ * A partial-range join: one inequality, one expression per side.
  * `leftIsLower` says which child holds the lower bound.
  */
-sealed abstract class PartialRangeJoin extends RangeJoin {
+sealed abstract class PartialRangeJoin extends RangeJoinKind {
   def leftIsLower: Boolean
 
   /**
@@ -472,13 +472,14 @@ final case class GreaterPartialRangeJoin(override val strict: Boolean) extends P
  * cross-side inequality: keeps the first that matches.
  *  - point-in-range: one key probed as both ends of a `(low, high)` window on the other side.
  *  - interval overlap: a `(low, high)` key on each side.
- *  - partial range: one inequality, one column per side.
- * Leftover conjuncts, including inclusivity ([[RangePredicate]] only extracts the
- * canonical `low <= high` shape), stay on the original condition and are evaluated
- * per candidate.
+ *  - partial range: one inequality, one expression per side.
+ * [[RangePredicate]] normalizes `<`/`<=`/`>`/`>=` to `(dataType, low, high, strict)`;
+ * `strict` selects the exclusive point-index scan for `partialRange` below, but
+ * inclusivity otherwise, and every leftover conjunct, stay on the original condition
+ * and are evaluated per candidate.
  */
 object ExtractRangeJoinKeys extends PredicateHelper {
-  type ReturnType = (JoinType, Seq[Expression], Seq[Expression], RangeJoin)
+  type ReturnType = (JoinType, Seq[Expression], Seq[Expression], RangeJoinKind)
 
   def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
     case Join(left, right, joinType, Some(condition), _) =>
@@ -517,7 +518,7 @@ object ExtractRangeJoinKeys extends PredicateHelper {
       left: LogicalPlan,
       right: LogicalPlan,
       joinType: JoinType,
-      rangeJoin: RangeJoin)(
+      rangeJoinKind: RangeJoinKind)(
       shape: PartialFunction[(Expression, Expression, Expression, Expression),
         (Seq[Expression], Seq[Expression])]): Option[ReturnType] = {
     rangePreds.combinations(2).collectFirst(Function.unlift {
@@ -526,7 +527,7 @@ object ExtractRangeJoinKeys extends PredicateHelper {
           place(keysA, keysB, left, right).filter { case (l, r) =>
             supportedKeys(l, r)
           }.map { case (leftKeys, rightKeys) =>
-            (joinType, leftKeys, rightKeys, rangeJoin)
+            (joinType, leftKeys, rightKeys, rangeJoinKind)
           }
         }
       case _ => None
@@ -551,8 +552,8 @@ object ExtractRangeJoinKeys extends PredicateHelper {
   /**
    * Puts `leftExprs` on the left child when that child can evaluate all of them
    * and the right child can evaluate `rightExprs`. Otherwise swaps, when the
-   * opposite assignment fits. A key is a column of one input, so at most one
-   * assignment succeeds.
+   * opposite assignment fits. A key is evaluable on exactly one input, so at
+   * most one assignment succeeds.
    */
   private def place(
       leftExprs: Seq[Expression],
@@ -601,12 +602,12 @@ object ExtractRangeJoinKeys extends PredicateHelper {
       } else {
         // Unswapped, the left child holds `low`. Swapped, it holds `high`.
         place(Seq(low), Seq(high), left, right).map { case (leftKeys, rightKeys) =>
-          val rangeJoin = if (canEvaluate(low, left)) {
+          val rangeJoinKind = if (canEvaluate(low, left)) {
             LessPartialRangeJoin(strict)
           } else {
             GreaterPartialRangeJoin(strict)
           }
-          (joinType, leftKeys, rightKeys, rangeJoin)
+          (joinType, leftKeys, rightKeys, rangeJoinKind)
         }
       }
     }.nextOption()
