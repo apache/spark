@@ -491,10 +491,8 @@ class CatalystTranspiler(AbstractTranspiler):
                     "or fail analysis, so the transpiler falls back to interpreted Python"
                 )
         if lc in ("map", "array") or rc in ("map", "array"):
-            # MapType/ArrayType are not orderable, so a lowered `=` fails analysis
-            # -- even vs a None literal, which coerces to the complex type before
-            # the ordering check (SPARK-55219). The guard above handles
-            # map-vs-numeric etc.; this catches map/array-vs-None and map-vs-map.
+            # Not orderable, so a lowered `=` fails analysis -- even vs None, which
+            # coerces to the complex type first (SPARK-55219).
             raise UnsupportedOperationException(
                 "`==`/`!=` has a `map`/`array` operand; Spark's `=` does not "
                 "support ordering on MapType/ArrayType, so the transpiler falls "
@@ -572,9 +570,7 @@ class CatalystTranspiler(AbstractTranspiler):
                 f"({lc} vs {rc}); Python would raise TypeError, so the "
                 "transpiler falls back to interpreted Python"
             )
-        if lc == rc and lc in ("map", "array"):
-            # MapType/ArrayType are not orderable; a lowered `<`/`>` would fail
-            # analysis, so fall back to interpreted Python (SPARK-55219).
+        if lc in ("map", "array"):
             raise UnsupportedOperationException(
                 f"`{op_repr}` operands are both `{lc}`; Spark's ordering operators "
                 "do not support ordering on MapType/ArrayType, so the transpiler "
@@ -1138,27 +1134,6 @@ def _get_transpilers(session: "SparkSession") -> List[AbstractTranspiler]:
         for name in transpiler_names
         if name in AbstractTranspiler.varieties
     ]
-
-
-def _annotation_base_name(annotation: Optional[ast.AST]) -> Optional[str]:
-    """The bare type name an annotation spells, peeling one subscript.
-
-    ``dict[str, str]`` and bare ``dict`` both come back ``"dict"``; a stringized
-    annotation (``def f(a: "int")``) is unwrapped to its text; an attribute
-    spelling (``typing.Dict[str, str]``) unwraps to the attribute name. ``None``
-    means the annotation is absent or not a simple name we recognise.
-    """
-    if annotation is None:
-        return None
-    if isinstance(annotation, ast.Subscript):
-        annotation = annotation.value
-    if isinstance(annotation, ast.Name):
-        return annotation.id
-    if isinstance(annotation, ast.Attribute):
-        return annotation.attr  # typing.Dict -> "Dict", typing.List -> "List"
-    if isinstance(annotation, ast.Constant) and isinstance(annotation.value, str):
-        return annotation.value  # stringized annotation, e.g. def f(a: "int")
-    return None
 
 
 def _annotation_category(annotation: Optional[ast.AST]) -> Optional[str]:
