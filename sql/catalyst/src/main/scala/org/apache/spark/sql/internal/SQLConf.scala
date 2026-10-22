@@ -5801,6 +5801,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PYTHON_UDF_DETAILED_TIMING_ENABLED =
+    buildConf("spark.sql.execution.pythonUDF.detailedTiming.enabled")
+      .internal()
+      .doc("When true, collect detailed timing metrics for supported Python UDFs.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val PYTHON_UDF_ARROW_ENABLED =
     buildConf("spark.sql.execution.pythonUDF.arrow.enabled")
       .doc("Enable Arrow optimization in regular Python UDFs. This optimization " +
@@ -10000,6 +10009,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(PYTHON_UDF_DAEMON_KILL_WORKER_ON_FLUSH_FAILURE)
 
   def pythonWorkerLoggingEnabled: Boolean = getConf(PYTHON_WORKER_LOGGING_ENABLED)
+
+  def pythonUDFDetailedTimingEnabled: Boolean =
+    getConf(PYTHON_UDF_DETAILED_TIMING_ENABLED)
 
   def pythonUDFArrowConcurrencyLevel: Option[Int] = getConf(PYTHON_UDF_ARROW_CONCURRENCY_LEVEL)
 

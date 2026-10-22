@@ -24,7 +24,6 @@ import inspect
 import json
 import os
 import sys
-import time
 import warnings
 from typing import BinaryIO
 
@@ -61,6 +60,7 @@ from pyspark.util import (
     with_faulthandler,
 )
 from pyspark.worker_message import UDTFInfo, WorkerInitInfo
+from pyspark.worker_metrics import WorkerMetrics
 from pyspark.worker_util import (
     EvalConf,
     RunnerConf,
@@ -75,21 +75,9 @@ from pyspark.worker_util import (
 )
 
 
-def report_metrics(
-    outfile, boot, init, finish, execution_duration_ms, memory_bytes_spilled, disk_bytes_spilled
-):
+def report_metrics(outfile: BinaryIO, metrics: dict[str, int]) -> None:
     """Write the worker metrics as a length-prefixed JSON report after METRICS_DATA."""
-    payload = json.dumps(
-        {
-            "bootTimestampMs": int(1000 * boot),
-            "initTimestampMs": int(1000 * init),
-            "finishTimestampMs": int(1000 * finish),
-            "pythonExecutionDurationMs": execution_duration_ms,
-            "memoryBytesSpilled": memory_bytes_spilled,
-            "diskBytesSpilled": disk_bytes_spilled,
-        },
-        separators=(",", ":"),
-    ).encode("utf-8")
+    payload = json.dumps(metrics, separators=(",", ":")).encode("utf-8")
     write_int(SpecialLengths.METRICS_DATA, outfile)
     write_with_length(payload, outfile)
 
@@ -380,7 +368,9 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
     Initialization -> Processing -> Finish/Cleanup
     """
     try:
-        boot_time = time.time()
+        metrics = WorkerMetrics()
+        metrics.reset()
+        metrics.set_current_timestamp("bootTimestampMs")
         # Initialization
         init_message = message_receiver.get_init_message()
         init_info = WorkerInitInfo.from_stream(init_message)
@@ -436,7 +426,7 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
         split_index = init_info.split_index
         del init_info
 
-        init_time = time.time()
+        metrics.set_current_timestamp("initTimestampMs")
 
         # Processing
 
@@ -543,17 +533,17 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                     )
 
         is_pipelined = os.environ.get("SPARK_PIPELINED_UDF") == "1"
+        # Pipelined reads can overlap UDF work, so mark these task reports for filtering.
+        metrics.set("pythonNumPipelinedTasks", int(is_pipelined))
         if is_pipelined and hasattr(serializer, "_flush_per_batch"):
             serializer._flush_per_batch = True
         run_process = pipelined_process if is_pipelined else process
 
-        execution_start_time = time.time()
-        with capture_outputs():
+        with metrics.measure("pythonExecutionDurationMs"), capture_outputs():
             if profiler:
                 profiler.profile(run_process)
             else:
                 run_process()
-        execution_duration_ms = int(1000 * (time.time() - execution_start_time))
 
         # Cleanup
         # Reset task context to None. This is a guard code to avoid residual context when worker
@@ -563,16 +553,11 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
     except BaseException as e:
         handle_worker_exception(e, outfile)
         sys.exit(-1)
-    finish_time = time.time()
-    report_metrics(
-        outfile,
-        boot_time,
-        init_time,
-        finish_time,
-        execution_duration_ms,
-        shuffle.MemoryBytesSpilled,
-        shuffle.DiskBytesSpilled,
-    )
+    metrics.set_current_timestamp("finishTimestampMs")
+    # Spill totals are byte counts already expressed in their reporting unit.
+    metrics.set("memoryBytesSpilled", shuffle.MemoryBytesSpilled)
+    metrics.set("diskBytesSpilled", shuffle.DiskBytesSpilled)
+    report_metrics(outfile, metrics.to_dict())
 
     # Mark the beginning of the accumulators section of the output
     write_int(SpecialLengths.END_OF_DATA_SECTION, outfile)
