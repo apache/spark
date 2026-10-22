@@ -107,8 +107,8 @@ CREATE [ OR REPLACE ] VIEW [ IF NOT EXISTS ] view_identifier
 
       Required. Either the name of a table or view, optionally qualified, or a SQL query. Spark
       first tries to read the value as a multi-part identifier and otherwise parses it as a query.
-      A persistent metric view cannot reference temporary views, temporary functions, or session
-      variables (`INVALID_TEMP_OBJ_REFERENCE`).
+      A persistent metric view cannot reference temporary views or session variables
+      (`INVALID_TEMP_OBJ_REFERENCE`).
 
     * **filter**
 

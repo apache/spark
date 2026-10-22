@@ -246,7 +246,7 @@ DESCRIBE order_metrics;
 
 ### A Table as the Source
 
-The Quick Start view names a table. The name may be qualified (`spark_catalog.default.orders`). A persistent metric view cannot read a temporary view, a temporary function, or a session variable, for the same reason an ordinary persistent view cannot: the definition outlives the session.
+The Quick Start view names a table. The name may be qualified (`spark_catalog.default.orders`). A persistent metric view cannot read a temporary view or a session variable, for the same reason an ordinary persistent view cannot: the definition outlives the session.
 
 ### A SQL Query as the Source, with a Filter
 
@@ -341,7 +341,7 @@ A query over a metric view is an aggregate query. The rules follow from the rewr
 
 - Read a measure with `MEASURE(name)` in the `SELECT` list, optionally inside another expression (`ROUND(MEASURE(return_rate), 2)`). A measure selected by name alone, or `SELECT *`, has nothing to return and fails.
 - Every dimension in the `SELECT` list must be in `GROUP BY` (`GROUP BY ALL` works). A query with only `MEASURE()` calls needs no `GROUP BY`.
-- Filter with `WHERE` on dimensions. `WHERE` may also use a source column that is not a dimension, since the filter is applied to the source rows before aggregation; `SELECT` and `GROUP BY` may not.
+- Filter with `WHERE` on dimensions. Source columns that are not dimensions are not part of the view; to filter on one, use the view's `filter` key or a query source.
 - To filter or sort on a measure, alias it in the `SELECT` list and use the alias in `HAVING` and `ORDER BY`. `MEASURE()` itself is not resolved in `WHERE`, `HAVING` or `ORDER BY`.
 - `COUNT(*)` counts source rows (after the view's filter); it does not go through `MEASURE()`.
 - To combine a metric view with another table, aggregate the metric view first, in a subquery or common table expression, and join the result.
@@ -358,14 +358,6 @@ ORDER BY revenue DESC;
 +------+-------+
 |west  |534.99 |
 +------+-------+
-
--- WHERE on a source column that is not a dimension.
-SELECT MEASURE(revenue) AS returned_revenue FROM order_metrics WHERE returned;
-+----------------+
-|returned_revenue|
-+----------------+
-|179.99          |
-+----------------+
 
 -- Aggregate first, then join.
 WITH by_region AS (
@@ -417,15 +409,15 @@ metrics.groupBy("region").agg(
 # +------+-------+---------+
 # |region|revenue|customers|
 # +------+-------+---------+
-# |east  |245.50 |2        |
-# |west  |534.99 |4        |
+# |  east| 245.50|        2|
+# |  west| 534.99|        4|
 # +------+-------+---------+
 
 metrics.selectExpr("MEASURE(revenue) AS revenue", "MEASURE(customers) AS customers").show()
 # +-------+---------+
 # |revenue|customers|
 # +-------+---------+
-# |780.49 |6        |
+# | 780.49|        6|
 # +-------+---------+
 
 # A dimension filter before the aggregation.
@@ -435,9 +427,9 @@ metrics.where(F.col("region") == "west").groupBy("order_date").agg(
 # +----------+-------+
 # |order_date|revenue|
 # +----------+-------+
-# |2026-01-03|300.00 |
-# |2026-01-04|159.99 |
-# |2026-01-05|75.00  |
+# |2026-01-03| 300.00|
+# |2026-01-04| 159.99|
+# |2026-01-05|  75.00|
 # +----------+-------+
 
 # A measure filter after the aggregation, on the alias.
@@ -445,7 +437,7 @@ metrics.groupBy("region").agg(F.expr("MEASURE(revenue)").alias("revenue")).where
 # +------+-------+
 # |region|revenue|
 # +------+-------+
-# |west  |534.99 |
+# |  west| 534.99|
 # +------+-------+
 
 metrics.count()
@@ -462,9 +454,11 @@ A metric view needs nothing beyond SQL, so any client that submits SQL to Spark 
 
 ### Ratios and Rates as Single Measures
 
-A ratio belongs in one measure, as a ratio of aggregates, so every grain computes it from that grain's totals. Rounding can live in the definition as well. `ROUND(SUM(amount) / COUNT(1), 2)` gives `avg_order_value` a `DECIMAL(21, 2)` type instead of the wide decimal the bare division produces.
+A ratio belongs in one measure, as a ratio of aggregates, so every grain computes it from that grain's totals. Rounding can live in the definition as well. `ROUND(SUM(amount) / COUNT(1), 2)` gives `avg_order_value` a `DECIMAL(21, 2)` type instead of the wide decimal the bare division produces. This definition replaces the Quick Start view, so drop that one first (see [Changing a Definition](#changing-a-definition)).
 
 ```sql
+DROP VIEW order_metrics;
+
 CREATE VIEW order_metrics
     WITH METRICS
     LANGUAGE YAML
@@ -576,30 +570,6 @@ FROM region_metrics;
 
 ## Lifecycle
 
-### Inspecting a Definition
-
-`DESCRIBE EXTENDED` shows the view's type, the YAML document as `View Text`, and properties that record the source and filter: `metric_view.from.type` is `ASSET` for a named table or view and `SQL` for a query, with the name or query in `metric_view.from.name` or `metric_view.from.sql`, and `metric_view.where` holds the filter. `SHOW CREATE TABLE` is not supported on a metric view; `View Text` is the way to read a definition back.
-
-```sql
-DESCRIBE EXTENDED order_metrics_2026;
-+----------------------------+--------------------------------------------------------------------------------------------------------------------------------------+-------+
-|col_name                    |data_type                                                                                                                             |comment|
-+----------------------------+--------------------------------------------------------------------------------------------------------------------------------------+-------+
-|region                      |string                                                                                                                                |NULL   |
-|revenue                     |decimal(20,2)                                                                                                                         |NULL   |
-|                            |                                                                                                                                      |       |
-|# Detailed Table Information|                                                                                                                                      |       |
-|Catalog                     |spark_catalog                                                                                                                         |       |
-|Database                    |default                                                                                                                               |       |
-|Table                       |order_metrics_2026                                                                                                                    |       |
-|...                         |                                                                                                                                      |       |
-|Type                        |METRIC_VIEW                                                                                                                           |       |
-|View Text                   |\nversion: 0.1\nsource: orders\ndimensions:\n  - name: region\n    expr: region\nmeasures:\n  - name: revenue\n    expr: SUM(amount)\n|       |
-|Language                    |YAML                                                                                                                                  |       |
-|Table Properties            |[metric_view.from.name=orders, metric_view.from.type=ASSET, team=finance]                                                             |       |
-+----------------------------+--------------------------------------------------------------------------------------------------------------------------------------+-------+
-```
-
 ### Changing a Definition
 
 There is no `ALTER VIEW` form for the YAML body. In a Data Source V2 catalog, `CREATE OR REPLACE VIEW ... WITH METRICS` replaces an existing metric view. In the session catalog (`spark_catalog`), `OR REPLACE` does not yet replace an existing metric view: the statement fails with `TABLE_OR_VIEW_ALREADY_EXISTS` and the definition is unchanged, so drop the view and create it again.
@@ -622,9 +592,33 @@ measures:
 $$;
 ```
 
+### Inspecting a Definition
+
+`DESCRIBE EXTENDED` shows the view's type, the YAML document as `View Text`, and properties that record the source and filter: `metric_view.from.type` is `ASSET` for a named table or view and `SQL` for a query, with the name or query in `metric_view.from.name` or `metric_view.from.sql`, and `metric_view.where` holds the filter. `SHOW CREATE TABLE` is not supported on a metric view; `View Text` is the way to read a definition back.
+
+```sql
+DESCRIBE EXTENDED order_metrics;
++----------------------------+--------------------------------------------------------------------------------------------------------------------------------------+-------+
+|col_name                    |data_type                                                                                                                             |comment|
++----------------------------+--------------------------------------------------------------------------------------------------------------------------------------+-------+
+|region                      |string                                                                                                                                |NULL   |
+|revenue                     |decimal(20,2)                                                                                                                         |NULL   |
+|                            |                                                                                                                                      |       |
+|# Detailed Table Information|                                                                                                                                      |       |
+|Catalog                     |spark_catalog                                                                                                                         |       |
+|Database                    |default                                                                                                                               |       |
+|Table                       |order_metrics                                                                                                                         |       |
+|...                         |                                                                                                                                      |       |
+|Type                        |METRIC_VIEW                                                                                                                           |       |
+|View Text                   |\nversion: 0.1\nsource: orders\ndimensions:\n  - name: region\n    expr: region\nmeasures:\n  - name: revenue\n    expr: SUM(amount)\n|       |
+|Language                    |YAML                                                                                                                                  |       |
+|Table Properties            |[metric_view.from.name=orders, metric_view.from.type=ASSET]                                                                           |       |
++----------------------------+--------------------------------------------------------------------------------------------------------------------------------------+-------+
+```
+
 ### Renaming, Properties and Dropping
 
-`ALTER VIEW ... RENAME TO`, `SET TBLPROPERTIES` and `UNSET TBLPROPERTIES` work as they do for other views, and `DROP VIEW` removes the view. A metric view keeps no data, so dropping it removes only the definition.
+`ALTER VIEW ... RENAME TO`, `SET TBLPROPERTIES` and `UNSET TBLPROPERTIES` are the `ALTER VIEW` forms that apply to a metric view; `ALTER VIEW ... AS` is for SQL views and should not be used on one. `DROP VIEW` removes the view. A metric view keeps no data, so dropping it removes only the definition.
 
 ```sql
 ALTER VIEW order_metrics SET TBLPROPERTIES ('team' = 'finance');
@@ -650,10 +644,10 @@ DROP VIEW order_metrics_2026;
 
 ## Considerations
 
-- **No joins in a query over a metric view.** A metric view cannot be joined with another relation in the same query. Aggregate it in a subquery, a common table expression, or an ordinary view, and join the result.
-- **No temporary form.** `CREATE TEMPORARY VIEW ... WITH METRICS` is a syntax error. A metric view is always persisted in the catalog, and its source cannot be a temporary view, a temporary function, or a session variable.
+- **No joins in a query over a metric view.** Joining a metric view with another relation in the same query is not supported. Aggregate it in a subquery, a common table expression, or an ordinary view, and join the result.
+- **No temporary form.** `CREATE TEMPORARY VIEW ... WITH METRICS` is a syntax error. A metric view is always persisted in the catalog, and its source cannot be a temporary view or a session variable.
 - **A measure cannot reference a measure.** Each measure's expression resolves against the source's columns. Repeat the aggregate, or move the shared expression into a query source.
 - **Only `name` and `expr` on a column, and only `version`, `source`, `filter`, `dimensions` and `measures` at the top level.** There is no key for a display name, a format, a description, or a join; unknown keys are rejected.
 - **No `ALTER` of the YAML body.** Replace the view instead; in the session catalog, drop and recreate it.
 - **`SHOW CREATE TABLE` is not supported.** Use `DESCRIBE EXTENDED` and read `View Text`.
-- **`MEASURE()` applies only to a metric view's measures.** It cannot be applied to a column of a table or an ordinary view.
+- **`MEASURE()` applies only to a metric view's measures.** Applying it to a column of a table or an ordinary view is not supported.
