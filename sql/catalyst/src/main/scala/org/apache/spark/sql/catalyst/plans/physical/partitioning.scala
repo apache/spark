@@ -2497,8 +2497,11 @@ case class KeyedShuffleSpec(
         (None, None)
 
       // A reducer that threw in either direction makes the pair not reducible, see `pairReducers`.
+      // So does a side with no identity, since a reduce could not be recorded or reported for it
+      // (`reducedTogetherWith`); the gates above admit no such pair today.
       case (e1: TransformExpression, e2: TransformExpression) =>
-        val (thisReducer, otherReducer) = e1.pairReducers(e2)
+        val (thisReducer, otherReducer) =
+          if (e1.functionId.isEmpty || e2.functionId.isEmpty) (None, None) else e1.pairReducers(e2)
 
         val thisResult = thisReducer.map { reducer =>
           if (otherReducer.isEmpty) {
