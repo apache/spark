@@ -26,6 +26,8 @@ from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, Optional
 
 from pyspark.eval_handlers._typing import (
+    UDF,
+    UDTF,
     CoGroupedBatch,
     GroupedBatch,
     InputBatch,
@@ -149,9 +151,9 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
     _iter_based: ClassVar[bool] = False
 
     def __init__(
-        self, udfs: list[tuple[Any, ...]], runner_conf: "RunnerConf", eval_conf: "EvalConf"
+        self, udfs: "list[UDF] | list[UDTF]", runner_conf: "RunnerConf", eval_conf: "EvalConf"
     ) -> None:
-        self._udfs = udfs
+        self._udfs: list[Any] = udfs
         self._runner_conf = runner_conf
         self._eval_conf = eval_conf
 
