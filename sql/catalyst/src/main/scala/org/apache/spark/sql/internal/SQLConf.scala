@@ -7233,7 +7233,7 @@ object SQLConf {
         "represents these zoneless Oracle types. The same flag governs the write path: when " +
         "false a TimestampNTZType column is written to Oracle zoneless via setObject, and when " +
         "true via a JVM-default-zone java.sql.Timestamp; these can differ for wall-clocks in a " +
-        "DST gap. The JDBC options zonelessTimestampAsNTZ (read mapping) and " +
+        "DST gap. The JDBC options zonelessTimestampAsNTZ (type mapping) and " +
         "timestampNTZAsWallClock (read and write conversion) take precedence over this flag " +
         "when set. The flag is read at schema-resolution and write time, so a JDBC relation " +
         "whose schema was already resolved (e.g. a cached or metastore-registered table) must " +
