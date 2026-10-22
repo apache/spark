@@ -346,7 +346,11 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       val schema = TypeDescription.fromString("struct<ts:timestamp>")
       Seq(
         "part-0.orc" -> Seq("2020-05-25 10:11:12.123456789", null),
-        "part-1.orc" -> Seq("2020-05-25 10:11:13.000000789")
+        // The last stored value that is read as `a` and the first one after it, each alone in its
+        // file, so a pushed down range that misses either edge skips a matching file.
+        "part-1.orc" -> Seq("2020-05-25 10:11:12.123456999"),
+        "part-2.orc" -> Seq("2020-05-25 10:11:12.123457"),
+        "part-3.orc" -> Seq("2020-05-25 10:11:13.000000789")
       ).foreach { case (name, values) =>
         val file = new Path(new File(dir, name).getCanonicalPath)
         val writerOptions =
@@ -362,12 +366,14 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
         }
       }
       val path = dir.getCanonicalPath
-      // The stored values are read as `a`, `b`, and null.
+      // The stored values are read as `a`, null, `a`, `next`, and `b`.
       val a = "TIMESTAMP'2020-05-25 10:11:12.123456'"
       val b = "TIMESTAMP'2020-05-25 10:11:13'"
       val next = "TIMESTAMP'2020-05-25 10:11:12.123457'"
       checkAnswer(
-        spark.read.orc(path), sql(s"SELECT $a UNION ALL SELECT $b UNION ALL SELECT null"))
+        spark.read.orc(path),
+        sql(s"SELECT $a UNION ALL SELECT null UNION ALL SELECT $a UNION ALL SELECT $next " +
+          s"UNION ALL SELECT $b"))
 
       Seq(false, true).foreach { java8Api =>
         withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString) {
@@ -375,25 +381,27 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
             val df = spark.read.orc(path)
             Seq(
               s"ts = $b" -> 1,
-              s"ts = $a" -> 1,
-              s"ts <=> $a" -> 1,
-              s"ts <= $a" -> 1,
-              s"ts <= $b" -> 2,
-              s"ts IN ($a, $next)" -> 1,
-              s"ts IN ($a, $b)" -> 2,
-              s"ts < $next" -> 1,
-              s"ts >= $a" -> 2,
-              s"ts > $a" -> 1,
+              s"ts = $a" -> 2,
+              s"ts = $next" -> 1,
+              s"ts <=> $a" -> 2,
+              s"ts <= $a" -> 2,
+              s"ts <= $b" -> 4,
+              s"ts IN ($a, $next)" -> 3,
+              s"ts IN ($a, $b)" -> 3,
+              s"ts < $next" -> 2,
+              s"ts >= $a" -> 4,
+              s"ts > $a" -> 2,
               s"ts > $b" -> 0,
               s"ts < $a" -> 0,
-              s"ts != $a" -> 1,
-              s"NOT (ts <=> $a)" -> 2,
+              s"ts != $a" -> 2,
+              s"NOT (ts <=> $a)" -> 3,
               s"ts NOT IN ($a, $next)" -> 1
             ).foreach { case (condition, expected) =>
               assert(df.where(condition).count() === expected, condition)
             }
-            // The pushed down predicates still skip the file without the value.
-            assert(stripSparkFilter(df.where(s"ts = $a")).count() === 2)
+            // The pushed down predicates still skip the files without the matching values.
+            assert(stripSparkFilter(df.where(s"ts = $a")).count() === 3)
+            assert(stripSparkFilter(df.where(s"ts > $a")).count() === 2)
             assert(stripSparkFilter(df.where(s"ts = $b")).count() === 1)
           }
         }
