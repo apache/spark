@@ -1888,7 +1888,10 @@ def resolve_jira_issues(title, merge_branches, comment, title_components=()):
 def update_jira_for_pr(pr_num, title, merge_branches, title_components, is_revert=False):
     skip_jira_title_tags = ("MINOR", "TRIVIAL", "FOLLOWUP")
     tags = set(title_components)
-    jira_title = title[len('Revert "') : -1] if is_revert else title
+    # Revert/Reapply PRs keep their title verbatim, so unwrap before parsing to see the
+    # wrapped id, markers, and components.
+    jira_title = _unwrap_title(title)
+    jira_ids = leading_jira_ids(title)
     try:
         parsed = Title.parse(jira_title)
         tags.update(parsed.leading)
@@ -1908,7 +1911,6 @@ def update_jira_for_pr(pr_num, title, merge_branches, title_components, is_rever
     print()
     continue_maybe("Would you like to update an associated JIRA?")
     if is_revert:
-        jira_ids = leading_jira_ids(jira_title)
         for jira_id in jira_ids or [""]:
             revert_jira_issue(merge_branches, jira_id)
         return
@@ -2151,27 +2153,19 @@ class Title:
     def jira_ids(self) -> List[str]:
         """The leading SPARK-NNNNN JIRA ids, in order, without duplicates.
 
-        Only the ids that appear as leading bracket tags count; SPARK-NNNNN
-        mentions in the title body (e.g. a reference to a related ticket) are
-        deliberately excluded, since the body is not the ticket this PR
-        resolves.  [MINOR]/[TRIVIAL] markers in ``leading`` are dropped.
+        Only ids that appear as leading bracket tags are returned; a
+        SPARK-NNNNN mention in the title body (e.g. a reference to a related
+        ticket) is deliberately excluded, since the body is not the ticket this
+        PR resolves.  [MINOR]/[TRIVIAL] markers in ``leading`` are dropped.
 
-        >>> Title.parse("[SPARK-1234][SQL] Fix something").jira_ids()
+        >>> Title.parse("[SPARK-1234][SQL] Follow up to SPARK-5678").jira_ids()
         ['SPARK-1234']
         >>> Title.parse("[SPARK-1234][SPARK-5678][SQL] Fix").jira_ids()
         ['SPARK-1234', 'SPARK-5678']
-        >>> Title.parse("[SPARK-1234][SQL] Follow up to SPARK-5678").jira_ids()
-        ['SPARK-1234']
         >>> Title.parse("[MINOR][SQL] Fix typo").jira_ids()
         []
         """
-        seen = set()
-        ids = []
-        for tag in self.leading:
-            if _SPARK_ID_RE.match(tag) and tag not in seen:
-                seen.add(tag)
-                ids.append(tag)
-        return ids
+        return list(dict.fromkeys(t for t in self.leading if _SPARK_ID_RE.match(t)))
 
     def __str__(self) -> str:
         parts = "".join("[%s]" % t for t in self.leading)
@@ -2181,28 +2175,90 @@ class Title:
         return parts + (" " if parts else "") + self.text
 
 
+def _unwrap_title(title: str) -> str:
+    """Strip a ``Revert "..."`` / ``Reapply "..."`` wrapper from a PR title.
+
+    ``main()`` keeps Revert and Reapply PR titles verbatim, so the JIRA id,
+    leading markers, and components all live inside the quotes.  Unwrapping here
+    lets the id-extraction and skip-tag logic see them.  A title without such a
+    wrapper is returned unchanged.
+
+    >>> _unwrap_title('Revert "[SPARK-1234][SQL] Fix"')
+    '[SPARK-1234][SQL] Fix'
+    >>> _unwrap_title('Reapply "[SPARK-1234][SQL] Fix"')
+    '[SPARK-1234][SQL] Fix'
+    >>> _unwrap_title('[SPARK-1234][SQL] Fix')
+    '[SPARK-1234][SQL] Fix'
+    """
+    for prefix in ('Revert "', 'Reapply "'):
+        if title.startswith(prefix) and title.endswith('"'):
+            return title[len(prefix) : -1]
+    return title
+
+
 def leading_jira_ids(title: str) -> List[str]:
     """Return the leading SPARK-NNNNN JIRA ids of ``title``, in order.
 
-    Unlike a bare ``re.findall("SPARK-[0-9]{4,5}", title)``, this only returns
-    ids that appear as leading bracket tags, so a SPARK-NNNNN reference in the
-    title body is not mistaken for the ticket the PR resolves.  Titles that do
-    not start with a recognized leading tag (and so cannot be parsed) yield an
+    Unlike a bare ``re.findall("SPARK-[0-9]{4,5}", title)``, only ids that
+    appear as leading bracket tags are returned, so a SPARK-NNNNN reference in
+    the title body is not mistaken for the ticket the PR resolves.  A
+    ``Revert "..."`` / ``Reapply "..."`` wrapper is stripped first, so those PRs
+    still yield the wrapped id.
+
+    The title is parsed with :meth:`Title.parse`.  When parsing fails -- the
+    title has no recognized leading tag, or starts with ``[SPARK-N]`` but breaks
+    a later rule (e.g. ``[SPARK-1234][SQL][MINOR] Fix``) -- the leading
+    ``[SPARK-N]`` brackets are still collected directly, so a clearly leading id
+    is never dropped.  A title with no leading ``[SPARK-N]`` bracket yields an
     empty list.
 
-    >>> leading_jira_ids("[SPARK-1234][SQL] Fix something")
-    ['SPARK-1234']
     >>> leading_jira_ids("[SPARK-1234][SQL] Follow up to SPARK-5678")
+    ['SPARK-1234']
+    >>> leading_jira_ids('Reapply "[SPARK-1234][SQL] Fix"')
+    ['SPARK-1234']
+    >>> leading_jira_ids("[SPARK-1234][SQL][MINOR] Fix")
     ['SPARK-1234']
     >>> leading_jira_ids("[MINOR][SQL] Fix typo")
     []
     >>> leading_jira_ids("No leading tag, mentions SPARK-5678")
     []
     """
+    title = _unwrap_title(title)
     try:
         return Title.parse(title).jira_ids()
     except ValueError:
-        return []
+        return _leading_spark_brackets(title)
+
+
+def _leading_spark_brackets(title: str) -> List[str]:
+    """Collect the run of leading ``[SPARK-N]`` bracket tags from ``title``.
+
+    Used as a fallback when :meth:`Title.parse` rejects a title that still
+    begins with one or more ``[SPARK-N]`` tags.  Scans from the start and stops
+    at the first bracket that is not a SPARK id, so a SPARK id in the body is
+    not collected.
+
+    >>> _leading_spark_brackets("[SPARK-1234][SQL][MINOR] Fix")
+    ['SPARK-1234']
+    >>> _leading_spark_brackets("[SPARK-1][SPARK-2][SQL] Fix mentions SPARK-9999")
+    ['SPARK-1', 'SPARK-2']
+    >>> _leading_spark_brackets("[SQL] no leading id")
+    []
+    """
+    ids = []
+    pos = 0
+    while pos < len(title):
+        m = _BRACKET_TAG_RE.match(title, pos)
+        if not m:
+            break
+        tag = m.group(1).upper()
+        if not _SPARK_ID_RE.match(tag):
+            break
+        ids.append(tag)
+        pos = m.end()
+        while pos < len(title) and title[pos] == " ":
+            pos += 1
+    return list(dict.fromkeys(ids))
 
 
 def prompt_for_components():
@@ -2879,7 +2935,7 @@ __test__ = {
     ...         redirect_stdout(StringIO()),
     ...     ):
     ...         update_jira_for_pr("123", title, branches, [], is_revert=is_revert)
-    >>> title = 'Revert "[SPARK-1234][SPARK-5678][SQL] Fix SPARK-1234"'
+    >>> title = 'Revert "[SPARK-1234][SPARK-5678][SQL] Fix mentions SPARK-9999"'
     >>> update(title, ["master", "branch-4.x"], is_revert=True)
     >>> assert reverter.call_args_list == [
     ...     call(['master', 'branch-4.x'], 'SPARK-1234'),
