@@ -190,30 +190,28 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
 
   test("SPARK-58876: V2 NTZ reads keep frozen options and honor per-read and per-write options") {
     val table = s"$catalogName.${namespaceOpt.get}.${caseConvert("datetime")}"
+    // The lower-cased key must still override the wall-clock value pinned at loadTable.
+    val ntzOptions = "'zonelessTimestampAsNTZ' = 'true', 'timestampntzaswallclock' = 'true'"
     withDefaultTimeZone(LA) {
       val df = withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "false") {
         sql(s"SELECT time1 FROM $table WHERE name = 'amy'")
       }
       assert(df.schema.head.dataType === TimestampNTZType)
       withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
-        assert(df.collect().head.get(0) === LocalDateTime.of(2022, 5, 19, 0, 0, 0))
+        checkAnswer(df, Row(LocalDateTime.of(2022, 5, 19, 0, 0, 0)))
         // Per-read options override the flag: the mapping at loadTable, the getter at the scan.
-        // The lower-cased key must still override the wall-clock value pinned at loadTable.
-        val perRead = sql(s"SELECT time1 FROM $table WITH ('zonelessTimestampAsNTZ' = 'true', " +
-          "'timestampntzaswallclock' = 'true') WHERE name = 'amy'")
+        val perRead = sql(s"SELECT time1 FROM $table WITH ($ntzOptions) WHERE name = 'amy'")
         assert(perRead.schema.head.dataType === TimestampNTZType)
-        assert(perRead.collect().head.get(0) === LocalDateTime.of(2022, 5, 19, 0, 0, 0))
+        checkAnswer(perRead, Row(LocalDateTime.of(2022, 5, 19, 0, 0, 0)))
 
         // Aggregate and join pushdown rebuild the scan's options and must keep the per-read ones.
-        val ntzOptions =
-          "WITH ('zonelessTimestampAsNTZ' = 'true', 'timestampntzaswallclock' = 'true')"
-        val maxDf = sql(s"SELECT MAX(time1) FROM $table $ntzOptions")
+        val maxDf = sql(s"SELECT MAX(time1) FROM $table WITH ($ntzOptions)")
         checkAggregateRemoved(maxDf)
         assert(maxDf.schema.head.dataType === TimestampNTZType)
-        assert(maxDf.collect().head.get(0) === LocalDateTime.of(2022, 5, 19, 0, 0, 0))
+        checkAnswer(maxDf, Row(LocalDateTime.of(2022, 5, 19, 0, 0, 0)))
         withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
-          val joinDf = sql(s"SELECT a.time1, b.time1 FROM $table $ntzOptions a " +
-            s"JOIN $table $ntzOptions b ON a.name = b.name WHERE a.name = 'amy'")
+          val joinDf = sql(s"SELECT a.time1, b.time1 FROM $table WITH ($ntzOptions) a " +
+            s"JOIN $table WITH ($ntzOptions) b ON a.name = b.name WHERE a.name = 'amy'")
           checkJoinPushed(joinDf)
           checkAnswer(joinDf, Row(LocalDateTime.of(2022, 5, 19, 0, 0, 0),
             LocalDateTime.of(2022, 5, 19, 0, 0, 0)))
@@ -231,7 +229,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
         def insert(day: Int, options: String): Unit =
           sql(s"INSERT INTO $target WITH ($options) SELECT TIMESTAMP_NTZ'2022-05-$day 00:00:00'")
         withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
-          insert(19, "'zonelessTimestampAsNTZ' = 'true', 'timestampntzaswallclock' = 'true'")
+          insert(19, ntzOptions)
         }
         insert(20, "'timestampNTZAsWallClock' = 'false'")
         insert(21, "'zonelessTimestampAsNTZ' = 'false', 'timestampNTZAsWallClock' = 'false'")

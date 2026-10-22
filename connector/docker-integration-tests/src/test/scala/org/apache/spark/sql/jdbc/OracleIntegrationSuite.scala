@@ -624,7 +624,6 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
     assert(fracDf.select("T").collect().head.get(0)
       === LocalDateTime.of(1996, 1, 1, 1, 23, 45, 123456000))
 
-    // zonelessTimestampAsNTZ=false opts out of the NTZ mapping.
     val optOutDf = readDatetime(Map("zonelessTimestampAsNTZ" -> "false"))
     assert(optOutDf.schema("D").dataType === TimestampType)
     assert(optOutDf.schema("T").dataType === TimestampType)
@@ -638,12 +637,11 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
       assert(legacyRow.getTimestamp(0) === Timestamp.valueOf("1991-11-09 00:00:00"))
       assert(legacyRow.getTimestamp(1) === Timestamp.valueOf("1996-01-01 01:23:45"))
 
-      // Both options opt back into exact NTZ reads, per read or on a registered table.
       withDefaultTimeZone(LA) {
         val optInDf = readDatetime(
           Map("zonelessTimestampAsNTZ" -> "true", "timestampNTZAsWallClock" -> "true"))
         assert(optInDf.schema("T").dataType === TimestampNTZType)
-        assert(optInDf.select("D", "T").collect().head === ntzRow)
+        checkAnswer(optInDf.select("D", "T"), ntzRow)
         withTable("datetime_ntz") {
           sql(s"CREATE TABLE datetime_ntz USING org.apache.spark.sql.jdbc OPTIONS (url " +
             s"'$jdbcUrl', dbtable 'datetime', zonelessTimestampAsNTZ 'true', " +
@@ -804,8 +802,7 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
     // sees base(ldt).toLocalDateTime, not ldt (a wall-clock write would round-trip to ldt here).
     val ldt = LocalDateTime.of(1996, 1, 1, 1, 23, 45, 123456000)
     val schema = StructType(Seq(StructField("T", TimestampNTZType)))
-    // Writes ldt under the given flag and write options, then reads it back with the defaults.
-    def writeAndRead(legacy: String, options: Map[String, String]): Any = {
+    def writeAndRead(legacy: String, options: Map[String, String]): DataFrame = {
       withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> legacy) {
         spark.createDataFrame(spark.sparkContext.parallelize(Seq(Row(ldt))), schema)
           .write.format("jdbc").mode(SaveMode.Overwrite).options(options)
@@ -814,15 +811,15 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
       val df = spark.read.format("jdbc")
         .option("url", jdbcUrl).option("dbtable", "ntz_legacy_write").load()
       assert(df.schema.fields.head.dataType === TimestampNTZType)
-      df.collect().head.get(0)
+      df
     }
     withDefaultTimeZone(LA) {
       val expected = DateTimeUtils.toJavaTimestampNoRebase(
         DateTimeUtils.localDateTimeToMicros(ldt)).toLocalDateTime
       assert(expected != ldt) // guard: LA must shift base vs wall-clock for this to discriminate
-      assert(writeAndRead("true", Map.empty) === expected)
-      assert(writeAndRead("true", Map("timestampNTZAsWallClock" -> "true")) === ldt)
-      assert(writeAndRead("false", Map("timestampNTZAsWallClock" -> "false")) === expected)
+      checkAnswer(writeAndRead("true", Map.empty), Row(expected))
+      checkAnswer(writeAndRead("true", Map("timestampNTZAsWallClock" -> "true")), Row(ldt))
+      checkAnswer(writeAndRead("false", Map("timestampNTZAsWallClock" -> "false")), Row(expected))
     }
   }
 

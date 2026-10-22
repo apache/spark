@@ -1786,7 +1786,6 @@ class JDBCSuite extends SharedSparkSession {
   }
 
   test("SPARK-58876: Oracle NTZ mapping, preferTimestampNTZ and zonelessTimestampAsNTZ") {
-    // Resolve a mocked Oracle TIMESTAMP column via getSchema for each (flag, option) combination.
     def resolve(preferTimestampNTZ: Boolean, zoneless: Option[Boolean]): StructField = {
       val rsmd = mock(classOf[java.sql.ResultSetMetaData])
       when(rsmd.getColumnCount).thenReturn(1)
