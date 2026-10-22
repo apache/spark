@@ -26,7 +26,7 @@ import scala.util.{Failure, Success, Try}
 import org.apache.logging.log4j.Level
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkNumberFormatException}
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.rdd.MapPartitionsWithEvaluatorRDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SaveMode}
@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAnd
 import org.apache.spark.sql.catalyst.plans.logical.MergeRows
 import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Keep, Update}
 import org.apache.spark.sql.classic
+import org.apache.spark.sql.errors.DataTypeErrors.{toSQLConf, toSQLId}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
@@ -2843,6 +2844,314 @@ class WholeStageCodegenSuite extends SharedSparkSession
       checkAnswer(df, withoutWholeStage(df))
       withSQLConf(SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS.key -> "false") {
         assert(genCode(df).exists(c => stringParameter.findFirstIn(c.body).nonEmpty))
+      }
+    }
+  }
+
+  // A Parquet table, so that the filter is not evaluated by the optimizer on a local relation.
+  // On the first row `NOT (a > 0 AND b > 0)` is NULL, and no `isnotnull(a)` is inferred from it.
+  // The second row passes every condition of the tests below, except `b < 0`, `(a > 0 OR b < 0)`
+  // and `coalesce(b, cast(s AS INT)) < 0`. The rows can be
+  // written to different files, so the filter is not pushed down, which would skip the first
+  // row's file by its statistics.
+  private def withNullConjunctTable(y: Int)(f: => Unit): Unit = {
+    withTable("t") {
+      sql("CREATE TABLE t USING parquet AS " +
+        s"SELECT * FROM VALUES (NULL, 1, $y, NULL, 'x'), (0, 1, 0, 1, '1') AS v(a, b, y, x, s)")
+      f
+    }
+  }
+
+  // A common subexpression after the NULL conjunct takes the CSE path of FilterExec.
+  private val nullConjunctCSEQuery =
+    "SELECT a FROM t WHERE NOT (a > 0 AND b > 0) AND y + 1 > 0 AND y + 1 > -1"
+
+  private def checkArithmeticOverflow(query: String): Unit = {
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        sql(query).collect()
+      },
+      condition = "ARITHMETIC_OVERFLOW",
+      parameters = Map(
+        "message" -> "overflow",
+        "alternative" -> " Use 'try_add' to tolerate overflow and return NULL instead.",
+        "config" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      context = ExpectedContext(
+        fragment = "y + 1",
+        start = query.indexOf("y + 1"),
+        stop = query.indexOf("y + 1") + 4))
+  }
+
+  private def checkCastInvalidInput(query: String): Unit = {
+    val start = query.lastIndexOf("cast(s AS INT)")
+    checkError(
+      exception = intercept[SparkNumberFormatException] {
+        sql(query).collect()
+      },
+      condition = "CAST_INVALID_INPUT",
+      parameters = Map(
+        "expression" -> "'x'",
+        "sourceType" -> "\"STRING\"",
+        "targetType" -> "\"INT\"",
+        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      context = ExpectedContext(fragment = "cast(s AS INT)", start = start, stop = start + 13))
+  }
+
+  // Runs `f` with whole-stage codegen on and off and with the legacy behavior on and off, and
+  // passes it whether the filter drops a row at its first NULL conjunct.
+  private def withNullConjunctConfs(otherConfs: (String, String)*)(f: Boolean => Unit): Unit = {
+    for (codegen <- Seq(true, false); legacy <- Seq(true, false)) {
+      withSQLConf(otherConfs ++ Seq(
+          SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "false",
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString,
+          SQLConf.LEGACY_FILTER_SHORT_CIRCUIT_ON_NULL_CONJUNCT.key -> legacy.toString): _*) {
+        withClue(s"wholeStage=$codegen, legacy=$legacy: ") {
+          f(codegen && legacy)
+        }
+      }
+    }
+  }
+
+  test("SPARK-60315: a filter evaluates the conjuncts after a NULL one") {
+    withNullConjunctTable(Int.MaxValue) {
+      // The CSE path evaluates the common `y + 1` once, the non-CSE path at each use. Both
+      // generate the flag that keeps the row's evaluation going after a NULL conjunct.
+      def cseQueryCode(filterExecCSE: Boolean): String = {
+        withSQLConf(
+            SQLConf.ANSI_ENABLED.key -> "true",
+            SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> filterExecCSE.toString) {
+          val code = codegenString(sql(nullConjunctCSEQuery).queryExecution.executedPlan)
+          assert(code.contains("nullConjunct"))
+          code
+        }
+      }
+      assert("addExact".r.findAllIn(cseQueryCode(filterExecCSE = true)).length <
+        "addExact".r.findAllIn(cseQueryCode(filterExecCSE = false)).length)
+
+      Seq("true", "false").foreach { filterExecCSE =>
+        Seq(
+          "SELECT a FROM t WHERE NOT (a > 0 AND b > 0) AND y + 1 > 0",
+          nullConjunctCSEQuery
+        ).foreach { query =>
+          withNullConjunctConfs(
+              SQLConf.ANSI_ENABLED.key -> "true",
+              SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> filterExecCSE) {
+            skipsAtNull =>
+              if (skipsAtNull) {
+                checkAnswer(sql(query), Row(0))
+              } else {
+                checkArithmeticOverflow(query)
+              }
+          }
+        }
+      }
+    }
+    // A NULL conjunct from OR. The second row does not pass it.
+    withNullConjunctTable(Int.MaxValue) {
+      val query = "SELECT a FROM t WHERE (a > 0 OR b < 0) AND y + 1 > 0"
+      withNullConjunctConfs(SQLConf.ANSI_ENABLED.key -> "true") { skipsAtNull =>
+        if (skipsAtNull) {
+          checkAnswer(sql(query), Seq.empty)
+        } else {
+          checkArithmeticOverflow(query)
+        }
+      }
+    }
+    // Without an error, the CSE path drops the first row after its last conjunct is evaluated.
+    withNullConjunctTable(0) {
+      withNullConjunctConfs(
+          SQLConf.ANSI_ENABLED.key -> "true",
+          SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> "true") { _ =>
+        checkAnswer(sql(nullConjunctCSEQuery), Row(0))
+      }
+    }
+  }
+
+  test("SPARK-60315: a filter evaluates the conjuncts after a NULL one in non-ANSI mode") {
+    // Year-month interval arithmetic raises on overflow in every mode.
+    withNullConjunctTable(178956970) {
+      val condition = "NOT (a > 0 AND b > 0) AND " +
+        "make_ym_interval(y, 0) + INTERVAL '1' YEAR > INTERVAL '0' YEAR"
+      val query = s"SELECT a FROM t WHERE $condition"
+      withNullConjunctConfs(SQLConf.ANSI_ENABLED.key -> "false") { skipsAtNull =>
+        if (skipsAtNull) {
+          checkAnswer(sql(query), Row(0))
+        } else {
+          checkError(
+            exception = intercept[SparkArithmeticException] {
+              sql(query).collect()
+            },
+            condition = "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
+            parameters = Map("functionName" -> toSQLId("try_add")))
+        }
+        // A check on an expression, not on a column, that precedes the NULL conjunct:
+        // `cast(s AS INT)` is NULL on the first row, so the check is FALSE and drops the row
+        // before the overflowing conjunct, as with codegen off.
+        checkAnswer(
+          sql(s"SELECT a FROM t WHERE cast(s AS INT) IS NOT NULL AND $condition"), Row(0))
+      }
+    }
+  }
+
+  test("SPARK-60315: a filter drops a row with a NULL conjunct and stops at a FALSE one") {
+    withNullConjunctTable(Int.MaxValue) {
+      withNullConjunctConfs(SQLConf.ANSI_ENABLED.key -> "true") { _ =>
+        // The first row is dropped after its last conjunct is evaluated.
+        checkAnswer(sql("SELECT a FROM t WHERE NOT (a > 0 AND b > 0) AND y > -1"), Row(0))
+        // FALSE decides the AND, so the overflowing conjunct after it is not evaluated.
+        checkAnswer(
+          sql("SELECT a FROM t WHERE NOT (a > 0 AND b > 0) AND b < 0 AND y + 1 > 0"),
+          Seq.empty)
+      }
+      def hasNullConjunctFlag(query: String): Boolean =
+        genCode(sql(query)).exists(_.body.contains("nullConjunct"))
+      // `b > 0` cannot be NULL after the inferred `isnotnull(b)`, so no flag is generated.
+      val noNullConjunct = "SELECT a FROM t WHERE b > 0 AND y > -1"
+      checkAnswer(sql(noNullConjunct), Seq(Row(null), Row(0)))
+      assert(!hasNullConjunctFlag(noNullConjunct))
+      // `a > 0 OR b > 0` can be NULL, but neither the conjuncts after it nor the inferred checks
+      // can raise an error, so the evaluation after a NULL conjunct is not observable and no
+      // flag is generated either: the generated code is the one of the legacy behavior.
+      val noRaise = "SELECT a FROM t WHERE (a > 0 OR b > 0) AND x = 1 AND y = 0"
+      checkAnswer(sql(noRaise), Row(0))
+      assert(!hasNullConjunctFlag(noRaise))
+      // `y + 1 > 0` can raise, so the flag is generated.
+      val raise = "SELECT a FROM t WHERE (a > 0 OR b > 0) AND x = 1 AND y + 1 > 0"
+      checkAnswer(sql(raise), Row(0))
+      assert(hasNullConjunctFlag(raise))
+    }
+  }
+
+  test("SPARK-60315: a filter checks IS NOT NULL before the conjuncts it precedes") {
+    withNullConjunctTable(Int.MaxValue) {
+      // `x` is NULL on the first row. With codegen off, a FALSE `isnotnull(x)` drops the row
+      // before a conjunct after it in the condition is evaluated. With codegen on, the check is
+      // generated just before the first conjunct that references `x`, or after all of them, so
+      // after a NULL conjunct it has to be generated before the conjuncts it precedes.
+      //
+      // The common `b * 2` takes the CSE path of FilterExec. The overflowing `y + 1` is not
+      // common because `GeneratePredicate` (codegen off) evaluates common subexpressions first.
+      val cseQuery = "SELECT a FROM t WHERE x IS NOT NULL AND NOT (a > 0 AND b > 0) AND " +
+        "y + 1 > 0 AND b * 2 > 0 AND b * 2 > -1"
+      def multiplyExactCount(filterExecCSE: Boolean): Int = {
+        withSQLConf(
+            SQLConf.ANSI_ENABLED.key -> "true",
+            SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> filterExecCSE.toString) {
+          val code = codegenString(sql(cseQuery).queryExecution.executedPlan)
+          "multiplyExact".r.findAllIn(code).length
+        }
+      }
+      assert(multiplyExactCount(filterExecCSE = true) < multiplyExactCount(filterExecCSE = false))
+
+      Seq("true", "false").foreach { filterExecCSE =>
+        withNullConjunctConfs(
+            SQLConf.ANSI_ENABLED.key -> "true",
+            SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> filterExecCSE) {
+          skipsAtNull =>
+            // `isnotnull(x)` is inferred from `x > 0` and precedes the overflowing conjunct.
+            checkAnswer(
+              sql("SELECT a FROM t WHERE NOT (a > 0 AND b > 0) AND y + 1 > 0 AND x > 0"),
+              Row(0))
+            // A user-written check that no other conjunct references.
+            checkAnswer(
+              sql("SELECT a FROM t WHERE x IS NOT NULL AND NOT (a > 0 AND b > 0) AND y + 1 > 0"),
+              Row(0))
+            // The same with a common subexpression.
+            checkAnswer(sql(cseQuery), Row(0))
+            // A check written after the overflowing conjunct stays after it.
+            val checkAfter =
+              "SELECT a FROM t WHERE NOT (a > 0 AND b > 0) AND y + 1 > 0 AND x IS NOT NULL"
+            if (skipsAtNull) {
+              checkAnswer(sql(checkAfter), Row(0))
+            } else {
+              checkArithmeticOverflow(checkAfter)
+            }
+            // The same through the CSE branch of FilterExec, which generates the pending checks
+            // before `y + 1 > 0`, the first conjunct after the NULL one that can raise, and not
+            // before the conjuncts after it.
+            val checkAfterCSE = checkAfter + " AND b * 2 > 0 AND b * 2 > -1"
+            if (skipsAtNull) {
+              checkAnswer(sql(checkAfterCSE), Row(0))
+            } else {
+              checkArithmeticOverflow(checkAfterCSE)
+            }
+        }
+      }
+      // The aggregate FILTER clause goes through the same code generation.
+      withNullConjunctConfs(SQLConf.ANSI_ENABLED.key -> "true") { _ =>
+        checkAnswer(
+          sql("SELECT count(1) FILTER (WHERE x IS NOT NULL AND NOT (a > 0 AND b > 0) AND " +
+            "y + 1 > 0) FROM t"),
+          Row(1))
+      }
+    }
+  }
+
+  test("SPARK-60315: a filter checks IS NOT NULL on an expression after the conjunct it follows") {
+    withNullConjunctTable(Int.MaxValue) {
+      // `cast(s AS INT)` raises on the first row. With codegen on, a check on an expression is
+      // generated just before the first conjunct that contains the expression (SPARK-51356),
+      // even when it is written after that conjunct. After a NULL conjunct, it has to stay after
+      // the conjunct, as with codegen off: `coalesce(b, cast(s AS INT)) < 0` is FALSE on the row
+      // and drops it before the check raises, while `coalesce(b, cast(s AS INT)) < 2` is TRUE and
+      // the check raises after it. The second row passes the latter condition.
+      //
+      // The common `b * 2` takes the CSE path of FilterExec.
+      def query(conjunct: String, cse: Boolean): String = {
+        val common = if (cse) "b * 2 > 0 AND b * 2 > -1 AND " else ""
+        s"SELECT a FROM t WHERE NOT (a > 0 AND b > 0) AND $common$conjunct AND " +
+          "cast(s AS INT) IS NOT NULL"
+      }
+      def multiplyExactCount(filterExecCSE: Boolean): Int = {
+        withSQLConf(
+            SQLConf.ANSI_ENABLED.key -> "true",
+            SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> filterExecCSE.toString) {
+          val plan = sql(query("coalesce(b, cast(s AS INT)) < 0", cse = true)).queryExecution
+          "multiplyExact".r.findAllIn(codegenString(plan.executedPlan)).length
+        }
+      }
+      assert(multiplyExactCount(filterExecCSE = true) < multiplyExactCount(filterExecCSE = false))
+
+      Seq(true, false).foreach { cse =>
+        withNullConjunctConfs(
+            SQLConf.ANSI_ENABLED.key -> "true",
+            SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> cse.toString) {
+          skipsAtNull =>
+            checkAnswer(sql(query("coalesce(b, cast(s AS INT)) < 0", cse)), Seq.empty)
+            val raising = query("coalesce(b, cast(s AS INT)) < 2", cse)
+            if (skipsAtNull) {
+              checkAnswer(sql(raising), Row(0))
+            } else {
+              checkCastInvalidInput(raising)
+            }
+        }
+      }
+      // The placement of the checks is decided at code generation, so once a conjunct can be
+      // NULL, the checks after it are evaluated in the order of the condition on every row. Here
+      // the check written first is generated before `y < 0` and raises on the first row, as with
+      // codegen off, although `a > 0 OR b > 0` is TRUE on the row. The legacy behavior evaluates
+      // `y < 0` first, which is FALSE on both rows, and never reaches the check.
+      val checkFirst =
+        "SELECT a FROM t WHERE cast(s AS INT) IS NOT NULL AND (a > 0 OR b > 0) AND y < 0"
+      withNullConjunctConfs(SQLConf.ANSI_ENABLED.key -> "true") { skipsAtNull =>
+        if (skipsAtNull) {
+          checkAnswer(sql(checkFirst), Seq.empty)
+        } else {
+          checkCastInvalidInput(checkFirst)
+        }
+      }
+    }
+  }
+
+  test("SPARK-60315: an aggregate FILTER evaluates the conjuncts after a NULL one") {
+    withNullConjunctTable(Int.MaxValue) {
+      val query = "SELECT count(a) FILTER (WHERE NOT (a > 0 AND b > 0) AND y + 1 > 0) FROM t"
+      withNullConjunctConfs(SQLConf.ANSI_ENABLED.key -> "true") { skipsAtNull =>
+        if (skipsAtNull) {
+          checkAnswer(sql(query), Row(1))
+        } else {
+          checkArithmeticOverflow(query)
+        }
       }
     }
   }
