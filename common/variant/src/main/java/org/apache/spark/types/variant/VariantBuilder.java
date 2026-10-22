@@ -219,8 +219,9 @@ public class VariantBuilder {
   }
 
   // Check whether v is already canonically encoded. Return false at the first
-  // non-canonical encoding, including invalid UTF-8 in keys or strings.
-  // Returning false does not establish validity. May throw on malformed structure.
+  // non-canonical encoding, including invalid UTF-8 in keys or strings. Malformed bytes also
+  // return false so that the rebuild decides whether they fail, but an unreadable header may
+  // still throw. Returning false does not establish validity.
   public static boolean isCanonical(Variant v) {
     if (v.pos != 0) {
       return false;
@@ -232,7 +233,7 @@ public class VariantBuilder {
     int stringStart = getMetadataStringStart(metadata, numKeys, offsetSize);
     int lastOffset = readUnsigned(metadata, stringStart - offsetSize, offsetSize);
     if (lastOffset > metadata.length - stringStart) {
-      throw malformedVariant();
+      return false;
     }
     int canonicalOffsetSize = getIntegerSize(Math.max(lastOffset, numKeys));
     if (metadata[0] != metadataHeader(canonicalOffsetSize)) {
@@ -246,7 +247,7 @@ public class VariantBuilder {
     for (int keyId = 0; keyId < numKeys; ++keyId) {
       int nextOffset = readUnsigned(metadata, 1 + (keyId + 2) * offsetSize, offsetSize);
       if (currentOffset > nextOffset || nextOffset > metadata.length - stringStart) {
-        throw malformedVariant();
+        return false;
       }
       if (keyId > 0 && Arrays.compareUnsigned(
           metadata, stringStart + previousOffset, stringStart + currentOffset,
@@ -761,7 +762,7 @@ public class VariantBuilder {
   private static boolean isValueCanonical(byte[] value, int pos, boolean[] referenced) {
     int encodedSize = valueSize(value, pos);
     if (encodedSize <= 0 || (long) pos + encodedSize > value.length) {
-      throw malformedVariant();
+      return false;
     }
     switch (getType(value, pos)) {
       case OBJECT:
@@ -848,7 +849,7 @@ public class VariantBuilder {
   private static boolean isCanonicalString(byte[] value, int pos) {
     int encodedSize = valueSize(value, pos);
     if (encodedSize <= 0 || (long) pos + encodedSize > value.length) {
-      throw malformedVariant();
+      return false;
     }
     boolean shortString = (value[pos] & BASIC_TYPE_MASK) == SHORT_STR;
     int headerSize = shortString ? 1 : 1 + U32_SIZE;

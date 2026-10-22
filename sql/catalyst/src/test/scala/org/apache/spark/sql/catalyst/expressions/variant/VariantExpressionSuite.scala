@@ -1439,6 +1439,17 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("canonicalize_variant size limit") {
+    // Each invalid byte becomes a 3-byte U+FFFD, so 6 MiB of them exceed the 16 MiB test limit.
+    val value = Array[Byte](primitiveHeader(LONG_STR), 0, 0, 0x60, 0) ++
+      Array.fill[Byte](0x600000)(0xff.toByte)
+    checkErrorInExpression[SparkRuntimeException](
+      CanonicalizeVariant(BoundReference(0, VariantType, nullable = true)),
+      InternalRow(new VariantVal(value, Array[Byte](VERSION, 0, 0))),
+      "VARIANT_SIZE_LIMIT",
+      Map("sizeLimit" -> "16.0 MiB", "functionName" -> "`canonicalize_variant`"))
+  }
+
   test("variant_delete") {
     def checkDelete(input: String, paths: Seq[String], expected: String): Unit = {
       val pathLits: Seq[Expression] = paths.map(p => Literal.create(p, StringType))

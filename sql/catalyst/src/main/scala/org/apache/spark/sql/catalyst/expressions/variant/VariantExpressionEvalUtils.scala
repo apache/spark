@@ -78,7 +78,13 @@ object VariantExpressionEvalUtils {
 
   def canonicalizeVariant(input: VariantVal): VariantVal = {
     val variant = new Variant(input.getValue, input.getMetadata)
-    val canonicalized = VariantBuilder.canonicalize(variant)
+    val canonicalized = try {
+      VariantBuilder.canonicalize(variant)
+    } catch {
+      case _: VariantSizeLimitException =>
+        throw QueryExecutionErrors.variantSizeLimitError(
+          VariantUtil.SIZE_LIMIT, "canonicalize_variant")
+    }
     if (canonicalized eq variant) {
       input
     } else {
