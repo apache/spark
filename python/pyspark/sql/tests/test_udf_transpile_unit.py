@@ -1170,7 +1170,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             with _warnings.catch_warnings(record=True):
                 _warnings.simplefilter("always")
                 null_udf = UserDefinedFunction(none_body, ArrayType(LongType()))
-            self.assertTrue(null_udf.transpiled, "NULL lowering should cast to array<int>")
+            self.assertTrue(null_udf.transpiled, "NULL lowering should cast to array<bigint>")
             with _warnings.catch_warnings(record=True):
                 _warnings.simplefilter("always")
                 list_udf = UserDefinedFunction(list_body, ArrayType(LongType()))
@@ -2618,12 +2618,12 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # (func, return_type, schema, rows, expected); arg columns come from schema.
         cases = [
             (add, S, "a string, b string", [("x", "y"), ("a", "b")], ["xy", "ab"]),
-            (mul, S, "a string, b long", [("ab", 3)], ["ababab"]),
-            (mul, S, "a long, b string", [(3, "ab")], ["ababab"]),
+            (mul, S, "a string, b int", [("ab", 3)], ["ababab"]),
+            (mul, S, "a int, b string", [(3, "ab")], ["ababab"]),
             (mul3, S, "a string", [("2",), ("ab",)], ["222", "ababab"]),
             (concat_right, S, "a string", [("hi",)], ["hi!"]),
             (concat_left, S, "a string", [("x",)], ["pre-x"]),
-            (repeat_lit, S, "a long", [(3,)], ["ababab"]),
+            (repeat_lit, S, "a int", [(3,)], ["ababab"]),
         ]
         for i, (func, rt, schema, rows, expected) in enumerate(cases):
             with self.subTest(case=i):
@@ -2822,9 +2822,9 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # collect aborts on the first raising row, so each pin is its own call.
         self._raises(div, "a int, b int", [(None, 2)], "null", DoubleType())
         self._raises(div, "a double, b double", [(7.0, None)], "null", DoubleType())
-        self._raises(repeat, "a string, b long", [(None, 2)], "null", StringType())
-        self._raises(repeat, "a string, b long", [("ab", None)], "null", StringType())
-        self._raises(repeat, "a long, b string", [(None, "ab")], "null", StringType())
+        self._raises(repeat, "a string, b int", [(None, 2)], "null", StringType())
+        self._raises(repeat, "a string, b int", [("ab", None)], "null", StringType())
+        self._raises(repeat, "a int, b string", [(None, "ab")], "null", StringType())
 
     def test_udf_transpile_shift_counts_at_and_past_the_width(self):
         # Java (and so Spark) masks a shift distance to the operand's width where
@@ -2901,15 +2901,20 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
     def test_udf_transpile_repeat_count_must_be_integral(self):
         # `"ab" * n` needs an int count -- `"ab" * 2.5` is a TypeError in Python,
         # not the "abab" the cast would give. A float literal is visible here; for
-        # a parameter only the JVM knows, so the count is narrowed to integral and
-        # a double column drops the option.
+        # a parameter only the JVM knows, so the count is narrowed to integral32
+        # and a double or bigint column drops the option (a bigint above
+        # Int.MaxValue would overflow the cast to int where Python returns "").
         S = StringType()
         mul = lambda a, b: a * b  # noqa: E731
         self._assert_runs_as_python(mul, S, "a string, b double")
         self._assert_runs_as_python(mul, S, "a double, b string")
-        # An integral count still lowers, in both operand orders.
-        self.assertEqual(self._native_vals(mul, S, "a string, b long", [("ab", 3)]), ["ababab"])
-        self.assertEqual(self._native_vals(mul, S, "a long, b string", [(3, "ab")]), ["ababab"])
+        # A bigint count would overflow the cast to int (Python returns "" for
+        # negative counts, or a huge string), so it falls back too.
+        self._assert_runs_as_python(mul, S, "a string, b long")
+        self._assert_runs_as_python(mul, S, "a long, b string")
+        # An int32 count still lowers, in both operand orders.
+        self.assertEqual(self._native_vals(mul, S, "a string, b int", [("ab", 3)]), ["ababab"])
+        self.assertEqual(self._native_vals(mul, S, "a int, b string", [(3, "ab")]), ["ababab"])
 
     def test_udf_transpile_pow_zero_keeps_the_base(self):
         # `x ** 0` is 1 for every x in Python -- but `None ** 0` raises TypeError,

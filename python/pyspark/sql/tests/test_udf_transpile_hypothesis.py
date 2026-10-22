@@ -511,12 +511,13 @@ if _have_hypothesis:
 
 
         ``headroom`` shrinks both ends by an absolute amount, for a body that
-        adds or subtracts a constant. It is needed for the same reason and is
-        equally width-relative: ``x + 4`` on an *int* column is IntegerType
-        arithmetic (the literal is an int, so nothing widens), and so raises at
-        2147483647 where Python answers 2147483651. A byte or short column
-        widens to IntegerType and cannot overflow, which is exactly why a single
-        flat ``cap`` is the wrong tool here.
+        adds or subtracts a constant. Promotion now computes the int-column
+        boundary (``2147483647 + 4 == 2147483651``) by widening the operands,
+        so the boundary itself no longer raises; ``headroom=4`` bounds the
+        tested interior, and the remaining return-type overflow is pinned by
+        ``test_overflow_only_raises_when_the_return_type_cannot_hold_it``.
+        A byte or short column widens to IntegerType and cannot overflow,
+        which is exactly why a single flat ``cap`` is the wrong tool here.
         """
         dtype, low, high = draw(st.sampled_from(widths))
         if cap is not None:
@@ -1775,12 +1776,11 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
         @given(cols=_integral_column_batch(cap=_LONG_ARITH_BOUND, headroom=4))
         @_seed_width_list_examples(_WIDTH_EDGES_PLUS_FOUR_SAFE)
         def test_plus_four_across_integral_widths(self, cols):
-            # `x + 4` at every width, staying 4 clear of each end. A byte or short
-            # column widens to IntegerType for the addition and could take the full
-            # range, but an *int* column does not -- the literal is already an int,
-            # so nothing widens and 2147483647 + 4 raises where Python answers
-            # 2147483651. That boundary is the tier-2 overflow divergence, pinned by
-            # test_overflow_raises_where_python_promotes; here we test the interior.
+            # `x + 4` at every width, staying 4 clear of each end. Promotion now
+            # computes the int-column boundary (2147483647 + 4 == 2147483651);
+            # that case and the remaining return-type overflow are pinned by
+            # test_overflow_only_raises_when_the_return_type_cannot_hold_it.
+            # Here we test the interior.
             dtype, values = cols
             df = self._multi_row_single_arg_df(values, dtype)
             transpiled, interpreted = self._run(
@@ -2067,12 +2067,14 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
             # being added, so the arithmetic runs at a width the operands do not
             # fill. `x + y` on two tinyints is ByteType arithmetic; scaling the
             # generated values down keeps every row in range while preserving the
-            # spread of magnitudes relative to the width.
+            # spread of magnitudes relative to the width. Preserve the sign so
+            # the negative half of the value space is covered -- `x % (limit+1)`
+            # alone maps everything to [0, limit] and never exercises negatives.
             for dtype, limit in ((ByteType(), 63), (ShortType(), 16383)):
                 scaled = [
                     (
-                        None if x is None else max(-limit, min(limit, x % (limit + 1))),
-                        None if y is None else max(-limit, min(limit, y % (limit + 1))),
+                        None if x is None else (abs(x) % (limit + 1)) * (-1 if x < 0 else 1),
+                        None if y is None else (abs(y) % (limit + 1)) * (-1 if y < 0 else 1),
                     )
                     for x, y in rows
                 ]

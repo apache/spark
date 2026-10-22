@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAlias
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Add, Alias, AttributeReference, Cast, Concat, Expression, Literal, PythonUDF, TranspiledPythonUDF}
 import org.apache.spark.sql.catalyst.plans.PlanTest
@@ -195,6 +196,47 @@ class ResolveTranspiledPythonUDFOptionsSuite extends PlanTest with AnalysisTest 
     val plan = Project(Seq(Alias(node, "r")()), LocalRelation(a))
     val analyzed = getAnalyzer.executeAndCheck(plan, new QueryPlanningTracker)
     val out = analyzed.expressions.flatMap(_.collect { case t: TranspiledPythonUDF => t }).head
+    assert(out.transpiledOptions.isEmpty,
+      "an unresolvable option must be dropped so the call falls back to Python")
+  }
+
+  // Dropping an unresolved option resolves the UDF, but an enclosing UnresolvedAlias
+  // (from `SELECT udf(a)`) was left untouched when the drop batch was Once: the
+  // Resolution batch had already converged, so ResolveAliases never ran again.
+  // CheckAnalysis then failed on the UnresolvedAlias instead of falling back.
+  test("SPARK-59090: unaliased call with an unresolvable option still analyzes") {
+    val a = $"a".binary
+    val neverResolves = Cast(a, LongType)
+    val node = TranspiledPythonUDF("udf", pyUDF(Seq(a)), List(neverResolves),
+      List(List("binary")))
+    // UnresolvedAlias, not Alias -- this is what `df.select(udf(col))` produces.
+    val plan = Project(Seq(UnresolvedAlias(node, None)), LocalRelation(a))
+    val analyzed = getAnalyzer.executeAndCheck(plan, new QueryPlanningTracker)
+    // The UnresolvedAlias must be resolved to an Alias, not left unresolved.
+    assert(analyzed.expressions.head.isInstanceOf[Alias],
+      "an unaliased UDF whose option is dropped must still get an alias")
+    val out = analyzed.expressions.flatMap(_.collect { case t: TranspiledPythonUDF => t }).head
+    assert(out.transpiledOptions.isEmpty,
+      "an unresolvable option must be dropped so the call falls back to Python")
+  }
+
+  // A reference to an aliased UDF result whose option is dropped: the inner Alias
+  // becomes resolvable only after the drop, so the outer UnresolvedAttribute
+  // needs ResolveReferences to run again too. (Uses a long literal so the Add's
+  // operands match without a type-coercion re-run, which is a separate concern.)
+  test("SPARK-59090: reference to an aliased call with an unresolvable option resolves") {
+    val a = $"a".binary
+    val neverResolves = Cast(a, LongType)
+    val node = TranspiledPythonUDF("udf", pyUDF(Seq(a)), List(neverResolves),
+      List(List("binary")))
+    val inner = Project(Seq(Alias(node, "r")()), LocalRelation(a))
+    val r = inner.output.head
+    // `r + 1L` references the inner alias; unresolved until the inner UDF resolves.
+    val outer = Project(Seq(Alias(Add(r, Literal(1L)), "r1")()), inner)
+    val analyzed = getAnalyzer.executeAndCheck(outer, new QueryPlanningTracker)
+    // The TranspiledPythonUDF is in the inner Project, not the outer one.
+    val out = analyzed.children.head.expressions
+      .flatMap(_.collect { case t: TranspiledPythonUDF => t }).head
     assert(out.transpiledOptions.isEmpty,
       "an unresolvable option must be dropped so the call falls back to Python")
   }

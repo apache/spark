@@ -442,17 +442,22 @@ def _resolvable_builtins(func: Optional[Callable], params: List[str]) -> Set[str
     if func is None:
         return set()
     shadowed = set(params)
-    code = getattr(func, "__code__", None) or getattr(
-        getattr(func, "__call__", None), "__code__", None
-    )
+    # Resolve the callable Python actually dispatches, matching `_transpile_func`:
+    # `getattr(func, "__call__")` finds an instance attribute when one exists,
+    # but Python ignores it and calls the type's `__call__` instead. Reading the
+    # wrong code object here would miss a free variable and lower a shadowed
+    # builtin (e.g. `round`) as the builtin -- a silent wrong result.
+    if inspect.isfunction(func) or inspect.ismethod(func):
+        target: Any = func
+    else:
+        target = _call_impl(_call_dunder(func))
+    code = getattr(target, "__code__", None)
     if code is not None:
         # Closures and locals: a name bound anywhere in the function shadows the
         # builtin for the whole body, regardless of statement order.
         shadowed.update(code.co_freevars)
         shadowed.update(code.co_varnames)
-    globals_dict = getattr(func, "__globals__", None) or getattr(
-        getattr(func, "__call__", None), "__globals__", {}
-    )
+    globals_dict = getattr(target, "__globals__", None) or {}
     return {
         name
         for name in _SUPPORTED_BUILTINS
@@ -460,6 +465,22 @@ def _resolvable_builtins(func: Optional[Callable], params: List[str]) -> Set[str
         and name not in globals_dict
         and getattr(builtins, name, None) is not None
     }
+
+
+def _accepts_func_kwarg(transpiler: "AbstractTranspiler") -> bool:
+    """Whether ``transpiler._transpile_from_ast`` accepts the ``func`` keyword.
+
+    ``func`` was added to the override point after the fact; a custom transpiler
+    with the old signature raises ``TypeError`` on the keyword, which the broad
+    ``except`` at the call site would silently turn into "every option dropped".
+    """
+    try:
+        params = inspect.signature(transpiler._transpile_from_ast).parameters
+    except (ValueError, TypeError):
+        # Some callables (built-ins, C extensions) have no inspectable signature;
+        # assume they don't take it and let the call fail normally if they do.
+        return False
+    return "func" in params or any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values())
 
 
 class AbstractTranspiler(object):
@@ -1406,14 +1427,17 @@ class CatalystTranspiler(AbstractTranspiler):
                     "for this input-type variant"
                 )
             case ast.Call(func=ast.Name(id="len"), args=[arg], keywords=[]):
-                # ``len(s)`` is an int. Only strings are lowered (SPARK-55214);
-                # other argument categories raise so this variant is dropped.
+                # ``len(s)`` is always a Python int, so report "integral" not the
+                # unrefined "numeric": the integral-only lowerings (``//``, ``&``,
+                # shifts, ``round``) would otherwise miss ``len(s) // 2`` etc.
+                # and the UDF would fall back unnecessarily. Only strings are
+                # lowered (SPARK-55214); other argument categories raise.
                 if self._category(params, arg) != "string":
                     raise UnsupportedOperationException(
                         "`len` is only lowered for string operands; other "
                         "types fall back to interpreted Python"
                     )
-                return "numeric"
+                return "integral"
             case ast.Call(func=ast.Name(id=name), args=args) if name in _SUPPORTED_BUILTINS:
                 return self._builtin_call_category(params, name, args)
             case ast.UnaryOp(op=(ast.USub() | ast.UAdd() | ast.Invert()), operand=operand):
@@ -1751,13 +1775,17 @@ class CatalystTranspiler(AbstractTranspiler):
                         # TypeError, not a truncation. A float literal shows up as
                         # "fractional" here; for a parameter only the JVM knows, so
                         # narrow the count and let a double column drop the option.
+                        # "integral32" not "integral": `repeat` casts the count to
+                        # int, which raises under ANSI for a bigint above Int.MaxValue
+                        # where Python returns "" (negative) or a huge string. A
+                        # bigint column therefore drops the option and falls back.
                         if lc == "string" and _is_numeric_cat(rc) and rc != "fractional":
-                            self._narrow(params, "integral", right)
+                            self._narrow(params, "integral32", right)
                             return _raise_on_null_operand(
                                 "*", repeat(left_col, right_col.cast("int")), left_col, right_col
                             )
                         if _is_numeric_cat(lc) and lc != "fractional" and rc == "string":
-                            self._narrow(params, "integral", left)
+                            self._narrow(params, "integral32", left)
                             return _raise_on_null_operand(
                                 "*", repeat(right_col, left_col.cast("int")), left_col, right_col
                             )
@@ -2582,6 +2610,12 @@ def _transpile_func(
         # Maybe multiple transpilers (think CUDA, etc.).
         transpilers = _get_transpilers(session)
         for transpiler in transpilers:
+            # `func` is a newer keyword on `_transpile_from_ast`; a custom
+            # transpiler overriding it with the old signature would raise
+            # TypeError on the keyword, which the broad except below silently
+            # turns into "every option dropped". Feature-detect once so we
+            # only pass it to implementations that accept it.
+            accepts_func = _accepts_func_kwarg(transpiler)
             for combo in combos:
                 try:
                     transpiled_column = transpiler._transpile_from_ast(
@@ -2591,7 +2625,7 @@ def _transpile_func(
                         public_params,
                         returnType,
                         combo,
-                        func=func,
+                        **({"func": func} if accepts_func else {}),
                     )
                     if transpiled_column is not None:
                         transpiled.append(transpiled_column)
