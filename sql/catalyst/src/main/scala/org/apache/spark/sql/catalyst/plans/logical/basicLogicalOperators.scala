@@ -1795,16 +1795,17 @@ object BinByOutputAliases {
 }
 
 /**
- * Unresolved counterpart of [[BinBy]] produced by the parser. `ResolveBinBy` enforces type and
- * foldability constraints and rewrites this into a resolved [[BinBy]].
+ * Unresolved counterpart of [[BinBy]] produced by the parser and DataFrame API. Column positions
+ * accept expressions; `ResolveBinBy` requires them to resolve to top-level attributes. It also
+ * enforces type and foldability constraints and rewrites this into a resolved [[BinBy]].
  *
  * @param binWidthExpr       Bin-width expression (DAY-TIME INTERVAL).
- * @param rangeStartCol      Reference to the row's measurement-window start column.
- * @param rangeEndCol        Reference to the row's measurement-window end column.
+ * @param rangeStartCol      Expression for the row's measurement-window start column.
+ * @param rangeEndCol        Expression for the row's measurement-window end column.
  * @param originExpr         Optional alignment anchor expression (`ALIGN TO` clause). `None`
  *                           when the clause is omitted; `ResolveBinBy` defaults the resolved
  *                           plan's origin to `1970-01-01 00:00:00`.
- * @param distributeColumns  Columns whose values are proportionally redistributed across sub-rows.
+ * @param distributeColumns  Expressions for values to proportionally redistribute across sub-rows.
  * @param outputAliases      Optional renames for the three appended output columns.
  * @param child              Input relation.
  */
