@@ -453,6 +453,30 @@ NULL	5045279
 
 
 -- !query
+select array(1), map(1, 2), struct(1), 20181117 >> 2, 20181117 >>> 2
+-- !query schema
+struct<array(1):array<int>,map(1, 2):map<int,int>,struct(1):struct<col1:int>,(20181117 >> 2):int,(20181117 >>> 2):int>
+-- !query output
+[1]	{1:2}	{"col1":1}	5045279	5045279
+
+
+-- !query
+select '[1]' IS JSON ARRAY, 20181117 >> 2, 20181117 >>> 2
+-- !query schema
+struct<([1] IS JSON ARRAY):boolean,(20181117 >> 2):int,(20181117 >>> 2):int>
+-- !query output
+true	5045279	5045279
+
+
+-- !query
+select cast(null as array /* comment */ <array<int>>), 20181117 >> 2
+-- !query schema
+struct<NULL:array<array<int>>,(20181117 >> 2):int>
+-- !query output
+NULL	5045279
+
+
+-- !query
 select 1 << 1 + 2 as plus_over_shift
 -- !query schema
 struct<plus_over_shift:int>
