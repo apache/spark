@@ -208,10 +208,19 @@ object DropUnresolvedTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
               if (dropped.nonEmpty) {
                 val first = Utils.redact(
                   SQLConf.get.stringRedactionPattern, dropped.head.simpleString(maxFields = 100))
-                logWarning(log"Dropping ${MDC(LogKeys.COUNT, dropped.length)} transpiled " +
-                  log"option(s) for Python UDF ${MDC(LogKeys.FUNCTION_NAME, t.name)}; the call " +
-                  log"falls back to interpreted Python. First dropped: " +
-                  log"${MDC(LogKeys.EXPR, first)}")
+                // Only claim "falls back to interpreted Python" when every option was
+                // dropped; with survivors, ConvertToCatalyst still picks the first kept one.
+                if (kept.isEmpty) {
+                  logWarning(log"Dropping ${MDC(LogKeys.COUNT, dropped.length)} transpiled " +
+                    log"option(s) for Python UDF ${MDC(LogKeys.FUNCTION_NAME, t.name)}; " +
+                    log"the call falls back to interpreted Python. First dropped: " +
+                    log"${MDC(LogKeys.EXPR, first)}")
+                } else {
+                  logWarning(log"Dropping ${MDC(LogKeys.COUNT, dropped.length)} transpiled " +
+                    log"option(s) for Python UDF ${MDC(LogKeys.FUNCTION_NAME, t.name)}; " +
+                    log"${MDC(LogKeys.COUNT, kept.length)} option(s) remain. First dropped: " +
+                    log"${MDC(LogKeys.EXPR, first)}")
+                }
               }
               typed.copy(transpiledOptions = kept)
           }
