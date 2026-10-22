@@ -102,6 +102,10 @@ abstract class SchemaPruningSuite
     Order(0, Array(Item(1, "a", Array(Part(1, "p1", 1.5), Part(2, "p2", 2.5))),
       Item(2, "b", Array.empty))) ::
     Order(1, Array.empty) :: Nil
+  // a null at each level of the chain: a null item, null `parts`, a null part, null `items`
+  val ordersWithNulls =
+    Order(0, Array(null, Item(1, "a", null), Item(2, "b", Array(null, Part(1, "p1", 1.5))))) ::
+    Order(1, null) :: Nil
   case class Matrix(id: Int, rows: Array[Array[Part]])
   val matrices =
     Matrix(0, Array(Array(Part(1, "p1", 1.5)), Array(Part(2, "p2", 2.5), Part(3, "p3", 3.5)))) ::
@@ -615,6 +619,119 @@ abstract class SchemaPruningSuite
       checkAnswer(query,
         Row("a") :: Row("x") :: Row("b") :: Row("x") :: Row(null) :: Row("x") :: Nil)
     }
+  }
+
+  testSchemaPruning("SPARK-47230: references in another case than the generator alias") {
+    // a reference keeps the name it was written with, e.g. `FRIEND` for the element `friend`
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val explodeFriends = "from contacts lateral view outer explode(friends) t as friend"
+      val friends = Row("Z.", "Smith") :: Row(null, null) :: Row(null, null) ::
+        Row(null, null) :: Nil
+      val query1 = sql(s"select FRIEND.middle, FRIEND.last $explodeFriends")
+      checkScan(query1, "struct<friends:array<struct<middle:string,last:string>>>")
+      checkAnswer(query1, friends)
+
+      // the same element in two cases
+      val query2 = sql(s"select FRIEND.middle, friend.last $explodeFriends")
+      checkScan(query2, "struct<friends:array<struct<middle:string,last:string>>>")
+      checkAnswer(query2, friends)
+
+      // an inner element, and the input of the inner generator
+      withDataSourceTable(orders, "orders") {
+        val query3 = sql("select PART.pid, PART.weight from orders " +
+          "lateral view outer explode(items) t1 as item " +
+          "lateral view outer explode(ITEM.parts) t2 as part")
+        checkScan(query3,
+          "struct<items:array<struct<parts:array<struct<pid:int,weight:double>>>>>")
+        checkAnswer(query3,
+          Row(1, 1.5) :: Row(2, 2.5) :: Row(null, null) :: Row(null, null) :: Nil)
+      }
+    }
+  }
+
+  testSchemaPruning("SPARK-47230: functions over fields of an exploded element") {
+    withDataSourceTable(orders, "orders") {
+      val explodeItems = "from orders lateral view outer explode(items) t1 as item"
+      val query1 = sql(s"select item.sku, transform(item.parts, p -> p.pid) $explodeItems")
+      checkScan(query1, "struct<items:array<struct<sku:string,parts:array<struct<pid:int>>>>>")
+      checkAnswer(query1, Row("a", Seq(1, 2)) :: Row("b", Seq.empty) :: Row(null, null) :: Nil)
+
+      val query2 = sql(s"select item.sku, exists(item.parts, p -> p.weight > 2) $explodeItems")
+      checkScan(query2,
+        "struct<items:array<struct<sku:string,parts:array<struct<weight:double>>>>>")
+      checkAnswer(query2, Row("a", true) :: Row("b", false) :: Row(null, null) :: Nil)
+
+      val query3 = sql(s"select item.sku, item.parts[0].pid $explodeItems")
+      checkScan(query3, "struct<items:array<struct<sku:string,parts:array<struct<pid:int>>>>>")
+      checkAnswer(query3, Row("a", 1) :: Row("b", null) :: Row(null, null) :: Nil)
+    }
+  }
+
+  testSchemaPruning("SPARK-47230: chained elements with the same name") {
+    withDataSourceTable(orders, "orders") {
+      // the second `x` replaces the first one, but both are in the plan
+      val query1 = spark.table("orders")
+        .select(explode_outer(col("items")).as("x"))
+        .select(explode_outer(col("x.parts")).as("x"))
+        .select(col("x.pid"), col("x.weight"))
+      checkScan(query1, "struct<items:array<struct<parts:array<struct<pid:int,weight:double>>>>>")
+      checkAnswer(query1,
+        Row(1, 1.5) :: Row(2, 2.5) :: Row(null, null) :: Row(null, null) :: Nil)
+
+      // a field of the first `x` and of the second `x`
+      val query2 = spark.table("orders")
+        .select(explode_outer(col("items")).as("x"))
+        .select(col("x.sku"), explode_outer(col("x.parts")).as("x"))
+        .select(col("sku"), col("x.label"))
+      checkScan(query2,
+        "struct<items:array<struct<sku:string,parts:array<struct<label:string>>>>>")
+      checkAnswer(query2,
+        Row("a", "p1") :: Row("a", "p2") :: Row("b", null) :: Row(null, null) :: Nil)
+    }
+  }
+
+  testSchemaPruning("SPARK-47230: nulls at each level of two chained explodes") {
+    withDataSourceTable(ordersWithNulls, "orders") {
+      val query1 = sql(s"select id, part.pid, part.weight $explodeOrderParts")
+      checkScan(query1,
+        "struct<id:int,items:array<struct<parts:array<struct<pid:int,weight:double>>>>>")
+      checkAnswer(query1,
+        Row(0, null, null) :: Row(0, null, null) :: Row(0, null, null) :: Row(0, 1, 1.5) ::
+          Row(1, null, null) :: Nil)
+
+      // not outer: the inferred `size(...) > 0` filters drop the nulls
+      val query2 = sql("select id, part.pid, part.weight from orders " +
+        "lateral view explode(items) t1 as item lateral view explode(item.parts) t2 as part")
+      checkScan(query2, "struct<id:int,items:array<struct<qty:int," +
+        "parts:array<struct<pid:int,weight:double>>>>>")
+      checkAnswer(query2, Row(0, null, null) :: Row(0, 1, 1.5) :: Nil)
+
+      // `size` of a null array is -1 here (ANSI mode is off in this suite)
+      val query3 = sql("select id, size(item.parts) from orders " +
+        "lateral view outer explode(items) t1 as item")
+      checkScan(query3, "struct<id:int,items:array<struct<parts:array<struct<pid:int>>>>>")
+      checkAnswer(query3, Row(0, -1) :: Row(0, -1) :: Row(0, 2) :: Row(1, -1) :: Nil)
+
+      // the element is not read: only the array sizes are needed
+      val query4 = sql("select id from orders lateral view outer explode(items) t1 as item")
+      checkScan(query4, "struct<id:int,items:array<struct<qty:int>>>")
+      checkAnswer(query4, Row(0) :: Row(0) :: Row(0) :: Row(1) :: Nil)
+    }
+  }
+
+  testSchemaPruning("SPARK-47230: an explode of a map reads the map whole") {
+    // a map is not pruned through, alone or in a chain with an array
+    val query1 = sql(
+      "select k, v.first, v.last from contacts lateral view explode(relatives) t as k, v")
+    checkScan(query1,
+      "struct<relatives:map<string,struct<first:string,middle:string,last:string>>>")
+    checkAnswer(query1, Row("brother", "John", "Doe") :: Row("sister", "Jane", "Doe") :: Nil)
+
+    val query2 = sql("select friend.first, friend.last, v.last from contacts " +
+      "lateral view explode(friends) t1 as friend lateral view explode(relatives) t2 as k, v")
+    checkScan(query2, "struct<friends:array<struct<first:string,last:string>>," +
+      "relatives:map<string,struct<first:string,middle:string,last:string>>>")
+    checkAnswer(query2, Row("Susan", "Smith", "Doe") :: Nil)
   }
 
   testSchemaPruning("SPARK-47230: an explode above an aggregate is not pruned through") {

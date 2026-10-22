@@ -215,7 +215,14 @@ object SchemaPruning extends Rule[LogicalPlan] {
       val resolved = narrowed.foldLeft(withNewChildren) { (p, attr) =>
         val projectionOverSchema = ProjectionOverSchema(
           StructType(Array(StructField(attr.name, attr.dataType))), AttributeSet(attr))
-        p.transformExpressions { case projectionOverSchema(expr) => expr }
+        // ProjectionOverSchema matches references by name, but a reference keeps the name it was
+        // written with (e.g. `ITEM` for `item`), and a missed one keeps its old ordinal and reads
+        // the wrong field. The scan's own pruning normalizes names first
+        // (`normalizeAttributeRefNames`); the operators above the generators are only rewritten
+        // here, so normalize them here too.
+        p.transformExpressions {
+          case a: AttributeReference if a.exprId == attr.exprId => a.withName(attr.name)
+        }.transformExpressions { case projectionOverSchema(expr) => expr }
       }
       resolved match {
         case g: Generate =>
