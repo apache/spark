@@ -4092,7 +4092,7 @@ class SparkConnectPlanner(
     } else {
       UUID.randomUUID().toString
     }
-    if (clientSuppliedId && sessionHolder.containsCachedDataFrame(dfId)) {
+    if (sessionHolder.containsCachedDataFrame(dfId)) {
       throw checkpointRelationIdAlreadyExists(dfId)
     }
     val target = Dataset
