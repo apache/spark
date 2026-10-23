@@ -109,7 +109,7 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
 
 * **DISTRIBUTED BY PARTITION**
 
-    Requests that every write to the table be clustered by the table's partitioning, so the rows
+    Requests that writes to the table be clustered by the table's partitioning, so the rows
     of each partition are written by as few tasks as possible rather than by every task that holds
     rows for it.
 
@@ -127,8 +127,8 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
 
 * **ORDERED BY**
 
-    Requests a sort order for every write to the table, recorded on the table so that later writes
-    honor it too. `UNORDERED` asks for no ordering at all, which is different from omitting the
+    Requests a sort order for writes to the table, recorded on the table as the default for later
+    writes. `UNORDERED` asks for no ordering at all, which is different from omitting the
     clause -- omitting it leaves the choice to the catalog. The parentheses are optional:
     `ORDERED BY (a, b)` and `ORDERED BY a, b` are the same. The sort keys must resolve against the
     table's columns, so a statement that defines no schema (no column list, no typed partition
@@ -162,8 +162,10 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
     Both clauses are passed to the catalog, which has to support them. If the catalog does not
     advertise support for a write distribution and ordering, Spark rejects the statement rather
     than creating a table that silently lacks the requested layout. The built-in catalogs do not
-    support them. `ORDERED BY`, `LOCALLY ORDERED BY`, and `UNORDERED` may also be combined with
-    `CLUSTER BY`, subject to the catalog accepting the combination: Spark passes the clustering
+    support them. In the session catalog, Spark also rejects the clauses when the statement would
+    create a v1 table, for example with a file source such as `parquet` or with `STORED AS`, even
+    if a catalog extension registered as `spark_catalog` advertises support. `ORDERED BY`,
+    `LOCALLY ORDERED BY`, and `UNORDERED` may also be combined with `CLUSTER BY`, subject to the catalog accepting the combination: Spark passes the clustering
     columns and the requested distribution and ordering to the catalog without reconciling them,
     so the catalog decides how they interact and may reject a combination it does not support.
     `DISTRIBUTED BY PARTITION` cannot be combined with `CLUSTER BY`, as described above.
@@ -171,8 +173,10 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
     What the catalog records is a *default* for later writes, not a statement about the data
     already in the table: an individual write may override it, and rewriting existing data to match
     a newly requested layout is a separate operation. `SHOW CREATE TABLE` reproduces the clauses
-    only when the catalog accepts them, the statement would not create a v1 table, every column
-    they reference exists, and parsing them in the current session gives back the same pair. A
+    only when the pair can be written as clauses (`DISTRIBUTED BY PARTITION` needs a partitioned
+    table), the catalog accepts them, the statement would not create a v1 table, every sort key
+    renders, every column they reference exists, and parsing them in the current session gives
+    back the same pair. A
     sort key with a `TRUE`, `FALSE` or `NULL` argument, for example, is read back as a column
     reference when that keyword is not reserved, so it is not reproduced.
     `DESCRIBE TABLE EXTENDED` reports the requested values whether or not `SHOW CREATE TABLE` can

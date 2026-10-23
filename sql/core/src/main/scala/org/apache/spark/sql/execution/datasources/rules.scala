@@ -21,7 +21,6 @@ import java.util.Locale
 
 import scala.collection.mutable.{HashMap, HashSet}
 import scala.jdk.CollectionConverters._
-import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
@@ -33,6 +32,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.TypeUtils._
+import org.apache.spark.sql.catalyst.util.WriteDistributionAndOrdering
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.expressions.{FieldReference, LogicalExpressions, NamedReference, RewritableTransform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -356,8 +356,8 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
         // through a non-struct field, is kept as is for CheckAnalysis to report, and each
         // reference is normalized independently.
         def normalizeResolvable(ref: NamedReference): NamedReference = {
-          Try(schema.findNestedField(ref.fieldNames().toImmutableArraySeq, resolver = resolver))
-            .toOption.flatten
+          WriteDistributionAndOrdering
+            .findColumn(schema, ref.fieldNames().toImmutableArraySeq, resolver)
             .map { case (path, field) => FieldReference(path :+ field.name) }
             .getOrElse(ref)
         }

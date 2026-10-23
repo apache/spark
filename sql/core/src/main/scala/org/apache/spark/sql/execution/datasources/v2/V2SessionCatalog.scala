@@ -28,7 +28,8 @@ import org.apache.spark.sql.catalyst.{QualifiedTableName, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec, SessionCatalog}
 import org.apache.spark.sql.catalyst.util.TypeUtils._
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Column, FunctionCatalog, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableCatalogCapability, TableChange, V1Table}
+import org.apache.spark.sql.catalyst.util.WriteDistributionAndOrdering
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Column, FunctionCatalog, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableCatalogCapability, TableChange, TableInfo, V1Table}
 import org.apache.spark.sql.connector.catalog.NamespaceChange.RemoveProperty
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.Transform
@@ -273,6 +274,13 @@ class V2SessionCatalog(catalog: SessionCatalog)
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
     createTable0(ident, CatalogV2Util.v2ColumnsToStructType(columns), partitions, properties)
+  }
+
+  override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
+    WriteDistributionAndOrdering.validateCatalogForWriteDistributionAndOrdering(
+      this, ident, "CREATE TABLE", tableInfo.writeDistributionMode(),
+      tableInfo.writeOrdering().toImmutableArraySeq)
+    createTable(ident, tableInfo.columns(), tableInfo.partitions(), tableInfo.properties())
   }
 
   private def toOptions(properties: Map[String, String]): Map[String, String] = {

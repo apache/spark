@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.util
+
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
@@ -66,10 +68,10 @@ case class ShowCreateTableExec(
     showTableOptions(builder, tableOptions)
     showTablePartitioning(table, partitioning, builder)
     showTableWriteDistributionAndOrdering(resolvedTable, schema, partitioning, provider, builder)
-    showTableComment(table, builder)
-    showTableCollation(table, builder)
-    showTableLocation(table, builder)
-    showTableProperties(table, builder, tableOptions)
+    showTableComment(properties, builder)
+    showTableCollation(properties, builder)
+    showTableLocation(properties, builder)
+    showTableProperties(properties, builder, tableOptions)
   }
 
   private def showTableDataColumns(
@@ -154,21 +156,24 @@ case class ShowCreateTableExec(
     val writeDistributionMode = table.writeDistributionMode()
     val writeOrdering = table.writeOrdering().toImmutableArraySeq
     if (WriteDistributionAndOrdering.isRequested(writeDistributionMode, writeOrdering) &&
-        WriteDistributionAndOrdering.supportsWriteDistributionAndOrdering(resolvedTable.catalog) &&
-        !createsV1Table(resolvedTable.catalog, provider)) {
+        WriteDistributionAndOrdering.supportsWriteDistributionAndOrdering(resolvedTable.catalog)) {
+      lazy val createsV1 = createsV1Table(resolvedTable.catalog, provider)
+      val replay = WriteDistributionAndOrdering.replayWith(session.sessionState.sqlParser) _
       WriteDistributionAndOrdering.writeClausesSQL(
         writeDistributionMode,
         writeOrdering,
         partitioning.toImmutableArraySeq,
         schema,
-        WriteDistributionAndOrdering.replayWith(session.sessionState.sqlParser)
+        clauses => replay(clauses).filter(_ => !createsV1)
       ).foreach(clauses => builder ++= s"$clauses\n")
     }
   }
 
-  // Whether the printed CREATE TABLE, which has the table's provider as USING and no STORED AS
-  // or ROW FORMAT, would create a v1 table, which cannot record the clauses, so the replay would
-  // be rejected. A provider that cannot be looked up or linked fails the replay too.
+  // Whether the printed CREATE TABLE would create a v1 table, which cannot record the clauses, so
+  // the replay would be rejected. It has the table's provider, if any, as USING and no STORED AS
+  // or ROW FORMAT, so CREATE TABLE picks its provider as `createTableProvider` does. A provider
+  // that cannot be looked up or linked fails the replay too. The lookup is costly, so it runs
+  // only for clauses that parse.
   private def createsV1Table(catalog: TableCatalog, provider: Option[String]): Boolean = {
     V1CommandUtils.supportsV1Command(catalog) && {
       val tableProvider = DataSourceV2Utils.createTableProvider(
@@ -181,22 +186,24 @@ case class ShowCreateTableExec(
     }
   }
 
-  private def showTableLocation(table: Table, builder: StringBuilder): Unit = {
-    val isManagedOption = Option(table.properties.get(TableCatalog.PROP_IS_MANAGED_LOCATION))
+  private def showTableLocation(
+      properties: util.Map[String, String],
+      builder: StringBuilder): Unit = {
+    val isManagedOption = Option(properties.get(TableCatalog.PROP_IS_MANAGED_LOCATION))
     // Only generate LOCATION clause if it's not managed.
     if (isManagedOption.isEmpty || !isManagedOption.get.equalsIgnoreCase("true")) {
-      Option(table.properties.get(TableCatalog.PROP_LOCATION))
+      Option(properties.get(TableCatalog.PROP_LOCATION))
         .map("LOCATION '" + escapeSingleQuotedString(_) + "'\n")
         .foreach(builder.append)
     }
   }
 
   private def showTableProperties(
-      table: Table,
+      properties: util.Map[String, String],
       builder: StringBuilder,
       tableOptions: Map[String, String]): Unit = {
 
-    val showProps = table.properties.asScala
+    val showProps = properties.asScala
       .filter { case (key, _) =>
         !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(key) &&
         !key.startsWith(TableCatalog.OPTION_PREFIX) &&
@@ -213,14 +220,18 @@ case class ShowCreateTableExec(
     }
   }
 
-  private def showTableComment(table: Table, builder: StringBuilder): Unit = {
-    Option(table.properties.get(TableCatalog.PROP_COMMENT))
+  private def showTableComment(
+      properties: util.Map[String, String],
+      builder: StringBuilder): Unit = {
+    Option(properties.get(TableCatalog.PROP_COMMENT))
       .map("COMMENT '" + escapeSingleQuotedString(_) + "'\n")
       .foreach(builder.append)
   }
 
-  private def showTableCollation(table: Table, builder: StringBuilder): Unit = {
-    Option(table.properties.get(TableCatalog.PROP_COLLATION))
+  private def showTableCollation(
+      properties: util.Map[String, String],
+      builder: StringBuilder): Unit = {
+    Option(properties.get(TableCatalog.PROP_COLLATION))
       .map("DEFAULT COLLATION " + _ + "\n").foreach(builder.append)
   }
 

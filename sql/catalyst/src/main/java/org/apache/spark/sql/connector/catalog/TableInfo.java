@@ -81,8 +81,8 @@ public class TableInfo {
    * <p>
    * Only catalogs that report
    * {@link TableCatalogCapability#SUPPORTS_CREATE_TABLE_WITH_WRITE_DISTRIBUTION_AND_ORDERING} see a
-   * request; for any other catalog, Spark rejects the statement. A
-   * {@link WriteDistributionMode#HASH} request always comes with a partition in
+   * request; for any other catalog, including the built-in session catalog, Spark rejects the
+   * statement. A {@link WriteDistributionMode#HASH} request always comes with a partition in
    * {@link #partitions()} that is not {@code cluster_by}.
    * <p>
    * Spark passes the request only to the {@code TableInfo} overloads of
@@ -90,8 +90,11 @@ public class TableInfo {
    * methods {@code stageCreate}, {@code stageReplace} and {@code stageCreateOrReplace}. Their
    * default implementations drop it, so a catalog that reports the capability must override each
    * one it can be reached through. For a {@link TransactionalCatalogPlugin}, a
-   * {@code CREATE TABLE ... AS SELECT} or {@code REPLACE TABLE ... AS SELECT} reaches the catalog
-   * of its {@link org.apache.spark.sql.connector.catalog.transactions.Transaction} instead.
+   * {@code CREATE TABLE ... AS SELECT} or {@code REPLACE TABLE ... AS SELECT} that Spark runs in a
+   * transaction reaches the catalog of its
+   * {@link org.apache.spark.sql.connector.catalog.transactions.Transaction} instead; otherwise it
+   * reaches the plugin itself. See
+   * {@link TableCatalogCapability#SUPPORTS_CREATE_TABLE_WITH_WRITE_DISTRIBUTION_AND_ORDERING}.
    * {@link TableCatalog#createTableLike} never gets a request: Spark does not copy the source
    * table's write distribution and ordering into its {@code TableInfo}.
    *
