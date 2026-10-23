@@ -1969,6 +1969,23 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     val inSet = new V2ExpressionBuilder(
       InSet(padded, Set(UTF8String.fromString("Y"))), isPredicate = true).build()
     assert(inSet.isDefined)
+    inSet.get match {
+      case p: Predicate if p.name() == "IN" =>
+        assert(p.children().length === 2)
+        p.children()(0) match {
+          case g: GeneralScalarExpression
+              if g.name() == CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING =>
+            assert(g.children()(0) === FieldReference("flag"))
+            assert(g.children()(1) === LiteralValue(1, IntegerType))
+            assert(g.children()(2) ===
+              LiteralValue(UTF8String.fromString(" "), StringType))
+          case other =>
+            fail(s"expected CHAR_READ_SIDE_PADDING, got ${other.describe()}")
+        }
+        assert(p.children()(1) === LiteralValue(UTF8String.fromString("Y"), StringType))
+      case other =>
+        fail(s"expected IN predicate, got ${other.describe()}")
+    }
     val inNull = new V2ExpressionBuilder(
       In(padded, Seq(Literal("Y"), Literal(null, StringType))), isPredicate = true).build()
     assert(inNull.isEmpty, "IN list with NULL should stay local")

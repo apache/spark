@@ -445,19 +445,19 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
       checkFilterPushed(eq)
       val eqRows = eq.collect()
       assert(eqRows.length === 1)
-      assert(eqRows(0).getInt(0) === 1)
+      assert(eqRows(0).getDecimal(0).intValueExact() === 1)
       // scalastyle:off nonascii
       val cjk = sql(s"SELECT id FROM $table WHERE flag = '日本'")
       // scalastyle:on nonascii
       checkFilterPushed(cjk)
       val cjkRows = cjk.collect()
       assert(cjkRows.length === 1)
-      assert(cjkRows(0).getInt(0) === 3)
+      assert(cjkRows(0).getDecimal(0).intValueExact() === 3)
       val isNull = sql(s"SELECT id FROM $table WHERE flag IS NULL")
       checkFilterPushed(isNull)
       val nullRows = isNull.collect()
       assert(nullRows.length === 1)
-      assert(nullRows(0).getInt(0) === 2)
+      assert(nullRows(0).getDecimal(0).intValueExact() === 2)
     }
   }
 }
