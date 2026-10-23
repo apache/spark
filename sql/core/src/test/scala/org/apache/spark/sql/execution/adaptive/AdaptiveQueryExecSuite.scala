@@ -1936,20 +1936,30 @@ class AdaptiveQueryExecSuite
         assert(rows.count(_ == Row(0L, 334000L)) == 1)
         assert(rows.count(_ == Row(0L, 1L)) == 334000)
 
-        val aggregateJoins = collect(adaptivePlan) {
-          case agg: BaseAggregateExec =>
-            collect(agg) { case j: SortMergeJoinExec => j }
-        }.flatten
-        assert(aggregateJoins.size == 1)
-        assert(!aggregateJoins.head.isSkewJoin)
-        val unionJoins = findTopLevelSortMergeJoin(adaptivePlan)
-          .filterNot(j => aggregateJoins.exists(_ eq j))
-        assert(unionJoins.size == 1)
-        assert(unionJoins.head.isSkewJoin)
-        assert(collect(unionJoins.head) {
+        val rejectedJoins = collect(adaptivePlan) {
+          case agg: BaseAggregateExec => findTopLevelSortMergeJoin(agg)
+        }.flatten.distinct
+        assert(rejectedJoins.size == 1, adaptivePlan.toString)
+        val rejected = rejectedJoins.head
+        assert(!rejected.isSkewJoin)
+        // The rejected join does not lose partition coalescing to the kept split.
+        val rejectedReads = collect(rejected) { case r: AQEShuffleReadExec => r }
+        assert(rejectedReads.size == 2 && rejectedReads.forall(_.hasCoalescedPartition),
+          adaptivePlan.toString)
+
+        val keptJoins = findTopLevelSortMergeJoin(adaptivePlan).filterNot(_ eq rejected)
+        assert(keptJoins.size == 1, adaptivePlan.toString)
+        assert(keptJoins.head.isSkewJoin)
+        assert(collect(keptJoins.head) {
           case r: AQEShuffleReadExec => r
-        }.exists(_.partitionSpecs.exists(_.isInstanceOf[PartialReducerPartitionSpec])))
+        }.exists(_.hasSkewedPartition))
         assert(ValidateRequirements.validate(adaptivePlan))
+
+        // Turning the fallback off gives the plan back to the all-or-nothing path.
+        withSQLConf(SQLConf.SKEW_JOIN_PER_JOIN_FALLBACK_ENABLED.key -> "false") {
+          val (_, withoutFallback) = runAdaptiveAndVerifyResult(query)
+          assert(findTopLevelSortMergeJoin(withoutFallback).forall(!_.isSkewJoin))
+        }
       }
     }
   }
@@ -2030,12 +2040,12 @@ class AdaptiveQueryExecSuite
     val rule = OptimizeSkewedJoin(EnsureRequirements())
 
     val result = rule.applySkewJoins(bhj, Seq(
-      SkewJoinCandidate(innerJoin, Inner, innerJoin.copy(isSkewJoin = true)),
-      SkewJoinCandidate(bhj, Inner, bhj.copy(isSkewJoin = true))))
+      SkewJoinCandidate(innerJoin, innerJoin.copy(isSkewJoin = true)),
+      SkewJoinCandidate(bhj, bhj.copy(isSkewJoin = true))))
 
     assert(result.isInstanceOf[BroadcastHashJoinExec])
     assert(result.asInstanceOf[BroadcastHashJoinExec].isSkewJoin)
-    val innerJoins = collect(result) { case j: SortMergeJoinExec => j }
+    val innerJoins = findTopLevelSortMergeJoin(result)
     assert(innerJoins.size == 1 && innerJoins.head.isSkewJoin)
   }
 

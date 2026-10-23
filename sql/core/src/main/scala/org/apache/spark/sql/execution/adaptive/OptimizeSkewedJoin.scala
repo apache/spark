@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, EnsureRequirements, ValidateRequirements}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
@@ -212,8 +212,8 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
   }
 
   /**
-   * The candidate `plan` stands for, when it is a sort-merge, shuffled-hash or broadcast-hash join
-   * with a skewed shuffled side this rule can split.
+   * Returns the candidate for `plan` when it is a sort-merge, shuffled-hash or broadcast-hash join
+   * with a skewed shuffled side this rule can split, and `None` otherwise.
    */
   private def splitSkewJoin(
       plan: SparkPlan,
@@ -224,7 +224,7 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
           s2 @ SortExec(_, _, ShuffleStage(right: ShuffleQueryStageExec), _), false) =>
         tryOptimizeJoinChildren(left, right, joinType).map {
           case (newLeft, newRight) =>
-            SkewJoinCandidate(smj, joinType, smj.copy(
+            SkewJoinCandidate(smj, smj.copy(
               left = s1.copy(child = newLeft), right = s2.copy(child = newRight),
               isSkewJoin = true))
         }
@@ -234,30 +234,27 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
           ShuffleStage(right: ShuffleQueryStageExec), false) =>
         tryOptimizeJoinChildren(left, right, joinType).map {
           case (newLeft, newRight) =>
-            SkewJoinCandidate(
-              shj, joinType, shj.copy(left = newLeft, right = newRight, isSkewJoin = true))
+            SkewJoinCandidate(shj, shj.copy(left = newLeft, right = newRight, isSkewJoin = true))
         }
 
       // When localShuffleReader is disabled, the streamedPlan of BroadcastHashJoin may be skewed,
       // so we try to optimize it.
-      case bhj @ BroadcastHashJoinExec(_, _, joinType, BuildRight, _,
+      case bhj @ BroadcastHashJoinExec(_, _, _, BuildRight, _,
           ShuffleStage(left: ShuffleQueryStageExec), _, _, false) if !localShuffleReaderEnabled =>
         tryOptimizeBroadcastHashJoinStreamedPlan(left).map {
-          case newLeft =>
-            SkewJoinCandidate(bhj, joinType, bhj.copy(left = newLeft, isSkewJoin = true))
+          case newLeft => SkewJoinCandidate(bhj, bhj.copy(left = newLeft, isSkewJoin = true))
         }
-      case bhj @ BroadcastHashJoinExec(_, _, joinType, BuildLeft, _, _,
+      case bhj @ BroadcastHashJoinExec(_, _, _, BuildLeft, _, _,
           ShuffleStage(right: ShuffleQueryStageExec), _, false) if !localShuffleReaderEnabled =>
         tryOptimizeBroadcastHashJoinStreamedPlan(right).map {
-          case newRight =>
-            SkewJoinCandidate(bhj, joinType, bhj.copy(right = newRight, isSkewJoin = true))
+          case newRight => SkewJoinCandidate(bhj, bhj.copy(right = newRight, isSkewJoin = true))
         }
 
       case _ => None
     }
 
   /**
-   * Every join in `plan` this rule can split, in the bottom-up order a `transformUp` visits them.
+   * Every join in `plan` this rule can split, in the bottom-up order `foreachUp` visits them.
    */
   private def collectSplitSkewJoins(plan: SparkPlan): Seq[SkewJoinCandidate] = {
     val localShuffleReaderEnabled = conf.getConf(SQLConf.LOCAL_SHUFFLE_READER_ENABLED)
@@ -273,10 +270,11 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
    * so structurally equal joins in different places are distinct candidates. A subset may be
    * passed, keeping the others out of the result.
    *
-   * The walk is top-down: a sort-merge or shuffled-hash candidate has shuffle stages as children
-   * and contains nothing else, but a broadcast-hash join only constrains its streamed side, so
-   * another candidate can sit in its build side. Replacing the outer join first keeps that inner
-   * candidate an instance `plan` holds, and the walk then splits it inside the replacement.
+   * The walk is top-down: a shuffled-hash candidate has shuffle stages as children and a
+   * sort-merge one has sorts over them, so neither contains another candidate; a broadcast-hash
+   * join only constrains its streamed side, so another candidate can sit in its build side.
+   * Replacing the outer join first keeps that inner candidate an instance `plan` holds, and the
+   * walk then splits it inside the replacement.
    */
   private[adaptive] def applySkewJoins(
       plan: SparkPlan,
@@ -318,8 +316,9 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
       if (requirementsSatisfied(trial)) {
         accepted = accepted :+ candidate
       } else {
-        logDebug(s"Skip splitting the skewed ${candidate.joinType} join " +
-          s"${candidate.join.nodeName}: with it the plan fails ValidateRequirements")
+        logDebug(s"Skip splitting the skewed join " +
+          s"${candidate.join.simpleString(conf.maxToStringFields)}: with it the plan fails " +
+          "ValidateRequirements")
       }
     }
     logDebug(s"Optimized ${accepted.length} of ${candidates.length} skewed joins")
@@ -341,8 +340,10 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
       stripSkewJoinChildWrappers(optimized)
     } else if (conf.getConf(SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN)) {
       stripSkewJoinChildWrappers(ensureRequirements.apply(optimized))
-    } else {
+    } else if (conf.getConf(SQLConf.SKEW_JOIN_PER_JOIN_FALLBACK_ENABLED)) {
       applySkewJoinsSatisfyingRequirements(plan, candidates)
+    } else {
+      plan
     }
   }
 
@@ -358,7 +359,7 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
 
 // A skewed join `OptimizeSkewedJoin` can split: the join node in the plan, its join type, and the
 // join it is replaced by, with the skewed side split.
-private case class SkewJoinCandidate(join: SparkPlan, joinType: JoinType, replacement: SparkPlan)
+private case class SkewJoinCandidate(join: BaseJoinExec, replacement: SparkPlan)
 
 // After optimizing skew joins, we need to run EnsureRequirements again to add necessary shuffles
 // caused by skew join optimization. However, this shouldn't apply to the sub-plan under skew join,
