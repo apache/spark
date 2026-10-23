@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import java.lang.{Double => JDouble}
+import java.lang.{Double => JDouble, Float => JFloat}
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -60,7 +60,7 @@ class VectorAggSuite extends SparkFunSuite {
   }
 
   // Helper to create input row with array containing null elements
-  def createInputRowWithNullElement(values: Array[java.lang.Float]): InternalRow = {
+  def createInputRowWithNullElement(values: Array[JFloat]): InternalRow = {
     val arrayData = new GenericArrayData(values.map {
       case null => null
       case v => v.floatValue().asInstanceOf[AnyRef]
@@ -86,7 +86,7 @@ class VectorAggSuite extends SparkFunSuite {
   // Asserts that two floats are approximately equal within a tolerance.
   def assertFloatEquals(actual: Float, expected: Float, tolerance: Float = 1e-5f): Unit = {
     assert(
-      java.lang.Float.isNaN(expected) && java.lang.Float.isNaN(actual) ||
+      JFloat.isNaN(expected) && JFloat.isNaN(actual) ||
         math.abs(actual - expected) <= tolerance,
       s"Expected $expected but got $actual (tolerance: $tolerance)"
     )
@@ -478,8 +478,8 @@ class VectorAggSuite extends SparkFunSuite {
         }
         agg.update(buffer, InternalRow(array))
       }
-      assertResult(expected.map(java.lang.Float.floatToIntBits))(
-        evalAsFloatArray(agg, buffer).map(java.lang.Float.floatToIntBits))
+      assertResult(expected.map(JFloat.floatToIntBits))(
+        evalAsFloatArray(agg, buffer).map(JFloat.floatToIntBits))
     }
   }
 
@@ -498,7 +498,7 @@ class VectorAggSuite extends SparkFunSuite {
       agg.update(buffer, createInputRow(first))
       agg.update(buffer, createInputRow(last))
       assertResult(expected)(
-        evalAsFloatArray(agg, buffer).map(java.lang.Float.floatToRawIntBits))
+        evalAsFloatArray(agg, buffer).map(JFloat.floatToRawIntBits))
     }
   }
 
@@ -537,16 +537,16 @@ class VectorAggSuite extends SparkFunSuite {
         InternalRow(array)
       }
       rows.foreach(row => agg.update(buffer, row))
-      assertResult(expected.map(java.lang.Float.floatToIntBits))(
-        evalAsFloatArray(agg, buffer).map(java.lang.Float.floatToIntBits))
+      assertResult(expected.map(JFloat.floatToIntBits))(
+        evalAsFloatArray(agg, buffer).map(JFloat.floatToIntBits))
 
       val (_, buffer1, _) = createVectorAvg()
       val (_, buffer2, _) = createVectorAvg()
       agg.update(buffer1, rows.head)
       agg.update(buffer2, rows(1))
       agg.merge(buffer1, buffer2)
-      assertResult(expected.map(java.lang.Float.floatToIntBits))(
-        evalAsFloatArray(agg, buffer1).map(java.lang.Float.floatToIntBits))
+      assertResult(expected.map(JFloat.floatToIntBits))(
+        evalAsFloatArray(agg, buffer1).map(JFloat.floatToIntBits))
     }
   }
 
@@ -661,7 +661,7 @@ class VectorAggSuite extends SparkFunSuite {
 
   test("VectorSum - large vector with null element is skipped") {
     val (agg, buffer, _) = createVectorSum()
-    val vec1 = Array[java.lang.Float](1.0f, 2.0f, 3.0f, 4.0f, 5.0f, null, 7.0f, 8.0f,
+    val vec1 = Array[JFloat](1.0f, 2.0f, 3.0f, 4.0f, 5.0f, null, 7.0f, 8.0f,
                      9.0f, 10.0f, 11.0f, 12.0f, 13.0f, 14.0f, 15.0f, 16.0f)
     val vec2 = Array(16.0f, 15.0f, 14.0f, 13.0f, 12.0f, 11.0f, 10.0f, 9.0f,
                      8.0f, 7.0f, 6.0f, 5.0f, 4.0f, 3.0f, 2.0f, 1.0f)

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.lang.{Float => JFloat}
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -699,7 +701,7 @@ object VectorAvg {
         val delta3 = inputArray.getFloat(i + 3) - oldAvg3
         // A finite sum guarantees finite deltas; sum overflow only triggers a scalar fallback.
         val deltaSum = (delta0 + delta1) + (delta2 + delta3)
-        if (!java.lang.Float.isFinite(deltaSum)) {
+        if (!JFloat.isFinite(deltaSum)) {
           updateRemainingElements(accBytes, inputArray, i, dim, invCount)
           return
         }
@@ -726,9 +728,9 @@ object VectorAvg {
         val oldAvg = Platform.getFloat(accBytes, off)
         val value = inputArray.getFloat(i)
         val delta = value - oldAvg
-        val newAvg = if (java.lang.Float.isFinite(delta)) {
+        val newAvg = if (JFloat.isFinite(delta)) {
           oldAvg + delta * invCount
-        } else if (java.lang.Float.isFinite(oldAvg) && java.lang.Float.isFinite(value)) {
+        } else if (JFloat.isFinite(oldAvg) && JFloat.isFinite(value)) {
           // Scale before subtracting when opposite finite values overflow the delta.
           // For oldAvg = Float.MaxValue, value = -Float.MaxValue and invCount = 0.5f,
           // the delta is -Infinity, but scaling first gives the correct average of 0.0f.
