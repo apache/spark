@@ -4091,7 +4091,7 @@ class SparkConnectPlanner(
     } else {
       UUID.randomUUID().toString
     }
-    if (sessionHolder.containsCachedDataFrame(dfId)) {
+    if (sessionHolder.dataFrameCache.containsKey(dfId)) {
       throw checkpointRelationIdAlreadyExists(dfId)
     }
     val target = Dataset
@@ -4110,7 +4110,7 @@ class SparkConnectPlanner(
     }
 
     logInfo(log"Caching DataFrame with id ${MDC(DATAFRAME_ID, dfId)}")
-    if (!sessionHolder.cacheDataFrameByIdIfAbsent(dfId, checkpointed)) {
+    if (sessionHolder.dataFrameCache.putIfAbsent(dfId, checkpointed) != null) {
       throw checkpointRelationIdAlreadyExists(dfId)
     }
 

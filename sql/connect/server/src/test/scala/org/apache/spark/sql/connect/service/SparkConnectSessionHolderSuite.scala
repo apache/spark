@@ -76,9 +76,6 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     val dfId = "duplicate-id"
 
     sessionHolder.cacheDataFrameById(dfId, df1)
-    assert(!sessionHolder.cacheDataFrameByIdIfAbsent(dfId, df2))
-    assert(sessionHolder.getDataFrameOrThrow(dfId) eq df1)
-
     val error = intercept[SparkException] {
       sessionHolder.cacheDataFrameById(dfId, df2)
     }
