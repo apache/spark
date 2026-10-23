@@ -237,9 +237,9 @@ def read_single_udtf(pickleSer, udtf_info, handler_cls):
             f"The return type of a UDTF must be a struct type, but got {type(return_type)}."
         )
 
-    # Pick how to construct the UDTF from its __init__ signature. With an AnalyzeResult, an
-    # __init__ taking one argument receives a copy of it and one taking none is called as is;
-    # without one, __init__ must take no arguments. Any other signature is rejected.
+    # Pick how to construct the UDTF from the count of named positional __init__ parameters
+    # after self. With an AnalyzeResult, one parameter receives a copy of it, zero means the
+    # class is called with no arguments, and more are an error; without one, any is an error.
     udtf_init_args = inspect.getfullargspec(handler)
     if pickled_analyze_result is not None:
         if len(udtf_init_args.args) > 2:
