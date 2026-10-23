@@ -2271,6 +2271,18 @@ private[spark] class DAGScheduler(
           "map output to produce statistics from. This is not supported."))
       return
     }
+    // A map-stage job also runs its missing ancestor stages, and submitStage co-schedules a
+    // pipelined producer with the stage reading it, but none of handleJobSubmitted's pipelined
+    // setup applies here (shape check, gang admission, idiom checks, run epoch, group-atomic
+    // failure). A pipelined shuffle anywhere below `dependency` is the pipelined-below-regular
+    // shape that handleJobSubmitted rejects, so reject it here too, before any stage is created.
+    if (rddGraphHasPipelinedDependency(dependency.rdd)) {
+      val e = pipelinedUnsupportedError("a map-stage job that depends on a pipelined shuffle")
+      logWarning(log"Rejecting map-stage job ${MDC(JOB_ID, jobId)}: unsupported " +
+        log"pipelined-shuffle idiom", e)
+      listener.jobFailed(e)
+      return
+    }
     // Submitting this map stage might still require the creation of some parent stages, so make
     // sure that happens.
     var finalStage: ShuffleMapStage = null
