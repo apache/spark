@@ -904,11 +904,13 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
                 self.assertTrue(_wait_proc_dead(idle))
 
     def test_reap_server_does_not_expire_when_idle_retirement_is_disabled(self) -> None:
-        with _listening_socket() as port:
-            for uid, value in (("d150", "0"), ("d151", "-1")):
-                with self.subTest(value=value):
-                    os.environ["SPARK_LOCAL_CONNECT_POOL_IDLE_TIMEOUT"] = value
-                    server = self._live_process()
+        for uid, value in (("d150", "0"), ("d151", "-1")):
+            with self.subTest(value=value):
+                os.environ["SPARK_LOCAL_CONNECT_POOL_IDLE_TIMEOUT"] = value
+                server = self._live_process()
+                # A fresh listener per iteration: reap probes reachability with a connect that is
+                # never accepted, so reusing one backlog=1 socket can wedge the second connect.
+                with _listening_socket() as port:
                     self._write_state(
                         self._directory.server_path(uid),
                         self._server_data(port, server.pid, created=0),

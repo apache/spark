@@ -105,6 +105,14 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(GetArrayItem(array, Literal(1)).nullable)
     assert(!GetArrayItem(array, Subtract(Literal(2), Literal(2))).nullable)
     assert(GetArrayItem(array, AttributeReference("ordinal", IntegerType)()).nullable)
+    // A null ordinal returns null even when neither the array nor its elements can be null.
+    val nonNullArray = CreateArray(a :: Nil)
+    val nullableOrdinal = AttributeReference("ordinal", IntegerType)()
+    val nonNullOrdinal = AttributeReference("ordinal", IntegerType, nullable = false)()
+    Seq(true, false).foreach { failOnError =>
+      assert(GetArrayItem(nonNullArray, nullableOrdinal, failOnError).nullable)
+      assert(GetArrayItem(nonNullArray, nonNullOrdinal, failOnError).nullable == !failOnError)
+    }
 
     // GetArrayStructFields case
     val f1 = StructField("a", IntegerType, nullable = false)

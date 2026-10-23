@@ -1951,6 +1951,30 @@ default1	default2	default3
 
 
 -- !query
+SET VARIABLE var1 = 'changed1', var2 = 'changed2', var3 = 'changed3'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SET VARIABLE (var1, var2, var3) = (VALUES(DEFAULT, DEFAULT, DEFAULT))
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT var1 AS `default1`, var2 AS `default2`, var3 AS `default3`
+-- !query schema
+struct<default1:string,default2:string,default3:string>
+-- !query output
+default1	default2	default3
+
+
+-- !query
 SET VARIABLE var1 = 'hello'
 -- !query schema
 struct<>
@@ -2083,6 +2107,219 @@ struct<>
 
 
 -- !query
+SET VARIABLE (var1) =
+  (SELECT DEFAULT FROM VALUES(2),(1) AS T(c1) ORDER BY c1 LIMIT 1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT var1 AS `default`
+-- !query schema
+struct<default:string>
+-- !query output
+default1
+
+
+-- !query
+SET VARIABLE var1 = 'hello'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SET VARIABLE (var1) = (SELECT * FROM VALUES(DEFAULT) AS T(c1))
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT var1 AS `default`
+-- !query schema
+struct<default:string>
+-- !query output
+default1
+
+
+-- !query
+SET VARIABLE var1 = 'hello'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SET VARIABLE (var1) = (SELECT max(c1) FROM VALUES(DEFAULT) AS T(c1))
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT var1 AS `default`
+-- !query schema
+struct<default:string>
+-- !query output
+default1
+
+
+-- !query
+SET VARIABLE (var1) =
+  (SELECT * FROM VALUES(DEFAULT) AS T(c1) ORDER BY c1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`DEFAULT`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 47,
+    "stopIndex" : 53,
+    "fragment" : "DEFAULT"
+  } ]
+}
+
+
+-- !query
+SET VARIABLE (var1) = (SELECT (SELECT DEFAULT))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`DEFAULT`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 39,
+    "stopIndex" : 45,
+    "fragment" : "DEFAULT"
+  } ]
+}
+
+
+-- !query
+SET VARIABLE var1 = 'hello'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SET VARIABLE (var1) =
+  (SELECT (SELECT DEFAULT) FROM VALUES('outer-value') AS T(default))
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT var1 AS `outer-value`
+-- !query schema
+struct<outer-value:string>
+-- !query output
+outer-value
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE default STRING DEFAULT 'variable-value'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SET VARIABLE var1 = default
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT var1 AS `variable-value`
+-- !query schema
+struct<variable-value:string>
+-- !query output
+variable-value
+
+
+-- !query
+SET VARIABLE var1 = session.default
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT var1 AS `qualified-variable-value`
+-- !query schema
+struct<qualified-variable-value:string>
+-- !query output
+variable-value
+
+
+-- !query
+DROP TEMPORARY VARIABLE default
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SET VARIABLE (var1) = (SELECT DEFAULT, 1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`DEFAULT`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 31,
+    "stopIndex" : 37,
+    "fragment" : "DEFAULT"
+  } ]
+}
+
+
+-- !query
+SET VARIABLE var1 = 'hello'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 SET VARIABLE (var1) = (WITH v1(c1) AS (VALUES(1) AS T(c1)) SELECT DEFAULT FROM VALUES(1),(2),(3) AS T(c1))
 -- !query schema
 struct<>
@@ -2120,6 +2357,56 @@ SET VARIABLE (var1) = (VALUES(DEFAULT))
 struct<>
 -- !query output
 
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE default_int INT DEFAULT 7
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SET VARIABLE (default_int) = (VALUES(DEFAULT + 1))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DEFAULT_PLACEMENT_INVALID",
+  "sqlState" : "42608"
+}
+
+
+-- !query
+DROP TEMPORARY VARIABLE default_int
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SET VARIABLE (var1) = (VALUES(DEFAULT, 1))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`DEFAULT`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 31,
+    "stopIndex" : 37,
+    "fragment" : "DEFAULT"
+  } ]
+}
 
 
 -- !query

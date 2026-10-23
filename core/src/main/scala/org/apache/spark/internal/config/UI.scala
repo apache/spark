@@ -99,11 +99,27 @@ private[spark] object UI {
       "spark.decommission.enabled is true, the shuffle data is kept outside the executors " +
       "(through either spark.shuffle.service.enabled or a ShuffleDataIO with reliable " +
       "storage), and the cluster manager can hold executors: Standalone, YARN, and " +
-      "Kubernetes with spark.kubernetes.allocation.pods.allocator=direct.")
+      "Kubernetes with spark.kubernetes.allocation.pods.allocator=direct. On a Standalone " +
+      "Master, this also gates the hold and resume actions of the Master REST API.")
     .version("4.4.0")
     .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .booleanConf
     .createWithDefault(true)
+
+  val UI_ACTIONS_VIA_GET_ENABLED = ConfigBuilder("spark.ui.actionsViaGetEnabled")
+    .doc("Whether the state-changing endpoints of the web UI (job/stage kill, application " +
+      "hold and resume) accept HTTP GET requests in addition to POST. Unset, this " +
+      "defaults to true when spark.master is yarn, because the YARN ResourceManager/AM " +
+      "proxy does not forward POST requests (SPARK-6846), and to false everywhere else. " +
+      "Either way the state-changing endpoints require the random per-UI CSRF token " +
+      "embedded in the forms the UI renders, and reject prefetch requests " +
+      "(Purpose/Sec-Purpose/X-Moz headers) and HEAD requests, so forged cross-site " +
+      "requests and incidental fetches cannot trigger them; prefetch rejection " +
+      "relies on the prefetcher identifying itself via those headers.")
+    .version("4.3.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .booleanConf
+    .createOptional
 
   val UI_THREAD_DUMPS_ENABLED = ConfigBuilder("spark.ui.threadDumpsEnabled")
     .doc("Whether to show a link for executor thread dumps in Stages and Executor pages.")
@@ -116,6 +132,19 @@ private[spark] object UI {
     .version("4.0.0")
     .booleanConf
     .createWithDefault(true)
+
+  val UI_THREAD_DUMP_DOWNLOAD_IN_BROWSER_ENABLED =
+    ConfigBuilder("spark.ui.threadDump.downloadInBrowser.enabled")
+      .internal()
+      .doc("Whether the Download button on the executor thread dump page builds the file in " +
+        "the browser from the dump embedded in the page. When disabled, the button is a link " +
+        "with the whole dump inlined into a data: URI, which browsers truncate at the first " +
+        "'#' (a character that thread names contain). This is a kill switch to restore the " +
+        "old link if building the file in the browser causes a regression.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
 
   val UI_HEAP_HISTOGRAM_ENABLED = ConfigBuilder("spark.ui.heapHistogramEnabled")
     .doc("Whether to show a link for executor heap histogram in Executor page.")

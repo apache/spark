@@ -1116,23 +1116,18 @@ private[spark] class TaskSetManager(
     emptyTaskInfoAccumulablesAndNotifyDagScheduler(tid, tasks(index), reason, null,
       accumUpdates, metricPeaks)
 
-    // A pipelined-group member's transient shuffle cannot be recovered per-task, so a GENUINE task
-    // failure must fail the whole group even when the reason is normally not counted -- most
-    // importantly executor loss not caused by the app (ExecutorLostFailure with
-    // exitCausedByApp=false), which strands the transient output. But we must NOT force-count
-    // reasons that are benign: TaskKilled (a deliberate kill) and TaskCommitDenied. These are not
-    // normally even reachable for a pipelined group -- speculation is rejected up front for a
-    // pipelined job, and a group never does an in-place stage/task retry (a member failure aborts
-    // the whole group; the caller reruns as a fresh job), so the usual sources of these reasons do
-    // not arise. The exclusion is kept as a defensive guard: if one ever did reach a live member
-    // (e.g. a manual killTaskAttempt), it must be treated as benign rather than spuriously aborting
-    // the group. So for a pipelined set we count everything EXCEPT those two benign reasons.
-    // Non-pipelined sets are unchanged.
-    val forceCountForPipelined = taskSet.isPipelined && (reason match {
-      case _: TaskKilled | _: TaskCommitDenied => false
-      case _ => true
-    })
-    val countTowardsTaskFailures = reason.countTowardsTaskFailures || forceCountForPipelined
+    // A pipelined-group member's transient shuffle cannot be recovered per-task: the rest of the
+    // group has already exchanged part of the stream with this attempt, so retrying the task in
+    // the same stage attempt could deliver rows twice (a producer) or wait for a stream that is
+    // gone (a consumer). So every failure of a live pipelined attempt counts, even a reason that
+    // is normally not counted -- executor loss not caused by the app, a kill (e.g.
+    // SparkContext.killTaskAttempt), or a denied commit -- and the first one fails the group; the
+    // caller reruns it as a fresh job. None of these is benign: a pipelined task runs a single
+    // attempt (a pipelined job rejects speculation, and a failure aborts the set rather than
+    // retrying the task), so there is no losing duplicate to forgive. The kills the scheduler
+    // itself sends when it fails, cancels, or finishes the job do not count: killAllTaskAttempts
+    // makes the set a zombie before they are reported. Non-pipelined sets are unchanged.
+    val countTowardsTaskFailures = reason.countTowardsTaskFailures || taskSet.isPipelined
     if (!isZombie && countTowardsTaskFailures) {
       assert (null != failureReason)
       taskSetExcludelistHelperOpt.foreach(_.updateExcludedForFailedTask(

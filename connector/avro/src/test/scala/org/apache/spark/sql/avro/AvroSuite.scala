@@ -40,7 +40,7 @@ import org.apache.spark.sql.TestingUDT.IntervalData
 import org.apache.spark.sql.avro.AvroCompressionCodec._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.Filter
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeTestUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, LA, UTC}
 import org.apache.spark.sql.connector.catalog.TableCapability
 import org.apache.spark.sql.execution.{FileSourceScanExec, FormattedMode, SparkPlan}
@@ -3638,9 +3638,7 @@ abstract class AvroSuite
       SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
       SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       // Long.MaxValue epoch-nanoseconds = 2262-04-11T23:47:16.854775807Z, the largest instant the
-      // INT64 epoch-nanos encoding can represent. The lower bound Long.MinValue is intentionally
-      // not exercised: re-encoding its floored epoch-microseconds overflows Long (see
-      // DateTimeUtilsSuite), so it is not writable.
+      // INT64 epoch-nanos encoding can represent.
       val maxInstant = java.time.Instant.ofEpochSecond(9223372036L, 854775807L)
       val maxLocal = LocalDateTime.ofEpochSecond(9223372036L, 854775807, java.time.ZoneOffset.UTC)
       Seq(
@@ -3663,13 +3661,11 @@ abstract class AvroSuite
     withSQLConf(
       SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
       SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
-      // The smallest *writable* instant: Long.MinValue epoch-nanoseconds floor to an epochMicros
-      // whose re-encode overflows Long, so the practical minimum is the next whole microsecond up
-      // (~1677-09-21), the symmetric counterpart of the maximum-instant test above.
-      val minEpochNanos = (Long.MinValue / 1000L) * 1000L
+      // The smallest instant: Long.MinValue epoch-nanoseconds = 1677-09-21T00:12:43.145224192Z,
+      // the symmetric counterpart of the maximum-instant test above.
       // Pre-epoch full-precision value: 1969-12-31T23:59:59.999999999Z (= -1 epoch-nanosecond),
       // exercising the floor semantics end to end (mirrors the Parquet/ORC suites).
-      Seq(-1L, minEpochNanos).foreach { epochNanos =>
+      Seq(-1L, Long.MinValue).foreach { epochNanos =>
         val seconds = Math.floorDiv(epochNanos, 1000000000L)
         val nanoOfSecond = Math.floorMod(epochNanos, 1000000000L).toInt
         val instant = java.time.Instant.ofEpochSecond(seconds, nanoOfSecond.toLong)
@@ -3686,6 +3682,36 @@ abstract class AvroSuite
             val readBack = spark.read.schema(new StructType().add("ts", nanosType))
               .format("avro").load(dir.getCanonicalPath)
             checkAnswer(readBack, df)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57838: writing one nanosecond past the int64 epoch-nanos range fails loudly") {
+    withSQLConf(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      Seq(
+        "2262-04-11T23:47:16.854775808", "1677-09-21T00:12:43.145224191").foreach { ts =>
+        val local = LocalDateTime.parse(ts)
+        Seq(
+          (TimestampLTZNanosType(9), local.toInstant(java.time.ZoneOffset.UTC): Any, s"${ts}Z"),
+          (TimestampNTZNanosType(9), local: Any, ts)).foreach { case (nanosType, value, shown) =>
+          withTempPath { dir =>
+            val df = spark.createDataFrame(
+              spark.sparkContext.parallelize(Seq(Row(value)), numSlices = 1),
+              new StructType().add("ts", nanosType))
+            val e = intercept[SparkException] {
+              df.write.format("avro").save(dir.getCanonicalPath)
+            }
+            checkError(
+              exception = getRootCause(e).asInstanceOf[SparkArithmeticException],
+              condition = "DATETIME_OVERFLOW",
+              parameters = Map("operation" ->
+                (s"write the timestamp value $shown as Avro epoch-nanoseconds " +
+                  "(supported range: 1677-09-21T00:12:43.145224192Z to " +
+                  "2262-04-11T23:47:16.854775807Z)")))
           }
         }
       }
@@ -3962,6 +3988,87 @@ abstract class AvroSuite
       val readDf = spark.read.format("avro").load(dir.toString)
       assert(readDf.schema("t").dataType == TimeType(TimeType.MICROS_PRECISION))
       checkAnswer(readDf, Row(java.time.LocalTime.of(12, 34, 56, 123456000)))
+    }
+  }
+
+  test("SPARK-58814: Avro infers nested CHAR/VARCHAR schema and values") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        val input = spark.range(1).selectExpr(
+          "cast('ab' AS CHAR(4)) AS c",
+          "cast('xy' AS VARCHAR(3)) AS v",
+          "named_struct('c', cast('z' AS CHAR(2))) AS s",
+          "array(cast('q' AS VARCHAR(2))) AS a",
+          "map(cast('k' AS CHAR(2)), cast('v' AS VARCHAR(2))) AS m")
+        input.write.mode("overwrite").format("avro").save(path)
+
+        val readBack = spark.read.format("avro").load(path)
+        assert(DataType.equalsIgnoreNullability(readBack.schema, input.schema))
+        checkAnswer(
+          readBack.selectExpr(
+            "concat('<', c, '>')",
+            "v",
+            "concat('<', s.c, '>')",
+            "a",
+            "m"),
+          Row("<ab  >", "xy", "<z >", Seq("q"), Map("k " -> "v")))
+
+        withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+          assert(DataType.equalsIgnoreNullability(
+            spark.read.format("avro").load(path).schema,
+            CharVarcharUtils.replaceCharVarcharWithString(input.schema)))
+        }
+        withSQLConf(
+            SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+            SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+          assert(DataType.equalsIgnoreNullability(
+            spark.read.format("avro").load(path).schema,
+            input.schema))
+        }
+      }
+
+      withTempPath { dir =>
+        Seq("ab").toDF("c").write.format("avro").save(dir.getCanonicalPath)
+        val charDf = spark.read.schema("c CHAR(4)").format("avro").load(dir.getCanonicalPath)
+        checkAnswer(
+          charDf.selectExpr("concat('<', c, '>')"),
+          Row("<ab  >"))
+      }
+      withTempPath { dir =>
+        Seq("abcdef").toDF("c").write.format("avro").save(dir.getCanonicalPath)
+        Seq("CHAR", "VARCHAR").foreach { typ =>
+          checkError(
+            exception = intercept[SparkRuntimeException] {
+              spark.read.schema(s"c $typ(4)").format("avro")
+                .load(dir.getCanonicalPath).collect()
+            },
+            condition = "EXCEED_LIMIT_LENGTH",
+            parameters = Map("limit" -> "4"))
+        }
+      }
+
+      withTable("avro_char_varchar_assignment") {
+        sql(
+          """CREATE TABLE avro_char_varchar_assignment
+            |(c CHAR(4), v VARCHAR(4)) USING avro""".stripMargin)
+        sql("INSERT INTO avro_char_varchar_assignment VALUES ('ab', 'xy')")
+        assert(spark.table("avro_char_varchar_assignment").schema.map(_.dataType) ===
+          Seq(CharType(4), VarcharType(4)))
+        checkAnswer(
+          sql(
+            """SELECT concat('<', c, '>'), v
+              |FROM avro_char_varchar_assignment""".stripMargin),
+          Row("<ab  >", "xy"))
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            sql(
+              """INSERT INTO avro_char_varchar_assignment
+                |VALUES ('abcde', 'xy')""".stripMargin).collect()
+          },
+          condition = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "4"))
+      }
     }
   }
 
