@@ -339,26 +339,27 @@ class HandlerUDFsTests(PySparkBaseTestCase):
 
         data_source_f.__module__ = "pyspark.sql.worker.plan_data_source_read"
 
-        def with_profiler(func, conf):
-            return self._Handler([], RunnerConf(conf), None)._with_profiler(func, 0)
-
-        udf_conf = {"spark.sql.pyspark.udf.profiler": "perf"}
-        data_source_conf = {"spark.sql.pyspark.dataSource.profiler": "perf"}
+        udf_perf = self._Handler([], RunnerConf({"spark.sql.pyspark.udf.profiler": "perf"}), None)
+        data_source_perf = self._Handler(
+            [], RunnerConf({"spark.sql.pyspark.dataSource.profiler": "perf"}), None
+        )
+        udf_memory = self._Handler(
+            [], RunnerConf({"spark.sql.pyspark.udf.profiler": "memory"}), None
+        )
+        no_profiler = self._Handler([], RunnerConf({}), None)
         with patch.object(
             EvalTypeHandler, "_with_perf_profiler", side_effect=lambda func, result_id: "perf"
         ) as perf:
-            self.assertEqual(with_profiler(f, udf_conf), "perf")
-            self.assertIs(with_profiler(f, data_source_conf), f)
-            self.assertIs(with_profiler(data_source_f, udf_conf), data_source_f)
-            self.assertEqual(with_profiler(data_source_f, data_source_conf), "perf")
+            self.assertEqual(udf_perf._with_profiler(f, 0), "perf")
+            self.assertIs(data_source_perf._with_profiler(f, 0), f)
+            self.assertIs(udf_perf._with_profiler(data_source_f, 0), data_source_f)
+            self.assertEqual(data_source_perf._with_profiler(data_source_f, 0), "perf")
             self.assertEqual(perf.call_count, 2)
         with patch.object(
             EvalTypeHandler, "_with_memory_profiler", side_effect=lambda func, result_id: "memory"
         ):
-            self.assertEqual(
-                with_profiler(f, {"spark.sql.pyspark.udf.profiler": "memory"}), "memory"
-            )
-        self.assertIs(with_profiler(f, {}), f)
+            self.assertEqual(udf_memory._with_profiler(f, 0), "memory")
+        self.assertIs(no_profiler._with_profiler(f, 0), f)
 
 
 class UnpickleAndChainTests(PySparkBaseTestCase):
