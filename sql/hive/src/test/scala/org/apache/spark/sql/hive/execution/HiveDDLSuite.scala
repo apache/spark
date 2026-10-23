@@ -3431,6 +3431,28 @@ class HiveDDLSuite
     }
   }
 
+  test("SPARK-60493: saveAsTable with mode Overwrite keeps the existing table when the new " +
+      "Hive serde table has a Hive incompatible partition column type") {
+    val tbl = "tbl_with_incompatible_partition"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (i INT, pt INT) USING HIVE PARTITIONED BY (pt)")
+      sql(s"INSERT INTO $tbl PARTITION (pt = 2) VALUES (1)")
+      Seq("TIMESTAMP_NTZ", "INTERVAL YEAR", "TIMESTAMP_NTZ(9)", "TIME(6)").foreach { dataType =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"SELECT 1 AS i, CAST(NULL AS $dataType) AS pt")
+              .write.format("hive").mode(SaveMode.Overwrite).partitionBy("pt").saveAsTable(tbl)
+          },
+          condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+          parameters = Map(
+            "columnName" -> "`pt`",
+            "columnType" -> s""""$dataType"""",
+            "format" -> "Hive"))
+        checkAnswer(spark.table(tbl), Row(1, 2))
+      }
+    }
+  }
+
   test("SPARK-52272: V2SessionCatalog does not alter schema on Hive Catalog") {
     val spyCatalog = spy(spark.sessionState.catalog.externalCatalog)
     val v1SessionCatalog = new SessionCatalog(spyCatalog)
