@@ -179,9 +179,9 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
                     return_type=return_type,
                 )
             )
-        self._init_udfs(records)
+        self._on_udfs_assigned(records)
 
-    def _init_udfs(self, udfs: list[Any]) -> None:
+    def _on_udfs_assigned(self, udfs: list[Any]) -> None:
         """Set the handler up for its assigned ``UDF`` (or ``UDTF``) records; handlers extend it
         to derive their per-UDF state."""
         self._udfs = udfs

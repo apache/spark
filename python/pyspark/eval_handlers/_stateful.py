@@ -97,10 +97,10 @@ class PandasGroupedMapWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]
         ]
     )
 
-    def _init_udfs(self, udfs: list[UDF]) -> None:
+    def _on_udfs_assigned(self, udfs: list[UDF]) -> None:
         require_minimum_pandas_version()
         require_minimum_pyarrow_version()
-        super()._init_udfs(udfs)
+        super()._on_udfs_assigned(udfs)
 
         assert len(udfs) == 1, "One GROUPED_MAP_PANDAS_UDF_WITH_STATE UDF expected here."
 
@@ -419,10 +419,10 @@ class PandasTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"])
 
     eval_type = PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF
 
-    def _init_udfs(self, udfs: list[UDF]) -> None:
+    def _on_udfs_assigned(self, udfs: list[UDF]) -> None:
         require_minimum_pandas_version()
         require_minimum_pyarrow_version()
-        super()._init_udfs(udfs)
+        super()._on_udfs_assigned(udfs)
 
         assert len(udfs) == 1, "One TRANSFORM_WITH_STATE_PANDAS UDF expected here."
         self._func, self._return_type = udfs[0].func, udfs[0].return_type
@@ -572,10 +572,10 @@ class PandasTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.Recor
 
     eval_type = PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF
 
-    def _init_udfs(self, udfs: list[UDF]) -> None:
+    def _on_udfs_assigned(self, udfs: list[UDF]) -> None:
         require_minimum_pandas_version()
         require_minimum_pyarrow_version()
-        super()._init_udfs(udfs)
+        super()._on_udfs_assigned(udfs)
 
         assert len(udfs) == 1, "One TRANSFORM_WITH_STATE_PANDAS_INIT_STATE UDF expected here."
         self._func, self._return_type = udfs[0].func, udfs[0].return_type
@@ -792,9 +792,9 @@ class RowTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
 
     eval_type = PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF
 
-    def _init_udfs(self, udfs: list[UDF]) -> None:
+    def _on_udfs_assigned(self, udfs: list[UDF]) -> None:
         require_minimum_pyarrow_version()
-        super()._init_udfs(udfs)
+        super()._on_udfs_assigned(udfs)
 
         assert len(udfs) == 1, "One TRANSFORM_WITH_STATE_PYTHON_ROW UDF expected here."
         self._func, self._return_type = udfs[0].func, udfs[0].return_type
@@ -899,9 +899,9 @@ class RowTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.RecordBa
 
     eval_type = PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF
 
-    def _init_udfs(self, udfs: list[UDF]) -> None:
+    def _on_udfs_assigned(self, udfs: list[UDF]) -> None:
         require_minimum_pyarrow_version()
-        super()._init_udfs(udfs)
+        super()._on_udfs_assigned(udfs)
 
         assert len(udfs) == 1, "One TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE UDF expected here."
         self._func, self._return_type = udfs[0].func, udfs[0].return_type

@@ -43,7 +43,7 @@ class BatchedUDFHandlerTests(PySparkBaseTestCase):
     def _handler(*udfs, kwargs_offsets=None, return_type=None):
         """Build the handler from ``(arg_offsets, func)`` pairs."""
         handler = BatchedUDFHandler(runner_conf=RunnerConf({}), eval_conf=EvalConf({}))
-        handler._init_udfs(
+        handler._on_udfs_assigned(
             [
                 UDF(
                     func=f,

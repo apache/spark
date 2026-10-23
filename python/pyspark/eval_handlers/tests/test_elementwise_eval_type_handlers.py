@@ -103,7 +103,7 @@ class ElementwiseEvalTypeHandlerTestCase(PySparkBaseTestCase):
             runner_conf=RunnerConf(runner_conf or {"spark.sql.session.timeZone": "UTC"}),
             eval_conf=EvalConf(eval_conf),
         )
-        handler._init_udfs(
+        handler._on_udfs_assigned(
             [
                 UDF(
                     func=func,

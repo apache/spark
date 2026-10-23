@@ -140,7 +140,7 @@ class TableUDTFHandlerTests(UDTFEvalTypeHandlerTestCase):
 
     def _handler(self, udtf, args=(0,), kwargs=None, return_type=None):
         handler = TableUDTFHandler(runner_conf=RunnerConf({}), eval_conf=EvalConf({}))
-        handler._init_udfs(
+        handler._on_udfs_assigned(
             [
                 UDTF(
                     udtf=udtf,
@@ -251,7 +251,7 @@ class ArrowUDTFHandlerTests(UDTFEvalTypeHandlerTestCase):
     def _handler(self, udtf, args=(0,), kwargs=None, table_arg_offsets="0"):
         conf = {} if table_arg_offsets is None else {"table_arg_offsets": table_arg_offsets}
         handler = ArrowUDTFHandler(runner_conf=RunnerConf({}), eval_conf=EvalConf(conf))
-        handler._init_udfs(
+        handler._on_udfs_assigned(
             [
                 UDTF(
                     udtf=udtf,
@@ -421,7 +421,7 @@ class ArrowTableUDTFHandlerTestsMixin:
             runner_conf=RunnerConf({}),
             eval_conf=EvalConf({"input_type": self._ROW_INPUT_TYPE.json()}),
         )
-        handler._init_udfs(
+        handler._on_udfs_assigned(
             [
                 UDTF(
                     udtf=udtf,

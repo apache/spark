@@ -180,11 +180,11 @@ class ArrowElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
 
     eval_type = PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF
 
-    def _init_udfs(self, udfs: list[UDF]) -> None:
+    def _on_udfs_assigned(self, udfs: list[UDF]) -> None:
         # This path exchanges data with the JVM over Arrow, so PyArrow is required. Fail with a
         # clear message rather than a bare ImportError from `import pyarrow`.
         require_minimum_pyarrow_version()
-        super()._init_udfs(udfs)
+        super()._on_udfs_assigned(udfs)
 
         # Element-wise UDFs back higher-order lambdas like transform(arr, x -> udf(x)).
         # ExtractPythonUDFFromLambda rewrites them so the UDF receives *all* array elements
@@ -307,9 +307,9 @@ class _VectorizedElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     whole flat columns. The conversions below are the Arrow flavor (``pa.Array`` in and out);
     ``_PandasElementwiseUDFHandler`` overrides them for pandas."""
 
-    def _init_udfs(self, udfs: list[UDF]) -> None:
+    def _on_udfs_assigned(self, udfs: list[UDF]) -> None:
         require_minimum_pyarrow_version()
-        super()._init_udfs(udfs)
+        super()._on_udfs_assigned(udfs)
 
     def _to_udf_inputs(self, flat_batch: pa.RecordBatch, input_schema: StructType) -> list[Any]:
         """Adapt one flattened input batch (one aligned leaf Array per argument) to the UDF's
@@ -387,8 +387,8 @@ class _ScalarElementwiseUDFHandler(_VectorizedElementwiseUDFHandler):
     ``array<R>`` using the input's offsets - one row in, one row out, one Python round trip per
     batch. Subclasses supply the flavor's conversions and result check."""
 
-    def _init_udfs(self, udfs: list[UDF]) -> None:
-        super()._init_udfs(udfs)
+    def _on_udfs_assigned(self, udfs: list[UDF]) -> None:
+        super()._on_udfs_assigned(udfs)
 
         nesting = self._eval_conf.elementwise_nesting
         self._udf_infos = []
@@ -513,8 +513,8 @@ class _ScalarIterElementwiseUDFHandler(_VectorizedElementwiseUDFHandler):
 
     _iter_based = True
 
-    def _init_udfs(self, udfs: list[UDF]) -> None:
-        super()._init_udfs(udfs)
+    def _on_udfs_assigned(self, udfs: list[UDF]) -> None:
+        super()._on_udfs_assigned(udfs)
 
         assert len(udfs) == 1, "One SCALAR_*_ITER_ELEMENTWISE UDF expected here."
         udf = udfs[0]
