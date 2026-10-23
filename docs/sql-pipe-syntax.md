@@ -438,7 +438,8 @@ aggregate functions. The `GROUP BY` expressions may include one-based ordinals. 
 in which such ordinals refer to the expressions in the accompanying `SELECT` clause, in SQL pipe
 syntax, they refer to the columns of the relation produced by the preceding operator instead. For
 example, in `TABLE t |> AGGREGATE COUNT(*) GROUP BY 2`, we refer to the second column of the input
-table `t`.
+table `t`. An ordinal cannot be aliased, so `TABLE t |> AGGREGATE COUNT(*) GROUP BY 2 AS grp`
+returns an error. Other grouping expressions can be aliased.
 
 There is no need to repeat entire expressions between `GROUP BY` and `SELECT`, since the `AGGREGATE` 
 operator automatically includes the evaluated grouping expressions in its output. By the same token,

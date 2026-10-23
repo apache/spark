@@ -16,8 +16,43 @@
  */
 package org.apache.spark.deploy.k8s
 
+import java.util.{List => JList}
+
+import scala.jdk.CollectionConverters._
+
 import io.fabric8.kubernetes.api.model.HasMetadata
 
-private[spark] case class KubernetesExecutorSpec(
+import org.apache.spark.annotation.{DeveloperApi, Since, Stable}
+
+/**
+ * :: DeveloperApi ::
+ *
+ * Spec for executor pod and resources, used for K8s operations internally
+ * and Spark K8s operator.
+ */
+@Stable
+@DeveloperApi
+@Since("4.4.0")
+case class KubernetesExecutorSpec(
     pod: SparkPod,
-    executorKubernetesResources: Seq[HasMetadata])
+    executorKubernetesResources: Seq[HasMetadata]) {
+
+  /** Get executor Kubernetes resources as a Java-friendly list. */
+  @Since("4.4.0")
+  def getExecutorKubernetesResourcesAsJavaList: JList[HasMetadata] =
+    executorKubernetesResources.asJava
+}
+
+@Stable
+@DeveloperApi
+@Since("4.4.0")
+object KubernetesExecutorSpec {
+  @Since("4.4.0")
+  def create(
+      pod: SparkPod,
+      executorKubernetesResources: JList[HasMetadata]): KubernetesExecutorSpec = {
+    KubernetesExecutorSpec(
+      pod,
+      executorKubernetesResources.asScala.toSeq)
+  }
+}

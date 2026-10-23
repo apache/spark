@@ -39,10 +39,8 @@ import org.apache.spark.sql.types.IntegerType
  *   1. CREATE FLOW <name> [COMMENT ...] AS AUTO CDC INTO <target> ...
  *   2. CREATE STREAMING TABLE <name> FLOW AUTO CDC ...
  *
- * Both forms support `STORED AS SCD TYPE 1|2` and, under SCD Type 2, `TRACK HISTORY ON ...`.
- * Snapshot CDC, IGNORE NULL UPDATES, and APPLY AS TRUNCATE WHEN are not supported and should
- * fail to parse. The standalone AUTO CDC INTO form (without CREATE FLOW or CREATE STREAMING
- * TABLE) is also not supported.
+ * Both forms support `STORED AS SCD TYPE 1|2`, `IGNORE NULL UPDATES [ON ...]`, and, under SCD
+ * Type 2, `TRACK HISTORY ON ...`.
  */
 class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
   protected lazy val parser = new SparkSqlParser()
@@ -85,6 +83,10 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
     assert(cdc.storedAsScdType == 1)
     assert(cdc.trackHistoryColumns.isEmpty)
     assert(cdc.trackHistoryExceptColumns.isEmpty)
+    // No IGNORE NULL UPDATES clause leaves ignore-null updates off.
+    assert(!cdc.ignoreNullUpdates)
+    assert(cdc.ignoreNullUpdatesColumns.isEmpty)
+    assert(cdc.ignoreNullUpdatesExceptColumns.isEmpty)
   }
 
   test("CREATE FLOW AS AUTO CDC INTO - multipart source name") {
@@ -1067,20 +1069,127 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
     )
   }
 
-  test("IGNORE NULL UPDATES is not supported") {
-    checkError(
-      intercept[ParseException] {
-        parser.parsePlan(
-          """CREATE FLOW f AS AUTO CDC INTO target
-            |FROM STREAM(source)
-            |KEYS (id)
-            |IGNORE NULL UPDATES
-            |SEQUENCE BY ts""".stripMargin)
-      },
-      condition = "PARSE_SYNTAX_ERROR",
-      sqlState = "42601",
-      parameters = Map("error" -> "'IGNORE'", "hint" -> "")
-    )
+  test("CREATE FLOW AS AUTO CDC INTO - IGNORE NULL UPDATES (all columns)") {
+    val plan = parser.parsePlan(
+      """CREATE FLOW f AS AUTO CDC INTO target
+        |FROM STREAM(source)
+        |KEYS (id)
+        |SEQUENCE BY ts
+        |IGNORE NULL UPDATES""".stripMargin)
+
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
+    // The bare clause ignores nulls on all columns: the flag is set and neither subset is present.
+    assert(cdc.ignoreNullUpdates)
+    assert(cdc.ignoreNullUpdatesColumns.isEmpty)
+    assert(cdc.ignoreNullUpdatesExceptColumns.isEmpty)
+  }
+
+  test("CREATE FLOW AS AUTO CDC INTO - IGNORE NULL UPDATES ON include list") {
+    val plan = parser.parsePlan(
+      """CREATE FLOW f AS AUTO CDC INTO target
+        |FROM STREAM(source)
+        |KEYS (id)
+        |SEQUENCE BY ts
+        |IGNORE NULL UPDATES ON (name, value)""".stripMargin)
+
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
+    assert(cdc.ignoreNullUpdates)
+    assert(cdc.ignoreNullUpdatesColumns.get.map(_.name) == Seq("name", "value"))
+    assert(cdc.ignoreNullUpdatesExceptColumns.isEmpty)
+  }
+
+  test("CREATE FLOW AS AUTO CDC INTO - IGNORE NULL UPDATES ON * EXCEPT list") {
+    val plan = parser.parsePlan(
+      """CREATE FLOW f AS AUTO CDC INTO target
+        |FROM STREAM(source)
+        |KEYS (id)
+        |SEQUENCE BY ts
+        |IGNORE NULL UPDATES ON * EXCEPT (op, value)""".stripMargin)
+
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
+    assert(cdc.ignoreNullUpdates)
+    assert(cdc.ignoreNullUpdatesColumns.isEmpty)
+    assert(cdc.ignoreNullUpdatesExceptColumns.get.map(_.name) == Seq("op", "value"))
+  }
+
+  test("CREATE FLOW AS AUTO CDC INTO - IGNORE NULL UPDATES before SEQUENCE BY is allowed") {
+    // The clauses after KEYS are an unordered set, so IGNORE NULL UPDATES may precede SEQUENCE BY.
+    val plan = parser.parsePlan(
+      """CREATE FLOW f AS AUTO CDC INTO target
+        |FROM STREAM(source)
+        |KEYS (id)
+        |IGNORE NULL UPDATES
+        |SEQUENCE BY ts""".stripMargin)
+
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
+    assert(cdc.ignoreNullUpdates)
+  }
+
+  test("CREATE STREAMING TABLE FLOW AUTO CDC - IGNORE NULL UPDATES (all columns)") {
+    val plan = parser.parsePlan(
+      """CREATE STREAMING TABLE target FLOW AUTO CDC
+        |FROM STREAM(source)
+        |KEYS (id)
+        |SEQUENCE BY ts
+        |IGNORE NULL UPDATES""".stripMargin)
+
+    val cst = plan.asInstanceOf[CreateStreamingTableAutoCdc]
+    // The bare clause ignores nulls on all columns: the flag is set and neither subset is present.
+    assert(cst.ignoreNullUpdates)
+    assert(cst.ignoreNullUpdatesColumns.isEmpty)
+    assert(cst.ignoreNullUpdatesExceptColumns.isEmpty)
+  }
+
+  test("CREATE STREAMING TABLE FLOW AUTO CDC - IGNORE NULL UPDATES ON include list") {
+    val plan = parser.parsePlan(
+      """CREATE STREAMING TABLE target FLOW AUTO CDC
+        |FROM STREAM(source)
+        |KEYS (id)
+        |SEQUENCE BY ts
+        |IGNORE NULL UPDATES ON (name, value)""".stripMargin)
+
+    val cst = plan.asInstanceOf[CreateStreamingTableAutoCdc]
+    assert(cst.ignoreNullUpdates)
+    assert(cst.ignoreNullUpdatesColumns.get.map(_.name) == Seq("name", "value"))
+    assert(cst.ignoreNullUpdatesExceptColumns.isEmpty)
+  }
+
+  test("CREATE STREAMING TABLE FLOW AUTO CDC - IGNORE NULL UPDATES ON * EXCEPT list") {
+    val plan = parser.parsePlan(
+      """CREATE STREAMING TABLE target FLOW AUTO CDC
+        |FROM STREAM(source)
+        |KEYS (id)
+        |SEQUENCE BY ts
+        |IGNORE NULL UPDATES ON * EXCEPT (op, value)""".stripMargin)
+
+    val cst = plan.asInstanceOf[CreateStreamingTableAutoCdc]
+    assert(cst.ignoreNullUpdates)
+    assert(cst.ignoreNullUpdatesColumns.isEmpty)
+    assert(cst.ignoreNullUpdatesExceptColumns.get.map(_.name) == Seq("op", "value"))
+  }
+
+  test("AUTO CDC - duplicate IGNORE NULL UPDATES clause is rejected") {
+    intercept[ParseException] {
+      parser.parsePlan(
+        """CREATE FLOW f AS AUTO CDC INTO target
+          |FROM STREAM(source)
+          |KEYS (id)
+          |SEQUENCE BY ts
+          |IGNORE NULL UPDATES
+          |IGNORE NULL UPDATES ON (name)""".stripMargin)
+    }
+  }
+
+  test("IGNORE NULL UPDATES ON without parentheses is not allowed") {
+    // The include form requires a parenthesized column list, mirroring COLUMNS and TRACK HISTORY.
+    intercept[ParseException] {
+      parser.parsePlan(
+        """CREATE FLOW f AS AUTO CDC INTO target
+          |FROM STREAM(source)
+          |KEYS (id)
+          |SEQUENCE BY ts
+          |IGNORE NULL UPDATES ON name, value""".stripMargin)
+    }
   }
 
   test("TRACK HISTORY ON without parentheses is not allowed") {
@@ -1097,25 +1206,28 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
     }
   }
 
-  test("new keywords history, track, scd remain usable as identifiers") {
-    // history / track / scd are non-reserved, so they must still parse as ordinary table and
-    // column identifiers. This guards their non-reserved classification against regressions.
+  test("new keywords history, track, scd, updates remain usable as identifiers") {
+    // history / track / scd / updates are non-reserved, so they must still parse as ordinary
+    // table and column identifiers. This guards their non-reserved classification against
+    // regressions.
     val plan = parser.parsePlan(
       """CREATE FLOW f AS AUTO CDC INTO track
         |FROM STREAM(scd)
         |KEYS (history)
         |SEQUENCE BY track
-        |COLUMNS (history, track, scd)
+        |COLUMNS (history, track, scd, updates)
         |STORED AS SCD TYPE 2
-        |TRACK HISTORY ON (history, scd)""".stripMargin)
+        |TRACK HISTORY ON (history, scd)
+        |IGNORE NULL UPDATES ON (updates)""".stripMargin)
 
     val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
     assert(cdc.targetTable.asInstanceOf[UnresolvedIdentifier].nameParts == Seq("track"))
     assert(streamSource(cdc.source).multipartIdentifier == Seq("scd"))
     assert(cdc.keys.map(_.name) == Seq("history"))
     assert(cdc.sequenceByExpr == UnresolvedAttribute("track"))
-    assert(cdc.includeColumns.get.map(_.name) == Seq("history", "track", "scd"))
+    assert(cdc.includeColumns.get.map(_.name) == Seq("history", "track", "scd", "updates"))
     assert(cdc.storedAsScdType == 2)
     assert(cdc.trackHistoryColumns.get.map(_.name) == Seq("history", "scd"))
+    assert(cdc.ignoreNullUpdatesColumns.get.map(_.name) == Seq("updates"))
   }
 }

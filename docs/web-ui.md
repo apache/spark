@@ -88,6 +88,21 @@ drain cannot complete. The control only appears when `spark.ui.holdEnabled` is t
 cluster manager can hold executors (Standalone, YARN, and Kubernetes with the `direct` pods
 allocator); see [Configuration](configuration.html#spark-ui).
 
+Scripts can hold and resume the application through the same `/jobs/hold/` and `/jobs/resume/`
+endpoints the buttons submit to. Like the buttons, a request must be a POST (GET is accepted as
+well only when `spark.ui.actionsViaGetEnabled` is on) carrying the random per-UI `csrfToken`,
+the value of the hidden `csrfToken` field in the jobs page, which does not change for the
+lifetime of the UI. A request without a valid token is rejected with 403, and one without the
+trailing slash is only redirected, without taking effect. For example:
+
+```bash
+curl -X POST -d "csrfToken=<csrf-token>" http://<driver-host>:4040/jobs/hold/
+curl http://<driver-host>:4040/api/v1/applications/<app-id>/holdstatus
+```
+
+If the web UI requires authentication, reading the token and sending the request both need
+the same credentials.
+
 <p style="text-align: center;">
   <img src="img/AllJobsPage.png" title="All Jobs page" alt="All Jobs page" width="100%"/>
 </p>

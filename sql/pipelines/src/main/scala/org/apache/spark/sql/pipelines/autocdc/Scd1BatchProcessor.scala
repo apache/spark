@@ -33,222 +33,27 @@ import org.apache.spark.util.ArrayImplicits._
  * @param changeArgs The CDC flow configuration.
  * @param resolvedSequencingType The post-analysis [[DataType]] of the sequencing column, derived
  *                               from the flow's resolved DataFrame at flow setup time.
+ * @param reconciliationStrategy Strategy used to reconcile the microbatch. In the default AutoCDC
+ *                               execution mode an event wins wholesale and all columns share its
+ *                               row-level version. Modes such as ignore-null can reconcile leaves
+ *                               independently because different events may author them, and
+ *                               therefore require a different reconciliation strategy.
  */
 case class Scd1BatchProcessor(
     changeArgs: ChangeArgs,
-    resolvedSequencingType: DataType) {
+    resolvedSequencingType: DataType,
+    reconciliationStrategy: Scd1ReconciliationStrategy = Scd1RowLevelReconciliation) {
 
-  /**
-   * Reconcile a CDC microbatch into the canonical form that the auxiliary- and target-table
-   * merges consume. Composes the per-step transforms in the only order that produces correct
-   * SCD1 semantics:
-   *
-   *   1. [[deduplicateMicrobatch]]: collapse same-key events to the latest by sequence.
-   *   2. [[extendMicrobatchRowsWithCdcMetadata]]: project the operational `_cdc_metadata` column
-   *      (must run before column selection, which may drop inputs the metadata expressions
-   *      reference).
-   *   3. [[projectTargetColumnsOntoMicrobatch]]: apply the user-defined column selection while
-   *      preserving the CDC metadata column.
-   *   4. [[applyTombstonesToMicrobatch]]: filter out late-arriving events superseded by
-   *      tombstones already recorded in the auxiliary table.
-   *
-   * The per-step methods are kept package-visible so that focused unit tests can pin each
-   * transform's behavior independently. This method itself is package-visible so that
-   * [[Scd1ForeachBatchHandler]] can call it after running [[ScdBatchValidator.validateMicrobatch]]
-   * - validation is intentionally not folded in here, as it must run before any of these
-   * transforms touch the data.
-   *
-   * @param batchDf          The validated incoming CDC microbatch.
-   * @param auxiliaryTableDf A snapshot of the auxiliary table for tombstone reconciliation.
-   *                         Must contain at minimum the key columns + `_cdc_metadata`.
-   * @return The reconciled microbatch, ready to be merged onto both tables.
-   */
+  /** Reconciles a validated CDC microbatch into the form consumed by the table merges. */
   private[autocdc] def reconcileMicrobatch(
-      batchDf: DataFrame,
-      auxiliaryTableDf: DataFrame): DataFrame = {
-    val deduplicated = deduplicateMicrobatch(validatedMicrobatch = batchDf)
-    val withCdcMetadata = extendMicrobatchRowsWithCdcMetadata(validatedMicrobatch = deduplicated)
-    val projected = projectTargetColumnsOntoMicrobatch(
-      microbatchWithCdcMetadataDf = withCdcMetadata
-    )
-    applyTombstonesToMicrobatch(
-      microbatchDf = projected,
+      validatedBatchDf: DataFrame,
+      auxiliaryTableDf: DataFrame): DataFrame =
+    reconciliationStrategy.reconcileMicrobatch(
+      changeArgs = changeArgs,
+      resolvedSequencingType = resolvedSequencingType,
+      validatedBatchDf = validatedBatchDf,
       auxiliaryTableDf = auxiliaryTableDf
     )
-  }
-
-  /**
-   * Deduplicate the incoming CDC microbatch by key, keeping the most recent event per key
-   * as ordered by [[ChangeArgs.sequencing]].
-   *
-   * For SCD1 we only care about the most recent (by sequence value) event per key. When
-   * multiple events share the same key and the same sequence value, the row selected is
-   * non-deterministic and undefined.
-   *
-   * @param validatedMicrobatch A microbatch that has already been validated such that the
-   *                            sequencing column should not contain null values, and its data type
-   *                            should support ordering.
-   *
-   * The schema of the returned dataframe matches the schema of the microbatch exactly.
-   */
-  private[autocdc] def deduplicateMicrobatch(validatedMicrobatch: DataFrame): DataFrame = {
-    // The `max_by` API can only return a single column, so pack/unpack the entire row into a
-    // temporary column before and after the `max_by` operation.
-    val winningRowCol = Scd1BatchProcessor.winningRowColName
-
-    val allMicrobatchColumns =
-      validatedMicrobatch.columns
-        .map(colName => F.col(QuotingUtils.quoteIdentifier(colName)))
-        .toImmutableArraySeq
-
-    validatedMicrobatch
-      .groupBy(changeArgs.keys.map(k => F.col(k.quoted)): _*)
-      .agg(
-        F.max_by(F.struct(allMicrobatchColumns: _*), changeArgs.sequencing)
-          .as(winningRowCol)
-      )
-      .select(F.col(s"$winningRowCol.*"))
-  }
-
-  /**
-   * Project the CDC metadata column onto the microbatch.
-   *
-   * This must run before any column selection is applied to the microbatch. The
-   * [[ChangeArgs.deleteCondition]] and [[ChangeArgs.sequencing]] expressions are evaluated against
-   * the current microbatch schema, and column selection may drop inputs required by those
-   * expressions.
-   *
-   * Rows are classified as deletes only when [[ChangeArgs.deleteCondition]] evaluates to true. A
-   * false or null delete condition classifies the row as an upsert.
-   *
-   * @param validatedMicrobatch A microbatch that has already been validated such that the
-   *                            sequencing column should not contain null values, and its data type
-   *                            should support ordering.
-   *
-   * The returned dataframe has all of the columns in the input microbatch + the CDC metadata
-   * column.
-   */
-  private[autocdc] def extendMicrobatchRowsWithCdcMetadata(
-      validatedMicrobatch: DataFrame): DataFrame = {
-    val rowDeleteSequence: Column = changeArgs.deleteCondition match {
-      case Some(deleteCondition) =>
-        F.when(deleteCondition, changeArgs.sequencing).otherwise(F.lit(null))
-      case None =>
-        F.lit(null)
-    }
-
-    val rowUpsertSequence: Column =
-      // A row that is not a delete must be an upsert, these are mutually exclusive and a complete
-      // set of CDC event types.
-      F.when(rowDeleteSequence.isNull, changeArgs.sequencing).otherwise(F.lit(null))
-
-    validatedMicrobatch.withColumn(
-      AutoCdcReservedNames.cdcMetadataColName,
-      Scd1BatchProcessor.constructCdcMetadataCol(
-        deleteSequence = rowDeleteSequence,
-        upsertSequence = rowUpsertSequence,
-        sequencingType = resolvedSequencingType
-      )
-    )
-  }
-
-  /**
-   * Project the user-defined column selection onto the microbatch. By this point the input
-   * microbatch should already have projected its CDC metadata, because it's possible that the
-   * user-defined column selection drops columns that are otherwise necessary to compute the
-   * CDC metadata.
-   *
-   * Returned dataframe's schema is: all of the user-selected columns in the input dataframe as per
-   * [[ChangeArgs.columnSelection]] + the CDC metadata column.
-   */
-  private[autocdc] def projectTargetColumnsOntoMicrobatch(
-      microbatchWithCdcMetadataDf: DataFrame): DataFrame = {
-    val resolver = microbatchWithCdcMetadataDf.sparkSession.sessionState.conf.resolver
-
-    // The user schema is the microbatch schema after dropping the system CDC metadata column.
-    // We project out the system column before applying user selection and project it back in
-    // afterwards, so that users cannot control whether this [necessary] column shows up in the
-    // target table.
-    val userColumnsInMicrobatchSchema = ColumnSelection.applyToSchema(
-      schemaName = "microbatch",
-      schema = microbatchWithCdcMetadataDf.schema,
-      columnSelection = Some(
-        ColumnSelection.ExcludeColumns(
-          Seq(UnqualifiedColumnName(AutoCdcReservedNames.cdcMetadataColName))
-        )
-      ),
-      resolver = resolver
-    )
-
-    val userSelectedColumnsInMicrobatchSchema =
-      ColumnSelection.applyToSchema(
-        schemaName = "microbatch",
-        schema = userColumnsInMicrobatchSchema,
-        columnSelection = changeArgs.columnSelection,
-        resolver = resolver
-      )
-
-    // In addition to the explicit user-selected columns, re-project the operational CDC metadata
-    // column as the last column.
-    val finalColumnsInMicrobatchToSelect =
-      userSelectedColumnsInMicrobatchSchema.fieldNames.map(colName => {
-        // Spark drops backticks in the schema, quote all identifiers for safety before executing
-        // select. Identifiers could have special characters such as '.'.
-        F.col(QuotingUtils.quoteIdentifier(colName))
-      }) :+ F.col(
-        AutoCdcReservedNames.cdcMetadataColName
-      )
-
-    microbatchWithCdcMetadataDf.select(
-      finalColumnsInMicrobatchToSelect.toImmutableArraySeq: _*
-    )
-  }
-
-  /**
-   * Left anti-join the microbatch with the auxiliary table on tombstones that match against and
-   * effectively delete late-arriving upserts (or stale deletes).
-   *
-   * @param microbatchDf The incoming microbatch dataframe with at minimum all of the key
-   *                     columns + CDC metadata column.
-   * @param auxiliaryTableDf Dataframe representing the auxiliary table, with at minimum the key
-   *                         columns + CDC metadata column.
-   *
-   * The returned filtered dataframe has the same schema as the input microbatch, but with only
-   * the rows that remain unaffected by any known tombstones.
-   */
-  private[autocdc] def applyTombstonesToMicrobatch(
-      microbatchDf: DataFrame,
-      auxiliaryTableDf: DataFrame): DataFrame = {
-    val aliasedMicrobatchDf = microbatchDf.alias("microbatch")
-    val aliasedAuxiliaryTableDf = auxiliaryTableDf.alias("auxiliaryTable")
-
-    val cdcMetadata = AutoCdcReservedNames.cdcMetadataColName
-
-    val microbatchCdcMetadata = F.col(s"microbatch.$cdcMetadata")
-    val effectiveSeq = F.greatest(
-      Scd1BatchProcessor.deleteSequenceOf(microbatchCdcMetadata),
-      Scd1BatchProcessor.upsertSequenceOf(microbatchCdcMetadata)
-    )
-    val tombstoneDeleteSeq =
-      Scd1BatchProcessor.deleteSequenceOf(F.col(s"auxiliaryTable.$cdcMetadata"))
-
-    val keysMatch = changeArgs.keys
-      .map { k =>
-        F.col(s"microbatch.${k.quoted}") === F.col(s"auxiliaryTable.${k.quoted}")
-      }
-      .reduce(_ && _)
-
-    // A microbatch row is considered late-arriving (and therefore deleted by the tombstone) when
-    // the auxiliary table holds a tombstone for the same key with a strictly larger delete
-    // sequence. Both late-arriving upserts and deletes are dropped.
-    val microbatchRowDeletedByTombstone = effectiveSeq < tombstoneDeleteSeq
-
-    aliasedMicrobatchDf.join(
-      right = aliasedAuxiliaryTableDf,
-      joinExprs = keysMatch && microbatchRowDeletedByTombstone,
-      joinType = "left_anti"
-    )
-  }
 
   /**
    * Merge the reconciled (deduplicated per key) microbatch onto the auxiliary table,
@@ -408,13 +213,6 @@ case class Scd1BatchProcessor(
 }
 
 object Scd1BatchProcessor {
-  /**
-   * Internal columns inserted by AutoCDC reconciliation. Source change-data-feed dataframes must
-   * not contain any columns starting with [[AutoCdcReservedNames.prefix]]; the invariant is
-   * enforced at [[org.apache.spark.sql.pipelines.graph.AutoCdcMergeFlow]] construction.
-   */
-  private[autocdc] val winningRowColName: String = s"${AutoCdcReservedNames.prefix}winning_row"
-
   private[pipelines] val cdcDeleteSequenceFieldName: String = "deleteSequence"
   private[pipelines] val cdcUpsertSequenceFieldName: String = "upsertSequence"
 

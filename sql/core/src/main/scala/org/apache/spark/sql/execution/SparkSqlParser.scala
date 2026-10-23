@@ -123,6 +123,13 @@ class SparkSqlParser extends AbstractSqlParser {
   override def splitStatements(sqlText: String): SqlStatementSplitResult =
     SqlStatementSplitter.split(sqlText, SparkSqlParser.substituteVariablesForValidation)
 
+  /** Split statements while retaining their positions in the original SQL text. */
+  private[sql] def splitStatementsWithPositions(
+      sqlText: String): PositionedSqlStatementSplitResult =
+    SqlStatementSplitter.splitWithPositions(
+      sqlText,
+      SparkSqlParser.substituteVariablesForValidation)
+
   /**
    * Internal parse method that handles both parameter substitution and regular parsing.
    *
@@ -1730,7 +1737,10 @@ class SparkSqlAstBuilder extends AstBuilder {
           excludeColumns = params.excludeColumns,
           storedAsScdType = params.storedAsScdType,
           trackHistoryColumns = params.trackHistoryColumns,
-          trackHistoryExceptColumns = params.trackHistoryExceptColumns
+          trackHistoryExceptColumns = params.trackHistoryExceptColumns,
+          ignoreNullUpdates = params.ignoreNullUpdates,
+          ignoreNullUpdatesColumns = params.ignoreNullUpdatesColumns,
+          ignoreNullUpdatesExceptColumns = params.ignoreNullUpdatesExceptColumns
         )
       } else {
         Option(ctx.query) match {

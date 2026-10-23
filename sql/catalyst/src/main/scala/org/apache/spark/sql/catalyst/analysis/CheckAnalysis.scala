@@ -339,6 +339,9 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     } finally {
       preemptedError.clear()
     }
+    // Check MATERIALIZED CTE relations on the original plan, as `inlinedPlan` has them inlined.
+    // This runs after `checkAnalysis0`, so that resolution errors are reported first.
+    MaterializedCTECheck(plan)
     plan.setAnalyzed()
   }
 
@@ -485,11 +488,13 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           context = u.origin.getQueryContext,
           summary = u.origin.context.summary)
 
-      case r: V2TableReference =>
+      case r: V2Reference =>
         throw SparkException.internalError(
-          s"V2TableReference should be resolved during analysis: ${r.name}")
+          s"V2Reference should be resolved during analysis: ${r.name}")
 
-      case u: UnresolvedInlineTable if unresolvedInlineTableContainsScalarSubquery(u) =>
+      case u: UnresolvedInlineTable
+          if !SQLConf.get.getConf(SQLConf.INLINE_TABLE_NON_FOLDABLE_EXPRESSIONS_ENABLED) &&
+            unresolvedInlineTableContainsScalarSubquery(u) =>
         throw QueryCompilationErrors.inlineTableContainsScalarSubquery(u)
 
       case command: V2PartitionCommand =>
@@ -641,6 +646,14 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               s"Cannot resolve the runtime replaceable expression ${toSQLExpr(e)}. " +
               s"The replacement is unresolved: ${toSQLExpr(e.replacement)}.")
 
+          // Only the Spark Connect planner creates UnresolvedPlanId (a DataFrame subquery by plan
+          // id), and only its WithRelations transform resolves it. A survivor usually means the
+          // client never attached the referenced plan to the request, so report an invalid Spark
+          // Connect plan. If the planner analyzes the plan before substituting an attached plan
+          // id, it rethrows this error as an INTERNAL_ERROR.
+          case u: UnresolvedPlanId =>
+            throw QueryCompilationErrors.subqueryPlanNotAttached(u)
+
           // `Grouping` and `GroupingID` are considered as of having lower priority than the other
           // nodes which cause errors.
           case g: Grouping =>
@@ -759,7 +772,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 "joinCondition" -> toSQLExpr(condition),
                 "conditionType" -> toSQLType(condition.dataType)))
 
-          case j @ AsOfJoin(_, _, _, Some(condition), _, _, _, _, _, _, _, _, _, _)
+          case j @ AsOfJoin(_, _, _, Some(condition), _, _, _, _, _, _, _, _, _, _, _)
               if condition.dataType != BooleanType =>
             j.failAnalysis(
               errorClass = "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE",
@@ -767,17 +780,21 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 "joinCondition" -> toSQLExpr(condition),
                 "conditionType" -> toSQLType(condition.dataType)))
 
-          case j @ AsOfJoin(_, _, _, _, _, _, Some(toleranceAssertion), _, _, _, _, _, _, _) =>
-            if (!toleranceAssertion.foldable) {
-              j.failAnalysis(
-                errorClass = "AS_OF_JOIN.TOLERANCE_IS_UNFOLDABLE",
-                messageParameters = Map.empty)
+          case j: AsOfJoin =>
+            j.toleranceAssertion.foreach { toleranceAssertion =>
+              if (!toleranceAssertion.foldable) {
+                j.failAnalysis(
+                  errorClass = "AS_OF_JOIN.TOLERANCE_IS_UNFOLDABLE",
+                  messageParameters = Map.empty)
+              }
+              if (!toleranceAssertion.eval().asInstanceOf[Boolean]) {
+                j.failAnalysis(
+                  errorClass = "AS_OF_JOIN.TOLERANCE_IS_NON_NEGATIVE",
+                  messageParameters = Map.empty)
+              }
             }
-            if (!toleranceAssertion.eval().asInstanceOf[Boolean]) {
-              j.failAnalysis(
-                errorClass = "AS_OF_JOIN.TOLERANCE_IS_NON_NEGATIVE",
-                messageParameters = Map.empty)
-            }
+
+            AsOfJoinValidation.validateKeyTypes(j)
 
           // Reject streaming inputs early. The optimizer rewrite is built around an
           // unconditioned cross-product fed into a global `Aggregate` keyed by a per-row

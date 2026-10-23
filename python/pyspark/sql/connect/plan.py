@@ -1742,6 +1742,54 @@ class WithColumnsRenamed(LogicalPlan):
         return plan
 
 
+class BinBy(LogicalPlan):
+    """Logical plan for splitting timestamp ranges into fixed-width bins."""
+
+    def __init__(
+        self,
+        child: Optional[LogicalPlan],
+        range_start: Column,
+        range_end: Column,
+        bin_width: Column,
+        distribute_uniform: Sequence[Column],
+        align_to: Optional[Column] = None,
+        bin_start_name: Optional[str] = None,
+        bin_end_name: Optional[str] = None,
+        bin_distribute_ratio_name: Optional[str] = None,
+    ) -> None:
+        columns = [range_start, range_end, bin_width, *distribute_uniform]
+        if align_to is not None:
+            columns.append(align_to)
+        super().__init__(child, self._collect_references(columns))
+        self.range_start = range_start
+        self.range_end = range_end
+        self.bin_width = bin_width
+        self.distribute_uniform = distribute_uniform
+        self.align_to = align_to
+        self.bin_start_name = bin_start_name
+        self.bin_end_name = bin_end_name
+        self.bin_distribute_ratio_name = bin_distribute_ratio_name
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = self._create_proto_relation()
+        node = plan.bin_by
+        node.input.CopyFrom(self._child.plan(session))
+        node.range_start.CopyFrom(self.range_start.to_plan(session))
+        node.range_end.CopyFrom(self.range_end.to_plan(session))
+        node.bin_width.CopyFrom(self.bin_width.to_plan(session))
+        node.distribute_uniform.extend(col.to_plan(session) for col in self.distribute_uniform)
+        if self.align_to is not None:
+            node.align_to.CopyFrom(self.align_to.to_plan(session))
+        if self.bin_start_name is not None:
+            node.bin_start_name = self.bin_start_name
+        if self.bin_end_name is not None:
+            node.bin_end_name = self.bin_end_name
+        if self.bin_distribute_ratio_name is not None:
+            node.bin_distribute_ratio_name = self.bin_distribute_ratio_name
+        return self._with_relations(plan, session)
+
+
 class Unpivot(LogicalPlan):
     """Logical plan object for a unpivot operation."""
 

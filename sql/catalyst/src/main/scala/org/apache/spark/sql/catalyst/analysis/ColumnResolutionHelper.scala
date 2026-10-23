@@ -604,9 +604,10 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
   // Candidate threaded through the plan walk:
   //   - expr:   the resolved expression
   //   - depth:  the depth at which it was matched
-  //   - hidden: whether the candidate's references live in `p.metadataOutput`
-  //             at some plan node along the way (e.g. a natural/USING join
-  //             wrapper that hides a join key via `Project.hiddenOutputTag`).
+  //   - hidden: whether the candidate's references are not all visible at some
+  //             plan node along the way, e.g. at a natural/USING join wrapper that
+  //             hides a join key via `Project.hiddenOutputTag` (see the filter in
+  //             `resolveDataFrameColumnRecursively`).
   private case class Candidate(expr: NamedExpression, depth: Int, hidden: Boolean)
 
   private def resolveDataFrameColumnByPlanId(
@@ -640,7 +641,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       // case, return an empty Seq to delay the failure, so it is possible to be
       // resolved in the next iteration.
       // Always initialize `hidden = false` here; the filter below will set it
-      // correctly based on whether the references live in `p.metadataOutput`.
+      // correctly based on whether the references are all visible at `p`.
       (resolved.map(Candidate(_, currentDepth, hidden = false)).toSeq, true)
     } else {
       val children = p match {
@@ -687,12 +688,24 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     // ancestor plan (e.g. a natural/USING join wrapper that hides a join key
     // via `Project.hiddenOutputTag`). We accept that here but tag the candidate
     // as `hidden` so the top-level merge in `resolveDataFrameColumn` can prefer
-    // a regular (p.output) match over hidden (p.metadataOutput) ones. An
-    // attribute can be in both, e.g. under the SQL pipe SET operator, and then
-    // counts as a regular match.
+    // a regular (p.output) match over hidden (p.metadataOutput) ones.
+    //
+    // A candidate becomes hidden at `p` when its references are not all visible at `p`,
+    // and once hidden it stays hidden further up (`c.hidden`). An attribute is visible
+    // at `p` if it is in `p.output` and `p` does not hide it itself, i.e. it is not in
+    // the part of `p.metadataOutput` that `p` introduces rather than inherits from its
+    // children. An attribute can be in both `p.output` and `p.metadataOutput`:
+    //   - A Project that re-selects a USING join's hidden right key inherits the key in
+    //     its `metadataOutput` (`Project.metadataOutput` falls back to the child's), and
+    //     so does a USING join wrapper above it. The key is visible at both.
+    //   - `AddMetadataColumns` adds a hidden key to the `output` of the USING join
+    //     wrapper that hides it, and a metadata column to the `output` of a relation.
+    //     That node introduces the attribute in its `metadataOutput`, so it stays hidden.
+    val introducedHidden = AttributeSet(p.metadataOutput) --
+      p.children.flatMap(_.metadataOutput)
+    val visible = p.outputSet -- introducedHidden
     val filtered = candidates.flatMap { c =>
-      val hidden = c.hidden || (!c.expr.references.subsetOf(p.outputSet) &&
-        c.expr.references.subsetOf(AttributeSet(p.metadataOutput)))
+      val hidden = c.hidden || !c.expr.references.subsetOf(visible)
       if (c.expr.references.subsetOf(AttributeSet(p.output ++ p.metadataOutput))) {
         Some(c.copy(hidden = hidden))
       } else {

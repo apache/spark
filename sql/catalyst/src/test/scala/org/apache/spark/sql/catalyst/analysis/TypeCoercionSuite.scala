@@ -18,13 +18,14 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import java.sql.Timestamp
-import java.time.{Duration, LocalDateTime, Period}
+import java.time.{Duration, LocalDateTime, LocalTime, Period}
 
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile
 import org.apache.spark.sql.catalyst.plans.ReferenceAllColumns
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
@@ -44,6 +45,8 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
   assert(Utils.isTesting, s"${IS_TESTING.key} is not set to true")
 
   protected def implicitCast(e: Expression, expectedType: AbstractDataType): Option[Expression]
+
+  protected def implicitTypeCastsRule: TypeCoercionRule
 
   protected def dateTimeOperationsRule: TypeCoercionRule
 
@@ -218,6 +221,58 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
     shouldNotCast(checkedType, IntegralType)
   }
 
+  test("time_bucket implicitly casts date and string timestamp arguments") {
+    val bucketSize = Literal(Duration.ofMinutes(15))
+    val date = Literal(0, DateType)
+    val string = Literal("2024-01-01 00:00:00")
+
+    ruleTest(
+      rule = implicitTypeCastsRule,
+      initial = TimeBucket(bucketSize = bucketSize, ts = date, originTs = string),
+      transformed = TimeBucket(
+        bucketSize = bucketSize,
+        ts = Cast(date, TimestampType),
+        originTs = Cast(string, TimestampType)))
+  }
+
+  test("time_bucket does not implicitly cast time arguments to timestamp") {
+    val bucketSize = Literal(Duration.ofMinutes(15))
+    val time = Literal(LocalTime.of(10, 23, 0))
+    val timeBucket = TimeBucket(bucketSize = bucketSize, ts = time, originTs = time)
+
+    ruleTest(
+      rule = implicitTypeCastsRule,
+      initial = timeBucket,
+      transformed = timeBucket)
+  }
+
+  test("time_bucket does not implicitly cast string bucket size") {
+    val bucketSize = Literal("0 00:15:00")
+    val timestamp = Literal(Timestamp.valueOf("2024-01-01 00:00:00"))
+    val timeBucket = TimeBucket(
+      bucketSize = bucketSize,
+      ts = timestamp,
+      originTs = timestamp)
+
+    ruleTest(
+      rule = implicitTypeCastsRule,
+      initial = timeBucket,
+      transformed = timeBucket)
+  }
+
+  test("time_bucket implicitly casts null bucket size to day-time interval") {
+    val bucketSize = Literal(null)
+    val timestamp = Literal(Timestamp.valueOf("2024-01-01 00:00:00"))
+
+    ruleTest(
+      rule = implicitTypeCastsRule,
+      initial = TimeBucket(bucketSize = bucketSize, ts = timestamp, originTs = timestamp),
+      transformed = TimeBucket(
+        bucketSize = Cast(bucketSize, DayTimeIntervalType()),
+        ts = timestamp,
+        originTs = timestamp))
+  }
+
   test("SPARK-56152: implicit type cast - TimeType") {
     val checkedType = TimeType()
     checkTypeCasting(checkedType, castableTypes = Seq(checkedType, StringType) ++ datetimeTypes)
@@ -300,6 +355,76 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
 
   test("ineligible implicit type cast - TypeCollection") {
     shouldNotCast(IntegerType, TypeCollection(DateType, TimestampType))
+  }
+
+  test("implicit type cast - nanosecond-precision timestamps are not narrowed") {
+    Seq(
+      TimestampNTZNanosType(7),
+      TimestampNTZNanosType(9),
+      TimestampLTZNanosType(8),
+      TimestampLTZNanosType(9)).foreach { nanos =>
+      // Dropping sub-microsecond digits or the date needs an explicit CAST.
+      Seq(TimestampType, TimestampNTZType, AnyTimestampType, TimeType(), AnyTimeType).foreach {
+        shouldNotCast(nanos, _)
+      }
+      // DATE stays a direct target for date-valued functions.
+      shouldCast(nanos, DateType, DateType)
+      shouldCast(nanos, StringType, StringType)
+      // A TypeCollection fallback picks neither DATE nor TIME.
+      shouldNotCast(nanos, TypeCollection(NumericType, DateType, TimestampType, TimestampNTZType))
+      shouldNotCast(nanos, TypeCollection(NumericType, AnyTimeType))
+      shouldCast(nanos, TypeCollection(DateType, StringType), StringType)
+      shouldCast(nanos, TypeCollection(AnyTimestampType, AnyTimestampNanoType), nanos)
+    }
+
+    // Widening to a higher precision or the other family is kept.
+    shouldCast(TimestampType, TimestampLTZNanosType(9), TimestampLTZNanosType(9))
+    shouldCast(TimestampNTZNanosType(7), TimestampNTZNanosType(9), TimestampNTZNanosType(9))
+    shouldCast(TimestampNTZNanosType(9), TimestampLTZNanosType(9), TimestampLTZNanosType(9))
+    shouldCast(
+      TimestampLTZNanosType(8),
+      TypeCollection(DateType, TimestampLTZNanosType(9)),
+      TimestampLTZNanosType(9))
+    shouldNotCast(TimestampNTZNanosType(9), TimestampNTZNanosType(7))
+    shouldNotCast(TimestampLTZNanosType(9), TimestampNTZNanosType(8))
+
+    // The same holds inside arrays, maps and structs.
+    val ntz9 = TimestampNTZNanosType(9)
+    Seq(
+      ArrayType(TimeType()),
+      ArrayType(TimestampNTZType),
+      TypeCollection(ArrayType(DateType), ArrayType(TimeType()))).foreach {
+      shouldNotCast(ArrayType(ntz9), _)
+    }
+    shouldNotCast(MapType(StringType, ntz9), MapType(StringType, TimeType()))
+    shouldNotCast(MapType(ntz9, StringType), MapType(TimeType(), StringType))
+    shouldNotCast(new StructType().add("a", ntz9), new StructType().add("a", TimeType()))
+    shouldCast(ArrayType(ntz9), ArrayType(DateType), ArrayType(DateType))
+    shouldCast(
+      ArrayType(ntz9),
+      TypeCollection(ArrayType(DateType), ArrayType(StringType)),
+      ArrayType(StringType))
+    shouldCast(
+      MapType(ntz9, StringType),
+      TypeCollection(MapType(DateType, StringType), MapType(StringType, StringType)),
+      MapType(StringType, StringType))
+    shouldCast(ArrayType(TimestampNTZNanosType(7)), ArrayType(ntz9), ArrayType(ntz9))
+
+    // Micro timestamps are unchanged, including the DATE fallback.
+    shouldCast(TimestampType, AnyTimestampType, TimestampType)
+    shouldCast(TimestampNTZType, TypeCollection(NumericType, DateType), DateType)
+  }
+
+  test("implicit type cast - nanos arguments of functions without nanos support") {
+    val nanos = Literal.default(TimestampNTZNanosType(9))
+    Seq(
+      MonthsBetween(nanos, nanos, Literal(true)),
+      TimeTrunc(Literal("HOUR"), nanos),
+      new ApproximatePercentile(nanos, Literal(0.5))).foreach { e =>
+      ruleTest(implicitTypeCastsRule, e, e)
+    }
+    // A date-valued function still takes the nanos input as DATE.
+    ruleTest(implicitTypeCastsRule, LastDay(nanos), LastDay(Cast(nanos, DateType)))
   }
 
   test("type coercion for Concat") {
@@ -599,6 +724,9 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
   // scalastyle:on line.size.limit
   override def implicitCast(e: Expression, expectedType: AbstractDataType): Option[Expression] =
     TypeCoercion.implicitCast(e, expectedType)
+
+  override protected def implicitTypeCastsRule: TypeCoercionRule =
+    TypeCoercion.ImplicitTypeCasts
 
   override def dateTimeOperationsRule: TypeCoercionRule = TypeCoercion.DateTimeOperations
 

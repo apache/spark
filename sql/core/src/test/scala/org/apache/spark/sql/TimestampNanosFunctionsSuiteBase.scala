@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.time.{Instant, LocalDateTime}
+import java.time.{Instant, LocalDateTime, LocalTime}
 
 import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.functions._
@@ -1016,6 +1016,69 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
       assert(df.selectExpr("current_timestamp(6) AS c").schema.head.dataType === TimestampType)
       assert(df.selectExpr("localtimestamp() AS c").schema.head.dataType === TimestampNTZType)
     }
+  }
+
+  test("SPARK-57834: sequence over nanosecond-precision timestamps") {
+    val schema = new StructType()
+      .add("start", TimestampNTZNanosType(9))
+      .add("stop", TimestampNTZNanosType(9))
+
+    // Every generated element keeps the start value's .000000123 fraction and the array element
+    // type stays TIMESTAMP_NTZ(9).
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(Seq(Row(
+      LocalDateTime.parse("2020-01-01T00:00:00.000000123"),
+      LocalDateTime.parse("2020-01-01T00:00:02.000000123")))), schema)
+    val result = df.selectExpr("sequence(start, stop, INTERVAL '1' SECOND) AS s")
+    assert(
+      result.schema.head.dataType === ArrayType(TimestampNTZNanosType(9), containsNull = false))
+    checkAnswer(result, Row(Seq(
+      LocalDateTime.parse("2020-01-01T00:00:00.000000123"),
+      LocalDateTime.parse("2020-01-01T00:00:01.000000123"),
+      LocalDateTime.parse("2020-01-01T00:00:02.000000123"))))
+
+    // stop's smaller fraction drops the final boundary element, so the result never exceeds stop.
+    val df2 = spark.createDataFrame(spark.sparkContext.parallelize(Seq(Row(
+      LocalDateTime.parse("2020-01-01T00:00:00.000000900"),
+      LocalDateTime.parse("2020-01-01T00:00:02.000000100")))), schema)
+    checkAnswer(
+      df2.selectExpr("sequence(start, stop, INTERVAL '1' SECOND) AS s"),
+      Row(Seq(
+        LocalDateTime.parse("2020-01-01T00:00:00.000000900"),
+        LocalDateTime.parse("2020-01-01T00:00:01.000000900"))))
+  }
+
+  test("typed Scala UDFs reject nanosecond inputs instead of narrowing them") {
+    val ldt = LocalDateTime.parse("2020-01-01T12:00:00.123456789")
+    val df = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(ldt, Seq(ldt)))),
+      new StructType()
+        .add("c", TimestampNTZNanosType(9))
+        .add("a", ArrayType(TimestampNTZNanosType(9))))
+    val toStr = udf((t: LocalDateTime) => t.toString)
+    val timesToStr = udf((ts: Seq[LocalTime]) => ts.mkString(","))
+    Seq(
+      (toStr(col("c")), "input", "\"TIMESTAMP_NTZ\"",
+        "- root class: \"java.time.LocalDateTime\""),
+      (timesToStr(col("a")), "array element", "\"TIME(6)\"",
+        "- array element class: \"java.time.LocalTime\"\n" +
+          "- root class: \"scala.collection.immutable.Seq\"")).foreach {
+      case (c, expression, to, typePath) =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            df.select(c)
+          },
+          condition = "CANNOT_UP_CAST_DATATYPE",
+          parameters = Map(
+            "expression" -> expression,
+            "sourceType" -> "\"TIMESTAMP_NTZ(9)\"",
+            "targetType" -> to,
+            "details" -> (s"The type path of the target object is:\n$typePath\nYou can either " +
+              "add an explicit cast to the input data or choose a higher precision type of the " +
+              "field in the target object")))
+    }
+    // An explicit CAST still narrows.
+    checkAnswer(
+      df.select(toStr(col("c").cast(TimestampNTZType))), Row("2020-01-01T12:00:00.123456"))
   }
 }
 

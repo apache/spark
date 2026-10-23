@@ -55,6 +55,15 @@ import org.apache.spark.unsafe.types.UTF8String
       > SELECT _FUNC_('26/08/2015', 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy'));
        {"time":2015-08-26 00:00:00}
   """,
+  note = """
+    A CHAR `csvStr` is not rtrimmed. Padding is parsed as trailing spaces and can create
+    extra fields or attach to the last unquoted field; use ignoreTrailingWhiteSpace to trim
+    the last field. CHAR/VARCHAR in `schema` is accepted when CHAR/VARCHAR are first-class
+    (spark.sql.charVarchar.standardSemantics.enabled or
+    spark.sql.preserveCharVarcharTypeInfo): fields are assigned (CHAR padded; overflow is
+    a bad record). spark.sql.legacy.charVarcharAsString reads them as STRING. Otherwise
+    the schema raises UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING.
+  """,
   since = "3.0.0",
   group = "csv_funcs")
 // scalastyle:on line.size.limit
@@ -69,7 +78,6 @@ case class CsvToStructs(
   with ExpectsInputTypes {
 
   override def nullable: Boolean = child.nullable
-
   override def nullIntolerant: Boolean = true
 
   // Used in `FunctionRegistry`
@@ -85,7 +93,7 @@ case class CsvToStructs(
   def this(child: Expression, schema: Expression, options: Expression) =
     this(
       schema = ExprUtils.evalSchemaExpr(schema),
-      options = ExprUtils.convertToMapData(options),
+      options = ExprUtils.convertToMapData(options, "from_csv"),
       child = child,
       timeZoneId = None)
 
@@ -153,6 +161,11 @@ case class CsvToStructs(
       > SELECT _FUNC_('1,abc');
        STRUCT<_c0: INT, _c1: STRING>
   """,
+  note = """
+    A CHAR `csv` argument is not rtrimmed. When CHAR is first-class, padding can change
+    the inferred field count and types; for example CAST('1' AS CHAR(3)) infers DOUBLE
+    with the default comma delimiter.
+  """,
   since = "3.0.0",
   group = "csv_funcs")
 case class SchemaOfCsv(
@@ -167,7 +180,7 @@ case class SchemaOfCsv(
 
   def this(child: Expression, options: Expression) = this(
     child = child,
-    options = ExprUtils.convertToMapData(options))
+    options = ExprUtils.convertToMapData(options, "schema_of_csv"))
 
   override def nullable: Boolean = false
 
@@ -183,7 +196,7 @@ case class SchemaOfCsv(
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_NULL",
         messageParameters = Map("exprName" -> "csv"))
-    } else if (child.dataType != StringType) {
+    } else if (!child.dataType.isInstanceOf[StringType]) {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
@@ -255,7 +268,7 @@ case class StructsToCsv(
 
   def this(child: Expression, options: Expression) =
     this(
-      options = ExprUtils.convertToMapData(options),
+      options = ExprUtils.convertToMapData(options, "to_csv"),
       child = child,
       timeZoneId = None)
 
