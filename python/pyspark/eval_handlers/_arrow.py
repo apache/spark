@@ -84,7 +84,6 @@ class ArrowCoGroupedMapUDFHandler(CoGroupedEvalTypeHandler["pa.RecordBatch"]):
         super().__init__(udfs, runner_conf, eval_conf)
         assert len(udfs) == 1, "One COGROUPED_MAP_ARROW UDF expected here."
         udf = udfs[0]
-        self._cogrouped_udf = self._funcs[0]
         # signature was lost when wrapping it
         self._num_udf_args = len(inspect.getfullargspec(udf.func).args)
         parsed_offsets = extract_key_value_indexes(udf.args_offsets)
@@ -110,11 +109,11 @@ class ArrowCoGroupedMapUDFHandler(CoGroupedEvalTypeHandler["pa.RecordBatch"]):
             right_values = table_from_batches(right_batches, self._right_val_cols)
 
             if self._num_udf_args == 2:
-                result = self._cogrouped_udf(left_values, right_values)
+                result = self._funcs[0](left_values, right_values)
             else:
                 key_table = left_keys if left_keys.num_rows > 0 else right_keys
                 key = tuple(c[0] for c in key_table.columns)
-                result = self._cogrouped_udf(key, left_values, right_values)
+                result = self._funcs[0](key, left_values, right_values)
 
             verify_return_type(result, pa.Table)
             # Verify types (and reorder by name when configured).
@@ -142,7 +141,6 @@ class ArrowGroupedMapIterUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
         super().__init__(udfs, runner_conf, eval_conf)
         assert len(udfs) == 1, "One GROUPED_MAP_ARROW_ITER UDF expected here."
         udf = udfs[0]
-        self._grouped_udf = self._funcs[0]
         # signature was lost when wrapping it
         self._num_udf_args = len(inspect.getfullargspec(udf.func).args)
         parsed_offsets = extract_key_value_indexes(udf.args_offsets)
@@ -181,10 +179,10 @@ class ArrowGroupedMapIterUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
 
             # Call UDF with iterator of batches
             if self._num_udf_args == 1:
-                result = self._grouped_udf(value_batches)
+                result = self._funcs[0](value_batches)
             else:
                 key = tuple(c[0] for c in keys.columns)
-                result = self._grouped_udf(key, value_batches)
+                result = self._funcs[0](key, value_batches)
 
             # Verify (and reorder by name when configured) each output batch
             for batch in verify_return_type(result, Iterator[pa.RecordBatch]):
@@ -213,7 +211,6 @@ class ArrowGroupedMapUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
         super().__init__(udfs, runner_conf, eval_conf)
         assert len(udfs) == 1, "One GROUPED_MAP_ARROW UDF expected here."
         udf = udfs[0]
-        self._grouped_udf = self._funcs[0]
         # signature was lost when wrapping it
         self._num_udf_args = len(inspect.getfullargspec(udf.func).args)
         parsed_offsets = extract_key_value_indexes(udf.args_offsets)
@@ -251,10 +248,10 @@ class ArrowGroupedMapUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
             # Call UDF
             value_table = pa.Table.from_batches(value_batches)
             if self._num_udf_args == 1:
-                result = self._grouped_udf(value_table)
+                result = self._funcs[0](value_table)
             else:
                 key = tuple(c[0] for c in keys.columns)
-                result = self._grouped_udf(key, value_table)
+                result = self._funcs[0](key, value_table)
 
             verify_return_type(result, pa.Table)
             # Verify types (and reorder by name when configured).
@@ -314,7 +311,6 @@ class ArrowGroupedAggIterUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
         super().__init__(udfs, runner_conf, eval_conf)
         assert len(udfs) == 1, "One GROUPED_AGG_ARROW_ITER UDF expected here."
         udf = udfs[0]
-        self._udf_func, self._args_offsets = self._funcs[0], udf.args_offsets
         self._return_schema = to_arrow_schema(
             StructType([StructField("_0", udf.return_type)]),
             timezone="UTC",
@@ -324,7 +320,7 @@ class ArrowGroupedAggIterUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
     def run(self, split_index: int, data: Iterator[GroupedBatch]) -> Iterator[pa.RecordBatch]:
         import pyarrow as pa
 
-        args_offsets = self._args_offsets
+        args_offsets = self._udfs[0].args_offsets
 
         def extract_args(batch: pa.RecordBatch) -> Any:
             args = tuple(batch.column(o) for o in args_offsets)
@@ -332,7 +328,7 @@ class ArrowGroupedAggIterUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
 
         for group in data:
             batch_iter = map(extract_args, group)
-            result = self._udf_func(batch_iter)
+            result = self._funcs[0](batch_iter)
             # Drain remaining batches to maintain stream position
             for _ in batch_iter:
                 pass
@@ -367,8 +363,7 @@ class ArrowWindowAggUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
             num_rows = concatenated.num_rows
 
             result_arrays = []
-            for udf_index, udf in enumerate(self._udfs):
-                udf_func = self._funcs[udf_index]
+            for udf_index, (udf, udf_func) in enumerate(zip(self._udfs, self._funcs)):
                 args_offsets, kwargs_offsets = udf.args_offsets, udf.kwargs_offsets
                 bound_type = self._window_bound_types[udf_index]
                 if bound_type == "unbounded":
@@ -688,7 +683,6 @@ class ArrowMapUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         require_minimum_pyarrow_version()
         super().__init__(udfs, runner_conf, eval_conf)
         assert len(udfs) == 1, "One MAP_ARROW_ITER UDF expected here."
-        self._udf_func = self._funcs[0]
 
     def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
         import pyarrow as pa
@@ -697,7 +691,7 @@ class ArrowMapUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         input_batches = map(ArrowBatchTransformer.flatten_struct, data)
 
         # invoke the UDF
-        output_batches = self._udf_func(input_batches)
+        output_batches = self._funcs[0](input_batches)
 
         # The declared signature is Iterator[...], so a strict iterator is required by
         # default. With the legacy flag, accept any object Python can iterate over -- via
@@ -731,7 +725,6 @@ class ArrowScalarIterUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         super().__init__(udfs, runner_conf, eval_conf)
         assert len(udfs) == 1, "One SCALAR_ARROW_ITER UDF expected here."
         udf = udfs[0]
-        self._udf_func, self._args_offsets = self._funcs[0], udf.args_offsets
         self._arrow_return_type = to_arrow_type(
             udf.return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
         )
@@ -739,7 +732,7 @@ class ArrowScalarIterUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
         import pyarrow as pa
 
-        args_offsets = self._args_offsets
+        args_offsets = self._udfs[0].args_offsets
         num_input_rows = 0
 
         def extract_args(batch: pa.RecordBatch) -> Any:
@@ -752,7 +745,7 @@ class ArrowScalarIterUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         args_iter = map(extract_args, data)
 
         # Call UDF and verify result type (iterator of pa.Array)
-        verified_iter = verify_return_type(self._udf_func(args_iter), Iterator[pa.Array])
+        verified_iter = verify_return_type(self._funcs[0](args_iter), Iterator[pa.Array])
 
         # Process results: enforce schema and assemble into RecordBatch
         target_schema = pa.schema([pa.field("_0", self._arrow_return_type)])

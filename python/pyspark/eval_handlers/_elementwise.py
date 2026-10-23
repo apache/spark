@@ -518,8 +518,6 @@ class _ScalarIterElementwiseUDFHandler(_VectorizedElementwiseUDFHandler):
 
         assert len(udfs) == 1, "One SCALAR_*_ITER_ELEMENTWISE UDF expected here."
         udf = udfs[0]
-        self._udf_func, self._args_offsets = self._funcs[0], udf.args_offsets
-        self._return_type = udf.return_type
         assert not udf.kwargs_offsets, "Iterator UDFs do not take keyword arguments."
 
         # Each argument arrives as ``array^depth<T>``; the vectorized function must see the leaf
@@ -528,9 +526,9 @@ class _ScalarIterElementwiseUDFHandler(_VectorizedElementwiseUDFHandler):
         nesting = eval_conf.elementwise_nesting
         self._depth = nesting[0] if nesting is not None else 1
         self._udf_input_schema = _elementwise_input_schema(
-            eval_conf.input_type, self._args_offsets, self._depth
+            eval_conf.input_type, udf.args_offsets, self._depth
         )
-        self._udf_output_schema = _elementwise_output_schema(self._return_type, runner_conf)
+        self._udf_output_schema = _elementwise_output_schema(udf.return_type, runner_conf)
 
     @abstractmethod
     def _verify_return_type(self, results: Any) -> Iterator[Any]:
@@ -552,7 +550,7 @@ class _ScalarIterElementwiseUDFHandler(_VectorizedElementwiseUDFHandler):
             # shapes re-nest this batch's rows. The user function sees the flat leaves as a
             # pandas Series / DataFrame (pandas) or a pa.Array (Arrow), each with its leaf type.
             flat_batch, list_lengths_by_level, large_list_by_level = _elementwise_flatten_inputs(
-                batch, self._args_offsets, self._depth
+                batch, self._udfs[0].args_offsets, self._depth
             )
             pending_shapes.append((list_lengths_by_level, large_list_by_level, flat_batch.num_rows))
             num_input_elements += flat_batch.num_rows
@@ -561,7 +559,7 @@ class _ScalarIterElementwiseUDFHandler(_VectorizedElementwiseUDFHandler):
 
         flat_args_iter = map(extract_flat, data)
 
-        verified_iter = self._verify_return_type(self._udf_func(flat_args_iter))
+        verified_iter = self._verify_return_type(self._funcs[0](flat_args_iter))
 
         # Buffer the streamed flat element results and emit an ``array<R>`` row as soon as the
         # shape at the head of the FIFO is fully covered. A row whose length is 0 (an empty
@@ -603,7 +601,9 @@ class _ScalarIterElementwiseUDFHandler(_VectorizedElementwiseUDFHandler):
         def process_results() -> Iterator[pa.RecordBatch]:
             nonlocal pending_chunks, pending_len, empty_schema, num_output_elements
             for result in verified_iter:
-                chunk = self._to_flat_batch(result, self._return_type, self._udf_output_schema)
+                chunk = self._to_flat_batch(
+                    result, self._udfs[0].return_type, self._udf_output_schema
+                )
                 num_output_elements += chunk.num_rows
                 # Fail fast if the UDF over-produces, before the buffer grows unbounded (the
                 # base iterator paths do the same via verify_output_row_limit).
@@ -660,7 +660,7 @@ class PandasScalarIterElementwiseUDFHandler(
 
         pandas_iter_type = (
             Iterator[pd.DataFrame]
-            if isinstance(self._return_type, StructType)
+            if isinstance(self._udfs[0].return_type, StructType)
             else Iterator[pd.Series]
         )
         return verify_return_type(results, pandas_iter_type)

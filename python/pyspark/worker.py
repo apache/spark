@@ -150,26 +150,25 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
             handler: EvalTypeHandler
             if isinstance(init_info.udf_info, UDTFInfo):
                 assert issubclass(handler_cls, UDTFHandlerBase)
-                udtf_info = init_info.udf_info
-                udtf_cls = read_command(pickleSer, udtf_info.handler)
-                return_type = _parse_datatype_json_string(udtf_info.return_type)
+                udtf_cls = read_command(pickleSer, init_info.udf_info.handler)
+                return_type = _parse_datatype_json_string(init_info.udf_info.return_type)
                 if not isinstance(return_type, StructType):
                     raise PySparkRuntimeError(
                         "The return type of a UDTF must be a struct type, but got "
                         f"{type(return_type)}."
                     )
-                if udtf_info.pickled_analyze_result is not None:
-                    analyze_result = pickleSer.loads(udtf_info.pickled_analyze_result)
+                if init_info.udf_info.pickled_analyze_result is not None:
+                    analyze_result = pickleSer.loads(init_info.udf_info.pickled_analyze_result)
                 else:
                     analyze_result = None
                 udtf = UDTF(
                     udtf_cls=udtf_cls,
-                    args_offsets=udtf_info.args,
-                    kwargs_offsets=udtf_info.kwargs,
+                    args_offsets=init_info.udf_info.args,
+                    kwargs_offsets=init_info.udf_info.kwargs,
                     return_type=return_type,
-                    partition_child_indexes=udtf_info.partition_child_indexes,
+                    partition_child_indexes=init_info.udf_info.partition_child_indexes,
                     analyze_result=analyze_result,
-                    name=udtf_info.name,
+                    name=init_info.udf_info.name,
                 )
                 handler = handler_cls(udfs=[udtf], runner_conf=runner_conf, eval_conf=eval_conf)
             else:
