@@ -26,7 +26,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.autocdc.{AutoCdcReservedNames, Scd1BatchProcessor}
 import org.apache.spark.sql.pipelines.utils.{ExecutionTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
+import org.apache.spark.sql.types.{ArrayType, IntegerType, LongType, StringType, StructType}
 
 /**
  * Materialization-level tests for AUTO CDC's engine-owned reserved metadata column (SPARK-58118).
@@ -453,5 +453,54 @@ class AutoCdcReservedColumnMaterializationSuite
         "resolvedColumnName" -> s"$meta.$del"
       )
     )
+  }
+
+  test("a declared reserved column's array-of-struct nested casing is preserved for a " +
+    "case-sensitive downstream SELECT *") {
+    // A sequence field takes the SEQUENCE BY type, which can be ARRAY<STRUCT<...>>. A declared
+    // reserved column may spell the array's nested fields in a different case under
+    // case-insensitive AUTO CDC. Reconciliation has to preserve that declared spelling through the
+    // array element, otherwise the read path reports the engine's canonical lower-case name and a
+    // case-sensitive downstream SELECT * cannot resolve the field the target actually has. No
+    // existing target or upgrade is needed; the fresh declared schema alone exercises it.
+    val meta = AutoCdcReservedNames.cdcMetadataColName
+    val del = Scd1BatchProcessor.cdcDeleteSequenceFieldName
+    val ups = Scd1BatchProcessor.cdcUpsertSequenceFieldName
+    val upperOrdinal = "ORDINAL"
+    val seqType = ArrayType(new StructType().add(upperOrdinal, LongType))
+    val metadataType = new StructType().add(del, seqType).add(ups, seqType)
+    val declaredSchema = new StructType()
+      .add("id", IntegerType, nullable = false)
+      .add("version", LongType)
+      .add(meta, metadataType)
+
+    val stream = MemoryStream[(Int, Option[Long])]
+    stream.addData((1, Some(5L)))
+    val ctx = new TestGraphRegistrationContext(spark) {
+      registerTable("target", catalog = Some(catalog), database = Some(namespace),
+        specifiedSchema = Some(declaredSchema))
+      registerFlow(autoCdcFlow(name = "auto_cdc_flow", target = "target",
+        query = dfFlowFunc(stream.toDF().toDF("id", "version")),
+        keys = Seq("id"),
+        sequencing = functions.array(functions.struct(functions.col("version").as("ordinal")))))
+      registerMaterializedView("copy", catalog = Some(catalog), database = Some(namespace),
+        sqlConf = Map(SQLConf.CASE_SENSITIVE.key -> "true"),
+        query = readFlowFunc(s"$catalog.$namespace.target"))
+    }
+    runPipeline(ctx)
+
+    def seqElemNames(table: String, seqField: String): Seq[String] = {
+      val metaType = spark.table(table).schema(meta).dataType.asInstanceOf[StructType]
+      metaType(seqField).dataType.asInstanceOf[ArrayType]
+        .elementType.asInstanceOf[StructType].fieldNames.toSeq
+    }
+    for (seqField <- Seq(del, ups)) {
+      val target = seqElemNames(s"$catalog.$namespace.target", seqField)
+      val copy = seqElemNames(s"$catalog.$namespace.copy", seqField)
+      assert(target == Seq(upperOrdinal),
+        s"target $seqField element should keep declared $upperOrdinal, got ${target.mkString(",")}")
+      assert(copy == target,
+        s"downstream $seqField ${copy.mkString(",")} != target ${target.mkString(",")}")
+    }
   }
 }

@@ -19,7 +19,7 @@ package org.apache.spark.sql.pipelines.autocdc
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.Resolver
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, StructField, StructType}
 
 /**
  * Names that AutoCDC reserves for its own use, both for internal columns it inserts during
@@ -119,22 +119,34 @@ private[pipelines] object AutoCdcReservedNames {
 
   /**
    * Reconcile a declared reserved field against its engine-owned counterpart: keep the declared
-   * spelling, take the engine field's type and nullability. When both are structs -- the AUTO CDC
-   * metadata column is one -- recurse so the declared nested spelling and ordering are kept too,
-   * with the engine's nested types and nullability, mirroring the outer-column policy one level
-   * down.
+   * spelling, take the engine field's type and nullability, and reconcile the types recursively
+   * (see `reconcileReservedType`) so declared nested spelling survives through structs and arrays.
    */
   private def reconcileReservedField(
       declared: StructField,
       engine: StructField,
       resolver: Resolver): StructField =
-    (declared.dataType, engine.dataType) match {
+    engine.copy(
+      name = declared.name,
+      dataType = reconcileReservedType(declared.dataType, engine.dataType, resolver))
+
+  /**
+   * Reconcile a declared data type against its engine-owned counterpart: keep the declared nested
+   * spelling and ordering, take the engine's types and nullability. Recurse through structs -- the
+   * AUTO CDC metadata column is one -- and through array element types, since a sequencing column
+   * can be `ARRAY<STRUCT<...>>`; any other shape takes the engine's type as-is.
+   */
+  private def reconcileReservedType(
+      declared: DataType,
+      engine: DataType,
+      resolver: Resolver): DataType =
+    (declared, engine) match {
       case (declaredStruct: StructType, engineStruct: StructType) =>
-        engine.copy(
-          name = declared.name,
-          dataType = reconcileReservedStruct(declaredStruct, engineStruct, resolver))
-      case _ =>
-        engine.copy(name = declared.name)
+        reconcileReservedStruct(declaredStruct, engineStruct, resolver)
+      case (declaredArray: ArrayType, engineArray: ArrayType) =>
+        engineArray.copy(elementType =
+          reconcileReservedType(declaredArray.elementType, engineArray.elementType, resolver))
+      case _ => engine
     }
 
   /**
@@ -182,9 +194,10 @@ private[pipelines] object AutoCdcReservedNames {
 
   /**
    * Case-only spelling differences between `existing` and `desired` for a reserved field and,
-   * recursively, its nested struct fields, as `(existingName, desiredName)` pairs. Nested names are
+   * recursively, its nested fields, as `(existingName, desiredName)` pairs. Nested names are
    * qualified by their parent, e.g. `__spark_autocdc_metadata.DELETESEQUENCE`, so the same drift
-   * policy covers the metadata column's nested fields as well as the column itself.
+   * policy covers the metadata column's nested fields -- through structs and arrays -- as well as
+   * the column itself.
    */
   private def fieldCasingDrifts(
       existing: StructField,
@@ -192,17 +205,31 @@ private[pipelines] object AutoCdcReservedNames {
       resolver: Resolver): Seq[(String, String)] = {
     val outer =
       if (existing.name != desired.name) Seq((existing.name, desired.name)) else Seq.empty
-    val nested = (existing.dataType, desired.dataType) match {
+    val nested = typeCasingDrifts(existing.dataType, desired.dataType, resolver)
+      .map { case (e, r) => (s"${existing.name}.$e", s"${desired.name}.$r") }
+    outer ++ nested
+  }
+
+  /**
+   * Case-only spelling drifts among the nested fields of two data types, as `(existingName,
+   * desiredName)` pairs qualified by their path. Recurses through structs and through array element
+   * types, so a sequencing column such as `ARRAY<STRUCT<...>>` is covered as well as a nested
+   * struct. Any other shape has no nested names to drift.
+   */
+  private def typeCasingDrifts(
+      existing: DataType,
+      desired: DataType,
+      resolver: Resolver): Seq[(String, String)] =
+    (existing, desired) match {
       case (existingStruct: StructType, desiredStruct: StructType) =>
         existingStruct.fields.toSeq.flatMap { existingNested =>
           desiredStruct.fields
             .find(f => resolver(f.name, existingNested.name))
             .toSeq
             .flatMap(desiredNested => fieldCasingDrifts(existingNested, desiredNested, resolver))
-            .map { case (e, r) => (s"${existing.name}.$e", s"${desired.name}.$r") }
         }
+      case (existingArray: ArrayType, desiredArray: ArrayType) =>
+        typeCasingDrifts(existingArray.elementType, desiredArray.elementType, resolver)
       case _ => Seq.empty
     }
-    outer ++ nested
-  }
 }
