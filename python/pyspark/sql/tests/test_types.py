@@ -3884,8 +3884,8 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
             return variant(13 if ntz else 12, struct.pack("<q", micros))
 
         # The expected values are what the JVM `to_json` returns for the same variants on JDK 19+.
-        # On older JDKs, `to_json` can print longer digit strings for some doubles and floats,
-        # e.g. the powers of two below.
+        # On older JDKs, `to_json` can print different, still round-tripping digits for some
+        # doubles and floats, sometimes longer ones, e.g. the powers of two below.
         for v, expected in [
             (double(float("nan")), '"NaN"'),
             (double(float("inf")), '"Infinity"'),
@@ -3906,8 +3906,9 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
             (double(2.0**-44), "5.684341886080802E-14"),
             (float32(2.0**-96), "1.2621775E-29"),
             (float32(-(2.0**-96)), "-1.2621775E-29"),
-            # Neighboring floats whose shortest decimals, read as doubles, are exactly the
-            # midpoint between them.
+            # Neighboring floats that share their closest 7-digit decimal, 7.038531E-26. Read as
+            # a double it is exactly the midpoint between them, and its exact value names the
+            # lower float, so the upper one needs 8 digits.
             (variant(14, struct.pack("<I", 0x15AE43FE)), "7.0385313E-26"),
             (variant(14, struct.pack("<I", 0x15AE43FD)), "7.038531E-26"),
             (float32(33554448.0), "3.355445E7"),
@@ -3925,8 +3926,9 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
                 self.assertEqual(v.toJson(), expected)
                 # The output must always be valid JSON.
                 json.loads(v.toJson())
-                # The output must not depend on the caller's decimal context, and must work when
-                # the caller traps mixing floats with decimals.
+                # The formatting must not depend on the caller's decimal context, and must work
+                # when the caller traps mixing floats with decimals. Decoding a decimal leaf still
+                # uses the caller's context, which the few-digit decimal cases here fit in.
                 with decimal.localcontext() as ctx:
                     ctx.prec = 5
                     ctx.traps[decimal.FloatOperation] = True

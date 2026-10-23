@@ -427,19 +427,20 @@ class VariantUtils:
                 return '"' + str(value) + '"'
             return str(value)
 
-    # The helpers below format scalars the same way as the JVM `Variant.toJson` on JDK 19+, so
-    # that `VariantVal.toJson` and the `to_json` SQL function produce the same output. On older
-    # JDKs, `to_json` can print a longer, still round-tripping digit string for some doubles and
-    # floats (see `_float_to_json`).
+    # The helpers below format scalars the same way as the JVM `Variant.toJson` on JDK 19+. On
+    # older JDKs, `to_json` can print a different, still round-tripping digit string (sometimes
+    # longer) for some doubles and floats (see `_float_to_json`). Decimal leaves are decoded by
+    # `_get_decimal` in the caller's decimal context, so a value wider than its precision (28
+    # digits by default) can still differ from `to_json`.
 
     @classmethod
     def _float_to_json(cls, f: float, is_float32: bool) -> str:
         """
         Formats a double or float like Java's `Double.toString` and `Float.toString` on JDK 19+,
-        which print the shortest digits (JDK-4511638). Older JDKs can print a longer, still
-        round-tripping digit string for some values, e.g. 2^-24 as 5.9604644775390625E-8 instead
-        of 5.960464477539063E-8. Non-finite values are quoted because they are not valid JSON
-        numbers.
+        which print the shortest digits (JDK-4511638). Older JDKs can print a different, still
+        round-tripping digit string for some values, sometimes a longer one, e.g. 2^-24 as
+        5.9604644775390625E-8 instead of 5.960464477539063E-8. Non-finite values are quoted
+        because they are not valid JSON numbers.
         """
         if math.isnan(f):
             return '"NaN"'
@@ -524,8 +525,9 @@ class VariantUtils:
     @classmethod
     def _timestamp_to_json(cls, ts: datetime.datetime) -> str:
         """
-        Formats a timestamp as "yyyy-MM-dd HH:mm:ss[.fraction][+HH:MM]", where the fraction has
-        no trailing zeros and the offset is present only for timezone-aware timestamps.
+        Formats a timestamp as "yyyy-MM-dd HH:mm:ss[.fraction][+HH:MM|-HH:MM]", where the
+        fraction has no trailing zeros. The UTC offset is present only for timezone-aware
+        timestamps, and any seconds in it (e.g. of a local mean time offset) are dropped.
         """
         s = ts.replace(microsecond=0, tzinfo=None).isoformat(sep=" ")
         if ts.microsecond:
