@@ -106,10 +106,10 @@ object AdaptivePartialAggregationBenchmark extends SqlBasedBenchmark {
       benchmark.run()
     }
 
-    // Force the regular map to spill quickly and disable the periodic check (huge minRows). With
-    // fully distinct keys the compaction ratio is 1.0, so at the spill boundary the spill check
-    // bypasses instead of spilling; the baseline spills repeatedly and falls back to sort-based
-    // aggregation.
+    // Force the regular map to spill quickly and disable the periodic check (minRows = 0, which
+    // also leaves the spill check without a row floor). With fully distinct keys the compaction
+    // ratio is 1.0, so at the spill boundary the spill check bypasses instead of spilling; the
+    // baseline spills repeatedly and falls back to sort-based aggregation.
     runBenchmark("high-cardinality input, pass-through at the spill check") {
       val N = 8L << 20
       val benchmark = new Benchmark("adaptive partial agg, high card, spill", N, output = output)

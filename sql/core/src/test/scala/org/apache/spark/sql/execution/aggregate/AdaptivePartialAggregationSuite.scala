@@ -1142,10 +1142,11 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
   test("the spill check does not bypass an epoch smaller than minRows") {
     // The spill check, like the periodic check, judges an epoch only once it holds `minRows` rows,
     // because the bypass cannot be undone within the task. Force the regular map to fall back
-    // every 16 rows with a `minRows` larger than the input: every epoch is below the floor, so
-    // even fully distinct input must spill and fall back to sort-based aggregation instead of
-    // bypassing.
-    forEachCodegenAndMap(minRows = 100000, regularFallback = 16) { clue =>
+    // every 16 rows with `minRows = 32`: every epoch is below the floor, so even fully distinct
+    // input must spill and fall back to sort-based aggregation instead of bypassing. The 200-row
+    // input as a whole exceeds `minRows`, so this also pins that the floor counts the rows of the
+    // current epoch rather than of the task, which would bypass at the second spill.
+    forEachCodegenAndMap(minRows = 32, regularFallback = 16) { clue =>
       val df = () => spark.range(0, 200, 1, 1)
         .select($"id".cast("string") as "k", $"id" as "v")
         .groupBy($"k")
