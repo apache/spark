@@ -219,7 +219,7 @@ class JDBCTableCatalog extends TableCatalog
     val writeOptions = new JdbcOptionsInWrite(tableOptions)
     val caseSensitive = SQLConf.get.caseSensitiveAnalysis
     val schema = CatalogV2Util.v2ColumnsToStructType(columns)
-    JdbcUtils.withConnection(options) { conn =>
+    val databaseMetadata = JdbcUtils.withConnection(options) { conn =>
       JdbcUtils.classifyException(
         condition = "FAILED_JDBC.CREATE_TABLE",
         messageParameters = Map(
@@ -230,9 +230,10 @@ class JDBCTableCatalog extends TableCatalog
         isRuntime = false) {
         JdbcUtils.createTable(conn, getTableName(ident), schema, caseSensitive, writeOptions)
       }
+      JDBCDatabaseMetadata.fromJDBCConnection(conn)
     }
 
-    JDBCTable(ident, schema, writeOptions)
+    JDBCTable(ident, schema, writeOptions, databaseMetadata = Some(databaseMetadata))
   }
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {

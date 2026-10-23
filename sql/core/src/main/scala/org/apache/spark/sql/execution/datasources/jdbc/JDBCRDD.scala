@@ -94,12 +94,6 @@ object JDBCRDD extends Logging {
     }
   }
 
-  def resolveTable(options: JDBCOptions): StructType = {
-    JdbcUtils.withConnection(options) {
-      resolveTable(options, _)
-    }
-  }
-
   def getQueryOutputSchema(
       query: String, options: JDBCOptions, dialect: JdbcDialect, conn: Connection): StructType = {
     logInfo(log"Generated JDBC query to get scan output schema: ${MDC(SQL_TEXT, query)}")
