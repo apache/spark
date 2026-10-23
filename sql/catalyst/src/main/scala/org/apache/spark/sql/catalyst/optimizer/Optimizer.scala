@@ -2171,9 +2171,9 @@ object CollapseWindow extends Rule[LogicalPlan] {
  *   with order-sensitive frames.
  * - A rank filter can pin the top window so `InferWindowGroupLimit` retains its
  *   `Filter`-over-`Window` pattern. The pin requires a group-limit candidate for the
- *   normalized filter condition and is skipped when the unpinned order would already keep
- *   the rank window on top riding a lower exchange (see `shouldPinTopWindow`); preserving
- *   the rewrite can therefore cost the rank window a shared exchange. Only the windows
+ *   normalized filter condition, and is skipped when the unpinned order already leaves the
+ *   rank window riding a lower exchange, or when the pin would cost an exchange that
+ *   order avoids (see `shouldPinTopWindow` and `pinPaysAnExchange`). Only the windows
  *   below the pin are reordered, in an order whose later collapse cannot merge into the
  *   pin and defeat the rewrite (see `groupLimitSafeOrder`).
  * - The stack reordering is gated by `spark.sql.optimizer.windowReorder.enabled` (default
@@ -2182,7 +2182,10 @@ object CollapseWindow extends Rule[LogicalPlan] {
  *   When enabled, reorderable chains are stack-reordered; rejected chains, one-window
  *   runs, and chain bottoms at a derived-alias cut still get that same pairwise
  *   transposition. A pinned top window is not swapped down on any of these paths, because
- *   that would lose the `InferWindowGroupLimit` rewrite (see `shouldPinTopWindow`).
+ *   that would lose the `InferWindowGroupLimit` rewrite (see `shouldPinTopWindow`). When
+ *   the chain stops early (a derived-alias project, or a stack the rule refuses) the pin
+ *   still suppresses the swap above the rank window, which can keep an exchange the
+ *   disabled rule removes (see `pinPaysAnExchange`).
  */
 object TransposeWindow extends Rule[LogicalPlan] {
 
@@ -2294,6 +2297,26 @@ object TransposeWindow extends Rule[LogicalPlan] {
   private def equivalent(spec1: Seq[Expression], spec2: Seq[Expression]): Boolean =
     canRideExchange(spec1, spec2) && canRideExchange(spec2, spec1)
 
+  /**
+   * The exchanges an emitted order pays, under the same subset model as
+   * `canRideExchange`: walking bottom-to-top, a window inserts an exchange keyed on its
+   * own partition spec unless the keys of the last inserted exchange satisfy it, since a
+   * window preserves its child's distribution. The bottom child's partitioning is not
+   * consulted, matching `windowGroups`.
+   */
+  private def exchangeCount(windows: Seq[Window], order: Seq[Int]): Int = {
+    var count = 0
+    var keys = Seq.empty[Expression]
+    order.foreach { i =>
+      val spec = windows(i).partitionSpec
+      if (count == 0 || !canRideExchange(keys, spec)) {
+        count += 1
+        keys = spec
+      }
+    }
+    count
+  }
+
   /** Semantic equality of two sort order sequences, i.e. element-wise `semanticEquals`. */
   private def sameSortOrders(orders1: Seq[SortOrder], orders2: Seq[SortOrder]): Boolean =
     orders1.length == orders2.length &&
@@ -2355,14 +2378,26 @@ object TransposeWindow extends Rule[LogicalPlan] {
   }
 
   /**
-   * Whether a window appends a wide output: a collection-typed column such as
-   * collect_list's array, whose per-row payload is unbounded. Only collection types are
-   * detected (wide strings and many-column outputs are not): the proxy bounds the worst
-   * case of moving a window below another group's exchange rather than measuring width.
+   * Whether a window appends a wide output: one whose per-row payload can grow with the
+   * frame. Two signals are used:
+   *
+   * - A collection-typed result, such as collect_list's array, is treated as wide: the proxy
+   *   cannot bound a collection's size.
+   * - A `Collect` aggregate is wide regardless of its result type: `listagg`/`string_agg`
+   *   extends `Collect` but returns the child type, so its result is a string (or binary)
+   *   that grows with the frame just like collect_list's array.
+   *
+   * Other wide values (`max` over a long string, many-column outputs) are not detected: the
+   * proxy bounds the worst case of moving a window below another group's exchange rather
+   * than measuring width.
    */
   private def hasWideOutput(w: Window): Boolean =
     w.windowExpressions.exists { e =>
-      e.dataType.existsRecursively(t => t.isInstanceOf[ArrayType] || t.isInstanceOf[MapType])
+      e.dataType.existsRecursively(t => t.isInstanceOf[ArrayType] || t.isInstanceOf[MapType]) ||
+        e.exists {
+          case _: Collect[_] => true
+          case _ => false
+        }
     }
 
   /**
@@ -2398,9 +2433,9 @@ object TransposeWindow extends Rule[LogicalPlan] {
    *   member -- one that can ride exactly one minimal spec -- whose required child
    *   ordering satisfies its own, sharing that member's sort as well as its exchange;
    *   it joins the earliest emitted group otherwise. At most one candidate group has
-   *   such a member: a satisfying member's ordering extends the rider's, so the rider's
-   *   spec sits inside the member's own, which would make the member rideable on every
-   *   other candidate group too and contradict its anchoring. No tie-break is therefore
+   *   such a member: both members' specs are prefixes of the rider's required ordering,
+   *   so one contains the other, and the wider member would then ride the narrower
+   *   member's exchange too, contradicting its own anchoring. No tie-break is therefore
    *   needed.
    * - Groups are emitted narrow tier first, first appearance within each tier, wide
    *   groups -- those a wide-output window can ride -- last.
@@ -2412,6 +2447,8 @@ object TransposeWindow extends Rule[LogicalPlan] {
    */
   private def windowGroups(windows: Seq[Window]): WindowGroups = {
     val specs = windows.map(_.partitionSpec)
+    // The wide flags do not depend on the stack order, so they are computed once per pass.
+    val wide = windows.map(hasWideOutput)
     val minimal = specs.indices.map { i =>
       !specs.indices.exists { j =>
         j != i && canRideExchange(specs(j), specs(i)) && !equivalent(specs(j), specs(i))
@@ -2429,7 +2466,7 @@ object TransposeWindow extends Rule[LogicalPlan] {
     // exchange, not merely when one sits in it -- membership is decided from this
     // order below, and members-only marking could unflag a group after the reorder.
     val wideGroup = minimalSpecs.map { g =>
-      specs.indices.exists(i => hasWideOutput(windows(i)) && canRideExchange(g, specs(i)))
+      specs.indices.exists(i => wide(i) && canRideExchange(g, specs(i)))
     }
     val groupOrder = minimalSpecs.indices.sortBy(g => wideGroup(g))
     val emissionRank = groupOrder.zipWithIndex.toMap
@@ -2470,7 +2507,7 @@ object TransposeWindow extends Rule[LogicalPlan] {
     val leaders = minimalSpecs.indices.map { g =>
       val members = specs.indices.filter(i => groupOf(i) == g)
       val candidates = members.filter(i => equivalent(specs(i), minimalSpecs(g)))
-      candidates.minBy(i => (!maximalAmong(i, members), hasWideOutput(windows(i)), i))
+      candidates.minBy(i => (!maximalAmong(i, members), wide(i), i))
     }
 
     // Emits one group as chains: the leader, then the maximals of the members the
@@ -2483,7 +2520,7 @@ object TransposeWindow extends Rule[LogicalPlan] {
       val maximals = rest.filter(i => maximalAmong(i, rest))
       // Narrow output first, then stack position. An equal-ordering maximal rides the
       // earlier start instead of starting a chain.
-      val chainStarts = maximals.sortBy(i => (hasWideOutput(windows(i)), i))
+      val chainStarts = maximals.sortBy(i => (wide(i), i))
         .foldLeft(Seq(leader)) { (starts, m) =>
           if (starts.exists(s => requiredOrderingSatisfies(windows(s), windows(m)))) starts
           else starts :+ m
@@ -2573,6 +2610,9 @@ object TransposeWindow extends Rule[LogicalPlan] {
    *   Every other group keeps its `windowGroups` order, so the search probes one
    *   candidate order per (last group, tail) pair instead of enumerating group orders
    *   and last-group permutations.
+   * - The caller both emits this order and reads whether any candidate lets the pin ride
+   *   a last group, which is what decides whether keeping the pin costs an exchange (see
+   *   `pinPaysAnExchange`), so one search serves the decision and the rewrite.
    */
   private def groupLimitSafeOrder(chain: WindowChain, toPermute: Seq[Window]): Seq[Int] = {
     val groups = windowGroups(toPermute).groups
@@ -2693,8 +2733,9 @@ object TransposeWindow extends Rule[LogicalPlan] {
    * (`NOT (rn > 1)` -> `rn <= 1`; `NOT (rn <> 1)` parses as `NOT (NOT (rn = 1))` and
    * reduces to `rn = 1`), and `ConstantFolding` with `UnwrapCastInBinaryComparison`
    * reduces the bound to an integer literal (`CAST(rn AS BIGINT) <= 1L` -> `rn <= 1`).
-   * The rules run in batch order to a small fixed point because they chain: the IN
-   * dedup feeds the single-value rewrite, and folding feeds the cast unwrap.
+   * The listed order resolves these shapes in one pass, since `OptimizeIn` dedups and
+   * rewrites a single-value IN in the same application and `ConstantFolding` precedes
+   * the cast unwrap; the loop below is a cheap safety net for residual rule chaining.
    */
   private def normalizeRankFilterCondition(condition: Expression): Expression = {
     val attrs = condition.references.toSeq
@@ -2788,15 +2829,27 @@ object TransposeWindow extends Rule[LogicalPlan] {
    *   the top window on top riding a lower exchange (see
    *   `topWindowRidesLowerExchangeUnpinned`): preserving `WindowGroupLimit` then saves
    *   only post-shuffle work, so the lower-exchange plan wins.
-   * - When the unpinned order merely displaces the rank window off the top, the pin
-   *   still fires and can cost an exchange (the pinned window may need its own): a
-   *   buried rank window is not recovered later, so the rewrite is kept even at that
-   *   price.
+   * - The pin is also skipped when it costs an exchange the unpinned order avoids, which
+   *   happens when the unpinned order lets the rank window share or avoid an exchange
+   *   the pinned order cannot (see `pinPaysAnExchange`). `WindowGroupLimit` only saves
+   *   post-shuffle work, so a shuffle is worth more than the rewrite; this covers a rank
+   *   window that leads or rides the group it shares with other windows, not only one
+   *   that stays on top.
+   * - Otherwise the pin fires even though the pinned window may need its own exchange, as
+   *   when its group is a singleton: a buried rank window is not recovered later, so the
+   *   rewrite is kept at that price.
    * - The candidate check passes `chain.bottomChild`, whose `maxRows` equals the pinned
    *   Window's child's: the reorder is cardinality-preserving.
+   *
+   * @param pinnedOrder the order a pinned reorder emits (see `groupLimitSafeOrder`),
+   *                    evaluated only when the checks above pass: the decision and the
+   *                    emitted order must be made on the same search
    */
   private def shouldPinTopWindow(
-      filter: Filter, chain: WindowChain, groups: WindowGroups): Boolean = {
+      filter: Filter,
+      chain: WindowChain,
+      groups: WindowGroups,
+      pinnedOrder: => Seq[Int]): Boolean = {
     val topWindow = chain.windows.last
     if (topWindow.orderSpec.isEmpty ||
       !topWindow.windowExpressions.forall(InferWindowGroupLimit.isExpandingWindow)) {
@@ -2823,25 +2876,52 @@ object TransposeWindow extends Rule[LogicalPlan] {
       .selectRankCandidate(
         normalizeRankFilterCondition(condition), topWindow.windowExpressions,
         chain.bottomChild)
-      .isDefined && !topWindowRidesLowerExchangeUnpinned(chain, groups)
+      .isDefined && !topWindowRidesLowerExchangeUnpinned(chain, groups) &&
+      !pinPaysAnExchange(chain, groups, pinnedOrder)
+  }
+
+  /**
+   * Whether keeping the pin costs an exchange that the unpinned order avoids, in which
+   * case the pin is not worth it: it trades a shuffle for the post-shuffle savings of
+   * `WindowGroupLimit`.
+   *
+   * Costs are compared by `exchangeCount` on both orders, so the unpinned order wins
+   * whenever it is cheaper, no matter how the rank window delivers the saving -- by
+   * staying on top riding a lower exchange, by leading the group another window rides, or
+   * by sitting inside it. A chain that is not stack-reordered has no grouped order to
+   * compare against, so the comparison cannot fire: the pin is kept, and `pairwiseFallback`
+   * only swaps windows below it. That is also why a lone window above a cut ties against
+   * itself, leaving the swap the disabled rule makes across the cut unpriced.
+   */
+  private def pinPaysAnExchange(
+      chain: WindowChain, groups: WindowGroups, pinnedOrder: => Seq[Int]): Boolean = {
+    if (!reorderable(chain)) {
+      return false
+    }
+    val pinned = pinnedOrder :+ (chain.windows.length - 1)
+    exchangeCount(chain.windows, pinned) > exchangeCount(chain.windows, groups.order)
   }
 
   /**
    * Reorder `chain` and rebuild it, with the exchange-optimal `groups.order` unpinned or
-   * with `groupLimitSafeOrder` under a pin, keeping the top window in place if
-   * `pinTopWindow` (see `shouldPinTopWindow`): only the windows below it are reordered
-   * then and the order-restoring `Project` is placed below the pinned window, so that
-   * the strict `Filter`-over-`Window` match of `InferWindowGroupLimit` survives. The
-   * stripped links are re-applied above the reordered windows (below the pinned window if
-   * pinned), each additionally passing through the attributes that anything above it still
-   * references. Returns `None` if the chain is already in that target order.
+   * with `pinnedOrder` (the `groupLimitSafeOrder` result the pin was decided on) under a
+   * pin, keeping the top window in place if `pinTopWindow` (see `shouldPinTopWindow`):
+   * only the windows below it are reordered then and the order-restoring `Project` is
+   * placed below the pinned window, so that the strict `Filter`-over-`Window` match of
+   * `InferWindowGroupLimit` survives. The stripped links are re-applied above the
+   * reordered windows (below the pinned window if pinned), each additionally passing
+   * through the attributes that anything above it still references. Returns `None` if the
+   * chain is already in that target order.
    */
   private def reorderChain(
-      chain: WindowChain, pinTopWindow: Boolean, groups: WindowGroups): Option[LogicalPlan] = {
+      chain: WindowChain,
+      pinTopWindow: Boolean,
+      groups: WindowGroups,
+      pinnedOrder: => Seq[Int]): Option[LogicalPlan] = {
     val windows = chain.windows
     val toPermute = if (pinTopWindow) windows.dropRight(1) else windows
     val order =
-      if (pinTopWindow) groupLimitSafeOrder(chain, toPermute)
+      if (pinTopWindow) pinnedOrder
       else groups.order
     if (order == toPermute.indices) {
       return None
@@ -2915,8 +2995,12 @@ object TransposeWindow extends Rule[LogicalPlan] {
     // Both selective pinning and the unpinned rewrite need this exact grouping. Build it
     // once for the whole chain so the safety decision and emitted order cannot diverge.
     val groups = windowGroups(chain.windows)
+    // The pin decision and the pinned reorder must use one search: it is evaluated at most
+    // once, and only when the decision or the reorder actually needs it (see
+    // `groupLimitProbeCount`).
+    lazy val pinnedOrder = groupLimitSafeOrder(chain, chain.windows.dropRight(1))
     val pinTopWindow = parent.exists {
-      case filter: Filter => shouldPinTopWindow(filter, chain, groups)
+      case filter: Filter => shouldPinTopWindow(filter, chain, groups, pinnedOrder)
       case _ => false
     }
     // Stack reorder needs two or more movable windows; otherwise the pairwise
@@ -2937,7 +3021,7 @@ object TransposeWindow extends Rule[LogicalPlan] {
         val shortened = rebuildWithSwappedBottom(chain, swappedBottom)
         Some(reorderIfChainTop(shortened, parent).getOrElse(shortened))
       } else {
-        reorderChain(chain, pinTopWindow, groups)
+        reorderChain(chain, pinTopWindow, groups, pinnedOrder)
       }
     }
   }
