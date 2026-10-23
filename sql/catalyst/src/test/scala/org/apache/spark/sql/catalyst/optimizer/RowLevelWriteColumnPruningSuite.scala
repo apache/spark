@@ -88,9 +88,9 @@ class RowLevelWriteColumnPruningSuite extends PlanTest {
   }
 
   // the copy-on-write UPDATE query built by RewriteUpdateTable.buildReplaceDataPlan
-  private def replaceDataQuery(plan: LogicalPlan, names: Seq[String]): LogicalPlan = {
+  private def updateQuery(plan: LogicalPlan): LogicalPlan = {
     val operation = If(cond(plan), Literal(UPDATE_OPERATION), Literal(COPY_OPERATION))
-    val values = names.map { name =>
+    val values = queryColumns.map { name =>
       if (name == "_partition") {
         column(plan, name)
       } else {
@@ -100,7 +100,13 @@ class RowLevelWriteColumnPruningSuite extends PlanTest {
     Project(Alias(operation, OPERATION_COLUMN)() +: values, plan)
   }
 
-  private def updateQuery(plan: LogicalPlan): LogicalPlan = replaceDataQuery(plan, queryColumns)
+  // the updated rows for the matched rows, as the subquery and delta rewrites project them
+  private def updatedRows(matched: LogicalPlan): LogicalPlan = Project(
+    Alias(Literal(UPDATE_OPERATION), OPERATION_COLUMN)() +: queryColumns.map { name =>
+      if (name == "_partition") column(matched, name)
+      else Alias(updatedValue(matched, name), name)()
+    },
+    matched)
 
   private def replaceData(query: LogicalPlan, rowNames: Seq[String]): ReplaceData = {
     val projections = ReplaceDataProjections(
@@ -170,18 +176,11 @@ class RowLevelWriteColumnPruningSuite extends PlanTest {
   }
 
   test("ReplaceData: prune both children of the Union built for subquery conditions") {
-    val names = queryColumns
-    val matched = Filter(cond(read), read)
-    val updated = Project(
-      Alias(Literal(UPDATE_OPERATION), OPERATION_COLUMN)() +: names.map { name =>
-        if (name == "_partition") column(matched, name)
-        else Alias(updatedValue(matched, name), name)()
-      },
-      matched)
+    val updated = updatedRows(Filter(cond(read), read))
     val read2 = read.newInstance()
     val remaining = Filter(Not(EqualNullSafe(cond(read2), Literal.TrueLiteral)), read2)
     val copied = Project(
-      Alias(Literal(COPY_OPERATION), OPERATION_COLUMN)() +: names.map(column(remaining, _)),
+      Alias(Literal(COPY_OPERATION), OPERATION_COLUMN)() +: queryColumns.map(column(remaining, _)),
       remaining)
     val write = replaceData(Union(updated, copied), writeColumns)
     val optimized = Optimize.execute(write).asInstanceOf[ReplaceData]
@@ -196,15 +195,7 @@ class RowLevelWriteColumnPruningSuite extends PlanTest {
   }
 
   test("WriteDelta: prune the columns the write does not read") {
-    val matched = Filter(cond(read), read)
-    val names = queryColumns
-    val query = Project(
-      Alias(Literal(UPDATE_OPERATION), OPERATION_COLUMN)() +: names.map { name =>
-        if (name == "_partition") column(matched, name)
-        else Alias(updatedValue(matched, name), name)()
-      },
-      matched)
-    val write = writeDelta(query)
+    val write = writeDelta(updatedRows(Filter(cond(read), read)))
     val optimized = Optimize.execute(write).asInstanceOf[WriteDelta]
 
     checkPruned(optimized, write)
@@ -213,14 +204,13 @@ class RowLevelWriteColumnPruningSuite extends PlanTest {
 
   test("WriteDelta: prune the Expand built for delete and reinsert") {
     val matched = Filter(cond(read), read)
-    val names = queryColumns
-    val deleteOutput = Literal(DELETE_OPERATION) +: names.map { name =>
+    val deleteOutput = Literal(DELETE_OPERATION) +: queryColumns.map { name =>
       if (name == "pk" || name == "_partition") column(matched, name)
       else Literal(null, column(matched, name).dataType)
     }
-    val reinsertOutput = Literal(REINSERT_OPERATION) +: names.map(updatedValue(matched, _))
+    val reinsertOutput = Literal(REINSERT_OPERATION) +: queryColumns.map(updatedValue(matched, _))
     val expandOutput = AttributeReference(OPERATION_COLUMN, IntegerType, nullable = false)() +:
-      names.map(column(matched, _).newInstance())
+      queryColumns.map(column(matched, _).newInstance())
     val query = Expand(Seq(deleteOutput, reinsertOutput), expandOutput, matched)
     val write = writeDelta(query)
     val optimized = Optimize.execute(write).asInstanceOf[WriteDelta]
@@ -232,18 +222,20 @@ class RowLevelWriteColumnPruningSuite extends PlanTest {
     assert(scannedColumns(optimized, read) == Set("pk", "dep", "salary", "bonus", "_partition"))
   }
 
-  test("a projection that reads past the query output is an internal error") {
+  test("a projection that reads outside the query output is an internal error") {
     val query = updateQuery(read)
     val field = StructField("x", IntegerType)
-    val projections = ReplaceDataProjections(
-      ProjectingInternalRow(StructType(Seq(field)), IndexedSeq(query.output.length)), None)
-    val write = ReplaceData(tableRelation, cond(read), query, tableRelation, projections)
+    Seq(query.output.length, -1).foreach { ordinal =>
+      val projections = ReplaceDataProjections(
+        ProjectingInternalRow(StructType(Seq(field)), IndexedSeq(ordinal)), None)
+      val write = ReplaceData(tableRelation, cond(read), query, tableRelation, projections)
 
-    checkError(
-      exception = intercept[SparkException](write.references),
-      condition = "INTERNAL_ERROR",
-      parameters = Map("message" ->
-        "A projection of ReplaceData reads ordinal 8 of a query with 8 columns."))
+      checkError(
+        exception = intercept[SparkException](write.references),
+        condition = "INTERNAL_ERROR",
+        parameters = Map("message" ->
+          s"A projection of ReplaceData reads ordinal $ordinal of a query with 8 columns."))
+    }
   }
 
   test("no change when the projections read every query column") {
