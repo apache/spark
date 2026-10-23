@@ -16,7 +16,11 @@
 #
 
 """
-Worker that receives input from Piped RDD.
+Python worker that runs one task at a time. ``invoke_udf`` runs a task against any
+``SparkMessageReceiver``, so it does not depend on how the worker was started; ``main`` drives
+it over the socket of a worker launched by the JVM's PythonRunner, directly or forked by
+pyspark.daemon. A task runs either a classic RDD command (eval type NON_UDF) or SQL UDFs/UDTFs
+through the handler registered for their eval type in pyspark.eval_handlers.
 """
 
 import json
@@ -93,7 +97,8 @@ def unpickle_and_chain(
 def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
     """
     This function is the main processing function for worker.py.
-    It receives messages from the JVM, processes the data, and sends back results.
+    It reads the task's messages from message_receiver, processes the data, and writes the
+    results to outfile.
     This method goes through three phases:
 
     Initialization -> Processing -> Finish/Cleanup
@@ -129,8 +134,9 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
         eval_type = init_info.eval_type
         runner_conf = RunnerConf(init_info.runner_conf)
         eval_conf = EvalConf(init_info.eval_conf)
-        # UDF and UDTF runners fold profiling into func at construction time (see
-        # EvalTypeHandler.__init__); only the classic RDD command carries a profiler of its own.
+        # Only the classic RDD command carries a profiler of its own. UDF runners fold profiling
+        # into func at construction time (see EvalTypeHandler.__init__); UDTF runners are not
+        # profiled.
         profiler = None
         if eval_type == PythonEvalType.NON_UDF:
             assert isinstance(init_info.udf_info, (bytes, memoryview))

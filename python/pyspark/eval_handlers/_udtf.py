@@ -621,10 +621,9 @@ class UDTFHandlerBase(EvalTypeHandler[InputBatch, OutputBatch]):
             )
         analyze_result = udtf.analyze_result
 
-        # Update the function that creates a new UDTF instance to first try calling the UDTF
-        # constructor with one argument containing the previous AnalyzeResult. If that fails, then
-        # try a constructor with no arguments. In this way each UDTF class instance can decide if
-        # it wants to inspect the AnalyzeResult.
+        # Pick how to construct the UDTF from the count of named positional __init__ parameters
+        # after self. With an AnalyzeResult, one parameter receives a copy of it, zero means the
+        # class is called with no arguments, and more are an error; without one, any is an error.
         handler: Callable[[], Any] = udtf_cls
         udtf_init_args = inspect.getfullargspec(udtf_cls)
         if analyze_result is not None:
